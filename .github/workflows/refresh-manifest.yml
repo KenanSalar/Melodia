@@ -1,0 +1,185 @@
+name: Refresh manifest
+
+# Rebuilds and re-signs `latest.json` from the FINAL (edited) release
+# body once a release is published.
+#
+# `release.yml` builds `latest.json` while the release is still a draft
+# — at that point its body holds GitHub's auto-generated
+# `--generate-notes` text. Anything the author edits before flipping the
+# draft live is otherwise never reflected in the in-app updater's
+# `notes_short`. This workflow fires on the draft→published transition,
+# re-reads the (now final) body, and re-uploads the manifest.
+#
+# `workflow_dispatch` (with a `tag` input) refreshes an already-published
+# release retroactively — e.g. to fix a release published before this
+# workflow existed.
+#
+# No self-trigger loop: `gh release upload` of assets does not emit a
+# `release` event, and `published` only fires once per release.
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to refresh (e.g. v0.2.0)"
+        required: true
+        type: string
+
+permissions:
+  # Upload the refreshed latest.json / .minisig / SHA256SUMS.txt.
+  # No id-token/attestations: build provenance stays on the binary
+  # artifacts, which this workflow never touches.
+  contents: write
+
+concurrency:
+  group: refresh-manifest-${{ github.event.release.tag_name || inputs.tag }}
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    name: refresh latest.json
+    runs-on: ubuntu-latest
+    env:
+      TAG: ${{ github.event.release.tag_name || inputs.tag }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install minisign CLI
+        run: |
+          for attempt in 1 2 3; do
+            if sudo apt-get update -qq && sudo apt-get install -qq -y minisign; then
+              exit 0
+            fi
+            echo "::warning::apt install minisign attempt $attempt failed; retrying in 15s"
+            sleep 15
+          done
+          echo "::error::apt install minisign failed after 3 attempts"
+          exit 1
+
+      - name: Download release assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          # build-latest-json.py recomputes every platform entry's size
+          # and inlines its `.minisig`, so it needs the actual artifact
+          # files + sigs on disk. The existing `latest.json` is pulled
+          # too — its `critical` / `manifest_schema_version` / `version`
+          # / `pub_date` fields are carried over verbatim.
+          mkdir -p artifacts
+          gh release download "$TAG" --dir ./artifacts \
+            --pattern '*.AppImage' \
+            --pattern '*.tar.gz' \
+            --pattern '*.deb' \
+            --pattern '*.rpm' \
+            --pattern '*.msi' \
+            --pattern '*.minisig' \
+            --pattern 'latest.json'
+
+      - name: Resolve carry-over manifest fields
+        id: meta
+        shell: bash
+        run: |
+          MANIFEST=artifacts/latest.json
+          [[ -f "$MANIFEST" ]] || {
+            echo "::error::$MANIFEST not found in release $TAG"
+            exit 1
+          }
+          # `// <default>` guards a retroactive `workflow_dispatch`
+          # refresh of a manifest that predates one of these fields: a
+          # missing field makes `jq -r` emit the literal string `null`,
+          # which would crash `--manifest-schema-version` (type=int) and
+          # poison `pub_date` with "null". `// empty` yields "" so
+          # build-latest-json.py falls back to the current UTC time.
+          # `version` has no fallback on purpose — a manifest without it
+          # is broken and the rebuild should fail loudly.
+          {
+            echo "version=$(jq -r '.version' "$MANIFEST")"
+            echo "schema=$(jq -r '.manifest_schema_version // 1' "$MANIFEST")"
+            echo "critical=$(jq -r '.critical // false' "$MANIFEST")"
+            echo "pub_date=$(jq -r '.pub_date // empty' "$MANIFEST")"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Capture final release notes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          # The release is published by now, so `.body` is the final,
+          # author-edited Markdown — not the draft-time auto-notes.
+          gh release view "$TAG" --json body -q '.body' > release-notes.md \
+            || : > release-notes.md
+          wc -c release-notes.md
+
+      - name: Install markdown-it-py for notes stripping
+        shell: bash
+        run: |
+          # Same pin as release.yml — a breaking change to the
+          # token-walk API used by `_strip_via_md_it` would silently
+          # corrupt notes_short.
+          python3 -m pip install --quiet markdown-it-py==4.2.0
+
+      - name: Rebuild latest.json
+        shell: bash
+        run: |
+          CRIT_FLAG=()
+          [[ "${{ steps.meta.outputs.critical }}" == "true" ]] && CRIT_FLAG=(--critical)
+          python3 scripts/build-latest-json.py \
+            --version "${{ steps.meta.outputs.version }}" \
+            --tag "$TAG" \
+            --artifacts artifacts/ \
+            --notes-file release-notes.md \
+            --manifest-schema-version "${{ steps.meta.outputs.schema }}" \
+            --pub-date "${{ steps.meta.outputs.pub_date }}" \
+            "${CRIT_FLAG[@]}" \
+            --out latest.json
+
+      - name: Sign latest.json (prehashed, manifest-tagged)
+        shell: bash
+        env:
+          KEY: ${{ secrets.MINISIGN_SECRET_KEY }}
+          PW: ${{ secrets.MINISIGN_PASSWORD }}
+        run: |
+          echo "$KEY" | base64 -d > "$RUNNER_TEMP/minisign.key"
+          chmod 0600 "$RUNNER_TEMP/minisign.key"
+          echo "$PW" | minisign -SHm latest.json -s "$RUNNER_TEMP/minisign.key" \
+            -t "version=${{ steps.meta.outputs.version }} manifest=true"
+          shred -u "$RUNNER_TEMP/minisign.key" 2>/dev/null || rm -f "$RUNNER_TEMP/minisign.key"
+
+      - name: Verify latest.json signature with the public key
+        shell: bash
+        run: |
+          minisign -Vm latest.json -p assets/updater-pubkey.b64
+
+      - name: Upload refreshed manifest to release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          gh release upload "$TAG" latest.json latest.json.minisig --clobber
+
+      - name: Regenerate SHA256SUMS.txt
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          # The published SHA256SUMS.txt now carries stale lines for the
+          # changed latest.json / latest.json.minisig — rebuild it over
+          # the freshly-signed manifest.
+          cp latest.json latest.json.minisig artifacts/
+          cd artifacts
+          shopt -s nullglob
+          files=()
+          for f in *; do
+            [[ "$f" == "SHA256SUMS.txt" ]] && continue
+            files+=("$f")
+          done
+          if [[ ${#files[@]} -eq 0 ]]; then
+            echo "ERROR: no artifacts found to checksum"
+            exit 1
+          fi
+          sha256sum "${files[@]}" > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+          gh release upload "$TAG" SHA256SUMS.txt --clobber

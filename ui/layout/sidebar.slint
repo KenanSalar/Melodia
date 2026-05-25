@@ -1,0 +1,332 @@
+import { ScrollView } from "std-widgets.slint";
+import { Theme } from "../theme.slint";
+import { Settings } from "../settings.slint";
+import { Nav, NavEnterFrom, AlbumDetail } from "../globals.slint";
+import { MaterialIcon } from "../components/material-icon.slint";
+import { OverlayScrollbar } from "../components/overlay-scrollbar.slint";
+
+// Single nav row. Reads selected state from Nav, fires `select` on click.
+component SidebarItem inherits Rectangle {
+    in property <int> index;
+    in property <string> label;
+    in property <string> icon;
+
+    height: 36px;
+    background: transparent;
+
+    private property <bool> selected: Nav.selected-index == root.index;
+
+    // Press-shrink factor — 0.97 while held, 1.0 otherwise. A small
+    // fraction of the now-playing-bar buttons' shrink (0.9) since a
+    // full-width row's wobble reads much stronger than a compact
+    // circular button. Only the *factor* is animated, not the derived
+    // `row` width/height: those also change when the sidebar collapses
+    // / is resized, and animating them directly would make every row
+    // wobble through the collapse animation. Animating the factor
+    // confines it to presses.
+    property <float> press-scale: touch.pressed ? 0.97 : 1.0;
+    animate press-scale {
+        duration: touch.pressed ? 100ms : Theme.dur-med;
+        easing: cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+
+    // Inner visual row. The root keeps its fixed 36px layout slot so
+    // sibling rows never reflow; `row` is what scales on press — the
+    // tactile press-shrink shared with the now-playing-bar buttons.
+    row := Rectangle {
+        width: parent.width * root.press-scale;
+        height: parent.height * root.press-scale;
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        border-radius: Theme.radius-md;
+        background: root.selected
+            ? Theme.surface1
+            : (touch.has-hover ? Theme.surface0 : transparent);
+        animate background { duration: Theme.dur-fast; easing: ease-in-out; }
+
+        HorizontalLayout {
+            // Collapsed: 4px each side centers the 22px icon in the 30px content
+            // row (sidebar 46px − 2×8px outer padding). Expanded: 10% of the
+            // rendered sidebar width so icons drift outward as the user resizes
+            // — matches the old Tauri `padding-left: 10%`. Mirror the same
+            // clamp the Sidebar uses for its own `width` so we track the
+            // *rendered* width, not the raw stored value.
+            padding-left: Nav.sidebar-collapsed
+                ? 4px
+                : clamp(Nav.sidebar-width, Theme.sidebar-min-w, Theme.sidebar-max-w) * 10%;
+            padding-right: Nav.sidebar-collapsed ? 4px : Theme.pad-md;
+            spacing: Theme.pad-md;
+            alignment: start;
+            animate padding-left, padding-right { duration: Nav.sidebar-dragging ? 0ms : Theme.dur-med; easing: ease-in-out; }
+
+            VerticalLayout {
+                alignment: center;
+                MaterialIcon {
+                    name: root.icon;
+                    // Scale with the press factor so the wobble is visible
+                    // in collapsed mode too — without this, only the row's
+                    // surface fill shrinks (~1.4px) and the icon stays at
+                    // a fixed 22px, making the press feel inert when the
+                    // text label is hidden.
+                    icon-size: 22px * root.press-scale;
+                    icon-color: root.selected ? Theme.accent : Theme.text;
+                    filled: root.selected;
+                }
+            }
+
+            if !Nav.sidebar-collapsed: VerticalLayout {
+                alignment: center;
+                Text {
+                    text: root.label;
+                    color: root.selected ? Theme.text : Theme.subtext0;
+                    font-size: Theme.font-size-md * root.press-scale;
+                    font-weight: root.selected ? 600 : 500;
+                    vertical-alignment: center;
+                    overflow: elide;
+                }
+            }
+        }
+    }
+
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        // Also close the full-screen Now Playing view — it's a modal
+        // overlay that sits over any section, so any nav click dismisses
+        // it. Album Detail is NOT reset here: it's part of the Albums
+        // tab's state, so leaving and returning to Albums restores the
+        // last open album. The back button in DetailHeader is the only
+        // user-facing way out (it fires `AlbumDetail.close-detail`).
+        clicked => {
+            // Sidebar nav is always lateral — set the direction before the
+            // `selected-index` write so the new branch's `ViewTransition`
+            // reads `below` and fades up, regardless of what the previous
+            // direction was (e.g. `left` from a recent detail back).
+            Nav.pending-enter-from = NavEnterFrom.below;
+            Nav.now-playing-open = false;
+            Nav.selected-index = root.index;
+            // Persist the new tab into `settings.last_nav_index` so a
+            // restart reopens on the same section.
+            Nav.persist-selected-index(root.index);
+        }
+    }
+}
+
+// Tiny separator between sidebar sections.
+component Divider inherits Rectangle {
+    height: 1px;
+    background: Theme.surface0;
+}
+
+export component Sidebar inherits Rectangle {
+    // Drag updates set width every mouse move; without this flag the global
+    // width animation would interpolate each delta over dur-med, making the
+    // handle feel laggy. Animate only on the collapse toggle, not during drag.
+    property <bool> is-dragging;
+
+    width: Nav.sidebar-collapsed
+        ? Theme.sidebar-collapsed-w
+        : clamp(Nav.sidebar-width, Theme.sidebar-min-w, Theme.sidebar-max-w);
+    animate width { duration: is-dragging ? 0ms : Theme.dur-med; easing: ease-in-out; }
+
+    // `Theme.window-focused` is the raw OS focus mirror (always written
+    // from winit's `Focused` event in `src/ui/window_chrome/winit_filter.rs`).
+    // The KDE-only "Match Unfocused Window Background" tint feature gates
+    // at the binding site on three conditions: the user toggle, the OS
+    // focus state, and `Theme.use-native-titlebar`. The titlebar gate is
+    // required because the feature mirrors OS-drawn window-decoration
+    // fade — when we paint our own chrome the analogy doesn't apply, and
+    // `Settings.match-unfocused-bg` is preserved (not cleared) across a
+    // native-titlebar disable so it can survive a re-enable. Without the
+    // titlebar gate a KDE user in custom-titlebar mode would still see
+    // the tint on focus loss because the default value is `true` on KDE.
+    // `Theme.mantle-unfocused` is sourced from `[WM] inactiveBackground`
+    // in `kdeglobals` when KDE Breeze + System variant is active, so we
+    // match the OS frame exactly on focus changes; for every other theme
+    // it falls back to `base`. No `animate` here — the OS titlebar swaps
+    // colour instantly on focus loss, so a fade would desync our painted
+    // surfaces from the OS-drawn frame.
+    background: (Settings.match-unfocused-bg && Theme.use-native-titlebar && !Theme.window-focused)
+        ? Theme.mantle-unfocused : Theme.mantle;
+
+    VerticalLayout {
+        padding: Theme.pad-sm;
+        spacing: Theme.pad-xs;
+
+        // Collapse / expand toggle
+        Rectangle {
+            height: 36px;
+            background: transparent;
+
+            // Press-shrink factor — animated alone so the wobble only
+            // fires on press, not while the sidebar width animates.
+            // 0.97 to match the gentler SidebarItem shrink.
+            property <float> press-scale: collapse-touch.pressed ? 0.97 : 1.0;
+            animate press-scale {
+                duration: collapse-touch.pressed ? 100ms : Theme.dur-med;
+                easing: cubic-bezier(0.34, 1.56, 0.64, 1);
+            }
+
+            // Inner visual row — scales on press while the outer keeps
+            // the fixed layout slot. Same press-shrink pattern as
+            // `SidebarItem` and the now-playing-bar buttons.
+            Rectangle {
+                width: parent.width * parent.press-scale;
+                height: parent.height * parent.press-scale;
+                x: (parent.width - self.width) / 2;
+                y: (parent.height - self.height) / 2;
+                border-radius: Theme.radius-md;
+                background: collapse-touch.has-hover ? Theme.surface0 : transparent;
+                animate background { duration: Theme.dur-fast; easing: ease-in-out; }
+                HorizontalLayout {
+                    // Same reactive 10% left padding as `SidebarItem` so the
+                    // Collapse-toggle icon stays glued to the same vertical
+                    // line as the nav icons below it.
+                    padding-left: Nav.sidebar-collapsed
+                        ? 4px
+                        : clamp(Nav.sidebar-width, Theme.sidebar-min-w, Theme.sidebar-max-w) * 10%;
+                    padding-right: Nav.sidebar-collapsed ? 4px : Theme.pad-md;
+                    spacing: Theme.pad-md;
+                    alignment: start;
+                    animate padding-left, padding-right { duration: Nav.sidebar-dragging ? 0ms : Theme.dur-med; easing: ease-in-out; }
+                    VerticalLayout {
+                        alignment: center;
+                        MaterialIcon {
+                            name: Nav.sidebar-collapsed ? "dock_to_right" : "dock_to_left";
+                            icon-size: 22px;
+                            icon-color: Theme.text;
+                            filled: true;
+                        }
+                    }
+                    if !Nav.sidebar-collapsed: VerticalLayout {
+                        alignment: center;
+                        Text {
+                            text: @tr("Collapse");
+                            color: Theme.subtext0;
+                            font-size: Theme.font-size-md;
+                            vertical-alignment: center;
+                            overflow: elide;
+                        }
+                    }
+                }
+            }
+            collapse-touch := TouchArea {
+                mouse-cursor: pointer;
+                clicked => { Nav.sidebar-collapsed = !Nav.sidebar-collapsed; }
+            }
+        }
+
+        // Scrollable middle — caps the sidebar's preferred height so the
+        // parent HorizontalLayout no longer claims ~363px of vertical space,
+        // freeing the NowPlayingBar to keep its 72px slot at small window
+        // heights. Both built-in scrollbars are hidden; the custom
+        // `OverlayScrollbar` declared at the Sidebar root (below) sits flush
+        // against the right edge to match the tracks view's bar style.
+        // `viewport-width: self.width` locks the orthogonal axis so wheel
+        // events don't get hijacked into horizontal scroll (same idea as
+        // CLAUDE.md's nested-ScrollView pitfall, applied in reverse).
+        nav-scroll := ScrollView {
+            vertical-stretch: 1;
+            vertical-scrollbar-policy: always-off;
+            horizontal-scrollbar-policy: always-off;
+            viewport-width: self.width;
+
+            VerticalLayout {
+                spacing: Theme.pad-xs;
+
+                Divider {}
+
+                // Top nav: Search, Browse
+                SidebarItem { index: 0; label: @tr("Search"); icon: "search"; }
+                SidebarItem { index: 1; label: @tr("Browse"); icon: "home"; }
+
+                Divider {}
+
+                // Library
+                SidebarItem { index: 2; label: @tr("Favorites");  icon: "favorite";        }
+                SidebarItem { index: 3; label: @tr("Tracks");     icon: "library_music";   }
+                SidebarItem { index: 4; label: @tr("Albums");     icon: "album";           }
+                SidebarItem { index: 5; label: @tr("Artists");    icon: "person";          }
+                SidebarItem { index: 6; label: @tr("Genres");     icon: "theater_comedy";  }
+                SidebarItem { index: 7; label: @tr("Playlists");  icon: "playlist_play";   }
+            }
+        }
+
+        Divider {}
+
+        SidebarItem { index: 8; label: @tr("Settings"); icon: "settings"; }
+    }
+
+    // Drag-resize handle on the right edge — only meaningful when expanded.
+    if !Nav.sidebar-collapsed: Rectangle {
+        x: parent.width - 4px;
+        y: 0;
+        width: 4px;
+        height: parent.height;
+        background: resize-touch.pressed ? Theme.accent : transparent;
+        animate background { duration: Theme.dur-fast; easing: ease-in-out; }
+
+        resize-touch := TouchArea {
+            mouse-cursor: ew-resize;
+            // The handle is positioned at `parent.width - 4px`, so its local
+            // coordinate frame moves with the sidebar as we resize it. Using
+            // (mouse-x - pressed-x) underestimates the cursor's true travel —
+            // the sidebar ends up growing by half the cursor delta, leaving
+            // the handle lagging behind the pointer. Track the cursor in
+            // window-absolute coordinates instead so the handle stays glued
+            // to the pointer regardless of the parent moving.
+            property <length> start-w;
+            property <length> press-abs-x;
+            pointer-event(ev) => {
+                if (ev.kind == PointerEventKind.down) {
+                    self.start-w = Nav.sidebar-width;
+                    self.press-abs-x = self.absolute-position.x + self.pressed-x;
+                    root.is-dragging = true;
+                    Nav.sidebar-dragging = true;
+                }
+                if (ev.kind == PointerEventKind.up || ev.kind == PointerEventKind.cancel) {
+                    root.is-dragging = false;
+                    Nav.sidebar-dragging = false;
+                }
+            }
+            moved => {
+                if (self.pressed) {
+                    Nav.sidebar-width = clamp(
+                        self.start-w + (self.absolute-position.x + self.mouse-x - self.press-abs-x),
+                        Theme.sidebar-min-w,
+                        Theme.sidebar-max-w);
+                }
+            }
+            double-clicked => {
+                Nav.sidebar-width = Theme.sidebar-default-w;
+            }
+        }
+    }
+
+    // Overlay scrollbar — same component as the tracks view, sitting flush
+    // against the sidebar's right edge so the bar aligns with the panel
+    // boundary instead of stealing column space inside the padded layout.
+    // Aligns vertically with `nav-scroll` (the middle scrollable zone) so
+    // the bar doesn't run through the Collapse toggle or the Settings row.
+    // When expanded, inset by the 4px resize-handle width so the handle's
+    // hit-area stays on the very edge; when collapsed (no handle) the
+    // scrollbar takes the edge itself.
+    OverlayScrollbar {
+        x: parent.width - self.width
+            - (Nav.sidebar-collapsed ? 0px : 4px);
+        y: nav-scroll.absolute-position.y - root.absolute-position.y;
+        // Slimmer hit-area + thumb in the collapsed (46px) rail so the bar
+        // doesn't crowd the icons; full-size when expanded to match the
+        // tracks-view bar.
+        width: Nav.sidebar-collapsed ? 6px : 10px;
+        height: nav-scroll.height;
+        bar-thickness: Nav.sidebar-collapsed ? 4px : 8px;
+        bar-radius: Nav.sidebar-collapsed ? 2px : 4px;
+        min-thumb: Nav.sidebar-collapsed ? 20px : 28px;
+        visible-size: nav-scroll.visible-height;
+        content-size: nav-scroll.viewport-height;
+        offset: -nav-scroll.viewport-y;
+        scroll-to(o) => {
+            nav-scroll.viewport-y = -o;
+        }
+    }
+}

@@ -1,0 +1,79 @@
+import { Theme } from "../../theme.slint";
+import { MaterialIcon } from "../material-icon.slint";
+
+// Stacked-content settings row: icon + (label + description + below content
+// via @children), no right-side control. Mirrors Tauri's `settingsRow`
+// layout for chip-group / accent-grid / checkbox-grid rows where the
+// control sits *inside* `settingsRowContent` below the description.
+//
+// `disabled`: same overlay-TouchArea trick as `SettingRow` — a sibling
+// TouchArea above the row contents absorbs clicks when disabled, so the
+// inner control's TouchArea can't fire.
+export component SettingRowStacked inherits Rectangle {
+    in property <string> icon;
+    in property <string> label;
+    in property <string> description;
+    in property <bool>   disabled: false;
+
+    background: transparent;
+    opacity: root.disabled ? 0.4 : 1.0;
+    animate opacity { duration: Theme.dur-fast; easing: ease-in-out; }
+
+    HorizontalLayout {
+        padding: Theme.pad-lg;
+        spacing: Theme.pad-lg;
+        alignment: stretch;
+
+        // Icon column (top-aligned so it sits next to the label, not
+        // centred in the tall row that includes chips below).
+        VerticalLayout {
+            alignment: start;
+            // Push the icon down so it lines up with the label baseline,
+            // not the row's top padding boundary.
+            padding-top: 2px;
+            MaterialIcon {
+                name: root.icon;
+                icon-size: 22px;
+                icon-color: Theme.text;
+            }
+        }
+
+        // Content column: label + description + @children (chips, grid, …).
+        VerticalLayout {
+            spacing: Theme.pad-xs;
+            horizontal-stretch: 1;
+
+            Text {
+                text: root.label;
+                color: Theme.text;
+                font-size: Theme.font-size-md;
+            }
+            if root.description != "": Text {
+                text: root.description;
+                color: Theme.subtext0;
+                font-size: Theme.font-size-sm;
+                wrap: word-wrap;
+            }
+
+            // Below-content slot. A small top margin reads as a clear
+            // visual break between the description and the chips.
+            Rectangle {
+                background: transparent;
+                vertical-stretch: 0;
+                VerticalLayout {
+                    padding-top: Theme.pad-sm;
+                    spacing: Theme.pad-sm;
+                    @children
+                }
+            }
+        }
+    }
+
+    if root.disabled: TouchArea {
+        x: 0;
+        y: 0;
+        width: 100%;
+        height: 100%;
+        mouse-cursor: default;
+    }
+}

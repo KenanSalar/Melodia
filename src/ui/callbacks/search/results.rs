@@ -1,0 +1,221 @@
+//! `Search.*` result callbacks: cross-tab open-album / open-artist
+//! hand-offs, Top Result routing, `TrackList` row actions (play, queue,
+//! favorite toggle), sort, column visibility, and selection. See
+//! [`super::wire_search`].
+
+use std::sync::Arc;
+
+use slint::{ComponentHandle, Model, SharedString};
+
+use super::NAV_SEARCH;
+use crate::library;
+use crate::services::settings::{SortDir, ViewSort};
+use crate::state::AppState;
+use crate::ui::albums::AlbumsUi;
+use crate::ui::artists::ArtistsUi;
+use crate::ui::callbacks::collect_track_ids;
+use crate::ui::callbacks::cross_tab_nav;
+use crate::ui::callbacks::macros::spawn_logged;
+use crate::ui::search::{self as search_ui_mod, SearchUi, fetch};
+use crate::ui::track_list_view::TrackListColumnState;
+use crate::{AppWindow, Search};
+
+/// Wire the cross-tab open / Top Result / row-action / sort / selection
+/// callbacks.
+pub(super) fn wire(
+    ui: &AppWindow,
+    state: &AppState,
+    search_ui: &Arc<SearchUi>,
+    albums_ui: &Arc<AlbumsUi>,
+    artists_ui: &Arc<ArtistsUi>,
+) {
+    let g = ui.global::<Search>();
+    let weak = ui.as_weak();
+
+    // --- Cross-tab open-album --------------------------------------
+    {
+        let s = state.clone();
+        let au = albums_ui.clone();
+        let weak = weak.clone();
+        g.on_open_album(move |album_id| {
+            cross_tab_nav::open_album_cross_tab(
+                &s,
+                &au,
+                &weak,
+                i64::from(album_id),
+                NAV_SEARCH,
+                "search::open_album",
+            );
+        });
+    }
+
+    // --- Cross-tab open-artist -------------------------------------
+    {
+        let s = state.clone();
+        let aru = artists_ui.clone();
+        let weak = weak.clone();
+        g.on_open_artist(move |artist_id| {
+            cross_tab_nav::open_artist_cross_tab(
+                &s,
+                &aru,
+                &weak,
+                i64::from(artist_id),
+                NAV_SEARCH,
+                "search::open_artist",
+            );
+        });
+    }
+
+    // --- Top Result click ------------------------------------------
+    // Resolves to one of the two cross-tab handlers above based on
+    // `top-kind`. Invoking the global callback directly keeps the
+    // origin-stamp + nav-flip + persist all in one place.
+    {
+        let weak = weak.clone();
+        g.on_open_top_result(move || {
+            let Some(ui) = weak.upgrade() else { return };
+            let g = ui.global::<Search>();
+            let kind = g.get_top_kind();
+            let id = g.get_top_id();
+            if id < 0 {
+                return;
+            }
+            match kind.as_str() {
+                "album" => g.invoke_open_album(id),
+                "artist" => g.invoke_open_artist(id),
+                _ => {}
+            }
+        });
+    }
+
+    // --- Songs row actions -----------------------------------------
+    {
+        let s = state.clone();
+        g.on_play_row(move |track_id, _idx| {
+            let s = s.clone();
+            let id = i64::from(track_id);
+            spawn_logged!(s, "search::play_row",
+                library::queue::queue_append_unique(&s, id));
+        });
+    }
+    {
+        let s = state.clone();
+        g.on_play_next(move |ids| {
+            let id_vec = collect_track_ids(&ids);
+            let s = s.clone();
+            spawn_logged!(s, "search::play_next",
+                library::queue::queue_play_next_many(&s, id_vec));
+        });
+    }
+    {
+        let s = state.clone();
+        g.on_add_to_queue(move |ids| {
+            let id_vec: Vec<i64> = ids.iter().map(i64::from).collect();
+            let s = s.clone();
+            spawn_logged!(s, "search::add_to_queue",
+                library::queue::queue_add_tracks(&s, id_vec));
+        });
+    }
+    {
+        let s = state.clone();
+        g.on_toggle_row_favorite(move |ids, fav| {
+            let id_vec = collect_track_ids(&ids);
+            if id_vec.is_empty() {
+                return;
+            }
+            let s = s.clone();
+            s.runtime.clone().spawn(async move {
+                if let Err(e) = library::favorites::set_favorite(&s, id_vec, fav).await {
+                    log::warn!("search::set_favorite: {e}");
+                }
+                // No optimistic local update — `Search.tracks` is
+                // backed by `last_results` which lives on disk; the
+                // next `library_changed_tx` tick won't refresh us
+                // (Search is query-driven), and a stale `is_favorite`
+                // pip on a result row resolves itself on the user's
+                // next search or page revisit. Better than mutating
+                // the cached result set behind the user's back.
+            });
+        });
+    }
+    {
+        let s = state.clone();
+        let su = search_ui.clone();
+        let weak = weak.clone();
+        g.on_request_sort(move |field| {
+            let Some(ui) = weak.upgrade() else { return };
+            let g = ui.global::<Search>();
+            let cur_field = g.get_sort_field();
+            let cur_dir = g.get_sort_dir();
+            let (new_field, new_dir_s) = if cur_field.as_str() == field.as_str() {
+                let nd = if cur_dir.as_str() == "asc" { "desc" } else { "asc" };
+                (field.to_string(), nd.to_string())
+            } else {
+                (field.to_string(), "asc".to_string())
+            };
+            g.set_sort_field(SharedString::from(new_field.as_str()));
+            g.set_sort_dir(SharedString::from(new_dir_s.as_str()));
+            let new_dir = if new_dir_s == "desc" {
+                SortDir::Desc
+            } else {
+                SortDir::Asc
+            };
+            *su.state().sort.lock() = ViewSort {
+                field: new_field.clone(),
+                dir: new_dir.clone(),
+            };
+
+            let s_disk = s.clone();
+            let sort = ViewSort {
+                field: new_field,
+                dir: new_dir,
+            };
+            s.runtime.spawn_blocking(move || {
+                if let Err(e) =
+                    library::settings::set_view_sort(&s_disk, "search".to_owned(), sort)
+                {
+                    log::warn!("search::set_view_sort: {e}");
+                }
+            });
+
+            // Re-derive the visible Songs slice from the cached
+            // results — no DB hit. If there are no cached results
+            // yet (no commit ran since startup) this is a no-op.
+            fetch::swap_tracks_compact_or_full(&su, &weak);
+        });
+    }
+    {
+        let s = state.clone();
+        let weak = weak.clone();
+        g.on_toggle_column(move |_id| {
+            let Some(ui) = weak.upgrade() else { return };
+            let columns = ui.global::<Search>().snapshot_visible();
+            let s_disk = s.clone();
+            s.runtime.spawn_blocking(move || {
+                if let Err(e) = library::settings::update_view_columns(
+                    &s_disk,
+                    "search".to_owned(),
+                    columns,
+                ) {
+                    log::warn!("search::toggle_column: {e}");
+                }
+            });
+        });
+    }
+    {
+        let weak = weak.clone();
+        let su = search_ui.clone();
+        g.on_select_row(move |idx, id, shift, ctrl| {
+            let Some(ui) = weak.upgrade() else { return };
+            search_ui_mod::handle_select_row(&ui, &su, idx, id, shift, ctrl);
+        });
+    }
+    {
+        let weak = weak.clone();
+        let su = search_ui.clone();
+        g.on_clear_selection(move || {
+            let Some(ui) = weak.upgrade() else { return };
+            search_ui_mod::clear_selection(&ui, &su);
+        });
+    }
+}

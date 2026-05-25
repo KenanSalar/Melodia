@@ -1,0 +1,132 @@
+# ─── Rust / Cargo ────────────────────────────────────────────────────────────
+# Build artifacts (Cargo + Slint compiler output via OUT_DIR live here)
+/target/
+debug/
+
+# Vendored winit fork: its own `.gitignore` was dropped when the tree was
+# trimmed to essentials. Catch what cargo regenerates if it's ever run inside
+# `winit/` directly — build output, and a lockfile (winit is a library, so it
+# doesn't commit one; the build is governed by this repo's root Cargo.lock).
+/winit/target/
+/winit/Cargo.lock
+
+# rustfmt backup files
+**/*.rs.bk
+
+# Internal compiler error dumps
+rustc-ice-*.txt
+
+# MSVC Windows debug info
+*.pdb
+
+# cargo-mutants output
+**/mutants.out*/
+
+# NOTE: Cargo.lock IS committed — Melodia is a binary application.
+# (Libraries should ignore it; apps should not.)
+
+# ─── SQLx ────────────────────────────────────────────────────────────────────
+# `.sqlx/` (offline query cache) IS committed so the app builds in CI without a
+# live database. See https://github.com/launchbadge/sqlx FAQ on offline mode.
+# Do NOT add `.sqlx/` here.
+
+# Local development databases that live alongside the source tree
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+*.sqlite-journal
+
+# ─── App runtime artifacts ───────────────────────────────────────────────────
+# Anything the dev binary may drop next to itself when launched from the repo
+/queue.json
+/search_history.json
+/settings.json
+/artwork/
+/artists/
+/cache/
+
+# ─── Environment / secrets ───────────────────────────────────────────────────
+.env
+.env.local
+.env.*.local
+
+# ─── Coverage & profiling ────────────────────────────────────────────────────
+# cargo-llvm-cov
+*.profraw
+*.profdata
+/coverage/
+/lcov.info
+tarpaulin-report.html
+cobertura.xml
+
+# Flamegraphs / perf
+flamegraph.svg
+perf.data
+perf.data.old
+
+# heaptrack (we use this for memory regression checks per CLAUDE.md)
+heaptrack.*.gz
+heaptrack.*.zst
+*.heaptrack
+
+# Valgrind / massif
+massif.out.*
+valgrind-out.txt
+callgrind.out.*
+
+# ─── IDE / editor ────────────────────────────────────────────────────────────
+# JetBrains (RustRover, IntelliJ, etc.)
+.idea/
+
+# VS Code — ignore by default; whitelist shared settings if/when needed
+.vscode/
+
+# Zed
+.zed/
+
+# Fleet
+.fleet/
+
+# Vim / Neovim
+*.swp
+*.swo
+*~
+.*.swp
+
+# Emacs
+*~
+\#*\#
+.\#*
+
+# ─── OS metadata ─────────────────────────────────────────────────────────────
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+desktop.ini
+$RECYCLE.BIN/
+
+# Linux
+.directory
+.Trash-*
+
+# ─── Python ──────────────────────────────────────────────────────────────────
+# `scripts/build-latest-json.py` runs in CI to assemble the auto-updater
+# manifest. Local invocation (validation, dry-runs) drops a `__pycache__/`
+# next to the script — never useful to commit.
+__pycache__/
+*.pyc
+
+# ─── Misc ────────────────────────────────────────────────────────────────────
+# Personal scratch space — useful but should not be committed
+/scratch/
+/tmp/
+*.log

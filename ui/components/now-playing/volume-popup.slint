@@ -1,0 +1,332 @@
+import { Theme } from "../../theme.slint";
+import { Player, PopupHighlight } from "../../globals.slint";
+import { IconButton } from "../icon-button.slint";
+import { PopupSurface } from "../popup-surface.slint";
+import { FocusLossWatcher } from "../focus-loss-watcher.slint";
+
+// Volume control: an icon button + a popup containing an M3 Expressive
+// vertical slider (wide rounded inactive + active bars with a thin
+// horizontal-pill thumb between them, plus a stop-indicator dot near the
+// max end of the inactive bar) and a percentage badge floating to its
+// left.
+//
+// The PopupWindow is wider than the slider chrome itself; the slider
+// sits in the right strip (40 px wide) and the badge sits in the left
+// strip (42 px wide) with a 10 px transparent gap between, so the two
+// read as separate floating chromes instead of one wide bar. (PopupWindow
+// content can't render outside the popup rectangle, so we use a
+// transparent gap rather than a second popup or negative coordinates.)
+export component VolumePopup inherits Rectangle {
+    in property <length> diameter: 36px;
+    in property <length> icon-size: 22px;
+
+    width: btn.width;
+    height: btn.height;
+
+    // Keyboard-driven volume changes (↑ / ↓ / Ctrl±) bump
+    // `Player.volume-hud-tick`; we observe that here, set a tick-down
+    // counter, and force the volume button's tooltip to show with its
+    // current `% ` text. Same pill, same anchor as the hover tooltip —
+    // just driven without a real mouse hover. Slider drags don't bump
+    // the tick (they already raise the popup chrome below).
+    property <int> hud-tick-mirror: Player.volume-hud-tick;
+    property <int> tooltip-ticks-remaining: 0;
+
+    changed hud-tick-mirror => {
+        // 15 ticks × 100 ms = 1.5 s visible after the last keystroke.
+        // Each fresh keystroke resets the counter, so rapid taps keep
+        // the tooltip up smoothly.
+        root.tooltip-ticks-remaining = 15;
+    }
+
+    tooltip-hide-timer := Timer {
+        interval: 100ms;
+        running: root.tooltip-ticks-remaining > 0;
+        triggered => {
+            root.tooltip-ticks-remaining = max(0, root.tooltip-ticks-remaining - 1);
+        }
+    }
+
+    function volume-icon-name() -> string {
+        if (Player.vm.is_muted || Player.vm.volume == 0) {
+            return "volume_off";
+        }
+        if (Player.vm.volume < 50) {
+            return "volume_down";
+        }
+        return "volume_up";
+    }
+
+    btn := IconButton {
+        icon: root.volume-icon-name();
+        press-shrink: true;
+        diameter: root.diameter;
+        icon-size: root.icon-size;
+        filled: true;
+        tooltip-text: round(Player.vm.volume) + "%";
+        force-tooltip: root.tooltip-ticks-remaining > 0;
+        // Keep the disc highlighted while the popup is open. Cleared by
+        // the left-strip click-catcher below or by the AppWindow scrim
+        // catching an outside click.
+        force-bg: PopupHighlight.id == "volume";
+        clicked => { PopupHighlight.id = "volume"; pop.show(); }
+    }
+
+    pop := PopupWindow {
+        // Right-align the popup to the volume button so the slider
+        // chrome (on the popup's right strip) sits above the icon and
+        // the badge area extends to the left.
+        x: btn.width - self.width;
+        y: -self.height - 8px;
+        width: 92px;
+        height: 180px;
+        close-policy: close-on-click-outside;
+
+        // Live only while this popup is the one currently open — the
+        // trigger sets `PopupHighlight.id = "volume"` before `pop.show()`,
+        // and the close-handlers below (or the winit Release path) clear
+        // it back to "". One watcher per focus-loss instead of one per
+        // popup-host component instance.
+        if PopupHighlight.id == "volume": FocusLossWatcher {
+            close => { pop.close(); PopupHighlight.id = ""; }
+        }
+
+        // Click-catcher for the popup's empty left strip (the
+        // percentage-badge area + the transparent gap to the chrome).
+        // Without this, clicks there land *inside* the PopupWindow's
+        // bounding rect, so the close-on-click-outside policy doesn't
+        // fire and the popup feels sticky. Declared before the chrome
+        // so the chrome's TouchArea wins for clicks on the slider.
+        TouchArea {
+            x: 0;
+            y: 0;
+            width: parent.width - chrome.width;
+            height: parent.height;
+            clicked => { pop.close(); PopupHighlight.id = ""; }
+        }
+
+        // -- Slider chrome (right strip) --
+        // Pill-shaped popup surface; `PopupSurface { pill: true }` derives
+        // border-radius from the short axis (the 40 px width). No entry
+        // animation — popups appear instantly per design.
+        chrome := PopupSurface {
+            x: parent.width - self.width;
+            y: 0;
+            width: 40px;
+            height: parent.height;
+            pill: true;
+
+            slider := Rectangle {
+                x: 0;
+                y: Theme.pad-md;
+                width: parent.width;
+                height: parent.height - 2 * Theme.pad-md;
+
+                property <float> frac: clamp(Player.vm.volume / 100, 0, 1);
+                // M3 Expressive geometry: two slim rounded bars (inactive
+                // on top, active on bottom) that meet **at the thumb's
+                // center** with no gap. The thumb pill (4 px tall by
+                // default) blankets the seam, so the user reads it as
+                // one continuous bar with the thumb sitting on top. No
+                // minimum-size threshold, no opacity gate — the bars
+                // are just two halves of a single visual track, with the
+                // hidden split always under the thumb. At extremes one
+                // half shrinks to ~2 px and is fully covered.
+                //
+                // `thumb-h` halves while pressing/dragging (matches
+                // Compose Material 3's `Slider.kt`: any active
+                // interaction shrinks the thumb along the value axis to
+                // 1/2 its rest size). M3 standard easing, 200 ms.
+                property <length> track-w: 8px;
+                property <length> thumb-w: 24px;
+                property <length> thumb-h: vol-touch.pressed ? 2px : 4px;
+                // Mask sitting between the bars and the thumb. Fixed
+                // height = thumb-h (rest) + 2·gap = 12 px, so with the
+                // thumb pill (4 px) centered inside, 4 px of mask peeks
+                // above and 4 px below — that's the visible M3 gap that
+                // makes the slider read as two separate rounded bars.
+                // During the thumb's press animation (4→2 px), the mask
+                // stays 12 px, so the visible gap on each side grows
+                // 4→5 px ("active track absorbs the freed pixels" feel).
+                property <length> thumb-bg-w: self.thumb-w;
+                property <length> thumb-bg-h: 12px;
+                property <length> stop-d: 4px;
+                // Seat the dot inside the inactive bar's top hemisphere so
+                // it reads as the endpoint cap, not a separate element
+                // floating below the top: dot-center aligns with the
+                // bar's rounded-end radius (track-w / 2 = 4 px).
+                property <length> stop-y: 3px;
+
+                property <length> track-cx: self.width / 2;
+                // Centre the thumb against a stable 4 px reference (the
+                // rest `thumb-h`) rather than the live animated height.
+                // Deriving thumb-y from a height-dependent term would pin
+                // one edge at the extremes — at frac=0 the bottom edge
+                // stays put and only the top moves inward on press,
+                // looking asymmetric. The 12 px mask hides any 1-px
+                // overflow past the track ends.
+                property <length> thumb-cy:
+                    (1 - self.frac) * (self.height - 4px) + 2px;
+                property <length> thumb-y: self.thumb-cy - self.thumb-h / 2;
+                property <length> inactive-h: self.thumb-cy;
+                property <length> active-h: self.height - self.thumb-cy;
+
+                animate thumb-h { duration: 200ms; easing: cubic-bezier(0.2, 0, 0, 1); }
+
+                // Inactive bar — top half of the visual track. Bottom
+                // edge runs to `thumb-cy`; the thumb covers it.
+                Rectangle {
+                    x: parent.track-cx - parent.track-w / 2;
+                    y: 0;
+                    width: parent.track-w;
+                    height: parent.inactive-h;
+                    border-radius: self.width / 2;
+                    background: Theme.surface1;
+                }
+
+                // Active bar — bottom half of the visual track. Top edge
+                // starts at `thumb-cy`; the thumb covers it.
+                Rectangle {
+                    x: parent.track-cx - parent.track-w / 2;
+                    y: parent.thumb-cy;
+                    width: parent.track-w;
+                    height: parent.active-h;
+                    border-radius: self.width / 2;
+                    background: Theme.accent;
+                }
+
+                // Stop-indicator dot at the max end of the inactive bar.
+                // Always rendered at full opacity; the thumb-background
+                // mask (drawn after this element) covers it when the
+                // thumb approaches the top, so the dot just disappears
+                // behind the moving thumb without a fade.
+                Rectangle {
+                    x: parent.track-cx - parent.stop-d / 2;
+                    y: parent.stop-y;
+                    width: parent.stop-d;
+                    height: parent.stop-d;
+                    border-radius: self.width / 2;
+                    background: Theme.accent;
+                }
+
+                // Thumb background — Theme.crust (chrome bg) stadium
+                // that masks the bars where they meet at `thumb-cy`,
+                // creating the visible M3 "two separate rounded bars"
+                // look without a geometric gap (so no glitch at
+                // extremes — the mask just covers more of the small
+                // remnant the closer the thumb gets to either end).
+                Rectangle {
+                    x: parent.track-cx - parent.thumb-bg-w / 2;
+                    y: parent.thumb-cy - parent.thumb-bg-h / 2;
+                    width: parent.thumb-bg-w;
+                    height: parent.thumb-bg-h;
+                    border-radius: self.height / 2;
+                    background: Theme.crust;
+                }
+
+                // Thumb — thin horizontal pill, same accent color as the
+                // active bar. Wider than `track-w` so the pill overhangs
+                // the bars on each side (M3 Expressive "handle" look).
+                // Painted after the dot so the dot is z-covered if the
+                // opacity fade somehow lags the position update.
+                Rectangle {
+                    x: parent.track-cx - parent.thumb-w / 2;
+                    y: parent.thumb-y;
+                    width: parent.thumb-w;
+                    height: parent.thumb-h;
+                    border-radius: self.height / 2;
+                    background: Theme.accent;
+                }
+
+                vol-touch := TouchArea {
+                    mouse-cursor: pointer;
+
+                    // Last integer volume we forwarded to Rust; pixel-level
+                    // `moved` events that don't change the rounded value
+                    // are dropped here so the boundary crossing only fires
+                    // once per integer step (≤ 100 emits per full drag).
+                    property <int> last-emitted: -1;
+
+                    // Set true on jump-to-click or any `moved`; stays false
+                    // during a no-move grab. Gates commit so a dead-zone
+                    // press without movement doesn't write settings.json.
+                    property <bool> dragged-since-press: false;
+
+                    function value-from-y(y: length) -> int {
+                        return round(clamp(1 - y / parent.height, 0, 1) * 100);
+                    }
+
+                    function emit(v: int) {
+                        if (v != self.last-emitted) {
+                            self.last-emitted = v;
+                            Player.set-volume(v);
+                        }
+                    }
+
+                    pointer-event(ev) => {
+                        if (ev.kind == PointerEventKind.down) {
+                            // Grab zone = the mask region (±thumb-bg-h/2
+                            // around thumb-cy). Inside, capture the press
+                            // without jumping (matches the perceived thumb
+                            // hit area); outside, jump-to-click as before.
+                            if (self.mouse-y < parent.thumb-cy - parent.thumb-bg-h / 2
+                                || self.mouse-y > parent.thumb-cy + parent.thumb-bg-h / 2) {
+                                self.emit(self.value-from-y(self.mouse-y));
+                                self.dragged-since-press = true;
+                            } else {
+                                self.dragged-since-press = false;
+                            }
+                        }
+                        // Up/Cancel both signal "user is done". Commit
+                        // settings.json only if the user actually moved.
+                        if (ev.kind == PointerEventKind.up
+                            || ev.kind == PointerEventKind.cancel) {
+                            if (self.dragged-since-press) {
+                                Player.commit-volume();
+                            }
+                            // Slider release stays inside the popup (the
+                            // popup doesn't close on slider clicks), so
+                            // restore the trigger highlight that the
+                            // winit Release filter just cleared.
+                            PopupHighlight.id = "volume";
+                        }
+                    }
+                    moved => {
+                        if (self.pressed) {
+                            self.emit(self.value-from-y(self.mouse-y));
+                            self.dragged-since-press = true;
+                        }
+                    }
+                }
+            }
+        }
+
+        // -- Percentage badge (left strip, separate chrome) --
+        // Positioned in popup-absolute coordinates by chaining through
+        // chrome.y + slider.y + slider.thumb-cy. Vertically centred on
+        // the thumb; horizontally pinned to the left edge with a small
+        // gap to the slider chrome. Only shown while the slider is
+        // hovered or being dragged.
+        Rectangle {
+            width: 42px;
+            height: 22px;
+            x: 0;
+            y: chrome.y + slider.y + slider.thumb-cy - self.height / 2;
+            background: Theme.surface2;
+            border-radius: Theme.radius-sm;
+            // Hover/drag fade — opacity instead of `visible` so the
+            // animate block can interpolate. Expressive easing matches
+            // Tauri's `.valueIndicator` (150ms motion-easing-expressive).
+            opacity: vol-touch.has-hover || vol-touch.pressed ? 1.0 : 0.0;
+            animate opacity { duration: 150ms; easing: cubic-bezier(0.34, 1.56, 0.64, 1); }
+
+            Text {
+                text: round(Player.vm.volume) + "%";
+                color: Theme.text;
+                font-size: Theme.font-size-sm;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+        }
+    }
+}

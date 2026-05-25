@@ -1,0 +1,88 @@
+#!/bin/sh
+# melodia-update-helper — minimal pkexec target for the in-app updater.
+#
+# Invoked as:
+#   pkexec /usr/libexec/melodia-update-helper rpm /path/to/melodia-0.2.0.rpm
+#   pkexec /usr/libexec/melodia-update-helper deb /path/to/melodia_0.2.0_amd64.deb
+#
+# The polkit policy at
+#   /usr/share/polkit-1/actions/com.github.kenansalar.melodia.update.policy
+# registers this binary path as the target of the
+# `com.github.kenansalar.melodia.update` action, so the KDE / GNOME auth
+# dialog shows "Install Melodia update" instead of the raw
+# `dnf install -y ...` command line.
+#
+# Why this wrapper instead of letting the app pkexec dnf directly:
+# polkit's auth-dialog description is keyed off the .policy file's
+# `<message>` and the registered binary path. Pointing the policy at
+# `/usr/bin/dnf` or `/usr/bin/apt` would whitelist EVERY dnf/apt
+# invocation under that auth-cached-keep window, not just the Melodia
+# update. Narrowing the policy to this helper means the elevation only
+# covers `install <local-file>`, nothing else.
+
+set -eu
+
+usage() {
+    echo "usage: $0 {rpm|deb} <path-to-package>" >&2
+    exit 64  # EX_USAGE
+}
+
+[ "$#" -eq 2 ] || usage
+
+format="$1"
+package="$2"
+
+# Defence in depth: the package must be a regular file on disk. The
+# in-app updater always passes an absolute path under
+# ~/.cache/Melodia/update-staging/ (root-readable but user-writable),
+# but a malformed argv could try to point at a /dev/* or named pipe.
+[ -f "$package" ] || {
+    echo "$0: package does not exist or is not a regular file: $package" >&2
+    exit 1
+}
+
+# The path must be absolute. Combined with the dnf/apt invocations
+# below dropping the `--` end-of-options token (dnf5 rejects a bare
+# `--`), this is what guarantees `$package` can't be parsed as an
+# option flag — a relative path could otherwise begin with `-`.
+case "$package" in
+    /*) ;;
+    *)
+        echo "$0: package path must be absolute: $package" >&2
+        exit 1
+        ;;
+esac
+
+case "$format" in
+    rpm)
+        # Prefer dnf5 (Fedora 41+) over the legacy dnf shim. Matches
+        # the in-app updater's `resolve_install_program(Rpm)` preference
+        # order in src/services/updater/linux_pkg.rs so a helper run
+        # behaves identically to a direct-pkexec fallback.
+        # No `--` end-of-options token: dnf5 (Fedora 41+) rejects a bare
+        # `--` placed after the subcommand. `$package` is already
+        # validated as an absolute path to a regular file above, so it
+        # cannot be mistaken for a flag.
+        if command -v dnf5 >/dev/null 2>&1; then
+            exec dnf5 install -y "$package"
+        elif command -v dnf >/dev/null 2>&1; then
+            exec dnf install -y "$package"
+        else
+            echo "$0: no dnf5 or dnf on PATH" >&2
+            exit 127
+        fi
+        ;;
+    deb)
+        if command -v apt >/dev/null 2>&1; then
+            exec apt install -y "$package"
+        elif command -v apt-get >/dev/null 2>&1; then
+            exec apt-get install -y "$package"
+        else
+            echo "$0: no apt or apt-get on PATH" >&2
+            exit 127
+        fi
+        ;;
+    *)
+        usage
+        ;;
+esac

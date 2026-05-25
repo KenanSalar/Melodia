@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE policyconfig PUBLIC
+ "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN"
+ "http://www.freedesktop.org/standards/PolicyKit/1/policyconfig.dtd">
+<!--
+  Polkit action for the Melodia in-app updater.
+
+  This policy narrows pkexec elevation so the auth dialog shows
+  "Install Melodia update" instead of the raw dnf/apt command. The
+  action targets /usr/libexec/melodia-update-helper, which then
+  argv-dispatches to dnf5/dnf/apt/apt-get. Whitelisting the helper
+  binary (not /usr/bin/dnf itself) means the auth_admin_keep cache
+  only applies to Melodia updates, not to all dnf invocations under
+  the same session.
+
+  Translations: <message> tags repeat per supported locale via
+  xml:lang. Only English is shipped at v1; translators add per-locale
+  variants by appending <message xml:lang="de">…</message> entries.
+-->
+<policyconfig>
+
+  <vendor>Melodia</vendor>
+  <vendor_url>https://github.com/KenanSalar/Melodia</vendor_url>
+  <icon_name>melodia</icon_name>
+
+  <action id="com.github.kenansalar.melodia.update">
+    <description>Install Melodia update</description>
+    <message>Authentication is required to install a Melodia update.</message>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/libexec/melodia-update-helper</annotate>
+    <annotate key="org.freedesktop.policykit.exec.allow_gui">true</annotate>
+  </action>
+
+</policyconfig>

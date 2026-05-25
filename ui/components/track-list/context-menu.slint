@@ -1,0 +1,59 @@
+import { Theme } from "../../theme.slint";
+import { MaterialIcon } from "../material-icon.slint";
+
+// One row inside a context menu. Click runs `clicked()` and dismisses the
+// host popup (via Slint's `close-on-click: true` on the parent PopupWindow).
+export component MenuItem inherits Rectangle {
+    in property <string> label;
+    in property <string> icon;
+    in property <bool> destructive;
+
+    callback clicked();
+
+    height: 32px;
+    border-radius: Theme.radius-sm;
+    background: touch.has-hover ? Theme.surface2 : transparent;
+    animate background { duration: 100ms; easing: ease-in-out; }
+
+    HorizontalLayout {
+        padding-left: Theme.pad-sm;
+        padding-right: Theme.pad-sm;
+        spacing: Theme.pad-sm;
+        alignment: start;
+
+        VerticalLayout {
+            alignment: center;
+            MaterialIcon {
+                name: root.icon;
+                icon-size: 16px;
+                icon-color: root.destructive ? Theme.red : Theme.subtext1;
+            }
+        }
+
+        VerticalLayout {
+            alignment: center;
+            Text {
+                text: root.label;
+                color: root.destructive ? Theme.red : Theme.text;
+                font-size: Theme.font-size-md;
+            }
+        }
+    }
+
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+// Visual separator between menu sections.
+export component MenuSeparator inherits Rectangle {
+    height: 7px;
+    Rectangle {
+        x: Theme.pad-xs;
+        y: 3px;
+        width: parent.width - 2 * Theme.pad-xs;
+        height: 1px;
+        background: Theme.surface2;
+    }
+}

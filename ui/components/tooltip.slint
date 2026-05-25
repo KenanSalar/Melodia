@@ -1,0 +1,62 @@
+import { Theme } from "../theme.slint";
+
+// Reusable tooltip pill — anchors above its parent and fades in on
+// hover. Replaces what was the Tauri HTML `title=` attribute (Slint
+// has no native HTML-like tooltip).
+//
+// Usage: place inside the element you want a tooltip for, set
+// `text` and feed `hovered` from the parent's TouchArea. The 500 ms
+// reveal delay (so quick mouse-passes don't flash a tooltip) is
+// owned by this component, gated on `hovered`.
+export component Tooltip inherits Rectangle {
+    in property <string> text;
+    in property <bool>  hovered;
+    // Width of the host element. `parent` isn't accessible from a
+    // component's root binding in Slint, so callers pass it
+    // explicitly: `host-width: parent.width`.
+    in property <length> host-width;
+    // Vertical gap between the tooltip and the host element.
+    in property <length> gap: 6px;
+    // External force-show flag — bypasses the 500 ms hover delay and
+    // shows the pill immediately. Used by callers that want to surface
+    // the tooltip without a real mouse hover (e.g. keyboard-driven
+    // volume changes triggering the VolumePopup button's tooltip).
+    // Falls back through the same `animate opacity` so the fade-in /
+    // fade-out timing matches the hover path.
+    in property <bool> force-shown: false;
+
+    private property <bool> shown;
+
+    width: tip-text.preferred-width + 16px;
+    height: tip-text.preferred-height + 8px;
+    x: (root.host-width - self.width) / 2;
+    y: -self.height - root.gap;
+
+    background: Theme.surface2;
+    border-color: Theme.surface1;
+    border-width: 1px;
+    border-radius: 6px;
+    opacity: (shown || root.force-shown) ? 1.0 : 0.0;
+    animate opacity { duration: 150ms; easing: ease-out; }
+    visible: root.text != "";
+
+    reveal-timer := Timer {
+        interval: 500ms;
+        running: root.hovered && !root.shown && root.text != "";
+        triggered => { root.shown = true; }
+    }
+
+    // Reset when hover ends so the next hover restarts the delay.
+    // `changed` callback fires on either edge.
+    changed hovered => {
+        if (!root.hovered) { root.shown = false; }
+    }
+
+    tip-text := Text {
+        text: root.text;
+        color: Theme.text;
+        font-size: 11px;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+}

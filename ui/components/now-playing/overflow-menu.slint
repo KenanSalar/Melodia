@@ -1,0 +1,173 @@
+import { Theme } from "../../theme.slint";
+import { Settings } from "../../settings.slint";
+import { Player, WindowChrome, Queue, PopupHighlight } from "../../globals.slint";
+import { IconButton } from "../icon-button.slint";
+import { MaterialIcon } from "../material-icon.slint";
+import { PopupSurface } from "../popup-surface.slint";
+import { FocusLossWatcher } from "../focus-loss-watcher.slint";
+
+// One row inside the overflow popup. Renders the same icon + label pair
+// shown inline in the now-playing bar; active colour mirrors the inline
+// IconButton's `active-fg` (Theme.accent).
+component OverflowRow inherits Rectangle {
+    in property <string> icon;
+    in property <string> label;
+    in property <bool> active;
+    // FILL=1 variant for active glyphs that should read as solid (favorite,
+    // pin). Mirrors `IconButton.filled` for the inline siblings.
+    in property <bool> filled;
+    in property <bool> button-enabled: true;
+
+    callback clicked();
+
+    height: 36px;
+    border-radius: Theme.radius-sm;
+    background: touch.has-hover && root.button-enabled ? Theme.surface1 : transparent;
+    animate background { duration: Theme.dur-fast; easing: ease-in-out; }
+    opacity: root.button-enabled ? 1 : 0.5;
+
+    HorizontalLayout {
+        padding-left: Theme.pad-sm;
+        padding-right: Theme.pad-sm;
+        spacing: Theme.pad-sm;
+        alignment: start;
+
+        VerticalLayout {
+            alignment: center;
+            MaterialIcon {
+                name: root.icon;
+                icon-size: 20px;
+                icon-color: root.active ? Theme.accent : Theme.text;
+                filled: root.filled;
+            }
+        }
+        VerticalLayout {
+            alignment: center;
+            Text {
+                text: root.label;
+                color: root.active ? Theme.accent : Theme.text;
+                font-size: Theme.font-size-md;
+            }
+        }
+    }
+
+    touch := TouchArea {
+        mouse-cursor: root.button-enabled ? pointer : default;
+        clicked => {
+            if (root.button-enabled) { root.clicked(); }
+        }
+    }
+}
+
+// `more_vert` IconButton + PopupWindow listing every currently-overflowed
+// button. Same structural shape as ColumnTogglePopup (the canonical
+// popup-from-icon pattern). Popup opens upward (the bar lives at window
+// bottom) and right-aligns under the trigger.
+export component OverflowMenu inherits Rectangle {
+    in property <length> bar-w;
+
+    width: btn.width;
+    height: btn.height;
+
+    // Number of currently-overflowed buttons. Drives the popup's
+    // explicit height so the `y: -self.height - …` binding has a
+    // measured value to subtract from — without explicit sizing,
+    // Slint evaluates `self.height` to 0 before content layout, the
+    // popup ends up positioned just above the trigger, and then
+    // extends DOWNWARD over the now-playing bar instead of upward.
+    // Each row is fixed at 36 px (matches OverflowRow.height).
+    property <int> row-count:
+        (Settings.overflow-favorite ? 1 : 0)
+        + (Settings.overflow-repeat ? 1 : 0)
+        + (Settings.overflow-shuffle ? 1 : 0)
+        + (Settings.overflow-pin ? 1 : 0)
+        + (Settings.overflow-queue ? 1 : 0);
+
+    btn := IconButton {
+        icon: "more_vert";
+        press-shrink: true;
+        diameter: clamp(root.bar-w * 0.05, 28px, 36px);
+        icon-size: clamp(root.bar-w * 0.03, 18px, 20px);
+        tooltip-text: @tr("More");
+        // Keep the disc highlighted while the popup is open. Cleared by
+        // any row's `pop.close()` callsite below, or by the AppWindow
+        // scrim catching an outside click.
+        force-bg: PopupHighlight.id == "overflow";
+        clicked => { PopupHighlight.id = "overflow"; pop.show(); }
+    }
+
+    pop := PopupWindow {
+        // `height` must stay explicit because the `y: -self.height - …`
+        // binding has to subtract a real measured value — Slint's
+        // content-derived sizing resolves to 0 before the first layout
+        // pass, which would put the popup just barely above the trigger
+        // top and let it expand DOWN over the bar.
+        //   height = 36 px × visible rows + 4 px × 2 inner pad-xs + 2 px border + 2 px slack
+        //
+        // `width` is content-driven via `inner.preferred-width` (already
+        // includes the layout's pad-xs on both sides) plus the 1 px
+        // PopupSurface border on each side, with a 156 px floor that
+        // preserves the English-baseline look. Combined with
+        // `x: btn.width - self.width`, the popup right-aligns under the
+        // trigger and GROWS LEFTWARD for longer translated labels
+        // (e.g. de "Im Vordergrund anheften", el "Αφαίρεση από τα
+        // αγαπημένα"), keeping the bar's `padding-right` gap to the
+        // window edge so the underlying view's overlay scrollbar stays
+        // uncovered.
+        width: max(156px, inner.preferred-width + 2px);
+        height: 36px * root.row-count + 12px;
+        x: btn.width - self.width;
+        y: -self.height - 8px;
+        close-policy: close-on-click-outside;
+
+        PopupSurface {
+            // Live only while this popup is the one currently open — the
+            // trigger sets `PopupHighlight.id = "overflow"` before
+            // `pop.show()`, and the winit Release path (or any row's
+            // close handler below) clears it back to "". One watcher
+            // per focus-loss instead of N per visible popup-host.
+            if PopupHighlight.id == "overflow": FocusLossWatcher {
+                close => { pop.close(); PopupHighlight.id = ""; }
+            }
+
+            inner := VerticalLayout {
+                padding: Theme.pad-xs;
+                spacing: 0;
+
+                if Settings.overflow-favorite: OverflowRow {
+                    icon: Player.vm.track.is_favorite ? "favorite" : "favorite_border";
+                    label: Player.vm.track.is_favorite ? @tr("Unfavorite") : @tr("Favorite");
+                    active: Player.vm.track.is_favorite;
+                    filled: Player.vm.track.is_favorite;
+                    button-enabled: Player.vm.has_track;
+                    clicked => { Player.toggle-favorite(); pop.close(); PopupHighlight.id = ""; }
+                }
+                if Settings.overflow-repeat: OverflowRow {
+                    icon: Player.queue.repeat_mode == "one" ? "repeat_one" : "repeat";
+                    label: @tr("Repeat");
+                    active: Player.queue.repeat_mode != "off";
+                    clicked => { Player.cycle-repeat(); pop.close(); PopupHighlight.id = ""; }
+                }
+                if Settings.overflow-shuffle: OverflowRow {
+                    icon: "shuffle";
+                    label: @tr("Shuffle");
+                    active: Player.queue.shuffle;
+                    clicked => { Player.toggle-shuffle(); pop.close(); PopupHighlight.id = ""; }
+                }
+                if WindowChrome.always-on-top-supported && Settings.overflow-pin: OverflowRow {
+                    icon: "push_pin";
+                    label: WindowChrome.always-on-top-active ? @tr("Unpin from Top") : @tr("Pin on Top");
+                    active: WindowChrome.always-on-top-active;
+                    filled: WindowChrome.always-on-top-active;
+                    clicked => { WindowChrome.toggle-always-on-top(); pop.close(); PopupHighlight.id = ""; }
+                }
+                if Settings.overflow-queue: OverflowRow {
+                    icon: "queue_music";
+                    label: @tr("Queue");
+                    active: Queue.open;
+                    clicked => { Queue.open = !Queue.open; pop.close(); PopupHighlight.id = ""; }
+                }
+            }
+        }
+    }
+}

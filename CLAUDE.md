@@ -1,0 +1,211 @@
+# CLAUDE.md
+
+Guidance for Claude Code in this repo. Cross-platform desktop music player: **Slint 1.16** UI + pure-Rust backend, direct calls + tokio channels (no WebView/IPC).
+
+## Build & Dev Commands
+
+```bash
+cargo run                                  # debug
+cargo build --release && target/release/Melodia
+cargo clippy --all-targets -- -D warnings  # lint + check (don't run cargo check)
+cargo test
+cargo llvm-cov --html                      # coverage → target/llvm-cov/html/
+/usr/bin/time -v target/release/Melodia    # peak RSS (release only)
+```
+
+## Prerequisites
+
+- **Rust** edition 2024, stable ≥ 1.93.
+- **Linux**: GTK / X11 / Wayland dev pkgs for Slint femtovg (`libfontconfig1-dev`, `libfreetype6-dev`, Vulkan/OpenGL; `libwayland-dev` on Wayland). No WebKitGTK.
+- **macOS / Windows**: no extra deps.
+
+## Architecture
+
+### State & Playback Flow
+
+- **Library API** (`src/library/`): pure Rust `pub async fn`s; return `Result<T, AppError>`.
+- **PlayerState** (`src/player/state.rs`): state machine behind `std::sync::Mutex`. `with_state_emit()`: mutates → builds VM → drops lock → publishes on `watch` → returns `Vec<PlayerAction>` for `execute_actions()`.
+- **ViewModel propagation** — three `tokio::sync::watch`: `view_model_tx` (state minus queue), `queue_tx`, `position_tx` (500 ms). Full `to_view_model()` is `#[cfg(test)]`-only; prod uses `to_view_model_light` + `to_queue_view_model` (no per-tick queue clone).
+- **Bridge** (`src/ui/bridge.rs`): `slint::spawn_local(async_compat::Compat::new(...))` futures subscribe + write Slint properties on UI thread.
+- **PlayerAction** enum: side effects after lock drops (`PlayMedia`, `Pause`, `Seek`, `SetVolume`, `PreloadGapless`, `UpdatePlayCount`, `SaveQueue`, …).
+- **RodioPlayer**: wraps Rodio `Player`. Speakers `Box::leak`'d in `main.rs` for `'static` — `MixerDeviceSink` must outlive all `Player`s.
+
+### Threading Rules
+
+- Slint event loop runs on **main thread** only. Never block it.
+- One **tokio multi-thread runtime** in `main.rs`, shared as `Arc<Runtime>`.
+- **UI → backend**: callbacks `runtime.spawn(...)`, push results via channels.
+- **Backend → UI** (never `ui.set_*` from background): (1) `slint::spawn_local(async_compat::Compat::new(...))` UI-thread task that `.await`s tokio futures — **preferred** for reactive loops; (2) `slint::invoke_from_event_loop(...)` fire-and-forget; (3) `weak_handle.upgrade_in_event_loop(|ui| …)` auto-handles dropped UI.
+- **Models from background**: `upgrade_in_event_loop` + `as_any().downcast_ref::<VecModel<T>>()`.
+
+### Module Map
+
+Non-obvious wiring only — read the code for file roles.
+
+- `main.rs` (~210 LOC): arena cap → runtime → `AppState::init` → `boot::*` → `app.show()` + `slint::run_event_loop_until_quit()` (stays alive while close-to-tray hides the window) → `shutdown::*` → `process::exit(0)`.
+- `state/` — `AppState`; `PlaybackContext` via `state.playback_ctx()`. `error.rs` = `AppError` (thiserror).
+- `database/` — SQLx + SQLite (WAL, two-pool R/W, `sqlx::migrate!`, FTS5).
+- `media/` — scanner (Rayon), metadata (Lofty 0.24), artwork; **`cover_thumbs.rs`** path-keyed RGB8 LRU → `slint::Image`+`SharedPixelBuffer` (row 72/grid 448/detail 384 px); **watcher** (notify + debouncer → tokio mpsc).
+- `library/` — playback, queue, tracks, albums, artists, genres, playlists, search, `settings/`, browse, import, window. `playback::*` takes `&PlaybackContext`.
+- `tasks/` — `playback_monitor`, `file_event_processor`, **`queue_prune`** (subs `library_changed_tx`; prunes via `QueueState::prune_missing` inside `with_state_emit`; auto-skips pruned playing-track), `retroactive_hash` (BLAKE3 backfill), **`material_you`** (subs view_model + appearance kick; coalesces; `spawn_blocking` extract+generate; publishes `watch::Sender<SystemColorState>` to `ui::appearance` — `tasks/` imports no `ui::*`). `spawner.rs` = `TaskSpawner`.
+- `themes/` — pluggable registry. `apply(...)` writes 23 brushes. `"system"` resolves via `system_{dark,light}_variant`; KDE Breeze re-sources `~/.config/kdeglobals` via `palette_from_kde()`. Material You wins when `system.material_you = Some(...)`; synthetic `MATERIAL_YOU_ACCENT_ID` follows dynamic primary, `last_static_accent` remembers last non-MY pick. Non-Catppuccin themes fold via `..Palette::fallback_semantics(overlay1)`.
+- `ui/` — `bridge`, `icons`, **`notifications.rs`** (`VecModel<NotificationRow>` toast stack, cap 5), **`now_playing_artwork.rs`** (size-8 LRU → `(cover, blur)` `ArtworkPair` from one decode), **`detail_artwork.rs`** (Album-Detail size-12 sibling; released on `close_detail` via `AlbumsUi::release_detail_artwork`).
+- `ui/callbacks/` — `wire_all` + `Nav` persist; macros `wire_sync!`/`spawn_logged!`/`wire_pb!`/`wire_sync_pb!`.
+- `ui/appearance/` — `Arc<RwLock<SystemColorState>>`, MY `kick_tx`/`repaint_tx`, `PersistedAccent` shadow.
+- `ui/window_chrome/` — install + AOT + maximize seed + `RESPAWN_AFTER_EXIT`; `drop_coalescer`; `winit_filter` (drag-window intercept + DnD routing). Hydrates `Theme.use-native-titlebar` *before* `app.run()`.
+- `ui/now_playing/` — `pub(crate) write_crossfade_slot`; **`up_next`** subs `sinks.queue`, gated on `Nav.now-playing-open` (closed ⇒ stash snapshot, open ⇒ rebuild skipped if visible id slice unchanged).
+- `ui/{albums,browse,tracks,queue_sheet}/` — per-view `Ui` handle. **`AlbumsUi`** releases grid covers on `open_album`, detail pair on `close_detail`. **`BrowseUi`** fetch uses stale-fetch token + library-folder-rooted breadcrumbs. **`TracksUi`**: `RowSearchKey` + `PreparedTrackRow`. **`QueueSheetHandles`**: two-phase open + epoch-guarded teardown + `ShadowEntry`.
+- Requires `unstable-winit-030` on `slint`.
+
+### UI Structure (Slint)
+
+- `ui/app-window.slint` — root `Window`. Rounded mantle Rectangle wraps `VerticalLayout { CustomTitleBar?; HorizontalLayout { Sidebar; ContentArea; } NowPlayingBar; }`. Resize ring (4 edges + 4 corner `TouchArea`) gated on `!use-native-titlebar && !is-maximized`. `no-frame: !use-native-titlebar`; `resize-border-width: 4px` **must equal** edge-overlay thickness. Full-screen `NowPlayingView` replaces content panel when `Nav.now-playing-open`.
+- `ui/theme.slint` — `Theme` global: 23 brushes (`in-out` for repaint); layout/typography/motion `out`. In-out non-brush: `use-native-titlebar`, `window-focused`, `shell-radius`, `native-content-radius`. Derived `shell-radius-inner = max(0px, shell-radius - 1px)`. Semantic tokens (`danger`/`danger-hover`/`danger-text`).
+- `ui/settings.slint` — `Settings` global: theme/variant/accent lists+indices + dynamic-mode flags + per-row toggles. Owned by Rust.
+- `ui/models.slint` — boundary structs (`TrackRow`, `AlbumRow`, `ArtistRow`, `GenreRow`, `PlaylistRow`, `PositionTick`, `PlayerViewModel`). **Mirror exactly in Rust.**
+- `ui/layout/`, `ui/views/`, `ui/components/` (incl. `dialog` driven by `Dialog` global with `kind`+`target-id` routing).
+
+## Important Conventions
+
+- **Rust Edition 2024** — `gen` is reserved.
+- **Lock discipline** — release `PlayerState` lock before side effects; `with_state_emit()` enforces.
+- **`PlaybackContext` for `library::playback::*`** (not `&AppState`) — `state.playback_ctx()` (cheap, five `Arc::clone`s); fields `player_state`/`sinks`/`rodio`/`db`/`paths`. Owned `Arc`s dodge lifetime issues in `async move`. Wire via `wire_pb!`/`wire_sync_pb!`. Don't propagate elsewhere in `library/*`.
+- **`TaskSpawner` for `tasks/*::spawn`** — `(TaskTracker, CancellationToken)` bundle in `src/tasks/spawner.rs`. `TaskSpawner::from_state(&state)`; pass `&spawner`. `spawn(fut)` fire-and-forget; `spawn_cancellable(|shutdown| …)` for shutdown loops (loop + `select!` on `shutdown.cancelled()`).
+- **Gapless playback** — Rodio queue 2-deep via `preload_gapless()`; transition via polling `Player::len()` (single lock, avoid TOCTOU).
+- **Position polling** — 500 ms `tokio::time::interval`; media position = `get_pos()` × `speed()`.
+- **Symphonia** — `Decoder::builder().with_gapless(true).with_seekable(true).with_byte_len()`. Formats: MP3, FLAC, M4A/AAC, OGG/Vorbis, WAV, ALAC, AIFF.
+- **Persistence** — `settings.json` = app/user prefs (theme, locale, playback, window geom, updater); per-view UI state (column widths/visibility, sort, browse path, nav index, detail ids, section-collapse) → `views.json` (`src/services/view_state.rs` — `ViewStateData` + `read/write/mutate_view_state`). Window state on close; queue → `queue.json`; search history → `search_history.json` (cap 10).
+- **SQLx migrations** — `./migrations/`, run on startup; DB backed up before applying.
+- **`crate::database::placeholders(n)` for IN-clause lists.** Single-pass, capacity-preallocated; don't re-roll `repeat_n("?", n)...join`. Pair with `chunked_in_query`. Tuple-row CTE UPDATEs follow `batch_update_hashes` / `flush_artwork_backfill` shape — one chunked UPDATE per N rows, not N UPDATEs.
+- **Track projections by use case.** `TrackSummary` (12 cols; queue/NP/playback); `TrackListRow` (19; lists); `TrackMeta` (8; NP chips); `BrowseTrackRow` (9; Files); `Track` (40; scan ingest, hash backfill, detail, test fixtures). Each has a `*_columns()` helper. Pick the slimmest — `SELECT *` into `Track` for a list view costs ~30 unused `Option<String>` decodes/row.
+- **Stale-playback safety in `execute_actions`.** `Path::exists()` pre-flight on every `PlayMedia`; decode errors handled identically: log, `rodio.stop()`, `queue.advance_skip()` via `with_state_emit`, prepend into draining `VecDeque<PlayerAction>`. Silent skip. `execute_actions` takes `&PlayerStateHandle` + `&PlayerSinks`.
+- **Reusable notifications stack** (`ui/components/dialog/notification-stack.slint` + `src/ui/notifications.rs`). Reads `Notifications.rows`; mirrors `Dialog` `kind`-routing — new action = one `if (kind == "…")` branch + one `notifications.show(...)` call. Cap 5. Gotchas: per-card props use `data:` not `row:` (Slint reserves `row` as iter var); translated strings reach Rust via `pure callback`s on `Settings` wrapping `@tr(...)` literals.
+- **File hashing & moved-file detection** — BLAKE3 + partial index `idx_tracks_file_hash`. Watcher retains hash on delete. `tasks/retroactive_hash.rs` backfills. See `.claude/rules/blake3.md`.
+- **Natural sort** — `natord` + `sort_key` column on tracks.
+- **OS media controls** — souvlaki 0.8. Bounded `mpsc` (cap 32) decouples callback thread from `PlayerState`; `EventSink` trait decouples from Slint. **Windows SMTC deferred** — souvlaki panics on null `HWND` and no OS window exists at `AppState::init`, so `init_media_controls()` leaves Windows inert. `main()` posts a one-shot `invoke_from_event_loop` post-show that grabs `HWND` + calls `MediaControlsHandle::attach_smtc`; newly-attached returns `true`, triggering a no-op `with_state_emit` to flush playback. Linux MPRIS / macOS MediaPlayer attach eagerly. `event_tx` retained Windows-only for late rewire.
+- **Always-on-top (Linux)** — D-Bus to KWin or GNOME (`window-calls` ext.); falls back to native decorations on bare GNOME.
+- **System tray** — `src/services/tray/` cfg-split: Linux `ksni`; Win/mac `tray-icon 0.24`. Façade `mod.rs` (`TrayAction`, `TraySnapshot`, embedded `tray.png`, `init_tray`). `ui/tray_bridge.rs`: bounded `mpsc<TrayAction>` → one task — playback reuses souvlaki `EventSink`; `ShowHideWindow`/`Quit` hop UI via `invoke_from_event_loop`; `sinks.view_model` subscriber pushes tooltip + play/pause label. Linux eager; **Win/mac deferred**, dropped by `tray_bridge::shutdown()` pre-`process::exit` or it ghosts. No SNI host → `init_tray` `None`/`false`; tray-less still usable. **Opt-in** `TrayFlags.enabled` (default off): `main.rs` gates `tray_bridge::install`. Restart-gated via `restart-tray` `Dialog` → `WindowChrome.restart-tray()` → `controls.rs::on_restart_tray` (`library::window::set_tray_enabled` + `RESPAWN_AFTER_EXIT`). **Close-to-tray** `TrayFlags.close_to_tray` (default off): Slint `Window::hide/show` on `should_hide_to_tray()` — gated on setting AND active tray; `SettingRow.disabled` when `Settings.tray-active` false. Hide→show snapshots into `SAVED_WINDOW_GEOM`; re-show re-asserts via self-rescheduling 16 ms timer (`reschedule_geometry_restore`, cap `RESTORE_ATTEMPTS`). Tray labels English-only. `WINDOW_VISIBLE` atomic shadows visibility (`is_visible()` is `None` on Wayland).
+- **First launch** — auto-add `dirs::audio_dir()` + scan.
+- **Keyboard shortcuts** — Root `FocusScope` grabs focus on `init`, gates non-Esc on `!Dialog.open`. Typed keys in TextInputs never reach root. Bindings: Space play/pause; ←/→ seek ∓5s (Shift ∓30s, Ctrl prev/next); ↑/↓ vol ±5 (Ctrl ±1); 0–9 seek 0–90%; M mute; L favorite; N/P next/prev; S shuffle; R repeat; Q queue sheet; F Now Playing; F11 maximize; Esc Dialog cancel → NP close; Ctrl+B sidebar; Ctrl+, settings; Ctrl+N new playlist; OS media keys via souvlaki. Queue sheet's `FocusScope` (`enabled: Queue.open`) catches Esc / Ctrl+A before root.
+- **Animated view transitions** — Main-content branches mount via `ViewTransition`: enter-only fade + 32 px axis slide over `Theme.dur-spatial`. No exit anim — Slint `if` destroys outgoing instantly. Direction on `Nav.pending-enter-from: NavEnterFrom` (`{ below, right, left }`) — sidebar=`below`, drill-in=`right`, back=`left`. Write **synchronously on UI thread just before** flipping `if`; routed via `src/ui/nav_transition.rs`. `ViewTransition` flips `shown` via single-shot 1 ms Timer. Panel `clip: true` masks overshoot.
+- **Native dialogs (rfd) — always parent to main window.** UI thread via `slint::spawn_local(Compat::new(...))`. Call `.set_parent(&ui.window().window_handle())` before `pick_*()`, else dialog z-orders behind on Win/macOS. Requires `slint = { features = ["raw-window-handle-06"] }`.
+- **Popup chrome via `PopupSurface`** — every `PopupWindow` body wraps `ui/components/popup-surface.slint` (Theme.crust fill, 1 px Theme.surface2 border, Theme.radius-md, no entry anim). `pill: true` for vertical-pill.
+- **Reusable grid + detail components.** Grids compose `EntityCard` in virtualized chunked-row `ListView` — Rust chunks flat list into `AlbumGridRow` of N; `GridColumnsSync` computes N from width, fires `columns-changed` for no-DB rebuild. Detail views compose `DetailHeader` (full-bleed dual-slot hero-blur backdrop + accent gradient + scrim, left artwork, floating back button, `@children`); callers supply an action pill.
+- **Nav state persistence keyed by view-id.** All in `views.json` (`ViewStateData`): `last_nav_index` mirrors `Nav.selected-index`; `last_detail_ids: HashMap<String, i64>` holds open detail per tab keyed by `view_id`. Setter `library::settings::set_last_detail_id` writes via `mutate_view_state`. Sidebar nav does NOT reset detail ids; only back button does. Adding detail = `view_id::*` const + open/close `set_last_detail_id` + seed fn. Three section-collapse bools top-level on `ViewStateData`, at clippy's `struct_excessive_bools` cap.
+- **Pill buttons via `PillButton`** (`ui/components/action-pill.slint`) — 32 px outer / 28 px chrome, `Theme.surface1` hover (or `Theme.danger.brighter(10%)` for `danger: true`). Compose inside `ActionPill` with `PillLabel`/`PillDivider`. **Sort-row pills** carry `reserve-sort-slot: true` + `sort-direction` — trailing 16 px `arrow_drop_*` slot. Never concatenate Unicode `↑`/`↓` into the label. `IconButton` for round controls *outside* chips.
+- **Detail-page TrackList inset.** Album/Artist Detail wrap `TrackList` in `HorizontalLayout { padding-left/right: Theme.pad-lg }` to match `tracks-view.slint` / `browse-view.slint`. Detail root VL can't — `DetailHeader` is full-bleed for hero blur. Overlay scrollbars at `parent.width - self.width` (root-relative).
+- **Detail-close releases global Image properties.** `wire_{artists,albums}::on_close_detail`: `release_detail_hero_images!` resets `cover` + `blur-img-a/b` to `Image::default()`, clears `has-blur`, alongside `clear_detail` + `release_detail_artwork`. Without it, `SharedPixelBuffer` Arcs pin (~650 KiB CPU + ~1.5 MiB GPU on Mesa). **Sidebar nav-away does NOT trigger** — back button only.
+- **Dialog-close releases global Image properties + scalar state.** `Dialog.closed()` fires once close-anim `t` returns to ~0. Default handler in `globals.slint` clears `kind`/`target-id`/`input-text*`/`mosaic-*`/`pending-track-ids`/`title`/`message`/`cancel-label`/`destructive` (restore `confirm-label` to `"OK"`, don't clear to `""`); `wire_playlists` also clears `current_artwork` then `heap_trim::trim`. Do **not** clear in `accepted`/`cancelled` — unmounts body mid-fade. New dialog kind pinning an image must extend `on_closed`.
+- **Albums sub-section borrows `AlbumsUi.grid_covers`.** Artist Detail's Albums strip routes `request-album-cover` to `albums_ui.grid_cover(path)`. `wire_artists` releases on **both** Artists section-leave and `on_close_detail`.
+- **Strict clippy + rustc lints** — `[lints.*]` + `clippy.toml`. Slint-generated `app-window.rs` via `mod generated_ui` with allows.
+- **No `unwrap()` in non-test code** — use `?` and `AppError`. `expect()` only with invariant in message. Tests allow `unwrap`/`expect` via `clippy.toml`.
+- **Kick-after-persist for `mutate_settings` consumers.** Kick fires **inside** same `spawn_blocking` after write commits, only on `Ok(())`. Multi-write callbacks track `all_persists_ok`, kick only if every write committed.
+- **Sibling-callback writes need a synchronous shadow.** Two callbacks reading/writing same field race through disk. Mirror in `Arc<parking_lot::Mutex<T>>`, update synchronously *before* spawning disk write; read cell from siblings.
+- **Window-control APIs go through winit, not Slint.** Slint's `set_minimized`/`set_maximized` cache stalls on Wayland. Use `WinitWindowAccessor::with_winit_window(|w| w.set_minimized(true))`.
+- **Window dragging belongs at winit layer.** `drag_window()` from Slint `pointer-event(down)` leaks input grab. `TouchArea` reports `has-hover` via `WindowChrome.drag-region-hover-changed`; `on_winit_window_event` intercepts `MouseInput { Pressed, Left }` when atomic true → `drag_window()` → `PreventDefault`.
+- **`Window.no-frame` is sticky.** Slint reads once at first show. Native Title Bar toggle requires restart via `Dialog` `"restart-titlebar"` → `RESPAWN_AFTER_EXIT`. Hydrate `Theme.use-native-titlebar` *before* `app.run()`.
+- **Transparent ARGB Window for rounded outlines.** winit `with_transparent(true)`; `Window.background: Colors.transparent`; rounded mantle Rectangle (`clip: true`, `border-radius: Theme.shell-radius`) is the only direct child. Opaque + square when `is-maximized` or `use-native-titlebar`.
+- **Match Unfocused Window Background (KDE-only).** Tints sidebar + NP-bar to OS unfocused titlebar. `LayoutFlags.match_unfocused_to_system_bg`, serde default `is_kde_desktop()`; hidden off-KDE, disabled in custom-titlebar. `Theme.window-focused` mirrors winit `Focused(bool)` raw. Sites gate on all three: `(Settings.match-unfocused-bg && Theme.use-native-titlebar && !Theme.window-focused) ? mantle-unfocused : mantle`. Titlebar gate is the only thing stopping tint under our chrome. No `animate` — desyncs OS swap.
+- **PopupWindow auto-dismiss on OS focus loss.** `ui/components/focus-loss-watcher.slint::FocusLossWatcher` — one-shot component firing `close()` when local `Theme.window-focused` mirror transitions false. Mounted inside `if popup-is-open` so only the open popup has a live watcher; singletons gate on `PopupHighlight.id == "<discriminator>"`; per-row context menu gates on `PopupHighlight.row-ctx-id == row-data.id` (set on right-click, cleared in `winit_filter.rs` Release path). Slint 1.16 has no `closed` callback, but `pop.close()` is safe no-op when hidden. `changed` MUST watch local mirror — Slint rejects path expressions on globals.
+- **Force-exit shutdown.** `main()` ends `std::process::exit(0)`; normal return lets leaked `MixerDeviceSink`/MPRIS/accesskit pin the process. `tracker.wait()` + `db.close()` wrapped in a 3 s `timeout`; runtime dropped on a background thread. `save_state_on_exit` flushes synchronously *before* the timeout.
+- **Renderer is FemtoVG.** Set directly on `slint` dep — no Cargo feature. Software renderer dropped (slint-ui/slint#4176).
+- **OS file drag-and-drop via vendored winit fork.** Stock winit 0.30.13 has no `wl_data_device`. Fork at `winit/` (0.30.13 + 3 commits: PR #4009 + `WindowId` fix + URI percent-decoding, cfg-gated to Linux), wired via `[patch.crates-io] winit = { path = "winit" }`. Flow: `winit_filter.rs::DroppedFile` → `drop_coalescer.rs::schedule_drop_flush` (50 ms → `queue_import_files`); `HoveredFile{,Cancelled}` toggle `Queue.is-drop-hovered`. Don't bump winit without rebase + re-sync.
+- **`--version` literal-first branch in `main()`** — prints `Melodia <CARGO_PKG_VERSION>` then returns. Updater smoke test (`verify_swapped_binary`) spawns new binary with `--version`, asserts exit 0 in 5 s + stdout starts with `Melodia ` and contains expected version; rolls back from `target.old` on failure. **Forward-compat contract** — don't remove/break this branch or prefix; breaks in-place updates for older clients.
+- **Atomic-swap retains `.old` for rollback (Linux AppImage/tarball only).** Two-step rename: `target → target.old`, `staged → target`, smoke-test, rollback on failure. `.old` reaped on first successful boot. Single source: `install::old_path()`. `pkexec mv` cross-fs fallback, `install_via_package_manager` (Linux RPM/DEB), and `install_via_msiexec` (Windows MSI) retain NO `.old` — package format owns the replace. Smoke-test skipped on those paths via `InstallMethod` match in `download_and_install`. `main()`'s `.old` reaper is `cfg(target_os = "linux")`. macOS not a CI target — `swap_in_place` falls through to `std::fs::rename`.
+- **Windows installs are per-machine MSIs at `C:\Program Files\Melodia\bin\`.** `wix/main.wxs` `Scope="perMachine"` + `ProgramFiles6432Folder`; UAC at install. Start Menu shortcut Component under `ProgramMenuFolder` (without it, Windows Search can't find the app). Console suppressed via `#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]` — release runs as GUI, `cargo run` keeps console for `RUST_LOG`. In-app updater downloads signed `.msi` to `%LocalAppData%\Melodia\update-staging\`, spawns `msiexec /i <staged> /qb!` non-blocking — UAC re-prompts, WiX `MajorUpgrade` + `util:RestartResource` handle replacing the running binary. Smoke test skipped. `system_install::probe` short-circuits `windows-*-msi` keys to `false` so updater UI stays visible — symmetric with `linux_pkg::detect`.
+- **Download bound check (5% over manifest size) aborts streams.** `exceeds_size_bound(downloaded, expected_size)` saturates `expected_size * 105` toward "reject" on overflow; tripping it drops file, removes partial bytes, returns `AppError::Network`.
+- **HTTP Range resume via `plan_resume(existing_size, expected_size)`.** Returns `Skip` (existing == expected → skip network, verify catches corruption), `Resume(offset)` (send `Range: bytes=<offset>-`), or `Fresh`. 206 appends; 200 resets. Progress denominator stays on `expected_size`.
+- **`services::desktop_integration` self-deploys `.desktop` + icon on boot for tarball installs.** Compiled-in payloads `assets/desktop/Melodia.desktop.tmpl` (`@EXEC@`) + `logo-with-background.svg`. BLAKE3-gated idempotent writes to `~/.local/share/applications/...desktop` + `~/.local/share/icons/.../melodia.svg`. Skipped on AppImage (`$APPIMAGE` set) + RPM/DEB. Don't move source paths without updating `include_*!` call sites.
+- **Polkit helper for in-app updater RPM/DEB installs.** `/usr/libexec/melodia-update-helper` argv-dispatches to dnf5/dnf/apt/apt-get; policy `com.github.kenansalar.melodia.update`. `install_via_package_manager` runtime-detects, falls back to direct `pkexec dnf install`. **`LinuxPackageFormat` variants double as helper argv-dispatch keys**.
+- **`latest.json` minisign-signed; client verifies before parse.** Same key as per-artifact sigs (`assets/updater-pubkey.b64`). `fetch_latest_manifest` fetches `latest.json.minisig` and calls `minisign::verify_manifest_bytes` — `manifest=true` trusted comment is a **domain-separation tag**. Fail-closed: missing/invalid sig → `AppError::Validation`. CI: `minisign -SHm latest.json -t "version=$VERSION manifest=true"`.
+- **Manifest schema gate + critical-release flag** (`src/services/updater/manifest.rs`). `manifest_schema_version: u32` (default 1) — `check.rs` returns `CheckOutcome::UnsupportedSchema` when `> SUPPORTED_MANIFEST_SCHEMA`, treated like `NoAssetForTarget`. Bumping requires bumping `build-latest-json.py`'s `--manifest-schema-version` + CI invocation. `critical: bool` (default false) hides "Skip this version" and bypasses `skipped_release` filter. Set via `--critical` in `scripts/build-latest-json.py`.
+- **Build provenance attestation.** `release.yml` runs `actions/attest-build-provenance@v2` per matrix slot (needs `id-token: write` + `attestations: write`). Verify: `gh attestation verify <file> --repo KenanSalar/Melodia`.
+- **aarch64 builds alongside x86_64** (Linux + Windows). 12 `release.yml` matrix slots: 6 × x86_64 + 6 × aarch64 (`ubuntu-24.04-arm`/`windows-11-arm`). `build-latest-json.py`'s `PLATFORM_PATTERNS` lists **aarch64 first** — cargo-deb `_arm64.deb` has no leading-arch token. Client `target::current_target_key()` `cfg!`-branched per `(target_os, target_arch)`. `build-{appimage,rpm}.sh` read `ARCH` (default `uname -m`) with per-arch pinned `linuxdeploy` SHA256s — bump in lockstep.
+
+
+## Slint Conventions
+
+General patterns in `.claude/rules/slint.md`; per-crate rules in `.claude/rules/{tokio,sqlx,rodio-symphonia,lofty,rayon,serde,blake3,rust-performance}.md`. Project-specific:
+
+- **No `slint::slint!`** — `.slint` files via `build.rs`.
+- **Animation tokens**: 200ms fast, 250ms medium, 400ms spatial.
+- **Scrollbars — always `ui/components/overlay-scrollbar.slint`.** std-widgets' bar paints inside padded containers, can't be reskinned. (1) `ScrollView` primitive, both scrollbar policies `always-off`. (2) `OverlayScrollbar` at view root, sibling of padded layout, pinned via absolute coords. (3) Round-trip via `viewport-y` + `scroll-to`: `offset: -sv.viewport-y; scroll-to(o) => { sv.viewport-y = -o; }` (no `<=>` — sign flip blocks it). (4) `visible: content-size > visible-size`; mount both axes.
+
+## Slint Pitfalls (battle-tested)
+
+- **`visible: false` doesn't remove from layout.** Hidden child still claims stretch. Fix: `if !collapsed: VerticalLayout { … }`. Ref: slint#7377.
+- **Don't `animate` a property driven by both toggle and continuous input** (drag micro-updates get full easing → spongy). Gate duration on bool: `animate width { duration: is-dragging ? 0ms : 250ms; }`. Boolean ternaries safe; #7999 only fires on array/list calcs.
+- **Drag handles inside resized element need absolute coords.** Snapshot `start_abs = self.absolute-position.x + self.pressed-x` on `down`, then `parent.width = clamp(start_w + (self.absolute-position.x + self.mouse-x - start_abs), ...)`.
+- **Material Symbols glyphs need a collapsed line-box.** `Text` defaults to ~1.2× `font-size`; pin inside fixed `icon-size × icon-size` Rectangle. `MaterialIcon` does this.
+- **Fixed-width children don't center in a wider `VerticalLayout`.** Let column track child's natural width, or wrap in `HorizontalLayout { alignment: center; … }`.
+- **`parent` not accessible from component's root binding.** Take host metric as explicit `in property <length> host-width;`.
+- **`height: 100%` on child + `height: Npx` on parent → unbounded layout.** Row swallows whole body; sibling `ListView` renders 0 rows. Pin fixed-size rows with `min-height` + `max-height` + `vertical-stretch: 0`. Never `height/width: 100%` on layout child.
+- **Nested ScrollView + ListView need `viewport-height: self.height` on outer.** Reverse: lock `viewport-width: self.width`.
+- **Animating a binding derived from another animating property phase-lags.** Animate source only.
+- **Concurrent `animate` blocks aren't free at vsync** — re-evaluated per frame. For *periodic* visuals prefer one shared `Timer` + counter + math-derived bindings.
+- **Components writing own `in-out property` orphan one-way `name: source` binding on first click.** `clicked => { root.selected-index = i; }` detaches `selected-index: SomeGlobal.field`. Fix: two-way `<=>`. `ToggleSwitch`: `manual: true` emits `toggled(new-value)` *without* mutating own `checked`.
+- **Rectangle-inheriting components don't size from `if`-conditional children — wrap in a layout.** `Rectangle { if has-matches: SectionCard { … } }` reports 0×0. Fix: `VerticalLayout { … }`.
+- **`VerticalLayout` divides surplus equally when every child has `vertical-stretch: 0`.** Append trailing `Rectangle { vertical-stretch: 1; }`.
+- **`changed` doesn't accept path expressions on globals — mirror via local property.** `changed Nav.selected-index => {}` fails to parse. Use `property <int> watched-nav-idx: Nav.selected-index; changed watched-nav-idx => {}`.
+- **Reusable filter SearchBar pattern.** (1) `text <=> SomeGlobal.filter`, `blur-trigger: SomeGlobal.blur-search-tick`; (2) backdrop `TouchArea { clicked => { SomeGlobal.blur-search-tick += 1; } }` at view root before content; (3) clear filter + bump blur tick on nav-away. Matches tracked in Rust; Settings uses `pure callback Settings.matches(...)`.
+- **`PopupWindow.y: -self.height - …` needs explicit `width`/`height`.** Else `self.height` is 0 before first layout — popup lands above trigger top, expands downward. Canonical: `ui/components/now-playing/overflow-menu.slint`.
+- **No playback-driven RSS drift on FemtoVG.** Earlier growth was glibc per-thread arenas, not a Slint cache leak — `mallopt(M_ARENA_MAX, 2)` at top of `main()` removes it; `libc::malloc_trim(0)` one-shot in `src/tasks/heap_trim.rs` at t=5 s releases startup slack.
+- **Flash-free image cross-fade = two slots, never cleared.** Two stacked `Image`s + `use-a` bool; Rust writes new image into the *inactive* slot then flips bool so both `opacity` animate. Slot `source` is never reset — outgoing layer stays painted for full fade.
+- **Stock Slint 1.16 + winit 0.30 have zero OS file-drop on Wayland.** `DragArea`/`DropArea` is in-process only — no `PathBuf`. winit#1881 open since 2021. Vendored winit PR #4009.
+- **`changed <local-prop>` doesn't fire when first layout settles directly on final value.** Native-titlebar reaches final grid width in one pass — derived counts never *transition*. Fix: pair handler with single-shot 1 ms `Timer` firing same body once at mount.
+- **`init` runs *after* bindings resolve to final values — useless for entry animations.** Setting `shown: true` in `init` makes `true` the *initial* value, so `animate opacity` never runs. Fix: single-shot 1 ms `Timer` flips `shown` once at mount.
+- **Glyphs outside Vazirmatn inflate `Text` line-box and break patched-metrics centring.** Unicode arrows or any glyph the bundled font lacks pulls a fallback font; its taller `typoAsc/Desc` defines the line-box, so patched glyphs drift down. Fix: render foreign glyph as sibling `MaterialIcon` (collapsed em-box).
+
+## Styling
+
+- **Pluggable themes** in `src/themes/`, applied by writing brushes into `Theme`. Default: Catppuccin Mocha mauve.
+- **System dark/light** — `services/system_theme.rs` (Linux XDG portal). `SYSTEM_VARIANT_ID` resolves via `system_{dark,light}_variant`. `spawn_color_watcher` listens on portal `SettingChanged`; `ui/appearance/system_watcher.rs` re-applies. KDE Breeze + system re-source from `~/.config/kdeglobals`.
+- **Icons** — Material Symbols Rounded variable font (`MaterialSymbolsRounded.ttf` + `MaterialSymbolsRoundedFilled.ttf` for FILL=1). `import "...ttf";` OpenType ligatures (`text: "play_arrow"`).
+- **Fonts** — Vazirmatn (OFL, Latin + Arabic) under `ui/assets/fonts/`, embedded via static `import "...ttf"`. UI base 14 px. **TTFs patched** — `scripts/patch_vazirmatn.py` rewrites OS/2 typo + hhea ascent/descent to `1650/-500` so glyph mass lands at line-box centre on FemtoVG. Patched output in `ui/assets/fonts/vazirmatn/`; pristine upstream isn't checked in — to update, re-download the three TTFs and re-run patch script.
+- **Material Symbols Rounded subset** — both icon TTFs subsetted/instanced via `scripts/subset-icon-fonts.sh` to only the ligatures in `scripts/icons.txt` — cuts Rounded ~14 MiB → ~1 MiB. Re-run whenever a new icon ligature appears in a `.slint` file. Requires `pip install --user fonttools`.
+
+## Internationalization (i18n)
+
+- **`@tr("English msgid")` macro.** Registers msgid at codegen; re-renders on locale switch. Plurals: `@tr("{n} track" | "{n} tracks" % count)`. Interpolation: `@tr("{} of {}", a, b)`.
+- **Bundled translations.** `build.rs` calls `with_bundled_translations("translations")` + `with_default_translation_context(DefaultTranslationContext::None)`. Layout: `translations/<lang>/LC_MESSAGES/Melodia.po`. English is source baseline (no `en.po`).
+- **Runtime switch.** `slint::select_bundled_translation(&code)` — in `main.rs` before `app.run()` from persisted `settings.locale`, and inside `Settings.language-changed(int)` per dropdown pick. No restart.
+- **Locale wiring (`src/ui/locale.rs::install_locale`).** Hydrates `Settings.language-{names,codes,idx}` from `SUPPORTED_LOCALES` (`&["en","de","fr","es","tr","el","it"]`); change callback calls `select_bundled_translation`, updates `PersistedLocale` shadow, spawns `library::settings::set_locale`. Language names always native. New locale: append `SUPPORTED_LOCALES` + `LOCALE_NATIVE_NAMES` (1:1), drop `translations/<code>/LC_MESSAGES/Melodia.po`.
+- **Don't translate.** Material Symbols ligatures, asset paths, theme tokens, debug logs, brand/proper-noun chip labels (`"Melodia"`, `"KDE"`, `"GNOME"`, `"macOS"`, `"Windows 11"`, Catppuccin names), fallback `Dialog.confirm-label: "OK"`.
+- **`@tr()` only translates literal strings at codegen.** A `[string]` populated from Rust renders whatever Rust pushed. **Workaround**: inline literal `[@tr("A"), @tr("B"), …]` at use site (drop global property + Rust seeding); order must match Rust source. Theme Variant ternaries on `Settings.theme-idx == 0` swap between Catppuccin proper-noun list and Dark/Light/System.
+- **Adding strings.** Wrap literal in `@tr(...)` → add same `msgid`/`msgstr` to **every** shipped `Melodia.po`. Stay msgid-aligned. Plurals: `msgid_plural` + `msgstr[0]`/`msgstr[1]` — Turkish keeps gettext layout but doesn't pluralize after numerals; Greek pluralizes regularly.
+- **RTL deferred.** Slint 1.16 has no `direction: rtl` and no bidi-aware HorizontalLayout. fa/ar/he need manual layout mirroring + LRM/RLM markers.
+- **`slint::translate_from_bundle` is `i_slint_core`-internal.** Slint does NOT publicly expose a Rust-callable `tr("...")`.
+
+## Async / Tokio
+
+See `.claude/rules/tokio.md`. Project-specific:
+
+- One multi-thread runtime in `main.rs`. Inside Slint event loop, `.await` tokio futures via `slint::spawn_local(async_compat::Compat::new(...))`; pure background work uses `runtime.spawn(...)`.
+- **`tokio::sync::Mutex` only when lock crosses `.await`.** Otherwise `parking_lot::Mutex`.
+- **`watch` when only latest matters; `mpsc` for events you must not coalesce.**
+
+## Testing
+
+- **Unit tests** — per-module `tests/` subdirs. Each source file references via `#[cfg(test)] #[path = "tests/<name>_tests.rs"] mod tests;`. Never inline `#[cfg(test)] mod tests { ... }`.
+- **Integration tests** — `./tests/`. Dev-deps: `tempfile`, `tokio` (`test-util`).
+- **DB tests** — `DbPool::test_pool()` (in-memory). Helpers in `src/database/queries/tests/helpers.rs`: `make_test_metadata`, `insert_test_track`, `setup_seeded_db`.
+- **UI tests** — `slint::testing` exists but UI coverage intentionally light; test **library** layer thoroughly.
+
+## Memory Discipline
+
+Project exists *because* of memory regressions in the Tauri version.
+
+- Run `/usr/bin/time -v target/release/melodia` after notable changes; track peak RSS.
+- Feature adding > 20 MB idle RSS → profile with `heaptrack` before merging.
+- Size-bound caches (LRU); construct heavy clients lazily. `Vec::with_capacity` whenever capacity known.
+- **`RUST_LOG=info MELODIA_RSS_SAMPLE=1` for live memory diagnostics.** Opt-in `src/tasks/rss_sampler.rs` (UI thread, `rss_sampler::install(weak)`) logs `[MEM view=… VmRSS=… RssAnon=… RssFile=… …]` every 500 ms at INFO. `view=` tag captures Nav section + open detail id + `+NP`/`+QS` overlay flags. Env-gated diagnostic exception to `tasks/`-no-`ui::*`. `RssFile` growth is Mesa GPU pool, not Rust heap.
+- **glibc arena cap via `mallopt(M_ARENA_MAX, 2)` at top of `main()`.** glibc default (`8 × num_cpus`) gives each long-lived thread a 64 MiB virtual arena; cap drops idle anon memory. **Don't lower to 1** — serialises every allocation; audio thread can stall behind UI. Linux-glibc only (`cfg(all(target_os = "linux", target_env = "gnu"))`). **Literal first statement in `main()`**, before `env_logger::init()` and tokio. Pairs with `libc::malloc_trim(0)` one-shot at t=5 s.
+
+## Known Gaps
+
+- **zbus footgun**: never enable `features = ["tokio"]` on zbus — unifies into Slint's transitive `accesskit_unix → atspi → zbus` and panics Slint's a11y thread at startup. AOT uses `zbus::blocking::Connection` inside `tokio::task::spawn_blocking(...)`. `ksni` (Linux tray) pinned `default-features = false, features = ["blocking", "async-io"]` for the same reason — its default `tokio` feature pulls `zbus/tokio`; `async-io` (matching accesskit) is mandatory since ksni's `compat` module `compile_error!`s without an executor feature.
+- **Vendored winit fork**: `winit/` is winit 0.30.13 + 3 Wayland-DnD commits; `Cargo.toml` `[patch.crates-io] winit = { path = "winit" }`. Fresh clones and CI build with no setup. Trimmed to essentials (`src/`, `build.rs`, `Cargo.toml`, `LICENSE` + `winit/README.md`) — upstream `examples/`/`tests/`/`docs/`/tooling dropped. **`dpi` is NOT vendored** — `winit/Cargo.toml` pulls from crates.io (`dpi = "0.1.1"`, not `path = "dpi"`); a path-vendored `dpi` is a second un-unifiable instance that clashes with `muda`'s registry `dpi` on Windows (`i-slint-backend-winit` E0308). Upstream bump: rebase fork onto new tag, copy essential paths (don't rsync — re-adds cruft; re-apply registry-`dpi` edit). Retires (delete `winit/` + patch block) when upstream lands native Wayland DnD (winit#1881).
+
+## User Conventions
+
+- Always call big files/objects/functions **'monolithic'** — no synonyms.

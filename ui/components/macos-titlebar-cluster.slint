@@ -1,0 +1,96 @@
+import { Theme } from "../theme.slint";
+import { WindowChrome } from "../globals.slint";
+import { MacOsTrafficLight } from "macos-traffic-light.slint";
+
+// Three-circle macOS-style decoration cluster (close / minimize / maximize).
+// Owns the shared `cluster-hovered` mirror (ORs each child's `hovered` so
+// glyphs reveal on all three simultaneously, matching real macOS) and
+// flips the L→R ordering on `Theme.titlebar-button-side` so close always
+// sits at the outer (window-edge) corner of the cluster.
+//
+//   side == 0 (Right): [max-green | min-yellow | close-red] — close right
+//   side == 1 (Left):  [close-red | min-yellow | max-green] — close left
+//
+// The three Material Symbols ligatures (`close`, `minimize`, `add`) are
+// already in `scripts/icons.txt`'s subset — see CLAUDE.md's icon-font
+// subset note. `add` substitutes for macOS's "two opposing triangles"
+// zoom glyph since Material Symbols Rounded doesn't ship that mark.
+//
+// Click dispatch routes to the same `WindowChrome.*` callbacks the
+// standard right-side bar buttons use, so the Rust window-control wiring
+// in `src/ui/window_chrome/controls.rs` doesn't need to know anything
+// about which style or side is active.
+export component MacOsTitleBarCluster inherits Rectangle {
+    // ORed hover — drives glyph reveal on every child. A property at
+    // the cluster level (rather than per-child) so all three glyphs
+    // animate in/out together when the cursor enters any one of them.
+    property <bool> cluster-hovered:
+        close-light.hovered || min-light.hovered || max-light.hovered;
+
+    // Cluster has a natural width — three 18 px hit targets + two 4 px
+    // gaps = 62 px — plus 8 px outer padding on the side adjacent to
+    // the window edge, so the close button sits a touch in from the
+    // corner. The 14 px visible circles inside each hit target give a
+    // ~22 px center-to-center cadence, close to macOS's ~20 px.
+    // Pin the cluster's height to the titlebar's 32 px so it centres
+    // vertically without inheriting stretch from the bar.
+    min-height: 32px;
+    max-height: 32px;
+    horizontal-stretch: 0;
+    vertical-stretch: 0;
+    background: transparent;
+
+    GridLayout {
+        spacing: 4px;
+        padding-top: 0;
+        padding-bottom: 0;
+        // Inset on the window-corner side so close doesn't kiss the
+        // window edge — matches the macOS ~8 px inset.
+        padding-left: Theme.titlebar-button-side == 1 ? 8px : 4px;
+        padding-right: Theme.titlebar-button-side == 0 ? 8px : 4px;
+
+        // Macroized order: `col` flips so that whichever side the
+        // cluster lives on, the close button is the outermost circle.
+        // The middle column (min-yellow) is always col=1.
+        // Theme-driven circle hues — `Theme.red/yellow/green` are
+        // Catppuccin's semantic colour slots and re-resolve on every
+        // theme / variant change. Glyph contrast colour follows
+        // `Theme.accent-text`, the token designed for text painted on
+        // a coloured surface.
+        close-light := MacOsTrafficLight {
+            col: Theme.titlebar-button-side == 0 ? 2 : 0;
+            row: 0;
+            circle-color: Theme.red;
+            glyph-color: Theme.accent-text;
+            glyph-icon: "close";
+            tooltip-text: @tr("Close");
+            cluster-hovered: root.cluster-hovered;
+            clicked => { WindowChrome.close-window(); }
+        }
+
+        min-light := MacOsTrafficLight {
+            col: 1;
+            row: 0;
+            circle-color: Theme.yellow;
+            glyph-color: Theme.accent-text;
+            glyph-icon: "minimize";
+            tooltip-text: @tr("Minimize");
+            cluster-hovered: root.cluster-hovered;
+            clicked => { WindowChrome.minimize(); }
+        }
+
+        max-light := MacOsTrafficLight {
+            col: Theme.titlebar-button-side == 0 ? 0 : 2;
+            row: 0;
+            circle-color: Theme.green;
+            glyph-color: Theme.accent-text;
+            // No native "zoom" glyph in Material Symbols Rounded; `add`
+            // is the closest universally-recognised "expand / grow"
+            // analogue and reads cleanly inside the 12 px circle.
+            glyph-icon: "add";
+            tooltip-text: WindowChrome.is-maximized ? @tr("Restore") : @tr("Maximize");
+            cluster-hovered: root.cluster-hovered;
+            clicked => { WindowChrome.toggle-maximize(); }
+        }
+    }
+}

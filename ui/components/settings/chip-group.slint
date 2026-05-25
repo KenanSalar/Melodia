@@ -1,0 +1,136 @@
+import { Theme } from "../../theme.slint";
+
+// One pill-shaped chip in a ChipGroup. Lives in this file (not exported)
+// because it's only useful as a child of ChipGroup.
+component Chip inherits Rectangle {
+    in property <string> label;
+    in property <bool>   selected;
+
+    callback clicked();
+
+    height: 32px;
+    horizontal-stretch: 0;
+    border-radius: self.height / 2;
+    background: root.selected
+        ? Theme.accent
+        : (touch.has-hover ? Theme.surface2 : Theme.surface1);
+    animate background { duration: Theme.dur-fast; easing: ease-in-out; }
+
+    HorizontalLayout {
+        padding-left: Theme.pad-md;
+        padding-right: Theme.pad-md;
+        Text {
+            text: root.label;
+            vertical-alignment: center;
+            color: root.selected ? Theme.accent-text : Theme.text;
+            font-size: Theme.font-size-sm;
+        }
+    }
+
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+// Pill-chip selector. Clicking a chip writes `selected-index` and emits
+// `selected(idx)` — the host can react to the change for any side
+// effects. Slint 1.16's `HorizontalLayout` doesn't wrap, so rows wider
+// than the settings page width clamp opt in to wrapping via `wrap-at`:
+// chips beyond the wrap point flow to a second row in an internal
+// VerticalLayout. Default (`wrap-at: 0`) keeps the original single-row
+// layout for 4 – 8-chip rows that fit on one line.
+export component ChipGroup inherits Rectangle {
+    in property <[string]> options;
+    in-out property <int> selected-index;
+    // When false (default), a click writes `selected-index = i` locally
+    // before emitting `selected(i)` — fine for callers that two-way
+    // `<=>`-bind selected-index to a global property (Theme, Variant,
+    // Accent, Color Style chips). When true, the click only emits
+    // `selected(i)` and leaves `selected-index` untouched — required
+    // for callers whose `selected-index` is a derived expression
+    // (e.g. AppearanceSection's `px-to-preset(corner-radius-px)` for
+    // the Window Corner Radius row), where a local self-write would
+    // orphan the one-way binding (CLAUDE.md "Components that write to
+    // their own `in-out property` orphan a one-way binding" pitfall).
+    in property <bool> manual: false;
+    // Number of chips per row before wrapping. 0 (default) = no wrap,
+    // single HorizontalLayout. >0 = two rows: chips [0, wrap-at) on row 1,
+    // chips [wrap-at, 2*wrap-at) on row 2. Used by Color Style (8 chips,
+    // wrap-at: 4) to keep the Appearance card from growing beyond the
+    // page's width clamp.
+    in property <int> wrap-at: 0;
+
+    callback selected(int);
+
+    property <bool> wraps: root.wrap-at > 0 && root.options.length > root.wrap-at;
+    height: root.wraps ? (32px * 2 + Theme.pad-sm) : 32px;
+    horizontal-stretch: 0;
+
+    if !root.wraps: HorizontalLayout {
+        spacing: Theme.pad-sm;
+        alignment: start;
+
+        for option[i] in root.options: Chip {
+            label: option;
+            selected: i == root.selected-index;
+            clicked => {
+                if (!root.manual) {
+                    root.selected-index = i;
+                }
+                root.selected(i);
+            }
+        }
+    }
+
+    // Wrap mode: hardcoded for up to 8 chips split 4/4. Slint 1.16 doesn't
+    // accept inline `for ... : if cond : Element`, and a Rectangle wrapper
+    // around each for-iteration would still claim parent-layout spacing
+    // between filtered-out chips. Top-level `if cond: Chip` is the only
+    // form that properly removes the chip from layout (no spacing claim),
+    // so we unroll the indexed access. Only the Color Style row uses this
+    // path; bumping the cap means adding more `if` lines here.
+    if root.wraps: VerticalLayout {
+        spacing: Theme.pad-sm;
+        HorizontalLayout {
+            spacing: Theme.pad-sm;
+            alignment: start;
+            if root.options.length > 0: Chip {
+                label: root.options[0]; selected: 0 == root.selected-index;
+                clicked => { if (!root.manual) { root.selected-index = 0; } root.selected(0); }
+            }
+            if root.options.length > 1: Chip {
+                label: root.options[1]; selected: 1 == root.selected-index;
+                clicked => { if (!root.manual) { root.selected-index = 1; } root.selected(1); }
+            }
+            if root.options.length > 2: Chip {
+                label: root.options[2]; selected: 2 == root.selected-index;
+                clicked => { if (!root.manual) { root.selected-index = 2; } root.selected(2); }
+            }
+            if root.options.length > 3: Chip {
+                label: root.options[3]; selected: 3 == root.selected-index;
+                clicked => { if (!root.manual) { root.selected-index = 3; } root.selected(3); }
+            }
+        }
+        HorizontalLayout {
+            spacing: Theme.pad-sm;
+            alignment: start;
+            if root.options.length > 4: Chip {
+                label: root.options[4]; selected: 4 == root.selected-index;
+                clicked => { if (!root.manual) { root.selected-index = 4; } root.selected(4); }
+            }
+            if root.options.length > 5: Chip {
+                label: root.options[5]; selected: 5 == root.selected-index;
+                clicked => { if (!root.manual) { root.selected-index = 5; } root.selected(5); }
+            }
+            if root.options.length > 6: Chip {
+                label: root.options[6]; selected: 6 == root.selected-index;
+                clicked => { if (!root.manual) { root.selected-index = 6; } root.selected(6); }
+            }
+            if root.options.length > 7: Chip {
+                label: root.options[7]; selected: 7 == root.selected-index;
+                clicked => { if (!root.manual) { root.selected-index = 7; } root.selected(7); }
+            }
+        }
+    }
+}

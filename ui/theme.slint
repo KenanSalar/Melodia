@@ -1,0 +1,219 @@
+// Catppuccin Mocha tokens. The 22 theme-dependent brushes are `in-out` so
+// `src/themes/mod.rs::apply()` can swap palettes at runtime; the values
+// here are the initial defaults that paint correctly before any settings
+// load. Layout, typography and motion tokens stay `out` (driven by the
+// design system, not by user choice).
+
+export global Theme {
+    // Surfaces / structure
+    in-out property <brush> base: #1e1e2e;
+    in-out property <brush> mantle: #181825;
+    // Surface colour used by the sidebar / now-playing bar when the
+    // window is unfocused AND the user has the KDE-only "Match
+    // Unfocused Window Background" toggle on. `themes::apply()`
+    // sources this from `[WM] inactiveBackground` in `kdeglobals`
+    // when KDE Breeze + System variant is active, so the painted
+    // surfaces match the OS-drawn titlebar exactly. For every other
+    // theme it falls back to `base` (the same colour the previous
+    // implementation used, indistinguishable visually).
+    in-out property <brush> mantle-unfocused: #1e1e2e;
+    in-out property <brush> crust: #11111b;
+    in-out property <brush> surface0: #313244;
+    in-out property <brush> surface1: #45475a;
+    in-out property <brush> surface2: #585b70;
+
+    // Overlays / text
+    in-out property <brush> overlay0: #6c7086;
+    in-out property <brush> overlay1: #7f849c;
+    in-out property <brush> overlay2: #9399b2;
+    in-out property <brush> text: #cdd6f4;
+    in-out property <brush> subtext0: #a6adc8;
+    in-out property <brush> subtext1: #bac2de;
+    in-out property <brush> border: #313244;
+
+    // Accent (default mauve) + colour on accent
+    in-out property <brush> accent: #cba6f7;
+    in-out property <brush> accent-text: #1e1e2e;
+
+    // Semantic colours (Mocha palette)
+    in-out property <brush> red: #f38ba8;
+    in-out property <brush> green: #a6e3a1;
+    in-out property <brush> yellow: #f9e2af;
+    in-out property <brush> peach: #fab387;
+    in-out property <brush> mauve: #cba6f7;
+    in-out property <brush> pink: #f5c2e7;
+    in-out property <brush> lavender: #b4befe;
+
+    // Semantic role tokens for destructive actions. Themes can override these
+    // without touching the raw palette entries above, so a future Windows /
+    // KDE / macOS theme can pick its own danger colour while leaving `red`
+    // free for other roles. Defaults: `danger` = red, `danger-hover` mirrors
+    // the accent → lavender hover relationship by lightening to `peach`,
+    // and `danger-text` uses the same on-accent colour (Catppuccin's #1e1e2e
+    // contrasts well against #f38ba8).
+    out property <brush> danger: root.red;
+    out property <brush> danger-hover: root.peach;
+    out property <brush> danger-text: root.accent-text;
+
+    // Translucent disc for IconButtons that float over busy visual content
+    // (hero blur backdrops, the Now Playing scrim). Idle chrome is visible
+    // but soft so the button reads as a real affordance without competing
+    // with the artwork; `IconButton`'s hover state still paints the fully
+    // opaque `Theme.surface0`, so the transition animates from soft → solid.
+    // Reused by the detail-view back buttons (`detail-header.slint`) and the
+    // Now Playing view's top-bar buttons.
+    out property <brush> floating-button-bg: root.surface0.with-alpha(0.55);
+
+    // Layout — match Tauri --sidebar-width-* / --now-playing-height
+    out property <length> sidebar-collapsed-w: 46px;
+    out property <length> sidebar-default-w: 180px;
+    out property <length> sidebar-min-w: 105px;
+    out property <length> sidebar-max-w: 400px;
+    out property <length> now-playing-h: 72px;
+    // Track-row content height (Tauri's `ROW_CONTENT_HEIGHT`). Header height
+    // is independent — see `track-list-header.slint`'s explicit min/max.
+    out property <length> row-h: 46px;
+    // Compact row height when the artwork thumbnail is hidden. Picked to give
+    // ~4 px breathing room above/below the hover swap-in (16 px checkbox /
+    // 18 px favorite glyph) so the row reads as intentionally dense, not
+    // cramped.
+    out property <length> row-h-compact: 34px;
+    // Vertical gap below each row.
+    out property <length> row-gap: 0px;
+
+    // Radii / spacing
+    out property <length> radius-sm: 4px;
+    out property <length> radius-md: 8px;
+    out property <length> radius-lg: 12px;
+    // Outer-shell corner radius. Drives both the rounded outer mantle
+    // shell that wraps the entire layout (becoming the visible window
+    // outline in custom-frame + windowed mode, since `Window.background`
+    // is transparent then) and the inner content panel. Driven by user
+    // setting (Tauri's `--shell-border-radius`, user-adjustable on the
+    // Settings page → Appearance → Window Corner Radius); decoupled from
+    // `radius-md` so component-level radii stay constant when the user
+    // nudges the shell rounding.
+    //
+    // `in-out` so `src/ui/appearance.rs` can write the persisted value
+    // at startup and on every change — the callback path is:
+    //   Settings.corner-radius-changed(int)
+    //     → wire_corner_radius_changed (appearance.rs)
+    //     → Theme.set_shell_radius(...)
+    //     → both the outer mantle shell AND the inner panel repaint.
+    in-out property <length> shell-radius: 6px;
+    // Concentric-ring helper for the inner content panel: the outer
+    // border rectangle uses `shell-radius`, the inner base rectangle
+    // uses `shell-radius - 1px` to keep the 1 px ring uniform-thickness
+    // around each corner. Clamped to >= 0 so picking radius 0 doesn't
+    // produce a negative value (Slint clamps internally too, but the
+    // explicit max keeps intent legible).
+    out property <length> shell-radius-inner: max(0px, shell-radius - 1px);
+    // Native-titlebar mode: content panel's left-side rounding (top-left
+    // + bottom-left). Seeded once at startup from
+    // `library::settings::get_os_corner_radius()` (Windows = 8, macOS =
+    // 10, GNOME = 15, KDE = 6, other Linux = 6) so the rounding feels
+    // native to the host OS / desktop regardless of the user's
+    // persisted `corner_radius` pick — that pick only governs custom-
+    // titlebar mode where the user explicitly opted into custom chrome.
+    // The Settings page's "Window Corner Radius" row is greyed out in
+    // native mode and the description "Managed by the operating system"
+    // is honest: the rounding here is determined by the OS, not the
+    // user. Doesn't change at runtime — toggle Native Title Bar and
+    // restart to pick up an environment switch.
+    in-out property <length> native-content-radius: 6px;
+    out property <length> native-content-radius-inner: max(0px, native-content-radius - 1px);
+    out property <length> pad-xs: 4px;
+    out property <length> pad-sm: 8px;
+    out property <length> pad-md: 12px;
+    out property <length> pad-lg: 16px;
+
+    // Typography
+    out property <length> font-size-sm: 12px;
+    out property <length> font-size-row: 13px;   // Tauri's `.cell` size
+    out property <length> font-size-md: 14px;
+    out property <length> font-size-lg: 16px;
+
+    // Page-title tokens. Shared by every view's header band ("Tracks",
+    // "Albums", "Artists", "Favorites", …) so the headings stay
+    // consistent. Subtitle (count line) reuses `font-size-sm` +
+    // `subtext0`.
+    out property <length> page-title-size: 20px;
+    out property <int> page-title-weight: 600;
+    out property <brush> page-title-color: root.text;
+
+    // Motion. Easing is inlined as `ease-in-out` at each `animate { }` site
+    // because Slint 1.16 cannot expose `easing` properties across the Rust
+    // boundary, and a global `out property <easing>` triggers a build warning.
+    out property <duration> dur-fast: 200ms;
+    out property <duration> dur-med: 250ms;
+    out property <duration> dur-spatial: 400ms;
+
+    // Window decorations. When `true`, the OS draws the titlebar and the
+    // content panel's top-left stays flat (matches Tauri's
+    // `.content.nativeDecContent`). When `false` the custom titlebar
+    // (`ui/components/custom-titlebar.slint`) renders and the top-left
+    // rounds to match the shell's outer chrome (Tauri's `.content` +
+    // `.shell`). `in-out` so `src/ui/window_chrome.rs` can hydrate this
+    // from the persisted `WindowFlags.use_native_titlebar` after
+    // `AppWindow::new()` and before `app.run()` — Slint reads
+    // `Window.no-frame` once when the OS window first shows, so the
+    // value must be set in that tight window. Default `false` matches
+    // `WindowFlags::default()` so a fresh install boots with the custom
+    // titlebar.
+    in-out property <bool> use-native-titlebar: false;
+
+    // Custom-titlebar decoration button style.
+    //   0 = Standard (Material bar icons; current Windows-like look)
+    //   1 = macOS    (traffic-light circles with hover-reveal glyphs)
+    // Hydrated at startup in `src/ui/appearance/install.rs` from
+    // `WindowFlags.titlebar_button_style` and re-applied on every change
+    // by `wire_titlebar_button_style_changed`. `custom-titlebar.slint`
+    // reads it through this token (same precedent as `shell-radius`)
+    // instead of reaching into the `Settings` global.
+    in-out property <int> titlebar-button-style: 0;
+
+    // Custom-titlebar decoration button side.
+    //   0 = Right (default), 1 = Left.
+    // Same hydration shape as `titlebar-button-style`.
+    in-out property <int> titlebar-button-side: 0;
+
+    // True when the OS window currently has focus — raw mirror of winit's
+    // `WindowEvent::Focused(bool)`, written unconditionally from
+    // `src/ui/window_chrome/winit_filter.rs`. Two consumers today:
+    // (1) the KDE-only "Match Unfocused Window Background" tint — the
+    // sidebar / now-playing-bar bindings gate themselves on
+    // `Settings.match-unfocused-bg && Theme.use-native-titlebar
+    // && !Theme.window-focused` so the surfaces only swap to
+    // `mantle-unfocused` when the toggle is on AND we're painting under
+    // the native titlebar (the titlebar gate is required because
+    // `match-unfocused-bg` defaults to `true` on KDE and is preserved
+    // across a native-titlebar disable); (2) each `PopupWindow` mounts a
+    // `FocusLossWatcher` (`ui/components/focus-loss-watcher.slint`)
+    // inside an `if popup-is-open` gate so only the currently-open popup
+    // has a live watcher and auto-dismisses on focus loss. Any future
+    // feature needing OS focus state can subscribe directly.
+    in-out property <bool> window-focused: true;
+
+    // ms → "m:ss". Integer arithmetic avoids float rounding; negative or
+    // zero input collapses to "0:00" so the now-playing bar can safely
+    // format `position_ms` / `duration_ms` mid-transition. Shared by the
+    // track-list row (length cell) and the now-playing bar.
+    public pure function format-duration(ms: int) -> string {
+        // Output `h:mm:ss` for tracks ≥ 1 h, `m:ss` otherwise. Must stay
+        // byte-identical to `format_duration_ms` in `src/ui/tracks.rs` — the
+        // track-list rows use the Rust-precomputed string while the
+        // now-playing bar still calls this Slint helper, so any divergence
+        // shows up as inconsistent length labels for long tracks.
+        ms <= 0
+            ? "0:00"
+            : Math.floor(ms / 3600000) > 0
+                ? Math.floor(ms / 3600000) + ":"
+                    + (Math.mod(Math.floor(ms / 60000), 60) < 10 ? "0" : "")
+                    + Math.mod(Math.floor(ms / 60000), 60) + ":"
+                    + (Math.mod(Math.floor(ms / 1000), 60) < 10 ? "0" : "")
+                    + Math.mod(Math.floor(ms / 1000), 60)
+                : Math.floor(ms / 60000) + ":"
+                    + (Math.mod(Math.floor(ms / 1000), 60) < 10 ? "0" : "")
+                    + Math.mod(Math.floor(ms / 1000), 60)
+    }
+}

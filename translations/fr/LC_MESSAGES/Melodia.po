@@ -1,0 +1,823 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: Melodia 0.1.0\n"
+"Report-Msgid-Bugs-To: \n"
+"Language: fr\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+# ---- Sidebar / navigation ----------------------------------------------------
+
+msgid "Search"
+msgstr "Rechercher"
+
+# Default placeholder text for `SearchBar` (`ui/components/search-bar.slint`).
+# Currently every instantiation overrides `placeholder`, so this is defensive.
+msgid "Search…"
+msgstr "Rechercher…"
+
+msgid "Browse"
+msgstr "Parcourir"
+
+msgid "Favorites"
+msgstr "Favoris"
+
+msgid "Tracks"
+msgstr "Pistes"
+
+msgid "Albums"
+msgstr "Albums"
+
+msgid "Artists"
+msgstr "Artistes"
+
+msgid "Genres"
+msgstr "Genres"
+
+msgid "Playlists"
+msgstr "Listes de lecture"
+
+msgid "Settings"
+msgstr "Paramètres"
+
+msgid "Collapse"
+msgstr "Replier"
+
+# ---- Title-bar window controls ----------------------------------------------
+
+msgid "Minimize"
+msgstr "Réduire"
+
+msgid "Maximize"
+msgstr "Agrandir"
+
+msgid "Restore"
+msgstr "Restaurer"
+
+msgid "Close"
+msgstr "Fermer"
+
+# ---- Generic action verbs ---------------------------------------------------
+
+msgid "Cancel"
+msgstr "Annuler"
+
+msgid "Remove"
+msgstr "Supprimer"
+
+msgid "Clear"
+msgstr "Effacer"
+
+msgid "Restart"
+msgstr "Redémarrer"
+
+msgid "Deselect"
+msgstr "Désélectionner"
+
+msgid "Clear selection"
+msgstr "Effacer la sélection"
+
+# ---- Now-playing bar tooltips & states --------------------------------------
+
+msgid "Play"
+msgstr "Lecture"
+
+msgid "Pause"
+msgstr "Pause"
+
+msgid "Previous"
+msgstr "Précédent"
+
+msgid "Next"
+msgstr "Suivant"
+
+msgid "Repeat"
+msgstr "Répéter"
+
+msgid "Repeat: off"
+msgstr "Répéter : désactivé"
+
+msgid "Repeat: one"
+msgstr "Répéter : un"
+
+msgid "Repeat: all"
+msgstr "Répéter : tous"
+
+msgid "Shuffle"
+msgstr "Aléatoire"
+
+msgid "Shuffle: on"
+msgstr "Aléatoire : activé"
+
+msgid "Shuffle: off"
+msgstr "Aléatoire : désactivé"
+
+msgid "Favorite"
+msgstr "Favori"
+
+msgid "Unfavorite"
+msgstr "Retirer le favori"
+
+msgid "Pin on Top"
+msgstr "Épingler au premier plan"
+
+msgid "Unpin from Top"
+msgstr "Désépingler du premier plan"
+
+msgid "Queue"
+msgstr "File d'attente"
+
+msgid "More"
+msgstr "Plus d'options"
+
+msgid "No track playing"
+msgstr "Aucune piste en cours de lecture"
+
+msgid "Unknown artist"
+msgstr "Artiste inconnu"
+
+# ---- Now Playing view -------------------------------------------------------
+
+msgid "Up Next"
+msgstr "À suivre"
+
+msgid "No tracks up next"
+msgstr "Aucun titre à suivre"
+
+# ---- Queue sheet ------------------------------------------------------------
+
+msgid "No tracks"
+msgstr "Aucune piste"
+
+msgid "Queue is empty"
+msgstr "La file d'attente est vide"
+
+
+msgid "Remove selected"
+msgstr "Retirer la sélection"
+
+msgid "Clear queue"
+msgstr "Vider la file d'attente"
+
+msgid "Clear queue?"
+msgstr "Vider la file d'attente ?"
+
+msgid "Remove all tracks from the queue? Playback will stop."
+msgstr "Retirer toutes les pistes de la file d'attente ? La lecture s'arrêtera."
+
+msgid "Remove from queue?"
+msgstr "Retirer de la file d'attente ?"
+
+# Plural: track count for the queue header subtitle ("3 tracks", "1 track").
+msgid "{n} track"
+msgid_plural "{n} tracks"
+msgstr[0] "{n} piste"
+msgstr[1] "{n} pistes"
+
+# Plural: track count for the tracks-view header subtitle ("12 songs").
+msgid "{n} song"
+msgid_plural "{n} songs"
+msgstr[0] "{n} morceau"
+msgstr[1] "{n} morceaux"
+
+# Plural: queue-remove confirmation dialog.
+msgid "Remove {n} track from the queue?"
+msgid_plural "Remove {n} tracks from the queue?"
+msgstr[0] "Retirer {n} piste de la file d'attente ?"
+msgstr[1] "Retirer {n} pistes de la file d'attente ?"
+
+msgid "{} selected"
+msgstr "{} sélectionné(s)"
+
+# ---- Tracks view ------------------------------------------------------------
+
+msgid "Filter tracks…"
+msgstr "Filtrer les pistes…"
+
+msgid "Columns"
+msgstr "Colonnes"
+
+# ---- Track table column headers ---------------------------------------------
+
+msgid "Title"
+msgstr "Titre"
+
+msgid "Artist"
+msgstr "Artiste"
+
+msgid "Album"
+msgstr "Album"
+
+msgid "Genre"
+msgstr "Genre"
+
+msgid "Year"
+msgstr "Année"
+
+msgid "Length"
+msgstr "Durée"
+
+msgid "Artwork"
+msgstr "Pochette"
+
+# ---- Track row context menu -------------------------------------------------
+
+msgid "Play Next"
+msgstr "Lire ensuite"
+
+msgid "Add to Queue"
+msgstr "Ajouter à la file d'attente"
+
+msgid "Add to Favorites"
+msgstr "Ajouter aux favoris"
+
+msgid "Remove from Favorites"
+msgstr "Retirer des favoris"
+
+# ---- Placeholder views ------------------------------------------------------
+
+msgid "Coming soon"
+msgstr "Bientôt disponible"
+
+# ---- Settings page header ---------------------------------------------------
+
+msgid "Search settings…"
+msgstr "Rechercher dans les paramètres…"
+
+msgid "No matching settings"
+msgstr "Aucun paramètre correspondant"
+
+# ---- Library Folders section ------------------------------------------------
+
+msgid "Library Folders"
+msgstr "Dossiers de la bibliothèque"
+
+msgid "Manage Folders"
+msgstr "Gérer les dossiers"
+
+msgid "Add Folder"
+msgstr "Ajouter un dossier"
+
+msgid "Rescan"
+msgstr "Rescanner"
+
+msgid "No folders added"
+msgstr "Aucun dossier ajouté"
+
+msgid "Add a folder to scan for music files."
+msgstr "Ajoute un dossier pour rechercher des fichiers musicaux."
+
+# Library scan-progress text. `{}` placeholders carry int / string args; the
+# joining particles ("von", "·") get translated naturally.
+msgid "{} / {} files"
+msgstr "{} / {} fichiers"
+
+msgid "{} / {} files · {}"
+msgstr "{} / {} fichiers · {}"
+
+msgid "Remove Folder?"
+msgstr "Supprimer le dossier ?"
+
+# Translators: `{}` is the absolute filesystem path of the folder being removed.
+msgid "Remove \"{}\" from your library? All tracks under this folder will be removed."
+msgstr "Supprimer « {} » de ta bibliothèque ? Toutes les pistes de ce dossier seront également supprimées."
+
+# ---- Appearance section -----------------------------------------------------
+
+msgid "Appearance"
+msgstr "Apparence"
+
+msgid "Theme"
+msgstr "Thème"
+
+msgid "Theme Variant"
+msgstr "Variante de thème"
+
+# Theme Variant chips for non-Catppuccin themes (Dark/Light + synthetic System).
+# Catppuccin's variant names (Latte/Frappe/Macchiato/Mocha) are proper nouns
+# and stay verbatim across locales — only "System" is translatable on that path.
+msgid "Dark"
+msgstr "Sombre"
+
+msgid "Light"
+msgstr "Clair"
+
+msgid "System"
+msgstr "Système"
+
+msgid "Accent Color"
+msgstr "Couleur d'accentuation"
+
+msgid "Color Style"
+msgstr "Style de couleur"
+
+msgid "Active — palette derived from the current track's artwork."
+msgstr "Actif — palette dérivée de la pochette de la piste actuelle."
+
+msgid "Generate theme colors from album artwork."
+msgstr "Générer les couleurs du thème à partir de la pochette de l'album."
+
+# Color Style chip labels (Material 3 dynamic-colour scheme variants). Order
+# must match `services::material_you::SchemeStyle::all()` — "None" already
+# translated above; remaining 7 below. Source: Tauri's `settings.ts` (de),
+# kept verbatim so users moving between the apps see consistent vocabulary.
+
+msgid "Tonal Spot"
+msgstr "Tonal Spot"
+
+msgid "Content"
+msgstr "Contenu"
+
+msgid "Vibrant"
+msgstr "Vibrant"
+
+msgid "Expressive"
+msgstr "Expressif"
+
+msgid "Fidelity"
+msgstr "Fidélité"
+
+msgid "Neutral"
+msgstr "Neutre"
+
+msgid "Monochrome"
+msgstr "Monochrome"
+
+msgid "Native Title Bar"
+msgstr "Barre de titre native"
+
+msgid "Use the operating system's native title bar instead of the custom one. Restart required to apply."
+msgstr "Utiliser la barre de titre native du système d'exploitation au lieu de la barre personnalisée. Redémarrage requis."
+
+msgid "Restart Required"
+msgstr "Redémarrage requis"
+
+msgid "Switching to the native title bar requires restarting Melodia. Restart now?"
+msgstr "Le passage à la barre de titre native nécessite un redémarrage de Melodia. Redémarrer maintenant ?"
+
+msgid "Switching to the custom title bar requires restarting Melodia. Restart now?"
+msgstr "Le passage à la barre de titre personnalisée nécessite un redémarrage de Melodia. Redémarrer maintenant ?"
+
+msgid "Match Unfocused Window Background"
+msgstr "Adapter l'arrière-plan lors de la perte de focus"
+
+msgid "Only available with the native title bar."
+msgstr "Disponible uniquement avec la barre de titre native."
+
+msgid "Tint the sidebar and now-playing bar toward the content background when the window loses focus."
+msgstr "Teinter la barre latérale et la barre de lecture vers l'arrière-plan du contenu lorsque la fenêtre perd le focus."
+
+msgid "Window Corner Radius"
+msgstr "Rayon des coins de la fenêtre"
+
+msgid "Managed by the operating system"
+msgstr "Géré par le système d'exploitation"
+
+msgid "Square"
+msgstr "Carré"
+
+msgid "Decoration Button Style"
+msgstr "Style des boutons de décoration"
+
+msgid "Decoration Button Side"
+msgstr "Côté des boutons de décoration"
+
+msgid "Standard"
+msgstr "Standard"
+
+msgid "Right"
+msgstr "Droite"
+
+msgid "Left"
+msgstr "Gauche"
+
+msgid "Overflow Menu Buttons"
+msgstr "Boutons du menu de débordement"
+
+msgid "Move selected buttons into a compact overflow menu in the player bar"
+msgstr "Déplacer les boutons sélectionnés dans un menu de débordement compact dans la barre de lecture"
+
+# ---- Language section -------------------------------------------------------
+
+msgid "Language"
+msgstr "Langue"
+
+msgid "Choose your preferred language"
+msgstr "Choisis ta langue préférée"
+
+# ---- Playback section -------------------------------------------------------
+
+msgid "Playback"
+msgstr "Lecture"
+
+msgid "Gapless Playback"
+msgstr "Lecture sans interruption"
+
+msgid "Seamless transitions between tracks without silence gaps"
+msgstr "Transitions fluides entre les pistes sans silence"
+
+msgid "Play Button Animation"
+msgstr "Animation du bouton de lecture"
+
+msgid "Visual effect on the play button while music is playing"
+msgstr "Effet visuel sur le bouton de lecture pendant la lecture de la musique"
+
+# Animation preset names. "None" stays a generic English UI word in the
+# fallback context — we translate it; the others are coined terms / proper
+# nouns within the Material 3 motion vocabulary that we keep verbatim
+# alongside their localised counterparts where natural.
+msgid "None"
+msgstr "Aucune"
+
+msgid "Equalizer"
+msgstr "Égaliseur"
+
+msgid "Resume on Startup"
+msgstr "Reprendre au démarrage"
+
+msgid "Automatically resume the last track from where you left off when the app starts"
+msgstr "Reprendre automatiquement la dernière piste là où tu t'es arrêté au démarrage de l'application"
+
+# ---- File Watching section --------------------------------------------------
+
+msgid "File Watching"
+msgstr "Surveillance des fichiers"
+
+msgid "Watch for file changes"
+msgstr "Surveiller les modifications de fichiers"
+
+msgid "Automatically detect when files are added, removed, or changed in your library folders."
+msgstr "Détecter automatiquement quand des fichiers sont ajoutés, supprimés ou modifiés dans tes dossiers de bibliothèque."
+
+# ---- Updates section --------------------------------------------------------
+
+msgid "Updates"
+msgstr "Mises à jour"
+
+msgid "Software Updates"
+msgstr "Mises à jour logicielles"
+
+msgid "Current version: {}"
+msgstr "Version actuelle : {}"
+
+msgid "Check for Updates"
+msgstr "Vérifier les mises à jour"
+
+msgid "Checking..."
+msgstr "Vérification..."
+
+msgid "Update Installed"
+msgstr "Mise à jour installée"
+
+msgid "Restart Melodia to apply the update"
+msgstr "Redémarre Melodia pour appliquer la mise à jour"
+
+msgid "Restart Now"
+msgstr "Redémarrer maintenant"
+
+msgid "Version {} Available"
+msgstr "Version {} disponible"
+
+msgid "Download & Install"
+msgstr "Télécharger et installer"
+
+msgid "Installing..."
+msgstr "Installation..."
+
+msgid "You're up to date!"
+msgstr "Tu es à jour !"
+
+msgid "Melodia {} is the latest version."
+msgstr "Melodia {} est la dernière version."
+
+# ---- Browse view -------------------------------------------------------------
+
+msgid "Play All"
+msgstr "Tout lire"
+
+msgid "Shuffle All"
+msgstr "Tout mélanger"
+
+msgid "Back"
+msgstr "Retour"
+
+msgid "No library folders configured"
+msgstr "Aucun dossier de bibliothèque configuré"
+
+msgid "Open Settings to add a folder"
+msgstr "Ouvre les paramètres pour ajouter un dossier"
+
+msgid "Open Settings"
+msgstr "Ouvrir les paramètres"
+
+msgid "Empty folder"
+msgstr "Dossier vide"
+
+msgid "Could not load folder"
+msgstr "Impossible de charger le dossier"
+
+# ---- Notifications -----------------------------------------------------------
+
+# Surfaced as a transient warning when the user disables the file-watching
+# toggle in Settings; clears automatically when they re-enable it.
+msgid "File watching disabled"
+msgstr "Surveillance des fichiers désactivée"
+
+msgid "Tracks won't reflect disk changes until you re-enable it."
+msgstr "Les morceaux ne refléteront pas les modifications du disque tant que vous ne réactiverez pas cette option."
+
+# Surfaced as a transient info toast when the file watcher reports a
+# kernel-queue overflow (notify Flag::Rescan) and the app reconciles
+# every enabled folder against disk to catch missed events.
+msgid "Library re-syncing"
+msgstr "Resynchronisation de la bibliothèque"
+
+msgid "Filesystem event burst — rescanning your folders."
+msgstr "Rafale d'événements du système de fichiers — nouveau scan de vos dossiers."
+
+# ---- Albums view ------------------------------------------------------------
+
+msgid "Name"
+msgstr "Nom"
+
+msgid "Filter albums…"
+msgstr "Filtrer les albums…"
+
+msgid "{n} album"
+msgid_plural "{n} albums"
+msgstr[0] "{n} album"
+msgstr[1] "{n} albums"
+
+msgid "No albums yet"
+msgstr "Aucun album pour l'instant"
+
+msgid "Add a music folder in Settings to start building your library."
+msgstr "Ajoutez un dossier de musique dans les Paramètres pour commencer à constituer votre bibliothèque."
+
+# ---- Playlists view ---------------------------------------------------------
+
+msgid "Filter playlists…"
+msgstr "Filtrer les listes…"
+
+msgid "Updated"
+msgstr "Mises à jour"
+
+msgid "{n} playlist"
+msgid_plural "{n} playlists"
+msgstr[0] "{n} liste"
+msgstr[1] "{n} listes"
+
+msgid "No playlists yet"
+msgstr "Aucune liste pour le moment"
+
+msgid "Click \"+ New Playlist\" to create one."
+msgstr "Cliquez sur « + Nouvelle liste » pour en créer une."
+
+msgid "New Playlist"
+msgstr "Nouvelle liste"
+
+msgid "New Playlist…"
+msgstr "Nouvelle liste…"
+
+msgid "Add to Playlist"
+msgstr "Ajouter à une liste"
+
+msgid "0 tracks"
+msgstr "0 piste"
+
+# ---- Playlist Detail --------------------------------------------------------
+
+msgid "No tracks yet"
+msgstr "Aucune piste pour le moment"
+
+msgid "Drag music files here, or add tracks via any track's overflow menu."
+msgstr "Glissez des fichiers musicaux ici, ou ajoutez des pistes via le menu d'une piste."
+
+msgid "Drop files to add to this playlist"
+msgstr "Déposez des fichiers pour les ajouter à cette liste"
+
+msgid "Edit artwork"
+msgstr "Modifier l'image"
+
+msgid "Rename"
+msgstr "Renommer"
+
+msgid "Delete playlist"
+msgstr "Supprimer la liste"
+
+msgid "Remove from playlist"
+msgstr "Retirer de la liste"
+
+msgid "Remove from Playlist"
+msgstr "Retirer de la liste"
+
+# ---- Mosaic picker ----------------------------------------------------------
+
+msgid "Add tracks to this playlist to pick artwork."
+msgstr "Ajoutez des pistes à cette liste pour choisir une image."
+
+msgid "No artwork"
+msgstr "Aucune image"
+
+msgid "{} / 4 selected"
+msgstr "{} / 4 sélectionnées"
+
+msgid "Select up to 4 tracks"
+msgstr "Sélectionner jusqu'à 4 pistes"
+
+# ---- Playlist Create / Rename dialog ----------------------------------------
+
+msgid "Playlist name"
+msgstr "Nom de la liste"
+
+msgid "Description (optional)"
+msgstr "Description (facultatif)"
+
+msgid "Add a description…"
+msgstr "Ajouter une description…"
+
+# ---- Playlist Detail: Remove-selected confirm -------------------------------
+
+msgid "Remove from playlist?"
+msgstr "Retirer de la liste ?"
+
+msgid "Remove {n} track from the playlist?"
+msgid_plural "Remove {n} tracks from the playlist?"
+msgstr[0] "Retirer {n} piste de la liste ?"
+msgstr[1] "Retirer {n} pistes de la liste ?"
+
+# ---- Search view ------------------------------------------------------------
+
+msgid "Search your library…"
+msgstr "Rechercher dans votre bibliothèque…"
+
+msgid "Searching…"
+msgstr "Recherche en cours…"
+
+msgid "No results found"
+msgstr "Aucun résultat trouvé"
+
+msgid "Try a different search term"
+msgstr "Essayez un autre terme de recherche"
+
+msgid "Top Result"
+msgstr "Meilleur résultat"
+
+msgid "Songs"
+msgstr "Chansons"
+
+msgid "Show all {} songs"
+msgstr "Voir les {} titres"
+
+msgid "Show less"
+msgstr "Réduire"
+
+msgid "Recent"
+msgstr "Récents"
+
+msgid "Clear all"
+msgstr "Tout effacer"
+
+msgid "Remove from recent"
+msgstr "Retirer des récents"
+
+# ---- Favorites view ---------------------------------------------------------
+
+msgid "Filter favorites…"
+msgstr "Filtrer les favoris…"
+
+msgid "Most Played"
+msgstr "Les plus écoutés"
+
+msgid "Favorite Artists"
+msgstr "Artistes favoris"
+
+msgid "No favorites yet"
+msgstr "Aucun favori pour l'instant"
+
+# Plural: favourite-count subtitle (hero count line + Favorite Artists card
+# subtitle on the strip).
+msgid "{n} favorite"
+msgid_plural "{n} favorites"
+msgstr[0] "{n} favori"
+msgstr[1] "{n} favoris"
+
+# ---- Track row right-click menu (multi-select variants) ---------------------
+# Wired into `ui/components/track-list-row.slint`. The `{}` is the
+# selection count.
+
+msgid "Play {} Next"
+msgstr "Lire {} ensuite"
+
+msgid "Add {} to Queue"
+msgstr "Ajouter {} à la file"
+
+msgid "Add {} to Playlist"
+msgstr "Ajouter {} à la liste de lecture"
+
+msgid "Add {} to Favorites"
+msgstr "Ajouter {} aux favoris"
+
+msgid "Remove {} from Favorites"
+msgstr "Retirer {} des favoris"
+
+msgid "Remove {} from Playlist"
+msgstr "Retirer {} de la playlist"
+
+# ---- Track row right-click menu --------------------------------------------
+msgid "Open Containing Folder"
+msgstr "Ouvrir le dossier parent"
+
+# ---- ... cross-tab navigation ----------------------------------------------
+msgid "Go to Album"
+msgstr "Aller à l'album"
+
+msgid "Go to Artist"
+msgstr "Aller à l'artiste"
+
+msgid "Go to Genre"
+msgstr "Aller au genre"
+
+# ---- Add-to-Playlist picker dialog -----------------------------------------
+# Wired into `ui/components/playlist-picker.slint`. The first two badges
+# appear on rows whose playlists already contain some or all of the
+# selected tracks; the third is the empty-state hint.
+
+msgid "Already added"
+msgstr "Déjà ajoutés"
+
+msgid "{} of {} already added"
+msgstr "{} sur {} déjà ajoutés"
+
+# ---- Auto-updater (Settings → Updates + notification toasts) ----------------
+
+msgid "Skip this version"
+msgstr "Ignorer cette version"
+
+msgid "Updates managed by your package manager"
+msgstr "Mises à jour gérées par votre gestionnaire de paquets"
+
+msgid "Re-run the latest .msi installer from the Releases page."
+msgstr "Relancez le dernier installateur .msi depuis la page Releases."
+
+msgid "Use brew upgrade melodia."
+msgstr "Utilisez brew upgrade melodia."
+
+msgid "Use sudo dnf update melodia (or your distro equivalent)."
+msgstr "Utilisez sudo dnf update melodia (ou l'équivalent de votre distribution)."
+
+msgid "Update available"
+msgstr "Mise à jour disponible"
+
+msgid "Melodia {} is ready to install."
+msgstr "Melodia {} est prête à être installée."
+
+msgid "Install"
+msgstr "Installer"
+
+msgid "Update installed"
+msgstr "Mise à jour installée"
+
+msgid "Restart Melodia to start using the new version."
+msgstr "Redémarrez Melodia pour utiliser la nouvelle version."
+
+msgid "Restart"
+msgstr "Redémarrer"
+
+msgid "Update failed"
+msgstr "Échec de la mise à jour"
+
+msgid "Couldn't reach the update server. Check your internet connection."
+msgstr "Impossible de joindre le serveur de mise à jour. Vérifiez votre connexion Internet."
+
+msgid "Signature check failed. The downloaded update may be corrupted; please try again."
+msgstr "Échec de la vérification de la signature. La mise à jour téléchargée est peut-être corrompue ; veuillez réessayer."
+
+msgid "The update server returned an unexpected response."
+msgstr "Le serveur de mise à jour a renvoyé une réponse inattendue."
+
+msgid "Couldn't write the downloaded update to disk."
+msgstr "Impossible d'écrire la mise à jour téléchargée sur le disque."
+
+msgid "Update failed. See logs for details."
+msgstr "Échec de la mise à jour. Consultez les journaux pour plus de détails."
+
+msgid "Close to Tray"
+msgstr "Fermer dans la zone de notification"
+
+msgid "Keep Melodia running in the system tray when you close the window, instead of quitting."
+msgstr "Garder Melodia en cours d'exécution dans la zone de notification à la fermeture de la fenêtre, au lieu de quitter."
+
+msgid "System Tray Icon"
+msgstr "Icône dans la zone de notification"
+
+msgid "Show a Melodia icon in the system tray with playback controls."
+msgstr "Afficher une icône Melodia dans la zone de notification avec des commandes de lecture."
+
+msgid "Changing the system tray icon requires restarting Melodia. Restart now?"
+msgstr "Changer l'icône de la zone de notification nécessite de redémarrer Melodia. Redémarrer maintenant ?"
+
+msgid "Available only while the system tray icon is active."
+msgstr "Disponible uniquement lorsque l'icône de la zone de notification est active."

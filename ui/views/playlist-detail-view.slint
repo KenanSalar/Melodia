@@ -1,0 +1,415 @@
+import { Theme } from "../theme.slint";
+import { PlaylistDetail, Player, Dialog } from "../globals.slint";
+import { DetailHeader } from "../components/detail-header.slint";
+import { ActionPill, PillLabel, PillButton, PillDivider } from "../components/action-pill.slint";
+import { ColumnTogglePopup } from "../components/track-list/column-toggle-popup.slint";
+import { SearchBar } from "../components/search-bar.slint";
+import { DraggableTrackList } from "../components/track-list/draggable-track-list.slint";
+import { OverlayScrollbar } from "../components/overlay-scrollbar.slint";
+import { MaterialIcon } from "../components/material-icon.slint";
+
+// The full Playlist Detail view. Mounted by `app-window.slint` for nav
+// index 7 when `PlaylistDetail.playlist-id >= 0`. Same shape as
+// `AlbumDetailView` — `DetailHeader` (hero blur + artwork tile + right
+// column) over a track list — but uses the sibling `DraggableTrackList`
+// (drag-reorder enabled when `sort-field == "position"`) instead of the
+// shared `TrackList`. The shared component is kept drag-free for the
+// other consumers (Tracks / Browse / Album-Artist-Genre Detail).
+//
+// Header actions: Play All, Shuffle, Edit Artwork, Rename, Delete +
+// column toggle. The selection chip (when rows are selected) carries a
+// "Remove from playlist" action.
+export component PlaylistDetailView inherits Rectangle {
+    // Meta line: "N tracks · 45:32"; description is shown as the
+    // subtitle slot beneath the title.
+    property <string> meta-line:
+        @tr("{n} track" | "{n} tracks" % PlaylistDetail.playlist.track_count)
+        + " · " + Theme.format-duration(PlaylistDetail.playlist.total_duration_ms);
+
+    // Filter throttle (mirror of `artist-detail-view`): each keystroke
+    // bumps `pending`; the Timer fires the filter callback at most once
+    // per `interval` while `pending != applied`.
+    property <int> filter-tick-pending: 0;
+    property <int> filter-tick-applied: 0;
+
+    filter-throttle := Timer {
+        interval: 130ms;
+        running: root.filter-tick-pending != root.filter-tick-applied;
+        triggered() => {
+            root.filter-tick-applied = root.filter-tick-pending;
+            PlaylistDetail.filter-changed(PlaylistDetail.filter);
+        }
+    }
+
+    // Backdrop catches any click that no inner TouchArea consumes and
+    // bumps the blur tick — the SearchBar observes it and clears focus
+    // on change.
+    TouchArea {
+        clicked => { PlaylistDetail.blur-search-tick += 1; }
+    }
+
+    VerticalLayout {
+        DetailHeader {
+            vertical-stretch: 0;
+            artwork-path: PlaylistDetail.playlist.artwork_path;
+            artwork-size: clamp(root.width * 0.16, 160px, 240px);
+            cover: PlaylistDetail.cover;
+            fallback-icon: "playlist";
+            hero-blur-a: PlaylistDetail.blur-img-a;
+            hero-blur-b: PlaylistDetail.blur-img-b;
+            hero-blur-use-a: PlaylistDetail.blur-use-a;
+            has-hero-blur: PlaylistDetail.has-blur;
+            back-clicked => { PlaylistDetail.close-detail(); }
+
+            // Title row — playlist name on the left, SearchBar pinned
+            // to the right. The SearchBar filters the `tracks`
+            // DraggableTrackList (title + artist + album substring).
+            // Mirrors the Artist Detail hero layout.
+            HorizontalLayout {
+                vertical-stretch: 0;
+                spacing: Theme.pad-md;
+                alignment: stretch;
+
+                VerticalLayout {
+                    alignment: center;
+                    Text {
+                        text: "‎" + PlaylistDetail.playlist.name;
+                        color: Theme.text;
+                        font-size: 24px;
+                        font-weight: Theme.page-title-weight;
+                        horizontal-alignment: left;
+                        overflow: elide;
+                    }
+                }
+
+                Rectangle { horizontal-stretch: 1; }
+
+                VerticalLayout {
+                    alignment: center;
+                    SearchBar {
+                        text <=> PlaylistDetail.filter;
+                        placeholder: @tr("Filter tracks…");
+                        blur-trigger: PlaylistDetail.blur-search-tick;
+                        edited(t) => { root.filter-tick-pending += 1; }
+                    }
+                }
+            }
+            // Description — shown only when present so empty playlists
+            // don't reserve vertical space.
+            if PlaylistDetail.playlist.description != "": Text {
+                vertical-stretch: 0;
+                text: "‎" + PlaylistDetail.playlist.description;
+                color: Theme.subtext1;
+                font-size: Theme.font-size-lg;
+                horizontal-alignment: left;
+                overflow: elide;
+            }
+            Text {
+                vertical-stretch: 0;
+                text: root.meta-line;
+                color: Theme.subtext0;
+                font-size: Theme.font-size-md;
+                horizontal-alignment: left;
+            }
+
+            Rectangle { vertical-stretch: 1; }
+
+            HorizontalLayout {
+                vertical-stretch: 0;
+                spacing: Theme.pad-md;
+                alignment: start;
+
+                ActionPill {
+                    PillButton {
+                        icon: "play_arrow";
+                        icon-filled: true;
+                        text: @tr("Play All");
+                        clicked => { PlaylistDetail.play-all(); }
+                    }
+                    PillDivider { }
+                    PillButton {
+                        icon: "shuffle";
+                        text: @tr("Shuffle");
+                        clicked => { PlaylistDetail.shuffle-all(); }
+                    }
+                    PillDivider { }
+                    // Edit-artwork stays as a Rust-callback path — Rust
+                    // must fetch the playlist's track artworks (DB query)
+                    // before opening the picker. Rust populates Dialog
+                    // via `upgrade_in_event_loop`, which lands on a fresh
+                    // event-loop tick (not the click tick), so Slint's
+                    // property-recursion guard doesn't trip.
+                    PillButton {
+                        icon: "image";
+                        tooltip-text: @tr("Edit artwork");
+                        clicked => { PlaylistDetail.request-edit-artwork(); }
+                    }
+                    PillDivider { }
+                    // Rename / Delete populate Dialog inline (Slint-only),
+                    // matching the `queue-sheet` / `library-section`
+                    // pattern — no Rust hop, no recursion risk. Both can
+                    // read header data directly from
+                    // `PlaylistDetail.playlist` / `PlaylistDetail.playlist-id`.
+                    PillButton {
+                        icon: "edit";
+                        tooltip-text: @tr("Rename");
+                        clicked => {
+                            Dialog.title = @tr("Rename Playlist");
+                            Dialog.message = "";
+                            Dialog.confirm-label = @tr("Save");
+                            Dialog.cancel-label = @tr("Cancel");
+                            Dialog.destructive = false;
+                            Dialog.kind = "rename-playlist";
+                            Dialog.target-id = PlaylistDetail.playlist-id;
+                            // Pre-fill both fields with current values
+                            // so a quick rename is just a few keystrokes
+                            // and clearing description is one keystroke
+                            // away.
+                            Dialog.input-text = PlaylistDetail.playlist.name;
+                            Dialog.input-text-2 = PlaylistDetail.playlist.description;
+                            Dialog.open = true;
+                        }
+                    }
+                    PillDivider { }
+                    PillButton {
+                        icon: "delete";
+                        danger: true;
+                        tooltip-text: @tr("Delete playlist");
+                        clicked => {
+                            Dialog.title = @tr("Delete playlist?");
+                            Dialog.message = @tr("The playlist and its track order will be removed. The tracks themselves stay in your library.");
+                            Dialog.confirm-label = @tr("Delete");
+                            Dialog.cancel-label = @tr("Cancel");
+                            Dialog.destructive = true;
+                            Dialog.kind = "delete-playlist";
+                            Dialog.target-id = PlaylistDetail.playlist-id;
+                            Dialog.open = true;
+                        }
+                    }
+                    PillDivider { }
+                    ColumnTogglePopup {
+                        show-number  <=> PlaylistDetail.show-number;
+                        show-artwork <=> PlaylistDetail.show-artwork;
+                        show-artist  <=> PlaylistDetail.show-artist;
+                        show-album   <=> PlaylistDetail.show-album;
+                        show-genre   <=> PlaylistDetail.show-genre;
+                        show-year    <=> PlaylistDetail.show-year;
+                        // `tooltip-text` defaults to @tr("Columns").
+                        toggled(id) => { PlaylistDetail.toggle-column(id); }
+                    }
+                    // Selection slots — appended (with leading divider) when
+                    // multi-select is active.
+                    if PlaylistDetail.selected-ids.length > 0: PillDivider { }
+                    if PlaylistDetail.selected-ids.length > 0: PillLabel {
+                        text: @tr("{} selected", PlaylistDetail.selected-ids.length);
+                    }
+                    if PlaylistDetail.selected-ids.length > 0: PillButton {
+                        icon: "playlist_remove";
+                        // `playlist_remove`'s glyph weight is lighter
+                        // than `delete` / `edit` etc., so at the
+                        // PillButton 14 px default it reads visually
+                        // smaller than the sibling icons. 16 px brings
+                        // it back into the same optical row.
+                        icon-size: 16px;
+                        danger: true;
+                        tooltip-text: @tr("Remove from playlist");
+                        clicked => {
+                            // Always confirm before removing — even for
+                            // a single selected row — so a stray click
+                            // on the destructive chip can't drop tracks
+                            // silently. Dispatcher routes Accept to
+                            // `PlaylistDetail.remove-selected()`.
+                            Dialog.title = @tr("Remove from playlist?");
+                            Dialog.message = @tr(
+                                "Remove {n} track from the playlist?"
+                                    | "Remove {n} tracks from the playlist?"
+                                    % PlaylistDetail.selected-ids.length
+                            );
+                            Dialog.confirm-label = @tr("Remove");
+                            Dialog.cancel-label = @tr("Cancel");
+                            Dialog.destructive = true;
+                            Dialog.kind = "remove-playlist-selected";
+                            Dialog.target-id = -1;
+                            Dialog.open = true;
+                        }
+                    }
+                    if PlaylistDetail.selected-ids.length > 0: PillDivider { }
+                    if PlaylistDetail.selected-ids.length > 0: PillButton {
+                        icon: "close";
+                        tooltip-text: @tr("Clear selection");
+                        clicked => { PlaylistDetail.clear-selection(); }
+                    }
+                }
+            }
+        }
+
+        // Body — DraggableTrackList always mounted (so `tl` is always in
+        // scope for the overlay scrollbars). The empty-state Rectangle
+        // is painted ON TOP when the playlist has no tracks; the
+        // DraggableTrackList renders just its header beneath but the
+        // overlay covers it.
+        body := Rectangle {
+            horizontal-stretch: 1;
+            vertical-stretch: 1;
+
+            HorizontalLayout {
+                padding-left: Theme.pad-lg;
+                padding-right: Theme.pad-lg;
+                // Vertical gap between the hero blur and the tracklist
+                // header — keeps the spacing consistent with every
+                // other detail view.
+                padding-top: Theme.pad-lg;
+
+                tl := DraggableTrackList {
+                    horizontal-stretch: 1;
+                    vertical-stretch: 1;
+
+                    rows: PlaylistDetail.tracks;
+                    // Drag-reorder is silent unless we're in the user's
+                    // canonical (insertion) order — any other sort makes
+                    // a reorder ambiguous. An active filter also disables
+                    // it: filtered row indices don't map to playlist
+                    // positions.
+                    reorder-enabled: PlaylistDetail.sort-field == "position"
+                        && PlaylistDetail.filter == "";
+
+                    w-number <=> PlaylistDetail.w-number;
+                    w-title <=> PlaylistDetail.w-title;
+                    w-artist <=> PlaylistDetail.w-artist;
+                    w-album <=> PlaylistDetail.w-album;
+                    w-genre <=> PlaylistDetail.w-genre;
+                    w-year <=> PlaylistDetail.w-year;
+                    w-length <=> PlaylistDetail.w-length;
+
+                    show-number <=> PlaylistDetail.show-number;
+                    show-artwork <=> PlaylistDetail.show-artwork;
+                    show-artist <=> PlaylistDetail.show-artist;
+                    show-album <=> PlaylistDetail.show-album;
+                    show-genre <=> PlaylistDetail.show-genre;
+                    show-year <=> PlaylistDetail.show-year;
+                    number-mode: "index";
+
+                    sort-field: PlaylistDetail.sort-field;
+                    sort-dir: PlaylistDetail.sort-dir;
+                    playing-track-id: Player.vm.track.id;
+                    view-context: "playlist-detail";
+                    current-playlist-id: PlaylistDetail.playlist.id;
+                    view-selected-ids: PlaylistDetail.selected-ids;
+
+                    request-sort(f) => { PlaylistDetail.request-sort(f); }
+                    play-row(id, idx) => { PlaylistDetail.play-row(id, idx); }
+                    play-next(ids) => { PlaylistDetail.play-next(ids); }
+                    add-to-queue(ids) => { PlaylistDetail.add-to-queue(ids); }
+                    toggle-row-favorite(ids, on) => { PlaylistDetail.toggle-row-favorite(ids, on); }
+                    select-row(idx, id, sh, ct) => { PlaylistDetail.select-row(idx, id, sh, ct); }
+                    // A click in the track list blurs the hero SearchBar.
+                    request-blur-search => { PlaylistDetail.blur-search-tick += 1; }
+                    reorder(from, to) => { PlaylistDetail.reorder(from, to); }
+                    remove-from-playlist(ids) => { PlaylistDetail.remove-track(ids); }
+                    go-to-album(aid) => { PlaylistDetail.go-to-album(aid); }
+                    go-to-artist(aid) => { PlaylistDetail.go-to-artist(aid); }
+                    go-to-genre(gid) => { PlaylistDetail.go-to-genre(gid); }
+                }
+            }
+
+            // Empty-state overlay — painted on top of the (still-mounted)
+            // DraggableTrackList when the playlist has no rows.
+            if PlaylistDetail.playlist.track_count == 0: Rectangle {
+                background: Theme.base;
+                VerticalLayout {
+                    alignment: center;
+                    spacing: Theme.pad-md;
+                    HorizontalLayout {
+                        alignment: center;
+                        MaterialIcon {
+                            name: "music_note";
+                            icon-size: 64px;
+                            icon-color: Theme.overlay0;
+                        }
+                    }
+                    HorizontalLayout {
+                        alignment: center;
+                        Text {
+                            text: @tr("No tracks yet");
+                            color: Theme.text;
+                            font-size: Theme.font-size-lg;
+                            font-weight: 600;
+                        }
+                    }
+                    HorizontalLayout {
+                        alignment: center;
+                        Text {
+                            text: @tr("Drag music files here, or add tracks via any track's overflow menu.");
+                            color: Theme.subtext0;
+                            font-size: Theme.font-size-sm;
+                            horizontal-alignment: center;
+                            wrap: word-wrap;
+                        }
+                    }
+                }
+            }
+
+            // Drop-hovered banner — paints over the detail body when the
+            // OS file-hover routes here (queue sheet closed, this detail
+            // open). Z-stacks above the empty-state overlay so users see
+            // a clear "drop target" cue.
+            if PlaylistDetail.is-drop-hovered && PlaylistDetail.playlist-id >= 0: Rectangle {
+                background: Theme.accent.with-alpha(0.16);
+                border-radius: Theme.radius-md;
+                border-width: 2px;
+                border-color: Theme.accent;
+
+                VerticalLayout {
+                    alignment: center;
+                    spacing: Theme.pad-sm;
+                    HorizontalLayout {
+                        alignment: center;
+                        MaterialIcon {
+                            name: "playlist_add";
+                            icon-size: 56px;
+                            icon-color: Theme.accent;
+                        }
+                    }
+                    HorizontalLayout {
+                        alignment: center;
+                        Text {
+                            text: @tr("Drop files to add to this playlist");
+                            color: Theme.text;
+                            font-size: Theme.font-size-lg;
+                            font-weight: 600;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Overlay scrollbars — `tl` is always in scope (DraggableTrackList
+    // mounts unconditionally), so the scrollbar bindings are
+    // unconditional too. Empty playlists still show the header band but
+    // no scroll travel; the V-bar simply hides itself via its own
+    // visible-size / content-size gating.
+    OverlayScrollbar {
+        horizontal: false;
+        x: parent.width - self.width;
+        y: tl.absolute-position.y - root.absolute-position.y + tl.body-y;
+        width: 10px;
+        height: tl.body-height;
+        visible-size: tl.v-visible-height;
+        content-size: tl.v-viewport-height;
+        offset: tl.v-offset;
+        scroll-to(o) => { tl.set-v-offset(o); }
+    }
+
+    OverlayScrollbar {
+        horizontal: true;
+        x: tl.absolute-position.x - root.absolute-position.x;
+        y: parent.height - self.height;
+        width: tl.width - 10px;
+        height: 10px;
+        visible-size: tl.h-visible-width;
+        content-size: tl.h-viewport-width;
+        offset: tl.h-offset;
+        scroll-to(o) => { tl.set-h-offset(o); }
+    }
+}

@@ -1,0 +1,191 @@
+import { ScrollView } from "std-widgets.slint";
+import { Theme } from "../../theme.slint";
+import { EntityStripRow } from "../../models.slint";
+import { EntityCard } from "entity-card.slint";
+import { OverlayScrollbar } from "../overlay-scrollbar.slint";
+
+// Reusable horizontally-scrolling row of `EntityCard`s with a section
+// heading. Used three times in the Favorites view (Most Played, Favorite
+// Albums, Favorite Artists). The Tauri analogue was three separate JSX
+// blocks per card flavour; here the shape is unified through
+// `EntityStripRow` + a per-flavour boolean (`circular`, `show-play-count`).
+//
+// Scrolling follows the same pattern as `tracks-view`: stock ScrollView
+// scrollbars are turned off, and a sibling `OverlayScrollbar` along the
+// bottom edge picks up overflow via `viewport-x`. The bar auto-hides
+// when `content-size <= visible-size` (no manual visibility gate needed
+// on the consumer side).
+//
+// Hover-revealed circular play overlay on each card is opt-in via
+// `show-play-overlay`; the Most Played strip suppresses it (clicking the
+// card already plays the track) while the Albums / Artists strips show
+// it so the user can play the whole album / artist without leaving the
+// Favorites page.
+export component HorizontalCardStrip inherits Rectangle {
+    in property <string>             heading;
+    in property <[EntityStripRow]>   rows;
+    in property <length>             card-width: 160px;
+    in property <length>             card-height: 206px;
+    in property <length>             card-gap: 12px;
+    in property <bool>               circular: false;
+    in property <bool>               show-play-count: false;
+    in property <bool>               show-play-overlay: true;
+    in property <string>             fallback-icon: "music-note";
+    in property <string>             empty-text;
+
+    pure callback request-cover(string) -> image;
+    callback row-clicked(int);
+    callback play-clicked(int);
+
+    private property <length> strip-height: root.card-height + 18px;
+
+    VerticalLayout {
+        spacing: Theme.pad-sm;
+
+        // Section heading — small caps label sits above the strip; matches
+        // the picker's "Select up to 4 tracks" header weight + tracking so
+        // every section header in the app reads as one family. Gated on
+        // a non-empty `heading` so callers that supply their own outer
+        // header chrome (e.g. the Favorites view's collapsible pill
+        // header) can pass `heading: ""` to suppress this Text entirely
+        // without a separate boolean prop.
+        if root.heading != "": Text {
+            text: root.heading;
+            color: Theme.text;
+            font-size: Theme.font-size-md;
+            font-weight: 700;
+            letter-spacing: 0.4px;
+        }
+
+        // Empty-state — single muted line when the strip would otherwise
+        // be empty (e.g. zero plays in Most Played, zero favorite
+        // albums). Caller supplies the copy so it can be locale-aware
+        // and section-specific.
+        if root.rows.length == 0 && root.empty-text != "": Text {
+            text: root.empty-text;
+            color: Theme.subtext0;
+            font-size: Theme.font-size-sm;
+            wrap: word-wrap;
+        }
+
+        if root.rows.length > 0: Rectangle {
+            height: root.strip-height;
+            clip: true;
+
+            sv := ScrollView {
+                width: 100%;
+                height: 100%;
+                horizontal-scrollbar-policy: always-off;
+                vertical-scrollbar-policy:   always-off;
+                viewport-height: self.height;
+
+                HorizontalLayout {
+                    spacing: root.card-gap;
+                    alignment: start;
+
+                    for row[i] in root.rows: card-slot := Rectangle {
+                        width: root.card-width;
+                        height: root.card-height;
+                        clip: false;
+
+                        EntityCard {
+                            width: 100%;
+                            height: 100%;
+                            artwork-path: row.artwork_path;
+                            cover: root.request-cover(row.artwork_path);
+                            title: row.title;
+                            subtitle: row.subtitle;
+                            card-width: root.card-width;
+                            card-height: root.card-height;
+                            circular: root.circular;
+                            fallback-icon: root.fallback-icon;
+                            clicked => { root.row-clicked(row.id); }
+                        }
+
+                        // Hover-revealed play overlay — pinned bottom-
+                        // right of the artwork tile (artwork is the
+                        // upper square portion of the card; the tile
+                        // inset matches EntityCard's `Theme.pad-sm`).
+                        // Suppressed on Most Played because the card
+                        // click already starts playback there.
+                        if root.show-play-overlay: play-pill := Rectangle {
+                            x: root.card-width - self.width - Theme.pad-md;
+                            y: root.card-width - self.height - Theme.pad-md;
+                            width: 36px;
+                            height: 36px;
+                            border-radius: 18px;
+                            background: Theme.accent;
+                            opacity: play-touch.has-hover || card-touch.has-hover ? 1.0 : 0.0;
+                            animate opacity { duration: Theme.dur-fast; easing: ease-in-out; }
+
+                            // Material ligature; collapsed em-box per
+                            // CLAUDE.md (`MaterialIcon`-style pinning
+                            // inside a fixed-size Rectangle). Inline
+                            // here to keep the strip's import surface
+                            // small.
+                            Text {
+                                text: "play_arrow";
+                                color: Theme.accent-text;
+                                font-family: "Material Symbols Rounded";
+                                font-size: 22px;
+                                horizontal-alignment: center;
+                                vertical-alignment: center;
+                            }
+
+                            play-touch := TouchArea {
+                                mouse-cursor: pointer;
+                                clicked => { root.play-clicked(row.id); }
+                            }
+                        }
+
+                        // Play-count badge — top-left of the artwork
+                        // tile when `show-play-count` and `play_count > 0`.
+                        // Tauri parity for the Most Played Favorites
+                        // strip; suppressed elsewhere.
+                        if root.show-play-count && row.play_count > 0: Rectangle {
+                            x: Theme.pad-md;
+                            y: Theme.pad-md;
+                            height: 22px;
+                            width: count-text.preferred-width + 16px;
+                            border-radius: 11px;
+                            background: Theme.crust.with-alpha(0.85);
+                            border-width: 1px;
+                            border-color: Theme.surface2;
+                            count-text := Text {
+                                text: row.play_count + " ▶";
+                                color: Theme.text;
+                                font-size: Theme.font-size-sm;
+                                font-weight: 600;
+                                horizontal-alignment: center;
+                                vertical-alignment: center;
+                            }
+                        }
+
+                        // Card-level hover sentinel — covers the entire
+                        // card slot (transparent, sits below the play
+                        // pill's TouchArea so the pill consumes clicks
+                        // landing on the play icon and the card swallows
+                        // the rest). Drives the play-pill fade-in.
+                        card-touch := TouchArea {
+                            mouse-cursor: pointer;
+                            enabled: false;
+                        }
+                    }
+                }
+            }
+
+            // Bottom-edge overlay scrollbar. Auto-hides on no overflow.
+            OverlayScrollbar {
+                horizontal: true;
+                x: 0;
+                y: parent.height - self.height;
+                width: parent.width;
+                height: 8px;
+                visible-size: sv.visible-width;
+                content-size: sv.viewport-width;
+                offset: -sv.viewport-x;
+                scroll-to(o) => { sv.viewport-x = -o; }
+            }
+        }
+    }
+}
