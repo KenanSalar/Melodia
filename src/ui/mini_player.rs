@@ -67,15 +67,19 @@ pub fn install(app: &AppWindow, np_state: &Rc<NowPlayingState>) -> Result<(), Ap
     let mini = app.global::<MiniPlayer>();
 
     // active-changed: enter/leave mini state. Capture pre-mini geometry
-    // on enter; flip the Up Next subscriber gate either way.
+    // on enter, flip the Up Next subscriber gate either way, and re-seed
+    // the Up Next list on enter so the square variant doesn't render an
+    // empty list when the queue hasn't changed since the subscriber
+    // started stashing. Mirrors `wire_now_playing_open`'s on-open seed.
     {
         let np_state = np_state.clone();
         mini.on_active_changed(move |is_active| {
             np_state.mini_visible.set(is_active);
-            if is_active
-                && let Some(geom) = geometry::current()
-            {
-                *PRE_MINI_GEOM.lock() = Some(geom);
+            if is_active {
+                if let Some(geom) = geometry::current() {
+                    *PRE_MINI_GEOM.lock() = Some(geom);
+                }
+                np_state.kick_up_next();
             }
         });
     }

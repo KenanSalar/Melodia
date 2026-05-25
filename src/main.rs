@@ -301,7 +301,6 @@ fn main() -> AppResult<()> {
     {
         log::warn!("mini_player::install: {e}");
     }
-    let _ = np_state;
 
     // 7. Seed `Player.vm` / `Player.queue` once with the current state.
     boot::ui_setup::seed_initial_view_model(&app, &state, &views.cover_thumbs);
