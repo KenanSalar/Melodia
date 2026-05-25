@@ -1,0 +1,214 @@
+import { Theme } from "../theme.slint";
+import { Tracks, Player } from "../globals.slint";
+import { SearchBar } from "../components/search-bar.slint";
+import { ActionPill, PillLabel, PillButton, PillDivider } from "../components/action-pill.slint";
+import { ColumnTogglePopup } from "../components/track-list/column-toggle-popup.slint";
+import { TrackList } from "../components/track-list/track-list.slint";
+import { OverlayScrollbar } from "../components/overlay-scrollbar.slint";
+
+// The Tracks page. The page-header chrome (title, count, filter input,
+// action pill with column-toggle popup) lives here; the table itself is the
+// reusable `TrackList` component, bound to the per-view `Tracks` global so
+// Rust keeps wiring callbacks the same way it does today. Other list views
+// (Favorites, Album/Playlist Detail, …) will mirror this pattern with their
+// own globals as they land in their respective phases.
+export component TracksView inherits Rectangle {
+    // No own background — the parent content panel owns the rounded
+    // `Theme.base` fill, and a transparent root lets that fill show
+    // through at the rounded corner cells.
+
+    // Filter throttle: each keystroke bumps `pending`; the Timer fires the
+    // refilter callback at most once per `interval` while `pending !=
+    // applied`. Stops itself by syncing `applied` to `pending` inside the
+    // trigger. Throttle (not pure debounce) so the user sees partial
+    // results during fast typing on huge libraries — each rebuild is now
+    // cheap (Arc-bumped snapshot + pre-computed lowercase keys), so the
+    // ~130 ms cadence is comfortably below "feels laggy" while collapsing
+    // hundreds of allocs/keystroke down to ~one per fire.
+    property <int> filter-tick-pending: 0;
+    property <int> filter-tick-applied: 0;
+
+    filter-throttle := Timer {
+        interval: 130ms;
+        running: root.filter-tick-pending != root.filter-tick-applied;
+        triggered() => {
+            root.filter-tick-applied = root.filter-tick-pending;
+            Tracks.apply-filter(Tracks.filter);
+        }
+    }
+
+    // Backdrop catches any click that no inner TouchArea consumes (the
+    // padding around the layout, gaps between cells, etc.) and bumps the
+    // blur tick — the SearchBar observes the counter and clears focus on
+    // change.
+    TouchArea {
+        clicked => { Tracks.blur-search-tick += 1; }
+    }
+
+    VerticalLayout {
+        padding: Theme.pad-lg;
+        spacing: Theme.pad-md;
+
+        HorizontalLayout {
+            vertical-stretch: 0;
+            spacing: Theme.pad-md;
+            alignment: stretch;
+
+            // Title + count subtitle stacked Spotify / Apple-Music style:
+            // title large, count small below it. Avoids the
+            // baseline-vs-box-center mismatch that made the inline
+            // "Tracks • 504 songs" layout look off, and reads as a
+            // conventional library-section header.
+            VerticalLayout {
+                alignment: center;
+                spacing: 0;
+                Text {
+                    text: @tr("Tracks");
+                    color: Theme.page-title-color;
+                    font-size: Theme.page-title-size;
+                    font-weight: Theme.page-title-weight;
+                }
+                Text {
+                    // Plural form: singular/plural picked by count via gettext.
+                    text: @tr("{n} song" | "{n} songs" % Tracks.total-count);
+                    color: Theme.subtext0;
+                    font-size: Theme.font-size-sm;
+                }
+            }
+
+            Rectangle { horizontal-stretch: 1; }
+
+            // Single right-aligned action pill. Order: selection chip
+            // (when active) → Play All → column toggle. Selection slots
+            // sit at the leading edge of the pill so they appear "left"
+            // of Play All rather than wedged between Play All and the
+            // column toggle.
+            VerticalLayout {
+                alignment: center;
+                ActionPill {
+                    if Tracks.selected-ids.length > 0: PillLabel {
+                        text: @tr("{} selected", Tracks.selected-ids.length);
+                    }
+                    if Tracks.selected-ids.length > 0: PillButton {
+                        icon: "close";
+                        clicked => {
+                            Tracks.clear-selection();
+                            Tracks.blur-search-tick += 1;
+                        }
+                    }
+                    if Tracks.selected-ids.length > 0: PillDivider { }
+                    if Tracks.rows.length > 0: PillButton {
+                        icon: "play_arrow";
+                        icon-filled: true;
+                        text: @tr("Play All");
+                        clicked => { Tracks.play-all(); }
+                    }
+                    if Tracks.rows.length > 0: PillDivider { }
+                    ColumnTogglePopup {
+                        tooltip-text: "";
+                        show-number <=> Tracks.show-number;
+                        show-artwork <=> Tracks.show-artwork;
+                        show-artist <=> Tracks.show-artist;
+                        show-album <=> Tracks.show-album;
+                        show-genre <=> Tracks.show-genre;
+                        show-year <=> Tracks.show-year;
+                        toggled(id) => { Tracks.toggle-column(id); }
+                    }
+                }
+            }
+
+            VerticalLayout {
+                alignment: center;
+                SearchBar {
+                    text <=> Tracks.filter;
+                    placeholder: @tr("Filter tracks…");
+                    blur-trigger: Tracks.blur-search-tick;
+                    // Don't call apply-filter directly — bump the pending
+                    // tick so the Timer above coalesces fast typing into
+                    // one refilter per 130 ms. `play-row` (Enter) reads
+                    // the live filter via `current_ids_filtered`, so
+                    // play-on-Enter still uses the latest needle.
+                    edited(t) => { root.filter-tick-pending += 1; }
+                }
+            }
+        }
+
+        // Reusable track table. State stays in the `Tracks` global; this
+        // is just a binding-only consumer. Future views (Favorites / Album
+        // Detail / Playlist Detail) will re-use the same component with
+        // their own per-view globals and persistence keys.
+        tl := TrackList {
+            horizontal-stretch: 1;
+            vertical-stretch: 1;
+
+            rows: Tracks.rows;
+
+            w-number <=> Tracks.w-number;
+            w-title <=> Tracks.w-title;
+            w-artist <=> Tracks.w-artist;
+            w-album <=> Tracks.w-album;
+            w-genre <=> Tracks.w-genre;
+            w-year <=> Tracks.w-year;
+            w-length <=> Tracks.w-length;
+
+            show-number <=> Tracks.show-number;
+            show-artwork <=> Tracks.show-artwork;
+            show-artist <=> Tracks.show-artist;
+            show-album <=> Tracks.show-album;
+            show-genre <=> Tracks.show-genre;
+            show-year <=> Tracks.show-year;
+            number-mode: "index";
+
+            sort-field: Tracks.sort-field;
+            sort-dir: Tracks.sort-dir;
+            playing-track-id: Player.vm.track.id;
+            view-context: "tracks";
+            view-selected-ids: Tracks.selected-ids;
+
+            request-sort(f) => { Tracks.request-sort(f); }
+            play-row(id, idx) => { Tracks.play-row(id, idx); }
+            play-next(ids) => { Tracks.play-next(ids); }
+            add-to-queue(ids) => { Tracks.add-to-queue(ids); }
+            toggle-row-favorite(ids, on) => { Tracks.toggle-row-favorite(ids, on); }
+            select-row(idx, id, sh, ct) => { Tracks.select-row(idx, id, sh, ct); }
+            request-blur-search => { Tracks.blur-search-tick += 1; }
+            go-to-album(aid) => { Tracks.go-to-album(aid); }
+            go-to-artist(aid) => { Tracks.go-to-artist(aid); }
+            go-to-genre(gid) => { Tracks.go-to-genre(gid); }
+        }
+    }
+
+    // Overlay scrollbars sit at the TracksView root, outside the padded
+    // VerticalLayout, so they're flush with the content panel's rounded
+    // edges. They drive the inner ScrollView/ListView through TrackList's
+    // `v-*` / `h-*` out properties + `set-*` callbacks (the bars live
+    // outside TrackList's scope, so they can't reach the inner ids
+    // directly).
+    OverlayScrollbar {
+        horizontal: false;
+        x: parent.width - self.width;
+        // Align with the ListView body inside TrackList so the bar (and
+        // its thumb) stays out of the column header band. `tl.body-y`
+        // includes the header offset; we add the TrackList's own y offset
+        // within TracksView to get root-relative coords.
+        y: tl.y + tl.body-y;
+        width: 10px;
+        height: tl.body-height;
+        visible-size: tl.v-visible-height;
+        content-size: tl.v-viewport-height;
+        offset: tl.v-offset;
+        scroll-to(o) => { tl.set-v-offset(o); }
+    }
+
+    OverlayScrollbar {
+        horizontal: true;
+        x: tl.x;
+        y: parent.height - self.height;
+        width: tl.width - 10px;
+        height: 10px;
+        visible-size: tl.h-visible-width;
+        content-size: tl.h-viewport-width;
+        offset: tl.h-offset;
+        scroll-to(o) => { tl.set-h-offset(o); }
+    }
+}

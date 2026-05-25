@@ -1,0 +1,156 @@
+import { Theme } from "../../theme.slint";
+import { MaterialIcon } from "../material-icon.slint";
+import { PopupSurface } from "../popup-surface.slint";
+import { FocusLossWatcher } from "../focus-loss-watcher.slint";
+
+// Single option row inside the dropdown popup. Highlights on hover and
+// shows a check glyph when this row matches the dropdown's selection.
+component DropdownOption inherits Rectangle {
+    in property <string> label;
+    in property <bool>   active;
+
+    callback clicked();
+
+    height: 32px;
+    border-radius: Theme.radius-sm;
+    background: touch.has-hover ? Theme.surface2 : transparent;
+    animate background { duration: 100ms; easing: ease-in-out; }
+
+    HorizontalLayout {
+        padding-left: Theme.pad-sm;
+        padding-right: Theme.pad-sm;
+        spacing: Theme.pad-sm;
+        alignment: stretch;
+
+        VerticalLayout {
+            alignment: center;
+            horizontal-stretch: 1;
+            Text {
+                text: root.label;
+                color: Theme.text;
+                font-size: Theme.font-size-md;
+            }
+        }
+        VerticalLayout {
+            alignment: center;
+            // Checkmark only on the active row; the empty branch keeps
+            // the layout box stable so all rows have identical height.
+            if root.active: MaterialIcon {
+                name: "check";
+                icon-size: 16px;
+                icon-color: Theme.accent;
+            }
+        }
+    }
+
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+// Custom dropdown. Chosen over `std-widgets.ComboBox` because the latter's
+// styling follows the active style backend and won't match the rest of the
+// Catppuccin Mocha controls (Tauri parity: chevron pill + accent ring +
+// active-row checkmark).
+//
+// Slint's PopupWindow auto-dismisses on outside click via the default
+// `close-on-click` policy; option-row TouchAreas write back to the
+// dropdown's `selected-index` and call `popup.close()` (set explicitly to
+// `close-on-click-outside` so a click on a row doesn't close the popup
+// before its handler fires — the row handler closes it manually).
+export component Dropdown inherits Rectangle {
+    in property <[string]> options;
+    in-out property <int> selected-index;
+    in property <length> trigger-width: 160px;
+
+    callback selected(int);
+
+    width: root.trigger-width;
+    height: trigger.height;
+
+    function current-label() -> string {
+        return root.selected-index >= 0 && root.selected-index < root.options.length
+            ? root.options[root.selected-index]
+            : "";
+    }
+
+    trigger := Rectangle {
+        width: root.trigger-width;
+        height: 32px;
+        border-radius: Theme.radius-md;
+        background: touch.has-hover ? Theme.surface2 : Theme.surface1;
+        border-color: touch.has-hover ? Theme.accent : transparent;
+        border-width: 1px;
+        animate background { duration: Theme.dur-fast; easing: ease-in-out; }
+        animate border-color { duration: Theme.dur-fast; easing: ease-in-out; }
+
+        HorizontalLayout {
+            padding-left: Theme.pad-md;
+            padding-right: Theme.pad-sm;
+            spacing: Theme.pad-sm;
+
+            VerticalLayout {
+                alignment: center;
+                horizontal-stretch: 1;
+                Text {
+                    text: root.current-label();
+                    color: Theme.text;
+                    font-size: Theme.font-size-md;
+                    overflow: elide;
+                }
+            }
+            VerticalLayout {
+                alignment: center;
+                MaterialIcon {
+                    name: "arrow_drop_down";
+                    icon-size: 22px;
+                    icon-color: Theme.text;
+                }
+            }
+        }
+
+        touch := TouchArea {
+            mouse-cursor: pointer;
+            clicked => { popup.show(); }
+        }
+    }
+
+    popup := PopupWindow {
+        // Drop directly under the trigger; smart edge-flip (popup above
+        // when near the bottom of the viewport) is deferred — Tauri does
+        // it but it's polish, not a blocker for v1.
+        x: 0;
+        y: trigger.height + 4px;
+        width: root.trigger-width;
+        // `close-on-click-outside` (not the default `close-on-click`) lets
+        // the option's TouchArea fire its `clicked` handler before the
+        // popup closes itself; the handler then calls `popup.close()`.
+        close-policy: close-on-click-outside;
+
+        // Auto-dismiss on OS focus loss (alt-tab, click on another app).
+        // Ungated — settings hosts a handful of dropdown instances and
+        // gating each one through `PopupHighlight` would add a global
+        // discriminator without a meaningful efficiency win at this scale.
+        FocusLossWatcher {
+            close => { popup.close(); }
+        }
+
+        PopupSurface {
+            VerticalLayout {
+                padding: Theme.pad-xs;
+                spacing: 0;
+
+                for option[i] in root.options: DropdownOption {
+                    label: option;
+                    active: i == root.selected-index;
+                    clicked => {
+                        root.selected-index = i;
+                        root.selected(i);
+                        popup.close();
+                    }
+                }
+            }
+        }
+    }
+}

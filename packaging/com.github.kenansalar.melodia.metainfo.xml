@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Copyright 2026 Kenan Salar -->
+<!--
+  AppStream MetaInfo. KDE Discover and GNOME Software read THIS file
+  (not the RPM headers) for the app's display name, developer, license
+  and version. Without it, software centres fall back to raw package
+  data and render the app with no name / author / version / license.
+
+  The component id, the installed desktop file and this file's name all
+  share the `com.github.kenansalar.melodia` reverse-DNS base — matching
+  the polkit action `com.github.kenansalar.melodia.update`.
+
+  Shipped verbatim (no templating) by every Linux packaging path so the
+  exact same file lands in each: the RPM (scripts/build-rpm.sh), the DEB
+  ([package.metadata.deb] assets in Cargo.toml), the AppImage
+  (scripts/build-appimage.sh) and per-user tarball installs
+  (src/services/desktop_integration.rs). Installed to
+  /usr/share/metainfo/ system-wide, or ~/.local/share/metainfo/ per-user.
+
+  No <releases> block: the displayed version comes from the owning
+  package (rpm/dpkg) or the AppImage filename, so there is nothing here
+  to keep in lockstep with Cargo.toml.
+-->
+<component type="desktop-application">
+  <id>com.github.kenansalar.melodia</id>
+
+  <name>Melodia</name>
+  <summary>Local music library player with gapless playback</summary>
+
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>AGPL-3.0-or-later</project_license>
+
+  <developer id="com.github.kenansalar">
+    <name>Kenan Salar</name>
+  </developer>
+
+  <description>
+    <p>
+      Melodia is a modern, local-first desktop music player with a
+      Material 3-inspired interface. Your music collection stays entirely
+      on your own machine — no accounts, no streaming, no cloud — and the
+      app is built around a fast, fluid and low-memory listening
+      experience.
+    </p>
+    <p>
+      A Slint user interface sits on a pure-Rust backend, with a local
+      SQLite library, dynamic theming and smooth, considered motion
+      throughout.
+    </p>
+    <p>Features:</p>
+    <ul>
+      <li>Gapless playback via Rodio and Symphonia — MP3, FLAC, M4A/AAC, OGG/Vorbis, WAV, ALAC and AIFF</li>
+      <li>Fast local SQLite library with full-text search</li>
+      <li>Browse by album, artist, genre and playlist, with file drag-and-drop</li>
+      <li>Pluggable themes, including system light/dark and Material You dynamic colour</li>
+      <li>OS media-key and MPRIS integration</li>
+    </ul>
+  </description>
+
+  <launchable type="desktop-id">com.github.kenansalar.melodia.desktop</launchable>
+
+  <url type="homepage">https://github.com/KenanSalar/Melodia</url>
+  <url type="bugtracker">https://github.com/KenanSalar/Melodia/issues</url>
+  <url type="vcs-browser">https://github.com/KenanSalar/Melodia</url>
+
+  <content_rating type="oars-1.1" />
+
+  <branding>
+    <color type="primary" scheme_preference="light">#8839ef</color>
+    <color type="primary" scheme_preference="dark">#cba6f7</color>
+  </branding>
+</component>

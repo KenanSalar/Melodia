@@ -1,0 +1,344 @@
+// Shared structs that cross the Rust ↔ Slint boundary. Field names and
+// types must mirror the Rust generated structs exactly.
+
+export struct TrackSummaryRow {
+    id: int,
+    file_path: string,
+    title: string,
+    artist: string,
+    album: string,
+    duration_ms: int,
+    artwork_path: string,
+    // Decoded cover thumbnail. Populated on the Rust side via
+    // `CoverThumbs::get_or_load`; empty (`width == 0`) when the track has no
+    // artwork or the file failed to decode. The `ArtworkImage` component
+    // renders this when present and falls back to the music_note glyph
+    // otherwise.
+    cover_img: image,
+    is_favorite: bool,
+}
+
+// Mirror of `entities::track::TrackListRow`. Slint structs can't express
+// `Option<T>`, so optional fields collapse to typed defaults (`""`, `0`)
+// in the Rust → Slint conversion (`to_slint_track_list_row`).
+//
+// `selected` is a UI-state field, *not* persisted on the Rust entity. It
+// rides along on the row so each `TrackListRowItem` can read it via a
+// reactive property binding — Slint expressions can't iterate to do an
+// id-in-set membership check, so writing the bit per-row is the cheapest
+// reactive option.
+export struct TrackListRow {
+    id: int,
+    title: string,
+    artist: string,
+    album: string,
+    genre: string,
+    year: int,           // 0 = unknown
+    track_number: int,   // 0 = unknown
+    duration_ms: int,
+    is_favorite: bool,
+    artwork_path: string,
+    // Decoded cover image. Populated on the Rust side via
+    // `slint::Image::load_from_path`; empty (`width == 0`) when the track has
+    // no artwork or the file failed to load. Slint defers decoding until the
+    // `Image` element renders, so attaching this to every row in a virtualized
+    // ListView only pays the decode cost for visible rows.
+    cover_img: image,
+    // Pre-formatted "mm:ss" / "h:mm:ss" length string. Computed once on the
+    // Rust side instead of via `Theme.format-duration(duration_ms)` per row,
+    // because that function call would re-evaluate on every property
+    // invalidation in a binding context — multiplied by visible row count it
+    // shows up in profiling during scroll.
+    display_duration: string,
+    selected: bool,
+    // UI-state field, *not* persisted on the Rust entity. The Browse view
+    // sets this `false` for disk-only audio files (present on disk inside a
+    // library folder but not yet in the DB — `id == 0`) so the row renders
+    // dimmed and non-interactive. Every other consumer (Tracks, …) sets it
+    // `true`. Threaded through `TrackListRowItem` to gate opacity + the
+    // TouchAreas; rides on the row alongside `selected` for the same
+    // reason — Slint expressions can't do an id-in-set membership check.
+    enabled: bool,
+    // FK targets used by the right-click context menu's `Go to …` entries.
+    // 0 means the track has no linkage to that entity (and the menu entry
+    // is hidden). Mirrors `Option<i64>` on the Rust `TrackListRow`.
+    album_id: int,
+    artist_id: int,
+    genre_id: int,
+}
+
+// Mirror of `crate::ui::albums::to_slint_album_row`'s output — one album
+// card in the Albums grid, and the header data for the Album Detail view.
+// Slint structs can't express `Option<T>`, so `year == 0` means "unknown".
+export struct AlbumRow {
+    id: int,
+    name: string,
+    artist_name: string,
+    year: int,            // 0 = unknown
+    track_count: int,
+    total_duration_ms: int,
+    artwork_path: string,
+    // No decoded `cover_img` field: the cover is pulled lazily per visible
+    // card via the `request-cover(artwork_path) -> image` callback (on the
+    // `Albums` / `AlbumDetail` global). Only on-screen `EntityCard`s
+    // evaluate that binding, so off-screen cards never lock `CoverThumbs`
+    // and the grid model stays pure data.
+}
+
+// One virtualized row of the Albums grid: up to `Albums.columns` cards.
+// Rust re-chunks the flat album list into these whenever the column count,
+// filter, or sort changes, so the `ListView` in `AlbumGrid` virtualizes by
+// row — only on-screen rows instantiate their `EntityCard`s, and only
+// those request their cover `Image`. A struct with a model-typed field is
+// the canonical Slint way to express a virtualized grid.
+export struct AlbumGridRow {
+    albums: [AlbumRow],
+}
+
+// Mirror of `crate::ui::artists::to_slint_artist_row`'s output — one
+// artist card in the Artists grid, and the header data for the Artist
+// Detail view. Same lazy-cover contract as `AlbumRow` (no `cover_img`
+// field — pulled per visible card via the `request-cover` callback).
+export struct ArtistRow {
+    id: int,
+    name: string,
+    image_path: string,
+    track_count: int,
+    album_count: int,
+    total_duration_ms: int,
+}
+
+// One virtualized row of the Artists grid: up to `Artists.columns` cards.
+// Same shape and motivation as `AlbumGridRow`.
+export struct ArtistGridRow {
+    artists: [ArtistRow],
+}
+
+// Mirror of `crate::ui::genres::to_slint_genre_row`'s output — one genre
+// card in the Genres grid, and the header data for the Genre Detail view.
+// Genres have no intrinsic artwork (no path, no cached image): the grid
+// tile + detail header instead paint a deterministic name-hash gradient.
+// That's why there's no `artwork_path` or `cover_img` field — the Slint
+// side composes `@linear-gradient(135deg, tile_color_1, tile_color_2)`
+// inline.
+//
+// `tile_color_*` / `hero_color_*` are the four pre-computed gradient
+// stops (Rust hashes the name once on `to_slint_genre_row` and varies
+// hue / hue-offset / saturation / value on three independent axes — see
+// `crate::ui::genres::color::genre_accent` for the algorithm). The tile
+// pair is saturated for the small card / detail artwork tile; the hero
+// pair is dimmer + less saturated so the full-bleed detail backdrop
+// keeps scrim + foreground text legible.
+//
+// `display_duration` is the pre-formatted "mm:ss" / "h:mm:ss" string for
+// the genre's `total_duration_ms`, computed once on the Rust side (same
+// reason as `TrackListRow.display_duration`).
+export struct GenreRow {
+    id: int,
+    name: string,
+    track_count: int,
+    total_duration_ms: int,
+    display_duration: string,
+    tile_color_1: color,
+    tile_color_2: color,
+    hero_color_1: color,
+    hero_color_2: color,
+}
+
+// One virtualized row of the Genres grid: up to `Genres.columns` cards.
+// Same shape and motivation as `AlbumGridRow` / `ArtistGridRow`.
+export struct GenreGridRow {
+    genres: [GenreRow],
+}
+
+// Mirror of `crate::ui::playlists::to_slint_playlist_row`'s output — one
+// playlist card in the Playlists grid, and the header data for the
+// Playlist Detail view. Same lazy-cover contract as `AlbumRow` (no
+// `cover_img` field — pulled per visible card via the `request-cover`
+// callback on the `Playlists` / `PlaylistDetail` global). The thumbnail
+// is either a user-picked mosaic composed from 1-4 of the playlist's own
+// track artworks, or — when the playlist has no custom thumbnail — the
+// first track's artwork. Empty `artwork_path` ⇒ render the
+// `queue_music` fallback glyph.
+export struct PlaylistRow {
+    id: int,
+    name: string,
+    description: string,
+    artwork_path: string,
+    track_count: int,
+    total_duration_ms: int,
+}
+
+// One virtualized row of the Playlists grid: up to `Playlists.columns`
+// cards. Same shape and motivation as `AlbumGridRow` / `ArtistGridRow` /
+// `GenreGridRow`.
+export struct PlaylistGridRow {
+    playlists: [PlaylistRow],
+}
+
+// One row in the Add-to-Playlist picker dialog (`Dialog.kind ==
+// "add-to-playlist"`). Built on the Rust side from `PlaylistStats` plus
+// the per-selection overlap count returned by
+// `library::playlists::count_tracks_in_playlists_for_selection`. The
+// picker grays + disables rows where `contained-count >=
+// Dialog.pick-total-tracks` (every selected track is already in this
+// playlist), and shows an `X of Y already added` badge for partial
+// overlap. `artwork-path` feeds the row's 40 px thumbnail via
+// `Playlists.request-row-cover` — same 72 px LRU tier the track list
+// rows use, so there are no extra decodes.
+export struct PlaylistPickRow {
+    id: int,
+    name: string,
+    artwork_path: string,
+    contained_count: int,
+}
+
+// `position_ms`, `duration_ms`, and `progress` deliberately live on the
+// `Player` global as separate scalar properties — not on this struct. The
+// playback monitor publishes a `PositionTick` every 500 ms while a track
+// plays, and bundling those values inside `PlayerVm` meant every tick
+// invalidated the entire `Player.vm` property, dirty-marking every binding
+// that read *any* field (title, artist, artwork, favorite, has-next, …).
+// Slint allocates a `BindingHolder` per binding and `mark_dirty` walks the
+// dependency list recursively, so 7 200 invalidations/hour produced a
+// monotonic RSS climb that only stopped when playback paused. Keeping the
+// frequently-changing scalars on top-level properties keeps each tick's
+// dirty-set scoped to the three readers that actually care.
+export struct PlayerVm {
+    has_track: bool,
+    track: TrackSummaryRow,
+    status: string,
+    is_playing: bool,
+    volume: int,
+    is_muted: bool,
+    playback_speed: float,
+    gapless: bool,
+    has_next: bool,
+    has_previous: bool,
+}
+
+export struct QueueVm {
+    length: int,
+    current_index: int,
+    shuffle: bool,
+    repeat_mode: string,
+    has_next: bool,
+    has_previous: bool,
+}
+
+// One row in the queue bottom-sheet's list. Mirrored from
+// `crate::ui::queue_sheet::QueueRow` (Rust-side struct) and rebuilt by
+// `spawn_queue_rows_subscriber` whenever the queue mutates. `is_current`
+// is intentionally *not* a row field — the now-playing highlight comes
+// from `Queue.current-index` so a single integer write repaints exactly
+// the two affected rows instead of rewriting the whole VecModel.
+//
+// `selected` is UI-state, not persisted on the Rust side. It rides on
+// the row because Slint expressions can't iterate to do an in-set check.
+// `src/ui/queue_sheet.rs` mutates this through a shadow `Vec<QueueRow>`
+// (so Rust-side callbacks like `remove_selected` can read selection
+// state without round-tripping through Slint) and immediately pushes
+// the updated row into the live `VecModel` so the UI flips synchronously.
+export struct QueueRow {
+    id: int,
+    title: string,
+    artist: string,
+    artwork_path: string,
+    cover_img: image,
+    // Pre-formatted "mm:ss" / "h:mm:ss" string — same format as
+    // `TrackListRow.display_duration` for consistency. Computed on the
+    // Rust side via `crate::ui::tracks::format_duration_ms`.
+    display_duration: string,
+    selected: bool,
+    is_favorite: bool,
+}
+
+// Technical metadata for the full-screen Now Playing view's chip row.
+// Mirror of `crate::ui::now_playing::TrackMetaRow`, async-fetched on track
+// change (`library::tracks::get_track_meta` — an 8-column projection, not
+// a full `Track`). Every field is a
+// pre-formatted display string — `""` means "unknown / not yet loaded", so
+// the view gates each chip on `field != ""` and the whole row on
+// `track_id == Player.vm.track.id` (a slow fetch that lands after a rapid
+// track change is identified as stale and never shown).
+export struct TrackMetaRow {
+    track_id: int,
+    codec: string,        // "FLAC"
+    bitrate: string,      // "1009 kbps"
+    sample_rate: string,  // "44.1 kHz"
+    bit_depth: string,    // "16-bit"
+    channels: string,     // "Stereo"
+    year: string,         // "2017"
+    genre: string,        // "Jazz"
+}
+
+// One row in the Library Folders settings list. `last-scanned` is a
+// pre-formatted display string (empty when the folder has never been scanned)
+// — Rust formats it via `format_last_scanned` so Slint expressions stay
+// trivial.
+export struct FolderListRow {
+    id: int,
+    path: string,
+    last-scanned: string,
+}
+
+// One subfolder row in the Browse view. Just enough to render the row
+// (`name`) and drill into it (`path`).
+export struct BrowseFolderRow {
+    path: string,
+    name: string,
+}
+
+// One card in a `HorizontalCardStrip` (Favorites view's Most Played /
+// Favorite Albums / Favorite Artists carousels). Unified shape across
+// all three strip flavours so the same component renders any of them:
+//   * Most Played Favorites → id = track id, play-count > 0 reveals badge
+//   * Favorite Albums       → id = album id, subtitle = artist name
+//   * Favorite Artists      → id = artist id, subtitle = "{n} favorites"
+// `play-count` defaults to 0 and is only consulted when the host strip
+// has `show-play-count: true`, so a 0 silently suppresses the badge
+// everywhere else.
+export struct EntityStripRow {
+    id: int,
+    title: string,
+    subtitle: string,
+    artwork_path: string,
+    play_count: int,
+}
+
+// One segment in the Browse view's breadcrumb bar. `label` is the
+// human-friendly segment name (path basename); `path` is the absolute
+// path to navigate to when the segment is clicked. Computed on the Rust
+// side every time `current-path` changes — `std::path::Path::ancestors()`
+// reversed, with the final segment dropped (it's the rendered title, not
+// a click target).
+export struct BreadcrumbRow {
+    label: string,
+    path: string,
+}
+
+// One row in the bottom-right notification stack. Pushed onto
+// `Notifications.rows` from Rust (`src/ui/notifications.rs`) when a
+// transient message needs to surface — e.g. the user disabling file
+// watching, or (future) the auto-updater reporting an available release.
+//
+// `id` is a monotonically increasing handle the Rust side assigns at
+// push time; callers keep it so they can `Notifications.dismiss(id)`
+// programmatically (e.g. clearing the "watching disabled" row when the
+// user toggles watching back on).
+//
+// `variant` discriminates icon + left-accent colour: "info" → accent,
+// "success" → green, "warning" → yellow, "error" → danger.
+//
+// `action-label` empty ⇒ no action button rendered; the close X is
+// always present so every notification is dismissible. `action-kind` is
+// the routing key the `Notifications.action(id, kind)` default handler
+// dispatches on (mirrors `Dialog.kind` + `accepted` routing).
+export struct NotificationRow {
+    id: int,
+    variant: string,
+    title: string,
+    message: string,
+    action-label: string,
+    action-kind: string,
+}

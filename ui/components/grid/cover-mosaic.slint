@@ -1,0 +1,205 @@
+import { Theme } from "../../theme.slint";
+import { ArtworkImage } from "../artwork-image.slint";
+
+// One tile of the cover mosaic — delegates to `ArtworkImage` so the
+// missing-cover branch shares the accent-tinted chrome (`Theme.accent.
+// with-alpha(0.15)` background + `Theme.accent` glyph) every other
+// placeholder tile in the app uses. The slot-index lookup is guarded
+// so the same component handles both the "real artwork in this slot"
+// and "placeholder in this slot" cases without separate call sites
+// per layout.
+component MosaicSlot inherits Rectangle {
+    in property <int>      idx;
+    in property <[string]> artwork-paths;
+    in property <length>   tile-radius;
+    in property <string>   fallback-icon;
+    pure callback request-cover(string) -> image;
+
+    clip: true;
+    border-radius: tile-radius;
+
+    if root.artwork-paths.length > root.idx: ArtworkImage {
+        width: parent.width;
+        height: parent.height;
+        tile-radius: root.tile-radius;
+        artwork-path: root.artwork-paths[root.idx];
+        cover: root.request-cover(root.artwork-paths[root.idx]);
+        fallback-icon: root.fallback-icon;
+    }
+    if root.artwork-paths.length <= root.idx: ArtworkImage {
+        width: parent.width;
+        height: parent.height;
+        tile-radius: root.tile-radius;
+        // No cover, no path — ArtworkImage's `cover.width == 0` branch
+        // paints `Theme.accent.with-alpha(0.15)` + the fallback glyph
+        // colourised to `Theme.accent`. Same as every empty cell in
+        // the tracks list / album grid.
+        fallback-icon: root.fallback-icon;
+    }
+}
+
+// Reusable 1/2/3/4-tile artwork mosaic. Pure layout — the caller owns
+// the outer chrome (background, border, radius). Only the *inner* tile
+// branches are rendered here; an effective tile count of 0 draws
+// nothing, so the caller can render their own empty state behind /
+// inside the component.
+//
+// Originally extracted from the playlist-mosaic-picker preview so the
+// same layout drives the Favorites hero mosaic (which must update live
+// when the top-4 most-played favorites change). Tile sources are
+// resolved through the `request-cover` callback so each consumer can
+// route the lookup into its own LRU cache tier (e.g. row-tier 72 px
+// shared cache, grid-tier 448 px for sharp downscaled previews).
+//
+// Layout count is `tile-count` when set (`> 0`), otherwise
+// `artwork-paths.length`. Two consumer patterns:
+//
+// * Picker (default, `tile-count: 0`). The mosaic shape adapts to the
+//   user's running selection — picking the 2nd cover flips from a
+//   single-tile preview to a 2-split, etc. Every slot has a real
+//   artwork because `tile-count == artwork-paths.length`.
+//
+// * Favorites hero (`tile-count: min(track-count, 4)`). The mosaic
+//   shape adapts to the *favorite count* (1 favorite → single tile,
+//   2 → 2-split, 3 → 3-layout, 4+ → 2×2). Slots beyond the distinct-
+//   artwork count paint placeholder tiles via `MosaicSlot`'s fallback
+//   branch. So a library with 5 favorites and 2 distinct covers
+//   renders a 2×2 grid with 2 covers + 2 placeholders, not the same
+//   2 covers duplicated.
+//
+// Layouts mirror the canonical playlist composition:
+//   count 1  → single tile filling the parent
+//   count 2  → left / right split with a gutter
+//   count 3  → left full-height + right column split top / bottom
+//   count 4  → 2×2 grid
+//
+// `tile-radius` defaults to `Theme.radius-sm` (matching the picker's
+// historical look). Pass `0px` to get a truly flush-fill mosaic where
+// adjacent tiles butt up edge-to-edge without rounded corners — needed
+// when the surrounding chrome's own border-radius + clip is the only
+// curve the user should see (e.g. the Favorites hero tile, which is
+// meant to read as a single composited image like the playlist
+// detail's baked composite). Pair with `gutter-size: 0px` so the
+// outer Rectangle's background doesn't bleed through the layout
+// padding.
+export component CoverMosaic inherits Rectangle {
+    in property <[string]> artwork-paths;
+    in property <length>   gutter-size: 3px;
+    in property <length>   tile-radius: Theme.radius-sm;
+    // Material-Symbols-style icon ligature name forwarded to each
+    // empty-slot `ArtworkImage.fallback-icon`. Defaults to
+    // `"music-note"`; consumers can pass `"album"` / `"person"` /
+    // `"playlist"` / `"theater_comedy"` for context-appropriate
+    // chrome. Same names `EntityCard` / `DetailHeader` use.
+    in property <string>   placeholder-icon: "music-note";
+    // Forces the layout to render N tiles regardless of how many
+    // artworks are supplied (slots beyond `artwork-paths.length`
+    // become placeholders). `0` keeps the picker behaviour — layout
+    // count tracks `artwork-paths.length`.
+    in property <int>      tile-count: 0;
+    pure callback request-cover(string) -> image;
+
+    private property <int> effective-count:
+        root.tile-count > 0 ? root.tile-count : root.artwork-paths.length;
+
+    // 1 tile — fills the full preview rectangle.
+    if root.effective-count == 1: MosaicSlot {
+        idx: 0;
+        artwork-paths: root.artwork-paths;
+        tile-radius: root.tile-radius;
+        fallback-icon: root.placeholder-icon;
+        request-cover(p) => { return root.request-cover(p); }
+    }
+
+    // 2 tiles — left / right split with a gutter.
+    if root.effective-count == 2: HorizontalLayout {
+        spacing: root.gutter-size;
+        padding: root.gutter-size;
+        MosaicSlot {
+            idx: 0;
+            artwork-paths: root.artwork-paths;
+            tile-radius: root.tile-radius;
+            fallback-icon: root.placeholder-icon;
+            request-cover(p) => { return root.request-cover(p); }
+        }
+        MosaicSlot {
+            idx: 1;
+            artwork-paths: root.artwork-paths;
+            tile-radius: root.tile-radius;
+            fallback-icon: root.placeholder-icon;
+            request-cover(p) => { return root.request-cover(p); }
+        }
+    }
+
+    // 3 tiles — left full-height + right column split top / bottom.
+    if root.effective-count == 3: HorizontalLayout {
+        spacing: root.gutter-size;
+        padding: root.gutter-size;
+        MosaicSlot {
+            idx: 0;
+            horizontal-stretch: 1;
+            artwork-paths: root.artwork-paths;
+            tile-radius: root.tile-radius;
+            fallback-icon: root.placeholder-icon;
+            request-cover(p) => { return root.request-cover(p); }
+        }
+        VerticalLayout {
+            horizontal-stretch: 1;
+            spacing: root.gutter-size;
+            MosaicSlot {
+                idx: 1;
+                artwork-paths: root.artwork-paths;
+                tile-radius: root.tile-radius;
+                fallback-icon: root.placeholder-icon;
+                request-cover(p) => { return root.request-cover(p); }
+            }
+            MosaicSlot {
+                idx: 2;
+                artwork-paths: root.artwork-paths;
+                tile-radius: root.tile-radius;
+                fallback-icon: root.placeholder-icon;
+                request-cover(p) => { return root.request-cover(p); }
+            }
+        }
+    }
+
+    // 4+ tiles — 2×2 grid.
+    if root.effective-count >= 4: VerticalLayout {
+        spacing: root.gutter-size;
+        padding: root.gutter-size;
+        HorizontalLayout {
+            spacing: root.gutter-size;
+            MosaicSlot {
+                idx: 0;
+                artwork-paths: root.artwork-paths;
+                tile-radius: root.tile-radius;
+                fallback-icon: root.placeholder-icon;
+                request-cover(p) => { return root.request-cover(p); }
+            }
+            MosaicSlot {
+                idx: 1;
+                artwork-paths: root.artwork-paths;
+                tile-radius: root.tile-radius;
+                fallback-icon: root.placeholder-icon;
+                request-cover(p) => { return root.request-cover(p); }
+            }
+        }
+        HorizontalLayout {
+            spacing: root.gutter-size;
+            MosaicSlot {
+                idx: 2;
+                artwork-paths: root.artwork-paths;
+                tile-radius: root.tile-radius;
+                fallback-icon: root.placeholder-icon;
+                request-cover(p) => { return root.request-cover(p); }
+            }
+            MosaicSlot {
+                idx: 3;
+                artwork-paths: root.artwork-paths;
+                tile-radius: root.tile-radius;
+                fallback-icon: root.placeholder-icon;
+                request-cover(p) => { return root.request-cover(p); }
+            }
+        }
+    }
+}

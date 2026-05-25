@@ -1,0 +1,770 @@
+name: Release
+
+# Trigger model (mirrors the old Tauri project's `release.yml`):
+#
+#   * `push` to `main` → derive `v<version>` from `Cargo.toml` and
+#     build / upload into the matching GitHub draft release. If the
+#     draft already exists (previous push at the same version) it's
+#     updated in place via `gh release upload --clobber`. If the
+#     release for that tag is already PUBLISHED (you flipped the draft
+#     live), the workflow short-circuits — bumping `Cargo.toml`'s
+#     version is the signal to start a new release cycle.
+#   * `workflow_dispatch` → same flow, callable from the Actions UI.
+#
+# No tag-push trigger — Cargo.toml is the source of truth for the
+# version, exactly like `tauri.conf.json` was in the old project.
+#
+# Manual flip to "Published" still happens via the GitHub release UI
+# (or `gh release edit "$TAG" --draft=false --latest`). Drafts aren't
+# served by `/releases/latest/download/`, so the auto-updater only
+# sees a release once you've taken the final QA step yourself.
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+  # `actions/attest-build-provenance@v2` needs an OIDC token to mint a
+  # Sigstore certificate keyed to this workflow run, and write access to
+  # the repo's attestations store so users can verify with
+  # `gh attestation verify <file> --repo KenanSalar/Melodia`.
+  id-token: write
+  attestations: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+# Force every JS action (including transitives that we don't pin
+# directly, e.g. `actions/attest-build-provenance`'s nested
+# `actions/attest` + `actions/attest/predicate`) to run on Node 24.
+# GitHub deprecates Node 20 on 2026-06-02 and removes it on
+# 2026-09-16. Setting this here keeps the deprecation warning out
+# of every job's annotation list until the upstream actions
+# republish on Node 24 themselves.
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Resolve the target version + tag, and gate the rest of the workflow on
+  # whether a release for that tag already exists in a "published" state.
+  # ---------------------------------------------------------------------------
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+      tag: ${{ steps.meta.outputs.tag }}
+      should_release: ${{ steps.gate.outputs.should_release }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Resolve version + tag from Cargo.toml
+        id: meta
+        shell: bash
+        run: |
+          VERSION="$(awk -F\" '/^version = / { print $2; exit }' Cargo.toml)"
+          if [[ -z "$VERSION" ]]; then
+            echo "ERROR: failed to extract version from Cargo.toml" >&2
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Resolved release tag: v$VERSION"
+
+      - name: Gate on existing release state
+        id: gate
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          TAG="${{ steps.meta.outputs.tag }}"
+          # Three cases:
+          #   no release exists           → create draft
+          #   existing release is DRAFT   → rebuild + update draft in place
+          #   existing release is PUBLISHED → short-circuit. Bumping
+          #                                   Cargo.toml's version is the
+          #                                   signal to start a new cycle.
+          if STATE=$(gh release view "$TAG" --json isDraft -q '.isDraft' 2>/dev/null); then
+            if [[ "$STATE" == "true" ]]; then
+              echo "should_release=true" >> "$GITHUB_OUTPUT"
+              echo "Existing draft for $TAG — will rebuild + update."
+            else
+              echo "should_release=false" >> "$GITHUB_OUTPUT"
+              echo "Release $TAG is already published. Bump Cargo.toml's version to ship again."
+            fi
+          else
+            echo "should_release=true" >> "$GITHUB_OUTPUT"
+            echo "No release for $TAG yet — will create draft."
+          fi
+
+      # Fail-fast preflight: the Windows MSI build pins cargo-wix to an
+      # unreleased upstream commit (volks73/cargo-wix#295, the WiX v4+
+      # modern-toolset PR — see the comment on `Install cargo-wix` in the
+      # build job). If upstream rewrites history in a way that orphans
+      # that commit (force-push, deletion of the only branch keeping it
+      # reachable, repo removal), both MSI matrix slots would fail ~15 min
+      # into the build with a cryptic `cargo install` "object not found"
+      # error. Verifying here surfaces the same failure in seconds, at
+      # the start of the workflow, with a clear remediation pointer.
+      #
+      # The probe uses `git fetch --depth 1 <url> <sha>` rather than
+      # `git ls-remote`, because `ls-remote` only enumerates ref tips —
+      # it returns empty as soon as upstream pushes anything on top of
+      # the pinned merge commit, even though the commit is still a
+      # reachable object (which is all `cargo install --rev` needs).
+      # GitHub serves unreffed-but-reachable SHAs by default, so this
+      # check returns success while the SHA remains in upstream history
+      # and only fails if the commit is genuinely orphaned.
+      #
+      # Keep this SHA in lockstep with the `rev:` input on the
+      # `taiki-e/cache-cargo-install-action` step that installs cargo-wix.
+      # When 0.4.0 is released to crates.io both this preflight and that
+      # install step can be deleted in favour of
+      # `taiki-e/install-action tool: cargo-wix`.
+      - name: Preflight — cargo-wix git pin still resolves
+        shell: bash
+        run: |
+          PINNED_SHA="44fbc43cce8ff6dbcc6e6a321befd1a7b362494f"
+          UPSTREAM="https://github.com/volks73/cargo-wix"
+          PROBE="$(mktemp -d)"
+          git init -q "$PROBE"
+          if ! git -C "$PROBE" fetch --depth 1 "$UPSTREAM" "$PINNED_SHA"; then
+            echo "::error::cargo-wix pin $PINNED_SHA is no longer reachable on $UPSTREAM."
+            echo "::error::Upstream likely orphaned the commit (force-push that rewrote history,"
+            echo "::error::deletion of the only branch keeping it reachable, or repo removal)."
+            echo "::error::Remediation: (a) fork volks73/cargo-wix to KenanSalar/cargo-wix and"
+            echo "::error::re-pin the install step's --rev there, or (b) if 0.4.0 is now"
+            echo "::error::released on crates.io, replace the cargo install step with"
+            echo "::error::taiki-e/install-action@v2 with tool: cargo-wix."
+            exit 1
+          fi
+          echo "cargo-wix pin $PINNED_SHA reachable on $UPSTREAM"
+
+  # ---------------------------------------------------------------------------
+  # Fail the release if RustSec advisories cover any of our deps.
+  # Auto-updater is security-critical (it ships executable code to user
+  # machines); we'd rather hold a release than ship a known-vulnerable
+  # reqwest/openssl/whatever to every installed client. Soft-fails on
+  # informational advisories so a warning-only RUSTSEC-XXXX entry
+  # doesn't block a fix shipment.
+  # ---------------------------------------------------------------------------
+  audit:
+    needs: prepare
+    if: needs.prepare.outputs.should_release == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-audit
+      - name: cargo audit
+        # `--deny warnings` would over-trigger on transitive deps we
+        # don't directly control; `--deny unsound,unmaintained` fails
+        # the build only on the categories worth blocking a release.
+        run: cargo audit --deny unsound --deny unmaintained
+
+  # ---------------------------------------------------------------------------
+  # Per-format artifact builds. Each matrix slot produces one artifact +
+  # its prehashed minisign signature, then uploads both as a workflow
+  # artifact for the `release` job to collate.
+  # ---------------------------------------------------------------------------
+  build:
+    needs: [prepare, audit]
+    if: needs.prepare.outputs.should_release == 'true'
+    strategy:
+      # First failure cancels every other in-flight slot to save Actions
+      # minutes during iteration. Trade-off: if Windows MSI fails, we
+      # don't see whether Linux RPM also would have failed in the same
+      # run — fix the first red slot, push again, retest the rest.
+      fail-fast: true
+      matrix:
+        # `arch` is x86_64 / aarch64 — used to substitute into output
+        # filenames (`melodia-vX-${ARCH}-linux.tar.gz`, etc.) and as the
+        # ARCH env var the build-{appimage,rpm}.sh scripts read. ARM
+        # slots use GitHub's free hosted ARM runners (`ubuntu-24.04-arm`
+        # / `windows-11-arm`, generally available since 2024 on public
+        # repos).
+        include:
+          - { target: x86_64-unknown-linux-gnu,  runner: ubuntu-latest,      kind: linux-tarball,  arch: x86_64  }
+          - { target: x86_64-unknown-linux-gnu,  runner: ubuntu-latest,      kind: linux-appimage, arch: x86_64  }
+          - { target: x86_64-unknown-linux-gnu,  runner: ubuntu-latest,      kind: linux-rpm,      arch: x86_64  }
+          - { target: x86_64-unknown-linux-gnu,  runner: ubuntu-latest,      kind: linux-deb,      arch: x86_64  }
+          - { target: x86_64-pc-windows-msvc,    runner: windows-2025-vs2026,       kind: windows-msi,    arch: x86_64  }
+          - { target: aarch64-unknown-linux-gnu, runner: ubuntu-24.04-arm,   kind: linux-tarball,  arch: aarch64 }
+          - { target: aarch64-unknown-linux-gnu, runner: ubuntu-24.04-arm,   kind: linux-appimage, arch: aarch64 }
+          - { target: aarch64-unknown-linux-gnu, runner: ubuntu-24.04-arm,   kind: linux-rpm,      arch: aarch64 }
+          - { target: aarch64-unknown-linux-gnu, runner: ubuntu-24.04-arm,   kind: linux-deb,      arch: aarch64 }
+          - { target: aarch64-pc-windows-msvc,   runner: windows-11-arm,     kind: windows-msi,    arch: aarch64 }
+    runs-on: ${{ matrix.runner }}
+    env:
+      TAG: ${{ needs.prepare.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v5
+
+      # GitHub's arm64 runners default to community-hosted
+      # `ports.ubuntu.com`, which suffers sustained connectivity dropouts
+      # from Azure-hosted runner instances. Repoint to Azure's own
+      # ports mirror (in the same fabric — no cross-network hop). Also
+      # do the equivalent swap on amd64 (`archive.ubuntu.com` →
+      # `azure.archive.ubuntu.com`) in case GitHub's image baseline ever
+      # changes. Both sed branches are no-ops when the URL doesn't match,
+      # so it's safe to run on every Linux slot.
+      - name: Use Azure apt mirrors (mirror failover)
+        if: runner.os == 'Linux'
+        run: |
+          sudo sed -i \
+            -e 's|http://archive\.ubuntu\.com/ubuntu|http://azure.archive.ubuntu.com/ubuntu|g' \
+            -e 's|http://ports\.ubuntu\.com/ubuntu-ports|http://azure.ports.ubuntu.com/ubuntu-ports|g' \
+            /etc/apt/sources.list /etc/apt/sources.list.d/*.list /etc/apt/sources.list.d/*.sources 2>/dev/null || true
+
+      # Retry wrapper layered on top of the Azure mirror swap above —
+      # defence-in-depth for short hiccups on the new mirror. 3 attempts
+      # × 15 s backoff.
+      - name: Install Linux system deps
+        if: runner.os == 'Linux'
+        run: |
+          sudo systemctl stop unattended-upgrades || true
+          for attempt in 1 2 3; do
+            if sudo apt-get update -qq -o DPkg::Lock::Timeout=60 && \
+               sudo apt-get install -qq -y -o DPkg::Lock::Timeout=60 \
+                 libasound2-dev libxkbcommon-dev libfontconfig1-dev libfreetype-dev \
+                 libwayland-dev libdbus-1-dev libssl-dev pkg-config rpm; then
+              exit 0
+            fi
+            echo "::warning::apt install (system deps) attempt $attempt failed; retrying in 15s"
+            sleep 15
+          done
+          echo "::error::apt install (system deps) failed after 3 attempts"
+          exit 1
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          # arch included so x86_64 and aarch64 caches don't collide on
+          # the same `kind` (target triple differs but Swatinem keys on
+          # this string alone for the shared-key form).
+          shared-key: "rust-release-${{ matrix.kind }}-${{ matrix.arch }}"
+          cache-on-failure: true
+
+      # `--locked` is honest on every platform: the winit fork is vendored
+      # in-repo at `winit/` and `[patch.crates-io]` points at it, so
+      # `actions/checkout` brings it along and Cargo.toml + Cargo.lock agree
+      # identically on Linux and Windows (the fork's Wayland code is cfg-gated
+      # to Linux, harmless elsewhere).
+      - name: cargo build --release (Linux)
+        if: runner.os == 'Linux'
+        run: cargo build --release --target ${{ matrix.target }} --locked
+
+      # build.rs spawns the slint compile on a 16 MiB thread, so the
+      # 1 MiB Windows main-thread stack no longer overflows during the
+      # build-script run. No RUSTFLAGS/CARGO_HOST_RUSTFLAGS workaround.
+      - name: cargo build --release (Windows)
+        if: runner.os == 'Windows'
+        run: cargo build --release --target ${{ matrix.target }} --locked
+
+      # ---- Per-kind packaging ------------------------------------------------
+
+      - name: Package tarball
+        if: matrix.kind == 'linux-tarball'
+        shell: bash
+        env:
+          ARCH: ${{ matrix.arch }}
+        run: |
+          # Per-user install bundle: binary + desktop file + icon +
+          # install/uninstall scripts. The user extracts this anywhere,
+          # runs `./install-linux.sh`, and ends up with the app
+          # installed under ~/.local/share/Melodia/ + a launcher entry.
+          # The in-app updater works on that install path without
+          # polkit prompts (user-writable). See
+          # `scripts/install-linux.sh` for the layout it produces.
+          mkdir -p staging/melodia
+          cp target/${{ matrix.target }}/release/Melodia staging/melodia/Melodia
+          cp LICENSE                                     staging/melodia/
+          cp ui/assets/icons/logo-with-background.svg    staging/melodia/melodia.svg
+          cp scripts/Melodia.desktop                     staging/melodia/com.github.kenansalar.melodia.desktop
+          cp scripts/install-linux.sh                    staging/melodia/install-linux.sh
+          cp scripts/uninstall-linux.sh                  staging/melodia/uninstall-linux.sh
+          chmod +x staging/melodia/install-linux.sh staging/melodia/uninstall-linux.sh
+          tar -C staging -czf "melodia-${TAG}-${ARCH}-linux.tar.gz" melodia
+
+      - name: Package AppImage
+        if: matrix.kind == 'linux-appimage'
+        shell: bash
+        env:
+          ARCH: ${{ matrix.arch }}
+          # CI builds with `--target <triple>`, so the binary lives at
+          # `target/<triple>/release/Melodia`, not the default
+          # `target/release/Melodia` the script assumes.
+          BINARY: target/${{ matrix.target }}/release/Melodia
+        # ARCH env is read by build-appimage.sh to select the right
+        # linuxdeploy + plugin binary (per-arch upstream builds with
+        # their own pinned SHA256s in the script).
+        run: bash scripts/build-appimage.sh "melodia-${TAG}-${ARCH}.AppImage"
+
+      - name: Package RPM
+        if: matrix.kind == 'linux-rpm'
+        shell: bash
+        env:
+          ARCH: ${{ matrix.arch }}
+          # Same target-triple binary-path override as AppImage above.
+          BINARY: target/${{ matrix.target }}/release/Melodia
+        # ARCH drives `rpmbuild --target $ARCH` + the ExclusiveArch in
+        # the spec; output lands at ~/rpmbuild/RPMS/$ARCH/.
+        run: |
+          bash scripts/build-rpm.sh
+          cp ~/rpmbuild/RPMS/${ARCH}/melodia-*.rpm .
+
+      # `taiki-e/install-action@v2`'s manifest stopped covering the
+      # `latest` cargo-deb release for aarch64_linux (same class of
+      # surprise that took out `minisign` here earlier). Falling back
+      # via cargo-binstall does work but logs a noisy warning per run.
+      # Compile from source instead — ~30s on top of an already-slow
+      # release build, immune to upstream index lag.
+      - name: Install cargo-deb
+        if: matrix.kind == 'linux-deb'
+        run: cargo install --locked cargo-deb
+
+      - name: Package deb
+        if: matrix.kind == 'linux-deb'
+        shell: bash
+        env:
+          ARCH: ${{ matrix.arch }}
+        # cargo-deb derives the Debian arch suffix (`amd64` / `arm64`)
+        # from --target. We rename the output from cargo-deb's Debian-
+        # native `melodia_<version>_<debarch>.deb` (underscore separator)
+        # to the hyphen-prefixed `melodia-<tag>-<arch>.deb` scheme every
+        # other matrix slot produces, so the `melodia-*.deb` glob in
+        # the attest/upload/release steps actually matches.
+        run: |
+          cargo deb --target ${{ matrix.target }} --no-build
+          src="$(ls target/${{ matrix.target }}/debian/*.deb)"
+          cp "$src" "melodia-${TAG}-${ARCH}.deb"
+
+      # cargo-wix does NOT download WiX — it shells out to whichever
+      # variant is on PATH: v3 (`candle.exe`+`light.exe`, Legacy) or
+      # v4+ (`wix.exe`, Modern). `windows-2025-vs2026` still ships v3.14
+      # preinstalled but `windows-11-arm` does not, so we install WiX
+      # uniformly on both arch slots via `dotnet tool`. `wix/main.wxs`
+      # was migrated to the v4 schema (`http://wixtoolset.org/schemas/v4/wxs`)
+      # so both archs build with identical tooling — no x86 emulation
+      # on arm64, no per-runner branching here.
+      #
+      # Pinned to WiX v6.0.2 (August 2025, latest 6.x patch). The Open
+      # Source Maintenance Fee was introduced in v6 but EULA acceptance
+      # enforcement landed in v7.0.0, which doesn't fit headless CI;
+      # v6.0.2's release notes are reformatting + OSMF policy text only,
+      # so it remains the latest version where the EULA isn't enforced
+      # at runtime. Patch matches the extensions installed below — the
+      # WiX team's `wix extension add` guidance is "extensions should
+      # match the WiX runtime", and patch-skew within a major isn't
+      # documented as ABI-safe.
+      - name: Install WiX v6
+        if: matrix.kind == 'windows-msi'
+        shell: pwsh
+        run: |
+          dotnet tool install --global wix --version 6.0.2
+          "$env:USERPROFILE\.dotnet\tools" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      # WiX v4+ unbundled the legacy v3 in-box extensions (Util, UI,
+      # NetFx, ...) into per-extension NuGet packages that have to be
+      # installed into the global extension cache before `wix build`
+      # can load them. `wix/main.wxs` uses `xmlns:util` (for
+      # util:RestartResource — Restart Manager integration so an
+      # upgrade install over a running app doesn't bounce to the
+      # "files in use" dialog) and `xmlns:ui` (for ui:WixUI driving
+      # the WixUI_FeatureTree dialog set), so both extensions are
+      # required at build time.
+      #
+      # cargo-wix's `configure_toolset_extensions` parses the wxs
+      # `xmlns:*` declarations and emits the matching `-ext` flags on
+      # the `wix build` invocation, but does NOT install missing
+      # extensions itself (that path is gated behind `--migrate
+      # global`, which also tries to upgrade the source — pointless
+      # for an already-v4 wxs and a footgun if it rewrites preserved
+      # comments). Pre-installing here decouples the steps.
+      #
+      # Extension version pinned to 6.0.2 to exactly match the wix.exe
+      # 6.0.2 runtime installed above — v7.x extensions require a
+      # WiX v7+ runtime and the OSMF EULA acknowledgement we're
+      # deliberately avoiding above.
+      - name: Install WiX UI + Util extensions (global cache)
+        if: matrix.kind == 'windows-msi'
+        shell: pwsh
+        run: |
+          wix extension add --global WixToolset.UI.wixext/6.0.2
+          wix extension add --global WixToolset.Util.wixext/6.0.2
+
+      # cargo-wix 0.3.9 (latest crates.io release, 2025-03-13) is legacy
+      # WiX 3 only — its create.rs invokes candle.exe + light.exe with
+      # no wix.exe codepath, and rejects the v4 schema in wix/main.wxs.
+      # WiX v4+ modern-toolset support landed on main in PR #295
+      # (commit 44fbc43, 2026-03-31) but has not been released. Pin to
+      # that commit until upstream ships 0.4.0; switch back to
+      # `taiki-e/install-action@v2 tool: cargo-wix` (which falls back to
+      # cargo-binstall and would otherwise pull 0.3.9) once the release
+      # lands.
+      #
+      # `taiki-e/cache-cargo-install-action` wraps `cargo install` with
+      # an `actions/cache` keyed on tool+git+rev so the ~2-4 min source
+      # build only happens on a cache miss (first run for a SHA, or
+      # after the cache entry's 7-day inactivity expiry). `--locked` is
+      # the action's default. `tool: cargo-wix` resolves the trailing
+      # positional that `cargo install --git` requires for the
+      # multi-binary cargo-wix workspace.
+      - name: Install cargo-wix (pinned to PR #295 — modern WiX v4+ support, unreleased on crates.io)
+        if: matrix.kind == 'windows-msi'
+        uses: taiki-e/cache-cargo-install-action@v3.0.7
+        with:
+          tool: cargo-wix
+          git: https://github.com/volks73/cargo-wix
+          rev: 44fbc43cce8ff6dbcc6e6a321befd1a7b362494f
+
+      - name: Package MSI
+        if: matrix.kind == 'windows-msi'
+        shell: pwsh
+        env:
+          ARCH: ${{ matrix.arch }}
+        run: |
+          # wix/main.wxs is committed with a stable UpgradeCode (see
+          # MIGRATION.md Phase 14 footer for the packaging-prerequisites
+          # rationale). NEVER run `cargo wix init` in CI — it regenerates
+          # main.wxs with a fresh UpgradeCode, which breaks in-place MSI
+          # upgrades. The same UpgradeCode survived the v3→v4 schema
+          # migration so existing-installation upgrade continuity holds.
+          #
+          # cargo-wix derives `-arch x64` / `-arch arm64` from --target
+          # automatically; no wxs change needed for arm64.
+          #
+          # `--toolset modern` is REQUIRED — cargo-wix's default is
+          # `Toolset::Legacy` (candle.exe + light.exe), which on
+          # `windows-2025-vs2026` would pick up the preinstalled WiX 3.14
+          # and try to parse the v4-schema wxs (schema error), and on
+          # `windows-11-arm` would look for candle.exe and fail
+          # outright (no WiX preinstalled). There is no auto-detect
+          # path and no Cargo.toml metadata override — must be a CLI
+          # flag.
+          cargo wix --toolset modern --target ${{ matrix.target }} --no-build --nocapture
+          Get-ChildItem -Path "target/wix/" -Filter "*.msi" -Recurse |
+            ForEach-Object { Copy-Item $_.FullName -Destination "melodia-${env:TAG}-${env:ARCH}.msi" }
+
+      # ---- Build-provenance attestation --------------------------------------
+      #
+      # Layered on top of the minisign signing below. Minisign answers
+      # "the holder of the secret key signed these bytes"; the attestation
+      # answers "these bytes were produced by *this* workflow run at *this*
+      # commit, attested by GitHub's OIDC identity and logged to the
+      # Sigstore transparency log". Users verify with:
+      #
+      #   gh attestation verify <file> --repo KenanSalar/Melodia
+      #
+      # Attestations are stored against the repo automatically — no upload
+      # step needed. Run per-matrix-slot so each artifact's attestation
+      # bundles into the same workflow-run identity that signed + uploaded
+      # it. `subject-path` globs only over files this slot produced; the
+      # action no-ops on unmatched globs.
+      - name: Generate build provenance attestation
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: |
+            melodia-*.tar.gz
+            melodia-*.AppImage
+            melodia-*.rpm
+            melodia-*.deb
+            melodia-*.msi
+
+      # ---- Sign every artifact this matrix slot produced ---------------------
+
+      # `taiki-e/install-action@v2` removed its `minisign` recipe; the
+      # cargo-binstall fallback resolves to the `minisign` library crate
+      # on crates.io, which is a different project from the C CLI and
+      # ships no binaries. Use the system package manager instead:
+      # Ubuntu 24.04 ships minisign 0.11 (covers prehashed signing
+      # since 0.7); chocolatey ships the upstream Windows build.
+      # See "Install Linux system deps" above for the retry rationale.
+      - name: Install minisign CLI (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          for attempt in 1 2 3; do
+            if sudo apt-get update -qq && sudo apt-get install -qq -y minisign; then
+              exit 0
+            fi
+            echo "::warning::apt install minisign attempt $attempt failed; retrying in 15s"
+            sleep 15
+          done
+          echo "::error::apt install minisign failed after 3 attempts"
+          exit 1
+
+      - name: Install minisign CLI (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: choco install minisign -y --no-progress
+
+      - name: Sign artifacts (prehashed mode — required for streaming verify)
+        shell: bash
+        env:
+          KEY: ${{ secrets.MINISIGN_SECRET_KEY }}
+          PW: ${{ secrets.MINISIGN_PASSWORD }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+          KIND: ${{ matrix.kind }}
+        run: |
+          # The secret is stored base64-encoded so newlines survive the
+          # GitHub secrets pipeline. Decode to a runtime-only temp file
+          # and shred it after signing.
+          echo "$KEY" | base64 -d > "$RUNNER_TEMP/minisign.key"
+          chmod 0600 "$RUNNER_TEMP/minisign.key"
+
+          shopt -s nullglob
+          signed=0
+          for f in melodia-*.tar.gz melodia-*.AppImage melodia-*.rpm melodia-*.deb melodia-*.msi; do
+            [[ -f "$f" ]] || continue
+            # -H = prehashed. Required by minisign-verify's verify_stream()
+            # on the client. Without -H, the client must buffer the full
+            # 80–150 MiB artifact into RAM. See MIGRATION.md Phase 14 footer
+            # ("trap #2") for the streaming-verify rationale.
+            #
+            # -t encodes the version + matrix kind + filename into the
+            # trusted comment (which is covered by the signature). The
+            # client's `verify_stream` parses the comment and asserts
+            # `version=` matches the manifest version it's installing —
+            # defence in depth against a CDN-level swap of one
+            # legitimately-signed-by-us artifact for another. Drop the
+            # `-t` and every client on this release-or-newer will
+            # reject all installs as `VersionMismatch (no version=
+            # field)`. See MIGRATION.md Phase 14 footer for the
+            # trusted-comment hardening rationale.
+            echo "$PW" | minisign -SHm "$f" -s "$RUNNER_TEMP/minisign.key" \
+              -t "version=${VERSION} target=${KIND} file=$(basename "$f")"
+            signed=$((signed + 1))
+          done
+          shred -u "$RUNNER_TEMP/minisign.key" 2>/dev/null || rm -f "$RUNNER_TEMP/minisign.key"
+          echo "signed $signed artifact(s)"
+          [[ "$signed" -gt 0 ]] || { echo "ERROR: nothing was signed"; exit 1; }
+
+      - uses: actions/upload-artifact@v5
+        with:
+          # arch in the name so the x86_64 and arm64 slots for the same
+          # kind don't collide (upload-artifact requires unique names
+          # across all matrix slots in a job). The release job's
+          # download-artifact step uses merge-multiple: true to flatten
+          # all of these back into one directory.
+          name: ${{ matrix.kind }}-${{ matrix.arch }}
+          path: |
+            melodia-*
+            !*.key
+          retention-days: 7
+          if-no-files-found: error
+
+  # ---------------------------------------------------------------------------
+  # Collate every matrix slot's artifacts, regenerate latest.json, and
+  # either create the draft release (if missing) or update it in place
+  # (if a draft already exists for this version).
+  # ---------------------------------------------------------------------------
+  release:
+    needs: [prepare, build]
+    if: needs.prepare.outputs.should_release == 'true'
+    runs-on: ubuntu-latest
+    env:
+      TAG: ${{ needs.prepare.outputs.tag }}
+      VERSION: ${{ needs.prepare.outputs.version }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/download-artifact@v5
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      # Same mirror swap + retry combo as the build job — keeps the
+      # release job from breaking on a single bad mirror window.
+      - name: Use Azure apt mirrors (mirror failover)
+        run: |
+          sudo sed -i \
+            -e 's|http://archive\.ubuntu\.com/ubuntu|http://azure.archive.ubuntu.com/ubuntu|g' \
+            -e 's|http://ports\.ubuntu\.com/ubuntu-ports|http://azure.ports.ubuntu.com/ubuntu-ports|g' \
+            /etc/apt/sources.list /etc/apt/sources.list.d/*.list /etc/apt/sources.list.d/*.sources 2>/dev/null || true
+
+      - name: Install minisign CLI
+        run: |
+          for attempt in 1 2 3; do
+            if sudo apt-get update -qq && sudo apt-get install -qq -y minisign; then
+              exit 0
+            fi
+            echo "::warning::apt install minisign attempt $attempt failed; retrying in 15s"
+            sleep 15
+          done
+          echo "::error::apt install minisign failed after 3 attempts"
+          exit 1
+
+      - name: Verify all signatures with the public key
+        shell: bash
+        run: |
+          # `-p <file>` (lowercase) takes the full multi-line pubkey
+          # file with the `untrusted comment:` header, which is what
+          # `assets/updater-pubkey.b64` is. The uppercase `-P <string>`
+          # form's handling of the leading comment line is
+          # implementation-defined; the file form is unambiguous.
+          verified=0
+          for sig in artifacts/*.minisig; do
+            artifact="${sig%.minisig}"
+            [[ -f "$artifact" ]] || { echo "missing artifact for $sig"; exit 1; }
+            echo "==> verifying $(basename "$artifact")"
+            minisign -Vm "$artifact" -p assets/updater-pubkey.b64
+            verified=$((verified + 1))
+          done
+          echo "verified $verified signature(s)"
+          [[ "$verified" -gt 0 ]] || { echo "ERROR: no signatures verified"; exit 1; }
+
+      # First-run creates the draft with --generate-notes (no assets yet)
+      # so the auto-generated body exists before we read it for latest.json.
+      # Subsequent runs (re-pushing the same Cargo.toml version) find the
+      # existing draft and skip create. Either way the next step can read
+      # `.body` from `gh release view`.
+      - name: Ensure draft release exists
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "==> draft $TAG already exists"
+          else
+            echo "==> creating empty draft $TAG"
+            gh release create "$TAG" --draft \
+              --title "Melodia $TAG" \
+              --generate-notes
+          fi
+
+      - name: Capture release notes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          # Pull the release's Markdown body (auto-generated by
+          # `--generate-notes` above, or whatever the user has authored
+          # on a re-run) into a file the next step pipes into
+          # `notes_short` for the in-app updater panel.
+          gh release view "$TAG" --json body -q '.body' > release-notes.md \
+            || : > release-notes.md
+          wc -c release-notes.md
+
+      - name: Install markdown-it-py for notes stripping
+        shell: bash
+        run: |
+          # Optional dep — the script falls back to a regex pipeline
+          # without it, but markdown-it-py handles fenced code blocks,
+          # tables, nested formatting cleanly.
+          # Pinned: a breaking change to the token-walk API used by
+          # `_strip_via_md_it` would silently corrupt notes_short.
+          # Bump in lockstep with a manual re-run + diff of latest.json,
+          # AND with the matching pin in
+          # .github/workflows/refresh-manifest.yml — the two must agree
+          # or notes_short desyncs between the initial build and the
+          # post-publish refresh.
+          python3 -m pip install --quiet markdown-it-py==4.2.0
+
+      - name: Build latest.json
+        shell: bash
+        run: |
+          python3 scripts/build-latest-json.py \
+            --version "$VERSION" \
+            --tag "$TAG" \
+            --artifacts artifacts/ \
+            --notes-file release-notes.md \
+            --out latest.json
+
+      # Sign the manifest itself. Closes the manifest-substitution /
+      # downgrade-attack window: without this, a network attacker
+      # (CDN MITM / typosquatted github URL) could serve a stale
+      # `latest.json` that points clients at older / weaker versions
+      # — every per-artifact signature would still be valid, so the
+      # in-app updater would happily install the substituted release.
+      # The client (`src/services/updater/github.rs::fetch_latest_manifest`)
+      # fetches `latest.json.minisig` alongside the JSON and verifies
+      # before parsing; `manifest=true` in the trusted comment is the
+      # domain-separation tag that keeps an artifact .minisig from
+      # being cross-pasted into this slot.
+      - name: Sign latest.json (prehashed, manifest-tagged)
+        shell: bash
+        env:
+          KEY: ${{ secrets.MINISIGN_SECRET_KEY }}
+          PW: ${{ secrets.MINISIGN_PASSWORD }}
+        run: |
+          echo "$KEY" | base64 -d > "$RUNNER_TEMP/minisign.key"
+          chmod 0600 "$RUNNER_TEMP/minisign.key"
+          echo "$PW" | minisign -SHm latest.json -s "$RUNNER_TEMP/minisign.key" \
+            -t "version=${VERSION} manifest=true"
+          shred -u "$RUNNER_TEMP/minisign.key" 2>/dev/null || rm -f "$RUNNER_TEMP/minisign.key"
+
+      - name: Verify latest.json signature with the public key
+        shell: bash
+        run: |
+          minisign -Vm latest.json -p assets/updater-pubkey.b64
+
+      - name: Upload artifacts + latest.json + manifest sig to draft
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          gh release upload "$TAG" artifacts/* latest.json latest.json.minisig --clobber
+
+  # ---------------------------------------------------------------------------
+  # SHA256SUMS pass — pulls everything down from the just-updated draft
+  # release and uploads a single `SHA256SUMS.txt` covering every artifact
+  # in it (including latest.json). Mirrors the old Tauri workflow.
+  # ---------------------------------------------------------------------------
+  checksums:
+    name: checksums
+    needs: [prepare, release]
+    if: needs.prepare.outputs.should_release == 'true'
+    runs-on: ubuntu-latest
+    env:
+      TAG: ${{ needs.prepare.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Download release assets and generate checksums
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          echo "Release tag: $TAG"
+          mkdir -p artifacts
+          gh release download "$TAG" --dir ./artifacts \
+            --pattern '*.AppImage' \
+            --pattern '*.tar.gz' \
+            --pattern '*.deb' \
+            --pattern '*.rpm' \
+            --pattern '*.msi' \
+            --pattern '*.minisig' \
+            --pattern 'latest.json' \
+            --pattern 'latest.json.minisig'
+
+          cd artifacts
+          # Exclude SHA256SUMS.txt itself in case a prior run uploaded
+          # one — otherwise the file would checksum itself.
+          shopt -s nullglob
+          files=()
+          for f in *; do
+            [[ "$f" == "SHA256SUMS.txt" ]] && continue
+            files+=("$f")
+          done
+          if [[ ${#files[@]} -eq 0 ]]; then
+            echo "ERROR: no artifacts found to checksum"
+            exit 1
+          fi
+          sha256sum "${files[@]}" > SHA256SUMS.txt
+          echo "Generated checksums:"
+          cat SHA256SUMS.txt
+
+      - name: Upload checksums to release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          gh release upload "$TAG" ./artifacts/SHA256SUMS.txt --clobber

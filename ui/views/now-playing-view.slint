@@ -1,0 +1,491 @@
+import { ListView } from "std-widgets.slint";
+import { Theme } from "../theme.slint";
+import { Player, Nav, NowPlaying, Queue } from "../globals.slint";
+import { QueueRow } from "../models.slint";
+import { MaterialIcon } from "../components/material-icon.slint";
+import { IconButton } from "../components/icon-button.slint";
+import { ArtworkImage } from "../components/artwork-image.slint";
+import { NowPlayingCover } from "../components/now-playing/now-playing-cover.slint";
+import { OverlayScrollbar } from "../components/overlay-scrollbar.slint";
+
+// One technical-metadata chip (codec / bitrate / sample rate / …). The
+// caller only instantiates it when the matching `Player.track-meta` field
+// is non-empty, so the chip itself never has to handle a blank string.
+component MetaChip inherits Rectangle {
+    in property <string> text;
+
+    height: 26px;
+    // Fully-rounded pill — `height / 2` keeps the ends circular at any
+    // height.
+    border-radius: self.height / 2;
+    // Soft per-artwork accent tint instead of the opaque `Theme.surface0`
+    // slab — the chip strip now reads as part of the same colour family as
+    // the blurred backdrop. Defaults to `Theme.accent` when no artwork (see
+    // `Player.np-accent` in `globals.slint`).
+    background: Player.np-accent.with-alpha(0.22);
+
+    HorizontalLayout {
+        padding-left: Theme.pad-md;
+        padding-right: Theme.pad-md;
+        VerticalLayout {
+            alignment: center;
+            Text {
+                text: root.text;
+                color: Theme.subtext1;
+                font-size: Theme.font-size-sm;
+            }
+        }
+    }
+}
+
+// One row in the "Up Next" list. Display-only + click-to-skip — no drag,
+// no selection (unlike `QueueRowItem`), so it stays a thin component.
+component UpNextRow inherits Rectangle {
+    in property <QueueRow> data;
+    callback clicked();
+
+    height: 52px;
+
+    Rectangle {
+        // Per-artwork accent hover instead of the opaque `Theme.surface0`
+        // slab. Slightly bolder alpha than the chip pill (0.22 vs 0.18) so
+        // the transient hover indication still pops over the scrim.
+        background: touch.has-hover ? Player.np-accent.with-alpha(0.22) : transparent;
+        border-radius: Theme.radius-md;
+
+        HorizontalLayout {
+            padding: Theme.pad-sm;
+            spacing: Theme.pad-sm;
+            alignment: stretch;
+
+            VerticalLayout {
+                alignment: center;
+                ArtworkImage {
+                    artwork-path: root.data.artwork_path;
+                    cover: root.data.cover_img;
+                    tile-size: 38px;
+                }
+            }
+
+            // Outer Rectangle clips bidi overflow so `overflow: elide`
+            // triggers — same pattern as the now-playing bar's track-info
+            // cell.
+            Rectangle {
+                clip: true;
+                horizontal-stretch: 1;
+                VerticalLayout {
+                    alignment: center;
+                    spacing: 2px;
+                    Text {
+                        text: "‎" + root.data.title;
+                        color: Theme.text;
+                        font-size: Theme.font-size-row;
+                        overflow: elide;
+                    }
+                    Text {
+                        text: "‎" + root.data.artist;
+                        color: Theme.subtext0;
+                        font-size: Theme.font-size-sm;
+                        overflow: elide;
+                        visible: root.data.artist != "";
+                    }
+                }
+            }
+
+            VerticalLayout {
+                alignment: center;
+                Text {
+                    text: root.data.display_duration;
+                    color: Theme.subtext0;
+                    font-size: Theme.font-size-sm;
+                }
+            }
+        }
+
+        touch := TouchArea {
+            mouse-cursor: pointer;
+            clicked => { root.clicked(); }
+        }
+    }
+}
+
+// Full-screen Now Playing view. Rendered inside the main content panel
+// (sidebar + now-playing bar stay visible) when `Nav.now-playing-open` is
+// true. Mirrors the old Tauri layout: a large centred artwork + title /
+// artist / album + metadata chips floating directly on a blurred album-art
+// backdrop, with an "Up Next" list beside it. Transport + seek live in the
+// now-playing bar (which stays visible below this view), so they are
+// intentionally not duplicated here.
+export component NowPlayingView inherits Rectangle {
+    // --- Up Next "advance by one row" animation --------------------------
+    // When the current track changes the queue advances: the just-started
+    // track drops off the top of the Up Next list and every remaining row
+    // shifts up one slot. To make that read as a real upward *motion* — the
+    // way Apple Music / Spotify animate their queues — the list starts one
+    // row-height lower and slides up to rest. There is deliberately NO
+    // opacity fade (that whole-list "blink" was the weird part): the rows
+    // simply move.
+    //
+    // Driven by the phase-counter + Timer pattern (see `play-button.slint`).
+    // The phase counter is `NowPlaying.slide-phase` — it lives on the
+    // global so Rust resets it to 0 with a *direct* property write the
+    // bindings below pick up on the same render as the Up Next model swap
+    // (a `changed` handler would be queued a frame late, flashing the
+    // post-advance list at rest first). A value `>= slide-frames` means
+    // "at rest", so the list sits still when the view is first opened.
+    property <length> up-next-row-h: 52px;   // == UpNextRow height
+    property <int> slide-frames: 18;         // ~288ms at 16ms
+    property <float> slide-raw: clamp(1.0 * NowPlaying.slide-phase / root.slide-frames, 0.0, 1.0);
+    // Ease-out cubic so the row decelerates into place instead of stopping
+    // dead — `1 - (1 - t)^3`.
+    property <float> slide-p:
+        1.0 - (1.0 - root.slide-raw) * (1.0 - root.slide-raw) * (1.0 - root.slide-raw);
+
+    // Driven purely by `NowPlaying.slide-phase`: Rust resetting it to 0
+    // restarts the timer, which advances the phase each frame and stops
+    // itself once it reaches `slide-frames`.
+    slide-timer := Timer {
+        interval: 16ms;
+        running: NowPlaying.slide-phase < root.slide-frames;
+        triggered => {
+            NowPlaying.slide-phase += 1;
+        }
+    }
+
+    // --- Background: accent gradient floor + dual-slot blurred cross-fade -
+    // The gradient is always painted. For a track WITH artwork the blur
+    // slots fade in over it; for an art-less track `blur-has-image` is
+    // false and both slots fade to 0, leaving this accent-tinted gradient
+    // visible (Tauri parity). Either way there is never an empty frame.
+    Rectangle {
+        width: 100%;
+        height: 100%;
+        background: @linear-gradient(135deg, Theme.accent.mix(Theme.base, 0.2), Theme.base);
+    }
+
+    // Two stacked Image slots. Rust writes the new blurred cover into the
+    // inactive slot then flips `Player.blur-use-a`; only opacity animates,
+    // and a slot's `source` is NEVER cleared — so the outgoing layer stays
+    // fully painted for the whole fade. That overlap (plus the gradient
+    // floor) is what makes the cross-fade flash-free.
+    Image {
+        x: 0;
+        y: 0;
+        width: 100%;
+        height: 100%;
+        source: Player.blur-img-a;
+        image-fit: ImageFit.cover;
+        opacity: (Player.blur-has-image && Player.blur-use-a) ? 1.0 : 0.0;
+        animate opacity { duration: Theme.dur-med; easing: ease-in-out; }
+    }
+    Image {
+        x: 0;
+        y: 0;
+        width: 100%;
+        height: 100%;
+        source: Player.blur-img-b;
+        image-fit: ImageFit.cover;
+        opacity: (Player.blur-has-image && !Player.blur-use-a) ? 1.0 : 0.0;
+        animate opacity { duration: Theme.dur-med; easing: ease-in-out; }
+    }
+
+    // Scrim — darkens the backdrop a touch so the foreground text / chips
+    // stay legible regardless of cover (or accent) colour.
+    Rectangle {
+        width: 100%;
+        height: 100%;
+        background: Theme.crust.with-alpha(0.45);
+    }
+
+    // --- Foreground ------------------------------------------------------
+    // Padding is applied per-section, NOT uniformly on this VerticalLayout:
+    // the "Up Next" column must reach the panel's right edge so its overlay
+    // scrollbar sits flush there (same as the Tracks / Browse views).
+    VerticalLayout {
+        padding-top: Theme.pad-lg;
+        spacing: Theme.pad-md;
+
+        // Top bar — back button, then favourite toggle pushed to the right.
+        // Floats directly over the backdrop.
+        HorizontalLayout {
+            vertical-stretch: 0;
+            padding-left: Theme.pad-lg;
+            padding-right: Theme.pad-lg;
+            spacing: Theme.pad-sm;
+
+            VerticalLayout {
+                alignment: center;
+                IconButton {
+                    icon: "arrow_back";
+                    diameter: 36px;
+                    icon-size: 22px;
+                    // Translucent disc so the back button reads against the
+                    // scrim+blur like the detail-view back buttons do. Shared
+                    // `Theme.floating-button-bg` keeps both surfaces in sync.
+                    idle-bg: Theme.floating-button-bg;
+                    clicked => { Nav.now-playing-open = false; }
+                }
+            }
+
+            Rectangle { horizontal-stretch: 1; }
+
+            VerticalLayout {
+                alignment: center;
+                IconButton {
+                    icon: Player.vm.track.is_favorite ? "favorite" : "favorite_border";
+                    filled: Player.vm.track.is_favorite;
+                    active: Player.vm.track.is_favorite;
+                    button-enabled: Player.vm.has_track;
+                    diameter: 36px;
+                    icon-size: 22px;
+                    // Match the back button's translucent chrome. `active-bg`
+                    // mirrors `idle-bg` so favouriting (which flips `active:
+                    // true`) doesn't drop the chrome to transparent — the
+                    // disc stays visible regardless of state, and the icon
+                    // colour alone carries the favourited indication.
+                    idle-bg: Theme.floating-button-bg;
+                    active-bg: Theme.floating-button-bg;
+                    clicked => { Player.toggle-favorite(); }
+                }
+            }
+        }
+
+        // Body — centred artwork group on the left, fixed-width "Up Next"
+        // column on the right. Both float directly on the backdrop (no card
+        // chrome). No right padding: the Up Next column reaches the panel
+        // edge so its scrollbar lands flush there.
+        HorizontalLayout {
+            vertical-stretch: 1;
+            padding-left: Theme.pad-lg;
+            padding-bottom: Theme.pad-lg;
+            spacing: Theme.pad-md;
+
+            // -- Artwork + title + chips, vertically centred -------------
+            VerticalLayout {
+                horizontal-stretch: 1;
+                alignment: center;
+                spacing: Theme.pad-md;
+
+                // Large foreground cover. The frame is static — only the
+                // cover content cross-fades on a track change (dual-slot
+                // pattern, driven by `ui::now_playing_artwork`). High-res
+                // source, so it stays crisp at this size.
+                HorizontalLayout {
+                    alignment: center;
+                    NowPlayingCover {
+                        tile-size: clamp(root.width * 0.22, 200px, 380px);
+                    }
+                }
+
+                // Title / artist / album, centred under the artwork.
+                VerticalLayout {
+                    spacing: 4px;
+                    Text {
+                        text: Player.vm.has_track
+                            ? "‎" + Player.vm.track.title
+                            : @tr("No track playing");
+                        color: Theme.text;
+                        font-size: Theme.page-title-size;
+                        font-weight: 600;
+                        horizontal-alignment: center;
+                        overflow: elide;
+                    }
+                    Text {
+                        text: Player.vm.has_track
+                            ? "‎" + (Player.vm.track.artist == ""
+                                ? @tr("Unknown artist")
+                                : Player.vm.track.artist)
+                            : "—";
+                        color: Theme.subtext1;
+                        font-size: Theme.font-size-lg;
+                        horizontal-alignment: center;
+                        overflow: elide;
+                    }
+                    Text {
+                        text: "‎" + Player.vm.track.album;
+                        color: Theme.overlay2;
+                        font-size: Theme.font-size-md;
+                        horizontal-alignment: center;
+                        overflow: elide;
+                        visible: Player.vm.has_track && Player.vm.track.album != "";
+                    }
+                }
+
+                // Technical-metadata chips. A 26 px minimum is ALWAYS
+                // reserved while a track is playing (the `if has_track`
+                // wrapper + `min-height`) so the centred artwork above
+                // never reflows when a slow fetch lands — or when a track
+                // simply has no metadata. On narrow windows the strip
+                // grows downward into 2+ rows: the area's `width` is
+                // mirrored into Rust via `Player.recompute-chip-rows`,
+                // which re-chunks `Player.chip-rows` against the
+                // available width (mirrors the `GridColumnsSync` pattern).
+                // Chip *contents* are still gated on `track_id ==
+                // vm.track.id` so a fetch that lands after a rapid track
+                // change is never shown against the wrong track.
+                if Player.vm.has_track: chip-area := Rectangle {
+                    min-height: 26px;   // == MetaChip height
+                    vertical-stretch: 0;
+
+                    // `changed` can't watch a path expression directly
+                    // (CLAUDE.md note) — mirror the width into a local
+                    // property so the handler fires on resize.
+                    property <length> watched-w: self.width;
+                    changed watched-w => {
+                        Player.recompute-chip-rows(watched-w);
+                    }
+
+                    // First-layout seed. `changed` doesn't fire on the
+                    // initial binding evaluation, so the mount-time width
+                    // never reaches Rust without this. Same 1 ms pattern
+                    // as `GridColumnsSync`.
+                    Timer {
+                        interval: 1ms;
+                        running: true;
+                        triggered() => {
+                            self.running = false;
+                            Player.recompute-chip-rows(chip-area.width);
+                        }
+                    }
+
+                    if Player.track-meta.track_id == Player.vm.track.id: VerticalLayout {
+                        spacing: Theme.pad-sm;
+                        for row in Player.chip-rows: HorizontalLayout {
+                            alignment: center;
+                            spacing: Theme.pad-sm;
+                            for t in row: MetaChip {
+                                text: t;
+                            }
+                        }
+                    }
+                }
+            }
+
+            // -- "Up Next" list ------------------------------------------
+            // Responsive width so a narrow window doesn't squeeze the chip
+            // strip first — clamps to a readable 280 px floor and a 420 px
+            // ceiling that matches the old fixed value. Mirrors the
+            // artwork tile's `clamp(root.width * 0.22, …)` pattern. Reaches
+            // the panel's right edge — the overlay scrollbar inside
+            // `list-wrap` sits flush with that edge at any width.
+            VerticalLayout {
+                width: clamp(root.width * 0.35, 280px, 420px);
+                spacing: Theme.pad-sm;
+
+                Text {
+                    text: @tr("Up Next");
+                    color: Theme.text;
+                    font-size: Theme.font-size-lg;
+                    font-weight: 600;
+                }
+                Rectangle {
+                    height: 1px;
+                    background: Theme.border;
+                }
+
+                // List body. The ListView is an absolute child of this
+                // wrapper (not a layout child), so its `y` can carry the
+                // one-shot slide-up without fighting a layout. `clip: true`
+                // hides the row-height the list is offset by mid-animation.
+                Rectangle {
+                    vertical-stretch: 1;
+                    clip: true;
+
+                    // 20 px narrower than the wrapper so the row hover
+                    // background ends ~10 px before the overlay
+                    // scrollbar's left edge (10 px bar flush to panel
+                    // edge + 10 px visible gap). Matches the queue
+                    // sheet's hover-to-scrollbar gap for uniformity.
+                    up-next-list := ListView {
+                        // Suppress the std-widgets bar — the reusable
+                        // `OverlayScrollbar` below is the only scrollbar.
+                        vertical-scrollbar-policy: always-off;
+                        horizontal-scrollbar-policy: always-off;
+                        x: 0;
+                        // Starts one row-height away from rest on a track
+                        // change, then slides into rest at 0. Direction is
+                        // signed via `NowPlaying.slide-direction`: `+1` =
+                        // start +row_h (slides up, queue advanced forward
+                        // via Next), `-1` = start -row_h (slides down,
+                        // queue rewound via Previous).
+                        y: NowPlaying.slide-direction * (1.0 - root.slide-p) * root.up-next-row-h;
+                        width: parent.width - 20px;
+                        height: 100%;
+                        for row[idx] in NowPlaying.up-next-rows: UpNextRow {
+                            data: row;
+                            clicked => {
+                                // With repeat-all the list wraps past the
+                                // end of the queue, so the play-order index
+                                // is taken modulo the queue length.
+                                Queue.skip-to(Math.mod(
+                                    NowPlaying.base-index + idx,
+                                    NowPlaying.queue-length));
+                            }
+                        }
+                    }
+
+                    // Transient overlay: the row that just left the
+                    // visible Up Next list. Forward (Next) — the row that
+                    // became current — starts at the top of the wrapper
+                    // (y=0) and slides up to y=-row_h, off the top.
+                    // Backward (Previous) — the row that fell off the
+                    // bottom — starts at the bottom (y=parent.height -
+                    // row_h) and slides down to y=parent.height, off the
+                    // bottom. The wrapping Rectangle clips both ends.
+                    // Clicks are intentionally not wired: it disappears in
+                    // ~288 ms and represents a position the user can no
+                    // longer skip to via this row.
+                    UpNextRow {
+                        visible: NowPlaying.outgoing-visible
+                                 && NowPlaying.slide-phase < root.slide-frames;
+                        x: 0;
+                        width: parent.width - 20px;
+                        y: NowPlaying.slide-direction == 1
+                            ? -root.slide-p * root.up-next-row-h
+                            : parent.height - (1.0 - root.slide-p) * root.up-next-row-h;
+                        data: NowPlaying.outgoing-row;
+                    }
+
+                    OverlayScrollbar {
+                        // Flush with the panel's right edge — the Up Next
+                        // column reaches that edge, matching the Tracks /
+                        // Browse views' scrollbar placement.
+                        x: parent.width - self.width;
+                        y: 0;
+                        width: 10px;
+                        height: parent.height;
+                        visible-size: up-next-list.visible-height;
+                        content-size: up-next-list.viewport-height;
+                        offset: -up-next-list.viewport-y;
+                        scroll-to(o) => { up-next-list.viewport-y = -o; }
+                    }
+
+                    // Empty state.
+                    if NowPlaying.up-next-rows.length == 0: VerticalLayout {
+                        alignment: center;
+                        HorizontalLayout {
+                            alignment: center;
+                            VerticalLayout {
+                                spacing: Theme.pad-sm;
+                                HorizontalLayout {
+                                    alignment: center;
+                                    MaterialIcon {
+                                        name: "queue_music";
+                                        icon-size: 40px;
+                                        icon-color: Theme.surface2;
+                                    }
+                                }
+                                Text {
+                                    text: @tr("No tracks up next");
+                                    color: Theme.subtext0;
+                                    font-size: Theme.font-size-md;
+                                    horizontal-alignment: center;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

@@ -1,0 +1,172 @@
+import { ScrollView } from "std-widgets.slint";
+import { Theme } from "../../theme.slint";
+import { Dialog, Playlists } from "../../globals.slint";
+import { ArtworkImage } from "../artwork-image.slint";
+import { OverlayScrollbar } from "../overlay-scrollbar.slint";
+
+// Picker body — rendered inside `DialogOverlay` when
+// `Dialog.kind == "add-to-playlist"`. Single-column scrollable list of
+// playlists with per-row overlap state:
+//   * `contained-count == 0`            ⇒ plain row, no badge
+//   * `0 < contained-count < total`     ⇒ "N of M already added" badge,
+//                                         row stays clickable (the
+//                                         `INSERT OR IGNORE` against
+//                                         `idx_playlist_items_unique`
+//                                         adds only the missing tracks)
+//   * `contained-count >= total`        ⇒ "Already added" badge, row
+//                                         dim + click disabled
+//
+// Click on an enabled row commits inline (`Playlists.add-tracks(...)` +
+// `Dialog.open = false`) — no separate Apply button. `dialog.slint`
+// suppresses the primary button for this `kind`, so Cancel is the only
+// dialog-chrome control.
+//
+// Scrolling uses the reusable `OverlayScrollbar` (10 px wide, surface2 →
+// accent on hover/drag). The inner `ScrollView`'s native scrollbars are
+// both `always-off`; the `OverlayScrollbar` is a sibling positioned
+// against the right edge with a 2 px inset from the rounded border.
+
+// File-private row component. One playlist in the picker. Reads the
+// global selection size from `Dialog.pick-total-tracks` so a row's
+// `disabled` state stays in sync if `pick-total-tracks` ever changed
+// mid-dialog (today it doesn't — it's cached at open time).
+component PickerRow inherits Rectangle {
+    in property <int> id;
+    in property <string> name;
+    in property <string> artwork-path;
+    in property <int> contained-count;
+
+    private property <bool> disabled: root.contained-count >= Dialog.pick-total-tracks
+        && Dialog.pick-total-tracks > 0;
+
+    height: 56px;
+    border-radius: Theme.radius-sm;
+    background: touch.has-hover && !root.disabled ? Theme.surface1 : transparent;
+    animate background { duration: Theme.dur-fast; easing: ease-out; }
+    opacity: root.disabled ? 0.5 : 1.0;
+
+    HorizontalLayout {
+        padding-left: Theme.pad-sm;
+        padding-right: Theme.pad-sm;
+        padding-top: 8px;
+        padding-bottom: 8px;
+        spacing: Theme.pad-md;
+        alignment: start;
+
+        VerticalLayout {
+            alignment: center;
+            ArtworkImage {
+                tile-size: 40px;
+                tile-radius: Theme.radius-sm;
+                artwork-path: root.artwork-path;
+                cover: Playlists.request-row-cover(root.artwork-path);
+                fallback-icon: "playlist";
+            }
+        }
+
+        VerticalLayout {
+            horizontal-stretch: 1;
+            alignment: center;
+            spacing: 2px;
+
+            Text {
+                text: root.name;
+                color: Theme.text;
+                font-size: Theme.font-size-md;
+                font-weight: 500;
+                overflow: elide;
+            }
+
+            if root.contained-count > 0: Text {
+                text: root.disabled
+                    ? @tr("Already added")
+                    : @tr("{} of {} already added", root.contained-count, Dialog.pick-total-tracks);
+                color: Theme.subtext0;
+                font-size: Theme.font-size-sm;
+                overflow: elide;
+            }
+        }
+    }
+
+    touch := TouchArea {
+        enabled: !root.disabled;
+        mouse-cursor: pointer;
+        clicked => {
+            Playlists.add-tracks(root.id, Dialog.pending-track-ids);
+            Dialog.open = false;
+        }
+    }
+}
+
+export component PlaylistPicker inherits Rectangle {
+    // Cap visible list height; rows past the cap scroll. Picked to fit
+    // 5-6 rows comfortably (56 px row + 2 px spacing).
+    private property <length> list-area-h: 348px;
+    private property <length> row-h: 56px;
+    private property <length> row-spacing: 2px;
+    private property <length> pad: 4px;
+    private property <int> total-rows: Dialog.playlist-pick-rows.length;
+    private property <length> content-h:
+        root.total-rows * root.row-h
+        + (root.total-rows > 0 ? (root.total-rows - 1) * root.row-spacing : 0px)
+        + 2 * root.pad;
+
+    VerticalLayout {
+        spacing: Theme.pad-sm;
+
+        // In-flight placeholder — the menu entry that opens this dialog
+        // is gated on `visible-playlist-count > 0`, so reaching this
+        // branch only ever means the parallel Rust queries
+        // (get_playlists + count_tracks_in_playlists_for_selection)
+        // haven't returned yet. The "truly empty" case is unreachable.
+        // Hold an 80 px slot so the dialog doesn't snap-resize when the
+        // rows arrive a frame or two later.
+        if Dialog.playlist-pick-rows.length == 0: Rectangle {
+            height: 80px;
+        }
+
+        // List body. The wrapping Rectangle gates `clip: true` so the
+        // ScrollView's overflow rows can't paint outside the rounded
+        // border. The `OverlayScrollbar` sibling pins against the right
+        // edge; it self-hides when content fits.
+        if Dialog.playlist-pick-rows.length > 0: Rectangle {
+            height: min(root.list-area-h, root.content-h);
+            background: Theme.surface0;
+            border-radius: Theme.radius-md;
+            border-width: 1px;
+            border-color: Theme.border;
+            clip: true;
+
+            sv := ScrollView {
+                horizontal-scrollbar-policy: always-off;
+                vertical-scrollbar-policy: always-off;
+                viewport-width: self.visible-width;
+                viewport-height: root.content-h;
+
+                VerticalLayout {
+                    padding: root.pad;
+                    spacing: root.row-spacing;
+
+                    for r in Dialog.playlist-pick-rows: PickerRow {
+                        id: r.id;
+                        name: r.name;
+                        artwork-path: r.artwork-path;
+                        contained-count: r.contained-count;
+                    }
+                }
+            }
+
+            OverlayScrollbar {
+                horizontal: false;
+                x: parent.width - self.width - 2px;
+                y: 2px;
+                width: 10px;
+                height: parent.height - 4px;
+                visible-size: sv.visible-height;
+                content-size: sv.viewport-height;
+                offset: -sv.viewport-y;
+                scroll-to(o) => { sv.viewport-y = -o; }
+            }
+        }
+    }
+}

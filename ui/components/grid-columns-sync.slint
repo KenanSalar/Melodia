@@ -1,0 +1,43 @@
+// Bridges a grid view's reactive `computed-cols` (a Slint expression
+// derived from the view's body width) to its backing global's
+// `columns` field + `columns-changed` callback. Each grid view
+// (Albums / Artists / Genres) wires its own globals via the `seed`
+// callback — the component owns the *when*, the host owns the *what*.
+//
+// Two fire sources cover the full lifecycle:
+//
+//  1. `changed watched-cols` — fires `seed(N)` on every subsequent
+//     change to the host's `computed-cols` (window resize, sidebar
+//     drag, etc.). Mirrored locally because `changed` can't watch
+//     a path expression on an in-property (CLAUDE.md).
+//  2. Single-shot 1 ms Timer — fires `seed(N)` once at mount.
+//     Required because Slint's `changed` doesn't fire on the
+//     *initial* binding evaluation: in native-titlebar mode the
+//     first layout pass settles on the final grid width directly,
+//     so (1) never fires from the initial transition and Rust would
+//     keep chunking with the global's default while `card-w`
+//     (bound reactively to `computed-cols`) renders at the size the
+//     layout actually fits — leaving a visible right-edge gap.
+//
+// The Timer fires after a 1 ms tick rather than `init` so the first
+// layout pass has assigned the host's `grid.width` and
+// `computed-cols` evaluates to the real value, not the pre-layout 0.
+
+export component GridColumnsSync {
+    in property <int> computed-cols;
+    callback seed(int);
+
+    Timer {
+        interval: 1ms;
+        running: true;
+        triggered() => {
+            self.running = false;
+            root.seed(root.computed-cols);
+        }
+    }
+
+    property <int> watched-cols: root.computed-cols;
+    changed watched-cols => {
+        root.seed(root.watched-cols);
+    }
+}

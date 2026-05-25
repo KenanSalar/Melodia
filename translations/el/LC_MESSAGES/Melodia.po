@@ -1,0 +1,825 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: Melodia 0.1.0\n"
+"Report-Msgid-Bugs-To: \n"
+"Language: el\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+# ---- Sidebar / navigation ----------------------------------------------------
+
+msgid "Search"
+msgstr "Αναζήτηση"
+
+# Default placeholder text for `SearchBar` (`ui/components/search-bar.slint`).
+# Currently every instantiation overrides `placeholder`, so this is defensive.
+msgid "Search…"
+msgstr "Αναζήτηση…"
+
+msgid "Browse"
+msgstr "Περιήγηση"
+
+msgid "Favorites"
+msgstr "Αγαπημένα"
+
+msgid "Tracks"
+msgstr "Κομμάτια"
+
+msgid "Albums"
+msgstr "Άλμπουμ"
+
+msgid "Artists"
+msgstr "Καλλιτέχνες"
+
+msgid "Genres"
+msgstr "Είδη"
+
+msgid "Playlists"
+msgstr "Λίστες Αναπαραγωγής"
+
+msgid "Settings"
+msgstr "Ρυθμίσεις"
+
+msgid "Collapse"
+msgstr "Σύμπτυξη"
+
+# ---- Title-bar window controls ----------------------------------------------
+
+msgid "Minimize"
+msgstr "Ελαχιστοποίηση"
+
+msgid "Maximize"
+msgstr "Μεγιστοποίηση"
+
+msgid "Restore"
+msgstr "Επαναφορά"
+
+msgid "Close"
+msgstr "Κλείσιμο"
+
+# ---- Generic action verbs ---------------------------------------------------
+
+msgid "Cancel"
+msgstr "Άκυρο"
+
+msgid "Remove"
+msgstr "Κατάργηση"
+
+msgid "Clear"
+msgstr "Εκκαθάριση"
+
+msgid "Restart"
+msgstr "Επανεκκίνηση"
+
+msgid "Deselect"
+msgstr "Αποεπιλογή"
+
+msgid "Clear selection"
+msgstr "Εκκαθάριση επιλογής"
+
+# ---- Now-playing bar tooltips & states --------------------------------------
+
+msgid "Play"
+msgstr "Αναπαραγωγή"
+
+msgid "Pause"
+msgstr "Παύση"
+
+msgid "Previous"
+msgstr "Προηγούμενο"
+
+msgid "Next"
+msgstr "Επόμενο"
+
+msgid "Repeat"
+msgstr "Επανάληψη"
+
+msgid "Repeat: off"
+msgstr "Επανάληψη: ανενεργή"
+
+msgid "Repeat: one"
+msgstr "Επανάληψη: ένα"
+
+msgid "Repeat: all"
+msgstr "Επανάληψη: όλα"
+
+msgid "Shuffle"
+msgstr "Τυχαία σειρά"
+
+msgid "Shuffle: on"
+msgstr "Τυχαία σειρά: ενεργή"
+
+msgid "Shuffle: off"
+msgstr "Τυχαία σειρά: ανενεργή"
+
+msgid "Favorite"
+msgstr "Προσθήκη στα αγαπημένα"
+
+msgid "Unfavorite"
+msgstr "Αφαίρεση από τα αγαπημένα"
+
+msgid "Pin on Top"
+msgstr "Καρφίτσωμα στην κορυφή"
+
+msgid "Unpin from Top"
+msgstr "Ξεκαρφίτσωμα από την κορυφή"
+
+msgid "Queue"
+msgstr "Ουρά"
+
+msgid "More"
+msgstr "Περισσότερα"
+
+msgid "No track playing"
+msgstr "Δεν παίζει κομμάτι"
+
+msgid "Unknown artist"
+msgstr "Άγνωστος καλλιτέχνης"
+
+# ---- Now Playing view -------------------------------------------------------
+
+msgid "Up Next"
+msgstr "Επόμενα"
+
+msgid "No tracks up next"
+msgstr "Δεν υπάρχουν επόμενα κομμάτια"
+
+# ---- Queue sheet ------------------------------------------------------------
+
+msgid "No tracks"
+msgstr "Χωρίς κομμάτια"
+
+msgid "Queue is empty"
+msgstr "Η ουρά είναι άδεια"
+
+
+msgid "Remove selected"
+msgstr "Κατάργηση επιλεγμένων"
+
+msgid "Clear queue"
+msgstr "Εκκαθάριση ουράς"
+
+msgid "Clear queue?"
+msgstr "Εκκαθάριση ουράς;"
+
+msgid "Remove all tracks from the queue? Playback will stop."
+msgstr "Να καταργηθούν όλα τα κομμάτια από την ουρά; Η αναπαραγωγή θα σταματήσει."
+
+msgid "Remove from queue?"
+msgstr "Κατάργηση από την ουρά;"
+
+# Plural: track count for the queue header subtitle ("3 tracks", "1 track").
+# Greek pluralizes regularly after numerals, so msgstr[0] (singular) and
+# msgstr[1] (plural) carry distinct forms.
+msgid "{n} track"
+msgid_plural "{n} tracks"
+msgstr[0] "{n} κομμάτι"
+msgstr[1] "{n} κομμάτια"
+
+# Plural: track count for the tracks-view header subtitle ("12 songs").
+msgid "{n} song"
+msgid_plural "{n} songs"
+msgstr[0] "{n} τραγούδι"
+msgstr[1] "{n} τραγούδια"
+
+# Plural: queue-remove confirmation dialog.
+msgid "Remove {n} track from the queue?"
+msgid_plural "Remove {n} tracks from the queue?"
+msgstr[0] "Να καταργηθεί {n} κομμάτι από την ουρά;"
+msgstr[1] "Να καταργηθούν {n} κομμάτια από την ουρά;"
+
+msgid "{} selected"
+msgstr "{} επιλεγμένα"
+
+# ---- Tracks view ------------------------------------------------------------
+
+msgid "Filter tracks…"
+msgstr "Φιλτράρισμα κομματιών…"
+
+msgid "Columns"
+msgstr "Στήλες"
+
+# ---- Track table column headers ---------------------------------------------
+
+msgid "Title"
+msgstr "Τίτλος"
+
+msgid "Artist"
+msgstr "Καλλιτέχνης"
+
+msgid "Album"
+msgstr "Άλμπουμ"
+
+msgid "Genre"
+msgstr "Είδος"
+
+msgid "Year"
+msgstr "Έτος"
+
+msgid "Length"
+msgstr "Διάρκεια"
+
+msgid "Artwork"
+msgstr "Εξώφυλλο"
+
+# ---- Track row context menu -------------------------------------------------
+
+msgid "Play Next"
+msgstr "Αναπαραγωγή στη συνέχεια"
+
+msgid "Add to Queue"
+msgstr "Προσθήκη στην ουρά"
+
+msgid "Add to Favorites"
+msgstr "Προσθήκη στα αγαπημένα"
+
+msgid "Remove from Favorites"
+msgstr "Κατάργηση από τα αγαπημένα"
+
+# ---- Placeholder views ------------------------------------------------------
+
+msgid "Coming soon"
+msgstr "Έρχεται σύντομα"
+
+# ---- Settings page header ---------------------------------------------------
+
+msgid "Search settings…"
+msgstr "Αναζήτηση ρυθμίσεων…"
+
+msgid "No matching settings"
+msgstr "Καμία ρύθμιση δεν ταιριάζει"
+
+# ---- Library Folders section ------------------------------------------------
+
+msgid "Library Folders"
+msgstr "Φάκελοι βιβλιοθήκης"
+
+msgid "Manage Folders"
+msgstr "Διαχείριση φακέλων"
+
+msgid "Add Folder"
+msgstr "Προσθήκη φακέλου"
+
+msgid "Rescan"
+msgstr "Επανασάρωση"
+
+msgid "No folders added"
+msgstr "Δεν έχει προστεθεί φάκελος"
+
+msgid "Add a folder to scan for music files."
+msgstr "Πρόσθεσε έναν φάκελο για σάρωση αρχείων μουσικής."
+
+# Library scan-progress text. `{}` placeholders carry int / string args; the
+# joining particles ("von", "·") get translated naturally.
+msgid "{} / {} files"
+msgstr "{} / {} αρχεία"
+
+msgid "{} / {} files · {}"
+msgstr "{} / {} αρχεία · {}"
+
+msgid "Remove Folder?"
+msgstr "Κατάργηση φακέλου;"
+
+# Translators: `{}` is the absolute filesystem path of the folder being removed.
+msgid "Remove \"{}\" from your library? All tracks under this folder will be removed."
+msgstr "Να καταργηθεί το \"{}\" από τη βιβλιοθήκη; Όλα τα κομμάτια σε αυτόν τον φάκελο θα καταργηθούν."
+
+# ---- Appearance section -----------------------------------------------------
+
+msgid "Appearance"
+msgstr "Εμφάνιση"
+
+msgid "Theme"
+msgstr "Θέμα"
+
+msgid "Theme Variant"
+msgstr "Παραλλαγή θέματος"
+
+# Theme Variant chips for non-Catppuccin themes (Dark/Light + synthetic System).
+# Catppuccin's variant names (Latte/Frappe/Macchiato/Mocha) are proper nouns
+# and stay verbatim across locales — only "System" is translatable on that path.
+msgid "Dark"
+msgstr "Σκούρο"
+
+msgid "Light"
+msgstr "Φωτεινό"
+
+msgid "System"
+msgstr "Σύστημα"
+
+msgid "Accent Color"
+msgstr "Χρώμα τονισμού"
+
+msgid "Color Style"
+msgstr "Στυλ χρωμάτων"
+
+msgid "Active — palette derived from the current track's artwork."
+msgstr "Ενεργό — η παλέτα προέρχεται από το εξώφυλλο του τρέχοντος κομματιού."
+
+msgid "Generate theme colors from album artwork."
+msgstr "Δημιουργία χρωμάτων θέματος από το εξώφυλλο άλμπουμ."
+
+# Color Style chip labels (Material 3 dynamic-colour scheme variants). Order
+# must match `services::material_you::SchemeStyle::all()` — "None" already
+# translated above; remaining 7 below. "Tonal Spot" is a coined Material 3
+# term kept verbatim; the others are translated where natural.
+
+msgid "Tonal Spot"
+msgstr "Tonal Spot"
+
+msgid "Content"
+msgstr "Περιεχόμενο"
+
+msgid "Vibrant"
+msgstr "Ζωηρό"
+
+msgid "Expressive"
+msgstr "Εκφραστικό"
+
+msgid "Fidelity"
+msgstr "Πιστότητα"
+
+msgid "Neutral"
+msgstr "Ουδέτερο"
+
+msgid "Monochrome"
+msgstr "Μονόχρωμο"
+
+msgid "Native Title Bar"
+msgstr "Εγγενής γραμμή τίτλου"
+
+msgid "Use the operating system's native title bar instead of the custom one. Restart required to apply."
+msgstr "Χρήση της εγγενούς γραμμής τίτλου του λειτουργικού συστήματος αντί της προσαρμοσμένης. Απαιτείται επανεκκίνηση για εφαρμογή."
+
+msgid "Restart Required"
+msgstr "Απαιτείται επανεκκίνηση"
+
+msgid "Switching to the native title bar requires restarting Melodia. Restart now?"
+msgstr "Η μετάβαση στην εγγενή γραμμή τίτλου απαιτεί επανεκκίνηση της Melodia. Επανεκκίνηση τώρα;"
+
+msgid "Switching to the custom title bar requires restarting Melodia. Restart now?"
+msgstr "Η μετάβαση στην προσαρμοσμένη γραμμή τίτλου απαιτεί επανεκκίνηση της Melodia. Επανεκκίνηση τώρα;"
+
+msgid "Match Unfocused Window Background"
+msgstr "Αντιστοίχιση φόντου μη εστιασμένου παραθύρου"
+
+msgid "Only available with the native title bar."
+msgstr "Διαθέσιμο μόνο με την εγγενή γραμμή τίτλου."
+
+msgid "Tint the sidebar and now-playing bar toward the content background when the window loses focus."
+msgstr "Χρωμάτισε την πλευρική γραμμή και τη γραμμή αναπαραγωγής προς το φόντο του περιεχομένου όταν το παράθυρο χάνει την εστίαση."
+
+msgid "Window Corner Radius"
+msgstr "Ακτίνα γωνίας παραθύρου"
+
+msgid "Managed by the operating system"
+msgstr "Διαχειρίζεται από το λειτουργικό σύστημα"
+
+msgid "Square"
+msgstr "Τετράγωνο"
+
+msgid "Decoration Button Style"
+msgstr "Στιλ κουμπιών διακόσμησης"
+
+msgid "Decoration Button Side"
+msgstr "Πλευρά κουμπιών διακόσμησης"
+
+msgid "Standard"
+msgstr "Τυπικό"
+
+msgid "Right"
+msgstr "Δεξιά"
+
+msgid "Left"
+msgstr "Αριστερά"
+
+msgid "Overflow Menu Buttons"
+msgstr "Κουμπιά μενού υπερχείλισης"
+
+msgid "Move selected buttons into a compact overflow menu in the player bar"
+msgstr "Μετακίνηση επιλεγμένων κουμπιών σε ένα συμπαγές μενού υπερχείλισης στη γραμμή αναπαραγωγής"
+
+# ---- Language section -------------------------------------------------------
+
+msgid "Language"
+msgstr "Γλώσσα"
+
+msgid "Choose your preferred language"
+msgstr "Επίλεξε τη γλώσσα που προτιμάς"
+
+# ---- Playback section -------------------------------------------------------
+
+msgid "Playback"
+msgstr "Αναπαραγωγή"
+
+msgid "Gapless Playback"
+msgstr "Αναπαραγωγή χωρίς κενά"
+
+msgid "Seamless transitions between tracks without silence gaps"
+msgstr "Απρόσκοπτες μεταβάσεις μεταξύ κομματιών χωρίς διαστήματα σιωπής"
+
+msgid "Play Button Animation"
+msgstr "Κίνηση κουμπιού αναπαραγωγής"
+
+msgid "Visual effect on the play button while music is playing"
+msgstr "Οπτικό εφέ στο κουμπί αναπαραγωγής όσο παίζει η μουσική"
+
+# Animation preset names. "None" stays a generic English UI word in the
+# fallback context — we translate it; the others are coined terms / proper
+# nouns within the Material 3 motion vocabulary that we keep verbatim
+# alongside their localised counterparts where natural.
+msgid "None"
+msgstr "Κανένα"
+
+msgid "Equalizer"
+msgstr "Ισοσταθμιστής"
+
+msgid "Resume on Startup"
+msgstr "Συνέχιση κατά την εκκίνηση"
+
+msgid "Automatically resume the last track from where you left off when the app starts"
+msgstr "Συνέχισε αυτόματα το τελευταίο κομμάτι από εκεί που σταμάτησες όταν ξεκινά η εφαρμογή"
+
+# ---- File Watching section --------------------------------------------------
+
+msgid "File Watching"
+msgstr "Παρακολούθηση αρχείων"
+
+msgid "Watch for file changes"
+msgstr "Παρακολούθηση αλλαγών αρχείων"
+
+msgid "Automatically detect when files are added, removed, or changed in your library folders."
+msgstr "Εντοπίζει αυτόματα πότε προστίθενται, καταργούνται ή αλλάζουν αρχεία στους φακέλους της βιβλιοθήκης σου."
+
+# ---- Updates section --------------------------------------------------------
+
+msgid "Updates"
+msgstr "Ενημερώσεις"
+
+msgid "Software Updates"
+msgstr "Ενημερώσεις λογισμικού"
+
+msgid "Current version: {}"
+msgstr "Τρέχουσα έκδοση: {}"
+
+msgid "Check for Updates"
+msgstr "Έλεγχος για ενημερώσεις"
+
+msgid "Checking..."
+msgstr "Έλεγχος..."
+
+msgid "Update Installed"
+msgstr "Η ενημέρωση εγκαταστάθηκε"
+
+msgid "Restart Melodia to apply the update"
+msgstr "Επανεκκίνησε τη Melodia για να εφαρμοστεί η ενημέρωση"
+
+msgid "Restart Now"
+msgstr "Επανεκκίνηση τώρα"
+
+msgid "Version {} Available"
+msgstr "Διαθέσιμη η έκδοση {}"
+
+msgid "Download & Install"
+msgstr "Λήψη και εγκατάσταση"
+
+msgid "Installing..."
+msgstr "Εγκατάσταση..."
+
+msgid "You're up to date!"
+msgstr "Είσαι ενημερωμένος!"
+
+msgid "Melodia {} is the latest version."
+msgstr "Η Melodia {} είναι η τελευταία έκδοση."
+
+# ---- Browse view -------------------------------------------------------------
+
+msgid "Play All"
+msgstr "Αναπαραγωγή όλων"
+
+msgid "Shuffle All"
+msgstr "Τυχαία αναπαραγωγή όλων"
+
+msgid "Back"
+msgstr "Πίσω"
+
+msgid "No library folders configured"
+msgstr "Δεν έχουν διαμορφωθεί φάκελοι βιβλιοθήκης"
+
+msgid "Open Settings to add a folder"
+msgstr "Άνοιξε τις Ρυθμίσεις για να προσθέσεις φάκελο"
+
+msgid "Open Settings"
+msgstr "Άνοιγμα Ρυθμίσεων"
+
+msgid "Empty folder"
+msgstr "Άδειος φάκελος"
+
+msgid "Could not load folder"
+msgstr "Δεν ήταν δυνατή η φόρτωση του φακέλου"
+
+# ---- Notifications -----------------------------------------------------------
+
+# Surfaced as a transient warning when the user disables the file-watching
+# toggle in Settings; clears automatically when they re-enable it.
+msgid "File watching disabled"
+msgstr "Παρακολούθηση αρχείων απενεργοποιημένη"
+
+msgid "Tracks won't reflect disk changes until you re-enable it."
+msgstr "Τα κομμάτια δεν θα αντικατοπτρίζουν τις αλλαγές στο δίσκο μέχρι να την ενεργοποιήσετε ξανά."
+
+# Surfaced as a transient info toast when the file watcher reports a
+# kernel-queue overflow (notify Flag::Rescan) and the app reconciles
+# every enabled folder against disk to catch missed events.
+msgid "Library re-syncing"
+msgstr "Επανασυγχρονισμός βιβλιοθήκης"
+
+msgid "Filesystem event burst — rescanning your folders."
+msgstr "Έξαρση συμβάντων συστήματος αρχείων — επανεξετάζονται οι φάκελοί σας."
+
+# ---- Albums view ------------------------------------------------------------
+
+msgid "Name"
+msgstr "Όνομα"
+
+msgid "Filter albums…"
+msgstr "Φιλτράρισμα άλμπουμ…"
+
+msgid "{n} album"
+msgid_plural "{n} albums"
+msgstr[0] "{n} άλμπουμ"
+msgstr[1] "{n} άλμπουμ"
+
+msgid "No albums yet"
+msgstr "Δεν υπάρχουν άλμπουμ ακόμη"
+
+msgid "Add a music folder in Settings to start building your library."
+msgstr "Προσθέστε έναν φάκελο μουσικής στις Ρυθμίσεις για να αρχίσετε να χτίζετε τη βιβλιοθήκη σας."
+
+# ---- Playlists view ---------------------------------------------------------
+
+msgid "Filter playlists…"
+msgstr "Φιλτράρισμα λιστών…"
+
+msgid "Updated"
+msgstr "Ενημερωμένες"
+
+msgid "{n} playlist"
+msgid_plural "{n} playlists"
+msgstr[0] "{n} λίστα"
+msgstr[1] "{n} λίστες"
+
+msgid "No playlists yet"
+msgstr "Δεν υπάρχουν λίστες ακόμη"
+
+msgid "Click \"+ New Playlist\" to create one."
+msgstr "Πατήστε «+ Νέα λίστα» για να δημιουργήσετε μία."
+
+msgid "New Playlist"
+msgstr "Νέα λίστα"
+
+msgid "New Playlist…"
+msgstr "Νέα λίστα…"
+
+msgid "Add to Playlist"
+msgstr "Προσθήκη σε λίστα"
+
+msgid "0 tracks"
+msgstr "0 κομμάτια"
+
+# ---- Playlist Detail --------------------------------------------------------
+
+msgid "No tracks yet"
+msgstr "Δεν υπάρχουν κομμάτια ακόμη"
+
+msgid "Drag music files here, or add tracks via any track's overflow menu."
+msgstr "Σύρετε αρχεία μουσικής εδώ, ή προσθέστε κομμάτια από το μενού οποιουδήποτε κομματιού."
+
+msgid "Drop files to add to this playlist"
+msgstr "Αφήστε αρχεία για προσθήκη σε αυτή τη λίστα"
+
+msgid "Edit artwork"
+msgstr "Επεξεργασία εικόνας"
+
+msgid "Rename"
+msgstr "Μετονομασία"
+
+msgid "Delete playlist"
+msgstr "Διαγραφή λίστας"
+
+msgid "Remove from playlist"
+msgstr "Αφαίρεση από τη λίστα"
+
+msgid "Remove from Playlist"
+msgstr "Αφαίρεση από τη λίστα"
+
+# ---- Mosaic picker ----------------------------------------------------------
+
+msgid "Add tracks to this playlist to pick artwork."
+msgstr "Προσθέστε κομμάτια στη λίστα για να επιλέξετε εικόνα."
+
+msgid "No artwork"
+msgstr "Χωρίς εικόνα"
+
+msgid "{} / 4 selected"
+msgstr "{} / 4 επιλεγμένα"
+
+msgid "Select up to 4 tracks"
+msgstr "Επιλέξτε έως 4 κομμάτια"
+
+# ---- Playlist Create / Rename dialog ----------------------------------------
+
+msgid "Playlist name"
+msgstr "Όνομα λίστας"
+
+msgid "Description (optional)"
+msgstr "Περιγραφή (προαιρετική)"
+
+msgid "Add a description…"
+msgstr "Προσθήκη περιγραφής…"
+
+# ---- Playlist Detail: Remove-selected confirm -------------------------------
+
+msgid "Remove from playlist?"
+msgstr "Αφαίρεση από τη λίστα;"
+
+msgid "Remove {n} track from the playlist?"
+msgid_plural "Remove {n} tracks from the playlist?"
+msgstr[0] "Αφαίρεση {n} κομματιού από τη λίστα;"
+msgstr[1] "Αφαίρεση {n} κομματιών από τη λίστα;"
+
+# ---- Search view ------------------------------------------------------------
+
+msgid "Search your library…"
+msgstr "Αναζήτηση στη βιβλιοθήκη σας…"
+
+msgid "Searching…"
+msgstr "Αναζήτηση…"
+
+msgid "No results found"
+msgstr "Δεν βρέθηκαν αποτελέσματα"
+
+msgid "Try a different search term"
+msgstr "Δοκιμάστε διαφορετικούς όρους αναζήτησης"
+
+msgid "Top Result"
+msgstr "Κορυφαίο αποτέλεσμα"
+
+msgid "Songs"
+msgstr "Τραγούδια"
+
+msgid "Show all {} songs"
+msgstr "Εμφάνιση και των {} τραγουδιών"
+
+msgid "Show less"
+msgstr "Εμφάνιση λιγότερων"
+
+msgid "Recent"
+msgstr "Πρόσφατα"
+
+msgid "Clear all"
+msgstr "Καθαρισμός όλων"
+
+msgid "Remove from recent"
+msgstr "Αφαίρεση από τα πρόσφατα"
+
+# ---- Favorites view ---------------------------------------------------------
+
+msgid "Filter favorites…"
+msgstr "Φιλτράρισμα αγαπημένων…"
+
+msgid "Most Played"
+msgstr "Πιο δημοφιλή"
+
+msgid "Favorite Artists"
+msgstr "Αγαπημένοι καλλιτέχνες"
+
+msgid "No favorites yet"
+msgstr "Δεν υπάρχουν αγαπημένα ακόμη"
+
+# Plural: favourite-count subtitle (hero count line + Favorite Artists card
+# subtitle on the strip). Greek pluralizes regularly.
+msgid "{n} favorite"
+msgid_plural "{n} favorites"
+msgstr[0] "{n} αγαπημένο"
+msgstr[1] "{n} αγαπημένα"
+
+# ---- Track row right-click menu (multi-select variants) ---------------------
+# Wired into `ui/components/track-list-row.slint`. Το `{}` είναι ο
+# αριθμός των επιλεγμένων κομματιών.
+
+msgid "Play {} Next"
+msgstr "Αναπαραγωγή {} στη συνέχεια"
+
+msgid "Add {} to Queue"
+msgstr "Προσθήκη {} στην ουρά"
+
+msgid "Add {} to Playlist"
+msgstr "Προσθήκη {} σε λίστα αναπαραγωγής"
+
+msgid "Add {} to Favorites"
+msgstr "Προσθήκη {} στα αγαπημένα"
+
+msgid "Remove {} from Favorites"
+msgstr "Αφαίρεση {} από τα αγαπημένα"
+
+msgid "Remove {} from Playlist"
+msgstr "Αφαίρεση {} από τη λίστα"
+
+# ---- Track row right-click menu --------------------------------------------
+msgid "Open Containing Folder"
+msgstr "Άνοιγμα γονικού φακέλου"
+
+# ---- ... cross-tab navigation ----------------------------------------------
+msgid "Go to Album"
+msgstr "Μετάβαση στο άλμπουμ"
+
+msgid "Go to Artist"
+msgstr "Μετάβαση στον καλλιτέχνη"
+
+msgid "Go to Genre"
+msgstr "Μετάβαση στο είδος"
+
+# ---- Add-to-Playlist picker dialog -----------------------------------------
+# Wired into `ui/components/playlist-picker.slint`. The first two badges
+# appear on rows whose playlists already contain some or all of the
+# selected tracks; the third is the empty-state hint.
+
+msgid "Already added"
+msgstr "Έχουν ήδη προστεθεί"
+
+msgid "{} of {} already added"
+msgstr "{} από {} ήδη προστέθηκαν"
+
+# ---- Auto-updater (Settings → Updates + notification toasts) ----------------
+
+msgid "Skip this version"
+msgstr "Παράλειψη αυτής της έκδοσης"
+
+msgid "Updates managed by your package manager"
+msgstr "Οι ενημερώσεις διαχειρίζονται από τον διαχειριστή πακέτων σας"
+
+msgid "Use sudo dnf update melodia (or your distro equivalent)."
+msgstr "Χρησιμοποιήστε sudo dnf update melodia (ή το αντίστοιχο της διανομής σας)."
+
+msgid "Re-run the latest .msi installer from the Releases page."
+msgstr "Εκτελέστε ξανά τον τελευταίο εγκαταστάτη .msi από τη σελίδα Releases."
+
+msgid "Use brew upgrade melodia."
+msgstr "Χρησιμοποιήστε brew upgrade melodia."
+
+msgid "Update available"
+msgstr "Διαθέσιμη ενημέρωση"
+
+msgid "Melodia {} is ready to install."
+msgstr "Το Melodia {} είναι έτοιμο για εγκατάσταση."
+
+msgid "Install"
+msgstr "Εγκατάσταση"
+
+msgid "Update installed"
+msgstr "Η ενημέρωση εγκαταστάθηκε"
+
+msgid "Restart Melodia to start using the new version."
+msgstr "Επανεκκινήστε το Melodia για να χρησιμοποιήσετε τη νέα έκδοση."
+
+msgid "Restart"
+msgstr "Επανεκκίνηση"
+
+msgid "Update failed"
+msgstr "Αποτυχία ενημέρωσης"
+
+msgid "Couldn't reach the update server. Check your internet connection."
+msgstr "Δεν ήταν δυνατή η σύνδεση με τον διακομιστή ενημερώσεων. Ελέγξτε τη σύνδεσή σας στο διαδίκτυο."
+
+msgid "Signature check failed. The downloaded update may be corrupted; please try again."
+msgstr "Ο έλεγχος υπογραφής απέτυχε. Η ενημέρωση που κατεβάσατε μπορεί να είναι κατεστραμμένη· δοκιμάστε ξανά."
+
+msgid "The update server returned an unexpected response."
+msgstr "Ο διακομιστής ενημερώσεων επέστρεψε μια μη αναμενόμενη απάντηση."
+
+msgid "Couldn't write the downloaded update to disk."
+msgstr "Δεν ήταν δυνατή η εγγραφή της ενημέρωσης στον δίσκο."
+
+msgid "Update failed. See logs for details."
+msgstr "Η ενημέρωση απέτυχε. Δείτε τα αρχεία καταγραφής για λεπτομέρειες."
+
+msgid "Close to Tray"
+msgstr "Κλείσιμο στην περιοχή ειδοποιήσεων"
+
+msgid "Keep Melodia running in the system tray when you close the window, instead of quitting."
+msgstr "Διατήρηση της εκτέλεσης του Melodia στην περιοχή ειδοποιήσεων κατά το κλείσιμο του παραθύρου, αντί για έξοδο."
+
+msgid "System Tray Icon"
+msgstr "Εικονίδιο περιοχής ειδοποιήσεων"
+
+msgid "Show a Melodia icon in the system tray with playback controls."
+msgstr "Εμφάνιση εικονιδίου Melodia στην περιοχή ειδοποιήσεων με στοιχεία ελέγχου αναπαραγωγής."
+
+msgid "Changing the system tray icon requires restarting Melodia. Restart now?"
+msgstr "Η αλλαγή του εικονιδίου περιοχής ειδοποιήσεων απαιτεί επανεκκίνηση του Melodia. Επανεκκίνηση τώρα;"
+
+msgid "Available only while the system tray icon is active."
+msgstr "Διαθέσιμο μόνο όταν το εικονίδιο περιοχής ειδοποιήσεων είναι ενεργό."

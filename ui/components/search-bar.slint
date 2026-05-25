@@ -1,0 +1,216 @@
+import { Theme } from "../theme.slint";
+import { MaterialIcon } from "material-icon.slint";
+
+// Reusable compact filter / search input.
+//
+// Visual design (mirrors Tauri's `.filterBar` + `.searchBarFocused`):
+//   * Pill shape, 1 px `Theme.surface2` outline at rest (matches
+//     `ActionPill`'s chip outline so search bars + pills sit together as
+//     one family of controls).
+//   * Resting background stays `Theme.surface0` regardless of hover — no
+//     hover-driven lift, because the chrome's TouchArea covers icon /
+//     padding / border-edge and a single-region hover read poorly there.
+//   * On focus: faint accent ring (`accent` @ 18 %), soft drop-shadow glow,
+//     search icon tints to accent, the chrome scales by 1.5 % from its
+//     centre. All transitions run for `Theme.dur-med` (250 ms) ease-in-out.
+//
+// Layout: the outer slot is fixed-size (`input-width × 32 px`). The visible
+// chrome lives in an inner Rectangle that scales from its centre via
+// `(parent.size - self.size) / 2` x/y bindings, so neighbouring elements
+// in the parent layout don't shift on focus.
+//
+// Reuse pattern (any view):
+//
+//     // Simple view (no inner-component blur signalling needed):
+//     search := SearchBar {
+//         text <=> Albums.filter;
+//         placeholder: "Filter albums…";
+//         edited(t) => { Albums.apply-filter(t); }
+//     }
+//     // Backdrop / pill TouchArea handlers can call:
+//     //   search.clear-input-focus();
+//
+//     // View where descendant components (rows, etc.) in *other* files
+//     // need to trigger blur — declare an int property on the view's
+//     // global and bump it from those components. The SearchBar's
+//     // `blur-trigger` reacts to every change:
+//     SearchBar {
+//         text <=> Tracks.filter;
+//         placeholder: "Filter tracks…";
+//         blur-trigger: Tracks.blur-search-tick;
+//         edited(t) => { Tracks.apply-filter(t); }
+//     }
+export component SearchBar inherits Rectangle {
+    in-out property <string> text;
+    in property <string> placeholder: @tr("Search…");
+    in property <length> input-width: 220px;
+
+    // Counter the parent bumps to force a blur (Slint has no native
+    // "click outside" behaviour for TextInput). Each increment fires
+    // `clear-focus()` on the inner input. Use this when the trigger
+    // originates in a component that can't reference this instance by id
+    // (different file, ListView descendant, etc.).
+    in property <int> blur-trigger: 0;
+    changed blur-trigger => { input.clear-focus(); }
+
+    callback edited(string);
+
+    // Fires when the user presses Enter inside the input. Most consumers
+    // (Tracks / Albums / Artists / Favorites filters) don't wire this —
+    // their `edited` callback already refilters in-memory on every
+    // keystroke, so Enter has no extra work to do. The Search view
+    // *does* wire it: the 300 ms debounce Timer is skipped and
+    // `commit-search` fires synchronously against the current text.
+    // This is what lets the user re-trigger the same search after
+    // navigating away and back (cache release on tab-leave cleared the
+    // results, but `Search.query` was preserved — pressing Enter
+    // re-runs the FTS fetch without forcing the user to edit-then-
+    // re-type the same characters).
+    callback accepted();
+
+    // Public escape hatch for the simple case — same-file callers with an
+    // id reference can just call `search.clear-input-focus()` and skip the
+    // blur-trigger plumbing entirely.
+    public function clear-input-focus() {
+        input.clear-focus();
+    }
+
+    // Public escape hatch to programmatically focus the input — e.g. a view
+    // auto-focusing its search bar on mount. (Named `focus-input` rather than
+    // `focus` — the latter collides with the built-in element method.)
+    public function focus-input() {
+        input.focus();
+    }
+
+    // Outer slot is fixed-size — keeps the layout in the parent
+    // HorizontalLayout stable so growing on focus doesn't push neighbours.
+    width: input-width;
+    height: 32px;
+    background: transparent;
+
+    // Inner chrome holds all the visible styling and scales from the
+    // *centre* by binding `x`/`y` to a half-delta against the outer slot.
+    // Tauri uses `transform: scale(1.01)` on focus — Slint Rectangles have
+    // no scale transform, so we grow width/height and recompute x/y.
+    chrome := Rectangle {
+        property <float> focus-scale: input.has-focus ? 1.015 : 1.0;
+        width: root.width * focus-scale;
+        height: root.height * focus-scale;
+        // (parent.size - self.size) / 2 keeps the chrome centred against
+        // the outer slot as it scales.
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+
+        background: Theme.surface0;
+        // Pill chrome: 1 px `Theme.surface2` outline at rest (matches the
+        // `ActionPill` chip's outline so adjacent search bars + pills read
+        // as the same family of controls). Focus lifts it with a soft glow
+        // and swaps the ring to a faint accent tint.
+        border-radius: self.height / 2;
+        border-width: 1px;
+        border-color: input.has-focus
+            ? Theme.accent.with-alpha(0.18)
+            : Theme.surface2;
+        drop-shadow-color: input.has-focus
+            ? Theme.crust.with-alpha(0.45)
+            : Theme.crust.with-alpha(0.15);
+        drop-shadow-blur: input.has-focus ? 16px : 2px;
+        drop-shadow-offset-y: input.has-focus ? 4px : 1px;
+        // `x`/`y` are derived from `width`/`height`; per CLAUDE.md's "don't
+        // animate bindings derived from another animating property",
+        // animate only the source dimensions and let the centring tracks
+        // per-frame.
+        animate width, height, border-color, drop-shadow-color,
+                drop-shadow-blur, drop-shadow-offset-y {
+            duration: Theme.dur-fast;
+            easing: ease-in-out;
+        }
+
+        TouchArea {
+            // Forwards focus to the input on click so the whole pill is the
+            // target, not just the inner TextInput. No hover styling — the
+            // pill stays a single resting colour regardless of pointer
+            // position; the only visual lift happens on focus.
+            clicked => { input.focus(); }
+        }
+
+        HorizontalLayout {
+            padding-left: Theme.pad-sm;
+            padding-right: Theme.pad-xs;
+            spacing: Theme.pad-xs;
+            alignment: stretch;
+
+            VerticalLayout {
+                alignment: center;
+                MaterialIcon {
+                    name: "search";
+                    icon-size: 16px;
+                    icon-color: input.has-focus ? Theme.accent : Theme.subtext0;
+                    animate icon-color { duration: Theme.dur-fast; easing: ease-in-out; }
+                }
+            }
+
+            // Slint's TextInput renders the editable text; placeholder is
+            // faked by overlaying a Text when the input is empty.
+            Rectangle {
+                horizontal-stretch: 1;
+                VerticalLayout {
+                    alignment: center;
+                    Rectangle {
+                        height: 20px;
+                        // Both the placeholder Text and the TextInput fill
+                        // this 20 px box (`height: 100%`) so their
+                        // `vertical-alignment: center` actually centres the
+                        // glyph line-box inside it — without an explicit
+                        // height they auto-size to the line-box and pin to
+                        // the top of the box, reading ~1 px high.
+                        Text {
+                            visible: root.text == "";
+                            text: root.placeholder;
+                            color: Theme.overlay0;
+                            font-size: Theme.font-size-md;
+                            vertical-alignment: center;
+                            x: 0;
+                            height: 100%;
+                        }
+                        input := TextInput {
+                            text <=> root.text;
+                            color: Theme.text;
+                            font-size: Theme.font-size-md;
+                            single-line: true;
+                            vertical-alignment: center;
+                            x: 0;
+                            width: 100%;
+                            height: 100%;
+                            edited => { root.edited(self.text); }
+                            accepted => { root.accepted(); }
+                        }
+                    }
+                }
+            }
+
+            if root.text != "": Rectangle {
+                width: 22px;
+                height: 22px;
+                y: (parent.height - self.height) / 2;
+                border-radius: self.height / 2;
+                background: clear-touch.has-hover ? Theme.surface1 : transparent;
+                animate background { duration: Theme.dur-fast; easing: ease-in-out; }
+                MaterialIcon {
+                    x: (parent.width - self.width) / 2;
+                    y: (parent.height - self.height) / 2;
+                    name: "close";
+                    icon-size: 14px;
+                    icon-color: Theme.subtext0;
+                }
+                clear-touch := TouchArea {
+                    mouse-cursor: pointer;
+                    clicked => {
+                        root.text = "";
+                        root.edited("");
+                    }
+                }
+            }
+        }
+    }
+}

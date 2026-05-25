@@ -1,0 +1,131 @@
+import { Theme } from "../theme.slint";
+
+// M3 Expressive overlay scrollbar — fixed 10 px thickness, rounded ends,
+// Catppuccin colours pulled from `Theme` so future themes re-skin it for
+// free. Thumb stays the same size at all times; only the colour shifts on
+// hover/drag (surface2 → accent).
+//
+// Generic across both axes: set `horizontal: true` for the bottom bar.
+// Reads `visible-size` (viewport extent on the scrolled axis) and
+// `content-size` (total scrollable extent), renders the thumb proportionally,
+// and emits `scroll-to(new-offset)` on user interaction. The parent owns the
+// source of truth (typically `-scroll-view.viewport-y` or `-scroll-view.viewport-x`)
+// and binds `offset` from it; on every `scroll-to` the parent writes the
+// negated value back into the ScrollView, which feeds back here through the
+// binding — no two-way `<=>` needed.
+//
+// Drag uses absolute coordinates (`absolute-position.{x,y} + pressed-{x,y}`
+// snapshotted on press, then `+ mouse-{x,y}` on every move) so the thumb
+// tracks the cursor 1:1 even if the parent resizes mid-drag — same fix as
+// `track-list-header.slint`'s ResizeHandle.
+//
+// Click on the bare track jumps the thumb so its centre lands on the cursor,
+// then continues to drag from there.
+export component OverlayScrollbar inherits Rectangle {
+    in property <bool> horizontal: false;
+    in property <length> visible-size;
+    in property <length> content-size;
+    in property <length> offset;
+
+    // Visual dimensions of the thumb. Defaults match the bar used in the
+    // tracks view; tighter contexts (e.g. the collapsed sidebar) override
+    // these to fit more space-constrained edges.
+    in property <length> bar-thickness: 8px;
+    in property <length> bar-radius: 4px;
+    in property <length> min-thumb: 28px;
+
+    out property <bool> dragging: touch.pressed;
+
+    callback scroll-to(length);
+
+    visible: root.content-size > root.visible-size;
+    background: transparent;
+    private property <length> max-extent: max(1px, root.content-size - root.visible-size);
+    private property <length> track-len: root.horizontal ? root.width : root.height;
+    private property <length> thumb-len: max(
+        root.min-thumb,
+        root.track-len * root.visible-size / max(1px, root.content-size)
+    );
+    private property <length> thumb-travel: max(0px, root.track-len - root.thumb-len);
+    private property <length> thumb-pos: root.thumb-travel * (root.offset / root.max-extent);
+
+    private property <bool> active: touch.has-hover || root.dragging;
+
+    // Drag snapshot taken on press.
+    private property <length> press-offset;
+    private property <length> press-abs;
+
+    // Track (channel) — sized to `bar-thickness` along the cross axis and
+    // the full scrollable extent along the scrolled axis, so the thumb
+    // visibly runs inside a recessed channel rather than floating in empty
+    // space. Subtle by design (surface0 at half alpha) so it reads against
+    // the panel without competing with content.
+    Rectangle {
+        x: root.horizontal ? 0px : (root.width - root.bar-thickness) / 2;
+        y: root.horizontal ? (root.height - root.bar-thickness) / 2 : 0px;
+        width: root.horizontal ? root.width : root.bar-thickness;
+        height: root.horizontal ? root.bar-thickness : root.height;
+        border-radius: root.bar-radius;
+        background: Theme.surface0;
+        opacity: root.active ? 0.85 : 0.5;
+        animate opacity { duration: Theme.dur-fast; easing: ease-in-out; }
+    }
+
+    // Thumb — surface2 idle, accent on hover/drag. No size animation; only
+    // the colour transitions. Position (`x`/`y`) is intentionally
+    // un-animated because it's derived from `offset` and would phase-lag the
+    // cursor during a drag (see CLAUDE.md "Animating bindings derived from
+    // another animating property" pitfall).
+    Rectangle {
+        x: root.horizontal ? root.thumb-pos : (root.width - root.bar-thickness) / 2;
+        y: root.horizontal ? (root.height - root.bar-thickness) / 2 : root.thumb-pos;
+        width: root.horizontal ? root.thumb-len : root.bar-thickness;
+        height: root.horizontal ? root.bar-thickness : root.thumb-len;
+        border-radius: root.bar-radius;
+        background: root.active ? Theme.accent : Theme.surface2;
+        animate background { duration: Theme.dur-fast; easing: ease-in-out; }
+    }
+
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        pointer-event(ev) => {
+            if (ev.kind == PointerEventKind.down) {
+                // Hit-test the thumb. If the press landed inside the
+                // current thumb bounds, snapshot drag state from the
+                // current offset — the thumb stays put and subsequent
+                // moves drag it from where the user grabbed. Otherwise
+                // (bare-track press) jump the thumb so its centre lands
+                // on the cursor, then snapshot drag state from there so
+                // subsequent moves continue from the jump target.
+                if ((root.horizontal ? self.pressed-x : self.pressed-y) >= root.thumb-pos
+                    && (root.horizontal ? self.pressed-x : self.pressed-y) <= root.thumb-pos + root.thumb-len) {
+                    root.press-offset = root.offset;
+                } else {
+                    root.press-offset = clamp(
+                        (((root.horizontal ? self.pressed-x : self.pressed-y)
+                            - root.thumb-len / 2)
+                         / max(1px, root.thumb-travel)) * root.max-extent,
+                        0px, root.max-extent
+                    );
+                    root.scroll-to(root.press-offset);
+                }
+                root.press-abs = root.horizontal
+                    ? (self.absolute-position.x + self.pressed-x)
+                    : (self.absolute-position.y + self.pressed-y);
+            }
+        }
+        moved => {
+            if (self.pressed) {
+                root.scroll-to(clamp(
+                    root.press-offset
+                        + (((root.horizontal
+                                ? (self.absolute-position.x + self.mouse-x)
+                                : (self.absolute-position.y + self.mouse-y))
+                            - root.press-abs)
+                           / max(1px, root.thumb-travel)) * root.max-extent,
+                    0px, root.max-extent
+                ));
+            }
+        }
+    }
+}

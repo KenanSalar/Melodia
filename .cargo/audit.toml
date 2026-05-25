@@ -1,0 +1,44 @@
+# cargo-audit config. Consumed by `cargo audit` in `.github/workflows/release.yml`
+# (the `audit` job, which runs `cargo audit --deny unsound --deny unmaintained`).
+#
+# `--deny unmaintained` is correct policy: a flagged advisory should block the
+# release until the team decides what to do. The escape hatch lives here.
+#
+# Rules for adding an entry to `ignore`:
+#
+#   1. Include the advisory ID, the reason it doesn't apply to Melodia,
+#      and a `revisit:` date.
+#   2. Prefer pinning around the flagged crate (or removing the dep) over
+#      ignoring. Use this list only for transitive deps with no upgrade
+#      path that we've confirmed are safe to ship.
+#   3. Re-evaluate every `revisit:` date. Stale entries are worse than no
+#      entries — they hide real findings.
+#
+# The format is documented at
+# https://github.com/RustSec/rustsec/tree/main/cargo-audit#configuration
+
+[advisories]
+ignore = [
+    # rsa 0.9.10 Marvin Attack timing sidechannel — pulled via sqlx-mysql
+    # 0.8.6, which is an optional dep of sqlx behind the `mysql` feature.
+    # We're SQLite-only (Cargo.toml: `default-features = false`, no `mysql`
+    # feature). `cargo tree -i rsa` returns "nothing to print" — the crate
+    # is in Cargo.lock for cargo's cross-feature resolution stability but
+    # is not compiled into the Melodia binary. No fixed `rsa` upgrade
+    # available upstream.
+    # revisit: 2026-08-19
+    "RUSTSEC-2023-0071",
+
+    # bincode 2.0.1 unmaintained — pulled via i-slint-compiler 1.16.1 →
+    # typed-index-collections 3.5.0. Slint 1.16.1 is current; no upstream
+    # tracking issue. Build-time only (proc-macro / build.rs).
+    # revisit: 2026-08-19
+    "RUSTSEC-2025-0141",
+
+    # paste 1.0.15 unmaintained — pulled via lofty 0.24.0 (direct dep) and
+    # rav1e 0.8.1 (transitive: slint → image → ravif → rav1e). Lofty has
+    # no migration plan; rav1e's pastey migration (PR #3430) merged
+    # 2025-06-22 but is unreleased.
+    # revisit: 2026-08-19
+    "RUSTSEC-2024-0436",
+]

@@ -1,0 +1,221 @@
+import { Theme } from "../theme.slint";
+import { Playlists, Dialog } from "../globals.slint";
+import { SearchBar } from "../components/search-bar.slint";
+import { ActionPill, PillButton } from "../components/action-pill.slint";
+import { PlaylistGrid } from "../components/grid/playlist-grid.slint";
+import { GridColumnsSync } from "../components/grid-columns-sync.slint";
+import { MaterialIcon } from "../components/material-icon.slint";
+import { OverlayScrollbar } from "../components/overlay-scrollbar.slint";
+
+// The Playlists grid page. Mirrors `AlbumView` structure: header chrome
+// (title + count + filter + "New Playlist" action), virtualized grid
+// via `PlaylistGrid`, responsive column count via `GridColumnsSync`.
+// Bound to the `Playlists` global.
+export component PlaylistsView inherits Rectangle {
+    // Filter throttle — same pattern as the Tracks / Albums views.
+    property <int> filter-tick-pending: 0;
+    property <int> filter-tick-applied: 0;
+    filter-throttle := Timer {
+        interval: 130ms;
+        running: root.filter-tick-pending != root.filter-tick-applied;
+        triggered() => {
+            root.filter-tick-applied = root.filter-tick-pending;
+            Playlists.apply-filter(Playlists.filter);
+        }
+    }
+
+    // --- Responsive grid geometry --------------------------------------
+    property <length> min-card-w: 180px;
+    property <length> grid-gap: 20px;
+    property <length> card-text-h: 46px;
+    property <int> computed-cols:
+        max(1, Math.floor((grid.width - root.grid-gap) / (root.min-card-w + root.grid-gap)));
+    property <length> card-w:
+        max(0px, (grid.width - (root.computed-cols + 1) * root.grid-gap) / root.computed-cols);
+    property <length> card-h: root.card-w + root.card-text-h;
+    property <length> row-h: root.card-h + root.grid-gap;
+
+    GridColumnsSync {
+        computed-cols: root.computed-cols;
+        seed(c) => {
+            Playlists.columns = c;
+            Playlists.columns-changed(c);
+        }
+    }
+
+    TouchArea {
+        clicked => { Playlists.blur-search-tick += 1; }
+    }
+
+    VerticalLayout {
+        padding: Theme.pad-lg;
+        spacing: Theme.pad-md;
+
+        HorizontalLayout {
+            vertical-stretch: 0;
+            spacing: Theme.pad-md;
+            alignment: stretch;
+
+            VerticalLayout {
+                alignment: center;
+                spacing: 0;
+                Text {
+                    text: @tr("Playlists");
+                    color: Theme.page-title-color;
+                    font-size: Theme.page-title-size;
+                    font-weight: Theme.page-title-weight;
+                }
+                Text {
+                    text: @tr("{n} playlist" | "{n} playlists" % Playlists.total-count);
+                    color: Theme.subtext0;
+                    font-size: Theme.font-size-sm;
+                }
+            }
+
+            Rectangle { horizontal-stretch: 1; }
+
+            // "+ New Playlist" action — sits before the SearchBar so the
+            // primary action stays adjacent to the title chip. Populates
+            // the Dialog inline in Slint markup (mirroring `queue-sheet`
+            // and `library-section`'s confirmation flows) instead of
+            // hopping through a Rust callback — Slint's property graph
+            // doesn't tolerate synchronous Rust→`set_open(true)` writes
+            // mid-click-handler ("Recursion detected" in
+            // `i_slint_core::properties`). The dispatcher in `globals.slint`
+            // routes the Accept to `Playlists.create-playlist(name, [])`.
+            VerticalLayout {
+                alignment: center;
+                ActionPill {
+                    PillButton {
+                        icon: "add";
+                        text: @tr("New Playlist");
+                        clicked => {
+                            Dialog.title = @tr("New Playlist");
+                            Dialog.message = "";
+                            Dialog.confirm-label = @tr("Create");
+                            Dialog.cancel-label = @tr("Cancel");
+                            Dialog.destructive = false;
+                            Dialog.kind = "create-playlist";
+                            Dialog.target-id = -1;
+                            Dialog.input-text = "";
+                            Dialog.input-text-2 = "";
+                            Dialog.pending-track-ids = [];
+                            Dialog.open = true;
+                        }
+                    }
+                }
+            }
+
+            VerticalLayout {
+                alignment: center;
+                SearchBar {
+                    text <=> Playlists.filter;
+                    placeholder: @tr("Filter playlists…");
+                    blur-trigger: Playlists.blur-search-tick;
+                    edited(t) => { root.filter-tick-pending += 1; }
+                }
+            }
+        }
+
+        body := Rectangle {
+            horizontal-stretch: 1;
+            vertical-stretch: 1;
+
+            grid := PlaylistGrid {
+                width: 100%;
+                height: 100%;
+                rows: Playlists.grid-rows;
+                card-width: root.card-w;
+                card-height: root.card-h;
+                row-height: root.row-h;
+                gap: root.grid-gap;
+                open-playlist(id) => { Playlists.open-playlist(id); }
+                // Hover-overlay actions — delete + rename populate Dialog
+                // inline (same shape as the detail view's CRUD pills, see
+                // `playlist-detail-view.slint:108-143`). Edit-artwork
+                // routes to Rust so it can fetch the playlist's track
+                // artwork pool + seed the dialog's "current artwork"
+                // preview before opening.
+                delete-playlist(id) => {
+                    Dialog.title = @tr("Delete playlist?");
+                    Dialog.message = @tr("The playlist and its track order will be removed. The tracks themselves stay in your library.");
+                    Dialog.confirm-label = @tr("Delete");
+                    Dialog.cancel-label = @tr("Cancel");
+                    Dialog.destructive = true;
+                    Dialog.kind = "delete-playlist";
+                    Dialog.target-id = id;
+                    Dialog.open = true;
+                }
+                edit-playlist-artwork(id) => {
+                    Playlists.request-edit-artwork-for(id);
+                }
+                rename-playlist(id) => {
+                    // Grid model doesn't carry description, so go through
+                    // `Playlists.row-name` / `row-description` lookups
+                    // (Rust-backed, resolved from the cached
+                    // `PlaylistStats` list — no DB hop).
+                    Dialog.title = @tr("Rename Playlist");
+                    Dialog.message = "";
+                    Dialog.confirm-label = @tr("Save");
+                    Dialog.cancel-label = @tr("Cancel");
+                    Dialog.destructive = false;
+                    Dialog.kind = "rename-playlist";
+                    Dialog.target-id = id;
+                    Dialog.input-text = Playlists.row-name(id);
+                    Dialog.input-text-2 = Playlists.row-description(id);
+                    Dialog.open = true;
+                }
+                request-cover(p) => { Playlists.request-cover(p) }
+            }
+
+            // Empty-state overlay — opaque `Theme.base` fill, mirrors
+            // `AlbumView`'s. CTA points at the "New Playlist" action.
+            if Playlists.total-count == 0: Rectangle {
+                background: Theme.base;
+                VerticalLayout {
+                    alignment: center;
+                    spacing: Theme.pad-md;
+                    HorizontalLayout {
+                        alignment: center;
+                        MaterialIcon {
+                            name: "queue_music";
+                            icon-size: 64px;
+                            icon-color: Theme.overlay0;
+                        }
+                    }
+                    HorizontalLayout {
+                        alignment: center;
+                        Text {
+                            text: @tr("No playlists yet");
+                            color: Theme.text;
+                            font-size: Theme.font-size-lg;
+                            font-weight: 600;
+                        }
+                    }
+                    HorizontalLayout {
+                        alignment: center;
+                        Text {
+                            text: @tr("Click \"+ New Playlist\" to create one.");
+                            color: Theme.subtext0;
+                            font-size: Theme.font-size-sm;
+                            horizontal-alignment: center;
+                            wrap: word-wrap;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    OverlayScrollbar {
+        horizontal: false;
+        x: parent.width - self.width;
+        y: grid.absolute-position.y - root.absolute-position.y;
+        width: 10px;
+        height: grid.height;
+        visible-size: grid.v-visible-height;
+        content-size: grid.v-viewport-height;
+        offset: grid.v-offset;
+        scroll-to(o) => { grid.set-v-offset(o); }
+    }
+}

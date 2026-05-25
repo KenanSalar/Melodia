@@ -1,0 +1,43 @@
+import { Theme } from "../theme.slint";
+import { NavEnterFrom } from "../globals.slint";
+
+// Enter-only wrapper. Re-instantiated on every `if` branch mount, so the
+// state flip + animation replay on every nav. No exit animation — Slint's
+// `if` form destroys the outgoing view instantly.
+//
+//   enter-from:
+//     NavEnterFrom.below → lateral sidebar nav (fade + slide up)
+//     NavEnterFrom.right → drilling into a detail (fade + slide L)
+//     NavEnterFrom.left  → returning from a detail (fade + slide R)
+//
+// Why a single-shot Timer and not `init => { shown = true; }`:
+// Slint's `init` runs *after* property bindings are resolved with their
+// final values (see docs/reference/common.mdx#init), so flipping `shown`
+// inside `init` makes `true` the initial property value — there's no
+// from-state for `animate opacity / x / y` to interpolate from and the
+// view appears instantly. A 1 ms Timer fires after the first render with
+// `shown: false` has painted, so the flip is a true *change* and the
+// `animate` blocks engage. Same pattern as `ui/components/grid-columns-
+// sync.slint:30-37`.
+export component ViewTransition inherits Rectangle {
+    in property <NavEnterFrom> enter-from: NavEnterFrom.below;
+    private property <bool> shown: false;
+
+    Timer {
+        interval: 1ms;
+        running: true;
+        triggered() => {
+            self.running = false;
+            root.shown = true;
+        }
+    }
+
+    opacity: shown ? 1.0 : 0.0;
+    x: shown ? 0px : (enter-from == NavEnterFrom.right ? 32px
+                    : enter-from == NavEnterFrom.left  ? -32px : 0px);
+    y: shown ? 0px : (enter-from == NavEnterFrom.below ? 32px : 0px);
+
+    animate opacity { duration: Theme.dur-spatial; easing: cubic-bezier(0.2, 0, 0, 1); }
+    animate x       { duration: Theme.dur-spatial; easing: cubic-bezier(0.2, 0, 0, 1); }
+    animate y       { duration: Theme.dur-spatial; easing: cubic-bezier(0.2, 0, 0, 1); }
+}

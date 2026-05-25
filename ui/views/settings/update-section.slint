@@ -1,0 +1,195 @@
+import { Theme } from "../../theme.slint";
+import { Settings } from "../../settings.slint";
+import { MelodiaUpdater } from "../../globals.slint";
+import { SectionCard } from "../../components/settings/section-card.slint";
+import { SectionDivider } from "../../components/settings/section-divider.slint";
+import { SettingRow } from "../../components/settings/setting-row.slint";
+import { SettingRowStacked } from "../../components/settings/setting-row-stacked.slint";
+import { SectionButton } from "../../components/settings/section-button.slint";
+import { ProgressBar } from "../../components/settings/progress-bar.slint";
+
+// Update section. Mirrors Tauri's `UpdateSection.tsx`. The first row
+// ("Software Updates" + Check button) is always rendered; the other rows
+// stack below it under their own conditions:
+//   - up-to-date row     when up-to-date && !available && !restart-needed
+//   - update-installed   when restart-needed
+//   - version-available  when available && !restart-needed (with optional
+//                        progress bar when installing)
+//   - error              when error-message != ""
+//
+// All state comes from the `MelodiaUpdater` global (owned by Rust, see
+// `src/services/updater/state.rs` for the underlying enum). The local
+// `in-out property` declarations the placeholder phase used were
+// removed in Phase C — read-bindings to `MelodiaUpdater.*` replace them so
+// the section is genuinely reactive to backend state changes.
+//
+// Search visibility — see header comment in `language-section.slint`.
+// Each row's visibility ANDs the existing state condition with the search
+// predicate so typing a query that matches the section title surfaces
+// only the rows whose underlying state is true (an up-to-date message
+// won't appear on a session that has an update pending, even if the
+// user types "you're up to date").
+export component UpdateSection inherits Rectangle {
+    background: transparent;
+    horizontal-stretch: 1;
+    vertical-stretch: 0;
+
+    in property <string> query: Settings.search-query;
+
+    pure function row-visible(label: string, desc: string) -> bool {
+        return root.query == ""
+            || Settings.matches(@tr("Updates"), root.query)
+            || Settings.matches(label + " " + desc, root.query);
+    }
+
+    property <bool> show-software: row-visible(
+        @tr("Software Updates"), @tr("Current version: {}", MelodiaUpdater.current-version));
+    property <bool> show-up-to-date:
+        MelodiaUpdater.up-to-date && !MelodiaUpdater.update-available && !MelodiaUpdater.restart-needed
+        && row-visible(@tr("You're up to date!"),
+            @tr("Melodia {} is the latest version.", MelodiaUpdater.current-version));
+    property <bool> show-restart: MelodiaUpdater.restart-needed
+        && row-visible(@tr("Update Installed"), @tr("Restart Melodia to apply the update"));
+    property <bool> show-update-available:
+        MelodiaUpdater.update-available && !MelodiaUpdater.restart-needed
+        && row-visible(@tr("Version {} Available", MelodiaUpdater.available-version), MelodiaUpdater.notes-short);
+    property <bool> show-error: MelodiaUpdater.error-message != ""
+        && row-visible("", MelodiaUpdater.error-message);
+    // Per-platform hint string. The ternary keeps each branch's
+    // literal inside @tr() so Slint's codegen picks them up and the
+    // string re-resolves on locale switch. Order matches the
+    // `platform-kind` values set by `src/ui/updater_settings.rs`.
+    property <string> pkg-manager-hint:
+        MelodiaUpdater.platform-kind == "windows"
+            ? @tr("Re-run the latest .msi installer from the Releases page.")
+        : MelodiaUpdater.platform-kind == "macos"
+            ? @tr("Use brew upgrade melodia.")
+        : @tr("Use sudo dnf update melodia (or your distro equivalent).");
+    property <bool> show-package-managed: MelodiaUpdater.system-managed
+        && row-visible(@tr("Updates managed by your package manager"), pkg-manager-hint);
+
+    out property <bool> has-matches:
+        show-software || show-up-to-date || show-restart
+        || show-update-available || show-error || show-package-managed;
+
+    // VerticalLayout wrapper so the Rectangle's preferred-height tracks
+    // the SectionCard's natural height. See `language-section.slint`.
+    VerticalLayout {
+    if has-matches: SectionCard {
+        title: @tr("Updates");
+
+        // Always-visible row: Software Updates + Check button.
+        if root.show-software: SettingRow {
+            icon: "system_update";
+            label: @tr("Software Updates");
+            description: @tr("Current version: {}", MelodiaUpdater.current-version);
+            SectionButton {
+                label: MelodiaUpdater.is-checking ? @tr("Checking...") : @tr("Check for Updates");
+                icon: "";
+                primary: false;
+                button-enabled: !MelodiaUpdater.is-checking;
+                clicked => { MelodiaUpdater.check(); }
+            }
+        }
+
+        // Package-manager-managed hint (RPM / deb / MSI installs). Sits
+        // directly below the software row so the user immediately sees
+        // why the action buttons below are missing.
+        if root.show-software && root.show-package-managed: SectionDivider {}
+        if root.show-package-managed: SettingRow {
+            icon: "package_2";
+            label: @tr("Updates managed by your package manager");
+            description: pkg-manager-hint;
+        }
+
+        // Up-to-date row.
+        if root.show-software && root.show-up-to-date: SectionDivider {}
+        if root.show-up-to-date: SettingRow {
+            icon: "check_circle";
+            label: @tr("You're up to date!");
+            description: @tr("Melodia {} is the latest version.", MelodiaUpdater.current-version);
+        }
+
+        // Restart needed row (after install).
+        if root.show-software && root.show-restart: SectionDivider {}
+        if root.show-restart: SettingRow {
+            icon: "restart_alt";
+            label: @tr("Update Installed");
+            description: @tr("Restart Melodia to apply the update");
+            SectionButton {
+                label: @tr("Restart Now");
+                icon: "";
+                primary: true;
+                clicked => { MelodiaUpdater.restart(); }
+            }
+        }
+
+        // Update available row + optional progress bar. The Install +
+        // Skip buttons are hidden when the install path is package-
+        // manager-managed (RPM / MSI / Homebrew) — the user can still
+        // see the available version, but the action belongs to the OS
+        // package manager.
+        if root.show-software && root.show-update-available: SectionDivider {}
+        if root.show-update-available: SettingRow {
+            icon: "new_releases";
+            label: @tr("Version {} Available", MelodiaUpdater.available-version);
+            description: MelodiaUpdater.notes-short;
+            // Changelog can be a long single-line string — cap it to a
+            // reading column so it wraps early instead of widening the card.
+            description-max-width: 480px;
+            if !MelodiaUpdater.system-managed: SectionButton {
+                label: MelodiaUpdater.is-installing ? @tr("Installing...") : @tr("Download & Install");
+                icon: "";
+                primary: true;
+                button-enabled: !MelodiaUpdater.is-installing;
+                clicked => { MelodiaUpdater.install(); }
+            }
+            if !MelodiaUpdater.system-managed && !MelodiaUpdater.is-installing
+                    && !MelodiaUpdater.is-critical: SectionButton {
+                label: @tr("Skip this version");
+                icon: "";
+                primary: false;
+                clicked => { MelodiaUpdater.skip(); }
+            }
+        }
+        // Critical-release hint. Replaces the absent Skip button so the
+        // user understands why they can't dismiss this update permanently.
+        if root.show-update-available && MelodiaUpdater.is-critical
+                && !MelodiaUpdater.system-managed: SettingRow {
+            icon: "shield";
+            label: @tr("Critical update");
+            description: @tr("This update fixes a critical issue and can't be skipped.");
+        }
+        if root.show-update-available && MelodiaUpdater.is-installing: Rectangle {
+            background: transparent;
+            VerticalLayout {
+                padding-left: Theme.pad-lg;
+                padding-right: Theme.pad-lg;
+                padding-bottom: Theme.pad-md;
+                spacing: Theme.pad-xs;
+
+                ProgressBar {
+                    value: MelodiaUpdater.download-progress / 100;
+                }
+                HorizontalLayout {
+                    alignment: end;
+                    Text {
+                        text: MelodiaUpdater.download-progress + "%";
+                        color: Theme.subtext0;
+                        font-size: Theme.font-size-sm;
+                    }
+                }
+            }
+        }
+
+        // Error row.
+        if (root.show-software || root.show-up-to-date || root.show-restart
+                || root.show-update-available) && root.show-error: SectionDivider {}
+        if root.show-error: SettingRow {
+            icon: "error";
+            label: "";
+            description: MelodiaUpdater.error-message;
+        }
+    }
+    }
+}

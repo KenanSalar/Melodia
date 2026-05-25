@@ -1,0 +1,78 @@
+import { Theme } from "../../theme.slint";
+import { MaterialIcon } from "../material-icon.slint";
+
+// Pill-shaped text button with optional leading icon. Used for the
+// labelled buttons on the settings page (Add Folder, Check for Updates,
+// Restart Now, Download and Install). `icon-button.slint` is icon-only;
+// this is the labelled sibling. Two variants: `accent` (primary action,
+// filled) and `text` (secondary, outline).
+export component SectionButton inherits Rectangle {
+    in property <string> label;
+    in property <string> icon;            // empty = no leading icon
+    in property <bool>   button-enabled: true;
+    in property <bool>   primary: true;   // false = outline / "text" variant
+    // Only meaningful with `primary: true`. Switches the filled fill from
+    // accent → danger and the on-button text/icon colour from accent-text
+    // → danger-text. Used by the confirmation dialog's Confirm button.
+    // Hover brightens the same red (mirrors `PillButton` in action-pill.slint)
+    // instead of swapping to `Theme.danger-hover` (peach) which reads as an
+    // orange/yellow hue jump across palettes.
+    in property <bool>   destructive;
+
+    callback clicked();
+
+    height: 32px;
+    horizontal-stretch: 0;
+    border-radius: self.height / 2;
+    background: !root.button-enabled
+        ? Theme.surface1
+        : (root.primary
+            ? (root.destructive
+                ? (touch.has-hover ? Theme.danger.brighter(10%) : Theme.danger)
+                : (touch.has-hover ? Theme.accent.brighter(10%) : Theme.accent))
+            : (touch.has-hover ? Theme.surface2 : Theme.surface1));
+    border-color: root.primary || !root.button-enabled
+        ? transparent
+        : Theme.surface2;
+    border-width: 1px;
+    opacity: root.button-enabled ? 1.0 : 0.5;
+    animate background { duration: Theme.dur-fast; easing: ease-in-out; }
+
+    HorizontalLayout {
+        padding-left: Theme.pad-md;
+        padding-right: Theme.pad-md;
+        spacing: Theme.pad-xs;
+        alignment: center;
+
+        if root.icon != "": VerticalLayout {
+            alignment: center;
+            MaterialIcon {
+                name: root.icon;
+                icon-size: 18px;
+                icon-color: root.primary
+                    ? (root.destructive ? Theme.danger-text : Theme.accent-text)
+                    : Theme.text;
+            }
+        }
+
+        VerticalLayout {
+            alignment: center;
+            Text {
+                text: root.label;
+                color: root.primary
+                    ? (root.destructive ? Theme.danger-text : Theme.accent-text)
+                    : Theme.text;
+                font-size: Theme.font-size-sm;
+                font-weight: 600;
+                vertical-alignment: center;
+            }
+        }
+    }
+
+    touch := TouchArea {
+        mouse-cursor: root.button-enabled ? pointer : default;
+        clicked => {
+            if (root.button-enabled) { root.clicked(); }
+        }
+    }
+}

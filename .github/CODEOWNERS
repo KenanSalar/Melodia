@@ -1,0 +1,12 @@
+# Default owner for all files in the repository.
+# Unless a later match takes precedence, this owner
+# will be requested for review on every pull request.
+* @KenanSalar
+
+# Protect the CODEOWNERS file itself so ownership
+# rules cannot be changed without the owner's approval.
+/.github/CODEOWNERS @KenanSalar
+
+# Protect CI/CD workflows — these run with repo secrets
+# and can be abused to exfiltrate them or alter releases.
+/.github/workflows/ @KenanSalar

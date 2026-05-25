@@ -1,0 +1,178 @@
+import { Theme } from "../../theme.slint";
+import { Notifications } from "../../globals.slint";
+import { NotificationRow } from "../../models.slint";
+import { MaterialIcon } from "../material-icon.slint";
+import { IconButton } from "../icon-button.slint";
+import { SectionButton } from "../settings/section-button.slint";
+
+// Single card in the notification stack. Pinned to a fixed 360 px width by
+// its parent (the `for` block inside `NotificationStack`), height derives
+// from content.
+//
+// Variant → colour + glyph mapping:
+//   "info"    → accent / info        (default; falls through)
+//   "success" → green   / check_circle
+//   "warning" → yellow  / warning
+//   "error"   → danger  / error
+//
+// Enter animation mirrors the `Tooltip` pattern (`tooltip.slint`):
+// a private `shown` flips true on `init`, the opacity animates 0 → 1 across
+// `Theme.dur-fast`. No exit animation in v1 — clicking dismiss removes the
+// row from the model and the component disappears immediately. Acceptable
+// for the "minimal UX" directive; a future sweep timer can add a fade-out.
+//
+// Input transparency: this component only paints; clicks are captured by
+// the inner `IconButton` / `PillButton`. The notification stack's empty
+// space between cards and the surrounding container don't block pointer
+// events on the layers below (no root-level TouchArea).
+component NotificationCard inherits Rectangle {
+    // Named `data` rather than `row` because `row` is the implicit
+    // iteration variable inside `for row[i] in model:` blocks — Slint
+    // rejects a property named `row` with "Cannot override property 'row'".
+    in property <NotificationRow> data;
+    private property <bool> shown: false;
+
+    init => { root.shown = true; }
+
+    private property <brush> accent-brush:
+        root.data.variant == "success" ? Theme.green
+        : root.data.variant == "warning" ? Theme.yellow
+        : root.data.variant == "error" ? Theme.danger
+        : Theme.accent;
+
+    private property <string> variant-icon:
+        root.data.variant == "success" ? "check_circle"
+        : root.data.variant == "warning" ? "warning"
+        : root.data.variant == "error" ? "error"
+        : "info";
+
+    height: layout.preferred-height;
+    background: Theme.surface0;
+    border-color: Theme.border;
+    border-width: 1px;
+    border-radius: Theme.radius-md;
+    opacity: root.shown ? 1.0 : 0.0;
+    animate opacity { duration: Theme.dur-fast; easing: ease-out; }
+
+    // Left-edge variant accent bar. Sized to the card's height; the
+    // shared `border-radius` on the card masks the bar's right edge so the
+    // accent never paints past the rounded corners.
+    Rectangle {
+        x: 0;
+        y: 0;
+        width: 4px;
+        height: parent.height;
+        background: root.accent-brush;
+        border-top-left-radius: Theme.radius-md;
+        border-bottom-left-radius: Theme.radius-md;
+    }
+
+    layout := HorizontalLayout {
+        padding-left: 16px; // 4 px accent bar + 12 px inset
+        padding-right: Theme.pad-sm;
+        padding-top: Theme.pad-sm;
+        padding-bottom: Theme.pad-sm;
+        spacing: Theme.pad-sm;
+
+        // Variant icon — top-aligned so it sits at the start of the title.
+        VerticalLayout {
+            alignment: start;
+            padding-top: 2px;
+            MaterialIcon {
+                name: root.variant-icon;
+                icon-size: 20px;
+                icon-color: root.accent-brush;
+            }
+        }
+
+        // Title + optional message column. Takes the remaining width.
+        VerticalLayout {
+            horizontal-stretch: 1;
+            spacing: 2px;
+            alignment: start;
+            Text {
+                text: root.data.title;
+                color: Theme.text;
+                font-size: Theme.font-size-md;
+                font-weight: 600;
+                wrap: word-wrap;
+            }
+            // `if`-conditional element form (not `visible: false`) so an
+            // empty message doesn't reserve a phantom text-line slot —
+            // CLAUDE.md "visible: false does not remove from layout".
+            if root.data.message != "": Text {
+                text: root.data.message;
+                color: Theme.subtext0;
+                font-size: Theme.font-size-sm;
+                wrap: word-wrap;
+            }
+        }
+
+        // Optional action button. An accent-filled `SectionButton` pill so
+        // the action reads as a button, not a label. Wrapped in a
+        // `VerticalLayout { alignment: center; ... }` so it sits centred
+        // against the title-plus-message column and lines up with the
+        // close button beside it.
+        if root.data.action-label != "": VerticalLayout {
+            alignment: center;
+            SectionButton {
+                label: root.data.action-label;
+                icon: "";
+                primary: true;
+                clicked => {
+                    Notifications.action(root.data.id, root.data.action-kind);
+                }
+            }
+        }
+
+        // Close X — always present. Compact 24 px round button with a
+        // 16 px glyph so it doesn't dominate the card. Vertically centred
+        // to align with the action pill beside it.
+        VerticalLayout {
+            alignment: center;
+            IconButton {
+                icon: "close";
+                icon-size: 16px;
+                diameter: 24px;
+                // The card itself is `surface0`; bump the hover fill one
+                // step so the highlight is visible against it.
+                hover-bg: Theme.surface1;
+                clicked => {
+                    Notifications.dismiss(root.data.id);
+                }
+            }
+        }
+    }
+}
+
+// Overlay container that paints the live `Notifications.rows` model as a
+// bottom-right anchored stack. Mounted once at the AppWindow root as a
+// sibling of `DialogOverlay`. Sized to the full window so its inner
+// stack's absolute coordinates resolve against the visible viewport.
+//
+// Newest-at-bottom semantics (Tauri parity, `flex-direction: column-reverse`
+// equivalent): Rust appends to the end of `rows`, the `VerticalLayout`
+// renders top-to-bottom in model order, `alignment: end` pins the whole
+// stack to the bottom edge — so a row added later ends up below earlier
+// rows, closest to the screen corner. Older rows slide upward as new ones
+// arrive.
+export component NotificationStack inherits Rectangle {
+    // The 360 px column width matches the Tauri toast card. `preferred-
+    // height` of the inner layout sums all rows plus 8 px spacing; the
+    // outer Rectangle stays at 100 % × 100 % (set by the caller) so its
+    // children can compute right-edge / bottom-edge insets against the
+    // full window.
+    inner := VerticalLayout {
+        x: parent.width - self.width - 16px;
+        y: parent.height - self.preferred-height - 16px - Theme.now-playing-h;
+        width: 360px;
+        height: self.preferred-height;
+        spacing: 8px;
+        alignment: end;
+
+        for row[i] in Notifications.rows: NotificationCard {
+            data: row;
+            width: 100%;
+        }
+    }
+}

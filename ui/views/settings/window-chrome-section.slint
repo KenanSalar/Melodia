@@ -1,0 +1,308 @@
+import { Theme } from "../../theme.slint";
+import { Settings } from "../../settings.slint";
+import { Dialog } from "../../globals.slint";
+import { SectionCard } from "../../components/settings/section-card.slint";
+import { SectionDivider } from "../../components/settings/section-divider.slint";
+import { SettingRow } from "../../components/settings/setting-row.slint";
+import { SettingRowStacked } from "../../components/settings/setting-row-stacked.slint";
+import { ToggleSwitch } from "../../components/settings/toggle-switch.slint";
+import { ChipGroup } from "../../components/settings/chip-group.slint";
+
+// Window-chrome section: rows that control the OS-facing window shell.
+// Split out of `appearance-section.slint` because palette config (theme /
+// variant / accent / colour style) and chrome config (titlebar mode,
+// match-unfocused, corner radius) are orthogonal concerns — users tend
+// to set chrome once at install and never revisit, while palette rows
+// drive most of the Appearance page traffic.
+//
+// Native Title Bar routes through the shared `Dialog` global with
+// `kind: "restart-titlebar"`; Match Unfocused is KDE-only and gated on
+// `Settings.match-unfocused-supported`; Window Corner Radius is owned
+// by the OS in native-titlebar mode (chips disabled with an inline
+// hint).
+//
+// Search visibility — see `language-section.slint`. Each row's
+// visibility ANDs the existing state condition with the search
+// predicate. Dividers gate on "previous visible row exists AND next
+// visible row exists" so the card never ends up with a stranded
+// divider.
+export component WindowChromeSection inherits Rectangle {
+    background: transparent;
+    horizontal-stretch: 1;
+    vertical-stretch: 0;
+
+    in property <string> query: Settings.search-query;
+
+    out property <bool> native-titlebar: Theme.use-native-titlebar;
+
+    pure function row-visible(label: string, desc: string) -> bool {
+        return root.query == ""
+            || Settings.matches(@tr("Window"), root.query)
+            || Settings.matches(label + " " + desc, root.query);
+    }
+
+    property <bool> show-native-titlebar: row-visible(@tr("Native Title Bar"),
+        @tr("Use the operating system's native title bar instead of the custom one. Restart required to apply."));
+    property <bool> show-match-unfocused: Settings.match-unfocused-supported
+        && row-visible(@tr("Match Unfocused Window Background"),
+            !Theme.use-native-titlebar
+                ? @tr("Only available with the native title bar.")
+                : @tr("Tint the sidebar and now-playing bar toward the content background when the window loses focus."));
+    property <bool> show-corner-radius: row-visible(@tr("Window Corner Radius"),
+        root.native-titlebar ? @tr("Managed by the operating system") : "");
+    property <bool> show-titlebar-button-style: row-visible(@tr("Decoration Button Style"),
+        root.native-titlebar ? @tr("Managed by the operating system") : "");
+    property <bool> show-titlebar-button-side: row-visible(@tr("Decoration Button Side"),
+        root.native-titlebar ? @tr("Managed by the operating system") : "");
+    property <bool> show-tray-icon: row-visible(@tr("System Tray Icon"),
+        @tr("Show a Melodia icon in the system tray with playback controls."));
+    property <bool> show-close-to-tray: row-visible(@tr("Close to Tray"),
+        Settings.tray-active
+            ? @tr("Keep Melodia running in the system tray when you close the window, instead of quitting.")
+            : @tr("Available only while the system tray icon is active."));
+
+    out property <bool> has-matches:
+        show-native-titlebar || show-match-unfocused || show-corner-radius
+            || show-titlebar-button-style || show-titlebar-button-side
+            || show-tray-icon || show-close-to-tray;
+
+    property <bool> any-above-match: show-native-titlebar;
+    property <bool> any-above-corner: any-above-match || show-match-unfocused;
+    property <bool> any-above-tb-style: any-above-corner || show-corner-radius;
+    property <bool> any-above-tb-side: any-above-tb-style || show-titlebar-button-style;
+    property <bool> any-above-tray-icon: any-above-tb-side || show-titlebar-button-side;
+    property <bool> any-above-close-to-tray: any-above-tray-icon || show-tray-icon;
+
+    // Tauri's preset → px values, ported verbatim from
+    // `pages/settings/AppearanceSection.tsx`:
+    //
+    //   Square=0, KDE=6, Windows 11=8, macOS=10, GNOME=15.
+    //
+    // Only the preset chips are exposed — the manual stepper was dropped
+    // because off-preset px values in 1..=5 fall below the visible-arc
+    // threshold at 1× DPI (femtovg / pixel grid limitation), making
+    // them indistinguishable from Square. Restricting to the curated
+    // presets keeps every value visually distinct and lets the
+    // titlebar-button hover-radius math in `custom-titlebar.slint`
+    // assume `shell-radius` is either 0 or >= 6 — no piecewise floor
+    // needed.
+    pure function px-to-preset(px: int) -> int {
+        if (px == 0)  { return 0; }
+        if (px == 6)  { return 1; }
+        if (px == 8)  { return 2; }
+        if (px == 10) { return 3; }
+        if (px == 15) { return 4; }
+        return -1;
+    }
+    pure function preset-to-px(idx: int) -> int {
+        if (idx == 0) { return 0; }
+        if (idx == 1) { return 6; }
+        if (idx == 2) { return 8; }
+        if (idx == 3) { return 10; }
+        if (idx == 4) { return 15; }
+        return 0;
+    }
+
+    VerticalLayout {
+    if has-matches: SectionCard {
+        title: @tr("Window");
+
+        // Native Title Bar. Slint reads `Window.no-frame` only once at
+        // first show, so flipping the value at runtime would leave the
+        // OS frame stale until restart — instead we route through the
+        // shared `Dialog` global with `kind: "restart-titlebar"` and
+        // `target-id: 1|0` carrying the requested new value, then
+        // respawn the binary on confirm. The ToggleSwitch is in
+        // `manual: true` mode so a click does NOT mutate `checked`;
+        // the visual state stays anchored to `Theme.use-native-titlebar`
+        // (the persisted value) until the new process boots, so
+        // cancelling the dialog leaves the switch correct without any
+        // explicit revert.
+        if root.show-native-titlebar: SettingRow {
+            icon: "title";
+            label: @tr("Native Title Bar");
+            description: @tr("Use the operating system's native title bar instead of the custom one. Restart required to apply.");
+            ToggleSwitch {
+                checked: root.native-titlebar;
+                manual: true;
+                toggled(new-value) => {
+                    Dialog.kind = "restart-titlebar";
+                    Dialog.target-id = new-value ? 1 : 0;
+                    Dialog.title = @tr("Restart Required");
+                    Dialog.message = new-value
+                        ? @tr("Switching to the native title bar requires restarting Melodia. Restart now?")
+                        : @tr("Switching to the custom title bar requires restarting Melodia. Restart now?");
+                    Dialog.confirm-label = @tr("Restart");
+                    Dialog.cancel-label = @tr("Cancel");
+                    Dialog.destructive = false;
+                    Dialog.open = true;
+                }
+            }
+        }
+
+        if root.any-above-match && root.show-match-unfocused: SectionDivider {}
+
+        // Match Unfocused Window Background. KDE-only feature (no Tauri
+        // counterpart). Hidden entirely off-KDE; greyed out in
+        // custom-titlebar mode because the behaviour mirrors OS-drawn
+        // window decorations fading on focus loss — when we paint our
+        // own chrome the analogy doesn't apply. The raw OS focus mirror
+        // lives in `src/ui/window_chrome/winit_filter.rs` (always
+        // written into `Theme.window-focused`); the actual tint is
+        // gated at the binding sites in `sidebar.slint` and
+        // `now-playing-bar.slint` on the conjunction of
+        // `Settings.match-unfocused-bg`, `Theme.use-native-titlebar`,
+        // and `!Theme.window-focused`.
+        if root.show-match-unfocused: SettingRow {
+            icon: "tonality";
+            label: @tr("Match Unfocused Window Background");
+            description: !Theme.use-native-titlebar
+                ? @tr("Only available with the native title bar.")
+                : @tr("Tint the sidebar and now-playing bar toward the content background when the window loses focus.");
+            disabled: !Theme.use-native-titlebar;
+            ToggleSwitch {
+                checked <=> Settings.match-unfocused-bg;
+                toggled(v) => { Settings.match-unfocused-bg-changed(v); }
+            }
+        }
+
+        if root.any-above-corner && root.show-corner-radius: SectionDivider {}
+
+        // Window Corner Radius. Disabled when native titlebar is on
+        // (the OS owns the corner radius then). Stacked layout because
+        // the chip group sits *below* the description.
+        if root.show-corner-radius: SettingRowStacked {
+            icon: "rounded_corner";
+            label: @tr("Window Corner Radius");
+            description: root.native-titlebar
+                ? @tr("Managed by the operating system")
+                : "";
+            disabled: root.native-titlebar;
+
+            if !root.native-titlebar: ChipGroup {
+                // Preset chips: the first ("Square") is a generic UI label so
+                // it goes through `@tr()`; the rest are OS / desktop *brand
+                // names* (proper nouns) — not translated. Keeps a localised
+                // settings page consistent with how every other app refers
+                // to "Windows 11" / "macOS" / "GNOME" / "KDE".
+                options: [@tr("Square"), "KDE", "Windows 11", "macOS", "GNOME"];
+                // `manual: true` because `selected-index` here is a derived
+                // expression — without manual mode, the chip's local
+                // `selected-index = i` write on click would orphan the
+                // px-to-preset binding (CLAUDE.md "Components that write to
+                // their own `in-out property` orphan a one-way binding").
+                manual: true;
+                selected-index: px-to-preset(Settings.corner-radius);
+                selected(i) => {
+                    Settings.corner-radius = preset-to-px(i);
+                    Settings.corner-radius-changed(Settings.corner-radius);
+                }
+            }
+        }
+
+        if root.any-above-tb-style && root.show-titlebar-button-style: SectionDivider {}
+
+        // Decoration Button Style — Standard (current Material bar icons)
+        // vs macOS (red/yellow/green traffic-light circles with
+        // hover-reveal glyphs and grey-when-unfocused fill). Disabled
+        // under the native titlebar (the OS owns the decoration buttons
+        // there). Stacked layout because the chip group sits below the
+        // description.
+        if root.show-titlebar-button-style: SettingRowStacked {
+            icon: "category";
+            label: @tr("Decoration Button Style");
+            description: root.native-titlebar
+                ? @tr("Managed by the operating system")
+                : "";
+            disabled: root.native-titlebar;
+
+            if !root.native-titlebar: ChipGroup {
+                // "Standard" is a generic UI label so it goes through
+                // `@tr()`; "macOS" is a proper noun — never translated.
+                // Mirrors the Window Corner Radius row's brand-name rule.
+                options: [@tr("Standard"), "macOS"];
+                selected-index <=> Settings.titlebar-button-style;
+                selected(i) => {
+                    Settings.titlebar-button-style-changed(i);
+                }
+            }
+        }
+
+        if root.any-above-tb-side && root.show-titlebar-button-side: SectionDivider {}
+
+        // Decoration Button Side — Right (default, Windows / KDE
+        // convention) vs Left (macOS convention). Independent of the
+        // style above; close stays at the outer window corner in all
+        // four combinations.
+        if root.show-titlebar-button-side: SettingRowStacked {
+            icon: "swap_horiz";
+            label: @tr("Decoration Button Side");
+            description: root.native-titlebar
+                ? @tr("Managed by the operating system")
+                : "";
+            disabled: root.native-titlebar;
+
+            if !root.native-titlebar: ChipGroup {
+                options: [@tr("Right"), @tr("Left")];
+                selected-index <=> Settings.titlebar-button-side;
+                selected(i) => {
+                    Settings.titlebar-button-side-changed(i);
+                }
+            }
+        }
+
+        if root.any-above-tray-icon && root.show-tray-icon: SectionDivider {}
+
+        // System Tray Icon. Master toggle for the whole tray subsystem.
+        // Off by default — when off, `main.rs` skips `tray_bridge::install`
+        // so none of the tray code runs (no D-Bus connection / service
+        // thread / tasks). The startup gate reads the value once, so a
+        // runtime change needs a fresh process: the ToggleSwitch is
+        // `manual: true` and routes through the shared `Dialog` global with
+        // `kind: "restart-tray"` and `target-id: 1|0`, exactly like the
+        // Native Title Bar row. Cancelling the dialog leaves the switch
+        // anchored to the persisted `Settings.tray-enabled` with no revert.
+        if root.show-tray-icon: SettingRow {
+            icon: "dock_to_right";
+            label: @tr("System Tray Icon");
+            description: @tr("Show a Melodia icon in the system tray with playback controls.");
+            ToggleSwitch {
+                checked: Settings.tray-enabled;
+                manual: true;
+                toggled(new-value) => {
+                    Dialog.kind = "restart-tray";
+                    Dialog.target-id = new-value ? 1 : 0;
+                    Dialog.title = @tr("Restart Required");
+                    Dialog.message = @tr("Changing the system tray icon requires restarting Melodia. Restart now?");
+                    Dialog.confirm-label = @tr("Restart");
+                    Dialog.cancel-label = @tr("Cancel");
+                    Dialog.destructive = false;
+                    Dialog.open = true;
+                }
+            }
+        }
+
+        if root.any-above-close-to-tray && root.show-close-to-tray: SectionDivider {}
+
+        // Close to Tray. When on, the window-close button hides Melodia to
+        // the system tray instead of quitting. Greyed out (via
+        // `SettingRow.disabled`) whenever no tray icon is active — either
+        // the System Tray Icon setting above is off, or the session has no
+        // StatusNotifier host — since the setting then has no effect. The
+        // runtime gate + persistence are wired in
+        // `src/ui/appearance/window_settings.rs`.
+        if root.show-close-to-tray: SettingRow {
+            icon: "move_to_inbox";
+            label: @tr("Close to Tray");
+            description: Settings.tray-active
+                ? @tr("Keep Melodia running in the system tray when you close the window, instead of quitting.")
+                : @tr("Available only while the system tray icon is active.");
+            disabled: !Settings.tray-active;
+            ToggleSwitch {
+                checked <=> Settings.close-to-tray;
+                toggled(v) => { Settings.close-to-tray-changed(v); }
+            }
+        }
+    }
+    }
+}
