@@ -284,9 +284,24 @@ fn main() -> AppResult<()> {
     // 6c. Full-screen Now Playing view (owns its own small `(cover, blur)`
     // LRU separate from `cover_thumbs`).
     let np_artwork = Arc::new(ui::now_playing_artwork::NowPlayingArtwork::new());
-    if let Err(e) = ui::now_playing::install(&app, &state, &views.cover_thumbs, &np_artwork) {
-        log::warn!("now_playing::install: {e}");
+    let np_state = match ui::now_playing::install(&app, &state, &views.cover_thumbs, &np_artwork)
+    {
+        Ok(s) => Some(s),
+        Err(e) => {
+            log::warn!("now_playing::install: {e}");
+            None
+        }
+    };
+    // Miniplayer wiring depends on `np_state` so the up-next subscriber
+    // gate can flip on/off as the responsive mini state changes. Skip
+    // if `now_playing::install` failed — without it the gate would
+    // never affect anything visible.
+    if let Some(ref np_state) = np_state
+        && let Err(e) = ui::mini_player::install(&app, np_state)
+    {
+        log::warn!("mini_player::install: {e}");
     }
+    let _ = np_state;
 
     // 7. Seed `Player.vm` / `Player.queue` once with the current state.
     boot::ui_setup::seed_initial_view_model(&app, &state, &views.cover_thumbs);

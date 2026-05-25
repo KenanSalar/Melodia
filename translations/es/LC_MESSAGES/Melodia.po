@@ -821,3 +821,8 @@ msgstr "Cambiar el icono de la bandeja del sistema requiere reiniciar Melodia. Â
 
 msgid "Available only while the system tray icon is active."
 msgstr "Disponible solo mientras el icono de la bandeja del sistema estÃ© activo."
+
+# ---- Miniplayer --------------------------------------------------------------
+
+msgid "Exit miniplayer"
+msgstr "Salir del miniplayer"

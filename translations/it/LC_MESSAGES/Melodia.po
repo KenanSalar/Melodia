@@ -821,3 +821,8 @@ msgstr "La modifica dell'icona nell'area di notifica richiede il riavvio di Melo
 
 msgid "Available only while the system tray icon is active."
 msgstr "Disponibile solo quando l'icona nell'area di notifica è attiva."
+
+# ---- Miniplayer --------------------------------------------------------------
+
+msgid "Exit miniplayer"
+msgstr "Esci dal miniplayer"
