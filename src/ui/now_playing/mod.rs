@@ -47,10 +47,17 @@ pub(crate) const UP_NEXT_N: usize = 20;
 /// Shared UI-thread state coordinating the Now Playing view's two
 /// subscribers and the `now-playing-open` callback. All three run on the
 /// Slint event-loop thread, so `Rc<Cell/RefCell>` is enough — no atomics.
-pub(crate) struct NowPlayingState {
+pub struct NowPlayingState {
     /// Mirrors `Nav.now-playing-open`. Both subscribers skip their work
     /// while this is false — nothing they produce is on screen.
     pub(super) open: Cell<bool>,
+    /// Mirrors `MiniPlayer.active && MiniPlayer.square` — true while the
+    /// square miniplayer variant is visible (the variant that renders the
+    /// Up Next list). The up-next subscriber gates on `open || mini_visible`
+    /// so the same model serves both surfaces without a parallel
+    /// subscriber. Written from the `MiniPlayer.active-changed` callback
+    /// in `crate::ui::mini_player`.
+    pub(crate) mini_visible: Cell<bool>,
     /// Latest queue snapshot, kept whether or not the view is open, so
     /// opening the view can rebuild the Up Next list immediately.
     pub(super) latest_qvm: RefCell<Option<QueueViewModel>>,
@@ -94,7 +101,7 @@ pub fn install(
     state: &AppState,
     cover_thumbs: &Arc<CoverThumbs>,
     np_artwork: &Arc<NowPlayingArtwork>,
-) -> Result<(), slint::EventLoopError> {
+) -> Result<Rc<NowPlayingState>, slint::EventLoopError> {
     let up_next_model: Rc<VecModel<QueueRow>> = Rc::new(VecModel::default());
     ui.global::<NowPlaying>()
         .set_up_next_rows(ModelRc::from(up_next_model.clone()));
@@ -119,6 +126,7 @@ pub fn install(
     // yet, so the first open always seeds.
     let np_state = Rc::new(NowPlayingState {
         open: Cell::new(ui.global::<Nav>().get_now_playing_open()),
+        mini_visible: Cell::new(false),
         latest_qvm: RefCell::new(None),
         rendered_ids: RefCell::new(Vec::new()),
         last_current_id: Cell::new(current_track_id(&qvm)),
@@ -179,7 +187,7 @@ pub fn install(
     // No artwork seed here: the blurred background + sharp cover + metadata
     // chips are decoded on demand by `wire_now_playing_open` the first time
     // the view is opened.
-    Ok(())
+    Ok(np_state)
 }
 
 /// Write one dual-slot cross-fade pair — the blurred backdrop or the sharp

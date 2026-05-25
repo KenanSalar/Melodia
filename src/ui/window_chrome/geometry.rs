@@ -256,6 +256,15 @@ pub fn ensure_on_screen(w: &WinitWindow) {
     log::info!("restored window was off-screen; re-centered to ({cx}, {cy})");
 }
 
+/// Read the live geometry mirror's current value, if any. Used by the
+/// miniplayer module to snapshot pre-mini geometry on enter (so the exit
+/// button can restore the window to the size and position the user had
+/// before they shrank into mini mode). Returns `None` until winit has
+/// fired at least one `Resized`/`Moved` event.
+pub fn current() -> Option<PersistedGeometry> {
+    (*live().lock()).map(|e| e.geom)
+}
+
 /// Snapshot the live geometry mirror into `settings`. Caller already
 /// holds a `&mut SettingsData` from `read_settings`. No-op if no
 /// `Resized` / `Moved` event ever fired (the mirror is still `None`) —

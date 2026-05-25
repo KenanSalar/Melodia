@@ -40,10 +40,11 @@ pub(super) fn spawn_up_next_subscriber(
             let Some(ui) = weak.upgrade() else { break };
             let Some(qvm) = snapshot else { continue };
 
-            // View closed: stash the snapshot so an open can rebuild from
-            // it, but don't build ~20 `QueueRow`s (string clones +
-            // thumbnail lookups) for rows that aren't on screen.
-            if !np_state.open.get() {
+            // Skip the rebuild when nothing that renders the model is on
+            // screen — neither the full-screen Now Playing view nor the
+            // square miniplayer variant. Stash the snapshot so a later
+            // open can rebuild from it.
+            if !np_state.open.get() && !np_state.mini_visible.get() {
                 *np_state.latest_qvm.borrow_mut() = Some(qvm);
                 continue;
             }

@@ -1,0 +1,440 @@
+import { ListView } from "std-widgets.slint";
+import { Theme } from "../theme.slint";
+import { Player, MiniPlayer, NowPlaying, Queue, WindowChrome } from "../globals.slint";
+import { QueueRow } from "../models.slint";
+import { IconButton } from "../components/icon-button.slint";
+import { ArtworkImage } from "../components/artwork-image.slint";
+import { SliderTrack } from "../components/slider-track.slint";
+import { VolumePopup } from "../components/now-playing/volume-popup.slint";
+import { PlayButton } from "../components/now-playing/play-button.slint";
+import { OverlayScrollbar } from "../components/overlay-scrollbar.slint";
+
+// Compact row used by the square variant's Up Next list. Smaller than
+// `now-playing-view.slint::UpNextRow` (no description, tighter padding) so
+// 8 rows actually fit inside a window the user is deliberately shrinking.
+component MiniUpNextRow inherits Rectangle {
+    in property <QueueRow> data;
+    callback clicked();
+
+    height: 36px;
+
+    Rectangle {
+        background: touch.has-hover ? Theme.surface0 : transparent;
+        border-radius: Theme.radius-sm;
+        animate background { duration: Theme.dur-fast; easing: ease-in-out; }
+
+        HorizontalLayout {
+            padding-left: Theme.pad-xs;
+            padding-right: Theme.pad-sm;
+            spacing: Theme.pad-sm;
+
+            VerticalLayout {
+                alignment: center;
+                ArtworkImage {
+                    artwork-path: root.data.artwork_path;
+                    cover: root.data.cover_img;
+                    tile-size: 28px;
+                    tile-radius: Theme.radius-sm;
+                }
+            }
+
+            Rectangle {
+                clip: true;
+                horizontal-stretch: 1;
+                VerticalLayout {
+                    alignment: center;
+                    spacing: 1px;
+                    Text {
+                        text: "‎" + root.data.title;
+                        color: Theme.text;
+                        font-size: Theme.font-size-sm;
+                        overflow: elide;
+                    }
+                    Text {
+                        text: "‎" + root.data.artist;
+                        color: Theme.subtext0;
+                        font-size: 10px;
+                        overflow: elide;
+                        visible: root.data.artist != "";
+                    }
+                }
+            }
+        }
+
+        touch := TouchArea {
+            mouse-cursor: pointer;
+            clicked => { root.clicked(); }
+        }
+    }
+}
+
+// Compact miniplayer that replaces the full app UI when the OS window is
+// shrunk past the responsive threshold. Activated by `MiniPlayer.active`
+// (computed at the `AppWindow` root from `width`/`height`); chooses between
+// a horizontal strip and a square variant via `MiniPlayer.square`.
+//
+// Resize-only trigger — there is no "enter miniplayer" button anywhere in
+// the full UI; the only chrome inside the mini view is an exit button
+// (`open_in_full`) that snaps the window back to its pre-mini geometry.
+//
+// Cap inner gutters at 8px from any window edge that hosts a resize
+// TouchArea (see `app-window.slint` resize-ring). The corner TouchAreas
+// are 8×8; insetting interactive controls (volume / pin / exit pills and
+// the up-next list's right edge) by 8px keeps the cursor showing the
+// resize affordance instead of flickering hover state.
+export component MiniPlayerView inherits Rectangle {
+    background: Theme.mantle;
+    // Padding doubles as resize-ring breathing room. The whole component
+    // is gated on `mini-active`, so the resize-ring TouchAreas live above
+    // it and the inset preserves their hit zones at all four edges.
+    private property <length> edge-pad: 4px;
+    // Shared with both variants — tracks live progress, applies the
+    // seek-pending hold the same way the bar's slider does.
+    private property <float> slider-frac:
+        Player.duration-ms > 0
+            ? (Player.seek_pending_ms >= 0
+                ? clamp(Player.seek_pending_ms / Player.duration-ms, 0, 1)
+                : clamp(Player.position-ms / Player.duration-ms, 0, 1))
+            : 0;
+
+    // ---- Horizontal variant (wide & short) -------------------------------
+    if !MiniPlayer.square: VerticalLayout {
+        padding: root.edge-pad;
+        spacing: 0;
+
+        HorizontalLayout {
+            vertical-stretch: 1;
+            spacing: Theme.pad-sm;
+            padding-left: Theme.pad-xs;
+            padding-right: Theme.pad-xs;
+            alignment: stretch;
+
+            VerticalLayout {
+                alignment: center;
+                ArtworkImage {
+                    artwork-path: Player.vm.track.artwork_path;
+                    cover: Player.vm.track.cover_img;
+                    tile-size: 48px;
+                }
+            }
+
+            Rectangle {
+                clip: true;
+                horizontal-stretch: 1;
+                VerticalLayout {
+                    alignment: center;
+                    spacing: 2px;
+                    Text {
+                        text: Player.vm.has_track
+                            ? "‎" + Player.vm.track.title
+                            : @tr("No track playing");
+                        color: Theme.text;
+                        font-size: Theme.font-size-sm;
+                        font-weight: 500;
+                        overflow: elide;
+                    }
+                    Text {
+                        text: Player.vm.has_track
+                            ? "‎" + (Player.vm.track.artist == ""
+                                ? @tr("Unknown artist")
+                                : Player.vm.track.artist)
+                            : "—";
+                        color: Theme.subtext0;
+                        font-size: 11px;
+                        overflow: elide;
+                    }
+                }
+            }
+
+            // Transport — centred trio matching the now-playing bar.
+            HorizontalLayout {
+                spacing: 2px;
+                horizontal-stretch: 0;
+                alignment: center;
+
+                VerticalLayout {
+                    alignment: center;
+                    IconButton {
+                        icon: "chevron_left";
+                        press-shrink: true;
+                        diameter: 28px;
+                        icon-size: 18px;
+                        button-enabled: Player.vm.has_previous;
+                        tooltip-text: @tr("Previous");
+                        clicked => { Player.previous(); }
+                    }
+                }
+                VerticalLayout {
+                    alignment: center;
+                    PlayButton {
+                        wrapper-d: 30px;
+                        icon-size: 16px;
+                        is-playing: Player.vm.is_playing;
+                        animation-mode: 0;
+                        clicked => { Player.play-pause(); }
+                    }
+                }
+                VerticalLayout {
+                    alignment: center;
+                    IconButton {
+                        icon: "chevron_right";
+                        press-shrink: true;
+                        diameter: 28px;
+                        icon-size: 18px;
+                        button-enabled: Player.vm.has_next;
+                        tooltip-text: @tr("Next");
+                        clicked => { Player.next(); }
+                    }
+                }
+            }
+
+            HorizontalLayout {
+                spacing: 2px;
+                horizontal-stretch: 0;
+                alignment: end;
+                // 8px inset from the right edge so the corner-resize
+                // TouchAreas in app-window.slint keep their hit zone.
+                padding-right: 4px;
+
+                VerticalLayout {
+                    alignment: center;
+                    VolumePopup {
+                        diameter: 28px;
+                        icon-size: 18px;
+                    }
+                }
+                if WindowChrome.always-on-top-supported: VerticalLayout {
+                    alignment: center;
+                    IconButton {
+                        icon: "push_pin";
+                        press-shrink: true;
+                        diameter: 28px;
+                        icon-size: 18px;
+                        active: WindowChrome.always-on-top-active;
+                        filled: WindowChrome.always-on-top-active;
+                        tooltip-text: WindowChrome.always-on-top-active
+                            ? @tr("Unpin from Top") : @tr("Pin on Top");
+                        clicked => { WindowChrome.toggle-always-on-top(); }
+                    }
+                }
+                VerticalLayout {
+                    alignment: center;
+                    IconButton {
+                        icon: "open_in_full";
+                        press-shrink: true;
+                        diameter: 28px;
+                        icon-size: 18px;
+                        tooltip-text: @tr("Exit miniplayer");
+                        clicked => { MiniPlayer.exit-pressed(); }
+                    }
+                }
+            }
+        }
+
+        // Slim slider hugging the bottom edge. No time labels (cramped).
+        // Keeping `vertical-stretch: 0` here is critical — without it the
+        // surrounding HL would steal vertical space and the slider would
+        // float mid-row.
+        h-slider := SliderTrack {
+            min-height: 12px;
+            max-height: 12px;
+            vertical-stretch: 0;
+            value: root.slider-frac;
+            is-disabled: !Player.vm.has_track || Player.duration-ms <= 0;
+            seam-mask-color: Theme.mantle;
+            committed(v) => {
+                if (Player.duration-ms > 0) {
+                    Player.seek(round(v * Player.duration-ms));
+                }
+            }
+        }
+    }
+
+    // ---- Square variant (taller, optionally with Up Next) ----------------
+    if MiniPlayer.square: VerticalLayout {
+        padding: root.edge-pad;
+        spacing: Theme.pad-xs;
+
+        // Top row — pin (gated) + exit. Right-aligned so the artwork sits
+        // visually centred underneath it.
+        HorizontalLayout {
+            alignment: end;
+            spacing: 2px;
+            vertical-stretch: 0;
+            padding-right: 4px;
+
+            if WindowChrome.always-on-top-supported: IconButton {
+                icon: "push_pin";
+                press-shrink: true;
+                diameter: 28px;
+                icon-size: 18px;
+                active: WindowChrome.always-on-top-active;
+                filled: WindowChrome.always-on-top-active;
+                tooltip-text: WindowChrome.always-on-top-active
+                    ? @tr("Unpin from Top") : @tr("Pin on Top");
+                clicked => { WindowChrome.toggle-always-on-top(); }
+            }
+            IconButton {
+                icon: "open_in_full";
+                press-shrink: true;
+                diameter: 28px;
+                icon-size: 18px;
+                tooltip-text: @tr("Exit miniplayer");
+                clicked => { MiniPlayer.exit-pressed(); }
+            }
+        }
+
+        // Centred artwork — `tile-size` clamps so the cover scales with
+        // window width without ever ballooning past 180px or shrinking
+        // below 90px (where the placeholder glyph stops reading).
+        VerticalLayout {
+            alignment: center;
+            vertical-stretch: 0;
+            HorizontalLayout {
+                alignment: center;
+                ArtworkImage {
+                    artwork-path: Player.vm.track.artwork_path;
+                    cover: Player.vm.track.cover_img;
+                    tile-size: clamp(root.width * 0.5, 90px, 180px);
+                }
+            }
+        }
+
+        // Title + artist block.
+        VerticalLayout {
+            alignment: center;
+            vertical-stretch: 0;
+            spacing: 2px;
+            Text {
+                text: Player.vm.has_track
+                    ? "‎" + Player.vm.track.title
+                    : @tr("No track playing");
+                color: Theme.text;
+                font-size: Theme.font-size-md;
+                font-weight: 500;
+                horizontal-alignment: center;
+                overflow: elide;
+            }
+            Text {
+                text: Player.vm.has_track
+                    ? "‎" + (Player.vm.track.artist == ""
+                        ? @tr("Unknown artist")
+                        : Player.vm.track.artist)
+                    : "—";
+                color: Theme.subtext0;
+                font-size: 11px;
+                horizontal-alignment: center;
+                overflow: elide;
+            }
+        }
+
+        // Transport + volume — same trio as horizontal, slightly larger.
+        HorizontalLayout {
+            alignment: center;
+            spacing: Theme.pad-xs;
+            vertical-stretch: 0;
+
+            VerticalLayout {
+                alignment: center;
+                IconButton {
+                    icon: "chevron_left";
+                    press-shrink: true;
+                    diameter: 32px;
+                    icon-size: 20px;
+                    button-enabled: Player.vm.has_previous;
+                    tooltip-text: @tr("Previous");
+                    clicked => { Player.previous(); }
+                }
+            }
+            VerticalLayout {
+                alignment: center;
+                PlayButton {
+                    wrapper-d: 36px;
+                    icon-size: 18px;
+                    is-playing: Player.vm.is_playing;
+                    animation-mode: 0;
+                    clicked => { Player.play-pause(); }
+                }
+            }
+            VerticalLayout {
+                alignment: center;
+                IconButton {
+                    icon: "chevron_right";
+                    press-shrink: true;
+                    diameter: 32px;
+                    icon-size: 20px;
+                    button-enabled: Player.vm.has_next;
+                    tooltip-text: @tr("Next");
+                    clicked => { Player.next(); }
+                }
+            }
+            VerticalLayout {
+                alignment: center;
+                VolumePopup {
+                    diameter: 32px;
+                    icon-size: 20px;
+                }
+            }
+        }
+
+        // Slim full-width slider.
+        s-slider := SliderTrack {
+            min-height: 14px;
+            max-height: 14px;
+            vertical-stretch: 0;
+            value: root.slider-frac;
+            is-disabled: !Player.vm.has_track || Player.duration-ms <= 0;
+            seam-mask-color: Theme.mantle;
+            committed(v) => {
+                if (Player.duration-ms > 0) {
+                    Player.seek(round(v * Player.duration-ms));
+                }
+            }
+        }
+
+        // Up Next list — only renders when the window is tall enough to
+        // hold ~4 rows alongside the artwork + controls. Reuses the
+        // existing `NowPlaying.up-next-rows` model owned by Rust; the Rust
+        // subscriber rebuilds it whenever mini is visible (extended gate
+        // in `src/ui/now_playing/up_next.rs`).
+        if root.height >= 350px: Rectangle {
+            vertical-stretch: 1;
+            clip: true;
+
+            up-next-list := ListView {
+                vertical-scrollbar-policy: always-off;
+                horizontal-scrollbar-policy: always-off;
+                x: 0;
+                y: 0;
+                // 4px right inset so row TouchAreas don't extend under the
+                // window's right-edge resize TouchArea.
+                width: parent.width - 4px;
+                height: 100%;
+                for row[idx] in NowPlaying.up-next-rows: MiniUpNextRow {
+                    data: row;
+                    // Cap visible rows at 8 — beyond that, vertical
+                    // scrolling carries the rest, but the user sees a
+                    // compact strip rather than a sprawling list.
+                    visible: idx < 8;
+                    height: idx < 8 ? 36px : 0px;
+                    clicked => {
+                        Queue.skip-to(Math.mod(
+                            NowPlaying.base-index + idx,
+                            NowPlaying.queue-length));
+                    }
+                }
+            }
+
+            OverlayScrollbar {
+                x: parent.width - self.width;
+                y: 0;
+                width: 8px;
+                height: parent.height;
+                visible-size: up-next-list.visible-height;
+                content-size: up-next-list.viewport-height;
+                offset: -up-next-list.viewport-y;
+                scroll-to(o) => { up-next-list.viewport-y = -o; }
+            }
+        }
+    }
+}

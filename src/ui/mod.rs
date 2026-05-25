@@ -14,6 +14,7 @@ pub mod file_watching;
 pub mod genres;
 pub mod library_settings;
 pub mod locale;
+pub mod mini_player;
 pub mod model_diff;
 pub mod nav_history;
 pub mod nav_transition;
