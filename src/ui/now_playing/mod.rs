@@ -39,6 +39,16 @@ use crate::{AppWindow, Nav, NowPlaying, Player, QueueRow};
 use track_change::spawn_track_change_subscriber;
 use up_next::{rebuild_up_next, spawn_up_next_subscriber, wire_now_playing_open};
 
+/// Closure type for re-seeding the Up Next list from the stashed queue
+/// snapshot. Set once by [`install`] after construction; called by
+/// [`crate::ui::mini_player::install`] when the responsive miniplayer
+/// becomes visible, so the square variant's `UpNextList` doesn't render
+/// empty until the next queue mutation (the subscriber stashes snapshots
+/// while no surface renders the model — without this kick a never-opened
+/// Now Playing session followed by a direct shrink-to-mini would show
+/// nothing). Mirrors the seed `wire_now_playing_open` does on view open.
+type UpNextSeeder = Box<dyn Fn()>;
+
 /// How many upcoming tracks to surface in the "Up Next" list. The list is
 /// scrollable, so this is a soft cap — large enough to feel complete,
 /// small enough that rebuilding it on every queue mutation stays cheap.
@@ -51,12 +61,15 @@ pub struct NowPlayingState {
     /// Mirrors `Nav.now-playing-open`. Both subscribers skip their work
     /// while this is false — nothing they produce is on screen.
     pub(super) open: Cell<bool>,
-    /// Mirrors `MiniPlayer.active && MiniPlayer.square` — true while the
-    /// square miniplayer variant is visible (the variant that renders the
-    /// Up Next list). The up-next subscriber gates on `open || mini_visible`
-    /// so the same model serves both surfaces without a parallel
-    /// subscriber. Written from the `MiniPlayer.active-changed` callback
-    /// in `crate::ui::mini_player`.
+    /// Mirrors `MiniPlayer.active` — true whenever the responsive
+    /// miniplayer (either variant) is visible. Only the square variant
+    /// renders the Up Next list, but tracking the broader `active` keeps
+    /// the gate logic simple and the wasted horizontal-variant rebuild
+    /// (~6 rows, identical to the model the user might see seconds later
+    /// in square) is cheap. The up-next subscriber gates on
+    /// `open || mini_visible` so the same model serves both surfaces
+    /// without a parallel subscriber. Written from the
+    /// `MiniPlayer.active-changed` callback in `crate::ui::mini_player`.
     pub(crate) mini_visible: Cell<bool>,
     /// Latest queue snapshot, kept whether or not the view is open, so
     /// opening the view can rebuild the Up Next list immediately.
@@ -92,6 +105,27 @@ pub struct NowPlayingState {
     /// track-change subscriber can chunk against the current layout
     /// immediately, without waiting for the next Slint `changed` fire.
     pub(super) chip_last_width: Cell<f32>,
+    /// Re-seeder for the Up Next list — see [`UpNextSeeder`]. Populated
+    /// by [`install`] after construction (`None` only during the brief
+    /// window between `Rc::new(...)` and `install`'s post-init writes,
+    /// which is single-threaded). Captures `Weak<NowPlayingState>` to
+    /// avoid the obvious `Rc → closure → Rc` cycle.
+    up_next_seeder: RefCell<Option<UpNextSeeder>>,
+}
+
+impl NowPlayingState {
+    /// Rebuild the Up Next list from the stashed queue snapshot. No-op
+    /// when the seeder hasn't been wired yet (only before `install`
+    /// returns) or when no snapshot has been stashed (subscriber never
+    /// saw a queue update — empty library). Called from
+    /// `crate::ui::mini_player::install` when the responsive miniplayer
+    /// becomes visible, so the square variant doesn't render an empty
+    /// list while the subscriber's stashed snapshot is fresh.
+    pub(crate) fn kick_up_next(&self) {
+        if let Some(seeder) = self.up_next_seeder.borrow().as_ref() {
+            seeder();
+        }
+    }
 }
 
 /// Install the Now Playing view's models + subscribers. Runs on the Slint
@@ -135,6 +169,7 @@ pub fn install(
         applied_track_id: Cell::new(None),
         chip_texts: RefCell::new(Vec::new()),
         chip_last_width: Cell::new(0.0),
+        up_next_seeder: RefCell::new(None),
     });
 
     spawn_track_change_subscriber(
@@ -183,6 +218,21 @@ pub fn install(
     let seeded_ids = rebuild_up_next(ui, cover_thumbs, &up_next_model, &qvm);
     *np_state.rendered_ids.borrow_mut() = seeded_ids;
     *np_state.latest_qvm.borrow_mut() = Some(qvm);
+
+    // Wire the Up Next re-seeder. Captures `Weak<NowPlayingState>` to
+    // avoid the `Rc → closure → Rc` cycle; everything else is cheap to
+    // clone (`Arc<CoverThumbs>`, `Rc<VecModel<_>>`, `Weak<AppWindow>`).
+    {
+        let weak_ui = ui.as_weak();
+        let cover_thumbs = cover_thumbs.clone();
+        let up_next_model = up_next_model.clone();
+        let weak_np = Rc::downgrade(&np_state);
+        *np_state.up_next_seeder.borrow_mut() = Some(Box::new(move || {
+            let Some(ui) = weak_ui.upgrade() else { return };
+            let Some(np_state) = weak_np.upgrade() else { return };
+            up_next::seed_from_stash(&ui, &cover_thumbs, &up_next_model, &np_state);
+        }));
+    }
 
     // No artwork seed here: the blurred background + sharp cover + metadata
     // chips are decoded on demand by `wire_now_playing_open` the first time

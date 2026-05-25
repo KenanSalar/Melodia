@@ -1,72 +1,11 @@
-import { ListView } from "std-widgets.slint";
 import { Theme } from "../theme.slint";
-import { Player, MiniPlayer, NowPlaying, Queue, WindowChrome } from "../globals.slint";
-import { QueueRow } from "../models.slint";
+import { Player, MiniPlayer, WindowChrome } from "../globals.slint";
 import { IconButton } from "../components/icon-button.slint";
 import { ArtworkImage } from "../components/artwork-image.slint";
 import { SliderTrack } from "../components/slider-track.slint";
 import { VolumePopup } from "../components/now-playing/volume-popup.slint";
 import { PlayButton } from "../components/now-playing/play-button.slint";
-import { OverlayScrollbar } from "../components/overlay-scrollbar.slint";
-
-// Compact row used by the square variant's Up Next list. Smaller than
-// `now-playing-view.slint::UpNextRow` (no description, tighter padding) so
-// 8 rows actually fit inside a window the user is deliberately shrinking.
-component MiniUpNextRow inherits Rectangle {
-    in property <QueueRow> data;
-    callback clicked();
-
-    height: 36px;
-
-    Rectangle {
-        background: touch.has-hover ? Theme.surface0 : transparent;
-        border-radius: Theme.radius-sm;
-        animate background { duration: Theme.dur-fast; easing: ease-in-out; }
-
-        HorizontalLayout {
-            padding-left: Theme.pad-xs;
-            padding-right: Theme.pad-sm;
-            spacing: Theme.pad-sm;
-
-            VerticalLayout {
-                alignment: center;
-                ArtworkImage {
-                    artwork-path: root.data.artwork_path;
-                    cover: root.data.cover_img;
-                    tile-size: 28px;
-                    tile-radius: Theme.radius-sm;
-                }
-            }
-
-            Rectangle {
-                clip: true;
-                horizontal-stretch: 1;
-                VerticalLayout {
-                    alignment: center;
-                    spacing: 1px;
-                    Text {
-                        text: "‎" + root.data.title;
-                        color: Theme.text;
-                        font-size: Theme.font-size-sm;
-                        overflow: elide;
-                    }
-                    Text {
-                        text: "‎" + root.data.artist;
-                        color: Theme.subtext0;
-                        font-size: 10px;
-                        overflow: elide;
-                        visible: root.data.artist != "";
-                    }
-                }
-            }
-        }
-
-        touch := TouchArea {
-            mouse-cursor: pointer;
-            clicked => { root.clicked(); }
-        }
-    }
-}
+import { UpNextList } from "../components/now-playing/up-next-list.slint";
 
 // Compact miniplayer that replaces the full app UI when the OS window is
 // shrunk past the responsive threshold. Activated by `MiniPlayer.active`
@@ -96,6 +35,33 @@ export component MiniPlayerView inherits Rectangle {
                 ? clamp(Player.seek_pending_ms / Player.duration-ms, 0, 1)
                 : clamp(Player.position-ms / Player.duration-ms, 0, 1))
             : 0;
+
+    // ---- Window-move drag region -----------------------------------------
+    // Custom-frame mode hides the `CustomTitleBar` in mini, so without
+    // this the user has no way to move the window — only resize edges.
+    // Covers the whole mini area at z-bottom; controls layered on top
+    // (IconButtons, PlayButton, SliderTrack, UpNextList rows) win
+    // hit-testing because Slint dispatches to the topmost TouchArea, so
+    // `drag-region.has-hover` only goes true over empty space and
+    // press-on-button behaves normally. Wires the same
+    // `drag-region-hover-changed` → winit-press-intercept path used by
+    // `custom-titlebar.slint` (see `src/ui/window_chrome/winit_filter.rs`).
+    drag-region := TouchArea {
+        x: 0;
+        y: 0;
+        width: 100%;
+        height: 100%;
+        mouse-cursor: default;
+        changed has-hover => {
+            WindowChrome.drag-region-hover-changed(self.has-hover);
+        }
+        double-clicked => {
+            // Tauri parity: double-click the mini's bare area maximizes.
+            // The resulting size flip naturally trips `mini-active = false`
+            // through `app-window.slint`'s derived properties.
+            WindowChrome.toggle-maximize();
+        }
+    }
 
     // ---- Horizontal variant (wide & short) -------------------------------
     if !MiniPlayer.square: VerticalLayout {
@@ -394,47 +360,14 @@ export component MiniPlayerView inherits Rectangle {
 
         // Up Next list — only renders when the window is tall enough to
         // hold ~4 rows alongside the artwork + controls. Reuses the
-        // existing `NowPlaying.up-next-rows` model owned by Rust; the Rust
-        // subscriber rebuilds it whenever mini is visible (extended gate
-        // in `src/ui/now_playing/up_next.rs`).
-        if root.height >= 350px: Rectangle {
+        // shared `UpNextList` component, so the slide animation +
+        // outgoing-row overlay + empty state behave identically to the
+        // full-screen Now Playing view. The Rust subscriber rebuilds
+        // `NowPlaying.up-next-rows` whenever mini is visible (gate in
+        // `src/ui/now_playing/up_next.rs`).
+        if root.height >= 350px: UpNextList {
             vertical-stretch: 1;
-            clip: true;
-
-            up-next-list := ListView {
-                vertical-scrollbar-policy: always-off;
-                horizontal-scrollbar-policy: always-off;
-                x: 0;
-                y: 0;
-                // 4px right inset so row TouchAreas don't extend under the
-                // window's right-edge resize TouchArea.
-                width: parent.width - 4px;
-                height: 100%;
-                for row[idx] in NowPlaying.up-next-rows: MiniUpNextRow {
-                    data: row;
-                    // Cap visible rows at 8 — beyond that, vertical
-                    // scrolling carries the rest, but the user sees a
-                    // compact strip rather than a sprawling list.
-                    visible: idx < 8;
-                    height: idx < 8 ? 36px : 0px;
-                    clicked => {
-                        Queue.skip-to(Math.mod(
-                            NowPlaying.base-index + idx,
-                            NowPlaying.queue-length));
-                    }
-                }
-            }
-
-            OverlayScrollbar {
-                x: parent.width - self.width;
-                y: 0;
-                width: 8px;
-                height: parent.height;
-                visible-size: up-next-list.visible-height;
-                content-size: up-next-list.viewport-height;
-                offset: -up-next-list.viewport-y;
-                scroll-to(o) => { up-next-list.viewport-y = -o; }
-            }
+            compact: true;
         }
     }
 }
