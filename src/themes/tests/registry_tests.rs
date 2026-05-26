@@ -38,22 +38,24 @@ fn unknown_accent_or_variant_returns_none_or_first_variant() {
 
 #[test]
 fn non_catppuccin_themes_collapse_unspecified_semantics_to_overlay1() {
-    // GNOME Dark's overlay1 is 0x808088 — every Catppuccin-only semantic
-    // slot mirrors it because GNOME doesn't define those tokens.
+    // GNOME Dark's overlay1 is 0x808088. The Catppuccin-only semantic
+    // slots GNOME doesn't define (peach / mauve / pink / lavender)
+    // mirror it via `Palette::fallback_semantics`.
     let gnome = get("gnome-adwaita");
     let dark = gnome.variant("dark");
     assert!(dark.is_some(), "gnome dark variant must exist");
     let Some(dark) = dark else { return };
     let p = &dark.palette;
     assert_eq!(p.overlay1, 0x808088);
-    assert_eq!(p.green, 0x808088);
-    assert_eq!(p.yellow, 0x808088);
     assert_eq!(p.peach, 0x808088);
     assert_eq!(p.mauve, 0x808088);
     assert_eq!(p.pink, 0x808088);
     assert_eq!(p.lavender, 0x808088);
-    // `red` is theme-defined and must NOT collapse to the fallback.
+    // `red`, `green` and `yellow` are theme-defined (Adwaita's error /
+    // success / warning tokens) and must NOT collapse to the fallback.
     assert_eq!(p.red, 0xc01c28);
+    assert_eq!(p.green, 0x57e389);
+    assert_eq!(p.yellow, 0xf6d32d);
 }
 
 #[test]
