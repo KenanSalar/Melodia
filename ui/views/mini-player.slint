@@ -190,10 +190,10 @@ export component MiniPlayerView inherits Rectangle {
         // Slim slider hugging the bottom edge. No time labels (cramped).
         // Keeping `vertical-stretch: 0` here is critical — without it the
         // surrounding HL would steal vertical space and the slider would
-        // float mid-row.
+        // float mid-row. Let `SliderTrack` use its native 24 px min-height
+        // so the 24 px vertical-pill thumb doesn't clip against the
+        // mini-player's bottom edge; the 4 px track itself still reads slim.
         h-slider := SliderTrack {
-            min-height: 12px;
-            max-height: 12px;
             vertical-stretch: 0;
             value: root.slider-frac;
             is-disabled: !Player.vm.has_track || Player.duration-ms <= 0;
@@ -211,27 +211,54 @@ export component MiniPlayerView inherits Rectangle {
         padding: root.edge-pad;
         spacing: Theme.pad-xs;
 
-        // Top row — pin (gated). Right-aligned so the artwork sits
-        // visually centred underneath it. Reserves a fixed strip even
+        // Top row — pin on the left, favorite on the right, with a
+        // flexible spacer in the middle. Reserves a fixed strip even
         // when always-on-top is unsupported so the artwork below keeps
-        // the same offset across desktops.
+        // the same offset across desktops (the left-side wrapper
+        // collapses to zero width but the row's `min-height` holds).
         HorizontalLayout {
-            alignment: end;
+            alignment: stretch;
             spacing: 2px;
             vertical-stretch: 0;
+            padding-left: 4px;
             padding-right: 4px;
             min-height: 28px;
 
-            if WindowChrome.always-on-top-supported: IconButton {
-                icon: "push_pin";
-                press-shrink: true;
-                diameter: 28px;
-                icon-size: 18px;
-                active: WindowChrome.always-on-top-active;
-                filled: WindowChrome.always-on-top-active;
-                tooltip-text: WindowChrome.always-on-top-active
-                    ? @tr("Unpin from Top") : @tr("Pin on Top");
-                clicked => { WindowChrome.toggle-always-on-top(); }
+            // Pin — left side.
+            HorizontalLayout {
+                horizontal-stretch: 0;
+                alignment: start;
+                if WindowChrome.always-on-top-supported: IconButton {
+                    icon: "push_pin";
+                    press-shrink: true;
+                    diameter: 28px;
+                    icon-size: 18px;
+                    active: WindowChrome.always-on-top-active;
+                    filled: WindowChrome.always-on-top-active;
+                    tooltip-text: WindowChrome.always-on-top-active
+                        ? @tr("Unpin from Top") : @tr("Pin on Top");
+                    clicked => { WindowChrome.toggle-always-on-top(); }
+                }
+            }
+
+            Rectangle { horizontal-stretch: 1; }
+
+            // Favorite — right side.
+            HorizontalLayout {
+                horizontal-stretch: 0;
+                alignment: end;
+                IconButton {
+                    icon: Player.vm.track.is_favorite ? "favorite" : "favorite_border";
+                    press-shrink: true;
+                    diameter: 28px;
+                    icon-size: 18px;
+                    active: Player.vm.track.is_favorite;
+                    filled: Player.vm.track.is_favorite;
+                    button-enabled: Player.vm.has_track;
+                    tooltip-text: Player.vm.track.is_favorite
+                        ? @tr("Unfavorite") : @tr("Favorite");
+                    clicked => { Player.toggle-favorite(); }
+                }
             }
         }
 
@@ -288,12 +315,26 @@ export component MiniPlayerView inherits Rectangle {
             }
         }
 
-        // Transport + volume — same trio as horizontal, slightly larger.
+        // Transport + modes + volume — symmetric layout with shuffle and
+        // repeat flanking the prev/play/next trio, volume at the end.
         HorizontalLayout {
             alignment: center;
             spacing: Theme.pad-xs;
             vertical-stretch: 0;
 
+            VerticalLayout {
+                alignment: center;
+                IconButton {
+                    icon: "shuffle";
+                    press-shrink: true;
+                    diameter: 32px;
+                    icon-size: 20px;
+                    active: Player.queue.shuffle;
+                    tooltip-text: Player.queue.shuffle
+                        ? @tr("Shuffle: on") : @tr("Shuffle: off");
+                    clicked => { Player.toggle-shuffle(); }
+                }
+            }
             VerticalLayout {
                 alignment: center;
                 IconButton {
@@ -330,6 +371,22 @@ export component MiniPlayerView inherits Rectangle {
             }
             VerticalLayout {
                 alignment: center;
+                IconButton {
+                    icon: Player.queue.repeat_mode == "one" ? "repeat_one" : "repeat";
+                    press-shrink: true;
+                    diameter: 32px;
+                    icon-size: 20px;
+                    active: Player.queue.repeat_mode != "off";
+                    tooltip-text: Player.queue.repeat_mode == "off"
+                        ? @tr("Repeat: off")
+                        : (Player.queue.repeat_mode == "one"
+                            ? @tr("Repeat: one")
+                            : @tr("Repeat: all"));
+                    clicked => { Player.cycle-repeat(); }
+                }
+            }
+            VerticalLayout {
+                alignment: center;
                 VolumePopup {
                     diameter: 32px;
                     icon-size: 20px;
@@ -337,10 +394,11 @@ export component MiniPlayerView inherits Rectangle {
             }
         }
 
-        // Slim full-width slider.
+        // Slim full-width slider. Use `SliderTrack`'s native 24 px height
+        // so the vertical-pill thumb has room — the 4 px track stays slim,
+        // the thumb stops clipping against the Up Next list above and the
+        // mini's bottom edge when Up Next isn't mounted.
         s-slider := SliderTrack {
-            min-height: 14px;
-            max-height: 14px;
             vertical-stretch: 0;
             value: root.slider-frac;
             is-disabled: !Player.vm.has_track || Player.duration-ms <= 0;
@@ -359,9 +417,13 @@ export component MiniPlayerView inherits Rectangle {
         // full-screen Now Playing view. The Rust subscriber rebuilds
         // `NowPlaying.up-next-rows` whenever mini is visible (gate in
         // `src/ui/now_playing/up_next.rs`).
-        if root.height >= 350px: UpNextList {
+        if root.height >= 350px: VerticalLayout {
             vertical-stretch: 1;
-            compact: true;
+            padding-top: Theme.pad-xs;
+            UpNextList {
+                vertical-stretch: 1;
+                compact: true;
+            }
         }
     }
 }
