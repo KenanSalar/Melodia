@@ -213,12 +213,14 @@ export component AppWindow inherits Window {
     // above). Sets the global so child components see the new value,
     // schedules the fade-out → swap → fade-in, closes any open Now
     // Playing view so its artwork release path runs, and notifies the
-    // Rust subscriber via `MiniPlayer.active-changed` for window-size /
-    // pre-mini-geometry bookkeeping.
+    // Rust subscriber via `MiniPlayer.active-changed` for the up-next
+    // gate + square-variant artwork cache lifecycle. `MiniPlayer.square`
+    // is owned by `watched-mini-square` below (and seeded once at mount
+    // by `mini-seed-timer`) — Rust re-reads it from the global on entry
+    // so no redundant write is needed here.
     property <bool> watched-mini-active: root.mini-active;
     changed watched-mini-active => {
         MiniPlayer.active = self.watched-mini-active;
-        MiniPlayer.square = root.mini-square;
         if (self.watched-mini-active && Nav.now-playing-open) {
             Nav.now-playing-open = false;
         }

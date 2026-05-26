@@ -41,15 +41,17 @@ use async_compat::Compat;
 use track_change::{apply_track_change, spawn_track_change_subscriber};
 use up_next::{rebuild_up_next, spawn_up_next_subscriber, wire_now_playing_open};
 
-/// Closure type for re-seeding the Up Next list from the stashed queue
-/// snapshot. Set once by [`install`] after construction; called by
+/// Closure type for re-seeding a `NowPlayingState`-shadowed surface
+/// (Up Next list or high-res cover slot) from the stashed snapshot. Set
+/// once by [`install`] after construction; called by
 /// [`crate::ui::mini_player::install`] when the responsive miniplayer
-/// becomes visible, so the square variant's `UpNextList` doesn't render
-/// empty until the next queue mutation (the subscriber stashes snapshots
-/// while no surface renders the model — without this kick a never-opened
-/// Now Playing session followed by a direct shrink-to-mini would show
-/// nothing). Mirrors the seed `wire_now_playing_open` does on view open.
-type UpNextSeeder = Box<dyn Fn()>;
+/// becomes visible, so the square variant doesn't render an empty list
+/// or a stale low-res cover until the next queue / track mutation. The
+/// subscribers stash snapshots while no surface renders the model —
+/// without these kicks a never-opened Now Playing session followed by
+/// a direct shrink-to-mini would show empty / stale content. Mirrors
+/// the seeds `wire_now_playing_open` does on view open.
+type Seeder = Box<dyn Fn()>;
 
 /// How many upcoming tracks to surface in the "Up Next" list. The list is
 /// scrollable, so this is a soft cap — large enough to feel complete,
@@ -116,12 +118,12 @@ pub struct NowPlayingState {
     /// track-change subscriber can chunk against the current layout
     /// immediately, without waiting for the next Slint `changed` fire.
     pub(super) chip_last_width: Cell<f32>,
-    /// Re-seeder for the Up Next list — see [`UpNextSeeder`]. Populated
-    /// by [`install`] after construction (`None` only during the brief
+    /// Re-seeder for the Up Next list — see [`Seeder`]. Populated by
+    /// [`install`] after construction (`None` only during the brief
     /// window between `Rc::new(...)` and `install`'s post-init writes,
     /// which is single-threaded). Captures `Weak<NowPlayingState>` to
     /// avoid the obvious `Rc → closure → Rc` cycle.
-    up_next_seeder: RefCell<Option<UpNextSeeder>>,
+    up_next_seeder: RefCell<Option<Seeder>>,
     /// Re-seeder for the high-res cover (and per-artwork accent + metadata
     /// chips), invoked by [`Self::kick_artwork`]. Called from
     /// `crate::ui::mini_player` when the square miniplayer becomes
@@ -130,7 +132,7 @@ pub struct NowPlayingState {
     /// doesn't have to wait for the next track change before the sharp
     /// 384 px cover replaces the row-tier fallback in `ArtworkImage`. The
     /// closure no-ops when the current track is already applied.
-    artwork_seeder: RefCell<Option<UpNextSeeder>>,
+    artwork_seeder: RefCell<Option<Seeder>>,
 }
 
 impl NowPlayingState {

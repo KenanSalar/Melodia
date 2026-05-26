@@ -30,6 +30,18 @@ use crate::ui::now_playing::NowPlayingState;
 use crate::ui::now_playing_artwork::NowPlayingArtwork;
 use crate::{AppWindow, MiniPlayer};
 
+/// Hydrate `np_state.mini_square` from the live `MiniPlayer.square`
+/// global. Necessary because `square-changed` only fires on actual
+/// flips — a window already in a square aspect before entering mini
+/// would leave the Rust mirror stale, and `kick_artwork()` would be
+/// skipped on entry. Called from `on_active_changed` on entry.
+fn sync_mini_square(weak: &slint::Weak<AppWindow>, np_state: &NowPlayingState) {
+    let Some(ui) = weak.upgrade() else { return };
+    np_state
+        .mini_square
+        .set(ui.global::<MiniPlayer>().get_square());
+}
+
 /// Off-thread release of the [`NowPlayingArtwork`] LRU + a glibc
 /// `malloc_trim` to hand the freed pages back to the kernel. Mirrors the
 /// release path in `wire_now_playing_open` (see
@@ -69,9 +81,15 @@ pub fn install(
         let np_state = np_state.clone();
         let state = state.clone();
         let np_artwork = np_artwork.clone();
+        let weak = app.as_weak();
         mini.on_active_changed(move |is_active| {
             np_state.mini_visible.set(is_active);
             if is_active {
+                // Hydrate from the Slint global — `square-changed` only
+                // fires on actual flips, so a tall-aspect window already
+                // in `MiniPlayer.square = true` before entry would leave
+                // the Rust mirror at its `Cell::new(false)` init.
+                sync_mini_square(&weak, &np_state);
                 np_state.kick_up_next();
                 if np_state.mini_square.get() {
                     np_state.kick_artwork();
