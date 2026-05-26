@@ -29,6 +29,11 @@ export component SliderTrack inherits Rectangle {
     // floating badges/labels on hover-or-drag without wrapping the slider
     // in an outer TouchArea (which would steal pointer events).
     out property <bool>  has-hover: touch.has-hover;
+    // Surface raw pressed so popup hosts can restore trigger highlights on
+    // every release. `committed` only fires after movement, but the winit
+    // Release filter clears `PopupHighlight.id` unconditionally on every
+    // mouse-up — a no-move grab needs an unconditional restore path.
+    out property <bool>  pressed: touch.pressed;
 
     callback changed(float);
     callback committed(float);
@@ -57,9 +62,12 @@ export component SliderTrack inherits Rectangle {
     private property <length> thumb-bg-h: 24px;
     // Max-end stop dot — mirror of the vertical volume popup's `stop-d` /
     // `stop-y` (4 px dot seated inside the inactive bar's rounded end, dot
-    // centre aligned with the bar's end radius).
+    // centre aligned with the bar's end radius). `stop-margin` is the
+    // distance from the slider's right edge to the dot's right edge —
+    // matches the vertical's 3 px far-edge gap, just expressed as a margin
+    // rather than a coordinate.
     private property <length> stop-d: 4px;
-    private property <length> stop-x: 3px;
+    private property <length> stop-margin: 3px;
 
     private property <float>  frac: clamp(root.shown-value, 0, 1);
     private property <length> track-cy: root.height / 2;
@@ -69,7 +77,11 @@ export component SliderTrack inherits Rectangle {
     // at frac=0 the left edge stays at 0 and only the right edge moves
     // inward on press, looking asymmetric. The 12 px mask hides any
     // 1-px overflow past the track ends.
-    private property <length> thumb-cx: root.frac * (root.width - 4px) + 2px;
+    // Exposed so popup hosts (e.g. `VolumePopupHorizontal`'s percentage
+    // badge) can pin a sibling element to the live thumb position without
+    // re-deriving the formula and risking silent drift if the centring
+    // constants here change.
+    out property <length> thumb-cx: root.frac * (root.width - 4px) + 2px;
     private property <length> thumb-x: root.thumb-cx - root.thumb-w / 2;
     private property <length> active-w: root.thumb-cx;
     private property <length> inactive-w: root.width - root.thumb-cx;
@@ -103,7 +115,7 @@ export component SliderTrack inherits Rectangle {
     // behind the moving thumb without a fade. Mirror of the vertical popup
     // slider's top-end dot.
     if root.show-max-stop: Rectangle {
-        x: root.width - root.stop-x - root.stop-d;
+        x: root.width - root.stop-margin - root.stop-d;
         y: root.track-cy - root.stop-d / 2;
         width: root.stop-d;
         height: root.stop-d;

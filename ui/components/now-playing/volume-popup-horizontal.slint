@@ -111,6 +111,19 @@ export component VolumePopupHorizontal inherits Rectangle {
                 }
             }
 
+            // Restore the trigger disc's highlight on every slider release
+            // (drag or no-move grab). The winit Release filter clears
+            // `PopupHighlight.id` unconditionally on every mouse-up, and
+            // `SliderTrack.committed` only fires after movement — so a
+            // bare click-release inside the slider would otherwise leave
+            // the disc unhighlighted while the popup is still open.
+            property <bool> slider-pressed: slider.pressed;
+            changed slider-pressed => {
+                if (!self.slider-pressed) {
+                    PopupHighlight.id = "volume";
+                }
+            }
+
             slider := SliderTrack {
                 x: Theme.pad-md;
                 y: 0;
@@ -126,28 +139,23 @@ export component VolumePopupHorizontal inherits Rectangle {
                     chrome.emit-volume(round(v * 100));
                 }
                 committed(v) => {
+                    // Highlight restore is handled by `slider-pressed`'s
+                    // edge handler above; this only fires post-drag, so
+                    // it just needs to flush the persisted volume.
                     Player.commit-volume();
-                    // Slider release stays inside the popup (the chrome's
-                    // TouchArea ate the up-event), so restore the trigger
-                    // highlight that the winit Release filter just cleared.
-                    PopupHighlight.id = "volume";
                 }
             }
         }
 
         // Percentage badge — floats above the thumb in the empty top strip,
         // horizontally pinned to the thumb's x. Mirror of the vertical
-        // popup's left-strip badge (pinned to the thumb's y).
-        //
-        // Re-derives the thumb-x using SliderTrack's `dragging` /
-        // `drag-value` out properties — same logic as SliderTrack's
-        // internal `shown-value`, no new out-property needed.
-        property <float> badge-frac:
-            slider.dragging ? slider.drag-value : clamp(Player.vm.volume / 100, 0, 1);
+        // popup's left-strip badge (pinned to the thumb's y). Consumes
+        // `SliderTrack.thumb-cx` directly so the badge follows the live
+        // thumb (including drag preview) without re-deriving the formula.
         Rectangle {
             width: 42px;
             height: 22px;
-            x: chrome.x + slider.x + pop.badge-frac * (slider.width - 4px) + 2px - self.width / 2;
+            x: chrome.x + slider.x + slider.thumb-cx - self.width / 2;
             // 10 px transparent gap above the chrome.
             y: chrome.y - 10px - self.height;
             background: Theme.surface2;
