@@ -15,12 +15,20 @@ export component SliderTrack inherits Rectangle {
     in property <float> value;          // bound source-of-truth (0..1)
     in property <bool>  is-disabled: false;
     in property <brush> seam-mask-color: Theme.mantle;
+    // Volume sliders draw a small accent dot at the max (right) end of the
+    // inactive bar — mirrors the vertical popup slider's top-end indicator.
+    // Default false so progress sliders are unaffected.
+    in property <bool>  show-max-stop: false;
 
     // Gated on `dragged-since-press` so a click-inside-mask grab without
     // movement doesn't flip the visual / time-text into "drag mode";
     // they keep tracking live `value` until the user actually moves.
     out property <bool>  dragging: touch.pressed && root.dragged-since-press;
     out property <float> drag-value;    // valid only while dragging
+    // Surface the inner TouchArea's hover state so popup hosts can gate
+    // floating badges/labels on hover-or-drag without wrapping the slider
+    // in an outer TouchArea (which would steal pointer events).
+    out property <bool>  has-hover: touch.has-hover;
 
     callback changed(float);
     callback committed(float);
@@ -47,6 +55,11 @@ export component SliderTrack inherits Rectangle {
     // shrinks to 2 px under press — "active track absorbs the freed pixels".
     private property <length> thumb-bg-w: 12px;
     private property <length> thumb-bg-h: 24px;
+    // Max-end stop dot — mirror of the vertical volume popup's `stop-d` /
+    // `stop-y` (4 px dot seated inside the inactive bar's rounded end, dot
+    // centre aligned with the bar's end radius).
+    private property <length> stop-d: 4px;
+    private property <length> stop-x: 3px;
 
     private property <float>  frac: clamp(root.shown-value, 0, 1);
     private property <length> track-cy: root.height / 2;
@@ -82,6 +95,20 @@ export component SliderTrack inherits Rectangle {
         height: root.track-h;
         border-radius: root.track-h / 2;
         background: Theme.surface1;
+    }
+
+    // Stop-indicator dot at the max (right) end of the inactive bar. Always
+    // rendered at full opacity; the mask (painted after this element) covers
+    // it when the thumb approaches the right end, so the dot disappears
+    // behind the moving thumb without a fade. Mirror of the vertical popup
+    // slider's top-end dot.
+    if root.show-max-stop: Rectangle {
+        x: root.width - root.stop-x - root.stop-d;
+        y: root.track-cy - root.stop-d / 2;
+        width: root.stop-d;
+        height: root.stop-d;
+        border-radius: self.width / 2;
+        background: root.is-disabled ? Theme.overlay0 : Theme.accent;
     }
 
     // Mask — parent-background stadium that hides the bar seam at thumb-cx.

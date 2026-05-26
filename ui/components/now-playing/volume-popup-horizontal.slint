@@ -1,0 +1,167 @@
+import { Theme } from "../../theme.slint";
+import { Player, PopupHighlight } from "../../globals.slint";
+import { IconButton } from "../icon-button.slint";
+import { PopupSurface } from "../popup-surface.slint";
+import { SliderTrack } from "../slider-track.slint";
+import { FocusLossWatcher } from "../focus-loss-watcher.slint";
+
+// Horizontal counterpart to `VolumePopup`. Used by the rectangle miniplayer,
+// where the wide-short window can't fit the 180 px-tall vertical popup
+// without clipping. Reuses `SliderTrack` (with its opt-in `show-max-stop`)
+// inside the same `PopupSurface { pill: true }` chrome the vertical popup
+// uses, just rotated 90°: chrome along the bottom of the popup, percentage
+// badge floating above the thumb in the empty top strip.
+//
+// Anchored as a LEFT flyout from the trigger disc — the popup extends
+// leftward into the title/artist area, vertically centred on the disc. The
+// rectangle miniplayer is always wide enough horizontally; vertical room is
+// the constraint we're escaping.
+export component VolumePopupHorizontal inherits Rectangle {
+    in property <length> diameter: 36px;
+    in property <length> icon-size: 22px;
+
+    width: btn.width;
+    height: btn.height;
+
+    // Same keyboard-driven tooltip-force wiring as the vertical popup —
+    // `Player.volume-hud-tick` bumps on ↑ / ↓ / Ctrl±, we observe it here,
+    // set a tick-down counter, and force the trigger's tooltip to show with
+    // the current `% ` text. Slider drags don't bump the tick (they raise
+    // the popup chrome itself).
+    property <int> hud-tick-mirror: Player.volume-hud-tick;
+    property <int> tooltip-ticks-remaining: 0;
+
+    changed hud-tick-mirror => {
+        root.tooltip-ticks-remaining = 15;
+    }
+
+    tooltip-hide-timer := Timer {
+        interval: 100ms;
+        running: root.tooltip-ticks-remaining > 0;
+        triggered => {
+            root.tooltip-ticks-remaining = max(0, root.tooltip-ticks-remaining - 1);
+        }
+    }
+
+    function volume-icon-name() -> string {
+        if (Player.vm.is_muted || Player.vm.volume == 0) {
+            return "volume_off";
+        }
+        if (Player.vm.volume < 50) {
+            return "volume_down";
+        }
+        return "volume_up";
+    }
+
+    btn := IconButton {
+        icon: root.volume-icon-name();
+        press-shrink: true;
+        diameter: root.diameter;
+        icon-size: root.icon-size;
+        filled: true;
+        tooltip-text: round(Player.vm.volume) + "%";
+        force-tooltip: root.tooltip-ticks-remaining > 0;
+        force-bg: PopupHighlight.id == "volume";
+        clicked => { PopupHighlight.id = "volume"; pop.show(); }
+    }
+
+    pop := PopupWindow {
+        // Left flyout: popup's right edge sits 8 px left of the trigger
+        // disc, vertically centred on it. The disc-adjacent edge is the
+        // popup's right edge, so the slider chrome (mirror of vertical's
+        // "right strip", rotated 90°) lands along the bottom — same Y as
+        // the disc, with the badge floating above.
+        x: -self.width - 8px;
+        y: (btn.height - self.height) / 2;
+        width: 220px;
+        height: 72px;
+        close-policy: close-on-click-outside;
+
+        if PopupHighlight.id == "volume": FocusLossWatcher {
+            close => { pop.close(); PopupHighlight.id = ""; }
+        }
+
+        // Click-catcher for the empty top strip (badge area + transparent
+        // gap above the chrome). Declared before `chrome` so the chrome's
+        // TouchArea wins for slider clicks.
+        TouchArea {
+            x: 0;
+            y: 0;
+            width: parent.width;
+            height: parent.height - chrome.height;
+            clicked => { pop.close(); PopupHighlight.id = ""; }
+        }
+
+        chrome := PopupSurface {
+            x: 0;
+            y: parent.height - self.height;
+            width: parent.width;
+            height: 40px;
+            pill: true;
+
+            // Per-integer emit gate — `SliderTrack.changed` fires per
+            // pixel-level `moved` event; mirror the vertical popup's
+            // `emit()` helper so only integer-step changes hit
+            // `Player.set-volume` (≤ 100 emits per full drag).
+            property <int> last-emitted: -1;
+            function emit-volume(v: int) {
+                if (v != self.last-emitted) {
+                    self.last-emitted = v;
+                    Player.set-volume(v);
+                }
+            }
+
+            slider := SliderTrack {
+                x: Theme.pad-md;
+                y: 0;
+                width: parent.width - 2 * Theme.pad-md;
+                height: parent.height;
+                value: clamp(Player.vm.volume / 100, 0, 1);
+                show-max-stop: true;
+                // Inside PopupSurface (crust background), the seam mask
+                // must match crust — default is mantle (now-playing bar).
+                seam-mask-color: Theme.crust;
+
+                changed(v) => {
+                    chrome.emit-volume(round(v * 100));
+                }
+                committed(v) => {
+                    Player.commit-volume();
+                    // Slider release stays inside the popup (the chrome's
+                    // TouchArea ate the up-event), so restore the trigger
+                    // highlight that the winit Release filter just cleared.
+                    PopupHighlight.id = "volume";
+                }
+            }
+        }
+
+        // Percentage badge — floats above the thumb in the empty top strip,
+        // horizontally pinned to the thumb's x. Mirror of the vertical
+        // popup's left-strip badge (pinned to the thumb's y).
+        //
+        // Re-derives the thumb-x using SliderTrack's `dragging` /
+        // `drag-value` out properties — same logic as SliderTrack's
+        // internal `shown-value`, no new out-property needed.
+        property <float> badge-frac:
+            slider.dragging ? slider.drag-value : clamp(Player.vm.volume / 100, 0, 1);
+        Rectangle {
+            width: 42px;
+            height: 22px;
+            x: chrome.x + slider.x + pop.badge-frac * (slider.width - 4px) + 2px - self.width / 2;
+            // 10 px transparent gap above the chrome.
+            y: chrome.y - 10px - self.height;
+            background: Theme.surface2;
+            border-radius: Theme.radius-sm;
+            opacity: slider.dragging || slider.has-hover ? 1.0 : 0.0;
+            animate opacity { duration: 150ms; easing: cubic-bezier(0.34, 1.56, 0.64, 1); }
+
+            Text {
+                text: round(Player.vm.volume) + "%";
+                color: Theme.text;
+                font-size: Theme.font-size-sm;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+        }
+    }
+}
