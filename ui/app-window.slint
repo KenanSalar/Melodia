@@ -230,10 +230,14 @@ export component AppWindow inherits Window {
     // Variant changes while inside mini (aspect crossing 0.8 either way)
     // don't trigger a fade — they're an in-place re-layout within the
     // same component, and a flash would be jarring on every aspect
-    // wobble during a drag.
+    // wobble during a drag. The `square-changed` callback drives the
+    // Rust-side high-res cover cache lifecycle (seed on
+    // rectangle→square, release on square→rectangle) — see
+    // `src/ui/mini_player.rs`.
     property <bool> watched-mini-square: root.mini-square;
     changed watched-mini-square => {
         MiniPlayer.square = self.watched-mini-square;
+        MiniPlayer.square-changed(self.watched-mini-square);
     }
 
     // 1ms mount seed: `changed` doesn't fire on the first binding settle

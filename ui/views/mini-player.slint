@@ -12,13 +12,14 @@ import { UpNextList } from "../components/now-playing/up-next-list.slint";
 // (computed at the `AppWindow` root from `width`/`height`); chooses between
 // a horizontal strip and a square variant via `MiniPlayer.square`.
 //
-// Resize-only trigger — there is no "enter miniplayer" button anywhere in
-// the full UI; the only chrome inside the mini view is an exit button
-// (`open_in_full`) that snaps the window back to its pre-mini geometry.
+// Resize-only entry AND exit — there are no enter/exit buttons. The user
+// shrinks the window past the threshold to engage mini, grows it back
+// past the threshold to leave. Double-clicking the bare drag region
+// maximises (and so also exits mini).
 //
 // Cap inner gutters at 8px from any window edge that hosts a resize
 // TouchArea (see `app-window.slint` resize-ring). The corner TouchAreas
-// are 8×8; insetting interactive controls (volume / pin / exit pills and
+// are 8×8; insetting interactive controls (volume / pin pills and
 // the up-next list's right edge) by 8px keeps the cursor showing the
 // resize affordance instead of flickering hover state.
 export component MiniPlayerView inherits Rectangle {
@@ -183,17 +184,6 @@ export component MiniPlayerView inherits Rectangle {
                         clicked => { WindowChrome.toggle-always-on-top(); }
                     }
                 }
-                VerticalLayout {
-                    alignment: center;
-                    IconButton {
-                        icon: "open_in_full";
-                        press-shrink: true;
-                        diameter: 28px;
-                        icon-size: 18px;
-                        tooltip-text: @tr("Exit miniplayer");
-                        clicked => { MiniPlayer.exit-pressed(); }
-                    }
-                }
             }
         }
 
@@ -221,13 +211,16 @@ export component MiniPlayerView inherits Rectangle {
         padding: root.edge-pad;
         spacing: Theme.pad-xs;
 
-        // Top row — pin (gated) + exit. Right-aligned so the artwork sits
-        // visually centred underneath it.
+        // Top row — pin (gated). Right-aligned so the artwork sits
+        // visually centred underneath it. Reserves a fixed strip even
+        // when always-on-top is unsupported so the artwork below keeps
+        // the same offset across desktops.
         HorizontalLayout {
             alignment: end;
             spacing: 2px;
             vertical-stretch: 0;
             padding-right: 4px;
+            min-height: 28px;
 
             if WindowChrome.always-on-top-supported: IconButton {
                 icon: "push_pin";
@@ -240,19 +233,18 @@ export component MiniPlayerView inherits Rectangle {
                     ? @tr("Unpin from Top") : @tr("Pin on Top");
                 clicked => { WindowChrome.toggle-always-on-top(); }
             }
-            IconButton {
-                icon: "open_in_full";
-                press-shrink: true;
-                diameter: 28px;
-                icon-size: 18px;
-                tooltip-text: @tr("Exit miniplayer");
-                clicked => { MiniPlayer.exit-pressed(); }
-            }
         }
 
         // Centred artwork — `tile-size` clamps so the cover scales with
         // window width without ever ballooning past 180px or shrinking
         // below 90px (where the placeholder glyph stops reading).
+        //
+        // Source: the high-res `Player.np-cover-{a,b}` slot the
+        // Now Playing view uses (decoded at 384px via
+        // `NowPlayingArtwork`), with the 72px row-tier `cover_img` as a
+        // fallback for the brief window before the seed lands and for
+        // tracks whose decode failed. Rust gates the decode + cache
+        // lifecycle on `mini_square` — see `src/ui/mini_player.rs`.
         VerticalLayout {
             alignment: center;
             vertical-stretch: 0;
@@ -260,7 +252,9 @@ export component MiniPlayerView inherits Rectangle {
                 alignment: center;
                 ArtworkImage {
                     artwork-path: Player.vm.track.artwork_path;
-                    cover: Player.vm.track.cover_img;
+                    cover: Player.np-cover-has-image
+                        ? (Player.np-cover-use-a ? Player.np-cover-a : Player.np-cover-b)
+                        : Player.vm.track.cover_img;
                     tile-size: clamp(root.width * 0.5, 90px, 180px);
                 }
             }

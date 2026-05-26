@@ -297,7 +297,7 @@ fn main() -> AppResult<()> {
     // if `now_playing::install` failed — without it the gate would
     // never affect anything visible.
     if let Some(ref np_state) = np_state
-        && let Err(e) = ui::mini_player::install(&app, np_state)
+        && let Err(e) = ui::mini_player::install(&app, &state, &np_artwork, np_state)
     {
         log::warn!("mini_player::install: {e}");
     }

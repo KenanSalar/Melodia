@@ -181,19 +181,17 @@ export global Nav {
 // `active` and `square` are written from `AppWindow`'s derived
 // `mini-active`/`mini-square` root properties via mirror+changed handlers.
 //
-// `active-changed(bool)` is the Rust subscriber hook: tightens or relaxes
-// the OS window's min-inner-size via winit (`src/ui/mini_player.rs`),
-// snapshots pre-mini geometry on enter so the exit button can restore it.
-//
-// `exit-pressed()` fires from the `open_in_full` button inside the mini
-// view; Rust resizes the window back to the snapshotted pre-mini geometry
-// (or 800x600 fallback), which trips `mini-active = false` on the next
-// `Resized` event — no imperative property flip needed.
+// Entry AND exit are resize-only — there are no in-UI buttons. Rust hooks
+// `active-changed(bool)` to flip the Up Next subscriber gate and manage
+// the high-res cover cache; `square-changed(bool)` fires when the
+// variant flips between rectangle and square while already in
+// mini-active, so Rust can seed (or release) the high-res cover cache
+// that only the square variant uses.
 export global MiniPlayer {
     in-out property <bool> active: false;
     in-out property <bool> square: false;
     callback active-changed(bool);
-    callback exit-pressed();
+    callback square-changed(bool);
 }
 
 // Tracks: drives the Tracks view. The `rows` model is owned by Rust

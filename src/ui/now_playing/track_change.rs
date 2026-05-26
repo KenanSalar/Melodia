@@ -65,9 +65,13 @@ pub(super) fn spawn_track_change_subscriber(
             // statement-scoped temporary, dropped before the `.await`.
             np_state.current_track.borrow_mut().clone_from(&new_track);
             // The decode + blur + metadata DB read only produces something
-            // on screen while the view is open — skip it while closed and
-            // let `wire_now_playing_open` seed on the next open instead.
-            if np_state.open.get() {
+            // on screen while a surface renders it — the full Now Playing
+            // view or the square miniplayer (whose ~150 px artwork reads
+            // from the same `Player.np-cover-{a,b}` dual-slot). Skip
+            // otherwise and let `wire_now_playing_open` /
+            // `NowPlayingState::kick_artwork` seed on next open / first
+            // square paint instead.
+            if np_state.open.get() || (np_state.mini_visible.get() && np_state.mini_square.get()) {
                 apply_track_change(&weak, &state, &np_artwork, &np_state, new_track, true).await;
             }
         }
