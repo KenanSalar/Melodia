@@ -4,6 +4,7 @@ import { IconButton } from "../components/icon-button.slint";
 import { ArtworkImage } from "../components/artwork-image.slint";
 import { SliderTrack } from "../components/slider-track.slint";
 import { VolumePopup } from "../components/now-playing/volume-popup.slint";
+import { VolumePopupHorizontal } from "../components/now-playing/volume-popup-horizontal.slint";
 import { PlayButton } from "../components/now-playing/play-button.slint";
 import { UpNextList } from "../components/now-playing/up-next-list.slint";
 
@@ -165,7 +166,11 @@ export component MiniPlayerView inherits Rectangle {
 
                 VerticalLayout {
                     alignment: center;
-                    VolumePopup {
+                    // Rectangle mini is wide-and-short; the vertical
+                    // VolumePopup (180 px tall) clips against the top edge
+                    // here. Use the horizontal sibling — same M3 slider,
+                    // rotated 90°, anchored as a LEFT flyout from the disc.
+                    VolumePopupHorizontal {
                         diameter: 28px;
                         icon-size: 18px;
                     }
