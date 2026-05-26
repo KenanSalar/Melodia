@@ -106,11 +106,14 @@ component UpNextRow inherits Rectangle {
 // flag so callers don't have to thread half a dozen props.
 export component UpNextList inherits Rectangle {
     in property <bool> compact;
-    // Right-edge inset for the list body. Full Now Playing leaves 20 px
-    // so the row hover background ends well before the overlay scrollbar
-    // (matching the queue sheet); the mini insets 4 px so row TouchAreas
-    // don't extend under the window's right-edge resize TouchArea.
-    in property <length> list-inset-right: compact ? 4px : 20px;
+    // Right-edge inset for the list body. Must exceed `scrollbar-width`
+    // so the row hover background doesn't paint under the overlay
+    // scrollbar (the ListView extent and the scrollbar slot overlap
+    // otherwise). Full Now Playing leaves 20 px against a 10 px bar
+    // (matching the queue sheet); the mini leaves 12 px against an 8 px
+    // bar — that 4 px breathing gap also keeps row TouchAreas off the
+    // window's right-edge resize TouchArea.
+    in property <length> list-inset-right: compact ? 12px : 20px;
     // Width of the scrollbar slot. `OverlayScrollbar` keeps its
     // internal `bar-thickness` at 8 px; the extra px in the non-compact
     // host gives the user a 1 px hit-test margin on each side.
