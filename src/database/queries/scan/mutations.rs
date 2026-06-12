@@ -133,6 +133,9 @@ pub async fn insert_track(
 
 /// Update a track's location when it has been moved or renamed.
 /// Preserves all playback state (`play_count`, rating, `is_favorite`, etc.).
+/// Returns `false` when no row with `track_id` exists — callers holding a
+/// candidate id resolved *before* the transaction opened must treat that
+/// as "the row vanished in-tx" and fall back to inserting.
 pub async fn update_track_location(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     track_id: i64,
@@ -140,8 +143,8 @@ pub async fn update_track_location(
     new_file_name: &str,
     new_folder_id: i64,
     date_modified: Option<&str>,
-) -> Result<(), AppError> {
-    sqlx::query(
+) -> Result<bool, AppError> {
+    let result = sqlx::query(
         "UPDATE tracks SET file_path = ?, file_name = ?, folder_id = ?, date_modified = ?
          WHERE id = ?",
     )
@@ -152,7 +155,7 @@ pub async fn update_track_location(
     .bind(track_id)
     .execute(&mut **tx)
     .await?;
-    Ok(())
+    Ok(result.rows_affected() > 0)
 }
 
 /// Update all metadata columns for an existing track that has changed on disk.
