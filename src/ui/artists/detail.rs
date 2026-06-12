@@ -49,10 +49,24 @@ async fn fetch_artist_detail(
     let track_covers: Vec<PathBuf> = super::grid::unique_artwork_paths(
         tracks.iter().map(|t| t.artwork_path.as_deref()),
     );
-    if !track_covers.is_empty() {
+    // The Albums strip resolves its cards through the borrowed Albums
+    // grid tier (`request-album-cover` → `AlbumsUi::grid_cover`,
+    // decode-on-miss on the UI thread). Prewarm those covers alongside
+    // the track rows so a detail open with a cold cache doesn't freeze
+    // the UI for one full-res decode per album card at first paint.
+    let strip_covers: Vec<PathBuf> = super::grid::unique_artwork_paths(
+        albums.iter().map(|a| a.artwork_path.as_deref()),
+    );
+    if !track_covers.is_empty() || !strip_covers.is_empty() {
         let row_thumbs = artists_ui.cover_thumbs.clone();
+        let strip_thumbs = artists_ui.albums_grid_covers.clone();
         let _ = tokio::task::spawn_blocking(move || {
-            row_thumbs.prewarm(&track_covers);
+            if !track_covers.is_empty() {
+                row_thumbs.prewarm(&track_covers);
+            }
+            if !strip_covers.is_empty() {
+                strip_thumbs.prewarm(&strip_covers);
+            }
         })
         .await;
     }

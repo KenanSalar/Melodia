@@ -1,7 +1,8 @@
 //! Read-side helpers consumed by the scanner and the file-event
-//! processor: exists-by-path, find-by-hash (move detection), folder
-//! resolution by path prefix, and bulk pre-reads that gate the parallel
-//! scan's per-file work.
+//! processor: exists-by-path, folder resolution by path prefix, and bulk
+//! pre-reads that gate the parallel scan's per-file work. Move detection
+//! resolves hashes in batch via `batch_lookup_by_hash` / the reconcile
+//! pre-pass — there is no per-file hash lookup anymore.
 
 use crate::error::AppError;
 
@@ -17,21 +18,6 @@ pub async fn track_exists_by_path(
     .fetch_optional(&mut **tx)
     .await?;
     Ok(exists.is_some())
-}
-
-/// Find an existing track by its file hash. Returns (id, `file_path`) if found.
-/// Used for moved/renamed file detection during scanning.
-pub async fn find_track_by_hash(
-    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
-    file_hash: &str,
-) -> Result<Option<(i64, String)>, AppError> {
-    let row = sqlx::query_as::<_, (i64, String)>(
-        "SELECT id, file_path FROM tracks WHERE file_hash = ? ORDER BY id ASC LIMIT 1",
-    )
-    .bind(file_hash)
-    .fetch_optional(&mut **tx)
-    .await?;
-    Ok(row)
 }
 
 /// Find the library folder that contains the given file path (longest prefix match).

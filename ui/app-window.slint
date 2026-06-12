@@ -339,6 +339,26 @@ export component AppWindow inherits Window {
         Playlists.section-active-changed(self.watched-playlists-active);
     }
 
+    // Same shape for the Tracks section (sidebar index 3). Unlike Albums,
+    // the Tracks view keeps its row model warm across nav-aways (no cache
+    // release on leave) — Rust uses this flag only to gate the
+    // `library_changed` refresher: hidden ⇒ mark dirty and skip the
+    // full-library re-fetch, re-enter ⇒ one deferred refresh.
+    property <bool> watched-tracks-active:
+        Nav.selected-index == 3 && !Nav.now-playing-open && !root.mini-active;
+    changed watched-tracks-active => {
+        Tracks.section-active-changed(self.watched-tracks-active);
+    }
+
+    // Same shape for the Browse section (sidebar index 1). Same gate-only
+    // role as Tracks: the `library_changed` subscriber skips re-fetching
+    // the current directory while the view is hidden.
+    property <bool> watched-browse-active:
+        Nav.selected-index == 1 && !Nav.now-playing-open && !root.mini-active;
+    changed watched-browse-active => {
+        Browse.section-active-changed(self.watched-browse-active);
+    }
+
     // Outer mantle shell. In custom-frame + windowed mode the Window's
     // background is transparent, so this rounded mantle Rectangle IS the
     // visible window outline — the compositor treats the alpha=0 area

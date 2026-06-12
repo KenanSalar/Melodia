@@ -27,6 +27,7 @@ use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 
 use crate::entities::track::TrackListRow as RsTrackListRow;
 use crate::media::cover_thumbs::CoverThumbs;
+use crate::ui::section_state::SectionState;
 use crate::ui::util::clamp_i64_to_i32;
 use crate::{AppWindow, TrackListRow as UiTrackListRow, Tracks};
 
@@ -112,6 +113,12 @@ pub struct TracksUi {
     /// the bar's artwork tile reuses cached thumbnails warmed by the
     /// Tracks view.
     pub(super) cover_thumbs: Arc<CoverThumbs>,
+    /// Visibility and staleness bookkeeping (`section-active-changed`
+    /// shadow plus dirty flag). Unlike the entity-grid views, Tracks
+    /// releases nothing on leave — `dirty` is set only by the
+    /// `library_changed` refresher when a bump arrives while the section
+    /// is hidden, and consumed on re-enter to run one deferred re-fetch.
+    section: SectionState,
 }
 
 impl TracksUi {
@@ -121,7 +128,31 @@ impl TracksUi {
             search_keys: Mutex::new(Arc::new(Vec::new())),
             order: Mutex::new(Arc::new(Vec::new())),
             cover_thumbs,
+            section: SectionState::new(),
         }
+    }
+
+    /// Mirror the Tracks-section-visible flag (`section-active-changed`).
+    pub fn set_section_active(&self, active: bool) {
+        self.section.set_active(active);
+    }
+
+    /// Whether the Tracks section is currently on screen.
+    pub fn section_active(&self) -> bool {
+        self.section.active()
+    }
+
+    /// Mark the cached row data stale — a `library_changed` bump arrived
+    /// while the section was hidden. See [`Self::take_dirty`].
+    pub fn mark_dirty(&self) {
+        self.section.mark_dirty();
+    }
+
+    /// Atomically read-and-clear the dirty flag. `true` on section-enter
+    /// means a library mutation happened while hidden and the row set must
+    /// be re-fetched.
+    pub fn take_dirty(&self) -> bool {
+        self.section.take_dirty()
     }
 
     /// IDs of the rows that pass `filter`, in the current sort order. Used by

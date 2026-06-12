@@ -192,9 +192,17 @@ impl RodioPlayer {
     pub fn preload_gapless(&self, file_path: Option<&str>) {
         match file_path {
             Some(path) => {
-                let player = self.lock_player();
+                // Decode (file open + Symphonia format probe — synchronous
+                // I/O) *before* taking the Player lock: the playback
+                // monitor's 500 ms position query shares this mutex, so a
+                // probe under the lock stalls position publication right
+                // when a preload fires near track end. Only the `append`
+                // needs the lock; cross-action ordering against
+                // `play_media` / `stop` is unchanged (the lock never
+                // ordered whole actions, only made decode+append atomic).
                 match decode_file(path) {
                     Ok(source) => {
+                        let player = self.lock_player();
                         player.append(source);
                         self.gapless_pending.store(true, Ordering::Release);
                     }

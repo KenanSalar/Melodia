@@ -4,17 +4,17 @@
 //! per-keystroke filter walk is in memory (matches title + artist +
 //! album case-insensitive).
 
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use slint::{ComponentHandle, Model, VecModel, Weak};
 
 use super::FavoritesUi;
-use crate::entities::track::TrackListRow as RsTrackListRow;
 use crate::error::AppResult;
 use crate::library;
 use crate::services::settings::{SortDir, ViewSort};
 use crate::state::AppState;
-use crate::ui::tracks::to_slint_track_list_row;
+use crate::ui::tracks::{PreparedTrackRow, finish_track_list_row};
 use crate::{AppWindow, Favorites, TrackListRow as UiTrackListRow};
 
 /// Read-and-return the active sort. The Slint side mirrors this in
@@ -64,6 +64,22 @@ pub async fn refresh_tracks(
     });
 
     let rows = library::favorites::get_favorite_tracks(state, sort_by, sort_dir).await?;
+
+    // Prewarm the row covers off-thread before the first model apply:
+    // the `!Send` cover lookup in `finish_track_list_row` runs on the UI
+    // thread, so a cold cache (first section enter) would otherwise pay
+    // one synchronous decode per unique favourite cover at paint time.
+    // `prewarm` dedupes its input. Keystroke re-filters skip this — they
+    // only narrow an already-painted (warm) set.
+    let cover_paths: Vec<PathBuf> = rows
+        .iter()
+        .filter_map(|r| r.artwork_path.as_deref().map(PathBuf::from))
+        .collect();
+    if !cover_paths.is_empty() {
+        let thumbs = fav_ui.cover_thumbs.clone();
+        let _ = tokio::task::spawn_blocking(move || thumbs.prewarm(&cover_paths)).await;
+    }
+
     *fav_ui.state().tracks_all.lock() = rows;
 
     apply_filtered_tracks(fav_ui, weak);
@@ -80,17 +96,22 @@ pub async fn refresh_tracks(
 /// but its checkbox + accent background hold).
 pub fn apply_filtered_tracks(fav_ui: &Arc<FavoritesUi>, weak: &Weak<AppWindow>) {
     let needle = current_filter(fav_ui).to_lowercase();
-    let all = fav_ui.state().tracks_all.lock().clone();
     let thumbs = fav_ui.cover_thumbs.clone();
 
-    let filtered: Vec<RsTrackListRow> = if needle.is_empty() {
-        all
-    } else {
-        all.into_iter()
-            .filter(|r| crate::ui::detail_filter::track_matches(r, &needle))
+    // Filter + prepare the `Send` row halves on the calling thread,
+    // borrowing the cache in place — the old path deep-cloned the whole
+    // String-bearing Vec per keystroke and then built every UI row
+    // (including the `!Send` cover lookup) inside the event-loop closure.
+    let prepared: Vec<PreparedTrackRow> = {
+        let all = fav_ui.state().tracks_all.lock();
+        all.iter()
+            .filter(|r| {
+                needle.is_empty() || crate::ui::detail_filter::track_matches(r, &needle)
+            })
+            .map(crate::ui::tracks::prepare_track_list_row)
             .collect()
     };
-    let filtered_count = i32::try_from(filtered.len()).unwrap_or(i32::MAX);
+    let filtered_count = i32::try_from(prepared.len()).unwrap_or(i32::MAX);
 
     let weak = weak.clone();
     let _ = slint::invoke_from_event_loop(move || {
@@ -101,12 +122,16 @@ pub fn apply_filtered_tracks(fav_ui: &Arc<FavoritesUi>, weak: &Weak<AppWindow>) 
             log::warn!("Favorites.tracks: VecModel<TrackListRow> downcast failed");
             return;
         };
-        let mut rendered: Vec<UiTrackListRow> = filtered
-            .iter()
-            .map(|t| to_slint_track_list_row(t, &thumbs))
+        let mut rendered: Vec<UiTrackListRow> = prepared
+            .into_iter()
+            .map(|p| finish_track_list_row(p, &thumbs))
             .collect();
         super::selection::restamp_rows(&g, &mut rendered);
-        vec.set_vec(rendered);
+        // Per-row rewrite when identities align (same-shape refresh, e.g.
+        // a library tick): keeps the ListView's delegates instead of the
+        // tear-down-everything `set_vec` reset. Structural changes
+        // (filter narrowed/widened) fall back to `set_vec`.
+        crate::ui::model_diff::apply_rows_keyed(vec, rendered, |r| r.id);
         g.set_filtered_count(filtered_count);
     });
 }

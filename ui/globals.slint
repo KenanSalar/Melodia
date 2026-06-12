@@ -242,6 +242,10 @@ export global Tracks {
     callback add-to-queue([int]);
     callback toggle-row-favorite([int] /*track_ids*/, bool /*new*/);
     callback request-refresh();
+    // Mirrors "the Tracks section is on screen" — see `watched-tracks-active`
+    // in app-window.slint. Rust uses it to skip `library_changed` refreshes
+    // while the view is hidden and run one deferred re-fetch on re-enter.
+    callback section-active-changed(bool);
     // Cross-tab navigation from a row's right-click "Go to …" entry.
     callback go-to-album(int /*album_id*/);
     callback go-to-artist(int /*artist_id*/);
@@ -353,6 +357,10 @@ export global Browse {
     callback toggle-column(string /*column_id*/);
     callback play-all();
     callback refresh();
+    // Mirrors "the Browse section is on screen" — see `watched-browse-active`
+    // in app-window.slint. Rust uses it to skip `library_changed` re-fetches
+    // while the view is hidden and run one deferred re-fetch on re-enter.
+    callback section-active-changed(bool);
     // Cross-tab navigation from a row's right-click "Go to …" entry.
     callback go-to-album(int /*album_id*/);
     callback go-to-artist(int /*artist_id*/);
