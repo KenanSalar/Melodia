@@ -307,7 +307,7 @@ async fn handle_created(
         };
         let file_name = file_name_owned(path);
         let date_modified = extract_date_modified(path);
-        queries::scan::update_track_location(
+        let repointed = queries::scan::update_track_location(
             tx,
             existing_id,
             &path_str,
@@ -316,9 +316,18 @@ async fn handle_created(
             date_modified.as_deref(),
         )
         .await?;
+        if repointed {
+            moved_candidates.remove(&meta.file_hash);
+            log::info!("Detected moved file: {old_path} -> {path_str}");
+            return Ok(true);
+        }
+        // 0 rows: the candidate row was deleted earlier in this same
+        // transaction (dedup emits batch events in arbitrary order, so a
+        // Removed for the old path can precede this Created). The pre-tx
+        // candidate map can't see in-tx deletes — drop the dead entry and
+        // fall through to a fresh insert, matching the old inside-tx
+        // `find_track_by_hash` behavior.
         moved_candidates.remove(&meta.file_hash);
-        log::info!("Detected moved file: {old_path} -> {path_str}");
-        return Ok(true);
     }
 
     let Some(ids) = resolve_track_context(tx, path, &path_str, meta, "Created").await? else {
@@ -357,7 +366,9 @@ async fn handle_renamed(
         let file_name = file_name_owned(to);
         let date_modified = extract_date_modified(to);
 
-        queries::scan::update_track_location(
+        // `track_id` was resolved by path inside this transaction, so the
+        // row can't have vanished — the re-point bool is vacuously true.
+        let _repointed = queries::scan::update_track_location(
             tx,
             track_id,
             &to_str,

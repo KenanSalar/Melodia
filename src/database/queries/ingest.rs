@@ -122,7 +122,7 @@ pub async fn ingest_scanned_files(
         .filter(|f| !existing_tracks.contains_key(f.path.to_string_lossy().as_ref()))
         .map(|f| f.metadata.file_hash.as_str())
         .collect();
-    let hash_to_existing = batch_lookup_by_hash(tx, &new_path_hashes).await?;
+    let mut hash_to_existing = batch_lookup_by_hash(tx, &new_path_hashes).await?;
 
     // For every (existing_id, old_path) candidate above, stat the old path
     // off-thread so the writer transaction isn't blocked by a syscall per
@@ -186,9 +186,15 @@ pub async fn ingest_scanned_files(
 
         // --- New path: check for moved file (same hash, different path) ---
         // Only treat as a move if the old path no longer exists on disk —
-        // pre-computed in `existing_old_paths_present` above.
-        if let Some((existing_id, old_path)) = hash_to_existing.get(meta.file_hash.as_str())
-            && !existing_old_paths_present.contains(old_path)
+        // pre-computed in `existing_old_paths_present` above. The entry is
+        // consumed after a successful re-point so two same-hash new files
+        // in one scan can't both steal the one existing row — the second
+        // falls through to a fresh insert (mirrors `reconcile.rs`'s
+        // consume-once moved-candidates map). A failed folder resolution
+        // leaves the entry available for a later same-hash file.
+        if let Some((existing_id, old_path)) =
+            hash_to_existing.get(meta.file_hash.as_str()).cloned()
+            && !existing_old_paths_present.contains(&old_path)
         {
             let Some(folder_id) = resolve_folder_id(
                 tx,
@@ -209,15 +215,19 @@ pub async fn ingest_scanned_files(
                 .unwrap_or("")
                 .to_string();
 
-            queries::scan::update_track_location(
+            // `hash_to_existing` was resolved inside this transaction and
+            // nothing deletes rows before this loop (orphan pruning runs
+            // after ingest), so the re-point bool is vacuously true.
+            let _repointed = queries::scan::update_track_location(
                 tx,
-                *existing_id,
+                existing_id,
                 file_path_str,
                 &file_name,
                 folder_id,
                 meta.date_modified.as_deref(),
             )
             .await?;
+            hash_to_existing.remove(meta.file_hash.as_str());
             log::info!("Detected moved file: {old_path} -> {file_path_str}");
             moved_count += 1;
             continue;
