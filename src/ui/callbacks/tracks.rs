@@ -27,6 +27,27 @@ pub fn wire_tracks(ui: &AppWindow, state: &AppState, tracks_ui: &Arc<TracksUi>) 
         tracks.set_sort_dir(SharedString::from(dir));
     }
 
+    // section-active-changed: mirror visibility into the synchronous shadow
+    // and, on re-enter, run the deferred refresh if a `library_changed` bump
+    // arrived while the section was hidden (the refresher marks dirty
+    // instead of re-fetching a view the user can't see). Seed the shadow
+    // from the current nav state — `changed` in `AppWindow` won't fire for
+    // a session that *starts* on Tracks (sidebar index 3).
+    tracks_ui.set_section_active(ui.global::<crate::Nav>().get_selected_index() == 3);
+    {
+        let tu = tracks_ui.clone();
+        let weak = weak.clone();
+        tracks.on_section_active_changed(move |active| {
+            tu.set_section_active(active);
+            if active && tu.take_dirty() {
+                let Some(ui) = weak.upgrade() else { return };
+                // Reuse the request-refresh path so the deferred fetch
+                // picks up the current sort + filter.
+                ui.global::<Tracks>().invoke_request_refresh();
+            }
+        });
+    }
+
     // request-sort: clicking a header column. Same field flips dir; new field
     // resets to ascending. Re-sort is done entirely in memory — no DB
     // re-fetch and no `RowSearchKey` rebuild (`resort_and_apply`); the new

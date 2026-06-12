@@ -95,6 +95,7 @@ pub async fn delete_playlist(db: &DbPool, id: i64) -> Result<(), AppError> {
     Ok(())
 }
 
+#[cfg(test)]
 pub async fn get_playlist_tracks(
     db: &DbPool,
     playlist_id: i64,

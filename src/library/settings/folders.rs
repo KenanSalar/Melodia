@@ -239,7 +239,36 @@ pub async fn scan_folder_internal(
         )));
     }
 
-    let files = collect_media_files(folder_path);
+    // Read-side pre-load through the read pool (before the writer tx opens):
+    // size + mtime for every track already in this folder. Doesn't contend
+    // with the scan's writes.
+    let existing_summaries =
+        queries::scan::get_existing_track_summaries_for_folder(&state.db, folder.id).await?;
+
+    // Directory walk + incremental filter on the blocking pool. Both are
+    // synchronous syscall loops (WalkDir over the whole tree, then one
+    // `fs::metadata` per already-known file inside `track_is_current`) —
+    // running them inline in this async fn would pin one of the runtime's
+    // few workers for the duration on a cold-cache disk, stalling position
+    // ticks and watcher deliveries during boot reconciles.
+    //
+    // The incremental filter only (re)parses files that are new, or whose
+    // size or mtime no longer matches the stored row. Byte-unchanged files
+    // keep their existing DB metadata untouched — Lofty is skipped for
+    // them entirely, which is the bulk of a typical startup rescan.
+    let folder_path_owned = folder_path.to_path_buf();
+    let (files, to_scan) = tokio::task::spawn_blocking(move || {
+        let files = collect_media_files(&folder_path_owned);
+        let to_scan: Vec<PathBuf> = files
+            .iter()
+            .filter(|path| !track_is_current(path, &existing_summaries))
+            .cloned()
+            .collect();
+        (files, to_scan)
+    })
+    .await
+    .map_err(|e| AppError::Scanner(format!("Scan walk task failed: {e}")))?;
+
     if files.is_empty() {
         return Ok(0);
     }
@@ -248,21 +277,6 @@ pub async fn scan_folder_internal(
     // the scan-progress channel so the UI doesn't keep a stale progress bar.
     let _scan_guard = ScanProgressGuard(&state.scan_progress_tx);
 
-    // Read-side pre-load through the read pool (before the writer tx opens):
-    // size + mtime for every track already in this folder. Doesn't contend
-    // with the scan's writes.
-    let existing_summaries =
-        queries::scan::get_existing_track_summaries_for_folder(&state.db, folder.id).await?;
-
-    // Incremental filter: only (re)parse files that are new, or whose size
-    // or mtime no longer matches the stored row. Byte-unchanged files keep
-    // their existing DB metadata untouched — Lofty is skipped for them
-    // entirely, which is the bulk of a typical startup rescan.
-    let to_scan: Vec<PathBuf> = files
-        .iter()
-        .filter(|path| !track_is_current(path, &existing_summaries))
-        .cloned()
-        .collect();
     let skipped = files.len() - to_scan.len();
     if skipped > 0 {
         log::info!(

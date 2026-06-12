@@ -51,8 +51,11 @@ pub enum TrayAction {
 }
 
 /// Minimal render state the tray needs: tooltip text + the Play/Pause label.
-/// Derived from `PlayerViewModelLight` by `ui::tray_bridge`.
-#[derive(Debug, Clone, Default)]
+/// Derived from `PlayerViewModelLight` by `ui::tray_bridge`. `PartialEq`
+/// lets the state subscribers skip the blocking tray round-trip when an
+/// emit (volume step, seek, queue edit) didn't change anything the tray
+/// renders.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct TraySnapshot {
     /// Current track title, `None` when nothing is loaded.
     pub track_title: Option<String>,

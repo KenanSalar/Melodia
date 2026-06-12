@@ -55,6 +55,7 @@ use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 use crate::entities::browse::BrowseFile;
 use crate::media::cover_thumbs::CoverThumbs;
 use crate::services::view_state;
+use crate::ui::section_state::SectionState;
 use crate::state::AppState;
 use crate::{
     AppWindow, Browse, BrowseFolderRow as UiBrowseFolderRow, TrackListRow as UiTrackListRow,
@@ -88,6 +89,12 @@ pub struct BrowseUi {
     pub(super) cover_thumbs: Arc<CoverThumbs>,
     /// Stale-fetch guard. See module-level comment.
     pub(super) fetch_token: AtomicU64,
+    /// Visibility and staleness bookkeeping (`section-active-changed`
+    /// shadow plus dirty flag). Browse releases nothing on leave —
+    /// `dirty` is set only by the `library_changed` subscriber when a
+    /// bump arrives while the section is hidden, and consumed on
+    /// re-enter to re-fetch the current directory once.
+    section: SectionState,
 }
 
 impl BrowseUi {
@@ -100,7 +107,31 @@ impl BrowseUi {
             sort_dir: Mutex::new("asc".to_owned()),
             cover_thumbs,
             fetch_token: AtomicU64::new(0),
+            section: SectionState::new(),
         }
+    }
+
+    /// Mirror the Browse-section-visible flag (`section-active-changed`).
+    pub fn set_section_active(&self, active: bool) {
+        self.section.set_active(active);
+    }
+
+    /// Whether the Browse section is currently on screen.
+    pub fn section_active(&self) -> bool {
+        self.section.active()
+    }
+
+    /// Mark the cached directory listing stale — a `library_changed` bump
+    /// arrived while the section was hidden. See [`Self::take_dirty`].
+    pub fn mark_dirty(&self) {
+        self.section.mark_dirty();
+    }
+
+    /// Atomically read-and-clear the dirty flag. `true` on section-enter
+    /// means a library mutation happened while hidden and the current
+    /// directory must be re-fetched.
+    pub fn take_dirty(&self) -> bool {
+        self.section.take_dirty()
     }
 
     pub fn current_path(&self) -> String {

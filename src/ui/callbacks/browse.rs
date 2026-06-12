@@ -30,6 +30,31 @@ pub fn wire_browse(ui: &AppWindow, state: &AppState, browse_ui: &Arc<BrowseUi>) 
         browse_ui.set_sort(field, dir.to_owned());
     }
 
+    // section-active-changed: mirror visibility into the synchronous shadow
+    // and, on re-enter, re-fetch the current directory once if a
+    // `library_changed` bump arrived while the section was hidden (the
+    // subscriber below marks dirty instead of re-fetching a view the user
+    // can't see). Seed the shadow from the current nav state — `changed`
+    // in `AppWindow` won't fire for a session that *starts* on Browse
+    // (sidebar index 1).
+    browse_ui.set_section_active(ui.global::<crate::Nav>().get_selected_index() == 1);
+    {
+        let s = state.clone();
+        let bu = browse_ui.clone();
+        let weak = weak.clone();
+        g.on_section_active_changed(move |active| {
+            bu.set_section_active(active);
+            if active && bu.take_dirty() {
+                let path = bu.current_path();
+                let s = s.clone();
+                let bu = bu.clone();
+                let weak = weak.clone();
+                spawn_logged!(s, "browse::section_enter",
+                    browse_ui_mod::fetch_and_apply(&s, &bu, weak, path));
+            }
+        });
+    }
+
     // open-folder: push current path onto history, spawn fetch for the
     // new path, persist the new browse_path. The Slint TouchArea fires
     // this on a folder-row click.
@@ -314,6 +339,16 @@ pub fn wire_browse(ui: &AppWindow, state: &AppState, browse_ui: &Arc<BrowseUi>) 
             // at; mark it seen so we don't re-fetch immediately.
             rx.mark_unchanged();
             while rx.changed().await.is_ok() {
+                // Skip the directory re-fetch (read_dir + a full-index LIKE
+                // scan) while the section is hidden — play-count flushes
+                // bump this channel after every track completion, so an
+                // ungated re-fetch would run O(library) work per song
+                // during plain listening. Mark dirty so the next
+                // section-enter re-fetches once instead.
+                if !bu.section_active() {
+                    bu.mark_dirty();
+                    continue;
+                }
                 let path = bu.current_path();
                 let s = s.clone();
                 let bu = bu.clone();

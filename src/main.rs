@@ -313,8 +313,9 @@ fn main() -> AppResult<()> {
     boot::ui_setup::spawn_initial_genres_fetch(&state, &views.genres_ui, weak.clone());
     boot::ui_setup::spawn_initial_playlists_fetch(&state, &views.playlists_ui, weak.clone());
 
-    // 9. Re-fetch Tracks whenever the library mutates.
-    boot::ui_setup::install_library_changed_refresher(&state, weak.clone())?;
+    // 9. Re-fetch Tracks whenever the library mutates (deferred to the next
+    // section-enter while the view is hidden).
+    boot::ui_setup::install_library_changed_refresher(&state, &views.tracks_ui, weak.clone())?;
 
     // 9b. Toast on watcher-overflow rescan (kernel queue dropped events).
     boot::ui_setup::install_rescan_notice_subscriber(&state, weak.clone(), notifications.clone())?;

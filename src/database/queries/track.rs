@@ -94,6 +94,7 @@ pub async fn get_tracks_by_genre(db: &DbPool, genre_id: i64) -> Result<Vec<track
     Ok(tracks)
 }
 
+#[cfg(test)]
 pub async fn get_track_by_id(db: &DbPool, id: i64) -> Result<track::Track, AppError> {
     sqlx::query_as::<_, track::Track>("SELECT * FROM tracks WHERE id = ?")
         .bind(id)
@@ -103,6 +104,7 @@ pub async fn get_track_by_id(db: &DbPool, id: i64) -> Result<track::Track, AppEr
 }
 
 /// Fetch tracks by IDs, preserving the input order.
+#[cfg(test)]
 pub async fn get_tracks_by_ids(db: &DbPool, ids: &[i64]) -> Result<Vec<track::Track>, AppError> {
     let tracks: Vec<track::Track> = chunked_in_query(
         db.read(),
@@ -275,7 +277,7 @@ pub async fn set_favorite(db: &DbPool, ids: &[i64], favorite: bool) -> Result<()
     }
     // Reserve 1 bind slot for the `favorite` parameter itself.
     for chunk in ids.chunks(crate::database::SQLITE_BIND_LIMIT - 1) {
-        let placeholders = vec!["?"; chunk.len()].join(", ");
+        let placeholders = crate::database::placeholders(chunk.len());
         let sql = format!(
             "UPDATE tracks SET is_favorite = ? WHERE id IN ({placeholders})"
         );

@@ -266,12 +266,18 @@ impl CoverThumbs {
     /// Uses `LruCache::contains` (non-promoting) for the pre-check so
     /// prewarm doesn't reorder LRU positions of paths that are already
     /// hot from earlier views.
+    ///
+    /// Input duplicates are deduped here rather than at call sites — a
+    /// caller passing one path per *track* (e.g. a queue of many tracks
+    /// sharing a few album covers) must not trigger one decode per
+    /// duplicate.
     pub fn prewarm(&self, paths: &[PathBuf]) {
         let missing: Vec<PathBuf> = {
             let cache = self.cache.lock();
+            let mut seen = std::collections::HashSet::with_capacity(paths.len());
             paths
                 .iter()
-                .filter(|p| !cache.contains(*p))
+                .filter(|p| !cache.contains(*p) && seen.insert(*p))
                 .cloned()
                 .collect()
         };

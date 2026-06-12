@@ -45,32 +45,45 @@ async fn extract_metadata_batch(
         }
     }
 
-    let mut join_set = tokio::task::JoinSet::new();
-    for path in paths_to_extract {
-        let artwork_dir = artwork_dir.clone();
-        let cover_cache_clone = cover_cache.clone();
-        join_set.spawn_blocking(move || {
-            let result = extract_metadata(&path, &artwork_dir, &cover_cache_clone, false);
-            (path, result)
-        });
+    if paths_to_extract.is_empty() {
+        return HashMap::new();
     }
 
-    let mut results = HashMap::new();
-    while let Some(task_result) = join_set.join_next().await {
-        match task_result {
-            Ok((path, Ok(meta))) => {
-                results.insert(path, meta);
-            }
-            Ok((path, Err(e))) => {
-                log::warn!("Failed to extract metadata for {}: {}", path.display(), e);
-            }
-            Err(e) => {
-                log::warn!("Metadata extraction task panicked: {e}");
-            }
+    // One blocking task wrapping Rayon file-level parallelism — the same
+    // shape as `scan_files_parallel`. A bulk drop into a watched folder can
+    // produce thousands of Created events in one batch; fanning out one
+    // `spawn_blocking` per file would burst toward tokio's blocking-thread
+    // cap and thrash the disk with hundreds of concurrent readers, while
+    // Rayon bounds concurrency to the core count.
+    let cover_cache = cover_cache.clone();
+    let extracted = tokio::task::spawn_blocking(move || {
+        use rayon::prelude::*;
+        paths_to_extract
+            .into_par_iter()
+            .filter_map(|path| {
+                match extract_metadata(&path, &artwork_dir, &cover_cache, false) {
+                    Ok(meta) => Some((path, meta)),
+                    Err(e) => {
+                        log::warn!(
+                            "Failed to extract metadata for {}: {}",
+                            path.display(),
+                            e
+                        );
+                        None
+                    }
+                }
+            })
+            .collect::<HashMap<_, _>>()
+    })
+    .await;
+
+    match extracted {
+        Ok(results) => results,
+        Err(e) => {
+            log::warn!("Metadata extraction task panicked: {e}");
+            HashMap::new()
         }
     }
-
-    results
 }
 
 /// Process a deduplicated batch of file events.
@@ -89,8 +102,15 @@ pub(super) async fn process_batch(
             _ => None,
         })
         .collect();
-    let missing_old_paths: HashSet<String> = if hashes_to_check.is_empty() {
-        HashSet::new()
+    // Hash → lowest-id existing row whose on-disk file has vanished: the
+    // move-detection candidates for this batch. Resolved once here (chunked
+    // IN query + one stat pass, both before the write tx opens) and handed
+    // to `handle_created`, which previously re-issued a per-event
+    // `find_track_by_hash` round-trip inside the transaction for the same
+    // data. Entries are consumed on a successful re-point so two same-hash
+    // Created events can't both steal the one existing row.
+    let mut moved_candidates: HashMap<String, (i64, String)> = if hashes_to_check.is_empty() {
+        HashMap::new()
     } else {
         // Batch all hash lookups into chunked IN-clause queries.
         // For each hash, we want the lowest-id matching row, so we fetch
@@ -119,13 +139,12 @@ pub(super) async fn process_batch(
                 })
                 .or_insert((id, path));
         }
-        let candidates: Vec<String> = by_hash.into_values().map(|(_, p)| p).collect();
 
+        // Stat pass off the runtime: keep only candidates whose previous
+        // path is gone from disk (genuinely moved, not duplicated).
         tokio::task::spawn_blocking(move || {
-            candidates
-                .into_iter()
-                .filter(|p| !Path::new(p).exists())
-                .collect::<HashSet<String>>()
+            by_hash.retain(|_, (_, path)| !Path::new(path.as_str()).exists());
+            by_hash
         })
         .await
         .unwrap_or_default()
@@ -138,39 +157,60 @@ pub(super) async fn process_batch(
         queries::stats::disable_stats_triggers(&mut tx).await?;
     }
 
+    // Rows actually inserted / re-pointed / updated / deleted this batch.
+    // Gates the post-loop sweeps: a no-op batch (events for untracked
+    // files, paths outside library folders) must not pay the full-table
+    // album-artwork window-function pass or a stats recalc — mirrors the
+    // `any_changes` gate on the scan path (`library/settings/folders.rs`).
+    let mut changes: usize = 0;
+
     for event in &events {
         match event {
             FileEvent::Created(path) => {
-                if let Some(meta) = metadata_map.get(path)
-                    && let Err(e) = handle_created(&mut tx, path, meta, &missing_old_paths).await
-                {
-                    log::warn!("Failed to process created file {}: {}", path.display(), e);
+                if let Some(meta) = metadata_map.get(path) {
+                    match handle_created(&mut tx, path, meta, &mut moved_candidates).await {
+                        Ok(changed) => changes += usize::from(changed),
+                        Err(e) => log::warn!(
+                            "Failed to process created file {}: {}",
+                            path.display(),
+                            e
+                        ),
+                    }
                 }
             }
             FileEvent::Removed(path) => {
                 let path_str = path.to_string_lossy();
                 match queries::scan::delete_track_by_path(&mut tx, &path_str).await {
-                    Ok(true) => log::info!("Removed track: {}", path.display()),
+                    Ok(true) => {
+                        changes += 1;
+                        log::info!("Removed track: {}", path.display());
+                    }
                     Ok(false) => log::debug!("Track not in DB, skip remove: {}", path.display()),
                     Err(e) => log::warn!("Failed to remove track {}: {}", path.display(), e),
                 }
             }
             FileEvent::Renamed { from, to } => {
                 let meta = metadata_map.get(to);
-                if let Err(e) = handle_renamed(&mut tx, from, to, meta, &missing_old_paths).await {
-                    log::warn!(
+                match handle_renamed(&mut tx, from, to, meta, &mut moved_candidates).await {
+                    Ok(changed) => changes += usize::from(changed),
+                    Err(e) => log::warn!(
                         "Failed to process rename {} -> {}: {}",
                         from.display(),
                         to.display(),
                         e
-                    );
+                    ),
                 }
             }
             FileEvent::Modified(path) => {
-                if let Some(meta) = metadata_map.get(path)
-                    && let Err(e) = handle_modified(&mut tx, path, meta, &missing_old_paths).await
-                {
-                    log::warn!("Failed to process modified file {}: {}", path.display(), e);
+                if let Some(meta) = metadata_map.get(path) {
+                    match handle_modified(&mut tx, path, meta, &mut moved_candidates).await {
+                        Ok(changed) => changes += usize::from(changed),
+                        Err(e) => log::warn!(
+                            "Failed to process modified file {}: {}",
+                            path.display(),
+                            e
+                        ),
+                    }
                 }
             }
             // Caller short-circuits on RescanNeeded before reaching here.
@@ -179,11 +219,18 @@ pub(super) async fn process_batch(
     }
 
     if is_bulk {
-        queries::stats::recalculate_all_stats(&mut tx).await?;
+        // Triggers were off during the loop; with zero changes the
+        // denormalized stats are still correct, so only the re-enable is
+        // unconditional.
+        if changes > 0 {
+            queries::stats::recalculate_all_stats(&mut tx).await?;
+        }
         queries::stats::enable_stats_triggers(&mut tx).await?;
     }
 
-    queries::scan::update_album_artwork_from_tracks(&mut tx).await?;
+    if changes > 0 {
+        queries::scan::update_album_artwork_from_tracks(&mut tx).await?;
+    }
     tx.commit().await?;
 
     Ok(())
@@ -230,29 +277,33 @@ fn file_name_owned(path: &Path) -> String {
         .to_owned()
 }
 
+/// Returns `true` when a row was actually written (insert or moved-file
+/// re-point) so the caller can gate the per-batch sweeps on real changes.
 async fn handle_created(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     path: &Path,
     meta: &ExtractedMetadata,
-    missing_old_paths: &HashSet<String>,
-) -> AppResult<()> {
+    moved_candidates: &mut HashMap<String, (i64, String)>,
+) -> AppResult<bool> {
     let path_str = path.to_string_lossy().into_owned();
 
     if queries::scan::track_exists_by_path(tx, &path_str).await? {
-        return Ok(());
+        return Ok(false);
     }
 
     // Move detection: same content hash + the previous owner's path is now
     // missing → re-point the existing row instead of inserting a new one.
-    if let Some((existing_id, old_path)) = queries::scan::find_track_by_hash(tx, &meta.file_hash).await?
-        && missing_old_paths.contains(&old_path)
-    {
+    // Candidates were batch-resolved before the transaction opened; consume
+    // the entry only on a successful re-point so a failed folder lookup
+    // leaves it available to a later same-hash event, matching the old
+    // per-event-query behavior.
+    if let Some((existing_id, old_path)) = moved_candidates.get(&meta.file_hash).cloned() {
         let Some(folder_id) = queries::scan::find_folder_for_path(tx, &path_str).await? else {
             log::debug!(
                 "Moved file not in any library folder, skipping: {}",
                 path.display()
             );
-            return Ok(());
+            return Ok(false);
         };
         let file_name = file_name_owned(path);
         let date_modified = extract_date_modified(path);
@@ -265,12 +316,13 @@ async fn handle_created(
             date_modified.as_deref(),
         )
         .await?;
+        moved_candidates.remove(&meta.file_hash);
         log::info!("Detected moved file: {old_path} -> {path_str}");
-        return Ok(());
+        return Ok(true);
     }
 
     let Some(ids) = resolve_track_context(tx, path, &path_str, meta, "Created").await? else {
-        return Ok(());
+        return Ok(false);
     };
 
     let file_name = file_name_owned(path);
@@ -279,16 +331,17 @@ async fn handle_created(
         queries::scan::insert_track(tx, &path_str, &file_name, meta, &ids, &now).await?;
     log::info!("Added new track: {path_str}");
 
-    Ok(())
+    Ok(true)
 }
 
+/// Returns `true` when a row was actually written. See [`handle_created`].
 async fn handle_renamed(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     from: &Path,
     to: &Path,
     meta: Option<&ExtractedMetadata>,
-    missing_old_paths: &HashSet<String>,
-) -> AppResult<()> {
+    moved_candidates: &mut HashMap<String, (i64, String)>,
+) -> AppResult<bool> {
     let from_str = from.to_string_lossy().into_owned();
     let to_str = to.to_string_lossy().into_owned();
 
@@ -298,7 +351,7 @@ async fn handle_renamed(
                 "Renamed file not in any library folder, skipping: {}",
                 to.display()
             );
-            return Ok(());
+            return Ok(false);
         };
 
         let file_name = file_name_owned(to);
@@ -314,31 +367,33 @@ async fn handle_renamed(
         )
         .await?;
         log::info!("Renamed track: {from_str} -> {to_str}");
+        return Ok(true);
     } else if let Some(meta) = meta {
-        handle_created(tx, to, meta, missing_old_paths).await?;
+        return handle_created(tx, to, meta, moved_candidates).await;
     }
 
-    Ok(())
+    Ok(false)
 }
 
+/// Returns `true` when a row was actually written. See [`handle_created`].
 async fn handle_modified(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     path: &Path,
     meta: &ExtractedMetadata,
-    missing_old_paths: &HashSet<String>,
-) -> AppResult<()> {
+    moved_candidates: &mut HashMap<String, (i64, String)>,
+) -> AppResult<bool> {
     let path_str = path.to_string_lossy().into_owned();
 
     if !queries::scan::track_exists_by_path(tx, &path_str).await? {
-        return handle_created(tx, path, meta, missing_old_paths).await;
+        return handle_created(tx, path, meta, moved_candidates).await;
     }
 
     let Some(ids) = resolve_track_context(tx, path, &path_str, meta, "Modified").await? else {
-        return Ok(());
+        return Ok(false);
     };
 
     queries::scan::update_track_metadata(tx, &path_str, meta, &ids).await?;
     log::info!("Updated metadata for: {path_str}");
 
-    Ok(())
+    Ok(true)
 }
