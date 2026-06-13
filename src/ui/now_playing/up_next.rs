@@ -40,10 +40,11 @@ pub(super) fn spawn_up_next_subscriber(
             let Some(ui) = weak.upgrade() else { break };
             let Some(qvm) = snapshot else { continue };
 
-            // View closed: stash the snapshot so an open can rebuild from
-            // it, but don't build ~20 `QueueRow`s (string clones +
-            // thumbnail lookups) for rows that aren't on screen.
-            if !np_state.open.get() {
+            // Skip the rebuild when nothing that renders the model is on
+            // screen — neither the full-screen Now Playing view nor the
+            // square miniplayer variant. Stash the snapshot so a later
+            // open can rebuild from it.
+            if !np_state.open.get() && !np_state.mini_visible.get() {
                 *np_state.latest_qvm.borrow_mut() = Some(qvm);
                 continue;
             }
@@ -108,6 +109,31 @@ pub(super) fn spawn_up_next_subscriber(
     Ok(())
 }
 
+/// Rebuild the Up Next list from `np_state.latest_qvm` (the snapshot the
+/// subscriber stashes while no surface renders the model). No-op when no
+/// snapshot has been stashed. Shared between:
+///
+/// - `wire_now_playing_open` — when the full-screen Now Playing view opens.
+/// - `crate::ui::mini_player::install` — via `NowPlayingState::kick_up_next`,
+///   when the responsive miniplayer becomes visible.
+///
+/// Resets the slide bookkeeping (`last_current_id`, `last_queue_index`) so
+/// the next real track change picks the right direction without replaying
+/// a phantom animation for changes that happened while closed.
+pub(super) fn seed_from_stash(
+    ui: &AppWindow,
+    cover_thumbs: &CoverThumbs,
+    up_next_model: &Rc<VecModel<QueueRow>>,
+    np_state: &NowPlayingState,
+) {
+    let latest_qvm = np_state.latest_qvm.borrow().clone();
+    let Some(qvm) = latest_qvm else { return };
+    let ids = rebuild_up_next(ui, cover_thumbs, up_next_model, &qvm);
+    *np_state.rendered_ids.borrow_mut() = ids;
+    np_state.last_current_id.set(current_track_id(&qvm));
+    np_state.last_queue_index.set(qvm.queue_index);
+}
+
 /// Wire `Nav.now-playing-open-changed` (mirrored from the Slint side — see
 /// `app-window.slint`). Updates the shared `open` flag and, on open, seeds
 /// everything the two subscribers skipped while the view was closed.
@@ -140,17 +166,7 @@ pub(super) fn wire_now_playing_open(
         let Some(ui) = weak.upgrade() else { return };
 
         // Up Next: rebuild from the latest snapshot stashed while closed.
-        let latest_qvm = np_state.latest_qvm.borrow().clone();
-        if let Some(qvm) = latest_qvm {
-            let ids = rebuild_up_next(&ui, &cover_thumbs, &up_next_model, &qvm);
-            *np_state.rendered_ids.borrow_mut() = ids;
-            np_state.last_current_id.set(current_track_id(&qvm));
-            // Sync the index too — re-opening with a track changed while
-            // closed shouldn't replay a phantom animation, and the next
-            // real change should compute direction against the current
-            // index, not the one from before the view closed.
-            np_state.last_queue_index.set(qvm.queue_index);
-        }
+        seed_from_stash(&ui, &cover_thumbs, &up_next_model, &np_state);
 
         // Artwork + chips: seed for the current track, but only if it
         // differs from whatever is already written into the `Player`

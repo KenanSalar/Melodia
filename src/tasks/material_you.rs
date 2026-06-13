@@ -3,10 +3,12 @@
 //! 1. Subscribes to `view_model_rx` (current artwork path) and a
 //!    `watch::<u64>` kick channel from `ui::appearance` (theme / variant /
 //!    style / system-theme changes).
-//! 2. On any change, re-reads `settings.json` for the latest
-//!    `(theme_id, dynamic_color_style, theme_variant)`, snapshots the
-//!    current `os_state`, and decides whether to generate or clear
-//!    Material You.
+//! 2. Keeps a cached `(theme_id, dynamic_color_style, theme_variant)`
+//!    snapshot, re-read from `settings.json` only on kick wakes (every
+//!    write to those fields kicks after persisting). On any wake it
+//!    combines the snapshot with the current `os_state` and decides
+//!    whether to generate or clear Material You — view-model wakes (the
+//!    per-emit playback hot path) never touch the filesystem.
 //! 3. CPU-bound extraction + palette generation runs on
 //!    `tokio::task::spawn_blocking`. Source ARGB is cached in a
 //!    bounded `SeedCache` (cap 32) so prev/next/prev round-trips don't
@@ -76,6 +78,40 @@ struct LastApplied {
     theme_id: Option<String>,
 }
 
+/// The three appearance fields `react` consumes, snapshotted from
+/// `settings.json` only on kick wakes. Every write to these fields is
+/// followed by a kick (kick-after-persist convention), so view-model
+/// wakes — the per-emit hot path: volume steps, seeks, play/pause —
+/// reuse the cached copy instead of paying a disk read + JSON parse
+/// per state emit.
+struct AppearanceSnapshot {
+    theme_id: String,
+    dynamic_color_style: String,
+    theme_variant: String,
+}
+
+/// Read the appearance fields off the blocking pool. Returns `None` on a
+/// failed read so the caller can retain its previous snapshot (transient
+/// failure) or bail until the next kick (no snapshot yet).
+async fn read_appearance(state: &AppState) -> Option<AppearanceSnapshot> {
+    let state = state.clone();
+    match tokio::task::spawn_blocking(move || library::settings::get_settings(&state)).await {
+        Ok(Ok(s)) => Some(AppearanceSnapshot {
+            theme_id: s.theme_id,
+            dynamic_color_style: s.dynamic_color_style,
+            theme_variant: s.theme_variant,
+        }),
+        Ok(Err(e)) => {
+            log::warn!("material_you: read settings: {e}");
+            None
+        }
+        Err(e) => {
+            log::warn!("material_you: settings read join: {e}");
+            None
+        }
+    }
+}
+
 async fn run(
     state: AppState,
     os_state: Arc<RwLock<SystemColorState>>,
@@ -88,14 +124,19 @@ async fn run(
     let mut seed_cache = SeedCache::new();
     let mut last = LastApplied::default();
 
+    // Appearance snapshot, refreshed from disk only on kick wakes (every
+    // theme / variant / style write kicks after persisting). View-model
+    // wakes reuse it, so playback state emits never touch the filesystem.
+    let mut appearance = read_appearance(&state).await;
+
     // Drive once at startup so an app launch with style != "none" picks
     // up the persisted artwork (queue restore seeds the view model
     // before this task spawns).
     react(
-        &state,
         &os_state,
         &mut seed_cache,
         &mut last,
+        appearance.as_ref(),
         &view_model_rx,
         &repaint_tx,
         &cover_thumbs,
@@ -111,13 +152,18 @@ async fn run(
             res = kick_rx.changed() => {
                 if res.is_err() { break; }
                 let _ = kick_rx.borrow_and_update();
+                // Keep the previous snapshot on a transient read failure —
+                // the next kick re-attempts.
+                if let Some(fresh) = read_appearance(&state).await {
+                    appearance = Some(fresh);
+                }
             }
         }
         react(
-            &state,
             &os_state,
             &mut seed_cache,
             &mut last,
+            appearance.as_ref(),
             &view_model_rx,
             &repaint_tx,
             &cover_thumbs,
@@ -127,33 +173,29 @@ async fn run(
     log::debug!("material_you coordinator stopped");
 }
 
-/// Single iteration: read settings + view-model + `os_state`, decide
-/// whether to generate/clear/skip, and publish the result through
-/// `repaint_tx` for the UI-thread subscriber to apply.
+/// Single iteration: combine the cached appearance snapshot with the
+/// latest view-model + `os_state`, decide whether to generate/clear/skip,
+/// and publish the result through `repaint_tx` for the UI-thread
+/// subscriber to apply.
 async fn react(
-    state: &AppState,
     os_state: &Arc<RwLock<SystemColorState>>,
     seed_cache: &mut SeedCache,
     last: &mut LastApplied,
+    appearance: Option<&AppearanceSnapshot>,
     view_model_rx: &watch::Receiver<Option<PlayerViewModelLight>>,
     repaint_tx: &watch::Sender<SystemColorState>,
     cover_thumbs: &Arc<CoverThumbs>,
 ) {
-    // Snapshot inputs.
-    let settings = match library::settings::get_settings(state) {
-        Ok(s) => s,
-        Err(e) => {
-            log::warn!("material_you: read settings: {e}");
-            return;
-        }
-    };
+    // No snapshot yet (startup read failed) — nothing sensible to decide
+    // on; the next kick re-reads and re-drives.
+    let Some(appearance) = appearance else { return };
 
-    let style = SchemeStyle::from_id(&settings.dynamic_color_style);
-    let theme_id = settings.theme_id.clone();
+    let style = SchemeStyle::from_id(&appearance.dynamic_color_style);
+    let theme_id = appearance.theme_id.clone();
 
     // Resolve `is_dark` from the user's variant + OS signal.
     let os_theme = os_state.read().theme.clone();
-    let is_dark = match settings.theme_variant.as_str() {
+    let is_dark = match appearance.theme_variant.as_str() {
         "dark" => true,
         "light" => false,
         _ => os_theme != "light", // "system" or anything unknown → OS says

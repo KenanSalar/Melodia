@@ -101,7 +101,7 @@ fn find_external_cover_cache_hit() -> Result<(), AppError> {
     let _ = find_external_cover(&track_path, &cache);
 
     // Only one directory entry cached
-    assert_eq!(cache.lock().len(), 1);
+    assert_eq!(cache.dir_to_cover.lock().len(), 1);
     Ok(())
 }
 
@@ -183,6 +183,29 @@ fn find_and_cache_artwork_external_only() -> Result<(), AppError> {
 
     let result = find_and_cache_artwork(&track_path, None, &artwork_dir, &cache);
     assert!(result.is_some());
+    Ok(())
+}
+
+#[test]
+fn find_and_cache_artwork_memoizes_per_cover() -> Result<(), AppError> {
+    let tmp = tempfile::tempdir()?;
+    let album_dir = tmp.path().join("album");
+    let artwork_dir = tmp.path().join("artwork");
+    std::fs::create_dir_all(&album_dir)?;
+    std::fs::create_dir_all(&artwork_dir)?;
+    std::fs::write(album_dir.join("cover.jpg"), b"album art")?;
+
+    let cache: CoverCache = new_cover_cache();
+
+    // Two tracks in the same directory resolve to the same cover file and
+    // must share one memo entry (one read+hash, not one per track).
+    let first = find_and_cache_artwork(&album_dir.join("a.mp3"), None, &artwork_dir, &cache)
+        .ok_or_else(|| AppError::Validation("expected cached artwork path".into()))?;
+    let second = find_and_cache_artwork(&album_dir.join("b.mp3"), None, &artwork_dir, &cache)
+        .ok_or_else(|| AppError::Validation("expected cached artwork path".into()))?;
+
+    assert_eq!(first, second);
+    assert_eq!(cache.cover_to_cached.lock().len(), 1);
     Ok(())
 }
 

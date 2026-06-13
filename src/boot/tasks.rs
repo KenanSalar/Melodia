@@ -28,7 +28,7 @@ pub fn spawn_background_tasks(
     tasks::play_count_flusher::spawn(
         spawner,
         state.db.clone(),
-        state.library_changed_tx.clone(),
+        state.stats_changed_tx.clone(),
     );
 
     // OS media controls → SlintEventSink: souvlaki events drive the same

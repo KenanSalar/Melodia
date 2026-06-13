@@ -10,6 +10,7 @@ import { ActionPill, PillLabel, PillButton, PillDivider } from "../components/ac
 import { ColumnTogglePopup } from "../components/track-list/column-toggle-popup.slint";
 import { TrackList } from "../components/track-list/track-list.slint";
 import { OverlayScrollbar } from "../components/overlay-scrollbar.slint";
+import { FilterThrottle } from "../components/filter-throttle.slint";
 
 // The Favorites view (Nav sidebar index 2). Vertical regions:
 //   * Hero — compact (~160 px). Left-side live cover mosaic + right-
@@ -41,15 +42,10 @@ export component FavoritesView inherits Rectangle {
     // the refilter callback at most once per `interval` while `pending !=
     // applied`. Same shape as `tracks-view.slint`'s throttle.
     property <int> filter-tick-pending: 0;
-    property <int> filter-tick-applied: 0;
 
-    filter-throttle := Timer {
-        interval: 130ms;
-        running: root.filter-tick-pending != root.filter-tick-applied;
-        triggered() => {
-            root.filter-tick-applied = root.filter-tick-pending;
-            Favorites.filter-changed(Favorites.filter);
-        }
+    filter-throttle := FilterThrottle {
+        pending: root.filter-tick-pending;
+        fire() => { Favorites.filter-changed(Favorites.filter); }
     }
 
     // Backdrop catches any click that no inner TouchArea consumes and
@@ -310,16 +306,15 @@ export component FavoritesView inherits Rectangle {
         // Wraps the Most Played + Favorite Artists sub-sections AND the
         // All Songs TrackList in a single outer vertical `ScrollView`
         // so one scrollbar (mounted at the view root) covers all three
-        // surfaces. Tradeoff: the TrackList is sized to its full row
-        // count (header + rows × `Theme.row-h`), defeating the inner
-        // ListView's virtualization for the Favorites view. Acceptable
-        // because (a) `release_section_state` drops every row on tab
-        // leave + heap-trims, (b) favourite collections are bounded by
-        // taste (typically dozens to hundreds, not tens of thousands),
-        // and (c) the unified scroll UX matches the Tauri version the
-        // user is porting from. Other views (Tracks / AlbumDetail /
-        // ArtistDetail) keep their virtualization because they don't
-        // have sibling scroll-coupled regions.
+        // surfaces. The TrackList is capped at the outer viewport height
+        // (`min` in its `height` binding), so its inner ListView
+        // virtualizes to ~visible rows — the outer ScrollView's own
+        // travel covers just the strips region, and the unified
+        // scrollbar composes both travels. Wheel handoff between the
+        // regions is native: a Slint Flickable at its scroll edge
+        // forwards wheel events to the parent, so scrolling up at the
+        // list top brings the strips back (the unified scroll UX
+        // matches the Tauri version the user is porting from).
         below-hero := Rectangle {
             vertical-stretch: 1;
             clip: true;
@@ -567,12 +562,17 @@ export component FavoritesView inherits Rectangle {
                 // + header strip + the VL's `pad-xs` gap between
                 // header and list. `max(1, ...)` keeps an empty list
                 // still rendering the column header instead of
-                // collapsing to 0 px.
-                height: max(1, Favorites.tracks.length)
-                    * (Favorites.show-artwork
-                        ? Theme.row-h
-                        : Theme.row-h-compact)
-                    + 32px + Theme.pad-xs;
+                // collapsing to 0 px. Capped at the outer viewport:
+                // small lists keep the content-tall layout, large lists
+                // pin to the visible region so the inner ListView
+                // virtualizes instead of instantiating every row.
+                height: min(
+                    max(1, Favorites.tracks.length)
+                        * (Favorites.show-artwork
+                            ? Theme.row-h
+                            : Theme.row-h-compact)
+                        + 32px + Theme.pad-xs,
+                    below-sv.visible-height);
 
                 rows: Favorites.tracks;
 
@@ -615,8 +615,14 @@ export component FavoritesView inherits Rectangle {
         }
     }
 
-    // Outer vertical scrollbar covers the strips + tracklist together
-    // (driving `below-sv`, NOT the TrackList's internal v-scroll).
+    // Composite scroll math: the outer ScrollView's own travel covers
+    // the strips region (viewport minus visible height), the TrackList's
+    // inner ListView covers the rows. The unified scrollbar below spans
+    // both travels; drags split the offset at the boundary.
+    property <length> v-outer-max: max(0px, below-sv.viewport-height - below-sv.visible-height);
+    property <length> v-inner-max: max(0px, tl.v-viewport-height - tl.v-visible-height);
+
+    // Outer vertical scrollbar covers the strips + tracklist together.
     // Pinned to the right edge of the below-hero region so it starts
     // exactly under the hero banner.
     OverlayScrollbar {
@@ -626,9 +632,12 @@ export component FavoritesView inherits Rectangle {
         width: 10px;
         height: below-hero.height;
         visible-size: below-sv.visible-height;
-        content-size: below-sv.viewport-height;
-        offset: -below-sv.viewport-y;
-        scroll-to(o) => { below-sv.viewport-y = -o; }
+        content-size: below-sv.visible-height + root.v-outer-max + root.v-inner-max;
+        offset: -below-sv.viewport-y + tl.v-offset;
+        scroll-to(o) => {
+            below-sv.viewport-y = -min(o, root.v-outer-max);
+            tl.set-v-offset(max(0px, o - root.v-outer-max));
+        }
     }
 
     // Horizontal scrollbar still drives the TrackList's column pan —

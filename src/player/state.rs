@@ -159,7 +159,6 @@ pub enum PlayerAction {
         track_id: i64,
         position_ms: u64,
     },
-    SaveQueue(PersistableQueue),
 }
 
 impl PlayerState {

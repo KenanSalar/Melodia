@@ -6,6 +6,7 @@ import { ColumnTogglePopup } from "../components/track-list/column-toggle-popup.
 import { SearchBar } from "../components/search-bar.slint";
 import { DraggableTrackList } from "../components/track-list/draggable-track-list.slint";
 import { OverlayScrollbar } from "../components/overlay-scrollbar.slint";
+import { FilterThrottle } from "../components/filter-throttle.slint";
 import { MaterialIcon } from "../components/material-icon.slint";
 
 // The full Playlist Detail view. Mounted by `app-window.slint` for nav
@@ -26,19 +27,14 @@ export component PlaylistDetailView inherits Rectangle {
         @tr("{n} track" | "{n} tracks" % PlaylistDetail.playlist.track_count)
         + " · " + Theme.format-duration(PlaylistDetail.playlist.total_duration_ms);
 
-    // Filter throttle (mirror of `artist-detail-view`): each keystroke
-    // bumps `pending`; the Timer fires the filter callback at most once
-    // per `interval` while `pending != applied`.
+    // Filter throttle: each keystroke bumps `filter-tick-pending`; the
+    // shared `FilterThrottle` fires the filter callback at most once per
+    // ~130 ms while pending is ahead of the last-applied tick.
     property <int> filter-tick-pending: 0;
-    property <int> filter-tick-applied: 0;
 
-    filter-throttle := Timer {
-        interval: 130ms;
-        running: root.filter-tick-pending != root.filter-tick-applied;
-        triggered() => {
-            root.filter-tick-applied = root.filter-tick-pending;
-            PlaylistDetail.filter-changed(PlaylistDetail.filter);
-        }
+    filter-throttle := FilterThrottle {
+        pending: root.filter-tick-pending;
+        fire() => { PlaylistDetail.filter-changed(PlaylistDetail.filter); }
     }
 
     // Backdrop catches any click that no inner TouchArea consumes and

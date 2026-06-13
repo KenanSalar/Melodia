@@ -224,6 +224,21 @@ pub async fn scan_folder(state: &AppState, folder_id: i64) -> Result<u32, AppErr
     scan_folder_internal(state, folder_id).await
 }
 
+/// Scan-delta size above which the denormalized-stats triggers are dropped
+/// for the ingest and rebuilt via one `recalculate_all_stats` sweep at the
+/// end. At or below it the triggers stay enabled: per-row maintenance on a
+/// handful of inserts/updates/deletes is far cheaper than the full 3-table
+/// correlated-subquery recalc the drop would force. Same value and
+/// rationale as the watcher reconcile path's `BULK_THRESHOLD`
+/// (`tasks/file_event_processor/reconcile.rs`).
+const SCAN_BULK_THRESHOLD: usize = 20;
+
+/// Files per ingest write-transaction on the bulk scan path. Large enough
+/// that per-chunk overhead (begin/commit + the 6 trigger DDL statements)
+/// is noise, small enough that interactive writes waiting on the single
+/// writer connection get a slot every few seconds even on slow disks.
+const TX_CHUNK_FILES: usize = 2_000;
+
 /// Internal scan implementation. Reusable by `scan_folder` and the first-launch task.
 pub async fn scan_folder_internal(
     state: &AppState,
@@ -239,7 +254,36 @@ pub async fn scan_folder_internal(
         )));
     }
 
-    let files = collect_media_files(folder_path);
+    // Read-side pre-load through the read pool (before the writer tx opens):
+    // size + mtime for every track already in this folder. Doesn't contend
+    // with the scan's writes.
+    let existing_summaries =
+        queries::scan::get_existing_track_summaries_for_folder(&state.db, folder.id).await?;
+
+    // Directory walk + incremental filter on the blocking pool. Both are
+    // synchronous syscall loops (WalkDir over the whole tree, then one
+    // `fs::metadata` per already-known file inside `track_is_current`) —
+    // running them inline in this async fn would pin one of the runtime's
+    // few workers for the duration on a cold-cache disk, stalling position
+    // ticks and watcher deliveries during boot reconciles.
+    //
+    // The incremental filter only (re)parses files that are new, or whose
+    // size or mtime no longer matches the stored row. Byte-unchanged files
+    // keep their existing DB metadata untouched — Lofty is skipped for
+    // them entirely, which is the bulk of a typical startup rescan.
+    let folder_path_owned = folder_path.to_path_buf();
+    let (files, to_scan) = tokio::task::spawn_blocking(move || {
+        let files = collect_media_files(&folder_path_owned);
+        let to_scan: Vec<PathBuf> = files
+            .iter()
+            .filter(|path| !track_is_current(path, &existing_summaries))
+            .cloned()
+            .collect();
+        (files, to_scan)
+    })
+    .await
+    .map_err(|e| AppError::Scanner(format!("Scan walk task failed: {e}")))?;
+
     if files.is_empty() {
         return Ok(0);
     }
@@ -248,21 +292,6 @@ pub async fn scan_folder_internal(
     // the scan-progress channel so the UI doesn't keep a stale progress bar.
     let _scan_guard = ScanProgressGuard(&state.scan_progress_tx);
 
-    // Read-side pre-load through the read pool (before the writer tx opens):
-    // size + mtime for every track already in this folder. Doesn't contend
-    // with the scan's writes.
-    let existing_summaries =
-        queries::scan::get_existing_track_summaries_for_folder(&state.db, folder.id).await?;
-
-    // Incremental filter: only (re)parse files that are new, or whose size
-    // or mtime no longer matches the stored row. Byte-unchanged files keep
-    // their existing DB metadata untouched — Lofty is skipped for them
-    // entirely, which is the bulk of a typical startup rescan.
-    let to_scan: Vec<PathBuf> = files
-        .iter()
-        .filter(|path| !track_is_current(path, &existing_summaries))
-        .cloned()
-        .collect();
     let skipped = files.len() - to_scan.len();
     if skipped > 0 {
         log::info!(
@@ -272,6 +301,13 @@ pub async fn scan_folder_internal(
         );
     }
     let total = u32::try_from(to_scan.len()).unwrap_or(u32::MAX);
+
+    // Decided before `to_scan` moves into the scan task. Edge: a tiny
+    // `to_scan` combined with a huge orphan purge (folder emptied
+    // externally) runs the delete trigger per orphaned row — rare, still
+    // correct, and accepted over plumbing the orphan count (unknown until
+    // inside the transaction) into this decision.
+    let is_bulk = to_scan.len() > SCAN_BULK_THRESHOLD;
 
     // Publish an initial 0-of-total tick so the UI shows the bar immediately.
     let _ = state.scan_progress_tx.send(Some(ScanProgressTick {
@@ -322,20 +358,51 @@ pub async fn scan_folder_internal(
         .map_err(|e| AppError::Scanner(format!("Scan task failed: {e}")))?
     };
 
-    let mut tx = state.db.write().begin().await?;
-    queries::stats::disable_stats_triggers(&mut tx).await?;
-
     let scan_timestamp = crate::utils::now_rfc3339();
 
-    let result = queries::ingest::ingest_scanned_files(
-        &mut tx,
-        &scanned_files,
-        &queries::FolderResolution::Fixed(folder.id),
-        &scan_timestamp,
-        true,
-    )
-    .await?;
+    // --- Phase 1: ingest, chunked into separate write transactions on the
+    // bulk path. The single writer connection frees between chunks, so
+    // interactive writes (favorite toggles, play-count flushes, position
+    // saves) no longer queue behind a multi-minute first scan. Each chunk
+    // is self-consistent: stats triggers are dropped and recreated INSIDE
+    // its transaction, so a crash never leaves them missing — the stats
+    // merely lag until the final recalc below, which is invisible to the
+    // UI because `library_changed_tx` is bumped only after the final
+    // commit. A crash between chunks leaves committed tracks behind; the
+    // next scan's size+mtime gate makes the re-run a cheap no-op over them.
+    let mut inserted_count: u32 = 0;
+    let mut moved_count: u32 = 0;
+    let mut updated_count: u32 = 0;
+    let chunk_size = if is_bulk {
+        TX_CHUNK_FILES
+    } else {
+        scanned_files.len().max(1)
+    };
+    for chunk in scanned_files.chunks(chunk_size) {
+        let mut tx = state.db.write().begin().await?;
+        if is_bulk {
+            queries::stats::disable_stats_triggers(&mut tx).await?;
+        }
+        let result = queries::ingest::ingest_scanned_files(
+            &mut tx,
+            chunk,
+            &queries::FolderResolution::Fixed(folder.id),
+            &scan_timestamp,
+            true,
+        )
+        .await?;
+        if is_bulk {
+            queries::stats::enable_stats_triggers(&mut tx).await?;
+        }
+        tx.commit().await?;
+        inserted_count += result.inserted_count;
+        moved_count += result.moved_count;
+        updated_count += result.updated_count;
+    }
 
+    // --- Phase 2: orphan pruning + album-artwork roll-up + stats recalc
+    // in one final transaction.
+    let mut tx = state.db.write().begin().await?;
     let all_db_paths = queries::scan::get_all_track_paths_for_folder(&mut tx, folder.id).await?;
     // Orphans = DB rows whose file is no longer on disk. Compare against the
     // full on-disk set (`files`), NOT `scanned_files`: with the incremental
@@ -349,6 +416,14 @@ pub async fn scan_folder_internal(
         .into_iter()
         .filter(|p| !on_disk_paths.contains(p))
         .collect();
+    // On the bulk path a full recalc follows anyway, so a large orphan
+    // purge shouldn't pay per-row delete triggers on top — drop them for
+    // the delete. Small deltas keep the triggers on (per-row maintenance
+    // is the whole point of the `!is_bulk` branch).
+    let bulk_orphan_purge = is_bulk && !orphans.is_empty();
+    if bulk_orphan_purge {
+        queries::stats::disable_stats_triggers(&mut tx).await?;
+    }
     if !orphans.is_empty() {
         log::info!(
             "Removing {} orphaned tracks from folder {}",
@@ -360,27 +435,30 @@ pub async fn scan_folder_internal(
 
     // No-op rescans (every file unchanged, no orphans, no inserts) skip the
     // album-artwork propagation and the full stats recalc — both are O(rows)
-    // sweeps that produce identical values when nothing changed. The
-    // disable/enable-triggers cost is tiny by comparison and stays
-    // unconditional so the symmetric pair always pairs up.
-    let any_changes = result.inserted_count > 0
-        || result.updated_count > 0
-        || result.moved_count > 0
-        || !orphans.is_empty();
+    // sweeps that produce identical values when nothing changed.
+    let any_changes =
+        inserted_count > 0 || updated_count > 0 || moved_count > 0 || !orphans.is_empty();
 
     if any_changes {
         queries::scan::update_album_artwork_from_tracks(&mut tx).await?;
-        queries::stats::recalculate_all_stats(&mut tx).await?;
     }
-    queries::stats::enable_stats_triggers(&mut tx).await?;
+    // Small deltas (`!is_bulk`) never dropped the triggers, so per-row
+    // maintenance already kept the stats correct — no recalc needed at all.
+    if is_bulk {
+        if any_changes {
+            queries::stats::recalculate_all_stats(&mut tx).await?;
+        }
+        if bulk_orphan_purge {
+            queries::stats::enable_stats_triggers(&mut tx).await?;
+        }
+    }
     tx.commit().await?;
 
-    let inserted_count = result.inserted_count;
-    if result.moved_count > 0 {
-        log::info!("Detected {} moved/renamed files", result.moved_count);
+    if moved_count > 0 {
+        log::info!("Detected {moved_count} moved/renamed files");
     }
-    if result.updated_count > 0 {
-        log::info!("Updated metadata for {} changed files", result.updated_count);
+    if updated_count > 0 {
+        log::info!("Updated metadata for {updated_count} changed files");
     }
 
     let now = crate::utils::now_rfc3339();

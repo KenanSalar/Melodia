@@ -34,23 +34,42 @@ impl<W: Write> Write for HashingWriter<W> {
     }
 }
 
-/// LRU cap for the parent-directory → external-cover-path resolution cache.
-/// Each entry stores at most two `PathBuf`s (key + the resolved cover path),
-/// so 2 000 entries is well under 1 MB but covers a realistic distinct-album
-/// directory count for a large library. Older entries are evicted on insert
-/// once the cap is reached, so the cache no longer grows unbounded as a user
-/// browses lots of folders.
+/// LRU cap shared by both external-cover caches. Each entry stores a couple
+/// of `PathBuf`s / a short `String`, so 2 000 entries is well under 1 MB but
+/// covers a realistic distinct-album directory count for a large library.
+/// Older entries are evicted on insert once the cap is reached, so neither
+/// cache grows unbounded as a user browses lots of folders.
 const COVER_CACHE_CAP: NonZeroUsize = match NonZeroUsize::new(2_000) {
     Some(n) => n,
     None => panic!("COVER_CACHE_CAP > 0"),
 };
 
-pub type CoverCache = Arc<Mutex<LruCache<PathBuf, Option<PathBuf>>>>;
+/// Filesystem memoization for external cover resolution, two tiers:
+///
+/// * `dir_to_cover` — parent directory → which cover filename (if any)
+///   lives in it, saving the per-track directory probe.
+/// * `cover_to_cached` — cover file path → result of [`cache_image_file`]
+///   (the deduplicated artwork-cache path, or `None` for an unreadable /
+///   empty file). Every track in an album directory resolves to the same
+///   cover file, so without this tier the cover is fully re-read and
+///   re-hashed once per *track* instead of once per *cover*.
+///
+/// Locks are held only around LRU get/put — never across the file
+/// read+hash itself — so Rayon scan workers don't serialize behind I/O.
+pub struct CoverCaches {
+    dir_to_cover: Mutex<LruCache<PathBuf, Option<PathBuf>>>,
+    cover_to_cached: Mutex<LruCache<PathBuf, Option<String>>>,
+}
 
-/// Build a fresh cover cache with the standard cap. Use this everywhere a
-/// `CoverCache` is constructed so the cap stays consistent.
+pub type CoverCache = Arc<CoverCaches>;
+
+/// Build a fresh cover cache with the standard caps. Use this everywhere a
+/// `CoverCache` is constructed so the caps stay consistent.
 pub fn new_cover_cache() -> CoverCache {
-    Arc::new(Mutex::new(LruCache::new(COVER_CACHE_CAP)))
+    Arc::new(CoverCaches {
+        dir_to_cover: Mutex::new(LruCache::new(COVER_CACHE_CAP)),
+        cover_to_cached: Mutex::new(LruCache::new(COVER_CACHE_CAP)),
+    })
 }
 
 /// Common cover art filenames to look for in the audio file's directory.
@@ -99,7 +118,7 @@ fn find_external_cover(file_path: &Path, cover_cache: &CoverCache) -> Option<Pat
 
     // Check cache first. `LruCache::get` requires `&mut self`, so the lock
     // is held briefly while the entry is promoted to most-recently-used.
-    if let Some(cached) = cover_cache.lock().get(&dir_buf) {
+    if let Some(cached) = cover_cache.dir_to_cover.lock().get(&dir_buf) {
         return cached.clone();
     }
 
@@ -115,7 +134,7 @@ fn find_external_cover(file_path: &Path, cover_cache: &CoverCache) -> Option<Pat
 
     // Cache the result (even None, to avoid re-scanning directories without
     // covers). Evicts the LRU entry if at capacity.
-    cover_cache.lock().put(dir_buf, result.clone());
+    cover_cache.dir_to_cover.lock().put(dir_buf, result.clone());
 
     result
 }
@@ -209,11 +228,30 @@ pub fn find_and_cache_artwork(
     artwork_dir: &Path,
     cover_cache: &CoverCache,
 ) -> Option<String> {
-    // 1. External cover art files (cover.jpg, folder.jpg, etc.)
-    if let Some(cover_path) = find_external_cover(file_path, cover_cache)
-        && let Some(cached) = cache_image_file(&cover_path, artwork_dir)
-    {
-        return Some(cached);
+    // 1. External cover art files (cover.jpg, folder.jpg, etc.). The
+    //    read+hash+copy result is memoized per cover path so an album's
+    //    cover is processed once, not once per track in its directory. A
+    //    memoized `None` (unreadable / empty cover) also skips the re-read
+    //    and falls through to embedded artwork, matching the uncached
+    //    behavior.
+    if let Some(cover_path) = find_external_cover(file_path, cover_cache) {
+        let memo = cover_cache.cover_to_cached.lock().get(&cover_path).cloned();
+        let cached = if let Some(result) = memo {
+            result
+        } else {
+            // Lock dropped during the read+hash — two Rayon workers
+            // racing on the same cover may duplicate the work once,
+            // but never queue behind each other's I/O.
+            let result = cache_image_file(&cover_path, artwork_dir);
+            cover_cache
+                .cover_to_cached
+                .lock()
+                .put(cover_path, result.clone());
+            result
+        };
+        if let Some(cached) = cached {
+            return Some(cached);
+        }
     }
 
     // 2. Embedded tag artwork

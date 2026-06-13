@@ -284,8 +284,22 @@ fn main() -> AppResult<()> {
     // 6c. Full-screen Now Playing view (owns its own small `(cover, blur)`
     // LRU separate from `cover_thumbs`).
     let np_artwork = Arc::new(ui::now_playing_artwork::NowPlayingArtwork::new());
-    if let Err(e) = ui::now_playing::install(&app, &state, &views.cover_thumbs, &np_artwork) {
-        log::warn!("now_playing::install: {e}");
+    let np_state = match ui::now_playing::install(&app, &state, &views.cover_thumbs, &np_artwork)
+    {
+        Ok(s) => Some(s),
+        Err(e) => {
+            log::warn!("now_playing::install: {e}");
+            None
+        }
+    };
+    // Miniplayer wiring depends on `np_state` so the up-next subscriber
+    // gate can flip on/off as the responsive mini state changes. Skip
+    // if `now_playing::install` failed — without it the gate would
+    // never affect anything visible.
+    if let Some(ref np_state) = np_state
+        && let Err(e) = ui::mini_player::install(&app, &state, &np_artwork, np_state)
+    {
+        log::warn!("mini_player::install: {e}");
     }
 
     // 7. Seed `Player.vm` / `Player.queue` once with the current state.
@@ -299,8 +313,9 @@ fn main() -> AppResult<()> {
     boot::ui_setup::spawn_initial_genres_fetch(&state, &views.genres_ui, weak.clone());
     boot::ui_setup::spawn_initial_playlists_fetch(&state, &views.playlists_ui, weak.clone());
 
-    // 9. Re-fetch Tracks whenever the library mutates.
-    boot::ui_setup::install_library_changed_refresher(&state, weak.clone())?;
+    // 9. Re-fetch Tracks whenever the library mutates (deferred to the next
+    // section-enter while the view is hidden).
+    boot::ui_setup::install_library_changed_refresher(&state, &views.tracks_ui, weak.clone())?;
 
     // 9b. Toast on watcher-overflow rescan (kernel queue dropped events).
     boot::ui_setup::install_rescan_notice_subscriber(&state, weak.clone(), notifications.clone())?;

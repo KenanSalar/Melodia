@@ -827,3 +827,11 @@ msgstr "Das Ändern des Systembereich-Symbols erfordert einen Neustart von Melod
 
 msgid "Available only while the system tray icon is active."
 msgstr "Nur verfügbar, solange das Systembereich-Symbol aktiv ist."
+
+# ---- Miniplayer --------------------------------------------------------------
+
+# Tooltip on the `open_in_full` button inside the compact miniplayer
+# (`ui/views/mini-player.slint`). Restores the OS window to its pre-mini
+# size so the full UI returns.
+msgid "Exit miniplayer"
+msgstr "Mini-Player verlassen"

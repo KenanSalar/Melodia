@@ -5,9 +5,7 @@ use crate::entities::track::TrackSummary;
 use crate::error::{AppError, AppResult};
 use crate::player::actions::execute_actions;
 use crate::player::rodio_backend::load_queue_from_disk_sync;
-use crate::player::state::{
-    PlayerAction, lock_state, play_track_inner, restore_queue, with_state_emit,
-};
+use crate::player::state::{play_track_inner, restore_queue, with_state_emit};
 use crate::player::types::RepeatMode;
 use crate::services::settings::{mutate_settings, mutate_settings_with};
 use crate::state::AppState;
@@ -89,7 +87,6 @@ pub async fn queue_append_unique(state: &AppState, track_id: i64) -> Result<(), 
         actions,
         &*state.rodio,
         &state.db,
-        &state.paths,
         &state.player_state,
         &state.sinks,
     );
@@ -179,7 +176,6 @@ pub fn queue_skip_to_index(state: &AppState, index: usize) -> Result<(), AppErro
         actions,
         &*state.rodio,
         &state.db,
-        &state.paths,
         &state.player_state,
         &state.sinks,
     );
@@ -201,7 +197,6 @@ pub async fn queue_direct_play(state: &AppState, track_id: i64) -> Result<(), Ap
         actions,
         &*state.rodio,
         &state.db,
-        &state.paths,
         &state.player_state,
         &state.sinks,
     );
@@ -280,33 +275,6 @@ fn persist_repeat(state: &AppState, mode: RepeatMode) {
             log::warn!("persist repeat_mode: {e}");
         }
     });
-}
-
-pub fn queue_save(state: &AppState) -> Result<(), AppError> {
-    let actions = {
-        let s = lock_state(&state.player_state);
-        let mut actions = vec![];
-
-        if let Some(ref track) = s.current_track {
-            actions.push(PlayerAction::SavePosition {
-                track_id: track.id,
-                position_ms: s.position_ms,
-            });
-        }
-
-        actions.push(PlayerAction::SaveQueue(s.queue.to_persistable()));
-        actions
-    };
-
-    execute_actions(
-        actions,
-        &*state.rodio,
-        &state.db,
-        &state.paths,
-        &state.player_state,
-        &state.sinks,
-    );
-    Ok(())
 }
 
 pub async fn queue_load(state: &AppState) -> Result<(), AppError> {

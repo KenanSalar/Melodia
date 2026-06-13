@@ -1,12 +1,8 @@
-import { ListView } from "std-widgets.slint";
 import { Theme } from "../theme.slint";
-import { Player, Nav, NowPlaying, Queue } from "../globals.slint";
-import { QueueRow } from "../models.slint";
-import { MaterialIcon } from "../components/material-icon.slint";
+import { Player, Nav, NowPlaying } from "../globals.slint";
 import { IconButton } from "../components/icon-button.slint";
-import { ArtworkImage } from "../components/artwork-image.slint";
 import { NowPlayingCover } from "../components/now-playing/now-playing-cover.slint";
-import { OverlayScrollbar } from "../components/overlay-scrollbar.slint";
+import { UpNextList } from "../components/now-playing/up-next-list.slint";
 
 // One technical-metadata chip (codec / bitrate / sample rate / …). The
 // caller only instantiates it when the matching `Player.track-meta` field
@@ -38,77 +34,6 @@ component MetaChip inherits Rectangle {
     }
 }
 
-// One row in the "Up Next" list. Display-only + click-to-skip — no drag,
-// no selection (unlike `QueueRowItem`), so it stays a thin component.
-component UpNextRow inherits Rectangle {
-    in property <QueueRow> data;
-    callback clicked();
-
-    height: 52px;
-
-    Rectangle {
-        // Per-artwork accent hover instead of the opaque `Theme.surface0`
-        // slab. Slightly bolder alpha than the chip pill (0.22 vs 0.18) so
-        // the transient hover indication still pops over the scrim.
-        background: touch.has-hover ? Player.np-accent.with-alpha(0.22) : transparent;
-        border-radius: Theme.radius-md;
-
-        HorizontalLayout {
-            padding: Theme.pad-sm;
-            spacing: Theme.pad-sm;
-            alignment: stretch;
-
-            VerticalLayout {
-                alignment: center;
-                ArtworkImage {
-                    artwork-path: root.data.artwork_path;
-                    cover: root.data.cover_img;
-                    tile-size: 38px;
-                }
-            }
-
-            // Outer Rectangle clips bidi overflow so `overflow: elide`
-            // triggers — same pattern as the now-playing bar's track-info
-            // cell.
-            Rectangle {
-                clip: true;
-                horizontal-stretch: 1;
-                VerticalLayout {
-                    alignment: center;
-                    spacing: 2px;
-                    Text {
-                        text: "‎" + root.data.title;
-                        color: Theme.text;
-                        font-size: Theme.font-size-row;
-                        overflow: elide;
-                    }
-                    Text {
-                        text: "‎" + root.data.artist;
-                        color: Theme.subtext0;
-                        font-size: Theme.font-size-sm;
-                        overflow: elide;
-                        visible: root.data.artist != "";
-                    }
-                }
-            }
-
-            VerticalLayout {
-                alignment: center;
-                Text {
-                    text: root.data.display_duration;
-                    color: Theme.subtext0;
-                    font-size: Theme.font-size-sm;
-                }
-            }
-        }
-
-        touch := TouchArea {
-            mouse-cursor: pointer;
-            clicked => { root.clicked(); }
-        }
-    }
-}
-
 // Full-screen Now Playing view. Rendered inside the main content panel
 // (sidebar + now-playing bar stay visible) when `Nav.now-playing-open` is
 // true. Mirrors the old Tauri layout: a large centred artwork + title /
@@ -116,42 +41,12 @@ component UpNextRow inherits Rectangle {
 // backdrop, with an "Up Next" list beside it. Transport + seek live in the
 // now-playing bar (which stays visible below this view), so they are
 // intentionally not duplicated here.
+//
+// The Up Next list itself — including its advance-by-row slide animation,
+// outgoing-row overlay, scrollbar and empty state — lives in the shared
+// `UpNextList` component (`components/now-playing/up-next-list.slint`) so
+// the mini-player's square variant reuses the same behaviour.
 export component NowPlayingView inherits Rectangle {
-    // --- Up Next "advance by one row" animation --------------------------
-    // When the current track changes the queue advances: the just-started
-    // track drops off the top of the Up Next list and every remaining row
-    // shifts up one slot. To make that read as a real upward *motion* — the
-    // way Apple Music / Spotify animate their queues — the list starts one
-    // row-height lower and slides up to rest. There is deliberately NO
-    // opacity fade (that whole-list "blink" was the weird part): the rows
-    // simply move.
-    //
-    // Driven by the phase-counter + Timer pattern (see `play-button.slint`).
-    // The phase counter is `NowPlaying.slide-phase` — it lives on the
-    // global so Rust resets it to 0 with a *direct* property write the
-    // bindings below pick up on the same render as the Up Next model swap
-    // (a `changed` handler would be queued a frame late, flashing the
-    // post-advance list at rest first). A value `>= slide-frames` means
-    // "at rest", so the list sits still when the view is first opened.
-    property <length> up-next-row-h: 52px;   // == UpNextRow height
-    property <int> slide-frames: 18;         // ~288ms at 16ms
-    property <float> slide-raw: clamp(1.0 * NowPlaying.slide-phase / root.slide-frames, 0.0, 1.0);
-    // Ease-out cubic so the row decelerates into place instead of stopping
-    // dead — `1 - (1 - t)^3`.
-    property <float> slide-p:
-        1.0 - (1.0 - root.slide-raw) * (1.0 - root.slide-raw) * (1.0 - root.slide-raw);
-
-    // Driven purely by `NowPlaying.slide-phase`: Rust resetting it to 0
-    // restarts the timer, which advances the phase each frame and stops
-    // itself once it reaches `slide-frames`.
-    slide-timer := Timer {
-        interval: 16ms;
-        running: NowPlaying.slide-phase < root.slide-frames;
-        triggered => {
-            NowPlaying.slide-phase += 1;
-        }
-    }
-
     // --- Background: accent gradient floor + dual-slot blurred cross-fade -
     // The gradient is always painted. For a track WITH artwork the blur
     // slots fade in over it; for an art-less track `blur-has-image` is
@@ -383,107 +278,13 @@ export component NowPlayingView inherits Rectangle {
                     background: Theme.border;
                 }
 
-                // List body. The ListView is an absolute child of this
-                // wrapper (not a layout child), so its `y` can carry the
-                // one-shot slide-up without fighting a layout. `clip: true`
-                // hides the row-height the list is offset by mid-animation.
-                Rectangle {
+                // Shared list body — slide animation, outgoing-row
+                // overlay, scrollbar and empty state all live inside
+                // `UpNextList`. The mini-player mounts the same component
+                // with `compact: true`.
+                UpNextList {
                     vertical-stretch: 1;
-                    clip: true;
-
-                    // 20 px narrower than the wrapper so the row hover
-                    // background ends ~10 px before the overlay
-                    // scrollbar's left edge (10 px bar flush to panel
-                    // edge + 10 px visible gap). Matches the queue
-                    // sheet's hover-to-scrollbar gap for uniformity.
-                    up-next-list := ListView {
-                        // Suppress the std-widgets bar — the reusable
-                        // `OverlayScrollbar` below is the only scrollbar.
-                        vertical-scrollbar-policy: always-off;
-                        horizontal-scrollbar-policy: always-off;
-                        x: 0;
-                        // Starts one row-height away from rest on a track
-                        // change, then slides into rest at 0. Direction is
-                        // signed via `NowPlaying.slide-direction`: `+1` =
-                        // start +row_h (slides up, queue advanced forward
-                        // via Next), `-1` = start -row_h (slides down,
-                        // queue rewound via Previous).
-                        y: NowPlaying.slide-direction * (1.0 - root.slide-p) * root.up-next-row-h;
-                        width: parent.width - 20px;
-                        height: 100%;
-                        for row[idx] in NowPlaying.up-next-rows: UpNextRow {
-                            data: row;
-                            clicked => {
-                                // With repeat-all the list wraps past the
-                                // end of the queue, so the play-order index
-                                // is taken modulo the queue length.
-                                Queue.skip-to(Math.mod(
-                                    NowPlaying.base-index + idx,
-                                    NowPlaying.queue-length));
-                            }
-                        }
-                    }
-
-                    // Transient overlay: the row that just left the
-                    // visible Up Next list. Forward (Next) — the row that
-                    // became current — starts at the top of the wrapper
-                    // (y=0) and slides up to y=-row_h, off the top.
-                    // Backward (Previous) — the row that fell off the
-                    // bottom — starts at the bottom (y=parent.height -
-                    // row_h) and slides down to y=parent.height, off the
-                    // bottom. The wrapping Rectangle clips both ends.
-                    // Clicks are intentionally not wired: it disappears in
-                    // ~288 ms and represents a position the user can no
-                    // longer skip to via this row.
-                    UpNextRow {
-                        visible: NowPlaying.outgoing-visible
-                                 && NowPlaying.slide-phase < root.slide-frames;
-                        x: 0;
-                        width: parent.width - 20px;
-                        y: NowPlaying.slide-direction == 1
-                            ? -root.slide-p * root.up-next-row-h
-                            : parent.height - (1.0 - root.slide-p) * root.up-next-row-h;
-                        data: NowPlaying.outgoing-row;
-                    }
-
-                    OverlayScrollbar {
-                        // Flush with the panel's right edge — the Up Next
-                        // column reaches that edge, matching the Tracks /
-                        // Browse views' scrollbar placement.
-                        x: parent.width - self.width;
-                        y: 0;
-                        width: 10px;
-                        height: parent.height;
-                        visible-size: up-next-list.visible-height;
-                        content-size: up-next-list.viewport-height;
-                        offset: -up-next-list.viewport-y;
-                        scroll-to(o) => { up-next-list.viewport-y = -o; }
-                    }
-
-                    // Empty state.
-                    if NowPlaying.up-next-rows.length == 0: VerticalLayout {
-                        alignment: center;
-                        HorizontalLayout {
-                            alignment: center;
-                            VerticalLayout {
-                                spacing: Theme.pad-sm;
-                                HorizontalLayout {
-                                    alignment: center;
-                                    MaterialIcon {
-                                        name: "queue_music";
-                                        icon-size: 40px;
-                                        icon-color: Theme.surface2;
-                                    }
-                                }
-                                Text {
-                                    text: @tr("No tracks up next");
-                                    color: Theme.subtext0;
-                                    font-size: Theme.font-size-md;
-                                    horizontal-alignment: center;
-                                }
-                            }
-                        }
-                    }
+                    compact: false;
                 }
             }
         }

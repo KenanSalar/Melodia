@@ -36,8 +36,22 @@ use crate::state::AppState;
 use crate::ui::now_playing_artwork::NowPlayingArtwork;
 use crate::{AppWindow, Nav, NowPlaying, Player, QueueRow};
 
-use track_change::spawn_track_change_subscriber;
+use async_compat::Compat;
+
+use track_change::{apply_track_change, spawn_track_change_subscriber};
 use up_next::{rebuild_up_next, spawn_up_next_subscriber, wire_now_playing_open};
+
+/// Closure type for re-seeding a `NowPlayingState`-shadowed surface
+/// (Up Next list or high-res cover slot) from the stashed snapshot. Set
+/// once by [`install`] after construction; called by
+/// [`crate::ui::mini_player::install`] when the responsive miniplayer
+/// becomes visible, so the square variant doesn't render an empty list
+/// or a stale low-res cover until the next queue / track mutation. The
+/// subscribers stash snapshots while no surface renders the model —
+/// without these kicks a never-opened Now Playing session followed by
+/// a direct shrink-to-mini would show empty / stale content. Mirrors
+/// the seeds `wire_now_playing_open` does on view open.
+type Seeder = Box<dyn Fn()>;
 
 /// How many upcoming tracks to surface in the "Up Next" list. The list is
 /// scrollable, so this is a soft cap — large enough to feel complete,
@@ -47,10 +61,29 @@ pub(crate) const UP_NEXT_N: usize = 20;
 /// Shared UI-thread state coordinating the Now Playing view's two
 /// subscribers and the `now-playing-open` callback. All three run on the
 /// Slint event-loop thread, so `Rc<Cell/RefCell>` is enough — no atomics.
-pub(crate) struct NowPlayingState {
+pub struct NowPlayingState {
     /// Mirrors `Nav.now-playing-open`. Both subscribers skip their work
     /// while this is false — nothing they produce is on screen.
     pub(super) open: Cell<bool>,
+    /// Mirrors `MiniPlayer.active` — true whenever the responsive
+    /// miniplayer (either variant) is visible. Only the square variant
+    /// renders the Up Next list, but tracking the broader `active` keeps
+    /// the gate logic simple and the wasted horizontal-variant rebuild
+    /// (~6 rows, identical to the model the user might see seconds later
+    /// in square) is cheap. The up-next subscriber gates on
+    /// `open || mini_visible` so the same model serves both surfaces
+    /// without a parallel subscriber. Written from the
+    /// `MiniPlayer.active-changed` callback in `crate::ui::mini_player`.
+    pub(crate) mini_visible: Cell<bool>,
+    /// Mirrors `MiniPlayer.square` — true only when the responsive
+    /// miniplayer is rendering the square variant (the one with the
+    /// 90–180 px artwork tile and the Up Next list). The track-change
+    /// subscriber gates its high-res cover decode on
+    /// `open || (mini_visible && mini_square)` so the rectangle variant
+    /// (48 px tile, served from the row-tier `CoverThumbs`) doesn't pay
+    /// for a 384 px decode it can't display. Written from the
+    /// `MiniPlayer.square-changed` callback in `crate::ui::mini_player`.
+    pub(crate) mini_square: Cell<bool>,
     /// Latest queue snapshot, kept whether or not the view is open, so
     /// opening the view can rebuild the Up Next list immediately.
     pub(super) latest_qvm: RefCell<Option<QueueViewModel>>,
@@ -85,6 +118,51 @@ pub(crate) struct NowPlayingState {
     /// track-change subscriber can chunk against the current layout
     /// immediately, without waiting for the next Slint `changed` fire.
     pub(super) chip_last_width: Cell<f32>,
+    /// Re-seeder for the Up Next list — see [`Seeder`]. Populated by
+    /// [`install`] after construction (`None` only during the brief
+    /// window between `Rc::new(...)` and `install`'s post-init writes,
+    /// which is single-threaded). Captures `Weak<NowPlayingState>` to
+    /// avoid the obvious `Rc → closure → Rc` cycle.
+    up_next_seeder: RefCell<Option<Seeder>>,
+    /// Re-seeder for the high-res cover (and per-artwork accent + metadata
+    /// chips), invoked by [`Self::kick_artwork`]. Called from
+    /// `crate::ui::mini_player` when the square miniplayer becomes
+    /// visible (either by entering mini-active directly into the square
+    /// variant or by flipping from rectangle → square) so the user
+    /// doesn't have to wait for the next track change before the sharp
+    /// 384 px cover replaces the row-tier fallback in `ArtworkImage`. The
+    /// closure no-ops when the current track is already applied.
+    artwork_seeder: RefCell<Option<Seeder>>,
+}
+
+impl NowPlayingState {
+    /// Rebuild the Up Next list from the stashed queue snapshot. No-op
+    /// when the seeder hasn't been wired yet (only before `install`
+    /// returns) or when no snapshot has been stashed (subscriber never
+    /// saw a queue update — empty library). Called from
+    /// `crate::ui::mini_player::install` when the responsive miniplayer
+    /// becomes visible, so the square variant doesn't render an empty
+    /// list while the subscriber's stashed snapshot is fresh.
+    pub(crate) fn kick_up_next(&self) {
+        if let Some(seeder) = self.up_next_seeder.borrow().as_ref() {
+            seeder();
+        }
+    }
+
+    /// Decode the current track's high-res cover (and accent + metadata
+    /// chips) and write into the `Player` global. No-op when no seeder
+    /// has been wired (only before [`install`] returns) and a no-op
+    /// inside the closure when the current track is already applied.
+    /// Called from `crate::ui::mini_player` on the rectangle→square
+    /// transition (and on enter-mini if the entry is directly into the
+    /// square variant) so the sharp 384 px cover replaces the row-tier
+    /// fallback without waiting for the next track change. Mirrors
+    /// `wire_now_playing_open`'s seed branch.
+    pub(crate) fn kick_artwork(&self) {
+        if let Some(seeder) = self.artwork_seeder.borrow().as_ref() {
+            seeder();
+        }
+    }
 }
 
 /// Install the Now Playing view's models + subscribers. Runs on the Slint
@@ -94,7 +172,7 @@ pub fn install(
     state: &AppState,
     cover_thumbs: &Arc<CoverThumbs>,
     np_artwork: &Arc<NowPlayingArtwork>,
-) -> Result<(), slint::EventLoopError> {
+) -> Result<Rc<NowPlayingState>, slint::EventLoopError> {
     let up_next_model: Rc<VecModel<QueueRow>> = Rc::new(VecModel::default());
     ui.global::<NowPlaying>()
         .set_up_next_rows(ModelRc::from(up_next_model.clone()));
@@ -119,6 +197,8 @@ pub fn install(
     // yet, so the first open always seeds.
     let np_state = Rc::new(NowPlayingState {
         open: Cell::new(ui.global::<Nav>().get_now_playing_open()),
+        mini_visible: Cell::new(false),
+        mini_square: Cell::new(false),
         latest_qvm: RefCell::new(None),
         rendered_ids: RefCell::new(Vec::new()),
         last_current_id: Cell::new(current_track_id(&qvm)),
@@ -127,6 +207,8 @@ pub fn install(
         applied_track_id: Cell::new(None),
         chip_texts: RefCell::new(Vec::new()),
         chip_last_width: Cell::new(0.0),
+        up_next_seeder: RefCell::new(None),
+        artwork_seeder: RefCell::new(None),
     });
 
     spawn_track_change_subscriber(
@@ -176,10 +258,63 @@ pub fn install(
     *np_state.rendered_ids.borrow_mut() = seeded_ids;
     *np_state.latest_qvm.borrow_mut() = Some(qvm);
 
+    // Wire the Up Next re-seeder. Captures `Weak<NowPlayingState>` to
+    // avoid the `Rc → closure → Rc` cycle; everything else is cheap to
+    // clone (`Arc<CoverThumbs>`, `Rc<VecModel<_>>`, `Weak<AppWindow>`).
+    {
+        let weak_ui = ui.as_weak();
+        let cover_thumbs = cover_thumbs.clone();
+        let up_next_model = up_next_model.clone();
+        let weak_np = Rc::downgrade(&np_state);
+        *np_state.up_next_seeder.borrow_mut() = Some(Box::new(move || {
+            let Some(ui) = weak_ui.upgrade() else { return };
+            let Some(np_state) = weak_np.upgrade() else { return };
+            up_next::seed_from_stash(&ui, &cover_thumbs, &up_next_model, &np_state);
+        }));
+    }
+
+    // Wire the artwork re-seeder. Mirrors `wire_now_playing_open`'s
+    // seed-on-open path: dedup against `applied_track_id` then dispatch
+    // an off-thread decode + UI-thread write via `apply_track_change`.
+    // `animate = false` — the cover should already be there when the
+    // square miniplayer paints, not cross-fade in.
+    {
+        let weak_ui = ui.as_weak();
+        let state = state.clone();
+        let np_artwork = np_artwork.clone();
+        let weak_np = Rc::downgrade(&np_state);
+        *np_state.artwork_seeder.borrow_mut() = Some(Box::new(move || {
+            let Some(np_state) = weak_np.upgrade() else { return };
+            let current_track = np_state.current_track.borrow().clone();
+            let current_id = current_track.as_ref().map(|t| t.id);
+            if current_id == np_state.applied_track_id.get() {
+                return;
+            }
+            let weak_ui = weak_ui.clone();
+            let state = state.clone();
+            let np_artwork = np_artwork.clone();
+            let res = slint::spawn_local(Compat::new(async move {
+                apply_track_change(
+                    &weak_ui,
+                    &state,
+                    &np_artwork,
+                    &np_state,
+                    current_track,
+                    false,
+                )
+                .await;
+            }));
+            if let Err(e) = res {
+                log::warn!("ui::now_playing artwork seeder task spawn_local: {e}");
+            }
+        }));
+    }
+
     // No artwork seed here: the blurred background + sharp cover + metadata
     // chips are decoded on demand by `wire_now_playing_open` the first time
-    // the view is opened.
-    Ok(())
+    // the view is opened (or by `np_state.kick_artwork` when the square
+    // miniplayer first becomes visible).
+    Ok(np_state)
 }
 
 /// Write one dual-slot cross-fade pair — the blurred backdrop or the sharp

@@ -157,20 +157,18 @@ pub async fn fetch_and_apply(
             let has_playable = files.iter().any(|f| f.in_library);
             let can_go_back = !browse_ui.history.lock().is_empty();
             let current_path = res.path.clone();
-            let thumbs = browse_ui.cover_thumbs.clone();
             let browse_ui = browse_ui.clone();
 
             let _ = weak.upgrade_in_event_loop(move |ui| {
                 let g = ui.global::<Browse>();
-                // `to_slint_browse_track_row` builds a `slint::Image`
-                // (which is `!Send`), so the rows must be built here on
-                // the UI thread. Build them from `&files`, then move
-                // `files` itself into the `last_files` cache as the final
-                // step — one move, no clone (the old `clone_from` deep-
-                // cloned the whole `Vec<BrowseFile>` a second time).
+                // Build the rows from `&files`, then move `files` itself
+                // into the `last_files` cache as the final step — one
+                // move, no clone (the old `clone_from` deep-cloned the
+                // whole `Vec<BrowseFile>` a second time). Covers resolve
+                // lazily per visible row via `RowCovers.request`.
                 let ui_rows: Vec<UiTrackListRow> = files
                     .iter()
-                    .map(|f| to_slint_browse_track_row(f, &thumbs))
+                    .map(to_slint_browse_track_row)
                     .collect();
                 replace_folder_model(&g, ui_folders);
                 replace_rows_model(&g, ui_rows);
@@ -223,14 +221,10 @@ pub async fn fetch_and_apply(
 pub fn resort_and_apply(ui: &AppWindow, browse_ui: &Arc<BrowseUi>) {
     let sort_field = browse_ui.sort_field();
     let sort_dir = browse_ui.sort_dir();
-    let thumbs = browse_ui.cover_thumbs.clone();
     let ui_rows: Vec<UiTrackListRow> = {
         let mut files = browse_ui.last_files.lock();
         sort_browse_files(&mut files, &sort_field, &sort_dir);
-        files
-            .iter()
-            .map(|f| to_slint_browse_track_row(f, &thumbs))
-            .collect()
+        files.iter().map(to_slint_browse_track_row).collect()
     };
     let g = ui.global::<Browse>();
     replace_rows_model(&g, ui_rows);
