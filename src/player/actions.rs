@@ -1,7 +1,6 @@
 use std::collections::VecDeque;
 use std::path::Path;
 
-use crate::config::Paths;
 use crate::database::DbPool;
 use crate::database::queries;
 
@@ -10,7 +9,6 @@ use super::rodio_backend::PlayerBackend;
 use super::state::{
     PlayerAction, PlayerStateHandle, play_track_inner, stop_end_of_queue, with_state_emit,
 };
-use super::types::PersistableQueue;
 
 /// Execute a list of `PlayerActions` against the audio backend and database.
 /// Called after releasing the `PlayerState` lock.
@@ -25,7 +23,6 @@ pub fn execute_actions<B: PlayerBackend>(
     actions: Vec<PlayerAction>,
     rodio_player: &B,
     db: &DbPool,
-    paths: &Paths,
     player_state: &PlayerStateHandle,
     sinks: &PlayerSinks,
 ) {
@@ -105,9 +102,6 @@ pub fn execute_actions<B: PlayerBackend>(
                     }
                 });
             }
-            PlayerAction::SaveQueue(queue) => {
-                save_queue_to_disk_sync(paths, &queue);
-            }
         }
     }
 }
@@ -133,12 +127,6 @@ fn enqueue_auto_skip(
     // ahead of anything still queued from the original batch.
     for (i, a) in actions.into_iter().enumerate() {
         pending.insert(i, a);
-    }
-}
-
-fn save_queue_to_disk_sync(paths: &Paths, queue: &PersistableQueue) {
-    if let Err(e) = crate::services::write_json_atomic_sync(&paths.queue_path, queue) {
-        log::error!("Failed to write queue file: {e}");
     }
 }
 

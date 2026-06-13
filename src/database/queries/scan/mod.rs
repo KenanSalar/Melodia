@@ -14,12 +14,12 @@ mod sort_key;
 mod upserts;
 
 pub use lookups::{
-    ExistingTrackSummary, find_folder_for_path, find_track_by_hash,
-    get_all_track_paths_for_folder, get_existing_track_summaries_for_folder,
-    get_track_id_by_path, track_exists_by_path,
+    ExistingTrackSummary, find_folder_for_path, get_all_track_paths_for_folder,
+    get_existing_track_summaries_for_folder, get_track_id_by_path, track_exists_by_path,
 };
 pub use mutations::{
-    delete_track_by_path, delete_tracks_by_paths_batch, insert_track, update_album_artwork_from_tracks,
+    INSERT_CHUNK_ROWS, NewTrackRow, delete_track_by_path, delete_tracks_by_paths_batch,
+    insert_track, insert_tracks_batch, update_album_artwork_from_tracks,
     update_track_artwork_if_missing, update_track_location, update_track_metadata,
 };
 pub use sort_key::to_natural_sort_key;

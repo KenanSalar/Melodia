@@ -174,6 +174,38 @@ export global Nav {
     in-out property <bool> sidebar-dragging: false;
 }
 
+// MiniPlayer: drives the compact miniplayer that replaces the full UI when
+// the OS window is shrunk past a threshold. Tauri parity: enter when
+// `width < 550px || height < 250px`, pick the `square` variant when
+// `height >= width * 0.8`. Source of truth is the live window size — both
+// `active` and `square` are written from `AppWindow`'s derived
+// `mini-active`/`mini-square` root properties via mirror+changed handlers.
+//
+// Entry AND exit are resize-only — there are no in-UI buttons. Rust hooks
+// `active-changed(bool)` to flip the Up Next subscriber gate and manage
+// the high-res cover cache; `square-changed(bool)` fires when the
+// variant flips between rectangle and square while already in
+// mini-active, so Rust can seed (or release) the high-res cover cache
+// that only the square variant uses.
+export global MiniPlayer {
+    in-out property <bool> active: false;
+    in-out property <bool> square: false;
+    callback active-changed(bool);
+    callback square-changed(bool);
+}
+
+// Shared lazy cover lookup for every `TrackListRowItem` thumbnail (Tracks,
+// Browse, Favorites, Search, Album/Artist/Genre/Playlist detail, and the
+// draggable playlist variant — they all render the same row component).
+// One global instead of per-view forwarding: Rust wires it once to the
+// shared row-tier (72 px) `CoverThumbs` LRU. Rows carry only
+// `artwork_path`; the decode (or LRU hit) happens here, per *instantiated*
+// row — virtualized lists pay for ~visible rows only, and model rows no
+// longer pin pixel buffers the LRU already evicted.
+export global RowCovers {
+    pure callback request(string /*artwork_path*/) -> image;
+}
+
 // Tracks: drives the Tracks view. The `rows` model is owned by Rust
 // (`Rc<VecModel<TrackListRow>>` in `src/ui/tracks.rs`) and pushed in via
 // `set_rows(ModelRc::from(...))`. The full unfiltered Vec lives on the Rust
@@ -222,6 +254,10 @@ export global Tracks {
     callback add-to-queue([int]);
     callback toggle-row-favorite([int] /*track_ids*/, bool /*new*/);
     callback request-refresh();
+    // Mirrors "the Tracks section is on screen" — see `watched-tracks-active`
+    // in app-window.slint. Rust uses it to skip `library_changed` refreshes
+    // while the view is hidden and run one deferred re-fetch on re-enter.
+    callback section-active-changed(bool);
     // Cross-tab navigation from a row's right-click "Go to …" entry.
     callback go-to-album(int /*album_id*/);
     callback go-to-artist(int /*artist_id*/);
@@ -333,6 +369,10 @@ export global Browse {
     callback toggle-column(string /*column_id*/);
     callback play-all();
     callback refresh();
+    // Mirrors "the Browse section is on screen" — see `watched-browse-active`
+    // in app-window.slint. Rust uses it to skip `library_changed` re-fetches
+    // while the view is hidden and run one deferred re-fetch on re-enter.
+    callback section-active-changed(bool);
     // Cross-tab navigation from a row's right-click "Go to …" entry.
     callback go-to-album(int /*album_id*/);
     callback go-to-artist(int /*artist_id*/);
@@ -1435,12 +1475,12 @@ export global Favorites {
     in-out property <int>   selection-anchor: -1;
 
     // Lazy cover callbacks — one per cache tier so Rust can route each
-    // surface into the right LRU (row-tier 72 px for mosaic + All Songs
-    // rows; dedicated thumbs for most-played + circular artist).
+    // surface into the right LRU (row-tier 72 px for the mosaic;
+    // dedicated thumbs for most-played + circular artist). All Songs
+    // rows resolve through the shared `RowCovers` global.
     pure callback request-mosaic-cover(string)      -> image;
     pure callback request-most-played-cover(string) -> image;
     pure callback request-artist-cover(string)      -> image;
-    pure callback request-row-cover(string)         -> image;
 
     // Hero actions
     callback play-all();
@@ -1812,8 +1852,8 @@ export global Search {
     in-out property <[int]> selected-ids;
     in-out property <int>   selection-anchor: -1;
 
-    // --- Lazy cover lookups (3 LRU tiers + per-kind routing for top) --
-    pure callback request-row-cover(string)          -> image;
+    // --- Lazy cover lookups (strip tiers + per-kind routing for top;
+    // result rows go through the shared `RowCovers` global) ---
     pure callback request-album-strip-cover(string)  -> image;
     pure callback request-artist-strip-cover(string) -> image;
     pure callback request-top-result-cover(string)   -> image;

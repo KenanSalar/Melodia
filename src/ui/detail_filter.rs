@@ -20,7 +20,6 @@ use parking_lot::Mutex;
 use slint::{Model, ModelRc, VecModel};
 
 use crate::entities::track::TrackListRow as RsTrackListRow;
-use crate::media::cover_thumbs::CoverThumbs;
 use crate::ui::detail_selection::DetailSelectionView;
 use crate::TrackListRow as UiTrackListRow;
 
@@ -28,20 +27,33 @@ use crate::TrackListRow as UiTrackListRow;
 /// title + artist + album. `needle` must already be lowercased (the
 /// caller stores it that way in `*DetailState::filter`).
 pub fn track_matches(r: &RsTrackListRow, needle: &str) -> bool {
-    if r.title.to_lowercase().contains(needle) {
+    field_contains(&r.title, needle)
+        || r.artist.as_deref().is_some_and(|a| field_contains(a, needle))
+        || r.album.as_deref().is_some_and(|a| field_contains(a, needle))
+}
+
+/// Case-insensitive substring check without the per-call `to_lowercase`
+/// heap allocation on the (overwhelmingly common) all-ASCII path. The
+/// filter walk runs per throttled keystroke over every row of the open
+/// detail — a "Rock" genre detail can hold thousands of rows, and the
+/// old three-allocations-per-row walk dominated its keystroke cost.
+/// Non-ASCII text falls back to the allocating Unicode-correct path.
+/// `needle` must already be lowercased.
+fn field_contains(haystack: &str, needle: &str) -> bool {
+    if needle.is_empty() {
         return true;
     }
-    if let Some(a) = r.artist.as_deref()
-        && a.to_lowercase().contains(needle)
-    {
-        return true;
+    if haystack.is_ascii() && needle.is_ascii() {
+        let h = haystack.as_bytes();
+        let n = needle.as_bytes();
+        if n.len() > h.len() {
+            return false;
+        }
+        return h
+            .windows(n.len())
+            .any(|w| w.iter().zip(n).all(|(a, b)| a.to_ascii_lowercase() == *b));
     }
-    if let Some(a) = r.album.as_deref()
-        && a.to_lowercase().contains(needle)
-    {
-        return true;
-    }
-    false
+    haystack.to_lowercase().contains(needle)
 }
 
 /// Re-apply selection from the view's `selected-ids` onto freshly-built
@@ -85,11 +97,7 @@ pub struct FilterRefs<'a> {
 /// Used directly by Album / Genre / Playlist Detail. Artist Detail keeps
 /// its own variant (worker-thread prep + Albums strip) but reuses
 /// [`track_matches`] / [`restamp_selection`] from this module.
-pub fn apply_filtered_detail<V: DetailSelectionView>(
-    view: &V,
-    refs: &FilterRefs<'_>,
-    thumbs: &CoverThumbs,
-) {
+pub fn apply_filtered_detail<V: DetailSelectionView>(view: &V, refs: &FilterRefs<'_>) {
     let needle = refs.filter.lock().clone();
 
     let displayed: Vec<RsTrackListRow> = {
@@ -101,7 +109,7 @@ pub fn apply_filtered_detail<V: DetailSelectionView>(
     };
     let mut rows: Vec<UiTrackListRow> = displayed
         .iter()
-        .map(|t| crate::ui::tracks::to_slint_track_list_row(t, thumbs))
+        .map(crate::ui::tracks::to_slint_track_list_row)
         .collect();
     restamp_selection(view, &mut rows);
     *refs.tracks.lock() = displayed;

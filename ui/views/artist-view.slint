@@ -6,20 +6,16 @@ import { ArtistGrid } from "../components/grid/artist-grid.slint";
 import { GridColumnsSync } from "../components/grid-columns-sync.slint";
 import { MaterialIcon } from "../components/material-icon.slint";
 import { OverlayScrollbar } from "../components/overlay-scrollbar.slint";
+import { FilterThrottle } from "../components/filter-throttle.slint";
 
 // The Artists grid page. Mirrors `AlbumView`: filter throttle, responsive
 // column math, sort pills, virtualized `ArtistGrid` bound to the
 // `Artists` global. Sort fields are name / track count / album count.
 export component ArtistView inherits Rectangle {
     property <int> filter-tick-pending: 0;
-    property <int> filter-tick-applied: 0;
-    filter-throttle := Timer {
-        interval: 130ms;
-        running: root.filter-tick-pending != root.filter-tick-applied;
-        triggered() => {
-            root.filter-tick-applied = root.filter-tick-pending;
-            Artists.apply-filter(Artists.filter);
-        }
+    filter-throttle := FilterThrottle {
+        pending: root.filter-tick-pending;
+        fire() => { Artists.apply-filter(Artists.filter); }
     }
 
     property <length> min-card-w: 180px;

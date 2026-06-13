@@ -821,3 +821,8 @@ msgstr "Changer l'icône de la zone de notification nécessite de redémarrer Me
 
 msgid "Available only while the system tray icon is active."
 msgstr "Disponible uniquement lorsque l'icône de la zone de notification est active."
+
+# ---- Miniplayer --------------------------------------------------------------
+
+msgid "Exit miniplayer"
+msgstr "Quitter le miniplayer"

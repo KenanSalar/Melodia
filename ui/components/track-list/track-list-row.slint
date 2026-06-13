@@ -1,7 +1,7 @@
 import { ScrollView } from "std-widgets.slint";
 import { Theme } from "../../theme.slint";
 import { TrackListRow } from "../../models.slint";
-import { Playlists, Dialog, Nav, PopupHighlight } from "../../globals.slint";
+import { Playlists, Dialog, Nav, PopupHighlight, RowCovers } from "../../globals.slint";
 import { MaterialIcon } from "../material-icon.slint";
 import { ArtworkImage } from "../artwork-image.slint";
 import { MenuItem, MenuSeparator } from "context-menu.slint";
@@ -495,7 +495,10 @@ export component TrackListRowItem inherits Rectangle {
                         alignment: center;
                         ArtworkImage {
                             artwork-path: root.row-data.artwork_path;
-                            cover: root.row-data.cover_img;
+                            // Lazy per-instantiated-row lookup — only the
+                            // ~visible rows of a virtualized list hit the
+                            // shared row-tier LRU (decode on miss).
+                            cover: RowCovers.request(root.row-data.artwork_path);
                             tile-size: 36px;
                             tile-radius: Theme.radius-sm;
                         }

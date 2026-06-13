@@ -204,14 +204,6 @@ impl FavoritesUi {
             .get_or_load_opt(Some(artwork_path).filter(|s| !s.is_empty()))
     }
 
-    /// Lazy cover lookup for the All Songs row column. Routed via
-    /// `Favorites.request-row-cover`; backed by the shared row-tier
-    /// cache so cache parity with Tracks / Browse stays free.
-    pub fn row_cover(&self, artwork_path: &str) -> Image {
-        self.cover_thumbs
-            .get_or_load_opt(Some(artwork_path).filter(|s| !s.is_empty()))
-    }
-
     /// Track ids of the post-filter All Songs list, in display order.
     /// `play-all` / `shuffle-all` / `play-row` use this to recover ids
     /// without round-tripping the Slint model.

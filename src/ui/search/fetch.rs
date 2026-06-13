@@ -3,6 +3,7 @@
 //! Result ranking (unit-tested) and the 2-second delayed history-add
 //! scheduler.
 
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
 use std::time::Duration;
@@ -21,7 +22,7 @@ use crate::error::AppResult;
 use crate::library;
 use crate::services::settings::SortDir;
 use crate::state::AppState;
-use crate::ui::tracks::to_slint_track_list_row;
+use crate::ui::tracks::{PreparedTrackRow, finish_track_list_row};
 use crate::ui::track_sort::sort_track_rows_by;
 use crate::{
     AppWindow, EntityStripRow as UiEntityStripRow, Search, TrackListRow as UiTrackListRow,
@@ -82,6 +83,52 @@ pub async fn kick_search(
         return Ok(());
     }
 
+    // Prewarm every result surface's covers off-thread before the apply:
+    // track rows finish on the UI thread (`finish_track_list_row`) and
+    // the Album / Artist strip cards resolve via lazy `request-*-cover`
+    // lookups that decode on miss *on the UI thread* — without this, a
+    // cold cache pays one synchronous decode per card at paint time.
+    // Result sets are LIMIT-bounded so the prewarm set is small;
+    // `prewarm` dedupes its input.
+    let track_covers: Vec<PathBuf> = results
+        .tracks
+        .iter()
+        .filter_map(|t| t.artwork_path.as_deref().map(PathBuf::from))
+        .collect();
+    let album_covers: Vec<PathBuf> = results
+        .albums
+        .iter()
+        .filter_map(|a| a.artwork_path.as_deref().map(PathBuf::from))
+        .collect();
+    let artist_covers: Vec<PathBuf> = results
+        .artists
+        .iter()
+        .filter_map(|a| a.image_path.as_deref().map(PathBuf::from))
+        .collect();
+    if !(track_covers.is_empty() && album_covers.is_empty() && artist_covers.is_empty()) {
+        let row_thumbs = search_ui.cover_thumbs.clone();
+        let album_thumbs = search_ui.album_strip_thumbs.clone();
+        let artist_thumbs = search_ui.artist_strip_thumbs.clone();
+        let _ = tokio::task::spawn_blocking(move || {
+            if !track_covers.is_empty() {
+                row_thumbs.prewarm(&track_covers);
+            }
+            if !album_covers.is_empty() {
+                album_thumbs.prewarm(&album_covers);
+            }
+            if !artist_covers.is_empty() {
+                artist_thumbs.prewarm(&artist_covers);
+            }
+        })
+        .await;
+        // The decode burst yielded — re-check staleness so a query that
+        // arrived mid-prewarm wins the paint (same no-`loading`-reset
+        // contract as the post-fetch check above).
+        if search_ui.fetch_token.load(Ordering::Relaxed) != my_token {
+            return Ok(());
+        }
+    }
+
     *search_ui.state().last_results.lock() = Some(results.clone());
     (*search_ui.state().last_query.lock()).clone_from(&trimmed);
     apply_results_to_slint(search_ui, weak, &results, &trimmed);
@@ -105,7 +152,6 @@ pub fn apply_results_to_slint(
     results: &SearchResults,
     query: &str,
 ) {
-    let thumbs = search_ui.cover_thumbs.clone();
     let sort = search_ui.state().sort.lock().clone();
 
     // Apply the in-memory sort to a copy of the tracks (the FTS5
@@ -130,6 +176,16 @@ pub fn apply_results_to_slint(
     let total = i32::try_from(sorted_tracks.len()).unwrap_or(i32::MAX);
     let top = compute_top_result(results, query);
 
+    // Prepare the `Send` row halves here (worker thread on the fetch
+    // path) so the event-loop closure below only pays for the `!Send`
+    // cover lookups. Result sets are LIMIT-bounded, so preparing the
+    // full set — rather than just the compact slice, which can't be
+    // sized off-thread (`show-all-tracks` is UI-thread state) — is cheap.
+    let prepared: Vec<PreparedTrackRow> = sorted_tracks
+        .iter()
+        .map(crate::ui::tracks::prepare_track_list_row)
+        .collect();
+
     let album_rows: Vec<UiEntityStripRow> = results
         .albums
         .iter()
@@ -149,14 +205,14 @@ pub fn apply_results_to_slint(
         // Songs — honour `show-all-tracks` against the sorted set.
         let show_all = g.get_show_all_tracks();
         let take = if show_all {
-            sorted_tracks.len()
+            prepared.len()
         } else {
-            sorted_tracks.len().min(COMPACT_TRACK_LIMIT)
+            prepared.len().min(COMPACT_TRACK_LIMIT)
         };
-        let mut rendered: Vec<UiTrackListRow> = sorted_tracks
-            .iter()
+        let mut rendered: Vec<UiTrackListRow> = prepared
+            .into_iter()
             .take(take)
-            .map(|t| to_slint_track_list_row(t, &thumbs))
+            .map(finish_track_list_row)
             .collect();
         restamp_rows(&g, &mut rendered);
         write_track_model(&g, rendered);

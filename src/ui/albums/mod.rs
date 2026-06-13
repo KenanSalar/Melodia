@@ -258,6 +258,15 @@ impl AlbumsUi {
         self.grid_covers
             .get_or_load_opt(Some(artwork_path).filter(|s| !s.is_empty()))
     }
+
+    /// Shared handle to the grid-tier cover cache, for surfaces that
+    /// borrow it (Artist Detail's Albums strip resolves its cards via
+    /// [`Self::grid_cover`] and prewarms through this handle). Same LRU —
+    /// no second cache, and the existing release sites clear it for both
+    /// surfaces.
+    pub fn grid_thumbs(&self) -> Arc<CoverThumbs> {
+        self.grid_covers.clone()
+    }
 }
 
 /// Build the empty `VecModel`s the Albums grid, the detail track list, and

@@ -76,9 +76,12 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, fav_ui: &Arc<FavoritesUi>) 
         });
     }
 
-    // --- library_changed_tx subscriber (Phase 9) ------------------
-    // Bumped after every `set_favorite` / `toggle_current_favorite`
-    // (Phase 1.2) + every scan / file-event commit. While the
+    // --- library_changed_tx + stats_changed_tx subscriber (Phase 9) ---
+    // `library_changed` is bumped after every `set_favorite` /
+    // `toggle_current_favorite` (Phase 1.2) + every scan / file-event
+    // commit; `stats_changed` after every play-count flush. Favorites is
+    // the only surface that ranks by `play_count` (hero mosaic + Most
+    // Played strip), so it alone listens to both channels. While the
     // Favorites tab is visible we refetch hero + strips + tracks
     // in-place; while hidden we just mark dirty so the next enter
     // triggers `kick_full_refresh`.
@@ -86,10 +89,26 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, fav_ui: &Arc<FavoritesUi>) 
         let s = state.clone();
         let fu = fav_ui.clone();
         let weak = weak.clone();
-        let mut rx = state.library_changed_tx.subscribe();
+        let mut library_rx = state.library_changed_tx.subscribe();
+        let mut stats_rx = state.stats_changed_tx.subscribe();
         let _ = slint::spawn_local(Compat::new(async move {
-            rx.mark_unchanged();
-            while rx.changed().await.is_ok() {
+            library_rx.mark_unchanged();
+            stats_rx.mark_unchanged();
+            loop {
+                // Both senders live in `AppState` for the process lifetime,
+                // so an `Err` only happens during teardown — exit the loop.
+                tokio::select! {
+                    changed = library_rx.changed() => {
+                        if changed.is_err() {
+                            break;
+                        }
+                    }
+                    changed = stats_rx.changed() => {
+                        if changed.is_err() {
+                            break;
+                        }
+                    }
+                }
                 if !fu.section_active() {
                     fu.mark_dirty();
                     continue;
