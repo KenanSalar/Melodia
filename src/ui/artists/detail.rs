@@ -46,7 +46,7 @@ async fn fetch_artist_detail(
     let albums = library::artists::get_artist_albums(state, artist_id).await?;
     let tracks = library::artists::get_artist_tracks(state, artist_id).await?;
 
-    let track_covers: Vec<PathBuf> = super::grid::unique_artwork_paths(
+    let track_covers: Vec<PathBuf> = crate::ui::grid_prewarm::unique_artwork_paths(
         tracks.iter().map(|t| t.artwork_path.as_deref()),
     );
     // The Albums strip resolves its cards through the borrowed Albums
@@ -54,7 +54,7 @@ async fn fetch_artist_detail(
     // decode-on-miss on the UI thread). Prewarm those covers alongside
     // the track rows so a detail open with a cold cache doesn't freeze
     // the UI for one full-res decode per album card at first paint.
-    let strip_covers: Vec<PathBuf> = super::grid::unique_artwork_paths(
+    let strip_covers: Vec<PathBuf> = crate::ui::grid_prewarm::unique_artwork_paths(
         albums.iter().map(|a| a.artwork_path.as_deref()),
     );
     if !track_covers.is_empty() || !strip_covers.is_empty() {

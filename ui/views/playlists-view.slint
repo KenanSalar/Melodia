@@ -6,6 +6,7 @@ import { PlaylistGrid } from "../components/grid/playlist-grid.slint";
 import { GridColumnsSync } from "../components/grid-columns-sync.slint";
 import { MaterialIcon } from "../components/material-icon.slint";
 import { OverlayScrollbar } from "../components/overlay-scrollbar.slint";
+import { FilterThrottle } from "../components/filter-throttle.slint";
 
 // The Playlists grid page. Mirrors `AlbumView` structure: header chrome
 // (title + count + filter + "New Playlist" action), virtualized grid
@@ -14,14 +15,9 @@ import { OverlayScrollbar } from "../components/overlay-scrollbar.slint";
 export component PlaylistsView inherits Rectangle {
     // Filter throttle — same pattern as the Tracks / Albums views.
     property <int> filter-tick-pending: 0;
-    property <int> filter-tick-applied: 0;
-    filter-throttle := Timer {
-        interval: 130ms;
-        running: root.filter-tick-pending != root.filter-tick-applied;
-        triggered() => {
-            root.filter-tick-applied = root.filter-tick-pending;
-            Playlists.apply-filter(Playlists.filter);
-        }
+    filter-throttle := FilterThrottle {
+        pending: root.filter-tick-pending;
+        fire() => { Playlists.apply-filter(Playlists.filter); }
     }
 
     // --- Responsive grid geometry --------------------------------------

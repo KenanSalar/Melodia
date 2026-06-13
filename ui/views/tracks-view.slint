@@ -5,6 +5,7 @@ import { ActionPill, PillLabel, PillButton, PillDivider } from "../components/ac
 import { ColumnTogglePopup } from "../components/track-list/column-toggle-popup.slint";
 import { TrackList } from "../components/track-list/track-list.slint";
 import { OverlayScrollbar } from "../components/overlay-scrollbar.slint";
+import { FilterThrottle } from "../components/filter-throttle.slint";
 
 // The Tracks page. The page-header chrome (title, count, filter input,
 // action pill with column-toggle popup) lives here; the table itself is the
@@ -26,15 +27,10 @@ export component TracksView inherits Rectangle {
     // ~130 ms cadence is comfortably below "feels laggy" while collapsing
     // hundreds of allocs/keystroke down to ~one per fire.
     property <int> filter-tick-pending: 0;
-    property <int> filter-tick-applied: 0;
 
-    filter-throttle := Timer {
-        interval: 130ms;
-        running: root.filter-tick-pending != root.filter-tick-applied;
-        triggered() => {
-            root.filter-tick-applied = root.filter-tick-pending;
-            Tracks.apply-filter(Tracks.filter);
-        }
+    filter-throttle := FilterThrottle {
+        pending: root.filter-tick-pending;
+        fire() => { Tracks.apply-filter(Tracks.filter); }
     }
 
     // Backdrop catches any click that no inner TouchArea consumes (the

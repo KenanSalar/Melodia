@@ -43,7 +43,7 @@ async fn fetch_album_detail(
     // shared row-tier cache. The big header tile + hero blur are handled
     // separately — `decode_detail_pair` (called from `open_album` /
     // `refresh_detail`) decodes that pair into the `detail_artwork` LRU.
-    let track_covers: Vec<PathBuf> = super::grid::unique_artwork_paths(
+    let track_covers: Vec<PathBuf> = crate::ui::grid_prewarm::unique_artwork_paths(
         tracks.iter().map(|t| t.artwork_path.as_deref()),
     );
     if !track_covers.is_empty() {

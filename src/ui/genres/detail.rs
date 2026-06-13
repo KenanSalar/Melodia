@@ -39,7 +39,7 @@ async fn fetch_genre_detail(
     // shared row-tier cache. Unlike Albums / Artists Detail there is no
     // separate header tile or hero blur — the header has no artwork at
     // all (genres are procedural; see the module-level doc).
-    let track_covers: Vec<PathBuf> = unique_artwork_paths(
+    let track_covers: Vec<PathBuf> = crate::ui::grid_prewarm::unique_artwork_paths(
         tracks.iter().map(|t| t.artwork_path.as_deref()),
     );
     if !track_covers.is_empty() {
@@ -50,24 +50,6 @@ async fn fetch_genre_detail(
         .await;
     }
     Ok((detail, tracks))
-}
-
-/// Deduplicated, non-empty artwork paths from an iterator of optional
-/// path strings — fed to `CoverThumbs::prewarm`. Copied verbatim from
-/// `albums::grid::unique_artwork_paths`'s contract (not re-exported
-/// from there to avoid a `pub(crate)` widening), since the helper is
-/// trivial.
-fn unique_artwork_paths<'a>(
-    paths: impl Iterator<Item = Option<&'a str>>,
-) -> Vec<PathBuf> {
-    let mut seen: std::collections::HashSet<&str> = std::collections::HashSet::new();
-    let mut out: Vec<PathBuf> = Vec::new();
-    for p in paths.flatten() {
-        if !p.is_empty() && seen.insert(p) {
-            out.push(PathBuf::from(p));
-        }
-    }
-    out
 }
 
 /// Fetch a genre's header + track list, prewarm thumbnails, and
