@@ -71,6 +71,14 @@ pub struct ArtistsUi {
     /// (see [`Self::release_section_state`]) whenever the user leaves the
     /// Artists section, and re-warmed on return.
     grid_covers: Arc<CoverThumbs>,
+    /// Borrowed handle to the **Albums** grid tier
+    /// ([`crate::ui::albums::AlbumsUi::grid_thumbs`]). The Artist Detail
+    /// Albums strip resolves its cards through `AlbumsUi::grid_cover`
+    /// (decode-on-miss on the UI thread), so [`detail::open_artist`]'s
+    /// fetch prewarms the strip's covers into this cache off-thread first.
+    /// Not released here — `wire_artists` already clears the shared LRU on
+    /// section-leave / detail-close via the `AlbumsUi` handle.
+    albums_grid_covers: Arc<CoverThumbs>,
     /// Detail-tier `(cover, blur)` pair cache for the Artist Detail header.
     /// Released on section exit.
     detail_artwork: Arc<DetailArtwork>,
@@ -80,7 +88,7 @@ pub struct ArtistsUi {
 }
 
 impl ArtistsUi {
-    pub fn new(cover_thumbs: Arc<CoverThumbs>) -> Self {
+    pub fn new(cover_thumbs: Arc<CoverThumbs>, albums_grid_covers: Arc<CoverThumbs>) -> Self {
         Self {
             grid: ArtistGridState {
                 data: Mutex::new(Arc::new(GridData::new(Vec::new()))),
@@ -99,6 +107,7 @@ impl ArtistsUi {
                 GRID_COVER_SIZE,
                 DEFAULT_GRID_COVER_CAP,
             )),
+            albums_grid_covers,
             detail_artwork: Arc::new(DetailArtwork::new()),
             section: SectionState::new(),
         }

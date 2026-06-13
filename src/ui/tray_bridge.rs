@@ -347,10 +347,12 @@ fn spawn_state_subscriber_linux(
         // exits. `LinuxTray::update` does a blocking D-Bus round-trip to
         // ksni's service thread; `block_in_place` hands the worker thread to
         // other tasks for its duration rather than stalling the runtime.
-        // View-model changes are rare (per track / play-pause), so the
-        // hand-off cost is irrelevant.
-        let snapshot = snapshot_from_vm(rx.borrow_and_update().as_ref());
-        tokio::task::block_in_place(|| tray.update(&snapshot));
+        // The view-model channel emits on *every* state change (volume
+        // steps during a drag, seeks, queue edits), but the tray only
+        // renders title / artist / play-pause — diff against the last
+        // pushed snapshot so D-Bus traffic stays per-track / per-toggle.
+        let mut last = snapshot_from_vm(rx.borrow_and_update().as_ref());
+        tokio::task::block_in_place(|| tray.update(&last));
         loop {
             tokio::select! {
                 () = shutdown.cancelled() => break,
@@ -359,7 +361,11 @@ fn spawn_state_subscriber_linux(
                         break;
                     }
                     let snapshot = snapshot_from_vm(rx.borrow_and_update().as_ref());
+                    if snapshot == last {
+                        continue;
+                    }
                     tokio::task::block_in_place(|| tray.update(&snapshot));
+                    last = snapshot;
                 }
             }
         }
@@ -374,12 +380,21 @@ fn spawn_state_subscriber_linux(
 fn spawn_state_subscriber_local(sinks: &Arc<crate::player::event_sink::PlayerSinks>) {
     let mut rx = sinks.view_model.subscribe();
     let res = slint::spawn_local(async_compat::Compat::new(async move {
-        tray::update_tray(&snapshot_from_vm(rx.borrow_and_update().as_ref()));
+        // Diff against the last pushed snapshot — the view-model channel
+        // emits per state change (volume steps, seeks), but the tray only
+        // renders title / artist / play-pause.
+        let mut last = snapshot_from_vm(rx.borrow_and_update().as_ref());
+        tray::update_tray(&last);
         loop {
             if rx.changed().await.is_err() {
                 break;
             }
-            tray::update_tray(&snapshot_from_vm(rx.borrow_and_update().as_ref()));
+            let snapshot = snapshot_from_vm(rx.borrow_and_update().as_ref());
+            if snapshot == last {
+                continue;
+            }
+            tray::update_tray(&snapshot);
+            last = snapshot;
         }
         log::debug!("tray: state subscriber stopped");
     }));

@@ -27,6 +27,7 @@ use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 
 use crate::entities::track::TrackListRow as RsTrackListRow;
 use crate::media::cover_thumbs::CoverThumbs;
+use crate::ui::section_state::SectionState;
 use crate::ui::util::clamp_i64_to_i32;
 use crate::{AppWindow, TrackListRow as UiTrackListRow, Tracks};
 
@@ -112,6 +113,12 @@ pub struct TracksUi {
     /// the bar's artwork tile reuses cached thumbnails warmed by the
     /// Tracks view.
     pub(super) cover_thumbs: Arc<CoverThumbs>,
+    /// Visibility and staleness bookkeeping (`section-active-changed`
+    /// shadow plus dirty flag). Unlike the entity-grid views, Tracks
+    /// releases nothing on leave — `dirty` is set only by the
+    /// `library_changed` refresher when a bump arrives while the section
+    /// is hidden, and consumed on re-enter to run one deferred re-fetch.
+    section: SectionState,
 }
 
 impl TracksUi {
@@ -121,7 +128,31 @@ impl TracksUi {
             search_keys: Mutex::new(Arc::new(Vec::new())),
             order: Mutex::new(Arc::new(Vec::new())),
             cover_thumbs,
+            section: SectionState::new(),
         }
+    }
+
+    /// Mirror the Tracks-section-visible flag (`section-active-changed`).
+    pub fn set_section_active(&self, active: bool) {
+        self.section.set_active(active);
+    }
+
+    /// Whether the Tracks section is currently on screen.
+    pub fn section_active(&self) -> bool {
+        self.section.active()
+    }
+
+    /// Mark the cached row data stale — a `library_changed` bump arrived
+    /// while the section was hidden. See [`Self::take_dirty`].
+    pub fn mark_dirty(&self) {
+        self.section.mark_dirty();
+    }
+
+    /// Atomically read-and-clear the dirty flag. `true` on section-enter
+    /// means a library mutation happened while hidden and the row set must
+    /// be re-fetched.
+    pub fn take_dirty(&self) -> bool {
+        self.section.take_dirty()
     }
 
     /// IDs of the rows that pass `filter`, in the current sort order. Used by
@@ -234,13 +265,12 @@ pub fn prepare_track_list_row(r: &RsTrackListRow) -> PreparedTrackRow {
     }
 }
 
-/// Finish a [`PreparedTrackRow`] into a `UiTrackListRow` by decoding (or
-/// cache-hitting) its cover thumbnail. Must run on the UI thread —
-/// `slint::Image` is `!Send`.
-pub fn finish_track_list_row(p: PreparedTrackRow, thumbs: &CoverThumbs) -> UiTrackListRow {
-    let cover_img = thumbs.get_or_load_opt(
-        Some(p.artwork_path.as_str()).filter(|s| !s.is_empty()),
-    );
+/// Finish a [`PreparedTrackRow`] into a `UiTrackListRow`. Since covers
+/// went lazy (`RowCovers.request` resolves the thumbnail per instantiated
+/// row on the Slint side), this is a plain field move — the prepare/finish
+/// split survives only because the established view pipelines hop threads
+/// between the two stages.
+pub fn finish_track_list_row(p: PreparedTrackRow) -> UiTrackListRow {
     UiTrackListRow {
         id: p.id,
         title: p.title,
@@ -252,7 +282,6 @@ pub fn finish_track_list_row(p: PreparedTrackRow, thumbs: &CoverThumbs) -> UiTra
         duration_ms: p.duration_ms,
         is_favorite: p.is_favorite,
         artwork_path: p.artwork_path,
-        cover_img,
         display_duration: p.display_duration,
         selected: false,
         enabled: p.enabled,
@@ -262,8 +291,8 @@ pub fn finish_track_list_row(p: PreparedTrackRow, thumbs: &CoverThumbs) -> UiTra
     }
 }
 
-pub fn to_slint_track_list_row(r: &RsTrackListRow, thumbs: &CoverThumbs) -> UiTrackListRow {
-    finish_track_list_row(prepare_track_list_row(r), thumbs)
+pub fn to_slint_track_list_row(r: &RsTrackListRow) -> UiTrackListRow {
+    finish_track_list_row(prepare_track_list_row(r))
 }
 
 /// `mm:ss` for tracks under one hour, `h:mm:ss` otherwise. Matches the Slint

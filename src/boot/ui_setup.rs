@@ -75,6 +75,18 @@ pub fn install_views(
     ui::tracks::install_tracks_model(app);
     ui::tracks::install_selection_model(app);
     let cover_thumbs = Arc::new(media::cover_thumbs::CoverThumbs::new());
+    // Every `TrackListRowItem` thumbnail (all track tables, all views)
+    // resolves through this one lazy callback into the shared row-tier
+    // LRU — rows carry only the artwork path, so only instantiated
+    // (~visible) rows pay a lookup/decode and nothing pins evicted
+    // buffers. The closure captures only the `Arc<CoverThumbs>` — no UI
+    // handle, no reference cycle.
+    {
+        let ct = cover_thumbs.clone();
+        app.global::<melodia::RowCovers>().on_request(move |path| {
+            ct.get_or_load_opt(Some(path.as_str()).filter(|s| !s.is_empty()))
+        });
+    }
     let tracks_ui = Arc::new(ui::tracks::TracksUi::new(cover_thumbs.clone()));
     ui::callbacks::wire_tracks(app, state, &tracks_ui);
 
@@ -94,7 +106,10 @@ pub fn install_views(
     // album from Artist Detail" hand-off has a live `AlbumsUi` to call
     // into.
     ui::artists::install_artists_models(app);
-    let artists_ui = Arc::new(ui::artists::ArtistsUi::new(cover_thumbs.clone()));
+    let artists_ui = Arc::new(ui::artists::ArtistsUi::new(
+        cover_thumbs.clone(),
+        albums_ui.grid_thumbs(),
+    ));
     ui::callbacks::wire_artists(app, state, &artists_ui, &albums_ui);
 
     // 5c2c. Genres view. Self-contained: no cross-tab origin, no
@@ -420,17 +435,30 @@ pub fn spawn_initial_playlists_fetch(
 /// on every mutation so the Tracks view stays in sync with scans / watcher
 /// batches. The initial `0` is not observed — `changed()` only resolves on
 /// a real `send_modify`, so this does not race the explicit initial fetch.
+///
+/// Gated on section visibility: play-count flushes bump this channel after
+/// every track completion, so an ungated refresh would re-fetch the whole
+/// library (full 19-col SELECT + search-key rebuild + re-sort) per song
+/// during plain listening, even with the view hidden. While hidden the bump
+/// is folded into the `TracksUi` dirty flag; `Tracks.section-active-changed`
+/// runs one deferred refresh on re-enter.
 pub fn install_library_changed_refresher(
     state: &AppState,
+    tracks_ui: &Arc<ui::tracks::TracksUi>,
     weak: slint::Weak<AppWindow>,
 ) -> Result<(), melodia::error::AppError> {
     let mut rx = state.library_changed_tx.subscribe();
+    let tu = tracks_ui.clone();
     slint::spawn_local(async_compat::Compat::new(async move {
         loop {
             if rx.changed().await.is_err() {
                 break;
             }
             let _ = rx.borrow_and_update();
+            if !tu.section_active() {
+                tu.mark_dirty();
+                continue;
+            }
             let Some(ui) = weak.upgrade() else { break };
             ui.global::<melodia::Tracks>().invoke_request_refresh();
         }

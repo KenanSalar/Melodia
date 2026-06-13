@@ -2,7 +2,6 @@ use std::sync::Mutex;
 
 use tokio::sync::watch;
 
-use crate::config::Paths;
 use crate::error::AppError;
 use crate::player::event_sink::PlayerSinks;
 use crate::player::rodio_backend::PlayerBackend;
@@ -111,7 +110,6 @@ fn make_test_sinks() -> PlayerSinks {
 /// at `track_path` so the `Path::exists()` pre-flight check in
 /// `execute_actions` lets `PlayMedia` reach the (mock) backend.
 struct ActionsFixture {
-    paths: Paths,
     db: crate::database::DbPool,
     player_state: PlayerStateHandle,
     sinks: PlayerSinks,
@@ -121,22 +119,10 @@ struct ActionsFixture {
 
 async fn fixture() -> Result<ActionsFixture, AppError> {
     let tmp = tempfile::tempdir()?;
-    let root = tmp.path().to_owned();
-    let track_path = root.join("track.mp3");
+    let track_path = tmp.path().join("track.mp3");
     std::fs::write(&track_path, b"")?;
-    let paths = Paths {
-        db_path: root.join("melodia.db"),
-        settings_path: root.join("settings.json"),
-        view_state_path: root.join("views.json"),
-        queue_path: root.join("queue.json"),
-        search_history_path: root.join("search_history.json"),
-        artwork_dir: root.join("artwork"),
-        artists_dir: root.join("artists"),
-        data_dir: root,
-    };
     let db = crate::database::DbPool::test_pool().await;
     Ok(ActionsFixture {
-        paths,
         db,
         player_state: PlayerStateHandle::default(),
         sinks: make_test_sinks(),
@@ -161,7 +147,6 @@ async fn execute_play_media_calls_backend() -> Result<(), AppError> {
         actions,
         &mock,
         &fx.db,
-        &fx.paths,
         &fx.player_state,
         &fx.sinks,
     );
@@ -196,7 +181,6 @@ async fn execute_play_media_decode_failure_triggers_auto_skip() -> Result<(), Ap
         actions,
         &mock,
         &fx.db,
-        &fx.paths,
         &fx.player_state,
         &fx.sinks,
     );
@@ -226,7 +210,6 @@ async fn execute_play_media_vanished_file_pre_flights() -> Result<(), AppError> 
         actions,
         &mock,
         &fx.db,
-        &fx.paths,
         &fx.player_state,
         &fx.sinks,
     );
@@ -252,7 +235,6 @@ async fn execute_resume_pause_stop() -> Result<(), AppError> {
         actions,
         &mock,
         &fx.db,
-        &fx.paths,
         &fx.player_state,
         &fx.sinks,
     );
@@ -275,7 +257,6 @@ async fn execute_seek_calls_backend() -> Result<(), AppError> {
         actions,
         &mock,
         &fx.db,
-        &fx.paths,
         &fx.player_state,
         &fx.sinks,
     );
@@ -299,7 +280,6 @@ async fn execute_set_volume_and_speed() -> Result<(), AppError> {
         actions,
         &mock,
         &fx.db,
-        &fx.paths,
         &fx.player_state,
         &fx.sinks,
     );
@@ -324,7 +304,6 @@ async fn execute_preload_gapless_with_and_without_path() -> Result<(), AppError>
         actions,
         &mock,
         &fx.db,
-        &fx.paths,
         &fx.player_state,
         &fx.sinks,
     );
@@ -359,7 +338,6 @@ async fn execute_multiple_actions_in_order() -> Result<(), AppError> {
         actions,
         &mock,
         &fx.db,
-        &fx.paths,
         &fx.player_state,
         &fx.sinks,
     );
@@ -380,7 +358,6 @@ async fn execute_empty_actions_is_noop() -> Result<(), AppError> {
         vec![],
         &mock,
         &fx.db,
-        &fx.paths,
         &fx.player_state,
         &fx.sinks,
     );

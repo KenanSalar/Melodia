@@ -161,7 +161,7 @@ impl PlaylistsUi {
 
     pub fn prewarm_visible_covers(&self) {
         let data = self.grid.data.lock().clone();
-        let unique = grid::unique_artwork_paths(
+        let unique = crate::ui::grid_prewarm::unique_artwork_paths(
             data.playlists
                 .iter()
                 .take(state::GRID_PREWARM_AHEAD)

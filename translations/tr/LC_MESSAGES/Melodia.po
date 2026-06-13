@@ -824,3 +824,8 @@ msgstr "Sistem tepsisi simgesini değiştirmek Melodia'yı yeniden başlatmayı 
 
 msgid "Available only while the system tray icon is active."
 msgstr "Yalnızca sistem tepsisi simgesi etkinken kullanılabilir."
+
+# ---- Miniplayer --------------------------------------------------------------
+
+msgid "Exit miniplayer"
+msgstr "Mini oynatıcıdan çık"
