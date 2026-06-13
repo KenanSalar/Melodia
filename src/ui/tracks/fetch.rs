@@ -50,17 +50,23 @@ pub async fn fetch_and_apply(
     // Pre-warm the thumbnail cache off the runtime worker pool. Album art
     // decoding is CPU-bound; Rayon parallelizes across cores while
     // `spawn_blocking` keeps the tokio runtime responsive. Walked in
-    // DISPLAY order (through the `order` permutation, not raw fetch
-    // order): `prewarm` caps its work at the LRU capacity, so on a
-    // library with more unique covers than the cache holds, the entries
-    // that survive are the ones the user sees first.
+    // DISPLAY order (through the `order` permutation, not raw fetch order)
+    // and truncated at the LRU capacity: `prewarm` decodes at most that
+    // many anyway, and on a library with more unique covers than the cache
+    // holds, the surviving entries are the ones the user sees first.
+    // Stopping the build at `cap` avoids allocating a path Vec longer than
+    // the cache can ever hold.
     let unique_paths: Vec<PathBuf> = {
         let full = tracks_ui.full.lock().clone();
         let order = tracks_ui.order.lock().clone();
-        let cap = (full.len() / 8).max(16);
-        let mut seen: HashSet<&str> = HashSet::with_capacity(cap);
-        let mut out: Vec<PathBuf> = Vec::with_capacity(cap);
+        let cap = tracks_ui.cover_thumbs.capacity();
+        let prealloc = ((full.len() / 8).max(16)).min(cap);
+        let mut seen: HashSet<&str> = HashSet::with_capacity(prealloc);
+        let mut out: Vec<PathBuf> = Vec::with_capacity(prealloc);
         for r in order.iter().filter_map(|&i| full.get(i)) {
+            if out.len() >= cap {
+                break;
+            }
             if let Some(p) = r.artwork_path.as_deref()
                 && !p.is_empty()
                 && seen.insert(p)

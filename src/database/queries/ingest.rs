@@ -25,9 +25,11 @@ pub struct IngestResult {
     pub inserted_count: u32,
     pub moved_count: u32,
     pub updated_count: u32,
-    /// IDs of the freshly-inserted tracks, in insertion order. Populated
-    /// directly from `insert_track`'s `last_insert_rowid()` so callers don't
-    /// need a follow-up `WHERE file_path IN (…)` lookup.
+    /// IDs of the freshly-inserted tracks, in **input order**. Populated by
+    /// `insert_tracks_batch`'s `RETURNING id, file_path` (remapped to input
+    /// order via the returned path, since `RETURNING` output order is
+    /// unspecified) so callers don't need a follow-up `WHERE file_path IN
+    /// (…)` lookup.
     pub inserted_track_ids: Vec<i64>,
 }
 
