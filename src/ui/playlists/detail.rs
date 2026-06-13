@@ -92,14 +92,13 @@ pub async fn open_playlist(
     // (queue takes priority when both are open).
     crate::ui::window_chrome::set_current_playlist_id(playlist_id);
 
-    let thumbs = playlists_ui.cover_thumbs.clone();
     let playlists_ui = playlists_ui.clone();
     let state_for_history = state.clone();
     let _ = weak.upgrade_in_event_loop(move |ui| {
         let g = ui.global::<PlaylistDetail>();
         let ui_tracks: Vec<UiTrackListRow> = prepared
             .into_iter()
-            .map(|p| crate::ui::tracks::finish_track_list_row(p, &thumbs))
+            .map(crate::ui::tracks::finish_track_list_row)
             .collect();
         let header = to_slint_playlist_row(&detail);
         g.set_playlist(header);
@@ -153,7 +152,6 @@ pub async fn refresh_detail(
     // before we permute `tracks` to the user's chosen sort.
     let position_order_snapshot: Vec<i64> = tracks.iter().map(|t| t.id).collect();
 
-    let thumbs = playlists_ui.cover_thumbs.clone();
     let playlists_ui = playlists_ui.clone();
     let _ = weak.upgrade_in_event_loop(move |ui| {
         let g = ui.global::<PlaylistDetail>();
@@ -205,7 +203,7 @@ pub async fn refresh_detail(
             if let Some(vm) = model.as_any().downcast_ref::<VecModel<UiTrackListRow>>() {
                 for (i, t) in tracks.iter().enumerate() {
                     let Some(old) = vm.row_data(i) else { continue };
-                    let mut fresh = crate::ui::tracks::to_slint_track_list_row(t, &thumbs);
+                    let mut fresh = crate::ui::tracks::to_slint_track_list_row(t);
                     fresh.selected = old.selected;
                     if fresh != old {
                         vm.set_row_data(i, fresh);
@@ -219,7 +217,7 @@ pub async fn refresh_detail(
         } else {
             let ui_tracks: Vec<UiTrackListRow> = tracks
                 .iter()
-                .map(|t| crate::ui::tracks::to_slint_track_list_row(t, &thumbs))
+                .map(crate::ui::tracks::to_slint_track_list_row)
                 .collect();
             replace_tracks_model(&g, ui_tracks);
             playlists_ui.detail.applied_selection.lock().clear();
@@ -394,7 +392,6 @@ pub fn apply_filtered_detail(ui: &AppWindow, playlists_ui: &PlaylistsUi) {
             applied: &playlists_ui.detail.applied_selection,
             filter: &playlists_ui.detail.filter,
         },
-        &playlists_ui.cover_thumbs,
     );
 }
 

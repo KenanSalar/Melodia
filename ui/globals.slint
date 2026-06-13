@@ -194,6 +194,18 @@ export global MiniPlayer {
     callback square-changed(bool);
 }
 
+// Shared lazy cover lookup for every `TrackListRowItem` thumbnail (Tracks,
+// Browse, Favorites, Search, Album/Artist/Genre/Playlist detail, and the
+// draggable playlist variant — they all render the same row component).
+// One global instead of per-view forwarding: Rust wires it once to the
+// shared row-tier (72 px) `CoverThumbs` LRU. Rows carry only
+// `artwork_path`; the decode (or LRU hit) happens here, per *instantiated*
+// row — virtualized lists pay for ~visible rows only, and model rows no
+// longer pin pixel buffers the LRU already evicted.
+export global RowCovers {
+    pure callback request(string /*artwork_path*/) -> image;
+}
+
 // Tracks: drives the Tracks view. The `rows` model is owned by Rust
 // (`Rc<VecModel<TrackListRow>>` in `src/ui/tracks.rs`) and pushed in via
 // `set_rows(ModelRc::from(...))`. The full unfiltered Vec lives on the Rust
@@ -1463,12 +1475,12 @@ export global Favorites {
     in-out property <int>   selection-anchor: -1;
 
     // Lazy cover callbacks — one per cache tier so Rust can route each
-    // surface into the right LRU (row-tier 72 px for mosaic + All Songs
-    // rows; dedicated thumbs for most-played + circular artist).
+    // surface into the right LRU (row-tier 72 px for the mosaic;
+    // dedicated thumbs for most-played + circular artist). All Songs
+    // rows resolve through the shared `RowCovers` global.
     pure callback request-mosaic-cover(string)      -> image;
     pure callback request-most-played-cover(string) -> image;
     pure callback request-artist-cover(string)      -> image;
-    pure callback request-row-cover(string)         -> image;
 
     // Hero actions
     callback play-all();
@@ -1840,8 +1852,8 @@ export global Search {
     in-out property <[int]> selected-ids;
     in-out property <int>   selection-anchor: -1;
 
-    // --- Lazy cover lookups (3 LRU tiers + per-kind routing for top) --
-    pure callback request-row-cover(string)          -> image;
+    // --- Lazy cover lookups (strip tiers + per-kind routing for top;
+    // result rows go through the shared `RowCovers` global) ---
     pure callback request-album-strip-cover(string)  -> image;
     pure callback request-artist-strip-cover(string) -> image;
     pure callback request-top-result-cover(string)   -> image;

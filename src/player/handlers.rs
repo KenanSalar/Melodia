@@ -121,7 +121,7 @@ pub fn spawn_playback_monitor(tracker: &TaskTracker, ctx: PlaybackMonitorContext
                         actions
                     });
 
-                    execute_actions(actions, &rodio_player, &db, &paths, &player_state, &sinks);
+                    execute_actions(actions, &rodio_player, &db, &player_state, &sinks);
                 }
                 PlaybackCheck::EndOfStream => {
                     let actions = with_state_emit(&player_state, &sinks, |state| {
@@ -142,7 +142,7 @@ pub fn spawn_playback_monitor(tracker: &TaskTracker, ctx: PlaybackMonitorContext
                         actions
                     });
 
-                    execute_actions(actions, &rodio_player, &db, &paths, &player_state, &sinks);
+                    execute_actions(actions, &rodio_player, &db, &player_state, &sinks);
                 }
                 PlaybackCheck::Playing => {
                     // Normal tick: update position with lightweight event

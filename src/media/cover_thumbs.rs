@@ -271,13 +271,21 @@ impl CoverThumbs {
     /// caller passing one path per *track* (e.g. a queue of many tracks
     /// sharing a few album covers) must not trigger one decode per
     /// duplicate.
+    ///
+    /// Work is capped at the LRU capacity: decoding more unique paths
+    /// than the cache can hold would evict the earliest entries with the
+    /// latest — pure wasted decode CPU, and on display-ordered input it
+    /// would evict exactly the covers about to paint. Callers should pass
+    /// paths in display order so the kept prefix is the visible one.
     pub fn prewarm(&self, paths: &[PathBuf]) {
         let missing: Vec<PathBuf> = {
             let cache = self.cache.lock();
-            let mut seen = std::collections::HashSet::with_capacity(paths.len());
+            let cap = cache.cap().get();
+            let mut seen = std::collections::HashSet::with_capacity(paths.len().min(cap));
             paths
                 .iter()
                 .filter(|p| !cache.contains(*p) && seen.insert(*p))
+                .take(cap)
                 .cloned()
                 .collect()
         };

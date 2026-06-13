@@ -122,15 +122,18 @@ component BreadcrumbSegment inherits Rectangle {
 // **Layout**: the folder section and the `TrackList` both live inside a
 // single outer `ScrollView` (`below-sv`), so one vertical overlay
 // scrollbar scrolls folders then tracks continuously — the favorites-
-// view pattern. Tradeoff: folders + tracks render in full (the folder
-// `ListView` is sized to its row count, and `TrackList` is sized to its
-// — defeating both inner virtualizations). Acceptable because a single
-// browse directory holds dozens–hundreds of entries, not tens of
-// thousands, and the unified scroll UX matches the Tauri version.
-// The vertical bar drives `below-sv`; the horizontal bar still drives
-// `TrackList`'s internal column pan via its `h-*` out properties. Both
-// are siblings of the padded VerticalLayout so they sit flush with the
-// BrowseView's right/bottom edges.
+// view pattern. The TrackList is capped at the outer viewport height
+// (`min` in its `height` binding) so its inner ListView virtualizes to
+// ~visible rows; the outer ScrollView's own travel covers the folder
+// section, and the unified scrollbar composes both travels (wheel
+// handoff between the regions is native — a Slint Flickable at its
+// scroll edge forwards wheel events to the parent). The folder
+// `ListView` stays sized to its row count: folder rows are light
+// (icon + label, no popups) and directory listings are bounded.
+// The horizontal bar still drives `TrackList`'s internal column pan via
+// its `h-*` out properties. Both bars are siblings of the padded
+// VerticalLayout so they sit flush with the BrowseView's right/bottom
+// edges.
 //
 // Nav-activation refresh: index 1 == Browse. `changed
 // Nav.selected-index` doesn't accept path expressions on globals
@@ -313,22 +316,27 @@ export component BrowseView inherits Rectangle {
                     }
 
                 // Track table — hidden at the root view, which only ever
-                // lists library folders (never songs). Sized to its full
-                // row count (row stride × count + 32 px header strip +
-                // the inner `pad-xs` gap) so every row renders inside the
-                // outer ScrollView; `visible: false` stops it painting
-                // its (empty) column header at the root.
+                // lists library folders (never songs); `visible: false`
+                // stops it painting its (empty) column header at the
+                // root. Height = content (row stride × count + 32 px
+                // header strip + the inner `pad-xs` gap) capped at the
+                // outer viewport: small directories keep the
+                // content-tall layout, large ones pin to the visible
+                // region so the inner ListView virtualizes instead of
+                // instantiating every row.
                 tl := TrackList {
                     visible: Browse.current-path != "";
                     horizontal-stretch: 1;
                     vertical-stretch: 0;
                     height: Browse.current-path == ""
                         ? 0px
-                        : max(1, Browse.rows.length)
-                            * (Browse.show-artwork
-                                ? Theme.row-h
-                                : Theme.row-h-compact)
-                            + 32px + Theme.pad-xs;
+                        : min(
+                            max(1, Browse.rows.length)
+                                * (Browse.show-artwork
+                                    ? Theme.row-h
+                                    : Theme.row-h-compact)
+                                + 32px + Theme.pad-xs,
+                            below-sv.visible-height);
 
                     rows: Browse.rows;
 
@@ -498,6 +506,14 @@ export component BrowseView inherits Rectangle {
     // the `TrackList`'s internal column pan via its `h-*` out properties.
     // `body` / `tl` are nested inside `vl`, so positions are taken via
     // `absolute-position` rather than plain `.y` / `.x`.
+    // Composite scroll math: the outer ScrollView's own travel covers
+    // the folder-section region (viewport minus visible height), the
+    // TrackList's inner ListView covers the track rows. The unified
+    // scrollbar spans both travels; drags split the offset at the
+    // boundary.
+    property <length> v-outer-max: max(0px, below-sv.viewport-height - below-sv.visible-height);
+    property <length> v-inner-max: max(0px, tl.v-viewport-height - tl.v-visible-height);
+
     OverlayScrollbar {
         horizontal: false;
         x: parent.width - self.width;
@@ -505,9 +521,12 @@ export component BrowseView inherits Rectangle {
         width: 10px;
         height: body.height;
         visible-size: below-sv.visible-height;
-        content-size: below-sv.viewport-height;
-        offset: -below-sv.viewport-y;
-        scroll-to(o) => { below-sv.viewport-y = -o; }
+        content-size: below-sv.visible-height + root.v-outer-max + root.v-inner-max;
+        offset: -below-sv.viewport-y + tl.v-offset;
+        scroll-to(o) => {
+            below-sv.viewport-y = -min(o, root.v-outer-max);
+            tl.set-v-offset(max(0px, o - root.v-outer-max));
+        }
     }
 
     OverlayScrollbar {

@@ -23,7 +23,6 @@ pub async fn player_play_track(ctx: &PlaybackContext, track_id: i64) -> Result<(
         actions,
         &*ctx.rodio,
         &ctx.db,
-        &ctx.paths,
         &ctx.player_state,
         &ctx.sinks,
     );
@@ -64,7 +63,6 @@ pub async fn player_play_tracks(
         actions,
         &*ctx.rodio,
         &ctx.db,
-        &ctx.paths,
         &ctx.player_state,
         &ctx.sinks,
     );
@@ -81,7 +79,6 @@ pub fn player_play(ctx: &PlaybackContext) -> Result<(), AppError> {
         actions,
         &*ctx.rodio,
         &ctx.db,
-        &ctx.paths,
         &ctx.player_state,
         &ctx.sinks,
     );
@@ -98,7 +95,6 @@ pub fn player_pause(ctx: &PlaybackContext) -> Result<(), AppError> {
         actions,
         &*ctx.rodio,
         &ctx.db,
-        &ctx.paths,
         &ctx.player_state,
         &ctx.sinks,
     );
@@ -119,7 +115,6 @@ pub fn player_toggle_play_pause(ctx: &PlaybackContext) -> Result<(), AppError> {
         actions,
         &*ctx.rodio,
         &ctx.db,
-        &ctx.paths,
         &ctx.player_state,
         &ctx.sinks,
     );
@@ -136,7 +131,6 @@ pub fn player_stop(ctx: &PlaybackContext) -> Result<(), AppError> {
         actions,
         &*ctx.rodio,
         &ctx.db,
-        &ctx.paths,
         &ctx.player_state,
         &ctx.sinks,
     );
@@ -151,7 +145,6 @@ pub fn player_seek(ctx: &PlaybackContext, position_ms: u64) -> Result<(), AppErr
         actions,
         &*ctx.rodio,
         &ctx.db,
-        &ctx.paths,
         &ctx.player_state,
         &ctx.sinks,
     );
@@ -168,7 +161,6 @@ pub fn player_next(ctx: &PlaybackContext) -> Result<(), AppError> {
         actions,
         &*ctx.rodio,
         &ctx.db,
-        &ctx.paths,
         &ctx.player_state,
         &ctx.sinks,
     );
@@ -185,7 +177,6 @@ pub fn player_previous(ctx: &PlaybackContext) -> Result<(), AppError> {
         actions,
         &*ctx.rodio,
         &ctx.db,
-        &ctx.paths,
         &ctx.player_state,
         &ctx.sinks,
     );
@@ -209,7 +200,6 @@ pub fn player_set_volume(ctx: &PlaybackContext, level: u32) -> Result<(), AppErr
         actions,
         &*ctx.rodio,
         &ctx.db,
-        &ctx.paths,
         &ctx.player_state,
         &ctx.sinks,
     );
@@ -227,7 +217,6 @@ pub async fn player_set_muted(ctx: &PlaybackContext, muted: bool) -> Result<(), 
         actions,
         &*ctx.rodio,
         &ctx.db,
-        &ctx.paths,
         &ctx.player_state,
         &ctx.sinks,
     );
@@ -243,7 +232,6 @@ pub async fn player_toggle_mute(ctx: &PlaybackContext) -> Result<(), AppError> {
         actions,
         &*ctx.rodio,
         &ctx.db,
-        &ctx.paths,
         &ctx.player_state,
         &ctx.sinks,
     );
@@ -284,7 +272,6 @@ pub fn player_set_playback_speed(ctx: &PlaybackContext, speed: f64) -> Result<()
         actions,
         &*ctx.rodio,
         &ctx.db,
-        &ctx.paths,
         &ctx.player_state,
         &ctx.sinks,
     );

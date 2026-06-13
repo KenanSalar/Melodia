@@ -14,7 +14,6 @@ use std::sync::Arc;
 
 use sqlx::FromRow;
 
-use crate::config::Paths;
 use crate::database::DbPool;
 use crate::error::AppResult;
 use crate::player::actions::execute_actions;
@@ -38,7 +37,6 @@ pub fn spawn(spawner: &TaskSpawner, state: &AppState) {
     let player_state = state.player_state.clone();
     let sinks = state.sinks.clone();
     let rodio = state.rodio.clone();
-    let paths = state.paths.clone();
     let mut rx = state.library_changed_tx.subscribe();
 
     spawner.spawn_cancellable(move |shutdown| async move {
@@ -50,8 +48,7 @@ pub fn spawn(spawner: &TaskSpawner, state: &AppState) {
                         break;
                     }
                     let _ = rx.borrow_and_update();
-                    if let Err(e) = reconcile_once(&db, &player_state, &sinks, &rodio, &paths).await
-                    {
+                    if let Err(e) = reconcile_once(&db, &player_state, &sinks, &rodio).await {
                         log::warn!("queue_prune reconcile failed: {e}");
                     }
                 }
@@ -73,7 +70,6 @@ async fn reconcile_once(
     player_state: &PlayerStateHandle,
     sinks: &PlayerSinks,
     rodio: &Arc<RodioPlayer>,
-    paths: &Paths,
 ) -> AppResult<()> {
     // Step 1: snapshot every track id currently referenced by the queue,
     // including the (optional) direct-play track. Brief read-only lock —
@@ -142,6 +138,6 @@ async fn reconcile_once(
         }
     });
 
-    execute_actions(actions, &**rodio, db, paths, player_state, sinks);
+    execute_actions(actions, &**rodio, db, player_state, sinks);
     Ok(())
 }
