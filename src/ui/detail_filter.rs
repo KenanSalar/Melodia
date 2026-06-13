@@ -20,7 +20,6 @@ use parking_lot::Mutex;
 use slint::{Model, ModelRc, VecModel};
 
 use crate::entities::track::TrackListRow as RsTrackListRow;
-use crate::media::cover_thumbs::CoverThumbs;
 use crate::ui::detail_selection::DetailSelectionView;
 use crate::TrackListRow as UiTrackListRow;
 
@@ -98,11 +97,7 @@ pub struct FilterRefs<'a> {
 /// Used directly by Album / Genre / Playlist Detail. Artist Detail keeps
 /// its own variant (worker-thread prep + Albums strip) but reuses
 /// [`track_matches`] / [`restamp_selection`] from this module.
-pub fn apply_filtered_detail<V: DetailSelectionView>(
-    view: &V,
-    refs: &FilterRefs<'_>,
-    thumbs: &CoverThumbs,
-) {
+pub fn apply_filtered_detail<V: DetailSelectionView>(view: &V, refs: &FilterRefs<'_>) {
     let needle = refs.filter.lock().clone();
 
     let displayed: Vec<RsTrackListRow> = {
@@ -114,7 +109,7 @@ pub fn apply_filtered_detail<V: DetailSelectionView>(
     };
     let mut rows: Vec<UiTrackListRow> = displayed
         .iter()
-        .map(|t| crate::ui::tracks::to_slint_track_list_row(t, thumbs))
+        .map(crate::ui::tracks::to_slint_track_list_row)
         .collect();
     restamp_selection(view, &mut rows);
     *refs.tracks.lock() = displayed;

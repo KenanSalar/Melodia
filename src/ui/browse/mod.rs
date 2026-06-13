@@ -266,9 +266,9 @@ use crate::BreadcrumbRow as UiBreadcrumbRow;
 /// component renders. In-library files reuse the Tracks-view converter
 /// (full data, `enabled: true`); disk-only files become a sparse,
 /// dimmed, non-interactive row (`id == 0`, `enabled: false`).
-pub fn to_slint_browse_track_row(f: &BrowseFile, thumbs: &CoverThumbs) -> UiTrackListRow {
+pub fn to_slint_browse_track_row(f: &BrowseFile) -> UiTrackListRow {
     if f.in_library {
-        let mut row = crate::ui::tracks::to_slint_track_list_row(&f.row, thumbs);
+        let mut row = crate::ui::tracks::to_slint_track_list_row(&f.row);
         row.enabled = true;
         row
     } else {
@@ -283,7 +283,6 @@ pub fn to_slint_browse_track_row(f: &BrowseFile, thumbs: &CoverThumbs) -> UiTrac
             duration_ms: 0,
             is_favorite: false,
             artwork_path: SharedString::from(""),
-            cover_img: thumbs.get_or_load_opt(None),
             display_duration: SharedString::from(""),
             selected: false,
             enabled: false,

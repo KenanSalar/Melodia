@@ -59,24 +59,27 @@ const FLUSH_INTERVAL: Duration = Duration::from_secs(2);
 /// existing sender). Tracked by `spawner` so shutdown awaits the final
 /// flush before the runtime is dropped.
 ///
-/// `library_changed_tx` is bumped after every successful play-count flush
+/// `stats_changed_tx` is bumped after every successful play-count flush
 /// so subscribers (Favorites hero mosaic, future "Most Played" widgets,
-/// …) re-fetch when the ranking changes. Skip-count flushes do not bump
-/// — no UI surface currently depends on skip counts.
-pub fn spawn(spawner: &TaskSpawner, db: DbPool, library_changed_tx: watch::Sender<u64>) {
+/// …) re-fetch when the ranking changes. Deliberately NOT
+/// `library_changed_tx`: a play-count write changes a ranking, not the
+/// library's structure, and bumping the structural channel forced every
+/// view refresher + `queue_prune` to run after every played song.
+/// Skip-count flushes do not bump — no UI surface depends on skip counts.
+pub fn spawn(spawner: &TaskSpawner, db: DbPool, stats_changed_tx: watch::Sender<u64>) {
     let (tx, rx) = mpsc::unbounded_channel::<PlayCountEvent>();
     if SENDER.set(tx).is_err() {
         // Already spawned. Drop the new receiver to release resources.
         return;
     }
-    spawner.spawn_cancellable(move |shutdown| run(rx, shutdown, db, library_changed_tx));
+    spawner.spawn_cancellable(move |shutdown| run(rx, shutdown, db, stats_changed_tx));
 }
 
 async fn run(
     mut rx: UnboundedReceiver<PlayCountEvent>,
     shutdown: CancellationToken,
     db: DbPool,
-    library_changed_tx: watch::Sender<u64>,
+    stats_changed_tx: watch::Sender<u64>,
 ) {
     let mut interval = tokio::time::interval(FLUSH_INTERVAL);
     interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
@@ -91,16 +94,16 @@ async fn run(
                 while let Ok(ev) = rx.try_recv() {
                     record(&mut play_counts, &mut skip_counts, ev);
                 }
-                flush(&db, &mut play_counts, &mut skip_counts, &library_changed_tx).await;
+                flush(&db, &mut play_counts, &mut skip_counts, &stats_changed_tx).await;
                 log::info!("Play-count flusher stopped");
                 return;
             }
             ev = rx.recv() => if let Some(ev) = ev { record(&mut play_counts, &mut skip_counts, ev) } else {
-                flush(&db, &mut play_counts, &mut skip_counts, &library_changed_tx).await;
+                flush(&db, &mut play_counts, &mut skip_counts, &stats_changed_tx).await;
                 return;
             },
             _ = interval.tick() => {
-                flush(&db, &mut play_counts, &mut skip_counts, &library_changed_tx).await;
+                flush(&db, &mut play_counts, &mut skip_counts, &stats_changed_tx).await;
             }
         }
     }
@@ -117,7 +120,7 @@ async fn flush(
     db: &DbPool,
     plays: &mut HashMap<i64, u32>,
     skips: &mut HashMap<i64, u32>,
-    library_changed_tx: &watch::Sender<u64>,
+    stats_changed_tx: &watch::Sender<u64>,
 ) {
     if plays.is_empty() && skips.is_empty() {
         return;
@@ -145,7 +148,7 @@ async fn flush(
     // ranks by skip_count today, and bumping for nothing would cost a
     // wasted re-fetch on every skip burst.
     if play_flush_ok {
-        library_changed_tx.send_modify(|n| *n = n.wrapping_add(1));
+        stats_changed_tx.send_modify(|n| *n = n.wrapping_add(1));
     }
 }
 

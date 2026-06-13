@@ -152,7 +152,6 @@ pub fn apply_results_to_slint(
     results: &SearchResults,
     query: &str,
 ) {
-    let thumbs = search_ui.cover_thumbs.clone();
     let sort = search_ui.state().sort.lock().clone();
 
     // Apply the in-memory sort to a copy of the tracks (the FTS5
@@ -213,7 +212,7 @@ pub fn apply_results_to_slint(
         let mut rendered: Vec<UiTrackListRow> = prepared
             .into_iter()
             .take(take)
-            .map(|p| finish_track_list_row(p, &thumbs))
+            .map(finish_track_list_row)
             .collect();
         restamp_rows(&g, &mut rendered);
         write_track_model(&g, rendered);

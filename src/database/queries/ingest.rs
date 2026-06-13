@@ -81,6 +81,10 @@ pub async fn ingest_scanned_files(
     let mut moved_count: u32 = 0;
     let mut updated_count: u32 = 0;
     let mut inserted_track_ids: Vec<i64> = Vec::with_capacity(scanned_files.len());
+    // New-file inserts are buffered and flushed as multi-row statements —
+    // never holds more than one chunk's worth of row metadata.
+    let mut pending_inserts: Vec<queries::scan::NewTrackRow<'_>> =
+        Vec::with_capacity(queries::scan::INSERT_CHUNK_ROWS);
 
     // Batch-load existing tracks with file info for incremental comparison.
     // Maps file_path -> (file_size, date_modified) for mtime+size gate.
@@ -233,7 +237,7 @@ pub async fn ingest_scanned_files(
             continue;
         }
 
-        // --- Truly new file: insert ---
+        // --- Truly new file: insert (buffered) ---
         let Some((artist_id, album_id, genre_id, folder_id)) =
             resolve_ids(tx, meta, folder_resolution, file, file_path_str, &mut caches).await?
         else {
@@ -254,11 +258,34 @@ pub async fn ingest_scanned_files(
             .unwrap_or("")
             .to_string();
 
-        let new_id =
-            queries::scan::insert_track(tx, file_path_str, &file_name, meta, &ids, scan_timestamp)
-                .await?;
-        inserted_track_ids.push(new_id);
-        inserted_count += 1;
+        // Buffer instead of executing one 43-bind INSERT per file —
+        // `insert_tracks_batch` flushes a full chunk as a single
+        // multi-row statement (~27× fewer round-trips on a fresh scan).
+        // Safe to defer: nothing later in this loop reads not-yet-
+        // inserted rows (path/hash lookups run against the pre-loaded
+        // maps, and FK upserts in `resolve_ids` execute immediately).
+        pending_inserts.push(queries::scan::NewTrackRow {
+            file_path: file_path_str.to_owned(),
+            file_name,
+            meta,
+            ids,
+        });
+        if pending_inserts.len() >= queries::scan::INSERT_CHUNK_ROWS {
+            let ids =
+                queries::scan::insert_tracks_batch(tx, &pending_inserts, scan_timestamp).await?;
+            inserted_count += u32::try_from(ids.len()).unwrap_or(u32::MAX);
+            inserted_track_ids.extend(ids);
+            pending_inserts.clear();
+        }
+    }
+
+    // Flush the insert remainder before the artwork backfill so the new
+    // rows exist for any later same-transaction reads.
+    if !pending_inserts.is_empty() {
+        let ids = queries::scan::insert_tracks_batch(tx, &pending_inserts, scan_timestamp).await?;
+        inserted_count += u32::try_from(ids.len()).unwrap_or(u32::MAX);
+        inserted_track_ids.extend(ids);
+        pending_inserts.clear();
     }
 
     // Drain the artwork backfill: one chunked UPDATE per (artwork_path)

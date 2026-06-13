@@ -169,15 +169,14 @@ export component ArtistDetailView inherits Rectangle {
         // --- Below-hero scroll container --------------------------------
         // Wraps the Albums sub-section + the All Songs TrackList in a
         // single outer vertical `ScrollView` so one scrollbar (mounted
-        // at the view root) covers both surfaces. Tradeoff identical to
-        // the Favorites view: the TrackList is sized to its full row
-        // count, defeating the inner ListView's virtualization for
-        // Artist Detail. Acceptable because (a) tracks are scoped to
-        // one artist (typically dozens to a few hundred), (b)
-        // `release_section_state` drops every row on tab leave +
-        // heap-trims, and (c) it lets the user scroll past the Albums
-        // strip on small windows to reach the tracklist (matches
-        // Favorites' unified-scroll UX).
+        // at the view root) covers both surfaces. The TrackList is
+        // capped at the outer viewport height (`min` in its `height`
+        // binding), so its inner ListView virtualizes to ~visible rows
+        // — the outer ScrollView's own travel covers just the Albums
+        // strip region, and the unified scrollbar composes both travels.
+        // Wheel handoff between the two regions is native: a Slint
+        // Flickable at its scroll edge forwards wheel events to the
+        // parent, so scrolling up at the list top brings the strip back.
         below-hero := Rectangle {
             vertical-stretch: 1;
             clip: true;
@@ -340,11 +339,18 @@ export component ArtistDetailView inherits Rectangle {
             tl := TrackList {
                 horizontal-stretch: 1;
                 vertical-stretch: 0;
-                height: max(1, ArtistDetail.tracks.length)
-                    * (ArtistDetail.show-artwork
-                        ? Theme.row-h
-                        : Theme.row-h-compact)
-                    + 32px + Theme.pad-xs;
+                // Capped at the outer viewport: small lists keep the
+                // content-tall layout (the outer ScrollView never needs
+                // to scroll past them), large lists pin to the visible
+                // region so the inner ListView virtualizes to ~visible
+                // rows instead of instantiating every TrackListRowItem.
+                height: min(
+                    max(1, ArtistDetail.tracks.length)
+                        * (ArtistDetail.show-artwork
+                            ? Theme.row-h
+                            : Theme.row-h-compact)
+                        + 32px + Theme.pad-xs,
+                    below-sv.visible-height);
 
                 rows: ArtistDetail.tracks;
 
@@ -387,9 +393,15 @@ export component ArtistDetailView inherits Rectangle {
         }
     }
 
+    // Composite scroll math: the outer ScrollView's own travel covers
+    // the Albums-strip region (viewport minus visible height), the
+    // TrackList's inner ListView covers the rows. The unified scrollbar
+    // below spans both travels; drags split the offset at the boundary.
+    property <length> v-outer-max: max(0px, below-sv.viewport-height - below-sv.visible-height);
+    property <length> v-inner-max: max(0px, tl.v-viewport-height - tl.v-visible-height);
+
     // Outer vertical scrollbar covers the Albums sub-section + the
-    // tracklist together (driving `below-sv`, NOT the TrackList's
-    // internal v-scroll). Pinned to the right edge of the below-hero
+    // tracklist together. Pinned to the right edge of the below-hero
     // region so it starts exactly under the hero banner.
     OverlayScrollbar {
         horizontal: false;
@@ -398,9 +410,12 @@ export component ArtistDetailView inherits Rectangle {
         width: 10px;
         height: below-hero.height;
         visible-size: below-sv.visible-height;
-        content-size: below-sv.viewport-height;
-        offset: -below-sv.viewport-y;
-        scroll-to(o) => { below-sv.viewport-y = -o; }
+        content-size: below-sv.visible-height + root.v-outer-max + root.v-inner-max;
+        offset: -below-sv.viewport-y + tl.v-offset;
+        scroll-to(o) => {
+            below-sv.viewport-y = -min(o, root.v-outer-max);
+            tl.set-v-offset(max(0px, o - root.v-outer-max));
+        }
     }
 
     // Horizontal scrollbar still drives the TrackList's column pan.

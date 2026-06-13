@@ -480,6 +480,63 @@ async fn ingest_detects_moved_file() -> Result<(), AppError> {
 }
 
 #[tokio::test]
+async fn ingest_batched_inserts_preserve_input_order_across_chunks() -> Result<(), AppError> {
+    // More files than one multi-row INSERT chunk holds, so the batch path
+    // flushes mid-loop at least once. `inserted_track_ids` must come back
+    // in input order (the DnD import queues tracks in drop order), and
+    // every id must point at the right row — the mapping goes through
+    // `RETURNING id, file_path` because SQLite's RETURNING output order
+    // is unspecified.
+    let db = DbPool::test_pool().await;
+    queries::folder::insert_folder(&db, "/music", true).await?;
+
+    let n = queries::scan::INSERT_CHUNK_ROWS + 5;
+    let files: Vec<ScannedFile> = (0..n)
+        .map(|i| {
+            make_scanned_file_with_hash(
+                &format!("/music/batch/{i:04}.mp3"),
+                &format!("Track {i:04}"),
+                &format!("{i:064}"),
+            )
+        })
+        .collect();
+
+    let mut tx = db.write().begin().await?;
+    let result = ingest_scanned_files(
+        &mut tx,
+        &files,
+        &FolderResolution::Fixed(1),
+        "2024-01-01T00:00:00Z",
+        false,
+    )
+    .await?;
+    tx.commit().await?;
+
+    assert_eq!(result.inserted_count, u32::try_from(n).unwrap_or(u32::MAX));
+    assert_eq!(result.inserted_track_ids.len(), n);
+
+    // Each returned id (in input order) must resolve to the matching path.
+    for (i, id) in result.inserted_track_ids.iter().enumerate() {
+        let path: (String,) = sqlx::query_as("SELECT file_path FROM tracks WHERE id = ?")
+            .bind(id)
+            .fetch_one(db.read())
+            .await?;
+        assert_eq!(path.0, format!("/music/batch/{i:04}.mp3"));
+    }
+
+    // Playback defaults from the literal block.
+    let defaults: (i64, i64, bool) = sqlx::query_as(
+        "SELECT play_count, last_position, is_favorite FROM tracks WHERE file_path = '/music/batch/0000.mp3'",
+    )
+    .fetch_one(db.read())
+    .await?;
+    assert_eq!(defaults.0, 0);
+    assert_eq!(defaults.1, 0);
+    assert!(!defaults.2);
+    Ok(())
+}
+
+#[tokio::test]
 async fn ingest_duplicate_hash_repoints_once_inserts_second() -> Result<(), AppError> {
     // Two new files carrying the same content hash + one existing row
     // whose old path is gone from disk: the first file claims the move,

@@ -135,7 +135,6 @@ where
 
     *artists_ui.detail.artist_id.lock() = artist_id;
 
-    let thumbs = artists_ui.cover_thumbs.clone();
     let artists_ui = artists_ui.clone();
     let state_for_history = state.clone();
     let _ = weak.upgrade_in_event_loop(move |ui| {
@@ -143,7 +142,7 @@ where
 
         let ui_tracks: Vec<UiTrackListRow> = prepared
             .into_iter()
-            .map(|p| crate::ui::tracks::finish_track_list_row(p, &thumbs))
+            .map(crate::ui::tracks::finish_track_list_row)
             .collect();
 
         let header = to_slint_artist_row(&detail);
@@ -210,7 +209,6 @@ pub async fn refresh_detail(
 
     let weak_for_filter = weak.clone();
     let artists_ui_clone = artists_ui.clone();
-    let thumbs = artists_ui.cover_thumbs.clone();
     let artists_ui = artists_ui.clone();
     let _ = weak.upgrade_in_event_loop(move |ui| {
         let g = ui.global::<ArtistDetail>();
@@ -249,10 +247,6 @@ pub async fn refresh_detail(
 
         // Hand off the model swap to `apply_filtered_detail` so the
         // filter + selection re-stamp pass runs in one place.
-        // `thumbs` is kept in scope through the closure capture but
-        // unused here — `apply_filtered_detail` uses its own clone
-        // from `artists_ui.cover_thumbs`.
-        let _ = thumbs;
         drop(g);
         apply_filtered_detail(&weak_for_filter, &artists_ui_clone);
     });
@@ -323,7 +317,6 @@ pub fn set_filter(artists_ui: &ArtistsUi, needle: &str) {
 /// filtered rows so existing selections survive a filter change.
 pub fn apply_filtered_detail(weak: &Weak<AppWindow>, artists_ui: &Arc<ArtistsUi>) {
     let needle = artists_ui.detail.filter.lock().clone();
-    let thumbs = artists_ui.cover_thumbs.clone();
 
     let displayed_tracks: Vec<RsTrackListRow> = {
         let all = artists_ui.detail.all_tracks.lock();
@@ -364,7 +357,7 @@ pub fn apply_filtered_detail(weak: &Weak<AppWindow>, artists_ui: &Arc<ArtistsUi>
 
         let mut ui_tracks: Vec<UiTrackListRow> = prepared
             .into_iter()
-            .map(|p| crate::ui::tracks::finish_track_list_row(p, &thumbs))
+            .map(crate::ui::tracks::finish_track_list_row)
             .collect();
         restamp_selection(&g, &mut ui_tracks);
         // Keep the displayed `tracks` cache in lockstep with the model.

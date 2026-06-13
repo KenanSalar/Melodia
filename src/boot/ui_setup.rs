@@ -75,6 +75,18 @@ pub fn install_views(
     ui::tracks::install_tracks_model(app);
     ui::tracks::install_selection_model(app);
     let cover_thumbs = Arc::new(media::cover_thumbs::CoverThumbs::new());
+    // Every `TrackListRowItem` thumbnail (all track tables, all views)
+    // resolves through this one lazy callback into the shared row-tier
+    // LRU — rows carry only the artwork path, so only instantiated
+    // (~visible) rows pay a lookup/decode and nothing pins evicted
+    // buffers. The closure captures only the `Arc<CoverThumbs>` — no UI
+    // handle, no reference cycle.
+    {
+        let ct = cover_thumbs.clone();
+        app.global::<melodia::RowCovers>().on_request(move |path| {
+            ct.get_or_load_opt(Some(path.as_str()).filter(|s| !s.is_empty()))
+        });
+    }
     let tracks_ui = Arc::new(ui::tracks::TracksUi::new(cover_thumbs.clone()));
     ui::callbacks::wire_tracks(app, state, &tracks_ui);
 

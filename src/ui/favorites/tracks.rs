@@ -96,7 +96,6 @@ pub async fn refresh_tracks(
 /// but its checkbox + accent background hold).
 pub fn apply_filtered_tracks(fav_ui: &Arc<FavoritesUi>, weak: &Weak<AppWindow>) {
     let needle = current_filter(fav_ui).to_lowercase();
-    let thumbs = fav_ui.cover_thumbs.clone();
 
     // Filter + prepare the `Send` row halves on the calling thread,
     // borrowing the cache in place — the old path deep-cloned the whole
@@ -124,7 +123,7 @@ pub fn apply_filtered_tracks(fav_ui: &Arc<FavoritesUi>, weak: &Weak<AppWindow>) 
         };
         let mut rendered: Vec<UiTrackListRow> = prepared
             .into_iter()
-            .map(|p| finish_track_list_row(p, &thumbs))
+            .map(finish_track_list_row)
             .collect();
         super::selection::restamp_rows(&g, &mut rendered);
         // Per-row rewrite when identities align (same-shape refresh, e.g.

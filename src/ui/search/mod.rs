@@ -170,15 +170,6 @@ impl SearchUi {
         &self.inner
     }
 
-    /// Lazy cover lookup for the Songs row column. Routed via
-    /// `Search.request-row-cover`; backed by the shared row-tier
-    /// cache so cache parity with Tracks / Browse / Favorites stays
-    /// free.
-    pub fn row_cover(&self, artwork_path: &str) -> Image {
-        self.cover_thumbs
-            .get_or_load_opt(Some(artwork_path).filter(|s| !s.is_empty()))
-    }
-
     /// Lazy cover lookup for the Albums-strip cards. Routed via
     /// `Search.request-album-strip-cover`.
     pub fn album_strip_cover(&self, artwork_path: &str) -> Image {

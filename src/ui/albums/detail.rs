@@ -127,7 +127,6 @@ where
 
     *albums_ui.detail.album_id.lock() = album_id;
 
-    let thumbs = albums_ui.cover_thumbs.clone();
     let albums_ui = albums_ui.clone();
     let state_for_history = state.clone();
     let _ = weak.upgrade_in_event_loop(move |ui| {
@@ -135,7 +134,7 @@ where
         // UI-thread step: just the cover lookups + the model swap.
         let ui_tracks: Vec<UiTrackListRow> = prepared
             .into_iter()
-            .map(|p| crate::ui::tracks::finish_track_list_row(p, &thumbs))
+            .map(crate::ui::tracks::finish_track_list_row)
             .collect();
         let header = to_slint_album_row(&detail);
         g.set_album(header);
@@ -206,7 +205,6 @@ pub async fn refresh_detail(
     )
     .await;
 
-    let thumbs = albums_ui.cover_thumbs.clone();
     let albums_ui = albums_ui.clone();
     let _ = weak.upgrade_in_event_loop(move |ui| {
         let g = ui.global::<AlbumDetail>();
@@ -273,7 +271,7 @@ pub async fn refresh_detail(
             if let Some(vm) = model.as_any().downcast_ref::<VecModel<UiTrackListRow>>() {
                 for (i, t) in tracks.iter().enumerate() {
                     let Some(old) = vm.row_data(i) else { continue };
-                    let mut fresh = crate::ui::tracks::to_slint_track_list_row(t, &thumbs);
+                    let mut fresh = crate::ui::tracks::to_slint_track_list_row(t);
                     // Selection is unchanged on this branch — keep it.
                     fresh.selected = old.selected;
                     if fresh != old {
@@ -287,7 +285,7 @@ pub async fn refresh_detail(
         } else {
             let ui_tracks: Vec<UiTrackListRow> = tracks
                 .iter()
-                .map(|t| crate::ui::tracks::to_slint_track_list_row(t, &thumbs))
+                .map(crate::ui::tracks::to_slint_track_list_row)
                 .collect();
             replace_tracks_model(&g, ui_tracks);
             // The fresh rows all carry `selected: false`, so the `applied`
@@ -389,7 +387,6 @@ pub fn apply_filtered_detail(ui: &AppWindow, albums_ui: &AlbumsUi) {
             applied: &albums_ui.detail.applied_selection,
             filter: &albums_ui.detail.filter,
         },
-        &albums_ui.cover_thumbs,
     );
 }
 
