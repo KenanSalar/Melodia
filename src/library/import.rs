@@ -104,9 +104,9 @@ pub async fn import_files_to_library(
             queries::stats::enable_stats_triggers(&mut tx).await?;
             tx.commit().await?;
 
-            // IDs come straight from `insert_track`'s `last_insert_rowid()`,
-            // collected during ingest — no follow-up `WHERE file_path IN (…)`
-            // round-trip needed.
+            // IDs come from `insert_tracks_batch`'s `RETURNING id, file_path`
+            // (remapped to input/drop order via the returned path), collected
+            // during ingest — no follow-up `WHERE file_path IN (…)` round-trip.
             all_track_ids.extend(result.inserted_track_ids);
         }
     }

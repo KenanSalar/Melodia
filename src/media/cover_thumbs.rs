@@ -182,6 +182,16 @@ impl CoverThumbs {
         self.cache.lock().resize(cache_cap);
     }
 
+    /// Current LRU capacity (max resident thumbnails). A `prewarm` caller
+    /// walking a display-ordered path list can `.take(capacity())` while
+    /// building it so it never allocates a path Vec longer than the cache
+    /// can ever hold — `prewarm` itself caps decode work at this same
+    /// number, so anything past it would only evict the earlier (more
+    /// visible) covers.
+    pub fn capacity(&self) -> usize {
+        self.cache.lock().cap().get()
+    }
+
     /// Cached lookup; decode + insert on miss. Returns the empty default
     /// `Image` for cache misses that fail to decode (and remembers that
     /// failure so we don't retry on every refilter).
