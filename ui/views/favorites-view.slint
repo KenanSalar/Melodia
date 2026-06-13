@@ -10,6 +10,7 @@ import { ActionPill, PillLabel, PillButton, PillDivider } from "../components/ac
 import { ColumnTogglePopup } from "../components/track-list/column-toggle-popup.slint";
 import { TrackList } from "../components/track-list/track-list.slint";
 import { OverlayScrollbar } from "../components/overlay-scrollbar.slint";
+import { FilterThrottle } from "../components/filter-throttle.slint";
 
 // The Favorites view (Nav sidebar index 2). Vertical regions:
 //   * Hero — compact (~160 px). Left-side live cover mosaic + right-
@@ -41,15 +42,10 @@ export component FavoritesView inherits Rectangle {
     // the refilter callback at most once per `interval` while `pending !=
     // applied`. Same shape as `tracks-view.slint`'s throttle.
     property <int> filter-tick-pending: 0;
-    property <int> filter-tick-applied: 0;
 
-    filter-throttle := Timer {
-        interval: 130ms;
-        running: root.filter-tick-pending != root.filter-tick-applied;
-        triggered() => {
-            root.filter-tick-applied = root.filter-tick-pending;
-            Favorites.filter-changed(Favorites.filter);
-        }
+    filter-throttle := FilterThrottle {
+        pending: root.filter-tick-pending;
+        fire() => { Favorites.filter-changed(Favorites.filter); }
     }
 
     // Backdrop catches any click that no inner TouchArea consumes and

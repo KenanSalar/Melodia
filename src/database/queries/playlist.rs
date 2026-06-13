@@ -221,8 +221,9 @@ pub async fn remove_tracks_from_playlist_batch(
 
     let mut tx = db.write().begin().await?;
 
-    // Chunk to stay within SQLite bind limit (999 total, 1 for playlist_id)
-    for chunk in track_ids.chunks(998) {
+    // Chunk to stay within the SQLite bind limit — one slot is the
+    // `playlist_id`, the rest are the `track_id` IN-list.
+    for chunk in track_ids.chunks(crate::database::SQLITE_BIND_LIMIT - 1) {
         let placeholders = crate::database::placeholders(chunk.len());
         let sql = format!(
             "DELETE FROM playlist_items WHERE playlist_id = ? AND track_id IN ({placeholders})"

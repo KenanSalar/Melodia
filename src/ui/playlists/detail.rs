@@ -39,7 +39,7 @@ async fn fetch_playlist_detail(
     let detail = library::playlists::get_playlist_detail(state, playlist_id).await?;
     let tracks = library::playlists::get_playlist_tracks(state, playlist_id).await?;
 
-    let track_covers: Vec<PathBuf> = super::grid::unique_artwork_paths(
+    let track_covers: Vec<PathBuf> = crate::ui::grid_prewarm::unique_artwork_paths(
         tracks.iter().map(|t| t.artwork_path.as_deref()),
     );
     if !track_covers.is_empty() {

@@ -6,6 +6,7 @@ import { AlbumGrid } from "../components/grid/album-grid.slint";
 import { GridColumnsSync } from "../components/grid-columns-sync.slint";
 import { MaterialIcon } from "../components/material-icon.slint";
 import { OverlayScrollbar } from "../components/overlay-scrollbar.slint";
+import { FilterThrottle } from "../components/filter-throttle.slint";
 
 // The Albums grid page. Page-header chrome (title, count, filter input,
 // sort action-pill) lives here; the grid itself is the reusable,
@@ -17,18 +18,13 @@ import { OverlayScrollbar } from "../components/overlay-scrollbar.slint";
 // `Albums.columns` and fires `Albums.columns-changed` so the flat
 // album list is re-chunked into rows of N.
 export component AlbumView inherits Rectangle {
-    // Filter throttle — identical pattern to `tracks-view.slint`: each
-    // keystroke bumps `pending`; the Timer fires `apply-filter` at most
-    // once per `interval` while `pending != applied`.
+    // Filter throttle: each keystroke bumps `filter-tick-pending`; the
+    // shared `FilterThrottle` fires `apply-filter` at most once per
+    // ~130 ms while pending is ahead of the last-applied tick.
     property <int> filter-tick-pending: 0;
-    property <int> filter-tick-applied: 0;
-    filter-throttle := Timer {
-        interval: 130ms;
-        running: root.filter-tick-pending != root.filter-tick-applied;
-        triggered() => {
-            root.filter-tick-applied = root.filter-tick-pending;
-            Albums.apply-filter(Albums.filter);
-        }
+    filter-throttle := FilterThrottle {
+        pending: root.filter-tick-pending;
+        fire() => { Albums.apply-filter(Albums.filter); }
     }
 
     // --- Responsive grid geometry --------------------------------------

@@ -12,6 +12,7 @@ pub mod event_sink;
 pub mod favorites;
 pub mod file_watching;
 pub mod genres;
+pub mod grid_prewarm;
 pub mod library_settings;
 pub mod locale;
 pub mod mini_player;

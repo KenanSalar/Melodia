@@ -1,7 +1,6 @@
 //! Albums grid: DB fetch + filter / sort / chunk / prewarm logic, plus the
 //! display-aware cover-cache cap tuner.
 
-use std::collections::HashSet;
 use std::num::NonZeroUsize;
 use std::path::PathBuf;
 use std::rc::Rc;
@@ -189,27 +188,12 @@ fn sort_album_indices(indices: &mut [usize], data: &GridData, field: &str, dir: 
 /// (name-sorted) albums — the covers first on screen. Shared by
 /// `fetch_grid` and `AlbumsUi::prewarm_visible_covers`.
 pub(super) fn first_screenful_paths(data: &GridData) -> Vec<PathBuf> {
-    unique_artwork_paths(
+    crate::ui::grid_prewarm::unique_artwork_paths(
         data.albums
             .iter()
             .take(GRID_PREWARM_AHEAD)
             .map(|a| a.artwork_path.as_deref()),
     )
-}
-
-/// Deduplicated, non-empty artwork paths from an iterator of optional path
-/// strings — fed to `CoverThumbs::prewarm`.
-pub(super) fn unique_artwork_paths<'a>(
-    paths: impl Iterator<Item = Option<&'a str>>,
-) -> Vec<PathBuf> {
-    let mut seen: HashSet<&str> = HashSet::new();
-    let mut out: Vec<PathBuf> = Vec::new();
-    for p in paths.flatten() {
-        if !p.is_empty() && seen.insert(p) {
-            out.push(PathBuf::from(p));
-        }
-    }
-    out
 }
 
 // --- Cap tuning -----------------------------------------------------------

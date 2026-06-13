@@ -9,6 +9,7 @@ import { MaterialIcon } from "../components/material-icon.slint";
 import { SearchBar } from "../components/search-bar.slint";
 import { TrackList } from "../components/track-list/track-list.slint";
 import { OverlayScrollbar } from "../components/overlay-scrollbar.slint";
+import { FilterThrottle } from "../components/filter-throttle.slint";
 
 // The full Artist Detail view. Mirrors `AlbumDetailView`:
 //
@@ -36,19 +37,14 @@ export component ArtistDetailView inherits Rectangle {
     property <length> album-card-w: 140px;
     property <length> album-card-h: 184px;
 
-    // Filter throttle (mirror of `tracks-view` / `favorites-view`):
-    // each keystroke bumps `pending`; the Timer fires the filter
-    // callback at most once per `interval` while `pending != applied`.
+    // Filter throttle: each keystroke bumps `filter-tick-pending`; the
+    // shared `FilterThrottle` fires the filter callback at most once per
+    // ~130 ms while pending is ahead of the last-applied tick.
     property <int> filter-tick-pending: 0;
-    property <int> filter-tick-applied: 0;
 
-    filter-throttle := Timer {
-        interval: 130ms;
-        running: root.filter-tick-pending != root.filter-tick-applied;
-        triggered() => {
-            root.filter-tick-applied = root.filter-tick-pending;
-            ArtistDetail.filter-changed(ArtistDetail.filter);
-        }
+    filter-throttle := FilterThrottle {
+        pending: root.filter-tick-pending;
+        fire() => { ArtistDetail.filter-changed(ArtistDetail.filter); }
     }
 
     // Backdrop catches any click that no inner TouchArea consumes

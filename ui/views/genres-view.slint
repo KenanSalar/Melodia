@@ -6,6 +6,7 @@ import { GenreGrid } from "../components/grid/genre-grid.slint";
 import { GridColumnsSync } from "../components/grid-columns-sync.slint";
 import { MaterialIcon } from "../components/material-icon.slint";
 import { OverlayScrollbar } from "../components/overlay-scrollbar.slint";
+import { FilterThrottle } from "../components/filter-throttle.slint";
 
 // The Genres grid page. Mirror of `AlbumView` — page-header chrome
 // (title, count, sort action-pill, filter input) lives here; the grid
@@ -17,18 +18,13 @@ import { OverlayScrollbar } from "../components/overlay-scrollbar.slint";
 // `request-cover(p) => { Albums.request-cover(p) }` plumbing — it's
 // simply absent here).
 export component GenresView inherits Rectangle {
-    // Filter throttle — identical pattern to `album-view.slint`: each
-    // keystroke bumps `pending`; the Timer fires `apply-filter` at most
-    // once per `interval` while `pending != applied`.
+    // Filter throttle: each keystroke bumps `filter-tick-pending`; the
+    // shared `FilterThrottle` fires `apply-filter` at most once per
+    // ~130 ms while pending is ahead of the last-applied tick.
     property <int> filter-tick-pending: 0;
-    property <int> filter-tick-applied: 0;
-    filter-throttle := Timer {
-        interval: 130ms;
-        running: root.filter-tick-pending != root.filter-tick-applied;
-        triggered() => {
-            root.filter-tick-applied = root.filter-tick-pending;
-            Genres.apply-filter(Genres.filter);
-        }
+    filter-throttle := FilterThrottle {
+        pending: root.filter-tick-pending;
+        fire() => { Genres.apply-filter(Genres.filter); }
     }
 
     // --- Responsive grid geometry --------------------------------------
