@@ -432,9 +432,8 @@ pub async fn batch_update_hashes(
     db: &DbPool,
     updates: &[(i64, String, Option<String>)],
 ) -> Result<(), AppError> {
-    const SQLITE_BIND_LIMIT: usize = 999;
     const COLS_PER_ROW: usize = 3;
-    const CHUNK_SIZE: usize = SQLITE_BIND_LIMIT / COLS_PER_ROW; // 333
+    const CHUNK_SIZE: usize = crate::database::SQLITE_BIND_LIMIT / COLS_PER_ROW; // 333
 
     if updates.is_empty() {
         return Ok(());
