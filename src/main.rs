@@ -107,6 +107,30 @@ fn main() -> AppResult<()> {
         libc::mallopt(-8, 2);
     }
 
+    // Give PipeWire's ALSA-compat layer a clean stream name. CPAL (via
+    // Rodio) opens the default ALSA device; under PipeWire that PCM
+    // becomes a graph node auto-named `alsa_playback.<prgname>`, which
+    // EasyEffects / pavucontrol show verbatim. `PIPEWIRE_ALSA` is read by
+    // pipewire-alsa when the PCM is opened (it accepts SPA-JSON
+    // `alsa.properties` / `stream.properties`); setting `node.name`
+    // overrides the auto-name and `application.name` fills the app-name
+    // column those mixers display, so the stream reads simply "Melodia".
+    // No-op on bare ALSA (the real plugin ignores it) and on non-PipeWire
+    // systems. Must be set before any thread spawns — both for the unsafe
+    // `set_var` soundness and so the audio device (opened later in
+    // `AppState::init`) inherits it.
+    #[cfg(target_os = "linux")]
+    #[allow(
+        unsafe_code,
+        reason = "set_var before any thread spawns; main() is single-threaded here"
+    )]
+    unsafe {
+        std::env::set_var(
+            "PIPEWIRE_ALSA",
+            "{ application.name = \"Melodia\" node.name = \"Melodia\" }",
+        );
+    }
+
     env_logger::init();
     log::info!("Melodia starting");
 
@@ -183,20 +207,33 @@ fn main() -> AppResult<()> {
             } else {
                 attrs
             };
-            // Pin the Wayland `app_id` / X11 `WM_CLASS` to the
-            // brand-cased "Melodia". Without this winit leaves it
-            // empty and the compositor falls back to the binary
-            // basename — lowercase `melodia` for the RPM/DEB-installed
-            // `/usr/bin/melodia`, but `Melodia` for the `cargo run`
-            // target binary. Setting it explicitly matches the
-            // `.desktop` file's `StartupWMClass=Melodia`, so the
-            // compositor shows `Name=Melodia` in the taskbar/dock.
+            // Pin the window identity so the compositor resolves our
+            // icon and label. The two protocols match differently:
+            //
+            //   * X11: `WM_CLASS` res_class "Melodia" is matched against
+            //     the `.desktop` file's `StartupWMClass=Melodia`. Without
+            //     it winit leaves the class empty and the compositor falls
+            //     back to the binary basename (lowercase `melodia` for the
+            //     RPM/DEB `/usr/bin/melodia`, `Melodia` for `cargo run`).
+            //   * Wayland: clients cannot set a window icon at all — the
+            //     compositor finds it by matching the `app_id` to a
+            //     `.desktop` file of the *same basename*, then reads its
+            //     `Icon=`. `StartupWMClass` is not consulted on Wayland.
+            //     Our desktop file installs as
+            //     `com.github.kenansalar.melodia.desktop`
+            //     (see `services::desktop_integration`), so the `app_id`
+            //     must be that reverse-DNS id — not "Melodia" — or KWin
+            //     shows the generic Wayland placeholder in Alt+Tab.
             #[cfg(target_os = "linux")]
             let attrs = {
                 use slint::winit_030::winit::platform::wayland::WindowAttributesExtWayland;
                 use slint::winit_030::winit::platform::x11::WindowAttributesExtX11;
                 let attrs = WindowAttributesExtX11::with_name(attrs, "Melodia", "Melodia");
-                WindowAttributesExtWayland::with_name(attrs, "Melodia", "Melodia")
+                WindowAttributesExtWayland::with_name(
+                    attrs,
+                    "com.github.kenansalar.melodia",
+                    "com.github.kenansalar.melodia",
+                )
             };
             attrs
         })
