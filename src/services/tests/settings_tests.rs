@@ -75,6 +75,31 @@ fn test_settings_roundtrip_volume_mute() -> Result<(), AppError> {
 }
 
 #[test]
+fn test_settings_roundtrip_playback_speed() -> Result<(), AppError> {
+    let settings = SettingsData {
+        playback: PlaybackFlags {
+            playback_speed: 1.5,
+            ..PlaybackFlags::default()
+        },
+        ..SettingsData::default()
+    };
+    let json = serde_json::to_string(&settings).map_err(|e| json_err(&e))?;
+    let deserialized: SettingsData = serde_json::from_str(&json).map_err(|e| json_err(&e))?;
+    assert!((deserialized.playback.playback_speed - 1.5).abs() < f64::EPSILON);
+    Ok(())
+}
+
+#[test]
+fn test_playback_speed_defaults_when_missing() -> Result<(), AppError> {
+    // Settings files written before this field existed must still load,
+    // defaulting the speed to 1.0 (the `#[serde(default)]` on PlaybackFlags).
+    let json = r#"{"volume": 80}"#;
+    let settings: SettingsData = serde_json::from_str(json).map_err(|e| json_err(&e))?;
+    assert!((settings.playback.playback_speed - 1.0).abs() < f64::EPSILON);
+    Ok(())
+}
+
+#[test]
 fn test_corner_radius_clamped_to_max() -> Result<(), AppError> {
     let json = r#"{"corner_radius": 999}"#;
     let mut settings: SettingsData = serde_json::from_str(json).map_err(|e| json_err(&e))?;

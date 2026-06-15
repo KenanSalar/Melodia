@@ -66,6 +66,7 @@ search_off
 settings
 shield
 shuffle
+speed
 swap_horiz
 system_update
 theater_comedy

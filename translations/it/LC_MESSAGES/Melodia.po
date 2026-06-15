@@ -132,6 +132,9 @@ msgstr "Coda"
 msgid "More"
 msgstr "Altro"
 
+msgid "Playback speed"
+msgstr "Velocità di riproduzione"
+
 msgid "No track playing"
 msgstr "Nessun brano in riproduzione"
 
