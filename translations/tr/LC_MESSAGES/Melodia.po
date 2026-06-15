@@ -786,9 +786,6 @@ msgstr "Güncelleme yüklendi"
 msgid "Restart Melodia to start using the new version."
 msgstr "Yeni sürümü kullanmak için Melodia'yı yeniden başlatın."
 
-msgid "Restart"
-msgstr "Yeniden başlat"
-
 msgid "Update failed"
 msgstr "Güncelleme başarısız"
 
@@ -829,3 +826,22 @@ msgstr "Yalnızca sistem tepsisi simgesi etkinken kullanılabilir."
 
 msgid "Exit miniplayer"
 msgstr "Mini oynatıcıdan çık"
+
+# ---- About -------------------------------------------------------------------
+
+# Settings → About section (`ui/views/settings/about-section.slint`): app
+# name + version, authorship, source-repository link, and license.
+msgid "About"
+msgstr "Hakkında"
+
+# Translators: `{}` is the app version string (e.g. "0.1.0").
+msgid "Version {}"
+msgstr "Sürüm {}"
+
+# Translators: `{}` is the author's name ("Kenan Salar") — a proper noun,
+# passed verbatim and never translated.
+msgid "Made by {}"
+msgstr "{} tarafından yapıldı"
+
+msgid "License"
+msgstr "Lisans"

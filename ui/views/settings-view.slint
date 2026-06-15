@@ -11,6 +11,7 @@ import { LanguageSection } from "settings/language-section.slint";
 import { PlaybackSection } from "settings/playback-section.slint";
 import { FileWatchingSection } from "settings/file-watching-section.slint";
 import { UpdateSection } from "settings/update-section.slint";
+import { AboutSection } from "settings/about-section.slint";
 
 // Settings host page. Mirrors Tauri's `pages/Settings.tsx` shape: a
 // vertically scrolling, width-clamped column of section cards.
@@ -109,6 +110,7 @@ export component SettingsView inherits Rectangle {
                         pb-sec   := PlaybackSection {}
                         fw-sec   := FileWatchingSection {}
                         upd-sec  := UpdateSection {}
+                        about-sec := AboutSection {}
 
                         // No-results placeholder — only mounted when a
                         // search query is non-empty AND no section claims
@@ -122,7 +124,8 @@ export component SettingsView inherits Rectangle {
                                 && !lang-sec.has-matches
                                 && !pb-sec.has-matches
                                 && !fw-sec.has-matches
-                                && !upd-sec.has-matches: Rectangle {
+                                && !upd-sec.has-matches
+                                && !about-sec.has-matches: Rectangle {
                             background: transparent;
                             height: 200px;
                             VerticalLayout {

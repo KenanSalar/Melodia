@@ -785,9 +785,6 @@ msgstr "Η ενημέρωση εγκαταστάθηκε"
 msgid "Restart Melodia to start using the new version."
 msgstr "Επανεκκινήστε το Melodia για να χρησιμοποιήσετε τη νέα έκδοση."
 
-msgid "Restart"
-msgstr "Επανεκκίνηση"
-
 msgid "Update failed"
 msgstr "Αποτυχία ενημέρωσης"
 
@@ -828,3 +825,22 @@ msgstr "Διαθέσιμο μόνο όταν το εικονίδιο περιο�
 
 msgid "Exit miniplayer"
 msgstr "Έξοδος από το μίνι πρόγραμμα αναπαραγωγής"
+
+# ---- About -------------------------------------------------------------------
+
+# Settings → About section (`ui/views/settings/about-section.slint`): app
+# name + version, authorship, source-repository link, and license.
+msgid "About"
+msgstr "Σχετικά"
+
+# Translators: `{}` is the app version string (e.g. "0.1.0").
+msgid "Version {}"
+msgstr "Έκδοση {}"
+
+# Translators: `{}` is the author's name ("Kenan Salar") — a proper noun,
+# passed verbatim and never translated.
+msgid "Made by {}"
+msgstr "Δημιουργήθηκε από {}"
+
+msgid "License"
+msgstr "Άδεια"

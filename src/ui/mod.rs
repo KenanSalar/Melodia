@@ -1,3 +1,4 @@
+pub mod about;
 pub mod albums;
 pub mod appearance;
 pub mod artists;
