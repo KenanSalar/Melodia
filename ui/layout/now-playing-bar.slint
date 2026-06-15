@@ -42,13 +42,9 @@ export component NowPlayingBar inherits Rectangle {
     out property <length> btn-d: clamp(root.bar-w * 0.05, 28px, 36px);
     out property <length> btn-icon-d: clamp(root.bar-w * 0.03, 18px, 20px);
 
-    // True iff at least one button is currently routed to the overflow
-    // menu. Drives the visibility of the `more_vert` trigger so the bar
-    // stays clean when no buttons are overflowed.
-    property <bool> has-overflow:
-        Settings.overflow-favorite || Settings.overflow-repeat
-        || Settings.overflow-shuffle || Settings.overflow-pin
-        || Settings.overflow-queue;
+    // The `more_vert` overflow trigger is ALWAYS mounted below: it permanently
+    // houses the playback-speed flyout (never shown inline), and additionally
+    // collects whatever buttons the user has routed to it via `Settings.overflow-*`.
 
     // The seam between content and bar is drawn by the content panel's
     // bottom border in `app-window.slint`, so it follows the rounded
@@ -422,7 +418,7 @@ export component NowPlayingBar inherits Rectangle {
                         icon-size: clamp(root.bar-w * 0.035, 22px, 22px);
                     }
                 }
-                if root.has-overflow: VerticalLayout {
+                VerticalLayout {
                     alignment: center;
                     OverflowMenu { bar-w: root.bar-w; }
                 }

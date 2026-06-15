@@ -132,6 +132,9 @@ msgstr "Sıra"
 msgid "More"
 msgstr "Diğer Seçenekler"
 
+msgid "Playback speed"
+msgstr "Oynatma hızı"
+
 msgid "No track playing"
 msgstr "Çalan parça yok"
 

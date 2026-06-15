@@ -91,16 +91,21 @@ impl Default for ColumnWidths {
     }
 }
 
-/// Audio-playback toggles persisted with the rest of `SettingsData`. Grouped
-/// into a substruct so each toggle still serializes at the top level of the
-/// JSON file (`#[serde(flatten)]` on the parent field) while keeping the
-/// `clippy::struct_excessive_bools` budget per struct manageable.
+/// Audio-playback preferences persisted with the rest of `SettingsData`.
+/// Grouped into a substruct so each field still serializes at the top level
+/// of the JSON file (`#[serde(flatten)]` on the parent field) while keeping
+/// the `clippy::struct_excessive_bools` budget per struct manageable.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct PlaybackFlags {
     pub gapless_playback: bool,
     pub resume_on_startup: bool,
     pub is_muted: bool,
+    /// Playback-rate multiplier (1.0 = normal). Clamped to the player's
+    /// `MIN_SPEED..=MAX_SPEED` range when applied / persisted. The struct's
+    /// `#[serde(default)]` makes older `settings.json` files (written before
+    /// this field existed) deserialize it to `1.0`.
+    pub playback_speed: f64,
 }
 
 impl Default for PlaybackFlags {
@@ -109,6 +114,7 @@ impl Default for PlaybackFlags {
             gapless_playback: true,
             resume_on_startup: false,
             is_muted: false,
+            playback_speed: 1.0,
         }
     }
 }

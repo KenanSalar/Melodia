@@ -128,6 +128,31 @@ pub fn wire_all(ui: &AppWindow, state: &AppState) {
         });
     }
 
+    // set_playback_speed: apply to the live player AND persist (speed
+    // survives restarts — mirrors repeat/shuffle/volume). The flyout only
+    // ever sends valid preset values; downstream clamps anyway, so no
+    // clamp is needed here. Two steps like the gapless callback in
+    // `src/ui/playback_settings.rs`: (a) fast synchronous runtime apply,
+    // (b) blocking-pool disk write.
+    {
+        let s = state.clone();
+        player.on_set_playback_speed(move |speed| {
+            let speed = f64::from(speed);
+            let s_apply = s.clone();
+            spawn_logged_sync!(
+                s_apply,
+                "set_playback_speed",
+                library::playback::player_set_playback_speed(&s_apply.playback_ctx(), speed)
+            );
+            let s_disk = s.clone();
+            s.runtime.spawn_blocking(move || {
+                if let Err(e) = library::settings::set_playback_speed(&s_disk, speed) {
+                    log::warn!("persist playback_speed: {e}");
+                }
+            });
+        });
+    }
+
     // Player.toggle-favorite is wired in `wire_now_playing_favorite` (called
     // after every per-view wire fn) so it can fan the change into all three
     // surfaces that hold a per-row `is_favorite` (Tracks, Browse, AlbumDetail).

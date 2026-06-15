@@ -136,9 +136,15 @@ impl AppState {
             s.is_muted = settings.playback.is_muted;
             s.pre_mute_volume = s.volume;
             s.gapless_enabled = settings.playback.gapless_playback;
+            s.playback_speed = settings.playback.playback_speed.clamp(
+                crate::player::state::MIN_SPEED,
+                crate::player::state::MAX_SPEED,
+            );
             let vol = s.effective_volume();
+            let speed = s.playback_speed;
             drop(s);
             rodio.set_volume(vol);
+            rodio.set_speed(speed);
         }
 
         let cover_cache: CoverCache = crate::media::artwork::new_cover_cache();

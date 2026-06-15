@@ -29,7 +29,9 @@ pub use folders::{
     add_folder, get_folders, reconcile_watched_folders, remove_folder, scan_folder,
     scan_folder_internal, set_folder_watching_enabled, toggle_folder_watching,
 };
-pub use playback::{set_gapless_playback, set_play_button_animation, set_resume_on_startup};
+pub use playback::{
+    set_gapless_playback, set_play_button_animation, set_playback_speed, set_resume_on_startup,
+};
 pub use updates::{
     record_check_failure, record_check_success, reset_skipped_release, set_auto_check_enabled,
     set_skipped_release,
