@@ -247,6 +247,11 @@ export global Settings {
     // dependency tracking handles re-evaluation on `search-query` changes.
     pure callback matches(string /*haystack*/, string /*needle*/) -> bool;
 
+    // About section — opens the project's source repository
+    // (`CARGO_PKG_REPOSITORY`) in the system browser. Action callback
+    // (Slint → Rust); wired in `src/ui/about.rs`, no Slint-side handler.
+    callback open-repository();
+
     // Translated strings for the "File watching disabled" notification.
     // Surfaced as `pure callback`s so the Rust side can resolve them
     // through Slint's bundled-translation pipeline (`@tr(...)`) without

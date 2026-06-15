@@ -6,6 +6,7 @@ arrow_drop_down
 arrow_drop_up
 artist
 auto_awesome
+balance
 brush
 category
 check

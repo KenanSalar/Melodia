@@ -226,6 +226,7 @@ pub fn install_library_settings_and_friends(
     let notifications = ui::notifications::install(app);
     ui::file_watching::install(app, state, &notifications);
     ui::updater_settings::install(app, state);
+    ui::about::install(app, state);
     Ok(notifications)
 }
 

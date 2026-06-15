@@ -783,9 +783,6 @@ msgstr "Mise à jour installée"
 msgid "Restart Melodia to start using the new version."
 msgstr "Redémarrez Melodia pour utiliser la nouvelle version."
 
-msgid "Restart"
-msgstr "Redémarrer"
-
 msgid "Update failed"
 msgstr "Échec de la mise à jour"
 
@@ -826,3 +823,22 @@ msgstr "Disponible uniquement lorsque l'icône de la zone de notification est ac
 
 msgid "Exit miniplayer"
 msgstr "Quitter le miniplayer"
+
+# ---- About -------------------------------------------------------------------
+
+# Settings → About section (`ui/views/settings/about-section.slint`): app
+# name + version, authorship, source-repository link, and license.
+msgid "About"
+msgstr "À propos"
+
+# Translators: `{}` is the app version string (e.g. "0.1.0").
+msgid "Version {}"
+msgstr "Version {}"
+
+# Translators: `{}` is the author's name ("Kenan Salar") — a proper noun,
+# passed verbatim and never translated.
+msgid "Made by {}"
+msgstr "Créé par {}"
+
+msgid "License"
+msgstr "Licence"
