@@ -132,8 +132,8 @@ msgstr "Warteschlange"
 msgid "More"
 msgstr "Weitere Optionen"
 
-msgid "Playback speed"
-msgstr "Wiedergabegeschwindigkeit"
+msgid "Speed"
+msgstr "Tempo"
 
 msgid "No track playing"
 msgstr "Kein Titel wird abgespielt"

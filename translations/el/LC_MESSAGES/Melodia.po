@@ -132,8 +132,8 @@ msgstr "Ουρά"
 msgid "More"
 msgstr "Περισσότερα"
 
-msgid "Playback speed"
-msgstr "Ταχύτητα αναπαραγωγής"
+msgid "Speed"
+msgstr "Ταχύτητα"
 
 msgid "No track playing"
 msgstr "Δεν παίζει κομμάτι"

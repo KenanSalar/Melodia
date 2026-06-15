@@ -132,8 +132,8 @@ msgstr "File d'attente"
 msgid "More"
 msgstr "Plus d'options"
 
-msgid "Playback speed"
-msgstr "Vitesse de lecture"
+msgid "Speed"
+msgstr "Vitesse"
 
 msgid "No track playing"
 msgstr "Aucune piste en cours de lecture"
