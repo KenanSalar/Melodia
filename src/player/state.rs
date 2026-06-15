@@ -16,8 +16,10 @@ pub const RESTART_THRESHOLD_MS: u64 = 3000;
 pub const MAX_VOLUME: u32 = 200;
 /// Minimum playback speed multiplier.
 pub const MIN_SPEED: f64 = 0.25;
-/// Maximum playback speed multiplier.
-pub const MAX_SPEED: f64 = 4.0;
+/// Maximum playback speed multiplier. Capped at 2× — rodio's `set_speed` is
+/// naive resampling (it shifts pitch), so beyond 2× the audio degrades into
+/// chipmunk territory with little practical use for music.
+pub const MAX_SPEED: f64 = 2.0;
 
 pub struct PlayerState {
     pub status: PlaybackStatus,

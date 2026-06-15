@@ -334,13 +334,13 @@ fn test_toggle_mute() {
 
 #[test]
 fn test_set_playback_speed_clamps() {
-    let mut state = PlayerState { playback_speed: 0.1f64.clamp(0.25, 4.0), ..Default::default() };
+    let mut state = PlayerState { playback_speed: 0.1f64.clamp(0.25, 2.0), ..Default::default() };
     assert!((state.playback_speed - 0.25).abs() < f64::EPSILON);
 
-    state.playback_speed = 5.0f64.clamp(0.25, 4.0);
-    assert!((state.playback_speed - 4.0).abs() < f64::EPSILON);
+    state.playback_speed = 5.0f64.clamp(0.25, 2.0);
+    assert!((state.playback_speed - 2.0).abs() < f64::EPSILON);
 
-    state.playback_speed = 1.5f64.clamp(0.25, 4.0);
+    state.playback_speed = 1.5f64.clamp(0.25, 2.0);
     assert!((state.playback_speed - 1.5).abs() < f64::EPSILON);
 }
 

@@ -132,6 +132,9 @@ msgstr "Cola"
 msgid "More"
 msgstr "Más opciones"
 
+msgid "Playback speed"
+msgstr "Velocidad de reproducción"
+
 msgid "No track playing"
 msgstr "No hay ninguna pista en reproducción"
 
