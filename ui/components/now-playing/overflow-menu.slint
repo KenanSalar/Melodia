@@ -5,10 +5,13 @@ import { IconButton } from "../icon-button.slint";
 import { MaterialIcon } from "../material-icon.slint";
 import { PopupSurface } from "../popup-surface.slint";
 import { FocusLossWatcher } from "../focus-loss-watcher.slint";
+import { SpeedFlyout } from "./speed-flyout.slint";
 
 // One row inside the overflow popup. Renders the same icon + label pair
 // shown inline in the now-playing bar; active colour mirrors the inline
-// IconButton's `active-fg` (Theme.accent).
+// IconButton's `active-fg` (Theme.accent). Optional trailing slots
+// (`trailing-text` + `trailing-icon`) are used by the permanent
+// "Playback speed" row to show the current rate and a flyout chevron.
 component OverflowRow inherits Rectangle {
     in property <string> icon;
     in property <string> label;
@@ -17,6 +20,10 @@ component OverflowRow inherits Rectangle {
     // pin). Mirrors `IconButton.filled` for the inline siblings.
     in property <bool> filled;
     in property <bool> button-enabled: true;
+    // Optional right-aligned slots (empty ⇒ not rendered). The label VL
+    // stretches, so these dock to the row's right edge.
+    in property <string> trailing-text;
+    in property <string> trailing-icon;
 
     callback clicked();
 
@@ -30,7 +37,7 @@ component OverflowRow inherits Rectangle {
         padding-left: Theme.pad-sm;
         padding-right: Theme.pad-sm;
         spacing: Theme.pad-sm;
-        alignment: start;
+        alignment: stretch;
 
         VerticalLayout {
             alignment: center;
@@ -43,10 +50,27 @@ component OverflowRow inherits Rectangle {
         }
         VerticalLayout {
             alignment: center;
+            horizontal-stretch: 1;
             Text {
                 text: root.label;
                 color: root.active ? Theme.accent : Theme.text;
                 font-size: Theme.font-size-md;
+            }
+        }
+        if root.trailing-text != "": VerticalLayout {
+            alignment: center;
+            Text {
+                text: root.trailing-text;
+                color: root.active ? Theme.accent : Theme.subtext0;
+                font-size: Theme.font-size-md;
+            }
+        }
+        if root.trailing-icon != "": VerticalLayout {
+            alignment: center;
+            MaterialIcon {
+                name: root.trailing-icon;
+                icon-size: 18px;
+                icon-color: root.active ? Theme.accent : Theme.subtext0;
             }
         }
     }
@@ -59,29 +83,68 @@ component OverflowRow inherits Rectangle {
     }
 }
 
-// `more_vert` IconButton + PopupWindow listing every currently-overflowed
-// button. Same structural shape as ColumnTogglePopup (the canonical
-// popup-from-icon pattern). Popup opens upward (the bar lives at window
-// bottom) and right-aligns under the trigger.
+// `more_vert` IconButton + PopupWindow listing the permanent "Playback
+// speed" row (with its left-opening preset flyout) plus every button the
+// user has routed to the overflow menu. Same structural shape as the
+// volume popup (the canonical fixed-size popup-from-icon pattern): the
+// PopupWindow reserves room for both the menu column (right, under the
+// trigger) and the speed flyout (left), with a transparent click-catcher
+// over the empty regions. Popup opens upward (the bar lives at window
+// bottom) and the menu column right-aligns under the trigger.
+//
+// Unlike the configurable buttons, the speed control is ALWAYS here — it
+// is never shown inline in the bar — so the `more_vert` trigger is now
+// always mounted by `now-playing-bar.slint`.
 export component OverflowMenu inherits Rectangle {
     in property <length> bar-w;
 
     width: btn.width;
     height: btn.height;
 
-    // Number of currently-overflowed buttons. Drives the popup's
-    // explicit height so the `y: -self.height - …` binding has a
-    // measured value to subtract from — without explicit sizing,
-    // Slint evaluates `self.height` to 0 before content layout, the
-    // popup ends up positioned just above the trigger, and then
-    // extends DOWNWARD over the now-playing bar instead of upward.
-    // Each row is fixed at 36 px (matches OverflowRow.height).
-    property <int> row-count:
+    // Whether the preset flyout is expanded. Reset to collapsed on every
+    // (re)open via the trigger, and by every close path below.
+    property <bool> speed-flyout-open: false;
+
+    // Number of currently-overflowed action buttons (the speed row is
+    // permanent and counted separately, +1 below). The pin row is gated on
+    // always-on-top support, so only count it when actually mounted —
+    // otherwise the menu reserves an empty 36 px slot.
+    property <int> overflow-count:
         (Settings.overflow-favorite ? 1 : 0)
         + (Settings.overflow-repeat ? 1 : 0)
         + (Settings.overflow-shuffle ? 1 : 0)
-        + (Settings.overflow-pin ? 1 : 0)
+        + ((WindowChrome.always-on-top-supported && Settings.overflow-pin) ? 1 : 0)
         + (Settings.overflow-queue ? 1 : 0);
+
+    // Menu column height = 36 px per row (the permanent speed row +
+    // overflowed buttons) + 8 px inner pad + 2 px border + 2 px slack.
+    // (The content-driven *width* `menu-w` is declared on the PopupWindow
+    // below — Slint forbids the enclosing component from reading a property
+    // *inside* a PopupWindow, so it can't live up here.)
+    property <length> menu-h: 36px * (1 + root.overflow-count) + 12px;
+
+    // Speed flyout geometry. Must match the preset count in
+    // `speed-flyout.slint` (8 rows: 0.25× … 2×) — each 32 px + the same 12 px
+    // chrome allowance as the menu column.
+    property <length> flyout-w: 120px;
+    property <length> flyout-h: 32px * 8 + 12px;
+    // Transparent gap between the flyout (left) and menu (right) columns so
+    // they read as two separate floating chromes.
+    property <length> gap: 8px;
+
+    // Map the live multiplier back to a preset label for the collapsed row.
+    // Kept in lock-step with the `presets` list in `speed-flyout.slint`.
+    // 1.0 falls through to the "1x" default.
+    function current-speed-label() -> string {
+        if (abs(Player.vm.playback_speed - 0.25) < 0.001) { return "0.25x"; }
+        if (abs(Player.vm.playback_speed - 0.5) < 0.001) { return "0.5x"; }
+        if (abs(Player.vm.playback_speed - 0.75) < 0.001) { return "0.75x"; }
+        if (abs(Player.vm.playback_speed - 1.25) < 0.001) { return "1.25x"; }
+        if (abs(Player.vm.playback_speed - 1.5) < 0.001) { return "1.5x"; }
+        if (abs(Player.vm.playback_speed - 1.75) < 0.001) { return "1.75x"; }
+        if (abs(Player.vm.playback_speed - 2.0) < 0.001) { return "2x"; }
+        return "1x";
+    }
 
     btn := IconButton {
         icon: "more_vert";
@@ -93,46 +156,107 @@ export component OverflowMenu inherits Rectangle {
         // any row's `pop.close()` callsite below, or by the AppWindow
         // scrim catching an outside click.
         force-bg: PopupHighlight.id == "overflow";
-        clicked => { PopupHighlight.id = "overflow"; pop.show(); }
+        clicked => {
+            // Always (re)open collapsed.
+            root.speed-flyout-open = false;
+            PopupHighlight.id = "overflow";
+            pop.show();
+        }
     }
 
     pop := PopupWindow {
-        // `height` must stay explicit because the `y: -self.height - …`
-        // binding has to subtract a real measured value — Slint's
-        // content-derived sizing resolves to 0 before the first layout
-        // pass, which would put the popup just barely above the trigger
-        // top and let it expand DOWN over the bar.
-        //   height = 36 px × visible rows + 4 px × 2 inner pad-xs + 2 px border + 2 px slack
-        //
-        // `width` is content-driven via `inner.preferred-width` (already
-        // includes the layout's pad-xs on both sides) plus the 1 px
-        // PopupSurface border on each side, with a 156 px floor that
-        // preserves the English-baseline look. Combined with
-        // `x: btn.width - self.width`, the popup right-aligns under the
-        // trigger and GROWS LEFTWARD for longer translated labels
-        // (e.g. de "Im Vordergrund anheften", el "Αφαίρεση από τα
-        // αγαπημένα"), keeping the bar's `padding-right` gap to the
-        // window edge so the underlying view's overlay scrollbar stays
-        // uncovered.
-        width: max(156px, inner.preferred-width + 2px);
-        height: 36px * root.row-count + 12px;
+        // Content-driven menu-column width. Declared HERE (on the
+        // PopupWindow) so it can read its own descendant `menu-vl`'s
+        // `preferred-width` — the enclosing component is not allowed to.
+        // The wide "Playback speed" row sets the floor; +2 px for the
+        // PopupSurface border; 156 px minimum preserves the English look.
+        property <length> menu-w: max(156px, menu-vl.preferred-width + 2px);
+
+        // Fixed-reserve sizing (volume-popup pattern): the PopupWindow is
+        // always wide and tall enough for the menu column AND the flyout,
+        // so it never has to re-layout when the flyout expands. The menu
+        // column's on-screen position is independent of the popup size
+        // (popup.x + menu.x both cancel `self.width`), so it stays pinned
+        // under the trigger whether or not the flyout is open.
+        width: root.flyout-w + root.gap + self.menu-w;
+        height: max(root.menu-h, root.flyout-h);
         x: btn.width - self.width;
         y: -self.height - 8px;
         close-policy: close-on-click-outside;
 
-        PopupSurface {
+        // Transparent catcher over the whole popup. Declared first so the
+        // menu/flyout rows (real TouchAreas, drawn on top) win their own
+        // clicks; clicks on empty regions inside the popup rect fall
+        // through to here and close (close-on-click-outside only fires for
+        // clicks truly outside the rect). Mirrors the volume popup's
+        // left-strip catcher.
+        TouchArea {
+            width: parent.width;
+            height: parent.height;
+            clicked => {
+                pop.close();
+                root.speed-flyout-open = false;
+                PopupHighlight.id = "";
+            }
+        }
+
+        // Speed flyout — left column, bottom-anchored (its bottom aligns
+        // with the menu column's bottom, 8 px above the trigger), grows
+        // upward. Mounted only while open so the 12 rows aren't built when
+        // collapsed.
+        if root.speed-flyout-open: SpeedFlyout {
+            x: 0;
+            y: parent.height - root.flyout-h;
+            width: root.flyout-w;
+            height: root.flyout-h;
+            current-speed: Player.vm.playback_speed;
+            pick(v) => {
+                Player.set-playback-speed(v);
+                pop.close();
+                root.speed-flyout-open = false;
+                PopupHighlight.id = "";
+            }
+        }
+
+        // Menu column — right, bottom-anchored under the trigger.
+        menu-surface := PopupSurface {
+            x: parent.width - pop.menu-w;
+            y: parent.height - root.menu-h;
+            width: pop.menu-w;
+            height: root.menu-h;
+
             // Live only while this popup is the one currently open — the
             // trigger sets `PopupHighlight.id = "overflow"` before
-            // `pop.show()`, and the winit Release path (or any row's
-            // close handler below) clears it back to "". One watcher
-            // per focus-loss instead of N per visible popup-host.
+            // `pop.show()`, and the winit Release path (or any row's close
+            // handler below) clears it back to "". One watcher per
+            // focus-loss instead of N per visible popup-host.
             if PopupHighlight.id == "overflow": FocusLossWatcher {
-                close => { pop.close(); PopupHighlight.id = ""; }
+                close => {
+                    pop.close();
+                    root.speed-flyout-open = false;
+                    PopupHighlight.id = "";
+                }
             }
 
-            inner := VerticalLayout {
+            menu-vl := VerticalLayout {
                 padding: Theme.pad-xs;
                 spacing: 0;
+
+                // Permanent Playback speed row — opens the preset flyout to
+                // the left. Does NOT close the popup; re-asserts the
+                // highlight id so the winit Release clear doesn't unmount
+                // the FocusLossWatcher.
+                OverflowRow {
+                    icon: "speed";
+                    label: @tr("Playback speed");
+                    trailing-text: root.current-speed-label();
+                    trailing-icon: "chevron_left";
+                    active: root.speed-flyout-open;
+                    clicked => {
+                        root.speed-flyout-open = !root.speed-flyout-open;
+                        PopupHighlight.id = "overflow";
+                    }
+                }
 
                 if Settings.overflow-favorite: OverflowRow {
                     icon: Player.vm.track.is_favorite ? "favorite" : "favorite_border";
@@ -140,32 +264,32 @@ export component OverflowMenu inherits Rectangle {
                     active: Player.vm.track.is_favorite;
                     filled: Player.vm.track.is_favorite;
                     button-enabled: Player.vm.has_track;
-                    clicked => { Player.toggle-favorite(); pop.close(); PopupHighlight.id = ""; }
+                    clicked => { Player.toggle-favorite(); pop.close(); root.speed-flyout-open = false; PopupHighlight.id = ""; }
                 }
                 if Settings.overflow-repeat: OverflowRow {
                     icon: Player.queue.repeat_mode == "one" ? "repeat_one" : "repeat";
                     label: @tr("Repeat");
                     active: Player.queue.repeat_mode != "off";
-                    clicked => { Player.cycle-repeat(); pop.close(); PopupHighlight.id = ""; }
+                    clicked => { Player.cycle-repeat(); pop.close(); root.speed-flyout-open = false; PopupHighlight.id = ""; }
                 }
                 if Settings.overflow-shuffle: OverflowRow {
                     icon: "shuffle";
                     label: @tr("Shuffle");
                     active: Player.queue.shuffle;
-                    clicked => { Player.toggle-shuffle(); pop.close(); PopupHighlight.id = ""; }
+                    clicked => { Player.toggle-shuffle(); pop.close(); root.speed-flyout-open = false; PopupHighlight.id = ""; }
                 }
                 if WindowChrome.always-on-top-supported && Settings.overflow-pin: OverflowRow {
                     icon: "push_pin";
                     label: WindowChrome.always-on-top-active ? @tr("Unpin from Top") : @tr("Pin on Top");
                     active: WindowChrome.always-on-top-active;
                     filled: WindowChrome.always-on-top-active;
-                    clicked => { WindowChrome.toggle-always-on-top(); pop.close(); PopupHighlight.id = ""; }
+                    clicked => { WindowChrome.toggle-always-on-top(); pop.close(); root.speed-flyout-open = false; PopupHighlight.id = ""; }
                 }
                 if Settings.overflow-queue: OverflowRow {
                     icon: "queue_music";
                     label: @tr("Queue");
                     active: Queue.open;
-                    clicked => { Queue.open = !Queue.open; pop.close(); PopupHighlight.id = ""; }
+                    clicked => { Queue.open = !Queue.open; pop.close(); root.speed-flyout-open = false; PopupHighlight.id = ""; }
                 }
             }
         }

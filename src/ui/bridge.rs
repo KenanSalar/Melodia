@@ -200,7 +200,7 @@ pub fn to_slint_player_vm(
 /// Narrow playback speed (f64 backend, f32 Slint) for UI consumption.
 #[allow(
     clippy::cast_possible_truncation,
-    reason = "playback speed values (0.25..=4.0) round-trip through f32 without observable loss"
+    reason = "playback speed values (0.25..=2.0) round-trip through f32 without observable loss"
 )]
 fn speed_to_f32(speed: f64) -> f32 {
     speed as f32

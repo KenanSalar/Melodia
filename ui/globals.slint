@@ -105,6 +105,11 @@ export global Player {
     callback seek(int);          // position in ms
     callback set-volume(int);    // 0..100, fires continuously during drag
     callback commit-volume();    // fires on slider release; persists to settings.json
+    // Playback-rate multiplier (e.g. 0.5, 1.0, 1.5). Fired by the speed
+    // flyout in the now-playing bar's overflow menu. Applies to the live
+    // player immediately AND persists to settings.json (speed survives
+    // restarts). The active value is read back via `vm.playback_speed`.
+    callback set-playback-speed(float);
     callback toggle-mute();
     callback toggle-shuffle();
     callback cycle-repeat();

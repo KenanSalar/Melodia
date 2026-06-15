@@ -90,9 +90,14 @@ pub fn evaluate_playback_check(was_gapless: bool, queue_len: usize, is_empty: bo
     PlaybackCheck::Playing
 }
 
-/// Pure speed-adjusted position calculation, separated for testability.
+/// Convert rodio's reported position into the media (source) position.
 ///
-/// `speed` is in `0.25..=4.0`. Real-world track durations stay well below
+/// rodio inserts `track_position()` *after* `speed()` in its source chain, so
+/// `Player::get_pos()` measures the speed-adjusted *output* timeline:
+/// `output = media / speed`. We therefore multiply by `speed` to recover the
+/// media position the UI displays. See `seek_to_media` for the inverse.
+///
+/// `speed` is in `0.25..=2.0`. Real-world track durations stay well below
 /// `2^53` ms (~285 years), so the u64 ↔ f64 round-trip is lossless and the
 /// final f64 → u64 truncation can never produce a nonsensical value.
 #[allow(
@@ -104,6 +109,24 @@ pub fn evaluate_playback_check(was_gapless: bool, queue_len: usize, is_empty: bo
 pub fn compute_position(wall_time: Duration, speed: f64) -> u64 {
     let ms = u64::try_from(wall_time.as_millis()).unwrap_or(u64::MAX);
     (ms as f64 * speed) as u64
+}
+
+/// Inverse of [`compute_position`]: convert a MEDIA position into the
+/// output-timeline value `try_seek` expects (`media / speed`). Pure half of
+/// [`RodioPlayer::seek_to_media`], split out for testability. A non-positive
+/// `speed` (only possible from a corrupt value) passes through unchanged.
+#[allow(
+    clippy::cast_precision_loss,
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    reason = "media_ms / speed is non-negative, finite, and fits in u64 for any real audio duration"
+)]
+pub fn media_to_output_ms(media_ms: u64, speed: f64) -> u64 {
+    if speed > 0.0 {
+        (media_ms as f64 / speed) as u64
+    } else {
+        media_ms
+    }
 }
 
 pub struct RodioPlayer {
@@ -142,11 +165,25 @@ impl RodioPlayer {
         self.gapless_pending.store(false, Ordering::Release);
         if let Some(pos) = start_position_ms {
             log::debug!("Resuming playback at {pos}ms");
-            if let Err(e) = player.try_seek(Duration::from_millis(pos)) {
-                log::warn!("Seek after play failed: {e}");
-            }
+            Self::seek_to_media(&player, pos, speed);
         }
         Ok(())
+    }
+
+    /// Seek the (already-locked) player to a MEDIA-time position, accounting
+    /// for the current speed.
+    ///
+    /// rodio tracks position *after* the speed stage, so `try_seek`'s argument
+    /// is in the speed-adjusted *output* timeline (`Speed::try_seek` multiplies
+    /// it back up by the factor to reach the decoder). Passing `media_ms`
+    /// directly would seek the decoder to `media_ms × speed` and read back
+    /// wrong via `get_pos() × speed`. We pass `media_ms / speed` so the decoder
+    /// lands exactly on `media_ms` and the round-trip is consistent.
+    fn seek_to_media(player: &Player, media_ms: u64, speed: f64) {
+        let output_ms = media_to_output_ms(media_ms, speed);
+        if let Err(e) = player.try_seek(Duration::from_millis(output_ms)) {
+            log::warn!("Seek failed: {e}");
+        }
     }
 
     pub fn resume(&self) {
@@ -168,9 +205,8 @@ impl RodioPlayer {
 
     pub fn seek(&self, position_ms: u64) {
         let player = self.lock_player();
-        if let Err(e) = player.try_seek(Duration::from_millis(position_ms)) {
-            log::warn!("Seek failed: {e}");
-        }
+        let speed = f64::from(player.speed());
+        Self::seek_to_media(&player, position_ms, speed);
     }
 
     pub fn set_volume(&self, volume: f64) {
@@ -180,7 +216,21 @@ impl RodioPlayer {
 
     pub fn set_speed(&self, speed: f64) {
         let player = self.lock_player();
+        let old_speed = f64::from(player.speed());
+        // Current media position under the OLD speed, captured before changing it.
+        let media_ms = compute_position(player.get_pos(), old_speed);
         player.set_speed(narrow_audio_param(speed));
+        // Re-anchor rodio's position tracker. Without this, `get_pos()` keeps
+        // the output-time it accumulated at the old speed, and `query_position`'s
+        // `get_pos() × new_speed` rescales that whole elapsed portion — so the
+        // UI position would jump (e.g. 1×→2× doubles it, the bug this fixes).
+        // Seeking resets the tracker's offset to the current media position in
+        // the new speed's timeline so playback continues from where it is.
+        // Skipped when nothing has played yet (boot / stopped at 0) to avoid a
+        // spurious decoder seek.
+        if media_ms > 0 {
+            Self::seek_to_media(&player, media_ms, speed);
+        }
     }
 
     /// Whether a gapless source is currently staged behind the playing one.
@@ -218,8 +268,9 @@ impl RodioPlayer {
         }
     }
 
-    /// Query the current playback position in milliseconds.
-    /// `get_pos()` returns wall-clock time — multiply by speed for actual media position.
+    /// Query the current playback position in milliseconds (media timeline).
+    /// `get_pos()` returns the speed-adjusted output time (`media / speed`);
+    /// `compute_position` multiplies by speed to recover the media position.
     pub fn query_position(&self) -> u64 {
         let player = self.lock_player();
         let wall_time = player.get_pos();
@@ -292,7 +343,7 @@ pub fn load_queue_from_disk_sync(paths: &Paths) -> Option<PersistableQueue> {
 }
 
 /// Narrow a backend-side `f64` audio parameter (volume 0.0..=1.0, speed
-/// 0.25..=4.0) to the `f32` Rodio's API expects.
+/// 0.25..=2.0) to the `f32` Rodio's API expects.
 #[allow(
     clippy::cast_possible_truncation,
     reason = "audio params are bounded constants whose round-trip through f32 is below the perceptual threshold"
