@@ -283,7 +283,9 @@ impl Limiter {
         let over = peak_db - LIMITER_THRESHOLD_DB;
         let half_knee = LIMITER_KNEE_DB / 2.0;
         let reduction_db = if over <= -half_knee {
-            0.0
+            // Below the knee: no reduction, so the gain is exactly unity —
+            // return early and skip the `db_to_linear` (powf) of 0 dB.
+            return 1.0;
         } else if over >= half_knee {
             -over
         } else {
@@ -318,8 +320,8 @@ pub struct EqSource<S> {
     /// This source's sample rate (Hz), captured once — constant per decoded
     /// file, so coefficients computed from it stay correct for the source's life.
     sample_rate: f32,
-    channels: usize,
-    /// `[channel][band]` filter state. Fixed size; allocated once.
+    /// `[channel][band]` filter state. Fixed size; allocated once. Its length
+    /// is the channel count, so the active path iterates it directly.
     banks: Vec<[DirectForm1<f32>; NUM_BANDS]>,
     /// Per-band on/off — a band is inactive at unity gain or outside Nyquist.
     band_active: [bool; NUM_BANDS],
@@ -362,7 +364,6 @@ impl<S: Source> EqSource<S> {
             shared,
             last_generation,
             sample_rate,
-            channels,
             banks,
             band_active: [false; NUM_BANDS],
             preamp_gain: 1.0,
@@ -433,18 +434,6 @@ impl<S: Source> EqSource<S> {
         // with a non-zero preamp still needs the preamp + limiter stage).
         self.bypass = !any_active && preamp_is_unity;
     }
-
-    /// Apply the preamp then the active band filters to one channel's sample.
-    fn process_band_sample(&mut self, channel: usize, sample: f32) -> f32 {
-        let mut out = sample * self.preamp_gain;
-        let bank = &mut self.banks[channel];
-        for (filter, active) in bank.iter_mut().zip(self.band_active.iter()) {
-            if *active {
-                out = filter.run(out);
-            }
-        }
-        out
-    }
 }
 
 impl<S: Source> Iterator for EqSource<S> {
@@ -458,7 +447,9 @@ impl<S: Source> Iterator for EqSource<S> {
             return Some(s);
         }
 
-        // Frame boundary: pick up state changes.
+        // Pick up state changes: per-frame on the active path, per-sample in
+        // bypass (which buffers no frame). The `Acquire` load is near-free
+        // either way.
         let generation = self.shared.generation();
         if generation != self.last_generation {
             self.rebuild();
@@ -471,14 +462,23 @@ impl<S: Source> Iterator for EqSource<S> {
         }
 
         // Active path: pull one interleaved frame, preamp + EQ each channel,
-        // then apply the coupled limiter across the whole frame.
-        self.frame_len = 0;
-        for ch in 0..self.channels {
+        // then apply the coupled limiter across the whole frame. Zipping
+        // `banks`/`frame` (both `channels` long) instead of indexing them keeps
+        // the per-sample inner work free of bounds checks.
+        let mut frame_len = 0;
+        for (bank, slot) in self.banks.iter_mut().zip(self.frame.iter_mut()) {
             let Some(x) = self.input.next() else { break };
-            self.frame[ch] = self.process_band_sample(ch, x);
-            self.frame_len += 1;
+            let mut out = x * self.preamp_gain;
+            for (filter, &active) in bank.iter_mut().zip(self.band_active.iter()) {
+                if active {
+                    out = filter.run(out);
+                }
+            }
+            *slot = out;
+            frame_len += 1;
         }
-        if self.frame_len == 0 {
+        self.frame_len = frame_len;
+        if frame_len == 0 {
             return None;
         }
 
