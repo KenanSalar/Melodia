@@ -111,7 +111,7 @@ pub async fn fetch_artist_images(
 }
 
 /// Spawn a background task to fetch artist images. Fire-and-forget.
-/// `client` is the shared `AppState::http_client`.
+/// `client` is the shared client from `AppState::http_client()`.
 pub fn spawn_fetch(paths: Arc<Paths>, db: DbPool, client: reqwest::Client) {
     tokio::spawn(async move {
         if let Err(e) = fetch_artist_images(&paths, &db, &client).await {

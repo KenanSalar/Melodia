@@ -134,7 +134,7 @@ async fn run_one_iteration(
     // 304 round-trips zero bytes and zero JSON parses. The "Check for
     // updates" button bypasses the etag — see check_for_update's doc.
     let result =
-        check_for_update(&state.http_client, etag, env!("CARGO_PKG_VERSION"), false).await;
+        check_for_update(state.http_client(), etag, env!("CARGO_PKG_VERSION"), false).await;
     set_is_checking(weak, false);
 
     let now = Utc::now();

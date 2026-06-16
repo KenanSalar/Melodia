@@ -467,7 +467,7 @@ pub async fn scan_folder_internal(
     services::artist_images::spawn_fetch(
         state.paths.clone(),
         state.db.clone(),
-        state.http_client.clone(),
+        state.http_client().clone(),
     );
     tasks::retroactive_hash::spawn(&TaskSpawner::from_state(state), state);
 

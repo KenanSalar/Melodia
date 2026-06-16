@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
 use souvlaki::MediaControlEvent;
 use tokio::runtime::Handle;
@@ -76,11 +76,15 @@ pub struct AppState {
     pub always_on_top: AlwaysOnTopCapability,
     pub search_history: Arc<SearchHistoryState>,
     pub media_controls: Option<Arc<MediaControlsHandle>>,
-    /// Shared `reqwest::Client` reused across every HTTP-using service
-    /// (Deezer artist-image search + download today; future remote calls
-    /// should reuse this rather than constructing a new client per call —
-    /// `reqwest::Client` already wraps an internal connection pool in `Arc`).
-    pub http_client: reqwest::Client,
+    /// Shared `reqwest::Client`, built lazily on first use via
+    /// [`AppState::http_client`]. Only the updater and the post-scan Deezer
+    /// artist-image fetch ever need it, so deferring construction keeps the
+    /// rustls TLS stack and connection pool off the boot/idle footprint.
+    /// `Arc<OnceLock<…>>` so every cloned `AppState` shares one client and one
+    /// initialization (`reqwest::Client` itself wraps an internal pool in
+    /// `Arc`). Future remote calls should reuse the accessor rather than
+    /// constructing a new client per call.
+    http_client: Arc<OnceLock<reqwest::Client>>,
     /// Tracks every spawned background task so shutdown can wait for them
     /// to finish their current write before the runtime is dropped.
     pub task_tracker: TaskTracker,
@@ -189,46 +193,6 @@ impl AppState {
 
         let search_history = Arc::new(SearchHistoryState::init(&paths).await);
 
-        // One `reqwest::Client` for the whole app — reqwest's connection pool
-        // lives on the client, so per-call construction wastes the pool every
-        // time.
-        //
-        // Timeouts: reqwest's default is "no timeout", which means a wedged
-        // CDN socket parks the streaming download future in
-        // `bytes_stream().next()` indefinitely (cancellation token never
-        // fires because the future is parked in foreign code). The fix is a
-        // per-read deadline rather than a whole-body deadline: a
-        // legitimately-slow 200 MB download must be allowed to take minutes,
-        // but no individual read should sit silent for 60 s. `read_timeout`
-        // resets on every byte received, so it only trips when the socket
-        // is genuinely dead.
-        //
-        // User-Agent: GitHub's API guidance asks every consumer to set a
-        // descriptive UA. Default `reqwest/0.13` is tolerated but ours is
-        // more useful in server logs when something goes wrong.
-        //
-        // Pool cap: the updater only talks to api.github.com +
-        // objects.githubusercontent.com; 4 idle conns per host is more
-        // than enough and bounds memory on a long-running process. Default
-        // is unbounded.
-        //
-        // Build is documented infallible for these options; the fallback
-        // is paranoia. If it ever fires we'd lose the timeouts, which is
-        // why it's logged.
-        let http_client = reqwest::Client::builder()
-            .connect_timeout(std::time::Duration::from_secs(10))
-            .read_timeout(std::time::Duration::from_secs(60))
-            .pool_max_idle_per_host(4)
-            .user_agent(concat!("Melodia/", env!("CARGO_PKG_VERSION")))
-            .build()
-            .unwrap_or_else(|e| {
-                log::warn!(
-                    "reqwest::Client::builder().build() failed unexpectedly ({e}); falling back \
-                     to default client without timeouts — downloads may hang on a wedged socket"
-                );
-                reqwest::Client::new()
-            });
-
         let state = Self {
             paths: Arc::new(paths),
             runtime,
@@ -246,7 +210,7 @@ impl AppState {
             always_on_top: always_on_top_capability,
             search_history,
             media_controls: Some(mc_handle),
-            http_client,
+            http_client: Arc::new(OnceLock::new()),
             task_tracker: TaskTracker::new(),
             shutdown_token: CancellationToken::new(),
             nav_history: Arc::new(parking_lot::Mutex::new(
@@ -261,5 +225,51 @@ impl AppState {
         };
 
         Ok((state, channels))
+    }
+
+    /// The shared `reqwest::Client`, built on first call and reused for the
+    /// process lifetime. Construction is deferred out of `init` so the rustls
+    /// TLS stack and connection pool never load at boot/idle — only the
+    /// updater and the post-scan Deezer artist-image fetch pull them in.
+    /// reqwest's connection pool lives on the client, so callers reuse this
+    /// accessor rather than constructing a new client per request.
+    ///
+    /// Timeouts: reqwest's default is "no timeout", which means a wedged CDN
+    /// socket parks the streaming download future in `bytes_stream().next()`
+    /// indefinitely (the cancellation token never fires because the future is
+    /// parked in foreign code). The fix is a per-read deadline rather than a
+    /// whole-body deadline: a legitimately-slow 200 MB download must be allowed
+    /// to take minutes, but no individual read should sit silent for 60 s.
+    /// `read_timeout` resets on every byte received, so it only trips when the
+    /// socket is genuinely dead.
+    ///
+    /// User-Agent: GitHub's API guidance asks every consumer to set a
+    /// descriptive UA. Default `reqwest/0.13` is tolerated but ours is more
+    /// useful in server logs when something goes wrong.
+    ///
+    /// Pool cap: the updater only talks to api.github.com +
+    /// objects.githubusercontent.com; 4 idle conns per host is more than enough
+    /// and bounds memory on a long-running process. Default is unbounded.
+    ///
+    /// Build is documented infallible for these options; the fallback is
+    /// paranoia. If it ever fires we'd lose the timeouts, which is why it's
+    /// logged.
+    pub fn http_client(&self) -> &reqwest::Client {
+        self.http_client.get_or_init(|| {
+            reqwest::Client::builder()
+                .connect_timeout(std::time::Duration::from_secs(10))
+                .read_timeout(std::time::Duration::from_secs(60))
+                .pool_max_idle_per_host(4)
+                .user_agent(concat!("Melodia/", env!("CARGO_PKG_VERSION")))
+                .build()
+                .unwrap_or_else(|e| {
+                    log::warn!(
+                        "reqwest::Client::builder().build() failed unexpectedly ({e}); falling \
+                         back to default client without timeouts — downloads may hang on a wedged \
+                         socket"
+                    );
+                    reqwest::Client::new()
+                })
+        })
     }
 }

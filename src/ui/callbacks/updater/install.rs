@@ -77,7 +77,7 @@ pub(super) fn spawn_install(
         // "Install"). A 304 here is the happy case — we fall through to
         // the cached asset, which already passed verification.
         let outcome = check_for_update(
-            &state.http_client,
+            state.http_client(),
             etag.as_deref(),
             env!("CARGO_PKG_VERSION"),
             false,
@@ -173,7 +173,7 @@ pub(super) fn spawn_install(
         // different release between Available-toast and Install-click is
         // caught by the signature mismatch, not silently installed.
         match updater::download_and_install(
-            &state.http_client,
+            state.http_client(),
             &cached.asset,
             &cached.version,
             on_progress,
