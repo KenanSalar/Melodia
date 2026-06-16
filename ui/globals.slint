@@ -138,19 +138,22 @@ export global Player {
 // low → high), length == `equalizer::NUM_BANDS` (10). `preset-idx` indexes the
 // dropdown: `0..PRESET_COUNT-1` are the built-in presets (Flat first), and
 // `PRESET_COUNT` (the last entry) is the synthetic "Custom" shown once the user
-// hand-edits a band. `min-gain` / `max-gain` mirror `equalizer::{MIN,MAX}_GAIN_DB`.
+// hand-edits a band. `min-gain` / `max-gain` are seeded from
+// `equalizer::{MIN,MAX}_GAIN_DB` by `install_equalizer` (Rust is the single
+// source of truth — no literals to drift here).
 export global Equalizer {
     in-out property <bool> enabled;
     in-out property <[float]> band-gains;
     in-out property <int> preset-idx;
-    out property <float> min-gain: -12.0;
-    out property <float> max-gain: 12.0;
+    in property <float> min-gain;
+    in property <float> max-gain;
 
     // Preamp / master gain (dB) — transparent headroom for boosting without
-    // clipping. `min-preamp` / `max-preamp` mirror `equalizer::{MIN,MAX}_PREAMP_DB`.
+    // clipping. `min-preamp` / `max-preamp` are seeded from
+    // `equalizer::{MIN,MAX}_PREAMP_DB` by `install_equalizer`.
     in-out property <float> preamp;
-    out property <float> min-preamp: -12.0;
-    out property <float> max-preamp: 6.0;
+    in property <float> min-preamp;
+    in property <float> max-preamp;
 
     callback set-enabled(bool);
     // Live band change during a drag — apply to the player, don't persist.
