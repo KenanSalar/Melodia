@@ -41,7 +41,7 @@ pub use favorites::wire_favorites;
 pub use genres::wire_genres;
 pub use library_settings::wire_library_settings;
 pub use now_playing::wire_now_playing_favorite;
-pub use playlists::wire_playlists;
+pub use playlists::{wire_playlist_files, wire_playlists};
 pub use search::wire_search;
 pub use tracks::wire_tracks;
 pub use updater::wire as wire_updater;

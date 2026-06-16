@@ -79,6 +79,26 @@ impl NotificationsUi {
         id
     }
 
+    /// Like [`show`](Self::show) but auto-dismisses the toast after `ms`
+    /// milliseconds via a single-shot UI-thread timer. For transient
+    /// confirmations (e.g. playlist import/export) that shouldn't require a
+    /// manual close — sticky toasts (errors, actionable updater prompts)
+    /// keep using [`show`](Self::show). If the user closes it first (or it's
+    /// evicted past `MAX_VISIBLE`), the timer's by-id removal finds nothing
+    /// and no-ops — ids are monotonic and never reused, so it can't dismiss
+    /// the wrong row. Must be called from the UI thread (like all `&self`
+    /// methods here).
+    pub fn show_auto_dismiss(&self, p: NotificationParams, ms: u32) -> i32 {
+        let id = self.show(p);
+        let rows = self.rows.clone();
+        slint::Timer::single_shot(std::time::Duration::from_millis(u64::from(ms)), move || {
+            if let Some(pos) = rows.iter().position(|r: NotificationRow| r.id == id) {
+                rows.remove(pos);
+            }
+        });
+        id
+    }
+
     /// Remove the row with the given id. No-op if no row matches (already
     /// dismissed, or id never existed).
     pub fn dismiss(&self, id: i32) {

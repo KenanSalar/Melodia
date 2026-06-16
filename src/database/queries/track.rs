@@ -370,6 +370,30 @@ pub async fn get_track_ids_by_paths(
     Ok(rows.into_iter().map(|(id, path)| (path, id)).collect())
 }
 
+/// Look up track IDs by BLAKE3 `file_hash`. Returns a map from `file_hash`
+/// → track ID. Uses the partial index `idx_tracks_file_hash`. Hashes with
+/// no match are simply absent from the map. If two tracks share a hash
+/// (true content duplicates), one arbitrary id wins — acceptable for
+/// playlist re-matching since either copy plays identical audio.
+pub async fn get_track_ids_by_hashes(
+    db: &DbPool,
+    hashes: &[String],
+) -> Result<HashMap<String, i64>, AppError> {
+    let rows: Vec<(i64, String)> = chunked_in_query(
+        db.read(),
+        hashes,
+        |placeholders| {
+            format!(
+                "SELECT id, file_hash FROM tracks \
+                 WHERE file_hash IS NOT NULL AND file_hash IN ({placeholders})"
+            )
+        },
+    )
+    .await?;
+
+    Ok(rows.into_iter().map(|(id, hash)| (hash, id)).collect())
+}
+
 /// Find groups of tracks that share the same `file_hash` (duplicates).
 /// Returns a Vec of groups, where each group is a Vec of tracks with the same hash.
 ///

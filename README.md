@@ -41,6 +41,7 @@ _Screenshots coming soon._
 - Natural sort ordering for file and track names
 - Customizable, resizable, and toggleable track-list columns
 - Playlist creation and management with custom thumbnails
+- Import and export playlists as standard `.m3u8` files (with embedded BLAKE3 content hashes) so they survive a database reset and interoperate with other players
 - Drag-and-drop file import to playlists and the queue
 - Drag-and-drop track reordering in playlists and the play queue
 - Automatic pre-migration database backups

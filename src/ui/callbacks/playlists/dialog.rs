@@ -316,40 +316,11 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
         });
     }
 
-    // add-tracks: from any track row's Add-to-Playlist > [existing
-    // playlist]. Background-add + refresh; toast on completion.
-    {
-        let s = state.clone();
-        let pu = playlists_ui.clone();
-        let weak = weak.clone();
-        playlists.on_add_tracks(move |playlist_id, track_ids| {
-            let pid = i64::from(playlist_id);
-            let ids: Vec<i64> = track_ids.iter().map(i64::from).collect();
-            if ids.is_empty() {
-                return;
-            }
-            let count = ids.len();
-            let s = s.clone();
-            let pu = pu.clone();
-            let weak = weak.clone();
-            s.runtime.clone().spawn(async move {
-                if let Err(e) = library::playlists::add_to_playlist(&s, pid, ids).await {
-                    log::warn!("playlists::add_tracks({pid}): {e}");
-                    return;
-                }
-                if let Err(e) = playlists_ui_mod::fetch_grid(&s, &pu, weak.clone()).await {
-                    log::warn!("playlists::add_tracks refetch grid: {e}");
-                }
-                if pu.detail_playlist_id() == pid
-                    && let Err(e) =
-                        playlists_ui_mod::refresh_detail(&s, &pu, weak, pid).await
-                {
-                    log::warn!("playlists::add_tracks refresh detail: {e}");
-                }
-                log::info!("playlists::add_tracks({pid}): {count} track(s)");
-            });
-        });
-    }
+    // Add-to-Playlist commit (`add-tracks-to-selected`) + the per-row /
+    // select-all toggles live in `files.rs` alongside the Export picker's
+    // selection handlers — they share the model-mutation + selection-meta
+    // pattern, and the commit needs the `Rc<NotificationsUi>` for its
+    // completion toast (wired after the notifications stack exists).
 
     // request-add-to-playlist: track row's "Add to Playlist" entry
     // (single-row or multi-select). Runs two short SELECTs in parallel
@@ -388,9 +359,9 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
                 let _ = weak.upgrade_in_event_loop(move |ui| {
                     // Skip rows whose i64 playlist id can't fit in the
                     // Slint-side i32 (`PlaylistPickRow.id`). The picker's
-                    // click handler routes back into Rust through
-                    // `Playlists.add-tracks(int, [int])` — surfacing the
-                    // row with a clamped id would no-op on click.
+                    // toggle / commit route back into Rust by that id
+                    // (`Playlists.toggle-add-pick` / `add-tracks-to-selected`)
+                    // — surfacing a row with a clamped id would mis-target.
                     let rows: Vec<UiPlaylistPickRow> = playlist_stats
                         .into_iter()
                         .filter(|p| p.id != exclude)
@@ -412,11 +383,16 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
                                     p.thumbnail_path.as_deref().unwrap_or(""),
                                 ),
                                 contained_count: contained,
+                                // Multi-select: start with nothing ticked; the
+                                // user opts in per playlist (or via "Select all").
+                                selected: false,
                             })
                         })
                         .collect();
                     let dlg = ui.global::<Dialog>();
                     dlg.set_playlist_pick_rows(ModelRc::new(VecModel::from(rows)));
+                    dlg.set_add_select_all(false);
+                    dlg.set_add_selected_count(0);
                     dlg.set_open(true);
                 });
             });

@@ -746,6 +746,7 @@ export component TrackListRowItem inherits Rectangle {
                                 ? @tr("Add {} to Playlist", root.multi-count)
                                 : @tr("Add to Playlist");
                             Dialog.message = "";
+                            Dialog.confirm-label = @tr("Add");
                             Dialog.cancel-label = @tr("Cancel");
                             Dialog.destructive = false;
                             Dialog.kind = "add-to-playlist";
