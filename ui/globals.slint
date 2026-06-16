@@ -126,6 +126,35 @@ export global Player {
     in-out property <int> volume-hud-tick: 0;
 }
 
+// Equalizer: drives the graphic-EQ dialog (`Dialog.kind == "equalizer"`).
+// State is owned by Rust (`src/ui/equalizer.rs`): `enabled` + the `band-gains`
+// model are seeded from `settings.json` at boot and updated on every user
+// action; the dialog body reads them and fires the callbacks below. Each
+// callback applies to the live Rodio player AND (for non-drag actions, or on
+// drag release via `commit-band`) persists to `settings.json` — mirroring the
+// `set-volume` / `commit-volume` split.
+//
+// `band-gains` is a Rust-owned `Rc<VecModel<f32>>` (gain in dB per band,
+// low → high), length == `equalizer::NUM_BANDS` (10). `preset-idx` indexes the
+// dropdown: `0..PRESET_COUNT-1` are the built-in presets (Flat first), and
+// `PRESET_COUNT` (the last entry) is the synthetic "Custom" shown once the user
+// hand-edits a band. `min-gain` / `max-gain` mirror `equalizer::{MIN,MAX}_GAIN_DB`.
+export global Equalizer {
+    in-out property <bool> enabled;
+    in-out property <[float]> band-gains;
+    in-out property <int> preset-idx;
+    out property <float> min-gain: -12.0;
+    out property <float> max-gain: 12.0;
+
+    callback set-enabled(bool);
+    // Live band change during a drag — apply to the player, don't persist.
+    callback set-band(int /*band index*/, float /*gain dB*/);
+    // Drag release — persist the current curve.
+    callback commit-band(int /*band index*/, float /*gain dB*/);
+    callback select-preset(int /*dropdown index*/);
+    callback reset();
+}
+
 // Nav: UI-only, no Rust subscription needed in Phase 2.
 //   0=search, 1=browse,
 //   2=favorites, 3=tracks, 4=albums, 5=artists, 6=genres, 7=playlists,

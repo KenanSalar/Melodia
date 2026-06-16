@@ -854,3 +854,49 @@ msgstr "Erstellt von {}"
 
 msgid "License"
 msgstr "Lizenz"
+
+# Graphic equalizer
+msgid "On"
+msgstr "An"
+
+msgid "Off"
+msgstr "Aus"
+
+msgid "Done"
+msgstr "Fertig"
+
+msgid "Reset"
+msgstr "Zurücksetzen"
+
+msgid "Enable equalizer"
+msgstr "Equalizer aktivieren"
+
+msgid "Flat"
+msgstr "Neutral"
+
+msgid "Rock"
+msgstr "Rock"
+
+msgid "Pop"
+msgstr "Pop"
+
+msgid "Jazz"
+msgstr "Jazz"
+
+msgid "Classical"
+msgstr "Klassik"
+
+msgid "Bass Boost"
+msgstr "Bassverstärkung"
+
+msgid "Treble Boost"
+msgstr "Höhenverstärkung"
+
+msgid "Vocal"
+msgstr "Gesang"
+
+msgid "Electronic"
+msgstr "Elektronisch"
+
+msgid "Custom"
+msgstr "Benutzerdefiniert"
