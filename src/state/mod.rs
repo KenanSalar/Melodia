@@ -147,6 +147,15 @@ impl AppState {
             rodio.set_speed(speed);
         }
 
+        // Seed the graphic EQ from persisted settings before playback starts so
+        // the first track is already equalised when the EQ is enabled. EQ state
+        // lives on the Rodio backend (not `PlayerState`); `set_eq_gains` clamps
+        // and length-normalises the (possibly hand-edited) gain list, and the
+        // EQ ships off by default.
+        rodio.set_eq_gains(&settings.equalizer.eq_band_gains);
+        rodio.set_eq_preamp(settings.equalizer.eq_preamp);
+        rodio.set_eq_enabled(settings.equalizer.eq_enabled);
+
         let cover_cache: CoverCache = crate::media::artwork::new_cover_cache();
 
         let (vm_tx, _) = watch::channel::<Option<PlayerViewModelLight>>(None);

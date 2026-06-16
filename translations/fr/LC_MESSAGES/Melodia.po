@@ -132,8 +132,8 @@ msgstr "File d'attente"
 msgid "More"
 msgstr "Plus d'options"
 
-msgid "Playback speed"
-msgstr "Vitesse de lecture"
+msgid "Speed"
+msgstr "Vitesse"
 
 msgid "No track playing"
 msgstr "Aucune piste en cours de lecture"
@@ -845,3 +845,52 @@ msgstr "Créé par {}"
 
 msgid "License"
 msgstr "Licence"
+
+# Graphic equalizer
+msgid "On"
+msgstr "Activé"
+
+msgid "Off"
+msgstr "Désactivé"
+
+msgid "Done"
+msgstr "Terminé"
+
+msgid "Reset"
+msgstr "Réinitialiser"
+
+msgid "Enable equalizer"
+msgstr "Activer l'égaliseur"
+
+msgid "Flat"
+msgstr "Neutre"
+
+msgid "Rock"
+msgstr "Rock"
+
+msgid "Pop"
+msgstr "Pop"
+
+msgid "Jazz"
+msgstr "Jazz"
+
+msgid "Classical"
+msgstr "Classique"
+
+msgid "Bass Boost"
+msgstr "Amplification des basses"
+
+msgid "Treble Boost"
+msgstr "Amplification des aigus"
+
+msgid "Vocal"
+msgstr "Voix"
+
+msgid "Electronic"
+msgstr "Électronique"
+
+msgid "Custom"
+msgstr "Personnalisé"
+
+msgid "Preamp"
+msgstr "Préampli"

@@ -1,4 +1,5 @@
 pub mod actions;
+pub mod equalizer;
 pub mod event_sink;
 pub mod handlers;
 pub mod queue;

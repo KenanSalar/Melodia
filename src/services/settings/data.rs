@@ -7,6 +7,7 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 
+use crate::player::equalizer::{DEFAULT_PRESET, NUM_BANDS};
 use crate::player::types::RepeatMode;
 
 pub const MAX_CORNER_RADIUS: u32 = 15;
@@ -115,6 +116,39 @@ impl Default for PlaybackFlags {
             resume_on_startup: false,
             is_muted: false,
             playback_speed: 1.0,
+        }
+    }
+}
+
+/// Graphic-equalizer preferences. Like the other audio substructs this is
+/// `#[serde(flatten)]`'d into `SettingsData` so each field serializes at the
+/// top level of `settings.json`, and `#[serde(default)]` makes older files
+/// (written before the EQ existed) deserialize to the neutral defaults.
+///
+/// Defaults are deliberately inert: the EQ ships **off** with a flat curve, so
+/// a fresh install — or any older `settings.json` — sounds bit-identical to no
+/// EQ until the user opts in. Gains are stored in dB; the loader
+/// (`equalizer::normalize_gains`) clamps the range and fixes the list length on
+/// read, so a hand-edited or wrong-length array can't pin a bad value.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct EqualizerFlags {
+    pub eq_enabled: bool,
+    pub eq_band_gains: Vec<f32>,
+    pub eq_selected_preset: String,
+    /// Preamp / master gain in dB (0 = unity). Clamped to the player's
+    /// `MIN_PREAMP_DB..=MAX_PREAMP_DB` range when applied / persisted; the
+    /// `#[serde(default)]` makes older files deserialize it to `0.0`.
+    pub eq_preamp: f32,
+}
+
+impl Default for EqualizerFlags {
+    fn default() -> Self {
+        Self {
+            eq_enabled: false,
+            eq_band_gains: vec![0.0; NUM_BANDS],
+            eq_selected_preset: DEFAULT_PRESET.to_owned(),
+            eq_preamp: 0.0,
         }
     }
 }
@@ -409,6 +443,8 @@ pub struct SettingsData {
     #[serde(flatten)]
     pub playback: PlaybackFlags,
     #[serde(flatten)]
+    pub equalizer: EqualizerFlags,
+    #[serde(flatten)]
     pub queue: QueueFlags,
     #[serde(flatten)]
     pub window: WindowFlags,
@@ -449,6 +485,7 @@ impl Default for SettingsData {
             overflow_buttons: Vec::new(),
             locale: default_locale(),
             playback: PlaybackFlags::default(),
+            equalizer: EqualizerFlags::default(),
             queue: QueueFlags::default(),
             window: WindowFlags::default(),
             tray: TrayFlags::default(),

@@ -4,9 +4,10 @@ version = 4
 
 [[package]]
 name = "Melodia"
-version = "0.5.1"
+version = "0.6.0"
 dependencies = [
  "async-compat",
+ "biquad",
  "blake3",
  "chrono",
  "dirs",
@@ -692,6 +693,15 @@ dependencies = [
  "rustc-hash 2.1.2",
  "shlex",
  "syn",
+]
+
+[[package]]
+name = "biquad"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8dee8f423f64504139bdc53d7fbe6a1cd8eff4f354be3652e7cf26385c9f1cb4"
+dependencies = [
+ "num-traits",
 ]
 
 [[package]]

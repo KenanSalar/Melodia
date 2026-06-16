@@ -1,5 +1,6 @@
 use std::fs::File;
 use std::io::BufReader;
+use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
@@ -9,6 +10,7 @@ use rodio::{Decoder, Player};
 use crate::config::Paths;
 use crate::error::AppError;
 
+use super::equalizer::{self, EqShared, EqSource};
 use super::types::PersistableQueue;
 
 /// Trait abstracting audio playback operations.
@@ -134,6 +136,10 @@ pub struct RodioPlayer {
     // atomically; rodio's Player is already Send+Sync on its own.
     player: std::sync::Mutex<Player>,
     gapless_pending: AtomicBool,
+    // Lock-free graphic-EQ state. Shared by every `EqSource` we append, so a
+    // live change applies to both the playing track and the gapless-preloaded
+    // one. Mutated off the player lock; seeded at boot from persisted settings.
+    eq: Arc<EqShared>,
 }
 
 impl RodioPlayer {
@@ -143,6 +149,7 @@ impl RodioPlayer {
         Self {
             player: std::sync::Mutex::new(player),
             gapless_pending: AtomicBool::new(false),
+            eq: EqShared::new(false, &[0.0; equalizer::NUM_BANDS]),
         }
     }
 
@@ -159,7 +166,7 @@ impl RodioPlayer {
         player.clear();
         player.set_volume(narrow_audio_param(volume));
         player.set_speed(narrow_audio_param(speed));
-        let source = decode_file(file_path)?;
+        let source = EqSource::new(decode_file(file_path)?, self.eq.clone());
         player.append(source);
         player.play();
         self.gapless_pending.store(false, Ordering::Release);
@@ -233,6 +240,28 @@ impl RodioPlayer {
         }
     }
 
+    /// Enable / disable the graphic equalizer. Lock-free — touches only the
+    /// shared EQ state, not the player; the change is picked up by every
+    /// `EqSource` (playing + preloaded) on its next sample.
+    pub fn set_eq_enabled(&self, enabled: bool) {
+        self.eq.set_enabled(enabled);
+    }
+
+    /// Set a single band's gain (dB). Out-of-range indices are ignored.
+    pub fn set_eq_band(&self, index: usize, gain_db: f32) {
+        self.eq.set_gain(index, gain_db);
+    }
+
+    /// Replace all band gains at once (preset / reset / boot hydration).
+    pub fn set_eq_gains(&self, gains: &[f32]) {
+        self.eq.set_all_gains(gains);
+    }
+
+    /// Set the EQ preamp / master gain (dB). Lock-free, like the other EQ setters.
+    pub fn set_eq_preamp(&self, preamp_db: f32) {
+        self.eq.set_preamp(preamp_db);
+    }
+
     /// Whether a gapless source is currently staged behind the playing one.
     /// Used by the playback monitor to avoid re-issuing the late preload each tick.
     pub fn is_gapless_preloaded(&self) -> bool {
@@ -252,6 +281,10 @@ impl RodioPlayer {
                 // ordered whole actions, only made decode+append atomic).
                 match decode_file(path) {
                     Ok(source) => {
+                        // Wrap before locking — `EqSource::new` only reads the
+                        // decoder's channel/rate, no I/O, so it stays out of the
+                        // player-lock window the position monitor contends for.
+                        let source = EqSource::new(source, self.eq.clone());
                         let player = self.lock_player();
                         player.append(source);
                         self.gapless_pending.store(true, Ordering::Release);

@@ -132,8 +132,8 @@ msgstr "Sıra"
 msgid "More"
 msgstr "Diğer Seçenekler"
 
-msgid "Playback speed"
-msgstr "Oynatma hızı"
+msgid "Speed"
+msgstr "Hız"
 
 msgid "No track playing"
 msgstr "Çalan parça yok"
@@ -848,3 +848,52 @@ msgstr "{} tarafından yapıldı"
 
 msgid "License"
 msgstr "Lisans"
+
+# Graphic equalizer
+msgid "On"
+msgstr "Açık"
+
+msgid "Off"
+msgstr "Kapalı"
+
+msgid "Done"
+msgstr "Tamam"
+
+msgid "Reset"
+msgstr "Sıfırla"
+
+msgid "Enable equalizer"
+msgstr "Ekolayzırı etkinleştir"
+
+msgid "Flat"
+msgstr "Düz"
+
+msgid "Rock"
+msgstr "Rock"
+
+msgid "Pop"
+msgstr "Pop"
+
+msgid "Jazz"
+msgstr "Caz"
+
+msgid "Classical"
+msgstr "Klasik"
+
+msgid "Bass Boost"
+msgstr "Bas Yükseltme"
+
+msgid "Treble Boost"
+msgstr "Tiz Yükseltme"
+
+msgid "Vocal"
+msgstr "Vokal"
+
+msgid "Electronic"
+msgstr "Elektronik"
+
+msgid "Custom"
+msgstr "Özel"
+
+msgid "Preamp"
+msgstr "Ön yükseltici"
