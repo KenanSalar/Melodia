@@ -203,6 +203,33 @@ async fn get_track_ids_by_paths() -> Result<(), AppError> {
     Ok(())
 }
 
+#[tokio::test]
+async fn get_track_ids_by_hashes() -> Result<(), AppError> {
+    let db = seed_db().await?;
+    // `make_test_metadata` sets file_hash = blake3(title), so each seeded
+    // track's hash is deterministic from its title.
+    let alpha = blake3::hash(b"Alpha").to_hex().to_string();
+    let beta = blake3::hash(b"Beta").to_hex().to_string();
+    let unknown = blake3::hash(b"Nope").to_hex().to_string();
+
+    let map = queries::track::get_track_ids_by_hashes(
+        &db,
+        &[alpha.clone(), beta.clone(), unknown.clone()],
+    )
+    .await?;
+
+    assert_eq!(map.len(), 2);
+    assert!(map.contains_key(&alpha));
+    assert!(map.contains_key(&beta));
+    assert!(!map.contains_key(&unknown));
+
+    // The alpha hash resolves to the same id as the alpha path.
+    let by_path = queries::track::get_track_ids_by_paths(&db, &["/music/alpha.mp3".to_owned()])
+        .await?;
+    assert_eq!(map.get(&alpha), by_path.get("/music/alpha.mp3"));
+    Ok(())
+}
+
 // --- Duplicate detection tests ---
 
 #[tokio::test]

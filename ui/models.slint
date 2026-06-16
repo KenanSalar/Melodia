@@ -192,6 +192,19 @@ export struct PlaylistPickRow {
     contained_count: int,
 }
 
+// One row in the Export-playlists picker (`Dialog.kind ==
+// "export-playlists"`). Built on the Rust side from `PlaylistStats`. The
+// per-row `selected` flag is toggled via `Playlists.toggle-export-pick`
+// (Rust `set_row_data`) and en-masse via `Playlists.set-all-export-picks`;
+// the Export dispatcher reads it back to decide which playlists to write.
+export struct PlaylistExportPickRow {
+    id: int,
+    name: string,
+    artwork_path: string,
+    track_count: int,
+    selected: bool,
+}
+
 // `position_ms`, `duration_ms`, and `progress` deliberately live on the
 // `Player` global as separate scalar properties — not on this struct. The
 // playback monitor publishes a `PositionTick` every 500 ms while a track

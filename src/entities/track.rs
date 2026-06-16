@@ -172,6 +172,52 @@ pub fn track_list_columns_prefixed(alias: &str) -> &'static str {
     s
 }
 
+/// Playlist-export projection: just the fields an Extended-M3U8 line needs
+/// (`#EXTINF` duration + "artist - title", `#MELODIA-HASH`, and the path).
+/// Reading these five columns instead of a full `Track` avoids ~35 unused
+/// column decodes per row when writing a playlist file. `file_hash` is
+/// nullable (tracks before retroactive hashing); the writer omits the hash
+/// line when it is `None`.
+#[derive(Clone, Debug, PartialEq, FromRow, Serialize, Deserialize)]
+pub struct PlaylistExportRow {
+    pub file_path: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub file_hash: Option<String>,
+    pub title: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub artist: Option<String>,
+    pub duration_ms: i64,
+}
+
+/// The explicit SELECT columns for `PlaylistExportRow` queries.
+pub const PLAYLIST_EXPORT_COLUMNS: &[&str] =
+    &["file_path", "file_hash", "title", "artist", "duration_ms"];
+
+/// Comma-separated form of `PLAYLIST_EXPORT_COLUMNS` with a table-alias
+/// prefix (the export query joins `tracks t` to `playlist_items`). Cached
+/// per alias, same pattern as `track_list_columns_prefixed`.
+pub fn playlist_export_columns_prefixed(alias: &str) -> &'static str {
+    use std::sync::{Mutex, OnceLock};
+    static CACHE: OnceLock<Mutex<std::collections::HashMap<&'static str, &'static str>>> =
+        OnceLock::new();
+    let cache = CACHE.get_or_init(|| Mutex::new(std::collections::HashMap::new()));
+    let mut guard = cache.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+    if let Some(&hit) = guard.get(alias) {
+        return hit;
+    }
+    let s: &'static str = Box::leak(
+        PLAYLIST_EXPORT_COLUMNS
+            .iter()
+            .map(|c| format!("{alias}.{c}"))
+            .collect::<Vec<_>>()
+            .join(", ")
+            .into_boxed_str(),
+    );
+    let key: &'static str = Box::leak(alias.to_owned().into_boxed_str());
+    guard.insert(key, s);
+    s
+}
+
 /// Technical-metadata projection for the full-screen Now Playing view's
 /// chip row — just the 8 columns `TrackMetaRow` renders. Reading these
 /// instead of a full `Track` saves ~33 unused column decodes (most of them

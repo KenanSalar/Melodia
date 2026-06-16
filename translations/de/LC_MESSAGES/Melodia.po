@@ -903,3 +903,57 @@ msgstr "Benutzerdefiniert"
 
 msgid "Preamp"
 msgstr "Vorverstärkung"
+
+# ---- Playlist import / export (M3U8) ----------------------------------------
+
+msgid "Import"
+msgstr "Importieren"
+
+msgid "Export"
+msgstr "Exportieren"
+
+msgid "Export Playlists"
+msgstr "Playlists exportieren"
+
+msgid "Import playlists from .m3u8 files"
+msgstr "Playlists aus .m3u8-Dateien importieren"
+
+msgid "Export playlists to .m3u8 files"
+msgstr "Playlists in .m3u8-Dateien exportieren"
+
+msgid "Choose playlists to export, then pick a folder."
+msgstr "Wählen Sie die zu exportierenden Playlists und dann einen Ordner."
+
+msgid "Select all"
+msgstr "Alle auswählen"
+
+msgid "Import failed"
+msgstr "Import fehlgeschlagen"
+
+msgid "Couldn't read the selected playlist file(s)."
+msgstr "Die ausgewählten Playlist-Dateien konnten nicht gelesen werden."
+
+msgid "Export failed"
+msgstr "Export fehlgeschlagen"
+
+msgid "Couldn't write the playlist files."
+msgstr "Die Playlist-Dateien konnten nicht geschrieben werden."
+
+msgid "Saved to {}"
+msgstr "Gespeichert in {}"
+
+msgid "{} tracks added"
+msgstr "{} Lieder hinzugefügt"
+
+msgid "{} tracks added · {} missing"
+msgstr "{} Lieder hinzugefügt · {} fehlen"
+
+msgid "{n} playlist imported"
+msgid_plural "{n} playlists imported"
+msgstr[0] "{n} Playlist importiert"
+msgstr[1] "{n} Playlists importiert"
+
+msgid "{n} playlist exported"
+msgid_plural "{n} playlists exported"
+msgstr[0] "{n} Playlist exportiert"
+msgstr[1] "{n} Playlists exportiert"
