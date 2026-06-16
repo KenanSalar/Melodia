@@ -257,16 +257,6 @@ impl RodioPlayer {
         self.eq.set_all_gains(gains);
     }
 
-    /// Current EQ enabled flag (for UI seeding).
-    pub fn eq_enabled(&self) -> bool {
-        self.eq.enabled()
-    }
-
-    /// Current band gains (for UI seeding).
-    pub fn eq_gains(&self) -> [f32; equalizer::NUM_BANDS] {
-        self.eq.gains()
-    }
-
     /// Whether a gapless source is currently staged behind the playing one.
     /// Used by the playback monitor to avoid re-issuing the late preload each tick.
     pub fn is_gapless_preloaded(&self) -> bool {
