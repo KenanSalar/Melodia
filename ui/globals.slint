@@ -2,7 +2,7 @@ import { PlayerVm, QueueVm, QueueRow, TrackListRow, FolderListRow,
          BrowseFolderRow, BreadcrumbRow, NotificationRow, TrackMetaRow,
          AlbumRow, AlbumGridRow, ArtistRow, ArtistGridRow,
          GenreRow, GenreGridRow,
-         PlaylistRow, PlaylistGridRow, PlaylistPickRow,
+         PlaylistRow, PlaylistGridRow, PlaylistPickRow, PlaylistExportPickRow,
          EntityStripRow } from "models.slint";
 import { Theme } from "theme.slint";
 
@@ -709,6 +709,32 @@ export global Playlists {
         [int] /*track_ids*/,
         int /*exclude_playlist_id*/,
     );
+
+    // --- Import / export to M3U8 files ---------------------------------
+    // Header-pill actions on the Playlists view. Both are pure Rust flows
+    // (native rfd dialogs), so — unlike the create/rename dialogs — they
+    // don't write `Dialog.*` synchronously from the click handler and so
+    // don't risk Slint's property-recursion guard.
+
+    // Open a native multi-file picker (.m3u8/.m3u), import each into a new
+    // playlist, then toast a summary.
+    callback import-playlists();
+
+    // Open the Export picker dialog. Rust fetches all playlists, fills
+    // `Dialog.export-pick-rows` (all selected), then flips
+    // `Dialog.open = true` with `kind == "export-playlists"` — same
+    // populate-then-open shape as `request-add-to-playlist`.
+    callback request-export-playlists();
+
+    // Fired by the `Dialog.accepted` dispatcher on Export. Rust reads the
+    // selected rows off `Dialog.export-pick-rows`, opens a folder picker,
+    // writes one `.m3u8` per selected playlist, and toasts.
+    callback export-selected-playlists();
+
+    // Export-picker row interactions — Rust mutates the VecModel
+    // (`set_row_data`) since Slint can't push/remove ergonomically.
+    callback toggle-export-pick(int /*playlist_id*/);
+    callback set-all-export-picks(bool /*selected*/);
 }
 
 // PlaylistDetail: drives the full Playlist Detail view. `playlist-id ==
@@ -944,6 +970,17 @@ export global Dialog {
     // open starts from a clean model.
     in-out property <[PlaylistPickRow]> playlist-pick-rows;
 
+    // Rows shown inside the Export-playlists picker (`kind ==
+    // "export-playlists"`). Populated by Rust's `on_request_export_playlists`
+    // (all `selected: true`) before `open` is flipped. `export-select-all`
+    // mirrors the header "Select all" checkbox; `export-selected-count` is
+    // maintained by Rust on every toggle so the footer's Export button can
+    // disable when nothing is selected without iterating the model in Slint.
+    // All three cleared in `closed` below.
+    in-out property <[PlaylistExportPickRow]> export-pick-rows;
+    in-out property <bool> export-select-all: false;
+    in-out property <int> export-selected-count: 0;
+
     // Size of `pending-track-ids` at the moment the picker was opened —
     // cached so picker rows can derive `disabled` (`contained-count >=
     // pick-total-tracks`) without re-evaluating `pending-track-ids.length`
@@ -1019,6 +1056,10 @@ export global Dialog {
             }
         } else if (root.kind == "remove-playlist-selected") {
             PlaylistDetail.remove-selected();
+        } else if (root.kind == "export-playlists") {
+            // Rust reads the selected rows off `export-pick-rows`, then
+            // opens the folder picker and writes the files.
+            Playlists.export-selected-playlists();
         }
     }
     cancelled => { }
@@ -1054,6 +1095,10 @@ export global Dialog {
         // `Dialog.closed` in `callbacks/playlists.rs`.
         root.playlist-pick-rows = [];
         root.pick-total-tracks = 0;
+        // Export picker state.
+        root.export-pick-rows = [];
+        root.export-select-all = false;
+        root.export-selected-count = 0;
         // Chrome / labels — clearing these lets the conditional message
         // Text and Cancel button (`if Dialog.message != ""` /
         // `if Dialog.cancel-label != ""` in `dialog.slint`) unmount

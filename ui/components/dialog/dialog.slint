@@ -3,6 +3,7 @@ import { Dialog as DialogGlobal } from "../../globals.slint";
 import { SectionButton } from "../settings/section-button.slint";
 import { PlaylistMosaicPicker } from "playlist-mosaic-picker.slint";
 import { PlaylistPicker } from "playlist-picker.slint";
+import { ExportPlaylistPicker } from "export-playlist-picker.slint";
 import { EqualizerBody } from "equalizer-body.slint";
 import { LabeledInput } from "../labeled-input.slint";
 import { MaterialIcon } from "../material-icon.slint";
@@ -248,6 +249,11 @@ export component DialogOverlay inherits Rectangle {
             // button below is suppressed for this kind.
             if DialogGlobal.kind == "add-to-playlist": PlaylistPicker { }
 
+            // Export-playlists picker — checkbox list + "Select all". Unlike
+            // the add-to-playlist picker, this one DOES commit through the
+            // footer's primary (Export) button, so that button stays mounted.
+            if DialogGlobal.kind == "export-playlists": ExportPlaylistPicker { }
+
             // Graphic-equalizer body — enable toggle + preset dropdown + ten
             // band sliders + reset. Drives the `Equalizer` global; changes
             // apply live and persist. The footer keeps just the "Done" button
@@ -294,7 +300,10 @@ export component DialogOverlay inherits Rectangle {
                     button-enabled: DialogGlobal.open
                         && ((DialogGlobal.kind != "create-playlist"
                                 && DialogGlobal.kind != "rename-playlist")
-                            || DialogGlobal.input-text != "");
+                            || DialogGlobal.input-text != "")
+                        // Export needs at least one playlist selected.
+                        && (DialogGlobal.kind != "export-playlists"
+                            || DialogGlobal.export-selected-count > 0);
                     clicked => {
                         DialogGlobal.accepted();
                         DialogGlobal.open = false;

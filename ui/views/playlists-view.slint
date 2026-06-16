@@ -1,7 +1,7 @@
 import { Theme } from "../theme.slint";
 import { Playlists, Dialog } from "../globals.slint";
 import { SearchBar } from "../components/search-bar.slint";
-import { ActionPill, PillButton } from "../components/action-pill.slint";
+import { ActionPill, PillButton, PillDivider } from "../components/action-pill.slint";
 import { PlaylistGrid } from "../components/grid/playlist-grid.slint";
 import { GridColumnsSync } from "../components/grid-columns-sync.slint";
 import { MaterialIcon } from "../components/material-icon.slint";
@@ -97,6 +97,40 @@ export component PlaylistsView inherits Rectangle {
                             Dialog.input-text-2 = "";
                             Dialog.pending-track-ids = [];
                             Dialog.open = true;
+                        }
+                    }
+
+                    PillDivider { }
+
+                    // Import / Export to portable `.m3u8` files so playlists
+                    // survive a database wipe. Both are pure Rust flows
+                    // (native rfd dialogs); Export opens the multi-select
+                    // picker dialog, Import opens a multi-file picker.
+                    PillButton {
+                        icon: "download";
+                        text: @tr("Import");
+                        tooltip-text: @tr("Import playlists from .m3u8 files");
+                        clicked => { Playlists.import-playlists(); }
+                    }
+
+                    PillDivider { }
+
+                    PillButton {
+                        icon: "upload";
+                        text: @tr("Export");
+                        tooltip-text: @tr("Export playlists to .m3u8 files");
+                        clicked => {
+                            // Chrome set inline (so @tr applies); the Rust
+                            // callback fills the rows and flips `open` from a
+                            // fresh event-loop tick (same shape as
+                            // add-to-playlist).
+                            Dialog.title = @tr("Export Playlists");
+                            Dialog.message = @tr("Choose playlists to export, then pick a folder.");
+                            Dialog.confirm-label = @tr("Export");
+                            Dialog.cancel-label = @tr("Cancel");
+                            Dialog.destructive = false;
+                            Dialog.kind = "export-playlists";
+                            Playlists.request-export-playlists();
                         }
                     }
                 }

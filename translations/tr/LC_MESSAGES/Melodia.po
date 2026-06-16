@@ -897,3 +897,57 @@ msgstr "Özel"
 
 msgid "Preamp"
 msgstr "Ön yükseltici"
+
+# ---- Playlist import / export (M3U8) ----------------------------------------
+
+msgid "Import"
+msgstr "İçe aktar"
+
+msgid "Export"
+msgstr "Dışa aktar"
+
+msgid "Export Playlists"
+msgstr "Çalma listelerini dışa aktar"
+
+msgid "Import playlists from .m3u8 files"
+msgstr ".m3u8 dosyalarından çalma listelerini içe aktar"
+
+msgid "Export playlists to .m3u8 files"
+msgstr "Çalma listelerini .m3u8 dosyalarına dışa aktar"
+
+msgid "Choose playlists to export, then pick a folder."
+msgstr "Dışa aktarılacak çalma listelerini seçin, ardından bir klasör belirleyin."
+
+msgid "Select all"
+msgstr "Tümünü seç"
+
+msgid "Import failed"
+msgstr "İçe aktarma başarısız"
+
+msgid "Couldn't read the selected playlist file(s)."
+msgstr "Seçilen çalma listesi dosyaları okunamadı."
+
+msgid "Export failed"
+msgstr "Dışa aktarma başarısız"
+
+msgid "Couldn't write the playlist files."
+msgstr "Çalma listesi dosyaları yazılamadı."
+
+msgid "Saved to {}"
+msgstr "{} konumuna kaydedildi"
+
+msgid "{} tracks added"
+msgstr "{} parça eklendi"
+
+msgid "{} tracks added · {} missing"
+msgstr "{} parça eklendi · {} eksik"
+
+msgid "{n} playlist imported"
+msgid_plural "{n} playlists imported"
+msgstr[0] "{n} çalma listesi içe aktarıldı"
+msgstr[1] "{n} çalma listesi içe aktarıldı"
+
+msgid "{n} playlist exported"
+msgid_plural "{n} playlists exported"
+msgstr[0] "{n} çalma listesi dışa aktarıldı"
+msgstr[1] "{n} çalma listesi dışa aktarıldı"
