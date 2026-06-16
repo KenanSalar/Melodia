@@ -49,12 +49,14 @@ _Screenshots coming soon._
 - Gapless playback with a 2-deep Rodio queue
 - Queue management with shuffle and repeat modes (Off, All, One)
 - Full-screen Now Playing view with track details, an up-next list, and album-art cross-fade transitions
-- Playback speed control (0.25× – 4.0×)
+- 10-band graphic equalizer (31 Hz – 16 kHz) with adjustable preamp, nine built-in presets plus hand-tuned custom curves, and a soft-knee clip-protection limiter so boosts compress instead of clipping
+- Playback speed control (0.25× – 2.0×)
 - Volume control (0–200%) with mute
 - Resume playback on startup
 - OS media-key support
 - Configurable play-button animation (none, ripple, or animated equalizer bars)
 - Customizable player bar — relocate secondary controls into a compact overflow menu
+- Responsive mini-player — shrinking the window past a threshold collapses the full UI into a compact horizontal strip or a square widget (the square grows an up-next list when tall enough); restore the full window from the mini-player's expand button
 
 ### Themes
 Six theme families, each with light and dark variants and configurable accent colors:
@@ -197,6 +199,7 @@ cargo test                                      # run tests
 | Backend | Pure Rust — direct calls + tokio channels, no IPC |
 | Async runtime | [Tokio](https://tokio.rs/) |
 | Audio | [Rodio](https://github.com/RustAudio/rodio) + [Symphonia](https://github.com/pdeljanov/Symphonia) |
+| Equalizer DSP | [biquad](https://crates.io/crates/biquad) (peaking-filter bands) |
 | Media Controls | [Souvlaki](https://github.com/Sinono3/souvlaki) (MPRIS2, SMTC) |
 | Metadata | [Lofty](https://github.com/Serial-ATA/lofty-rs) |
 | File Hashing | [BLAKE3](https://github.com/BLAKE3-team/BLAKE3) |
@@ -224,7 +227,7 @@ src/
 ├── entities/    domain model types (track, album, artist, genre, playlist, …)
 ├── library/     playback, queue, tracks, albums, artists, genres, playlists, search, settings
 ├── media/       scanner, metadata, artwork, cover-thumbnail cache, folder watcher
-├── player/      playback state machine + Rodio backend
+├── player/      playback state machine + Rodio backend + graphic equalizer DSP
 ├── tasks/       background tasks (playback monitor, file events, queue prune, Material You)
 ├── themes/      pluggable theme registry
 ├── services/    updater, desktop integration, system theme
