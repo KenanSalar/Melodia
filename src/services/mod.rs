@@ -73,3 +73,22 @@ pub fn write_json_atomic_sync<T: Serialize>(path: &Path, value: &T) -> AppResult
     tmp.persist(path).map_err(|e| AppError::Io(e.error))?;
     Ok(())
 }
+
+/// Atomically write plain `text` to `path` via a temp file in the same
+/// directory + rename on success. Plain-text sibling of
+/// [`write_json_atomic_sync`] (used by M3U playlist export). Bytes are
+/// written verbatim — the caller owns line endings and trailing newline.
+pub fn write_text_atomic_sync(path: &Path, text: &str) -> AppResult<()> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let dir = path.parent().unwrap_or_else(|| Path::new("."));
+    let mut tmp = tempfile::NamedTempFile::new_in(dir)?;
+    {
+        let mut writer = BufWriter::new(tmp.as_file_mut());
+        writer.write_all(text.as_bytes())?;
+        writer.flush()?;
+    }
+    tmp.persist(path).map_err(|e| AppError::Io(e.error))?;
+    Ok(())
+}

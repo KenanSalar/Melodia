@@ -351,4 +351,58 @@ export global Settings {
         }
         return @tr("Update failed. See logs for details.");
     }
+
+    // Translated strings for the playlist import/export notification toasts
+    // (header pills on the Playlists view). Same `pure callback` shape as
+    // the updater strings — Rust invokes them at push time so they resolve
+    // in the active locale, with the dynamic counts interpolated.
+    pure callback playlist-import-title(int /*imported*/) -> string;
+    playlist-import-title(imported) => {
+        return @tr("{n} playlist imported" | "{n} playlists imported" % imported);
+    }
+    pure callback playlist-import-message(int /*tracks*/, int /*missing*/) -> string;
+    playlist-import-message(tracks, missing) => {
+        // Pluralized on the track count (`{n}`); the no-missing branch reuses
+        // the same `{n} track(s) added` msgid as `add-to-playlist-message`.
+        return missing > 0
+            ? @tr("{n} track added · {} missing" | "{n} tracks added · {} missing" % tracks, missing)
+            : @tr("{n} track added" | "{n} tracks added" % tracks);
+    }
+    pure callback playlist-import-failed-title() -> string;
+    playlist-import-failed-title => {
+        return @tr("Import failed");
+    }
+    pure callback playlist-import-failed-message() -> string;
+    playlist-import-failed-message => {
+        return @tr("Couldn't read the selected playlist file(s).");
+    }
+
+    pure callback playlist-export-title(int /*exported*/) -> string;
+    playlist-export-title(exported) => {
+        return @tr("{n} playlist exported" | "{n} playlists exported" % exported);
+    }
+    pure callback playlist-export-message(string /*folder*/) -> string;
+    playlist-export-message(folder) => {
+        return @tr("Saved to {}", folder);
+    }
+    pure callback playlist-export-failed-title() -> string;
+    playlist-export-failed-title => {
+        return @tr("Export failed");
+    }
+    pure callback playlist-export-failed-message() -> string;
+    playlist-export-failed-message => {
+        return @tr("Couldn't write the playlist files.");
+    }
+
+    // Add-to-Playlist multi-select commit toast (track row context menu →
+    // Add to Playlist → tick playlists → Add). Title pluralizes on the
+    // number of playlists, message on the number of tracks added.
+    pure callback add-to-playlist-title(int /*playlists*/) -> string;
+    add-to-playlist-title(playlists) => {
+        return @tr("Added to {n} playlist" | "Added to {n} playlists" % playlists);
+    }
+    pure callback add-to-playlist-message(int /*tracks*/) -> string;
+    add-to-playlist-message(tracks) => {
+        return @tr("{n} track added" | "{n} tracks added" % tracks);
+    }
 }

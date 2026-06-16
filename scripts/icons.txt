@@ -21,6 +21,7 @@ crop_square
 delete
 dock_to_left
 dock_to_right
+download
 edit
 error
 expand_less
@@ -74,6 +75,7 @@ title
 tonality
 translate
 tune
+upload
 visibility
 volume_down
 volume_off
