@@ -122,8 +122,9 @@ pub fn install_views(
     // 5c2d. Playlists view. CRUD entry points route through the
     // shared `Dialog` global; drag-reorder lives in the sibling
     // `DraggableTrackList` component (the shared `TrackList` stays
-    // drag-free); the "Add to Playlist >" submenu on every track row's
-    // overflow reaches `Playlists.add-tracks`; and OS file drops on
+    // drag-free); the "Add to Playlist" entry on every track row's
+    // overflow opens the multi-select picker (`Playlists.request-add-to-playlist`
+    // → `add-tracks-to-selected`); and OS file drops on
     // the detail view route through `CURRENT_PLAYLIST_ID` in
     // `ui::window_chrome::drop_coalescer` (set/cleared by
     // `playlists::detail::open_playlist` / `close_detail`). Queue

@@ -933,6 +933,19 @@ msgstr "Dışa aktarma başarısız"
 msgid "Couldn't write the playlist files."
 msgstr "Çalma listesi dosyaları yazılamadı."
 
+msgid "Add"
+msgstr "Ekle"
+
+msgid "Added to {n} playlist"
+msgid_plural "Added to {n} playlists"
+msgstr[0] "{n} çalma listesine eklendi"
+msgstr[1] "{n} çalma listesine eklendi"
+
+msgid "{n} track added"
+msgid_plural "{n} tracks added"
+msgstr[0] "{n} parça eklendi"
+msgstr[1] "{n} parça eklendi"
+
 msgid "Saved to {}"
 msgstr "{} konumuna kaydedildi"
 

@@ -243,15 +243,14 @@ export component DialogOverlay inherits Rectangle {
             if DialogGlobal.kind == "edit-playlist-artwork": PlaylistMosaicPicker { }
 
             // Add-to-Playlist picker body — rendered for the
-            // `"add-to-playlist"` kind. Each row commits inline on
-            // click (`Playlists.add-tracks` + `Dialog.open = false`);
-            // there is no `accepted` branch and the primary/Apply
-            // button below is suppressed for this kind.
+            // `"add-to-playlist"` kind. Multi-select: the footer's primary
+            // (Add) button commits the selection through the `accepted`
+            // dispatcher, same as the Export picker.
             if DialogGlobal.kind == "add-to-playlist": PlaylistPicker { }
 
-            // Export-playlists picker — checkbox list + "Select all". Unlike
-            // the add-to-playlist picker, this one DOES commit through the
-            // footer's primary (Export) button, so that button stays mounted.
+            // Export-playlists picker — selectable list + "Select all". Like
+            // the add-to-playlist picker, this one commits through the
+            // footer's primary (Export) button.
             if DialogGlobal.kind == "export-playlists": ExportPlaylistPicker { }
 
             // Graphic-equalizer body — enable toggle + preset dropdown + ten
@@ -279,13 +278,7 @@ export component DialogOverlay inherits Rectangle {
                     }
                 }
 
-                // The `"add-to-playlist"` picker commits inline on row
-                // click (no separate Apply), so its primary button is
-                // unmounted entirely. The Cancel button still renders
-                // (its `if cancel-label != ""` guard above keeps it
-                // alive because the menu click sets a non-empty
-                // `cancel-label`).
-                if DialogGlobal.kind != "add-to-playlist": SectionButton {
+                SectionButton {
                     label: DialogGlobal.confirm-label;
                     icon: "";
                     primary: true;
@@ -303,7 +296,10 @@ export component DialogOverlay inherits Rectangle {
                             || DialogGlobal.input-text != "")
                         // Export needs at least one playlist selected.
                         && (DialogGlobal.kind != "export-playlists"
-                            || DialogGlobal.export-selected-count > 0);
+                            || DialogGlobal.export-selected-count > 0)
+                        // Add-to-Playlist needs at least one playlist selected.
+                        && (DialogGlobal.kind != "add-to-playlist"
+                            || DialogGlobal.add-selected-count > 0);
                     clicked => {
                         DialogGlobal.accepted();
                         DialogGlobal.open = false;

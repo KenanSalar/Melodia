@@ -930,6 +930,19 @@ msgstr "Error al exportar"
 msgid "Couldn't write the playlist files."
 msgstr "No se pudieron escribir los archivos de lista."
 
+msgid "Add"
+msgstr "Añadir"
+
+msgid "Added to {n} playlist"
+msgid_plural "Added to {n} playlists"
+msgstr[0] "Añadido a {n} lista"
+msgstr[1] "Añadido a {n} listas"
+
+msgid "{n} track added"
+msgid_plural "{n} tracks added"
+msgstr[0] "{n} pista añadida"
+msgstr[1] "{n} pistas añadidas"
+
 msgid "Saved to {}"
 msgstr "Guardado en {}"
 
