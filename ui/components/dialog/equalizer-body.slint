@@ -1,0 +1,155 @@
+import { Theme } from "../../theme.slint";
+import { Equalizer } from "../../globals.slint";
+import { ToggleSwitch } from "../settings/toggle-switch.slint";
+import { Dropdown } from "../settings/dropdown.slint";
+import { SectionButton } from "../settings/section-button.slint";
+import { SliderTrack } from "../slider-track.slint";
+import { EqBandSlider } from "eq-band-slider.slint";
+
+// Body for the `Dialog.kind == "equalizer"` modal: an enable toggle, a preset
+// dropdown, ten vertical band sliders (±12 dB, 0 dB centred) and a Reset
+// button. Every control drives the `Equalizer` global; Rust applies each change
+// to the live player and persists it. Mounted by `dialog.slint`.
+export component EqualizerBody inherits VerticalLayout {
+    spacing: Theme.pad-lg;
+
+    // Preamp dB ↔ SliderTrack 0..1 mapping, in one place (the binding and both
+    // callbacks reuse these instead of re-inlining the formula).
+    pure function preamp-to-frac(db: float) -> float {
+        return (db - Equalizer.min-preamp) / (Equalizer.max-preamp - Equalizer.min-preamp);
+    }
+    pure function frac-to-preamp(f: float) -> float {
+        return Equalizer.min-preamp + f * (Equalizer.max-preamp - Equalizer.min-preamp);
+    }
+
+    // Band centre-frequency labels (low → high), order-matched to
+    // `equalizer::BAND_FREQS`. Numeric → not translated.
+    property <[string]> band-labels: ["31", "62", "125", "250", "500", "1k", "2k", "4k", "8k", "16k"];
+
+    // Preset names, order-matched to `equalizer::PRESETS` with a trailing
+    // synthetic "Custom". Inline `@tr` literals — a `[string]` populated from
+    // Rust wouldn't be translated (CLAUDE.md i18n notes).
+    property <[string]> preset-names: [
+        @tr("Flat"), @tr("Rock"), @tr("Pop"), @tr("Jazz"), @tr("Classical"),
+        @tr("Bass Boost"), @tr("Treble Boost"), @tr("Vocal"), @tr("Electronic"),
+        @tr("Custom"),
+    ];
+
+    // Controls row: enable toggle + label | preset dropdown | reset.
+    HorizontalLayout {
+        spacing: Theme.pad-md;
+        alignment: stretch;
+
+        VerticalLayout {
+            alignment: center;
+            ToggleSwitch {
+                checked <=> Equalizer.enabled;
+                toggled(v) => { Equalizer.set-enabled(v); }
+            }
+        }
+        VerticalLayout {
+            alignment: center;
+            horizontal-stretch: 1;
+            Text {
+                text: @tr("Enable equalizer");
+                color: Theme.text;
+                font-size: Theme.font-size-md;
+            }
+        }
+        VerticalLayout {
+            alignment: center;
+            Dropdown {
+                options: root.preset-names;
+                trigger-width: 150px;
+                selected-index <=> Equalizer.preset-idx;
+                selected(i) => { Equalizer.select-preset(i); }
+            }
+        }
+        VerticalLayout {
+            alignment: center;
+            SectionButton {
+                label: @tr("Reset");
+                icon: "";
+                primary: false;
+                clicked => { Equalizer.reset(); }
+            }
+        }
+    }
+
+    // Preamp row — transparent master gain (headroom) so boosts don't clip.
+    // Maps the dB value to the horizontal SliderTrack's 0..1 range.
+    HorizontalLayout {
+        spacing: Theme.pad-md;
+        alignment: stretch;
+
+        VerticalLayout {
+            alignment: center;
+            Text {
+                text: @tr("Preamp");
+                color: Theme.text;
+                font-size: Theme.font-size-md;
+            }
+        }
+        VerticalLayout {
+            alignment: center;
+            horizontal-stretch: 1;
+            SliderTrack {
+                value: root.preamp-to-frac(Equalizer.preamp);
+                is-disabled: !Equalizer.enabled;
+                seam-mask-color: Theme.surface0;
+                changed(v) => {
+                    Equalizer.set-preamp(root.frac-to-preamp(v));
+                }
+                committed(v) => {
+                    Equalizer.commit-preamp(root.frac-to-preamp(v));
+                }
+            }
+        }
+        VerticalLayout {
+            alignment: center;
+            Text {
+                // "dB" is a universal unit symbol — not translated.
+                text: (Equalizer.preamp > 0 ? "+" : "") + round(Equalizer.preamp) + " dB";
+                color: Equalizer.enabled ? Theme.subtext0 : Theme.overlay0;
+                font-size: Theme.font-size-sm;
+                min-width: 48px;
+                horizontal-alignment: right;
+            }
+        }
+    }
+
+    // Band sliders. Each column: dB readout, vertical slider, Hz label.
+    HorizontalLayout {
+        spacing: Theme.pad-sm;
+        alignment: stretch;
+
+        for label[i] in root.band-labels: VerticalLayout {
+            spacing: Theme.pad-xs;
+            horizontal-stretch: 1;
+
+            Text {
+                text: (Equalizer.band-gains[i] > 0 ? "+" : "") + round(Equalizer.band-gains[i]);
+                color: Equalizer.enabled ? Theme.subtext0 : Theme.overlay0;
+                font-size: Theme.font-size-sm;
+                horizontal-alignment: center;
+            }
+
+            EqBandSlider {
+                height: 150px;
+                value: Equalizer.band-gains[i];
+                min-db: Equalizer.min-gain;
+                max-db: Equalizer.max-gain;
+                is-disabled: !Equalizer.enabled;
+                changed(v) => { Equalizer.set-band(i, v); }
+                committed(v) => { Equalizer.commit-band(i, v); }
+            }
+
+            Text {
+                text: label;
+                color: Theme.subtext1;
+                font-size: Theme.font-size-sm;
+                horizontal-alignment: center;
+            }
+        }
+    }
+}
