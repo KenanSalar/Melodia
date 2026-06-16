@@ -136,10 +136,25 @@ impl AppState {
             s.is_muted = settings.playback.is_muted;
             s.pre_mute_volume = s.volume;
             s.gapless_enabled = settings.playback.gapless_playback;
+            s.playback_speed = settings.playback.playback_speed.clamp(
+                crate::player::state::MIN_SPEED,
+                crate::player::state::MAX_SPEED,
+            );
             let vol = s.effective_volume();
+            let speed = s.playback_speed;
             drop(s);
             rodio.set_volume(vol);
+            rodio.set_speed(speed);
         }
+
+        // Seed the graphic EQ from persisted settings before playback starts so
+        // the first track is already equalised when the EQ is enabled. EQ state
+        // lives on the Rodio backend (not `PlayerState`); `set_eq_gains` clamps
+        // and length-normalises the (possibly hand-edited) gain list, and the
+        // EQ ships off by default.
+        rodio.set_eq_gains(&settings.equalizer.eq_band_gains);
+        rodio.set_eq_preamp(settings.equalizer.eq_preamp);
+        rodio.set_eq_enabled(settings.equalizer.eq_enabled);
 
         let cover_cache: CoverCache = crate::media::artwork::new_cover_cache();
 

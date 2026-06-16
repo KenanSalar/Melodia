@@ -6,6 +6,7 @@ arrow_drop_down
 arrow_drop_up
 artist
 auto_awesome
+balance
 brush
 category
 check
@@ -65,6 +66,7 @@ search_off
 settings
 shield
 shuffle
+speed
 swap_horiz
 system_update
 theater_comedy

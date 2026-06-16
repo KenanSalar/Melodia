@@ -51,3 +51,20 @@ pub fn set_resume_on_startup(state: &AppState, on: bool) -> Result<(), AppError>
         settings.playback.resume_on_startup = on;
     })
 }
+
+/// Persist the user's chosen playback speed so it survives restarts
+/// (mirrors how repeat / shuffle / volume persist). The runtime effect
+/// (applying the multiplier to the live Rodio player) is done synchronously
+/// by the UI callback through `library::playback::player_set_playback_speed`
+/// *before* this disk write is scheduled. Clamped to the player's
+/// `MIN_SPEED..=MAX_SPEED` range here too so a hand-edited `settings.json`
+/// can't pin an out-of-range value.
+pub fn set_playback_speed(state: &AppState, speed: f64) -> Result<(), AppError> {
+    let speed = speed.clamp(
+        crate::player::state::MIN_SPEED,
+        crate::player::state::MAX_SPEED,
+    );
+    services::settings::mutate_settings(&state.paths, move |settings| {
+        settings.playback.playback_speed = speed;
+    })
+}

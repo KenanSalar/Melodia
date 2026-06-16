@@ -105,6 +105,11 @@ export global Player {
     callback seek(int);          // position in ms
     callback set-volume(int);    // 0..100, fires continuously during drag
     callback commit-volume();    // fires on slider release; persists to settings.json
+    // Playback-rate multiplier (e.g. 0.5, 1.0, 1.5). Fired by the speed
+    // flyout in the now-playing bar's overflow menu. Applies to the live
+    // player immediately AND persists to settings.json (speed survives
+    // restarts). The active value is read back via `vm.playback_speed`.
+    callback set-playback-speed(float);
     callback toggle-mute();
     callback toggle-shuffle();
     callback cycle-repeat();
@@ -119,6 +124,47 @@ export global Player {
     // drags **don't** bump this — they already raise the VolumePopup
     // chrome.
     in-out property <int> volume-hud-tick: 0;
+}
+
+// Equalizer: drives the graphic-EQ dialog (`Dialog.kind == "equalizer"`).
+// State is owned by Rust (`src/ui/equalizer.rs`): `enabled` + the `band-gains`
+// model are seeded from `settings.json` at boot and updated on every user
+// action; the dialog body reads them and fires the callbacks below. Each
+// callback applies to the live Rodio player AND (for non-drag actions, or on
+// drag release via `commit-band`) persists to `settings.json` — mirroring the
+// `set-volume` / `commit-volume` split.
+//
+// `band-gains` is a Rust-owned `Rc<VecModel<f32>>` (gain in dB per band,
+// low → high), length == `equalizer::NUM_BANDS` (10). `preset-idx` indexes the
+// dropdown: `0..PRESET_COUNT-1` are the built-in presets (Flat first), and
+// `PRESET_COUNT` (the last entry) is the synthetic "Custom" shown once the user
+// hand-edits a band. `min-gain` / `max-gain` are seeded from
+// `equalizer::{MIN,MAX}_GAIN_DB` by `install_equalizer` (Rust is the single
+// source of truth — no literals to drift here).
+export global Equalizer {
+    in-out property <bool> enabled;
+    in-out property <[float]> band-gains;
+    in-out property <int> preset-idx;
+    in property <float> min-gain;
+    in property <float> max-gain;
+
+    // Preamp / master gain (dB) — transparent headroom for boosting without
+    // clipping. `min-preamp` / `max-preamp` are seeded from
+    // `equalizer::{MIN,MAX}_PREAMP_DB` by `install_equalizer`.
+    in-out property <float> preamp;
+    in property <float> min-preamp;
+    in property <float> max-preamp;
+
+    callback set-enabled(bool);
+    // Live band change during a drag — apply to the player, don't persist.
+    callback set-band(int /*band index*/, float /*gain dB*/);
+    // Drag release — persist the current curve.
+    callback commit-band(int /*band index*/, float /*gain dB*/);
+    callback select-preset(int /*dropdown index*/);
+    callback reset();
+    // Preamp: live during drag (apply only), persist on release — same split.
+    callback set-preamp(float /*dB*/);
+    callback commit-preamp(float /*dB*/);
 }
 
 // Nav: UI-only, no Rust subscription needed in Phase 2.

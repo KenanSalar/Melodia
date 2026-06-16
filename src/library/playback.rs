@@ -285,6 +285,34 @@ pub fn player_set_gapless(ctx: &PlaybackContext, enabled: bool) -> Result<(), Ap
     Ok(())
 }
 
+// --- Graphic equalizer -----------------------------------------------------
+//
+// EQ state lives on the Rodio backend's lock-free shared cell, not the
+// `PlayerState` machine, so these bypass `with_state_emit` / `execute_actions`
+// and write the shared cell directly — the same place `set_volume`/`set_speed`
+// ultimately land. They're synchronous and infallible (no decode, no I/O), and
+// apply to both the playing track and the gapless-preloaded one at once.
+
+/// Toggle the graphic equalizer on the live player.
+pub fn player_set_eq_enabled(ctx: &PlaybackContext, enabled: bool) {
+    ctx.rodio.set_eq_enabled(enabled);
+}
+
+/// Set a single EQ band's gain (dB) on the live player.
+pub fn player_set_eq_band(ctx: &PlaybackContext, index: usize, gain_db: f32) {
+    ctx.rodio.set_eq_band(index, gain_db);
+}
+
+/// Replace all EQ band gains on the live player (preset / reset / hydration).
+pub fn player_set_eq_gains(ctx: &PlaybackContext, gains: &[f32]) {
+    ctx.rodio.set_eq_gains(gains);
+}
+
+/// Set the EQ preamp / master gain (dB) on the live player.
+pub fn player_set_eq_preamp(ctx: &PlaybackContext, preamp_db: f32) {
+    ctx.rodio.set_eq_preamp(preamp_db);
+}
+
 #[cfg(test)]
 #[path = "tests/playback_tests.rs"]
 mod tests;

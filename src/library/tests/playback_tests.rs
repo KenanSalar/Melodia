@@ -337,8 +337,8 @@ fn set_playback_speed_clamps_min() {
 fn set_playback_speed_clamps_max() {
     let mut state = PlayerState::default();
     let actions = state.build_set_speed_actions(10.0);
-    assert!((state.playback_speed - 4.0).abs() < f64::EPSILON);
-    assert_eq!(actions, vec![PlayerAction::SetSpeed(4.0)]);
+    assert!((state.playback_speed - 2.0).abs() < f64::EPSILON);
+    assert_eq!(actions, vec![PlayerAction::SetSpeed(2.0)]);
 }
 
 #[test]

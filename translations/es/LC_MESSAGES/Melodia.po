@@ -132,6 +132,9 @@ msgstr "Cola"
 msgid "More"
 msgstr "Más opciones"
 
+msgid "Speed"
+msgstr "Velocidad"
+
 msgid "No track playing"
 msgstr "No hay ninguna pista en reproducción"
 
@@ -783,9 +786,6 @@ msgstr "Actualización instalada"
 msgid "Restart Melodia to start using the new version."
 msgstr "Reinicia Melodia para usar la nueva versión."
 
-msgid "Restart"
-msgstr "Reiniciar"
-
 msgid "Update failed"
 msgstr "Error al actualizar"
 
@@ -826,3 +826,71 @@ msgstr "Disponible solo mientras el icono de la bandeja del sistema esté activo
 
 msgid "Exit miniplayer"
 msgstr "Salir del miniplayer"
+
+# ---- About -------------------------------------------------------------------
+
+# Settings → About section (`ui/views/settings/about-section.slint`): app
+# name + version, authorship, source-repository link, and license.
+msgid "About"
+msgstr "Acerca de"
+
+# Translators: `{}` is the app version string (e.g. "0.1.0").
+msgid "Version {}"
+msgstr "Versión {}"
+
+# Translators: `{}` is the author's name ("Kenan Salar") — a proper noun,
+# passed verbatim and never translated.
+msgid "Made by {}"
+msgstr "Creado por {}"
+
+msgid "License"
+msgstr "Licencia"
+
+# Graphic equalizer
+msgid "On"
+msgstr "Activado"
+
+msgid "Off"
+msgstr "Desactivado"
+
+msgid "Done"
+msgstr "Listo"
+
+msgid "Reset"
+msgstr "Restablecer"
+
+msgid "Enable equalizer"
+msgstr "Activar ecualizador"
+
+msgid "Flat"
+msgstr "Plano"
+
+msgid "Rock"
+msgstr "Rock"
+
+msgid "Pop"
+msgstr "Pop"
+
+msgid "Jazz"
+msgstr "Jazz"
+
+msgid "Classical"
+msgstr "Clásica"
+
+msgid "Bass Boost"
+msgstr "Refuerzo de graves"
+
+msgid "Treble Boost"
+msgstr "Refuerzo de agudos"
+
+msgid "Vocal"
+msgstr "Voz"
+
+msgid "Electronic"
+msgstr "Electrónica"
+
+msgid "Custom"
+msgstr "Personalizado"
+
+msgid "Preamp"
+msgstr "Preamplificación"

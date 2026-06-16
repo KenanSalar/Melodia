@@ -1,3 +1,4 @@
+pub mod about;
 pub mod albums;
 pub mod appearance;
 pub mod artists;
@@ -8,6 +9,7 @@ pub mod detail_artwork;
 pub mod detail_filter;
 pub mod detail_selection;
 pub mod detail_view;
+pub mod equalizer;
 pub mod event_sink;
 pub mod favorites;
 pub mod file_watching;

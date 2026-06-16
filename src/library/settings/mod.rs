@@ -17,6 +17,7 @@
 //! writes to it serialize cleanly.
 
 pub mod appearance;
+pub mod equalizer;
 pub mod folders;
 pub mod playback;
 pub mod updates;
@@ -25,11 +26,14 @@ pub mod view;
 pub use appearance::{
     set_appearance, set_corner_radius, set_dynamic_color_style, set_match_unfocused_to_system_bg,
 };
+pub use equalizer::{set_eq_band_gains_and_preset, set_eq_enabled, set_eq_preamp};
 pub use folders::{
     add_folder, get_folders, reconcile_watched_folders, remove_folder, scan_folder,
     scan_folder_internal, set_folder_watching_enabled, toggle_folder_watching,
 };
-pub use playback::{set_gapless_playback, set_play_button_animation, set_resume_on_startup};
+pub use playback::{
+    set_gapless_playback, set_play_button_animation, set_playback_speed, set_resume_on_startup,
+};
 pub use updates::{
     record_check_failure, record_check_success, reset_skipped_release, set_auto_check_enabled,
     set_skipped_release,
