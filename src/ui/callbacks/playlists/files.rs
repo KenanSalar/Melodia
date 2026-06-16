@@ -139,7 +139,8 @@ pub fn wire(
     }
 
     // request-export-playlists: fetch all playlists, fill the picker model
-    // (all selected), then open the dialog (chrome was set inline in Slint).
+    // (none selected — the user opts in), then open the dialog (chrome was
+    // set inline in Slint).
     {
         let s = state.clone();
         let weak = weak.clone();

@@ -946,11 +946,10 @@ msgstr[1] "{n} brani aggiunti"
 msgid "Saved to {}"
 msgstr "Salvato in {}"
 
-msgid "{} tracks added"
-msgstr "{} brani aggiunti"
-
-msgid "{} tracks added · {} missing"
-msgstr "{} brani aggiunti · {} mancanti"
+msgid "{n} track added · {} missing"
+msgid_plural "{n} tracks added · {} missing"
+msgstr[0] "{n} brano aggiunto · {} mancanti"
+msgstr[1] "{n} brani aggiunti · {} mancanti"
 
 msgid "{n} playlist imported"
 msgid_plural "{n} playlists imported"

@@ -949,11 +949,10 @@ msgstr[1] "{n} parça eklendi"
 msgid "Saved to {}"
 msgstr "{} konumuna kaydedildi"
 
-msgid "{} tracks added"
-msgstr "{} parça eklendi"
-
-msgid "{} tracks added · {} missing"
-msgstr "{} parça eklendi · {} eksik"
+msgid "{n} track added · {} missing"
+msgid_plural "{n} tracks added · {} missing"
+msgstr[0] "{n} parça eklendi · {} eksik"
+msgstr[1] "{n} parça eklendi · {} eksik"
 
 msgid "{n} playlist imported"
 msgid_plural "{n} playlists imported"

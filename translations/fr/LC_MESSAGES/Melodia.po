@@ -946,11 +946,10 @@ msgstr[1] "{n} pistes ajoutées"
 msgid "Saved to {}"
 msgstr "Enregistré dans {}"
 
-msgid "{} tracks added"
-msgstr "{} pistes ajoutées"
-
-msgid "{} tracks added · {} missing"
-msgstr "{} pistes ajoutées · {} introuvables"
+msgid "{n} track added · {} missing"
+msgid_plural "{n} tracks added · {} missing"
+msgstr[0] "{n} piste ajoutée · {} introuvables"
+msgstr[1] "{n} pistes ajoutées · {} introuvables"
 
 msgid "{n} playlist imported"
 msgid_plural "{n} playlists imported"

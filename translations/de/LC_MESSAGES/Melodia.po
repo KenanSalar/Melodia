@@ -955,11 +955,10 @@ msgstr[1] "{n} Lieder hinzugefügt"
 msgid "Saved to {}"
 msgstr "Gespeichert in {}"
 
-msgid "{} tracks added"
-msgstr "{} Lieder hinzugefügt"
-
-msgid "{} tracks added · {} missing"
-msgstr "{} Lieder hinzugefügt · {} fehlen"
+msgid "{n} track added · {} missing"
+msgid_plural "{n} tracks added · {} missing"
+msgstr[0] "{n} Lied hinzugefügt · {} fehlen"
+msgstr[1] "{n} Lieder hinzugefügt · {} fehlen"
 
 msgid "{n} playlist imported"
 msgid_plural "{n} playlists imported"

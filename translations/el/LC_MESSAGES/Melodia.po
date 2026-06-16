@@ -948,11 +948,10 @@ msgstr[1] "{n} κομμάτια προστέθηκαν"
 msgid "Saved to {}"
 msgstr "Αποθηκεύτηκε στο {}"
 
-msgid "{} tracks added"
-msgstr "{} κομμάτια προστέθηκαν"
-
-msgid "{} tracks added · {} missing"
-msgstr "{} κομμάτια προστέθηκαν · {} λείπουν"
+msgid "{n} track added · {} missing"
+msgid_plural "{n} tracks added · {} missing"
+msgstr[0] "{n} κομμάτι προστέθηκε · {} λείπουν"
+msgstr[1] "{n} κομμάτια προστέθηκαν · {} λείπουν"
 
 msgid "{n} playlist imported"
 msgid_plural "{n} playlists imported"

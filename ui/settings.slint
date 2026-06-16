@@ -362,9 +362,11 @@ export global Settings {
     }
     pure callback playlist-import-message(int /*tracks*/, int /*missing*/) -> string;
     playlist-import-message(tracks, missing) => {
+        // Pluralized on the track count (`{n}`); the no-missing branch reuses
+        // the same `{n} track(s) added` msgid as `add-to-playlist-message`.
         return missing > 0
-            ? @tr("{} tracks added · {} missing", tracks, missing)
-            : @tr("{} tracks added", tracks);
+            ? @tr("{n} track added · {} missing" | "{n} tracks added · {} missing" % tracks, missing)
+            : @tr("{n} track added" | "{n} tracks added" % tracks);
     }
     pure callback playlist-import-failed-title() -> string;
     playlist-import-failed-title => {

@@ -728,8 +728,8 @@ export global Playlists {
     callback import-playlists();
 
     // Open the Export picker dialog. Rust fetches all playlists, fills
-    // `Dialog.export-pick-rows` (all selected), then flips
-    // `Dialog.open = true` with `kind == "export-playlists"` — same
+    // `Dialog.export-pick-rows` (none selected — the user opts in), then
+    // flips `Dialog.open = true` with `kind == "export-playlists"` — same
     // populate-then-open shape as `request-add-to-playlist`.
     callback request-export-playlists();
 
@@ -984,7 +984,8 @@ export global Dialog {
 
     // Rows shown inside the Export-playlists picker (`kind ==
     // "export-playlists"`). Populated by Rust's `on_request_export_playlists`
-    // (all `selected: true`) before `open` is flipped. `export-select-all`
+    // (all `selected: false` — the user opts in) before `open` is flipped.
+    // `export-select-all`
     // mirrors the header "Select all" checkbox; `export-selected-count` is
     // maintained by Rust on every toggle so the footer's Export button can
     // disable when nothing is selected without iterating the model in Slint.
