@@ -134,7 +134,7 @@ pub fn install_equalizer(ui: &AppWindow, state: &AppState) {
         });
     }
 
-    // reset — flat curve, back to the "Flat" preset.
+    // reset — full return to neutral: flat curve, "Flat" preset, 0 dB preamp.
     {
         let state = state.clone();
         let model = model.clone();
@@ -142,9 +142,13 @@ pub fn install_equalizer(ui: &AppWindow, state: &AppState) {
         eq.on_reset(move || {
             let flat = [0.0_f32; equalizer::NUM_BANDS];
             model.set_vec(flat.to_vec());
-            library::playback::player_set_eq_gains(&state.playback_ctx(), &flat);
+            let ctx = state.playback_ctx();
+            library::playback::player_set_eq_gains(&ctx, &flat);
+            library::playback::player_set_eq_preamp(&ctx, 0.0);
             if let Some(ui) = weak.upgrade() {
-                ui.global::<Equalizer>().set_preset_idx(0);
+                let eq = ui.global::<Equalizer>();
+                eq.set_preset_idx(0);
+                eq.set_preamp(0.0);
             }
             let s = state.clone();
             state.runtime.spawn_blocking(move || {
@@ -154,6 +158,9 @@ pub fn install_equalizer(ui: &AppWindow, state: &AppState) {
                     equalizer::DEFAULT_PRESET.to_owned(),
                 ) {
                     log::warn!("persist eq band gains + preset: {e}");
+                }
+                if let Err(e) = library::settings::set_eq_preamp(&s, 0.0) {
+                    log::warn!("persist eq_preamp: {e}");
                 }
             });
         });

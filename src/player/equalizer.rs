@@ -62,10 +62,11 @@ const GAIN_EPSILON_DB: f32 = 0.05;
 /// a flat EQ with no preamp can still take the bit-identical bypass path.
 const PREAMP_EPSILON_DB: f32 = 0.01;
 
-// Safety limiter (feed-forward, soft-knee), applied to the EQ output. Tuned
-// like rodio's general-purpose `LimitSettings::default()`: transparent until
-// near full scale, then it pins peaks at the threshold. It only runs in the
-// active path, so EQ-off audio is never touched.
+// Safety limiter (feed-forward, soft-knee), applied to the EQ output. These are
+// rodio's general-purpose `LimitSettings::default()` values (-1 dBFS threshold,
+// 4 dB knee, 5 ms attack, 100 ms release): transparent until near full scale,
+// then it pins peaks at the threshold. It only runs in the active path, so
+// EQ-off audio is never touched.
 const LIMITER_THRESHOLD_DB: f32 = -1.0;
 const LIMITER_KNEE_DB: f32 = 4.0;
 const LIMITER_ATTACK_S: f32 = 0.005;
@@ -287,7 +288,8 @@ impl Limiter {
     }
 
     /// Advance the smoothed gain toward this frame's target and return it.
-    /// Falling level → fast attack; rising level → slow release.
+    /// Rising signal level → fast attack (gain falls quickly); falling level →
+    /// slow release (gain recovers gently).
     fn process(&mut self, peak: f32) -> f32 {
         let target = Self::target_gain(peak);
         let coeff = if target < self.gain { self.attack_coeff } else { self.release_coeff };
