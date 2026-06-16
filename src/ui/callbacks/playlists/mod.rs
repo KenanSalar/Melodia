@@ -11,13 +11,16 @@
 
 mod detail;
 mod dialog;
+mod files;
 mod grid;
 mod lifecycle;
 
+use std::rc::Rc;
 use std::sync::Arc;
 
 use crate::AppWindow;
 use crate::state::AppState;
+use crate::ui::notifications::NotificationsUi;
 use crate::ui::playlists::PlaylistsUi;
 
 /// Wire every `Playlists.*` / `PlaylistDetail.*` callback to its
@@ -30,4 +33,17 @@ pub fn wire_playlists(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playl
     detail::wire(ui, state, playlists_ui);
     dialog::wire(ui, state, playlists_ui);
     lifecycle::wire(ui, state, playlists_ui);
+}
+
+/// Wire the playlist import/export (M3U8) callbacks. Split out of
+/// [`wire_playlists`] because it needs the `Rc<NotificationsUi>` for
+/// completion toasts, which is created after the per-view wiring runs.
+/// Call once from `main.rs` after the notifications stack exists.
+pub fn wire_playlist_files(
+    ui: &AppWindow,
+    state: &AppState,
+    playlists_ui: &Arc<PlaylistsUi>,
+    notifications: &Rc<NotificationsUi>,
+) {
+    files::wire(ui, state, playlists_ui, notifications);
 }

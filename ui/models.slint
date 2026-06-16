@@ -179,17 +179,34 @@ export struct PlaylistGridRow {
 // "add-to-playlist"`). Built on the Rust side from `PlaylistStats` plus
 // the per-selection overlap count returned by
 // `library::playlists::count_tracks_in_playlists_for_selection`. The
-// picker grays + disables rows where `contained-count >=
+// picker is multi-select (mirrors the Export picker): the `selected` flag is
+// toggled via `Playlists.toggle-add-pick` (Rust `set_row_data`) and en-masse
+// via `Playlists.set-all-add-picks`; the Add dispatcher reads it back to
+// decide which playlists to add into. Rows where `contained-count >=
 // Dialog.pick-total-tracks` (every selected track is already in this
-// playlist), and shows an `X of Y already added` badge for partial
-// overlap. `artwork-path` feeds the row's 40 px thumbnail via
-// `Playlists.request-row-cover` — same 72 px LRU tier the track list
-// rows use, so there are no extra decodes.
+// playlist) are grayed + disabled (unselectable), with an `X of Y already
+// added` subtitle for partial overlap. `artwork-path` feeds the row's
+// thumbnail via `Playlists.request-row-cover` — same 72 px LRU tier the track
+// list rows use, so there are no extra decodes.
 export struct PlaylistPickRow {
     id: int,
     name: string,
     artwork_path: string,
     contained_count: int,
+    selected: bool,
+}
+
+// One row in the Export-playlists picker (`Dialog.kind ==
+// "export-playlists"`). Built on the Rust side from `PlaylistStats`. The
+// per-row `selected` flag is toggled via `Playlists.toggle-export-pick`
+// (Rust `set_row_data`) and en-masse via `Playlists.set-all-export-picks`;
+// the Export dispatcher reads it back to decide which playlists to write.
+export struct PlaylistExportPickRow {
+    id: int,
+    name: string,
+    artwork_path: string,
+    track_count: int,
+    selected: bool,
 }
 
 // `position_ms`, `duration_ms`, and `progress` deliberately live on the

@@ -2,7 +2,7 @@ import { PlayerVm, QueueVm, QueueRow, TrackListRow, FolderListRow,
          BrowseFolderRow, BreadcrumbRow, NotificationRow, TrackMetaRow,
          AlbumRow, AlbumGridRow, ArtistRow, ArtistGridRow,
          GenreRow, GenreGridRow,
-         PlaylistRow, PlaylistGridRow, PlaylistPickRow,
+         PlaylistRow, PlaylistGridRow, PlaylistPickRow, PlaylistExportPickRow,
          EntityStripRow } from "models.slint";
 import { Theme } from "theme.slint";
 
@@ -669,10 +669,17 @@ export global Playlists {
     callback apply-mosaic(int /*id*/, [string] /*paths*/);
     callback clear-artwork(int /*id*/);
 
-    // Add the given tracks to an existing playlist by id. Wired into
-    // every track row's Add-to-Playlist submenu so any track context can
-    // append into any playlist without leaving the current view.
-    callback add-tracks(int /*playlist_id*/, [int] /*track_ids*/);
+    // Add-to-Playlist picker row interactions — Rust mutates the VecModel
+    // (`set_row_data`) since Slint can't push/remove ergonomically.
+    // `toggle-add-pick` no-ops on disabled (fully-contained) rows;
+    // `set-all-add-picks` only flips the enabled rows.
+    callback toggle-add-pick(int /*playlist_id*/);
+    callback set-all-add-picks(bool /*selected*/);
+
+    // Fired by the `Dialog.accepted` dispatcher on Add. Rust reads the
+    // selected (enabled) rows off `Dialog.playlist-pick-rows` and adds
+    // `Dialog.pending-track-ids` into each, then toasts a summary.
+    callback add-tracks-to-selected();
 
     // Toggle a candidate artwork path in `Dialog.mosaic-selection`.
     // Rust handles the array mutation (Slint can't `push` / `remove`
@@ -709,6 +716,32 @@ export global Playlists {
         [int] /*track_ids*/,
         int /*exclude_playlist_id*/,
     );
+
+    // --- Import / export to M3U8 files ---------------------------------
+    // Header-pill actions on the Playlists view. Both are pure Rust flows
+    // (native rfd dialogs), so — unlike the create/rename dialogs — they
+    // don't write `Dialog.*` synchronously from the click handler and so
+    // don't risk Slint's property-recursion guard.
+
+    // Open a native multi-file picker (.m3u8/.m3u), import each into a new
+    // playlist, then toast a summary.
+    callback import-playlists();
+
+    // Open the Export picker dialog. Rust fetches all playlists, fills
+    // `Dialog.export-pick-rows` (none selected — the user opts in), then
+    // flips `Dialog.open = true` with `kind == "export-playlists"` — same
+    // populate-then-open shape as `request-add-to-playlist`.
+    callback request-export-playlists();
+
+    // Fired by the `Dialog.accepted` dispatcher on Export. Rust reads the
+    // selected rows off `Dialog.export-pick-rows`, opens a folder picker,
+    // writes one `.m3u8` per selected playlist, and toasts.
+    callback export-selected-playlists();
+
+    // Export-picker row interactions — Rust mutates the VecModel
+    // (`set_row_data`) since Slint can't push/remove ergonomically.
+    callback toggle-export-pick(int /*playlist_id*/);
+    callback set-all-export-picks(bool /*selected*/);
 }
 
 // PlaylistDetail: drives the full Playlist Detail view. `playlist-id ==
@@ -931,8 +964,8 @@ export global Dialog {
     // dispatch.
     //
     // Also reused by the `"add-to-playlist"` picker dialog as the canonical
-    // list of tracks being added — each row commits with
-    // `Playlists.add-tracks(r.id, Dialog.pending-track-ids)`.
+    // list of tracks being added — the Add dispatcher adds these into every
+    // selected playlist via `Playlists.add-tracks-to-selected()`.
     in-out property <[int]> pending-track-ids;
 
     // Rows shown inside the Add-to-Playlist picker (`kind ==
@@ -940,9 +973,26 @@ export global Dialog {
     // `on_request_add_to_playlist` once `library::playlists::get_playlists`
     // + `count_tracks_in_playlists_for_selection` resolve, then `open` is
     // flipped — so the dialog opens already populated (mirrors the
-    // `request-edit-artwork` flow). Cleared in `closed` below so the next
-    // open starts from a clean model.
+    // `request-edit-artwork` flow). The picker is multi-select: `add-select-all`
+    // mirrors the header "Select all" checkbox and `add-selected-count` is
+    // maintained by Rust on every toggle (counting only enabled rows) so the
+    // footer's Add button can disable when nothing is selected without
+    // iterating the model in Slint. All three cleared in `closed` below.
     in-out property <[PlaylistPickRow]> playlist-pick-rows;
+    in-out property <bool> add-select-all: false;
+    in-out property <int> add-selected-count: 0;
+
+    // Rows shown inside the Export-playlists picker (`kind ==
+    // "export-playlists"`). Populated by Rust's `on_request_export_playlists`
+    // (all `selected: false` — the user opts in) before `open` is flipped.
+    // `export-select-all`
+    // mirrors the header "Select all" checkbox; `export-selected-count` is
+    // maintained by Rust on every toggle so the footer's Export button can
+    // disable when nothing is selected without iterating the model in Slint.
+    // All three cleared in `closed` below.
+    in-out property <[PlaylistExportPickRow]> export-pick-rows;
+    in-out property <bool> export-select-all: false;
+    in-out property <int> export-selected-count: 0;
 
     // Size of `pending-track-ids` at the moment the picker was opened —
     // cached so picker rows can derive `disabled` (`contained-count >=
@@ -1019,6 +1069,14 @@ export global Dialog {
             }
         } else if (root.kind == "remove-playlist-selected") {
             PlaylistDetail.remove-selected();
+        } else if (root.kind == "export-playlists") {
+            // Rust reads the selected rows off `export-pick-rows`, then
+            // opens the folder picker and writes the files.
+            Playlists.export-selected-playlists();
+        } else if (root.kind == "add-to-playlist") {
+            // Rust reads the selected (enabled) rows off `playlist-pick-rows`
+            // and adds `pending-track-ids` into each, then toasts.
+            Playlists.add-tracks-to-selected();
         }
     }
     cancelled => { }
@@ -1053,7 +1111,13 @@ export global Dialog {
         // Pairs with the Rust-side `heap_trim::trim()` registered for
         // `Dialog.closed` in `callbacks/playlists.rs`.
         root.playlist-pick-rows = [];
+        root.add-select-all = false;
+        root.add-selected-count = 0;
         root.pick-total-tracks = 0;
+        // Export picker state.
+        root.export-pick-rows = [];
+        root.export-select-all = false;
+        root.export-selected-count = 0;
         // Chrome / labels — clearing these lets the conditional message
         // Text and Cancel button (`if Dialog.message != ""` /
         // `if Dialog.cancel-label != ""` in `dialog.slint`) unmount

@@ -266,6 +266,11 @@ fn main() -> AppResult<()> {
     // file-watcher toggle.
     let notifications = boot::ui_setup::install_library_settings_and_friends(&app, &state)?;
 
+    // 5d5. Playlist import/export (M3U8) header pills. Wired here — after
+    // both the playlists UI handle and the notifications stack exist —
+    // because the completion toasts need the `Rc<NotificationsUi>`.
+    ui::callbacks::wire_playlist_files(&app, &state, &views.playlists_ui, &notifications);
+
     // 5e. Appearance.
     let appearance_handles = match ui::appearance::install(&app, &state) {
         Ok(h) => Some(h),

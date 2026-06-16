@@ -14,6 +14,7 @@ pub mod favorites;
 pub mod genres;
 pub mod import;
 pub mod playback;
+pub mod playlist_files;
 pub mod playlists;
 pub mod queue;
 pub mod search;

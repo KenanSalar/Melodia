@@ -131,6 +131,27 @@ pub async fn get_playlist_tracks_for_list(
     Ok(tracks)
 }
 
+/// Slim projection for M3U export — `file_path`, `file_hash`, title, artist,
+/// `duration_ms` in playlist order. Far cheaper than `get_playlist_tracks`
+/// (full `Track`) which the export path doesn't need.
+pub async fn get_playlist_tracks_for_export(
+    db: &DbPool,
+    playlist_id: i64,
+) -> Result<Vec<track::PlaylistExportRow>, AppError> {
+    let cols = track::playlist_export_columns_prefixed("t");
+    let sql = format!(
+        "SELECT {cols} FROM tracks t \
+         JOIN playlist_items pi ON pi.track_id = t.id \
+         WHERE pi.playlist_id = ? \
+         ORDER BY pi.position ASC"
+    );
+    let tracks = sqlx::query_as::<_, track::PlaylistExportRow>(&sql)
+        .bind(playlist_id)
+        .fetch_all(db.read())
+        .await?;
+    Ok(tracks)
+}
+
 pub async fn add_tracks_to_playlist(
     db: &DbPool,
     playlist_id: i64,
