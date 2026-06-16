@@ -98,11 +98,10 @@ pub fn install_equalizer(ui: &AppWindow, state: &AppState) {
             let gains: Vec<f32> = model.iter().collect();
             let s = state.clone();
             state.runtime.spawn_blocking(move || {
-                if let Err(e) = library::settings::set_eq_band_gains(&s, &gains) {
-                    log::warn!("persist eq_band_gains: {e}");
-                }
-                if let Err(e) = library::settings::set_eq_selected_preset(&s, "Custom".to_owned()) {
-                    log::warn!("persist eq_selected_preset: {e}");
+                if let Err(e) =
+                    library::settings::set_eq_band_gains_and_preset(&s, &gains, "Custom".to_owned())
+                {
+                    log::warn!("persist eq band gains + preset: {e}");
                 }
             });
         });
@@ -122,11 +121,8 @@ pub fn install_equalizer(ui: &AppWindow, state: &AppState) {
             library::playback::player_set_eq_gains(&state.playback_ctx(), &gains);
             let s = state.clone();
             state.runtime.spawn_blocking(move || {
-                if let Err(e) = library::settings::set_eq_band_gains(&s, &gains) {
-                    log::warn!("persist eq_band_gains: {e}");
-                }
-                if let Err(e) = library::settings::set_eq_selected_preset(&s, name) {
-                    log::warn!("persist eq_selected_preset: {e}");
+                if let Err(e) = library::settings::set_eq_band_gains_and_preset(&s, &gains, name) {
+                    log::warn!("persist eq band gains + preset: {e}");
                 }
             });
         });
@@ -146,13 +142,12 @@ pub fn install_equalizer(ui: &AppWindow, state: &AppState) {
             }
             let s = state.clone();
             state.runtime.spawn_blocking(move || {
-                if let Err(e) = library::settings::set_eq_band_gains(&s, &flat) {
-                    log::warn!("persist eq_band_gains: {e}");
-                }
-                if let Err(e) =
-                    library::settings::set_eq_selected_preset(&s, equalizer::DEFAULT_PRESET.to_owned())
-                {
-                    log::warn!("persist eq_selected_preset: {e}");
+                if let Err(e) = library::settings::set_eq_band_gains_and_preset(
+                    &s,
+                    &flat,
+                    equalizer::DEFAULT_PRESET.to_owned(),
+                ) {
+                    log::warn!("persist eq band gains + preset: {e}");
                 }
             });
         });
