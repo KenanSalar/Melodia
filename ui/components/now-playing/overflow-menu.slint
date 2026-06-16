@@ -1,6 +1,6 @@
 import { Theme } from "../../theme.slint";
 import { Settings } from "../../settings.slint";
-import { Player, WindowChrome, Queue, PopupHighlight } from "../../globals.slint";
+import { Player, WindowChrome, Queue, PopupHighlight, Dialog, Equalizer } from "../../globals.slint";
 import { IconButton } from "../icon-button.slint";
 import { MaterialIcon } from "../material-icon.slint";
 import { PopupSurface } from "../popup-surface.slint";
@@ -116,12 +116,12 @@ export component OverflowMenu inherits Rectangle {
         + ((WindowChrome.always-on-top-supported && Settings.overflow-pin) ? 1 : 0)
         + (Settings.overflow-queue ? 1 : 0);
 
-    // Menu column height = 36 px per row (the permanent speed row +
-    // overflowed buttons) + 8 px inner pad + 2 px border + 2 px slack.
-    // (The content-driven *width* `menu-w` is declared on the PopupWindow
-    // below — Slint forbids the enclosing component from reading a property
-    // *inside* a PopupWindow, so it can't live up here.)
-    property <length> menu-h: 36px * (1 + root.overflow-count) + 12px;
+    // Menu column height = 36 px per row (the two permanent rows — Speed and
+    // Equalizer — plus overflowed buttons) + 8 px inner pad + 2 px border +
+    // 2 px slack. (The content-driven *width* `menu-w` is declared on the
+    // PopupWindow below — Slint forbids the enclosing component from reading a
+    // property *inside* a PopupWindow, so it can't live up here.)
+    property <length> menu-h: 36px * (2 + root.overflow-count) + 12px;
 
     // Speed flyout geometry. Must match the preset count in
     // `speed-flyout.slint` (8 rows: 0.25× … 2×) — each 32 px + the same 12 px
@@ -255,6 +255,30 @@ export component OverflowMenu inherits Rectangle {
                     clicked => {
                         root.speed-flyout-open = !root.speed-flyout-open;
                         PopupHighlight.id = "overflow";
+                    }
+                }
+
+                // Permanent Equalizer row — opens the reusable graphic-EQ
+                // dialog. Closes the popup (a modal dialog takes over) and
+                // populates the `Dialog` global inline; the EQ apply/persist
+                // wiring lives on the `Equalizer` global. The "On"/"Off"
+                // trailing text mirrors the live enabled state.
+                OverflowRow {
+                    icon: "graphic_eq";
+                    label: @tr("Equalizer");
+                    trailing-text: Equalizer.enabled ? @tr("On") : @tr("Off");
+                    active: Equalizer.enabled;
+                    clicked => {
+                        pop.close();
+                        root.speed-flyout-open = false;
+                        PopupHighlight.id = "";
+                        Dialog.kind = "equalizer";
+                        Dialog.title = @tr("Equalizer");
+                        Dialog.message = "";
+                        Dialog.confirm-label = @tr("Done");
+                        Dialog.cancel-label = "";
+                        Dialog.destructive = false;
+                        Dialog.open = true;
                     }
                 }
 

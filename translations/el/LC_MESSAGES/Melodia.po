@@ -847,3 +847,49 @@ msgstr "Δημιουργήθηκε από {}"
 
 msgid "License"
 msgstr "Άδεια"
+
+# Graphic equalizer
+msgid "On"
+msgstr "Ενεργό"
+
+msgid "Off"
+msgstr "Ανενεργό"
+
+msgid "Done"
+msgstr "Τέλος"
+
+msgid "Reset"
+msgstr "Επαναφορά"
+
+msgid "Enable equalizer"
+msgstr "Ενεργοποίηση ισοσταθμιστή"
+
+msgid "Flat"
+msgstr "Επίπεδο"
+
+msgid "Rock"
+msgstr "Rock"
+
+msgid "Pop"
+msgstr "Pop"
+
+msgid "Jazz"
+msgstr "Jazz"
+
+msgid "Classical"
+msgstr "Κλασική"
+
+msgid "Bass Boost"
+msgstr "Ενίσχυση μπάσων"
+
+msgid "Treble Boost"
+msgstr "Ενίσχυση πρίμων"
+
+msgid "Vocal"
+msgstr "Φωνητικά"
+
+msgid "Electronic"
+msgstr "Ηλεκτρονική"
+
+msgid "Custom"
+msgstr "Προσαρμοσμένο"
