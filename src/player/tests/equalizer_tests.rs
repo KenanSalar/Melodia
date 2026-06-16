@@ -7,8 +7,8 @@ use rodio::source::SeekError;
 use rodio::{ChannelCount, Sample, SampleRate, Source};
 
 use super::{
-    BAND_FREQS, EqShared, EqSource, MAX_GAIN_DB, MIN_GAIN_DB, NUM_BANDS, PRESETS, clamp_gain,
-    normalize_gains, preset_index,
+    BAND_FREQS, EqShared, EqSource, MAX_GAIN_DB, MAX_PREAMP_DB, MIN_GAIN_DB, MIN_PREAMP_DB,
+    NUM_BANDS, PRESETS, clamp_gain, clamp_preamp, normalize_gains, preset_index,
 };
 
 // --- helpers ---------------------------------------------------------------
@@ -213,6 +213,50 @@ fn live_gain_change_is_observed_via_generation() {
     let tail: Vec<f32> = src.collect();
     assert!(tail.iter().all(|s| s.is_finite()));
     assert_ne!(bits(&tail), bits(&flat_input[256..]), "a live gain change must take effect");
+}
+
+#[test]
+fn preamp_clamps_and_roundtrips() {
+    assert!(approx(clamp_preamp(0.0), 0.0));
+    assert!(approx(clamp_preamp(99.0), MAX_PREAMP_DB));
+    assert!(approx(clamp_preamp(-99.0), MIN_PREAMP_DB));
+    assert!(approx(clamp_preamp(f32::NAN), 0.0));
+
+    let shared = EqShared::new(true, &[0.0; NUM_BANDS]);
+    shared.set_preamp(99.0);
+    assert!(approx(shared.preamp(), MAX_PREAMP_DB));
+    shared.set_preamp(-3.0);
+    assert!(approx(shared.preamp(), -3.0));
+}
+
+#[test]
+fn preamp_scales_a_flat_curve() {
+    // Flat bands but a -6 dB preamp: not bypassed, output is the input scaled by
+    // the linear gain (low enough that the limiter never engages).
+    let input = ramp(512);
+    let factor = 10.0_f32.powf(-6.0 / 20.0);
+
+    let shared = EqShared::new(true, &[0.0; NUM_BANDS]);
+    shared.set_preamp(-6.0);
+    let out: Vec<f32> = EqSource::new(TestSource::new(input.clone(), 2, 44_100), shared).collect();
+
+    assert_ne!(bits(&out), bits(&input), "a non-zero preamp must change a flat curve");
+    assert!(out.iter().zip(&input).all(|(o, i)| approx(*o, *i * factor)));
+}
+
+#[test]
+fn limiter_keeps_heavy_boost_within_full_scale() {
+    // Max boost on every band + max preamp on a near-full-scale signal would
+    // blow well past ±1.0 without protection; the preamp/limiter/clamp chain
+    // must keep every output sample inside full scale.
+    let input = ramp(4096);
+    let shared = EqShared::new(true, &[MAX_GAIN_DB; NUM_BANDS]);
+    shared.set_preamp(MAX_PREAMP_DB);
+    let out: Vec<f32> = EqSource::new(TestSource::new(input, 2, 44_100), shared).collect();
+
+    assert!(out.iter().all(|s| s.is_finite()));
+    assert!(out.iter().all(|s| s.abs() <= 1.0 + 1e-6), "output must not exceed full scale");
+    assert!(out.iter().any(|s| s.abs() > 0.01), "output must not be silent");
 }
 
 #[test]

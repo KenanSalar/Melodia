@@ -891,3 +891,6 @@ msgstr "Elettronica"
 
 msgid "Custom"
 msgstr "Personalizzato"
+
+msgid "Preamp"
+msgstr "Preamplificazione"

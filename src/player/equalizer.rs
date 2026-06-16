@@ -4,21 +4,26 @@
 //! peaking/parametric filters — so a real graphic EQ can't be built from its
 //! primitives. This module provides:
 //!
-//! - [`EqShared`]: lock-free state (per-band gains + an enabled flag) read on
-//!   the audio thread. The library/UI layer mutates it; the audio thread polls
-//!   a generation counter and only recomputes coefficients when it changes.
+//! - [`EqShared`]: lock-free state (per-band gains, a preamp, an enabled flag)
+//!   read on the audio thread. The library/UI layer mutates it; the audio thread
+//!   polls a generation counter and only recomputes coefficients on change.
 //! - [`EqSource`]: a custom Rodio [`Source`] wrapping a decoder. Each sample
-//!   runs through a cascade of ten `Type::PeakingEQ` biquads — one
-//!   [`DirectForm1`] per band, **per channel** (rodio's own `BltFilter` keeps a
-//!   single filter state across interleaved channels, which is part of why it's
-//!   "probably buggy"; we keep independent per-channel state).
+//!   runs through a preamp gain then a cascade of ten `Type::PeakingEQ` biquads
+//!   — one [`DirectForm1`] per band, **per channel** (rodio's own `BltFilter`
+//!   keeps a single filter state across interleaved channels, which is part of
+//!   why it's "probably buggy"; we keep independent per-channel state). A
+//!   coupled soft-knee peak [`Limiter`] then catches any residual peaks so heavy
+//!   boosts compress instead of hard-clipping.
 //!
 //! `DirectForm1` is used (not `DirectForm2Transposed`) because its delay line
 //! holds past inputs/outputs that stay valid when coefficients change at
 //! runtime, so live slider drags swap coefficients without injecting transients.
 //!
-//! When the EQ is disabled or every band sits at unity gain, [`EqSource`] is a
-//! transparent passthrough — **zero added DSP cost in the default-off state**.
+//! Clip protection is two-stage and standard for graphic EQs: a **preamp**
+//! (transparent linear headroom the user controls) plus a **limiter** (an
+//! automatic safety net). Both run only in the active path — when the EQ is
+//! disabled, or every band is flat *and* the preamp is 0 dB, [`EqSource`] is a
+//! transparent per-sample passthrough (**bit-identical, zero added DSP cost**).
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
@@ -40,6 +45,11 @@ pub const BAND_FREQS: [f32; NUM_BANDS] = [
 pub const MIN_GAIN_DB: f32 = -12.0;
 pub const MAX_GAIN_DB: f32 = 12.0;
 
+/// Preamp (master input gain) range, in decibels. Asymmetric: generous cut for
+/// headroom after boosting, a little boost for makeup gain. 0 dB is unity.
+pub const MIN_PREAMP_DB: f32 = -12.0;
+pub const MAX_PREAMP_DB: f32 = 6.0;
+
 /// Quality factor for the peaking filters. ~1.4 gives musically sensible
 /// overlap for octave-spaced bands without ringing.
 const BAND_Q: f32 = 1.41;
@@ -47,6 +57,19 @@ const BAND_Q: f32 = 1.41;
 /// Bands within this many dB of unity are treated as off (skipped in the
 /// filter chain) so a near-flat EQ stays close to free.
 const GAIN_EPSILON_DB: f32 = 0.05;
+
+/// A preamp within this many dB of unity is treated as 0 dB (no gain stage), so
+/// a flat EQ with no preamp can still take the bit-identical bypass path.
+const PREAMP_EPSILON_DB: f32 = 0.01;
+
+// Safety limiter (feed-forward, soft-knee), applied to the EQ output. Tuned
+// like rodio's general-purpose `LimitSettings::default()`: transparent until
+// near full scale, then it pins peaks at the threshold. It only runs in the
+// active path, so EQ-off audio is never touched.
+const LIMITER_THRESHOLD_DB: f32 = -1.0;
+const LIMITER_KNEE_DB: f32 = 4.0;
+const LIMITER_ATTACK_S: f32 = 0.005;
+const LIMITER_RELEASE_S: f32 = 0.100;
 
 /// A named gain curve. `PRESETS` order is load-bearing: the Slint preset
 /// dropdown lists the same names as inline `@tr` literals in this order, and
@@ -87,6 +110,16 @@ pub fn clamp_gain(db: f32) -> f32 {
     }
 }
 
+/// Clamp the preamp into the supported range.
+#[must_use]
+pub fn clamp_preamp(db: f32) -> f32 {
+    if db.is_nan() {
+        0.0
+    } else {
+        db.clamp(MIN_PREAMP_DB, MAX_PREAMP_DB)
+    }
+}
+
 /// Coerce an arbitrary (possibly hand-edited / wrong-length) gain list into a
 /// validated `[f32; NUM_BANDS]`: pad missing bands with 0, drop extras, clamp.
 #[must_use]
@@ -100,12 +133,18 @@ pub fn preset_index(name: &str) -> Option<usize> {
     PRESETS.iter().position(|p| p.name == name)
 }
 
+/// Convert a decibel value to a linear amplitude factor.
+fn db_to_linear(db: f32) -> f32 {
+    10.0_f32.powf(db / 20.0)
+}
+
 /// Lock-free equalizer state shared between the control layer (writer) and the
-/// audio thread (reader). Gains are stored as `f32` bit patterns in atomics;
-/// every mutation bumps `generation` so [`EqSource`] knows to recompute.
+/// audio thread (reader). Gains / preamp are stored as `f32` bit patterns in
+/// atomics; every mutation bumps `generation` so [`EqSource`] knows to recompute.
 pub struct EqShared {
     enabled: AtomicBool,
     gains_bits: [AtomicU32; NUM_BANDS],
+    preamp_bits: AtomicU32,
     generation: AtomicU64,
 }
 
@@ -113,12 +152,14 @@ impl EqShared {
     /// Build shared state seeded from persisted settings. `generation` starts
     /// at 1 so a freshly constructed [`EqSource`] (which seeds its cached
     /// generation to a different value) always rebuilds before its first sample.
+    /// The preamp starts at unity (0 dB); seed it separately via [`set_preamp`].
     #[must_use]
     pub fn new(enabled: bool, gains: &[f32]) -> Arc<Self> {
         let norm = normalize_gains(gains);
         Arc::new(Self {
             enabled: AtomicBool::new(enabled),
             gains_bits: std::array::from_fn(|i| AtomicU32::new(norm[i].to_bits())),
+            preamp_bits: AtomicU32::new(0.0_f32.to_bits()),
             generation: AtomicU64::new(1),
         })
     }
@@ -150,6 +191,11 @@ impl EqShared {
         self.bump();
     }
 
+    pub fn set_preamp(&self, db: f32) {
+        self.preamp_bits.store(clamp_preamp(db).to_bits(), Ordering::Relaxed);
+        self.bump();
+    }
+
     #[must_use]
     pub fn enabled(&self) -> bool {
         self.enabled.load(Ordering::Relaxed)
@@ -168,6 +214,11 @@ impl EqShared {
     }
 
     #[must_use]
+    pub fn preamp(&self) -> f32 {
+        f32::from_bits(self.preamp_bits.load(Ordering::Relaxed))
+    }
+
+    #[must_use]
     fn generation(&self) -> u64 {
         self.generation.load(Ordering::Acquire)
     }
@@ -180,12 +231,77 @@ fn identity_coeffs() -> Coefficients<f32> {
     Coefficients { a1: 0.0, a2: 0.0, b0: 1.0, b1: 0.0, b2: 0.0 }
 }
 
+/// One-pole smoothing coefficient for a time constant at a given update rate:
+/// the smoothed value moves `(1 - coeff)` of the way to its target each update.
+fn smoothing_coeff(time_s: f32, rate: f32) -> f32 {
+    if rate > 0.0 && time_s > 0.0 {
+        (-1.0 / (time_s * rate)).exp()
+    } else {
+        0.0
+    }
+}
+
+/// Soft-knee feed-forward peak limiter. Computes one gain per frame from the
+/// frame's peak magnitude and smooths it with separate attack/release times, so
+/// boosts are turned down cleanly (no added harmonics) rather than hard-clipped.
+/// A single coupled gain is applied across all channels to preserve stereo
+/// imaging — matching rodio's limiter design (Giannoulis et al. 2012).
+struct Limiter {
+    /// Current smoothed linear gain (≤ 1.0); starts at unity.
+    gain: f32,
+    attack_coeff: f32,
+    release_coeff: f32,
+}
+
+impl Limiter {
+    fn new(frame_rate: f32) -> Self {
+        Self {
+            gain: 1.0,
+            attack_coeff: smoothing_coeff(LIMITER_ATTACK_S, frame_rate),
+            release_coeff: smoothing_coeff(LIMITER_RELEASE_S, frame_rate),
+        }
+    }
+
+    fn reset(&mut self) {
+        self.gain = 1.0;
+    }
+
+    /// Target gain (linear, ≤ 1.0) for a peak magnitude — the soft-knee
+    /// limiter curve with an infinite ratio above the knee.
+    fn target_gain(peak: f32) -> f32 {
+        if peak <= 0.0 {
+            return 1.0;
+        }
+        let peak_db = 20.0 * peak.log10();
+        let over = peak_db - LIMITER_THRESHOLD_DB;
+        let half_knee = LIMITER_KNEE_DB / 2.0;
+        let reduction_db = if over <= -half_knee {
+            0.0
+        } else if over >= half_knee {
+            -over
+        } else {
+            let k = over + half_knee;
+            -(k * k) / (2.0 * LIMITER_KNEE_DB)
+        };
+        db_to_linear(reduction_db)
+    }
+
+    /// Advance the smoothed gain toward this frame's target and return it.
+    /// Falling level → fast attack; rising level → slow release.
+    fn process(&mut self, peak: f32) -> f32 {
+        let target = Self::target_gain(peak);
+        let coeff = if target < self.gain { self.attack_coeff } else { self.release_coeff };
+        self.gain = coeff.mul_add(self.gain, (1.0 - coeff) * target);
+        self.gain
+    }
+}
+
 /// A Rodio source that applies the shared graphic EQ to its inner decoder.
 ///
 /// One [`EqSource`] wraps each decoded track; both the playing track and the
 /// gapless-preloaded one share the same [`EqShared`], so a live change applies
-/// to both. Per-source state (the filter banks) is a few hundred bytes — no
-/// caches, negligible memory.
+/// to both. Per-source state (the filter banks + a one-frame buffer) is a few
+/// hundred bytes — no caches, negligible memory.
 pub struct EqSource<S> {
     input: S,
     shared: Arc<EqShared>,
@@ -195,12 +311,19 @@ pub struct EqSource<S> {
     /// file, so coefficients computed from it stay correct for the source's life.
     sample_rate: f32,
     channels: usize,
-    /// Which interleaved channel the next sample belongs to.
-    cursor: usize,
     /// `[channel][band]` filter state. Fixed size; allocated once.
     banks: Vec<[DirectForm1<f32>; NUM_BANDS]>,
     /// Per-band on/off — a band is inactive at unity gain or outside Nyquist.
     band_active: [bool; NUM_BANDS],
+    /// Linear preamp gain applied before the bands in the active path.
+    preamp_gain: f32,
+    /// Coupled safety limiter applied to the EQ output.
+    limiter: Limiter,
+    /// One processed interleaved frame (`channels` samples) awaiting emit, used
+    /// only by the active path so the limiter can act per-frame (coupled).
+    frame: Vec<f32>,
+    frame_len: usize,
+    frame_pos: usize,
     /// Fast path: when true, `next` returns the inner sample untouched.
     bypass: bool,
 }
@@ -216,6 +339,13 @@ impl<S: Source> EqSource<S> {
         let banks = (0..channels)
             .map(|_| std::array::from_fn(|_| DirectForm1::<f32>::new(identity_coeffs())))
             .collect();
+        // The limiter updates its gain once per interleaved frame, so its time
+        // constants are relative to the frame rate (sample_rate / channels).
+        #[allow(
+            clippy::cast_precision_loss,
+            reason = "channel count is tiny (1–8) and converts to f32 exactly"
+        )]
+        let frame_rate = sample_rate / channels.max(1) as f32;
         // Seed the cached generation to something other than the live value so
         // the first `next()` rebuilds from the current shared state.
         let last_generation = shared.generation().wrapping_sub(1);
@@ -225,21 +355,30 @@ impl<S: Source> EqSource<S> {
             last_generation,
             sample_rate,
             channels,
-            cursor: 0,
             banks,
             band_active: [false; NUM_BANDS],
+            preamp_gain: 1.0,
+            limiter: Limiter::new(frame_rate),
+            frame: vec![0.0; channels],
+            frame_len: 0,
+            frame_pos: 0,
             bypass: true,
         }
     }
 
-    /// Recompute per-band coefficients from the shared state. Called only when
-    /// the generation counter advances (toggle, slider drag, preset, reset).
+    /// Recompute per-band coefficients and the preamp gain from the shared
+    /// state. Called only when the generation counter advances (toggle, slider
+    /// drag, preset, reset, preamp change).
     fn rebuild(&mut self) {
         if !self.shared.enabled() {
             self.bypass = true;
             self.band_active = [false; NUM_BANDS];
             return;
         }
+
+        let preamp_db = self.shared.preamp();
+        self.preamp_gain = db_to_linear(preamp_db);
+        let preamp_is_unity = preamp_db.abs() < PREAMP_EPSILON_DB;
 
         let Ok(fs) = Hertz::<f32>::from_hz(self.sample_rate) else {
             // Pathological sample rate — leave audio untouched.
@@ -282,43 +421,72 @@ impl<S: Source> EqSource<S> {
             }
         }
 
-        self.bypass = !any_active;
+        // Active when any band filters OR the preamp is non-unity (a flat curve
+        // with a non-zero preamp still needs the preamp + limiter stage).
+        self.bypass = !any_active && preamp_is_unity;
+    }
+
+    /// Apply the preamp then the active band filters to one channel's sample.
+    fn process_band_sample(&mut self, channel: usize, sample: f32) -> f32 {
+        let mut out = sample * self.preamp_gain;
+        let bank = &mut self.banks[channel];
+        for (filter, active) in bank.iter_mut().zip(self.band_active.iter()) {
+            if *active {
+                out = filter.run(out);
+            }
+        }
+        out
     }
 }
 
 impl<S: Source> Iterator for EqSource<S> {
     type Item = Sample;
 
-    #[inline]
     fn next(&mut self) -> Option<Sample> {
+        // Emit any remaining samples from the current processed frame first.
+        if self.frame_pos < self.frame_len {
+            let s = self.frame[self.frame_pos];
+            self.frame_pos += 1;
+            return Some(s);
+        }
+
+        // Frame boundary: pick up state changes.
         let generation = self.shared.generation();
         if generation != self.last_generation {
             self.rebuild();
             self.last_generation = generation;
         }
 
-        let sample = self.input.next()?;
-
-        // Advance the channel cursor even while bypassed so toggling the EQ on
-        // mid-stream never swaps L/R alignment.
-        let channel = self.cursor;
-        self.cursor += 1;
-        if self.cursor >= self.channels {
-            self.cursor = 0;
-        }
-
+        // Bypass: pure per-sample passthrough (bit-identical, no framing).
         if self.bypass {
-            return Some(sample);
+            return self.input.next();
         }
 
-        let bank = &mut self.banks[channel];
-        let mut out = sample;
-        for (filter, active) in bank.iter_mut().zip(self.band_active.iter()) {
-            if *active {
-                out = filter.run(out);
-            }
+        // Active path: pull one interleaved frame, preamp + EQ each channel,
+        // then apply the coupled limiter across the whole frame.
+        self.frame_len = 0;
+        for ch in 0..self.channels {
+            let Some(x) = self.input.next() else { break };
+            self.frame[ch] = self.process_band_sample(ch, x);
+            self.frame_len += 1;
         }
-        Some(out)
+        if self.frame_len == 0 {
+            return None;
+        }
+
+        let mut peak = 0.0_f32;
+        for &s in &self.frame[..self.frame_len] {
+            peak = peak.max(s.abs());
+        }
+        let gain = self.limiter.process(peak);
+        for s in &mut self.frame[..self.frame_len] {
+            // Final hard clamp catches the brief feed-forward overshoot before
+            // the gain settles; the limiter keeps it within a fraction of a dB.
+            *s = (*s * gain).clamp(-1.0, 1.0);
+        }
+
+        self.frame_pos = 1;
+        Some(self.frame[0])
     }
 
     #[inline]
@@ -350,15 +518,16 @@ impl<S: Source> Source for EqSource<S> {
 
     fn try_seek(&mut self, pos: Duration) -> Result<(), SeekError> {
         self.input.try_seek(pos)?;
-        // Clear every delay line so the seek destination doesn't pop from
-        // pre-seek filter history, and re-align the channel cursor (rodio seeks
-        // land on a frame boundary).
+        // Clear every delay line + the limiter envelope so the seek destination
+        // doesn't pop from pre-seek state, and drop any buffered frame.
         for bank in &mut self.banks {
             for filter in bank.iter_mut() {
                 filter.reset_state();
             }
         }
-        self.cursor = 0;
+        self.limiter.reset();
+        self.frame_len = 0;
+        self.frame_pos = 0;
         Ok(())
     }
 }

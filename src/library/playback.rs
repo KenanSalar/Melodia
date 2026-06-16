@@ -308,6 +308,11 @@ pub fn player_set_eq_gains(ctx: &PlaybackContext, gains: &[f32]) {
     ctx.rodio.set_eq_gains(gains);
 }
 
+/// Set the EQ preamp / master gain (dB) on the live player.
+pub fn player_set_eq_preamp(ctx: &PlaybackContext, preamp_db: f32) {
+    ctx.rodio.set_eq_preamp(preamp_db);
+}
+
 #[cfg(test)]
 #[path = "tests/playback_tests.rs"]
 mod tests;

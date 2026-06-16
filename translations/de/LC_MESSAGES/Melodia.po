@@ -900,3 +900,6 @@ msgstr "Elektronisch"
 
 msgid "Custom"
 msgstr "Benutzerdefiniert"
+
+msgid "Preamp"
+msgstr "Vorverstärkung"

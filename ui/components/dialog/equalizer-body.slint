@@ -3,6 +3,7 @@ import { Equalizer } from "../../globals.slint";
 import { ToggleSwitch } from "../settings/toggle-switch.slint";
 import { Dropdown } from "../settings/dropdown.slint";
 import { SectionButton } from "../settings/section-button.slint";
+import { SliderTrack } from "../slider-track.slint";
 import { EqBandSlider } from "eq-band-slider.slint";
 
 // Body for the `Dialog.kind == "equalizer"` modal: an enable toggle, a preset
@@ -62,6 +63,51 @@ export component EqualizerBody inherits VerticalLayout {
                 icon: "";
                 primary: false;
                 clicked => { Equalizer.reset(); }
+            }
+        }
+    }
+
+    // Preamp row — transparent master gain (headroom) so boosts don't clip.
+    // Maps the dB value to the horizontal SliderTrack's 0..1 range.
+    HorizontalLayout {
+        spacing: Theme.pad-md;
+        alignment: stretch;
+
+        VerticalLayout {
+            alignment: center;
+            Text {
+                text: @tr("Preamp");
+                color: Theme.text;
+                font-size: Theme.font-size-md;
+            }
+        }
+        VerticalLayout {
+            alignment: center;
+            horizontal-stretch: 1;
+            SliderTrack {
+                value: (Equalizer.preamp - Equalizer.min-preamp)
+                    / (Equalizer.max-preamp - Equalizer.min-preamp);
+                is-disabled: !Equalizer.enabled;
+                seam-mask-color: Theme.surface0;
+                changed(v) => {
+                    Equalizer.set-preamp(Equalizer.min-preamp
+                        + v * (Equalizer.max-preamp - Equalizer.min-preamp));
+                }
+                committed(v) => {
+                    Equalizer.commit-preamp(Equalizer.min-preamp
+                        + v * (Equalizer.max-preamp - Equalizer.min-preamp));
+                }
+            }
+        }
+        VerticalLayout {
+            alignment: center;
+            Text {
+                // "dB" is a universal unit symbol — not translated.
+                text: (Equalizer.preamp > 0 ? "+" : "") + round(Equalizer.preamp) + " dB";
+                color: Equalizer.enabled ? Theme.subtext0 : Theme.overlay0;
+                font-size: Theme.font-size-sm;
+                min-width: 48px;
+                horizontal-alignment: right;
             }
         }
     }

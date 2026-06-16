@@ -31,17 +31,22 @@ pub fn install_equalizer(ui: &AppWindow, state: &AppState) {
 
     // Read persisted EQ config; a missing / unreadable file falls back to the
     // inert defaults (off, flat, "Flat").
-    let (enabled, gains, preset_idx) = match settings::read_settings(&state.paths) {
+    let (enabled, gains, preset_idx, preamp) = match settings::read_settings(&state.paths) {
         Ok(s) => {
             let gains = equalizer::normalize_gains(&s.equalizer.eq_band_gains);
             let idx = equalizer::preset_index(&s.equalizer.eq_selected_preset)
                 .and_then(|i| i32::try_from(i).ok())
                 .unwrap_or(custom_idx);
-            (s.equalizer.eq_enabled, gains, idx)
+            (
+                s.equalizer.eq_enabled,
+                gains,
+                idx,
+                equalizer::clamp_preamp(s.equalizer.eq_preamp),
+            )
         }
         Err(e) => {
             log::warn!("read settings for equalizer: {e}");
-            (false, equalizer::normalize_gains(&[]), 0)
+            (false, equalizer::normalize_gains(&[]), 0, 0.0)
         }
     };
 
@@ -54,6 +59,7 @@ pub fn install_equalizer(ui: &AppWindow, state: &AppState) {
     eq.set_enabled(enabled);
     eq.set_band_gains(ModelRc::from(model.clone()));
     eq.set_preset_idx(preset_idx);
+    eq.set_preamp(preamp);
 
     // set-enabled — live toggle + persist.
     {
@@ -148,6 +154,34 @@ pub fn install_equalizer(ui: &AppWindow, state: &AppState) {
                     equalizer::DEFAULT_PRESET.to_owned(),
                 ) {
                     log::warn!("persist eq band gains + preset: {e}");
+                }
+            });
+        });
+    }
+
+    // set-preamp — live preamp change during a drag: apply to the player and
+    // update the property so the slider's dB readout tracks. No disk write.
+    {
+        let state = state.clone();
+        let weak = ui.as_weak();
+        eq.on_set_preamp(move |db| {
+            let db = equalizer::clamp_preamp(db);
+            library::playback::player_set_eq_preamp(&state.playback_ctx(), db);
+            if let Some(ui) = weak.upgrade() {
+                ui.global::<Equalizer>().set_preamp(db);
+            }
+        });
+    }
+
+    // commit-preamp — drag release: persist the preamp.
+    {
+        let state = state.clone();
+        eq.on_commit_preamp(move |db| {
+            let db = equalizer::clamp_preamp(db);
+            let s = state.clone();
+            state.runtime.spawn_blocking(move || {
+                if let Err(e) = library::settings::set_eq_preamp(&s, db) {
+                    log::warn!("persist eq_preamp: {e}");
                 }
             });
         });

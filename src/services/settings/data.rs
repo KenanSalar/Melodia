@@ -136,6 +136,10 @@ pub struct EqualizerFlags {
     pub eq_enabled: bool,
     pub eq_band_gains: Vec<f32>,
     pub eq_selected_preset: String,
+    /// Preamp / master gain in dB (0 = unity). Clamped to the player's
+    /// `MIN_PREAMP_DB..=MAX_PREAMP_DB` range when applied / persisted; the
+    /// `#[serde(default)]` makes older files deserialize it to `0.0`.
+    pub eq_preamp: f32,
 }
 
 impl Default for EqualizerFlags {
@@ -144,6 +148,7 @@ impl Default for EqualizerFlags {
             eq_enabled: false,
             eq_band_gains: vec![0.0; NUM_BANDS],
             eq_selected_preset: DEFAULT_PRESET.to_owned(),
+            eq_preamp: 0.0,
         }
     }
 }

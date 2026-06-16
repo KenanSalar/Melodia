@@ -146,6 +146,12 @@ export global Equalizer {
     out property <float> min-gain: -12.0;
     out property <float> max-gain: 12.0;
 
+    // Preamp / master gain (dB) — transparent headroom for boosting without
+    // clipping. `min-preamp` / `max-preamp` mirror `equalizer::{MIN,MAX}_PREAMP_DB`.
+    in-out property <float> preamp;
+    out property <float> min-preamp: -12.0;
+    out property <float> max-preamp: 6.0;
+
     callback set-enabled(bool);
     // Live band change during a drag — apply to the player, don't persist.
     callback set-band(int /*band index*/, float /*gain dB*/);
@@ -153,6 +159,9 @@ export global Equalizer {
     callback commit-band(int /*band index*/, float /*gain dB*/);
     callback select-preset(int /*dropdown index*/);
     callback reset();
+    // Preamp: live during drag (apply only), persist on release — same split.
+    callback set-preamp(float /*dB*/);
+    callback commit-preamp(float /*dB*/);
 }
 
 // Nav: UI-only, no Rust subscription needed in Phase 2.
