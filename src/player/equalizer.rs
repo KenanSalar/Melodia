@@ -101,6 +101,12 @@ pub const PRESET_COUNT: usize = PRESETS.len();
 /// Default preset name persisted on first launch.
 pub const DEFAULT_PRESET: &str = "Flat";
 
+/// Sentinel preset name persisted for a hand-tuned (non-built-in) curve. It is
+/// deliberately absent from [`PRESETS`], so [`preset_index`] returns `None` for
+/// it and the UI maps it to the synthetic "Custom" dropdown slot at
+/// [`PRESET_COUNT`].
+pub const CUSTOM_PRESET: &str = "Custom";
+
 /// Clamp a single band gain into the supported range.
 #[must_use]
 pub fn clamp_gain(db: f32) -> f32 {

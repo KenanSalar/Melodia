@@ -61,6 +61,14 @@ pub fn install_equalizer(ui: &AppWindow, state: &AppState) {
     eq.set_preset_idx(preset_idx);
     eq.set_preamp(preamp);
 
+    // Seed the dB ranges from the DSP constants so Rust stays the single source
+    // of truth (the band/preamp sliders read these). Runs at boot, before the
+    // dialog can open.
+    eq.set_min_gain(equalizer::MIN_GAIN_DB);
+    eq.set_max_gain(equalizer::MAX_GAIN_DB);
+    eq.set_min_preamp(equalizer::MIN_PREAMP_DB);
+    eq.set_max_preamp(equalizer::MAX_PREAMP_DB);
+
     // set-enabled — live toggle + persist.
     {
         let state = state.clone();
@@ -104,9 +112,11 @@ pub fn install_equalizer(ui: &AppWindow, state: &AppState) {
             let gains: Vec<f32> = model.iter().collect();
             let s = state.clone();
             state.runtime.spawn_blocking(move || {
-                if let Err(e) =
-                    library::settings::set_eq_band_gains_and_preset(&s, &gains, "Custom".to_owned())
-                {
+                if let Err(e) = library::settings::set_eq_band_gains_and_preset(
+                    &s,
+                    &gains,
+                    equalizer::CUSTOM_PRESET.to_owned(),
+                ) {
                     log::warn!("persist eq band gains + preset: {e}");
                 }
             });

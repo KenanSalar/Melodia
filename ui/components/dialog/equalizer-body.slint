@@ -13,6 +13,15 @@ import { EqBandSlider } from "eq-band-slider.slint";
 export component EqualizerBody inherits VerticalLayout {
     spacing: Theme.pad-lg;
 
+    // Preamp dB ↔ SliderTrack 0..1 mapping, in one place (the binding and both
+    // callbacks reuse these instead of re-inlining the formula).
+    pure function preamp-to-frac(db: float) -> float {
+        return (db - Equalizer.min-preamp) / (Equalizer.max-preamp - Equalizer.min-preamp);
+    }
+    pure function frac-to-preamp(f: float) -> float {
+        return Equalizer.min-preamp + f * (Equalizer.max-preamp - Equalizer.min-preamp);
+    }
+
     // Band centre-frequency labels (low → high), order-matched to
     // `equalizer::BAND_FREQS`. Numeric → not translated.
     property <[string]> band-labels: ["31", "62", "125", "250", "500", "1k", "2k", "4k", "8k", "16k"];
@@ -85,17 +94,14 @@ export component EqualizerBody inherits VerticalLayout {
             alignment: center;
             horizontal-stretch: 1;
             SliderTrack {
-                value: (Equalizer.preamp - Equalizer.min-preamp)
-                    / (Equalizer.max-preamp - Equalizer.min-preamp);
+                value: root.preamp-to-frac(Equalizer.preamp);
                 is-disabled: !Equalizer.enabled;
                 seam-mask-color: Theme.surface0;
                 changed(v) => {
-                    Equalizer.set-preamp(Equalizer.min-preamp
-                        + v * (Equalizer.max-preamp - Equalizer.min-preamp));
+                    Equalizer.set-preamp(root.frac-to-preamp(v));
                 }
                 committed(v) => {
-                    Equalizer.commit-preamp(Equalizer.min-preamp
-                        + v * (Equalizer.max-preamp - Equalizer.min-preamp));
+                    Equalizer.commit-preamp(root.frac-to-preamp(v));
                 }
             }
         }
