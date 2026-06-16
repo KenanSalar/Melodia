@@ -893,3 +893,6 @@ msgstr "Ηλεκτρονική"
 
 msgid "Custom"
 msgstr "Προσαρμοσμένο"
+
+msgid "Preamp"
+msgstr "Προενίσχυση"

@@ -153,6 +153,7 @@ impl AppState {
         // and length-normalises the (possibly hand-edited) gain list, and the
         // EQ ships off by default.
         rodio.set_eq_gains(&settings.equalizer.eq_band_gains);
+        rodio.set_eq_preamp(settings.equalizer.eq_preamp);
         rodio.set_eq_enabled(settings.equalizer.eq_enabled);
 
         let cover_cache: CoverCache = crate::media::artwork::new_cover_cache();

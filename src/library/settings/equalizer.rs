@@ -17,6 +17,17 @@ pub fn set_eq_enabled(state: &AppState, enabled: bool) -> Result<(), AppError> {
     })
 }
 
+/// Persist the preamp / master gain (dB). Clamped here too so a hand-edited
+/// `settings.json` can't pin an out-of-range value. The runtime effect is
+/// applied synchronously by the UI callback through
+/// `library::playback::player_set_eq_preamp` before this disk write.
+pub fn set_eq_preamp(state: &AppState, preamp_db: f32) -> Result<(), AppError> {
+    let preamp_db = equalizer::clamp_preamp(preamp_db);
+    services::settings::mutate_settings(&state.paths, move |settings| {
+        settings.equalizer.eq_preamp = preamp_db;
+    })
+}
+
 /// Persist the band gains **and** the selected-preset name in a single settings
 /// write. Drag-release (`commit-band`), preset selection, and reset each change
 /// both at once, so one `mutate_settings` read-modify-write replaces the two it

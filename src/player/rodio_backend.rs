@@ -257,6 +257,11 @@ impl RodioPlayer {
         self.eq.set_all_gains(gains);
     }
 
+    /// Set the EQ preamp / master gain (dB). Lock-free, like the other EQ setters.
+    pub fn set_eq_preamp(&self, preamp_db: f32) {
+        self.eq.set_preamp(preamp_db);
+    }
+
     /// Whether a gapless source is currently staged behind the playing one.
     /// Used by the playback monitor to avoid re-issuing the late preload each tick.
     pub fn is_gapless_preloaded(&self) -> bool {

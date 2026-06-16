@@ -894,3 +894,6 @@ msgstr "Elektronik"
 
 msgid "Custom"
 msgstr "Özel"
+
+msgid "Preamp"
+msgstr "Ön yükseltici"
