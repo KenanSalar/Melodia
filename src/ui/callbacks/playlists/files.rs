@@ -1,5 +1,8 @@
 //! Playlist import/export (Extended-M3U8) callbacks — the Import / Export
-//! header pills on the Playlists view.
+//! header pills on the Playlists view — plus the Add-to-Playlist picker's
+//! multi-select toggles + commit (they share the Export picker's
+//! model-mutation + selection-meta pattern, and the commit needs the
+//! `Rc<NotificationsUi>` for its completion toast).
 //!
 //! All native dialogs run on the UI thread via
 //! `slint::spawn_local(Compat::new(...))` (`Compat` supplies a tokio reactor
@@ -21,7 +24,10 @@ use crate::library;
 use crate::state::AppState;
 use crate::ui::notifications::{NotificationParams, NotificationsUi};
 use crate::ui::playlists::{self as playlists_ui_mod, PlaylistsUi};
-use crate::{AppWindow, Dialog, PlaylistExportPickRow as UiPlaylistExportPickRow, Playlists, Settings};
+use crate::{
+    AppWindow, Dialog, PlaylistExportPickRow as UiPlaylistExportPickRow,
+    PlaylistPickRow as UiPlaylistPickRow, Playlists, Settings,
+};
 
 /// Transient import/export confirmation toasts auto-dismiss after this long.
 /// Error toasts stay sticky so a failure isn't missed.
@@ -316,6 +322,169 @@ pub fn wire(
             refresh_export_selection_meta(&dlg);
         });
     }
+
+    // toggle-add-pick: flip one enabled row's `selected`, then recompute the
+    // header's select-all + count. Disabled (fully-contained) rows no-op.
+    {
+        let weak = weak.clone();
+        playlists.on_toggle_add_pick(move |id| {
+            let Some(ui) = weak.upgrade() else { return };
+            let dlg = ui.global::<Dialog>();
+            let pick_total = dlg.get_pick_total_tracks();
+            let model = dlg.get_playlist_pick_rows();
+            if let Some(vm) = model
+                .as_any()
+                .downcast_ref::<VecModel<UiPlaylistPickRow>>()
+            {
+                for i in 0..vm.row_count() {
+                    if let Some(mut row) = vm.row_data(i)
+                        && row.id == id
+                    {
+                        if !add_pick_disabled(row.contained_count, pick_total) {
+                            row.selected = !row.selected;
+                            vm.set_row_data(i, row);
+                        }
+                        break;
+                    }
+                }
+            }
+            refresh_add_selection_meta(&dlg);
+        });
+    }
+
+    // set-all-add-picks: set every *enabled* row's `selected` to `sel`
+    // (fully-contained rows stay unselectable).
+    {
+        let weak = weak.clone();
+        playlists.on_set_all_add_picks(move |sel| {
+            let Some(ui) = weak.upgrade() else { return };
+            let dlg = ui.global::<Dialog>();
+            let pick_total = dlg.get_pick_total_tracks();
+            let model = dlg.get_playlist_pick_rows();
+            if let Some(vm) = model
+                .as_any()
+                .downcast_ref::<VecModel<UiPlaylistPickRow>>()
+            {
+                for i in 0..vm.row_count() {
+                    if let Some(mut row) = vm.row_data(i)
+                        && !add_pick_disabled(row.contained_count, pick_total)
+                        && row.selected != sel
+                    {
+                        row.selected = sel;
+                        vm.set_row_data(i, row);
+                    }
+                }
+            }
+            refresh_add_selection_meta(&dlg);
+        });
+    }
+
+    // add-tracks-to-selected: fired by the accept dispatcher. Read the
+    // selected (enabled) playlist ids + pending tracks synchronously (the
+    // dialog closes + clears its model right after this returns), then add the
+    // tracks into each selected playlist, refresh, and toast a summary. Runs
+    // on the UI thread (`spawn_local` + `Compat`) because the
+    // `Rc<NotificationsUi>` isn't `Send`.
+    {
+        let s = state.clone();
+        let pu = playlists_ui.clone();
+        let weak = weak.clone();
+        let notifications = notifications.clone();
+        playlists.on_add_tracks_to_selected(move || {
+            let Some(ui) = weak.upgrade() else { return };
+            let dlg = ui.global::<Dialog>();
+            let pick_total = dlg.get_pick_total_tracks();
+            let pids: Vec<i64> = dlg
+                .get_playlist_pick_rows()
+                .iter()
+                .filter(|r| r.selected && !add_pick_disabled(r.contained_count, pick_total))
+                .map(|r| i64::from(r.id))
+                .collect();
+            let track_ids: Vec<i64> =
+                dlg.get_pending_track_ids().iter().map(i64::from).collect();
+            if pids.is_empty() || track_ids.is_empty() {
+                return;
+            }
+
+            let s = s.clone();
+            let pu = pu.clone();
+            let weak = weak.clone();
+            let notifications = notifications.clone();
+            let _ = slint::spawn_local(Compat::new(async move {
+                let requested = pids.len();
+                let track_count = track_ids.len();
+                let mut ok: usize = 0;
+                for pid in &pids {
+                    match library::playlists::add_to_playlist(&s, *pid, track_ids.clone()).await
+                    {
+                        Ok(()) => ok += 1,
+                        Err(e) => log::warn!("playlists::add_tracks_to_selected({pid}): {e}"),
+                    }
+                }
+
+                if ok > 0 {
+                    if let Err(e) = playlists_ui_mod::fetch_grid(&s, &pu, weak.clone()).await {
+                        log::warn!("playlists::add_tracks_to_selected refetch grid: {e}");
+                    }
+                    let detail_id = pu.detail_playlist_id();
+                    if pids.contains(&detail_id)
+                        && let Err(e) =
+                            playlists_ui_mod::refresh_detail(&s, &pu, weak.clone(), detail_id)
+                                .await
+                    {
+                        log::warn!("playlists::add_tracks_to_selected refresh detail: {e}");
+                    }
+                }
+
+                // Total failure (rare — a DB error on every playlist) is
+                // logged above; surface the success/partial result as a toast.
+                if ok == 0 {
+                    return;
+                }
+                let Some(ui) = weak.upgrade() else { return };
+                let settings = ui.global::<Settings>();
+                let variant = if ok < requested { "warning" } else { "success" };
+                notifications.show_auto_dismiss(
+                    NotificationParams {
+                        variant: variant.into(),
+                        title: settings.invoke_add_to_playlist_title(clamp_usize(ok)),
+                        message: settings
+                            .invoke_add_to_playlist_message(clamp_usize(track_count)),
+                        action_label: SharedString::default(),
+                        action_kind: SharedString::default(),
+                    },
+                    TOAST_AUTO_DISMISS_MS,
+                );
+            }));
+        });
+    }
+}
+
+/// A picker row is disabled (unselectable) when every pending track is already
+/// in that playlist. Mirrors the Slint-side `disabled` expression.
+fn add_pick_disabled(contained_count: i32, pick_total: i32) -> bool {
+    pick_total > 0 && contained_count >= pick_total
+}
+
+/// Recompute `Dialog.add-selected-count` and `Dialog.add-select-all` from the
+/// current Add-to-Playlist picker model, counting only enabled (not fully-
+/// contained) rows so "Select all" reflects "all selectable rows selected".
+fn refresh_add_selection_meta(dlg: &Dialog) {
+    let pick_total = dlg.get_pick_total_tracks();
+    let model = dlg.get_playlist_pick_rows();
+    let mut enabled: usize = 0;
+    let mut selected: usize = 0;
+    for r in model.iter() {
+        if add_pick_disabled(r.contained_count, pick_total) {
+            continue;
+        }
+        enabled += 1;
+        if r.selected {
+            selected += 1;
+        }
+    }
+    dlg.set_add_selected_count(clamp_usize(selected));
+    dlg.set_add_select_all(enabled > 0 && selected == enabled);
 }
 
 /// Recompute `Dialog.export-selected-count` and `Dialog.export-select-all`

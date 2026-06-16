@@ -391,4 +391,16 @@ export global Settings {
     playlist-export-failed-message => {
         return @tr("Couldn't write the playlist files.");
     }
+
+    // Add-to-Playlist multi-select commit toast (track row context menu →
+    // Add to Playlist → tick playlists → Add). Title pluralizes on the
+    // number of playlists, message on the number of tracks added.
+    pure callback add-to-playlist-title(int /*playlists*/) -> string;
+    add-to-playlist-title(playlists) => {
+        return @tr("Added to {n} playlist" | "Added to {n} playlists" % playlists);
+    }
+    pure callback add-to-playlist-message(int /*tracks*/) -> string;
+    add-to-playlist-message(tracks) => {
+        return @tr("{n} track added" | "{n} tracks added" % tracks);
+    }
 }

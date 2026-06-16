@@ -1,206 +1,29 @@
-import { ScrollView } from "std-widgets.slint";
 import { Theme } from "../../theme.slint";
 import { Dialog, Playlists } from "../../globals.slint";
-import { ArtworkImage } from "../artwork-image.slint";
 import { MaterialIcon } from "../material-icon.slint";
-import { OverlayScrollbar } from "../overlay-scrollbar.slint";
+import { SelectableRow, SelectAllHeader, PickerListCard } from "selectable-picker.slint";
 
 // Export picker body — rendered inside `DialogOverlay` when
 // `Dialog.kind == "export-playlists"`. A "Select all" header over a
-// scrollable list of playlists, each a Material-3-expressive selectable
-// list item: leading artwork tile, title + track count, trailing circular
-// selection indicator. Selecting a row fills it with a tonal accent
-// container (not just a checkmark) so the selected set reads at a glance.
+// scrollable list of selectable playlists; the footer Export button (in
+// `dialog.slint`) commits the selection through the `Dialog.accepted`
+// dispatcher.
 //
 // Toggling a row flips its `selected` flag (Rust mutates the VecModel via
 // `Playlists.toggle-export-pick`); the header flips them all
-// (`set-all-export-picks`). The footer Export button (in `dialog.slint`)
-// commits the selection through the `Dialog.accepted` dispatcher.
-
-// Circular selection indicator (M3 expressive): a filled accent disc with a
-// check glyph when selected, a filled disc with a dash for the header's
-// indeterminate (some-but-not-all) state, and a hollow ring otherwise.
-component SelectIndicator inherits Rectangle {
-    in property <bool> checked;
-    in property <bool> indeterminate;
-
-    private property <bool> active: root.checked || root.indeterminate;
-
-    width: 24px;
-    height: 24px;
-    border-radius: self.width / 2;
-    background: root.active ? Theme.accent : transparent;
-    border-width: root.active ? 0px : 2px;
-    border-color: Theme.overlay0;
-    animate background { duration: Theme.dur-fast; easing: ease-in-out; }
-    animate border-color { duration: Theme.dur-fast; easing: ease-in-out; }
-
-    if root.active: MaterialIcon {
-        x: (parent.width - self.width) / 2;
-        y: (parent.height - self.height) / 2;
-        name: root.indeterminate ? "remove" : "check";
-        icon-size: 16px;
-        icon-color: Theme.accent-text;
-    }
-}
-
-// File-private selectable list item.
-component ExportRow inherits Rectangle {
-    in property <int> id;
-    in property <string> name;
-    in property <string> artwork-path;
-    in property <int> track-count;
-    in property <bool> selected;
-
-    height: 60px;
-    border-radius: Theme.radius-md;
-    // Selected rows fill with a tonal accent container; unselected rows are
-    // flat with a soft hover fill. Deliberately NO border: a visible 1 px
-    // border promotes this rounded Rectangle to a compositing layer on
-    // FemtoVG, and the row's text is then resampled when that layer blits —
-    // it reads as "same font size but zoomed/blurry" next to the
-    // directly-rendered header text. The tonal fill + the filled circular
-    // indicator carry the selection state on their own (and an outline-less
-    // filled container is the more faithful M3 selection treatment anyway).
-    background: root.selected
-        ? Theme.accent.with-alpha(0.16)
-        : (touch.has-hover ? Theme.surface1 : transparent);
-    animate background { duration: Theme.dur-fast; easing: ease-in-out; }
-
-    HorizontalLayout {
-        padding-left: Theme.pad-sm;
-        padding-right: Theme.pad-md;
-        spacing: Theme.pad-md;
-        alignment: start;
-
-        VerticalLayout {
-            alignment: center;
-            ArtworkImage {
-                tile-size: 44px;
-                tile-radius: Theme.radius-md;
-                artwork-path: root.artwork-path;
-                cover: Playlists.request-row-cover(root.artwork-path);
-                fallback-icon: "playlist";
-                // Subtle expressive zoom on hover (same idiom as the grid
-                // cards / now-playing bar).
-                cover-scale: touch.has-hover ? 1.05 : 1.0;
-            }
-        }
-
-        VerticalLayout {
-            horizontal-stretch: 1;
-            alignment: center;
-            spacing: 2px;
-            Text {
-                text: root.name;
-                color: Theme.text;
-                font-size: Theme.font-size-md;
-                font-weight: 600;
-                overflow: elide;
-            }
-            Text {
-                text: @tr("{n} track" | "{n} tracks" % root.track-count);
-                color: root.selected ? Theme.accent : Theme.subtext0;
-                font-size: Theme.font-size-sm;
-                animate color { duration: Theme.dur-fast; easing: ease-in-out; }
-            }
-        }
-
-        VerticalLayout {
-            alignment: center;
-            SelectIndicator { checked: root.selected; }
-        }
-    }
-
-    touch := TouchArea {
-        mouse-cursor: pointer;
-        clicked => { Playlists.toggle-export-pick(root.id); }
-    }
-}
-
+// (`set-all-export-picks`). The selectable-row / header / list-card visuals
+// are the shared `selectable-picker.slint` toolkit, so this body is just the
+// wiring + the export-specific empty state.
 export component ExportPlaylistPicker inherits Rectangle {
-    private property <length> list-area-h: 312px;
-    private property <length> row-h: 60px;
-    private property <length> row-spacing: 4px;
-    private property <length> pad: 6px;
-    private property <int> total-rows: Dialog.export-pick-rows.length;
-    private property <length> content-h:
-        root.total-rows * root.row-h
-        + (root.total-rows > 0 ? (root.total-rows - 1) * root.row-spacing : 0px)
-        + 2 * root.pad;
-
     VerticalLayout {
         spacing: Theme.pad-sm;
 
-        // "Select all" header — a tonal container with the tri-state
-        // indicator, label, and a count chip that turns accent once at
-        // least one playlist is picked.
-        Rectangle {
-            height: 52px;
-            border-radius: Theme.radius-md;
-            background: header-touch.has-hover ? Theme.surface1 : Theme.surface0;
-            animate background { duration: Theme.dur-fast; easing: ease-in-out; }
-
-            HorizontalLayout {
-                padding-left: Theme.pad-md;
-                padding-right: Theme.pad-md;
-                spacing: Theme.pad-md;
-                alignment: start;
-
-                VerticalLayout {
-                    alignment: center;
-                    SelectIndicator {
-                        checked: Dialog.export-select-all;
-                        indeterminate: !Dialog.export-select-all
-                            && Dialog.export-selected-count > 0;
-                    }
-                }
-                VerticalLayout {
-                    horizontal-stretch: 1;
-                    alignment: center;
-                    Text {
-                        text: @tr("Select all");
-                        color: Theme.text;
-                        font-size: Theme.font-size-md;
-                        font-weight: 600;
-                    }
-                }
-                // Count chip.
-                VerticalLayout {
-                    alignment: center;
-                    Rectangle {
-                        height: 26px;
-                        width: chip-l.preferred-width;
-                        border-radius: self.height / 2;
-                        background: Dialog.export-selected-count > 0
-                            ? Theme.accent.with-alpha(0.18)
-                            : Theme.surface1;
-                        animate background { duration: Theme.dur-fast; easing: ease-in-out; }
-
-                        chip-l := HorizontalLayout {
-                            padding-left: 12px;
-                            padding-right: 12px;
-                            alignment: center;
-                            Text {
-                                text: @tr("{} selected", Dialog.export-selected-count);
-                                color: Dialog.export-selected-count > 0
-                                    ? Theme.accent
-                                    : Theme.subtext0;
-                                font-size: Theme.font-size-sm;
-                                font-weight: 600;
-                                vertical-alignment: center;
-                            }
-                        }
-                    }
-                }
-            }
-
-            header-touch := TouchArea {
-                mouse-cursor: pointer;
-                clicked => {
-                    Playlists.set-all-export-picks(!Dialog.export-select-all);
-                }
-            }
+        SelectAllHeader {
+            checked: Dialog.export-select-all;
+            indeterminate: !Dialog.export-select-all
+                && Dialog.export-selected-count > 0;
+            selected-count: Dialog.export-selected-count;
+            toggled => { Playlists.set-all-export-picks(!Dialog.export-select-all); }
         }
 
         // Empty state — defensive; the Export pill is only reachable when
@@ -231,46 +54,16 @@ export component ExportPlaylistPicker inherits Rectangle {
             }
         }
 
-        // List body — clipped container with an overlay scrollbar, same
-        // treatment as the add-to-playlist picker.
-        if Dialog.export-pick-rows.length > 0: Rectangle {
-            height: min(root.list-area-h, root.content-h);
-            background: Theme.surface0;
-            border-radius: Theme.radius-md;
-            border-width: 1px;
-            border-color: Theme.border;
-            clip: true;
-
-            sv := ScrollView {
-                horizontal-scrollbar-policy: always-off;
-                vertical-scrollbar-policy: always-off;
-                viewport-width: self.visible-width;
-                viewport-height: root.content-h;
-
-                VerticalLayout {
-                    padding: root.pad;
-                    spacing: root.row-spacing;
-
-                    for r in Dialog.export-pick-rows: ExportRow {
-                        id: r.id;
-                        name: r.name;
-                        artwork-path: r.artwork_path;
-                        track-count: r.track-count;
-                        selected: r.selected;
-                    }
-                }
-            }
-
-            OverlayScrollbar {
-                horizontal: false;
-                x: parent.width - self.width - 2px;
-                y: 2px;
-                width: 10px;
-                height: parent.height - 4px;
-                visible-size: sv.visible-height;
-                content-size: sv.viewport-height;
-                offset: -sv.viewport-y;
-                scroll-to(o) => { sv.viewport-y = -o; }
+        if Dialog.export-pick-rows.length > 0: PickerListCard {
+            row-count: Dialog.export-pick-rows.length;
+            for r in Dialog.export-pick-rows: SelectableRow {
+                name: r.name;
+                subtitle: @tr("{n} track" | "{n} tracks" % r.track-count);
+                cover: Playlists.request-row-cover(r.artwork_path);
+                artwork-path: r.artwork_path;
+                fallback-icon: "playlist";
+                selected: r.selected;
+                toggled => { Playlists.toggle-export-pick(r.id); }
             }
         }
     }

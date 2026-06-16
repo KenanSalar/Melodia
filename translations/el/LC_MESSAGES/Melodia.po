@@ -932,6 +932,19 @@ msgstr "Η εξαγωγή απέτυχε"
 msgid "Couldn't write the playlist files."
 msgstr "Δεν ήταν δυνατή η εγγραφή των αρχείων λίστας."
 
+msgid "Add"
+msgstr "Προσθήκη"
+
+msgid "Added to {n} playlist"
+msgid_plural "Added to {n} playlists"
+msgstr[0] "Προστέθηκε σε {n} λίστα"
+msgstr[1] "Προστέθηκε σε {n} λίστες"
+
+msgid "{n} track added"
+msgid_plural "{n} tracks added"
+msgstr[0] "{n} κομμάτι προστέθηκε"
+msgstr[1] "{n} κομμάτια προστέθηκαν"
+
 msgid "Saved to {}"
 msgstr "Αποθηκεύτηκε στο {}"
 
