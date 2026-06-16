@@ -207,7 +207,10 @@ pub async fn init_database(paths: &Paths) -> Result<DbPool, AppError> {
         .busy_timeout(Duration::from_secs(5))
         .pragma("foreign_keys", "ON")
         .pragma("synchronous", "NORMAL")
-        .pragma("cache_size", "-64000")
+        // Page cache sized for a single-user desktop library DB, not a
+        // server. The working set fits comfortably; oversizing the cache
+        // only inflates idle resident memory. (Negative value = KiB.)
+        .pragma("cache_size", "-16000")
         .pragma("temp_store", "MEMORY");
 
     let write_pool = SqlitePoolOptions::new()
@@ -257,23 +260,40 @@ pub async fn init_database(paths: &Paths) -> Result<DbPool, AppError> {
     // cheap no-op on non-Windows (paths there never start with `\\?\`).
     strip_windows_verbatim_paths(&write_pool).await?;
 
-    // Read pool: multiple connections for concurrent reads
+    // Read pool: a small, fixed band of connections for concurrent reads.
+    // Melodia is single-user and its reads are tiny and effectively
+    // sequential, so a handful of connections is ample. Clamp to 2..=4
+    // rather than scaling with core count: one connection per core (the old
+    // `.max(4)` floor with no ceiling) needlessly multiplies per-connection
+    // page-cache and prepared-statement memory on many-core machines for
+    // concurrency this workload never uses. (`.claude/rules/sqlx.md` advises
+    // a num_cpus read pool — that is server-workload guidance; a desktop
+    // app is a different profile.)
     let read_conns = std::thread::available_parallelism()
         .map(|n| u32::try_from(n.get()).unwrap_or(u32::MAX))
         .unwrap_or(4)
-        .max(4);
+        .clamp(2, 4);
 
     let read_opts = SqliteConnectOptions::from_str(&db_url)?
         .journal_mode(SqliteJournalMode::Wal)
         .read_only(true)
         .busy_timeout(Duration::from_secs(5))
         .pragma("foreign_keys", "ON")
-        .pragma("cache_size", "-64000")
+        // Modest per-connection page cache: with `mmap_size` below, cold
+        // pages stay cheaply file-backed (shared) rather than being copied
+        // into per-connection heap cache, so a large cache here would just
+        // be idle resident overhead multiplied across the pool.
+        .pragma("cache_size", "-16000")
         .pragma("temp_store", "MEMORY")
         .pragma("mmap_size", "268435456");
 
+    // `idle_timeout` reaps connections opened during the concurrent boot
+    // prefetch burst once they go idle; without it sqlx keeps them for the
+    // process lifetime. `min_connections` stays at its default (0) — the
+    // cold-reopen cost after idle is negligible for this workload.
     let read_pool = SqlitePoolOptions::new()
         .max_connections(read_conns)
+        .idle_timeout(Duration::from_secs(60))
         .connect_with(read_opts)
         .await?;
 

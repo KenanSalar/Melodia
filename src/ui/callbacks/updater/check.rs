@@ -30,7 +30,7 @@ pub(super) fn spawn_manual_check(
         // short-circuit would keep returning the cached "schema too new"
         // outcome until the next manifest publish bumped the ETag.
         let result = check_for_update(
-            &state.http_client,
+            state.http_client(),
             etag.as_deref(),
             env!("CARGO_PKG_VERSION"),
             true,

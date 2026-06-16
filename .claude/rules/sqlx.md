@@ -5,6 +5,7 @@
 - Use **two-pool architecture** for SQLite:
   - Write pool: `max_connections(1)` — SQLite only supports one concurrent writer
   - Read pool: `max_connections(num_cpus)` with `.read_only(true)` — multiple concurrent readers in WAL mode
+    - **Desktop caveat (Melodia):** a single-user desktop app issues tiny, effectively-sequential reads, so scaling per-core just multiplies idle per-connection page-cache/statement-cache memory. Clamp to a small fixed band (`.clamp(2, 4)`) and add an `idle_timeout` so boot-burst connections get reaped. See `init_database` in `src/database/mod.rs`.
 - A single shared pool degrades write performance by ~20x due to reader/writer contention
 
 ## Pragmas & Configuration
@@ -76,6 +77,6 @@
 
 ## SQLite-Specific Pragmas
 
-- `PRAGMA cache_size = -64000` (64MB page cache) — significantly improves read performance for large DBs
+- `PRAGMA cache_size = -64000` (64MB page cache) — significantly improves read performance for large DBs. For a small single-user desktop DB (Melodia), size it modestly (e.g. `-16000`); with `mmap_size` set, cold pages stay cheaply file-backed instead of being copied into per-connection heap cache, so a large cache there is just idle resident overhead multiplied across the pool.
 - `PRAGMA wal_autocheckpoint = 1000` — tune how often WAL is checkpointed (default 1000 pages)
 - `PRAGMA optimize` — run periodically (e.g. on app close) to update query planner statistics; fast and safe
