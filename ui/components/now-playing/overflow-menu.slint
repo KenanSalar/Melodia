@@ -1,6 +1,6 @@
 import { Theme } from "../../theme.slint";
 import { Settings } from "../../settings.slint";
-import { Player, WindowChrome, Queue, PopupHighlight, Dialog, Equalizer } from "../../globals.slint";
+import { Player, WindowChrome, Queue, PopupHighlight, Dialog, Equalizer, ReplayGain } from "../../globals.slint";
 import { IconButton } from "../icon-button.slint";
 import { MaterialIcon } from "../material-icon.slint";
 import { PopupSurface } from "../popup-surface.slint";
@@ -274,6 +274,28 @@ export component OverflowMenu inherits Rectangle {
                         PopupHighlight.id = "";
                         Dialog.kind = "equalizer";
                         Dialog.title = @tr("Equalizer");
+                        Dialog.message = "";
+                        Dialog.confirm-label = @tr("Done");
+                        Dialog.cancel-label = "";
+                        Dialog.destructive = false;
+                        Dialog.open = true;
+                    }
+                }
+
+                // Permanent ReplayGain row — opens the loudness-normalization
+                // dialog, mirroring the Equalizer row. The "On"/"Off" trailing
+                // text mirrors the live enabled state.
+                OverflowRow {
+                    icon: "tune";
+                    label: @tr("ReplayGain");
+                    trailing-text: ReplayGain.enabled ? @tr("On") : @tr("Off");
+                    active: ReplayGain.enabled;
+                    clicked => {
+                        pop.close();
+                        root.speed-flyout-open = false;
+                        PopupHighlight.id = "";
+                        Dialog.kind = "replaygain";
+                        Dialog.title = @tr("ReplayGain");
                         Dialog.message = "";
                         Dialog.confirm-label = @tr("Done");
                         Dialog.cancel-label = "";

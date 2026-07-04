@@ -5,6 +5,7 @@ import { PlaylistMosaicPicker } from "playlist-mosaic-picker.slint";
 import { PlaylistPicker } from "playlist-picker.slint";
 import { ExportPlaylistPicker } from "export-playlist-picker.slint";
 import { EqualizerBody } from "equalizer-body.slint";
+import { ReplayGainBody } from "replaygain-body.slint";
 import { LabeledInput } from "../labeled-input.slint";
 import { MaterialIcon } from "../material-icon.slint";
 
@@ -100,6 +101,7 @@ export component DialogOverlay inherits Rectangle {
         // (Tauri shipped its `EditPlaylistDialog` at 480 px).
         property <length> max-w:
             DialogGlobal.kind == "equalizer" ? 600px
+            : DialogGlobal.kind == "replaygain" ? 480px
             : DialogGlobal.kind == "edit-playlist-artwork" ? 520px
             : 540px;
         // Header icon for confirmation kinds — empty for form / picker
@@ -258,6 +260,8 @@ export component DialogOverlay inherits Rectangle {
             // apply live and persist. The footer keeps just the "Done" button
             // (the caller sets `cancel-label` empty).
             if DialogGlobal.kind == "equalizer": EqualizerBody { }
+
+            if DialogGlobal.kind == "replaygain": ReplayGainBody { }
 
             HorizontalLayout {
                 alignment: end;

@@ -963,3 +963,21 @@ msgid "{n} playlist exported"
 msgid_plural "{n} playlists exported"
 msgstr[0] "{n} çalma listesi dışa aktarıldı"
 msgstr[1] "{n} çalma listesi dışa aktarıldı"
+
+msgid "ReplayGain"
+msgstr "ReplayGain"
+
+msgid "Enable ReplayGain"
+msgstr "ReplayGain'i etkinleştir"
+
+msgid "Normalization mode"
+msgstr "Normalleştirme modu"
+
+msgid "Track"
+msgstr "Parça"
+
+msgid "Prevent clipping"
+msgstr "Kırpılmayı önle"
+
+msgid "ReplayGain only affects tracks that already have loudness tags. Scan your library with a tool like rsgain or loudgain to add them."
+msgstr "ReplayGain yalnızca ses düzeyi etiketleri olan parçaları etkiler. Bunları eklemek için kitaplığınızı rsgain veya loudgain gibi bir araçla tarayın."

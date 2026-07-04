@@ -5,6 +5,7 @@ use crate::database::DbPool;
 use crate::database::queries;
 
 use super::event_sink::PlayerSinks;
+use super::replaygain::TrackReplayGain;
 use super::rodio_backend::PlayerBackend;
 use super::state::{
     PlayerAction, PlayerStateHandle, play_track_inner, stop_end_of_queue, with_state_emit,
@@ -34,6 +35,7 @@ pub fn execute_actions<B: PlayerBackend>(
                 volume,
                 speed,
                 start_position_ms,
+                replaygain,
             } => {
                 if !Path::new(&file_path).exists() {
                     log::warn!("Skipping vanished file: {file_path}");
@@ -42,7 +44,7 @@ pub fn execute_actions<B: PlayerBackend>(
                     continue;
                 }
                 if let Err(e) =
-                    rodio_player.play_media(&file_path, volume, speed, start_position_ms)
+                    rodio_player.play_media(&file_path, volume, speed, start_position_ms, replaygain)
                 {
                     log::error!("Failed to play {file_path}: {e}");
                     rodio_player.stop();
@@ -58,7 +60,11 @@ pub fn execute_actions<B: PlayerBackend>(
             PlayerAction::SetVolume(v) => rodio_player.set_volume(v),
             PlayerAction::SetSpeed(s) => rodio_player.set_speed(s),
             PlayerAction::PreloadGapless(path) => {
-                rodio_player.preload_gapless(path.as_deref());
+                // This action only ever *clears* a stale preload (`path` is
+                // `None`); the real gapless preload with baked ReplayGain happens
+                // directly in `spawn_playback_monitor`. A default (unity) RG here
+                // is harmless — the `None` path never builds an audio source.
+                rodio_player.preload_gapless(path.as_deref(), TrackReplayGain::default());
             }
             PlayerAction::UpdatePlayCount(track_id) => {
                 use crate::tasks::play_count_flusher::{PlayCountEvent, try_send};

@@ -1,6 +1,7 @@
 //! Tests for the graphic-equalizer DSP core.
 
 use std::num::NonZero;
+use std::sync::Arc;
 use std::time::Duration;
 
 use rodio::source::SeekError;
@@ -10,6 +11,7 @@ use super::{
     BAND_FREQS, EqShared, EqSource, MAX_GAIN_DB, MAX_PREAMP_DB, MIN_GAIN_DB, MIN_PREAMP_DB,
     NUM_BANDS, PRESETS, clamp_gain, clamp_preamp, normalize_gains, preset_index,
 };
+use crate::player::replaygain::{ReplayGainShared, RgMode, TrackReplayGain};
 
 // --- helpers ---------------------------------------------------------------
 
@@ -93,7 +95,23 @@ impl Source for TestSource {
 
 fn run_eq(gains: &[f32], enabled: bool, input: Vec<f32>, channels: u16) -> Vec<f32> {
     let shared = EqShared::new(enabled, gains);
-    EqSource::new(TestSource::new(input, channels, 44_100), shared).collect()
+    // Inert ReplayGain (disabled, no baked tags) so these tests exercise the EQ
+    // path alone.
+    let rg = ReplayGainShared::new();
+    EqSource::new(TestSource::new(input, channels, 44_100), shared, rg, TrackReplayGain::default())
+        .collect()
+}
+
+/// Collect an `EqSource` over a mono 44.1 kHz signal with the given EQ-enabled
+/// flag (bands flat) and `ReplayGain` state (shared master + baked per-track tags).
+fn run_rg(
+    eq_enabled: bool,
+    rg: Arc<ReplayGainShared>,
+    baked: TrackReplayGain,
+    input: Vec<f32>,
+) -> Vec<f32> {
+    let shared = EqShared::new(eq_enabled, &[0.0; NUM_BANDS]);
+    EqSource::new(TestSource::new(input, 1, 44_100), shared, rg, baked).collect()
 }
 
 // --- tests -----------------------------------------------------------------
@@ -171,7 +189,13 @@ fn band_outside_nyquist_is_skipped() {
 
     let input = ramp(256);
     let shared = EqShared::new(true, &gains);
-    let out: Vec<f32> = EqSource::new(TestSource::new(input.clone(), 1, 8_000), shared).collect();
+    let out: Vec<f32> = EqSource::new(
+        TestSource::new(input.clone(), 1, 8_000),
+        shared,
+        ReplayGainShared::new(),
+        TrackReplayGain::default(),
+    )
+    .collect();
     assert_eq!(bits(&out), bits(&input));
 }
 
@@ -187,7 +211,12 @@ fn seek_resets_filter_state() {
     // Warm a source's delay lines on the first half, then seek back to 0 and
     // collect the full run. With state reset, it must match the fresh run.
     let shared = EqShared::new(true, &gains);
-    let mut src = EqSource::new(TestSource::new(input.clone(), 1, 44_100), shared);
+    let mut src = EqSource::new(
+        TestSource::new(input.clone(), 1, 44_100),
+        shared,
+        ReplayGainShared::new(),
+        TrackReplayGain::default(),
+    );
     for _ in 0..400 {
         let _ = src.next();
     }
@@ -201,7 +230,12 @@ fn seek_resets_filter_state() {
 #[test]
 fn live_gain_change_is_observed_via_generation() {
     let shared = EqShared::new(true, &[0.0; NUM_BANDS]);
-    let mut src = EqSource::new(TestSource::new(ramp(2048), 1, 44_100), shared.clone());
+    let mut src = EqSource::new(
+        TestSource::new(ramp(2048), 1, 44_100),
+        shared.clone(),
+        ReplayGainShared::new(),
+        TrackReplayGain::default(),
+    );
 
     // First samples with a flat curve are passthrough.
     let head: Vec<f32> = (0..256).filter_map(|_| src.next()).collect();
@@ -238,7 +272,13 @@ fn preamp_scales_a_flat_curve() {
 
     let shared = EqShared::new(true, &[0.0; NUM_BANDS]);
     shared.set_preamp(-6.0);
-    let out: Vec<f32> = EqSource::new(TestSource::new(input.clone(), 2, 44_100), shared).collect();
+    let out: Vec<f32> = EqSource::new(
+        TestSource::new(input.clone(), 2, 44_100),
+        shared,
+        ReplayGainShared::new(),
+        TrackReplayGain::default(),
+    )
+    .collect();
 
     assert_ne!(bits(&out), bits(&input), "a non-zero preamp must change a flat curve");
     assert!(out.iter().zip(&input).all(|(o, i)| approx(*o, *i * factor)));
@@ -252,7 +292,13 @@ fn limiter_keeps_heavy_boost_within_full_scale() {
     let input = ramp(4096);
     let shared = EqShared::new(true, &[MAX_GAIN_DB; NUM_BANDS]);
     shared.set_preamp(MAX_PREAMP_DB);
-    let out: Vec<f32> = EqSource::new(TestSource::new(input, 2, 44_100), shared).collect();
+    let out: Vec<f32> = EqSource::new(
+        TestSource::new(input, 2, 44_100),
+        shared,
+        ReplayGainShared::new(),
+        TrackReplayGain::default(),
+    )
+    .collect();
 
     assert!(out.iter().all(|s| s.is_finite()));
     assert!(out.iter().all(|s| s.abs() <= 1.0 + 1e-6), "output must not exceed full scale");
@@ -278,4 +324,66 @@ fn shared_gain_setters_clamp_and_roundtrip() {
 
     // Out-of-range index is a no-op, not a panic.
     shared.set_gain(999, 5.0);
+}
+
+// --- ReplayGain integration (⚠ M1 / M2 guards) -----------------------------
+
+#[test]
+fn replaygain_applies_with_eq_disabled() {
+    // ⚠ M1: ReplayGain enabled, EQ DISABLED. The source must NOT bypass — output
+    // is the input scaled by the baked gain (-6.02 dB ≈ ×0.5, low enough that
+    // the limiter never engages), proving the EQ-off early return doesn't kill RG.
+    let input = ramp(512);
+    let rg = ReplayGainShared::new();
+    rg.set_enabled(true);
+    rg.set_mode(RgMode::Album);
+    let baked = TrackReplayGain { album_gain: Some(-6.020_6), ..Default::default() };
+
+    let out = run_rg(false, rg, baked, input.clone());
+
+    assert_ne!(bits(&out), bits(&input), "ReplayGain must apply even with the EQ off");
+    assert!(out.iter().all(|s| s.is_finite()));
+    assert!(out.iter().zip(&input).all(|(o, i)| approx(*o, *i * 0.5)));
+}
+
+#[test]
+fn replaygain_enabled_untagged_track_is_passthrough() {
+    // RG enabled but the track has no tags and the EQ is off → unity gain → the
+    // bit-identical bypass still holds (no wasted DSP on untagged tracks).
+    let input = ramp(512);
+    let rg = ReplayGainShared::new();
+    rg.set_enabled(true);
+    let out = run_rg(false, rg, TrackReplayGain::default(), input.clone());
+    assert_eq!(bits(&out), bits(&input));
+}
+
+#[test]
+fn live_replaygain_change_is_observed_via_generation() {
+    // ⚠ M2: EQ enabled but flat (0 dB, no preamp), so only ReplayGain can alter
+    // the signal. Start with RG disabled → passthrough; enable RG mid-stream with
+    // NO EQ change → subsequent samples must diverge, proving `next()` polls the
+    // ReplayGain generation too.
+    let input = ramp(2048);
+    let rg = ReplayGainShared::new(); // starts disabled
+    let baked = TrackReplayGain { album_gain: Some(-6.020_6), ..Default::default() };
+
+    let shared = EqShared::new(true, &[0.0; NUM_BANDS]);
+    let mut src = EqSource::new(
+        TestSource::new(input.clone(), 1, 44_100),
+        shared,
+        rg.clone(),
+        baked,
+    );
+
+    let head: Vec<f32> = (0..256).filter_map(|_| src.next()).collect();
+    assert_eq!(bits(&head), bits(&input[..256]), "flat EQ + RG off must be passthrough");
+
+    rg.set_enabled(true);
+    let tail: Vec<f32> = src.collect();
+    assert!(tail.iter().all(|s| s.is_finite()));
+    assert_ne!(
+        bits(&tail),
+        bits(&input[256..]),
+        "a live ReplayGain-only change must take effect"
+    );
 }

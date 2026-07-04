@@ -962,3 +962,21 @@ msgid "{n} playlist exported"
 msgid_plural "{n} playlists exported"
 msgstr[0] "{n} λίστα εξήχθη"
 msgstr[1] "{n} λίστες εξήχθησαν"
+
+msgid "ReplayGain"
+msgstr "ReplayGain"
+
+msgid "Enable ReplayGain"
+msgstr "Ενεργοποίηση ReplayGain"
+
+msgid "Normalization mode"
+msgstr "Λειτουργία κανονικοποίησης"
+
+msgid "Track"
+msgstr "Κομμάτι"
+
+msgid "Prevent clipping"
+msgstr "Αποτροπή ψαλιδίσματος"
+
+msgid "ReplayGain only affects tracks that already have loudness tags. Scan your library with a tool like rsgain or loudgain to add them."
+msgstr "Το ReplayGain επηρεάζει μόνο κομμάτια που έχουν ήδη ετικέτες έντασης ήχου. Σαρώστε τη βιβλιοθήκη σας με ένα εργαλείο όπως το rsgain ή το loudgain για να τις προσθέσετε."

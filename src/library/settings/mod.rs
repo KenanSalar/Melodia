@@ -20,6 +20,7 @@ pub mod appearance;
 pub mod equalizer;
 pub mod folders;
 pub mod playback;
+pub mod replaygain;
 pub mod updates;
 pub mod view;
 
@@ -27,6 +28,10 @@ pub use appearance::{
     set_appearance, set_corner_radius, set_dynamic_color_style, set_match_unfocused_to_system_bg,
 };
 pub use equalizer::{set_eq_band_gains_and_preset, set_eq_enabled, set_eq_preamp};
+pub use replaygain::{
+    set_replaygain_enabled, set_replaygain_mode, set_replaygain_preamp,
+    set_replaygain_prevent_clipping,
+};
 pub use folders::{
     add_folder, get_folders, reconcile_watched_folders, remove_folder, scan_folder,
     scan_folder_internal, set_folder_watching_enabled, toggle_folder_watching,

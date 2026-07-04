@@ -11,6 +11,7 @@ use crate::config::Paths;
 use crate::error::AppError;
 
 use super::equalizer::{self, EqShared, EqSource};
+use super::replaygain::{ReplayGainShared, RgMode, TrackReplayGain};
 use super::types::PersistableQueue;
 
 /// Trait abstracting audio playback operations.
@@ -22,6 +23,7 @@ pub trait PlayerBackend: Send + Sync {
         volume: f64,
         speed: f64,
         start_position_ms: Option<u64>,
+        baked_rg: TrackReplayGain,
     ) -> Result<(), AppError>;
     fn resume(&self);
     fn pause(&self);
@@ -29,7 +31,7 @@ pub trait PlayerBackend: Send + Sync {
     fn seek(&self, position_ms: u64);
     fn set_volume(&self, volume: f64);
     fn set_speed(&self, speed: f64);
-    fn preload_gapless(&self, file_path: Option<&str>);
+    fn preload_gapless(&self, file_path: Option<&str>, baked_rg: TrackReplayGain);
 }
 
 /// Blanket impl: any `Deref<Target = T>` where T: `PlayerBackend` also implements `PlayerBackend`.
@@ -38,8 +40,8 @@ impl<T: std::ops::Deref + Send + Sync> PlayerBackend for T
 where
     T::Target: PlayerBackend,
 {
-    fn play_media(&self, file_path: &str, volume: f64, speed: f64, start_position_ms: Option<u64>) -> Result<(), AppError> {
-        (**self).play_media(file_path, volume, speed, start_position_ms)
+    fn play_media(&self, file_path: &str, volume: f64, speed: f64, start_position_ms: Option<u64>, baked_rg: TrackReplayGain) -> Result<(), AppError> {
+        (**self).play_media(file_path, volume, speed, start_position_ms, baked_rg)
     }
     fn resume(&self) { (**self).resume(); }
     fn pause(&self) { (**self).pause(); }
@@ -47,7 +49,7 @@ where
     fn seek(&self, position_ms: u64) { (**self).seek(position_ms); }
     fn set_volume(&self, volume: f64) { (**self).set_volume(volume); }
     fn set_speed(&self, speed: f64) { (**self).set_speed(speed); }
-    fn preload_gapless(&self, file_path: Option<&str>) { (**self).preload_gapless(file_path); }
+    fn preload_gapless(&self, file_path: Option<&str>, baked_rg: TrackReplayGain) { (**self).preload_gapless(file_path, baked_rg); }
 }
 
 impl PlayerBackend for RodioPlayer {
@@ -57,8 +59,9 @@ impl PlayerBackend for RodioPlayer {
         volume: f64,
         speed: f64,
         start_position_ms: Option<u64>,
+        baked_rg: TrackReplayGain,
     ) -> Result<(), AppError> {
-        self.play_media(file_path, volume, speed, start_position_ms)
+        self.play_media(file_path, volume, speed, start_position_ms, baked_rg)
     }
     fn resume(&self) { self.resume(); }
     fn pause(&self) { self.pause(); }
@@ -66,7 +69,7 @@ impl PlayerBackend for RodioPlayer {
     fn seek(&self, position_ms: u64) { self.seek(position_ms); }
     fn set_volume(&self, volume: f64) { self.set_volume(volume); }
     fn set_speed(&self, speed: f64) { self.set_speed(speed); }
-    fn preload_gapless(&self, file_path: Option<&str>) { self.preload_gapless(file_path); }
+    fn preload_gapless(&self, file_path: Option<&str>, baked_rg: TrackReplayGain) { self.preload_gapless(file_path, baked_rg); }
 }
 
 /// Result of checking the Rodio player queue in a single lock acquisition.
@@ -140,6 +143,11 @@ pub struct RodioPlayer {
     // live change applies to both the playing track and the gapless-preloaded
     // one. Mutated off the player lock; seeded at boot from persisted settings.
     eq: Arc<EqShared>,
+    // Lock-free ReplayGain master state (enabled / mode / preamp / prevent-clip).
+    // Shared by every `EqSource` like `eq`, so a live change applies to both the
+    // playing and preloaded track; the *per-track* gain is baked per source, not
+    // held here. Seeded at boot from persisted settings.
+    rg: Arc<ReplayGainShared>,
 }
 
 impl RodioPlayer {
@@ -150,6 +158,7 @@ impl RodioPlayer {
             player: std::sync::Mutex::new(player),
             gapless_pending: AtomicBool::new(false),
             eq: EqShared::new(false, &[0.0; equalizer::NUM_BANDS]),
+            rg: ReplayGainShared::new(),
         }
     }
 
@@ -161,12 +170,13 @@ impl RodioPlayer {
         volume: f64,
         speed: f64,
         start_position_ms: Option<u64>,
+        baked_rg: TrackReplayGain,
     ) -> Result<(), AppError> {
         let player = self.lock_player();
         player.clear();
         player.set_volume(narrow_audio_param(volume));
         player.set_speed(narrow_audio_param(speed));
-        let source = EqSource::new(decode_file(file_path)?, self.eq.clone());
+        let source = EqSource::new(decode_file(file_path)?, self.eq.clone(), self.rg.clone(), baked_rg);
         player.append(source);
         player.play();
         self.gapless_pending.store(false, Ordering::Release);
@@ -262,13 +272,34 @@ impl RodioPlayer {
         self.eq.set_preamp(preamp_db);
     }
 
+    /// Enable / disable `ReplayGain`. Lock-free — touches only the shared RG state;
+    /// every `EqSource` (playing + preloaded) picks it up on its next sample.
+    pub fn set_replaygain_enabled(&self, enabled: bool) {
+        self.rg.set_enabled(enabled);
+    }
+
+    /// Set the `ReplayGain` mode (Track / Album). Lock-free.
+    pub fn set_replaygain_mode(&self, mode: RgMode) {
+        self.rg.set_mode(mode);
+    }
+
+    /// Set the `ReplayGain` preamp (dB). Lock-free.
+    pub fn set_replaygain_preamp(&self, preamp_db: f32) {
+        self.rg.set_preamp(preamp_db);
+    }
+
+    /// Enable / disable the static peak-based clip guard. Lock-free.
+    pub fn set_replaygain_prevent_clipping(&self, on: bool) {
+        self.rg.set_prevent_clipping(on);
+    }
+
     /// Whether a gapless source is currently staged behind the playing one.
     /// Used by the playback monitor to avoid re-issuing the late preload each tick.
     pub fn is_gapless_preloaded(&self) -> bool {
         self.gapless_pending.load(Ordering::Acquire)
     }
 
-    pub fn preload_gapless(&self, file_path: Option<&str>) {
+    pub fn preload_gapless(&self, file_path: Option<&str>, baked_rg: TrackReplayGain) {
         match file_path {
             Some(path) => {
                 // Decode (file open + Symphonia format probe — synchronous
@@ -284,7 +315,7 @@ impl RodioPlayer {
                         // Wrap before locking — `EqSource::new` only reads the
                         // decoder's channel/rate, no I/O, so it stays out of the
                         // player-lock window the position monitor contends for.
-                        let source = EqSource::new(source, self.eq.clone());
+                        let source = EqSource::new(source, self.eq.clone(), self.rg.clone(), baked_rg);
                         let player = self.lock_player();
                         player.append(source);
                         self.gapless_pending.store(true, Ordering::Release);

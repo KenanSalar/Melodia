@@ -960,3 +960,21 @@ msgid "{n} playlist exported"
 msgid_plural "{n} playlists exported"
 msgstr[0] "{n} playlist esportata"
 msgstr[1] "{n} playlist esportate"
+
+msgid "ReplayGain"
+msgstr "ReplayGain"
+
+msgid "Enable ReplayGain"
+msgstr "Abilita ReplayGain"
+
+msgid "Normalization mode"
+msgstr "Modalità di normalizzazione"
+
+msgid "Track"
+msgstr "Traccia"
+
+msgid "Prevent clipping"
+msgstr "Previeni clipping"
+
+msgid "ReplayGain only affects tracks that already have loudness tags. Scan your library with a tool like rsgain or loudgain to add them."
+msgstr "ReplayGain influisce solo sulle tracce che hanno già tag di volume. Analizza la tua libreria con uno strumento come rsgain o loudgain per aggiungerli."

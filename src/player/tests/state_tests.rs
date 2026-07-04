@@ -17,6 +17,10 @@ fn make_summary(id: i64, title: &str, duration_ms: i64) -> Arc<TrackSummary> {
         disc_number: None,
         last_position: 0,
         is_favorite: false,
+        replaygain_track_gain: None,
+        replaygain_track_peak: None,
+        replaygain_album_gain: None,
+        replaygain_album_peak: None,
     })
 }
 
@@ -724,6 +728,10 @@ fn test_restore_queue_with_last_position() {
         disc_number: None,
         last_position: 45_000,
         is_favorite: false,
+        replaygain_track_gain: None,
+        replaygain_track_peak: None,
+        replaygain_album_gain: None,
+        replaygain_album_peak: None,
     });
 
     let persistable = PersistableQueue {

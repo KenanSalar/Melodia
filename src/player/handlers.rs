@@ -171,7 +171,14 @@ pub fn spawn_playback_monitor(tracker: &TaskTracker, ctx: PlaybackMonitorContext
                             && state.duration_ms.saturating_sub(state.position_ms)
                                 < PRELOAD_LEAD_MS
                         {
-                            state.queue.peek_next().map(|t| t.file_path.clone())
+                            // Capture the next track's baked ReplayGain alongside
+                            // its path — it must travel with *its own* source (the
+                            // preloaded track has different tags than the playing
+                            // one), so the gain is baked per source, not shared.
+                            state
+                                .queue
+                                .peek_next()
+                                .map(|t| (t.file_path.clone(), t.replaygain()))
                         } else {
                             None
                         };
@@ -191,8 +198,8 @@ pub fn spawn_playback_monitor(tracker: &TaskTracker, ctx: PlaybackMonitorContext
                         let _ = position_tx.send(Some(tick.clone()));
                     }
 
-                    if let Some(path) = late_preload {
-                        rodio_player.preload_gapless(Some(&path));
+                    if let Some((path, rg)) = late_preload {
+                        rodio_player.preload_gapless(Some(&path), rg);
                     }
 
                     // OS media controls: update position every ~5 seconds

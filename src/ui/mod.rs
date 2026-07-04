@@ -10,6 +10,7 @@ pub mod detail_filter;
 pub mod detail_selection;
 pub mod detail_view;
 pub mod equalizer;
+pub mod replaygain;
 pub mod event_sink;
 pub mod favorites;
 pub mod file_watching;

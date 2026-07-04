@@ -160,6 +160,16 @@ impl AppState {
         rodio.set_eq_preamp(settings.equalizer.eq_preamp);
         rodio.set_eq_enabled(settings.equalizer.eq_enabled);
 
+        // Seed ReplayGain from persisted settings the same way — master state on
+        // the Rodio backend, per-track gain baked per source at play time. Ships
+        // off by default; the mode string falls back to Album on an unknown value.
+        rodio.set_replaygain_preamp(settings.replaygain.rg_preamp);
+        rodio.set_replaygain_mode(crate::player::replaygain::RgMode::from_settings_str(
+            &settings.replaygain.rg_mode,
+        ));
+        rodio.set_replaygain_prevent_clipping(settings.replaygain.rg_prevent_clipping);
+        rodio.set_replaygain_enabled(settings.replaygain.rg_enabled);
+
         let cover_cache: CoverCache = crate::media::artwork::new_cover_cache();
 
         let (vm_tx, _) = watch::channel::<Option<PlayerViewModelLight>>(None);

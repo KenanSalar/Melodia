@@ -225,6 +225,7 @@ pub fn install_library_settings_and_friends(
     ui::callbacks::wire_library_settings(app, state);
     ui::playback_settings::install_playback_settings(app, state);
     ui::equalizer::install_equalizer(app, state);
+    ui::replaygain::install_replaygain(app, state);
     let notifications = ui::notifications::install(app);
     ui::file_watching::install(app, state, &notifications);
     ui::updater_settings::install(app, state);

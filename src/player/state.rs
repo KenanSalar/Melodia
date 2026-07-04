@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 
 use super::event_sink::PlayerSinks;
 use super::queue::QueueState;
+use super::replaygain::TrackReplayGain;
 use crate::entities::track::TrackSummary;
 
 use super::types::{PersistableQueue, PlaybackStatus, RepeatMode};
@@ -145,6 +146,8 @@ pub enum PlayerAction {
         volume: f64,
         speed: f64,
         start_position_ms: Option<u64>,
+        /// This track's baked `ReplayGain` tag values, applied by the audio source.
+        replaygain: TrackReplayGain,
     },
     Resume,
     Pause,
@@ -378,6 +381,7 @@ pub fn play_track_inner(
     let file_path = track.file_path.clone();
     let volume = state.effective_volume();
     let speed = state.playback_speed;
+    let replaygain = track.replaygain();
     state.current_track = Some(track);
 
     // Gapless preload is staged late (by the playback monitor) when the
@@ -389,6 +393,7 @@ pub fn play_track_inner(
         volume,
         speed,
         start_position_ms: clamped_pos,
+        replaygain,
     }]
 }
 

@@ -412,3 +412,36 @@ fn corner_radius_by_desktop_environment() {
     unsafe { std::env::remove_var("XDG_CURRENT_DESKTOP") };
     assert_eq!(get_os_corner_radius(), 6, "missing env should return 6");
 }
+
+#[test]
+fn test_replaygain_defaults_when_absent() -> Result<(), AppError> {
+    // An older settings.json (written before ReplayGain existed) deserializes to
+    // the inert defaults: off, "album" mode, 0 dB preamp, prevent-clipping on.
+    let json = r#"{"theme_id": "catppuccin"}"#;
+    let settings: SettingsData = serde_json::from_str(json).map_err(|e| json_err(&e))?;
+    assert!(!settings.replaygain.rg_enabled);
+    assert_eq!(settings.replaygain.rg_mode, "album");
+    assert!((settings.replaygain.rg_preamp - 0.0).abs() < f32::EPSILON);
+    assert!(settings.replaygain.rg_prevent_clipping);
+    Ok(())
+}
+
+#[test]
+fn test_replaygain_roundtrip() -> Result<(), AppError> {
+    let settings = SettingsData {
+        replaygain: ReplayGainFlags {
+            rg_enabled: true,
+            rg_mode: "track".to_owned(),
+            rg_preamp: -3.0,
+            rg_prevent_clipping: false,
+        },
+        ..SettingsData::default()
+    };
+    let json = serde_json::to_string(&settings).map_err(|e| json_err(&e))?;
+    let deserialized: SettingsData = serde_json::from_str(&json).map_err(|e| json_err(&e))?;
+    assert!(deserialized.replaygain.rg_enabled);
+    assert_eq!(deserialized.replaygain.rg_mode, "track");
+    assert!((deserialized.replaygain.rg_preamp - (-3.0)).abs() < f32::EPSILON);
+    assert!(!deserialized.replaygain.rg_prevent_clipping);
+    Ok(())
+}

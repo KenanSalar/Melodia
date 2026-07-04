@@ -313,6 +313,34 @@ pub fn player_set_eq_preamp(ctx: &PlaybackContext, preamp_db: f32) {
     ctx.rodio.set_eq_preamp(preamp_db);
 }
 
+// --- ReplayGain ------------------------------------------------------------
+//
+// ReplayGain master state (enabled / mode / preamp / prevent-clipping) lives on
+// the same lock-free shared cell as the EQ, so these setters mirror the EQ ones:
+// synchronous, infallible, and applied to the playing + gapless-preloaded track
+// at once. The *per-track* gain is baked per source at play time (see
+// `player::replaygain`), not set here.
+
+/// Toggle `ReplayGain` on the live player.
+pub fn player_set_replaygain_enabled(ctx: &PlaybackContext, enabled: bool) {
+    ctx.rodio.set_replaygain_enabled(enabled);
+}
+
+/// Set the `ReplayGain` mode (Track / Album) on the live player.
+pub fn player_set_replaygain_mode(ctx: &PlaybackContext, mode: crate::player::replaygain::RgMode) {
+    ctx.rodio.set_replaygain_mode(mode);
+}
+
+/// Set the `ReplayGain` preamp (dB) on the live player.
+pub fn player_set_replaygain_preamp(ctx: &PlaybackContext, preamp_db: f32) {
+    ctx.rodio.set_replaygain_preamp(preamp_db);
+}
+
+/// Toggle the static peak-based clip guard on the live player.
+pub fn player_set_replaygain_prevent_clipping(ctx: &PlaybackContext, on: bool) {
+    ctx.rodio.set_replaygain_prevent_clipping(on);
+}
+
 #[cfg(test)]
 #[path = "tests/playback_tests.rs"]
 mod tests;

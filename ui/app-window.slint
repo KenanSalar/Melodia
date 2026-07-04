@@ -19,7 +19,7 @@ import "assets/fonts/vazirmatn/Vazirmatn-SemiBold.ttf";
 
 import { Theme } from "theme.slint";
 import { Settings } from "settings.slint";
-import { Player, Equalizer, Nav, NavEnterFrom, MiniPlayer, Tracks, Browse, LibrarySettings, Dialog, WindowChrome, Queue, Notifications, NowPlaying, Favorites, Albums, AlbumDetail, Artists, ArtistDetail, Genres, GenreDetail, Playlists, PlaylistDetail, PopupHighlight, Search, MelodiaUpdater, RowCovers } from "globals.slint";
+import { Player, Equalizer, ReplayGain, Nav, NavEnterFrom, MiniPlayer, Tracks, Browse, LibrarySettings, Dialog, WindowChrome, Queue, Notifications, NowPlaying, Favorites, Albums, AlbumDetail, Artists, ArtistDetail, Genres, GenreDetail, Playlists, PlaylistDetail, PopupHighlight, Search, MelodiaUpdater, RowCovers } from "globals.slint";
 import { TrackSummaryRow, TrackListRow, PlayerVm, QueueVm, QueueRow, FolderListRow,
          BrowseFolderRow, BreadcrumbRow, NotificationRow, TrackMetaRow,
          AlbumRow, AlbumGridRow, ArtistRow, ArtistGridRow,
@@ -51,7 +51,7 @@ import { ViewTransition } from "components/view-transition.slint";
 
 // Re-export so Rust can mention these from `slint::include_modules!`.
 export {
-    Theme, Settings, Player, Equalizer, Nav, MiniPlayer, Tracks, Browse, LibrarySettings, Dialog, WindowChrome, Queue, Notifications, NowPlaying, Favorites, Albums, AlbumDetail, Artists, ArtistDetail, Genres, GenreDetail, Playlists, PlaylistDetail, PopupHighlight, Search, MelodiaUpdater, RowCovers,
+    Theme, Settings, Player, Equalizer, ReplayGain, Nav, MiniPlayer, Tracks, Browse, LibrarySettings, Dialog, WindowChrome, Queue, Notifications, NowPlaying, Favorites, Albums, AlbumDetail, Artists, ArtistDetail, Genres, GenreDetail, Playlists, PlaylistDetail, PopupHighlight, Search, MelodiaUpdater, RowCovers,
     TrackSummaryRow, TrackListRow, PlayerVm, QueueVm, QueueRow, FolderListRow,
     BrowseFolderRow, BreadcrumbRow, NotificationRow, TrackMetaRow,
     AlbumRow, AlbumGridRow, ArtistRow, ArtistGridRow,
