@@ -1,6 +1,6 @@
 import { ScrollView } from "std-widgets.slint";
 import { Theme } from "../theme.slint";
-import { Favorites, Player } from "../globals.slint";
+import { Favorites, Player, CompositeScroll } from "../globals.slint";
 import { CoverMosaic } from "../components/grid/cover-mosaic.slint";
 import { HorizontalCardStrip } from "../components/grid/horizontal-card-strip.slint";
 import { EntityCard } from "../components/grid/entity-card.slint";
@@ -310,14 +310,27 @@ export component FavoritesView inherits Rectangle {
         // (`min` in its `height` binding), so its inner ListView
         // virtualizes to ~visible rows — the outer ScrollView's own
         // travel covers just the strips region, and the unified
-        // scrollbar composes both travels. Wheel handoff between the
-        // regions is native: a Slint Flickable at its scroll edge
-        // forwards wheel events to the parent, so scrolling up at the
-        // list top brings the strips back (the unified scroll UX
-        // matches the Tauri version the user is porting from).
+        // scrollbar composes both travels. The mouse WHEEL does NOT hand
+        // off between the two nested scrollers natively — Slint's inner
+        // ListView swallows the wheel at its top edge instead of bubbling
+        // to `below-sv` (see CompositeScroll). So `hover-catch` reports
+        // region hover to the winit MouseWheel filter, which routes
+        // vertical wheel through `vbar.scroll-to`; the scrollbar-drag path
+        // already composes both travels directly.
         below-hero := Rectangle {
             vertical-stretch: 1;
             clip: true;
+
+            // Ancestor hover sentinel (see CompositeScroll). Forwards every
+            // event to the ScrollView child — row clicks, drags and native
+            // horizontal scroll are unaffected; only its `has-hover` is
+            // observed. Empty-space clicks fall through to here (rows grab
+            // their own), reproducing the root backdrop's blur-on-empty-click.
+            hover-catch := TouchArea {
+                width: 100%;
+                height: 100%;
+                changed has-hover => { CompositeScroll.hovered = self.has-hover; }
+                clicked => { Favorites.blur-search-tick += 1; }
 
             below-sv := ScrollView {
                 width: 100%;
@@ -612,6 +625,7 @@ export component FavoritesView inherits Rectangle {
         }
                 }
             }
+            }
         }
     }
 
@@ -622,10 +636,26 @@ export component FavoritesView inherits Rectangle {
     property <length> v-outer-max: max(0px, below-sv.viewport-height - below-sv.visible-height);
     property <length> v-inner-max: max(0px, tl.v-viewport-height - tl.v-visible-height);
 
+    // Wheel routing (see CompositeScroll): the winit MouseWheel filter bumps
+    // `wheel-tick` after writing `wheel-dy` (+y = up). Globals can't be watched
+    // directly, so mirror the tick and apply one composite step through the
+    // same `vbar.scroll-to` split the scrollbar drag uses — the height cap and
+    // the inner ListView's virtualization stay untouched.
+    property <int> cs-wheel-watch: CompositeScroll.wheel-tick;
+    changed cs-wheel-watch => {
+        vbar.scroll-to(clamp(
+            (-below-sv.viewport-y + tl.v-offset) - CompositeScroll.wheel-dy,
+            0px, root.v-outer-max + root.v-inner-max));
+        // Consume the accumulated delta so the winit filter starts the next
+        // batch from zero (deltas accumulate in Rust to survive same-frame
+        // wheel coalescing — see CompositeScroll).
+        CompositeScroll.wheel-dy = 0px;
+    }
+
     // Outer vertical scrollbar covers the strips + tracklist together.
     // Pinned to the right edge of the below-hero region so it starts
     // exactly under the hero banner.
-    OverlayScrollbar {
+    vbar := OverlayScrollbar {
         horizontal: false;
         x: parent.width - self.width;
         y: below-hero.absolute-position.y - root.absolute-position.y;

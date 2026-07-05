@@ -1,6 +1,6 @@
 import { ListView, ScrollView } from "std-widgets.slint";
 import { Theme } from "../theme.slint";
-import { Browse, Nav, Player } from "../globals.slint";
+import { Browse, Nav, Player, CompositeScroll } from "../globals.slint";
 import { MaterialIcon } from "../components/material-icon.slint";
 import { IconButton } from "../components/icon-button.slint";
 import { ActionPill, PillLabel, PillButton, PillDivider } from "../components/action-pill.slint";
@@ -125,10 +125,12 @@ component BreadcrumbSegment inherits Rectangle {
 // view pattern. The TrackList is capped at the outer viewport height
 // (`min` in its `height` binding) so its inner ListView virtualizes to
 // ~visible rows; the outer ScrollView's own travel covers the folder
-// section, and the unified scrollbar composes both travels (wheel
-// handoff between the regions is native — a Slint Flickable at its
-// scroll edge forwards wheel events to the parent). The folder
-// `ListView` stays sized to its row count: folder rows are light
+// section, and the unified scrollbar composes both travels. The mouse
+// WHEEL does NOT hand off between the nested scrollers natively — Slint's
+// inner ListView swallows the wheel at its edge, so a `hover-catch`
+// sentinel reports region hover to the winit MouseWheel filter, which
+// routes vertical wheel through `vbar.scroll-to` (see CompositeScroll).
+// The folder `ListView` stays sized to its row count: folder rows are light
 // (icon + label, no popups) and directory listings are bounded.
 // The horizontal bar still drives `TrackList`'s internal column pan via
 // its `h-*` out properties. Both bars are siblings of the padded
@@ -272,6 +274,15 @@ export component BrowseView inherits Rectangle {
             vertical-stretch: 1;
             clip: true;
 
+            // Ancestor hover sentinel (see CompositeScroll). Wraps only the
+            // scroll region (not the sibling empty-state cards); forwards every
+            // event to the ScrollView child, so folder/row clicks and native
+            // horizontal scroll are unaffected — only its `has-hover` is read.
+            hover-catch := TouchArea {
+                width: 100%;
+                height: 100%;
+                changed has-hover => { CompositeScroll.hovered = self.has-hover; }
+
             below-sv := ScrollView {
                 width: 100%;
                 height: 100%;
@@ -375,6 +386,7 @@ export component BrowseView inherits Rectangle {
                     go-to-genre(gid) => { Browse.go-to-genre(gid); }
                 }
                 }
+            }
             }
 
             // 1. Root view with no library folders configured.
@@ -519,7 +531,22 @@ export component BrowseView inherits Rectangle {
     property <length> v-outer-max: max(0px, below-sv.viewport-height - below-sv.visible-height);
     property <length> v-inner-max: max(0px, tl.v-viewport-height - tl.v-visible-height);
 
-    OverlayScrollbar {
+    // Wheel routing (see CompositeScroll): mirror the winit filter's tick and
+    // apply one composite step through the same `vbar.scroll-to` split the
+    // scrollbar drag uses — the height cap and the inner ListView's
+    // virtualization stay untouched.
+    property <int> cs-wheel-watch: CompositeScroll.wheel-tick;
+    changed cs-wheel-watch => {
+        vbar.scroll-to(clamp(
+            (-below-sv.viewport-y + tl.v-offset) - CompositeScroll.wheel-dy,
+            0px, root.v-outer-max + root.v-inner-max));
+        // Consume the accumulated delta so the winit filter starts the next
+        // batch from zero (deltas accumulate in Rust to survive same-frame
+        // wheel coalescing — see CompositeScroll).
+        CompositeScroll.wheel-dy = 0px;
+    }
+
+    vbar := OverlayScrollbar {
         horizontal: false;
         x: parent.width - self.width;
         y: body.absolute-position.y - root.absolute-position.y;

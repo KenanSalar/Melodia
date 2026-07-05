@@ -19,7 +19,7 @@ import "assets/fonts/vazirmatn/Vazirmatn-SemiBold.ttf";
 
 import { Theme } from "theme.slint";
 import { Settings } from "settings.slint";
-import { Player, Equalizer, ReplayGain, Nav, NavEnterFrom, MiniPlayer, Tracks, Browse, LibrarySettings, Dialog, WindowChrome, Queue, Notifications, NowPlaying, Favorites, RecentlyPlayed, Albums, AlbumDetail, Artists, ArtistDetail, Genres, GenreDetail, Playlists, PlaylistDetail, PopupHighlight, Search, MelodiaUpdater, RowCovers } from "globals.slint";
+import { Player, Equalizer, ReplayGain, Nav, NavEnterFrom, CompositeScroll, MiniPlayer, Tracks, Browse, LibrarySettings, Dialog, WindowChrome, Queue, Notifications, NowPlaying, Favorites, RecentlyPlayed, Albums, AlbumDetail, Artists, ArtistDetail, Genres, GenreDetail, Playlists, PlaylistDetail, PopupHighlight, Search, MelodiaUpdater, RowCovers } from "globals.slint";
 import { TrackSummaryRow, TrackListRow, PlayerVm, QueueVm, QueueRow, FolderListRow,
          BrowseFolderRow, BreadcrumbRow, NotificationRow, TrackMetaRow,
          AlbumRow, AlbumGridRow, ArtistRow, ArtistGridRow,
@@ -52,7 +52,7 @@ import { ViewTransition } from "components/view-transition.slint";
 
 // Re-export so Rust can mention these from `slint::include_modules!`.
 export {
-    Theme, Settings, Player, Equalizer, ReplayGain, Nav, MiniPlayer, Tracks, Browse, LibrarySettings, Dialog, WindowChrome, Queue, Notifications, NowPlaying, Favorites, RecentlyPlayed, Albums, AlbumDetail, Artists, ArtistDetail, Genres, GenreDetail, Playlists, PlaylistDetail, PopupHighlight, Search, MelodiaUpdater, RowCovers,
+    Theme, Settings, Player, Equalizer, ReplayGain, Nav, CompositeScroll, MiniPlayer, Tracks, Browse, LibrarySettings, Dialog, WindowChrome, Queue, Notifications, NowPlaying, Favorites, RecentlyPlayed, Albums, AlbumDetail, Artists, ArtistDetail, Genres, GenreDetail, Playlists, PlaylistDetail, PopupHighlight, Search, MelodiaUpdater, RowCovers,
     TrackSummaryRow, TrackListRow, PlayerVm, QueueVm, QueueRow, FolderListRow,
     BrowseFolderRow, BreadcrumbRow, NotificationRow, TrackMetaRow,
     AlbumRow, AlbumGridRow, ArtistRow, ArtistGridRow,
@@ -156,6 +156,13 @@ export component AppWindow inherits Window {
     // another page.
     property <int> watched-nav-idx: Nav.selected-index;
     changed watched-nav-idx => {
+        // A tab switch changes the mounted content view — clear any stale
+        // composite-scroll hover flag (and any accumulated, un-applied wheel
+        // delta) left by an unmounted composite view, or the winit wheel filter
+        // would keep eating vertical wheel on the new view until the next mouse
+        // move (see CompositeScroll in globals.slint).
+        CompositeScroll.hovered = false;
+        CompositeScroll.wheel-dy = 0px;
         if (self.watched-nav-idx != 9) {
             Settings.search-query = "";
             Settings.blur-search-tick += 1;
@@ -180,11 +187,37 @@ export component AppWindow inherits Window {
     // open/close transitions.
     property <bool> watched-now-playing-open: Nav.now-playing-open;
     changed watched-now-playing-open => {
+        // NP open/close swaps the mounted content view — reset composite hover
+        // and any accumulated wheel delta (see watched-nav-idx / CompositeScroll).
+        CompositeScroll.hovered = false;
+        CompositeScroll.wheel-dy = 0px;
         Nav.now-playing-open-changed(self.watched-now-playing-open);
         // Opening / closing Now Playing de-instantiates the section view
         // underneath it — same focus-orphaning risk as a sidebar nav (see
         // `watched-nav-idx`). Re-grab focus so global shortcuts survive.
         keyboard-shortcuts.focus();
+    }
+
+    // Artist Detail (a composite-scroll view) opens/closes without a nav-index
+    // change — grid ↔ detail both live under index 5 — so the watched-nav-idx
+    // reset above would miss it. Mirror the detail id and reset composite hover
+    // on any change, else a stale hover flag from the unmounting view would
+    // trap the wheel on the artist grid (see CompositeScroll).
+    property <int> watched-artist-detail-id: ArtistDetail.artist-id;
+    changed watched-artist-detail-id => {
+        CompositeScroll.hovered = false;
+        CompositeScroll.wheel-dy = 0px;
+    }
+
+    // The miniplayer swap unmounts the whole full-UI branch
+    // (`if !root.mini-render-active`) — and with it any composite view — without
+    // a nav-index change, so the resets above would miss it. Reset composite
+    // hover here too, else the unmounting view's stale flag would trap the wheel
+    // in the miniplayer (see CompositeScroll).
+    property <bool> watched-mini-render: root.mini-render-active;
+    changed watched-mini-render => {
+        CompositeScroll.hovered = false;
+        CompositeScroll.wheel-dy = 0px;
     }
 
     // ---- Miniplayer responsive switch ----------------------------------

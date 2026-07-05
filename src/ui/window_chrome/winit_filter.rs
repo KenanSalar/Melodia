@@ -36,10 +36,10 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use slint::ComponentHandle;
 use slint::winit_030::WinitWindowAccessor;
-use slint::winit_030::winit::event::{ElementState, MouseButton, WindowEvent};
+use slint::winit_030::winit::event::{ElementState, MouseButton, MouseScrollDelta, WindowEvent};
 
 use crate::state::AppState;
-use crate::{AppWindow, PlaylistDetail, PopupHighlight, Queue, Theme};
+use crate::{AppWindow, CompositeScroll, PlaylistDetail, PopupHighlight, Queue, Theme};
 
 use super::{drop_coalescer, geometry};
 
@@ -238,6 +238,55 @@ pub(super) fn install(app: &AppWindow, state: &AppState, drag_hover: Arc<AtomicB
                     log::warn!("close-window: quit_event_loop: {e}");
                 }
                 slint::winit_030::EventResult::PreventDefault
+            }
+            // Composite-view wheel routing. Favorites / Recently Played /
+            // Artist Detail / Browse stack a strip section above a height-
+            // capped (virtualized) `TrackList` inside one outer `ScrollView`.
+            // Slint's inner `ListView` swallows the vertical wheel at its top
+            // edge instead of bubbling to the outer scroller, so the strips/hero
+            // can't be wheeled back once scrolled away (see `CompositeScroll` in
+            // globals.slint for the full root-cause note). There is no
+            // Slint-native seam to intercept the wheel without eating row
+            // clicks, so we do it here: only vertical-dominant wheel over a live
+            // composite region is taken over and fed into that view's existing
+            // composite scroll math. Horizontal-dominant wheel (column pan,
+            // strip carousels), the sidebar, and every non-composite view stay
+            // native. Delta conversion mirrors the Slint winit backend exactly
+            // (`event_loop.rs`: line delta × 60, pixel delta → logical).
+            WindowEvent::MouseWheel { delta, .. } => {
+                let (dx, dy) = match delta {
+                    MouseScrollDelta::LineDelta(lx, ly) => (lx * 60.0, ly * 60.0),
+                    MouseScrollDelta::PixelDelta(p) => {
+                        let l = p.to_logical::<f32>(f64::from(w.scale_factor()));
+                        (l.x, l.y)
+                    }
+                };
+                let Some(ui) = weak.upgrade() else {
+                    return slint::winit_030::EventResult::Propagate;
+                };
+                // Don't hijack the wheel while an overlay (Queue sheet / Dialog /
+                // Now Playing) is up: `hovered` can be stale-true if the overlay
+                // opened over a composite region without a pointer move, since
+                // Slint only clears `has-hover` on the next `MouseEvent::Exit`
+                // (one pointer event later). Mirrors the Mouse-4/5 arm's own
+                // overlay gate.
+                let cs = ui.global::<CompositeScroll>();
+                if cs.get_hovered()
+                    && !crate::ui::nav_history::overlay_open(&ui)
+                    && dy != 0.0
+                    && dy.abs() >= dx.abs()
+                {
+                    // Accumulate rather than overwrite: Slint fires the mounted
+                    // view's `changed wheel-tick` handler at most once per loop
+                    // iteration, so several wheel events landing before a re-eval
+                    // would otherwise collapse to just the last delta (under-scroll
+                    // on fast flicks). The view zeroes `wheel-dy` after applying, so
+                    // this only ever sums deltas within one un-applied frame.
+                    cs.set_wheel_dy(cs.get_wheel_dy() + dy);
+                    cs.set_wheel_tick(cs.get_wheel_tick().wrapping_add(1));
+                    return slint::winit_030::EventResult::PreventDefault;
+                }
+                slint::winit_030::EventResult::Propagate
             }
             _ => slint::winit_030::EventResult::Propagate,
         }

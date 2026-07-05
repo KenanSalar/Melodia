@@ -1,6 +1,6 @@
 import { ScrollView } from "std-widgets.slint";
 import { Theme } from "../theme.slint";
-import { RecentlyPlayed, Player } from "../globals.slint";
+import { RecentlyPlayed, Player, CompositeScroll } from "../globals.slint";
 import { CoverMosaic } from "../components/grid/cover-mosaic.slint";
 import { HorizontalCardStrip } from "../components/grid/horizontal-card-strip.slint";
 import { MaterialIcon } from "../components/material-icon.slint";
@@ -235,10 +235,24 @@ export component RecentlyPlayedView inherits Rectangle {
         // --- Below-hero scroll container --------------------------------
         // Wraps the Most Played strip AND the TrackList in a single outer
         // ScrollView so one scrollbar (mounted at the view root) covers both
-        // surfaces — the composite-scroll shape from Favorites.
+        // surfaces — the composite-scroll shape from Favorites, including the
+        // `hover-catch` wheel sentinel (Slint's inner ListView swallows the
+        // wheel at its edge, so vertical wheel is routed via the winit filter
+        // through `vbar.scroll-to` — see CompositeScroll).
         below-hero := Rectangle {
             vertical-stretch: 1;
             clip: true;
+
+            // Ancestor hover sentinel (see CompositeScroll). Forwards every
+            // event to the ScrollView child — row clicks, drags and native
+            // horizontal scroll are unaffected; only its `has-hover` is
+            // observed. Empty-space clicks fall through to here (rows grab
+            // their own), reproducing the root backdrop's blur-on-empty-click.
+            hover-catch := TouchArea {
+                width: 100%;
+                height: 100%;
+                changed has-hover => { CompositeScroll.hovered = self.has-hover; }
+                clicked => { RecentlyPlayed.blur-search-tick += 1; }
 
             below-sv := ScrollView {
                 width: 100%;
@@ -355,6 +369,7 @@ export component RecentlyPlayedView inherits Rectangle {
                     }
                 }
             }
+            }
         }
     }
 
@@ -364,7 +379,22 @@ export component RecentlyPlayedView inherits Rectangle {
     property <length> v-outer-max: max(0px, below-sv.viewport-height - below-sv.visible-height);
     property <length> v-inner-max: max(0px, tl.v-viewport-height - tl.v-visible-height);
 
-    OverlayScrollbar {
+    // Wheel routing (see CompositeScroll): mirror the winit filter's tick and
+    // apply one composite step through the same `vbar.scroll-to` split the
+    // scrollbar drag uses — the height cap and the inner ListView's
+    // virtualization stay untouched.
+    property <int> cs-wheel-watch: CompositeScroll.wheel-tick;
+    changed cs-wheel-watch => {
+        vbar.scroll-to(clamp(
+            (-below-sv.viewport-y + tl.v-offset) - CompositeScroll.wheel-dy,
+            0px, root.v-outer-max + root.v-inner-max));
+        // Consume the accumulated delta so the winit filter starts the next
+        // batch from zero (deltas accumulate in Rust to survive same-frame
+        // wheel coalescing — see CompositeScroll).
+        CompositeScroll.wheel-dy = 0px;
+    }
+
+    vbar := OverlayScrollbar {
         horizontal: false;
         x: parent.width - self.width;
         y: below-hero.absolute-position.y - root.absolute-position.y;

@@ -245,6 +245,36 @@ export global Nav {
     in-out property <bool> sidebar-dragging: false;
 }
 
+// CompositeScroll: bridges the winit `MouseWheel` filter
+// (`src/ui/window_chrome/winit_filter.rs`) to whichever *composite* view is
+// currently mounted — Favorites, Recently Played, Artist Detail, Browse. Those
+// views wrap a strip section + a height-capped (virtualized) `TrackList` in a
+// single outer `below-sv := ScrollView`. Slint's inner `ListView` swallows the
+// vertical wheel at its scroll edge instead of bubbling to `below-sv` (verified
+// in `i-slint-core` `flickable.rs::process_wheel_event`), so the strips/hero
+// can't be wheeled back once scrolled away. Fixing this in pure Slint is
+// impossible without breaking row clicks (a wrapping TouchArea forwards the
+// wheel to the ListView first; an overlay one grabs presses), so the winit
+// layer intercepts vertical-dominant wheel over the region and drives the
+// existing composite scroll math here. The height cap — and thus
+// virtualization — is left completely untouched.
+export global CompositeScroll {
+    // Set true by the mounted composite view's hover sentinel while the cursor
+    // is over its below-hero scroll region. Reset to false on any content-view
+    // switch (see `app-window.slint`) so a view unmounting mid-hover can't
+    // leave the flag stuck. The winit filter reads it to decide whether to take
+    // over the wheel or let Slint scroll natively (sidebar, other views).
+    in-out property <bool> hovered: false;
+    // Accumulated wheel delta in Slint logical px, +y = scroll up (matches
+    // `flickable.rs`'s sign: `viewport-y += delta`). Rust *adds* the event delta
+    // then bumps `wheel-tick`; the mounted composite view mirrors the tick,
+    // applies one composite scroll step, and zeroes `wheel-dy`. Accumulating
+    // (rather than overwriting) survives Slint coalescing several wheel events
+    // into one `changed wheel-tick` firing — no delta is dropped on fast flicks.
+    in-out property <length> wheel-dy: 0px;
+    in-out property <int> wheel-tick: 0;
+}
+
 // MiniPlayer: drives the compact miniplayer that replaces the full UI when
 // the OS window is shrunk past a threshold. Tauri parity: enter when
 // `width < 550px || height < 250px`, pick the `square` variant when
