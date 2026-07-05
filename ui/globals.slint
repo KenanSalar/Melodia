@@ -1671,6 +1671,98 @@ export global Favorites {
     }
 }
 
+// RecentlyPlayed: drives the Recently-Played view (a trimmed Favorites).
+// Owned by `src/ui/recently_played`. No hero mosaic / artist strip — just a
+// header (count + duration + Play All / Shuffle), a non-collapsible "Most
+// Played" strip, and a filterable `TrackList` of the 200 most-recently-played
+// tracks. Membership is fixed to that set; filter + column sort re-walk the
+// cache in memory (no re-query).
+export global RecentlyPlayed {
+    // Hero — 2×2 cover mosaic of the up-to-4 most-recently-played distinct
+    // covers. Empty list renders the empty-state tile.
+    in-out property <[string]> mosaic-paths;
+
+    // Hero blur cross-fade — two slots, never cleared (outgoing slot stays
+    // painted through the fade so a mosaic refresh never flashes). `has-blur`
+    // ⇒ either slot is non-empty (gates the accent-gradient floor fallback).
+    // Same dual-slot contract as `Favorites`.
+    in-out property <image> blur-img-a;
+    in-out property <image> blur-img-b;
+    in-out property <bool>  blur-use-a;
+    in-out property <bool>  has-blur;
+
+    // Most Played strip — library-wide top tracks by play_count. Reuses the
+    // unified `EntityStripRow` shape.
+    in-out property <[EntityStripRow]> most-played-rows;
+
+    // Recency list — `TrackList` data + filter + sort. `tracks` is the
+    // post-filter/sort view Rust writes. `sort-field` defaults to the synthetic
+    // "recency" (keep fetch order); a column header click swaps in a real field.
+    in-out property <[TrackListRow]> tracks;
+    in-out property <int>            filtered-count;
+    in-out property <string>         filter;
+    in-out property <int>            blur-search-tick: 0;
+    in-out property <string>         sort-field: "recency";  // recency | track_number | title | artist | album | genre | year | length
+    in-out property <string>         sort-dir: "desc";
+
+    // Header stats over the full recency set.
+    in-out property <int>    track-count;
+    in-out property <string> duration-text;   // "12h 34m"
+
+    // Per-column widths / visibility for the `TrackList` — mirrors the shape
+    // `Favorites` / `Tracks` use. Hydrated from
+    // `settings.view_columns["recently_played"]` +
+    // `settings.view_column_widths["recently_played"]`.
+    in-out property <length> w-number: 56px;
+    in-out property <length> w-title: 320px;
+    in-out property <length> w-artist: 200px;
+    in-out property <length> w-album: 220px;
+    in-out property <length> w-genre: 140px;
+    in-out property <length> w-year: 72px;
+    in-out property <length> w-length: 88px;
+
+    in-out property <bool> show-number: false;
+    in-out property <bool> show-artist: true;
+    in-out property <bool> show-album: true;
+    in-out property <bool> show-genre: false;
+    in-out property <bool> show-year: false;
+    in-out property <bool> show-artwork: true;
+
+    in-out property <[int]> selected-ids;
+    in-out property <int>   selection-anchor: -1;
+
+    // Lazy cover callbacks — the hero 2×2 mosaic tiles and the Most Played
+    // strip cards. The list rows resolve through the shared `RowCovers` global.
+    pure callback request-mosaic-cover(string)      -> image;
+    pure callback request-most-played-cover(string) -> image;
+
+    // Header actions.
+    callback play-all();
+    callback shuffle-all();
+
+    // Most Played card click ⇒ start playback in that scope.
+    callback play-track(int /*track_id*/);
+
+    // List row interactions — same shape as Tracks / Favorites.
+    callback play-row(int /*track_id*/, int /*index*/);
+    callback play-next([int] /*track_ids*/);
+    callback add-to-queue([int]);
+    callback toggle-row-favorite([int] /*track_ids*/, bool /*new*/);
+    callback select-row(int /*idx*/, int /*id*/, bool /*shift*/, bool /*ctrl*/);
+    callback clear-selection();
+    callback request-sort(string /*field*/);
+    callback toggle-column(string /*column_id*/);
+    callback filter-changed(string);
+    // Cross-tab navigation from a row's right-click "Go to …" entry.
+    callback go-to-album(int /*album_id*/);
+    callback go-to-artist(int /*artist_id*/);
+    callback go-to-genre(int /*genre_id*/);
+
+    // Section-visible signal — driven by `watched-recently-active` in
+    // `app-window.slint`.
+    callback section-active-changed(bool);
+}
+
 // Artists: drives the Artist grid view. Same ownership + filter / sort /
 // chunk contract as `Albums` (Rust owns the flat list; `apply-filter` and
 // `request-sort` re-derive `grid-rows` without a DB hit), just one row of

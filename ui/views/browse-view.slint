@@ -413,7 +413,12 @@ export component BrowseView inherits Rectangle {
                     PillButton {
                         icon: "settings";
                         text: @tr("Open Settings");
-                        clicked => { Nav.selected-index = 8; }
+                        // Settings is nav index 9 (Recently-Played took 8).
+                        // Persist like every other nav entry so the tab sticks.
+                        clicked => {
+                            Nav.selected-index = 9;
+                            Nav.persist-selected-index(9);
+                        }
                     }
                 }
                 }

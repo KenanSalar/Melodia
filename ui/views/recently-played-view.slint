@@ -1,0 +1,393 @@
+import { ScrollView } from "std-widgets.slint";
+import { Theme } from "../theme.slint";
+import { RecentlyPlayed, Player } from "../globals.slint";
+import { CoverMosaic } from "../components/grid/cover-mosaic.slint";
+import { HorizontalCardStrip } from "../components/grid/horizontal-card-strip.slint";
+import { MaterialIcon } from "../components/material-icon.slint";
+import { SearchBar } from "../components/search-bar.slint";
+import { ActionPill, PillLabel, PillButton, PillDivider } from "../components/action-pill.slint";
+import { ColumnTogglePopup } from "../components/track-list/column-toggle-popup.slint";
+import { TrackList } from "../components/track-list/track-list.slint";
+import { OverlayScrollbar } from "../components/overlay-scrollbar.slint";
+import { FilterThrottle } from "../components/filter-throttle.slint";
+
+// The Recently-Played view. Mirrors the Favorites layout — same hero (live 2×2
+// cover mosaic + count + duration + Play All / Shuffle) and the same unified
+// below-hero scroll — but trimmed: no Favorite Artists strip, and the "Most
+// Played" strip is non-collapsible. The hero mosaic shows the up-to-4
+// most-recently-played distinct covers; the `TrackList` holds the 200 most-
+// recently-played tracks (filter + column sort applied in memory over that
+// fixed set). Data flows through the `RecentlyPlayed` global.
+export component RecentlyPlayedView inherits Rectangle {
+    // Filter throttle: each keystroke bumps `pending`; the Timer fires the
+    // refilter callback at most once per `interval`. Same shape as Favorites.
+    property <int> filter-tick-pending: 0;
+
+    filter-throttle := FilterThrottle {
+        pending: root.filter-tick-pending;
+        fire() => { RecentlyPlayed.filter-changed(RecentlyPlayed.filter); }
+    }
+
+    // Backdrop catches any click no inner TouchArea consumes and bumps the blur
+    // tick — the SearchBar observes the counter and clears focus on change.
+    TouchArea {
+        clicked => { RecentlyPlayed.blur-search-tick += 1; }
+    }
+
+    private property <length> hero-height: 180px;
+    private property <length> hero-artwork: 140px;
+
+    // Stats line: "{n} tracks · {duration}". Empty-state copy stands alone.
+    private property <string> stats-text:
+        RecentlyPlayed.track-count > 0
+            ? @tr("{n} track" | "{n} tracks" % RecentlyPlayed.track-count)
+                + " · " + RecentlyPlayed.duration-text
+            : @tr("No recently played tracks");
+
+    // --- Full-bleed hero blur backdrop ----------------------------------
+    // Dual-slot crossfade (outgoing slot never cleared so a mosaic refresh
+    // never flashes). Accent-tinted gradient floor shows through when there is
+    // no blur image (nothing played yet / decode failure).
+    Rectangle {
+        x: 0; y: 0;
+        width: 100%; height: root.hero-height;
+        background: @linear-gradient(135deg,
+            Theme.accent.mix(Theme.base, 0.25),
+            Theme.base);
+    }
+    Image {
+        x: 0; y: 0;
+        width: 100%; height: root.hero-height;
+        source: RecentlyPlayed.blur-img-a;
+        image-fit: ImageFit.cover;
+        opacity: (RecentlyPlayed.has-blur && RecentlyPlayed.blur-use-a) ? 1.0 : 0.0;
+        animate opacity { duration: Theme.dur-med; easing: ease-in-out; }
+    }
+    Image {
+        x: 0; y: 0;
+        width: 100%; height: root.hero-height;
+        source: RecentlyPlayed.blur-img-b;
+        image-fit: ImageFit.cover;
+        opacity: (RecentlyPlayed.has-blur && !RecentlyPlayed.blur-use-a) ? 1.0 : 0.0;
+        animate opacity { duration: Theme.dur-med; easing: ease-in-out; }
+    }
+    Rectangle {
+        x: 0; y: 0;
+        width: 100%; height: root.hero-height;
+        background: Theme.crust.with-alpha(0.45);
+    }
+
+    VerticalLayout {
+        // --- Hero -------------------------------------------------------
+        Rectangle {
+            vertical-stretch: 0;
+            height: root.hero-height;
+
+            HorizontalLayout {
+                padding: Theme.pad-lg;
+                spacing: Theme.pad-lg;
+                alignment: stretch;
+
+                // Mosaic tile — outer Rectangle owns the chrome; CoverMosaic
+                // paints the 1..=4 tile layout inside.
+                VerticalLayout {
+                    alignment: start;
+                    horizontal-stretch: 0;
+
+                    Rectangle {
+                        width: root.hero-artwork;
+                        height: root.hero-artwork;
+                        background: RecentlyPlayed.track-count == 0
+                            ? Theme.accent.with-alpha(0.15)
+                            : Theme.surface1;
+                        border-radius: Theme.radius-lg;
+                        border-width: 1px;
+                        border-color: Theme.border;
+                        clip: true;
+
+                        // Empty state — nothing has been played yet. Uses the
+                        // `history` glyph at full accent, matching the sidebar
+                        // entry.
+                        if RecentlyPlayed.track-count == 0: VerticalLayout {
+                            alignment: center;
+                            HorizontalLayout {
+                                alignment: center;
+                                MaterialIcon {
+                                    name: "history";
+                                    icon-size: 56px;
+                                    icon-color: Theme.accent;
+                                }
+                            }
+                        }
+
+                        // Flush-fill 2×2 mosaic of the most-recent covers (see
+                        // Favorites for the gutter/radius override rationale).
+                        if RecentlyPlayed.track-count > 0: CoverMosaic {
+                            width: 100%;
+                            height: 100%;
+                            artwork-paths: RecentlyPlayed.mosaic-paths;
+                            tile-count: RecentlyPlayed.track-count > 4 ? 4 : RecentlyPlayed.track-count;
+                            placeholder-icon: "music-note";
+                            gutter-size: 0px;
+                            tile-radius: 0px;
+                            request-cover(p) => {
+                                return RecentlyPlayed.request-mosaic-cover(p);
+                            }
+                        }
+                    }
+                }
+
+                // Right column — title row (title + SearchBar) + stats + pills.
+                VerticalLayout {
+                    horizontal-stretch: 1;
+                    alignment: stretch;
+                    spacing: Theme.pad-xs;
+
+                    HorizontalLayout {
+                        vertical-stretch: 0;
+                        spacing: Theme.pad-md;
+                        alignment: stretch;
+
+                        VerticalLayout {
+                            alignment: center;
+                            Text {
+                                // Leading LRM keeps the title left-anchored under RTL.
+                                text: "\u{200e}" + @tr("Recently Played");
+                                color: Theme.text;
+                                font-size: 28px;
+                                font-weight: Theme.page-title-weight;
+                                horizontal-alignment: left;
+                            }
+                        }
+
+                        Rectangle { horizontal-stretch: 1; }
+
+                        VerticalLayout {
+                            alignment: center;
+                            SearchBar {
+                                text <=> RecentlyPlayed.filter;
+                                placeholder: @tr("Filter recently played…");
+                                blur-trigger: RecentlyPlayed.blur-search-tick;
+                                edited(t) => { root.filter-tick-pending += 1; }
+                            }
+                        }
+                    }
+
+                    Text {
+                        vertical-stretch: 0;
+                        text: root.stats-text;
+                        color: Theme.subtext0;
+                        font-size: Theme.font-size-md;
+                        horizontal-alignment: left;
+                    }
+
+                    Rectangle { vertical-stretch: 1; }
+
+                    // Play All / Shuffle / Columns pill — only mounted when
+                    // there's something to play. The selection chip appears in
+                    // the trailing slot when rows are selected.
+                    if RecentlyPlayed.track-count > 0: HorizontalLayout {
+                        vertical-stretch: 0;
+                        spacing: Theme.pad-md;
+                        alignment: start;
+
+                        ActionPill {
+                            PillButton {
+                                icon: "play_arrow";
+                                icon-filled: true;
+                                text: @tr("Play All");
+                                clicked => { RecentlyPlayed.play-all(); }
+                            }
+                            PillDivider { }
+                            PillButton {
+                                icon: "shuffle";
+                                text: @tr("Shuffle");
+                                clicked => { RecentlyPlayed.shuffle-all(); }
+                            }
+                            PillDivider { }
+                            ColumnTogglePopup {
+                                show-number  <=> RecentlyPlayed.show-number;
+                                show-artwork <=> RecentlyPlayed.show-artwork;
+                                show-artist  <=> RecentlyPlayed.show-artist;
+                                show-album   <=> RecentlyPlayed.show-album;
+                                show-genre   <=> RecentlyPlayed.show-genre;
+                                show-year    <=> RecentlyPlayed.show-year;
+                                toggled(id) => { RecentlyPlayed.toggle-column(id); }
+                            }
+                            if RecentlyPlayed.selected-ids.length > 0: PillDivider { }
+                            if RecentlyPlayed.selected-ids.length > 0: PillLabel {
+                                text: @tr("{} selected", RecentlyPlayed.selected-ids.length);
+                            }
+                            if RecentlyPlayed.selected-ids.length > 0: PillButton {
+                                icon: "close";
+                                tooltip-text: @tr("Clear selection");
+                                clicked => {
+                                    RecentlyPlayed.clear-selection();
+                                    RecentlyPlayed.blur-search-tick += 1;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // --- Below-hero scroll container --------------------------------
+        // Wraps the Most Played strip AND the TrackList in a single outer
+        // ScrollView so one scrollbar (mounted at the view root) covers both
+        // surfaces — the composite-scroll shape from Favorites.
+        below-hero := Rectangle {
+            vertical-stretch: 1;
+            clip: true;
+
+            below-sv := ScrollView {
+                width: 100%;
+                height: 100%;
+                horizontal-scrollbar-policy: always-off;
+                vertical-scrollbar-policy:   always-off;
+                viewport-width: self.width;
+
+                VerticalLayout {
+                    spacing: 0;
+
+                    // --- Most Played strip (non-collapsible) -----------
+                    if RecentlyPlayed.most-played-rows.length > 0: VerticalLayout {
+                        vertical-stretch: 0;
+                        padding-left: Theme.pad-lg;
+                        padding-right: Theme.pad-lg;
+                        padding-top: Theme.pad-md;
+                        padding-bottom: Theme.pad-lg;
+                        spacing: Theme.pad-sm;
+
+                        HorizontalLayout {
+                            alignment: start;
+                            Text {
+                                text: @tr("Most Played");
+                                color: Theme.text;
+                                font-size: Theme.font-size-lg;
+                                font-weight: 600;
+                            }
+                        }
+
+                        HorizontalCardStrip {
+                            heading: "";
+                            rows: RecentlyPlayed.most-played-rows;
+                            card-width: 160px;
+                            card-height: 206px;
+                            show-play-count: true;
+                            show-play-overlay: false;
+                            fallback-icon: "music-note";
+                            request-cover(p) => {
+                                return RecentlyPlayed.request-most-played-cover(p);
+                            }
+                            row-clicked(id) => { RecentlyPlayed.play-track(id); }
+                            play-clicked(id) => { RecentlyPlayed.play-track(id); }
+                        }
+
+                        Rectangle {
+                            height: 1px;
+                            background: Theme.surface2;
+                        }
+                    }
+
+                    // --- Recently Played TrackList ---------------------
+                    HorizontalLayout {
+                        horizontal-stretch: 1;
+                        vertical-stretch: 0;
+                        padding-left: Theme.pad-lg;
+                        padding-right: Theme.pad-lg;
+                        // The Most Played strip's hairline supplies the gap
+                        // above the header when it's mounted; otherwise add
+                        // pad-lg so the table doesn't butt the hero edge.
+                        padding-top: RecentlyPlayed.most-played-rows.length > 0
+                            ? 0px
+                            : Theme.pad-lg;
+
+                        tl := TrackList {
+                            horizontal-stretch: 1;
+                            vertical-stretch: 0;
+                            // Row count × per-row stride + header strip + the
+                            // VL gap, capped at the outer viewport so large
+                            // lists let the inner ListView virtualize.
+                            height: min(
+                                max(1, RecentlyPlayed.tracks.length)
+                                    * (RecentlyPlayed.show-artwork
+                                        ? Theme.row-h
+                                        : Theme.row-h-compact)
+                                    + 32px + Theme.pad-xs,
+                                below-sv.visible-height);
+
+                            rows: RecentlyPlayed.tracks;
+
+                            w-number <=> RecentlyPlayed.w-number;
+                            w-title <=> RecentlyPlayed.w-title;
+                            w-artist <=> RecentlyPlayed.w-artist;
+                            w-album <=> RecentlyPlayed.w-album;
+                            w-genre <=> RecentlyPlayed.w-genre;
+                            w-year <=> RecentlyPlayed.w-year;
+                            w-length <=> RecentlyPlayed.w-length;
+
+                            show-number <=> RecentlyPlayed.show-number;
+                            show-artwork <=> RecentlyPlayed.show-artwork;
+                            show-artist <=> RecentlyPlayed.show-artist;
+                            show-album <=> RecentlyPlayed.show-album;
+                            show-genre <=> RecentlyPlayed.show-genre;
+                            show-year <=> RecentlyPlayed.show-year;
+                            number-mode: "index";
+
+                            sort-field: RecentlyPlayed.sort-field;
+                            sort-dir: RecentlyPlayed.sort-dir;
+                            playing-track-id: Player.vm.track.id;
+                            view-context: "recently_played";
+                            view-selected-ids: RecentlyPlayed.selected-ids;
+
+                            request-sort(f) => { RecentlyPlayed.request-sort(f); }
+                            play-row(id, idx) => { RecentlyPlayed.play-row(id, idx); }
+                            play-next(ids) => { RecentlyPlayed.play-next(ids); }
+                            add-to-queue(ids) => { RecentlyPlayed.add-to-queue(ids); }
+                            toggle-row-favorite(ids, on) => { RecentlyPlayed.toggle-row-favorite(ids, on); }
+                            select-row(idx, id, sh, ct) => { RecentlyPlayed.select-row(idx, id, sh, ct); }
+                            request-blur-search => { RecentlyPlayed.blur-search-tick += 1; }
+                            go-to-album(aid) => { RecentlyPlayed.go-to-album(aid); }
+                            go-to-artist(aid) => { RecentlyPlayed.go-to-artist(aid); }
+                            go-to-genre(gid) => { RecentlyPlayed.go-to-genre(gid); }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Composite scroll math — the outer ScrollView covers the strip region,
+    // the TrackList's inner ListView covers the rows; the unified scrollbar
+    // spans both travels. Mirrors Favorites.
+    property <length> v-outer-max: max(0px, below-sv.viewport-height - below-sv.visible-height);
+    property <length> v-inner-max: max(0px, tl.v-viewport-height - tl.v-visible-height);
+
+    OverlayScrollbar {
+        horizontal: false;
+        x: parent.width - self.width;
+        y: below-hero.absolute-position.y - root.absolute-position.y;
+        width: 10px;
+        height: below-hero.height;
+        visible-size: below-sv.visible-height;
+        content-size: below-sv.visible-height + root.v-outer-max + root.v-inner-max;
+        offset: -below-sv.viewport-y + tl.v-offset;
+        scroll-to(o) => {
+            below-sv.viewport-y = -min(o, root.v-outer-max);
+            tl.set-v-offset(max(0px, o - root.v-outer-max));
+        }
+    }
+
+    OverlayScrollbar {
+        horizontal: true;
+        x: tl.absolute-position.x - root.absolute-position.x;
+        y: parent.height - self.height;
+        width: tl.width - 10px;
+        height: 10px;
+        visible-size: tl.h-visible-width;
+        content-size: tl.h-viewport-width;
+        offset: tl.h-offset;
+        scroll-to(o) => { tl.set-h-offset(o); }
+    }
+}

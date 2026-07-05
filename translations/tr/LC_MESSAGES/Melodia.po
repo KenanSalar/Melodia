@@ -981,3 +981,12 @@ msgstr "Kırpılmayı önle"
 
 msgid "ReplayGain only affects tracks that already have loudness tags. Scan your library with a tool like rsgain or loudgain to add them."
 msgstr "ReplayGain yalnızca ses düzeyi etiketleri olan parçaları etkiler. Bunları eklemek için kitaplığınızı rsgain veya loudgain gibi bir araçla tarayın."
+
+msgid "Recently Played"
+msgstr "Son Çalınanlar"
+
+msgid "Filter recently played…"
+msgstr "Son çalınanları filtrele…"
+
+msgid "No recently played tracks"
+msgstr "Son çalınan parça yok"

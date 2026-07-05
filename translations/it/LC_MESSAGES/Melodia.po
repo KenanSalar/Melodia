@@ -978,3 +978,12 @@ msgstr "Previeni clipping"
 
 msgid "ReplayGain only affects tracks that already have loudness tags. Scan your library with a tool like rsgain or loudgain to add them."
 msgstr "ReplayGain influisce solo sulle tracce che hanno già tag di volume. Analizza la tua libreria con uno strumento come rsgain o loudgain per aggiungerli."
+
+msgid "Recently Played"
+msgstr "Riprodotti di recente"
+
+msgid "Filter recently played…"
+msgstr "Filtra riprodotti di recente…"
+
+msgid "No recently played tracks"
+msgstr "Nessun brano riprodotto di recente"

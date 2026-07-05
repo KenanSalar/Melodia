@@ -139,6 +139,15 @@ pub fn install_views(
     let favorites_ui = Arc::new(ui::favorites::FavoritesUi::new(cover_thumbs.clone()));
     ui::callbacks::wire_favorites(app, state, &favorites_ui, &artists_ui);
 
+    // 5c2e-bis. Recently-Played view (sidebar index 8). A trimmed Favorites —
+    // the shared row-tier `cover_thumbs` serves the list; the handle allocates
+    // its own Most Played strip LRU (released on tab-leave). Its row-menu
+    // "Go to …" entries are wired centrally by `wire_cross_tab_nav` below.
+    ui::recently_played::install_recently_played_models(app);
+    let recently_played_ui =
+        Arc::new(ui::recently_played::RecentlyPlayedUi::new(cover_thumbs.clone()));
+    ui::callbacks::wire_recently_played(app, state, &recently_played_ui);
+
     // 5c2f. Search view (sidebar index 0). Wired after both Albums +
     // Artists so the cross-tab open-album / open-artist hand-offs have
     // live UI handles to call into. The shared row-tier `cover_thumbs`
@@ -168,7 +177,7 @@ pub fn install_views(
     // 5c2a. Hydrate persisted nav state.
     if let Some(vs) = startup_view_state {
         let idx = vs.last_nav_index;
-        if (0..=8).contains(&idx) {
+        if (0..=9).contains(&idx) {
             app.global::<Nav>().set_selected_index(idx);
         }
     }
@@ -321,6 +330,7 @@ pub fn hydrate_ui_from_settings(
     ui::track_list_view::hydrate_genre_detail_view(app, vs);
     ui::track_list_view::hydrate_playlist_detail_view(app, vs);
     ui::track_list_view::hydrate_favorites_view(app, vs);
+    ui::track_list_view::hydrate_recently_played_view(app, vs);
     ui::track_list_view::hydrate_search_view(app, vs);
     app.global::<ArtistDetail>()
         .set_albums_collapsed(vs.artist_albums_collapsed);

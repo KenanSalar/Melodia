@@ -54,11 +54,12 @@ pub struct AppState {
     pub library_changed_tx: watch::Sender<u64>,
     /// Bumped after every play-count flush. Split from `library_changed_tx`
     /// so the per-song flush (every track completion) doesn't imply
-    /// "library structure changed" — only Favorites ranks anything by
-    /// `play_count` (hero mosaic + Most Played strip), so it is the sole
-    /// subscriber. Everything else (Tracks/Browse refreshers,
-    /// `queue_prune`, the folder list) stays on `library_changed_tx` and
-    /// no longer fires per played song.
+    /// "library structure changed" — the only views that depend on
+    /// play-driven data subscribe here: Favorites (hero mosaic + Most Played
+    /// strip, ranked by `play_count`) and Recently-Played (ordered by
+    /// `last_played`, written on the same flush). Everything else
+    /// (Tracks/Browse refreshers, `queue_prune`, the folder list) stays on
+    /// `library_changed_tx` and no longer fires per played song.
     pub stats_changed_tx: watch::Sender<u64>,
     /// Bumped whenever the watcher reports a kernel-queue overflow (notify
     /// `Flag::Rescan`). A UI-thread subscriber pushes a transient

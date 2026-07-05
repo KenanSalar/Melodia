@@ -37,6 +37,7 @@ _Screenshots coming soon._
 - Dedicated detail pages for albums, artists, genres, and playlists
 - Deezer-backed artist image fetching with local caching
 - Favorites view with a hero header, artwork mosaic, most-played section, and a filterable track list
+- Recently-Played view listing the tracks you last listened to (newest first), with a most-played strip and a filterable track list that updates live as you play
 - Play-count and skip-count tracking per track
 - Natural sort ordering for file and track names
 - Customizable, resizable, and toggleable track-list columns
@@ -51,6 +52,7 @@ _Screenshots coming soon._
 - Queue management with shuffle and repeat modes (Off, All, One)
 - Full-screen Now Playing view with track details, an up-next list, and album-art cross-fade transitions
 - 10-band graphic equalizer (31 Hz – 16 kHz) with adjustable preamp, nine built-in presets plus hand-tuned custom curves, and a soft-knee clip-protection limiter so boosts compress instead of clipping
+- ReplayGain loudness normalization — applies per-track or per-album gain from the file's loudness tags (Track or Album mode), with an adjustable preamp and optional peak-based clip prevention; reuses the equalizer's soft-knee limiter so a boosted track compresses instead of clipping, and works with the equalizer off
 - Playback speed control (0.25× – 2.0×)
 - Volume control (0–200%) with mute
 - Resume playback on startup
@@ -228,7 +230,7 @@ src/
 ├── entities/    domain model types (track, album, artist, genre, playlist, …)
 ├── library/     playback, queue, tracks, albums, artists, genres, playlists, search, settings
 ├── media/       scanner, metadata, artwork, cover-thumbnail cache, folder watcher
-├── player/      playback state machine + Rodio backend + graphic equalizer DSP
+├── player/      playback state machine + Rodio backend + graphic equalizer & ReplayGain DSP
 ├── tasks/       background tasks (playback monitor, file events, queue prune, Material You)
 ├── themes/      pluggable theme registry
 ├── services/    updater, desktop integration, system theme

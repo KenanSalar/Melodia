@@ -978,3 +978,12 @@ msgstr "Evitar recorte"
 
 msgid "ReplayGain only affects tracks that already have loudness tags. Scan your library with a tool like rsgain or loudgain to add them."
 msgstr "ReplayGain solo afecta a las pistas que ya tienen etiquetas de volumen. Analiza tu biblioteca con una herramienta como rsgain o loudgain para añadirlas."
+
+msgid "Recently Played"
+msgstr "Reproducido recientemente"
+
+msgid "Filter recently played…"
+msgstr "Filtrar reproducidos recientemente…"
+
+msgid "No recently played tracks"
+msgstr "No hay pistas reproducidas recientemente"

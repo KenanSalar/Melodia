@@ -538,6 +538,61 @@ pub async fn get_most_played_favorites(
     Ok(rows)
 }
 
+/// Top N tracks by play count across the whole library (only those with
+/// `play_count` > 0). Sibling of [`get_most_played_favorites`] without the
+/// `is_favorite` filter — drives the Recently-Played view's "Most Played"
+/// strip. Reuses the generic `MostPlayedFavorite` card projection.
+pub async fn get_most_played(
+    db: &DbPool,
+    limit: i64,
+) -> Result<Vec<track::MostPlayedFavorite>, AppError> {
+    let rows = sqlx::query_as::<_, track::MostPlayedFavorite>(
+        "SELECT id, title, artist, artwork_path, play_count, duration_ms \
+         FROM tracks \
+         WHERE play_count > 0 \
+         ORDER BY play_count DESC \
+         LIMIT ?",
+    )
+    .bind(limit)
+    .fetch_all(db.read())
+    .await?;
+    Ok(rows)
+}
+
+/// The N most-recently-played tracks (list-view projection), newest first.
+///
+/// Ordering rides on `last_played` (RFC-3339 UTC, written by the play-count
+/// flusher / `update_play_count`). Lexical `TEXT` order == chronological order,
+/// so `ORDER BY last_played DESC` is correct: the fixed-width date/time prefix
+/// and constant `+00:00` offset aside, `chrono`'s `to_rfc3339` emits
+/// *variable*-width fractional seconds (`AutoSi` → 0/3/6/9 digits), but that is
+/// still order-safe — the offset `'+'` (0x2B) sorts below every digit, and
+/// `AutoSi` only ever drops trailing-zero fractional groups. Rows without a
+/// `last_played` (never played) are excluded — index-backed by the partial
+/// `idx_tracks_last_played`.
+///
+/// Returns the `TrackListRow` projection so the Recently-Played view can render
+/// through the shared `TrackList`; `last_played` itself is not selected (it is
+/// only the sort key). Membership is the top `limit` by recency — the view
+/// re-sorts/filters this set in memory, it never re-queries.
+pub async fn get_recently_played(
+    db: &DbPool,
+    limit: i64,
+) -> Result<Vec<track::TrackListRow>, AppError> {
+    let cols = track::track_list_columns();
+    let sql = format!(
+        "SELECT {cols} FROM tracks \
+         WHERE last_played IS NOT NULL \
+         ORDER BY last_played DESC \
+         LIMIT ?"
+    );
+    let rows = sqlx::query_as::<_, track::TrackListRow>(&sql)
+        .bind(limit)
+        .fetch_all(db.read())
+        .await?;
+    Ok(rows)
+}
+
 #[cfg(test)]
 #[path = "tests/track_tests.rs"]
 mod tests;

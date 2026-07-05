@@ -980,3 +980,12 @@ msgstr "Αποτροπή ψαλιδίσματος"
 
 msgid "ReplayGain only affects tracks that already have loudness tags. Scan your library with a tool like rsgain or loudgain to add them."
 msgstr "Το ReplayGain επηρεάζει μόνο κομμάτια που έχουν ήδη ετικέτες έντασης ήχου. Σαρώστε τη βιβλιοθήκη σας με ένα εργαλείο όπως το rsgain ή το loudgain για να τις προσθέσετε."
+
+msgid "Recently Played"
+msgstr "Πρόσφατα αναπαραγόμενα"
+
+msgid "Filter recently played…"
+msgstr "Φιλτράρισμα πρόσφατα αναπαραγόμενων…"
+
+msgid "No recently played tracks"
+msgstr "Δεν υπάρχουν πρόσφατα αναπαραγόμενα κομμάτια"

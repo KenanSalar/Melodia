@@ -987,3 +987,12 @@ msgstr "Übersteuerung verhindern"
 
 msgid "ReplayGain only affects tracks that already have loudness tags. Scan your library with a tool like rsgain or loudgain to add them."
 msgstr "ReplayGain wirkt sich nur auf Titel aus, die bereits Lautstärke-Tags haben. Scanne deine Bibliothek mit einem Werkzeug wie rsgain oder loudgain, um sie hinzuzufügen."
+
+msgid "Recently Played"
+msgstr "Zuletzt gespielt"
+
+msgid "Filter recently played…"
+msgstr "Zuletzt gespielte filtern…"
+
+msgid "No recently played tracks"
+msgstr "Keine zuletzt gespielten Titel"

@@ -32,7 +32,8 @@ use slint::ComponentHandle;
 
 use crate::AppWindow;
 use crate::{
-    AlbumDetail, ArtistDetail, Browse, Favorites, GenreDetail, PlaylistDetail, Search, Tracks,
+    AlbumDetail, ArtistDetail, Browse, Favorites, GenreDetail, PlaylistDetail, RecentlyPlayed,
+    Search, Tracks,
 };
 use crate::services::settings::ColumnWidths;
 use crate::services::view_state::ViewStateData;
@@ -107,6 +108,7 @@ pub mod view_id {
     pub const GENRE_DETAIL: &str = "genre_detail";
     pub const PLAYLIST_DETAIL: &str = "playlist_detail";
     pub const FAVORITES: &str = "favorites";
+    pub const RECENTLY_PLAYED: &str = "recently_played";
     pub const SEARCH: &str = "search";
     // Entity grids — `view_columns` doesn't apply (no track-list columns),
     // but `view_sort` does: the grid header's sort is persisted per grid.
@@ -257,6 +259,12 @@ impl_track_list_column_state!(
     FAVORITES,
     hydrate_favorites_view,
     snapshot_favorites_view
+);
+impl_track_list_column_state!(
+    RecentlyPlayed,
+    RECENTLY_PLAYED,
+    hydrate_recently_played_view,
+    snapshot_recently_played_view
 );
 impl_track_list_column_state!(Search, SEARCH, hydrate_search_view, snapshot_search_view);
 

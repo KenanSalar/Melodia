@@ -224,7 +224,45 @@ Mirror the favorite-toggle path end-to-end. Sort-by-rating is already index-back
 
 ---
 
-## Feature 3 — Recently-Played view
+## Feature 3 — Recently-Played view ✅ **DONE (2026-07-05)**
+
+> **Shipped.** A new sidebar view (nav index 8; Settings renumbered to 9) mirroring a **trimmed**
+> Favorites — no hero mosaic / artist strip. Header (count + duration + Play All / Shuffle) → a
+> **non-collapsible** "Most Played" `HorizontalCardStrip` → a filterable `TrackList` of the 200
+> most-recently-played tracks (`last_played DESC`). Membership is fixed to that set; the search
+> filter and column re-sort re-walk the cached rows **in memory** (`RECENCY_SORT` sentinel keeps
+> fetch order; real fields via `sort_track_rows_by`) — never re-querying. It is the **2nd**
+> subscriber to `stats_changed_tx` (Favorites was sole). `cargo clippy --all-targets -- -D warnings`
+> clean; `cargo test` green (791 lib tests incl. `get_recently_played` / `get_most_played` ordering
+> + exclusion + LIMIT). New files: `src/library/recently_played.rs`, `src/ui/recently_played/*`,
+> `src/ui/callbacks/recently_played/*`, `ui/views/recently-played-view.slint`, `RecentlyPlayed`
+> global. `history` icon added + re-subset; 3 new `@tr` strings in all 6 `.po` files. Manual GUI
+> verification (play tracks → newest-first list, auto-update on flush, Most Played strip, filter +
+> column sort, restart persistence) is the remaining user-side check.
+>
+> **Two scope decisions during implementation:** (1) the Most Played strip is **non-collapsible** —
+> `ViewStateData` is already at clippy's `struct_excessive_bools` cap (3 collapse bools), so a 4th
+> persisted collapse flag would trip the lint; a fixed ~10-card strip doesn't need collapse. (2) The
+> track sort is **in-memory** (not the DB `track_list_order_by` path Favorites uses) because the
+> recency set's membership must stay fixed to the 200 most-recent — a DB re-sort would change which
+> rows appear.
+>
+> **Follow-up (post-review polish):** on request, the view was brought to **full Favorites parity** —
+> the trimmed plain header was replaced with the Favorites-style **hero** (live 2×2 blur cover mosaic
+> of the 4 most-recently-played distinct covers via a new `hero.rs` + `mosaic_thumbs` tier, reusing
+> `write_crossfade_slot`), so the below-hero unified scroll now reads identically to Favorites. The
+> sidebar entry was **moved to render directly under Favorites** while keeping routing `index: 8`
+> (sidebar visual order = source order, so no tab-renumber was needed). Favorite-Artists strip stays
+> omitted; Most Played stays non-collapsible.
+>
+> **Correction to the "no migration needed" premise:** the `last_played` **column** always existed,
+> but its partial index `idx_tracks_last_played` had been **dropped** in
+> `20260612000000_drop_unused_track_indexes.sql` (rationale: `last_played` was write-only, "no
+> recently-played surface exists"). This view *is* that surface, so a new migration
+> `20260705000000_readd_last_played_index.sql` re-creates it. `EXPLAIN QUERY PLAN` confirms the
+> `ORDER BY last_played DESC LIMIT 200` query goes from `SCAN tracks` + `USE TEMP B-TREE FOR ORDER
+> BY` (no index) to `SEARCH tracks USING INDEX idx_tracks_last_played` (with it). Symmetric with the
+> `idx_tracks_play_count` index that same drop migration deliberately kept for Most Played.
 
 **Design:** New library view mirroring **Favorites**, querying `last_played DESC`. `last_played`
 is already written by `queries::track::update_play_count` and index-backed by

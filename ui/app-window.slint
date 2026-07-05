@@ -19,7 +19,7 @@ import "assets/fonts/vazirmatn/Vazirmatn-SemiBold.ttf";
 
 import { Theme } from "theme.slint";
 import { Settings } from "settings.slint";
-import { Player, Equalizer, ReplayGain, Nav, NavEnterFrom, MiniPlayer, Tracks, Browse, LibrarySettings, Dialog, WindowChrome, Queue, Notifications, NowPlaying, Favorites, Albums, AlbumDetail, Artists, ArtistDetail, Genres, GenreDetail, Playlists, PlaylistDetail, PopupHighlight, Search, MelodiaUpdater, RowCovers } from "globals.slint";
+import { Player, Equalizer, ReplayGain, Nav, NavEnterFrom, MiniPlayer, Tracks, Browse, LibrarySettings, Dialog, WindowChrome, Queue, Notifications, NowPlaying, Favorites, RecentlyPlayed, Albums, AlbumDetail, Artists, ArtistDetail, Genres, GenreDetail, Playlists, PlaylistDetail, PopupHighlight, Search, MelodiaUpdater, RowCovers } from "globals.slint";
 import { TrackSummaryRow, TrackListRow, PlayerVm, QueueVm, QueueRow, FolderListRow,
          BrowseFolderRow, BreadcrumbRow, NotificationRow, TrackMetaRow,
          AlbumRow, AlbumGridRow, ArtistRow, ArtistGridRow,
@@ -30,6 +30,7 @@ import { NowPlayingBar } from "layout/now-playing-bar.slint";
 import { PlaceholderView } from "views/placeholder-view.slint";
 import { TracksView } from "views/tracks-view.slint";
 import { FavoritesView } from "views/favorites-view.slint";
+import { RecentlyPlayedView } from "views/recently-played-view.slint";
 import { BrowseView } from "views/browse-view.slint";
 import { AlbumView } from "views/album-view.slint";
 import { AlbumDetailView } from "views/album-detail-view.slint";
@@ -51,7 +52,7 @@ import { ViewTransition } from "components/view-transition.slint";
 
 // Re-export so Rust can mention these from `slint::include_modules!`.
 export {
-    Theme, Settings, Player, Equalizer, ReplayGain, Nav, MiniPlayer, Tracks, Browse, LibrarySettings, Dialog, WindowChrome, Queue, Notifications, NowPlaying, Favorites, Albums, AlbumDetail, Artists, ArtistDetail, Genres, GenreDetail, Playlists, PlaylistDetail, PopupHighlight, Search, MelodiaUpdater, RowCovers,
+    Theme, Settings, Player, Equalizer, ReplayGain, Nav, MiniPlayer, Tracks, Browse, LibrarySettings, Dialog, WindowChrome, Queue, Notifications, NowPlaying, Favorites, RecentlyPlayed, Albums, AlbumDetail, Artists, ArtistDetail, Genres, GenreDetail, Playlists, PlaylistDetail, PopupHighlight, Search, MelodiaUpdater, RowCovers,
     TrackSummaryRow, TrackListRow, PlayerVm, QueueVm, QueueRow, FolderListRow,
     BrowseFolderRow, BreadcrumbRow, NotificationRow, TrackMetaRow,
     AlbumRow, AlbumGridRow, ArtistRow, ArtistGridRow,
@@ -136,7 +137,8 @@ export component AppWindow inherits Window {
         if (idx == 5) { return @tr("Artists"); }
         if (idx == 6) { return @tr("Genres"); }
         if (idx == 7) { return @tr("Playlists"); }
-        if (idx == 8) { return @tr("Settings"); }
+        if (idx == 8) { return @tr("Recently Played"); }
+        if (idx == 9) { return @tr("Settings"); }
         // App name (proper noun) — never translated.
         return "Melodia";
     }
@@ -144,7 +146,7 @@ export component AppWindow inherits Window {
     // Clear the Settings page's live search query and blur its TextInput
     // when the user navigates away. The handler lives at the AppWindow
     // level so it always fires — `SettingsView` is mounted only when
-    // `Nav.selected-index == 8`, so a `changed` handler placed inside it
+    // `Nav.selected-index == 9`, so a `changed` handler placed inside it
     // would never see the leaving transition (the component gets
     // de-instantiated before the handler runs). Slint's `changed` only
     // observes properties on the current element, not path expressions on
@@ -154,7 +156,7 @@ export component AppWindow inherits Window {
     // another page.
     property <int> watched-nav-idx: Nav.selected-index;
     changed watched-nav-idx => {
-        if (self.watched-nav-idx != 8) {
+        if (self.watched-nav-idx != 9) {
             Settings.search-query = "";
             Settings.blur-search-tick += 1;
         }
@@ -359,6 +361,15 @@ export component AppWindow inherits Window {
         Browse.section-active-changed(self.watched-browse-active);
     }
 
+    // Same shape for the Recently-Played section (sidebar index 8). Like
+    // Favorites, Rust releases the section's cover cache on `false` and
+    // re-fetches on `true`.
+    property <bool> watched-recently-active:
+        Nav.selected-index == 8 && !Nav.now-playing-open && !root.mini-active;
+    changed watched-recently-active => {
+        RecentlyPlayed.section-active-changed(self.watched-recently-active);
+    }
+
     // Outer mantle shell. In custom-frame + windowed mode the Window's
     // background is transparent, so this rounded mantle Rectangle IS the
     // visible window outline — the compositor treats the alpha=0 area
@@ -558,9 +569,9 @@ export component AppWindow inherits Window {
                         return accept;
                     }
                     if (ev.text == ",") {
-                        // 8 = Settings tab; see Nav comment.
-                        Nav.selected-index = 8;
-                        Nav.persist-selected-index(8);
+                        // 9 = Settings tab; see Nav comment.
+                        Nav.selected-index = 9;
+                        Nav.persist-selected-index(9);
                         return accept;
                     }
                     if (ev.text == "n") {
@@ -820,6 +831,12 @@ export component AppWindow inherits Window {
                             width: parent.width;
                             height: parent.height;
                             enter-from: Nav.pending-enter-from;
+                            RecentlyPlayedView { width: 100%; height: 100%; }
+                        }
+                        if !Nav.now-playing-open && Nav.selected-index == 9: ViewTransition {
+                            width: parent.width;
+                            height: parent.height;
+                            enter-from: Nav.pending-enter-from;
                             SettingsView { width: 100%; height: 100%; }
                         }
                         if !Nav.now-playing-open
@@ -831,7 +848,8 @@ export component AppWindow inherits Window {
                             && Nav.selected-index != 5
                             && Nav.selected-index != 6
                             && Nav.selected-index != 7
-                            && Nav.selected-index != 8: ViewTransition {
+                            && Nav.selected-index != 8
+                            && Nav.selected-index != 9: ViewTransition {
                             width: parent.width;
                             height: parent.height;
                             enter-from: Nav.pending-enter-from;

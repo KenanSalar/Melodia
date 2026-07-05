@@ -1,0 +1,223 @@
+//! Recently-Played view glue between Rust and Slint.
+//!
+//! Drives the `RecentlyPlayed` Slint global — a trimmed cousin of the
+//! Favorites page composed of:
+//!
+//! * A lightweight header — track count + total duration + Play All /
+//!   Shuffle pills (no hero mosaic).
+//! * A **Most Played** `HorizontalCardStrip` — the library-wide top tracks by
+//!   `play_count` (non-collapsible; a small fixed strip).
+//! * A filterable `TrackList` bound to the post-filter `RecentlyPlayed.tracks`
+//!   model — the 200 most-recently-played tracks (`last_played DESC`). The set
+//!   is fetched once per refresh; keystrokes and column re-sorts re-walk the
+//!   cached `tracks_all` **in memory** (membership is fixed to the 200).
+//!
+//! Cache discipline mirrors `src/ui/favorites`: the shared row-tier
+//! `CoverThumbs` plus one dedicated Most Played tier, released on section
+//! leave so the hidden view's resident footprint drops to ~0. Re-enter
+//! re-fetches via the `library_changed_tx` / `stats_changed_tx`-driven
+//! `mark_dirty` / `take_dirty` round-trip.
+
+mod hero;
+mod sections;
+mod selection;
+mod state;
+mod tracks;
+
+use std::rc::Rc;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+
+use slint::{ComponentHandle, Image, ModelRc, SharedString, VecModel};
+
+use crate::entities::track::MostPlayedFavorite;
+use crate::media::cover_thumbs::CoverThumbs;
+use crate::ui::util::clamp_i64_to_i32;
+use crate::{
+    AppWindow, EntityStripRow as UiEntityStripRow, RecentlyPlayed,
+    TrackListRow as UiTrackListRow,
+};
+
+use state::{
+    MOSAIC_THUMB_CAP, MOSAIC_THUMB_SIZE, MOST_PLAYED_THUMB_CAP, MOST_PLAYED_THUMB_SIZE,
+    RecentlyPlayedUiState,
+};
+
+pub use sections::{apply_filtered_strips, refresh_strips};
+pub use selection::{clear_selection, handle_select_row};
+pub use tracks::{
+    apply_filtered_tracks, current_filter, current_sort, refresh_tracks, set_filter, set_sort,
+};
+
+/// Synthetic sort field meaning "keep the recency fetch order" — it is not a
+/// real `TrackListRow` column, so `apply_filtered_tracks` skips the in-memory
+/// sort while it is active. Any other field routes through
+/// [`crate::ui::track_sort::sort_track_rows_by`]. Mirrored as the default
+/// `RecentlyPlayed.sort-field` literal on the Slint side.
+pub const RECENCY_SORT: &str = "recency";
+
+/// Rust-side state for the Recently-Played view. Shared between the UI
+/// callbacks (`wire_recently_played`) and the async fetchers behind an
+/// `Arc<RecentlyPlayedUi>` — `Send + Sync`.
+pub struct RecentlyPlayedUi {
+    inner: RecentlyPlayedUiState,
+    /// Shared row-tier (72 px) cache — used for the `TrackList` row column.
+    pub(super) cover_thumbs: Arc<CoverThumbs>,
+    /// Hero mosaic-tile cache (128 px). Released on section leave.
+    pub(super) mosaic_thumbs: Arc<CoverThumbs>,
+    /// Most Played strip cache (180 px). Released on section leave.
+    pub(super) most_played_thumbs: Arc<CoverThumbs>,
+    /// Section-visible shadow — mirrors `Nav.selected-index ==
+    /// NAV_RECENTLY_PLAYED && !Nav.now-playing-open`. Gates the refresh
+    /// subscriber so a background tick doesn't repaint a hidden view.
+    section_active: AtomicBool,
+    /// Sticky "data is stale, refetch on next section enter". Set on every
+    /// channel tick that fires while hidden, plus on section leave.
+    data_dirty: AtomicBool,
+}
+
+impl RecentlyPlayedUi {
+    pub fn new(cover_thumbs: Arc<CoverThumbs>) -> Self {
+        Self {
+            inner: RecentlyPlayedUiState::new(),
+            cover_thumbs,
+            mosaic_thumbs: Arc::new(CoverThumbs::with_config(
+                MOSAIC_THUMB_SIZE,
+                MOSAIC_THUMB_CAP,
+            )),
+            most_played_thumbs: Arc::new(CoverThumbs::with_config(
+                MOST_PLAYED_THUMB_SIZE,
+                MOST_PLAYED_THUMB_CAP,
+            )),
+            section_active: AtomicBool::new(false),
+            data_dirty: AtomicBool::new(false),
+        }
+    }
+
+    pub fn set_section_active(&self, active: bool) {
+        self.section_active.store(active, Ordering::Relaxed);
+    }
+
+    pub fn section_active(&self) -> bool {
+        self.section_active.load(Ordering::Relaxed)
+    }
+
+    pub fn mark_dirty(&self) {
+        self.data_dirty.store(true, Ordering::Release);
+    }
+
+    /// Atomically read-and-clear the dirty flag.
+    pub fn take_dirty(&self) -> bool {
+        self.data_dirty.swap(false, Ordering::AcqRel)
+    }
+
+    /// Drop every section-local resident buffer so the hidden view's
+    /// footprint drops to ~0. Called (off the UI thread) on section leave;
+    /// `mark_dirty()` was set synchronously on the same leave so the
+    /// section-enter handler re-fetches via `take_dirty()`. Release ordering
+    /// matches `FavoritesUi::release_section_state`.
+    pub fn release_section_state(&self) {
+        if self.section_active() {
+            return;
+        }
+        self.mosaic_thumbs.clear();
+        self.most_played_thumbs.clear();
+        self.inner.tracks_all.lock().clear();
+        self.inner.most_played.lock().clear();
+        self.inner.applied_selection.lock().clear();
+        crate::tasks::heap_trim::trim();
+    }
+
+    pub(crate) fn state(&self) -> &RecentlyPlayedUiState {
+        &self.inner
+    }
+
+    /// Lazy cover lookup for the hero 2×2 mosaic tiles. Routed via
+    /// `RecentlyPlayed.request-mosaic-cover`.
+    pub fn mosaic_cover(&self, artwork_path: &str) -> Image {
+        self.mosaic_thumbs
+            .get_or_load_opt(Some(artwork_path).filter(|s| !s.is_empty()))
+    }
+
+    /// Lazy cover lookup for the Most Played strip cards. Routed via
+    /// `RecentlyPlayed.request-most-played-cover`.
+    pub fn most_played_cover(&self, artwork_path: &str) -> Image {
+        self.most_played_thumbs
+            .get_or_load_opt(Some(artwork_path).filter(|s| !s.is_empty()))
+    }
+
+    /// Track ids of the post-filter list in **display order** (filter + active
+    /// column sort applied), so `play-all` / `shuffle-all` enqueue what the
+    /// user sees. Recency sort keeps the cached fetch order.
+    pub fn filtered_track_ids(&self) -> Vec<i64> {
+        let needle = self.inner.filter.lock().to_lowercase();
+        let sort = self.inner.sort.lock().clone();
+        let all = self.inner.tracks_all.lock();
+        let mut rows: Vec<&crate::entities::track::TrackListRow> = all
+            .iter()
+            .filter(|r| needle.is_empty() || crate::ui::detail_filter::track_matches(r, &needle))
+            .collect();
+        if sort.field != RECENCY_SORT {
+            let dir = match sort.dir {
+                crate::services::settings::SortDir::Asc => "asc",
+                crate::services::settings::SortDir::Desc => "desc",
+            };
+            crate::ui::track_sort::sort_track_rows_by(
+                &mut rows,
+                &sort.field,
+                dir,
+                |r| *r,
+                |r| r.title.to_lowercase(),
+            );
+        }
+        rows.iter().map(|r| r.id).collect()
+    }
+
+    /// Surgically flip `is_favorite` on a cached row so a single-row toggle
+    /// reflects in the model without a full re-fetch. Unlike Favorites this
+    /// never removes the row — recency membership is independent of the
+    /// favorite flag.
+    pub fn flip_track_favorite(&self, id: i64, fav: bool) {
+        if let Some(r) = self.inner.tracks_all.lock().iter_mut().find(|r| r.id == id) {
+            r.is_favorite = fav;
+        }
+    }
+}
+
+/// Bind empty Slint `VecModel`s for the Most Played strip, the track list, and
+/// the selection set. Subsequent updates locate them by downcasting back to
+/// `VecModel<T>` from the UI thread.
+pub fn install_recently_played_models(ui: &AppWindow) {
+    let g = ui.global::<RecentlyPlayed>();
+
+    let mosaic_paths: Rc<VecModel<SharedString>> = Rc::new(VecModel::default());
+    g.set_mosaic_paths(ModelRc::from(mosaic_paths));
+
+    let most_played: Rc<VecModel<UiEntityStripRow>> = Rc::new(VecModel::default());
+    g.set_most_played_rows(ModelRc::from(most_played));
+
+    let tracks: Rc<VecModel<UiTrackListRow>> = Rc::new(VecModel::default());
+    g.set_tracks(ModelRc::from(tracks));
+
+    let sel: Rc<VecModel<i32>> = Rc::new(VecModel::default());
+    g.set_selected_ids(ModelRc::from(sel));
+}
+
+/// Map a `MostPlayedFavorite` to its Slint strip row. Subtitle is the artist
+/// name; `play_count` rides in the `play_count` slot so the strip's
+/// `show-play-count: true` reveals it.
+pub fn to_slint_most_played_row(t: &MostPlayedFavorite) -> UiEntityStripRow {
+    UiEntityStripRow {
+        id: clamp_i64_to_i32(t.id),
+        title: SharedString::from(t.title.as_str()),
+        subtitle: SharedString::from(t.artist.as_deref().unwrap_or("")),
+        artwork_path: SharedString::from(t.artwork_path.as_deref().unwrap_or("")),
+        play_count: t.play_count,
+    }
+}
+
+#[allow(dead_code)]
+fn assert_send_sync() {
+    fn check<T: Send + Sync>() {}
+    check::<RecentlyPlayedUi>();
+}

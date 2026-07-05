@@ -978,3 +978,12 @@ msgstr "Éviter la saturation"
 
 msgid "ReplayGain only affects tracks that already have loudness tags. Scan your library with a tool like rsgain or loudgain to add them."
 msgstr "ReplayGain n'affecte que les pistes qui possèdent déjà des balises de volume. Analysez votre bibliothèque avec un outil comme rsgain ou loudgain pour les ajouter."
+
+msgid "Recently Played"
+msgstr "Écoutés récemment"
+
+msgid "Filter recently played…"
+msgstr "Filtrer les écoutes récentes…"
+
+msgid "No recently played tracks"
+msgstr "Aucune piste écoutée récemment"
