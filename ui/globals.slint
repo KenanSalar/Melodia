@@ -289,7 +289,9 @@ export global CompositeScroll {
     in-out property <bool> hovered: false;
     // Accumulated wheel delta in Slint logical px, +y = scroll up (matches
     // `flickable.rs`'s sign: `viewport-y += delta`). Rust *adds* the event delta
-    // then bumps `wheel-tick`; the mounted composite view mirrors the tick,
+    // then bumps `wheel-tick`; the mounted view's `CompositeScrollbars` instance
+    // (`ui/components/composite-scrollbars.slint` — the shared vbar/hbar +
+    // wheel-routing component every composite view mounts) mirrors the tick,
     // applies one composite scroll step, and zeroes `wheel-dy`. Accumulating
     // (rather than overwriting) survives Slint coalescing several wheel events
     // into one `changed wheel-tick` firing — no delta is dropped on fast flicks.

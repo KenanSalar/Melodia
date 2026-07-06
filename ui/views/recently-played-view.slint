@@ -8,7 +8,7 @@ import { SearchBar } from "../components/search-bar.slint";
 import { ActionPill, PillLabel, PillButton, PillDivider } from "../components/action-pill.slint";
 import { ColumnTogglePopup } from "../components/track-list/column-toggle-popup.slint";
 import { TrackList } from "../components/track-list/track-list.slint";
-import { OverlayScrollbar } from "../components/overlay-scrollbar.slint";
+import { CompositeScrollbars } from "../components/composite-scrollbars.slint";
 import { FilterThrottle } from "../components/filter-throttle.slint";
 import { HeroBlurBackdrop } from "../components/hero-blur-backdrop.slint";
 
@@ -221,7 +221,8 @@ export component RecentlyPlayedView inherits Rectangle {
         // surfaces — the composite-scroll shape from Favorites, including the
         // `hover-catch` wheel sentinel (Slint's inner ListView swallows the
         // wheel at its edge, so vertical wheel is routed via the winit filter
-        // through `vbar.scroll-to` — see CompositeScroll).
+        // through the mounted `CompositeScrollbars`' composite split — see
+        // CompositeScroll).
         below-hero := Rectangle {
             vertical-stretch: 1;
             clip: true;
@@ -357,51 +358,25 @@ export component RecentlyPlayedView inherits Rectangle {
         }
     }
 
-    // Composite scroll math — the outer ScrollView covers the strip region,
-    // the TrackList's inner ListView covers the rows; the unified scrollbar
-    // spans both travels. Mirrors Favorites.
-    property <length> v-outer-max: max(0px, below-sv.viewport-height - below-sv.visible-height);
-    property <length> v-inner-max: max(0px, tl.v-viewport-height - tl.v-visible-height);
-
-    // Wheel routing (see CompositeScroll): mirror the winit filter's tick and
-    // apply one composite step through the same `vbar.scroll-to` split the
-    // scrollbar drag uses — the height cap and the inner ListView's
-    // virtualization stay untouched.
-    property <int> cs-wheel-watch: CompositeScroll.wheel-tick;
-    changed cs-wheel-watch => {
-        vbar.scroll-to(clamp(
-            (-below-sv.viewport-y + tl.v-offset) - CompositeScroll.wheel-dy,
-            0px, root.v-outer-max + root.v-inner-max));
-        // Consume the accumulated delta so the winit filter starts the next
-        // batch from zero (deltas accumulate in Rust to survive same-frame
-        // wheel coalescing — see CompositeScroll).
-        CompositeScroll.wheel-dy = 0px;
-    }
-
-    vbar := OverlayScrollbar {
-        horizontal: false;
-        x: parent.width - self.width;
-        y: below-hero.absolute-position.y - root.absolute-position.y;
-        width: 10px;
-        height: below-hero.height;
-        visible-size: below-sv.visible-height;
-        content-size: below-sv.visible-height + root.v-outer-max + root.v-inner-max;
-        offset: -below-sv.viewport-y + tl.v-offset;
-        scroll-to(o) => {
-            below-sv.viewport-y = -min(o, root.v-outer-max);
-            tl.set-v-offset(max(0px, o - root.v-outer-max));
-        }
-    }
-
-    OverlayScrollbar {
-        horizontal: true;
-        x: tl.absolute-position.x - root.absolute-position.x;
-        y: parent.height - self.height;
-        width: tl.width - 10px;
-        height: 10px;
-        visible-size: tl.h-visible-width;
-        content-size: tl.h-viewport-width;
-        offset: tl.h-offset;
-        scroll-to(o) => { tl.set-h-offset(o); }
+    // Composite scroll: unified vbar + column-pan hbar + CompositeScroll
+    // wheel routing, owned by the shared component. Mirrors Favorites.
+    CompositeScrollbars {
+        x: 0; y: 0;
+        width: 100%; height: 100%;
+        outer-viewport-y <=> below-sv.viewport-y;
+        outer-viewport-height: below-sv.viewport-height;
+        outer-visible-height: below-sv.visible-height;
+        inner-offset: tl.v-offset;
+        inner-viewport-height: tl.v-viewport-height;
+        inner-visible-height: tl.v-visible-height;
+        set-inner-offset(o) => { tl.set-v-offset(o); }
+        h-offset: tl.h-offset;
+        h-viewport-width: tl.h-viewport-width;
+        h-visible-width: tl.h-visible-width;
+        set-h-offset(o) => { tl.set-h-offset(o); }
+        v-region-y: below-hero.absolute-position.y - root.absolute-position.y;
+        v-region-height: below-hero.height;
+        h-region-x: tl.absolute-position.x - root.absolute-position.x;
+        h-region-width: tl.width;
     }
 }
