@@ -16,7 +16,7 @@ use crate::library;
 use crate::state::AppState;
 use crate::ui::notifications::{NotificationParams, NotificationsUi};
 use crate::ui::playlists::{self as playlists_ui_mod, PlaylistsUi};
-use crate::{AppWindow, PlaylistPickRow as UiPlaylistPickRow, Playlists, Settings};
+use crate::{AppWindow, Dialog, PlaylistPickRow as UiPlaylistPickRow, Playlists, Settings};
 
 pub(super) fn wire(
     ui: &AppWindow,
@@ -33,7 +33,7 @@ pub(super) fn wire(
         let weak = weak.clone();
         playlists.on_toggle_add_pick(move |id| {
             let Some(ui) = weak.upgrade() else { return };
-            let dlg = ui.global::<crate::Dialog>();
+            let dlg = ui.global::<Dialog>();
             let pick_total = dlg.get_pick_total_tracks();
             toggle_pick(
                 &dlg.get_playlist_pick_rows(),
@@ -52,7 +52,7 @@ pub(super) fn wire(
         let weak = weak.clone();
         playlists.on_set_all_add_picks(move |sel| {
             let Some(ui) = weak.upgrade() else { return };
-            let dlg = ui.global::<crate::Dialog>();
+            let dlg = ui.global::<Dialog>();
             let pick_total = dlg.get_pick_total_tracks();
             set_all_picks(
                 &dlg.get_playlist_pick_rows(),
@@ -78,7 +78,7 @@ pub(super) fn wire(
         let notifications = notifications.clone();
         playlists.on_add_tracks_to_selected(move || {
             let Some(ui) = weak.upgrade() else { return };
-            let dlg = ui.global::<crate::Dialog>();
+            let dlg = ui.global::<Dialog>();
             let pick_total = dlg.get_pick_total_tracks();
             let pids: Vec<i64> = dlg
                 .get_playlist_pick_rows()

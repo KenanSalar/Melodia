@@ -2,7 +2,7 @@ import { Theme } from "../../theme.slint";
 import { MaterialIcon } from "../material-icon.slint";
 import { PopupSurface } from "../popup-surface.slint";
 import { FlyoutOption } from "flyout-option.slint";
-import { SleepPresets } from "flyout-presets.slint";
+import { FlyoutMetrics, SleepPresets } from "flyout-presets.slint";
 
 // Round − / + stepper button. Reports press *down* and *up* (not just click) so
 // the host can implement hold-to-accelerate. The `TouchArea` stays enabled even
@@ -125,7 +125,7 @@ export component SleepTimerFlyout inherits PopupSurface {
 
         // Custom ±stepper: [−] [ M:SS ] [+]. Tap = ±30 s; hold accelerates.
         HorizontalLayout {
-            height: 32px;
+            height: FlyoutMetrics.option-row-h;
             padding-left: Theme.pad-sm;
             padding-right: Theme.pad-sm;
             spacing: Theme.pad-sm;
