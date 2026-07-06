@@ -4,31 +4,22 @@
 //! here is derived from the already-fetched recency rows: the mosaic is the
 //! up-to-4 most-recently-played *distinct* covers, and the count/duration are
 //! summed off the same rows. The blur backdrop reuses the shared dual-slot
-//! cross-fade (`write_crossfade_slot`) and the same atlas+blur recipe as
-//! `favorites::hero` so both surfaces read identically.
+//! cross-fade (`write_crossfade_slot`) and the shared
+//! [`crate::ui::mosaic_blur`] atlas+blur recipe so both hero surfaces read
+//! identically.
 
 use std::collections::HashSet;
-use std::path::Path;
 
-use image::imageops::fast_blur;
 use slint::{
     ComponentHandle, Image, Model, Rgb8Pixel, SharedPixelBuffer, SharedString, VecModel, Weak,
 };
 
 use crate::entities::track::TrackListRow as RsTrackListRow;
 use crate::state::AppState;
+use crate::ui::mosaic_blur::compose_mosaic_blur;
 use crate::ui::now_playing::write_crossfade_slot;
 use crate::ui::tracks::format_duration_ms;
 use crate::{AppWindow, RecentlyPlayed};
-
-/// Atlas + blur target size. Matches `favorites::hero::BLUR_TARGET` so the GPU
-/// pipeline / cache pressure stays consistent across blur surfaces.
-const BLUR_TARGET: u32 = 192;
-/// `fast_blur` sigma — same as the Favorites hero / Now Playing backdrop.
-const BLUR_SIGMA: f32 = 24.0;
-/// Per-tile source decode cap before atlasing.
-const MAX_SOURCE_DIM: u32 = 8192;
-const PER_TILE: u32 = BLUR_TARGET / 2;
 
 /// The up-to-`n` most-recently-played *distinct* cover paths, in recency
 /// order — the hero mosaic tiles. Skips empty/absent artwork.
@@ -130,81 +121,5 @@ fn apply_hero_blur(weak: &Weak<AppWindow>, buf: Option<SharedPixelBuffer<Rgb8Pix
     });
 }
 
-/// Compose up to 4 covers into a `BLUR_TARGET × BLUR_TARGET` 2×2 atlas, then
-/// blur. Mirrors `favorites::hero::compose_mosaic_blur` (same 1/2/3/4 layouts).
-/// Runs on the blocking pool. `None` when every decode failed.
-fn compose_mosaic_blur(paths: &[String]) -> Option<SharedPixelBuffer<Rgb8Pixel>> {
-    use image::{ImageBuffer, RgbImage};
-
-    if paths.is_empty() {
-        return None;
-    }
-
-    let mut atlas: RgbImage = ImageBuffer::new(BLUR_TARGET, BLUR_TARGET);
-
-    let mut tiles: Vec<RgbImage> = Vec::with_capacity(4);
-    for p in paths.iter().take(4) {
-        if let Some(tile) = decode_tile(Path::new(p)) {
-            tiles.push(tile);
-        }
-    }
-    if tiles.is_empty() {
-        return None;
-    }
-
-    match tiles.len() {
-        1 => {
-            blit(&mut atlas, &tiles[0], 0, 0, BLUR_TARGET, BLUR_TARGET);
-        }
-        2 => {
-            blit(&mut atlas, &tiles[0], 0, 0, PER_TILE, BLUR_TARGET);
-            blit(&mut atlas, &tiles[1], PER_TILE, 0, PER_TILE, BLUR_TARGET);
-        }
-        3 => {
-            blit(&mut atlas, &tiles[0], 0, 0, PER_TILE, BLUR_TARGET);
-            blit(&mut atlas, &tiles[1], PER_TILE, 0, PER_TILE, PER_TILE);
-            blit(&mut atlas, &tiles[2], PER_TILE, PER_TILE, PER_TILE, PER_TILE);
-        }
-        _ => {
-            blit(&mut atlas, &tiles[0], 0, 0, PER_TILE, PER_TILE);
-            blit(&mut atlas, &tiles[1], PER_TILE, 0, PER_TILE, PER_TILE);
-            blit(&mut atlas, &tiles[2], 0, PER_TILE, PER_TILE, PER_TILE);
-            blit(&mut atlas, &tiles[3], PER_TILE, PER_TILE, PER_TILE, PER_TILE);
-        }
-    }
-
-    let blurred = fast_blur(&atlas, BLUR_SIGMA);
-    Some(buffer_from_rgb(&blurred))
-}
-
-fn decode_tile(path: &Path) -> Option<image::RgbImage> {
-    let mut reader = image::ImageReader::open(path).ok()?.with_guessed_format().ok()?;
-    let mut limits = image::Limits::default();
-    limits.max_image_width = Some(MAX_SOURCE_DIM);
-    limits.max_image_height = Some(MAX_SOURCE_DIM);
-    reader.limits(limits);
-    let decoded = reader.decode().ok()?;
-    Some(decoded.thumbnail_exact(BLUR_TARGET, BLUR_TARGET).to_rgb8())
-}
-
-fn blit(dst: &mut image::RgbImage, src: &image::RgbImage, dx: u32, dy: u32, dw: u32, dh: u32) {
-    let (sw, sh) = src.dimensions();
-    if sw == 0 || sh == 0 {
-        return;
-    }
-    for y in 0..dh {
-        for x in 0..dw {
-            let sx = x * sw / dw;
-            let sy = y * sh / dh;
-            let px = *src.get_pixel(sx, sy);
-            dst.put_pixel(dx + x, dy + y, px);
-        }
-    }
-}
-
-fn buffer_from_rgb(img: &image::RgbImage) -> SharedPixelBuffer<Rgb8Pixel> {
-    let (w, h) = img.dimensions();
-    let mut buf = SharedPixelBuffer::<Rgb8Pixel>::new(w, h);
-    buf.make_mut_bytes().copy_from_slice(img.as_raw());
-    buf
-}
+// The atlas composition itself lives in `crate::ui::mosaic_blur` — shared
+// with the Favorites hero so both surfaces read identically.

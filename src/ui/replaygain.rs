@@ -52,11 +52,8 @@ pub fn install_replaygain(ui: &AppWindow, state: &AppState) {
         let state = state.clone();
         rg.on_set_enabled(move |on| {
             library::playback::player_set_replaygain_enabled(&state.playback_ctx(), on);
-            let s = state.clone();
-            state.runtime.spawn_blocking(move || {
-                if let Err(e) = library::settings::set_replaygain_enabled(&s, on) {
-                    log::warn!("persist rg_enabled: {e}");
-                }
+            state.persist_blocking("persist rg_enabled", move |s| {
+                library::settings::set_replaygain_enabled(s, on)
             });
         });
     }
@@ -67,11 +64,8 @@ pub fn install_replaygain(ui: &AppWindow, state: &AppState) {
         rg.on_set_mode(move |idx| {
             let mode = RgMode::from_u8(u8::try_from(idx).unwrap_or(1));
             library::playback::player_set_replaygain_mode(&state.playback_ctx(), mode);
-            let s = state.clone();
-            state.runtime.spawn_blocking(move || {
-                if let Err(e) = library::settings::set_replaygain_mode(&s, mode) {
-                    log::warn!("persist rg_mode: {e}");
-                }
+            state.persist_blocking("persist rg_mode", move |s| {
+                library::settings::set_replaygain_mode(s, mode)
             });
         });
     }
@@ -81,11 +75,8 @@ pub fn install_replaygain(ui: &AppWindow, state: &AppState) {
         let state = state.clone();
         rg.on_set_prevent_clipping(move |on| {
             library::playback::player_set_replaygain_prevent_clipping(&state.playback_ctx(), on);
-            let s = state.clone();
-            state.runtime.spawn_blocking(move || {
-                if let Err(e) = library::settings::set_replaygain_prevent_clipping(&s, on) {
-                    log::warn!("persist rg_prevent_clipping: {e}");
-                }
+            state.persist_blocking("persist rg_prevent_clipping", move |s| {
+                library::settings::set_replaygain_prevent_clipping(s, on)
             });
         });
     }
@@ -109,11 +100,8 @@ pub fn install_replaygain(ui: &AppWindow, state: &AppState) {
         let state = state.clone();
         rg.on_commit_preamp(move |db| {
             let db = replaygain::clamp_rg_preamp(db);
-            let s = state.clone();
-            state.runtime.spawn_blocking(move || {
-                if let Err(e) = library::settings::set_replaygain_preamp(&s, db) {
-                    log::warn!("persist rg_preamp: {e}");
-                }
+            state.persist_blocking("persist rg_preamp", move |s| {
+                library::settings::set_replaygain_preamp(s, db)
             });
         });
     }

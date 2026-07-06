@@ -26,6 +26,8 @@
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU8, AtomicU32, AtomicU64, Ordering};
 
+use super::dsp::db_to_linear;
+
 /// Preamp (extra gain applied on top of the tag value) range, in decibels.
 /// Symmetric — unlike the EQ preamp — because the `ReplayGain` preamp is a
 /// listener preference for overall loudness, cutting or boosting equally.
@@ -43,11 +45,6 @@ pub const DEFAULT_MODE: &str = "album";
 /// A computed linear gain within this much of unity is treated as no gain, so a
 /// track with ~0 dB effective `ReplayGain` can still take the bit-identical bypass.
 const RG_UNITY_EPSILON: f32 = 1e-4;
-
-/// Convert a decibel value to a linear amplitude factor.
-fn db_to_linear(db: f32) -> f32 {
-    10.0_f32.powf(db / 20.0)
-}
 
 /// Clamp a `ReplayGain` preamp value into the supported range.
 #[must_use]

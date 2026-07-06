@@ -7,7 +7,7 @@ use async_compat::Compat;
 use slint::{ComponentHandle, Model, SharedString};
 
 use super::collect_nonzero_track_ids;
-use super::macros::{spawn_logged, spawn_logged_sync};
+use super::macros::{spawn_logged, spawn_logged_sync, wire_row_flag};
 use crate::library;
 use crate::state::AppState;
 use crate::ui::browse::{self as browse_ui_mod, BrowseUi};
@@ -198,62 +198,33 @@ pub fn wire_browse(ui: &AppWindow, state: &AppState, browse_ui: &Arc<BrowseUi>) 
         });
     }
 
-    // toggle-row-favorite: write through, then surgically update each
-    // row (no re-fetch, so scroll position holds and there's no flash).
-    // Disk-only rows can't be favorited.
+    // toggle-row-favorite / set-row-rating: write through, then surgically
+    // update each row (no re-fetch, so scroll position holds and there's no
+    // flash). Disk-only rows have id 0 and are filtered out by
+    // `collect_nonzero_track_ids`; rating never changes list membership.
     {
-        let s = state.clone();
-        let weak = weak.clone();
         let bu = browse_ui.clone();
-        g.on_toggle_row_favorite(move |ids, fav| {
-            let id_vec = collect_nonzero_track_ids(&ids);
-            if id_vec.is_empty() {
-                return;
-            }
-            let s = s.clone();
-            let weak = weak.clone();
-            let bu = bu.clone();
-            s.runtime.clone().spawn(async move {
-                if let Err(e) =
-                    library::favorites::set_favorite(&s, id_vec.clone(), fav).await
-                {
-                    log::warn!("browse::set_favorite: {e}");
-                    return;
-                }
+        wire_row_flag!(g, on_toggle_row_favorite, state, "browse::set_favorite",
+            library::favorites::set_favorite, collect_nonzero_track_ids,
+            captures: [weak, bu],
+            after: |id_vec, fav| {
                 for id in &id_vec {
                     bu.flip_favorite(*id, fav);
                     browse_ui_mod::apply_row_favorite(&weak, *id, fav);
                 }
             });
-        });
     }
-
-    // set-row-rating: mirror the favorite path (disk-only rows have id 0 and
-    // are filtered out by `collect_nonzero_track_ids`). Rating never changes
-    // list membership, so a surgical per-row patch suffices.
     {
-        let s = state.clone();
-        let weak = weak.clone();
         let bu = browse_ui.clone();
-        g.on_set_row_rating(move |ids, rating| {
-            let id_vec = collect_nonzero_track_ids(&ids);
-            if id_vec.is_empty() {
-                return;
-            }
-            let s = s.clone();
-            let weak = weak.clone();
-            let bu = bu.clone();
-            s.runtime.clone().spawn(async move {
-                if let Err(e) = library::ratings::set_rating(&s, id_vec.clone(), rating).await {
-                    log::warn!("browse::set_rating: {e}");
-                    return;
-                }
+        wire_row_flag!(g, on_set_row_rating, state, "browse::set_rating",
+            library::ratings::set_rating, collect_nonzero_track_ids,
+            captures: [weak, bu],
+            after: |id_vec, rating| {
                 for id in &id_vec {
                     bu.flip_rating(*id, rating);
                     browse_ui_mod::apply_row_rating(&weak, *id, rating);
                 }
             });
-        });
     }
 
     // request-sort: clicking a header column. Same field flips dir; new

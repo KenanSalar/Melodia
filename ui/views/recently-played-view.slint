@@ -10,6 +10,7 @@ import { ColumnTogglePopup } from "../components/track-list/column-toggle-popup.
 import { TrackList } from "../components/track-list/track-list.slint";
 import { OverlayScrollbar } from "../components/overlay-scrollbar.slint";
 import { FilterThrottle } from "../components/filter-throttle.slint";
+import { HeroBlurBackdrop } from "../components/hero-blur-backdrop.slint";
 
 // The Recently-Played view. Mirrors the Favorites layout — same hero (live 2×2
 // cover mosaic + count + duration + Play All / Shuffle) and the same unified
@@ -45,36 +46,18 @@ export component RecentlyPlayedView inherits Rectangle {
             : @tr("No recently played tracks");
 
     // --- Full-bleed hero blur backdrop ----------------------------------
-    // Dual-slot crossfade (outgoing slot never cleared so a mosaic refresh
-    // never flashes). Accent-tinted gradient floor shows through when there is
-    // no blur image (nothing played yet / decode failure).
-    Rectangle {
+    // Shared component owns the dual-slot crossfade (outgoing slot never
+    // cleared so a mosaic refresh never flashes). Gradient floor shows
+    // through when there is no blur image (nothing played yet / decode
+    // failure).
+    HeroBlurBackdrop {
         x: 0; y: 0;
         width: 100%; height: root.hero-height;
-        background: @linear-gradient(135deg,
-            Theme.accent.mix(Theme.base, 0.25),
-            Theme.base);
-    }
-    Image {
-        x: 0; y: 0;
-        width: 100%; height: root.hero-height;
-        source: RecentlyPlayed.blur-img-a;
-        image-fit: ImageFit.cover;
-        opacity: (RecentlyPlayed.has-blur && RecentlyPlayed.blur-use-a) ? 1.0 : 0.0;
-        animate opacity { duration: Theme.dur-med; easing: ease-in-out; }
-    }
-    Image {
-        x: 0; y: 0;
-        width: 100%; height: root.hero-height;
-        source: RecentlyPlayed.blur-img-b;
-        image-fit: ImageFit.cover;
-        opacity: (RecentlyPlayed.has-blur && !RecentlyPlayed.blur-use-a) ? 1.0 : 0.0;
-        animate opacity { duration: Theme.dur-med; easing: ease-in-out; }
-    }
-    Rectangle {
-        x: 0; y: 0;
-        width: 100%; height: root.hero-height;
-        background: Theme.crust.with-alpha(0.45);
+        blur-a: RecentlyPlayed.blur-img-a;
+        blur-b: RecentlyPlayed.blur-img-b;
+        use-a: RecentlyPlayed.blur-use-a;
+        has-blur: RecentlyPlayed.has-blur;
+        tint-start: Theme.accent.mix(Theme.base, 0.25);
     }
 
     VerticalLayout {

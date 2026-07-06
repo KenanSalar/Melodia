@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use crate::database::queries;
 use crate::error::AppError;
-use crate::player::state::{PlayerAction, lock_state, with_state_emit};
+use crate::player::state::{PlayerAction, lock_state, sync_current_track_if_in, with_state_emit};
 use crate::state::AppState;
 
 /// Star ratings live in the range 0–5 (0 = unrated). Both public setters clamp
@@ -30,27 +30,9 @@ pub async fn set_rating(state: &AppState, ids: Vec<i64>, rating: i32) -> Result<
 }
 
 /// If `current_track` is one of `ids`, flip its cached `rating` and emit so the
-/// Now-Playing surfaces reflect a rating set from a list row. Skips the emit
-/// entirely when the playing track isn't in the set (the common case) to avoid
-/// a spurious view-model publish.
+/// Now-Playing surfaces reflect a rating set from a list row.
 fn sync_current_track_rating(state: &AppState, ids: &[i64], rating: i32) {
-    let affects_current = {
-        let g = lock_state(&state.player_state);
-        g.current_track.as_ref().is_some_and(|t| ids.contains(&t.id))
-    };
-    if !affects_current {
-        return;
-    }
-    with_state_emit(&state.player_state, &state.sinks, |s| {
-        // Re-check the id under the emit lock — the track may have advanced
-        // between the pre-check and here.
-        if let Some(track) = s.current_track.as_mut()
-            && ids.contains(&track.id)
-        {
-            Arc::make_mut(track).rating = rating;
-        }
-        Vec::<PlayerAction>::new()
-    });
+    sync_current_track_if_in(&state.player_state, &state.sinks, ids, |t| t.rating = rating);
 }
 
 /// Set the star rating on the currently playing track. Persists to DB, flips

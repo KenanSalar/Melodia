@@ -15,7 +15,7 @@ use crate::library;
 use crate::services::settings::{SortDir, ViewSort};
 use crate::state::AppState;
 use crate::ui::callbacks::collect_track_ids;
-use crate::ui::callbacks::macros::spawn_logged;
+use crate::ui::callbacks::macros::{spawn_logged, wire_row_flag};
 use crate::ui::recently_played::{self as recently_played_ui_mod, RecentlyPlayedUi};
 use crate::ui::track_list_view::TrackListColumnState;
 use crate::{AppWindow, RecentlyPlayed};
@@ -58,55 +58,31 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, rp_ui: &Arc<RecentlyPlayedU
     // `library_changed_tx`; the lifecycle subscriber re-fetches. Multi-select
     // arrives as `[int]`; single-row mode sends a 1-element array.
     {
-        let s = state.clone();
         let ru = rp_ui.clone();
-        let weak = weak.clone();
-        g.on_toggle_row_favorite(move |ids, fav| {
-            let id_vec = collect_track_ids(&ids);
-            if id_vec.is_empty() {
-                return;
-            }
-            let s = s.clone();
-            let ru = ru.clone();
-            let weak = weak.clone();
-            s.runtime.clone().spawn(async move {
-                if let Err(e) = library::favorites::set_favorite(&s, id_vec.clone(), fav).await {
-                    log::warn!("recently_played::set_favorite: {e}");
-                    return;
-                }
+        wire_row_flag!(g, on_toggle_row_favorite, state, "recently_played::set_favorite",
+            library::favorites::set_favorite, collect_track_ids,
+            captures: [weak, ru],
+            after: |id_vec, fav| {
                 for id in &id_vec {
                     ru.flip_track_favorite(*id, fav);
                 }
                 recently_played_ui_mod::apply_filtered_tracks(&ru, &weak);
             });
-        });
     }
 
     // set-row-rating: flip in place (recency membership is fixed to the 200,
     // independent of rating), then re-walk the filtered view.
     {
-        let s = state.clone();
         let ru = rp_ui.clone();
-        let weak = weak.clone();
-        g.on_set_row_rating(move |ids, rating| {
-            let id_vec = collect_track_ids(&ids);
-            if id_vec.is_empty() {
-                return;
-            }
-            let s = s.clone();
-            let ru = ru.clone();
-            let weak = weak.clone();
-            s.runtime.clone().spawn(async move {
-                if let Err(e) = library::ratings::set_rating(&s, id_vec.clone(), rating).await {
-                    log::warn!("recently_played::set_rating: {e}");
-                    return;
-                }
+        wire_row_flag!(g, on_set_row_rating, state, "recently_played::set_rating",
+            library::ratings::set_rating, collect_track_ids,
+            captures: [weak, ru],
+            after: |id_vec, rating| {
                 for id in &id_vec {
                     ru.flip_track_rating(*id, rating);
                 }
                 recently_played_ui_mod::apply_filtered_tracks(&ru, &weak);
             });
-        });
     }
 
     // --- Filter ---------------------------------------------------

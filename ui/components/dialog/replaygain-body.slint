@@ -1,8 +1,8 @@
 import { Theme } from "../../theme.slint";
 import { ReplayGain } from "../../globals.slint";
-import { ToggleSwitch } from "../settings/toggle-switch.slint";
 import { Dropdown } from "../settings/dropdown.slint";
-import { SliderTrack } from "../slider-track.slint";
+import { DialogToggleRow } from "dialog-toggle-row.slint";
+import { PreampSliderRow } from "preamp-slider-row.slint";
 
 // Body for the `Dialog.kind == "replaygain"` modal: an enable toggle, a
 // Track/Album mode dropdown, a preamp slider (±15 dB, 0 dB centred), and a
@@ -12,41 +12,15 @@ import { SliderTrack } from "../slider-track.slint";
 export component ReplayGainBody inherits VerticalLayout {
     spacing: Theme.pad-lg;
 
-    // Preamp dB ↔ SliderTrack 0..1 mapping, in one place (the binding and both
-    // callbacks reuse these instead of re-inlining the formula).
-    pure function preamp-to-frac(db: float) -> float {
-        return (db - ReplayGain.min-preamp) / (ReplayGain.max-preamp - ReplayGain.min-preamp);
-    }
-    pure function frac-to-preamp(f: float) -> float {
-        return ReplayGain.min-preamp + f * (ReplayGain.max-preamp - ReplayGain.min-preamp);
-    }
-
     // Mode names, order-matched to `RgMode` (0 = Track, 1 = Album). Inline `@tr`
     // literals — a `[string]` populated from Rust wouldn't be translated
     // (CLAUDE.md i18n notes).
     property <[string]> mode-names: [@tr("Track"), @tr("Album")];
 
-    // Enable toggle + label.
-    HorizontalLayout {
-        spacing: Theme.pad-md;
-        alignment: stretch;
-
-        VerticalLayout {
-            alignment: center;
-            ToggleSwitch {
-                checked <=> ReplayGain.enabled;
-                toggled(v) => { ReplayGain.set-enabled(v); }
-            }
-        }
-        VerticalLayout {
-            alignment: center;
-            horizontal-stretch: 1;
-            Text {
-                text: @tr("Enable ReplayGain");
-                color: Theme.text;
-                font-size: Theme.font-size-md;
-            }
-        }
+    DialogToggleRow {
+        label: @tr("Enable ReplayGain");
+        checked <=> ReplayGain.enabled;
+        toggled(v) => { ReplayGain.set-enabled(v); }
     }
 
     // Mode row — per-track vs per-album normalization.
@@ -74,69 +48,20 @@ export component ReplayGainBody inherits VerticalLayout {
         }
     }
 
-    // Preamp row — extra gain applied on top of the tag value. Maps the dB value
-    // to the horizontal SliderTrack's 0..1 range.
-    HorizontalLayout {
-        spacing: Theme.pad-md;
-        alignment: stretch;
-
-        VerticalLayout {
-            alignment: center;
-            Text {
-                text: @tr("Preamp");
-                color: Theme.text;
-                font-size: Theme.font-size-md;
-            }
-        }
-        VerticalLayout {
-            alignment: center;
-            horizontal-stretch: 1;
-            SliderTrack {
-                value: root.preamp-to-frac(ReplayGain.preamp);
-                is-disabled: !ReplayGain.enabled;
-                seam-mask-color: Theme.surface0;
-                changed(v) => {
-                    ReplayGain.set-preamp(root.frac-to-preamp(v));
-                }
-                committed(v) => {
-                    ReplayGain.commit-preamp(root.frac-to-preamp(v));
-                }
-            }
-        }
-        VerticalLayout {
-            alignment: center;
-            Text {
-                // "dB" is a universal unit symbol — not translated.
-                text: (ReplayGain.preamp > 0 ? "+" : "") + round(ReplayGain.preamp) + " dB";
-                color: ReplayGain.enabled ? Theme.subtext0 : Theme.overlay0;
-                font-size: Theme.font-size-sm;
-                min-width: 48px;
-                horizontal-alignment: right;
-            }
-        }
+    // Preamp row — extra gain applied on top of the tag value.
+    PreampSliderRow {
+        preamp: ReplayGain.preamp;
+        min-preamp: ReplayGain.min-preamp;
+        max-preamp: ReplayGain.max-preamp;
+        enabled: ReplayGain.enabled;
+        changed(db) => { ReplayGain.set-preamp(db); }
+        committed(db) => { ReplayGain.commit-preamp(db); }
     }
 
-    // Prevent-clipping toggle + label — the static peak-based clip guard.
-    HorizontalLayout {
-        spacing: Theme.pad-md;
-        alignment: stretch;
-
-        VerticalLayout {
-            alignment: center;
-            ToggleSwitch {
-                checked <=> ReplayGain.prevent-clipping;
-                toggled(v) => { ReplayGain.set-prevent-clipping(v); }
-            }
-        }
-        VerticalLayout {
-            alignment: center;
-            horizontal-stretch: 1;
-            Text {
-                text: @tr("Prevent clipping");
-                color: Theme.text;
-                font-size: Theme.font-size-md;
-            }
-        }
+    DialogToggleRow {
+        label: @tr("Prevent clipping");
+        checked <=> ReplayGain.prevent-clipping;
+        toggled(v) => { ReplayGain.set-prevent-clipping(v); }
     }
 
     // Footnote — ReplayGain reads precomputed loudness tags from the files; it

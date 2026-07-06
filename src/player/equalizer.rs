@@ -41,6 +41,7 @@ use biquad::{Biquad, Coefficients, DirectForm1, Hertz, Type};
 use rodio::source::SeekError;
 use rodio::{ChannelCount, Sample, SampleRate, Source};
 
+use super::dsp::db_to_linear;
 use super::replaygain::{self, ReplayGainShared, TrackReplayGain};
 
 /// Number of equalizer bands.
@@ -148,11 +149,6 @@ pub fn normalize_gains(gains: &[f32]) -> [f32; NUM_BANDS] {
 #[must_use]
 pub fn preset_index(name: &str) -> Option<usize> {
     PRESETS.iter().position(|p| p.name == name)
-}
-
-/// Convert a decibel value to a linear amplitude factor.
-fn db_to_linear(db: f32) -> f32 {
-    10.0_f32.powf(db / 20.0)
 }
 
 /// Lock-free equalizer state shared between the control layer (writer) and the

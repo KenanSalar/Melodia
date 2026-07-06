@@ -1,61 +1,8 @@
 import { Theme } from "../../theme.slint";
 import { MaterialIcon } from "../material-icon.slint";
 import { PopupSurface } from "../popup-surface.slint";
-
-// One preset in the sleep-timer list. `value` is the minutes argument handed to
-// `Player.set-sleep-timer` (0 = off, > 0 = duration, -1 = "End of current
-// track"); `label` is the translated display string.
-struct SleepPreset {
-    value: int,
-    label: string,
-}
-
-// Single preset row inside the sleep-timer flyout. Sibling of `SpeedOption`
-// (`speed-flyout.slint`): label on the left, a `check` glyph on the active row,
-// `Theme.surface1` hover fill to match the overflow menu family.
-component SleepOption inherits Rectangle {
-    in property <string> label;
-    in property <bool> active;
-
-    callback clicked();
-
-    height: 32px;
-    border-radius: Theme.radius-sm;
-    background: touch.has-hover ? Theme.surface1 : transparent;
-    animate background { duration: Theme.dur-fast; easing: ease-in-out; }
-
-    HorizontalLayout {
-        padding-left: Theme.pad-sm;
-        padding-right: Theme.pad-sm;
-        spacing: Theme.pad-sm;
-        alignment: stretch;
-
-        VerticalLayout {
-            alignment: center;
-            horizontal-stretch: 1;
-            Text {
-                text: root.label;
-                color: root.active ? Theme.accent : Theme.text;
-                font-size: Theme.font-size-md;
-            }
-        }
-        VerticalLayout {
-            alignment: center;
-            // Checkmark only on the active row; the empty branch keeps the
-            // layout box stable so all rows have identical height.
-            if root.active: MaterialIcon {
-                name: "check";
-                icon-size: 16px;
-                icon-color: Theme.accent;
-            }
-        }
-    }
-
-    touch := TouchArea {
-        mouse-cursor: pointer;
-        clicked => { root.clicked(); }
-    }
-}
+import { FlyoutOption } from "flyout-option.slint";
+import { SleepPresets } from "flyout-presets.slint";
 
 // Round − / + stepper button. Reports press *down* and *up* (not just click) so
 // the host can implement hold-to-accelerate. The `TouchArea` stays enabled even
@@ -122,18 +69,6 @@ export component SleepTimerFlyout inherits PopupSurface {
     property <int> repeat-dir: 0;   // -1 / 0 / +1
     property <int> hold-ticks: 0;   // 90 ms ticks since the press began
 
-    // Preset count / layout MUST match `sleep-flyout-h` in `overflow-menu.slint`
-    // (7 preset rows + divider + stepper row + Start pill). `-1` = "End of track".
-    property <[SleepPreset]> presets: [
-        { value: 0,   label: @tr("Off") },
-        { value: 15,  label: @tr("15 min") },
-        { value: 30,  label: @tr("30 min") },
-        { value: 45,  label: @tr("45 min") },
-        { value: 60,  label: @tr("60 min") },
-        { value: 90,  label: @tr("90 min") },
-        { value: -1,  label: @tr("End of track") },
-    ];
-
     // Step size grows with hold time: 30 s → 1 min → 2 min → 5 min. `t` is in
     // 90 ms ticks, so 17 ≈ 1.5 s, 34 ≈ 3 s, 67 ≈ 6 s.
     pure function step-for-ticks(t: int) -> int {
@@ -168,7 +103,9 @@ export component SleepTimerFlyout inherits PopupSurface {
         padding: Theme.pad-xs;
         spacing: 0;
 
-        for p in root.presets: SleepOption {
+        // Presets live in the shared `SleepPresets` global — the host's
+        // `sleep-flyout-h` reserve math reads the same list's length.
+        for p in SleepPresets.list: FlyoutOption {
             label: p.label;
             active: p.value == -1
                 ? root.track-end-active

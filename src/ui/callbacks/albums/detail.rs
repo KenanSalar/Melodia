@@ -10,7 +10,7 @@ use crate::state::AppState;
 use crate::ui::albums::{self as albums_ui_mod, AlbumsUi};
 use crate::ui::callbacks::collect_track_ids;
 use crate::ui::callbacks::macros::{
-    release_detail_hero_images, spawn_logged, spawn_logged_sync,
+    release_detail_hero_images, spawn_logged, spawn_logged_sync, wire_row_flag,
 };
 use crate::ui::track_list_view::{TrackListColumnState, view_id};
 use crate::{AlbumDetail, AppWindow, Nav};
@@ -170,60 +170,33 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, albums_ui: &Arc<AlbumsUi>) 
         });
     }
 
-    // toggle-row-favorite: write through, then surgically update each
-    // affected row (no list re-fetch — scroll position holds and
-    // there's no flash). Single-row and multi-select both arrive as
-    // `[int]`.
+    // toggle-row-favorite / set-row-rating: write through, then surgically
+    // update each affected row (no list re-fetch — scroll position holds and
+    // there's no flash). Single-row and multi-select both arrive as `[int]`;
+    // rating never changes list membership.
     {
-        let s = state.clone();
-        let weak = weak.clone();
         let au = albums_ui.clone();
-        detail.on_toggle_row_favorite(move |ids, fav| {
-            let id_vec = collect_track_ids(&ids);
-            if id_vec.is_empty() {
-                return;
-            }
-            let s = s.clone();
-            let weak = weak.clone();
-            let au = au.clone();
-            s.runtime.clone().spawn(async move {
-                if let Err(e) = library::favorites::set_favorite(&s, id_vec.clone(), fav).await {
-                    log::warn!("albums::set_favorite: {e}");
-                    return;
-                }
+        wire_row_flag!(detail, on_toggle_row_favorite, state, "albums::set_favorite",
+            library::favorites::set_favorite, collect_track_ids,
+            captures: [weak, au],
+            after: |id_vec, fav| {
                 for id in &id_vec {
                     au.flip_detail_favorite(*id, fav);
                     albums_ui_mod::apply_detail_row_favorite(&weak, *id, fav);
                 }
             });
-        });
     }
-
-    // set-row-rating: mirror the favorite path. Rating never changes list
-    // membership, so a surgical per-row patch suffices.
     {
-        let s = state.clone();
-        let weak = weak.clone();
         let au = albums_ui.clone();
-        detail.on_set_row_rating(move |ids, rating| {
-            let id_vec = collect_track_ids(&ids);
-            if id_vec.is_empty() {
-                return;
-            }
-            let s = s.clone();
-            let weak = weak.clone();
-            let au = au.clone();
-            s.runtime.clone().spawn(async move {
-                if let Err(e) = library::ratings::set_rating(&s, id_vec.clone(), rating).await {
-                    log::warn!("albums::set_rating: {e}");
-                    return;
-                }
+        wire_row_flag!(detail, on_set_row_rating, state, "albums::set_rating",
+            library::ratings::set_rating, collect_track_ids,
+            captures: [weak, au],
+            after: |id_vec, rating| {
                 for id in &id_vec {
                     au.flip_detail_rating(*id, rating);
                     albums_ui_mod::apply_detail_row_rating(&weak, *id, rating);
                 }
             });
-        });
     }
 
     // select-row / clear-selection: modifier-aware selection, mirroring the

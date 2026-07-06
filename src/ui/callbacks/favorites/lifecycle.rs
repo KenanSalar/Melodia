@@ -5,11 +5,12 @@
 use std::sync::Arc;
 
 use async_compat::Compat;
-use slint::{ComponentHandle, Image, Model, SharedString, VecModel};
+use slint::{ComponentHandle, Image, SharedString};
 
 use super::NAV_FAVORITES;
 use crate::state::AppState;
 use crate::ui::favorites::{self as favorites_ui_mod, FavoritesUi};
+use crate::ui::model_diff::clear_vec_model;
 use crate::{
     AppWindow, EntityStripRow as UiEntityStripRow, Favorites, Nav,
     TrackListRow as UiTrackListRow,
@@ -49,11 +50,17 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, fav_ui: &Arc<FavoritesUi>) 
                 g.set_blur_img_a(Image::default());
                 g.set_blur_img_b(Image::default());
                 g.set_has_blur(false);
-                clear_model::<UiTrackListRow>(&g.get_tracks(), "tracks");
-                clear_model::<UiEntityStripRow>(&g.get_most_played_rows(), "most-played");
-                clear_model::<UiEntityStripRow>(&g.get_artist_rows(), "artist");
-                clear_model_i32(&g.get_selected_ids());
-                clear_model_string(&g.get_mosaic_paths());
+                clear_vec_model::<UiTrackListRow>(&g.get_tracks(), "favorites: clear tracks");
+                clear_vec_model::<UiEntityStripRow>(
+                    &g.get_most_played_rows(),
+                    "favorites: clear most-played",
+                );
+                clear_vec_model::<UiEntityStripRow>(&g.get_artist_rows(), "favorites: clear artist");
+                clear_vec_model::<i32>(&g.get_selected_ids(), "favorites: clear selected-ids");
+                clear_vec_model::<SharedString>(
+                    &g.get_mosaic_paths(),
+                    "favorites: clear mosaic-paths",
+                );
                 g.set_selection_anchor(-1);
             }
             let fu = fu.clone();
@@ -160,25 +167,5 @@ async fn kick_full_refresh(
     }
     if let Err(e) = t {
         log::warn!("favorites::refresh_tracks: {e}");
-    }
-}
-
-fn clear_model<T: Clone + Default + 'static>(model: &slint::ModelRc<T>, label: &str) {
-    if let Some(vm) = model.as_any().downcast_ref::<VecModel<T>>() {
-        vm.set_vec(Vec::new());
-    } else {
-        log::warn!("favorites: clear {label}: VecModel downcast failed");
-    }
-}
-
-fn clear_model_i32(model: &slint::ModelRc<i32>) {
-    if let Some(vm) = model.as_any().downcast_ref::<VecModel<i32>>() {
-        vm.set_vec(Vec::new());
-    }
-}
-
-fn clear_model_string(model: &slint::ModelRc<SharedString>) {
-    if let Some(vm) = model.as_any().downcast_ref::<VecModel<SharedString>>() {
-        vm.set_vec(Vec::new());
     }
 }

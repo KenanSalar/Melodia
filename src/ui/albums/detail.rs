@@ -17,6 +17,7 @@ use crate::state::AppState;
 use crate::ui::detail_artwork::decode_detail_pair;
 use crate::ui::detail_filter::FilterRefs;
 use crate::ui::detail_view::{impl_detail_view_helpers, resolve_view_sort};
+use crate::ui::model_patch;
 use crate::ui::track_list_view::view_id;
 use crate::ui::track_sort::sort_track_list_rows;
 use crate::ui::tracks::PreparedTrackRow;
@@ -395,20 +396,9 @@ pub fn apply_filtered_detail(ui: &AppWindow, albums_ui: &AlbumsUi) {
 /// put. Mirrors `tracks::apply_row_favorite`.
 pub fn apply_detail_row_favorite(weak: &Weak<AppWindow>, id: i64, fav: bool) {
     let _ = weak.upgrade_in_event_loop(move |ui| {
-        let rows = ui.global::<AlbumDetail>().get_tracks();
-        let Some(vm) = rows.as_any().downcast_ref::<VecModel<UiTrackListRow>>() else {
-            return;
-        };
-        for i in 0..vm.row_count() {
-            let Some(mut r) = vm.row_data(i) else {
-                continue;
-            };
-            if i64::from(r.id) == id {
-                r.is_favorite = fav;
-                vm.set_row_data(i, r);
-                break;
-            }
-        }
+        model_patch::patch_track_row_by_id(&ui.global::<AlbumDetail>().get_tracks(), id, |r| {
+            r.is_favorite = fav;
+        });
     });
 }
 
@@ -416,20 +406,9 @@ pub fn apply_detail_row_favorite(weak: &Weak<AppWindow>, id: i64, fav: bool) {
 /// [`apply_detail_row_favorite`].
 pub fn apply_detail_row_rating(weak: &Weak<AppWindow>, id: i64, rating: i32) {
     let _ = weak.upgrade_in_event_loop(move |ui| {
-        let rows = ui.global::<AlbumDetail>().get_tracks();
-        let Some(vm) = rows.as_any().downcast_ref::<VecModel<UiTrackListRow>>() else {
-            return;
-        };
-        for i in 0..vm.row_count() {
-            let Some(mut r) = vm.row_data(i) else {
-                continue;
-            };
-            if i64::from(r.id) == id {
-                r.rating = rating;
-                vm.set_row_data(i, r);
-                break;
-            }
-        }
+        model_patch::patch_track_row_by_id(&ui.global::<AlbumDetail>().get_tracks(), id, |r| {
+            r.rating = rating;
+        });
     });
 }
 

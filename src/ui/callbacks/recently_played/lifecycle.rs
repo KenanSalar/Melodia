@@ -6,10 +6,11 @@
 use std::sync::Arc;
 
 use async_compat::Compat;
-use slint::{ComponentHandle, Image, Model, SharedString, VecModel};
+use slint::{ComponentHandle, Image, SharedString};
 
 use super::NAV_RECENTLY_PLAYED;
 use crate::state::AppState;
+use crate::ui::model_diff::clear_vec_model;
 use crate::ui::recently_played::{self as recently_played_ui_mod, RecentlyPlayedUi};
 use crate::{
     AppWindow, EntityStripRow as UiEntityStripRow, Nav, RecentlyPlayed,
@@ -45,10 +46,19 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, rp_ui: &Arc<RecentlyPlayedU
                 g.set_blur_img_a(Image::default());
                 g.set_blur_img_b(Image::default());
                 g.set_has_blur(false);
-                clear_model::<UiTrackListRow>(&g.get_tracks(), "tracks");
-                clear_model::<UiEntityStripRow>(&g.get_most_played_rows(), "most-played");
-                clear_model_string(&g.get_mosaic_paths());
-                clear_model_i32(&g.get_selected_ids());
+                clear_vec_model::<UiTrackListRow>(&g.get_tracks(), "recently_played: clear tracks");
+                clear_vec_model::<UiEntityStripRow>(
+                    &g.get_most_played_rows(),
+                    "recently_played: clear most-played",
+                );
+                clear_vec_model::<SharedString>(
+                    &g.get_mosaic_paths(),
+                    "recently_played: clear mosaic-paths",
+                );
+                clear_vec_model::<i32>(
+                    &g.get_selected_ids(),
+                    "recently_played: clear selected-ids",
+                );
                 g.set_selection_anchor(-1);
             }
             let ru = ru.clone();
@@ -138,25 +148,5 @@ async fn kick_full_refresh(
     );
     if let Err(e) = t {
         log::warn!("recently_played::refresh_tracks: {e}");
-    }
-}
-
-fn clear_model<T: Clone + Default + 'static>(model: &slint::ModelRc<T>, label: &str) {
-    if let Some(vm) = model.as_any().downcast_ref::<VecModel<T>>() {
-        vm.set_vec(Vec::new());
-    } else {
-        log::warn!("recently_played: clear {label}: VecModel downcast failed");
-    }
-}
-
-fn clear_model_i32(model: &slint::ModelRc<i32>) {
-    if let Some(vm) = model.as_any().downcast_ref::<VecModel<i32>>() {
-        vm.set_vec(Vec::new());
-    }
-}
-
-fn clear_model_string(model: &slint::ModelRc<SharedString>) {
-    if let Some(vm) = model.as_any().downcast_ref::<VecModel<SharedString>>() {
-        vm.set_vec(Vec::new());
     }
 }

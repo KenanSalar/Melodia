@@ -11,6 +11,8 @@ import { ColumnTogglePopup } from "../components/track-list/column-toggle-popup.
 import { TrackList } from "../components/track-list/track-list.slint";
 import { OverlayScrollbar } from "../components/overlay-scrollbar.slint";
 import { FilterThrottle } from "../components/filter-throttle.slint";
+import { CollapsibleSectionHeader } from "../components/collapsible-section-header.slint";
+import { HeroBlurBackdrop } from "../components/hero-blur-backdrop.slint";
 
 // The Favorites view (Nav sidebar index 2). Vertical regions:
 //   * Hero — compact (~160 px). Left-side live cover mosaic + right-
@@ -56,37 +58,18 @@ export component FavoritesView inherits Rectangle {
     }
 
     // --- Full-bleed hero blur backdrop ----------------------------------
-    // Behind everything else; matches DetailHeader's dual-slot crossfade
-    // contract (outgoing slot never cleared so mosaic refresh never
-    // flashes). Accent-tinted gradient floor shows through when there is
-    // no blur image (zero favorites / decode failure).
-    Rectangle {
+    // Behind everything else; the shared component owns the dual-slot
+    // crossfade contract (outgoing slot never cleared so mosaic refresh
+    // never flashes). Gradient floor shows through when there is no blur
+    // image (zero favorites / decode failure).
+    HeroBlurBackdrop {
         x: 0; y: 0;
         width: 100%; height: root.hero-height;
-        background: @linear-gradient(135deg,
-            Theme.accent.mix(Theme.base, 0.25),
-            Theme.base);
-    }
-    Image {
-        x: 0; y: 0;
-        width: 100%; height: root.hero-height;
-        source: Favorites.blur-img-a;
-        image-fit: ImageFit.cover;
-        opacity: (Favorites.has-blur && Favorites.blur-use-a) ? 1.0 : 0.0;
-        animate opacity { duration: Theme.dur-med; easing: ease-in-out; }
-    }
-    Image {
-        x: 0; y: 0;
-        width: 100%; height: root.hero-height;
-        source: Favorites.blur-img-b;
-        image-fit: ImageFit.cover;
-        opacity: (Favorites.has-blur && !Favorites.blur-use-a) ? 1.0 : 0.0;
-        animate opacity { duration: Theme.dur-med; easing: ease-in-out; }
-    }
-    Rectangle {
-        x: 0; y: 0;
-        width: 100%; height: root.hero-height;
-        background: Theme.crust.with-alpha(0.45);
+        blur-a: Favorites.blur-img-a;
+        blur-b: Favorites.blur-img-b;
+        use-a: Favorites.blur-use-a;
+        has-blur: Favorites.has-blur;
+        tint-start: Theme.accent.mix(Theme.base, 0.25);
     }
 
     private property <length> hero-height: 180px;
@@ -213,7 +196,7 @@ export component FavoritesView inherits Rectangle {
                         VerticalLayout {
                             alignment: center;
                             Text {
-                                text: "‎" + @tr("Favorites");
+                                text: "\u{200e}" + @tr("Favorites");
                                 color: Theme.text;
                                 font-size: 28px;
                                 font-weight: Theme.page-title-weight;
@@ -360,46 +343,10 @@ export component FavoritesView inherits Rectangle {
             HorizontalLayout {
                 alignment: start;
 
-                most-played-header-target := Rectangle {
-                    width: most-played-header-row.preferred-width;
-                    height: 28px;
-                    border-radius: self.height / 2;
-                    background: most-played-header-touch.has-hover
-                        ? Theme.surface1
-                        : transparent;
-                    animate background { duration: Theme.dur-fast; easing: ease-in-out; }
-
-                    most-played-header-row := HorizontalLayout {
-                        padding-left: 10px;
-                        padding-right: 10px;
-                        spacing: 2px;
-                        alignment: start;
-
-                        VerticalLayout {
-                            alignment: center;
-                            Text {
-                                text: @tr("Most Played");
-                                color: Theme.text;
-                                font-size: Theme.font-size-lg;
-                                font-weight: 600;
-                            }
-                        }
-                        VerticalLayout {
-                            alignment: center;
-                            MaterialIcon {
-                                name: Favorites.most-played-collapsed
-                                    ? "expand_more"
-                                    : "expand_less";
-                                icon-size: 20px;
-                                icon-color: Theme.subtext0;
-                            }
-                        }
-                    }
-
-                    most-played-header-touch := TouchArea {
-                        mouse-cursor: pointer;
-                        clicked => { Favorites.toggle-most-played-collapsed(); }
-                    }
+                CollapsibleSectionHeader {
+                    label: @tr("Most Played");
+                    collapsed: Favorites.most-played-collapsed;
+                    toggled => { Favorites.toggle-most-played-collapsed(); }
                 }
             }
 
@@ -444,55 +391,13 @@ export component FavoritesView inherits Rectangle {
             padding-bottom: Theme.pad-lg;
             spacing: Theme.pad-sm;
 
-            // Clickable header: "Favorite Artists" label + chevron.
-            // Hit area is the chevron + label only (compact), not
-            // the whole row width — clicking dead space to the right
-            // of the chevron shouldn't toggle. Chevron mirrors the
-            // app convention: down (`expand_more`) when collapsed,
-            // up (`expand_less`) when expanded.
             HorizontalLayout {
                 alignment: start;
 
-                fav-artists-header-target := Rectangle {
-                    width: fav-artists-header-row.preferred-width;
-                    height: 28px;
-                    border-radius: self.height / 2;
-                    background: fav-artists-header-touch.has-hover
-                        ? Theme.surface1
-                        : transparent;
-                    animate background { duration: Theme.dur-fast; easing: ease-in-out; }
-
-                    fav-artists-header-row := HorizontalLayout {
-                        padding-left: 10px;
-                        padding-right: 10px;
-                        spacing: 2px;
-                        alignment: start;
-
-                        VerticalLayout {
-                            alignment: center;
-                            Text {
-                                text: @tr("Favorite Artists");
-                                color: Theme.text;
-                                font-size: Theme.font-size-lg;
-                                font-weight: 600;
-                            }
-                        }
-                        VerticalLayout {
-                            alignment: center;
-                            MaterialIcon {
-                                name: Favorites.artists-collapsed
-                                    ? "expand_more"
-                                    : "expand_less";
-                                icon-size: 20px;
-                                icon-color: Theme.subtext0;
-                            }
-                        }
-                    }
-
-                    fav-artists-header-touch := TouchArea {
-                        mouse-cursor: pointer;
-                        clicked => { Favorites.toggle-artists-collapsed(); }
-                    }
+                CollapsibleSectionHeader {
+                    label: @tr("Favorite Artists");
+                    collapsed: Favorites.artists-collapsed;
+                    toggled => { Favorites.toggle-artists-collapsed(); }
                 }
             }
 

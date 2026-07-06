@@ -507,6 +507,36 @@ where
     result
 }
 
+/// If `current_track` is one of `ids`, apply `apply` to its cached
+/// [`TrackSummary`] and emit so the Now-Playing surfaces reflect a per-track
+/// field edited from a list row (favorite heart, rating stars). Skips the emit
+/// entirely when the playing track isn't in the set (the common case) to avoid
+/// a spurious view-model publish.
+pub fn sync_current_track_if_in(
+    state: &PlayerStateHandle,
+    sinks: &PlayerSinks,
+    ids: &[i64],
+    apply: impl FnOnce(&mut TrackSummary),
+) {
+    let affects_current = {
+        let g = lock_state(state);
+        g.current_track.as_ref().is_some_and(|t| ids.contains(&t.id))
+    };
+    if !affects_current {
+        return;
+    }
+    with_state_emit(state, sinks, |s| {
+        // Re-check the id under the emit lock — the track may have advanced
+        // between the pre-check and here.
+        if let Some(track) = s.current_track.as_mut()
+            && ids.contains(&track.id)
+        {
+            apply(Arc::make_mut(track));
+        }
+        Vec::<PlayerAction>::new()
+    });
+}
+
 /// Restore queue from persisted data. Shared by startup (lib.rs) and `queue_load` command.
 ///
 /// `shuffle_enabled` and `repeat_mode` are user preferences and live in

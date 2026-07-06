@@ -10,7 +10,7 @@ use crate::library;
 use crate::services::settings::{SortDir, ViewSort};
 use crate::state::AppState;
 use crate::ui::callbacks::collect_track_ids;
-use crate::ui::callbacks::macros::spawn_logged;
+use crate::ui::callbacks::macros::{spawn_logged, wire_row_flag};
 use crate::ui::favorites::{self as favorites_ui_mod, FavoritesUi};
 use crate::ui::track_list_view::TrackListColumnState;
 use crate::{AppWindow, Favorites};
@@ -55,55 +55,31 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, fav_ui: &Arc<FavoritesUi>) 
     // where the user undoes the change quickly. Multi-select arrives
     // as `[int]`; single-row mode sends a 1-element array.
     {
-        let s = state.clone();
         let fu = fav_ui.clone();
-        let weak = weak.clone();
-        g.on_toggle_row_favorite(move |ids, fav| {
-            let id_vec = collect_track_ids(&ids);
-            if id_vec.is_empty() {
-                return;
-            }
-            let s = s.clone();
-            let fu = fu.clone();
-            let weak = weak.clone();
-            s.runtime.clone().spawn(async move {
-                if let Err(e) = library::favorites::set_favorite(&s, id_vec.clone(), fav).await {
-                    log::warn!("favorites::set_favorite: {e}");
-                    return;
-                }
+        wire_row_flag!(g, on_toggle_row_favorite, state, "favorites::set_favorite",
+            library::favorites::set_favorite, collect_track_ids,
+            captures: [weak, fu],
+            after: |id_vec, fav| {
                 for id in &id_vec {
                     fu.flip_or_remove_track(*id, fav);
                 }
                 favorites_ui_mod::apply_filtered_tracks(&fu, &weak);
             });
-        });
     }
 
     // set-row-rating: rating is independent of favorite membership, so the
     // row stays — patch the cached rows and re-walk the filtered view.
     {
-        let s = state.clone();
         let fu = fav_ui.clone();
-        let weak = weak.clone();
-        g.on_set_row_rating(move |ids, rating| {
-            let id_vec = collect_track_ids(&ids);
-            if id_vec.is_empty() {
-                return;
-            }
-            let s = s.clone();
-            let fu = fu.clone();
-            let weak = weak.clone();
-            s.runtime.clone().spawn(async move {
-                if let Err(e) = library::ratings::set_rating(&s, id_vec.clone(), rating).await {
-                    log::warn!("favorites::set_rating: {e}");
-                    return;
-                }
+        wire_row_flag!(g, on_set_row_rating, state, "favorites::set_rating",
+            library::ratings::set_rating, collect_track_ids,
+            captures: [weak, fu],
+            after: |id_vec, rating| {
                 for id in &id_vec {
                     fu.flip_track_rating(*id, rating);
                 }
                 favorites_ui_mod::apply_filtered_tracks(&fu, &weak);
             });
-        });
     }
 
     // --- Filter / sort --------------------------------------------

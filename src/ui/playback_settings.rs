@@ -77,11 +77,8 @@ pub fn install_playback_settings(ui: &AppWindow, state: &AppState) {
         }
         // Persist on the blocking pool — `mutate_settings` is a
         // synchronous file rewrite we don't want on the UI thread.
-        let s_for_disk = state_clone.clone();
-        state_clone.runtime.spawn_blocking(move || {
-            if let Err(e) = library::settings::set_gapless_playback(&s_for_disk, on) {
-                log::warn!("persist gapless_playback: {e}");
-            }
+        state_clone.persist_blocking("persist gapless_playback", move |s| {
+            library::settings::set_gapless_playback(s, on)
         });
     });
 
@@ -93,13 +90,8 @@ pub fn install_playback_settings(ui: &AppWindow, state: &AppState) {
             // disk write needs to happen here, and it goes to the
             // blocking pool to keep the UI thread responsive.
             let token = play_button_anim_token_from_idx(idx).to_owned();
-            let s_for_disk = state_anim.clone();
-            state_anim.runtime.spawn_blocking(move || {
-                if let Err(e) =
-                    library::settings::set_play_button_animation(&s_for_disk, token)
-                {
-                    log::warn!("persist play_button_animation: {e}");
-                }
+            state_anim.persist_blocking("persist play_button_animation", move |s| {
+                library::settings::set_play_button_animation(s, token)
             });
         });
 
@@ -111,11 +103,8 @@ pub fn install_playback_settings(ui: &AppWindow, state: &AppState) {
             // persist on the blocking pool. The Slint two-way binding
             // already updated `Settings.resume-on-startup` before this
             // callback fired.
-            let s_for_disk = state_resume.clone();
-            state_resume.runtime.spawn_blocking(move || {
-                if let Err(e) = library::settings::set_resume_on_startup(&s_for_disk, on) {
-                    log::warn!("persist resume_on_startup: {e}");
-                }
+            state_resume.persist_blocking("persist resume_on_startup", move |s| {
+                library::settings::set_resume_on_startup(s, on)
             });
         });
 }

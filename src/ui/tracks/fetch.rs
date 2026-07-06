@@ -13,7 +13,7 @@ use crate::entities::track::TrackListRow as RsTrackListRow;
 use crate::error::AppResult;
 use crate::library;
 use crate::state::AppState;
-use crate::ui::track_sort;
+use crate::ui::{model_patch, track_sort};
 use crate::{AppWindow, TrackListRow as UiTrackListRow, Tracks};
 
 /// Re-fetch the full list from the DB, store it in `tracks_ui`, then push the
@@ -133,51 +133,23 @@ pub fn resort_and_apply(
     });
 }
 
-/// Flip `is_favorite` on a single row in both the canonical Vec and the
-/// Slint `VecModel`. Only touches the affected row — scroll position and
-/// neighbouring rows stay put.
+/// Flip `is_favorite` on a single row in the Slint `VecModel`. Only touches
+/// the affected row — scroll position and neighbouring rows stay put.
 pub fn apply_row_favorite(weak: &Weak<AppWindow>, id: i64, fav: bool) {
     let _ = weak.upgrade_in_event_loop(move |ui| {
-        let rows = ui.global::<Tracks>().get_rows();
-        let Some(vec_model) =
-            rows.as_any().downcast_ref::<VecModel<UiTrackListRow>>()
-        else {
-            return;
-        };
-        for i in 0..vec_model.row_count() {
-            let Some(mut r) = vec_model.row_data(i) else {
-                continue;
-            };
-            if i64::from(r.id) == id {
-                r.is_favorite = fav;
-                vec_model.set_row_data(i, r);
-                break;
-            }
-        }
+        model_patch::patch_track_row_by_id(&ui.global::<Tracks>().get_rows(), id, |r| {
+            r.is_favorite = fav;
+        });
     });
 }
 
 /// Set `rating` on a single row in the Slint `VecModel` — the star-rating
-/// analogue of [`apply_row_favorite`]. Only touches the affected row, so
-/// scroll position and neighbours stay put.
+/// analogue of [`apply_row_favorite`].
 pub fn apply_row_rating(weak: &Weak<AppWindow>, id: i64, rating: i32) {
     let _ = weak.upgrade_in_event_loop(move |ui| {
-        let rows = ui.global::<Tracks>().get_rows();
-        let Some(vec_model) =
-            rows.as_any().downcast_ref::<VecModel<UiTrackListRow>>()
-        else {
-            return;
-        };
-        for i in 0..vec_model.row_count() {
-            let Some(mut r) = vec_model.row_data(i) else {
-                continue;
-            };
-            if i64::from(r.id) == id {
-                r.rating = rating;
-                vec_model.set_row_data(i, r);
-                break;
-            }
-        }
+        model_patch::patch_track_row_by_id(&ui.global::<Tracks>().get_rows(), id, |r| {
+            r.rating = rating;
+        });
     });
 }
 

@@ -10,6 +10,7 @@ import { SearchBar } from "../components/search-bar.slint";
 import { TrackList } from "../components/track-list/track-list.slint";
 import { OverlayScrollbar } from "../components/overlay-scrollbar.slint";
 import { FilterThrottle } from "../components/filter-throttle.slint";
+import { CollapsibleSectionHeader } from "../components/collapsible-section-header.slint";
 
 // The full Artist Detail view. Mirrors `AlbumDetailView`:
 //
@@ -83,7 +84,7 @@ export component ArtistDetailView inherits Rectangle {
                 VerticalLayout {
                     alignment: center;
                     Text {
-                        text: "‎" + ArtistDetail.artist.name;
+                        text: "\u{200e}" + ArtistDetail.artist.name;
                         color: Theme.text;
                         font-size: 24px;
                         font-weight: Theme.page-title-weight;
@@ -220,62 +221,13 @@ export component ArtistDetailView inherits Rectangle {
             padding-bottom: Theme.pad-lg;
             spacing: Theme.pad-sm;
 
-            // Clickable header: "Albums" label + chevron. Hit area is
-            // the chevron + label only (compact), not the whole row
-            // width — clicking dead space to the right of the chevron
-            // shouldn't toggle. Chevron mirrors the convention used
-            // elsewhere in the app: down (`expand_more`) when collapsed
-            // ("click to expand downward"), up (`expand_less`) when
-            // expanded ("click to collapse upward").
             HorizontalLayout {
                 alignment: start;
 
-                header-target := Rectangle {
-                    width: header-row.preferred-width;
-                    height: 28px;
-                    // Pill chrome on hover — matches `PillButton`'s
-                    // `border-radius: self.height / 2`.
-                    border-radius: self.height / 2;
-                    background: header-touch.has-hover
-                        ? Theme.surface1
-                        : transparent;
-                    animate background { duration: Theme.dur-fast; easing: ease-in-out; }
-
-                    header-row := HorizontalLayout {
-                        // 10 px matches `PillButton`'s horizontal padding —
-                        // keeps the rounded pill ends from crowding the
-                        // text on the left and the chevron on the right.
-                        // With 4 px the text optically hugs the left curve.
-                        padding-left: 10px;
-                        padding-right: 10px;
-                        spacing: 2px;
-                        alignment: start;
-
-                        VerticalLayout {
-                            alignment: center;
-                            Text {
-                                text: @tr("Albums");
-                                color: Theme.text;
-                                font-size: Theme.font-size-lg;
-                                font-weight: 600;
-                            }
-                        }
-                        VerticalLayout {
-                            alignment: center;
-                            MaterialIcon {
-                                name: ArtistDetail.albums-collapsed
-                                    ? "expand_more"
-                                    : "expand_less";
-                                icon-size: 20px;
-                                icon-color: Theme.subtext0;
-                            }
-                        }
-                    }
-
-                    header-touch := TouchArea {
-                        mouse-cursor: pointer;
-                        clicked => { ArtistDetail.toggle-albums-collapsed(); }
-                    }
+                CollapsibleSectionHeader {
+                    label: @tr("Albums");
+                    collapsed: ArtistDetail.albums-collapsed;
+                    toggled => { ArtistDetail.toggle-albums-collapsed(); }
                 }
             }
 

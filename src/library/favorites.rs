@@ -3,7 +3,7 @@ use std::sync::Arc;
 use crate::database::queries;
 use crate::entities::{album, artist, track};
 use crate::error::AppError;
-use crate::player::state::{PlayerAction, lock_state, with_state_emit};
+use crate::player::state::{PlayerAction, lock_state, sync_current_track_if_in, with_state_emit};
 use crate::state::AppState;
 
 pub async fn set_favorite(
@@ -23,26 +23,10 @@ pub async fn set_favorite(
 }
 
 /// If `current_track` is one of `ids`, flip its cached `is_favorite` and emit so
-/// the Now-Playing surfaces reflect a favorite toggled from a list row. Skips
-/// the emit entirely when the playing track isn't in the set (the common case)
-/// to avoid a spurious view-model publish.
+/// the Now-Playing surfaces reflect a favorite toggled from a list row.
 fn sync_current_track_favorite(state: &AppState, ids: &[i64], favorite: bool) {
-    let affects_current = {
-        let g = lock_state(&state.player_state);
-        g.current_track.as_ref().is_some_and(|t| ids.contains(&t.id))
-    };
-    if !affects_current {
-        return;
-    }
-    with_state_emit(&state.player_state, &state.sinks, |s| {
-        // Re-check the id under the emit lock — the track may have advanced
-        // between the pre-check and here.
-        if let Some(track) = s.current_track.as_mut()
-            && ids.contains(&track.id)
-        {
-            Arc::make_mut(track).is_favorite = favorite;
-        }
-        Vec::<PlayerAction>::new()
+    sync_current_track_if_in(&state.player_state, &state.sinks, ids, |t| {
+        t.is_favorite = favorite;
     });
 }
 

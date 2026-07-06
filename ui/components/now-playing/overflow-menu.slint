@@ -8,6 +8,7 @@ import { PopupSurface } from "../popup-surface.slint";
 import { FocusLossWatcher } from "../focus-loss-watcher.slint";
 import { SpeedFlyout } from "./speed-flyout.slint";
 import { SleepTimerFlyout } from "./sleep-timer-flyout.slint";
+import { FlyoutMetrics, SleepPresets, SpeedPresets } from "./flyout-presets.slint";
 
 // One row inside the overflow popup. Renders the same icon + label pair
 // shown inline in the now-playing bar; active colour mirrors the inline
@@ -129,17 +130,20 @@ export component OverflowMenu inherits Rectangle {
     // can't live up here.)
     property <length> menu-h: 36px * (5 + root.overflow-count) + 12px;
 
-    // Speed flyout geometry. Must match the preset count in
-    // `speed-flyout.slint` (8 rows: 0.25× … 2×) — each 32 px + the same 12 px
-    // chrome allowance as the menu column.
+    // Speed flyout geometry. Height derives from the shared preset list +
+    // metrics (`flyout-presets.slint`), so adding a preset can't clip the
+    // popup.
     property <length> flyout-w: 120px;
-    property <length> flyout-h: 32px * 8 + 12px;
+    property <length> flyout-h:
+        FlyoutMetrics.option-row-h * SpeedPresets.list.length + FlyoutMetrics.chrome-h;
     // Sleep-timer flyout geometry. Wider than the speed flyout to fit the
-    // "End of track" row (and its translations). Height must match the layout
-    // in `sleep-timer-flyout.slint`: 7 preset rows (32 px each) + a 9 px divider
-    // + a 32 px ±stepper row + a 32 px Start-pill row, plus the same 12 px chrome.
+    // "End of track" row (and its translations). Height = the preset rows +
+    // a 9 px divider + the ±stepper row + the Start-pill row (both option-row
+    // sized), plus the shared chrome allowance.
     property <length> sleep-flyout-w: 168px;
-    property <length> sleep-flyout-h: 32px * 7 + 9px + 32px + 32px + 12px;
+    property <length> sleep-flyout-h:
+        FlyoutMetrics.option-row-h * (SleepPresets.list.length + 2) + 9px
+        + FlyoutMetrics.chrome-h;
     // The two flyouts share the single left column; reserve the wider one so
     // the popup never re-layouts when switching between them.
     property <length> left-col-w: max(root.flyout-w, root.sleep-flyout-w);
@@ -148,7 +152,8 @@ export component OverflowMenu inherits Rectangle {
     property <length> gap: 8px;
 
     // Map the live multiplier back to a preset label for the collapsed row.
-    // Kept in lock-step with the `presets` list in `speed-flyout.slint`.
+    // Kept in lock-step with `SpeedPresets.list` (`flyout-presets.slint`) —
+    // Slint functions can't loop over a model, so this stays hand-rolled.
     // 1.0 falls through to the "1x" default.
     function current-speed-label() -> string {
         if (abs(Player.vm.playback_speed - 0.25) < 0.001) { return "0.25x"; }
