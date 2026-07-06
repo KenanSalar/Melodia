@@ -252,3 +252,24 @@ pub fn apply_row_favorite(weak: &Weak<AppWindow>, id: i64, fav: bool) {
         }
     });
 }
+
+/// Set `rating` on a single row in the Slint `VecModel` — the rating analogue
+/// of [`apply_row_favorite`]. Only touches the affected row.
+pub fn apply_row_rating(weak: &Weak<AppWindow>, id: i64, rating: i32) {
+    let _ = weak.upgrade_in_event_loop(move |ui| {
+        let rows = ui.global::<Browse>().get_rows();
+        let Some(vm) = rows.as_any().downcast_ref::<VecModel<UiTrackListRow>>() else {
+            return;
+        };
+        for i in 0..vm.row_count() {
+            let Some(mut r) = vm.row_data(i) else {
+                continue;
+            };
+            if i64::from(r.id) == id {
+                r.rating = rating;
+                vm.set_row_data(i, r);
+                break;
+            }
+        }
+    });
+}

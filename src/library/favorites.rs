@@ -12,10 +12,38 @@ pub async fn set_favorite(
     favorite: bool,
 ) -> Result<(), AppError> {
     queries::track::set_favorite(&state.db, &ids, favorite).await?;
+    // If the currently-playing track was one of the toggled ids, mirror the new
+    // flag onto `current_track` so the Now-Playing heart updates without waiting
+    // for the next track load (parity with `toggle_current_favorite`).
+    sync_current_track_favorite(state, &ids, favorite);
     state
         .library_changed_tx
         .send_modify(|n| *n = n.wrapping_add(1));
     Ok(())
+}
+
+/// If `current_track` is one of `ids`, flip its cached `is_favorite` and emit so
+/// the Now-Playing surfaces reflect a favorite toggled from a list row. Skips
+/// the emit entirely when the playing track isn't in the set (the common case)
+/// to avoid a spurious view-model publish.
+fn sync_current_track_favorite(state: &AppState, ids: &[i64], favorite: bool) {
+    let affects_current = {
+        let g = lock_state(&state.player_state);
+        g.current_track.as_ref().is_some_and(|t| ids.contains(&t.id))
+    };
+    if !affects_current {
+        return;
+    }
+    with_state_emit(&state.player_state, &state.sinks, |s| {
+        // Re-check the id under the emit lock — the track may have advanced
+        // between the pre-check and here.
+        if let Some(track) = s.current_track.as_mut()
+            && ids.contains(&track.id)
+        {
+            Arc::make_mut(track).is_favorite = favorite;
+        }
+        Vec::<PlayerAction>::new()
+    });
 }
 
 /// Toggle the favorite flag on the currently playing track. Persists to DB,
@@ -36,7 +64,11 @@ pub async fn toggle_current_favorite(
     queries::track::set_favorite(&state.db, &[id], new_fav).await?;
 
     with_state_emit(&state.player_state, &state.sinks, |s| {
-        if let Some(track) = s.current_track.as_mut() {
+        // Guard against a track change between the id read above and here: only
+        // flip the cached flag if `current_track` is still the track we wrote.
+        if let Some(track) = s.current_track.as_mut()
+            && track.id == id
+        {
             Arc::make_mut(track).is_favorite = new_fav;
         }
         Vec::<PlayerAction>::new()

@@ -1,5 +1,5 @@
-//! `Player.toggle-favorite` fan-out into Tracks / Browse / `AlbumDetail`
-//! / `ArtistDetail` / `GenreDetail` rows.
+//! `Player.toggle-favorite` and `Player.set-current-rating` fan-out into
+//! Tracks / Browse / `AlbumDetail` / `ArtistDetail` / `GenreDetail` rows.
 
 use std::sync::Arc;
 
@@ -64,6 +64,59 @@ pub fn wire_now_playing_favorite(
                 }
                 Ok(None) => {}
                 Err(e) => log::warn!("toggle_favorite: {e}"),
+            }
+        });
+    });
+}
+
+/// Wire `Player.set-current-rating` (star control in the Now Playing view and
+/// the overflow menu). The star-rating analogue of [`wire_now_playing_favorite`]:
+/// rates the currently-playing track and mirrors the `(id, rating)` result into
+/// every view-side surface that holds a per-row `rating`, so a row showing the
+/// currently-playing track updates instantly. Each `apply_*` helper no-ops when
+/// the id isn't present, so calling all five on every change is safe.
+///
+/// Call once after the per-view wires, alongside `wire_now_playing_favorite`.
+pub fn wire_now_playing_rating(
+    ui: &AppWindow,
+    state: &AppState,
+    tracks_ui: &Arc<TracksUi>,
+    browse_ui: &Arc<BrowseUi>,
+    albums_ui: &Arc<AlbumsUi>,
+    artists_ui: &Arc<ArtistsUi>,
+    genres_ui: &Arc<GenresUi>,
+) {
+    let s = state.clone();
+    let tu = tracks_ui.clone();
+    let bu = browse_ui.clone();
+    let au = albums_ui.clone();
+    let aru = artists_ui.clone();
+    let gu = genres_ui.clone();
+    let weak = ui.as_weak();
+    ui.global::<Player>().on_set_current_rating(move |rating| {
+        let s = s.clone();
+        let tu = tu.clone();
+        let bu = bu.clone();
+        let au = au.clone();
+        let aru = aru.clone();
+        let gu = gu.clone();
+        let weak = weak.clone();
+        s.runtime.clone().spawn(async move {
+            match library::ratings::set_current_rating(&s, rating).await {
+                Ok(Some((id, rating))) => {
+                    tu.flip_rating(id, rating);
+                    tracks_ui_mod::apply_row_rating(&weak, id, rating);
+                    bu.flip_rating(id, rating);
+                    browse_ui_mod::apply_row_rating(&weak, id, rating);
+                    au.flip_detail_rating(id, rating);
+                    albums_ui_mod::apply_detail_row_rating(&weak, id, rating);
+                    aru.flip_detail_rating(id, rating);
+                    artists_ui_mod::apply_detail_row_rating(&weak, id, rating);
+                    gu.flip_detail_rating(id, rating);
+                    genres_ui_mod::apply_detail_row_rating(&weak, id, rating);
+                }
+                Ok(None) => {}
+                Err(e) => log::warn!("set_current_rating: {e}"),
             }
         });
     });

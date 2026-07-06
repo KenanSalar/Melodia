@@ -182,7 +182,33 @@ track, so a shared "current track RG" cell would feed the preloaded source the w
 
 ---
 
-## Feature 2 — Star ratings (activate the inert `rating` column)
+## Feature 2 — Star ratings (activate the inert `rating` column) ✅ **DONE (2026-07-06)**
+
+> **Shipped** with a scope refinement from the user: the stars are **hover-revealed, not a
+> column**. The 5-star `StarRating` control (`ui/components/star-rating.slint`) appears on row
+> hover **inside the Title cell, to the right of the (still-visible) title text** — the title
+> elides to make room and is never swapped out. This deliberately drops the plan's dedicated
+> resizable/hideable "Rating column" (and therefore all `w-*`/`show-*`/`ColumnTogglePopup`/
+> `ColumnWidths`/`impl_track_list_column_state!` plumbing) **and** the in-table sort header (a
+> sortable header needs a body column). Whole stars 0–5 only (`star`/`star_border`, no half-stars).
+>
+> `rating` was added to `TrackListRow` (lists) + `TrackSummary` (NP/queue) projections + their
+> `*_COLUMNS` + `ui/models.slint` mirrors. DB `queries::track::set_rating` mirrors `set_favorite`;
+> `library::ratings::{set_rating, set_current_rating}` (clamped 0–5) mirror the favorite library
+> fns. Because rating never changes list membership, every surface (Tracks, Browse, Album/Artist/
+> Genre/Playlist detail, Favorites, Recently-Played) uses one optimistic `flip_rating`/
+> `apply_row_rating` (or `*_detail_*`) pair — no `flip_or_remove` case; Search stays non-optimistic
+> like its favorite handler. Now-Playing parity: `Player.set-current-rating` → `wire_now_playing_rating`
+> (sibling of `wire_now_playing_favorite`), a star strip in the full NP view, and a permanent
+> inline-star Rating row in the overflow menu (also fixed the pre-existing `menu-h` row undercount:
+> `2`→`4` permanent rows after ReplayGain+Rating). Icons `star`/`star_border` added + re-subset;
+> `"Rating"` `@tr` added to all 6 `.po`. `cargo clippy --all-targets -- -D warnings` clean; new
+> `set_rating` DB tests + `clamp_rating` unit test green. Manual GUI verification (hover stars,
+> cross-view fan-out, NP rating, restart persistence) is the remaining user-side check.
+>
+> **Deferred:** in-table rating sort UI (needs a column/menu trigger), queue-sheet inline stars,
+> context-menu multi-select rating, and a persistent at-rest indicator (stars show on hover only,
+> per the user's request).
 
 **Design:** 0–5 stars stored in the existing `tracks.rating` (`INTEGER NOT NULL DEFAULT 0`).
 Mirror the favorite-toggle path end-to-end. Sort-by-rating is already index-backed by

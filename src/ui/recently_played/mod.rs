@@ -182,6 +182,15 @@ impl RecentlyPlayedUi {
             r.is_favorite = fav;
         }
     }
+
+    /// Surgically set `rating` on a cached row — the star-rating analogue of
+    /// [`Self::flip_track_favorite`]. Recency membership is fixed to the 200
+    /// most-recent rows, so rating never removes the row.
+    pub fn flip_track_rating(&self, id: i64, rating: i32) {
+        if let Some(r) = self.inner.tracks_all.lock().iter_mut().find(|r| r.id == id) {
+            r.rating = rating;
+        }
+    }
 }
 
 /// Bind empty Slint `VecModel`s for the Most Played strip, the track list, and

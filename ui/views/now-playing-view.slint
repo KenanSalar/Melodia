@@ -1,6 +1,7 @@
 import { Theme } from "../theme.slint";
 import { Player, Nav, NowPlaying } from "../globals.slint";
 import { IconButton } from "../components/icon-button.slint";
+import { StarRating } from "../components/star-rating.slint";
 import { NowPlayingCover } from "../components/now-playing/now-playing-cover.slint";
 import { UpNextList } from "../components/now-playing/up-next-list.slint";
 
@@ -123,6 +124,16 @@ export component NowPlayingView inherits Rectangle {
             }
 
             Rectangle { horizontal-stretch: 1; }
+
+            // Star rating for the current track, left of the favorite heart.
+            if Player.vm.has_track: VerticalLayout {
+                alignment: center;
+                StarRating {
+                    rating: Player.vm.track.rating;
+                    star-size: 22px;
+                    rated(n) => { Player.set-current-rating(n); }
+                }
+            }
 
             VerticalLayout {
                 alignment: center;

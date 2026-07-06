@@ -79,6 +79,33 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, fav_ui: &Arc<FavoritesUi>) 
         });
     }
 
+    // set-row-rating: rating is independent of favorite membership, so the
+    // row stays — patch the cached rows and re-walk the filtered view.
+    {
+        let s = state.clone();
+        let fu = fav_ui.clone();
+        let weak = weak.clone();
+        g.on_set_row_rating(move |ids, rating| {
+            let id_vec = collect_track_ids(&ids);
+            if id_vec.is_empty() {
+                return;
+            }
+            let s = s.clone();
+            let fu = fu.clone();
+            let weak = weak.clone();
+            s.runtime.clone().spawn(async move {
+                if let Err(e) = library::ratings::set_rating(&s, id_vec.clone(), rating).await {
+                    log::warn!("favorites::set_rating: {e}");
+                    return;
+                }
+                for id in &id_vec {
+                    fu.flip_track_rating(*id, rating);
+                }
+                favorites_ui_mod::apply_filtered_tracks(&fu, &weak);
+            });
+        });
+    }
+
     // --- Filter / sort --------------------------------------------
     // Filter pass walks all three surfaces: All Songs tracklist
     // (title+artist+album), Most Played (title+artist) and Favorite

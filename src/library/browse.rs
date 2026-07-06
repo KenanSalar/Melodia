@@ -136,6 +136,7 @@ pub async fn browse_directory(
                     duration_ms: 0,
                     artwork_path: None,
                     is_favorite: false,
+                    rating: 0,
                     album_id: None,
                     artist_id: None,
                     genre_id: None,

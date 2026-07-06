@@ -114,6 +114,10 @@ export global Player {
     callback toggle-shuffle();
     callback cycle-repeat();
     callback toggle-favorite();
+    // Set the star rating (0–5) on the currently playing track. Mirrors
+    // `toggle-favorite`: applies to `current_track` + fans out to the row
+    // surfaces. The active value is read back via `vm.track.rating`.
+    callback set-current-rating(int /*rating*/);
 
     // Bumped each time the user changes volume via the keyboard handler
     // in `ui/app-window.slint` (↑ / ↓ / Ctrl+↑ / Ctrl+↓). `VolumePopup`
@@ -354,6 +358,7 @@ export global Tracks {
     callback play-next([int] /*track_ids*/);
     callback add-to-queue([int]);
     callback toggle-row-favorite([int] /*track_ids*/, bool /*new*/);
+    callback set-row-rating([int] /*track_ids*/, int /*rating*/);
     callback request-refresh();
     // Mirrors "the Tracks section is on screen" — see `watched-tracks-active`
     // in app-window.slint. Rust uses it to skip `library_changed` refreshes
@@ -464,6 +469,7 @@ export global Browse {
     callback play-next([int] /*track_ids*/);
     callback add-to-queue([int] /*track_ids*/);
     callback toggle-row-favorite([int] /*track_ids*/, bool /*new_state*/);
+    callback set-row-rating([int] /*track_ids*/, int /*rating*/);
     callback select-row(int /*idx*/, int /*id*/, bool /*shift*/, bool /*ctrl*/);
     callback clear-selection();
     callback request-sort(string /*field*/);
@@ -888,6 +894,7 @@ export global PlaylistDetail {
     callback play-next([int] /*track_ids*/);
     callback add-to-queue([int]);
     callback toggle-row-favorite([int] /*track_ids*/, bool /*new*/);
+    callback set-row-rating([int] /*track_ids*/, int /*rating*/);
     callback select-row(int /*idx*/, int /*id*/, bool /*shift*/, bool /*ctrl*/);
     callback clear-selection();
     callback request-sort(string /*field*/);
@@ -1540,6 +1547,7 @@ export global AlbumDetail {
     callback play-next([int] /*track_ids*/);
     callback add-to-queue([int]);
     callback toggle-row-favorite([int] /*track_ids*/, bool /*new*/);
+    callback set-row-rating([int] /*track_ids*/, int /*rating*/);
     callback select-row(int /*idx*/, int /*id*/, bool /*shift*/, bool /*ctrl*/);
     // Cross-tab navigation from a row's right-click "Go to …" entry.
     callback go-to-album(int /*album_id*/);
@@ -1672,6 +1680,7 @@ export global Favorites {
     callback play-next([int] /*track_ids*/);
     callback add-to-queue([int]);
     callback toggle-row-favorite([int] /*track_ids*/, bool /*new*/);
+    callback set-row-rating([int] /*track_ids*/, int /*rating*/);
     callback select-row(int /*idx*/, int /*id*/, bool /*shift*/, bool /*ctrl*/);
     callback clear-selection();
     callback request-sort(string /*field*/);
@@ -1778,6 +1787,7 @@ export global RecentlyPlayed {
     callback play-next([int] /*track_ids*/);
     callback add-to-queue([int]);
     callback toggle-row-favorite([int] /*track_ids*/, bool /*new*/);
+    callback set-row-rating([int] /*track_ids*/, int /*rating*/);
     callback select-row(int /*idx*/, int /*id*/, bool /*shift*/, bool /*ctrl*/);
     callback clear-selection();
     callback request-sort(string /*field*/);
@@ -1895,6 +1905,7 @@ export global ArtistDetail {
     callback play-next([int] /*track_ids*/);
     callback add-to-queue([int]);
     callback toggle-row-favorite([int] /*track_ids*/, bool /*new*/);
+    callback set-row-rating([int] /*track_ids*/, int /*rating*/);
     callback select-row(int /*idx*/, int /*id*/, bool /*shift*/, bool /*ctrl*/);
     callback clear-selection();
     callback request-sort(string /*field*/);
@@ -2020,6 +2031,7 @@ export global GenreDetail {
     callback play-next([int] /*track_ids*/);
     callback add-to-queue([int]);
     callback toggle-row-favorite([int] /*track_ids*/, bool /*new*/);
+    callback set-row-rating([int] /*track_ids*/, int /*rating*/);
     callback select-row(int /*idx*/, int /*id*/, bool /*shift*/, bool /*ctrl*/);
     callback clear-selection();
     callback request-sort(string /*field*/);
@@ -2138,6 +2150,7 @@ export global Search {
     callback play-next([int] /*track_ids*/);
     callback add-to-queue([int]);
     callback toggle-row-favorite([int] /*track_ids*/, bool /*new*/);
+    callback set-row-rating([int] /*track_ids*/, int /*rating*/);
     callback select-row(int /*idx*/, int /*id*/, bool /*shift*/, bool /*ctrl*/);
     callback clear-selection();
     callback request-sort(string /*field*/);

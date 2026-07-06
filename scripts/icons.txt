@@ -69,6 +69,8 @@ settings
 shield
 shuffle
 speed
+star
+star_border
 swap_horiz
 system_update
 theater_comedy

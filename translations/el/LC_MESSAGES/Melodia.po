@@ -963,6 +963,9 @@ msgid_plural "{n} playlists exported"
 msgstr[0] "{n} λίστα εξήχθη"
 msgstr[1] "{n} λίστες εξήχθησαν"
 
+msgid "Rating"
+msgstr "Βαθμολογία"
+
 msgid "ReplayGain"
 msgstr "ReplayGain"
 

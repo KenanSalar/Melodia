@@ -82,6 +82,33 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, rp_ui: &Arc<RecentlyPlayedU
         });
     }
 
+    // set-row-rating: flip in place (recency membership is fixed to the 200,
+    // independent of rating), then re-walk the filtered view.
+    {
+        let s = state.clone();
+        let ru = rp_ui.clone();
+        let weak = weak.clone();
+        g.on_set_row_rating(move |ids, rating| {
+            let id_vec = collect_track_ids(&ids);
+            if id_vec.is_empty() {
+                return;
+            }
+            let s = s.clone();
+            let ru = ru.clone();
+            let weak = weak.clone();
+            s.runtime.clone().spawn(async move {
+                if let Err(e) = library::ratings::set_rating(&s, id_vec.clone(), rating).await {
+                    log::warn!("recently_played::set_rating: {e}");
+                    return;
+                }
+                for id in &id_vec {
+                    ru.flip_track_rating(*id, rating);
+                }
+                recently_played_ui_mod::apply_filtered_tracks(&ru, &weak);
+            });
+        });
+    }
+
     // --- Filter ---------------------------------------------------
     {
         let ru = rp_ui.clone();

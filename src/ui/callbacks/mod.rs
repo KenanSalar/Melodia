@@ -41,7 +41,7 @@ pub use cross_tab_nav::wire_cross_tab_nav;
 pub use favorites::wire_favorites;
 pub use genres::wire_genres;
 pub use library_settings::wire_library_settings;
-pub use now_playing::wire_now_playing_favorite;
+pub use now_playing::{wire_now_playing_favorite, wire_now_playing_rating};
 pub use playlists::{wire_playlist_files, wire_playlists};
 pub use recently_played::wire_recently_played;
 pub use search::wire_search;

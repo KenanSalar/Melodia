@@ -616,6 +616,7 @@ export component FavoritesView inherits Rectangle {
                 play-next(ids) => { Favorites.play-next(ids); }
                 add-to-queue(ids) => { Favorites.add-to-queue(ids); }
                 toggle-row-favorite(ids, on) => { Favorites.toggle-row-favorite(ids, on); }
+                set-row-rating(ids, n) => { Favorites.set-row-rating(ids, n); }
                 select-row(idx, id, sh, ct) => { Favorites.select-row(idx, id, sh, ct); }
                 request-blur-search => { Favorites.blur-search-tick += 1; }
                 go-to-album(aid) => { Favorites.go-to-album(aid); }

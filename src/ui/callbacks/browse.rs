@@ -228,6 +228,34 @@ pub fn wire_browse(ui: &AppWindow, state: &AppState, browse_ui: &Arc<BrowseUi>) 
         });
     }
 
+    // set-row-rating: mirror the favorite path (disk-only rows have id 0 and
+    // are filtered out by `collect_nonzero_track_ids`). Rating never changes
+    // list membership, so a surgical per-row patch suffices.
+    {
+        let s = state.clone();
+        let weak = weak.clone();
+        let bu = browse_ui.clone();
+        g.on_set_row_rating(move |ids, rating| {
+            let id_vec = collect_nonzero_track_ids(&ids);
+            if id_vec.is_empty() {
+                return;
+            }
+            let s = s.clone();
+            let weak = weak.clone();
+            let bu = bu.clone();
+            s.runtime.clone().spawn(async move {
+                if let Err(e) = library::ratings::set_rating(&s, id_vec.clone(), rating).await {
+                    log::warn!("browse::set_rating: {e}");
+                    return;
+                }
+                for id in &id_vec {
+                    bu.flip_rating(*id, rating);
+                    browse_ui_mod::apply_row_rating(&weak, *id, rating);
+                }
+            });
+        });
+    }
+
     // request-sort: clicking a header column. Same field flips dir; new
     // field resets to ascending. Browse sorts in-memory (it mixes
     // disk-only + DB files) — no DB round-trip.

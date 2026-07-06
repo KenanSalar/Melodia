@@ -157,6 +157,30 @@ pub fn apply_row_favorite(weak: &Weak<AppWindow>, id: i64, fav: bool) {
     });
 }
 
+/// Set `rating` on a single row in the Slint `VecModel` — the star-rating
+/// analogue of [`apply_row_favorite`]. Only touches the affected row, so
+/// scroll position and neighbours stay put.
+pub fn apply_row_rating(weak: &Weak<AppWindow>, id: i64, rating: i32) {
+    let _ = weak.upgrade_in_event_loop(move |ui| {
+        let rows = ui.global::<Tracks>().get_rows();
+        let Some(vec_model) =
+            rows.as_any().downcast_ref::<VecModel<UiTrackListRow>>()
+        else {
+            return;
+        };
+        for i in 0..vec_model.row_count() {
+            let Some(mut r) = vec_model.row_data(i) else {
+                continue;
+            };
+            if i64::from(r.id) == id {
+                r.rating = rating;
+                vec_model.set_row_data(i, r);
+                break;
+            }
+        }
+    });
+}
+
 /// Filter and convert `full` into UI rows, walking `order` so rows come
 /// out in the current display sort order. Pure / does not touch any UI
 /// state — safe to run on either the runtime worker (cold path, after

@@ -167,6 +167,33 @@ pub fn wire_tracks(ui: &AppWindow, state: &AppState, tracks_ui: &Arc<TracksUi>) 
         });
     }
 
+    // set-row-rating: write through, then surgically patch each affected row.
+    // Rating never changes list membership, so no re-fetch is needed.
+    {
+        let s = state.clone();
+        let weak = weak.clone();
+        let tu = tracks_ui.clone();
+        tracks.on_set_row_rating(move |ids, rating| {
+            let id_vec = collect_track_ids(&ids);
+            if id_vec.is_empty() {
+                return;
+            }
+            let s = s.clone();
+            let weak = weak.clone();
+            let tu = tu.clone();
+            s.runtime.clone().spawn(async move {
+                if let Err(e) = library::ratings::set_rating(&s, id_vec.clone(), rating).await {
+                    log::warn!("set_rating: {e}");
+                    return;
+                }
+                for id in &id_vec {
+                    tu.flip_rating(*id, rating);
+                    tracks_ui_mod::apply_row_rating(&weak, *id, rating);
+                }
+            });
+        });
+    }
+
     // select-row: modifier-aware click handler. Computes the new selected
     // set in Rust (Slint expressions can't iterate a model for a membership
     // check) and walks the visible VecModel to flip per-row `selected` flags.

@@ -393,6 +393,27 @@ pub fn apply_detail_row_favorite(weak: &Weak<AppWindow>, id: i64, fav: bool) {
     });
 }
 
+/// Set `rating` on a single detail row in the Slint `VecModel`. Mirrors
+/// [`apply_detail_row_favorite`].
+pub fn apply_detail_row_rating(weak: &Weak<AppWindow>, id: i64, rating: i32) {
+    let _ = weak.upgrade_in_event_loop(move |ui| {
+        let rows = ui.global::<ArtistDetail>().get_tracks();
+        let Some(vm) = rows.as_any().downcast_ref::<VecModel<UiTrackListRow>>() else {
+            return;
+        };
+        for i in 0..vm.row_count() {
+            let Some(mut r) = vm.row_data(i) else {
+                continue;
+            };
+            if i64::from(r.id) == id {
+                r.rating = rating;
+                vm.set_row_data(i, r);
+                break;
+            }
+        }
+    });
+}
+
 /// Reopen the artist that was visible at the last shutdown, if any.
 pub fn seed_detail_from_settings(
     ui: &AppWindow,

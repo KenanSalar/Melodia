@@ -964,6 +964,9 @@ msgid_plural "{n} playlists exported"
 msgstr[0] "{n} çalma listesi dışa aktarıldı"
 msgstr[1] "{n} çalma listesi dışa aktarıldı"
 
+msgid "Rating"
+msgstr "Derecelendirme"
+
 msgid "ReplayGain"
 msgstr "ReplayGain"
 

@@ -19,6 +19,7 @@ fn make_summary(id: i64, title: &str, duration_ms: i64) -> Arc<TrackSummary> {
         disc_number: None,
         last_position: 0,
         is_favorite: false,
+        rating: 0,
         replaygain_track_gain: None,
         replaygain_track_peak: None,
         replaygain_album_gain: None,

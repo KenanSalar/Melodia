@@ -290,6 +290,28 @@ pub async fn set_favorite(db: &DbPool, ids: &[i64], favorite: bool) -> Result<()
     Ok(())
 }
 
+/// Set the star `rating` (0–5) for one or more tracks by ID. Mirrors
+/// [`set_favorite`]: the value is clamped 0–5 by the caller
+/// (`library::ratings::set_rating`), chunked to respect the `SQLite` bind
+/// limit (one slot reserved for the `rating` bind), and run non-persistently
+/// since the placeholder count is dynamic.
+pub async fn set_rating(db: &DbPool, ids: &[i64], rating: i32) -> Result<(), AppError> {
+    if ids.is_empty() {
+        return Ok(());
+    }
+    // Reserve 1 bind slot for the `rating` parameter itself.
+    for chunk in ids.chunks(crate::database::SQLITE_BIND_LIMIT - 1) {
+        let placeholders = crate::database::placeholders(chunk.len());
+        let sql = format!("UPDATE tracks SET rating = ? WHERE id IN ({placeholders})");
+        let mut query = sqlx::query(&sql).persistent(false).bind(rating);
+        for id in chunk {
+            query = query.bind(*id);
+        }
+        query.execute(db.write()).await?;
+    }
+    Ok(())
+}
+
 /// Fetch all favorite tracks (lightweight list-view columns) with sorting.
 pub async fn get_favorite_tracks_for_list(
     db: &DbPool,

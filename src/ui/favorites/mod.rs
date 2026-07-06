@@ -242,6 +242,15 @@ impl FavoritesUi {
             r.is_favorite = true;
         }
     }
+
+    /// Surgically set `rating` on a cached All Songs row. Unlike
+    /// [`Self::flip_or_remove_track`], rating never affects membership (the
+    /// list stays keyed on `is_favorite = TRUE`), so the row is only patched.
+    pub fn flip_track_rating(&self, id: i64, rating: i32) {
+        if let Some(r) = self.inner.tracks_all.lock().iter_mut().find(|r| r.id == id) {
+            r.rating = rating;
+        }
+    }
 }
 
 /// Bind empty Slint `VecModel`s for the Most Played carousel, the

@@ -61,7 +61,7 @@ use crate::{
     AppWindow, Browse, BrowseFolderRow as UiBrowseFolderRow, TrackListRow as UiTrackListRow,
 };
 
-pub use fetch::{apply_row_favorite, fetch_and_apply, resort_and_apply};
+pub use fetch::{apply_row_favorite, apply_row_rating, fetch_and_apply, resort_and_apply};
 pub use selection::{clear_selection, handle_select_row};
 
 /// Rust-side state for the Browse view. Shared between the UI callbacks
@@ -211,6 +211,15 @@ impl BrowseUi {
             f.row.is_favorite = fav;
         }
     }
+
+    /// Surgically set `rating` on the cached `last_files` row — the rating
+    /// analogue of [`Self::flip_favorite`].
+    pub fn flip_rating(&self, id: i64, rating: i32) {
+        let mut files = self.last_files.lock();
+        if let Some(f) = files.iter_mut().find(|f| f.row.id == id) {
+            f.row.rating = rating;
+        }
+    }
 }
 
 /// Build empty `VecModel`s for `folders`, `rows`, and `breadcrumbs` and
@@ -282,6 +291,7 @@ pub fn to_slint_browse_track_row(f: &BrowseFile) -> UiTrackListRow {
             track_number: 0,
             duration_ms: 0,
             is_favorite: false,
+            rating: 0,
             artwork_path: SharedString::from(""),
             display_duration: SharedString::from(""),
             selected: false,

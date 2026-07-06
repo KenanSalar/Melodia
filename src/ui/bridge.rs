@@ -166,6 +166,7 @@ pub fn to_slint_track(t: &TrackSummary, cover_thumbs: &CoverThumbs) -> TrackSumm
         artwork_path: SharedString::from(t.artwork_path.as_deref().unwrap_or("")),
         cover_img,
         is_favorite: t.is_favorite,
+        rating: t.rating,
     }
 }
 

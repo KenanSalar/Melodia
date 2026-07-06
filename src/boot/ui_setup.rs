@@ -197,8 +197,11 @@ pub fn install_views(
     // appends a `{section, Some(id)}` entry on top once it lands.
     ui::nav_history::record_current(state, app);
 
-    // 5c3. Now-Playing favourite heart fans into every per-row cache.
+    // 5c3. Now-Playing favourite heart + star rating fan into every per-row cache.
     ui::callbacks::wire_now_playing_favorite(
+        app, state, &tracks_ui, &browse_ui, &albums_ui, &artists_ui, &genres_ui,
+    );
+    ui::callbacks::wire_now_playing_rating(
         app, state, &tracks_ui, &browse_ui, &albums_ui, &artists_ui, &genres_ui,
     );
     // Retune the album-tier + artist-tier + playlist-tier cover LRUs

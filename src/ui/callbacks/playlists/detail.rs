@@ -148,6 +148,33 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
         });
     }
 
+    // set-row-rating: mirror the favorite path (rating never changes list
+    // membership, so a surgical per-row patch suffices).
+    {
+        let s = state.clone();
+        let weak = weak.clone();
+        let pu = playlists_ui.clone();
+        detail.on_set_row_rating(move |ids, rating| {
+            let id_vec = collect_track_ids(&ids);
+            if id_vec.is_empty() {
+                return;
+            }
+            let s = s.clone();
+            let weak = weak.clone();
+            let pu = pu.clone();
+            s.runtime.clone().spawn(async move {
+                if let Err(e) = library::ratings::set_rating(&s, id_vec.clone(), rating).await {
+                    log::warn!("playlists::set_rating: {e}");
+                    return;
+                }
+                for id in &id_vec {
+                    pu.flip_detail_rating(*id, rating);
+                    playlists_ui_mod::apply_detail_row_rating(&weak, *id, rating);
+                }
+            });
+        });
+    }
+
     {
         let weak = weak.clone();
         let pu = playlists_ui.clone();

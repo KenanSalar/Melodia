@@ -28,6 +28,11 @@ pub struct TrackSummary {
     pub last_position: i64,
     #[serde(default)]
     pub is_favorite: bool,
+    /// 0–5 star rating (0 = unrated). Carried on the playback projection so
+    /// the Now-Playing controls can display/edit the current track's rating
+    /// without an async fetch, and the queue round-trip preserves it.
+    #[serde(default)]
+    pub rating: i32,
     // ReplayGain — carried here (not just on the full `Track`) so the sync
     // playback path can bake per-track gain into the audio source without an
     // async DB fetch. Stored as `f32` (the DB column is REAL/f64) since the DSP
@@ -80,6 +85,7 @@ impl From<Track> for TrackSummary {
             disc_number: t.disc_number,
             last_position: t.last_position,
             is_favorite: t.is_favorite,
+            rating: t.rating,
             replaygain_track_gain: rg_f64_to_f32(t.replaygain_track_gain),
             replaygain_track_peak: rg_f64_to_f32(t.replaygain_track_peak),
             replaygain_album_gain: rg_f64_to_f32(t.replaygain_album_gain),
@@ -103,6 +109,7 @@ impl From<&Track> for TrackSummary {
             disc_number: t.disc_number,
             last_position: t.last_position,
             is_favorite: t.is_favorite,
+            rating: t.rating,
             replaygain_track_gain: rg_f64_to_f32(t.replaygain_track_gain),
             replaygain_track_peak: rg_f64_to_f32(t.replaygain_track_peak),
             replaygain_album_gain: rg_f64_to_f32(t.replaygain_album_gain),
@@ -140,6 +147,9 @@ pub struct TrackListRow {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub artwork_path: Option<String>,
     pub is_favorite: bool,
+    /// 0–5 star rating (0 = unrated). Surfaced in list rows for the
+    /// hover-revealed star control.
+    pub rating: i32,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub album_id: Option<i64>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -160,7 +170,7 @@ pub struct TrackListRow {
 pub const TRACK_SUMMARY_COLUMNS: &[&str] = &[
     "id", "file_path", "file_name", "title", "artist", "album", "duration_ms",
     "artwork_path", "track_number", "disc_number", "last_position", "is_favorite",
-    "replaygain_track_gain", "replaygain_track_peak", "replaygain_album_gain",
+    "rating", "replaygain_track_gain", "replaygain_track_peak", "replaygain_album_gain",
     "replaygain_album_peak",
 ];
 
@@ -178,7 +188,7 @@ pub fn track_summary_columns() -> &'static str {
 pub const TRACK_LIST_COLUMNS: &[&str] = &[
     "id", "file_path", "file_name", "title", "artist", "album_artist", "album", "genre",
     "track_number", "disc_number", "year", "duration_ms", "artwork_path", "is_favorite",
-    "album_id", "artist_id", "genre_id", "date_added", "sort_key",
+    "rating", "album_id", "artist_id", "genre_id", "date_added", "sort_key",
 ];
 
 /// Comma-separated form of `TRACK_LIST_COLUMNS` for direct `SELECT` usage.

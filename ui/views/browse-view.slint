@@ -378,6 +378,7 @@ export component BrowseView inherits Rectangle {
                     play-next(ids) => { Browse.play-next(ids); }
                     add-to-queue(ids) => { Browse.add-to-queue(ids); }
                     toggle-row-favorite(ids, on) => { Browse.toggle-row-favorite(ids, on); }
+                    set-row-rating(ids, n) => { Browse.set-row-rating(ids, n); }
                     select-row(idx, id, sh, ct) => { Browse.select-row(idx, id, sh, ct); }
                     // Browse has no filter input — nothing to blur.
                     request-blur-search => { }

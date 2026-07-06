@@ -16,6 +16,7 @@ export struct TrackSummaryRow {
     // otherwise.
     cover_img: image,
     is_favorite: bool,
+    rating: int,   // 0–5, 0 = unrated
 }
 
 // Mirror of `entities::track::TrackListRow`. Slint structs can't express
@@ -37,6 +38,7 @@ export struct TrackListRow {
     track_number: int,   // 0 = unknown
     duration_ms: int,
     is_favorite: bool,
+    rating: int,   // 0–5, 0 = unrated
     artwork_path: string,
     // No decoded cover field: the row thumbnail resolves lazily through
     // `RowCovers.request(artwork_path)` per instantiated row (same contract

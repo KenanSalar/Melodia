@@ -3,6 +3,7 @@ import { Settings } from "../../settings.slint";
 import { Player, WindowChrome, Queue, PopupHighlight, Dialog, Equalizer, ReplayGain } from "../../globals.slint";
 import { IconButton } from "../icon-button.slint";
 import { MaterialIcon } from "../material-icon.slint";
+import { StarRating } from "../star-rating.slint";
 import { PopupSurface } from "../popup-surface.slint";
 import { FocusLossWatcher } from "../focus-loss-watcher.slint";
 import { SpeedFlyout } from "./speed-flyout.slint";
@@ -116,12 +117,12 @@ export component OverflowMenu inherits Rectangle {
         + ((WindowChrome.always-on-top-supported && Settings.overflow-pin) ? 1 : 0)
         + (Settings.overflow-queue ? 1 : 0);
 
-    // Menu column height = 36 px per row (the two permanent rows — Speed and
-    // Equalizer — plus overflowed buttons) + 8 px inner pad + 2 px border +
-    // 2 px slack. (The content-driven *width* `menu-w` is declared on the
-    // PopupWindow below — Slint forbids the enclosing component from reading a
-    // property *inside* a PopupWindow, so it can't live up here.)
-    property <length> menu-h: 36px * (2 + root.overflow-count) + 12px;
+    // Menu column height = 36 px per row (the four permanent rows — Speed,
+    // Equalizer, ReplayGain, Rating — plus overflowed buttons) + 8 px inner pad
+    // + 2 px border + 2 px slack. (The content-driven *width* `menu-w` is
+    // declared on the PopupWindow below — Slint forbids the enclosing component
+    // from reading a property *inside* a PopupWindow, so it can't live up here.)
+    property <length> menu-h: 36px * (4 + root.overflow-count) + 12px;
 
     // Speed flyout geometry. Must match the preset count in
     // `speed-flyout.slint` (8 rows: 0.25× … 2×) — each 32 px + the same 12 px
@@ -301,6 +302,52 @@ export component OverflowMenu inherits Rectangle {
                         Dialog.cancel-label = "";
                         Dialog.destructive = false;
                         Dialog.open = true;
+                    }
+                }
+
+                // Permanent Rating row — inline 5-star control for the current
+                // track. Unlike the dialog rows it neither closes the popup nor
+                // opens a flyout: clicking a star applies immediately and
+                // re-asserts the highlight id so the winit Release clear doesn't
+                // unmount the FocusLossWatcher.
+                Rectangle {
+                    height: 36px;
+                    opacity: Player.vm.has_track ? 1 : 0.5;
+                    HorizontalLayout {
+                        padding-left: Theme.pad-sm;
+                        padding-right: Theme.pad-sm;
+                        spacing: Theme.pad-sm;
+                        alignment: stretch;
+                        VerticalLayout {
+                            alignment: center;
+                            MaterialIcon {
+                                name: "star";
+                                icon-size: 20px;
+                                icon-color: Player.vm.track.rating > 0 ? Theme.accent : Theme.text;
+                                filled: Player.vm.track.rating > 0;
+                            }
+                        }
+                        VerticalLayout {
+                            alignment: center;
+                            horizontal-stretch: 1;
+                            Text {
+                                text: @tr("Rating");
+                                color: Theme.text;
+                                font-size: Theme.font-size-md;
+                            }
+                        }
+                        VerticalLayout {
+                            alignment: center;
+                            StarRating {
+                                rating: Player.vm.track.rating;
+                                star-size: 18px;
+                                enabled: Player.vm.has_track;
+                                rated(n) => {
+                                    Player.set-current-rating(n);
+                                    PopupHighlight.id = "overflow";
+                                }
+                            }
+                        }
                     }
                 }
 

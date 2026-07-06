@@ -182,6 +182,33 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, genres_ui: &Arc<GenresUi>) 
         });
     }
 
+    // set-row-rating: mirror the favorite path (rating never changes list
+    // membership, so a surgical per-row patch suffices).
+    {
+        let s = state.clone();
+        let weak = weak.clone();
+        let gu = genres_ui.clone();
+        detail.on_set_row_rating(move |ids, rating| {
+            let id_vec = collect_track_ids(&ids);
+            if id_vec.is_empty() {
+                return;
+            }
+            let s = s.clone();
+            let weak = weak.clone();
+            let gu = gu.clone();
+            s.runtime.clone().spawn(async move {
+                if let Err(e) = library::ratings::set_rating(&s, id_vec.clone(), rating).await {
+                    log::warn!("genres::set_rating: {e}");
+                    return;
+                }
+                for id in &id_vec {
+                    gu.flip_detail_rating(*id, rating);
+                    genres_ui_mod::apply_detail_row_rating(&weak, *id, rating);
+                }
+            });
+        });
+    }
+
     // select-row / clear-selection: modifier-aware selection,
     // mirroring the Tracks / Albums views. The new selected set is
     // computed in Rust.
