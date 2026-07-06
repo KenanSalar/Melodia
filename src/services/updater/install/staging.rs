@@ -152,7 +152,7 @@ pub async fn prune_stale_staging() {
             return;
         };
         let Some(cutoff) = std::time::SystemTime::now()
-            .checked_sub(std::time::Duration::from_secs(7 * 24 * 60 * 60))
+            .checked_sub(std::time::Duration::from_hours(7 * 24))
         else {
             return;
         };
@@ -340,7 +340,7 @@ pub(crate) fn discard_staging_if_sidecar_mismatches(
     expected_url: &str,
 ) -> Option<StagedMeta> {
     let sidecar = sidecar_meta_path(dest);
-    let existing_size = std::fs::metadata(dest).map(|m| m.len()).unwrap_or(0);
+    let existing_size = std::fs::metadata(dest).map_or(0, |m| m.len());
     if existing_size == 0 {
         // No bytes to validate, but clear any orphan sidecar so it
         // doesn't outlive the next prune cycle as misleading state.

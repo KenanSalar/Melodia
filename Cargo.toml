@@ -2,7 +2,7 @@
 name = "Melodia"
 version = "0.8.0"
 edition = "2024"
-rust-version = "1.93"
+rust-version = "1.96"
 description = "Cross-platform desktop music player (Slint + Rust)"
 license = "AGPL-3.0-or-later"
 repository = "https://github.com/KenanSalar/Melodia"
@@ -129,7 +129,7 @@ parking_lot = "0.12.5"
 # `query!` / `query_as!` machinery comes along for the ride but we don't
 # call it — all queries go through runtime `query_as::<_, T>()` /
 # `query_scalar`. `derive` covers `#[derive(sqlx::FromRow)]`.
-sqlx = { version = "0.8.6", default-features = false, features = ["runtime-tokio", "sqlite", "migrate", "derive", "macros"] }
+sqlx = { version = "0.9.0", default-features = false, features = ["runtime-tokio", "sqlite", "migrate", "derive", "macros"] }
 
 # Audio
 rodio = { version = "0.22.2", default-features = false, features = [

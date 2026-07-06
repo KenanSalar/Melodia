@@ -1,5 +1,6 @@
 pub mod queries;
 
+use sqlx::AssertSqlSafe;
 use sqlx::migrate::Migrate;
 use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePool, SqlitePoolOptions};
 use std::str::FromStr;
@@ -10,6 +11,10 @@ use crate::error::AppError;
 
 /// `SQLite` bind variable limit — queries with more placeholders will fail.
 pub const SQLITE_BIND_LIMIT: usize = 999;
+
+/// sqlx's default migrations-tracking table; the 0.9 `Migrate` trait methods
+/// take it explicitly (it became configurable via `sqlx.toml`).
+const MIGRATIONS_TABLE: &str = "_sqlx_migrations";
 
 /// Build a `?, ?, …` placeholder list for an `IN (...)` clause. Single-pass,
 /// capacity-preallocated — replaces the previous `repeat_n("?", n).collect::<Vec<_>>().join(", ")`
@@ -49,7 +54,7 @@ where
     for chunk in items.chunks(SQLITE_BIND_LIMIT) {
         let sql = build_sql(&placeholders(chunk.len()));
 
-        let mut query = sqlx::query_as::<_, T>(&sql);
+        let mut query = sqlx::query_as::<_, T>(AssertSqlSafe(sql));
         for item in chunk {
             query = query.bind(item);
         }
@@ -117,7 +122,7 @@ async fn backup_database(
     }
     let safe_path = backup_path.display().to_string().replace('\'', "''");
     let sql = format!("VACUUM INTO '{safe_path}'");
-    sqlx::raw_sql(&sql).execute(pool).await?;
+    sqlx::raw_sql(AssertSqlSafe(sql)).execute(pool).await?;
     log::info!("Database backup created at {}", backup_path.display());
     Ok(())
 }
@@ -195,10 +200,10 @@ pub async fn init_database(paths: &Paths) -> Result<DbPool, AppError> {
     // to fail fast on contention." With this architecture — a single-
     // -connection write pool and WAL readers that don't block writers — the
     // only contention source would be an external process opening the same
-    // SQLite file, which doesn't happen for Melodia. SQLx 0.8 has no first-
-    // class IMMEDIATE flag, and constructing a manual conn-acquire +
-    // `BEGIN IMMEDIATE` wrapper everywhere is high-churn for zero practical
-    // benefit here. DEFERRED + `busy_timeout(5s)` therefore stays — revisit
+    // SQLite file, which doesn't happen for Melodia. SQLx 0.9 does expose
+    // `Pool::begin_with("BEGIN IMMEDIATE")`, but with a single write
+    // connection there is no intra-process writer contention for it to
+    // fail fast on. DEFERRED + `busy_timeout(5s)` therefore stays — revisit
     // if a future second writer (sidecar tool, multi-window mode, etc.) gets
     // added.
     let write_opts = SqliteConnectOptions::from_str(&db_url)?
@@ -222,9 +227,9 @@ pub async fn init_database(paths: &Paths) -> Result<DbPool, AppError> {
     let migrator = sqlx::migrate!("./migrations");
     let (has_pending, backup_ext) = {
         let mut conn = write_pool.acquire().await?;
-        conn.ensure_migrations_table().await?;
+        conn.ensure_migrations_table(MIGRATIONS_TABLE).await?;
         let applied: std::collections::HashSet<i64> = conn
-            .list_applied_migrations()
+            .list_applied_migrations(MIGRATIONS_TABLE)
             .await?
             .into_iter()
             .map(|m| m.version)
@@ -270,8 +275,7 @@ pub async fn init_database(paths: &Paths) -> Result<DbPool, AppError> {
     // a num_cpus read pool — that is server-workload guidance; a desktop
     // app is a different profile.)
     let read_conns = std::thread::available_parallelism()
-        .map(|n| u32::try_from(n.get()).unwrap_or(u32::MAX))
-        .unwrap_or(4)
+        .map_or(4, |n| u32::try_from(n.get()).unwrap_or(u32::MAX))
         .clamp(2, 4);
 
     let read_opts = SqliteConnectOptions::from_str(&db_url)?
@@ -293,7 +297,7 @@ pub async fn init_database(paths: &Paths) -> Result<DbPool, AppError> {
     // cold-reopen cost after idle is negligible for this workload.
     let read_pool = SqlitePoolOptions::new()
         .max_connections(read_conns)
-        .idle_timeout(Duration::from_secs(60))
+        .idle_timeout(Duration::from_mins(1))
         .connect_with(read_opts)
         .await?;
 

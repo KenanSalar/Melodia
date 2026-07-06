@@ -114,8 +114,7 @@ pub fn extract_metadata(
     let fs_meta = std::fs::metadata(path);
     let file_size = fs_meta
         .as_ref()
-        .map(|m| i64::try_from(m.len()).unwrap_or(i64::MAX))
-        .unwrap_or(0);
+        .map_or(0, |m| i64::try_from(m.len()).unwrap_or(i64::MAX));
 
     let date_modified = extract_date_modified(path);
 

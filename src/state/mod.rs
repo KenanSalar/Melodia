@@ -271,7 +271,7 @@ impl AppState {
         self.http_client.get_or_init(|| {
             reqwest::Client::builder()
                 .connect_timeout(std::time::Duration::from_secs(10))
-                .read_timeout(std::time::Duration::from_secs(60))
+                .read_timeout(std::time::Duration::from_mins(1))
                 .pool_max_idle_per_host(4)
                 .user_agent(concat!("Melodia/", env!("CARGO_PKG_VERSION")))
                 .build()

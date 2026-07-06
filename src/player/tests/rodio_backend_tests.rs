@@ -56,19 +56,19 @@ fn playing_when_single_source_no_gapless() {
 
 #[test]
 fn position_at_normal_speed() {
-    let wall = Duration::from_millis(5000);
+    let wall = Duration::from_secs(5);
     assert_eq!(compute_position(wall, 1.0), 5000);
 }
 
 #[test]
 fn position_at_double_speed() {
-    let wall = Duration::from_millis(5000);
+    let wall = Duration::from_secs(5);
     assert_eq!(compute_position(wall, 2.0), 10000);
 }
 
 #[test]
 fn position_at_half_speed() {
-    let wall = Duration::from_millis(5000);
+    let wall = Duration::from_secs(5);
     assert_eq!(compute_position(wall, 0.5), 2500);
 }
 
@@ -79,20 +79,20 @@ fn position_zero_wall_time() {
 
 #[test]
 fn position_zero_speed() {
-    let wall = Duration::from_millis(5000);
+    let wall = Duration::from_secs(5);
     assert_eq!(compute_position(wall, 0.0), 0);
 }
 
 #[test]
 fn position_fractional_speed() {
-    let wall = Duration::from_millis(10000);
+    let wall = Duration::from_secs(10);
     // 10000 * 0.75 = 7500
     assert_eq!(compute_position(wall, 0.75), 7500);
 }
 
 #[test]
 fn position_large_wall_time() {
-    let wall = Duration::from_secs(3600); // 1 hour
+    let wall = Duration::from_hours(1);
     assert_eq!(compute_position(wall, 1.0), 3_600_000);
 }
 

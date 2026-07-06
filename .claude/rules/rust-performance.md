@@ -13,6 +13,7 @@
 - Use `Cow<'_, str>` for functions that usually return input unchanged but sometimes modify
 - Avoid `format!()` for simple conversions — use `.to_string()`, `.into()`, or string concatenation
 - `push_str()` is faster than `format!` for building strings incrementally
+- `std::fmt::from_fn` (1.93) builds an ad-hoc `Display` from a closure — formatted output without a newtype or an intermediate `String`
 
 ## Collections
 
@@ -20,6 +21,9 @@
 - Accept `&[T]` over `&Vec<T>` in function signatures — more flexible, same performance
 - Consider `SmallVec<[T; N]>` for collections that are usually small but occasionally grow
 - Avoid `Box<dyn Trait>` in hot paths — use enums or generics for static dispatch
+- `Vec::extract_if` (1.87) / `HashMap::extract_if` (1.88) drain matching elements with a predicate in one pass — no retain-plus-collect double walk
+- `VecDeque::pop_front_if` / `pop_back_if` (1.93) for conditional queue draining (e.g. a draining action queue)
+- `Vec::push_mut` / `VecDeque::push_back_mut` (1.95) push and hand back `&mut` to the new element — no re-index after the push
 
 ## Iterator Patterns
 
@@ -28,6 +32,16 @@
 - Use `.filter_map()` instead of `.filter().map()` for combined operations
 - `iter().enumerate()` over manual index tracking
 - Prefer `iter().any()` / `iter().find()` over collecting then checking
+- `Peekable::next_if_map` (1.94) — conditional consume-and-transform without a separate peek/next pair
+- `<[T]>::array_windows::<N>()` (1.94) yields const-length `&[T; N]` windows — the compiler knows the width (good for frame-based DSP); `slice::as_array::<N>()` (1.93) is the safe `&[T]` → `Option<&[T; N]>` conversion
+
+## Language Idioms (Rust 1.88–1.96)
+
+- Let chains (1.88, edition 2024 only): `if let Some(a) = x && a.ready() { … }` — flatten nested `if let` towers instead of stacking indentation
+- `if let` guards on match arms (1.95): `Some(x) if let Ok(v) = parse(x) => …` — pattern-match inside a guard; guard patterns don't count toward exhaustiveness
+- `cfg_select!` (1.95) — compile-time `match` over cfgs, in std; replaces the `cfg-if` crate for platform-split code paths
+- `assert_matches!` / `debug_assert_matches!` (1.96) — prefer over `assert!(matches!(…))` in tests: supports `if` guards and prints the non-matching value on failure
+- New `Copy` range types exist in `core::range` (1.96), but `0..1` syntax still produces the legacy `Iterator` ranges — nothing to adopt yet
 
 ## Compile-Time Optimizations (release profile)
 
@@ -36,11 +50,12 @@
 lto = "fat"           # Full link-time optimization
 codegen-units = 1     # Single codegen unit for better optimization
 panic = "abort"       # Smaller binary, no unwind overhead
-strip = true          # Strip debug symbols from release binary
+strip = "debuginfo"   # Drop DWARF but keep symbols — end-user panic backtraces stay readable ("symbols"/true strips both)
 ```
 
 - Set `target-cpu=native` via `RUSTFLAGS` for platform-specific SIMD optimizations
-- Use `mold` linker for faster dev builds: `RUSTFLAGS="-C link-arg=-fuse-ld=mold"`
+- Since Rust 1.90, `rust-lld` is the default linker on `x86_64-unknown-linux-gnu` — dev links are fast out of the box (opt out with `-C linker-features=-lld`); `mold` is at best a marginal further gain, not a recommendation
+- `--remap-path-scope` (stable since 1.95) controls which local paths get remapped out of the binary; Cargo's `trim-paths` profile key was still nightly-only as of 1.93 — verify before recommending
 
 ## Profiling
 
@@ -53,9 +68,11 @@ strip = true          # Strip debug symbols from release binary
 
 - Prefer `to_owned()` over `to_string()` when converting `&str` — avoids `Display` trait overhead
 - Use `std::mem::take()` or `std::mem::replace()` instead of clone-then-clear patterns
-- Consider `mimalloc` or `jemalloc` as global allocator for 5-10% improvement with no code changes
+- Global-allocator swaps (`mimalloc`/`jemalloc`) trade RSS for speed — measure peak RSS before adopting. **Melodia caveat:** mimalloc's per-thread segments across the app's many long-lived threads caused a large idle-RSS regression and was reverted; don't propose allocator swaps here
 - Avoid unnecessary `Arc` — single-threaded code doesn't need atomic reference counting
 - Use `#[inline]` sparingly — the compiler usually makes good inlining decisions; only hint for small hot functions crossing crate boundaries
+- `core::hint::cold_path()` (1.95) marks a branch as unlikely — use in hot loops where the error/edge arm is rare
+- `std::sync::LazyLock` / `LazyCell` (1.80) for lazy statics — no `once_cell` dependency; `get`/`get_mut`/`force_mut` (1.94) inspect without forcing initialization. Pairs with "construct heavy clients lazily"
 
 ## Type-Level Optimizations
 
@@ -67,6 +84,7 @@ strip = true          # Strip debug symbols from release binary
 ## Concurrency Patterns
 
 - `AtomicUsize` / `AtomicBool` for lock-free counters and flags — cheaper than `Mutex<usize>` for simple state
+- `Atomic*::update` / `try_update` (1.95, on all atomic types) — closure-based read-modify-write, cleaner than a hand-rolled `fetch_update` loop for lock-free shared state
 - `RwLock<T>` instead of `Mutex<T>` when reads dominate — allows concurrent reads
 - Avoid contention on a single `Mutex` in parallel code — partition state or use thread-local storage
 

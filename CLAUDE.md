@@ -15,7 +15,7 @@ cargo llvm-cov --html                      # coverage → target/llvm-cov/html/
 
 ## Prerequisites
 
-- **Rust** edition 2024, stable ≥ 1.93.
+- **Rust** edition 2024, stable ≥ 1.96.
 - **Linux**: GTK / X11 / Wayland dev pkgs for Slint femtovg (`libfontconfig1-dev`, `libfreetype6-dev`, Vulkan/OpenGL; `libwayland-dev` on Wayland). No WebKitGTK.
 - **macOS / Windows**: no extra deps.
 
@@ -77,7 +77,7 @@ Non-obvious wiring only — read the code for file roles.
 - **Symphonia** — `Decoder::builder().with_gapless(true).with_seekable(true).with_byte_len()`. Formats: MP3, FLAC, M4A/AAC, OGG/Vorbis, WAV, ALAC, AIFF.
 - **Persistence** — `settings.json` = app/user prefs (theme, locale, playback, window geom, updater); per-view UI state (column widths/visibility, sort, browse path, nav index, detail ids, section-collapse) → `views.json` (`src/services/view_state.rs` — `ViewStateData` + `read/write/mutate_view_state`). Window state on close; queue → `queue.json`; search history → `search_history.json` (cap 10).
 - **SQLx migrations** — `./migrations/`, run on startup; DB backed up before applying.
-- **`crate::database::placeholders(n)` for IN-clause lists.** Single-pass, capacity-preallocated; don't re-roll `repeat_n("?", n)...join`. Pair with `chunked_in_query`. Tuple-row CTE UPDATEs follow `batch_update_hashes` / `flush_artwork_backfill` shape — one chunked UPDATE per N rows, not N UPDATEs.
+- **`crate::database::placeholders(n)` for IN-clause lists.** Single-pass, capacity-preallocated; don't re-roll `repeat_n("?", n)...join`. Pair with `chunked_in_query`. Tuple-row CTE UPDATEs follow `batch_update_hashes` / `flush_artwork_backfill` shape — one chunked UPDATE per N rows, not N UPDATEs. Runtime-built SQL `String`s (placeholder lists, column projections) are wrapped in `sqlx::AssertSqlSafe(sql)` at the query call site (sqlx 0.9 `SqlSafeStr`) — data never rides in the string, only through `.bind()`.
 - **Lazy row covers via the `RowCovers` global.** `TrackListRow` carries no `image` field; `TrackListRowItem` resolves its thumbnail per *instantiated* row through `RowCovers.request(artwork_path)`, wired once in `boot/ui_setup.rs` to the shared row-tier `CoverThumbs`. New TrackList consumers need zero cover plumbing. `CoverThumbs::prewarm` dedupes its input and caps work at the LRU capacity — pass paths in **display order** so the kept prefix is what paints first.
 - **Scan ingest is chunked + batched.** Bulk scans (`to_scan > SCAN_BULK_THRESHOLD`) ingest in per-`TX_CHUNK_FILES` write transactions (writer connection frees between chunks; per-chunk stats-trigger drop/create stays crash-safe) with multi-row `INSERT … RETURNING id, file_path` via `insert_tracks_batch` (ids mapped back by path — RETURNING order is unspecified; DnD import relies on input order). Small deltas keep stats triggers enabled and skip `recalculate_all_stats` entirely. Orphans + artwork rollup + recalc land in one final tx; `library_changed_tx` bumps once after it.
 - **`stats_changed_tx` vs `library_changed_tx`.** Play-count flushes bump the stats channel only; its two subscribers are Favorites (hero mosaic + Most Played rank by `play_count`) and Recently-Played (list ordered by `last_played`, written on the same flush). Everything structural (scans, watcher, imports, favorite toggles) stays on `library_changed_tx`.

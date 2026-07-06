@@ -120,8 +120,7 @@ fn decode_pool() -> Option<&'static rayon::ThreadPool> {
     DECODE_POOL
         .get_or_init(|| {
             let threads = std::thread::available_parallelism()
-                .map(|p| (p.get() / 2).clamp(2, 4))
-                .unwrap_or(2);
+                .map_or(2, |p| (p.get() / 2).clamp(2, 4));
             rayon::ThreadPoolBuilder::new()
                 .num_threads(threads)
                 .thread_name(|i| format!("cover-decode-{i}"))

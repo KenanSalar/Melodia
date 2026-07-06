@@ -273,7 +273,7 @@ pub fn schedule_history_add(
     let su = search_ui.clone();
     let weak = weak.clone();
     state.runtime.clone().spawn(async move {
-        tokio::time::sleep(Duration::from_millis(2000)).await;
+        tokio::time::sleep(Duration::from_secs(2)).await;
         if su.history_token.load(Ordering::Relaxed) != my_token {
             return; // newer keystroke since we scheduled; bail.
         }

@@ -158,7 +158,7 @@ gh attestation verify <file> --repo KenanSalar/Melodia
 
 ### Prerequisites
 
-- [Rust](https://rustup.rs/) — stable, **≥ 1.93**, edition 2024
+- [Rust](https://rustup.rs/) — stable, **≥ 1.96**, edition 2024
 
 **Linux** — development packages for Slint's FemtoVG renderer (no WebKitGTK required):
 

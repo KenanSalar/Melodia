@@ -4,6 +4,8 @@
 
 use std::collections::HashMap;
 
+use sqlx::AssertSqlSafe;
+
 use crate::database::SQLITE_BIND_LIMIT;
 use crate::error::AppError;
 use crate::media::metadata::ExtractedMetadata;
@@ -50,11 +52,11 @@ pub async fn update_track_artwork_if_missing(
 /// these in the same order in their respective SQL so this single helper
 /// covers schema changes in one place.
 fn bind_track_columns<'q>(
-    q: sqlx::query::Query<'q, sqlx::Sqlite, sqlx::sqlite::SqliteArguments<'q>>,
+    q: sqlx::query::Query<'q, sqlx::Sqlite, sqlx::sqlite::SqliteArguments>,
     meta: &'q crate::media::metadata::ExtractedMetadata,
     ids: &'q ResolvedIds,
     sort_key: &'q str,
-) -> sqlx::query::Query<'q, sqlx::Sqlite, sqlx::sqlite::SqliteArguments<'q>> {
+) -> sqlx::query::Query<'q, sqlx::Sqlite, sqlx::sqlite::SqliteArguments> {
     q.bind(&meta.file_hash)
         .bind(&meta.title)
         .bind(&meta.artist)
@@ -121,7 +123,7 @@ pub async fn insert_track(
             ?
         )",
     );
-    let q = sqlx::query(&sql).bind(file_path).bind(file_name);
+    let q = sqlx::query(AssertSqlSafe(sql)).bind(file_path).bind(file_name);
 
     let q = bind_track_columns(q, meta, ids, &sort_key);
 
@@ -364,7 +366,7 @@ pub async fn delete_tracks_by_paths_batch(
     for chunk in file_paths.chunks(crate::database::SQLITE_BIND_LIMIT) {
         let placeholders = crate::database::placeholders(chunk.len());
         let sql = format!("DELETE FROM tracks WHERE file_path IN ({placeholders})");
-        let mut query = sqlx::query(&sql);
+        let mut query = sqlx::query(AssertSqlSafe(sql));
         for path in chunk {
             query = query.bind(path);
         }

@@ -15,6 +15,7 @@ use std::collections::HashMap;
 use std::sync::OnceLock;
 use std::time::Duration;
 
+use sqlx::AssertSqlSafe;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio::sync::watch;
 use tokio_util::sync::CancellationToken;
@@ -177,7 +178,7 @@ async fn flush_play_counts(
         }
         sql.push(')');
 
-        let mut q = sqlx::query(&sql);
+        let mut q = sqlx::query(AssertSqlSafe(sql));
         for &(id, n) in chunk {
             q = q.bind(id).bind(i64::from(n));
         }
@@ -210,7 +211,7 @@ async fn flush_skip_counts(
         }
         sql.push(')');
 
-        let mut q = sqlx::query(&sql);
+        let mut q = sqlx::query(AssertSqlSafe(sql));
         for &(id, n) in chunk {
             q = q.bind(id).bind(i64::from(n));
         }
