@@ -31,6 +31,7 @@ pub mod queue_sheet;
 pub mod recently_played;
 pub mod search;
 pub mod section_state;
+pub mod sleep_timer;
 pub mod track_list_view;
 pub mod track_sort;
 pub mod tracks;

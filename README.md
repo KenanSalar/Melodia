@@ -39,6 +39,7 @@ _Screenshots coming soon._
 - Favorites view with a hero header, artwork mosaic, most-played section, and a filterable track list
 - Recently-Played view listing the tracks you last listened to (newest first), with a most-played strip and a filterable track list that updates live as you play
 - Play-count and skip-count tracking per track
+- Per-track star ratings (0–5), set inline via a hover-revealed star control in any track list and from the Now Playing view
 - Natural sort ordering for file and track names
 - Customizable, resizable, and toggleable track-list columns
 - Playlist creation and management with custom thumbnails
@@ -54,6 +55,7 @@ _Screenshots coming soon._
 - 10-band graphic equalizer (31 Hz – 16 kHz) with adjustable preamp, nine built-in presets plus hand-tuned custom curves, and a soft-knee clip-protection limiter so boosts compress instead of clipping
 - ReplayGain loudness normalization — applies per-track or per-album gain from the file's loudness tags (Track or Album mode), with an adjustable preamp and optional peak-based clip prevention; reuses the equalizer's soft-knee limiter so a boosted track compresses instead of clipping, and works with the equalizer off
 - Playback speed control (0.25× – 2.0×)
+- Sleep timer that pauses playback after a preset (15–90 min) or custom duration, or at the end of the current track; the duration countdown is playback-linked, so pausing the music holds the timer
 - Volume control (0–200%) with mute
 - Resume playback on startup
 - OS media-key support

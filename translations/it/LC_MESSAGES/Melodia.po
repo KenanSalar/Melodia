@@ -990,3 +990,30 @@ msgstr "Filtra riprodotti di recente…"
 
 msgid "No recently played tracks"
 msgstr "Nessun brano riprodotto di recente"
+
+msgid "Sleep timer"
+msgstr "Timer di spegnimento"
+
+msgid "15 min"
+msgstr "15 min"
+
+msgid "30 min"
+msgstr "30 min"
+
+msgid "45 min"
+msgstr "45 min"
+
+msgid "60 min"
+msgstr "60 min"
+
+msgid "90 min"
+msgstr "90 min"
+
+msgid "End of track"
+msgstr "Fine del brano"
+
+msgid "Track end"
+msgstr "Fine brano"
+
+msgid "Start"
+msgstr "Avvia"

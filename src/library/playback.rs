@@ -285,6 +285,20 @@ pub fn player_set_gapless(ctx: &PlaybackContext, enabled: bool) -> Result<(), Ap
     Ok(())
 }
 
+/// Arm / disarm the sleep-timer's "End of current track" mode. When armed, the
+/// playback monitor pauses at the next end-of-stream boundary instead of
+/// advancing the queue (see `src/player/handlers.rs`). Session-only — nothing
+/// is persisted. The `with_state_emit` re-publishes the light `ViewModel` so the
+/// UI's `Player.vm.sleep_at_track_end` (and thus the overflow-menu sleep row)
+/// tracks the flag; the monitor disarms it when it fires, which re-emits and
+/// auto-clears the row.
+pub fn player_set_pause_at_track_end(ctx: &PlaybackContext, armed: bool) -> Result<(), AppError> {
+    with_state_emit(&ctx.player_state, &ctx.sinks, |s| {
+        s.pause_after_current_track = armed;
+    });
+    Ok(())
+}
+
 // --- Graphic equalizer -----------------------------------------------------
 //
 // EQ state lives on the Rodio backend's lock-free shared cell, not the

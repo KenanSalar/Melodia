@@ -231,6 +231,10 @@ export struct PlayerVm {
     is_muted: bool,
     playback_speed: float,
     gapless: bool,
+    // Sleep-timer "End of current track" armed state. Backend-owned (mirrors
+    // `PlayerState::pause_after_current_track`); the overflow menu's sleep row
+    // reads it directly so the row auto-clears when the monitor fires.
+    sleep_at_track_end: bool,
     has_next: bool,
     has_previous: bool,
 }

@@ -999,3 +999,30 @@ msgstr "Zuletzt gespielte filtern…"
 
 msgid "No recently played tracks"
 msgstr "Keine zuletzt gespielten Titel"
+
+msgid "Sleep timer"
+msgstr "Einschlaf-Timer"
+
+msgid "15 min"
+msgstr "15 Min."
+
+msgid "30 min"
+msgstr "30 Min."
+
+msgid "45 min"
+msgstr "45 Min."
+
+msgid "60 min"
+msgstr "60 Min."
+
+msgid "90 min"
+msgstr "90 Min."
+
+msgid "End of track"
+msgstr "Titelende"
+
+msgid "Track end"
+msgstr "Titelende"
+
+msgid "Start"
+msgstr "Starten"

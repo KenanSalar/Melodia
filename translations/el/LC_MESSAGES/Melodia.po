@@ -992,3 +992,30 @@ msgstr "Φιλτράρισμα πρόσφατα αναπαραγόμενων…"
 
 msgid "No recently played tracks"
 msgstr "Δεν υπάρχουν πρόσφατα αναπαραγόμενα κομμάτια"
+
+msgid "Sleep timer"
+msgstr "Χρονοδιακόπτης ύπνου"
+
+msgid "15 min"
+msgstr "15 λεπτά"
+
+msgid "30 min"
+msgstr "30 λεπτά"
+
+msgid "45 min"
+msgstr "45 λεπτά"
+
+msgid "60 min"
+msgstr "60 λεπτά"
+
+msgid "90 min"
+msgstr "90 λεπτά"
+
+msgid "End of track"
+msgstr "Τέλος κομματιού"
+
+msgid "Track end"
+msgstr "Τέλος κομματιού"
+
+msgid "Start"
+msgstr "Έναρξη"

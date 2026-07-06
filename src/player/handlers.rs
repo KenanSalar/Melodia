@@ -13,8 +13,7 @@ use super::actions::execute_actions;
 use super::event_sink::PlayerSinks;
 use super::rodio_backend::{PlaybackCheck, RodioPlayer};
 use super::state::{
-    PlayerAction, PlayerStateHandle, PositionTick, lock_state, play_track_inner,
-    stop_end_of_queue, with_state_emit,
+    PlayerAction, PlayerState, PlayerStateHandle, PositionTick, lock_state, with_state_emit,
 };
 use super::types::PlaybackStatus;
 
@@ -124,23 +123,14 @@ pub fn spawn_playback_monitor(tracker: &TaskTracker, ctx: PlaybackMonitorContext
                     execute_actions(actions, &rodio_player, &db, &player_state, &sinks);
                 }
                 PlaybackCheck::EndOfStream => {
-                    let actions = with_state_emit(&player_state, &sinks, |state| {
-                        let mut actions = Vec::with_capacity(4);
-
-                        // Update play count for the track that just ended
-                        if let Some(ref track) = state.current_track {
-                            actions.push(PlayerAction::UpdatePlayCount(track.id));
-                        }
-
-                        // Advance queue
-                        if let Some(track) = state.queue.advance().cloned() {
-                            actions.extend(play_track_inner(state, track, None));
-                        } else {
-                            actions.extend(stop_end_of_queue(state));
-                        }
-
-                        actions
-                    });
+                    // Advance the queue (or, if the sleep-timer's "End of current
+                    // track" mode is armed, disarm it and stop instead). See
+                    // `PlayerState::build_end_of_stream_actions`.
+                    let actions = with_state_emit(
+                        &player_state,
+                        &sinks,
+                        PlayerState::build_end_of_stream_actions,
+                    );
 
                     execute_actions(actions, &rodio_player, &db, &player_state, &sinks);
                 }
@@ -167,6 +157,12 @@ pub fn spawn_playback_monitor(tracker: &TaskTracker, ctx: PlaybackMonitorContext
                         // choice the moment the current track started).
                         let late_preload = if state.gapless_enabled
                             && !already_preloaded
+                            // Sleep-timer "End of current track": suppress the
+                            // gapless preload so the current track drains to
+                            // `EndOfStream` (not `GaplessTransition`, which would
+                            // already be playing the next track) — that's the only
+                            // boundary the pause-at-track-end gate below can catch.
+                            && !state.pause_after_current_track
                             && state.duration_ms > 0
                             && state.duration_ms.saturating_sub(state.position_ms)
                                 < PRELOAD_LEAD_MS

@@ -119,6 +119,24 @@ export global Player {
     // surfaces. The active value is read back via `vm.track.rating`.
     callback set-current-rating(int /*rating*/);
 
+    // Session-only sleep timer, fired by the overflow menu's sleep flyout.
+    // `minutes`: 0 = off, > 0 = duration timer, -1 = "End of current track".
+    // Applies live only (never persisted — resets each launch). See
+    // `src/ui/sleep_timer.rs`.
+    callback set-sleep-timer(int /*minutes*/);
+    // Custom duration from the flyout's ±stepper Start pill (seconds). Rust
+    // clamps to [30 s, 2 h] and arms a duration timer.
+    callback set-sleep-timer-seconds(int /*seconds*/);
+    // Active armed *duration* in seconds (0 = no duration timer). Drives the
+    // flyout preset rows' active highlight (a preset matches when
+    // `value*60 == this`) and the collapsed row. End-of-track mode is separate —
+    // it rides on `vm.sleep_at_track_end`.
+    in-out property <int> sleep-timer-total-seconds: 0;
+    // Live "M:SS" / "H:MM:SS" remaining string, written by the countdown task each second.
+    // Standalone (NOT a `vm` field) so the per-second update only invalidates
+    // the row that reads it — same rationale as `position-ms` / `duration-ms`.
+    in-out property <string> sleep-timer-remaining: "";
+
     // Bumped each time the user changes volume via the keyboard handler
     // in `ui/app-window.slint` (↑ / ↓ / Ctrl+↑ / Ctrl+↓). `VolumePopup`
     // observes this via a `changed` handler, sets a tick-down counter,

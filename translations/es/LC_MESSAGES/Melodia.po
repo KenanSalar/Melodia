@@ -990,3 +990,30 @@ msgstr "Filtrar reproducidos recientemente…"
 
 msgid "No recently played tracks"
 msgstr "No hay pistas reproducidas recientemente"
+
+msgid "Sleep timer"
+msgstr "Temporizador de apagado"
+
+msgid "15 min"
+msgstr "15 min"
+
+msgid "30 min"
+msgstr "30 min"
+
+msgid "45 min"
+msgstr "45 min"
+
+msgid "60 min"
+msgstr "60 min"
+
+msgid "90 min"
+msgstr "90 min"
+
+msgid "End of track"
+msgstr "Fin de la pista"
+
+msgid "Track end"
+msgstr "Fin de pista"
+
+msgid "Start"
+msgstr "Iniciar"

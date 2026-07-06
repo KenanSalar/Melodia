@@ -993,3 +993,30 @@ msgstr "Son çalınanları filtrele…"
 
 msgid "No recently played tracks"
 msgstr "Son çalınan parça yok"
+
+msgid "Sleep timer"
+msgstr "Uyku zamanlayıcısı"
+
+msgid "15 min"
+msgstr "15 dk"
+
+msgid "30 min"
+msgstr "30 dk"
+
+msgid "45 min"
+msgstr "45 dk"
+
+msgid "60 min"
+msgstr "60 dk"
+
+msgid "90 min"
+msgstr "90 dk"
+
+msgid "End of track"
+msgstr "Parça sonu"
+
+msgid "Track end"
+msgstr "Parça sonu"
+
+msgid "Start"
+msgstr "Başlat"

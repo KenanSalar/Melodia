@@ -7,6 +7,7 @@ import { StarRating } from "../star-rating.slint";
 import { PopupSurface } from "../popup-surface.slint";
 import { FocusLossWatcher } from "../focus-loss-watcher.slint";
 import { SpeedFlyout } from "./speed-flyout.slint";
+import { SleepTimerFlyout } from "./sleep-timer-flyout.slint";
 
 // One row inside the overflow popup. Renders the same icon + label pair
 // shown inline in the now-playing bar; active colour mirrors the inline
@@ -103,8 +104,11 @@ export component OverflowMenu inherits Rectangle {
     height: btn.height;
 
     // Whether the preset flyout is expanded. Reset to collapsed on every
-    // (re)open via the trigger, and by every close path below.
+    // (re)open via the trigger, and by every close path below. The speed and
+    // sleep flyouts share the one left column, so they are mutually exclusive —
+    // opening one closes the other.
     property <bool> speed-flyout-open: false;
+    property <bool> sleep-flyout-open: false;
 
     // Number of currently-overflowed action buttons (the speed row is
     // permanent and counted separately, +1 below). The pin row is gated on
@@ -117,18 +121,28 @@ export component OverflowMenu inherits Rectangle {
         + ((WindowChrome.always-on-top-supported && Settings.overflow-pin) ? 1 : 0)
         + (Settings.overflow-queue ? 1 : 0);
 
-    // Menu column height = 36 px per row (the four permanent rows — Speed,
-    // Equalizer, ReplayGain, Rating — plus overflowed buttons) + 8 px inner pad
-    // + 2 px border + 2 px slack. (The content-driven *width* `menu-w` is
-    // declared on the PopupWindow below — Slint forbids the enclosing component
-    // from reading a property *inside* a PopupWindow, so it can't live up here.)
-    property <length> menu-h: 36px * (4 + root.overflow-count) + 12px;
+    // Menu column height = 36 px per row (the five permanent rows — Speed,
+    // Sleep timer, Equalizer, ReplayGain, Rating — plus overflowed buttons)
+    // + 8 px inner pad + 2 px border + 2 px slack. (The content-driven *width*
+    // `menu-w` is declared on the PopupWindow below — Slint forbids the
+    // enclosing component from reading a property *inside* a PopupWindow, so it
+    // can't live up here.)
+    property <length> menu-h: 36px * (5 + root.overflow-count) + 12px;
 
     // Speed flyout geometry. Must match the preset count in
     // `speed-flyout.slint` (8 rows: 0.25× … 2×) — each 32 px + the same 12 px
     // chrome allowance as the menu column.
     property <length> flyout-w: 120px;
     property <length> flyout-h: 32px * 8 + 12px;
+    // Sleep-timer flyout geometry. Wider than the speed flyout to fit the
+    // "End of track" row (and its translations). Height must match the layout
+    // in `sleep-timer-flyout.slint`: 7 preset rows (32 px each) + a 9 px divider
+    // + a 32 px ±stepper row + a 32 px Start-pill row, plus the same 12 px chrome.
+    property <length> sleep-flyout-w: 168px;
+    property <length> sleep-flyout-h: 32px * 7 + 9px + 32px + 32px + 12px;
+    // The two flyouts share the single left column; reserve the wider one so
+    // the popup never re-layouts when switching between them.
+    property <length> left-col-w: max(root.flyout-w, root.sleep-flyout-w);
     // Transparent gap between the flyout (left) and menu (right) columns so
     // they read as two separate floating chromes.
     property <length> gap: 8px;
@@ -159,7 +173,7 @@ export component OverflowMenu inherits Rectangle {
         force-bg: PopupHighlight.id == "overflow";
         clicked => {
             // Always (re)open collapsed.
-            root.speed-flyout-open = false;
+            root.speed-flyout-open = false; root.sleep-flyout-open = false;
             PopupHighlight.id = "overflow";
             pop.show();
         }
@@ -179,8 +193,8 @@ export component OverflowMenu inherits Rectangle {
         // column's on-screen position is independent of the popup size
         // (popup.x + menu.x both cancel `self.width`), so it stays pinned
         // under the trigger whether or not the flyout is open.
-        width: root.flyout-w + root.gap + self.menu-w;
-        height: max(root.menu-h, root.flyout-h);
+        width: root.left-col-w + root.gap + self.menu-w;
+        height: max(root.menu-h, max(root.flyout-h, root.sleep-flyout-h));
         x: btn.width - self.width;
         y: -self.height - 8px;
         close-policy: close-on-click-outside;
@@ -196,7 +210,7 @@ export component OverflowMenu inherits Rectangle {
             height: parent.height;
             clicked => {
                 pop.close();
-                root.speed-flyout-open = false;
+                root.speed-flyout-open = false; root.sleep-flyout-open = false;
                 PopupHighlight.id = "";
             }
         }
@@ -204,9 +218,11 @@ export component OverflowMenu inherits Rectangle {
         // Speed flyout — left column, bottom-anchored (its bottom aligns
         // with the menu column's bottom, 8 px above the trigger), grows
         // upward. Mounted only while open so the 12 rows aren't built when
-        // collapsed.
+        // collapsed. Right-aligned within the shared (wider) left column so
+        // the `gap` to the menu column holds regardless of which flyout is
+        // the widest.
         if root.speed-flyout-open: SpeedFlyout {
-            x: 0;
+            x: root.left-col-w - root.flyout-w;
             y: parent.height - root.flyout-h;
             width: root.flyout-w;
             height: root.flyout-h;
@@ -214,7 +230,31 @@ export component OverflowMenu inherits Rectangle {
             pick(v) => {
                 Player.set-playback-speed(v);
                 pop.close();
-                root.speed-flyout-open = false;
+                root.speed-flyout-open = false; root.sleep-flyout-open = false;
+                PopupHighlight.id = "";
+            }
+        }
+
+        // Sleep-timer flyout — same left column as the speed flyout (mutually
+        // exclusive). Presets apply + close; the ±stepper's Start pill arms a
+        // custom duration (seconds) + closes.
+        if root.sleep-flyout-open: SleepTimerFlyout {
+            x: root.left-col-w - root.sleep-flyout-w;
+            y: parent.height - root.sleep-flyout-h;
+            width: root.sleep-flyout-w;
+            height: root.sleep-flyout-h;
+            active-total-seconds: Player.sleep-timer-total-seconds;
+            track-end-active: Player.vm.sleep_at_track_end;
+            pick(m) => {
+                Player.set-sleep-timer(m);
+                pop.close();
+                root.speed-flyout-open = false; root.sleep-flyout-open = false;
+                PopupHighlight.id = "";
+            }
+            start-custom(secs) => {
+                Player.set-sleep-timer-seconds(secs);
+                pop.close();
+                root.speed-flyout-open = false; root.sleep-flyout-open = false;
                 PopupHighlight.id = "";
             }
         }
@@ -234,7 +274,7 @@ export component OverflowMenu inherits Rectangle {
             if PopupHighlight.id == "overflow": FocusLossWatcher {
                 close => {
                     pop.close();
-                    root.speed-flyout-open = false;
+                    root.speed-flyout-open = false; root.sleep-flyout-open = false;
                     PopupHighlight.id = "";
                 }
             }
@@ -255,6 +295,29 @@ export component OverflowMenu inherits Rectangle {
                     active: root.speed-flyout-open;
                     clicked => {
                         root.speed-flyout-open = !root.speed-flyout-open;
+                        root.sleep-flyout-open = false;
+                        PopupHighlight.id = "overflow";
+                    }
+                }
+
+                // Permanent Sleep-timer row — opens the preset flyout to the
+                // left (mutually exclusive with the speed flyout). Does NOT
+                // close the popup; re-asserts the highlight id. Trailing text
+                // shows the live countdown, or "Track end" while the
+                // end-of-track mode is armed (from `vm.sleep_at_track_end`).
+                OverflowRow {
+                    icon: "bedtime";
+                    label: @tr("Sleep timer");
+                    trailing-text: Player.vm.sleep_at_track_end
+                        ? @tr("Track end")
+                        : (Player.sleep-timer-total-seconds > 0 ? Player.sleep-timer-remaining : "");
+                    trailing-icon: "chevron_left";
+                    active: root.sleep-flyout-open
+                        || Player.sleep-timer-total-seconds > 0
+                        || Player.vm.sleep_at_track_end;
+                    clicked => {
+                        root.sleep-flyout-open = !root.sleep-flyout-open;
+                        root.speed-flyout-open = false;
                         PopupHighlight.id = "overflow";
                     }
                 }
@@ -271,7 +334,7 @@ export component OverflowMenu inherits Rectangle {
                     active: Equalizer.enabled;
                     clicked => {
                         pop.close();
-                        root.speed-flyout-open = false;
+                        root.speed-flyout-open = false; root.sleep-flyout-open = false;
                         PopupHighlight.id = "";
                         Dialog.kind = "equalizer";
                         Dialog.title = @tr("Equalizer");
@@ -293,7 +356,7 @@ export component OverflowMenu inherits Rectangle {
                     active: ReplayGain.enabled;
                     clicked => {
                         pop.close();
-                        root.speed-flyout-open = false;
+                        root.speed-flyout-open = false; root.sleep-flyout-open = false;
                         PopupHighlight.id = "";
                         Dialog.kind = "replaygain";
                         Dialog.title = @tr("ReplayGain");
@@ -357,32 +420,32 @@ export component OverflowMenu inherits Rectangle {
                     active: Player.vm.track.is_favorite;
                     filled: Player.vm.track.is_favorite;
                     button-enabled: Player.vm.has_track;
-                    clicked => { Player.toggle-favorite(); pop.close(); root.speed-flyout-open = false; PopupHighlight.id = ""; }
+                    clicked => { Player.toggle-favorite(); pop.close(); root.speed-flyout-open = false; root.sleep-flyout-open = false; PopupHighlight.id = ""; }
                 }
                 if Settings.overflow-repeat: OverflowRow {
                     icon: Player.queue.repeat_mode == "one" ? "repeat_one" : "repeat";
                     label: @tr("Repeat");
                     active: Player.queue.repeat_mode != "off";
-                    clicked => { Player.cycle-repeat(); pop.close(); root.speed-flyout-open = false; PopupHighlight.id = ""; }
+                    clicked => { Player.cycle-repeat(); pop.close(); root.speed-flyout-open = false; root.sleep-flyout-open = false; PopupHighlight.id = ""; }
                 }
                 if Settings.overflow-shuffle: OverflowRow {
                     icon: "shuffle";
                     label: @tr("Shuffle");
                     active: Player.queue.shuffle;
-                    clicked => { Player.toggle-shuffle(); pop.close(); root.speed-flyout-open = false; PopupHighlight.id = ""; }
+                    clicked => { Player.toggle-shuffle(); pop.close(); root.speed-flyout-open = false; root.sleep-flyout-open = false; PopupHighlight.id = ""; }
                 }
                 if WindowChrome.always-on-top-supported && Settings.overflow-pin: OverflowRow {
                     icon: "push_pin";
                     label: WindowChrome.always-on-top-active ? @tr("Unpin from Top") : @tr("Pin on Top");
                     active: WindowChrome.always-on-top-active;
                     filled: WindowChrome.always-on-top-active;
-                    clicked => { WindowChrome.toggle-always-on-top(); pop.close(); root.speed-flyout-open = false; PopupHighlight.id = ""; }
+                    clicked => { WindowChrome.toggle-always-on-top(); pop.close(); root.speed-flyout-open = false; root.sleep-flyout-open = false; PopupHighlight.id = ""; }
                 }
                 if Settings.overflow-queue: OverflowRow {
                     icon: "queue_music";
                     label: @tr("Queue");
                     active: Queue.open;
-                    clicked => { Queue.open = !Queue.open; pop.close(); root.speed-flyout-open = false; PopupHighlight.id = ""; }
+                    clicked => { Queue.open = !Queue.open; pop.close(); root.speed-flyout-open = false; root.sleep-flyout-open = false; PopupHighlight.id = ""; }
                 }
             }
         }
