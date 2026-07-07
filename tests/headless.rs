@@ -7,8 +7,9 @@
 //! - Uses `XDG_DATA_HOME` to redirect `dirs::data_dir()` so the prod path code
 //!   is exercised verbatim.
 //! - `AppState::init` opens the default audio device (rodio); machines without
-//!   audio will fail here. Phase 1 accepts that — the headless smoke test runs
-//!   on a dev machine, not headless CI yet.
+//!   audio will fail here. CI provisions an in-kernel `snd-dummy` sound card and
+//!   points ALSA's default PCM at it (see the `test` job in
+//!   `.github/workflows/pr-validation.yml`), so this runs headless there too.
 
 use std::path::PathBuf;
 
