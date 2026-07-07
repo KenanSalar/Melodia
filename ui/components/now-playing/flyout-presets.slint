@@ -1,0 +1,61 @@
+// Single source of truth for the overflow menu's two left-column flyouts:
+// the preset lists themselves plus the row/chrome metrics the host's
+// fixed-reserve geometry math needs. `overflow-menu.slint` computes each
+// flyout's reserved height from `list.length` here, so adding or removing a
+// preset can no longer clip the popup.
+
+// One preset in the speed list. `value` is the multiplier handed to
+// `Player.set-playback-speed`; `label` is the (untranslated, numeric)
+// display token. Kept in lock-step with `current-speed-label()` in
+// `overflow-menu.slint`, which maps the live `vm.playback_speed` back to
+// the same label for the collapsed "Speed" row.
+export struct SpeedPreset {
+    value: float,
+    label: string,
+}
+
+// One preset in the sleep-timer list. `value` is the minutes argument handed
+// to `Player.set-sleep-timer` (0 = off, > 0 = duration, -1 = "End of current
+// track"); `label` is the translated display string.
+export struct SleepPreset {
+    value: int,
+    label: string,
+}
+
+export global SpeedPresets {
+    // Fine 0.25 steps from 0.25× up to the player's 2× cap (rodio's naive
+    // speed shifts pitch, so beyond 2× is chipmunk territory). Mirror any
+    // change in `current-speed-label()` in `overflow-menu.slint`.
+    out property <[SpeedPreset]> list: [
+        { value: 0.25, label: "0.25x" },
+        { value: 0.5,  label: "0.5x" },
+        { value: 0.75, label: "0.75x" },
+        { value: 1.0,  label: "1x" },
+        { value: 1.25, label: "1.25x" },
+        { value: 1.5,  label: "1.5x" },
+        { value: 1.75, label: "1.75x" },
+        { value: 2.0,  label: "2x" },
+    ];
+}
+
+export global SleepPresets {
+    // `-1` = "End of track"; `0` = off.
+    out property <[SleepPreset]> list: [
+        { value: 0,   label: @tr("Off") },
+        { value: 15,  label: @tr("15 min") },
+        { value: 30,  label: @tr("30 min") },
+        { value: 45,  label: @tr("45 min") },
+        { value: 60,  label: @tr("60 min") },
+        { value: 90,  label: @tr("90 min") },
+        { value: -1,  label: @tr("End of track") },
+    ];
+}
+
+export global FlyoutMetrics {
+    // Height of one `FlyoutOption` row (and the sleep flyout's stepper /
+    // Start-pill rows, which match it for a uniform rhythm).
+    out property <length> option-row-h: 32px;
+    // Vertical chrome allowance per flyout: 8 px inner pad + 2 px border
+    // + 2 px slack — the same allowance the menu column uses.
+    out property <length> chrome-h: 12px;
+}

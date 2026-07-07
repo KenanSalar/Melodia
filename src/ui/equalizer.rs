@@ -74,11 +74,8 @@ pub fn install_equalizer(ui: &AppWindow, state: &AppState) {
         let state = state.clone();
         eq.on_set_enabled(move |on| {
             library::playback::player_set_eq_enabled(&state.playback_ctx(), on);
-            let s = state.clone();
-            state.runtime.spawn_blocking(move || {
-                if let Err(e) = library::settings::set_eq_enabled(&s, on) {
-                    log::warn!("persist eq_enabled: {e}");
-                }
+            state.persist_blocking("persist eq_enabled", move |s| {
+                library::settings::set_eq_enabled(s, on)
             });
         });
     }
@@ -110,15 +107,12 @@ pub fn install_equalizer(ui: &AppWindow, state: &AppState) {
                 model.set_row_data(i, equalizer::clamp_gain(db));
             }
             let gains: Vec<f32> = model.iter().collect();
-            let s = state.clone();
-            state.runtime.spawn_blocking(move || {
-                if let Err(e) = library::settings::set_eq_band_gains_and_preset(
-                    &s,
+            state.persist_blocking("persist eq band gains + preset", move |s| {
+                library::settings::set_eq_band_gains_and_preset(
+                    s,
                     &gains,
                     equalizer::CUSTOM_PRESET.to_owned(),
-                ) {
-                    log::warn!("persist eq band gains + preset: {e}");
-                }
+                )
             });
         });
     }
@@ -135,11 +129,8 @@ pub fn install_equalizer(ui: &AppWindow, state: &AppState) {
             let name = preset.name.to_owned();
             model.set_vec(gains.to_vec());
             library::playback::player_set_eq_gains(&state.playback_ctx(), &gains);
-            let s = state.clone();
-            state.runtime.spawn_blocking(move || {
-                if let Err(e) = library::settings::set_eq_band_gains_and_preset(&s, &gains, name) {
-                    log::warn!("persist eq band gains + preset: {e}");
-                }
+            state.persist_blocking("persist eq band gains + preset", move |s| {
+                library::settings::set_eq_band_gains_and_preset(s, &gains, name)
             });
         });
     }
@@ -195,11 +186,8 @@ pub fn install_equalizer(ui: &AppWindow, state: &AppState) {
         let state = state.clone();
         eq.on_commit_preamp(move |db| {
             let db = equalizer::clamp_preamp(db);
-            let s = state.clone();
-            state.runtime.spawn_blocking(move || {
-                if let Err(e) = library::settings::set_eq_preamp(&s, db) {
-                    log::warn!("persist eq_preamp: {e}");
-                }
+            state.persist_blocking("persist eq_preamp", move |s| {
+                library::settings::set_eq_preamp(s, db)
             });
         });
     }

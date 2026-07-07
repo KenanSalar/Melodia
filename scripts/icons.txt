@@ -7,6 +7,7 @@ arrow_drop_up
 artist
 auto_awesome
 balance
+bedtime
 brush
 category
 check
@@ -34,6 +35,7 @@ folder_off
 folder_open
 graphic_eq
 heart_minus
+history
 home
 image
 info
@@ -68,6 +70,8 @@ settings
 shield
 shuffle
 speed
+star
+star_border
 swap_horiz
 system_update
 theater_comedy

@@ -140,6 +140,24 @@ pub(super) fn wire(
     }
     {
         let s = state.clone();
+        g.on_set_row_rating(move |ids, rating| {
+            let id_vec = collect_track_ids(&ids);
+            if id_vec.is_empty() {
+                return;
+            }
+            let s = s.clone();
+            s.runtime.clone().spawn(async move {
+                if let Err(e) = library::ratings::set_rating(&s, id_vec, rating).await {
+                    log::warn!("search::set_rating: {e}");
+                }
+                // No optimistic local update — mirrors `on_toggle_row_favorite`
+                // above (Search is query-driven; the hover star reflects the
+                // new rating on the user's next search or page revisit).
+            });
+        });
+    }
+    {
+        let s = state.clone();
         let su = search_ui.clone();
         let weak = weak.clone();
         g.on_request_sort(move |field| {

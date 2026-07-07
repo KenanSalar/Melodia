@@ -969,3 +969,60 @@ msgid "{n} playlist exported"
 msgid_plural "{n} playlists exported"
 msgstr[0] "{n} Playlist exportiert"
 msgstr[1] "{n} Playlists exportiert"
+
+msgid "Rating"
+msgstr "Bewertung"
+
+msgid "ReplayGain"
+msgstr "ReplayGain"
+
+msgid "Enable ReplayGain"
+msgstr "ReplayGain aktivieren"
+
+msgid "Normalization mode"
+msgstr "Normalisierungsmodus"
+
+msgid "Track"
+msgstr "Titel"
+
+msgid "Prevent clipping"
+msgstr "Übersteuerung verhindern"
+
+msgid "ReplayGain only affects tracks that already have loudness tags. Scan your library with a tool like rsgain or loudgain to add them."
+msgstr "ReplayGain wirkt sich nur auf Titel aus, die bereits Lautstärke-Tags haben. Scanne deine Bibliothek mit einem Werkzeug wie rsgain oder loudgain, um sie hinzuzufügen."
+
+msgid "Recently Played"
+msgstr "Zuletzt gespielt"
+
+msgid "Filter recently played…"
+msgstr "Zuletzt gespielte filtern…"
+
+msgid "No recently played tracks"
+msgstr "Keine zuletzt gespielten Titel"
+
+msgid "Sleep timer"
+msgstr "Einschlaf-Timer"
+
+msgid "15 min"
+msgstr "15 Min."
+
+msgid "30 min"
+msgstr "30 Min."
+
+msgid "45 min"
+msgstr "45 Min."
+
+msgid "60 min"
+msgstr "60 Min."
+
+msgid "90 min"
+msgstr "90 Min."
+
+msgid "End of track"
+msgstr "Titelende"
+
+msgid "Track end"
+msgstr "Titelende"
+
+msgid "Start"
+msgstr "Starten"

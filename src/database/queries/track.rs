@@ -1,5 +1,7 @@
 use std::collections::HashMap;
 
+use sqlx::AssertSqlSafe;
+
 use crate::database::{chunked_in_query, DbPool};
 use crate::entities::track;
 use crate::error::AppError;
@@ -55,7 +57,7 @@ pub async fn get_all_tracks(
 ) -> Result<Vec<track::Track>, AppError> {
     let order_by = track_list_order_by(sort_by.as_deref(), sort_dir.as_deref());
     let sql = format!("SELECT * FROM tracks ORDER BY {order_by}");
-    let tracks = sqlx::query_as::<_, track::Track>(&sql)
+    let tracks = sqlx::query_as::<_, track::Track>(AssertSqlSafe(sql))
         .fetch_all(db.read())
         .await?;
     Ok(tracks)
@@ -131,7 +133,7 @@ pub async fn get_track_summary_by_id(
 ) -> Result<Option<track::TrackSummary>, AppError> {
     let cols = track::track_summary_columns();
     let sql = format!("SELECT {cols} FROM tracks WHERE id = ? LIMIT 1");
-    let row: Option<track::TrackSummary> = sqlx::query_as::<_, track::TrackSummary>(&sql)
+    let row: Option<track::TrackSummary> = sqlx::query_as::<_, track::TrackSummary>(AssertSqlSafe(sql))
         .bind(id)
         .fetch_optional(db.read())
         .await?;
@@ -148,7 +150,7 @@ pub async fn get_track_meta(
 ) -> Result<Option<track::TrackMeta>, AppError> {
     let cols = track::track_meta_columns();
     let sql = format!("SELECT {cols} FROM tracks WHERE id = ? LIMIT 1");
-    let row: Option<track::TrackMeta> = sqlx::query_as::<_, track::TrackMeta>(&sql)
+    let row: Option<track::TrackMeta> = sqlx::query_as::<_, track::TrackMeta>(AssertSqlSafe(sql))
         .bind(id)
         .fetch_optional(db.read())
         .await?;
@@ -199,7 +201,7 @@ pub async fn get_all_tracks_for_list(
     let cols = track::track_list_columns();
     let order_by = track_list_order_by(sort_by.as_deref(), sort_dir.as_deref());
     let sql = format!("SELECT {cols} FROM tracks ORDER BY {order_by}");
-    let tracks = sqlx::query_as::<_, track::TrackListRow>(&sql)
+    let tracks = sqlx::query_as::<_, track::TrackListRow>(AssertSqlSafe(sql))
         .fetch_all(db.read())
         .await?;
     Ok(tracks)
@@ -209,7 +211,7 @@ pub async fn get_all_tracks_for_list(
 pub async fn get_tracks_by_album_for_list(db: &DbPool, album_id: i64) -> Result<Vec<track::TrackListRow>, AppError> {
     let cols = track::track_list_columns();
     let tracks = sqlx::query_as::<_, track::TrackListRow>(
-        &format!("SELECT {cols} FROM tracks WHERE album_id = ? ORDER BY disc_number ASC, track_number ASC")
+        AssertSqlSafe(format!("SELECT {cols} FROM tracks WHERE album_id = ? ORDER BY disc_number ASC, track_number ASC"))
     )
     .bind(album_id)
     .fetch_all(db.read())
@@ -221,7 +223,7 @@ pub async fn get_tracks_by_album_for_list(db: &DbPool, album_id: i64) -> Result<
 pub async fn get_tracks_by_artist_for_list(db: &DbPool, artist_id: i64) -> Result<Vec<track::TrackListRow>, AppError> {
     let cols = track::track_list_columns();
     let tracks = sqlx::query_as::<_, track::TrackListRow>(
-        &format!("SELECT {cols} FROM tracks WHERE artist_id = ? ORDER BY sort_key COLLATE NOCASE ASC")
+        AssertSqlSafe(format!("SELECT {cols} FROM tracks WHERE artist_id = ? ORDER BY sort_key COLLATE NOCASE ASC"))
     )
     .bind(artist_id)
     .fetch_all(db.read())
@@ -233,7 +235,7 @@ pub async fn get_tracks_by_artist_for_list(db: &DbPool, artist_id: i64) -> Resul
 pub async fn get_tracks_by_genre_for_list(db: &DbPool, genre_id: i64) -> Result<Vec<track::TrackListRow>, AppError> {
     let cols = track::track_list_columns();
     let tracks = sqlx::query_as::<_, track::TrackListRow>(
-        &format!("SELECT {cols} FROM tracks WHERE genre_id = ? ORDER BY sort_key COLLATE NOCASE ASC")
+        AssertSqlSafe(format!("SELECT {cols} FROM tracks WHERE genre_id = ? ORDER BY sort_key COLLATE NOCASE ASC"))
     )
     .bind(genre_id)
     .fetch_all(db.read())
@@ -281,7 +283,29 @@ pub async fn set_favorite(db: &DbPool, ids: &[i64], favorite: bool) -> Result<()
         let sql = format!(
             "UPDATE tracks SET is_favorite = ? WHERE id IN ({placeholders})"
         );
-        let mut query = sqlx::query(&sql).persistent(false).bind(favorite);
+        let mut query = sqlx::query(AssertSqlSafe(sql)).persistent(false).bind(favorite);
+        for id in chunk {
+            query = query.bind(*id);
+        }
+        query.execute(db.write()).await?;
+    }
+    Ok(())
+}
+
+/// Set the star `rating` (0–5) for one or more tracks by ID. Mirrors
+/// [`set_favorite`]: the value is clamped 0–5 by the caller
+/// (`library::ratings::set_rating`), chunked to respect the `SQLite` bind
+/// limit (one slot reserved for the `rating` bind), and run non-persistently
+/// since the placeholder count is dynamic.
+pub async fn set_rating(db: &DbPool, ids: &[i64], rating: i32) -> Result<(), AppError> {
+    if ids.is_empty() {
+        return Ok(());
+    }
+    // Reserve 1 bind slot for the `rating` parameter itself.
+    for chunk in ids.chunks(crate::database::SQLITE_BIND_LIMIT - 1) {
+        let placeholders = crate::database::placeholders(chunk.len());
+        let sql = format!("UPDATE tracks SET rating = ? WHERE id IN ({placeholders})");
+        let mut query = sqlx::query(AssertSqlSafe(sql)).persistent(false).bind(rating);
         for id in chunk {
             query = query.bind(*id);
         }
@@ -300,7 +324,7 @@ pub async fn get_favorite_tracks_for_list(
     let order_by = track_list_order_by(sort_by.as_deref(), sort_dir.as_deref());
     let sql =
         format!("SELECT {cols} FROM tracks WHERE is_favorite = TRUE ORDER BY {order_by}");
-    let tracks = sqlx::query_as::<_, track::TrackListRow>(&sql)
+    let tracks = sqlx::query_as::<_, track::TrackListRow>(AssertSqlSafe(sql))
         .fetch_all(db.read())
         .await?;
     Ok(tracks)
@@ -346,7 +370,7 @@ pub async fn get_tracks_in_directory(
     let sql = format!(
         "SELECT {cols} FROM tracks WHERE file_path LIKE ? ESCAPE '\\' AND file_path NOT LIKE ? ESCAPE '\\'"
     );
-    let tracks = sqlx::query_as::<_, track::TrackListRow>(&sql)
+    let tracks = sqlx::query_as::<_, track::TrackListRow>(AssertSqlSafe(sql))
         .bind(&pattern)
         .bind(&subdir_pattern)
         .fetch_all(db.read())
@@ -367,7 +391,9 @@ pub async fn get_track_ids_by_paths(
     )
     .await?;
 
-    Ok(rows.into_iter().map(|(id, path)| (path, id)).collect())
+    let mut map = HashMap::with_capacity(rows.len());
+    map.extend(rows.into_iter().map(|(id, path)| (path, id)));
+    Ok(map)
 }
 
 /// Look up track IDs by BLAKE3 `file_hash`. Returns a map from `file_hash`
@@ -391,7 +417,9 @@ pub async fn get_track_ids_by_hashes(
     )
     .await?;
 
-    Ok(rows.into_iter().map(|(id, hash)| (hash, id)).collect())
+    let mut map = HashMap::with_capacity(rows.len());
+    map.extend(rows.into_iter().map(|(id, hash)| (hash, id)));
+    Ok(map)
 }
 
 /// Find groups of tracks that share the same `file_hash` (duplicates).
@@ -475,7 +503,7 @@ pub async fn batch_update_hashes(
                     date_modified = (SELECT m FROM v WHERE v.id = tracks.id)
               WHERE id IN (SELECT id FROM v)"
         );
-        let mut q = sqlx::query(&sql).persistent(false);
+        let mut q = sqlx::query(AssertSqlSafe(sql)).persistent(false);
         for (id, hash, mtime) in chunk {
             q = q.bind(id).bind(hash).bind(mtime);
         }
@@ -535,6 +563,61 @@ pub async fn get_most_played_favorites(
     .bind(limit)
     .fetch_all(db.read())
     .await?;
+    Ok(rows)
+}
+
+/// Top N tracks by play count across the whole library (only those with
+/// `play_count` > 0). Sibling of [`get_most_played_favorites`] without the
+/// `is_favorite` filter — drives the Recently-Played view's "Most Played"
+/// strip. Reuses the generic `MostPlayedFavorite` card projection.
+pub async fn get_most_played(
+    db: &DbPool,
+    limit: i64,
+) -> Result<Vec<track::MostPlayedFavorite>, AppError> {
+    let rows = sqlx::query_as::<_, track::MostPlayedFavorite>(
+        "SELECT id, title, artist, artwork_path, play_count, duration_ms \
+         FROM tracks \
+         WHERE play_count > 0 \
+         ORDER BY play_count DESC \
+         LIMIT ?",
+    )
+    .bind(limit)
+    .fetch_all(db.read())
+    .await?;
+    Ok(rows)
+}
+
+/// The N most-recently-played tracks (list-view projection), newest first.
+///
+/// Ordering rides on `last_played` (RFC-3339 UTC, written by the play-count
+/// flusher / `update_play_count`). Lexical `TEXT` order == chronological order,
+/// so `ORDER BY last_played DESC` is correct: the fixed-width date/time prefix
+/// and constant `+00:00` offset aside, `chrono`'s `to_rfc3339` emits
+/// *variable*-width fractional seconds (`AutoSi` → 0/3/6/9 digits), but that is
+/// still order-safe — the offset `'+'` (0x2B) sorts below every digit, and
+/// `AutoSi` only ever drops trailing-zero fractional groups. Rows without a
+/// `last_played` (never played) are excluded — index-backed by the partial
+/// `idx_tracks_last_played`.
+///
+/// Returns the `TrackListRow` projection so the Recently-Played view can render
+/// through the shared `TrackList`; `last_played` itself is not selected (it is
+/// only the sort key). Membership is the top `limit` by recency — the view
+/// re-sorts/filters this set in memory, it never re-queries.
+pub async fn get_recently_played(
+    db: &DbPool,
+    limit: i64,
+) -> Result<Vec<track::TrackListRow>, AppError> {
+    let cols = track::track_list_columns();
+    let sql = format!(
+        "SELECT {cols} FROM tracks \
+         WHERE last_played IS NOT NULL \
+         ORDER BY last_played DESC \
+         LIMIT ?"
+    );
+    let rows = sqlx::query_as::<_, track::TrackListRow>(AssertSqlSafe(sql))
+        .bind(limit)
+        .fetch_all(db.read())
+        .await?;
     Ok(rows)
 }
 

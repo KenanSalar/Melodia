@@ -166,6 +166,7 @@ pub fn to_slint_track(t: &TrackSummary, cover_thumbs: &CoverThumbs) -> TrackSumm
         artwork_path: SharedString::from(t.artwork_path.as_deref().unwrap_or("")),
         cover_img,
         is_favorite: t.is_favorite,
+        rating: t.rating,
     }
 }
 
@@ -192,6 +193,7 @@ pub fn to_slint_player_vm(
         is_muted: vm.is_muted,
         playback_speed: speed_to_f32(vm.playback_speed),
         gapless: vm.gapless_enabled,
+        sleep_at_track_end: vm.sleep_at_track_end,
         has_next: vm.has_next,
         has_previous: vm.has_previous,
     }

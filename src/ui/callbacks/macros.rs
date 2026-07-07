@@ -81,6 +81,47 @@ macro_rules! wire_sync_pb {
     }};
 }
 
+/// Wire an `on_toggle_row_favorite` / `on_set_row_rating`-shaped callback:
+/// collect the track ids with `$collect`, bail on an empty set, hop onto the
+/// runtime, run the async `library::*` setter (warn + abort on error), then
+/// run the `after` block for the optimistic per-view UI patch. The Slint side
+/// passes an `[int]` so a single-row click and a multi-select batch share one
+/// code path; `$val` rebinds the callback's second argument (the flag /
+/// rating) for use inside `after`.
+///
+/// `captures:` lists the existing local bindings the `after` block needs —
+/// each is cloned once into the callback and once per invocation, matching
+/// the hand-rolled shape this replaces. The Search results surface stays
+/// hand-rolled on purpose: it is deliberately NON-optimistic (see the
+/// comments at its call site), which this macro does not model.
+macro_rules! wire_row_flag {
+    (
+        $target:expr, $method:ident, $state:expr, $label:literal,
+        $setter:path, $collect:path,
+        captures: [$($cap:ident),* $(,)?],
+        after: |$ids:ident, $val:ident| $after:block
+    ) => {{
+        let s = $state.clone();
+        $(let $cap = $cap.clone();)*
+        $target.$method(move |ids, value| {
+            let $ids = $collect(&ids);
+            if $ids.is_empty() {
+                return;
+            }
+            let s = s.clone();
+            $(let $cap = $cap.clone();)*
+            s.runtime.clone().spawn(async move {
+                if let Err(e) = $setter(&s, $ids.clone(), value).await {
+                    log::warn!("{}: {e}", $label);
+                    return;
+                }
+                let $val = value;
+                $after
+            });
+        });
+    }};
+}
+
 /// Reset a detail global's hero-Image properties (`cover` plus the
 /// dual-slot `blur-img-a` / `blur-img-b`) to `Image::default()` and clear
 /// `has-blur`, so the backing `SharedPixelBuffer` Arcs release and `FemtoVG`
@@ -97,7 +138,7 @@ macro_rules! release_detail_hero_images {
 }
 
 pub(super) use {
-    release_detail_hero_images, spawn_logged, spawn_logged_sync, wire_pb, wire_sync,
-    wire_sync_pb,
+    release_detail_hero_images, spawn_logged, spawn_logged_sync, wire_pb, wire_row_flag,
+    wire_sync, wire_sync_pb,
 };
 

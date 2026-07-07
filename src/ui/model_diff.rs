@@ -16,7 +16,7 @@
 //! strictly cheaper than a reset, and it ensures field updates always
 //! propagate.
 
-use slint::{Model, VecModel};
+use slint::{Model, ModelRc, VecModel};
 
 /// Apply `new_rows` to `vec_model`, preferring per-row `set_row_data` when
 /// `new_rows` and `vec_model` describe the same row identities in the same
@@ -50,4 +50,15 @@ where
         }
     }
     vec_model.set_vec(new_rows);
+}
+
+/// Empty a `VecModel<T>`-backed model in place, logging a downcast miss under
+/// `label`. Section-leave teardown uses this so the model's `SharedString`s /
+/// row structs drop on the same UI tick as the Image-property release.
+pub fn clear_vec_model<T: Clone + 'static>(model: &ModelRc<T>, label: &str) {
+    if let Some(vm) = model.as_any().downcast_ref::<VecModel<T>>() {
+        vm.set_vec(Vec::new());
+    } else {
+        log::warn!("{label}: VecModel downcast failed");
+    }
 }

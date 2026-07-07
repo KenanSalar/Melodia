@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 
 use super::event_sink::PlayerSinks;
 use super::queue::QueueState;
+use super::replaygain::TrackReplayGain;
 use crate::entities::track::TrackSummary;
 
 use super::types::{PersistableQueue, PlaybackStatus, RepeatMode};
@@ -31,6 +32,13 @@ pub struct PlayerState {
     pub pre_mute_volume: u32,
     pub playback_speed: f64,
     pub gapless_enabled: bool,
+    /// Sleep-timer "End of current track" mode: when armed, the playback
+    /// monitor pauses at the next end-of-stream boundary instead of advancing
+    /// the queue. Session-only (never persisted). Set via
+    /// [`crate::library::playback::player_set_pause_at_track_end`]; surfaced to
+    /// the UI as `sleep_at_track_end` on the light `ViewModel` so the overflow
+    /// menu's sleep row auto-clears once the monitor fires and disarms it.
+    pub pause_after_current_track: bool,
     pub queue: QueueState,
 }
 
@@ -46,6 +54,7 @@ impl Default for PlayerState {
             pre_mute_volume: 100,
             playback_speed: 1.0,
             gapless_enabled: true,
+            pause_after_current_track: false,
             queue: QueueState::default(),
         }
     }
@@ -99,6 +108,7 @@ pub struct PlayerViewModel {
     pub is_muted: bool,
     pub playback_speed: f64,
     pub gapless_enabled: bool,
+    pub sleep_at_track_end: bool,
     pub queue_tracks: Vec<Arc<TrackSummary>>,
     pub queue_index: i32,
     pub shuffle_enabled: bool,
@@ -123,6 +133,7 @@ pub struct PlayerViewModelLight {
     pub is_muted: bool,
     pub playback_speed: f64,
     pub gapless_enabled: bool,
+    pub sleep_at_track_end: bool,
     pub has_next: bool,
     pub has_previous: bool,
 }
@@ -145,6 +156,8 @@ pub enum PlayerAction {
         volume: f64,
         speed: f64,
         start_position_ms: Option<u64>,
+        /// This track's baked `ReplayGain` tag values, applied by the audio source.
+        replaygain: TrackReplayGain,
     },
     Resume,
     Pause,
@@ -198,6 +211,7 @@ impl PlayerState {
             is_muted: self.is_muted,
             playback_speed: self.playback_speed,
             gapless_enabled: self.gapless_enabled,
+            sleep_at_track_end: self.pause_after_current_track,
             queue_tracks: self.queue.tracks_in_play_order(),
             queue_index: super::queue::current_index_to_i32(self.queue.current_index),
             shuffle_enabled: self.queue.shuffle_enabled,
@@ -219,6 +233,7 @@ impl PlayerState {
             is_muted: self.is_muted,
             playback_speed: self.playback_speed,
             gapless_enabled: self.gapless_enabled,
+            sleep_at_track_end: self.pause_after_current_track,
             has_next: self.has_next(),
             has_previous: self.has_previous(),
         }
@@ -351,6 +366,34 @@ impl PlayerState {
         vec![PlayerAction::SetVolume(self.effective_volume())]
     }
 
+    /// Build actions when the current source drains to end-of-stream (the
+    /// playback monitor's `EndOfStream` branch). Normally advances the queue
+    /// (or stops at the end), but when the sleep-timer's "End of current track"
+    /// mode is armed it disarms the flag and stops instead of advancing —
+    /// leaving `current_track` at position 0 for replay-from-start. Always
+    /// counts a play for the track that just ended.
+    pub fn build_end_of_stream_actions(&mut self) -> Vec<PlayerAction> {
+        let mut actions = Vec::with_capacity(4);
+
+        if let Some(ref track) = self.current_track {
+            actions.push(PlayerAction::UpdatePlayCount(track.id));
+        }
+
+        if self.pause_after_current_track {
+            self.pause_after_current_track = false;
+            actions.extend(stop_end_of_queue(self));
+            return actions;
+        }
+
+        if let Some(track) = self.queue.advance().cloned() {
+            actions.extend(play_track_inner(self, track, None));
+        } else {
+            actions.extend(stop_end_of_queue(self));
+        }
+
+        actions
+    }
+
     /// Build actions for set-playback-speed command.
     pub fn build_set_speed_actions(&mut self, speed: f64) -> Vec<PlayerAction> {
         let speed = speed.clamp(MIN_SPEED, MAX_SPEED);
@@ -378,6 +421,7 @@ pub fn play_track_inner(
     let file_path = track.file_path.clone();
     let volume = state.effective_volume();
     let speed = state.playback_speed;
+    let replaygain = track.replaygain();
     state.current_track = Some(track);
 
     // Gapless preload is staged late (by the playback monitor) when the
@@ -389,6 +433,7 @@ pub fn play_track_inner(
         volume,
         speed,
         start_position_ms: clamped_pos,
+        replaygain,
     }]
 }
 
@@ -460,6 +505,36 @@ where
     let _ = sinks.view_model.send(Some(vm_light));
 
     result
+}
+
+/// If `current_track` is one of `ids`, apply `apply` to its cached
+/// [`TrackSummary`] and emit so the Now-Playing surfaces reflect a per-track
+/// field edited from a list row (favorite heart, rating stars). Skips the emit
+/// entirely when the playing track isn't in the set (the common case) to avoid
+/// a spurious view-model publish.
+pub fn sync_current_track_if_in(
+    state: &PlayerStateHandle,
+    sinks: &PlayerSinks,
+    ids: &[i64],
+    apply: impl FnOnce(&mut TrackSummary),
+) {
+    let affects_current = {
+        let g = lock_state(state);
+        g.current_track.as_ref().is_some_and(|t| ids.contains(&t.id))
+    };
+    if !affects_current {
+        return;
+    }
+    with_state_emit(state, sinks, |s| {
+        // Re-check the id under the emit lock — the track may have advanced
+        // between the pre-check and here.
+        if let Some(track) = s.current_track.as_mut()
+            && ids.contains(&track.id)
+        {
+            apply(Arc::make_mut(track));
+        }
+        Vec::<PlayerAction>::new()
+    });
 }
 
 /// Restore queue from persisted data. Shared by startup (lib.rs) and `queue_load` command.

@@ -1,8 +1,10 @@
 pub mod actions;
+pub(crate) mod dsp;
 pub mod equalizer;
 pub mod event_sink;
 pub mod handlers;
 pub mod queue;
+pub mod replaygain;
 pub mod rodio_backend;
 pub mod state;
 pub mod types;

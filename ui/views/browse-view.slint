@@ -1,12 +1,12 @@
 import { ListView, ScrollView } from "std-widgets.slint";
 import { Theme } from "../theme.slint";
-import { Browse, Nav, Player } from "../globals.slint";
+import { Browse, Nav, Player, CompositeScroll } from "../globals.slint";
 import { MaterialIcon } from "../components/material-icon.slint";
 import { IconButton } from "../components/icon-button.slint";
 import { ActionPill, PillLabel, PillButton, PillDivider } from "../components/action-pill.slint";
 import { ColumnTogglePopup } from "../components/track-list/column-toggle-popup.slint";
 import { TrackList } from "../components/track-list/track-list.slint";
-import { OverlayScrollbar } from "../components/overlay-scrollbar.slint";
+import { CompositeScrollbars } from "../components/composite-scrollbars.slint";
 
 // One folder row in the Browse list. Folder icon + name + right chevron.
 // Click → `Browse.open-folder(path)`.
@@ -125,10 +125,13 @@ component BreadcrumbSegment inherits Rectangle {
 // view pattern. The TrackList is capped at the outer viewport height
 // (`min` in its `height` binding) so its inner ListView virtualizes to
 // ~visible rows; the outer ScrollView's own travel covers the folder
-// section, and the unified scrollbar composes both travels (wheel
-// handoff between the regions is native — a Slint Flickable at its
-// scroll edge forwards wheel events to the parent). The folder
-// `ListView` stays sized to its row count: folder rows are light
+// section, and the unified scrollbar composes both travels. The mouse
+// WHEEL does NOT hand off between the nested scrollers natively — Slint's
+// inner ListView swallows the wheel at its edge, so a `hover-catch`
+// sentinel reports region hover to the winit MouseWheel filter, which
+// routes vertical wheel through the mounted `CompositeScrollbars`'
+// composite split (see CompositeScroll).
+// The folder `ListView` stays sized to its row count: folder rows are light
 // (icon + label, no popups) and directory listings are bounded.
 // The horizontal bar still drives `TrackList`'s internal column pan via
 // its `h-*` out properties. Both bars are siblings of the padded
@@ -272,6 +275,15 @@ export component BrowseView inherits Rectangle {
             vertical-stretch: 1;
             clip: true;
 
+            // Ancestor hover sentinel (see CompositeScroll). Wraps only the
+            // scroll region (not the sibling empty-state cards); forwards every
+            // event to the ScrollView child, so folder/row clicks and native
+            // horizontal scroll are unaffected — only its `has-hover` is read.
+            hover-catch := TouchArea {
+                width: 100%;
+                height: 100%;
+                changed has-hover => { CompositeScroll.hovered = self.has-hover; }
+
             below-sv := ScrollView {
                 width: 100%;
                 height: 100%;
@@ -367,6 +379,7 @@ export component BrowseView inherits Rectangle {
                     play-next(ids) => { Browse.play-next(ids); }
                     add-to-queue(ids) => { Browse.add-to-queue(ids); }
                     toggle-row-favorite(ids, on) => { Browse.toggle-row-favorite(ids, on); }
+                    set-row-rating(ids, n) => { Browse.set-row-rating(ids, n); }
                     select-row(idx, id, sh, ct) => { Browse.select-row(idx, id, sh, ct); }
                     // Browse has no filter input — nothing to blur.
                     request-blur-search => { }
@@ -375,6 +388,7 @@ export component BrowseView inherits Rectangle {
                     go-to-genre(gid) => { Browse.go-to-genre(gid); }
                 }
                 }
+            }
             }
 
             // 1. Root view with no library folders configured.
@@ -413,7 +427,12 @@ export component BrowseView inherits Rectangle {
                     PillButton {
                         icon: "settings";
                         text: @tr("Open Settings");
-                        clicked => { Nav.selected-index = 8; }
+                        // Settings is nav index 9 (Recently-Played took 8).
+                        // Persist like every other nav entry so the tab sticks.
+                        clicked => {
+                            Nav.selected-index = 9;
+                            Nav.persist-selected-index(9);
+                        }
                     }
                 }
                 }
@@ -506,38 +525,27 @@ export component BrowseView inherits Rectangle {
     // the `TrackList`'s internal column pan via its `h-*` out properties.
     // `body` / `tl` are nested inside `vl`, so positions are taken via
     // `absolute-position` rather than plain `.y` / `.x`.
-    // Composite scroll math: the outer ScrollView's own travel covers
-    // the folder-section region (viewport minus visible height), the
-    // TrackList's inner ListView covers the track rows. The unified
-    // scrollbar spans both travels; drags split the offset at the
-    // boundary.
-    property <length> v-outer-max: max(0px, below-sv.viewport-height - below-sv.visible-height);
-    property <length> v-inner-max: max(0px, tl.v-viewport-height - tl.v-visible-height);
-
-    OverlayScrollbar {
-        horizontal: false;
-        x: parent.width - self.width;
-        y: body.absolute-position.y - root.absolute-position.y;
-        width: 10px;
-        height: body.height;
-        visible-size: below-sv.visible-height;
-        content-size: below-sv.visible-height + root.v-outer-max + root.v-inner-max;
-        offset: -below-sv.viewport-y + tl.v-offset;
-        scroll-to(o) => {
-            below-sv.viewport-y = -min(o, root.v-outer-max);
-            tl.set-v-offset(max(0px, o - root.v-outer-max));
-        }
-    }
-
-    OverlayScrollbar {
-        horizontal: true;
-        x: tl.absolute-position.x - root.absolute-position.x;
-        y: parent.height - self.height;
-        width: tl.width - 10px;
-        height: 10px;
-        visible-size: tl.h-visible-width;
-        content-size: tl.h-viewport-width;
-        offset: tl.h-offset;
-        scroll-to(o) => { tl.set-h-offset(o); }
+    // Composite scroll: unified vbar over the folder section + track rows,
+    // column-pan hbar, and the CompositeScroll wheel routing — owned by the
+    // shared component. The vbar band anchors to `body` here (no hero
+    // banner; the bar spans the whole below-breadcrumbs region).
+    CompositeScrollbars {
+        x: 0; y: 0;
+        width: 100%; height: 100%;
+        outer-viewport-y <=> below-sv.viewport-y;
+        outer-viewport-height: below-sv.viewport-height;
+        outer-visible-height: below-sv.visible-height;
+        inner-offset: tl.v-offset;
+        inner-viewport-height: tl.v-viewport-height;
+        inner-visible-height: tl.v-visible-height;
+        set-inner-offset(o) => { tl.set-v-offset(o); }
+        h-offset: tl.h-offset;
+        h-viewport-width: tl.h-viewport-width;
+        h-visible-width: tl.h-visible-width;
+        set-h-offset(o) => { tl.set-h-offset(o); }
+        v-region-y: body.absolute-position.y - root.absolute-position.y;
+        v-region-height: body.height;
+        h-region-x: tl.absolute-position.x - root.absolute-position.x;
+        h-region-width: tl.width;
     }
 }

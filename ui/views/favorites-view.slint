@@ -1,6 +1,6 @@
 import { ScrollView } from "std-widgets.slint";
 import { Theme } from "../theme.slint";
-import { Favorites, Player } from "../globals.slint";
+import { Favorites, Player, CompositeScroll } from "../globals.slint";
 import { CoverMosaic } from "../components/grid/cover-mosaic.slint";
 import { HorizontalCardStrip } from "../components/grid/horizontal-card-strip.slint";
 import { EntityCard } from "../components/grid/entity-card.slint";
@@ -9,8 +9,10 @@ import { SearchBar } from "../components/search-bar.slint";
 import { ActionPill, PillLabel, PillButton, PillDivider } from "../components/action-pill.slint";
 import { ColumnTogglePopup } from "../components/track-list/column-toggle-popup.slint";
 import { TrackList } from "../components/track-list/track-list.slint";
-import { OverlayScrollbar } from "../components/overlay-scrollbar.slint";
+import { CompositeScrollbars } from "../components/composite-scrollbars.slint";
 import { FilterThrottle } from "../components/filter-throttle.slint";
+import { CollapsibleSectionHeader } from "../components/collapsible-section-header.slint";
+import { HeroBlurBackdrop } from "../components/hero-blur-backdrop.slint";
 
 // The Favorites view (Nav sidebar index 2). Vertical regions:
 //   * Hero — compact (~160 px). Left-side live cover mosaic + right-
@@ -56,37 +58,18 @@ export component FavoritesView inherits Rectangle {
     }
 
     // --- Full-bleed hero blur backdrop ----------------------------------
-    // Behind everything else; matches DetailHeader's dual-slot crossfade
-    // contract (outgoing slot never cleared so mosaic refresh never
-    // flashes). Accent-tinted gradient floor shows through when there is
-    // no blur image (zero favorites / decode failure).
-    Rectangle {
+    // Behind everything else; the shared component owns the dual-slot
+    // crossfade contract (outgoing slot never cleared so mosaic refresh
+    // never flashes). Gradient floor shows through when there is no blur
+    // image (zero favorites / decode failure).
+    HeroBlurBackdrop {
         x: 0; y: 0;
         width: 100%; height: root.hero-height;
-        background: @linear-gradient(135deg,
-            Theme.accent.mix(Theme.base, 0.25),
-            Theme.base);
-    }
-    Image {
-        x: 0; y: 0;
-        width: 100%; height: root.hero-height;
-        source: Favorites.blur-img-a;
-        image-fit: ImageFit.cover;
-        opacity: (Favorites.has-blur && Favorites.blur-use-a) ? 1.0 : 0.0;
-        animate opacity { duration: Theme.dur-med; easing: ease-in-out; }
-    }
-    Image {
-        x: 0; y: 0;
-        width: 100%; height: root.hero-height;
-        source: Favorites.blur-img-b;
-        image-fit: ImageFit.cover;
-        opacity: (Favorites.has-blur && !Favorites.blur-use-a) ? 1.0 : 0.0;
-        animate opacity { duration: Theme.dur-med; easing: ease-in-out; }
-    }
-    Rectangle {
-        x: 0; y: 0;
-        width: 100%; height: root.hero-height;
-        background: Theme.crust.with-alpha(0.45);
+        blur-a: Favorites.blur-img-a;
+        blur-b: Favorites.blur-img-b;
+        use-a: Favorites.blur-use-a;
+        has-blur: Favorites.has-blur;
+        tint-start: Theme.accent.mix(Theme.base, 0.25);
     }
 
     private property <length> hero-height: 180px;
@@ -213,7 +196,7 @@ export component FavoritesView inherits Rectangle {
                         VerticalLayout {
                             alignment: center;
                             Text {
-                                text: "‎" + @tr("Favorites");
+                                text: "\u{200e}" + @tr("Favorites");
                                 color: Theme.text;
                                 font-size: 28px;
                                 font-weight: Theme.page-title-weight;
@@ -310,14 +293,28 @@ export component FavoritesView inherits Rectangle {
         // (`min` in its `height` binding), so its inner ListView
         // virtualizes to ~visible rows — the outer ScrollView's own
         // travel covers just the strips region, and the unified
-        // scrollbar composes both travels. Wheel handoff between the
-        // regions is native: a Slint Flickable at its scroll edge
-        // forwards wheel events to the parent, so scrolling up at the
-        // list top brings the strips back (the unified scroll UX
-        // matches the Tauri version the user is porting from).
+        // scrollbar composes both travels. The mouse WHEEL does NOT hand
+        // off between the two nested scrollers natively — Slint's inner
+        // ListView swallows the wheel at its top edge instead of bubbling
+        // to `below-sv` (see CompositeScroll). So `hover-catch` reports
+        // region hover to the winit MouseWheel filter, which routes
+        // vertical wheel through the mounted `CompositeScrollbars`'
+        // composite split; the scrollbar-drag path already composes both
+        // travels directly.
         below-hero := Rectangle {
             vertical-stretch: 1;
             clip: true;
+
+            // Ancestor hover sentinel (see CompositeScroll). Forwards every
+            // event to the ScrollView child — row clicks, drags and native
+            // horizontal scroll are unaffected; only its `has-hover` is
+            // observed. Empty-space clicks fall through to here (rows grab
+            // their own), reproducing the root backdrop's blur-on-empty-click.
+            hover-catch := TouchArea {
+                width: 100%;
+                height: 100%;
+                changed has-hover => { CompositeScroll.hovered = self.has-hover; }
+                clicked => { Favorites.blur-search-tick += 1; }
 
             below-sv := ScrollView {
                 width: 100%;
@@ -347,46 +344,10 @@ export component FavoritesView inherits Rectangle {
             HorizontalLayout {
                 alignment: start;
 
-                most-played-header-target := Rectangle {
-                    width: most-played-header-row.preferred-width;
-                    height: 28px;
-                    border-radius: self.height / 2;
-                    background: most-played-header-touch.has-hover
-                        ? Theme.surface1
-                        : transparent;
-                    animate background { duration: Theme.dur-fast; easing: ease-in-out; }
-
-                    most-played-header-row := HorizontalLayout {
-                        padding-left: 10px;
-                        padding-right: 10px;
-                        spacing: 2px;
-                        alignment: start;
-
-                        VerticalLayout {
-                            alignment: center;
-                            Text {
-                                text: @tr("Most Played");
-                                color: Theme.text;
-                                font-size: Theme.font-size-lg;
-                                font-weight: 600;
-                            }
-                        }
-                        VerticalLayout {
-                            alignment: center;
-                            MaterialIcon {
-                                name: Favorites.most-played-collapsed
-                                    ? "expand_more"
-                                    : "expand_less";
-                                icon-size: 20px;
-                                icon-color: Theme.subtext0;
-                            }
-                        }
-                    }
-
-                    most-played-header-touch := TouchArea {
-                        mouse-cursor: pointer;
-                        clicked => { Favorites.toggle-most-played-collapsed(); }
-                    }
+                CollapsibleSectionHeader {
+                    label: @tr("Most Played");
+                    collapsed: Favorites.most-played-collapsed;
+                    toggled => { Favorites.toggle-most-played-collapsed(); }
                 }
             }
 
@@ -431,55 +392,13 @@ export component FavoritesView inherits Rectangle {
             padding-bottom: Theme.pad-lg;
             spacing: Theme.pad-sm;
 
-            // Clickable header: "Favorite Artists" label + chevron.
-            // Hit area is the chevron + label only (compact), not
-            // the whole row width — clicking dead space to the right
-            // of the chevron shouldn't toggle. Chevron mirrors the
-            // app convention: down (`expand_more`) when collapsed,
-            // up (`expand_less`) when expanded.
             HorizontalLayout {
                 alignment: start;
 
-                fav-artists-header-target := Rectangle {
-                    width: fav-artists-header-row.preferred-width;
-                    height: 28px;
-                    border-radius: self.height / 2;
-                    background: fav-artists-header-touch.has-hover
-                        ? Theme.surface1
-                        : transparent;
-                    animate background { duration: Theme.dur-fast; easing: ease-in-out; }
-
-                    fav-artists-header-row := HorizontalLayout {
-                        padding-left: 10px;
-                        padding-right: 10px;
-                        spacing: 2px;
-                        alignment: start;
-
-                        VerticalLayout {
-                            alignment: center;
-                            Text {
-                                text: @tr("Favorite Artists");
-                                color: Theme.text;
-                                font-size: Theme.font-size-lg;
-                                font-weight: 600;
-                            }
-                        }
-                        VerticalLayout {
-                            alignment: center;
-                            MaterialIcon {
-                                name: Favorites.artists-collapsed
-                                    ? "expand_more"
-                                    : "expand_less";
-                                icon-size: 20px;
-                                icon-color: Theme.subtext0;
-                            }
-                        }
-                    }
-
-                    fav-artists-header-touch := TouchArea {
-                        mouse-cursor: pointer;
-                        clicked => { Favorites.toggle-artists-collapsed(); }
-                    }
+                CollapsibleSectionHeader {
+                    label: @tr("Favorite Artists");
+                    collapsed: Favorites.artists-collapsed;
+                    toggled => { Favorites.toggle-artists-collapsed(); }
                 }
             }
 
@@ -603,6 +522,7 @@ export component FavoritesView inherits Rectangle {
                 play-next(ids) => { Favorites.play-next(ids); }
                 add-to-queue(ids) => { Favorites.add-to-queue(ids); }
                 toggle-row-favorite(ids, on) => { Favorites.toggle-row-favorite(ids, on); }
+                set-row-rating(ids, n) => { Favorites.set-row-rating(ids, n); }
                 select-row(idx, id, sh, ct) => { Favorites.select-row(idx, id, sh, ct); }
                 request-blur-search => { Favorites.blur-search-tick += 1; }
                 go-to-album(aid) => { Favorites.go-to-album(aid); }
@@ -612,48 +532,31 @@ export component FavoritesView inherits Rectangle {
         }
                 }
             }
+            }
         }
     }
 
-    // Composite scroll math: the outer ScrollView's own travel covers
-    // the strips region (viewport minus visible height), the TrackList's
-    // inner ListView covers the rows. The unified scrollbar below spans
-    // both travels; drags split the offset at the boundary.
-    property <length> v-outer-max: max(0px, below-sv.viewport-height - below-sv.visible-height);
-    property <length> v-inner-max: max(0px, tl.v-viewport-height - tl.v-visible-height);
-
-    // Outer vertical scrollbar covers the strips + tracklist together.
-    // Pinned to the right edge of the below-hero region so it starts
-    // exactly under the hero banner.
-    OverlayScrollbar {
-        horizontal: false;
-        x: parent.width - self.width;
-        y: below-hero.absolute-position.y - root.absolute-position.y;
-        width: 10px;
-        height: below-hero.height;
-        visible-size: below-sv.visible-height;
-        content-size: below-sv.visible-height + root.v-outer-max + root.v-inner-max;
-        offset: -below-sv.viewport-y + tl.v-offset;
-        scroll-to(o) => {
-            below-sv.viewport-y = -min(o, root.v-outer-max);
-            tl.set-v-offset(max(0px, o - root.v-outer-max));
-        }
-    }
-
-    // Horizontal scrollbar still drives the TrackList's column pan —
-    // strips have their own internal horizontal scrollbars
-    // (`HorizontalCardStrip`), so a unified bottom bar wouldn't be
-    // meaningful for them (different content widths, independent
-    // scroll positions).
-    OverlayScrollbar {
-        horizontal: true;
-        x: tl.absolute-position.x - root.absolute-position.x;
-        y: parent.height - self.height;
-        width: tl.width - 10px;
-        height: 10px;
-        visible-size: tl.h-visible-width;
-        content-size: tl.h-viewport-width;
-        offset: tl.h-offset;
-        scroll-to(o) => { tl.set-h-offset(o); }
+    // Composite scroll: unified vbar over strips + tracklist, hbar for the
+    // TrackList's column pan, and the CompositeScroll wheel routing — all
+    // owned by the shared component; this view only mirrors its named
+    // elements (`below-sv`, `tl`, `below-hero`) into plain props.
+    CompositeScrollbars {
+        x: 0; y: 0;
+        width: 100%; height: 100%;
+        outer-viewport-y <=> below-sv.viewport-y;
+        outer-viewport-height: below-sv.viewport-height;
+        outer-visible-height: below-sv.visible-height;
+        inner-offset: tl.v-offset;
+        inner-viewport-height: tl.v-viewport-height;
+        inner-visible-height: tl.v-visible-height;
+        set-inner-offset(o) => { tl.set-v-offset(o); }
+        h-offset: tl.h-offset;
+        h-viewport-width: tl.h-viewport-width;
+        h-visible-width: tl.h-visible-width;
+        set-h-offset(o) => { tl.set-h-offset(o); }
+        v-region-y: below-hero.absolute-position.y - root.absolute-position.y;
+        v-region-height: below-hero.height;
+        h-region-x: tl.absolute-position.x - root.absolute-position.x;
+        h-region-width: tl.width;
     }
 }

@@ -962,3 +962,60 @@ msgid "{n} playlist exported"
 msgid_plural "{n} playlists exported"
 msgstr[0] "{n} λίστα εξήχθη"
 msgstr[1] "{n} λίστες εξήχθησαν"
+
+msgid "Rating"
+msgstr "Βαθμολογία"
+
+msgid "ReplayGain"
+msgstr "ReplayGain"
+
+msgid "Enable ReplayGain"
+msgstr "Ενεργοποίηση ReplayGain"
+
+msgid "Normalization mode"
+msgstr "Λειτουργία κανονικοποίησης"
+
+msgid "Track"
+msgstr "Κομμάτι"
+
+msgid "Prevent clipping"
+msgstr "Αποτροπή ψαλιδίσματος"
+
+msgid "ReplayGain only affects tracks that already have loudness tags. Scan your library with a tool like rsgain or loudgain to add them."
+msgstr "Το ReplayGain επηρεάζει μόνο κομμάτια που έχουν ήδη ετικέτες έντασης ήχου. Σαρώστε τη βιβλιοθήκη σας με ένα εργαλείο όπως το rsgain ή το loudgain για να τις προσθέσετε."
+
+msgid "Recently Played"
+msgstr "Πρόσφατα αναπαραγόμενα"
+
+msgid "Filter recently played…"
+msgstr "Φιλτράρισμα πρόσφατα αναπαραγόμενων…"
+
+msgid "No recently played tracks"
+msgstr "Δεν υπάρχουν πρόσφατα αναπαραγόμενα κομμάτια"
+
+msgid "Sleep timer"
+msgstr "Χρονοδιακόπτης ύπνου"
+
+msgid "15 min"
+msgstr "15 λεπτά"
+
+msgid "30 min"
+msgstr "30 λεπτά"
+
+msgid "45 min"
+msgstr "45 λεπτά"
+
+msgid "60 min"
+msgstr "60 λεπτά"
+
+msgid "90 min"
+msgstr "90 λεπτά"
+
+msgid "End of track"
+msgstr "Τέλος κομματιού"
+
+msgid "Track end"
+msgstr "Τέλος κομματιού"
+
+msgid "Start"
+msgstr "Έναρξη"

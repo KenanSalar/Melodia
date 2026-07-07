@@ -9,7 +9,7 @@ use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel};
 use crate::library;
 use crate::state::AppState;
 use crate::ui::callbacks::collect_track_ids;
-use crate::ui::callbacks::macros::{release_detail_hero_images, spawn_logged};
+use crate::ui::callbacks::macros::{release_detail_hero_images, spawn_logged, wire_row_flag};
 use crate::ui::playlists::{self as playlists_ui_mod, PlaylistsUi};
 use crate::ui::track_list_view::{TrackListColumnState, view_id};
 use crate::{AppWindow, Dialog, PlaylistDetail};
@@ -123,29 +123,32 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
         });
     }
 
+    // toggle-row-favorite / set-row-rating: write through, then surgically
+    // update each affected row (rating never changes list membership, so a
+    // surgical per-row patch suffices).
     {
-        let s = state.clone();
-        let weak = weak.clone();
         let pu = playlists_ui.clone();
-        detail.on_toggle_row_favorite(move |ids, fav| {
-            let id_vec = collect_track_ids(&ids);
-            if id_vec.is_empty() {
-                return;
-            }
-            let s = s.clone();
-            let weak = weak.clone();
-            let pu = pu.clone();
-            s.runtime.clone().spawn(async move {
-                if let Err(e) = library::favorites::set_favorite(&s, id_vec.clone(), fav).await {
-                    log::warn!("playlists::set_favorite: {e}");
-                    return;
-                }
+        wire_row_flag!(detail, on_toggle_row_favorite, state, "playlists::set_favorite",
+            library::favorites::set_favorite, collect_track_ids,
+            captures: [weak, pu],
+            after: |id_vec, fav| {
                 for id in &id_vec {
                     pu.flip_detail_favorite(*id, fav);
                     playlists_ui_mod::apply_detail_row_favorite(&weak, *id, fav);
                 }
             });
-        });
+    }
+    {
+        let pu = playlists_ui.clone();
+        wire_row_flag!(detail, on_set_row_rating, state, "playlists::set_rating",
+            library::ratings::set_rating, collect_track_ids,
+            captures: [weak, pu],
+            after: |id_vec, rating| {
+                for id in &id_vec {
+                    pu.flip_detail_rating(*id, rating);
+                    playlists_ui_mod::apply_detail_row_rating(&weak, *id, rating);
+                }
+            });
     }
 
     {

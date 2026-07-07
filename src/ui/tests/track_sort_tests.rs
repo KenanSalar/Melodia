@@ -37,6 +37,7 @@ fn mk(
         artwork_path: None,
         duration_ms,
         is_favorite: false,
+        rating: 0,
         album_id: None,
         artist_id: None,
         genre_id: None,

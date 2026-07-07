@@ -3,7 +3,7 @@ use std::sync::Arc;
 use crate::database::queries;
 use crate::entities::{album, artist, track};
 use crate::error::AppError;
-use crate::player::state::{PlayerAction, lock_state, with_state_emit};
+use crate::player::state::{PlayerAction, lock_state, sync_current_track_if_in, with_state_emit};
 use crate::state::AppState;
 
 pub async fn set_favorite(
@@ -12,10 +12,22 @@ pub async fn set_favorite(
     favorite: bool,
 ) -> Result<(), AppError> {
     queries::track::set_favorite(&state.db, &ids, favorite).await?;
+    // If the currently-playing track was one of the toggled ids, mirror the new
+    // flag onto `current_track` so the Now-Playing heart updates without waiting
+    // for the next track load (parity with `toggle_current_favorite`).
+    sync_current_track_favorite(state, &ids, favorite);
     state
         .library_changed_tx
         .send_modify(|n| *n = n.wrapping_add(1));
     Ok(())
+}
+
+/// If `current_track` is one of `ids`, flip its cached `is_favorite` and emit so
+/// the Now-Playing surfaces reflect a favorite toggled from a list row.
+fn sync_current_track_favorite(state: &AppState, ids: &[i64], favorite: bool) {
+    sync_current_track_if_in(&state.player_state, &state.sinks, ids, |t| {
+        t.is_favorite = favorite;
+    });
 }
 
 /// Toggle the favorite flag on the currently playing track. Persists to DB,
@@ -36,7 +48,11 @@ pub async fn toggle_current_favorite(
     queries::track::set_favorite(&state.db, &[id], new_fav).await?;
 
     with_state_emit(&state.player_state, &state.sinks, |s| {
-        if let Some(track) = s.current_track.as_mut() {
+        // Guard against a track change between the id read above and here: only
+        // flip the cached flag if `current_track` is still the track we wrote.
+        if let Some(track) = s.current_track.as_mut()
+            && track.id == id
+        {
             Arc::make_mut(track).is_favorite = new_fav;
         }
         Vec::<PlayerAction>::new()

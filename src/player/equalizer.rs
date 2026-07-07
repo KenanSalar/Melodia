@@ -24,6 +24,14 @@
 //! automatic safety net). Both run only in the active path — when the EQ is
 //! disabled, or every band is flat *and* the preamp is 0 dB, [`EqSource`] is a
 //! transparent per-sample passthrough (**bit-identical, zero added DSP cost**).
+//!
+//! [`EqSource`] **also applies `ReplayGain`** (see [`super::replaygain`]): a
+//! per-track linear pre-gain, baked in at construction, applied *before* the EQ
+//! bands so the same limiter guards a `ReplayGain` boost for free. `ReplayGain` is
+//! independent of the EQ toggle — it applies whether or not the EQ is enabled,
+//! and its own master state ([`ReplayGainShared`]) is polled via a second
+//! generation counter alongside the EQ's. When `ReplayGain` is off (or the track
+//! has no tags and the EQ is also inert) the passthrough fast-path still holds.
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
@@ -32,6 +40,9 @@ use std::time::Duration;
 use biquad::{Biquad, Coefficients, DirectForm1, Hertz, Type};
 use rodio::source::SeekError;
 use rodio::{ChannelCount, Sample, SampleRate, Source};
+
+use super::dsp::db_to_linear;
+use super::replaygain::{self, ReplayGainShared, TrackReplayGain};
 
 /// Number of equalizer bands.
 pub const NUM_BANDS: usize = 10;
@@ -138,11 +149,6 @@ pub fn normalize_gains(gains: &[f32]) -> [f32; NUM_BANDS] {
 #[must_use]
 pub fn preset_index(name: &str) -> Option<usize> {
     PRESETS.iter().position(|p| p.name == name)
-}
-
-/// Convert a decibel value to a linear amplitude factor.
-fn db_to_linear(db: f32) -> f32 {
-    10.0_f32.powf(db / 20.0)
 }
 
 /// Lock-free equalizer state shared between the control layer (writer) and the
@@ -258,6 +264,10 @@ struct Limiter {
     gain: f32,
     attack_coeff: f32,
     release_coeff: f32,
+    /// Linear magnitude at the knee's lower edge (`THRESHOLD − KNEE/2` dB). A
+    /// frame peak at or below this needs no reduction, so [`Self::target_gain`]
+    /// can return unity without evaluating `log10`. Precomputed once.
+    knee_low_linear: f32,
 }
 
 impl Limiter {
@@ -266,6 +276,7 @@ impl Limiter {
             gain: 1.0,
             attack_coeff: smoothing_coeff(LIMITER_ATTACK_S, frame_rate),
             release_coeff: smoothing_coeff(LIMITER_RELEASE_S, frame_rate),
+            knee_low_linear: db_to_linear(LIMITER_THRESHOLD_DB - LIMITER_KNEE_DB / 2.0),
         }
     }
 
@@ -275,20 +286,24 @@ impl Limiter {
 
     /// Target gain (linear, ≤ 1.0) for a peak magnitude — the soft-knee
     /// limiter curve with an infinite ratio above the knee.
-    fn target_gain(peak: f32) -> f32 {
-        if peak <= 0.0 {
+    fn target_gain(&self, peak: f32) -> f32 {
+        // Below the knee's lower edge the curve is flat at unity, so quiet
+        // frames (the overwhelmingly common case) skip the `log10` entirely.
+        // `log10` is monotonic, so `peak <= knee_low_linear` is the exact
+        // linear-domain equivalent of the old `over <= -half_knee` dB test; it
+        // also subsumes the previous `peak <= 0.0` guard, since `peak` is a
+        // magnitude (≥ 0) and `knee_low_linear > 0`.
+        if peak <= self.knee_low_linear {
             return 1.0;
         }
         let peak_db = 20.0 * peak.log10();
         let over = peak_db - LIMITER_THRESHOLD_DB;
         let half_knee = LIMITER_KNEE_DB / 2.0;
-        let reduction_db = if over <= -half_knee {
-            // Below the knee: no reduction, so the gain is exactly unity —
-            // return early and skip the `db_to_linear` (powf) of 0 dB.
-            return 1.0;
-        } else if over >= half_knee {
+        let reduction_db = if over >= half_knee {
             -over
         } else {
+            // Within the knee (the guard above already excluded `over <=
+            // -half_knee`, so this branch is `-half_knee < over < half_knee`).
             let k = over + half_knee;
             -(k * k) / (2.0 * LIMITER_KNEE_DB)
         };
@@ -299,24 +314,37 @@ impl Limiter {
     /// Rising signal level → fast attack (gain falls quickly); falling level →
     /// slow release (gain recovers gently).
     fn process(&mut self, peak: f32) -> f32 {
-        let target = Self::target_gain(peak);
+        let target = self.target_gain(peak);
         let coeff = if target < self.gain { self.attack_coeff } else { self.release_coeff };
         self.gain = coeff.mul_add(self.gain, (1.0 - coeff) * target);
         self.gain
     }
 }
 
-/// A Rodio source that applies the shared graphic EQ to its inner decoder.
+/// A Rodio source that applies the shared graphic EQ **and `ReplayGain`** to its
+/// inner decoder.
 ///
 /// One [`EqSource`] wraps each decoded track; both the playing track and the
-/// gapless-preloaded one share the same [`EqShared`], so a live change applies
-/// to both. Per-source state (the filter banks + a one-frame buffer) is a few
-/// hundred bytes — no caches, negligible memory.
+/// gapless-preloaded one share the same [`EqShared`] / [`ReplayGainShared`], so
+/// a live master change applies to both. The **per-track** `ReplayGain` values
+/// ([`baked_rg`](Self::baked_rg)) are baked in at construction, however — the
+/// gapless-preloaded next track has different tags than the playing one, so its
+/// gain must travel with its own source, not on a shared cell. Per-source state
+/// (the filter banks + a one-frame buffer) is a few hundred bytes — no caches,
+/// negligible memory.
 pub struct EqSource<S> {
     input: S,
     shared: Arc<EqShared>,
+    /// Shared `ReplayGain` master state (enabled / mode / preamp / prevent-clip).
+    rg_shared: Arc<ReplayGainShared>,
+    /// This track's baked `ReplayGain` tag values. Combined with `rg_shared`'s
+    /// live mode/preamp at `rebuild` time to produce `rg_gain`.
+    baked_rg: TrackReplayGain,
     /// Last generation this source applied; mismatch triggers `rebuild`.
     last_generation: u64,
+    /// Last `ReplayGain` generation this source applied — polled alongside
+    /// `last_generation` so a live RG-only change also triggers `rebuild`.
+    last_rg_generation: u64,
     /// This source's sample rate (Hz), captured once — constant per decoded
     /// file, so coefficients computed from it stay correct for the source's life.
     sample_rate: f32,
@@ -327,6 +355,9 @@ pub struct EqSource<S> {
     band_active: [bool; NUM_BANDS],
     /// Linear preamp gain applied before the bands in the active path.
     preamp_gain: f32,
+    /// Linear `ReplayGain` factor applied before the bands (after the preamp) in
+    /// the active path. 1.0 when `ReplayGain` is disabled or the track is untagged.
+    rg_gain: f32,
     /// Coupled safety limiter applied to the EQ output.
     limiter: Limiter,
     /// One processed interleaved frame (`channels` samples) awaiting emit, used
@@ -339,7 +370,12 @@ pub struct EqSource<S> {
 }
 
 impl<S: Source> EqSource<S> {
-    pub fn new(input: S, shared: Arc<EqShared>) -> Self {
+    pub fn new(
+        input: S,
+        shared: Arc<EqShared>,
+        rg_shared: Arc<ReplayGainShared>,
+        baked_rg: TrackReplayGain,
+    ) -> Self {
         let channels = usize::from(input.channels().get());
         #[allow(
             clippy::cast_precision_loss,
@@ -356,17 +392,22 @@ impl<S: Source> EqSource<S> {
             reason = "channel count is tiny (1–8) and converts to f32 exactly"
         )]
         let frame_rate = sample_rate / channels.max(1) as f32;
-        // Seed the cached generation to something other than the live value so
+        // Seed the cached generations to something other than the live values so
         // the first `next()` rebuilds from the current shared state.
         let last_generation = shared.generation().wrapping_sub(1);
+        let last_rg_generation = rg_shared.generation().wrapping_sub(1);
         Self {
             input,
             shared,
+            rg_shared,
+            baked_rg,
             last_generation,
+            last_rg_generation,
             sample_rate,
             banks,
             band_active: [false; NUM_BANDS],
             preamp_gain: 1.0,
+            rg_gain: 1.0,
             limiter: Limiter::new(frame_rate),
             frame: vec![0.0; channels],
             frame_len: 0,
@@ -379,9 +420,27 @@ impl<S: Source> EqSource<S> {
     /// state. Called only when the generation counter advances (toggle, slider
     /// drag, preset, reset, preamp change).
     fn rebuild(&mut self) {
+        // ReplayGain is independent of the EQ toggle, so compute its gain FIRST —
+        // before any EQ-disabled / pathological early return could skip it.
+        let rg_gain = if self.rg_shared.enabled() {
+            replaygain::compute_linear_gain(
+                self.baked_rg,
+                self.rg_shared.mode(),
+                self.rg_shared.preamp(),
+                self.rg_shared.prevent_clipping(),
+            )
+        } else {
+            1.0
+        };
+        self.rg_gain = rg_gain;
+        let rg_is_unity = replaygain::is_unity_gain(rg_gain);
+
         if !self.shared.enabled() {
-            self.bypass = true;
+            // EQ off: no preamp, no bands. ReplayGain may still apply, so only
+            // take the passthrough bypass when its gain is unity too.
+            self.preamp_gain = 1.0;
             self.band_active = [false; NUM_BANDS];
+            self.bypass = rg_is_unity;
             return;
         }
 
@@ -390,9 +449,11 @@ impl<S: Source> EqSource<S> {
         let preamp_is_unity = preamp_db.abs() < PREAMP_EPSILON_DB;
 
         let Ok(fs) = Hertz::<f32>::from_hz(self.sample_rate) else {
-            // Pathological sample rate — leave audio untouched.
-            self.bypass = true;
+            // Pathological sample rate — can't build the peaking filters. The
+            // ReplayGain factor is just a scalar, so let it still apply.
+            self.preamp_gain = 1.0;
             self.band_active = [false; NUM_BANDS];
+            self.bypass = rg_is_unity;
             return;
         };
 
@@ -430,9 +491,10 @@ impl<S: Source> EqSource<S> {
             }
         }
 
-        // Active when any band filters OR the preamp is non-unity (a flat curve
-        // with a non-zero preamp still needs the preamp + limiter stage).
-        self.bypass = !any_active && preamp_is_unity;
+        // Active when any band filters, OR the preamp is non-unity, OR
+        // ReplayGain applies a non-unity factor — each needs the gain + limiter
+        // stage. Only a flat EQ with 0 dB preamp and unity ReplayGain bypasses.
+        self.bypass = !any_active && preamp_is_unity && rg_is_unity;
     }
 }
 
@@ -448,12 +510,15 @@ impl<S: Source> Iterator for EqSource<S> {
         }
 
         // Pick up state changes: per-frame on the active path, per-sample in
-        // bypass (which buffers no frame). The `Acquire` load is near-free
-        // either way.
+        // bypass (which buffers no frame). The `Acquire` loads are near-free
+        // either way. Poll BOTH the EQ and ReplayGain generations so a live
+        // change to either triggers a single rebuild.
         let generation = self.shared.generation();
-        if generation != self.last_generation {
+        let rg_generation = self.rg_shared.generation();
+        if generation != self.last_generation || rg_generation != self.last_rg_generation {
             self.rebuild();
             self.last_generation = generation;
+            self.last_rg_generation = rg_generation;
         }
 
         // Bypass: pure per-sample passthrough (bit-identical, no framing).
@@ -468,7 +533,7 @@ impl<S: Source> Iterator for EqSource<S> {
         let mut frame_len = 0;
         for (bank, slot) in self.banks.iter_mut().zip(self.frame.iter_mut()) {
             let Some(x) = self.input.next() else { break };
-            let mut out = x * self.preamp_gain;
+            let mut out = x * self.preamp_gain * self.rg_gain;
             for (filter, &active) in bank.iter_mut().zip(self.band_active.iter()) {
                 if active {
                     out = filter.run(out);

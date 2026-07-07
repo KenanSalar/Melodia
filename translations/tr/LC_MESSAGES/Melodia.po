@@ -963,3 +963,60 @@ msgid "{n} playlist exported"
 msgid_plural "{n} playlists exported"
 msgstr[0] "{n} çalma listesi dışa aktarıldı"
 msgstr[1] "{n} çalma listesi dışa aktarıldı"
+
+msgid "Rating"
+msgstr "Derecelendirme"
+
+msgid "ReplayGain"
+msgstr "ReplayGain"
+
+msgid "Enable ReplayGain"
+msgstr "ReplayGain'i etkinleştir"
+
+msgid "Normalization mode"
+msgstr "Normalleştirme modu"
+
+msgid "Track"
+msgstr "Parça"
+
+msgid "Prevent clipping"
+msgstr "Kırpılmayı önle"
+
+msgid "ReplayGain only affects tracks that already have loudness tags. Scan your library with a tool like rsgain or loudgain to add them."
+msgstr "ReplayGain yalnızca ses düzeyi etiketleri olan parçaları etkiler. Bunları eklemek için kitaplığınızı rsgain veya loudgain gibi bir araçla tarayın."
+
+msgid "Recently Played"
+msgstr "Son Çalınanlar"
+
+msgid "Filter recently played…"
+msgstr "Son çalınanları filtrele…"
+
+msgid "No recently played tracks"
+msgstr "Son çalınan parça yok"
+
+msgid "Sleep timer"
+msgstr "Uyku zamanlayıcısı"
+
+msgid "15 min"
+msgstr "15 dk"
+
+msgid "30 min"
+msgstr "30 dk"
+
+msgid "45 min"
+msgstr "45 dk"
+
+msgid "60 min"
+msgstr "60 dk"
+
+msgid "90 min"
+msgstr "90 dk"
+
+msgid "End of track"
+msgstr "Parça sonu"
+
+msgid "Track end"
+msgstr "Parça sonu"
+
+msgid "Start"
+msgstr "Başlat"

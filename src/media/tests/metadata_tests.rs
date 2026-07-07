@@ -75,6 +75,15 @@ fn parse_gain_empty() {
 }
 
 #[test]
+fn parse_gain_rejects_non_finite() {
+    // Rust's float parser accepts "nan"/"inf"; a non-finite gain baked into the
+    // audio source would render the track as silence, so it must map to None.
+    assert_eq!(parse_replaygain_gain("nan dB"), None);
+    assert_eq!(parse_replaygain_gain("inf dB"), None);
+    assert_eq!(parse_replaygain_gain("-inf"), None);
+}
+
+#[test]
 fn parse_peak_standard() {
     assert_eq!(parse_replaygain_peak("0.988553"), Some(0.988_553));
 }
@@ -87,6 +96,13 @@ fn parse_peak_whitespace() {
 #[test]
 fn parse_peak_invalid() {
     assert_eq!(parse_replaygain_peak("abc"), None);
+}
+
+#[test]
+fn parse_peak_rejects_non_finite() {
+    // Same guard as the gain parser — a non-finite peak breaks the clip clamp.
+    assert_eq!(parse_replaygain_peak("nan"), None);
+    assert_eq!(parse_replaygain_peak("inf"), None);
 }
 
 // ── extract_metadata ──

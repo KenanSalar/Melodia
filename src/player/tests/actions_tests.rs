@@ -4,6 +4,7 @@ use tokio::sync::watch;
 
 use crate::error::AppError;
 use crate::player::event_sink::PlayerSinks;
+use crate::player::replaygain::TrackReplayGain;
 use crate::player::rodio_backend::PlayerBackend;
 use crate::player::state::{PlayerAction, PlayerStateHandle};
 
@@ -55,6 +56,7 @@ impl PlayerBackend for MockBackend {
         volume: f64,
         speed: f64,
         start_position_ms: Option<u64>,
+        _baked_rg: TrackReplayGain,
     ) -> Result<(), AppError> {
         let mut inner = self.inner();
         if inner.play_media_should_fail {
@@ -84,7 +86,7 @@ impl PlayerBackend for MockBackend {
     fn set_speed(&self, speed: f64) {
         self.inner().speed_calls.push(speed);
     }
-    fn preload_gapless(&self, file_path: Option<&str>) {
+    fn preload_gapless(&self, file_path: Option<&str>, _baked_rg: TrackReplayGain) {
         self.inner()
             .preload_calls
             .push(file_path.map(std::borrow::ToOwned::to_owned));
@@ -141,6 +143,7 @@ async fn execute_play_media_calls_backend() -> Result<(), AppError> {
         volume: 0.8,
         speed: 1.0,
         start_position_ms: Some(5000),
+        replaygain: TrackReplayGain::default(),
     }];
 
     crate::player::actions::execute_actions(
@@ -175,6 +178,7 @@ async fn execute_play_media_decode_failure_triggers_auto_skip() -> Result<(), Ap
         volume: 0.5,
         speed: 1.0,
         start_position_ms: None,
+        replaygain: TrackReplayGain::default(),
     }];
 
     crate::player::actions::execute_actions(
@@ -204,6 +208,7 @@ async fn execute_play_media_vanished_file_pre_flights() -> Result<(), AppError> 
         volume: 1.0,
         speed: 1.0,
         start_position_ms: None,
+        replaygain: TrackReplayGain::default(),
     }];
 
     crate::player::actions::execute_actions(
@@ -329,6 +334,7 @@ async fn execute_multiple_actions_in_order() -> Result<(), AppError> {
             volume: 1.0,
             speed: 1.0,
             start_position_ms: None,
+            replaygain: TrackReplayGain::default(),
         },
         PlayerAction::PreloadGapless(Some("/music/next.mp3".to_owned())),
         PlayerAction::SetVolume(0.5),

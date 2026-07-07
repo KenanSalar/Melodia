@@ -80,10 +80,10 @@ pub fn set_browse_path(state: &AppState, path: Option<String>) -> Result<(), App
 
 /// Persist the active sidebar tab so the next launch reopens on the same
 /// section. Indices follow the `Nav` global comment in `ui/globals.slint`.
-/// Out-of-range writes (negative / > 8) are clamped to the valid range so a
+/// Out-of-range writes (negative / > 9) are clamped to the valid range so a
 /// corrupt write can't pin the app to an unselectable tab.
 pub fn set_last_nav_index(state: &AppState, idx: i32) -> Result<(), AppError> {
-    let clamped = idx.clamp(0, 8);
+    let clamped = idx.clamp(0, 9);
     services::view_state::mutate_view_state(&state.paths, move |s| {
         s.last_nav_index = clamped;
     })

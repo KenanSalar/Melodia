@@ -54,11 +54,12 @@ pub struct AppState {
     pub library_changed_tx: watch::Sender<u64>,
     /// Bumped after every play-count flush. Split from `library_changed_tx`
     /// so the per-song flush (every track completion) doesn't imply
-    /// "library structure changed" — only Favorites ranks anything by
-    /// `play_count` (hero mosaic + Most Played strip), so it is the sole
-    /// subscriber. Everything else (Tracks/Browse refreshers,
-    /// `queue_prune`, the folder list) stays on `library_changed_tx` and
-    /// no longer fires per played song.
+    /// "library structure changed" — the only views that depend on
+    /// play-driven data subscribe here: Favorites (hero mosaic + Most Played
+    /// strip, ranked by `play_count`) and Recently-Played (ordered by
+    /// `last_played`, written on the same flush). Everything else
+    /// (Tracks/Browse refreshers, `queue_prune`, the folder list) stays on
+    /// `library_changed_tx` and no longer fires per played song.
     pub stats_changed_tx: watch::Sender<u64>,
     /// Bumped whenever the watcher reports a kernel-queue overflow (notify
     /// `Flag::Rescan`). A UI-thread subscriber pushes a transient
@@ -151,14 +152,7 @@ impl AppState {
             rodio.set_speed(speed);
         }
 
-        // Seed the graphic EQ from persisted settings before playback starts so
-        // the first track is already equalised when the EQ is enabled. EQ state
-        // lives on the Rodio backend (not `PlayerState`); `set_eq_gains` clamps
-        // and length-normalises the (possibly hand-edited) gain list, and the
-        // EQ ships off by default.
-        rodio.set_eq_gains(&settings.equalizer.eq_band_gains);
-        rodio.set_eq_preamp(settings.equalizer.eq_preamp);
-        rodio.set_eq_enabled(settings.equalizer.eq_enabled);
+        hydrate_audio_dsp(&rodio, &settings);
 
         let cover_cache: CoverCache = crate::media::artwork::new_cover_cache();
 
@@ -227,6 +221,25 @@ impl AppState {
         Ok((state, channels))
     }
 
+    /// Persist a settings mutation on the blocking pool, logging (never
+    /// surfacing) a failure under `label`. This is the write half of the
+    /// two-phase "apply live, then persist" shape used by the EQ / `ReplayGain`
+    /// / playback-settings installers: the caller has already applied the value
+    /// to the running player, so a failed disk write must not undo it — the
+    /// warn is the only report.
+    pub fn persist_blocking(
+        &self,
+        label: &'static str,
+        f: impl FnOnce(&AppState) -> Result<(), AppError> + Send + 'static,
+    ) {
+        let s = self.clone();
+        self.runtime.spawn_blocking(move || {
+            if let Err(e) = f(&s) {
+                log::warn!("{label}: {e}");
+            }
+        });
+    }
+
     /// The shared `reqwest::Client`, built on first call and reused for the
     /// process lifetime. Construction is deferred out of `init` so the rustls
     /// TLS stack and connection pool never load at boot/idle — only the
@@ -258,7 +271,7 @@ impl AppState {
         self.http_client.get_or_init(|| {
             reqwest::Client::builder()
                 .connect_timeout(std::time::Duration::from_secs(10))
-                .read_timeout(std::time::Duration::from_secs(60))
+                .read_timeout(std::time::Duration::from_mins(1))
                 .pool_max_idle_per_host(4)
                 .user_agent(concat!("Melodia/", env!("CARGO_PKG_VERSION")))
                 .build()
@@ -272,4 +285,28 @@ impl AppState {
                 })
         })
     }
+}
+
+/// Seed the Rodio backend's lock-free DSP cells (graphic EQ + `ReplayGain`)
+/// from persisted settings before playback starts, so the first track is
+/// already processed when either is enabled. Both live on the Rodio backend
+/// (not `PlayerState`). Ordering is deliberate: values first, `enabled` last,
+/// so the enable's generation bump publishes a fully-seeded state to the
+/// audio thread.
+fn hydrate_audio_dsp(rodio: &RodioPlayer, settings: &settings::SettingsData) {
+    // `set_eq_gains` clamps and length-normalises the (possibly hand-edited)
+    // gain list; the EQ ships off by default.
+    rodio.set_eq_gains(&settings.equalizer.eq_band_gains);
+    rodio.set_eq_preamp(settings.equalizer.eq_preamp);
+    rodio.set_eq_enabled(settings.equalizer.eq_enabled);
+
+    // ReplayGain master state seeds the same way — per-track gain is baked per
+    // source at play time. Ships off by default; the mode string falls back to
+    // Album on an unknown value.
+    rodio.set_replaygain_preamp(settings.replaygain.rg_preamp);
+    rodio.set_replaygain_mode(crate::player::replaygain::RgMode::from_settings_str(
+        &settings.replaygain.rg_mode,
+    ));
+    rodio.set_replaygain_prevent_clipping(settings.replaygain.rg_prevent_clipping);
+    rodio.set_replaygain_enabled(settings.replaygain.rg_enabled);
 }

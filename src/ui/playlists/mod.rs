@@ -49,7 +49,8 @@ use state::{
 };
 
 pub use detail::{
-    apply_detail_row_favorite, apply_filtered_detail, apply_optimistic_reorder, clear_detail,
+    apply_detail_row_favorite, apply_detail_row_rating, apply_filtered_detail,
+    apply_optimistic_reorder, clear_detail,
     open_playlist, refresh_detail, resort_detail, rollback_reorder, seed_detail_from_settings,
     set_filter,
 };
@@ -201,6 +202,17 @@ impl PlaylistsUi {
         }
         if let Some(r) = self.detail.all_tracks.lock().iter_mut().find(|r| r.id == id) {
             r.is_favorite = fav;
+        }
+    }
+
+    /// Star-rating analogue of [`Self::flip_detail_favorite`] — set `rating`
+    /// on both the displayed `tracks` cache and the canonical `all_tracks` set.
+    pub fn flip_detail_rating(&self, id: i64, rating: i32) {
+        if let Some(r) = self.detail.tracks.lock().iter_mut().find(|r| r.id == id) {
+            r.rating = rating;
+        }
+        if let Some(r) = self.detail.all_tracks.lock().iter_mut().find(|r| r.id == id) {
+            r.rating = rating;
         }
     }
 

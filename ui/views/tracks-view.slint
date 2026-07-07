@@ -166,6 +166,7 @@ export component TracksView inherits Rectangle {
             play-next(ids) => { Tracks.play-next(ids); }
             add-to-queue(ids) => { Tracks.add-to-queue(ids); }
             toggle-row-favorite(ids, on) => { Tracks.toggle-row-favorite(ids, on); }
+            set-row-rating(ids, n) => { Tracks.set-row-rating(ids, n); }
             select-row(idx, id, sh, ct) => { Tracks.select-row(idx, id, sh, ct); }
             request-blur-search => { Tracks.blur-search-tick += 1; }
             go-to-album(aid) => { Tracks.go-to-album(aid); }

@@ -60,7 +60,8 @@ use grid::compute_indices;
 use state::GridIndexCache;
 
 pub use detail::{
-    apply_detail_row_favorite, apply_filtered_detail, clear_detail, open_genre, refresh_detail,
+    apply_detail_row_favorite, apply_detail_row_rating, apply_filtered_detail, clear_detail,
+    open_genre, refresh_detail,
     resort_detail, seed_detail_from_settings, set_filter,
 };
 pub use grid::{fetch_grid, rebuild_grid};
@@ -199,6 +200,17 @@ impl GenresUi {
         }
         if let Some(r) = self.detail.all_tracks.lock().iter_mut().find(|r| r.id == id) {
             r.is_favorite = fav;
+        }
+    }
+
+    /// Star-rating analogue of [`Self::flip_detail_favorite`] — set `rating`
+    /// on both the displayed `tracks` cache and the canonical `all_tracks` set.
+    pub fn flip_detail_rating(&self, id: i64, rating: i32) {
+        if let Some(r) = self.detail.tracks.lock().iter_mut().find(|r| r.id == id) {
+            r.rating = rating;
+        }
+        if let Some(r) = self.detail.all_tracks.lock().iter_mut().find(|r| r.id == id) {
+            r.rating = rating;
         }
     }
 }

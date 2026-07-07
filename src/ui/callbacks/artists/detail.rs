@@ -12,7 +12,7 @@ use crate::ui::albums::AlbumsUi;
 use crate::ui::artists::{self as artists_ui_mod, ArtistsUi};
 use crate::ui::callbacks::collect_track_ids;
 use crate::ui::callbacks::macros::{
-    release_detail_hero_images, spawn_logged, spawn_logged_sync,
+    release_detail_hero_images, spawn_logged, spawn_logged_sync, wire_row_flag,
 };
 use crate::ui::track_list_view::{TrackListColumnState, view_id};
 use crate::{AppWindow, ArtistDetail, Nav};
@@ -179,29 +179,32 @@ pub(super) fn wire(
         });
     }
 
+    // toggle-row-favorite / set-row-rating: write through, then surgically
+    // update each affected row (rating never changes list membership, so a
+    // surgical per-row patch suffices).
     {
-        let s = state.clone();
-        let weak = weak.clone();
         let au = artists_ui.clone();
-        detail.on_toggle_row_favorite(move |ids, fav| {
-            let id_vec = collect_track_ids(&ids);
-            if id_vec.is_empty() {
-                return;
-            }
-            let s = s.clone();
-            let weak = weak.clone();
-            let au = au.clone();
-            s.runtime.clone().spawn(async move {
-                if let Err(e) = library::favorites::set_favorite(&s, id_vec.clone(), fav).await {
-                    log::warn!("artists::set_favorite: {e}");
-                    return;
-                }
+        wire_row_flag!(detail, on_toggle_row_favorite, state, "artists::set_favorite",
+            library::favorites::set_favorite, collect_track_ids,
+            captures: [weak, au],
+            after: |id_vec, fav| {
                 for id in &id_vec {
                     au.flip_detail_favorite(*id, fav);
                     artists_ui_mod::apply_detail_row_favorite(&weak, *id, fav);
                 }
             });
-        });
+    }
+    {
+        let au = artists_ui.clone();
+        wire_row_flag!(detail, on_set_row_rating, state, "artists::set_rating",
+            library::ratings::set_rating, collect_track_ids,
+            captures: [weak, au],
+            after: |id_vec, rating| {
+                for id in &id_vec {
+                    au.flip_detail_rating(*id, rating);
+                    artists_ui_mod::apply_detail_row_rating(&weak, *id, rating);
+                }
+            });
     }
 
     {

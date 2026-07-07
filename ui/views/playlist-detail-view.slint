@@ -297,6 +297,7 @@ export component PlaylistDetailView inherits Rectangle {
                     play-next(ids) => { PlaylistDetail.play-next(ids); }
                     add-to-queue(ids) => { PlaylistDetail.add-to-queue(ids); }
                     toggle-row-favorite(ids, on) => { PlaylistDetail.toggle-row-favorite(ids, on); }
+                    set-row-rating(ids, n) => { PlaylistDetail.set-row-rating(ids, n); }
                     select-row(idx, id, sh, ct) => { PlaylistDetail.select-row(idx, id, sh, ct); }
                     // A click in the track list blurs the hero SearchBar.
                     request-blur-search => { PlaylistDetail.blur-search-tick += 1; }

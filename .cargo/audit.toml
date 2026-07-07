@@ -19,21 +19,30 @@
 
 [advisories]
 ignore = [
-    # rsa 0.9.10 Marvin Attack timing sidechannel — pulled via sqlx-mysql
-    # 0.8.6, which is an optional dep of sqlx behind the `mysql` feature.
-    # We're SQLite-only (Cargo.toml: `default-features = false`, no `mysql`
-    # feature). `cargo tree -i rsa` returns "nothing to print" — the crate
-    # is in Cargo.lock for cargo's cross-feature resolution stability but
-    # is not compiled into the Melodia binary. No fixed `rsa` upgrade
-    # available upstream.
-    # revisit: 2026-08-19
-    "RUSTSEC-2023-0071",
-
     # bincode 2.0.1 unmaintained — pulled via i-slint-compiler 1.16.1 →
     # typed-index-collections 3.5.0. Slint 1.16.1 is current; no upstream
     # tracking issue. Build-time only (proc-macro / build.rs).
     # revisit: 2026-08-19
     "RUSTSEC-2025-0141",
+
+    # quick-xml 0.39.4 DoS advisories (quadratic duplicate-attribute check,
+    # unbounded namespace allocation) — pulled only via wayland-scanner
+    # 0.31.10, a build-time proc-macro that parses the *vendored* Wayland
+    # protocol XML shipped in the wayland-protocols crates; no
+    # attacker-controlled input ever reaches it. wayland-scanner pins
+    # quick-xml `^0.39`, so no upgrade path to the fixed >=0.41 exists
+    # until smithay releases against it.
+    # revisit: 2026-10-06
+    "RUSTSEC-2026-0194",
+    "RUSTSEC-2026-0195",
+
+    # ttf-parser 0.25.1 unmaintained — pulled via i-slint-compiler /
+    # i-slint-core 1.16.1 → resvg 0.47 → usvg → fontdb. Slint 1.16.1 is
+    # current; no newer ttf-parser exists to update to. Parses only fonts
+    # bundled in the binary and installed system fonts, not downloaded
+    # content.
+    # revisit: 2026-10-06
+    "RUSTSEC-2026-0192",
 
     # paste 1.0.15 unmaintained — pulled via lofty 0.24.0 (direct dep) and
     # rav1e 0.8.1 (transitive: slint → image → ravif → rav1e). Lofty has

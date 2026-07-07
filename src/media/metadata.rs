@@ -81,14 +81,18 @@ pub fn extract_date_modified(path: &Path) -> Option<String> {
         .and_then(date_modified_from_metadata)
 }
 
-/// Parse a `ReplayGain` gain string like "-6.50 dB" to f64
+/// Parse a `ReplayGain` gain string like "-6.50 dB" to f64. Rejects non-finite
+/// values (`"nan"`, `"inf"` parse successfully as floats in Rust) so a malformed
+/// tag can't poison the playback DSP — the value is baked into the audio source
+/// and a `NaN`/`inf` gain would render the track as silence.
 fn parse_replaygain_gain(s: &str) -> Option<f64> {
-    s.trim().trim_end_matches("dB").trim().parse::<f64>().ok()
+    s.trim().trim_end_matches("dB").trim().parse::<f64>().ok().filter(|v| v.is_finite())
 }
 
-/// Parse a `ReplayGain` peak string (linear scale, e.g. "0.988553") to f64
+/// Parse a `ReplayGain` peak string (linear scale, e.g. "0.988553") to f64.
+/// Rejects non-finite values for the same reason as the gain parser.
 fn parse_replaygain_peak(s: &str) -> Option<f64> {
-    s.trim().parse::<f64>().ok()
+    s.trim().parse::<f64>().ok().filter(|v| v.is_finite())
 }
 
 pub fn extract_metadata(
@@ -110,8 +114,7 @@ pub fn extract_metadata(
     let fs_meta = std::fs::metadata(path);
     let file_size = fs_meta
         .as_ref()
-        .map(|m| i64::try_from(m.len()).unwrap_or(i64::MAX))
-        .unwrap_or(0);
+        .map_or(0, |m| i64::try_from(m.len()).unwrap_or(i64::MAX));
 
     let date_modified = extract_date_modified(path);
 

@@ -1,5 +1,7 @@
 use std::collections::HashMap;
 
+use sqlx::AssertSqlSafe;
+
 use crate::database::DbPool;
 use crate::entities::{playlist, playlist_item, track};
 use crate::error::AppError;
@@ -124,7 +126,7 @@ pub async fn get_playlist_tracks_for_list(
          WHERE pi.playlist_id = ? \
          ORDER BY pi.position ASC"
     );
-    let tracks = sqlx::query_as::<_, track::TrackListRow>(&sql)
+    let tracks = sqlx::query_as::<_, track::TrackListRow>(AssertSqlSafe(sql))
         .bind(playlist_id)
         .fetch_all(db.read())
         .await?;
@@ -145,7 +147,7 @@ pub async fn get_playlist_tracks_for_export(
          WHERE pi.playlist_id = ? \
          ORDER BY pi.position ASC"
     );
-    let tracks = sqlx::query_as::<_, track::PlaylistExportRow>(&sql)
+    let tracks = sqlx::query_as::<_, track::PlaylistExportRow>(AssertSqlSafe(sql))
         .bind(playlist_id)
         .fetch_all(db.read())
         .await?;
@@ -249,7 +251,7 @@ pub async fn remove_tracks_from_playlist_batch(
         let sql = format!(
             "DELETE FROM playlist_items WHERE playlist_id = ? AND track_id IN ({placeholders})"
         );
-        let mut query = sqlx::query(&sql).bind(playlist_id);
+        let mut query = sqlx::query(AssertSqlSafe(sql)).bind(playlist_id);
         for &id in chunk {
             query = query.bind(id);
         }
@@ -353,7 +355,7 @@ async fn batch_update_positions_pairs(
     sql.push_str(&crate::database::placeholders(pairs.len()));
     sql.push(')');
 
-    let mut query = sqlx::query(&sql);
+    let mut query = sqlx::query(AssertSqlSafe(sql));
     for &(id, pos) in pairs {
         query = query.bind(id).bind(pos);
     }

@@ -285,6 +285,20 @@ pub fn player_set_gapless(ctx: &PlaybackContext, enabled: bool) -> Result<(), Ap
     Ok(())
 }
 
+/// Arm / disarm the sleep-timer's "End of current track" mode. When armed, the
+/// playback monitor pauses at the next end-of-stream boundary instead of
+/// advancing the queue (see `src/player/handlers.rs`). Session-only — nothing
+/// is persisted. The `with_state_emit` re-publishes the light `ViewModel` so the
+/// UI's `Player.vm.sleep_at_track_end` (and thus the overflow-menu sleep row)
+/// tracks the flag; the monitor disarms it when it fires, which re-emits and
+/// auto-clears the row.
+pub fn player_set_pause_at_track_end(ctx: &PlaybackContext, armed: bool) -> Result<(), AppError> {
+    with_state_emit(&ctx.player_state, &ctx.sinks, |s| {
+        s.pause_after_current_track = armed;
+    });
+    Ok(())
+}
+
 // --- Graphic equalizer -----------------------------------------------------
 //
 // EQ state lives on the Rodio backend's lock-free shared cell, not the
@@ -311,6 +325,34 @@ pub fn player_set_eq_gains(ctx: &PlaybackContext, gains: &[f32]) {
 /// Set the EQ preamp / master gain (dB) on the live player.
 pub fn player_set_eq_preamp(ctx: &PlaybackContext, preamp_db: f32) {
     ctx.rodio.set_eq_preamp(preamp_db);
+}
+
+// --- ReplayGain ------------------------------------------------------------
+//
+// ReplayGain master state (enabled / mode / preamp / prevent-clipping) lives on
+// the same lock-free shared cell as the EQ, so these setters mirror the EQ ones:
+// synchronous, infallible, and applied to the playing + gapless-preloaded track
+// at once. The *per-track* gain is baked per source at play time (see
+// `player::replaygain`), not set here.
+
+/// Toggle `ReplayGain` on the live player.
+pub fn player_set_replaygain_enabled(ctx: &PlaybackContext, enabled: bool) {
+    ctx.rodio.set_replaygain_enabled(enabled);
+}
+
+/// Set the `ReplayGain` mode (Track / Album) on the live player.
+pub fn player_set_replaygain_mode(ctx: &PlaybackContext, mode: crate::player::replaygain::RgMode) {
+    ctx.rodio.set_replaygain_mode(mode);
+}
+
+/// Set the `ReplayGain` preamp (dB) on the live player.
+pub fn player_set_replaygain_preamp(ctx: &PlaybackContext, preamp_db: f32) {
+    ctx.rodio.set_replaygain_preamp(preamp_db);
+}
+
+/// Toggle the static peak-based clip guard on the live player.
+pub fn player_set_replaygain_prevent_clipping(ctx: &PlaybackContext, on: bool) {
+    ctx.rodio.set_replaygain_prevent_clipping(on);
 }
 
 #[cfg(test)]

@@ -127,7 +127,8 @@ fn format_view(ui: &AppWindow) -> String {
         6 if genre_id >= 0 => format!("GenreDetail({genre_id})"),
         6 => "Genres".to_owned(),
         7 => "Playlists".to_owned(),
-        8 => "Settings".to_owned(),
+        8 => "RecentlyPlayed".to_owned(),
+        9 => "Settings".to_owned(),
         n => format!("Nav({n})"),
     };
 

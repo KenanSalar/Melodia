@@ -31,7 +31,7 @@ use crate::ui::section_state::SectionState;
 use crate::ui::util::clamp_i64_to_i32;
 use crate::{AppWindow, TrackListRow as UiTrackListRow, Tracks};
 
-pub use fetch::{apply_row_favorite, fetch_and_apply, refilter, resort_and_apply};
+pub use fetch::{apply_row_favorite, apply_row_rating, fetch_and_apply, refilter, resort_and_apply};
 pub use selection::{clear_selection, handle_select_row};
 
 /// Pre-lowered text columns for fuzzy filtering. Built once per
@@ -198,6 +198,17 @@ impl TracksUi {
             r.is_favorite = fav;
         }
     }
+
+    /// Surgical mutation of `rating` on the canonical Vec — the star-rating
+    /// analogue of [`Self::flip_favorite`]. Paired with `apply_row_rating` so a
+    /// hover-set rating doesn't re-fetch the whole list.
+    pub fn flip_rating(&self, id: i64, rating: i32) {
+        let mut full = self.full.lock();
+        let v = Arc::make_mut(&mut *full);
+        if let Some(r) = v.iter_mut().find(|r| r.id == id) {
+            r.rating = rating;
+        }
+    }
 }
 
 /// Build an empty `VecModel<TrackListRow>`, hand it to the Slint `Tracks`
@@ -231,6 +242,7 @@ pub struct PreparedTrackRow {
     track_number: i32,
     duration_ms: i32,
     is_favorite: bool,
+    rating: i32,
     artwork_path: SharedString,
     display_duration: SharedString,
     enabled: bool,
@@ -254,6 +266,7 @@ pub fn prepare_track_list_row(r: &RsTrackListRow) -> PreparedTrackRow {
         duration_ms: i32::try_from(r.duration_ms.clamp(0, i64::from(i32::MAX)))
             .unwrap_or(i32::MAX),
         is_favorite: r.is_favorite,
+        rating: r.rating,
         artwork_path: SharedString::from(r.artwork_path.as_deref().unwrap_or("")),
         display_duration: SharedString::from(format_duration_ms(r.duration_ms.max(0))),
         // Always interactive for real DB-backed rows. Only the Browse view
@@ -281,6 +294,7 @@ pub fn finish_track_list_row(p: PreparedTrackRow) -> UiTrackListRow {
         track_number: p.track_number,
         duration_ms: p.duration_ms,
         is_favorite: p.is_favorite,
+        rating: p.rating,
         artwork_path: p.artwork_path,
         display_duration: p.display_duration,
         selected: false,

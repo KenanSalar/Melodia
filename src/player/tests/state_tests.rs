@@ -17,6 +17,11 @@ fn make_summary(id: i64, title: &str, duration_ms: i64) -> Arc<TrackSummary> {
         disc_number: None,
         last_position: 0,
         is_favorite: false,
+        rating: 0,
+        replaygain_track_gain: None,
+        replaygain_track_peak: None,
+        replaygain_album_gain: None,
+        replaygain_album_peak: None,
     })
 }
 
@@ -724,6 +729,11 @@ fn test_restore_queue_with_last_position() {
         disc_number: None,
         last_position: 45_000,
         is_favorite: false,
+        rating: 0,
+        replaygain_track_gain: None,
+        replaygain_track_peak: None,
+        replaygain_album_gain: None,
+        replaygain_album_peak: None,
     });
 
     let persistable = PersistableQueue {
@@ -751,4 +761,78 @@ fn test_restore_queue_index_out_of_bounds() {
     // get_current() returns None for out-of-range index, so no track loaded
     assert!(state.current_track.is_none());
     assert_eq!(state.queue.current_index, Some(99));
+}
+
+#[test]
+fn end_of_stream_advances_when_next_track_present() {
+    let mut state = PlayerState::default();
+    let track1 = make_summary(1, "Song 1", 100_000);
+    let track2 = make_summary(2, "Song 2", 100_000);
+    state.current_track = Some(track1.clone());
+    state.queue.add_tracks(vec![track1, track2]);
+    state.queue.current_index = Some(0);
+    state.status = PlaybackStatus::Playing;
+
+    let actions = state.build_end_of_stream_actions();
+
+    // Advanced to track 2 and kept playing.
+    assert_eq!(state.status, PlaybackStatus::Playing);
+    assert_eq!(state.current_track.as_ref().map(|t| t.id), Some(2));
+    assert_eq!(state.queue.current_index, Some(1));
+    assert!(actions.iter().any(|a| matches!(a, PlayerAction::PlayMedia { .. })));
+    // Counted the track that just ended.
+    assert!(actions.iter().any(|a| matches!(a, PlayerAction::UpdatePlayCount(1))));
+}
+
+#[test]
+fn end_of_stream_stops_at_end_of_queue() {
+    let mut state = PlayerState::default();
+    let track = make_summary(1, "Only Song", 100_000);
+    state.current_track = Some(track.clone());
+    state.queue.add_tracks(vec![track]);
+    state.queue.current_index = Some(0);
+    state.status = PlaybackStatus::Playing;
+
+    let actions = state.build_end_of_stream_actions();
+
+    assert_eq!(state.status, PlaybackStatus::Stopped);
+    assert_eq!(state.position_ms, 0);
+    assert!(actions.iter().any(|a| matches!(a, PlayerAction::Stop)));
+}
+
+#[test]
+fn end_of_stream_pauses_when_sleep_at_track_end_armed() {
+    // ⚠ M6: with the sleep-timer "End of current track" flag armed, the
+    // end-of-stream boundary must STOP (not advance) even though a next track
+    // is queued, and disarm the flag so the following boundary advances again.
+    let mut state = PlayerState::default();
+    let track1 = make_summary(1, "Song 1", 100_000);
+    let track2 = make_summary(2, "Song 2", 100_000);
+    state.current_track = Some(track1.clone());
+    state.queue.add_tracks(vec![track1, track2]);
+    state.queue.current_index = Some(0);
+    state.status = PlaybackStatus::Playing;
+    state.pause_after_current_track = true;
+
+    let actions = state.build_end_of_stream_actions();
+
+    // Did NOT advance — current track unchanged, stopped at position 0.
+    assert_eq!(state.current_track.as_ref().map(|t| t.id), Some(1));
+    assert_eq!(state.status, PlaybackStatus::Stopped);
+    assert_eq!(state.position_ms, 0);
+    assert_eq!(state.queue.current_index, Some(0));
+    // Flag disarmed so a subsequent boundary advances normally.
+    assert!(!state.pause_after_current_track);
+    // Emitted a Stop, still counted the finished track, started no new media.
+    assert!(actions.iter().any(|a| matches!(a, PlayerAction::Stop)));
+    assert!(actions.iter().any(|a| matches!(a, PlayerAction::UpdatePlayCount(1))));
+    assert!(!actions.iter().any(|a| matches!(a, PlayerAction::PlayMedia { .. })));
+}
+
+#[test]
+fn view_model_light_carries_sleep_at_track_end() {
+    let mut state = PlayerState::default();
+    assert!(!state.to_view_model_light().sleep_at_track_end);
+    state.pause_after_current_track = true;
+    assert!(state.to_view_model_light().sleep_at_track_end);
 }

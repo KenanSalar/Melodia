@@ -3,6 +3,7 @@ import { Theme } from "../../theme.slint";
 import { TrackListRow } from "../../models.slint";
 import { Playlists, Dialog, Nav, PopupHighlight, RowCovers } from "../../globals.slint";
 import { MaterialIcon } from "../material-icon.slint";
+import { StarRating } from "../star-rating.slint";
 import { ArtworkImage } from "../artwork-image.slint";
 import { MenuItem, MenuSeparator } from "context-menu.slint";
 import { DataCell } from "track-list-cell.slint";
@@ -186,6 +187,9 @@ export component TrackListRowItem inherits Rectangle {
     callback play-next([int]);
     callback add-to-queue([int]);
     callback toggle-row-favorite([int] /*track_ids*/, bool /*new_state*/);
+    // Star rating (0–5). Batch-shaped like `toggle-row-favorite`; the hover
+    // strip emits a 1-element array today, leaving room for multi-select later.
+    callback set-row-rating([int] /*track_ids*/, int /*rating*/);
     callback select-row(int /*idx*/, int /*id*/, bool /*shift*/, bool /*ctrl*/);
     // Fired when the context menu's "Remove from playlist" entry is
     // clicked. Only emitted when `view-context == "playlist-detail"`.
@@ -531,6 +535,22 @@ export component TrackListRowItem inherits Rectangle {
                             icon-size: 18px;
                             icon-color: Theme.red;
                             filled: true;
+                        }
+                    }
+                    // Star rating — revealed on row hover, to the RIGHT of the
+                    // title text. The title `VerticalLayout` keeps
+                    // `horizontal-stretch: 1`, so it elides to make room; the
+                    // title is never swapped out (unlike the Length-cell favorite
+                    // toggle). Gated on `root.enabled` so disk-only Browse rows
+                    // (id 0) can't be rated. The per-star TouchAreas are
+                    // descendants of `touch`, so hovering a star keeps the row
+                    // hovered and this strip mounted.
+                    if touch.has-hover && root.enabled: VerticalLayout {
+                        alignment: center;
+                        StarRating {
+                            rating: root.row-data.rating;
+                            star-size: 16px;
+                            rated(n) => { root.set-row-rating([root.row-data.id], n); }
                         }
                     }
                 }

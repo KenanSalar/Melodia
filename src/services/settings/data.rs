@@ -8,6 +8,7 @@ use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 
 use crate::player::equalizer::{DEFAULT_PRESET, NUM_BANDS};
+use crate::player::replaygain::{DEFAULT_MODE, RG_DEFAULT_PREAMP_DB};
 use crate::player::types::RepeatMode;
 
 pub const MAX_CORNER_RADIUS: u32 = 15;
@@ -149,6 +150,38 @@ impl Default for EqualizerFlags {
             eq_band_gains: vec![0.0; NUM_BANDS],
             eq_selected_preset: DEFAULT_PRESET.to_owned(),
             eq_preamp: 0.0,
+        }
+    }
+}
+
+/// `ReplayGain` (loudness normalization) preferences. Like the other audio
+/// substructs this is `#[serde(flatten)]`'d into `SettingsData` and carries a
+/// whole-struct `#[serde(default)]` so older `settings.json` files (written
+/// before `ReplayGain` existed) deserialize to these neutral defaults.
+///
+/// Defaults are inert: `ReplayGain` ships **off**, so a fresh install — or any
+/// older file — plays at the raw recorded level until the user opts in. The
+/// `rg_prevent_clipping` guard defaults **on** so a boosted track never clips
+/// once `ReplayGain` is enabled. `rg_mode` is stored as a lowercase token
+/// (`"track"` / `"album"`); the loader falls back to Album on an unknown value.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ReplayGainFlags {
+    pub rg_enabled: bool,
+    pub rg_mode: String,
+    /// Extra preamp in dB (0 = unity), clamped to the player's
+    /// `RG_MIN_PREAMP_DB..=RG_MAX_PREAMP_DB` range when applied / persisted.
+    pub rg_preamp: f32,
+    pub rg_prevent_clipping: bool,
+}
+
+impl Default for ReplayGainFlags {
+    fn default() -> Self {
+        Self {
+            rg_enabled: false,
+            rg_mode: DEFAULT_MODE.to_owned(),
+            rg_preamp: RG_DEFAULT_PREAMP_DB,
+            rg_prevent_clipping: true,
         }
     }
 }
@@ -445,6 +478,8 @@ pub struct SettingsData {
     #[serde(flatten)]
     pub equalizer: EqualizerFlags,
     #[serde(flatten)]
+    pub replaygain: ReplayGainFlags,
+    #[serde(flatten)]
     pub queue: QueueFlags,
     #[serde(flatten)]
     pub window: WindowFlags,
@@ -486,6 +521,7 @@ impl Default for SettingsData {
             locale: default_locale(),
             playback: PlaybackFlags::default(),
             equalizer: EqualizerFlags::default(),
+            replaygain: ReplayGainFlags::default(),
             queue: QueueFlags::default(),
             window: WindowFlags::default(),
             tray: TrayFlags::default(),

@@ -2,6 +2,7 @@ use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 
 use rayon::prelude::*;
+use sqlx::AssertSqlSafe;
 
 use crate::database::queries;
 use crate::database::SQLITE_BIND_LIMIT;
@@ -102,7 +103,7 @@ pub async fn ingest_scanned_files(
         let sql = format!(
             "SELECT file_path, file_size, date_modified FROM tracks WHERE file_path IN ({placeholders})"
         );
-        let mut query = sqlx::query_as::<_, (String, Option<i64>, Option<String>)>(&sql);
+        let mut query = sqlx::query_as::<_, (String, Option<i64>, Option<String>)>(AssertSqlSafe(sql));
         let path_cows: Vec<Cow<'_, str>> =
             chunk.iter().map(|f| f.path.to_string_lossy()).collect();
         for cow in &path_cows {
@@ -325,7 +326,7 @@ async fn batch_lookup_by_hash(
              WHERE file_hash IN ({placeholders})
              ORDER BY id ASC"
         );
-        let mut q = sqlx::query_as::<_, (String, i64, String)>(&sql);
+        let mut q = sqlx::query_as::<_, (String, i64, String)>(AssertSqlSafe(sql));
         for h in chunk {
             q = q.bind(*h);
         }
@@ -402,7 +403,7 @@ async fn flush_artwork_backfill(
               WHERE file_path IN (SELECT path FROM v)
                 AND (artwork_path IS NULL OR artwork_path = '')"
         );
-        let mut q = sqlx::query(&sql).persistent(false);
+        let mut q = sqlx::query(AssertSqlSafe(sql)).persistent(false);
         for (path, art) in chunk {
             q = q.bind(path).bind(art);
         }

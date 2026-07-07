@@ -1,3 +1,5 @@
+use sqlx::AssertSqlSafe;
+
 use crate::database::DbPool;
 use crate::entities::{album, artist, track};
 use crate::error::AppError;
@@ -77,7 +79,7 @@ pub async fn search_all(db: &DbPool, query: &str) -> Result<SearchResults, AppEr
          WHERE tracks_fts MATCH ?
          ORDER BY rank LIMIT 50"
     );
-    let tracks_fut = sqlx::query_as::<_, track::TrackListRow>(&sql)
+    let tracks_fut = sqlx::query_as::<_, track::TrackListRow>(AssertSqlSafe(sql))
         .bind(&fts_query)
         .fetch_all(db.read());
 

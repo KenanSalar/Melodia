@@ -134,3 +134,17 @@ pub fn apply_filtered_tracks(fav_ui: &Arc<FavoritesUi>, weak: &Weak<AppWindow>) 
         g.set_filtered_count(filtered_count);
     });
 }
+
+/// Set `rating` on a single All Songs row in the Slint `VecModel`. Rating is
+/// independent of favorite membership (and there is no in-table rating sort),
+/// so the row stays put — patch it in place rather than rebuilding the whole
+/// filtered list. Mirrors [`crate::ui::tracks::apply_row_rating`].
+pub fn apply_row_rating(weak: &Weak<AppWindow>, id: i64, rating: i32) {
+    let _ = weak.upgrade_in_event_loop(move |ui| {
+        crate::ui::model_patch::patch_track_row_by_id(
+            &ui.global::<Favorites>().get_tracks(),
+            id,
+            |r| r.rating = rating,
+        );
+    });
+}

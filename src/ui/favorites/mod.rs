@@ -56,7 +56,8 @@ pub use hero::refresh_hero;
 pub use sections::{apply_filtered_strips, refresh_strips};
 pub use selection::{clear_selection, handle_select_row};
 pub use tracks::{
-    apply_filtered_tracks, current_filter, current_sort, refresh_tracks, set_filter, set_sort,
+    apply_filtered_tracks, apply_row_rating, current_filter, current_sort, refresh_tracks,
+    set_filter, set_sort,
 };
 
 /// Rust-side state for the Favorites view. Shared between the UI
@@ -157,6 +158,9 @@ impl FavoritesUi {
         self.inner.most_played.lock().clear();
         self.inner.fav_artists.lock().clear();
         self.inner.applied_selection.lock().clear();
+        // Forget the last-composed mosaic covers so a re-enter recomposes the
+        // hero blur (the LRU tiles were just dropped above).
+        self.inner.last_mosaic_paths.lock().clear();
         crate::tasks::heap_trim::trim();
     }
 
@@ -240,6 +244,15 @@ impl FavoritesUi {
             tracks.retain(|r| r.id != id);
         } else if let Some(r) = tracks.iter_mut().find(|r| r.id == id) {
             r.is_favorite = true;
+        }
+    }
+
+    /// Surgically set `rating` on a cached All Songs row. Unlike
+    /// [`Self::flip_or_remove_track`], rating never affects membership (the
+    /// list stays keyed on `is_favorite = TRUE`), so the row is only patched.
+    pub fn flip_track_rating(&self, id: i64, rating: i32) {
+        if let Some(r) = self.inner.tracks_all.lock().iter_mut().find(|r| r.id == id) {
+            r.rating = rating;
         }
     }
 }

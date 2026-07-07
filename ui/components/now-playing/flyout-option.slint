@@ -1,0 +1,52 @@
+import { Theme } from "../../theme.slint";
+import { MaterialIcon } from "../material-icon.slint";
+import { FlyoutMetrics } from "flyout-presets.slint";
+
+// Single option row inside a left-column flyout (speed / sleep timer).
+// Mirrors `DropdownOption` (`ui/components/settings/dropdown.slint`): label
+// on the left, a `check` glyph on the active row. Hover fill matches the
+// sibling overflow rows (`Theme.surface1`) since both live in the same
+// popup family.
+export component FlyoutOption inherits Rectangle {
+    in property <string> label;
+    in property <bool> active;
+
+    callback clicked();
+
+    height: FlyoutMetrics.option-row-h;
+    border-radius: Theme.radius-sm;
+    background: touch.has-hover ? Theme.surface1 : transparent;
+    animate background { duration: Theme.dur-fast; easing: ease-in-out; }
+
+    HorizontalLayout {
+        padding-left: Theme.pad-sm;
+        padding-right: Theme.pad-sm;
+        spacing: Theme.pad-sm;
+        alignment: stretch;
+
+        VerticalLayout {
+            alignment: center;
+            horizontal-stretch: 1;
+            Text {
+                text: root.label;
+                color: root.active ? Theme.accent : Theme.text;
+                font-size: Theme.font-size-md;
+            }
+        }
+        VerticalLayout {
+            alignment: center;
+            // Checkmark only on the active row; the empty branch keeps the
+            // layout box stable so all rows have identical height.
+            if root.active: MaterialIcon {
+                name: "check";
+                icon-size: 16px;
+                icon-color: Theme.accent;
+            }
+        }
+    }
+
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}

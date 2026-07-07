@@ -17,6 +17,8 @@ pub mod playback;
 pub mod playlist_files;
 pub mod playlists;
 pub mod queue;
+pub mod ratings;
+pub mod recently_played;
 pub mod search;
 pub mod settings;
 pub mod tracks;

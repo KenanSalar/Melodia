@@ -383,6 +383,54 @@ async fn set_favorite_empty_ids_is_noop() -> Result<(), AppError> {
 }
 
 #[tokio::test]
+async fn set_rating_updates_value() -> Result<(), AppError> {
+    let db = seed_db().await?;
+    let id: i64 = sqlx::query_scalar("SELECT id FROM tracks LIMIT 1")
+        .fetch_one(db.read())
+        .await?;
+
+    // Default rating is 0 (unrated).
+    let t = queries::track::get_track_by_id(&db, id).await?;
+    assert_eq!(t.rating, 0);
+
+    queries::track::set_rating(&db, &[id], 4).await?;
+    let t = queries::track::get_track_by_id(&db, id).await?;
+    assert_eq!(t.rating, 4);
+
+    // Clearing back to 0 works.
+    queries::track::set_rating(&db, &[id], 0).await?;
+    let t = queries::track::get_track_by_id(&db, id).await?;
+    assert_eq!(t.rating, 0);
+    Ok(())
+}
+
+#[tokio::test]
+async fn set_rating_targets_only_given_ids() -> Result<(), AppError> {
+    let db = seed_db().await?;
+    let all = queries::track::get_all_tracks(&db, None, None).await?;
+    assert!(all.len() >= 2);
+
+    queries::track::set_rating(&db, &[all[0].id], 5).await?;
+
+    let rated = queries::track::get_track_by_id(&db, all[0].id).await?;
+    assert_eq!(rated.rating, 5);
+    // Untargeted rows stay at the default 0.
+    for other in &all[1..] {
+        let t = queries::track::get_track_by_id(&db, other.id).await?;
+        assert_eq!(t.rating, 0, "id {} must be untouched", other.id);
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn set_rating_empty_ids_is_noop() -> Result<(), AppError> {
+    let db = seed_db().await?;
+    // Should not error.
+    queries::track::set_rating(&db, &[], 3).await?;
+    Ok(())
+}
+
+#[tokio::test]
 async fn get_favorite_stats_orders_artwork_by_play_count() -> Result<(), AppError> {
     let db = seed_db().await?;
     let all = queries::track::get_all_tracks(&db, None, None).await?;
@@ -460,5 +508,82 @@ async fn get_favorite_stats_empty_when_favorites_have_no_artwork() -> Result<(),
         "no artworks among favorites ⇒ empty list, got {:?}",
         stats.artwork_paths
     );
+    Ok(())
+}
+
+#[tokio::test]
+async fn get_recently_played_orders_newest_first_and_excludes_null() -> Result<(), AppError> {
+    let db = seed_db().await?;
+
+    // Distinct, lexically-ordered RFC-3339 timestamps on two tracks; leave
+    // Gamma's `last_played` NULL (never played) so it must be excluded.
+    sqlx::query("UPDATE tracks SET last_played = '2026-01-01T00:00:00+00:00' WHERE title = 'Alpha'")
+        .execute(db.write())
+        .await?;
+    sqlx::query("UPDATE tracks SET last_played = '2026-06-01T00:00:00+00:00' WHERE title = 'Beta'")
+        .execute(db.write())
+        .await?;
+
+    let rows = queries::track::get_recently_played(&db, 200).await?;
+    let titles: Vec<&str> = rows.iter().map(|r| r.title.as_str()).collect();
+    assert_eq!(
+        titles,
+        vec!["Beta", "Alpha"],
+        "newest-played first; the NULL-last_played track is excluded"
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn get_recently_played_respects_limit() -> Result<(), AppError> {
+    let db = seed_db().await?;
+    sqlx::query("UPDATE tracks SET last_played = '2026-01-01T00:00:00+00:00' WHERE title = 'Alpha'")
+        .execute(db.write())
+        .await?;
+    sqlx::query("UPDATE tracks SET last_played = '2026-06-01T00:00:00+00:00' WHERE title = 'Beta'")
+        .execute(db.write())
+        .await?;
+
+    let rows = queries::track::get_recently_played(&db, 1).await?;
+    assert_eq!(rows.len(), 1, "LIMIT caps the result set");
+    assert_eq!(rows[0].title, "Beta", "the single row is the most recent");
+    Ok(())
+}
+
+#[tokio::test]
+async fn get_most_played_orders_by_count_and_excludes_zero() -> Result<(), AppError> {
+    let db = seed_db().await?;
+
+    // Beta highest, Alpha lower, Gamma left at play_count 0 (must be excluded).
+    sqlx::query("UPDATE tracks SET play_count = 3 WHERE title = 'Alpha'")
+        .execute(db.write())
+        .await?;
+    sqlx::query("UPDATE tracks SET play_count = 9 WHERE title = 'Beta'")
+        .execute(db.write())
+        .await?;
+
+    let rows = queries::track::get_most_played(&db, 200).await?;
+    let titles: Vec<&str> = rows.iter().map(|r| r.title.as_str()).collect();
+    assert_eq!(
+        titles,
+        vec!["Beta", "Alpha"],
+        "play_count DESC; the play_count == 0 track is excluded (no favorite filter)"
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn get_most_played_respects_limit() -> Result<(), AppError> {
+    let db = seed_db().await?;
+    sqlx::query("UPDATE tracks SET play_count = 3 WHERE title = 'Alpha'")
+        .execute(db.write())
+        .await?;
+    sqlx::query("UPDATE tracks SET play_count = 9 WHERE title = 'Beta'")
+        .execute(db.write())
+        .await?;
+
+    let rows = queries::track::get_most_played(&db, 1).await?;
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].title, "Beta");
     Ok(())
 }

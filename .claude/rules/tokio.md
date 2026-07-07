@@ -18,6 +18,8 @@
 
 - For request/response: combine `mpsc` (send request) + `oneshot` (receive reply)
 - Use `watch` for ViewModel updates from backend to frontend listeners
+- `Receiver::recv_many(&mut buf, limit)` batch-drains an `mpsc` in one await — cancel-safe (a losing `select!` branch consumed nothing) and returns 0 only when the channel is closed *and* empty. Fits coalescing patterns (file-event batches, drop floods)
+- `watch` consumer loops should be do-while shaped: process `rx.borrow_and_update()` first, *then* `await changed()` — handles the initial value and can't miss an update that landed between subscribe and first await
 
 ## Mutex & Locking
 
@@ -37,6 +39,7 @@
 - Use `CancellationToken` from `tokio-util` to broadcast shutdown signals
 - Use `TaskTracker` from `tokio-util` to wait for all spawned tasks to complete
 - Pattern: detect shutdown signal → broadcast via token → await tracker completion
+- `token.run_until_cancelled(fut)` returns `Some(output)`, or `None` once cancelled (dropping the future) — the concise alternative to a manual `select!` on `token.cancelled()`; completion wins a tie, and `run_until_cancelled_owned` consumes the token
 
 ## Common Pitfalls
 
@@ -52,6 +55,7 @@
 - `join_set.join_next().await` returns the next completed task result (in completion order, not spawn order)
 - `join_set.abort_all()` cancels all remaining tasks — good for fan-out patterns with early exit
 - Unlike `join_all`, `JoinSet` lets you process results as they arrive without waiting for all tasks
+- `JoinSet::join_all()` awaits everything at once and collects results in completion order — but it **panics on `JoinError`**; keep the `join_next()` loop when tasks may fail or get aborted
 
 ## Timeout & Cancellation
 

@@ -10,7 +10,7 @@ use slint::{ComponentHandle, Model, SharedString};
 use crate::library;
 use crate::state::AppState;
 use crate::ui::callbacks::collect_track_ids;
-use crate::ui::callbacks::macros::{spawn_logged, spawn_logged_sync};
+use crate::ui::callbacks::macros::{spawn_logged, spawn_logged_sync, wire_row_flag};
 use crate::ui::callbacks::persist_view_sort;
 use crate::ui::genres::{self as genres_ui_mod, GenresUi};
 use crate::ui::track_list_view::{TrackListColumnState, view_id};
@@ -153,33 +153,33 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, genres_ui: &Arc<GenresUi>) 
         });
     }
 
-    // toggle-row-favorite: write through, then surgically update each
-    // affected row (no list re-fetch — scroll position holds and
-    // there's no flash). Single-row and multi-select both arrive as
-    // `[int]`.
+    // toggle-row-favorite / set-row-rating: write through, then surgically
+    // update each affected row (no list re-fetch — scroll position holds and
+    // there's no flash). Single-row and multi-select both arrive as `[int]`;
+    // rating never changes list membership.
     {
-        let s = state.clone();
-        let weak = weak.clone();
         let gu = genres_ui.clone();
-        detail.on_toggle_row_favorite(move |ids, fav| {
-            let id_vec = collect_track_ids(&ids);
-            if id_vec.is_empty() {
-                return;
-            }
-            let s = s.clone();
-            let weak = weak.clone();
-            let gu = gu.clone();
-            s.runtime.clone().spawn(async move {
-                if let Err(e) = library::favorites::set_favorite(&s, id_vec.clone(), fav).await {
-                    log::warn!("genres::set_favorite: {e}");
-                    return;
-                }
+        wire_row_flag!(detail, on_toggle_row_favorite, state, "genres::set_favorite",
+            library::favorites::set_favorite, collect_track_ids,
+            captures: [weak, gu],
+            after: |id_vec, fav| {
                 for id in &id_vec {
                     gu.flip_detail_favorite(*id, fav);
                     genres_ui_mod::apply_detail_row_favorite(&weak, *id, fav);
                 }
             });
-        });
+    }
+    {
+        let gu = genres_ui.clone();
+        wire_row_flag!(detail, on_set_row_rating, state, "genres::set_rating",
+            library::ratings::set_rating, collect_track_ids,
+            captures: [weak, gu],
+            after: |id_vec, rating| {
+                for id in &id_vec {
+                    gu.flip_detail_rating(*id, rating);
+                    genres_ui_mod::apply_detail_row_rating(&weak, *id, rating);
+                }
+            });
     }
 
     // select-row / clear-selection: modifier-aware selection,

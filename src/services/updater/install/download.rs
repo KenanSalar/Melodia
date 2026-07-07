@@ -140,7 +140,7 @@ pub(super) async fn download_to_file(
         discard_staging_if_sidecar_mismatches(dest, expected_version, expected_size, url)
             .and_then(|m| m.etag);
 
-    let existing_size = std::fs::metadata(dest).map(|m| m.len()).unwrap_or(0);
+    let existing_size = std::fs::metadata(dest).map_or(0, |m| m.len());
     let resume = plan_resume(existing_size, expected_size);
 
     // Write (or refresh) the sidecar at the *start* of the download so a

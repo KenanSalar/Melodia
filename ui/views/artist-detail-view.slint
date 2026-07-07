@@ -1,6 +1,6 @@
 import { ScrollView } from "std-widgets.slint";
 import { Theme } from "../theme.slint";
-import { ArtistDetail, Player } from "../globals.slint";
+import { ArtistDetail, Player, CompositeScroll } from "../globals.slint";
 import { DetailHeader } from "../components/detail-header.slint";
 import { ActionPill, PillLabel, PillButton, PillDivider } from "../components/action-pill.slint";
 import { ColumnTogglePopup } from "../components/track-list/column-toggle-popup.slint";
@@ -8,8 +8,9 @@ import { EntityCard } from "../components/grid/entity-card.slint";
 import { MaterialIcon } from "../components/material-icon.slint";
 import { SearchBar } from "../components/search-bar.slint";
 import { TrackList } from "../components/track-list/track-list.slint";
-import { OverlayScrollbar } from "../components/overlay-scrollbar.slint";
+import { CompositeScrollbars } from "../components/composite-scrollbars.slint";
 import { FilterThrottle } from "../components/filter-throttle.slint";
+import { CollapsibleSectionHeader } from "../components/collapsible-section-header.slint";
 
 // The full Artist Detail view. Mirrors `AlbumDetailView`:
 //
@@ -83,7 +84,7 @@ export component ArtistDetailView inherits Rectangle {
                 VerticalLayout {
                     alignment: center;
                     Text {
-                        text: "‎" + ArtistDetail.artist.name;
+                        text: "\u{200e}" + ArtistDetail.artist.name;
                         color: Theme.text;
                         font-size: 24px;
                         font-weight: Theme.page-title-weight;
@@ -170,12 +171,27 @@ export component ArtistDetailView inherits Rectangle {
         // binding), so its inner ListView virtualizes to ~visible rows
         // — the outer ScrollView's own travel covers just the Albums
         // strip region, and the unified scrollbar composes both travels.
-        // Wheel handoff between the two regions is native: a Slint
-        // Flickable at its scroll edge forwards wheel events to the
-        // parent, so scrolling up at the list top brings the strip back.
+        // The mouse WHEEL does NOT hand off between the two nested
+        // scrollers natively — Slint's inner ListView swallows the wheel
+        // at its top edge instead of bubbling to `below-sv` (see
+        // CompositeScroll). So `hover-catch` reports region hover to the
+        // winit MouseWheel filter, which routes vertical wheel through the
+        // mounted `CompositeScrollbars`' composite split; the
+        // scrollbar-drag path already composes both travels directly.
         below-hero := Rectangle {
             vertical-stretch: 1;
             clip: true;
+
+            // Ancestor hover sentinel (see CompositeScroll). Forwards every
+            // event to the ScrollView child — row clicks, drags and native
+            // horizontal scroll are unaffected; only its `has-hover` is
+            // observed. Empty-space clicks fall through to here (rows grab
+            // their own), reproducing the root backdrop's blur-on-empty-click.
+            hover-catch := TouchArea {
+                width: 100%;
+                height: 100%;
+                changed has-hover => { CompositeScroll.hovered = self.has-hover; }
+                clicked => { ArtistDetail.blur-search-tick += 1; }
 
             below-sv := ScrollView {
                 width: 100%;
@@ -205,62 +221,13 @@ export component ArtistDetailView inherits Rectangle {
             padding-bottom: Theme.pad-lg;
             spacing: Theme.pad-sm;
 
-            // Clickable header: "Albums" label + chevron. Hit area is
-            // the chevron + label only (compact), not the whole row
-            // width — clicking dead space to the right of the chevron
-            // shouldn't toggle. Chevron mirrors the convention used
-            // elsewhere in the app: down (`expand_more`) when collapsed
-            // ("click to expand downward"), up (`expand_less`) when
-            // expanded ("click to collapse upward").
             HorizontalLayout {
                 alignment: start;
 
-                header-target := Rectangle {
-                    width: header-row.preferred-width;
-                    height: 28px;
-                    // Pill chrome on hover — matches `PillButton`'s
-                    // `border-radius: self.height / 2`.
-                    border-radius: self.height / 2;
-                    background: header-touch.has-hover
-                        ? Theme.surface1
-                        : transparent;
-                    animate background { duration: Theme.dur-fast; easing: ease-in-out; }
-
-                    header-row := HorizontalLayout {
-                        // 10 px matches `PillButton`'s horizontal padding —
-                        // keeps the rounded pill ends from crowding the
-                        // text on the left and the chevron on the right.
-                        // With 4 px the text optically hugs the left curve.
-                        padding-left: 10px;
-                        padding-right: 10px;
-                        spacing: 2px;
-                        alignment: start;
-
-                        VerticalLayout {
-                            alignment: center;
-                            Text {
-                                text: @tr("Albums");
-                                color: Theme.text;
-                                font-size: Theme.font-size-lg;
-                                font-weight: 600;
-                            }
-                        }
-                        VerticalLayout {
-                            alignment: center;
-                            MaterialIcon {
-                                name: ArtistDetail.albums-collapsed
-                                    ? "expand_more"
-                                    : "expand_less";
-                                icon-size: 20px;
-                                icon-color: Theme.subtext0;
-                            }
-                        }
-                    }
-
-                    header-touch := TouchArea {
-                        mouse-cursor: pointer;
-                        clicked => { ArtistDetail.toggle-albums-collapsed(); }
-                    }
+                CollapsibleSectionHeader {
+                    label: @tr("Albums");
+                    collapsed: ArtistDetail.albums-collapsed;
+                    toggled => { ArtistDetail.toggle-albums-collapsed(); }
                 }
             }
 
@@ -377,6 +344,7 @@ export component ArtistDetailView inherits Rectangle {
                 play-next(ids) => { ArtistDetail.play-next(ids); }
                 add-to-queue(ids) => { ArtistDetail.add-to-queue(ids); }
                 toggle-row-favorite(ids, on) => { ArtistDetail.toggle-row-favorite(ids, on); }
+                set-row-rating(ids, n) => { ArtistDetail.set-row-rating(ids, n); }
                 select-row(idx, id, sh, ct) => { ArtistDetail.select-row(idx, id, sh, ct); }
                 request-blur-search => { ArtistDetail.blur-search-tick += 1; }
                 go-to-album(aid) => { ArtistDetail.go-to-album(aid); }
@@ -386,44 +354,30 @@ export component ArtistDetailView inherits Rectangle {
         }
                 }
             }
+            }
         }
     }
 
-    // Composite scroll math: the outer ScrollView's own travel covers
-    // the Albums-strip region (viewport minus visible height), the
-    // TrackList's inner ListView covers the rows. The unified scrollbar
-    // below spans both travels; drags split the offset at the boundary.
-    property <length> v-outer-max: max(0px, below-sv.viewport-height - below-sv.visible-height);
-    property <length> v-inner-max: max(0px, tl.v-viewport-height - tl.v-visible-height);
-
-    // Outer vertical scrollbar covers the Albums sub-section + the
-    // tracklist together. Pinned to the right edge of the below-hero
-    // region so it starts exactly under the hero banner.
-    OverlayScrollbar {
-        horizontal: false;
-        x: parent.width - self.width;
-        y: below-hero.absolute-position.y - root.absolute-position.y;
-        width: 10px;
-        height: below-hero.height;
-        visible-size: below-sv.visible-height;
-        content-size: below-sv.visible-height + root.v-outer-max + root.v-inner-max;
-        offset: -below-sv.viewport-y + tl.v-offset;
-        scroll-to(o) => {
-            below-sv.viewport-y = -min(o, root.v-outer-max);
-            tl.set-v-offset(max(0px, o - root.v-outer-max));
-        }
-    }
-
-    // Horizontal scrollbar still drives the TrackList's column pan.
-    OverlayScrollbar {
-        horizontal: true;
-        x: tl.absolute-position.x - root.absolute-position.x;
-        y: parent.height - self.height;
-        width: tl.width - 10px;
-        height: 10px;
-        visible-size: tl.h-visible-width;
-        content-size: tl.h-viewport-width;
-        offset: tl.h-offset;
-        scroll-to(o) => { tl.set-h-offset(o); }
+    // Composite scroll: unified vbar over the Albums sub-section + the
+    // tracklist, column-pan hbar, and the CompositeScroll wheel routing —
+    // owned by the shared component.
+    CompositeScrollbars {
+        x: 0; y: 0;
+        width: 100%; height: 100%;
+        outer-viewport-y <=> below-sv.viewport-y;
+        outer-viewport-height: below-sv.viewport-height;
+        outer-visible-height: below-sv.visible-height;
+        inner-offset: tl.v-offset;
+        inner-viewport-height: tl.v-viewport-height;
+        inner-visible-height: tl.v-visible-height;
+        set-inner-offset(o) => { tl.set-v-offset(o); }
+        h-offset: tl.h-offset;
+        h-viewport-width: tl.h-viewport-width;
+        h-visible-width: tl.h-visible-width;
+        set-h-offset(o) => { tl.set-h-offset(o); }
+        v-region-y: below-hero.absolute-position.y - root.absolute-position.y;
+        v-region-height: below-hero.height;
+        h-region-x: tl.absolute-position.x - root.absolute-position.x;
+        h-region-width: tl.width;
     }
 }

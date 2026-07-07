@@ -6,7 +6,7 @@ use std::sync::Arc;
 use slint::{ComponentHandle, Model, SharedString};
 
 use super::collect_track_ids;
-use super::macros::{spawn_logged, spawn_logged_sync};
+use super::macros::{spawn_logged, spawn_logged_sync, wire_row_flag};
 use crate::library;
 use crate::state::AppState;
 use crate::ui::track_list_view::{TrackListColumnState, view_id};
@@ -138,33 +138,32 @@ pub fn wire_tracks(ui: &AppWindow, state: &AppState, tracks_ui: &Arc<TracksUi>) 
         });
     }
 
-    // toggle-row-favorite: write through, then surgically update each
-    // affected row (no list re-fetch, so scroll position holds and
-    // there's no flash). The Slint side passes an `[int]` so a single-
-    // row click and a multi-select batch share one code path.
+    // toggle-row-favorite / set-row-rating: write through, then surgically
+    // update each affected row (no list re-fetch, so scroll position holds
+    // and there's no flash). Rating never changes list membership.
     {
-        let s = state.clone();
-        let weak = weak.clone();
         let tu = tracks_ui.clone();
-        tracks.on_toggle_row_favorite(move |ids, fav| {
-            let id_vec = collect_track_ids(&ids);
-            if id_vec.is_empty() {
-                return;
-            }
-            let s = s.clone();
-            let weak = weak.clone();
-            let tu = tu.clone();
-            s.runtime.clone().spawn(async move {
-                if let Err(e) = library::favorites::set_favorite(&s, id_vec.clone(), fav).await {
-                    log::warn!("set_favorite: {e}");
-                    return;
-                }
+        wire_row_flag!(tracks, on_toggle_row_favorite, state, "set_favorite",
+            library::favorites::set_favorite, collect_track_ids,
+            captures: [weak, tu],
+            after: |id_vec, fav| {
                 for id in &id_vec {
                     tu.flip_favorite(*id, fav);
                     tracks_ui_mod::apply_row_favorite(&weak, *id, fav);
                 }
             });
-        });
+    }
+    {
+        let tu = tracks_ui.clone();
+        wire_row_flag!(tracks, on_set_row_rating, state, "set_rating",
+            library::ratings::set_rating, collect_track_ids,
+            captures: [weak, tu],
+            after: |id_vec, rating| {
+                for id in &id_vec {
+                    tu.flip_rating(*id, rating);
+                    tracks_ui_mod::apply_row_rating(&weak, *id, rating);
+                }
+            });
     }
 
     // select-row: modifier-aware click handler. Computes the new selected
