@@ -41,11 +41,14 @@ jobs:
       - name: cargo clippy
         run: cargo clippy --all-targets --locked -- -D warnings
 
-  # Tests + coverage. Runs the FULL suite including the audio-dependent
-  # integration test `tests/headless.rs` behind a dummy ALSA device.
+  # Tests + coverage. Gated behind clippy + msrv so a lint/MSRV failure
+  # fast-fails the pipeline without paying for the expensive instrumented
+  # run. Runs the FULL suite including the audio-dependent integration test
+  # `tests/headless.rs` behind a userspace ALSA null device.
   test:
     name: test
     runs-on: ubuntu-latest
+    needs: [clippy, msrv]
     steps:
       - uses: actions/checkout@v5
       - uses: ./.github/actions/linux-system-deps
@@ -61,18 +64,17 @@ jobs:
           tool: cargo-llvm-cov
 
       # `tests/headless.rs` boots AppState, which opens rodio's default output
-      # device (cpal -> ALSA). Headless runners have no sound card, so load the
-      # in-kernel dummy card and point ALSA's default PCM at it. `type plug`
-      # wraps `hw` so cpal's format/rate is converted rather than rejected.
-      - name: Set up dummy ALSA device
+      # device (cpal -> ALSA). Headless runners have no sound card, and the
+      # GitHub Azure kernel ships no snd-dummy/snd-aloop module, so point ALSA's
+      # default PCM at the built-in userspace `null` device (part of alsa-lib —
+      # no kernel module, daemon, or extra package). rodio/cpal open it and
+      # discard output; verified locally against tests/headless.rs.
+      - name: Set up dummy ALSA device (userspace null)
         run: |
-          sudo modprobe snd-dummy \
-            || (sudo apt-get install -y "linux-modules-extra-$(uname -r)" && sudo modprobe snd-dummy)
           sudo tee /etc/asound.conf >/dev/null <<'EOF'
-          pcm.!default { type plug slave.pcm "hw:Dummy,0" }
-          ctl.!default { type hw card Dummy }
+          pcm.!default { type null }
+          ctl.!default { type null }
           EOF
-          echo "ALSA cards:"; cat /proc/asound/cards || true
 
       # One instrumented test run feeds both the HTML report and the text
       # summary (report phases don't re-run tests).

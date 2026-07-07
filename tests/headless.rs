@@ -7,9 +7,9 @@
 //! - Uses `XDG_DATA_HOME` to redirect `dirs::data_dir()` so the prod path code
 //!   is exercised verbatim.
 //! - `AppState::init` opens the default audio device (rodio); machines without
-//!   audio will fail here. CI provisions an in-kernel `snd-dummy` sound card and
-//!   points ALSA's default PCM at it (see the `test` job in
-//!   `.github/workflows/pr-validation.yml`), so this runs headless there too.
+//!   audio will fail here. CI points ALSA's default PCM at the userspace `null`
+//!   device (see the `test` job in `.github/workflows/pr-validation.yml`), so
+//!   this runs headless there too.
 
 use std::path::PathBuf;
 
