@@ -143,10 +143,13 @@ async fn backup_database(
 /// prefix because `dunce::canonicalize` would also keep it. Wrapped in a
 /// single transaction. Idempotent: a second boot matches zero rows.
 ///
-/// Not `#[cfg(windows)]` — the patterns can never match on non-Windows
-/// (paths there don't start with `\\?\`), so the four UPDATEs are
-/// near-free zero-row scans on Linux/macOS and the function is unit-
-/// testable on every CI runner.
+/// The function itself is not `#[cfg(windows)]`, so it stays compiled and
+/// unit-testable on every CI runner; its *call site* in [`init_database`] is
+/// guarded by a runtime `cfg!(target_os = "windows")` instead. That keeps the
+/// two full-table `tracks` LIKE scans (the `\\?\…` patterns can never match
+/// off-Windows, where paths don't start with `\\?\`) out of every Linux/macOS
+/// boot — the default case-insensitive LIKE collation can't use the
+/// `file_path` index, so each scan is a full table walk.
 async fn strip_windows_verbatim_paths(pool: &SqlitePool) -> Result<(), AppError> {
     // `_` in LIKE matches exactly one char (the drive letter); the literal
     // `:` after it prevents this pattern from ever matching a UNC path
@@ -261,9 +264,15 @@ pub async fn init_database(paths: &Paths) -> Result<DbPool, AppError> {
     // `dunce::canonicalize` on Windows), which never produces the prefix for
     // `MAX_PATH`-fitting paths; this brings existing rows in line so the
     // Browse view's path-keyed HashMap matches `read_dir` output. Idempotent
-    // — the `WHERE` filters match zero rows on subsequent boots — and a
-    // cheap no-op on non-Windows (paths there never start with `\\?\`).
-    strip_windows_verbatim_paths(&write_pool).await?;
+    // — the `WHERE` filters match zero rows on subsequent boots.
+    //
+    // Gated to Windows: off-Windows the patterns can never match, so the two
+    // `tracks` UPDATEs would just full-scan the table (LIKE can't use the
+    // index) to touch zero rows. `cfg!` const-folds the guard, leaving the fn
+    // compiled + unit-testable everywhere.
+    if cfg!(target_os = "windows") {
+        strip_windows_verbatim_paths(&write_pool).await?;
+    }
 
     // Read pool: a small, fixed band of connections for concurrent reads.
     // Melodia is single-user and its reads are tiny and effectively

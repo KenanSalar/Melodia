@@ -73,7 +73,20 @@ pub async fn refresh_tracks(
     let total_ms: i64 = rows.iter().map(|r| r.duration_ms).sum();
     let mosaic_paths = super::hero::mosaic_paths_from(&rows, 4);
     super::hero::push_hero_stats(count, total_ms, &mosaic_paths, weak);
-    {
+    // Only recompose the hero blur when the mosaic covers actually changed. A
+    // played-track refresh (or an in-view favorite/rating toggle, which also
+    // bumps a subscribed channel) usually yields the same top-4 covers, and
+    // re-decoding + re-blurring them is wasted blocking-pool work. Reset on
+    // section-leave so a genuine re-enter recomposes.
+    let blur_changed = {
+        let mut last = rp_ui.state().last_mosaic_paths.lock();
+        let changed = *last != mosaic_paths;
+        if changed {
+            last.clone_from(&mosaic_paths);
+        }
+        changed
+    };
+    if blur_changed {
         let st = state.clone();
         let weak = weak.clone();
         state.runtime.spawn(async move {
@@ -135,5 +148,34 @@ pub fn apply_filtered_tracks(rp_ui: &Arc<RecentlyPlayedUi>, weak: &Weak<AppWindo
         super::selection::restamp_rows(&g, &mut rendered);
         crate::ui::model_diff::apply_rows_keyed(vec, rendered, |r| r.id);
         g.set_filtered_count(filtered_count);
+    });
+}
+
+/// Flip `is_favorite` on a single row in the Slint `VecModel`. Only touches the
+/// affected row — scroll position and neighbouring rows stay put. Recency
+/// membership is independent of the favorite flag, so an in-place patch is
+/// always correct here (no re-fetch, no full-list rebuild). Mirrors
+/// [`crate::ui::tracks::apply_row_favorite`].
+pub fn apply_row_favorite(weak: &Weak<AppWindow>, id: i64, fav: bool) {
+    let _ = weak.upgrade_in_event_loop(move |ui| {
+        crate::ui::model_patch::patch_track_row_by_id(
+            &ui.global::<RecentlyPlayed>().get_tracks(),
+            id,
+            |r| r.is_favorite = fav,
+        );
+    });
+}
+
+/// Set `rating` on a single row in the Slint `VecModel` — the star-rating
+/// analogue of [`apply_row_favorite`]. These lists have no rating column and no
+/// in-table rating sort, so the row never moves; an in-place patch is always
+/// correct.
+pub fn apply_row_rating(weak: &Weak<AppWindow>, id: i64, rating: i32) {
+    let _ = weak.upgrade_in_event_loop(move |ui| {
+        crate::ui::model_patch::patch_track_row_by_id(
+            &ui.global::<RecentlyPlayed>().get_tracks(),
+            id,
+            |r| r.rating = rating,
+        );
     });
 }

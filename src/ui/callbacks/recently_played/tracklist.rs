@@ -63,25 +63,31 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, rp_ui: &Arc<RecentlyPlayedU
             library::favorites::set_favorite, collect_track_ids,
             captures: [weak, ru],
             after: |id_vec, fav| {
+                // Surgically patch each affected row (recency membership is
+                // independent of the favorite flag, so the row stays put): no
+                // 200-row rebuild, scroll position holds, no flash.
                 for id in &id_vec {
                     ru.flip_track_favorite(*id, fav);
+                    recently_played_ui_mod::apply_row_favorite(&weak, *id, fav);
                 }
-                recently_played_ui_mod::apply_filtered_tracks(&ru, &weak);
             });
     }
 
     // set-row-rating: flip in place (recency membership is fixed to the 200,
-    // independent of rating), then re-walk the filtered view.
+    // independent of rating), patching the cached row and the one visible row
+    // (no full filtered-list rebuild).
     {
         let ru = rp_ui.clone();
         wire_row_flag!(g, on_set_row_rating, state, "recently_played::set_rating",
             library::ratings::set_rating, collect_track_ids,
             captures: [weak, ru],
             after: |id_vec, rating| {
+                // Rating never changes membership or sort (no rating column /
+                // in-table rating sort), so patch each row in place.
                 for id in &id_vec {
                     ru.flip_track_rating(*id, rating);
+                    recently_played_ui_mod::apply_row_rating(&weak, *id, rating);
                 }
-                recently_played_ui_mod::apply_filtered_tracks(&ru, &weak);
             });
     }
 

@@ -264,6 +264,10 @@ struct Limiter {
     gain: f32,
     attack_coeff: f32,
     release_coeff: f32,
+    /// Linear magnitude at the knee's lower edge (`THRESHOLD − KNEE/2` dB). A
+    /// frame peak at or below this needs no reduction, so [`Self::target_gain`]
+    /// can return unity without evaluating `log10`. Precomputed once.
+    knee_low_linear: f32,
 }
 
 impl Limiter {
@@ -272,6 +276,7 @@ impl Limiter {
             gain: 1.0,
             attack_coeff: smoothing_coeff(LIMITER_ATTACK_S, frame_rate),
             release_coeff: smoothing_coeff(LIMITER_RELEASE_S, frame_rate),
+            knee_low_linear: db_to_linear(LIMITER_THRESHOLD_DB - LIMITER_KNEE_DB / 2.0),
         }
     }
 
@@ -281,20 +286,24 @@ impl Limiter {
 
     /// Target gain (linear, ≤ 1.0) for a peak magnitude — the soft-knee
     /// limiter curve with an infinite ratio above the knee.
-    fn target_gain(peak: f32) -> f32 {
-        if peak <= 0.0 {
+    fn target_gain(&self, peak: f32) -> f32 {
+        // Below the knee's lower edge the curve is flat at unity, so quiet
+        // frames (the overwhelmingly common case) skip the `log10` entirely.
+        // `log10` is monotonic, so `peak <= knee_low_linear` is the exact
+        // linear-domain equivalent of the old `over <= -half_knee` dB test; it
+        // also subsumes the previous `peak <= 0.0` guard, since `peak` is a
+        // magnitude (≥ 0) and `knee_low_linear > 0`.
+        if peak <= self.knee_low_linear {
             return 1.0;
         }
         let peak_db = 20.0 * peak.log10();
         let over = peak_db - LIMITER_THRESHOLD_DB;
         let half_knee = LIMITER_KNEE_DB / 2.0;
-        let reduction_db = if over <= -half_knee {
-            // Below the knee: no reduction, so the gain is exactly unity —
-            // return early and skip the `db_to_linear` (powf) of 0 dB.
-            return 1.0;
-        } else if over >= half_knee {
+        let reduction_db = if over >= half_knee {
             -over
         } else {
+            // Within the knee (the guard above already excluded `over <=
+            // -half_knee`, so this branch is `-half_knee < over < half_knee`).
             let k = over + half_knee;
             -(k * k) / (2.0 * LIMITER_KNEE_DB)
         };
@@ -305,7 +314,7 @@ impl Limiter {
     /// Rising signal level → fast attack (gain falls quickly); falling level →
     /// slow release (gain recovers gently).
     fn process(&mut self, peak: f32) -> f32 {
-        let target = Self::target_gain(peak);
+        let target = self.target_gain(peak);
         let coeff = if target < self.gain { self.attack_coeff } else { self.release_coeff };
         self.gain = coeff.mul_add(self.gain, (1.0 - coeff) * target);
         self.gain

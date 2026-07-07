@@ -43,6 +43,11 @@ pub(crate) struct FavoritesUiState {
     /// Slint model. Same diff-then-write pattern Albums uses to keep
     /// selection updates O(changed) rather than O(rows).
     pub applied_selection: Mutex<HashSet<i32>>,
+    /// Mosaic cover paths last composed into the hero blur. Guards against
+    /// recomposing (up to 4 decodes + one blur) when a refresh yields the same
+    /// covers — the common case for a played-track / in-view-toggle refresh.
+    /// Reset on section-leave so a genuine re-enter recomposes.
+    pub last_mosaic_paths: Mutex<Vec<String>>,
 }
 
 impl FavoritesUiState {
@@ -62,6 +67,7 @@ impl FavoritesUiState {
             most_played: Mutex::new(Vec::new()),
             fav_artists: Mutex::new(Vec::new()),
             applied_selection: Mutex::new(HashSet::new()),
+            last_mosaic_paths: Mutex::new(Vec::new()),
         }
     }
 }

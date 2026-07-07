@@ -46,7 +46,8 @@ use state::{
 pub use sections::{apply_filtered_strips, refresh_strips};
 pub use selection::{clear_selection, handle_select_row};
 pub use tracks::{
-    apply_filtered_tracks, current_filter, current_sort, refresh_tracks, set_filter, set_sort,
+    apply_filtered_tracks, apply_row_favorite, apply_row_rating, current_filter, current_sort,
+    refresh_tracks, set_filter, set_sort,
 };
 
 /// Synthetic sort field meaning "keep the recency fetch order" — it is not a
@@ -125,6 +126,9 @@ impl RecentlyPlayedUi {
         self.inner.tracks_all.lock().clear();
         self.inner.most_played.lock().clear();
         self.inner.applied_selection.lock().clear();
+        // Forget the last-composed mosaic covers so a re-enter recomposes the
+        // hero blur (the LRU tiles were just dropped above).
+        self.inner.last_mosaic_paths.lock().clear();
         crate::tasks::heap_trim::trim();
     }
 

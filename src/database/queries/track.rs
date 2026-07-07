@@ -391,7 +391,9 @@ pub async fn get_track_ids_by_paths(
     )
     .await?;
 
-    Ok(rows.into_iter().map(|(id, path)| (path, id)).collect())
+    let mut map = HashMap::with_capacity(rows.len());
+    map.extend(rows.into_iter().map(|(id, path)| (path, id)));
+    Ok(map)
 }
 
 /// Look up track IDs by BLAKE3 `file_hash`. Returns a map from `file_hash`
@@ -415,7 +417,9 @@ pub async fn get_track_ids_by_hashes(
     )
     .await?;
 
-    Ok(rows.into_iter().map(|(id, hash)| (hash, id)).collect())
+    let mut map = HashMap::with_capacity(rows.len());
+    map.extend(rows.into_iter().map(|(id, hash)| (hash, id)));
+    Ok(map)
 }
 
 /// Find groups of tracks that share the same `file_hash` (duplicates).

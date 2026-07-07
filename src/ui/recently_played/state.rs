@@ -31,6 +31,11 @@ pub(crate) struct RecentlyPlayedUiState {
     /// Set of `TrackListRow.id`s currently `selected: true` on the Slint
     /// model. Same diff-then-write pattern the other list views use.
     pub applied_selection: Mutex<HashSet<i32>>,
+    /// Mosaic cover paths last composed into the hero blur. Guards against
+    /// recomposing (up to 4 decodes + one blur) when a refresh yields the same
+    /// top-4 covers — the common case for a played-track / in-view-toggle
+    /// refresh. Reset on section-leave so a genuine re-enter recomposes.
+    pub last_mosaic_paths: Mutex<Vec<String>>,
 }
 
 impl RecentlyPlayedUiState {
@@ -44,6 +49,7 @@ impl RecentlyPlayedUiState {
             }),
             most_played: Mutex::new(Vec::new()),
             applied_selection: Mutex::new(HashSet::new()),
+            last_mosaic_paths: Mutex::new(Vec::new()),
         }
     }
 }

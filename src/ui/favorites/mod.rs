@@ -56,7 +56,8 @@ pub use hero::refresh_hero;
 pub use sections::{apply_filtered_strips, refresh_strips};
 pub use selection::{clear_selection, handle_select_row};
 pub use tracks::{
-    apply_filtered_tracks, current_filter, current_sort, refresh_tracks, set_filter, set_sort,
+    apply_filtered_tracks, apply_row_rating, current_filter, current_sort, refresh_tracks,
+    set_filter, set_sort,
 };
 
 /// Rust-side state for the Favorites view. Shared between the UI
@@ -157,6 +158,9 @@ impl FavoritesUi {
         self.inner.most_played.lock().clear();
         self.inner.fav_artists.lock().clear();
         self.inner.applied_selection.lock().clear();
+        // Forget the last-composed mosaic covers so a re-enter recomposes the
+        // hero blur (the LRU tiles were just dropped above).
+        self.inner.last_mosaic_paths.lock().clear();
         crate::tasks::heap_trim::trim();
     }
 

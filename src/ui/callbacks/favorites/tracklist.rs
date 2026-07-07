@@ -68,17 +68,21 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, fav_ui: &Arc<FavoritesUi>) 
     }
 
     // set-row-rating: rating is independent of favorite membership, so the
-    // row stays — patch the cached rows and re-walk the filtered view.
+    // row stays put — patch the cached rows and the one visible row in place
+    // (no full filtered-list rebuild).
     {
         let fu = fav_ui.clone();
         wire_row_flag!(g, on_set_row_rating, state, "favorites::set_rating",
             library::ratings::set_rating, collect_track_ids,
             captures: [weak, fu],
             after: |id_vec, rating| {
+                // Rating never removes the row (unlike the favorite toggle) and
+                // there's no in-table rating sort, so patch each row in place
+                // instead of rebuilding the whole filtered list.
                 for id in &id_vec {
                     fu.flip_track_rating(*id, rating);
+                    favorites_ui_mod::apply_row_rating(&weak, *id, rating);
                 }
-                favorites_ui_mod::apply_filtered_tracks(&fu, &weak);
             });
     }
 

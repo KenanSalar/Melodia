@@ -41,8 +41,23 @@ pub async fn refresh_hero(
 
     let paths = stats.artwork_paths.clone();
     if paths.is_empty() {
+        // Reset the guard so the next non-empty refresh (even with covers
+        // identical to a pre-empty state) recomposes.
+        fav_ui.state().last_mosaic_paths.lock().clear();
         clear_hero_blur(weak);
         return Ok(());
+    }
+
+    // Skip the decode+blur when the mosaic covers are unchanged from the last
+    // composed set — the blur already on screen is still correct, so a
+    // library/stats tick with the same top-4 covers costs nothing. Reset on
+    // section-leave so a genuine re-enter recomposes.
+    {
+        let mut last = fav_ui.state().last_mosaic_paths.lock();
+        if *last == paths {
+            return Ok(());
+        }
+        last.clone_from(&paths);
     }
 
     // Composition + blur is CPU-bound — runs on the blocking pool to
