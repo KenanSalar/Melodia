@@ -1,0 +1,41 @@
+name: Linux system deps
+description: >-
+  Install Melodia's Linux build/test system dependencies (Slint femtovg fonts,
+  ALSA, xkbcommon, Wayland, D-Bus, OpenSSL) with Azure apt-mirror failover and
+  a retry loop. Mirrors the provisioning used by release.yml (minus the
+  packaging-only `rpm`).
+
+runs:
+  using: composite
+  steps:
+    # GitHub's arm64 runners default to community-hosted `ports.ubuntu.com`,
+    # which suffers sustained connectivity dropouts from Azure-hosted runner
+    # instances. Repoint to Azure's own mirror (same fabric, no cross-network
+    # hop); also swap `archive.ubuntu.com` on amd64. Both sed branches are
+    # no-ops when the URL doesn't match, so this is safe on every Linux slot.
+    - name: Use Azure apt mirrors (mirror failover)
+      shell: bash
+      run: |
+        sudo sed -i \
+          -e 's|http://archive\.ubuntu\.com/ubuntu|http://azure.archive.ubuntu.com/ubuntu|g' \
+          -e 's|http://ports\.ubuntu\.com/ubuntu-ports|http://azure.ports.ubuntu.com/ubuntu-ports|g' \
+          /etc/apt/sources.list /etc/apt/sources.list.d/*.list /etc/apt/sources.list.d/*.sources 2>/dev/null || true
+
+    # Retry wrapper layered on top of the Azure mirror swap above — defence in
+    # depth for short hiccups. 3 attempts x 15 s backoff.
+    - name: Install Linux system deps
+      shell: bash
+      run: |
+        sudo systemctl stop unattended-upgrades || true
+        for attempt in 1 2 3; do
+          if sudo apt-get update -qq -o DPkg::Lock::Timeout=60 && \
+             sudo apt-get install -qq -y -o DPkg::Lock::Timeout=60 \
+               libasound2-dev libxkbcommon-dev libfontconfig1-dev libfreetype-dev \
+               libwayland-dev libdbus-1-dev libssl-dev pkg-config; then
+            exit 0
+          fi
+          echo "::warning::apt install (system deps) attempt $attempt failed; retrying in 15s"
+          sleep 15
+        done
+        echo "::error::apt install (system deps) failed after 3 attempts"
+        exit 1

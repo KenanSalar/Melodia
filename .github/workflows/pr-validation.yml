@@ -1,0 +1,163 @@
+name: PR Validation
+
+on:
+  pull_request:
+    branches: [ main, dev ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write   # the `test` job posts/updates a coverage comment
+
+# Cancel superseded runs on the same PR/branch.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+  # GitHub removes Node 20 on 2026-09-16; without this, Node-20 JS actions
+  # (github-script@v7, rust-cache@v2) fail once it's gone. Mirrors release.yml.
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+jobs:
+  # Clippy — mirrors the project's local gate (`cargo clippy --all-targets -- -D
+  # warnings`). The crate-wide `[lints]` set pedantic/style/complexity to warn,
+  # so `-D warnings` promotes them to hard errors.
+  clippy:
+    name: clippy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/linux-system-deps
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: ci-clippy
+          cache-on-failure: true
+      - name: cargo clippy
+        run: cargo clippy --all-targets --locked -- -D warnings
+
+  # Tests + coverage. Gated behind clippy so a lint failure fast-fails the
+  # pipeline without paying for the expensive instrumented run. Runs the FULL
+  # suite including the audio-dependent integration test `tests/headless.rs`
+  # behind a userspace ALSA null device.
+  test:
+    name: test
+    runs-on: ubuntu-latest
+    needs: [clippy]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/linux-system-deps
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: llvm-tools-preview
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: ci-test
+          cache-on-failure: true
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-llvm-cov
+
+      # `tests/headless.rs` boots AppState, which opens rodio's default output
+      # device (cpal -> ALSA). Headless runners have no sound card, and the
+      # GitHub Azure kernel ships no snd-dummy/snd-aloop module, so point ALSA's
+      # default PCM at the built-in userspace `null` device (part of alsa-lib —
+      # no kernel module, daemon, or extra package). rodio/cpal open it and
+      # discard output; verified locally against tests/headless.rs.
+      - name: Set up dummy ALSA device (userspace null)
+        run: |
+          sudo tee /etc/asound.conf >/dev/null <<'EOF'
+          pcm.!default { type null }
+          ctl.!default { type null }
+          EOF
+
+      # One instrumented test run feeds both the HTML report and the text
+      # summary (report phases don't re-run tests).
+      - name: Run tests with coverage
+        run: |
+          cargo llvm-cov --locked --no-report
+          cargo llvm-cov report --html
+          cargo llvm-cov report --summary-only | tee coverage-summary.txt
+
+      - name: Coverage summary to job log
+        if: ${{ !cancelled() }}
+        run: |
+          {
+            echo '### Coverage'
+            echo '```'
+            cat coverage-summary.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload coverage report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v5
+        with:
+          name: coverage-report
+          path: target/llvm-cov/html
+          retention-days: 30
+
+      # Fork PRs get a read-only GITHUB_TOKEN (the `permissions:` block above is
+      # ignored for forks), so createComment 403s. Don't let that redden an
+      # otherwise-green run — the comment is a convenience, not a gate.
+      - name: Post coverage comment on PR
+        if: github.event_name == 'pull_request'
+        continue-on-error: true
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const marker = '## Melodia Coverage Report';
+            const summary = fs.readFileSync('coverage-summary.txt', 'utf8');
+            const body = `${marker}\n\n\`\`\`\n${summary}\n\`\`\`\n\n*Updated: ${new Date().toISOString()}*`;
+
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            const botComment = comments.find(
+              (c) => c.user.type === 'Bot' && c.body.includes(marker)
+            );
+            if (botComment) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: botComment.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+            }
+
+  # Single gate job — mark THIS as the required status check in branch
+  # protection. Green iff every job passed or was skipped.
+  pr-validation:
+    name: pr-validation
+    if: always()
+    needs: [clippy, test]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check job results
+        run: |
+          results=(
+            "${{ needs.clippy.result }}"
+            "${{ needs.test.result }}"
+          )
+          for result in "${results[@]}"; do
+            if [[ "$result" != "success" && "$result" != "skipped" ]]; then
+              echo "Job failed or was cancelled: $result"
+              exit 1
+            fi
+          done
+          echo "All jobs passed or were skipped"
