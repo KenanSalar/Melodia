@@ -37,8 +37,21 @@ async fn fetch_playlist_detail(
     playlists_ui: &PlaylistsUi,
     playlist_id: i64,
 ) -> AppResult<(PlaylistStats, Vec<RsTrackListRow>)> {
-    let detail = library::playlists::get_playlist_detail(state, playlist_id).await?;
-    let tracks = library::playlists::get_playlist_tracks(state, playlist_id).await?;
+    let mut detail = library::playlists::get_playlist_detail(state, playlist_id).await?;
+    let tracks = if detail.is_smart {
+        // Smart playlists have no `playlist_items` rows — resolve membership
+        // live from the stored criteria, and derive the header stats from the
+        // resolved set (the junction-maintained `track_count`/`total_duration_ms`
+        // stay 0 for a virtual playlist).
+        let criteria =
+            crate::entities::smart_criteria::SmartCriteria::from_json_opt(detail.smart_criteria.as_deref());
+        let rows = library::smart_playlists::evaluate(state, &criteria).await?;
+        detail.track_count = i32::try_from(rows.len()).unwrap_or(i32::MAX);
+        detail.total_duration_ms = rows.iter().map(|t| t.duration_ms).sum();
+        rows
+    } else {
+        library::playlists::get_playlist_tracks(state, playlist_id).await?
+    };
 
     let track_covers: Vec<PathBuf> = crate::ui::grid_prewarm::unique_artwork_paths(
         tracks.iter().map(|t| t.artwork_path.as_deref()),
@@ -90,8 +103,14 @@ pub async fn open_playlist(
 
     // Inform the OS file-drop coalescer that this playlist is the
     // current drop target — used only when the Queue Sheet is closed
-    // (queue takes priority when both are open).
-    crate::ui::window_chrome::set_current_playlist_id(playlist_id);
+    // (queue takes priority when both are open). Smart playlists can't
+    // accept manual file drops (membership is derived), so a smart detail
+    // registers no drop target — drops fall through to the library import.
+    crate::ui::window_chrome::set_current_playlist_id(if detail.is_smart {
+        -1
+    } else {
+        playlist_id
+    });
 
     let playlists_ui = playlists_ui.clone();
     let state_for_history = state.clone();

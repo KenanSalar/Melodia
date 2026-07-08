@@ -12,6 +12,7 @@ use super::state::{
     DEFAULT_GRID_COVER_CAP, GRID_PREWARM_AHEAD, GridData, GridIndexCache,
 };
 use super::{PlaylistsUi, to_slint_playlist_row};
+use crate::entities::smart_criteria::SmartCriteria;
 use crate::error::AppResult;
 use crate::library;
 use crate::state::AppState;
@@ -28,7 +29,20 @@ pub async fn fetch_grid(
     playlists_ui: &Arc<PlaylistsUi>,
     weak: Weak<AppWindow>,
 ) -> AppResult<()> {
-    let playlists = library::playlists::get_playlists(state).await?;
+    let mut playlists = library::playlists::get_playlists(state).await?;
+    // Smart playlists have no `playlist_items` rows, so the trigger-maintained
+    // `track_count` / `total_duration_ms` stay 0. Resolve their real stats from
+    // the stored criteria. Only smart rows pay this (typically a handful).
+    for p in playlists.iter_mut().filter(|p| p.is_smart) {
+        let criteria = SmartCriteria::from_json_opt(p.smart_criteria.as_deref());
+        match library::smart_playlists::count(state, &criteria).await {
+            Ok((count, duration)) => {
+                p.track_count = i32::try_from(count).unwrap_or(i32::MAX);
+                p.total_duration_ms = duration;
+            }
+            Err(e) => log::warn!("smart playlist {} count failed: {e}", p.id),
+        }
+    }
     let data = Arc::new(GridData::new(playlists));
     {
         let _gate = playlists_ui.section.gate();

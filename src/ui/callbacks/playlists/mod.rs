@@ -14,6 +14,7 @@ mod dialog;
 mod files;
 mod grid;
 mod lifecycle;
+mod smart;
 
 use std::rc::Rc;
 use std::sync::Arc;
@@ -32,6 +33,7 @@ pub fn wire_playlists(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playl
     grid::wire(ui, state, playlists_ui);
     detail::wire(ui, state, playlists_ui);
     dialog::wire(ui, state, playlists_ui);
+    smart::wire(ui, state, playlists_ui);
     lifecycle::wire(ui, state, playlists_ui);
 }
 

@@ -1,11 +1,12 @@
 import { Theme } from "../../theme.slint";
-import { Dialog as DialogGlobal } from "../../globals.slint";
+import { Dialog as DialogGlobal, SmartEditor } from "../../globals.slint";
 import { SectionButton } from "../settings/section-button.slint";
 import { PlaylistMosaicPicker } from "playlist-mosaic-picker.slint";
 import { PlaylistPicker } from "playlist-picker.slint";
 import { ExportPlaylistPicker } from "export-playlist-picker.slint";
 import { EqualizerBody } from "equalizer-body.slint";
 import { ReplayGainBody } from "replaygain-body.slint";
+import { SmartPlaylistEditorBody } from "smart-playlist-editor-body.slint";
 import { LabeledInput } from "../labeled-input.slint";
 import { MaterialIcon } from "../material-icon.slint";
 
@@ -103,6 +104,7 @@ export component DialogOverlay inherits Rectangle {
             DialogGlobal.kind == "equalizer" ? 600px
             : DialogGlobal.kind == "replaygain" ? 480px
             : DialogGlobal.kind == "edit-playlist-artwork" ? 520px
+            : DialogGlobal.kind == "smart-playlist-editor" ? 660px
             : 540px;
         // Header icon for confirmation kinds — empty for form / picker
         // kinds (create-playlist, rename-playlist, edit-playlist-artwork),
@@ -263,6 +265,10 @@ export component DialogOverlay inherits Rectangle {
 
             if DialogGlobal.kind == "replaygain": ReplayGainBody { }
 
+            // Smart-playlist rule-builder body — the `SmartEditor` global drives
+            // it; the dispatcher routes Accept to `SmartEditor.commit()`.
+            if DialogGlobal.kind == "smart-playlist-editor": SmartPlaylistEditorBody { }
+
             HorizontalLayout {
                 alignment: end;
                 spacing: Theme.pad-sm;
@@ -303,7 +309,10 @@ export component DialogOverlay inherits Rectangle {
                             || DialogGlobal.export-selected-count > 0)
                         // Add-to-Playlist needs at least one playlist selected.
                         && (DialogGlobal.kind != "add-to-playlist"
-                            || DialogGlobal.add-selected-count > 0);
+                            || DialogGlobal.add-selected-count > 0)
+                        // Smart-playlist editor needs a name and ≥1 rule.
+                        && (DialogGlobal.kind != "smart-playlist-editor"
+                            || (SmartEditor.name != "" && SmartEditor.rules.length > 0));
                     clicked => {
                         DialogGlobal.accepted();
                         DialogGlobal.open = false;

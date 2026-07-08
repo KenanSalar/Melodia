@@ -76,6 +76,17 @@ export component PillButton inherits Rectangle {
     in property <bool> reserve-sort-slot: false;
     in property <string> sort-direction: "";
     in property <string> tooltip-text: "";
+    // Anchor the tooltip below the button instead of above — for pills
+    // pinned to the top of the window where an above-tooltip would clip
+    // off-screen (e.g. the Playlists header action pills).
+    in property <bool> tooltip-below: false;
+    // Suppress this button's own (in-tree) tooltip so the host can render one
+    // on a higher paint layer instead. Needed where a below-tooltip would be
+    // occluded by later-painted sibling content (Slint has no z-index — paint
+    // order is declaration order), e.g. the Playlists header pills over the
+    // grid. `hovered` is exposed so the host can drive its overlay tooltip.
+    in property <bool> tooltip-overlay: false;
+    out property <bool> hovered: touch.has-hover;
     // Force the hover background to paint regardless of pointer position.
     // Used by popup triggers (column-toggle) to keep the highlight while
     // their popup is open — see `PopupHighlight` in `globals.slint`.
@@ -174,8 +185,10 @@ export component PillButton inherits Rectangle {
 
             Tooltip {
                 text: root.tooltip-text;
-                hovered: touch.has-hover;
+                hovered: touch.has-hover && !root.tooltip-overlay;
                 host-width: chrome.width;
+                host-height: chrome.height;
+                below: root.tooltip-below;
             }
 
             touch := TouchArea {

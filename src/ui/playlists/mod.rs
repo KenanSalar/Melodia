@@ -178,6 +178,23 @@ impl PlaylistsUi {
         *self.detail.playlist_id.lock()
     }
 
+    /// Whether the cached grid holds any smart (dynamic) playlist. Used to gate
+    /// the `stats_changed_tx` subscriber so play-count/last-played flushes only
+    /// re-fetch when a smart playlist could actually be affected.
+    pub fn has_smart_playlists(&self) -> bool {
+        self.grid.data.lock().playlists.iter().any(|p| p.is_smart)
+    }
+
+    /// Whether the playlist with `id` is smart, per the cached grid data.
+    pub fn is_playlist_smart(&self, id: i64) -> bool {
+        self.grid
+            .data
+            .lock()
+            .playlists
+            .iter()
+            .any(|p| p.id == id && p.is_smart)
+    }
+
     /// Track ids of the **displayed** detail list, in display order — the
     /// filter-applied subset when a search is active, otherwise the full
     /// playlist. `play-all` / shuffle / add-to-queue pass these to
@@ -278,6 +295,7 @@ pub fn to_slint_playlist_row(p: &PlaylistStats) -> UiPlaylistRow {
             p.total_duration_ms.clamp(0, i64::from(i32::MAX)),
         )
         .unwrap_or(i32::MAX),
+        is_smart: p.is_smart,
     }
 }
 

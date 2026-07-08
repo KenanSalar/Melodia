@@ -3,6 +3,7 @@ import { PlayerVm, QueueVm, QueueRow, TrackListRow, FolderListRow,
          AlbumRow, AlbumGridRow, ArtistRow, ArtistGridRow,
          GenreRow, GenreGridRow,
          PlaylistRow, PlaylistGridRow, PlaylistPickRow, PlaylistExportPickRow,
+         SmartRuleRow,
          EntityStripRow } from "models.slint";
 import { Theme } from "theme.slint";
 
@@ -187,6 +188,44 @@ export global Equalizer {
     // Preamp: live during drag (apply only), persist on release — same split.
     callback set-preamp(float /*dB*/);
     callback commit-preamp(float /*dB*/);
+}
+
+// SmartEditor: drives the Smart-Playlist rule-builder dialog
+// (`Dialog.kind == "smart-playlist-editor"`). State is Rust-owned
+// (`src/ui/callbacks/playlists/smart.rs`): the `rules` model is a
+// `VecModel<SmartRuleRow>`, and the scalar properties are read back on `commit`.
+// Entry points (`request-new` / `request-edit`) populate everything and open the
+// dialog on a fresh event-loop tick (Rust hop — avoids the recursion guard that
+// a synchronous `Dialog.open = true` from a click would trip). `commit` is fired
+// by the `Dialog.accepted` dispatcher and reconstructs a `SmartCriteria` from
+// the model + scalars, then creates (target-id < 0) or updates the playlist.
+export global SmartEditor {
+    in-out property <[SmartRuleRow]> rules;
+    // 0 = match all (AND), 1 = match any (OR).
+    in-out property <int> match-mode-index;
+    in-out property <string> name;
+    in-out property <string> description;
+    // Optional result cap.
+    in-out property <bool> limit-enabled;
+    in-out property <string> limit-count-text: "25";
+    in-out property <int> limit-order-index;
+    // -1 = create a new smart playlist; otherwise the playlist id being edited.
+    in-out property <int> target-id: -1;
+
+    // Entry points — reset/populate state and open the dialog (Rust-driven).
+    callback request-new();
+    callback request-edit(int /*playlist_id*/);
+
+    // Rule-row mutations (Rust rewrites the model row, recomputing
+    // field-kind / input-kind).
+    callback add-rule();
+    callback remove-rule(int /*row*/);
+    callback set-rule-field(int /*row*/, int /*field index*/);
+    callback set-rule-op(int /*row*/, int /*op index*/);
+    callback set-rule-value(int /*row*/, string);
+
+    // Fired by the `Dialog.accepted` dispatcher — reconstruct + persist.
+    callback commit();
 }
 
 // ReplayGain: drives the loudness-normalization dialog
@@ -1159,6 +1198,10 @@ export global Dialog {
             // Rust reads the selected (enabled) rows off `playlist-pick-rows`
             // and adds `pending-track-ids` into each, then toasts.
             Playlists.add-tracks-to-selected();
+        } else if (root.kind == "smart-playlist-editor") {
+            // Rust reconstructs a `SmartCriteria` from `SmartEditor.rules` +
+            // scalars and creates / updates the smart playlist.
+            SmartEditor.commit();
         }
     }
     cancelled => { }

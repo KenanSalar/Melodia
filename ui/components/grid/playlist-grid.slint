@@ -75,6 +75,8 @@ export component PlaylistGrid inherits Rectangle {
                             + " · " + Theme.format-duration(playlist.total_duration_ms)
                         : @tr("0 tracks");
                     show-overlay-actions: true;
+                    // Persistent badge marks smart (dynamic) playlists.
+                    badge-icon: playlist.is_smart ? "auto_awesome" : "";
                     clicked => { root.open-playlist(playlist.id); }
                     delete-clicked => { root.delete-playlist(playlist.id); }
                     edit-artwork-clicked => { root.edit-playlist-artwork(playlist.id); }

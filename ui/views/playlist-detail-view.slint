@@ -1,5 +1,5 @@
 import { Theme } from "../theme.slint";
-import { PlaylistDetail, Player, Dialog } from "../globals.slint";
+import { PlaylistDetail, Player, Dialog, SmartEditor } from "../globals.slint";
 import { DetailHeader } from "../components/detail-header.slint";
 import { ActionPill, PillLabel, PillButton, PillDivider } from "../components/action-pill.slint";
 import { ColumnTogglePopup } from "../components/track-list/column-toggle-popup.slint";
@@ -68,13 +68,28 @@ export component PlaylistDetailView inherits Rectangle {
 
                 VerticalLayout {
                     alignment: center;
-                    Text {
-                        text: "‎" + PlaylistDetail.playlist.name;
-                        color: Theme.text;
-                        font-size: 24px;
-                        font-weight: Theme.page-title-weight;
-                        horizontal-alignment: left;
-                        overflow: elide;
+                    HorizontalLayout {
+                        spacing: Theme.pad-sm;
+                        alignment: start;
+                        // Smart-playlist badge — leading the title, matching
+                        // the grid card's corner badge.
+                        if PlaylistDetail.playlist.is_smart: VerticalLayout {
+                            alignment: center;
+                            MaterialIcon {
+                                name: "auto_awesome";
+                                icon-size: 22px;
+                                icon-color: Theme.accent;
+                                filled: true;
+                            }
+                        }
+                        Text {
+                            text: "‎" + PlaylistDetail.playlist.name;
+                            color: Theme.text;
+                            font-size: 24px;
+                            font-weight: Theme.page-title-weight;
+                            horizontal-alignment: left;
+                            overflow: elide;
+                        }
                     }
                 }
 
@@ -166,6 +181,24 @@ export component PlaylistDetailView inherits Rectangle {
                             Dialog.open = true;
                         }
                     }
+                    // Edit Rules — smart playlists only. Chrome set inline (so
+                    // `@tr` applies); Rust `request-edit` loads the criteria +
+                    // opens the editor from a fresh event-loop tick.
+                    if PlaylistDetail.playlist.is_smart: PillDivider { }
+                    if PlaylistDetail.playlist.is_smart: PillButton {
+                        icon: "tune";
+                        tooltip-text: @tr("Edit rules");
+                        clicked => {
+                            Dialog.title = @tr("Edit Rules");
+                            Dialog.message = "";
+                            Dialog.confirm-label = @tr("Save");
+                            Dialog.cancel-label = @tr("Cancel");
+                            Dialog.destructive = false;
+                            Dialog.kind = "smart-playlist-editor";
+                            Dialog.target-id = PlaylistDetail.playlist-id;
+                            SmartEditor.request-edit(PlaylistDetail.playlist-id);
+                        }
+                    }
                     PillDivider { }
                     PillButton {
                         icon: "delete";
@@ -199,7 +232,10 @@ export component PlaylistDetailView inherits Rectangle {
                     if PlaylistDetail.selected-ids.length > 0: PillLabel {
                         text: @tr("{} selected", PlaylistDetail.selected-ids.length);
                     }
-                    if PlaylistDetail.selected-ids.length > 0: PillButton {
+                    // Removing a track is meaningless for a smart playlist
+                    // (membership is derived, not curated) — hide it there.
+                    if PlaylistDetail.selected-ids.length > 0
+                        && !PlaylistDetail.playlist.is_smart: PillButton {
                         icon: "playlist_remove";
                         // `playlist_remove`'s glyph weight is lighter
                         // than `delete` / `edit` etc., so at the
@@ -266,8 +302,11 @@ export component PlaylistDetailView inherits Rectangle {
                     // a reorder ambiguous. An active filter also disables
                     // it: filtered row indices don't map to playlist
                     // positions.
+                    // Smart playlists are query-derived — there is no curated
+                    // order to reorder into, so drag-reorder is off for them.
                     reorder-enabled: PlaylistDetail.sort-field == "position"
-                        && PlaylistDetail.filter == "";
+                        && PlaylistDetail.filter == ""
+                        && !PlaylistDetail.playlist.is_smart;
 
                     w-number <=> PlaylistDetail.w-number;
                     w-title <=> PlaylistDetail.w-title;
@@ -327,7 +366,9 @@ export component PlaylistDetailView inherits Rectangle {
                     HorizontalLayout {
                         alignment: center;
                         Text {
-                            text: @tr("No tracks yet");
+                            text: PlaylistDetail.playlist.is_smart
+                                ? @tr("No matching tracks")
+                                : @tr("No tracks yet");
                             color: Theme.text;
                             font-size: Theme.font-size-lg;
                             font-weight: 600;
@@ -336,7 +377,9 @@ export component PlaylistDetailView inherits Rectangle {
                     HorizontalLayout {
                         alignment: center;
                         Text {
-                            text: @tr("Drag music files here, or add tracks via any track's overflow menu.");
+                            text: PlaylistDetail.playlist.is_smart
+                                ? @tr("No tracks match these rules.")
+                                : @tr("Drag music files here, or add tracks via any track's overflow menu.");
                             color: Theme.subtext0;
                             font-size: Theme.font-size-sm;
                             horizontal-alignment: center;
@@ -350,7 +393,8 @@ export component PlaylistDetailView inherits Rectangle {
             // OS file-hover routes here (queue sheet closed, this detail
             // open). Z-stacks above the empty-state overlay so users see
             // a clear "drop target" cue.
-            if PlaylistDetail.is-drop-hovered && PlaylistDetail.playlist-id >= 0: Rectangle {
+            if PlaylistDetail.is-drop-hovered && PlaylistDetail.playlist-id >= 0
+                && !PlaylistDetail.playlist.is_smart: Rectangle {
                 background: Theme.accent.with-alpha(0.16);
                 border-radius: Theme.radius-md;
                 border-width: 2px;
