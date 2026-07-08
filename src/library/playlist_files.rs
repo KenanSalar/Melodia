@@ -100,7 +100,7 @@ pub async fn export_playlists_to_folder(
         (ok, errs)
     })
     .await
-    .map_err(|e| AppError::io_other(e.to_string()))?;
+    .map_err(AppError::io_source)?;
 
     failed.extend(write_errs);
 

@@ -16,12 +16,11 @@ use sqlx::FromRow;
 
 use crate::database::DbPool;
 use crate::error::AppResult;
-use crate::player::actions::execute_actions;
+use crate::player::actions::emit_and_execute;
 use crate::player::event_sink::PlayerSinks;
 use crate::player::rodio_backend::RodioPlayer;
 use crate::player::state::{
     PlayerAction, PlayerStateHandle, lock_state, play_track_inner, stop_end_of_queue,
-    with_state_emit,
 };
 use crate::state::AppState;
 use crate::tasks::TaskSpawner;
@@ -118,7 +117,7 @@ async fn reconcile_once(
     // `with_state_emit` publishes the new queue VM on `sinks.queue` and the
     // light VM on `sinks.view_model`, so the queue sheet's subscriber
     // rebuilds rows automatically.
-    let actions = with_state_emit(player_state, sinks, |s| {
+    emit_and_execute(&**rodio, db, player_state, sinks, |s| {
         let outcome = s.queue.prune_missing(&to_remove);
         if outcome.current_was_removed {
             if let Some(track) = s.queue.get_current().cloned() {
@@ -137,7 +136,5 @@ async fn reconcile_once(
             Vec::new()
         }
     });
-
-    execute_actions(actions, &**rodio, db, player_state, sinks);
     Ok(())
 }

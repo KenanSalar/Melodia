@@ -22,7 +22,7 @@ use crate::config::Paths;
 use crate::database::DbPool;
 use crate::player::event_sink::PlayerSinks;
 use crate::player::rodio_backend::RodioPlayer;
-use crate::player::state::PlayerStateHandle;
+use crate::player::state::{PlayerAction, PlayerState, PlayerStateHandle};
 
 use super::AppState;
 
@@ -35,6 +35,25 @@ pub struct PlaybackContext {
     pub rodio: Arc<RodioPlayer>,
     pub db: DbPool,
     pub paths: Arc<Paths>,
+}
+
+impl PlaybackContext {
+    /// Serialized mutate → emit → execute against this context's handles. Thin
+    /// forwarder over [`crate::player::actions::emit_and_execute`] so the
+    /// `library::playback::*` / `library::queue::*` call sites stay one-liners
+    /// while still routing through the shared execution lock.
+    pub fn emit_and_execute<F>(&self, f: F)
+    where
+        F: FnOnce(&mut PlayerState) -> Vec<PlayerAction>,
+    {
+        crate::player::actions::emit_and_execute(
+            &*self.rodio,
+            &self.db,
+            &self.player_state,
+            &self.sinks,
+            f,
+        );
+    }
 }
 
 impl AppState {

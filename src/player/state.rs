@@ -13,14 +13,28 @@ use super::types::{PersistableQueue, PlaybackStatus, RepeatMode};
 
 /// Restart-from-beginning threshold for Previous command (ms).
 pub const RESTART_THRESHOLD_MS: u64 = 3000;
-/// Maximum UI volume level (stored in `PlayerState`).
-pub const MAX_VOLUME: u32 = 200;
+/// Maximum volume level (percent) stored in `PlayerState` and reachable from the
+/// UI. Playback amplitude tops out at unity gain (see [`volume_to_amplitude`]),
+/// so this is the true ceiling — there is no boost band above it.
+pub const MAX_VOLUME: u32 = 100;
 /// Minimum playback speed multiplier.
 pub const MIN_SPEED: f64 = 0.25;
 /// Maximum playback speed multiplier. Capped at 2× — rodio's `set_speed` is
 /// naive resampling (it shifts pitch), so beyond 2× the audio degrades into
 /// chipmunk territory with little practical use for music.
 pub const MAX_SPEED: f64 = 2.0;
+
+/// Single source of truth for converting a stored volume level (percent,
+/// `[0, MAX_VOLUME]`) plus a mute flag into the linear amplitude `[0.0, 1.0]`
+/// the audio backend and OS media controls (MPRIS) both expect. Muted → 0.0.
+/// `MAX_VOLUME` is the ceiling, so the result never exceeds unity gain.
+pub fn volume_to_amplitude(volume: u32, is_muted: bool) -> f64 {
+    if is_muted {
+        0.0
+    } else {
+        f64::from(volume) / 100.0
+    }
+}
 
 pub struct PlayerState {
     pub status: PlaybackStatus,
@@ -67,6 +81,15 @@ pub struct PlayerStateHandle {
     mutex: std::sync::Mutex<PlayerState>,
     /// Mirror of `PlayerState::status` as a `u8`, updated after every state change.
     pub status_atomic: AtomicU8,
+    /// Serializes the *side-effect* phase across tasks. `with_state_emit` makes a
+    /// single state mutation atomic, but the `execute_actions` that follows runs
+    /// on whatever tokio worker the caller happens to be on. Without this,
+    /// two batches (e.g. the monitor's EOS-advance and a UI `Stop`) can interleave
+    /// their rodio side effects on separate workers and leave state and backend
+    /// disagreeing. `emit_and_execute` holds this across *both* the mutation and
+    /// the execution so mutation order equals side-effect order. Held only across
+    /// synchronous work (never an `.await`), so a blocking mutex is correct.
+    exec_lock: std::sync::Mutex<()>,
 }
 
 impl Default for PlayerStateHandle {
@@ -74,7 +97,21 @@ impl Default for PlayerStateHandle {
         Self {
             mutex: std::sync::Mutex::new(PlayerState::default()),
             status_atomic: AtomicU8::new(PlaybackStatus::Stopped as u8),
+            exec_lock: std::sync::Mutex::new(()),
         }
+    }
+}
+
+impl PlayerStateHandle {
+    /// Acquire the execution lock, recovering from poison rather than panicking
+    /// (mirrors [`lock_state`] / `RodioPlayer::lock_player`). The guarded unit
+    /// carries no data — poison only means a prior holder panicked mid-batch, and
+    /// the guard exists purely to serialize the next batch.
+    pub fn lock_exec(&self) -> MutexGuard<'_, ()> {
+        self.exec_lock.lock().unwrap_or_else(|poisoned| {
+            log::error!("PlayerState exec lock was poisoned, recovering");
+            poisoned.into_inner()
+        })
     }
 }
 
@@ -251,14 +288,11 @@ impl PlayerState {
         }
     }
 
-    /// Convert volume for audio backend: stored [0, 200], backend gets [0.0, 1.0].
-    /// Caps at 100 before dividing to prevent audio clipping. Returns 0.0 when muted.
+    /// Convert this state's volume for the audio backend: stored `[0, MAX_VOLUME]`,
+    /// backend gets `[0.0, 1.0]`. Returns 0.0 when muted. Thin wrapper over the
+    /// shared [`volume_to_amplitude`] so the MPRIS path can reuse the same math.
     pub fn effective_volume(&self) -> f64 {
-        if self.is_muted {
-            0.0
-        } else {
-            f64::from(self.volume.min(100)) / 100.0
-        }
+        volume_to_amplitude(self.volume, self.is_muted)
     }
 
     /// Build actions for play/resume command.

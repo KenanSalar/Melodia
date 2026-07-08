@@ -306,6 +306,57 @@ fn limiter_keeps_heavy_boost_within_full_scale() {
 }
 
 #[test]
+fn limiter_timing_is_channel_count_independent() {
+    // The limiter updates once per interleaved frame, so its attack/release time
+    // constants must depend only on the per-channel sample rate — NOT the channel
+    // count. With flat bands + a boost preamp, mono and stereo sources at the same
+    // sample rate must produce a bit-identical per-frame gain envelope: each
+    // stereo frame's two samples equal the matching mono sample. A
+    // `frame_rate = sample_rate / channels` bug makes the stereo envelope decay
+    // ~2× faster, so the frames diverge and this fails.
+    const FRAMES: usize = 2048;
+    let build = |channels: u16| {
+        let shared = EqShared::new(true, &[0.0; NUM_BANDS]);
+        // Boost preamp → peak well above full scale, so the limiter engages and
+        // its gain envelope (the thing driven by the time constants) actually moves.
+        shared.set_preamp(MAX_PREAMP_DB);
+        let samples = vec![1.0_f32; FRAMES * usize::from(channels)];
+        EqSource::new(
+            TestSource::new(samples, channels, 44_100),
+            shared,
+            ReplayGainShared::new(),
+            TrackReplayGain::default(),
+        )
+        .collect::<Vec<f32>>()
+    };
+
+    let mono = build(1);
+    let stereo = build(2);
+    assert_eq!(mono.len(), FRAMES);
+    assert_eq!(stereo.len(), FRAMES * 2);
+
+    // The envelope must actually move (limiter engaged), else the test is vacuous.
+    assert_ne!(
+        mono.first().map(|s| s.to_bits()),
+        mono.last().map(|s| s.to_bits()),
+        "limiter must attenuate over time for this test to be meaningful"
+    );
+
+    for (frame, (m, s)) in mono.iter().zip(stereo.chunks_exact(2)).enumerate() {
+        assert_eq!(
+            m.to_bits(),
+            s[0].to_bits(),
+            "frame {frame}: stereo channel matches mono → limiter timing is channel-independent"
+        );
+        assert_eq!(
+            s[0].to_bits(),
+            s[1].to_bits(),
+            "frame {frame}: both stereo channels share one per-frame limiter gain"
+        );
+    }
+}
+
+#[test]
 fn shared_gain_setters_clamp_and_roundtrip() {
     let shared = EqShared::new(false, &[0.0; NUM_BANDS]);
     shared.set_gain(0, 99.0);

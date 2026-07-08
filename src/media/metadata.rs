@@ -44,10 +44,10 @@ pub struct ExtractedMetadata {
 /// Uses `update_reader` for optimized streaming I/O with SIMD-friendly buffering.
 pub fn compute_file_hash(path: &Path) -> Result<String, AppError> {
     let mut file = std::fs::File::open(path)
-        .map_err(|e| AppError::Metadata(format!("Failed to open {} for hashing: {}", path.display(), e)))?;
+        .map_err(|e| AppError::metadata(format!("Failed to open {} for hashing", path.display()), e))?;
     let mut hasher = blake3::Hasher::new();
     hasher.update_reader(&mut file)
-        .map_err(|e| AppError::Metadata(format!("Failed to hash {}: {}", path.display(), e)))?;
+        .map_err(|e| AppError::metadata(format!("Failed to hash {}", path.display()), e))?;
     Ok(hasher.finalize().to_hex().to_string())
 }
 
@@ -124,13 +124,13 @@ pub fn extract_metadata(
         // Skip reading embedded pictures — significant speedup for rescans
         let parse_opts = lofty::config::ParseOptions::new().read_cover_art(false);
         lofty::probe::Probe::open(path)
-            .map_err(|e| AppError::Metadata(format!("Failed to open {}: {}", path.display(), e)))?
+            .map_err(|e| AppError::metadata(format!("Failed to open {}", path.display()), e))?
             .options(parse_opts)
             .read()
-            .map_err(|e| AppError::Metadata(format!("Failed to read tags from {}: {}", path.display(), e)))?
+            .map_err(|e| AppError::metadata(format!("Failed to read tags from {}", path.display()), e))?
     } else {
         lofty::probe::read_from_path(path)
-            .map_err(|e| AppError::Metadata(format!("Failed to read tags from {}: {}", path.display(), e)))?
+            .map_err(|e| AppError::metadata(format!("Failed to read tags from {}", path.display()), e))?
     };
 
     let properties = tagged_file.properties();

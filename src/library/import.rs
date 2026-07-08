@@ -80,7 +80,7 @@ pub async fn import_files_to_library(
             scan_files_parallel(&new_paths_clone, &artwork_dir, &cover_cache_clone, &|_, _| {})
         })
         .await
-        .map_err(|e| AppError::Scanner(format!("Scan task failed: {e}")))?;
+        .map_err(|e| AppError::scanner("Scan task failed", e))?;
 
         if !scanned_files.is_empty() {
             let mut tx = state.db.write().begin().await?;

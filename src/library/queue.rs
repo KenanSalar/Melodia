@@ -3,7 +3,7 @@ use std::sync::Arc;
 use crate::database::queries;
 use crate::entities::track::TrackSummary;
 use crate::error::{AppError, AppResult};
-use crate::player::actions::execute_actions;
+use crate::player::actions::emit_and_execute;
 use crate::player::rodio_backend::load_queue_from_disk_sync;
 use crate::player::state::{play_track_inner, restore_queue, with_state_emit};
 use crate::player::types::RepeatMode;
@@ -66,7 +66,7 @@ pub async fn queue_append_unique(state: &AppState, track_id: i64) -> Result<(), 
         .ok_or_else(|| AppError::NotFound(format!("track {track_id}")))?;
     let summary = Arc::new(summary);
 
-    let actions = with_state_emit(&state.player_state, &state.sinks, |s| {
+    emit_and_execute(&*state.rodio, &state.db, &state.player_state, &state.sinks, |s| {
         let existing = s
             .queue
             .play_order
@@ -82,14 +82,6 @@ pub async fn queue_append_unique(state: &AppState, track_id: i64) -> Result<(), 
             None => vec![],
         }
     });
-
-    execute_actions(
-        actions,
-        &*state.rodio,
-        &state.db,
-        &state.player_state,
-        &state.sinks,
-    );
     Ok(())
 }
 
@@ -164,21 +156,13 @@ pub fn queue_clear(state: &AppState) -> Result<(), AppError> {
 }
 
 pub fn queue_skip_to_index(state: &AppState, index: usize) -> Result<(), AppError> {
-    let actions = with_state_emit(&state.player_state, &state.sinks, |s| {
+    emit_and_execute(&*state.rodio, &state.db, &state.player_state, &state.sinks, |s| {
         let track = s.queue.skip_to_index(index).cloned();
         match track {
             Some(t) => play_track_inner(s, t, None),
             None => vec![],
         }
     });
-
-    execute_actions(
-        actions,
-        &*state.rodio,
-        &state.db,
-        &state.player_state,
-        &state.sinks,
-    );
     Ok(())
 }
 
@@ -188,18 +172,10 @@ pub async fn queue_direct_play(state: &AppState, track_id: i64) -> Result<(), Ap
         .ok_or_else(|| AppError::NotFound(format!("track {track_id}")))?;
     let summary = Arc::new(summary);
 
-    let actions = with_state_emit(&state.player_state, &state.sinks, |s| {
+    emit_and_execute(&*state.rodio, &state.db, &state.player_state, &state.sinks, |s| {
         s.queue.set_direct_play(Arc::clone(&summary));
         play_track_inner(s, summary, None)
     });
-
-    execute_actions(
-        actions,
-        &*state.rodio,
-        &state.db,
-        &state.player_state,
-        &state.sinks,
-    );
     Ok(())
 }
 

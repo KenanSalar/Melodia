@@ -172,11 +172,18 @@ impl RodioPlayer {
         start_position_ms: Option<u64>,
         baked_rg: TrackReplayGain,
     ) -> Result<(), AppError> {
+        // Decode (file open + Symphonia probe — synchronous I/O) and wrap the
+        // source *before* taking the Player lock, mirroring `preload_gapless`.
+        // The position monitor's 500 ms `query_position` shares this mutex, so a
+        // probe under the lock stalls position publication. `EqSource::new` only
+        // reads the decoder's channel/rate (no I/O), so it stays out of the lock
+        // window too. The play+seek sequence below still holds the lock as one
+        // unit so the monitor never observes position ~0 between play and seek.
+        let source = EqSource::new(decode_file(file_path)?, self.eq.clone(), self.rg.clone(), baked_rg);
         let player = self.lock_player();
         player.clear();
         player.set_volume(narrow_audio_param(volume));
         player.set_speed(narrow_audio_param(speed));
-        let source = EqSource::new(decode_file(file_path)?, self.eq.clone(), self.rg.clone(), baked_rg);
         player.append(source);
         player.play();
         self.gapless_pending.store(false, Ordering::Release);

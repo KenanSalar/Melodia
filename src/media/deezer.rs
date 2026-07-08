@@ -22,7 +22,7 @@ pub async fn search_artist_image_url(
         .query(&[("q", artist_name), ("limit", "1")])
         .send()
         .await
-        .map_err(|e| AppError::Network(format!("Deezer API request failed: {e}")))?;
+        .map_err(|e| AppError::network("Deezer API request failed", e))?;
 
     if !response.status().is_success() {
         return Ok(None);
@@ -31,7 +31,7 @@ pub async fn search_artist_image_url(
     let body = response
         .json::<DeezerSearchResponse>()
         .await
-        .map_err(|e| AppError::Network(format!("Failed to parse Deezer response: {e}")))?;
+        .map_err(|e| AppError::network("Failed to parse Deezer response", e))?;
 
     Ok(body.data.first().and_then(|a| a.picture_medium.clone()))
 }
@@ -50,15 +50,14 @@ pub async fn download_and_cache_artist_image(
     artists_dir: &Path,
 ) -> Result<Option<String>, AppError> {
     // Validate URL scheme and domain
-    let parsed = reqwest::Url::parse(image_url).map_err(|e| {
-        AppError::Network(format!("Invalid image URL: {e}"))
-    })?;
+    let parsed = reqwest::Url::parse(image_url)
+        .map_err(|e| AppError::network("Invalid image URL", e))?;
     if parsed.scheme() != "https" {
-        return Err(AppError::Network("Image URL must use HTTPS".to_owned()));
+        return Err(AppError::network_msg("Image URL must use HTTPS"));
     }
     let host = parsed.host_str().unwrap_or("");
     if !host.ends_with(".deezer.com") && !host.ends_with(".dzcdn.net") {
-        return Err(AppError::Network(format!(
+        return Err(AppError::network_msg(format!(
             "Image URL has untrusted domain: {host}"
         )));
     }
@@ -67,13 +66,13 @@ pub async fn download_and_cache_artist_image(
         .get(image_url)
         .send()
         .await
-        .map_err(|e| AppError::Network(format!("Failed to download artist image: {e}")))?;
+        .map_err(|e| AppError::network("Failed to download artist image", e))?;
 
     // Check Content-Length before downloading body
     if let Some(len) = response.content_length()
         && len > MAX_IMAGE_BYTES
     {
-        return Err(AppError::Network(format!(
+        return Err(AppError::network_msg(format!(
             "Image too large: {len} bytes (max {MAX_IMAGE_BYTES})"
         )));
     }
@@ -81,10 +80,10 @@ pub async fn download_and_cache_artist_image(
     let bytes = response
         .bytes()
         .await
-        .map_err(|e| AppError::Network(format!("Failed to read image bytes: {e}")))?;
+        .map_err(|e| AppError::network("Failed to read image bytes", e))?;
 
     if bytes.len() as u64 > MAX_IMAGE_BYTES {
-        return Err(AppError::Network(format!(
+        return Err(AppError::network_msg(format!(
             "Image too large: {} bytes (max {})",
             bytes.len(),
             MAX_IMAGE_BYTES

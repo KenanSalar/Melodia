@@ -3,7 +3,6 @@ use std::sync::Arc;
 use crate::database::queries;
 use crate::entities::track::TrackSummary;
 use crate::error::AppError;
-use crate::player::actions::execute_actions;
 use crate::player::state::{lock_state, play_track_inner, with_state_emit};
 use crate::player::types::PlaybackStatus;
 use crate::state::PlaybackContext;
@@ -14,18 +13,10 @@ pub async fn player_play_track(ctx: &PlaybackContext, track_id: i64) -> Result<(
         .ok_or_else(|| AppError::NotFound(format!("track {track_id}")))?;
     let summary = Arc::new(summary);
 
-    let actions = with_state_emit(&ctx.player_state, &ctx.sinks, |s| {
+    ctx.emit_and_execute(|s| {
         s.queue.set_direct_play(Arc::clone(&summary));
         play_track_inner(s, summary, None)
     });
-
-    execute_actions(
-        actions,
-        &*ctx.rodio,
-        &ctx.db,
-        &ctx.player_state,
-        &ctx.sinks,
-    );
     Ok(())
 }
 
@@ -46,7 +37,7 @@ pub async fn player_play_tracks(
     }
 
     let start = start_index.unwrap_or(0).min(summaries.len() - 1);
-    let actions = with_state_emit(&ctx.player_state, &ctx.sinks, |s| {
+    ctx.emit_and_execute(|s| {
         s.queue.clear();
         s.queue.add_tracks(summaries);
         s.queue.current_index = Some(start);
@@ -58,46 +49,16 @@ pub async fn player_play_tracks(
             vec![]
         }
     });
-
-    execute_actions(
-        actions,
-        &*ctx.rodio,
-        &ctx.db,
-        &ctx.player_state,
-        &ctx.sinks,
-    );
     Ok(())
 }
 
 pub fn player_play(ctx: &PlaybackContext) -> Result<(), AppError> {
-    let actions = with_state_emit(
-        &ctx.player_state,
-        &ctx.sinks,
-        crate::player::state::PlayerState::build_play_actions,
-    );
-    execute_actions(
-        actions,
-        &*ctx.rodio,
-        &ctx.db,
-        &ctx.player_state,
-        &ctx.sinks,
-    );
+    ctx.emit_and_execute(crate::player::state::PlayerState::build_play_actions);
     Ok(())
 }
 
 pub fn player_pause(ctx: &PlaybackContext) -> Result<(), AppError> {
-    let actions = with_state_emit(
-        &ctx.player_state,
-        &ctx.sinks,
-        crate::player::state::PlayerState::build_pause_actions,
-    );
-    execute_actions(
-        actions,
-        &*ctx.rodio,
-        &ctx.db,
-        &ctx.player_state,
-        &ctx.sinks,
-    );
+    ctx.emit_and_execute(crate::player::state::PlayerState::build_pause_actions);
     Ok(())
 }
 
@@ -107,79 +68,30 @@ pub fn player_pause(ctx: &PlaybackContext) -> Result<(), AppError> {
 /// the state lock so two near-simultaneous toggles (e.g. UI + media-key) can't
 /// race past each other.
 pub fn player_toggle_play_pause(ctx: &PlaybackContext) -> Result<(), AppError> {
-    let actions = with_state_emit(&ctx.player_state, &ctx.sinks, |s| match s.status {
+    ctx.emit_and_execute(|s| match s.status {
         PlaybackStatus::Playing | PlaybackStatus::Loading => s.build_pause_actions(),
         PlaybackStatus::Paused | PlaybackStatus::Stopped => s.build_play_actions(),
     });
-    execute_actions(
-        actions,
-        &*ctx.rodio,
-        &ctx.db,
-        &ctx.player_state,
-        &ctx.sinks,
-    );
     Ok(())
 }
 
 pub fn player_stop(ctx: &PlaybackContext) -> Result<(), AppError> {
-    let actions = with_state_emit(
-        &ctx.player_state,
-        &ctx.sinks,
-        crate::player::state::PlayerState::build_stop_actions,
-    );
-    execute_actions(
-        actions,
-        &*ctx.rodio,
-        &ctx.db,
-        &ctx.player_state,
-        &ctx.sinks,
-    );
+    ctx.emit_and_execute(crate::player::state::PlayerState::build_stop_actions);
     Ok(())
 }
 
 pub fn player_seek(ctx: &PlaybackContext, position_ms: u64) -> Result<(), AppError> {
-    let actions = with_state_emit(&ctx.player_state, &ctx.sinks, |s| {
-        s.build_seek_actions(position_ms)
-    });
-    execute_actions(
-        actions,
-        &*ctx.rodio,
-        &ctx.db,
-        &ctx.player_state,
-        &ctx.sinks,
-    );
+    ctx.emit_and_execute(|s| s.build_seek_actions(position_ms));
     Ok(())
 }
 
 pub fn player_next(ctx: &PlaybackContext) -> Result<(), AppError> {
-    let actions = with_state_emit(
-        &ctx.player_state,
-        &ctx.sinks,
-        crate::player::state::PlayerState::build_next_actions,
-    );
-    execute_actions(
-        actions,
-        &*ctx.rodio,
-        &ctx.db,
-        &ctx.player_state,
-        &ctx.sinks,
-    );
+    ctx.emit_and_execute(crate::player::state::PlayerState::build_next_actions);
     Ok(())
 }
 
 pub fn player_previous(ctx: &PlaybackContext) -> Result<(), AppError> {
-    let actions = with_state_emit(
-        &ctx.player_state,
-        &ctx.sinks,
-        crate::player::state::PlayerState::build_previous_actions,
-    );
-    execute_actions(
-        actions,
-        &*ctx.rodio,
-        &ctx.db,
-        &ctx.player_state,
-        &ctx.sinks,
-    );
+    ctx.emit_and_execute(crate::player::state::PlayerState::build_previous_actions);
     Ok(())
 }
 
@@ -193,16 +105,7 @@ pub fn player_set_volume(ctx: &PlaybackContext, level: u32) -> Result<(), AppErr
             return Ok(());
         }
     }
-    let actions = with_state_emit(&ctx.player_state, &ctx.sinks, |s| {
-        s.build_set_volume_actions(level)
-    });
-    execute_actions(
-        actions,
-        &*ctx.rodio,
-        &ctx.db,
-        &ctx.player_state,
-        &ctx.sinks,
-    );
+    ctx.emit_and_execute(|s| s.build_set_volume_actions(level));
     // Persistence is intentionally NOT triggered here. The slider fires
     // `set_volume` continuously during drag for live audio; settings.json
     // is flushed once via `commit_player_settings` on slider release.
@@ -210,31 +113,13 @@ pub fn player_set_volume(ctx: &PlaybackContext, level: u32) -> Result<(), AppErr
 }
 
 pub async fn player_set_muted(ctx: &PlaybackContext, muted: bool) -> Result<(), AppError> {
-    let actions = with_state_emit(&ctx.player_state, &ctx.sinks, |s| {
-        s.build_set_muted_actions(muted)
-    });
-    execute_actions(
-        actions,
-        &*ctx.rodio,
-        &ctx.db,
-        &ctx.player_state,
-        &ctx.sinks,
-    );
+    ctx.emit_and_execute(|s| s.build_set_muted_actions(muted));
     // Mute is single-tap; commit inline.
     commit_player_settings(ctx).await
 }
 
 pub async fn player_toggle_mute(ctx: &PlaybackContext) -> Result<(), AppError> {
-    let actions = with_state_emit(&ctx.player_state, &ctx.sinks, |s| {
-        s.build_toggle_mute_actions()
-    });
-    execute_actions(
-        actions,
-        &*ctx.rodio,
-        &ctx.db,
-        &ctx.player_state,
-        &ctx.sinks,
-    );
+    ctx.emit_and_execute(crate::player::state::PlayerState::build_toggle_mute_actions);
     commit_player_settings(ctx).await
 }
 
@@ -265,16 +150,7 @@ pub async fn commit_player_settings(ctx: &PlaybackContext) -> Result<(), AppErro
 }
 
 pub fn player_set_playback_speed(ctx: &PlaybackContext, speed: f64) -> Result<(), AppError> {
-    let actions = with_state_emit(&ctx.player_state, &ctx.sinks, |s| {
-        s.build_set_speed_actions(speed)
-    });
-    execute_actions(
-        actions,
-        &*ctx.rodio,
-        &ctx.db,
-        &ctx.player_state,
-        &ctx.sinks,
-    );
+    ctx.emit_and_execute(|s| s.build_set_speed_actions(speed));
     Ok(())
 }
 

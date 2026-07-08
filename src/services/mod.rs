@@ -10,6 +10,7 @@ pub mod search_history;
 pub mod settings;
 #[cfg(target_os = "linux")]
 pub mod system_theme;
+pub mod toast;
 pub mod tray;
 pub mod updater;
 pub mod view_state;
@@ -67,7 +68,7 @@ pub fn write_json_atomic_sync<T: Serialize>(path: &Path, value: &T) -> AppResult
     {
         let mut writer = BufWriter::new(tmp.as_file_mut());
         serde_json::to_writer_pretty(&mut writer, value)
-            .map_err(|e| AppError::io_other(e.to_string()))?;
+            .map_err(AppError::io_source)?;
         writer.flush()?;
     }
     tmp.persist(path).map_err(|e| AppError::Io(e.error))?;

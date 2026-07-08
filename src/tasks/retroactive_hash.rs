@@ -64,7 +64,7 @@ async fn hash_unhashed_tracks(db: &DbPool) -> AppResult<()> {
             .collect::<Vec<_>>()
     })
     .await
-    .map_err(|e| crate::error::AppError::Scanner(format!("Hashing task panicked: {e}")))?;
+    .map_err(|e| crate::error::AppError::scanner("Hashing task panicked", e))?;
 
     if updates.is_empty() {
         return Ok(());

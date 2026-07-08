@@ -16,6 +16,26 @@ macro_rules! spawn_logged {
     }};
 }
 
+/// Like [`spawn_logged!`] but ALSO surfaces the failure to the user as an
+/// error toast (localized "Something went wrong" title + the error as the
+/// body) via the `services::toast` bridge. Reserve this for user-initiated
+/// operations whose silent failure is confusing — a folder scan or import that
+/// appears to do nothing. Routine / low-value failures (favorite toggles, nav)
+/// keep using [`spawn_logged!`] so the toast stack isn't spammed.
+macro_rules! spawn_logged_toast {
+    ($state:ident, $label:literal, $fut:expr) => {{
+        $state.runtime.clone().spawn(async move {
+            if let Err(e) = $fut.await {
+                log::warn!("{}: {e}", $label);
+                $crate::services::toast::notify(
+                    $crate::services::toast::ToastKind::OperationFailed,
+                    e.to_string(),
+                );
+            }
+        });
+    }};
+}
+
 /// Sync variant of `spawn_logged!` for `library::*` functions that are not
 /// `async`. Spawns the call onto the runtime so the UI thread isn't blocked
 /// (the body still acquires a `parking_lot::Mutex` and calls Rodio).
@@ -138,7 +158,7 @@ macro_rules! release_detail_hero_images {
 }
 
 pub(super) use {
-    release_detail_hero_images, spawn_logged, spawn_logged_sync, wire_pb, wire_row_flag,
-    wire_sync, wire_sync_pb,
+    release_detail_hero_images, spawn_logged, spawn_logged_sync, spawn_logged_toast, wire_pb,
+    wire_row_flag, wire_sync, wire_sync_pb,
 };
 

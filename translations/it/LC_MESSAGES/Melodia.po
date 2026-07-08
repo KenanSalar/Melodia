@@ -921,6 +921,12 @@ msgstr "Seleziona tutto"
 msgid "Import failed"
 msgstr "Importazione non riuscita"
 
+msgid "Playback error"
+msgstr "Errore di riproduzione"
+
+msgid "Something went wrong"
+msgstr "Qualcosa è andato storto"
+
 msgid "Couldn't read the selected playlist file(s)."
 msgstr "Impossibile leggere i file di playlist selezionati."
 

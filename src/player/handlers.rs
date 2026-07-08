@@ -9,11 +9,11 @@ use crate::config::Paths;
 use crate::database::DbPool;
 use crate::database::queries;
 
-use super::actions::execute_actions;
+use super::actions::emit_and_execute;
 use super::event_sink::PlayerSinks;
 use super::rodio_backend::{PlaybackCheck, RodioPlayer};
 use super::state::{
-    PlayerAction, PlayerState, PlayerStateHandle, PositionTick, lock_state, with_state_emit,
+    PlayerAction, PlayerState, PlayerStateHandle, PositionTick, lock_state,
 };
 use super::types::PlaybackStatus;
 
@@ -100,7 +100,7 @@ pub fn spawn_playback_monitor(tracker: &TaskTracker, ctx: PlaybackMonitorContext
             // Single lock acquisition to avoid TOCTOU between gapless and EOS checks
             match rodio_player.check_playback_state() {
                 PlaybackCheck::GaplessTransition => {
-                    let actions = with_state_emit(&player_state, &sinks, |state| {
+                    emit_and_execute(&rodio_player, &db, &player_state, &sinks, |state| {
                         let mut actions = Vec::with_capacity(2);
 
                         // Update play count for the track that just finished
@@ -119,20 +119,18 @@ pub fn spawn_playback_monitor(tracker: &TaskTracker, ctx: PlaybackMonitorContext
 
                         actions
                     });
-
-                    execute_actions(actions, &rodio_player, &db, &player_state, &sinks);
                 }
                 PlaybackCheck::EndOfStream => {
                     // Advance the queue (or, if the sleep-timer's "End of current
                     // track" mode is armed, disarm it and stop instead). See
                     // `PlayerState::build_end_of_stream_actions`.
-                    let actions = with_state_emit(
+                    emit_and_execute(
+                        &rodio_player,
+                        &db,
                         &player_state,
                         &sinks,
                         PlayerState::build_end_of_stream_actions,
                     );
-
-                    execute_actions(actions, &rodio_player, &db, &player_state, &sinks);
                 }
                 PlaybackCheck::Playing => {
                     // Normal tick: update position with lightweight event

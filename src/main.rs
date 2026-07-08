@@ -362,6 +362,10 @@ fn main() -> AppResult<()> {
     // 9b. Toast on watcher-overflow rescan (kernel queue dropped events).
     boot::ui_setup::install_rescan_notice_subscriber(&state, weak.clone(), notifications.clone())?;
 
+    // 9c. Surface backend failures (playback decode errors, failed scans /
+    // imports / saves) pushed through the `services::toast` bridge as toasts.
+    boot::ui_setup::install_toast_bridge(weak.clone(), notifications.clone())?;
+
     // 10. Opt-in memory sampler (`MELODIA_RSS_SAMPLE=1`). No-op when unset.
     // Lives on the UI thread so it can read the Nav / *Detail globals for
     // the view-tag annotation without an atomic-shadow plumbing pass.

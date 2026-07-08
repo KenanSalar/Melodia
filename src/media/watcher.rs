@@ -84,7 +84,7 @@ impl FolderWatcher {
                 }
             },
         )
-        .map_err(|e| AppError::Watcher(format!("Failed to create watcher: {e}")))?;
+        .map_err(|e| AppError::watcher("Failed to create watcher", e))?;
 
         for path in paths {
             if path.exists() {

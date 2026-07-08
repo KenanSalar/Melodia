@@ -248,7 +248,7 @@ pub async fn scan_folder_internal(
 
     let folder_path = Path::new(&folder.path);
     if !folder_path.exists() {
-        return Err(AppError::Scanner(format!(
+        return Err(AppError::scanner_msg(format!(
             "Folder does not exist: {}",
             folder.path
         )));
@@ -282,7 +282,7 @@ pub async fn scan_folder_internal(
         (files, to_scan)
     })
     .await
-    .map_err(|e| AppError::Scanner(format!("Scan walk task failed: {e}")))?;
+    .map_err(|e| AppError::scanner("Scan walk task failed", e))?;
 
     if files.is_empty() {
         return Ok(0);
@@ -355,7 +355,7 @@ pub async fn scan_folder_internal(
             )
         })
         .await
-        .map_err(|e| AppError::Scanner(format!("Scan task failed: {e}")))?
+        .map_err(|e| AppError::scanner("Scan task failed", e))?
     };
 
     let scan_timestamp = crate::utils::now_rfc3339();

@@ -385,13 +385,14 @@ impl<S: Source> EqSource<S> {
         let banks = (0..channels)
             .map(|_| std::array::from_fn(|_| DirectForm1::<f32>::new(identity_coeffs())))
             .collect();
-        // The limiter updates its gain once per interleaved frame, so its time
-        // constants are relative to the frame rate (sample_rate / channels).
-        #[allow(
-            clippy::cast_precision_loss,
-            reason = "channel count is tiny (1–8) and converts to f32 exactly"
-        )]
-        let frame_rate = sample_rate / channels.max(1) as f32;
+        // The limiter updates its gain once per interleaved frame. A frame is
+        // one sample per channel, so frames elapse at the per-channel sample
+        // rate — which is exactly what rodio's `sample_rate()` reports (samples
+        // per second per channel). The limiter's attack/release time constants
+        // are therefore relative to `sample_rate` directly, NOT divided by the
+        // channel count (the biquad path uses the same value as its per-channel
+        // `fs`, so dividing here would desync the two by the channel count).
+        let frame_rate = sample_rate;
         // Seed the cached generations to something other than the live values so
         // the first `next()` rebuilds from the current shared state.
         let last_generation = shared.generation().wrapping_sub(1);

@@ -81,7 +81,7 @@ impl SearchHistoryState {
             crate::services::write_json_atomic_sync(&path, &snapshot)
         })
         .await
-        .map_err(|e| crate::error::AppError::io_other(e.to_string()))?
+        .map_err(crate::error::AppError::io_source)?
     }
 }
 

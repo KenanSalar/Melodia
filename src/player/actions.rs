@@ -8,7 +8,8 @@ use super::event_sink::PlayerSinks;
 use super::replaygain::TrackReplayGain;
 use super::rodio_backend::PlayerBackend;
 use super::state::{
-    PlayerAction, PlayerStateHandle, play_track_inner, stop_end_of_queue, with_state_emit,
+    PlayerAction, PlayerState, PlayerStateHandle, play_track_inner, stop_end_of_queue,
+    with_state_emit,
 };
 
 /// Execute a list of `PlayerActions` against the audio backend and database.
@@ -47,6 +48,16 @@ pub fn execute_actions<B: PlayerBackend>(
                     rodio_player.play_media(&file_path, volume, speed, start_position_ms, replaygain)
                 {
                     log::error!("Failed to play {file_path}: {e}");
+                    // Surface the failure — the music silently stopping is
+                    // otherwise invisible. (The vanished-file branch above stays
+                    // silent: it auto-recovers by skipping to the next track.)
+                    let name = Path::new(&file_path)
+                        .file_name()
+                        .map_or_else(|| file_path.clone(), |n| n.to_string_lossy().into_owned());
+                    crate::services::toast::notify(
+                        crate::services::toast::ToastKind::PlaybackFailed,
+                        name,
+                    );
                     rodio_player.stop();
                     enqueue_auto_skip(&mut pending, player_state, sinks);
                 }
@@ -110,6 +121,37 @@ pub fn execute_actions<B: PlayerBackend>(
             }
         }
     }
+}
+
+/// Mutate state, publish the `ViewModel`, then execute the resulting side
+/// effects — all while holding the per-`PlayerStateHandle` execution lock so
+/// mutation order equals side-effect order across tokio workers.
+///
+/// This is the serialized replacement for the bare `with_state_emit(...)` +
+/// `execute_actions(...)` pair. `with_state_emit` alone keeps each *mutation*
+/// atomic, but the `execute_actions` that follows runs on whatever worker the
+/// caller is on; two batches from different tasks (e.g. the playback monitor's
+/// EOS-advance and a UI `Stop`) could otherwise interleave their rodio effects
+/// and leave state and backend disagreeing (a rare TOCTOU). Holding `exec_lock`
+/// across both halves closes that window.
+///
+/// The lock spans only synchronous work (no `.await`), so a blocking mutex is
+/// correct. `enqueue_auto_skip`'s nested `with_state_emit` inside
+/// `execute_actions` takes the *state* mutex, never `exec_lock`, so there is no
+/// re-entrancy.
+pub fn emit_and_execute<B, F>(
+    rodio_player: &B,
+    db: &DbPool,
+    player_state: &PlayerStateHandle,
+    sinks: &PlayerSinks,
+    f: F,
+) where
+    B: PlayerBackend,
+    F: FnOnce(&mut PlayerState) -> Vec<PlayerAction>,
+{
+    let _exec = player_state.lock_exec();
+    let actions = with_state_emit(player_state, sinks, f);
+    execute_actions(actions, rodio_player, db, player_state, sinks);
 }
 
 /// Advance past a track that turned out to be unplayable (file missing or
