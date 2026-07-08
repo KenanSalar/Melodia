@@ -180,30 +180,14 @@ impl PlaylistsUi {
         *self.detail.playlist_id.lock()
     }
 
-    /// Whether the cached grid holds any smart (dynamic) playlist. Used to gate
-    /// the `stats_changed_tx` subscriber so play-count/last-played flushes only
-    /// re-fetch when a smart playlist could actually be affected.
-    pub fn has_smart_playlists(&self) -> bool {
-        self.grid.data.lock().playlists.iter().any(|p| p.is_smart)
-    }
-
     /// Whether the cached grid holds any smart playlist whose criteria depend on
     /// play stats. Gates the `stats_changed_tx` subscriber so a play-count flush
     /// only refreshes when a smart playlist could actually have changed — a
-    /// static-rule ("Genre is Rock") smart playlist is skipped entirely. Implies
-    /// [`Self::has_smart_playlists`], so it is the stricter, correct gate.
+    /// static-rule ("Genre is Rock") smart playlist is skipped entirely. Stricter
+    /// than a plain "any smart playlist?" check, and the correct gate for the
+    /// stats path (a static-rule smart playlist can't have moved on a play flush).
     pub fn has_stat_dependent_smart_playlists(&self) -> bool {
         self.grid.data.lock().has_stat_dependent()
-    }
-
-    /// Whether the playlist with `id` is smart, per the cached grid data.
-    pub fn is_playlist_smart(&self, id: i64) -> bool {
-        self.grid
-            .data
-            .lock()
-            .playlists
-            .iter()
-            .any(|p| p.id == id && p.is_smart)
     }
 
     /// Whether the playlist with `id` is a stat-dependent smart playlist. Gates

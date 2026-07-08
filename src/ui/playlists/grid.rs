@@ -68,7 +68,17 @@ async fn fetch_grid_inner(
     // `track_count` / `total_duration_ms` stay 0 — resolve them from the stored
     // criteria. On a `StatsOnly` refresh only the stat-dependent rows can have
     // changed, so the rest carry their previous counts forward (the previous
-    // grid data is the source, cloned once up front).
+    // grid data is the source, cloned once up front — a cheap `Arc` bump).
+    //
+    // Transient-staleness note: `prev` is snapshotted and the counts computed
+    // before `section.gate()` is acquired, so the gate serializes only the final
+    // write (against the wipe and sibling writes), not the snapshot→compute→write
+    // as a whole — the final write is therefore last-writer-wins. If a
+    // `library_changed`-driven `Full` refresh (e.g. a scan that changed a
+    // stat-*independent* smart playlist's membership) commits while this
+    // `StatsOnly` pass is mid-flight, the count carried forward for that row can
+    // be briefly stale. Display-only, and it self-heals on the next `Full`
+    // refresh (next `library_changed` / section re-enter).
     let prev = playlists_ui.grid.data.lock().clone();
     let mut to_count: Vec<usize> = Vec::new();
     for (i, p) in playlists.iter_mut().enumerate() {

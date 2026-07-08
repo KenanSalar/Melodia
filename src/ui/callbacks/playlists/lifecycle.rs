@@ -161,7 +161,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
                 // Hidden section: the library_changed / section-enter path
                 // already re-fetches on return, so nothing to do here. And
                 // nothing to do unless a smart playlist could actually have
-                // moved (stricter than `has_smart_playlists`).
+                // moved (stricter than a plain any-smart-playlist check).
                 if !pu.section_active() || !pu.has_stat_dependent_smart_playlists() {
                     continue;
                 }
