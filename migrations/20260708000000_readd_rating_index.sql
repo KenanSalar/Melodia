@@ -1,0 +1,24 @@
+-- Re-add an index on `rating`, dropped in
+-- 20260612000000_drop_unused_track_indexes.sql.
+--
+-- That migration dropped idx_tracks_rating on the grounds that `rating` was
+-- write-only — "rating is initialized at insert and never read." That premise
+-- is now stale: this branch made ratings user-editable (the hover-revealed
+-- StarRating control -> library::ratings::set_rating -> UPDATE tracks SET
+-- rating = ?) AND smart (dynamic) playlists both filter and sort on rating
+-- (RuleField::Rating -> `WHERE rating <op> ?`, LimitOrder::RatingDesc ->
+-- `ORDER BY rating DESC`) in queries::smart_playlist. Without an index a
+-- rating-ruled or top-rated smart playlist full-scans + sorts the whole tracks
+-- table on every grid count and detail evaluate.
+--
+-- FULL index (not the initial schema's partial `WHERE rating > 0`): verified via
+-- EXPLAIN QUERY PLAN that SQLite does NOT use a `rating > 0` partial index for
+-- the queries the evaluator actually emits — it will not infer `rating >= 4`
+-- (or `rating = 5`, or a bare `ORDER BY rating DESC`) implies `rating > 0`, so
+-- the partial index only triggers on a literal `rating > 0` term the evaluator
+-- never produces (all three shapes fall back to a full SCAN). The full index is
+-- used for all of them (covering-index search; the top-rated ORDER BY becomes an
+-- ordered index scan with no temp B-tree). `rating` is a tiny INTEGER column, so
+-- indexing every row (incl. the unrated `DEFAULT 0` majority) is a small,
+-- disk-backed cost, maintained on scan-insert and the infrequent rating edit.
+CREATE INDEX IF NOT EXISTS idx_tracks_rating ON tracks (rating);

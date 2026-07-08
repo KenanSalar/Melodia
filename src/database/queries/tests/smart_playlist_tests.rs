@@ -263,6 +263,27 @@ async fn count_respects_limit() -> Result<(), AppError> {
 }
 
 #[tokio::test]
+async fn count_random_limit_caps_without_ordering() -> Result<(), AppError> {
+    let s = seed().await?;
+    // A `Random` limit skips the pointless `ORDER BY RANDOM()` in the count
+    // path. COUNT is still min(limit, matches); and since every seeded track
+    // shares the helper's 180_000 ms duration, the SUM of any 2 rows is
+    // deterministic regardless of which 2 the LIMIT keeps.
+    let c = SmartCriteria {
+        rules: Vec::new(),
+        limit: Some(SmartLimit {
+            count: 2,
+            order: LimitOrder::Random,
+        }),
+        ..SmartCriteria::default()
+    };
+    let (count, duration) = queries::smart_playlist::count_smart_playlist(&s.db, &c).await?;
+    assert_eq!(count, 2);
+    assert_eq!(duration, 360_000);
+    Ok(())
+}
+
+#[tokio::test]
 async fn duration_rule_value_is_seconds() -> Result<(), AppError> {
     let s = seed().await?;
     // Give each track a distinct duration in ms. The editor presents Duration

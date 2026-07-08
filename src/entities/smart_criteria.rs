@@ -61,6 +61,32 @@ impl SmartCriteria {
     pub fn to_json(&self) -> Result<String, serde_json::Error> {
         serde_json::to_string(self)
     }
+
+    /// Whether resolving this criteria's membership or order can be moved by a
+    /// play-count flush (a `play_count` / `skip_count` / `last_played` change —
+    /// the columns `stats_changed_tx` signals). Lets the Playlists grid skip
+    /// re-counting smart playlists a stats bump can't affect. `skip_count` is
+    /// included because a single flush can carry play *and* skip changes at the
+    /// same bump. Conservative: a `true` here only ever costs a redundant
+    /// recount, never a stale count.
+    pub fn depends_on_play_stats(&self) -> bool {
+        let order_is_stat = matches!(
+            self.limit.as_ref().map(|l| l.order),
+            Some(
+                LimitOrder::PlayCountDesc
+                    | LimitOrder::PlayCountAsc
+                    | LimitOrder::LastPlayedDesc
+                    | LimitOrder::LastPlayedAsc
+            )
+        );
+        order_is_stat
+            || self.rules.iter().any(|r| {
+                matches!(
+                    r.field,
+                    RuleField::PlayCount | RuleField::SkipCount | RuleField::LastPlayed
+                )
+            })
+    }
 }
 
 /// Whether a track must satisfy every rule (`All` → AND / intersection) or any

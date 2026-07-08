@@ -54,7 +54,9 @@ pub use detail::{
     open_playlist, refresh_detail, resort_detail, rollback_reorder, seed_detail_from_settings,
     set_filter,
 };
-pub use grid::{fetch_grid, rebuild_grid, tune_cache_for_display, update_flat_rows};
+pub use grid::{
+    fetch_grid, fetch_grid_stats, rebuild_grid, tune_cache_for_display, update_flat_rows,
+};
 pub use selection::{clear_selection, handle_select_row};
 
 /// Rust-side state for the Playlists grid + detail views. Shared between
@@ -185,6 +187,15 @@ impl PlaylistsUi {
         self.grid.data.lock().playlists.iter().any(|p| p.is_smart)
     }
 
+    /// Whether the cached grid holds any smart playlist whose criteria depend on
+    /// play stats. Gates the `stats_changed_tx` subscriber so a play-count flush
+    /// only refreshes when a smart playlist could actually have changed — a
+    /// static-rule ("Genre is Rock") smart playlist is skipped entirely. Implies
+    /// [`Self::has_smart_playlists`], so it is the stricter, correct gate.
+    pub fn has_stat_dependent_smart_playlists(&self) -> bool {
+        self.grid.data.lock().has_stat_dependent()
+    }
+
     /// Whether the playlist with `id` is smart, per the cached grid data.
     pub fn is_playlist_smart(&self, id: i64) -> bool {
         self.grid
@@ -193,6 +204,17 @@ impl PlaylistsUi {
             .playlists
             .iter()
             .any(|p| p.id == id && p.is_smart)
+    }
+
+    /// Whether the playlist with `id` is a stat-dependent smart playlist. Gates
+    /// the open-detail refresh on the `stats_changed` path — a play stat change
+    /// can't move a static-rule smart playlist, so its detail need not re-evaluate.
+    pub fn is_playlist_smart_stat_dependent(&self, id: i64) -> bool {
+        self.grid
+            .data
+            .lock()
+            .row_stats_by_id(id)
+            .is_some_and(|(_, _, stat_dependent)| stat_dependent)
     }
 
     /// Track ids of the **displayed** detail list, in display order — the

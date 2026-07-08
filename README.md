@@ -43,6 +43,7 @@ _Screenshots coming soon._
 - Natural sort ordering for file and track names
 - Customizable, resizable, and toggleable track-list columns
 - Playlist creation and management with custom thumbnails
+- Smart (dynamic) playlists whose membership is defined by rules rather than a fixed track list — match **all** or **any** of a set of conditions across fields like genre, artist, rating, year, play count, favorite, or when a track was last played/added, with an optional size cap and ordering (e.g. "50 most-played" or "top-rated"); membership is resolved live, so a smart playlist keeps itself up to date as your library and listening change
 - Import and export playlists as standard `.m3u8` files (with embedded BLAKE3 content hashes) so they survive a database reset and interoperate with other players
 - Drag-and-drop file import to playlists and the queue
 - Drag-and-drop track reordering in playlists and the play queue

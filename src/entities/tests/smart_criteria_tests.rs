@@ -168,6 +168,54 @@ fn editor_dropdown_orders_are_pinned() {
 }
 
 #[test]
+fn depends_on_play_stats_classification() {
+    // Helper: criteria with a single rule on `field` (value shape irrelevant to
+    // the stat-dependence check, which only inspects the field) and no limit.
+    let with_field = |field: RuleField| SmartCriteria {
+        rules: vec![Rule {
+            field,
+            op: RuleOp::IsSet,
+            value: None,
+        }],
+        limit: None,
+        ..SmartCriteria::default()
+    };
+    // Helper: no rules, just a limit order.
+    let with_order = |order: LimitOrder| SmartCriteria {
+        rules: Vec::new(),
+        limit: Some(SmartLimit { count: 25, order }),
+        ..SmartCriteria::default()
+    };
+
+    // Stat-dependent via rule field.
+    assert!(with_field(RuleField::PlayCount).depends_on_play_stats());
+    assert!(with_field(RuleField::SkipCount).depends_on_play_stats());
+    assert!(with_field(RuleField::LastPlayed).depends_on_play_stats());
+
+    // Stat-independent rule fields — a play-count flush can't move these.
+    assert!(!with_field(RuleField::Genre).depends_on_play_stats());
+    assert!(!with_field(RuleField::Rating).depends_on_play_stats());
+    assert!(!with_field(RuleField::DateAdded).depends_on_play_stats());
+
+    // Stat-dependent via limit order.
+    assert!(with_order(LimitOrder::PlayCountDesc).depends_on_play_stats());
+    assert!(with_order(LimitOrder::PlayCountAsc).depends_on_play_stats());
+    assert!(with_order(LimitOrder::LastPlayedDesc).depends_on_play_stats());
+    assert!(with_order(LimitOrder::LastPlayedAsc).depends_on_play_stats());
+
+    // Stat-independent limit orders.
+    assert!(!with_order(LimitOrder::DateAddedDesc).depends_on_play_stats());
+    assert!(!with_order(LimitOrder::RatingDesc).depends_on_play_stats());
+    assert!(!with_order(LimitOrder::Random).depends_on_play_stats());
+
+    // Empty criteria (whole library) is stat-independent.
+    assert!(!SmartCriteria::default().depends_on_play_stats());
+
+    // The mixed `sample()` (LastPlayed rule + PlayCountDesc order) is dependent.
+    assert!(sample().depends_on_play_stats());
+}
+
+#[test]
 fn match_mode_and_limit_order_index_round_trip() {
     // `as_index` == array position and `from_index` inverts it, for every
     // entry in the editor-order arrays.

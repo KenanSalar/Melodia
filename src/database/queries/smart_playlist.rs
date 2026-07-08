@@ -60,7 +60,16 @@ pub async fn count_smart_playlist(
     };
     push_where(&mut qb, criteria);
     if let Some(limit) = &criteria.limit {
-        push_order_and_limit(&mut qb, limit);
+        // The count subquery only needs the LIMIT to bound COUNT/SUM to the
+        // capped set. A deterministic order still selects *which* `count` rows
+        // are summed, so keep it — but `RANDOM()` would force SQLite to
+        // materialize + randomly sort the whole match set just to sum a
+        // nondeterministic slice (the displayed duration for a random-limited
+        // card is already nondeterministic), so skip that pointless full sort.
+        if limit.order != LimitOrder::Random {
+            qb.push(order_by_fragment(Some(limit)));
+        }
+        qb.push(" LIMIT ").push_bind(i64::from(limit.count));
         qb.push(")");
     }
     let row = qb

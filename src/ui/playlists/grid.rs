@@ -20,6 +20,19 @@ use crate::{
     AppWindow, PlaylistGridRow as UiPlaylistGridRow, PlaylistRow as UiPlaylistRow, Playlists,
 };
 
+/// How much smart-playlist counting a grid refresh pays for.
+#[derive(Clone, Copy)]
+enum RefreshKind {
+    /// Recount every smart playlist — structure may have changed (scan,
+    /// watcher, CRUD, criteria edit).
+    Full,
+    /// A play-count-flush-driven refresh: recount only smart playlists whose
+    /// criteria depend on play stats; carry the rest forward from the previous
+    /// grid data (a criteria edit bumps `library_changed`, forcing a `Full`
+    /// refresh, so the prior stat-dependence flags stay valid here).
+    StatsOnly,
+}
+
 /// Fetch the playlist list from the DB, prewarm cover thumbnails, then
 /// rebuild the grid model on the UI thread. The flat `Playlists.rows`
 /// model (used by the Add-to-Playlist submenu) is repopulated in the same
@@ -29,20 +42,86 @@ pub async fn fetch_grid(
     playlists_ui: &Arc<PlaylistsUi>,
     weak: Weak<AppWindow>,
 ) -> AppResult<()> {
+    fetch_grid_inner(state, playlists_ui, weak, RefreshKind::Full).await
+}
+
+/// `stats_changed`-driven grid refresh: recount only the stat-dependent smart
+/// playlists (others keep their previous counts, which a play stat change can't
+/// move). Gated upstream by `has_stat_dependent_smart_playlists`.
+pub async fn fetch_grid_stats(
+    state: &AppState,
+    playlists_ui: &Arc<PlaylistsUi>,
+    weak: Weak<AppWindow>,
+) -> AppResult<()> {
+    fetch_grid_inner(state, playlists_ui, weak, RefreshKind::StatsOnly).await
+}
+
+async fn fetch_grid_inner(
+    state: &AppState,
+    playlists_ui: &Arc<PlaylistsUi>,
+    weak: Weak<AppWindow>,
+    kind: RefreshKind,
+) -> AppResult<()> {
     let mut playlists = library::playlists::get_playlists(state).await?;
+
     // Smart playlists have no `playlist_items` rows, so the trigger-maintained
-    // `track_count` / `total_duration_ms` stay 0. Resolve their real stats from
-    // the stored criteria. Only smart rows pay this (typically a handful).
-    for p in playlists.iter_mut().filter(|p| p.is_smart) {
-        let criteria = SmartCriteria::from_json_opt(p.smart_criteria.as_deref());
-        match library::smart_playlists::count(state, &criteria).await {
-            Ok((count, duration)) => {
-                p.track_count = i32::try_from(count).unwrap_or(i32::MAX);
-                p.total_duration_ms = duration;
-            }
-            Err(e) => log::warn!("smart playlist {} count failed: {e}", p.id),
+    // `track_count` / `total_duration_ms` stay 0 — resolve them from the stored
+    // criteria. On a `StatsOnly` refresh only the stat-dependent rows can have
+    // changed, so the rest carry their previous counts forward (the previous
+    // grid data is the source, cloned once up front).
+    let prev = playlists_ui.grid.data.lock().clone();
+    let mut to_count: Vec<usize> = Vec::new();
+    for (i, p) in playlists.iter_mut().enumerate() {
+        if !p.is_smart {
+            continue;
+        }
+        let recount = match kind {
+            RefreshKind::Full => true,
+            RefreshKind::StatsOnly => match prev.row_stats_by_id(p.id) {
+                Some((count, duration, stat_dependent)) if !stat_dependent => {
+                    // A play stat change can't move this row — carry forward.
+                    p.track_count = count;
+                    p.total_duration_ms = duration;
+                    false
+                }
+                // Stat-dependent, or absent from the previous data → recount.
+                _ => true,
+            },
+        };
+        if recount {
+            to_count.push(i);
         }
     }
+
+    // Parse each selected row's criteria once, then fan the COUNT/SUM queries
+    // out across the read pool (WAL allows concurrent readers) instead of
+    // awaiting them serially. Results are written back by index — order-
+    // independent — so `join_all` completion order doesn't matter.
+    let parsed: Vec<(usize, SmartCriteria)> = to_count
+        .iter()
+        .map(|&i| {
+            (
+                i,
+                SmartCriteria::from_json_opt(playlists[i].smart_criteria.as_deref()),
+            )
+        })
+        .collect();
+    let counts = futures_util::future::join_all(
+        parsed
+            .iter()
+            .map(|(i, criteria)| async move { (*i, library::smart_playlists::count(state, criteria).await) }),
+    )
+    .await;
+    for (i, result) in counts {
+        match result {
+            Ok((count, duration)) => {
+                playlists[i].track_count = i32::try_from(count).unwrap_or(i32::MAX);
+                playlists[i].total_duration_ms = duration;
+            }
+            Err(e) => log::warn!("smart playlist {} count failed: {e}", playlists[i].id),
+        }
+    }
+
     let data = Arc::new(GridData::new(playlists));
     {
         let _gate = playlists_ui.section.gate();
