@@ -3,6 +3,14 @@ name: PR Validation
 on:
   pull_request:
     branches: [ main, dev ]
+  # Warm the shared caches on the base branch. GitHub scopes every cache to the
+  # ref that created it, and a PR run can only restore caches from its own
+  # branch, its base branch, or the default branch — never a sibling PR. Without
+  # a cache saved on `dev`, every new PR branch starts cold. Running on push to
+  # `dev` saves `ci-clippy`/`ci-test` caches under refs/heads/dev so every PR
+  # into `dev` restores them warm from its first run.
+  push:
+    branches: [ dev ]
   workflow_dispatch:
 
 permissions:
