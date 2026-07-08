@@ -244,7 +244,7 @@ pub async fn insert_tracks_batch(
                 // Unreachable in practice — every VALUES row produces a
                 // RETURNING row — but fail loudly rather than silently
                 // desync `inserted_track_ids` from reality.
-                return Err(AppError::Scanner(format!(
+                return Err(AppError::scanner_msg(format!(
                     "multi-row insert returned no id for {}",
                     row.file_path
                 )));

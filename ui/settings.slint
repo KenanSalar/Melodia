@@ -394,6 +394,20 @@ export global Settings {
         return @tr("Couldn't write the playlist files.");
     }
 
+    // Titles for the generic backend-failure toasts pushed from Rust through
+    // the `services::toast` bridge. Same `pure callback` shape as the playlist
+    // toasts — the UI-thread consumer resolves the localized title by toast
+    // kind at push time; the dynamic detail (a path or error message) rides on
+    // the toast body and is not translated.
+    pure callback toast-playback-error-title() -> string;
+    toast-playback-error-title => {
+        return @tr("Playback error");
+    }
+    pure callback toast-operation-failed-title() -> string;
+    toast-operation-failed-title => {
+        return @tr("Something went wrong");
+    }
+
     // Add-to-Playlist multi-select commit toast (track row context menu →
     // Add to Playlist → tick playlists → Add). Title pluralizes on the
     // number of playlists, message on the number of tracks added.

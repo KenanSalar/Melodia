@@ -88,7 +88,7 @@ pub async fn browse_directory(
         })
     })
     .await
-    .map_err(|e| AppError::io_other(e.to_string()))??;
+    .map_err(AppError::io_source)??;
 
     let dir_str = scan.canonical.to_string_lossy();
     let tracks = queries::track::get_tracks_in_directory(&state.db, &dir_str).await?;

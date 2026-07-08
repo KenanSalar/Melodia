@@ -522,3 +522,43 @@ pub fn install_rescan_notice_subscriber(
     .map(|_| ())
     .map_err(|e| melodia::error::AppError::Window(format!("rescan-notice subscriber: {e}")))
 }
+
+/// Drain the process-wide `services::toast` channel on the UI thread and render
+/// each backend-failure as an error toast. Mirrors
+/// [`install_rescan_notice_subscriber`] but consumes an `mpsc` (errors must not
+/// coalesce like a `watch` slot would) and resolves the localized title by
+/// toast kind at push time — so a failure that fires on a tokio worker still
+/// paints in whichever locale is active when it surfaces. The dynamic detail
+/// (a path or error message) is shown verbatim as the toast body.
+pub fn install_toast_bridge(
+    weak: slint::Weak<AppWindow>,
+    notifications: std::rc::Rc<ui::notifications::NotificationsUi>,
+) -> Result<(), melodia::error::AppError> {
+    use melodia::Settings;
+    use melodia::services::toast::{self, ToastKind, ToastRequest};
+    use ui::notifications::NotificationParams;
+
+    // First installer owns delivery; a second call (shouldn't happen) is a no-op.
+    let Some(mut rx) = toast::init() else {
+        return Ok(());
+    };
+    slint::spawn_local(async_compat::Compat::new(async move {
+        while let Some(ToastRequest { kind, detail }) = rx.recv().await {
+            let Some(ui) = weak.upgrade() else { break };
+            let g = ui.global::<Settings>();
+            let title = match kind {
+                ToastKind::PlaybackFailed => g.invoke_toast_playback_error_title(),
+                ToastKind::OperationFailed => g.invoke_toast_operation_failed_title(),
+            };
+            notifications.show(NotificationParams {
+                variant: "error".into(),
+                title,
+                message: detail.into(),
+                action_label: slint::SharedString::default(),
+                action_kind: "error".into(),
+            });
+        }
+    }))
+    .map(|_| ())
+    .map_err(|e| melodia::error::AppError::Window(format!("toast bridge: {e}")))
+}

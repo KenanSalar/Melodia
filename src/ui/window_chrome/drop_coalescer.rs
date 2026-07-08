@@ -151,7 +151,13 @@ pub(super) fn schedule_drop_flush(state: &AppState, path: PathBuf) {
                     // see freshly-imported tracks without this nudge.
                     state.library_changed_tx.send_modify(|n| *n = n.wrapping_add(1));
                 }
-                Err(e) => log::warn!("queue_import_files (drop): {e}"),
+                Err(e) => {
+                    log::warn!("queue_import_files (drop): {e}");
+                    crate::services::toast::notify(
+                        crate::services::toast::ToastKind::OperationFailed,
+                        e.to_string(),
+                    );
+                }
             }
             return;
         }

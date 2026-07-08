@@ -923,6 +923,12 @@ msgstr "Επιλογή όλων"
 msgid "Import failed"
 msgstr "Η εισαγωγή απέτυχε"
 
+msgid "Playback error"
+msgstr "Σφάλμα αναπαραγωγής"
+
+msgid "Something went wrong"
+msgstr "Κάτι πήγε στραβά"
+
 msgid "Couldn't read the selected playlist file(s)."
 msgstr "Δεν ήταν δυνατή η ανάγνωση των επιλεγμένων αρχείων λίστας."
 

@@ -267,6 +267,12 @@ Contributions are welcome. Before opening a pull request:
   style used in the git history.
 - Open pull requests against the `main` branch.
 
+Every pull request runs the **PR Validation** workflow — `clippy` (with
+`-D warnings`) and the full test suite under coverage — and the
+`pr-validation` check must pass before merging. Test coverage from the latest
+run is published to GitHub Pages at
+[kenansalar.github.io/Melodia](https://kenansalar.github.io/Melodia/).
+
 ## License
 
 Melodia is licensed under the

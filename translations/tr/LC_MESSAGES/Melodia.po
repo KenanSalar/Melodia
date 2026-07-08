@@ -924,6 +924,12 @@ msgstr "Tümünü seç"
 msgid "Import failed"
 msgstr "İçe aktarma başarısız"
 
+msgid "Playback error"
+msgstr "Oynatma hatası"
+
+msgid "Something went wrong"
+msgstr "Bir şeyler ters gitti"
+
 msgid "Couldn't read the selected playlist file(s)."
 msgstr "Seçilen çalma listesi dosyaları okunamadı."
 

@@ -315,10 +315,13 @@ fn test_stop_at_end_of_queue_preserves_track() -> Result<(), AppError> {
 
 #[test]
 fn test_set_volume_clamps() {
-    let mut state = PlayerState { volume: 200, ..Default::default() };
-    assert_eq!(state.volume, 200);
+    let mut state = PlayerState::default();
+    // A request above the ceiling clamps down to MAX_VOLUME.
+    state.build_set_volume_actions(999);
+    assert_eq!(state.volume, MAX_VOLUME);
 
-    state.volume = 75;
+    // A valid level passes through untouched.
+    state.build_set_volume_actions(75);
     assert_eq!(state.volume, 75);
 }
 
@@ -500,11 +503,17 @@ fn test_shuffle_unshuffle() {
 }
 
 #[test]
-fn test_effective_volume_caps_at_100() {
-    let mut state = PlayerState { volume: 150, ..Default::default() };
+fn test_volume_is_capped_at_max_and_converts_to_amplitude() {
+    // The ceiling is enforced when the level is stored, not inside
+    // `effective_volume`: a request above `MAX_VOLUME` clamps to it, so the
+    // backend amplitude tops out at unity gain (no dead >100% band).
+    let mut state = PlayerState::default();
+    state.build_set_volume_actions(150);
+    assert_eq!(state.volume, MAX_VOLUME);
     assert!((state.effective_volume() - 1.0).abs() < f64::EPSILON);
 
-    state.volume = 50;
+    state.build_set_volume_actions(50);
+    assert_eq!(state.volume, 50);
     assert!((state.effective_volume() - 0.5).abs() < f64::EPSILON);
 
     state.is_muted = true;

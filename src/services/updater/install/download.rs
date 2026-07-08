@@ -199,10 +199,10 @@ pub(super) async fn download_to_file(
     let resp = req
         .send()
         .await
-        .map_err(|e| AppError::Network(format!("update download GET {url} failed: {e}")))?;
+        .map_err(|e| AppError::network(format!("update download GET {url} failed"), e))?;
     let status = resp.status();
     if !status.is_success() {
-        return Err(AppError::Network(format!(
+        return Err(AppError::network_msg(format!(
             "update download {url} returned HTTP {status}"
         )));
     }
@@ -278,7 +278,7 @@ pub(super) async fn download_to_file(
 
     while let Some(chunk) = stream.next().await {
         let chunk =
-            chunk.map_err(|e| AppError::Network(format!("update download stream broke: {e}")))?;
+            chunk.map_err(|e| AppError::network("update download stream broke", e))?;
         let new_total = downloaded.saturating_add(chunk.len() as u64);
         if exceeds_size_bound(new_total, expected_size) {
             // Drop the file handle + remove the partial bytes before
@@ -289,7 +289,7 @@ pub(super) async fn download_to_file(
             // never had a chance to pass verify, so cleanup is right.
             drop(file);
             let _ = std::fs::remove_file(dest);
-            return Err(AppError::Network(format!(
+            return Err(AppError::network_msg(format!(
                 "update download exceeded declared size: {new_total} > {expected_size} (5% slack); \
                  manifest may be compromised or the CDN is misbehaving"
             )));

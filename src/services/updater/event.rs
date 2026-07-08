@@ -78,7 +78,7 @@ impl FailureKind {
     pub fn classify(err: &crate::error::AppError) -> Self {
         use crate::error::AppError;
         match err {
-            AppError::Network(_) => Self::Network,
+            AppError::Network { .. } => Self::Network,
             AppError::Io(_) => Self::Io,
             AppError::Validation(msg) if msg.contains("signature") => Self::Signature,
             AppError::Validation(_) => Self::Parse,
