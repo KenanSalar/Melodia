@@ -365,6 +365,11 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
                     let rows: Vec<UiPlaylistPickRow> = playlist_stats
                         .into_iter()
                         .filter(|p| p.id != exclude)
+                        // Smart playlists derive membership from rules — adding
+                        // tracks would write orphan `playlist_items` rows that
+                        // never surface. Exclude them as targets (same gate as
+                        // reorder / remove / file-drop).
+                        .filter(|p| !p.is_smart)
                         .filter_map(|p| {
                             let id = i32::try_from(p.id).ok().or_else(|| {
                                 log::warn!(

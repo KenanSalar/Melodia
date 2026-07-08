@@ -1059,14 +1059,14 @@ msgstr "Wiedergaben"
 msgid "Skips"
 msgstr "Übersprungen"
 
-msgid "Bitrate"
-msgstr "Bitrate"
+msgid "Bitrate (kbps)"
+msgstr "Bitrate (kbps)"
 
-msgid "Sample rate"
-msgstr "Abtastrate"
+msgid "Sample rate (Hz)"
+msgstr "Abtastrate (Hz)"
 
-msgid "File size"
-msgstr "Dateigröße"
+msgid "File size (bytes)"
+msgstr "Dateigröße (Bytes)"
 
 msgid "Last played"
 msgstr "Zuletzt gespielt"

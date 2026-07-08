@@ -1053,14 +1053,14 @@ msgstr "Çalınma"
 msgid "Skips"
 msgstr "Atlanan"
 
-msgid "Bitrate"
-msgstr "Bit hızı"
+msgid "Bitrate (kbps)"
+msgstr "Bit hızı (kbps)"
 
-msgid "Sample rate"
-msgstr "Örnekleme hızı"
+msgid "Sample rate (Hz)"
+msgstr "Örnekleme hızı (Hz)"
 
-msgid "File size"
-msgstr "Dosya boyutu"
+msgid "File size (bytes)"
+msgstr "Dosya boyutu (bayt)"
 
 msgid "Last played"
 msgstr "Son çalınma"

@@ -1052,14 +1052,14 @@ msgstr "Αναπαραγωγές"
 msgid "Skips"
 msgstr "Παραλείψεις"
 
-msgid "Bitrate"
-msgstr "Ρυθμός bit"
+msgid "Bitrate (kbps)"
+msgstr "Ρυθμός bit (kbps)"
 
-msgid "Sample rate"
-msgstr "Ρυθμός δειγματοληψίας"
+msgid "Sample rate (Hz)"
+msgstr "Ρυθμός δειγματοληψίας (Hz)"
 
-msgid "File size"
-msgstr "Μέγεθος αρχείου"
+msgid "File size (bytes)"
+msgstr "Μέγεθος αρχείου (bytes)"
 
 msgid "Last played"
 msgstr "Τελευταία αναπαραγωγή"

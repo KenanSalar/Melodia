@@ -261,3 +261,27 @@ async fn count_respects_limit() -> Result<(), AppError> {
     assert_eq!(count, 2);
     Ok(())
 }
+
+#[tokio::test]
+async fn duration_rule_value_is_seconds() -> Result<(), AppError> {
+    let s = seed().await?;
+    // Give each track a distinct duration in ms. The editor presents Duration
+    // in whole seconds ("Duration (sec)"), so a `Duration > 150` rule must
+    // compare against 150_000 ms — not the raw 150 ms (which would match all).
+    for (id, ms) in [
+        (s.t1, 60_000_i64),
+        (s.t2, 120_000),
+        (s.t3, 240_000),
+        (s.t4, 360_000),
+    ] {
+        sqlx::query("UPDATE tracks SET duration_ms = ? WHERE id = ?")
+            .bind(ms)
+            .bind(id)
+            .execute(s.db.write())
+            .await?;
+    }
+    let c = one(RuleField::DurationMs, RuleOp::Gt, Some(RuleValue::Number(150.0)));
+    // 150 s == 150_000 ms → only t3 (240 s) and t4 (360 s) exceed it.
+    assert_eq!(ids(&resolve(&s.db, &c).await?), HashSet::from([s.t3, s.t4]));
+    Ok(())
+}

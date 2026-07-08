@@ -1050,14 +1050,14 @@ msgstr "Reproducciones"
 msgid "Skips"
 msgstr "Omitidos"
 
-msgid "Bitrate"
-msgstr "Tasa de bits"
+msgid "Bitrate (kbps)"
+msgstr "Tasa de bits (kbps)"
 
-msgid "Sample rate"
-msgstr "Frecuencia de muestreo"
+msgid "Sample rate (Hz)"
+msgstr "Frecuencia de muestreo (Hz)"
 
-msgid "File size"
-msgstr "Tamaño de archivo"
+msgid "File size (bytes)"
+msgstr "Tamaño de archivo (bytes)"
 
 msgid "Last played"
 msgstr "Última reproducción"

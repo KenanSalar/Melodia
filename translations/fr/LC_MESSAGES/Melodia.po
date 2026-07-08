@@ -1050,14 +1050,14 @@ msgstr "Lectures"
 msgid "Skips"
 msgstr "Ignorés"
 
-msgid "Bitrate"
-msgstr "Débit"
+msgid "Bitrate (kbps)"
+msgstr "Débit (kbps)"
 
-msgid "Sample rate"
-msgstr "Échantillonnage"
+msgid "Sample rate (Hz)"
+msgstr "Échantillonnage (Hz)"
 
-msgid "File size"
-msgstr "Taille du fichier"
+msgid "File size (bytes)"
+msgstr "Taille du fichier (octets)"
 
 msgid "Last played"
 msgstr "Dernière lecture"

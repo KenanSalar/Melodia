@@ -195,7 +195,15 @@ fn push_rule(qb: &mut QueryBuilder<Sqlite>, rule: &Rule) {
                 RuleOp::Lt => " < ",
                 _ => " <= ",
             };
-            qb.push(col).push(sql_op).push_bind(*n);
+            // The editor presents Duration in whole seconds ("Duration (sec)"),
+            // but the column stores milliseconds — scale the bound value so the
+            // comparison is against the same unit the user typed.
+            let bound = if rule.field == RuleField::DurationMs {
+                *n * 1000.0
+            } else {
+                *n
+            };
+            qb.push(col).push(sql_op).push_bind(bound);
         }
         RuleOp::InLast | RuleOp::NotInLast => {
             let Some(RuleValue::Days(days)) = &rule.value else {
