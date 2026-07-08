@@ -27,9 +27,11 @@ pub async fn get_smart_playlist_tracks(
     let cols = track::track_list_columns();
     let mut qb: QueryBuilder<Sqlite> = QueryBuilder::new(format!("SELECT {cols} FROM tracks"));
     push_where(&mut qb, criteria);
-    qb.push(order_by_fragment(criteria.limit.as_ref()));
     if let Some(limit) = &criteria.limit {
-        qb.push(" LIMIT ").push_bind(i64::from(limit.count));
+        push_order_and_limit(&mut qb, limit);
+    } else {
+        // Unlimited: fall back to the natural display order.
+        qb.push(order_by_fragment(None));
     }
     let rows = qb
         .build_query_as::<track::TrackListRow>()
@@ -58,8 +60,7 @@ pub async fn count_smart_playlist(
     };
     push_where(&mut qb, criteria);
     if let Some(limit) = &criteria.limit {
-        qb.push(order_by_fragment(Some(limit)));
-        qb.push(" LIMIT ").push_bind(i64::from(limit.count));
+        push_order_and_limit(&mut qb, limit);
         qb.push(")");
     }
     let row = qb
@@ -120,43 +121,66 @@ fn rule_is_renderable(rule: &Rule) -> bool {
     }
 }
 
-/// Push a single rule's predicate. The caller wraps it in `(...)`. Assumes the
-/// rule passed [`rule_is_renderable`]; the `else` fallbacks push a benign
-/// always-false term rather than panicking if that invariant is ever broken.
+/// Push a single rule's predicate. The caller wraps it in `(...)`. Dispatches on
+/// the field's value category to a focused per-category helper. Assumes the rule
+/// passed [`rule_is_renderable`]; a value-shape mismatch degrades to a benign
+/// always-false term via [`push_false`] rather than panicking.
 fn push_rule(qb: &mut QueryBuilder<Sqlite>, rule: &Rule) {
     let col = column_for(rule.field);
-    let vt = rule.field.value_type();
-    match rule.op {
-        RuleOp::IsTrue => {
-            qb.push(col).push(" = 1");
-        }
-        RuleOp::IsFalse => {
-            qb.push(col).push(" = 0");
-        }
+    let value = rule.value.as_ref();
+    match rule.field.value_type() {
+        ValueType::Text => push_text_predicate(qb, col, rule.op, value),
+        ValueType::Number => push_numeric_predicate(qb, col, rule.field, rule.op, value),
+        ValueType::Bool => push_bool_predicate(qb, col, rule.op),
+        ValueType::Date => push_date_predicate(qb, col, rule.op, value),
+    }
+}
+
+/// A benign always-false term (`WHERE (… 0 …)` matches no row). Reached only if
+/// a rule that should have passed [`rule_is_renderable`] arrives with the wrong
+/// value shape — an internal-consistency break between the renderability gate
+/// and value extraction. Degrades to matching nothing rather than panicking on
+/// a user's library.
+fn push_false(qb: &mut QueryBuilder<Sqlite>) {
+    qb.push("0");
+}
+
+/// `IS (NOT) NULL` presence test shared by every value category. Text columns
+/// also treat an empty string as "not set".
+fn push_presence(qb: &mut QueryBuilder<Sqlite>, col: &str, op: RuleOp, is_text: bool) {
+    match op {
         RuleOp::IsSet => {
             qb.push(col).push(" IS NOT NULL");
-            if vt == ValueType::Text {
+            if is_text {
                 qb.push(" AND ").push(col).push(" != ''");
             }
         }
         RuleOp::IsNotSet => {
             qb.push(col).push(" IS NULL");
-            if vt == ValueType::Text {
+            if is_text {
                 qb.push(" OR ").push(col).push(" = ''");
             }
         }
+        _ => push_false(qb),
+    }
+}
+
+/// Text-column predicates: substring/prefix/suffix `LIKE`, case-insensitive
+/// equality, and presence.
+fn push_text_predicate(qb: &mut QueryBuilder<Sqlite>, col: &str, op: RuleOp, value: Option<&RuleValue>) {
+    match op {
+        RuleOp::IsSet | RuleOp::IsNotSet => push_presence(qb, col, op, true),
         RuleOp::Contains | RuleOp::NotContains | RuleOp::StartsWith | RuleOp::EndsWith => {
-            let Some(RuleValue::Text(s)) = &rule.value else {
-                qb.push("0");
-                return;
+            let Some(RuleValue::Text(s)) = value else {
+                return push_false(qb);
             };
             let esc = escape_like(s);
-            let pattern = match rule.op {
+            let pattern = match op {
                 RuleOp::StartsWith => format!("{esc}%"),
                 RuleOp::EndsWith => format!("%{esc}"),
                 _ => format!("%{esc}%"),
             };
-            if rule.op == RuleOp::NotContains {
+            if op == RuleOp::NotContains {
                 qb.push(col).push(" IS NULL OR ").push(col).push(" NOT LIKE ");
             } else {
                 qb.push(col).push(" LIKE ");
@@ -164,16 +188,14 @@ fn push_rule(qb: &mut QueryBuilder<Sqlite>, rule: &Rule) {
             qb.push_bind(pattern).push(" ESCAPE '\\'");
         }
         RuleOp::Is => {
-            let Some(RuleValue::Text(s)) = &rule.value else {
-                qb.push("0");
-                return;
+            let Some(RuleValue::Text(s)) = value else {
+                return push_false(qb);
             };
             qb.push(col).push(" = ").push_bind(s.clone()).push(" COLLATE NOCASE");
         }
         RuleOp::IsNot => {
-            let Some(RuleValue::Text(s)) = &rule.value else {
-                qb.push("0");
-                return;
+            let Some(RuleValue::Text(s)) = value else {
+                return push_false(qb);
             };
             qb.push(col)
                 .push(" IS NULL OR ")
@@ -182,12 +204,26 @@ fn push_rule(qb: &mut QueryBuilder<Sqlite>, rule: &Rule) {
                 .push_bind(s.clone())
                 .push(" COLLATE NOCASE");
         }
+        _ => push_false(qb),
+    }
+}
+
+/// Numeric-column predicates: the six comparisons and presence. Owns the
+/// Duration seconds→milliseconds scaling.
+fn push_numeric_predicate(
+    qb: &mut QueryBuilder<Sqlite>,
+    col: &str,
+    field: RuleField,
+    op: RuleOp,
+    value: Option<&RuleValue>,
+) {
+    match op {
+        RuleOp::IsSet | RuleOp::IsNotSet => push_presence(qb, col, op, false),
         RuleOp::Eq | RuleOp::Ne | RuleOp::Gt | RuleOp::Gte | RuleOp::Lt | RuleOp::Lte => {
-            let Some(RuleValue::Number(n)) = &rule.value else {
-                qb.push("0");
-                return;
+            let Some(RuleValue::Number(n)) = value else {
+                return push_false(qb);
             };
-            let sql_op = match rule.op {
+            let sql_op = match op {
                 RuleOp::Eq => " = ",
                 RuleOp::Ne => " <> ",
                 RuleOp::Gt => " > ",
@@ -198,26 +234,47 @@ fn push_rule(qb: &mut QueryBuilder<Sqlite>, rule: &Rule) {
             // The editor presents Duration in whole seconds ("Duration (sec)"),
             // but the column stores milliseconds — scale the bound value so the
             // comparison is against the same unit the user typed.
-            let bound = if rule.field == RuleField::DurationMs {
+            let bound = if field == RuleField::DurationMs {
                 *n * 1000.0
             } else {
                 *n
             };
             qb.push(col).push(sql_op).push_bind(bound);
         }
+        _ => push_false(qb),
+    }
+}
+
+/// Boolean-column predicates (`is_favorite = 1/0`).
+fn push_bool_predicate(qb: &mut QueryBuilder<Sqlite>, col: &str, op: RuleOp) {
+    match op {
+        RuleOp::IsTrue => {
+            qb.push(col).push(" = 1");
+        }
+        RuleOp::IsFalse => {
+            qb.push(col).push(" = 0");
+        }
+        _ => push_false(qb),
+    }
+}
+
+/// Date-column predicates: the relative-date window tests and presence.
+fn push_date_predicate(qb: &mut QueryBuilder<Sqlite>, col: &str, op: RuleOp, value: Option<&RuleValue>) {
+    match op {
+        RuleOp::IsSet | RuleOp::IsNotSet => push_presence(qb, col, op, false),
         RuleOp::InLast | RuleOp::NotInLast => {
-            let Some(RuleValue::Days(days)) = &rule.value else {
-                qb.push("0");
-                return;
+            let Some(RuleValue::Days(days)) = value else {
+                return push_false(qb);
             };
             let cutoff = cutoff_rfc3339(*days);
-            if rule.op == RuleOp::InLast {
+            if op == RuleOp::InLast {
                 qb.push(col).push(" IS NOT NULL AND ").push(col).push(" >= ");
             } else {
                 qb.push(col).push(" IS NULL OR ").push(col).push(" < ");
             }
             qb.push_bind(cutoff);
         }
+        _ => push_false(qb),
     }
 }
 
@@ -246,6 +303,15 @@ fn column_for(field: RuleField) -> &'static str {
         RuleField::LastPlayed => "last_played",
         RuleField::DateAdded => "date_added",
     }
+}
+
+/// Append `ORDER BY … LIMIT ?` for a capped smart playlist. Shared by the row
+/// query and the count subquery (which then closes its own `)`); an *unlimited*
+/// query handles ordering itself — the row query needs a display order, the
+/// count query needs none.
+fn push_order_and_limit(qb: &mut QueryBuilder<Sqlite>, limit: &SmartLimit) {
+    qb.push(order_by_fragment(Some(limit)));
+    qb.push(" LIMIT ").push_bind(i64::from(limit.count));
 }
 
 /// The `ORDER BY` clause (leading space included) for a resolved smart playlist.
@@ -279,11 +345,15 @@ fn escape_like(s: &str) -> String {
     out
 }
 
+/// Upper bound on a relative-date rule's day count (~9,863 years). Clamps a
+/// hostile/absurd value so `TimeDelta::try_days` can't overflow.
+const MAX_RELATIVE_DAYS: i64 = 3_600_000;
+
 /// The RFC-3339 cutoff `now - days` for the relative-date operators. `days` is
-/// clamped to a sane range so a hostile/absurd value can't overflow
+/// clamped to [`MAX_RELATIVE_DAYS`] so a hostile/absurd value can't overflow
 /// `TimeDelta`; the `unwrap_or` fallback is dead after the clamp.
 fn cutoff_rfc3339(days: i64) -> String {
-    let days = days.clamp(0, 3_600_000);
+    let days = days.clamp(0, MAX_RELATIVE_DAYS);
     let delta = chrono::TimeDelta::try_days(days).unwrap_or_else(chrono::TimeDelta::zero);
     (chrono::Utc::now() - delta).to_rfc3339()
 }

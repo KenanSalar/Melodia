@@ -25,6 +25,14 @@ pub async fn count(state: &AppState, criteria: &SmartCriteria) -> Result<(i64, i
     queries::smart_playlist::count_smart_playlist(&state.db, criteria).await
 }
 
+/// Serialize a rule set to the JSON stored in `playlists.smart_criteria`,
+/// mapping a serializer failure to a validation error.
+fn criteria_to_json(criteria: &SmartCriteria) -> Result<String, AppError> {
+    criteria
+        .to_json()
+        .map_err(|e| AppError::Validation(format!("serialize smart_criteria: {e}")))
+}
+
 /// Persist a new smart playlist and bump `library_changed_tx` so the grid
 /// refreshes (same signal every playlist CRUD uses).
 pub async fn create_smart_playlist(
@@ -33,9 +41,7 @@ pub async fn create_smart_playlist(
     description: Option<String>,
     criteria: &SmartCriteria,
 ) -> Result<Playlist, AppError> {
-    let criteria_json = criteria.to_json().map_err(|e| {
-        AppError::Validation(format!("serialize smart_criteria: {e}"))
-    })?;
+    let criteria_json = criteria_to_json(criteria)?;
     let playlist = queries::playlist::create_smart_playlist(
         &state.db,
         &name,
@@ -55,9 +61,7 @@ pub async fn update_smart_criteria(
     id: i64,
     criteria: &SmartCriteria,
 ) -> Result<Playlist, AppError> {
-    let criteria_json = criteria.to_json().map_err(|e| {
-        AppError::Validation(format!("serialize smart_criteria: {e}"))
-    })?;
+    let criteria_json = criteria_to_json(criteria)?;
     let playlist =
         queries::playlist::update_smart_criteria(&state.db, id, &criteria_json).await?;
     state

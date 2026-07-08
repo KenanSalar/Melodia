@@ -304,6 +304,67 @@ pub const FIELDS: &[RuleField] = &[
     RuleField::DateAdded,
 ];
 
+/// Match-mode editor order. The Slint `match-modes` dropdown mirrors this by
+/// index; [`MatchMode::as_index`] / [`MatchMode::from_index`] derive both
+/// directions from it, so the ordering lives in exactly one place.
+pub const MATCH_MODES: &[MatchMode] = &[MatchMode::All, MatchMode::Any];
+
+/// Limit-order editor order. The Slint `limit-orders` dropdown mirrors this by
+/// index; [`LimitOrder::as_index`] / [`LimitOrder::from_index`] derive both
+/// directions from it.
+pub const LIMIT_ORDERS: &[LimitOrder] = &[
+    LimitOrder::DateAddedDesc,
+    LimitOrder::DateAddedAsc,
+    LimitOrder::PlayCountDesc,
+    LimitOrder::PlayCountAsc,
+    LimitOrder::LastPlayedDesc,
+    LimitOrder::LastPlayedAsc,
+    LimitOrder::RatingDesc,
+    LimitOrder::Random,
+];
+
+/// Position of `value` in `slice` as an `i32` dropdown index, or `0` when
+/// absent. Used by the `as_index` helpers over the editor-order arrays, where
+/// the value is always present (every enum variant is listed).
+fn index_of<T: PartialEq>(slice: &[T], value: &T) -> i32 {
+    slice
+        .iter()
+        .position(|v| v == value)
+        .and_then(|i| i32::try_from(i).ok())
+        .unwrap_or(0)
+}
+
+/// The element at an `i32` dropdown index, if in range.
+fn at_index<T>(slice: &[T], index: i32) -> Option<&T> {
+    usize::try_from(index).ok().and_then(|i| slice.get(i))
+}
+
+impl MatchMode {
+    /// Dropdown index for this mode (mirrors [`MATCH_MODES`] / the Slint
+    /// `match-modes` array by position).
+    pub fn as_index(self) -> i32 {
+        index_of(MATCH_MODES, &self)
+    }
+
+    /// Mode at a dropdown index, falling back to the default on out-of-range.
+    pub fn from_index(index: i32) -> Self {
+        at_index(MATCH_MODES, index).copied().unwrap_or_default()
+    }
+}
+
+impl LimitOrder {
+    /// Dropdown index for this order (mirrors [`LIMIT_ORDERS`] / the Slint
+    /// `limit-orders` array by position).
+    pub fn as_index(self) -> i32 {
+        index_of(LIMIT_ORDERS, &self)
+    }
+
+    /// Order at a dropdown index, falling back to the default on out-of-range.
+    pub fn from_index(index: i32) -> Self {
+        at_index(LIMIT_ORDERS, index).copied().unwrap_or_default()
+    }
+}
+
 impl ValueType {
     /// `field-kind` code the editor's `SmartRuleRow` carries (selects the
     /// operator dropdown array).

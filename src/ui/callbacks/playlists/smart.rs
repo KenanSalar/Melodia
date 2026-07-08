@@ -61,30 +61,16 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
         });
     }
 
-    // set-rule-field — reset the operator to this field-kind's first, recompute
-    // the codes, clear the value only if the input kind changed.
+    // set-rule-field — reset the operator to this field-kind's first, then
+    // recompute the codes (clearing the value only if the input kind changed).
     {
         let weak = weak.clone();
         se.on_set_rule_field(move |row, field_idx| {
             let Some(ui) = weak.upgrade() else { return };
-            with_rules_model(&ui, |vm| {
-                let Ok(ri) = usize::try_from(row) else { return };
-                let Some(old) = vm.row_data(ri) else { return };
+            patch_rule_row(&ui, row, |old| {
                 let field = field_at(field_idx);
-                let vt = field.value_type();
-                let op = *sc::ops_for(vt).first().unwrap_or(&sc::RuleOp::Contains);
-                let input_kind = op.input_kind(vt).as_index();
-                let value_text = keep_or_clear(input_kind, old.input_kind, &old.value_text);
-                vm.set_row_data(
-                    ri,
-                    SmartRuleRow {
-                        field_index: field_idx,
-                        op_index: 0,
-                        field_kind: vt.as_index(),
-                        input_kind,
-                        value_text,
-                    },
-                );
+                let op = first_op(field.value_type());
+                rebuilt_row(field, field_idx, op, 0, &old)
             });
         });
     }
@@ -94,23 +80,10 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
         let weak = weak.clone();
         se.on_set_rule_op(move |row, op_idx| {
             let Some(ui) = weak.upgrade() else { return };
-            with_rules_model(&ui, |vm| {
-                let Ok(ri) = usize::try_from(row) else { return };
-                let Some(old) = vm.row_data(ri) else { return };
+            patch_rule_row(&ui, row, |old| {
                 let field = field_at(old.field_index);
-                let vt = field.value_type();
-                let op = op_at(vt, op_idx);
-                let input_kind = op.input_kind(vt).as_index();
-                let value_text = keep_or_clear(input_kind, old.input_kind, &old.value_text);
-                vm.set_row_data(
-                    ri,
-                    SmartRuleRow {
-                        op_index: op_idx,
-                        input_kind,
-                        value_text,
-                        ..old
-                    },
-                );
+                let op = op_at(field.value_type(), op_idx);
+                rebuilt_row(field, old.field_index, op, op_idx, &old)
             });
         });
     }
@@ -120,36 +93,21 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
         let weak = weak.clone();
         se.on_set_rule_value(move |row, text| {
             let Some(ui) = weak.upgrade() else { return };
-            with_rules_model(&ui, |vm| {
-                let Ok(ri) = usize::try_from(row) else { return };
-                let Some(old) = vm.row_data(ri) else { return };
-                vm.set_row_data(
-                    ri,
-                    SmartRuleRow {
-                        value_text: text,
-                        ..old
-                    },
-                );
+            patch_rule_row(&ui, row, |old| SmartRuleRow {
+                value_text: text,
+                ..old
             });
         });
     }
 
-    // request-new — reset to a fresh editor and open on a fresh tick.
+    // request-new — populate a fresh (default) editor and open on a fresh tick.
     {
         let weak = weak.clone();
         se.on_request_new(move || {
             let weak = weak.clone();
             let _ = slint::invoke_from_event_loop(move || {
                 let Some(ui) = weak.upgrade() else { return };
-                let se = ui.global::<SmartEditor>();
-                se.set_name(SharedString::default());
-                se.set_description(SharedString::default());
-                se.set_match_mode_index(0);
-                se.set_limit_enabled(false);
-                se.set_limit_count_text(SharedString::from("25"));
-                se.set_limit_order_index(0);
-                se.set_target_id(-1);
-                with_rules_model(&ui, |vm| vm.set_vec(vec![default_rule_row()]));
+                populate_editor(&ui, "", "", &sc::SmartCriteria::default(), -1);
                 ui.global::<Dialog>().set_open(true);
             });
         });
@@ -172,34 +130,11 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
                         return;
                     }
                 };
-                let name = SharedString::from(detail.name.as_str());
-                let description =
-                    SharedString::from(detail.description.as_deref().unwrap_or(""));
-                let criteria =
-                    sc::SmartCriteria::from_json_opt(detail.smart_criteria.as_deref());
+                let name = detail.name;
+                let description = detail.description.unwrap_or_default();
+                let criteria = sc::SmartCriteria::from_json_opt(detail.smart_criteria.as_deref());
                 let _ = weak.upgrade_in_event_loop(move |ui| {
-                    let se = ui.global::<SmartEditor>();
-                    se.set_name(name);
-                    se.set_description(description);
-                    se.set_match_mode_index(match_mode_index(criteria.match_mode));
-                    if let Some(l) = &criteria.limit {
-                        se.set_limit_enabled(true);
-                        se.set_limit_count_text(SharedString::from(l.count.to_string()));
-                        se.set_limit_order_index(limit_order_index(l.order));
-                    } else {
-                        se.set_limit_enabled(false);
-                        se.set_limit_count_text(SharedString::from("25"));
-                        se.set_limit_order_index(0);
-                    }
-                    se.set_target_id(clamp_i64_to_i32(id));
-                    with_rules_model(&ui, |vm| {
-                        let mut rows: Vec<SmartRuleRow> =
-                            criteria.rules.iter().filter_map(rule_to_row).collect();
-                        if rows.is_empty() {
-                            rows.push(default_rule_row());
-                        }
-                        vm.set_vec(rows);
-                    });
+                    populate_editor(&ui, &name, &description, &criteria, id);
                     ui.global::<Dialog>().set_open(true);
                 });
             });
@@ -213,46 +148,13 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
         let playlists_ui = playlists_ui.clone();
         se.on_commit(move || {
             let Some(ui) = weak.upgrade() else { return };
-            let se = ui.global::<SmartEditor>();
-            let name = se.get_name().trim().to_owned();
-            if name.is_empty() {
-                return;
-            }
-            let description = se.get_description().trim().to_owned();
-            let description_opt = if description.is_empty() {
-                None
-            } else {
-                Some(description)
-            };
-            let match_mode = if se.get_match_mode_index() == 1 {
-                sc::MatchMode::Any
-            } else {
-                sc::MatchMode::All
-            };
-            let limit = if se.get_limit_enabled() {
-                let count = se
-                    .get_limit_count_text()
-                    .trim()
-                    .parse::<u32>()
-                    .unwrap_or(25)
-                    .clamp(1, 100_000);
-                Some(sc::SmartLimit {
-                    count,
-                    order: limit_order_from_index(se.get_limit_order_index()),
-                })
-            } else {
-                None
-            };
-            let rules: Vec<sc::Rule> =
-                with_rules_model(&ui, |vm| vm.iter().filter_map(|r| row_to_rule(&r)).collect())
-                    .unwrap_or_default();
-            let target_id = i64::from(se.get_target_id());
-            let criteria = sc::SmartCriteria {
-                version: sc::SMART_CRITERIA_VERSION,
-                match_mode,
-                rules,
-                limit,
-            };
+            let Some(draft) = collect_criteria(&ui) else { return };
+            let CriteriaDraft {
+                name,
+                description,
+                criteria,
+                target_id,
+            } = draft;
 
             let s = state.clone();
             let pu = playlists_ui.clone();
@@ -262,7 +164,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
                     match library::smart_playlists::create_smart_playlist(
                         &s,
                         name.clone(),
-                        description_opt,
+                        description,
                         &criteria,
                     )
                     .await
@@ -279,14 +181,9 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
                     // Name / description are user-owned too — update them along
                     // with the criteria. `update_smart_criteria` bumps
                     // `library_changed_tx`, so the grid + open detail refresh.
-                    if let Err(e) = library::playlists::update_playlist(
-                        &s,
-                        target_id,
-                        name,
-                        description_opt,
-                        None,
-                    )
-                    .await
+                    if let Err(e) =
+                        library::playlists::update_playlist(&s, target_id, name, description, None)
+                            .await
                     {
                         log::warn!("update smart playlist meta {target_id}: {e}");
                     }
@@ -311,15 +208,52 @@ fn with_rules_model<R>(ui: &AppWindow, f: impl FnOnce(&VecModel<SmartRuleRow>) -
         .map(f)
 }
 
+/// Patch the rule row at editor index `row` through `f`, if it exists. The
+/// keyed-by-index analogue of [`crate::ui::model_patch::patch_track_row_by_id`].
+fn patch_rule_row(ui: &AppWindow, row: i32, f: impl FnOnce(SmartRuleRow) -> SmartRuleRow) {
+    with_rules_model(ui, |vm| {
+        let Ok(ri) = usize::try_from(row) else { return };
+        if let Some(old) = vm.row_data(ri) {
+            vm.set_row_data(ri, f(old));
+        }
+    });
+}
+
+/// Rebuild a rule row after a field or operator change: recompute the
+/// `field-kind` / `input-kind` codes from `(field, op)` and keep the old value
+/// text only when the input kind is unchanged (else the remounted input reads
+/// empty). Shared by the `set-rule-field` / `set-rule-op` handlers.
+fn rebuilt_row(
+    field: sc::RuleField,
+    field_index: i32,
+    op: sc::RuleOp,
+    op_index: i32,
+    old: &SmartRuleRow,
+) -> SmartRuleRow {
+    let vt = field.value_type();
+    let input_kind = op.input_kind(vt).as_index();
+    SmartRuleRow {
+        field_index,
+        op_index,
+        field_kind: vt.as_index(),
+        input_kind,
+        value_text: keep_or_clear(input_kind, old.input_kind, &old.value_text),
+    }
+}
+
+/// The first (default) operator for a value type.
+fn first_op(vt: sc::ValueType) -> sc::RuleOp {
+    *sc::ops_for(vt).first().unwrap_or(&sc::RuleOp::Contains)
+}
+
 /// The default blank rule row: `Title contains …`.
 fn default_rule_row() -> SmartRuleRow {
     let vt = sc::RuleField::Title.value_type();
-    let op = *sc::ops_for(vt).first().unwrap_or(&sc::RuleOp::Contains);
     SmartRuleRow {
         field_index: 0,
         op_index: 0,
         field_kind: vt.as_index(),
-        input_kind: op.input_kind(vt).as_index(),
+        input_kind: first_op(vt).input_kind(vt).as_index(),
         value_text: SharedString::default(),
     }
 }
@@ -334,11 +268,10 @@ fn field_at(index: i32) -> sc::RuleField {
 
 /// Operator at a dropdown index within `value_type`'s operator array.
 fn op_at(value_type: sc::ValueType, index: i32) -> sc::RuleOp {
-    let ops = sc::ops_for(value_type);
     usize::try_from(index)
         .ok()
-        .and_then(|i| ops.get(i).copied())
-        .unwrap_or_else(|| *ops.first().unwrap_or(&sc::RuleOp::Contains))
+        .and_then(|i| sc::ops_for(value_type).get(i).copied())
+        .unwrap_or_else(|| first_op(value_type))
 }
 
 /// Keep the old value text when the input kind is unchanged; clear it otherwise
@@ -348,40 +281,6 @@ fn keep_or_clear(new_kind: i32, old_kind: i32, old_text: &SharedString) -> Share
         old_text.clone()
     } else {
         SharedString::default()
-    }
-}
-
-fn match_mode_index(mode: sc::MatchMode) -> i32 {
-    match mode {
-        sc::MatchMode::All => 0,
-        sc::MatchMode::Any => 1,
-    }
-}
-
-/// Mirrors the `limit-orders` dropdown array in `smart-playlist-editor-body.slint`.
-fn limit_order_index(order: sc::LimitOrder) -> i32 {
-    match order {
-        sc::LimitOrder::DateAddedDesc => 0,
-        sc::LimitOrder::DateAddedAsc => 1,
-        sc::LimitOrder::PlayCountDesc => 2,
-        sc::LimitOrder::PlayCountAsc => 3,
-        sc::LimitOrder::LastPlayedDesc => 4,
-        sc::LimitOrder::LastPlayedAsc => 5,
-        sc::LimitOrder::RatingDesc => 6,
-        sc::LimitOrder::Random => 7,
-    }
-}
-
-fn limit_order_from_index(index: i32) -> sc::LimitOrder {
-    match index {
-        1 => sc::LimitOrder::DateAddedAsc,
-        2 => sc::LimitOrder::PlayCountDesc,
-        3 => sc::LimitOrder::PlayCountAsc,
-        4 => sc::LimitOrder::LastPlayedDesc,
-        5 => sc::LimitOrder::LastPlayedAsc,
-        6 => sc::LimitOrder::RatingDesc,
-        7 => sc::LimitOrder::Random,
-        _ => sc::LimitOrder::DateAddedDesc,
     }
 }
 
@@ -416,4 +315,82 @@ fn row_to_rule(row: &SmartRuleRow) -> Option<sc::Rule> {
         .and_then(|i| sc::ops_for(vt).get(i).copied())?;
     let value = sc::RuleValue::from_input(vt, op, row.value_text.as_str());
     Some(sc::Rule { field, op, value })
+}
+
+/// A committable smart-playlist draft read out of the editor. `target_id < 0`
+/// means "create"; otherwise it's an update of that playlist.
+struct CriteriaDraft {
+    name: String,
+    description: Option<String>,
+    criteria: sc::SmartCriteria,
+    target_id: i64,
+}
+
+/// Read the `SmartEditor` globals + the rules model into a [`CriteriaDraft`].
+/// Returns `None` when the name is blank (nothing to commit).
+fn collect_criteria(ui: &AppWindow) -> Option<CriteriaDraft> {
+    let se = ui.global::<SmartEditor>();
+    let name = se.get_name().trim().to_owned();
+    if name.is_empty() {
+        return None;
+    }
+    let description = se.get_description().trim().to_owned();
+    let description = (!description.is_empty()).then_some(description);
+    let limit = se.get_limit_enabled().then(|| sc::SmartLimit {
+        count: se
+            .get_limit_count_text()
+            .trim()
+            .parse::<u32>()
+            .unwrap_or_else(|_| sc::SmartLimit::default().count)
+            .clamp(1, 100_000),
+        order: sc::LimitOrder::from_index(se.get_limit_order_index()),
+    });
+    let rules: Vec<sc::Rule> =
+        with_rules_model(ui, |vm| vm.iter().filter_map(|r| row_to_rule(&r)).collect())
+            .unwrap_or_default();
+    Some(CriteriaDraft {
+        name,
+        description,
+        criteria: sc::SmartCriteria {
+            version: sc::SMART_CRITERIA_VERSION,
+            match_mode: sc::MatchMode::from_index(se.get_match_mode_index()),
+            rules,
+            limit,
+        },
+        target_id: i64::from(se.get_target_id()),
+    })
+}
+
+/// Populate every `SmartEditor` global + the rules model from a criteria and
+/// target id (`-1` = create). Shared by `request-new` and `request-edit`; the
+/// caller opens the dialog afterwards.
+fn populate_editor(
+    ui: &AppWindow,
+    name: &str,
+    description: &str,
+    criteria: &sc::SmartCriteria,
+    target_id: i64,
+) {
+    let se = ui.global::<SmartEditor>();
+    se.set_name(SharedString::from(name));
+    se.set_description(SharedString::from(description));
+    se.set_match_mode_index(criteria.match_mode.as_index());
+    if let Some(l) = &criteria.limit {
+        se.set_limit_enabled(true);
+        se.set_limit_count_text(SharedString::from(l.count.to_string()));
+        se.set_limit_order_index(l.order.as_index());
+    } else {
+        se.set_limit_enabled(false);
+        se.set_limit_count_text(SharedString::from(sc::SmartLimit::default().count.to_string()));
+        se.set_limit_order_index(0);
+    }
+    se.set_target_id(clamp_i64_to_i32(target_id));
+    with_rules_model(ui, |vm| {
+        let mut rows: Vec<SmartRuleRow> =
+            criteria.rules.iter().filter_map(rule_to_row).collect();
+        if rows.is_empty() {
+            rows.push(default_rule_row());
+        }
+        vm.set_vec(rows);
+    });
 }

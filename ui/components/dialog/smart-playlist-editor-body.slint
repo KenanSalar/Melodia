@@ -1,6 +1,7 @@
 import { ScrollView } from "std-widgets.slint";
 import { Theme } from "../../theme.slint";
 import { SmartEditor } from "../../globals.slint";
+import { SmartRuleRow } from "../../models.slint";
 import { Dropdown } from "../settings/dropdown.slint";
 import { ToggleSwitch } from "../settings/toggle-switch.slint";
 import { LabeledInput } from "../labeled-input.slint";
@@ -52,6 +53,98 @@ component RuleValueInput inherits Rectangle {
     }
 }
 
+// A dialog-row label, vertically centered against its sibling controls. Wraps
+// the "fixed-width children don't center in a wider layout" pitfall once (a bare
+// `Text` won't centre cross-axis inside a taller row) instead of hand-rolling
+// the `VerticalLayout { alignment: center; Text {…} }` at each label site.
+component RowLabel inherits VerticalLayout {
+    in property <string> text;
+    alignment: center;
+    Text {
+        text: root.text;
+        color: Theme.subtext0;
+        font-size: Theme.font-size-md;
+    }
+}
+
+// One editable rule row: field dropdown · operator dropdown · value input · a
+// remove button. Purely presentational — Rust owns the `SmartRuleRow` model and
+// applies every edit through the callbacks below (so this component never
+// mutates `rule`). Named `SmartRuleRowView` to avoid clashing with the
+// `SmartRuleRow` model struct.
+component SmartRuleRowView inherits HorizontalLayout {
+    in property <SmartRuleRow> rule;
+    in property <[string]> field-names;
+    // The operator label array for this row's field-kind (resolved by the host
+    // so the four `@tr` op arrays live in one place).
+    in property <[string]> ops;
+    callback set-field(int /*field index*/);
+    callback set-op(int /*op index*/);
+    callback set-value(string);
+    callback remove();
+
+    spacing: Theme.pad-sm;
+    alignment: start;
+
+    Dropdown {
+        trigger-width: 148px;
+        options: root.field-names;
+        // One-way binding + `manual` (no self-write) keeps Rust the single
+        // source of truth: `field-index` re-reads after every model edit, so a
+        // field change that resets the operator can't leave a stale selection
+        // (a plain `Dropdown` would orphan this binding on first pick).
+        manual: true;
+        selected-index: root.rule.field-index;
+        selected(idx) => { root.set-field(idx); }
+    }
+    Dropdown {
+        trigger-width: 148px;
+        options: root.ops;
+        manual: true;
+        selected-index: root.rule.op-index;
+        selected(idx) => { root.set-op(idx); }
+    }
+
+    // Value widget — split by input-kind so switching between text / number /
+    // none remounts a fresh input that re-reads the (Rust-reset) value; a
+    // same-kind field change reuses it and keeps the value. The two branches are
+    // load-bearing: do NOT collapse them into one with a ternary placeholder —
+    // the `input-kind == …` boundary IS the remount key that resyncs the input.
+    if root.rule.input-kind == 1: RuleValueInput {
+        horizontal-stretch: 1;
+        min-width: 90px;
+        text: root.rule.value-text;
+        placeholder: @tr("value");
+        edited(t) => { root.set-value(t); }
+    }
+    if root.rule.input-kind == 2: RuleValueInput {
+        horizontal-stretch: 1;
+        min-width: 90px;
+        text: root.rule.value-text;
+        placeholder: root.rule.field-kind == 3 ? @tr("days") : @tr("number");
+        edited(t) => { root.set-value(t); }
+    }
+    // Days suffix for the relative-date operators.
+    if root.rule.field-kind == 3 && root.rule.input-kind == 2: RowLabel {
+        text: @tr("days");
+    }
+    // Keep the remove button flush-right when there's no value widget
+    // (presence / boolean operators).
+    if root.rule.input-kind == 0: Rectangle { horizontal-stretch: 1; }
+
+    VerticalLayout {
+        alignment: center;
+        IconButton {
+            icon: "close";
+            icon-size: 16px;
+            diameter: 28px;
+            idle-bg: Theme.surface1;
+            hover-fg: Theme.danger;
+            clicked => { root.remove(); }
+        }
+    }
+}
+
 // Body of the Smart-Playlist rule-builder dialog (`Dialog.kind ==
 // "smart-playlist-editor"`). Reads/writes the `SmartEditor` global; Rust owns
 // the `rules` model and reconstructs a `SmartCriteria` on commit.
@@ -63,7 +156,9 @@ component RuleValueInput inherits Rectangle {
 export component SmartPlaylistEditorBody inherits VerticalLayout {
     spacing: Theme.pad-md;
 
-    // Field names — mirrors `smart_criteria::FIELDS` by index.
+    // Field names (20) — mirrors `smart_criteria::FIELDS` by index. Lengths are
+    // annotated so a reviewer can eyeball count-match with the Rust enums;
+    // `entities::tests::smart_criteria_tests` pins the leading order.
     property <[string]> field-names: [
         @tr("Title"), @tr("Artist"), @tr("Album Artist"), @tr("Album"),
         @tr("Genre"), @tr("Composer"), @tr("Comment"), @tr("Label"),
@@ -71,7 +166,8 @@ export component SmartPlaylistEditorBody inherits VerticalLayout {
         @tr("Skips"), @tr("Rating"), @tr("Bitrate (kbps)"), @tr("Sample rate (Hz)"),
         @tr("File size (bytes)"), @tr("Favorite"), @tr("Last played"), @tr("Date added"),
     ];
-    // Operator arrays by field-kind — mirror `ops_for(value_type)` by index.
+    // Operator arrays by field-kind — mirror `ops_for(value_type)` by index
+    // (text 8, number 8, bool 2, date 4).
     property <[string]> text-ops: [
         @tr("contains"), @tr("does not contain"), @tr("is"), @tr("is not"),
         @tr("starts with"), @tr("ends with"), @tr("is set"), @tr("is not set"),
@@ -84,7 +180,9 @@ export component SmartPlaylistEditorBody inherits VerticalLayout {
     property <[string]> date-ops: [
         @tr("in the last"), @tr("not in the last"), @tr("is set"), @tr("is not set"),
     ];
+    // (2) — mirrors `smart_criteria::MATCH_MODES` by index.
     property <[string]> match-modes: [ @tr("all"), @tr("any") ];
+    // (8) — mirrors `smart_criteria::LIMIT_ORDERS` by index.
     property <[string]> limit-orders: [
         @tr("most recently added"), @tr("least recently added"),
         @tr("most played"), @tr("least played"),
@@ -110,27 +208,13 @@ export component SmartPlaylistEditorBody inherits VerticalLayout {
     HorizontalLayout {
         spacing: Theme.pad-sm;
         alignment: start;
-        VerticalLayout {
-            alignment: center;
-            Text {
-                text: @tr("Match");
-                color: Theme.subtext0;
-                font-size: Theme.font-size-md;
-            }
-        }
+        RowLabel { text: @tr("Match"); }
         Dropdown {
             trigger-width: 90px;
             options: root.match-modes;
             selected-index <=> SmartEditor.match-mode-index;
         }
-        VerticalLayout {
-            alignment: center;
-            Text {
-                text: @tr("of the following rules");
-                color: Theme.subtext0;
-                font-size: Theme.font-size-md;
-            }
-        }
+        RowLabel { text: @tr("of the following rules"); }
     }
 
     // Rule rows — scrollable so a long rule set doesn't overflow the card.
@@ -147,66 +231,14 @@ export component SmartPlaylistEditorBody inherits VerticalLayout {
             viewport-width: rules-sv.visible-width;
             VerticalLayout {
                 spacing: Theme.pad-sm;
-                for rule[i] in SmartEditor.rules: HorizontalLayout {
-                    spacing: Theme.pad-sm;
-                    alignment: start;
-
-                    Dropdown {
-                        trigger-width: 148px;
-                        options: root.field-names;
-                        selected-index: rule.field-index;
-                        selected(idx) => { SmartEditor.set-rule-field(i, idx); }
-                    }
-                    Dropdown {
-                        trigger-width: 148px;
-                        options: root.ops-for-kind(rule.field-kind);
-                        selected-index: rule.op-index;
-                        selected(idx) => { SmartEditor.set-rule-op(i, idx); }
-                    }
-
-                    // Value widget — split by input-kind so switching between
-                    // text / number / none remounts a fresh input that re-reads
-                    // the (Rust-reset) value; a same-kind field change reuses it
-                    // and keeps the value. Either way the model matches what's
-                    // shown.
-                    if rule.input-kind == 1: RuleValueInput {
-                        horizontal-stretch: 1;
-                        min-width: 90px;
-                        text: rule.value-text;
-                        placeholder: @tr("value");
-                        edited(t) => { SmartEditor.set-rule-value(i, t); }
-                    }
-                    if rule.input-kind == 2: RuleValueInput {
-                        horizontal-stretch: 1;
-                        min-width: 90px;
-                        text: rule.value-text;
-                        placeholder: rule.field-kind == 3 ? @tr("days") : @tr("number");
-                        edited(t) => { SmartEditor.set-rule-value(i, t); }
-                    }
-                    // Days suffix for the relative-date operators.
-                    if rule.field-kind == 3 && rule.input-kind == 2: VerticalLayout {
-                        alignment: center;
-                        Text {
-                            text: @tr("days");
-                            color: Theme.subtext0;
-                            font-size: Theme.font-size-md;
-                        }
-                    }
-                    // Keep the remove button flush-right when there's no value
-                    // widget (presence / boolean operators).
-                    if rule.input-kind == 0: Rectangle { horizontal-stretch: 1; }
-
-                    VerticalLayout {
-                        alignment: center;
-                        IconButton {
-                            icon: "close";
-                            icon-size: 16px;
-                            diameter: 28px;
-                            idle-bg: Theme.surface1;
-                            hover-fg: Theme.danger;
-                            clicked => { SmartEditor.remove-rule(i); }
-                        }
-                    }
+                for rule[i] in SmartEditor.rules: SmartRuleRowView {
+                    rule: rule;
+                    field-names: root.field-names;
+                    ops: root.ops-for-kind(rule.field-kind);
+                    set-field(idx) => { SmartEditor.set-rule-field(i, idx); }
+                    set-op(idx) => { SmartEditor.set-rule-op(i, idx); }
+                    set-value(t) => { SmartEditor.set-rule-value(i, t); }
+                    remove => { SmartEditor.remove-rule(i); }
                 }
             }
         }
@@ -251,28 +283,14 @@ export component SmartPlaylistEditorBody inherits VerticalLayout {
             alignment: center;
             ToggleSwitch { checked <=> SmartEditor.limit-enabled; }
         }
-        VerticalLayout {
-            alignment: center;
-            Text {
-                text: @tr("Limit to");
-                color: Theme.subtext0;
-                font-size: Theme.font-size-md;
-            }
-        }
+        RowLabel { text: @tr("Limit to"); }
         if SmartEditor.limit-enabled: RuleValueInput {
             width: 64px;
             text: SmartEditor.limit-count-text;
             placeholder: @tr("N");
             edited(t) => { SmartEditor.limit-count-text = t; }
         }
-        if SmartEditor.limit-enabled: VerticalLayout {
-            alignment: center;
-            Text {
-                text: @tr("tracks by");
-                color: Theme.subtext0;
-                font-size: Theme.font-size-md;
-            }
-        }
+        if SmartEditor.limit-enabled: RowLabel { text: @tr("tracks by"); }
         if SmartEditor.limit-enabled: Dropdown {
             trigger-width: 190px;
             options: root.limit-orders;

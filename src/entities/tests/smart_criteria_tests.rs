@@ -1,6 +1,6 @@
 use super::{
-    LimitOrder, MatchMode, Rule, RuleField, RuleOp, RuleValue, SMART_CRITERIA_VERSION, SmartCriteria,
-    SmartLimit, ValueType, ops_for,
+    FIELDS, LIMIT_ORDERS, LimitOrder, MATCH_MODES, MatchMode, Rule, RuleField, RuleOp, RuleValue,
+    SMART_CRITERIA_VERSION, SmartCriteria, SmartLimit, ValueType, ops_for,
 };
 
 fn sample() -> SmartCriteria {
@@ -111,4 +111,81 @@ fn field_value_types_and_operator_lists_are_coherent() {
     for vt in [ValueType::Text, ValueType::Number, ValueType::Bool, ValueType::Date] {
         assert!(!ops_for(vt).is_empty(), "no operators for {vt:?}");
     }
+}
+
+#[test]
+fn editor_field_array_is_exhaustive_and_unique() {
+    // Wildcard-free match: adding a `RuleField` variant fails to compile here
+    // until it's given an arm — the reminder to also list it in `FIELDS` (and
+    // the Slint `field-names` array that mirrors `FIELDS` by index).
+    for &f in FIELDS {
+        match f {
+            RuleField::Title
+            | RuleField::Artist
+            | RuleField::AlbumArtist
+            | RuleField::Album
+            | RuleField::Genre
+            | RuleField::Composer
+            | RuleField::Comment
+            | RuleField::Label
+            | RuleField::Year
+            | RuleField::Bpm
+            | RuleField::DurationMs
+            | RuleField::PlayCount
+            | RuleField::SkipCount
+            | RuleField::Rating
+            | RuleField::Bitrate
+            | RuleField::SampleRate
+            | RuleField::FileSize
+            | RuleField::Favorite
+            | RuleField::LastPlayed
+            | RuleField::DateAdded => {}
+        }
+    }
+    // No field appears twice — a copy-paste slip would mis-map every index
+    // past the duplicate.
+    for (i, a) in FIELDS.iter().enumerate() {
+        for b in &FIELDS[i + 1..] {
+            assert_ne!(a, b, "duplicate field in FIELDS: {a:?}");
+        }
+    }
+}
+
+#[test]
+fn editor_dropdown_orders_are_pinned() {
+    // These leading positions are mirrored by the Slint dropdown arrays by
+    // index (see `smart-playlist-editor-body.slint`). Reordering either side
+    // silently mislabels the UI — pin the contract so it fails here instead.
+    assert_eq!(FIELDS.first(), Some(&RuleField::Title));
+    assert_eq!(MATCH_MODES.first(), Some(&MatchMode::All));
+    assert_eq!(MATCH_MODES.get(1), Some(&MatchMode::Any));
+    assert_eq!(LIMIT_ORDERS.first(), Some(&LimitOrder::DateAddedDesc));
+    assert_eq!(ops_for(ValueType::Text).first(), Some(&RuleOp::Contains));
+    assert_eq!(ops_for(ValueType::Number).first(), Some(&RuleOp::Eq));
+    assert_eq!(ops_for(ValueType::Bool).first(), Some(&RuleOp::IsTrue));
+    assert_eq!(ops_for(ValueType::Bool).get(1), Some(&RuleOp::IsFalse));
+    assert_eq!(ops_for(ValueType::Date).first(), Some(&RuleOp::InLast));
+}
+
+#[test]
+fn match_mode_and_limit_order_index_round_trip() {
+    // `as_index` == array position and `from_index` inverts it, for every
+    // entry in the editor-order arrays.
+    for (i, &m) in MATCH_MODES.iter().enumerate() {
+        assert_eq!(usize::try_from(m.as_index()).ok(), Some(i));
+        if let Ok(idx) = i32::try_from(i) {
+            assert_eq!(MatchMode::from_index(idx), m);
+        }
+    }
+    for (i, &o) in LIMIT_ORDERS.iter().enumerate() {
+        assert_eq!(usize::try_from(o.as_index()).ok(), Some(i));
+        if let Ok(idx) = i32::try_from(i) {
+            assert_eq!(LimitOrder::from_index(idx), o);
+        }
+    }
+    // Out-of-range indices fall back to the default rather than panicking.
+    assert_eq!(MatchMode::from_index(-1), MatchMode::default());
+    assert_eq!(MatchMode::from_index(99), MatchMode::default());
+    assert_eq!(LimitOrder::from_index(-1), LimitOrder::default());
+    assert_eq!(LimitOrder::from_index(99), LimitOrder::default());
 }
