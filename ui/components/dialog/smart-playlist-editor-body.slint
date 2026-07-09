@@ -1,0 +1,300 @@
+import { ScrollView } from "std-widgets.slint";
+import { Theme } from "../../theme.slint";
+import { SmartEditor } from "../../globals.slint";
+import { SmartRuleRow } from "../../models.slint";
+import { Dropdown } from "../settings/dropdown.slint";
+import { ToggleSwitch } from "../settings/toggle-switch.slint";
+import { LabeledInput } from "../labeled-input.slint";
+import { IconButton } from "../icon-button.slint";
+
+// Compact, controlled value input for a rule row / the limit count. `text` is
+// one-way (the host owns it via the model / a global); each keystroke reports
+// the new text through `edited(string)`. After the first keystroke Slint
+// detaches the inner `TextInput.text` binding (a component writing its own
+// in-out property orphans a one-way binding), so re-emitting the same value
+// from Rust never resets the cursor; a remount (the host's `if input-kind == …`
+// swap) re-reads `text` fresh. See the editor body for how that keeps the model
+// and the visible input in agreement.
+component RuleValueInput inherits Rectangle {
+    in property <string> text;
+    in property <string> placeholder;
+    callback edited(string);
+
+    height: 34px;
+    background: Theme.surface1;
+    border-color: ti.has-focus ? Theme.accent : Theme.border;
+    border-width: 1px;
+    border-radius: Theme.radius-md;
+    animate border-color { duration: Theme.dur-fast; easing: ease-in-out; }
+
+    HorizontalLayout {
+        padding-left: Theme.pad-sm;
+        padding-right: Theme.pad-sm;
+        Rectangle {
+            horizontal-stretch: 1;
+            if ti.text == "": Text {
+                text: root.placeholder;
+                color: Theme.overlay0;
+                font-size: Theme.font-size-md;
+                vertical-alignment: center;
+                x: 0;
+                height: 100%;
+            }
+            ti := TextInput {
+                text: root.text;
+                color: Theme.text;
+                font-size: Theme.font-size-md;
+                single-line: true;
+                vertical-alignment: center;
+                height: 100%;
+                edited => { root.edited(self.text); }
+            }
+        }
+    }
+}
+
+// A dialog-row label, vertically centered against its sibling controls. Wraps
+// the "fixed-width children don't center in a wider layout" pitfall once (a bare
+// `Text` won't centre cross-axis inside a taller row) instead of hand-rolling
+// the `VerticalLayout { alignment: center; Text {…} }` at each label site.
+component RowLabel inherits VerticalLayout {
+    in property <string> text;
+    alignment: center;
+    Text {
+        text: root.text;
+        color: Theme.subtext0;
+        font-size: Theme.font-size-md;
+    }
+}
+
+// One editable rule row: field dropdown · operator dropdown · value input · a
+// remove button. Purely presentational — Rust owns the `SmartRuleRow` model and
+// applies every edit through the callbacks below (so this component never
+// mutates `rule`). Named `SmartRuleRowView` to avoid clashing with the
+// `SmartRuleRow` model struct.
+component SmartRuleRowView inherits HorizontalLayout {
+    in property <SmartRuleRow> rule;
+    in property <[string]> field-names;
+    // The operator label array for this row's field-kind (resolved by the host
+    // so the four `@tr` op arrays live in one place).
+    in property <[string]> ops;
+    callback set-field(int /*field index*/);
+    callback set-op(int /*op index*/);
+    callback set-value(string);
+    callback remove();
+
+    spacing: Theme.pad-sm;
+    alignment: start;
+
+    Dropdown {
+        trigger-width: 148px;
+        options: root.field-names;
+        // One-way binding + `manual` (no self-write) keeps Rust the single
+        // source of truth: `field-index` re-reads after every model edit, so a
+        // field change that resets the operator can't leave a stale selection
+        // (a plain `Dropdown` would orphan this binding on first pick).
+        manual: true;
+        selected-index: root.rule.field-index;
+        selected(idx) => { root.set-field(idx); }
+    }
+    Dropdown {
+        trigger-width: 148px;
+        options: root.ops;
+        manual: true;
+        selected-index: root.rule.op-index;
+        selected(idx) => { root.set-op(idx); }
+    }
+
+    // Value widget — split by input-kind so switching between text / number /
+    // none remounts a fresh input that re-reads the (Rust-reset) value; a
+    // same-kind field change reuses it and keeps the value. The two branches are
+    // load-bearing: do NOT collapse them into one with a ternary placeholder —
+    // the `input-kind == …` boundary IS the remount key that resyncs the input.
+    if root.rule.input-kind == 1: RuleValueInput {
+        horizontal-stretch: 1;
+        min-width: 90px;
+        text: root.rule.value-text;
+        placeholder: @tr("value");
+        edited(t) => { root.set-value(t); }
+    }
+    if root.rule.input-kind == 2: RuleValueInput {
+        horizontal-stretch: 1;
+        min-width: 90px;
+        text: root.rule.value-text;
+        placeholder: root.rule.field-kind == 3 ? @tr("days") : @tr("number");
+        edited(t) => { root.set-value(t); }
+    }
+    // Days suffix for the relative-date operators.
+    if root.rule.field-kind == 3 && root.rule.input-kind == 2: RowLabel {
+        text: @tr("days");
+    }
+    // Keep the remove button flush-right when there's no value widget
+    // (presence / boolean operators).
+    if root.rule.input-kind == 0: Rectangle { horizontal-stretch: 1; }
+
+    VerticalLayout {
+        alignment: center;
+        IconButton {
+            icon: "close";
+            icon-size: 16px;
+            diameter: 28px;
+            idle-bg: Theme.surface1;
+            hover-fg: Theme.danger;
+            clicked => { root.remove(); }
+        }
+    }
+}
+
+// Body of the Smart-Playlist rule-builder dialog (`Dialog.kind ==
+// "smart-playlist-editor"`). Reads/writes the `SmartEditor` global; Rust owns
+// the `rules` model and reconstructs a `SmartCriteria` on commit.
+//
+// i18n contract: every dropdown option array below is an inline `@tr` literal
+// list, ordered to mirror `entities::smart_criteria::{FIELDS, ops_for,
+// LimitOrder}` by index — a Rust-populated `[string]` would not be translated.
+// Adding/reordering a field or operator means editing BOTH sides in lockstep.
+export component SmartPlaylistEditorBody inherits VerticalLayout {
+    spacing: Theme.pad-md;
+
+    // Field names (16) — mirrors `smart_criteria::FIELDS` by index. The counts
+    // annotated below are a reading aid; `entities::tests::smart_criteria_tests`
+    // is the guard — it pins the leading order and asserts each array's length
+    // against the Rust editor-order array it mirrors.
+    property <[string]> field-names: [
+        @tr("Title"), @tr("Artist"), @tr("Album Artist"), @tr("Album"),
+        @tr("Genre"), @tr("Year"), @tr("Duration (sec)"), @tr("Plays"),
+        @tr("Skips"), @tr("Rating"), @tr("Bitrate (kbps)"), @tr("Sample rate (Hz)"),
+        @tr("File size (bytes)"), @tr("Favorite"), @tr("Last played"), @tr("Date added"),
+    ];
+    // Operator arrays by field-kind — mirror `ops_for(value_type)` by index
+    // (text 8, number 8, bool 2, date 4).
+    property <[string]> text-ops: [
+        @tr("contains"), @tr("does not contain"), @tr("is"), @tr("is not"),
+        @tr("starts with"), @tr("ends with"), @tr("is set"), @tr("is not set"),
+    ];
+    property <[string]> number-ops: [
+        @tr("is"), @tr("is not"), @tr("greater than"), @tr("at least"),
+        @tr("less than"), @tr("at most"), @tr("is set"), @tr("is not set"),
+    ];
+    property <[string]> bool-ops: [ @tr("is true"), @tr("is false") ];
+    property <[string]> date-ops: [
+        @tr("in the last"), @tr("not in the last"), @tr("is set"), @tr("is not set"),
+    ];
+    // (2) — mirrors `smart_criteria::MATCH_MODES` by index.
+    property <[string]> match-modes: [ @tr("all"), @tr("any") ];
+    // (8) — mirrors `smart_criteria::LIMIT_ORDERS` by index.
+    property <[string]> limit-orders: [
+        @tr("most recently added"), @tr("least recently added"),
+        @tr("most played"), @tr("least played"),
+        @tr("most recently played"), @tr("least recently played"),
+        @tr("highest rated"), @tr("random"),
+    ];
+
+    function ops-for-kind(kind: int) -> [string] {
+        return kind == 0 ? root.text-ops
+            : kind == 1 ? root.number-ops
+            : kind == 2 ? root.bool-ops
+            : root.date-ops;
+    }
+
+    // Name.
+    LabeledInput {
+        label: @tr("Name");
+        placeholder: @tr("Smart playlist name");
+        text <=> SmartEditor.name;
+    }
+
+    // Match all / any header.
+    HorizontalLayout {
+        spacing: Theme.pad-sm;
+        alignment: start;
+        RowLabel { text: @tr("Match"); }
+        Dropdown {
+            trigger-width: 90px;
+            options: root.match-modes;
+            selected-index <=> SmartEditor.match-mode-index;
+        }
+        RowLabel { text: @tr("of the following rules"); }
+    }
+
+    // Rule rows — scrollable so a long rule set doesn't overflow the card.
+    Rectangle {
+        min-height: 76px;
+        max-height: 280px;
+        vertical-stretch: 1;
+        rules-sv := ScrollView {
+            // Lock the content width to the viewport so the rows fill the
+            // width and each value input's `horizontal-stretch` has real
+            // space to expand into — without this, a ScrollView sizes its
+            // content to the content's own preferred width and the stretchy
+            // input collapses to ~0 (CLAUDE.md "lock viewport-width").
+            viewport-width: rules-sv.visible-width;
+            VerticalLayout {
+                spacing: Theme.pad-sm;
+                for rule[i] in SmartEditor.rules: SmartRuleRowView {
+                    rule: rule;
+                    field-names: root.field-names;
+                    ops: root.ops-for-kind(rule.field-kind);
+                    set-field(idx) => { SmartEditor.set-rule-field(i, idx); }
+                    set-op(idx) => { SmartEditor.set-rule-op(i, idx); }
+                    set-value(t) => { SmartEditor.set-rule-value(i, t); }
+                    remove => { SmartEditor.remove-rule(i); }
+                }
+            }
+        }
+    }
+
+    // Add-rule.
+    HorizontalLayout {
+        alignment: start;
+        Rectangle {
+            height: 30px;
+            horizontal-stretch: 0;
+            border-radius: self.height / 2;
+            background: add-touch.has-hover ? Theme.surface2 : Theme.surface1;
+            animate background { duration: Theme.dur-fast; easing: ease-in-out; }
+            HorizontalLayout {
+                padding-left: Theme.pad-md;
+                padding-right: Theme.pad-md;
+                spacing: Theme.pad-xs;
+                alignment: center;
+                VerticalLayout {
+                    alignment: center;
+                    Text {
+                        text: "+ " + @tr("Add rule");
+                        color: Theme.text;
+                        font-size: Theme.font-size-md;
+                        font-weight: 600;
+                    }
+                }
+            }
+            add-touch := TouchArea {
+                mouse-cursor: pointer;
+                clicked => { SmartEditor.add-rule(); }
+            }
+        }
+    }
+
+    // Optional limit.
+    HorizontalLayout {
+        spacing: Theme.pad-sm;
+        alignment: start;
+        VerticalLayout {
+            alignment: center;
+            ToggleSwitch { checked <=> SmartEditor.limit-enabled; }
+        }
+        RowLabel { text: @tr("Limit to"); }
+        if SmartEditor.limit-enabled: RuleValueInput {
+            width: 64px;
+            text: SmartEditor.limit-count-text;
+            placeholder: @tr("N");
+            edited(t) => { SmartEditor.limit-count-text = t; }
+        }
+        if SmartEditor.limit-enabled: RowLabel { text: @tr("tracks by"); }
+        if SmartEditor.limit-enabled: Dropdown {
+            trigger-width: 190px;
+            options: root.limit-orders;
+            selected-index <=> SmartEditor.limit-order-index;
+        }
+    }
+}

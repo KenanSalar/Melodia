@@ -8,6 +8,7 @@ use std::sync::Arc;
 use parking_lot::Mutex;
 
 use crate::entities::playlist::PlaylistStats;
+use crate::entities::smart_criteria::SmartCriteria;
 use crate::entities::track::TrackListRow as RsTrackListRow;
 
 /// A playlist's pre-lowercased name, computed once per `fetch_grid` so the
@@ -23,6 +24,13 @@ pub(super) struct PlaylistSearchKey {
 pub(super) struct GridData {
     pub playlists: Vec<PlaylistStats>,
     pub keys: Vec<PlaylistSearchKey>,
+    /// Positionally aligned with [`GridData::playlists`]. `true` iff the row is
+    /// a smart playlist whose criteria can be moved by a play-count flush
+    /// (`SmartCriteria::depends_on_play_stats`); always `false` for regular
+    /// playlists. Computed once here (one criteria parse per smart row) so the
+    /// `stats_changed` gate is a cheap flag scan and the stats-only refresh can
+    /// recount just the rows a play stat change can affect.
+    pub stat_dependent: Vec<bool>,
 }
 
 impl GridData {
@@ -33,7 +41,37 @@ impl GridData {
                 name_lc: p.name.to_lowercase(),
             })
             .collect();
-        Self { playlists, keys }
+        let stat_dependent = playlists
+            .iter()
+            .map(|p| {
+                p.is_smart
+                    && SmartCriteria::from_json_opt(p.smart_criteria.as_deref())
+                        .depends_on_play_stats()
+            })
+            .collect();
+        Self {
+            playlists,
+            keys,
+            stat_dependent,
+        }
+    }
+
+    /// Whether any cached row is a stat-dependent smart playlist — the gate for
+    /// the `stats_changed` refresh.
+    pub(super) fn has_stat_dependent(&self) -> bool {
+        self.stat_dependent.iter().any(|&b| b)
+    }
+
+    /// `(track_count, total_duration_ms, stat_dependent)` for the row with `id`,
+    /// if present. Backs the stats-only refresh: stat-dependent rows are
+    /// recounted, others carry these cached counts forward. `stat_dependent` is
+    /// `false` for regular playlists, so the same lookup gates the open-detail
+    /// refresh too.
+    pub(super) fn row_stats_by_id(&self, id: i64) -> Option<(i32, i64, bool)> {
+        self.playlists.iter().position(|p| p.id == id).map(|i| {
+            let p = &self.playlists[i];
+            (p.track_count, p.total_duration_ms, self.stat_dependent[i])
+        })
     }
 }
 

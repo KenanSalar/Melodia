@@ -1026,3 +1026,161 @@ msgstr "Parça sonu"
 
 msgid "Start"
 msgstr "Başlat"
+
+# ---- Smart / dynamic playlists ---------------------------------------------
+
+msgid "Album Artist"
+msgstr "Albüm Sanatçısı"
+
+msgid "Duration (sec)"
+msgstr "Süre (sn)"
+
+msgid "Plays"
+msgstr "Çalınma"
+
+msgid "Skips"
+msgstr "Atlanan"
+
+msgid "Bitrate (kbps)"
+msgstr "Bit hızı (kbps)"
+
+msgid "Sample rate (Hz)"
+msgstr "Örnekleme hızı (Hz)"
+
+msgid "File size (bytes)"
+msgstr "Dosya boyutu (bayt)"
+
+msgid "Last played"
+msgstr "Son çalınma"
+
+msgid "Date added"
+msgstr "Eklenme tarihi"
+
+msgid "contains"
+msgstr "içerir"
+
+msgid "does not contain"
+msgstr "içermez"
+
+msgid "is"
+msgstr "eşittir"
+
+msgid "is not"
+msgstr "eşit değil"
+
+msgid "starts with"
+msgstr "ile başlar"
+
+msgid "ends with"
+msgstr "ile biter"
+
+msgid "is set"
+msgstr "ayarlanmış"
+
+msgid "is not set"
+msgstr "ayarlanmamış"
+
+msgid "greater than"
+msgstr "büyüktür"
+
+msgid "at least"
+msgstr "en az"
+
+msgid "less than"
+msgstr "küçüktür"
+
+msgid "at most"
+msgstr "en fazla"
+
+msgid "is true"
+msgstr "doğru"
+
+msgid "is false"
+msgstr "yanlış"
+
+msgid "in the last"
+msgstr "son"
+
+msgid "not in the last"
+msgstr "son olmayan"
+
+msgid "all"
+msgstr "tümü"
+
+msgid "any"
+msgstr "herhangi biri"
+
+msgid "most recently added"
+msgstr "en son eklenen"
+
+msgid "least recently added"
+msgstr "en önce eklenen"
+
+msgid "most played"
+msgstr "en çok çalınan"
+
+msgid "least played"
+msgstr "en az çalınan"
+
+msgid "most recently played"
+msgstr "en son çalınan"
+
+msgid "least recently played"
+msgstr "en önce çalınan"
+
+msgid "highest rated"
+msgstr "en yüksek puanlı"
+
+msgid "random"
+msgstr "rastgele"
+
+msgid "Match"
+msgstr "Eşleştir"
+
+msgid "of the following rules"
+msgstr "şu kurallardan"
+
+msgid "days"
+msgstr "gün"
+
+msgid "value"
+msgstr "değer"
+
+msgid "number"
+msgstr "sayı"
+
+msgid "N"
+msgstr "N"
+
+msgid "Limit to"
+msgstr "Sınırla:"
+
+msgid "tracks by"
+msgstr "parça, şuna göre:"
+
+msgid "Add rule"
+msgstr "Kural ekle"
+
+msgid "Smart playlist name"
+msgstr "Akıllı liste adı"
+
+msgid "New Smart Playlist"
+msgstr "Yeni Akıllı Liste"
+
+msgid "Create a playlist from rules"
+msgstr "Kurallardan liste oluştur"
+
+msgid "Edit Rules"
+msgstr "Kuralları düzenle"
+
+msgid "Edit rules"
+msgstr "Kuralları düzenle"
+
+msgid "No matching tracks"
+msgstr "Eşleşen parça yok"
+
+msgid "No tracks match these rules."
+msgstr "Bu kurallarla eşleşen parça yok."
+
+msgid "Create an empty playlist"
+msgstr "Boş liste oluştur"

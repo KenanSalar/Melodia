@@ -27,6 +27,55 @@ pub async fn create_playlist(
     Ok(result)
 }
 
+/// Create a smart (dynamic) playlist. Identical to [`create_playlist`] except
+/// `is_smart = TRUE` and `smart_criteria` holds the serialized
+/// [`crate::entities::smart_criteria::SmartCriteria`] JSON. Smart playlists
+/// never get `playlist_items` rows — their membership is resolved live from the
+/// criteria (see [`crate::database::queries::smart_playlist`]).
+pub async fn create_smart_playlist(
+    db: &DbPool,
+    name: &str,
+    description: Option<&str>,
+    criteria_json: &str,
+) -> Result<playlist::Playlist, AppError> {
+    let now = crate::utils::now_rfc3339();
+
+    let result = sqlx::query_as::<_, playlist::Playlist>(
+        "INSERT INTO playlists (name, description, thumbnail_path, is_smart, smart_criteria, created_at, updated_at)
+         VALUES (?, ?, NULL, TRUE, ?, ?, ?)
+         RETURNING *"
+    )
+    .bind(name)
+    .bind(description)
+    .bind(criteria_json)
+    .bind(&now)
+    .bind(&now)
+    .fetch_one(db.write())
+    .await?;
+    Ok(result)
+}
+
+/// Replace a smart playlist's rule set. Only `smart_criteria` (+ `updated_at`)
+/// change; name/description go through [`update_playlist`] like a regular
+/// playlist's.
+pub async fn update_smart_criteria(
+    db: &DbPool,
+    id: i64,
+    criteria_json: &str,
+) -> Result<playlist::Playlist, AppError> {
+    let now = crate::utils::now_rfc3339();
+
+    sqlx::query_as::<_, playlist::Playlist>(
+        "UPDATE playlists SET smart_criteria = ?, updated_at = ? WHERE id = ? RETURNING *",
+    )
+    .bind(criteria_json)
+    .bind(&now)
+    .bind(id)
+    .fetch_optional(db.write())
+    .await?
+    .ok_or_else(|| AppError::not_found("Playlist", id))
+}
+
 pub async fn get_all_playlists(db: &DbPool) -> Result<Vec<playlist::PlaylistStats>, AppError> {
     let playlists = sqlx::query_as::<_, playlist::PlaylistStats>(
         "SELECT * FROM playlist_stats ORDER BY updated_at DESC"

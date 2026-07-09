@@ -6,6 +6,7 @@ pub mod ingest;
 pub mod playlist;
 pub mod scan;
 pub mod search;
+pub mod smart_playlist;
 pub mod stats;
 pub mod track;
 

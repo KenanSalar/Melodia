@@ -1032,3 +1032,161 @@ msgstr "Titelende"
 
 msgid "Start"
 msgstr "Starten"
+
+# ---- Smart / dynamic playlists ---------------------------------------------
+
+msgid "Album Artist"
+msgstr "Album-Interpret"
+
+msgid "Duration (sec)"
+msgstr "Dauer (Sek.)"
+
+msgid "Plays"
+msgstr "Wiedergaben"
+
+msgid "Skips"
+msgstr "Übersprungen"
+
+msgid "Bitrate (kbps)"
+msgstr "Bitrate (kbps)"
+
+msgid "Sample rate (Hz)"
+msgstr "Abtastrate (Hz)"
+
+msgid "File size (bytes)"
+msgstr "Dateigröße (Bytes)"
+
+msgid "Last played"
+msgstr "Zuletzt gespielt"
+
+msgid "Date added"
+msgstr "Hinzugefügt am"
+
+msgid "contains"
+msgstr "enthält"
+
+msgid "does not contain"
+msgstr "enthält nicht"
+
+msgid "is"
+msgstr "ist"
+
+msgid "is not"
+msgstr "ist nicht"
+
+msgid "starts with"
+msgstr "beginnt mit"
+
+msgid "ends with"
+msgstr "endet mit"
+
+msgid "is set"
+msgstr "ist gesetzt"
+
+msgid "is not set"
+msgstr "ist nicht gesetzt"
+
+msgid "greater than"
+msgstr "größer als"
+
+msgid "at least"
+msgstr "mindestens"
+
+msgid "less than"
+msgstr "kleiner als"
+
+msgid "at most"
+msgstr "höchstens"
+
+msgid "is true"
+msgstr "ist wahr"
+
+msgid "is false"
+msgstr "ist falsch"
+
+msgid "in the last"
+msgstr "in den letzten"
+
+msgid "not in the last"
+msgstr "nicht in den letzten"
+
+msgid "all"
+msgstr "alle"
+
+msgid "any"
+msgstr "beliebige"
+
+msgid "most recently added"
+msgstr "zuletzt hinzugefügt"
+
+msgid "least recently added"
+msgstr "zuerst hinzugefügt"
+
+msgid "most played"
+msgstr "meistgespielt"
+
+msgid "least played"
+msgstr "am wenigsten gespielt"
+
+msgid "most recently played"
+msgstr "zuletzt gespielt"
+
+msgid "least recently played"
+msgstr "am längsten nicht gespielt"
+
+msgid "highest rated"
+msgstr "am besten bewertet"
+
+msgid "random"
+msgstr "zufällig"
+
+msgid "Match"
+msgstr "Erfülle"
+
+msgid "of the following rules"
+msgstr "der folgenden Regeln"
+
+msgid "days"
+msgstr "Tage"
+
+msgid "value"
+msgstr "Wert"
+
+msgid "number"
+msgstr "Zahl"
+
+msgid "N"
+msgstr "N"
+
+msgid "Limit to"
+msgstr "Begrenzen auf"
+
+msgid "tracks by"
+msgstr "Titel nach"
+
+msgid "Add rule"
+msgstr "Regel hinzufügen"
+
+msgid "Smart playlist name"
+msgstr "Name der intelligenten Playlist"
+
+msgid "New Smart Playlist"
+msgstr "Neue intelligente Playlist"
+
+msgid "Create a playlist from rules"
+msgstr "Eine Playlist aus Regeln erstellen"
+
+msgid "Edit Rules"
+msgstr "Regeln bearbeiten"
+
+msgid "Edit rules"
+msgstr "Regeln bearbeiten"
+
+msgid "No matching tracks"
+msgstr "Keine passenden Titel"
+
+msgid "No tracks match these rules."
+msgstr "Keine Titel entsprechen diesen Regeln."
+
+msgid "Create an empty playlist"
+msgstr "Eine leere Playlist erstellen"

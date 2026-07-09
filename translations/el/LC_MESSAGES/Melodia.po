@@ -1025,3 +1025,161 @@ msgstr "Τέλος κομματιού"
 
 msgid "Start"
 msgstr "Έναρξη"
+
+# ---- Smart / dynamic playlists ---------------------------------------------
+
+msgid "Album Artist"
+msgstr "Καλλιτέχνης άλμπουμ"
+
+msgid "Duration (sec)"
+msgstr "Διάρκεια (δευτ.)"
+
+msgid "Plays"
+msgstr "Αναπαραγωγές"
+
+msgid "Skips"
+msgstr "Παραλείψεις"
+
+msgid "Bitrate (kbps)"
+msgstr "Ρυθμός bit (kbps)"
+
+msgid "Sample rate (Hz)"
+msgstr "Ρυθμός δειγματοληψίας (Hz)"
+
+msgid "File size (bytes)"
+msgstr "Μέγεθος αρχείου (bytes)"
+
+msgid "Last played"
+msgstr "Τελευταία αναπαραγωγή"
+
+msgid "Date added"
+msgstr "Ημερομηνία προσθήκης"
+
+msgid "contains"
+msgstr "περιέχει"
+
+msgid "does not contain"
+msgstr "δεν περιέχει"
+
+msgid "is"
+msgstr "είναι"
+
+msgid "is not"
+msgstr "δεν είναι"
+
+msgid "starts with"
+msgstr "ξεκινά με"
+
+msgid "ends with"
+msgstr "τελειώνει με"
+
+msgid "is set"
+msgstr "έχει οριστεί"
+
+msgid "is not set"
+msgstr "δεν έχει οριστεί"
+
+msgid "greater than"
+msgstr "μεγαλύτερο από"
+
+msgid "at least"
+msgstr "τουλάχιστον"
+
+msgid "less than"
+msgstr "μικρότερο από"
+
+msgid "at most"
+msgstr "το πολύ"
+
+msgid "is true"
+msgstr "είναι αληθές"
+
+msgid "is false"
+msgstr "είναι ψευδές"
+
+msgid "in the last"
+msgstr "στις τελευταίες"
+
+msgid "not in the last"
+msgstr "όχι στις τελευταίες"
+
+msgid "all"
+msgstr "όλων"
+
+msgid "any"
+msgstr "οποιουδήποτε"
+
+msgid "most recently added"
+msgstr "πιο πρόσφατα προστεθέντα"
+
+msgid "least recently added"
+msgstr "λιγότερο πρόσφατα προστεθέντα"
+
+msgid "most played"
+msgstr "με τις περισσότερες αναπαραγωγές"
+
+msgid "least played"
+msgstr "με τις λιγότερες αναπαραγωγές"
+
+msgid "most recently played"
+msgstr "πιο πρόσφατα αναπαραγόμενα"
+
+msgid "least recently played"
+msgstr "λιγότερο πρόσφατα αναπαραγόμενα"
+
+msgid "highest rated"
+msgstr "με την υψηλότερη βαθμολογία"
+
+msgid "random"
+msgstr "τυχαία"
+
+msgid "Match"
+msgstr "Αντιστοίχιση"
+
+msgid "of the following rules"
+msgstr "από τους παρακάτω κανόνες"
+
+msgid "days"
+msgstr "ημέρες"
+
+msgid "value"
+msgstr "τιμή"
+
+msgid "number"
+msgstr "αριθμός"
+
+msgid "N"
+msgstr "N"
+
+msgid "Limit to"
+msgstr "Περιορισμός σε"
+
+msgid "tracks by"
+msgstr "κομμάτια κατά"
+
+msgid "Add rule"
+msgstr "Προσθήκη κανόνα"
+
+msgid "Smart playlist name"
+msgstr "Όνομα έξυπνης λίστας"
+
+msgid "New Smart Playlist"
+msgstr "Νέα έξυπνη λίστα"
+
+msgid "Create a playlist from rules"
+msgstr "Δημιουργία λίστας από κανόνες"
+
+msgid "Edit Rules"
+msgstr "Επεξεργασία κανόνων"
+
+msgid "Edit rules"
+msgstr "Επεξεργασία κανόνων"
+
+msgid "No matching tracks"
+msgstr "Κανένα κομμάτι δεν ταιριάζει"
+
+msgid "No tracks match these rules."
+msgstr "Κανένα κομμάτι δεν ταιριάζει με αυτούς τους κανόνες."
+
+msgid "Create an empty playlist"
+msgstr "Δημιουργία κενής λίστας"

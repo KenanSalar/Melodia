@@ -168,6 +168,10 @@ export struct PlaylistRow {
     artwork_path: string,
     track_count: int,
     total_duration_ms: int,
+    // A smart (dynamic) playlist: membership is derived from stored rules, not
+    // a curated track list. Surfaces a badge and disables manual editing
+    // (reorder / add / remove) on the grid card and detail view.
+    is_smart: bool,
 }
 
 // One virtualized row of the Playlists grid: up to `Playlists.columns`
@@ -209,6 +213,27 @@ export struct PlaylistExportPickRow {
     artwork_path: string,
     track_count: int,
     selected: bool,
+}
+
+// One rule row in the Smart-Playlist editor (`Dialog.kind ==
+// "smart-playlist-editor"`, driven by the `SmartEditor` global). The model is
+// Rust-owned (`VecModel<SmartRuleRow>`); the editor mutates it through
+// `SmartEditor.set-rule-*` callbacks, and Rust reconstructs a `SmartCriteria`
+// from it on commit. All values are indices/codes so no translated string ever
+// round-trips through Rust — the dropdown label arrays are inline `@tr` in the
+// editor body (see `smart-playlist-editor-body.slint`), mirrored by index to
+// Rust's `entities::smart_criteria::{FIELDS, ops_for}`.
+//   * field-index — index into the field-name dropdown (Rust `FIELDS`).
+//   * op-index    — index into this field-kind's operator array.
+//   * field-kind  — 0 text · 1 number · 2 bool · 3 date (selects the op array).
+//   * input-kind  — 0 none · 1 text · 2 number (selects the value widget).
+//   * value-text  — the raw value input (empty for none/bool operators).
+export struct SmartRuleRow {
+    field-index: int,
+    op-index: int,
+    field-kind: int,
+    input-kind: int,
+    value-text: string,
 }
 
 // `position_ms`, `duration_ms`, and `progress` deliberately live on the
