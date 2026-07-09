@@ -1029,18 +1029,6 @@ msgstr "Iniciar"
 msgid "Album Artist"
 msgstr "Artista del álbum"
 
-msgid "Composer"
-msgstr "Compositor"
-
-msgid "Comment"
-msgstr "Comentario"
-
-msgid "Label"
-msgstr "Sello"
-
-msgid "BPM"
-msgstr "BPM"
-
 msgid "Duration (sec)"
 msgstr "Duración (seg)"
 

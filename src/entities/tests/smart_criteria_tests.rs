@@ -125,11 +125,7 @@ fn editor_field_array_is_exhaustive_and_unique() {
             | RuleField::AlbumArtist
             | RuleField::Album
             | RuleField::Genre
-            | RuleField::Composer
-            | RuleField::Comment
-            | RuleField::Label
             | RuleField::Year
-            | RuleField::Bpm
             | RuleField::DurationMs
             | RuleField::PlayCount
             | RuleField::SkipCount
@@ -165,6 +161,32 @@ fn editor_dropdown_orders_are_pinned() {
     assert_eq!(ops_for(ValueType::Bool).first(), Some(&RuleOp::IsTrue));
     assert_eq!(ops_for(ValueType::Bool).get(1), Some(&RuleOp::IsFalse));
     assert_eq!(ops_for(ValueType::Date).first(), Some(&RuleOp::InLast));
+}
+
+#[test]
+fn slint_dropdown_arrays_match_rust_editor_order_lengths() {
+    // `editor_dropdown_orders_are_pinned` fixes the leading *order* of each
+    // mirrored array; this fixes the *length*. Shortening one side without the
+    // other compiles and mislabels every dropdown row past the drift point, so
+    // pin it here instead of relying on the `.slint`'s count comments.
+    const EDITOR: &str =
+        include_str!("../../../ui/components/dialog/smart-playlist-editor-body.slint");
+
+    // `@tr(` occurrences inside `property <[string]> <name>: [ … ];`. `None`
+    // when the array is renamed or removed, which fails the `assert_eq!` loudly.
+    fn tr_count(name: &str) -> Option<usize> {
+        let (_, tail) = EDITOR.split_once(&format!("property <[string]> {name}: ["))?;
+        let (body, _) = tail.split_once("];")?;
+        Some(body.matches("@tr(").count())
+    }
+
+    assert_eq!(tr_count("field-names"), Some(FIELDS.len()));
+    assert_eq!(tr_count("text-ops"), Some(ops_for(ValueType::Text).len()));
+    assert_eq!(tr_count("number-ops"), Some(ops_for(ValueType::Number).len()));
+    assert_eq!(tr_count("bool-ops"), Some(ops_for(ValueType::Bool).len()));
+    assert_eq!(tr_count("date-ops"), Some(ops_for(ValueType::Date).len()));
+    assert_eq!(tr_count("match-modes"), Some(MATCH_MODES.len()));
+    assert_eq!(tr_count("limit-orders"), Some(LIMIT_ORDERS.len()));
 }
 
 #[test]

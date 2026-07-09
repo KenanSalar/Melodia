@@ -1032,18 +1032,6 @@ msgstr "Başlat"
 msgid "Album Artist"
 msgstr "Albüm Sanatçısı"
 
-msgid "Composer"
-msgstr "Besteci"
-
-msgid "Comment"
-msgstr "Yorum"
-
-msgid "Label"
-msgstr "Plak Şirketi"
-
-msgid "BPM"
-msgstr "BPM"
-
 msgid "Duration (sec)"
 msgstr "Süre (sn)"
 

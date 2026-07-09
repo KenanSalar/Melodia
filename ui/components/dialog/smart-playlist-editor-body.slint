@@ -156,13 +156,13 @@ component SmartRuleRowView inherits HorizontalLayout {
 export component SmartPlaylistEditorBody inherits VerticalLayout {
     spacing: Theme.pad-md;
 
-    // Field names (20) — mirrors `smart_criteria::FIELDS` by index. Lengths are
-    // annotated so a reviewer can eyeball count-match with the Rust enums;
-    // `entities::tests::smart_criteria_tests` pins the leading order.
+    // Field names (16) — mirrors `smart_criteria::FIELDS` by index. The counts
+    // annotated below are a reading aid; `entities::tests::smart_criteria_tests`
+    // is the guard — it pins the leading order and asserts each array's length
+    // against the Rust editor-order array it mirrors.
     property <[string]> field-names: [
         @tr("Title"), @tr("Artist"), @tr("Album Artist"), @tr("Album"),
-        @tr("Genre"), @tr("Composer"), @tr("Comment"), @tr("Label"),
-        @tr("Year"), @tr("BPM"), @tr("Duration (sec)"), @tr("Plays"),
+        @tr("Genre"), @tr("Year"), @tr("Duration (sec)"), @tr("Plays"),
         @tr("Skips"), @tr("Rating"), @tr("Bitrate (kbps)"), @tr("Sample rate (Hz)"),
         @tr("File size (bytes)"), @tr("Favorite"), @tr("Last played"), @tr("Date added"),
     ];

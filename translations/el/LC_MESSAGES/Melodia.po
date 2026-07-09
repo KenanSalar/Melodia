@@ -1031,18 +1031,6 @@ msgstr "Έναρξη"
 msgid "Album Artist"
 msgstr "Καλλιτέχνης άλμπουμ"
 
-msgid "Composer"
-msgstr "Συνθέτης"
-
-msgid "Comment"
-msgstr "Σχόλιο"
-
-msgid "Label"
-msgstr "Δισκογραφική"
-
-msgid "BPM"
-msgstr "BPM"
-
 msgid "Duration (sec)"
 msgstr "Διάρκεια (δευτ.)"
 

@@ -120,12 +120,8 @@ pub enum RuleField {
     AlbumArtist,
     Album,
     Genre,
-    Composer,
-    Comment,
-    Label,
     // numeric
     Year,
-    Bpm,
     DurationMs,
     PlayCount,
     SkipCount,
@@ -149,12 +145,8 @@ impl RuleField {
             | RuleField::Artist
             | RuleField::AlbumArtist
             | RuleField::Album
-            | RuleField::Genre
-            | RuleField::Composer
-            | RuleField::Comment
-            | RuleField::Label => ValueType::Text,
+            | RuleField::Genre => ValueType::Text,
             RuleField::Year
-            | RuleField::Bpm
             | RuleField::DurationMs
             | RuleField::PlayCount
             | RuleField::SkipCount
@@ -313,11 +305,7 @@ pub const FIELDS: &[RuleField] = &[
     RuleField::AlbumArtist,
     RuleField::Album,
     RuleField::Genre,
-    RuleField::Composer,
-    RuleField::Comment,
-    RuleField::Label,
     RuleField::Year,
-    RuleField::Bpm,
     RuleField::DurationMs,
     RuleField::PlayCount,
     RuleField::SkipCount,
