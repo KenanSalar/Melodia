@@ -167,21 +167,25 @@ crossfade.
 ### The gapless / fade-cell hazard
 
 A staged gapless source sits *behind* the current one on the active deck and
-**shares its fade cell**. A self-ending fade-out armed there would be inherited
-by the staged source the moment the current one ends — it would start at full
-volume and audibly fade out. Three defences:
+**shares its fade cell**. Any fade-out armed there is inherited by the staged
+source the moment the current one ends — and a `FadeCmd` with `start: None` ramps
+from *the source's own* current gain, which for a source that has never been
+pulled is unity (`EqSource` initialises `fade_gain: 1.0`). So the staged track
+starts at full volume and audibly fades out. `end_on_complete: false` does not
+save it: holding at zero rather than ending the source keeps the *outgoing* deck
+alive, but the ramp the successor inherits is the same one. Four defences:
 
 1. The automatic path can't reach it: `crossfade_eligible` suppresses the preload
    for a crossfade transition, and `should_crossfade` refuses to fire while one
    is staged.
 2. `crossfade::manual_fade_ms` refuses to fade while `gapless_pending`, so a
    manual next in the last 1.5 s of a track hard-cuts instead.
-3. `play_media` re-checks the flag **under the deck lock** (the monitor's preload
-   runs off the `exec_lock` that serializes actions), and `begin_crossfade`
+3. `RodioPlayer::can_fade_out` refuses a pause/stop fade while one is staged, so
+   a pause or stop in that same window is a hard one.
+4. `play_media` re-checks the flag **under the deck lock** (the monitor's preload
+   runs off the `exec_lock` that serializes actions), `pause_with_fade` /
+   `stop_with_fade` re-check it the same way, and `begin_crossfade`
    `debug_assert!`s the invariant.
-
-Only `end_on_complete: true` ramps are dangerous. The pause/stop fades hold at
-silence instead, so the staged source never starts.
 
 ### State machine — `src/player/state.rs`
 
@@ -248,12 +252,16 @@ that far in when you hit play.
 ### Fade on pause / stop
 
 Arms a ramp to silence with `end_on_complete: false` — holding at zero rather
-than ending the source, so a staged gapless successor can't start — and defers
-the real `Player::pause()` / `clear()` by that duration on a `runtime.spawn`
-task. A `deck_epoch: AtomicU64` guards it — the same counter the gapless preload
-re-checks: the task re-reads the epoch **while holding the decks lock**, so a
-concurrent `play_media` can't be clobbered by a deferred clear that had already
-passed a lock-free check.
+than ending the source, which would drain the active deck and read as
+`EndOfStream` — and defers the real `Player::pause()` / `clear()` by that
+duration on a `runtime.spawn` task. A `deck_epoch: AtomicU64` guards it — the
+same counter the gapless preload re-checks: the task re-reads the epoch **while
+holding the decks lock**, so a concurrent `play_media` can't be clobbered by a
+deferred clear that had already passed a lock-free check. The deferred
+`ClearAll` is the deferred half of `stop()` and drops `gapless_pending` exactly
+as `stop()` does, *after* the decks — a preload that entered after the epoch
+bump snapshots the new epoch, so it can still stage a source behind the deck the
+clear is about to throw away, and the flag must not outlive it.
 
 `seek()` deliberately does **not** bump the epoch. A seek doesn't replace deck
 contents, and cancelling a pending deferred pause there would leave the decks
@@ -276,12 +284,16 @@ have no others, and anything it refuses falls through to the plain immediate
   `PAUSE_FADE_MS` fading to silence. Same gate, same reason, as
   `crossfade::manual_fade_ms`. A lock-free check can't be the last word here, so
   both callers re-read `gapless_pending` **under the decks lock** after bumping
-  the epoch, exactly as `play_media` does: a preload decoded before the bump can
-  still be waiting on that lock, while anything reaching it *after* the bump
-  re-checks the epoch itself and drops. `stop_with_fade` therefore never clears
-  `gapless_pending` eagerly — on the fade path it is already false, and clearing
-  it early would only be a way to start lying about a source the deferred clear
-  has not removed yet.
+  the epoch, exactly as `play_media` does: the gate's read and the bump are two
+  separate steps, so a preload can *complete* — append and set the flag, both
+  under that same lock — in between them, and only the re-read sees it. A preload
+  entering *after* the bump is the other case: it snapshots the new epoch, so it
+  passes its own re-check and stages for real. On the pause path that is benign
+  (the deck is only held at silence and paused, and the resume ramps it back to
+  unity); on the stop path the deferred `ClearAll` takes the staged source and the
+  flag together. `stop_with_fade` therefore never clears `gapless_pending`
+  eagerly — on the fade path it is already false, and clearing it early would only
+  be a way to start lying about a source the deferred clear has not removed yet.
 - **a crossfade in flight** — the outgoing deck's in-flight ramp has no start gain
   that could be restored on resume.
 

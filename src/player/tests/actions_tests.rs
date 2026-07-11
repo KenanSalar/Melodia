@@ -15,8 +15,10 @@ struct MockBackendInner {
     /// `(file_path, fade_ms, volume, speed)` per `begin_crossfade`.
     begin_crossfade_calls: Vec<(String, u64, f64, f64)>,
     resume_count: u32,
-    pause_count: u32,
     /// `fade_ms` per `pause_with_fade`, including the `0`s that mean "immediate".
+    /// `pause_with_fade` is the only pause on the trait, so this is also the
+    /// pause count — unlike `stop_count`, which has to cover the bare `stop()`
+    /// the auto-skip path calls outside any `PlayerAction`.
     pause_fade_calls: Vec<u64>,
     stop_count: u32,
     /// `fade_ms` per `stop_with_fade`, including the `0`s that mean "immediate".
@@ -106,9 +108,7 @@ impl PlayerBackend for MockBackend {
         self.inner().resume_count += 1;
     }
     fn pause_with_fade(&self, fade_ms: u64) {
-        let mut inner = self.inner();
-        inner.pause_fade_calls.push(fade_ms);
-        inner.pause_count += 1;
+        self.inner().pause_fade_calls.push(fade_ms);
     }
     fn stop(&self) {
         self.inner().stop_count += 1;
@@ -287,7 +287,7 @@ async fn execute_resume_pause_stop() -> Result<(), AppError> {
 
     let inner = mock.inner();
     assert_eq!(inner.resume_count, 1);
-    assert_eq!(inner.pause_count, 1);
+    assert_eq!(inner.pause_fade_calls, vec![0]);
     assert_eq!(inner.stop_count, 1);
     Ok(())
 }

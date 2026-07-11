@@ -204,7 +204,10 @@ pub struct RodioPlayer {
     // atomically; rodio's Player is already Send+Sync on its own. `Arc` so a
     // deferred pause/stop task can hold the decks after its sleep.
     decks: Arc<std::sync::Mutex<Decks>>,
-    gapless_pending: AtomicBool,
+    // `Arc` for the same reason as `deck_epoch`: the deferred clear of a faded
+    // stop is the deferred half of `stop()`, so it must be able to drop the flag
+    // alongside the deck contents it removes.
+    gapless_pending: Arc<AtomicBool>,
     // Set while a crossfade's outgoing deck is still draining. Paired with the
     // idle deck's `empty()` in `is_crossfading`, which self-heals the flag.
     crossfade_armed: AtomicBool,
@@ -238,7 +241,7 @@ impl RodioPlayer {
         });
         Self {
             decks: Arc::new(std::sync::Mutex::new(Decks { decks, active: 0 })),
-            gapless_pending: AtomicBool::new(false),
+            gapless_pending: Arc::new(AtomicBool::new(false)),
             crossfade_armed: AtomicBool::new(false),
             deck_epoch: Arc::new(AtomicU64::new(0)),
             eq: EqShared::new(false, &[0.0; equalizer::NUM_BANDS]),
@@ -262,19 +265,33 @@ impl RodioPlayer {
     fn schedule_after(&self, epoch: u64, delay_ms: u64, op: DeferredOp) {
         let decks = self.decks.clone();
         let deck_epoch = self.deck_epoch.clone();
+        let gapless_pending = self.gapless_pending.clone();
         self.runtime.spawn(async move {
             tokio::time::sleep(Duration::from_millis(delay_ms)).await;
             let guard = lock_decks_arc(&decks);
             if deck_epoch.load(Ordering::Acquire) != epoch {
                 return;
             }
-            for deck in &guard.decks {
-                match op {
-                    DeferredOp::PauseAll => deck.player.pause(),
-                    DeferredOp::ClearAll => {
+            match op {
+                // A pause keeps the deck contents — a staged gapless source
+                // included — so it must leave `gapless_pending` alone.
+                DeferredOp::PauseAll => {
+                    for deck in &guard.decks {
+                        deck.player.pause();
+                    }
+                }
+                // The deferred half of `stop()`, so it drops the flag exactly as
+                // `stop()` does: *after* the decks, never before. A preload that
+                // enters after the epoch bump snapshots the *new* epoch, passes
+                // its own re-check and can still stage a source behind the deck
+                // this is about to throw away — clearing the flag here is what
+                // stops it outliving the source it describes.
+                DeferredOp::ClearAll => {
+                    for deck in &guard.decks {
                         deck.player.clear();
                         deck.fade.reset();
                     }
+                    gapless_pending.store(false, Ordering::Release);
                 }
             }
         });
@@ -559,11 +576,15 @@ impl RodioPlayer {
         let epoch = self.bump_epoch();
         {
             let decks = self.lock_decks();
-            // Backstop for the gapless race, mirroring `play_media`: a preload
-            // decoded before the bump above can still be waiting on this lock, and
-            // it sets `gapless_pending` while holding it. Anything that reaches the
-            // lock *after* the bump re-checks the epoch itself and drops, so this
-            // one re-read closes the window the lock-free gate leaves open.
+            // Backstop for the gapless race, mirroring `play_media`. The read in
+            // `can_fade_out` is lock-free and the bump above is a separate step,
+            // so a preload can *complete* — append its source and set the flag,
+            // both under this same lock — in between the two. This re-read is what
+            // sees it. A preload arriving *after* the bump is the benign case: it
+            // stages behind a deck this fade only holds at silence and then
+            // pauses, and the resume ramps that deck back to unity — so the
+            // staged source is still the legitimate gapless successor it was
+            // meant to be.
             if self.gapless_pending.load(Ordering::Acquire) {
                 drop(decks);
                 self.pause();
@@ -592,11 +613,12 @@ impl RodioPlayer {
     /// The ramp deliberately does *not* end its source: that would drain the
     /// active deck and read as `EndOfStream`. The deferred clear does it.
     ///
-    /// `gapless_pending` is deliberately *not* cleared here. The gate above
-    /// already refused the fade if a source was staged, and the epoch bump stops
-    /// a later preload from staging one — so on this path the flag is already
-    /// false, and clearing it eagerly would only be a way to start lying about a
-    /// source the deferred clear has not removed yet.
+    /// `gapless_pending` is deliberately *not* cleared here. The gate above has
+    /// already refused the fade if a source was staged, so on this path the flag
+    /// is false — and clearing it eagerly would only be a way to start lying
+    /// about a source the deferred clear has not removed yet. A preload that
+    /// still slips in behind us stages a real source, and the deferred
+    /// [`DeferredOp::ClearAll`] drops it and the flag together.
     pub fn stop_with_fade(&self, fade_ms: u64) {
         if !self.can_fade_out(fade_ms) {
             self.stop();
@@ -605,7 +627,8 @@ impl RodioPlayer {
         let epoch = self.bump_epoch();
         {
             let decks = self.lock_decks();
-            // Same backstop as `pause_with_fade` — see the comment there.
+            // Same backstop as `pause_with_fade` — a preload can complete between
+            // that lock-free read and this lock. See the comment there.
             if self.gapless_pending.load(Ordering::Acquire) {
                 drop(decks);
                 self.stop();
