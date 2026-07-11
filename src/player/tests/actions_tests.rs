@@ -16,6 +16,8 @@ struct MockBackendInner {
     begin_crossfade_calls: Vec<(String, u64, f64, f64)>,
     resume_count: u32,
     pause_count: u32,
+    /// `fade_ms` per `pause_with_fade`, including the `0`s that mean "immediate".
+    pause_fade_calls: Vec<u64>,
     stop_count: u32,
     /// `fade_ms` per `stop_with_fade`, including the `0`s that mean "immediate".
     stop_fade_calls: Vec<u64>,
@@ -105,6 +107,11 @@ impl PlayerBackend for MockBackend {
     }
     fn pause(&self) {
         self.inner().pause_count += 1;
+    }
+    fn pause_with_fade(&self, fade_ms: u64) {
+        let mut inner = self.inner();
+        inner.pause_fade_calls.push(fade_ms);
+        inner.pause_count += 1;
     }
     fn stop(&self) {
         self.inner().stop_count += 1;
@@ -269,7 +276,7 @@ async fn execute_resume_pause_stop() -> Result<(), AppError> {
 
     let actions = vec![
         PlayerAction::Resume,
-        PlayerAction::Pause,
+        PlayerAction::Pause { fade_ms: 0 },
         PlayerAction::Stop { fade_ms: 0 },
     ];
 
@@ -303,6 +310,25 @@ async fn execute_stop_forwards_the_fade_length() -> Result<(), AppError> {
     crate::player::actions::execute_actions(actions, &mock, &fx.db, &fx.player_state, &fx.sinks);
 
     assert_eq!(mock.inner().stop_fade_calls, vec![250, 0]);
+    Ok(())
+}
+
+#[tokio::test]
+async fn execute_pause_forwards_the_fade_length() -> Result<(), AppError> {
+    // A user pause with fade-on-pause carries the ramp length; the `Pause` that
+    // next/previous append to restore a paused deck passes 0, so the incoming
+    // track can never be heard fading out on arrival.
+    let fx = fixture().await?;
+    let mock = MockBackend::new();
+
+    let actions = vec![
+        PlayerAction::Pause { fade_ms: 250 },
+        PlayerAction::Pause { fade_ms: 0 },
+    ];
+
+    crate::player::actions::execute_actions(actions, &mock, &fx.db, &fx.player_state, &fx.sinks);
+
+    assert_eq!(mock.inner().pause_fade_calls, vec![250, 0]);
     Ok(())
 }
 

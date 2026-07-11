@@ -570,6 +570,71 @@ fn a_live_fade_arm_is_observed_via_generation() {
 }
 
 #[test]
+fn a_fade_armed_mid_frame_still_steps_on_frame_boundaries() {
+    // Stereo, bypassed (EQ off + unity ReplayGain — the default), which is the
+    // path a crossfade or pause-fade normally arms onto. Pull an ODD number of
+    // samples first, so the source sits *mid*-frame when the ramp arrives. The
+    // bypass path tracks its interleave phase precisely so that the ramp still
+    // steps on real frame boundaries: both channels of a frame share one gain,
+    // and the source ends on a boundary rather than emitting a half frame.
+    let fade = FadeShared::idle();
+    let mut src = faded_source(vec![1.0; 1_024], 2, fade.clone());
+
+    let head: Vec<f32> = (0..65).filter_map(|_| src.next()).collect();
+    assert_eq!(bits(&head), bits(&vec![1.0_f32; 65]), "the bypass prefix is passthrough");
+
+    fade.arm(None, 0.0, 100, true);
+    let full: Vec<f32> = head.into_iter().chain(src).collect();
+
+    assert_eq!(full.len() % 2, 0, "the source must not end on a half frame");
+    for (i, frame) in full.chunks_exact(2).enumerate() {
+        assert!(
+            approx(frame[0], frame[1]),
+            "both channels of frame {i} must share one gain, got {} and {}",
+            frame[0],
+            frame[1]
+        );
+    }
+}
+
+#[test]
+fn enabling_the_eq_mid_frame_still_ends_the_source_on_a_frame_boundary() {
+    // Stereo. Pull an ODD number of samples in bypass, then switch the EQ on, so
+    // the rebuild lands *mid*-frame. The active path buffers a whole `channels`-
+    // wide frame at a time, so if it were allowed to start from that odd offset
+    // every frame it formed would be off by one — and the self-ending fade-out
+    // below would then end the source *between* the two channels of a frame,
+    // flipping that deck's channel parity in rodio's mixer for every track
+    // appended to it afterwards. The generation poll only fires at phase 0, so
+    // the switch waits for the next real boundary.
+    let fade = FadeShared::idle();
+    let eq = EqShared::new(false, &[0.0; NUM_BANDS]);
+    let mut src = EqSource::new(
+        TestSource::new(ramp(2_048), 2, RATE),
+        eq.clone(),
+        ReplayGainShared::new(),
+        TrackReplayGain::default(),
+        fade.clone(),
+    );
+
+    let mut out: Vec<f32> = (0..65).filter_map(|_| src.next()).collect();
+    assert_eq!(out.len(), 65, "the bypass prefix must yield every sample asked for");
+
+    // Mid-frame: 65 samples of a stereo stream is half of frame 32.
+    eq.set_enabled(true);
+    eq.set_gain(0, 6.0);
+
+    // A fade-out that ends its source once the ramp lands — the crossfade's
+    // outgoing arm. 100 ms at 1 kHz is 200 interleaved samples, well inside the
+    // 2 048 the input holds, so it really is the ramp that ends the source.
+    fade.arm(None, 0.0, 100, true);
+    out.extend(src);
+
+    assert!(out.len() < 2_048, "the ramp, not the input, must end the source");
+    assert_eq!(out.len() % 2, 0, "the source must not end on a half frame");
+}
+
+#[test]
 fn seek_does_not_disturb_an_armed_fade() {
     // `set_speed` re-anchors the active deck with a `try_seek`, and a crossfade
     // abort arms a ramp then seeks. Either resetting `fade_pos` would restart

@@ -12,7 +12,7 @@ This adds that: the tail of one track fades out while the head of the next fades
 in, both audible at once.
 
 Ships **off by default**, in Settings → Playback, with a duration slider
-(0.5–12 s, default 2 s) and three sub-options — skip same-album transitions,
+(1–12 s, default 2 s) and three sub-options — skip same-album transitions,
 crossfade on manual track change, and fade out on pause/stop.
 
 ## The constraint that shapes everything
@@ -118,6 +118,18 @@ full scale, and two unclamped decks summing would clip. The ramp advances once
 per **frame**, not per sample, in both paths: a frame is one sample per channel,
 i.e. one time step, and advancing per sample shears the stereo image.
 
+To do that the bypass path tracks its interleave position in `frame_phase`, on
+every sample, fade or no fade — and **all three generations are polled only at
+`frame_phase == 0`**. That gate does more than align the ramp. A rebuild can flip
+`bypass` *off* mid-track (the user switches the EQ on), and the active path then
+buffers a whole `channels`-wide frame from wherever the source sits: let it start
+mid-frame and every frame it forms is offset from a real one, so `fade_ended`
+would end the source on a **half frame** and flip that deck's channel parity in
+the mixer for every track appended after it. Polling at phase 0 means the active
+path can never be *entered* mid-frame; it then consumes whole frames and never
+advances the phase, so it still polls every frame. The cost is that a rebuild or
+an armed ramp lands up to `channels - 1` samples late.
+
 `try_seek` deliberately does **not** touch the fade fields. `set_speed`
 re-anchors the active deck with a `try_seek` to its own position, and a crossfade
 abort arms a ramp and *then* seeks; resetting `fade_pos` would restart a fade-in
@@ -192,25 +204,42 @@ call `rodio.stop()`. The outgoing track is still audible on the other deck, and
 the `play_media` that the auto-skip produces clears both decks anyway — stopping
 would only insert a gap of silence.
 
-`Stop` carries `fade_ms`: `stop_end_of_queue` always passes `0` (the track has
-already run out of audio), while `player_stop` passes `PAUSE_FADE_MS` when the
-setting is on.
+Both `Pause` and `Stop` carry `fade_ms`, and the length always comes from the
+caller — the backend never re-reads the setting itself.
+`library::playback::transport_fade_ms` is the single source: `PAUSE_FADE_MS` when
+the setting is on, `0` when it is off, and the three user-driven transport
+commands (`player_pause`, `player_toggle_play_pause`, `player_stop`) pass it in.
+
+Everything the machine does for its own reasons passes `0`. `stop_end_of_queue`
+does because the track has already run out of audio. `build_next_actions` /
+`build_previous_actions` do because of something less obvious: pressed while
+*paused*, they emit `[…, PlayMedia, Pause]`, and `PlayMedia` **starts the deck**.
+A fade there wouldn't pause the incoming track — it would ramp it down from full
+volume, so you'd hear its first quarter-second out loud and its decoder would be
+that far in when you hit play.
 
 ### Fade on pause / stop
 
 Arms a ramp to silence with `end_on_complete: false` — holding at zero rather
 than ending the source, so a staged gapless successor can't start — and defers
 the real `Player::pause()` / `clear()` by that duration on a `runtime.spawn`
-task. A `fade_epoch: AtomicU64` guards it: the task re-reads the epoch **while
-holding the decks lock**, so a concurrent `play_media` can't be clobbered by a
-deferred clear that had already passed a lock-free check.
+task. A `deck_epoch: AtomicU64` guards it — the same counter the gapless preload
+re-checks: the task re-reads the epoch **while holding the decks lock**, so a
+concurrent `play_media` can't be clobbered by a deferred clear that had already
+passed a lock-free check.
 
 `seek()` deliberately does **not** bump the epoch. A seek doesn't replace deck
 contents, and cancelling a pending deferred pause there would leave the decks
 running — silently, at the pause ramp's zero gain — while the UI reads Paused.
 
 Mid-crossfade, pause and stop are immediate: the outgoing deck's in-flight ramp
-has no start gain that could be restored on resume.
+has no start gain that could be restored on resume. So is either of them on an
+already-paused or empty deck — a paused deck is never pulled, so a ramp armed on
+it can never advance; there'd be nothing to fade and the deferred pause/clear
+would just sit there. `active_deck_busy()` is the shared predicate, and
+`pause_with_fade` / `stop_with_fade` gate on the same three terms: a `0` length,
+a deck that isn't busy, or a crossfade in flight. `RodioPlayer::pause()` and
+`stop()` stay as the plain immediate pair underneath them.
 
 `RodioPlayer` takes a `tokio::runtime::Handle` for this, and only this.
 `AppState::init(paths, runtime)` already has one before it constructs the player.

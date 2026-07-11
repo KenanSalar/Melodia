@@ -409,6 +409,24 @@ pub fn should_crossfade(
     Some(remaining)
 }
 
+/// What the playback monitor decided, plus the state it decided *against*.
+///
+/// The monitor reads that state under the `PlayerState` lock but only executes
+/// after acquiring `exec_lock`, so any other control op can complete in the gap.
+/// [`PlayerState::build_crossfade_actions`](super::state::PlayerState::build_crossfade_actions)
+/// re-verifies the whole snapshot under the emit lock and drops the crossfade if
+/// anything moved. Bundled rather than passed as loose scalars so `fade_ms` and
+/// `position_ms` — both `u64` — can't be swapped at a call site.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CrossfadeDecision {
+    /// Fade length in media milliseconds: the real remaining, per [`should_crossfade`].
+    pub fade_ms: u64,
+    /// The track that was playing when the decision was made.
+    pub track_id: Option<i64>,
+    /// The position it was at. Non-zero — [`should_crossfade`] rejects zero.
+    pub position_ms: u64,
+}
+
 /// Fade length for a **manual** track change (next / previous / picking a
 /// track), or `0` for a hard cut.
 ///

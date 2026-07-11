@@ -72,8 +72,10 @@ pub fn execute_actions<B: PlayerBackend>(
                 // Same pre-flight + auto-skip contract as `PlayMedia`, with one
                 // difference: no `rodio_player.stop()`. The outgoing track is
                 // still audible on the other deck, and the `play_media` that
-                // `enqueue_auto_skip` produces clears both decks anyway — so
-                // stopping here would only insert a gap of silence.
+                // `enqueue_auto_skip` produces takes over from it cleanly either
+                // way — hard-cutting (it clears both decks) or, with
+                // `crossfade_manual` on, fading out of it. Stopping here would
+                // only insert a gap of silence ahead of that.
                 if !Path::new(&file_path).exists() {
                     log::warn!("Skipping vanished file at crossfade: {file_path}");
                     enqueue_auto_skip(&mut pending, player_state, sinks);
@@ -98,7 +100,7 @@ pub fn execute_actions<B: PlayerBackend>(
                 }
             }
             PlayerAction::Resume => rodio_player.resume(),
-            PlayerAction::Pause => rodio_player.pause(),
+            PlayerAction::Pause { fade_ms } => rodio_player.pause_with_fade(fade_ms),
             PlayerAction::Stop { fade_ms } => rodio_player.stop_with_fade(fade_ms),
             PlayerAction::Seek { position_ms } => {
                 rodio_player.seek(position_ms);

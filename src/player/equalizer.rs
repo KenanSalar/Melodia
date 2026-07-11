@@ -374,10 +374,14 @@ pub struct EqSource<S> {
     /// Ramp progress and length, in **interleaved** samples of this source.
     fade_pos: u64,
     fade_total: u64,
-    /// Position within the current interleaved frame, used only by the bypass
-    /// path (the active path buffers a whole frame). Keeps the ramp advancing
-    /// once per *frame* there too, so both channels share a gain.
-    fade_phase: usize,
+    /// Position within the current interleaved frame, tracked by the bypass
+    /// path (the active path buffers a whole frame instead, so it starts and
+    /// ends on a boundary by construction and leaves this at `0`). Advanced on
+    /// every bypass sample, fade or no fade. Two things read it: the ramp, which
+    /// must step once per *frame* so both channels share a gain, and the
+    /// generation poll in `next`, which only fires at phase `0` so a rebuild can
+    /// never hand the active path a mid-frame start.
+    frame_phase: usize,
     /// The gain held for every sample of the frame the bypass path is emitting.
     frame_fade_gain: f32,
     /// Fade-out: end the source (return `None`) once the ramp lands.
@@ -459,7 +463,7 @@ impl<S: Source> EqSource<S> {
             fade_gain: 1.0,
             fade_pos: 0,
             fade_total: 0,
-            fade_phase: 0,
+            frame_phase: 0,
             frame_fade_gain: 1.0,
             fade_end_on_complete: false,
             sample_rate,
@@ -510,6 +514,21 @@ impl<S: Source> EqSource<S> {
     /// The armed fade-out has landed and this source should end.
     fn fade_ended(&self) -> bool {
         self.fade_engaged && !self.fade_ramping && self.fade_end_on_complete
+    }
+
+    /// Advance the interleave phase by one sample, wrapping at the frame width.
+    ///
+    /// A compare, not a modulo: this runs per sample on the bypass path, which
+    /// is what a flat EQ with unity `ReplayGain` takes — the default. `banks` is
+    /// sized from the decoder's `NonZero` channel count, so its length is always
+    /// at least 1 and the wrap can't spin (which also means a mono source sits at
+    /// phase `0` permanently, exactly as if there were no framing at all).
+    #[inline]
+    fn advance_frame_phase(&mut self) {
+        self.frame_phase += 1;
+        if self.frame_phase >= self.banks.len() {
+            self.frame_phase = 0;
+        }
     }
 
     /// Gain for the next `samples` interleaved samples, advancing the ramp.
@@ -628,26 +647,45 @@ impl<S: Source> Iterator for EqSource<S> {
             return Some(s);
         }
 
-        // Pick up state changes: per-frame on the active path, per-sample in
-        // bypass (which buffers no frame). The `Acquire` loads are near-free
-        // either way. Poll the EQ, ReplayGain and crossfade generations so a
-        // live change to any of them is picked up.
-        let generation = self.shared.generation();
-        let rg_generation = self.rg_shared.generation();
-        if generation != self.last_generation || rg_generation != self.last_rg_generation {
-            self.rebuild();
-            self.last_generation = generation;
-            self.last_rg_generation = rg_generation;
-        }
-        let fade_generation = self.fade.generation();
-        if fade_generation != self.last_fade_generation {
-            self.apply_fade_cmd();
-            self.last_fade_generation = fade_generation;
+        // Pick up state changes — the EQ, ReplayGain and crossfade generations —
+        // but only on a true frame boundary.
+        //
+        // The gate is load-bearing, not an optimization. A `rebuild` can flip
+        // `bypass` off (the EQ is switched on mid-track), and the active path
+        // below then pulls a whole `channels`-wide frame starting from wherever
+        // the source sits. Let that happen part-way through a frame and every
+        // frame it forms is offset from a real one — harmless for the audio it
+        // emits, but `fade_ended` would then end the source off-boundary, on a
+        // *half* frame, flipping that deck's channel parity in the mixer for
+        // everything appended to it afterwards. Polling only at phase 0 means
+        // the active path can never be entered mid-frame; it then consumes whole
+        // frames and never advances the phase, so it still polls every frame.
+        //
+        // The bypass path buffers no frame, so this is also what takes its
+        // `Acquire` loads down from per-sample to per-frame. The cost is that a
+        // rebuild or an armed ramp lands up to `channels - 1` samples late.
+        if self.frame_phase == 0 {
+            let generation = self.shared.generation();
+            let rg_generation = self.rg_shared.generation();
+            if generation != self.last_generation || rg_generation != self.last_rg_generation {
+                self.rebuild();
+                self.last_generation = generation;
+                self.last_rg_generation = rg_generation;
+            }
+            let fade_generation = self.fade.generation();
+            if fade_generation != self.last_fade_generation {
+                self.apply_fade_cmd();
+                self.last_fade_generation = fade_generation;
+            }
         }
 
         // Bypass: pure per-sample passthrough (bit-identical, no framing).
+        // The interleave phase still advances, so the gate above and the ramp
+        // below both know where a frame begins.
         if self.bypass && !self.fade_engaged {
-            return self.input.next();
+            let s = self.input.next()?;
+            self.advance_frame_phase();
+            return Some(s);
         }
 
         // Bypass + fade: the EQ/ReplayGain stages are inert, so skip the frame
@@ -659,7 +697,7 @@ impl<S: Source> Iterator for EqSource<S> {
         // one time step), so both channels of a frame share a gain — advancing
         // per sample would shear the stereo image across the fade.
         if self.bypass {
-            if self.fade_phase == 0 {
+            if self.frame_phase == 0 {
                 // An armed fade-out has run to silence: end the source. That
                 // drains its deck, which is the signal `is_crossfading()`
                 // watches for. Only ever at a frame boundary, so a partial
@@ -670,10 +708,13 @@ impl<S: Source> Iterator for EqSource<S> {
                 self.frame_fade_gain = self.step_fade(self.channels);
             }
             let s = self.input.next()?;
-            self.fade_phase = (self.fade_phase + 1) % self.banks.len().max(1);
+            self.advance_frame_phase();
             return Some(s.clamp(-1.0, 1.0) * self.frame_fade_gain);
         }
 
+        // Always a frame boundary here: the poll gate above only lets the active
+        // path be entered at phase 0, and it consumes whole frames from there —
+        // so ending the source cannot cut a frame in half.
         if self.fade_ended() {
             return None;
         }
@@ -770,7 +811,7 @@ impl<S: Source> Source for EqSource<S> {
         self.frame_pos = 0;
         // The decoder lands on a frame boundary, so the bypass path's interleave
         // phase restarts with it. The ramp's own progress is untouched.
-        self.fade_phase = 0;
+        self.frame_phase = 0;
         Ok(())
     }
 }

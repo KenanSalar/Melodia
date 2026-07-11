@@ -57,33 +57,43 @@ pub fn player_play(ctx: &PlaybackContext) -> Result<(), AppError> {
     Ok(())
 }
 
+/// Fade length for a *user-initiated* transport pause or stop, or `0` when the
+/// setting is off.
+///
+/// Only the transport commands the user drives fade. The paths that halt playback
+/// for the machine's own reasons pass `0` directly: `stop_end_of_queue` (nothing
+/// left to fade), and the `Pause` that next/previous append to restore a paused
+/// deck (fading there would make the incoming track audible on arrival).
+fn transport_fade_ms(ctx: &PlaybackContext) -> u64 {
+    if ctx.rodio.crossfade_settings().fade_on_pause {
+        crate::player::crossfade::PAUSE_FADE_MS
+    } else {
+        0
+    }
+}
+
 pub fn player_pause(ctx: &PlaybackContext) -> Result<(), AppError> {
-    ctx.emit_and_execute(crate::player::state::PlayerState::build_pause_actions);
+    let fade_ms = transport_fade_ms(ctx);
+    ctx.emit_and_execute(move |s| s.build_pause_actions(fade_ms));
     Ok(())
 }
 
-/// User-initiated stop — preserves `current_track` and `position_ms` so `player_play` can resume
-/// from where the user stopped. Contrast with `stop_end_of_queue` which resets position to 0.
 /// Toggle play/pause based on current playback status. Branching happens inside
 /// the state lock so two near-simultaneous toggles (e.g. UI + media-key) can't
 /// race past each other.
 pub fn player_toggle_play_pause(ctx: &PlaybackContext) -> Result<(), AppError> {
-    ctx.emit_and_execute(|s| match s.status {
-        PlaybackStatus::Playing | PlaybackStatus::Loading => s.build_pause_actions(),
+    let fade_ms = transport_fade_ms(ctx);
+    ctx.emit_and_execute(move |s| match s.status {
+        PlaybackStatus::Playing | PlaybackStatus::Loading => s.build_pause_actions(fade_ms),
         PlaybackStatus::Paused | PlaybackStatus::Stopped => s.build_play_actions(),
     });
     Ok(())
 }
 
+/// User-initiated stop — preserves `current_track` and `position_ms` so `player_play` can resume
+/// from where the user stopped. Contrast with `stop_end_of_queue` which resets position to 0.
 pub fn player_stop(ctx: &PlaybackContext) -> Result<(), AppError> {
-    // A user-initiated stop fades out when the setting is on. Internal stops
-    // (end of queue, error recovery) go through `stop_end_of_queue`, which
-    // always passes `0` — there is no audio left to fade there.
-    let fade_ms = if ctx.rodio.crossfade_settings().fade_on_pause {
-        crate::player::crossfade::PAUSE_FADE_MS
-    } else {
-        0
-    };
+    let fade_ms = transport_fade_ms(ctx);
     ctx.emit_and_execute(move |s| s.build_stop_actions(fade_ms));
     Ok(())
 }

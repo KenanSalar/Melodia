@@ -128,6 +128,19 @@ fn pull(src: &mut rodio::mixer::MixerSource, frames: usize) -> Vec<f32> {
     out
 }
 
+/// Pull `frames` frames, asserting only that the mixer stays alive.
+///
+/// rodio's `periodic_access` hook counts samples, not frames, so `pause()` can
+/// take effect *between* the two channels of a frame. That one-sample step at
+/// the pause boundary is rodio's, not ours, and it is not what [`pull`]'s
+/// steady-state channel-coupling check exists to catch — so flush a transition
+/// through here before asserting on what follows it.
+fn pull_lenient(src: &mut rodio::mixer::MixerSource, frames: usize) {
+    for _ in 0..frames * usize::from(CHANNELS) {
+        assert!(src.next().is_some(), "mixer must stay alive");
+    }
+}
+
 /// Run a blocking `Player` control op on another thread while this one keeps
 /// the mixer turning, then return everything that was pulled meanwhile.
 ///
@@ -312,5 +325,63 @@ async fn a_plain_play_is_transparent() -> std::io::Result<()> {
     let expected = f32::from(pcm_sample(AMPLITUDE)) / 32_768.0;
     assert_holds_at(&out[WARMUP_FRAMES..], expected, 1e-6, "bypass passthrough");
     assert!(!rodio.is_crossfading());
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn stopping_a_paused_deck_clears_it_immediately() -> std::io::Result<()> {
+    // `player_stop` passes the pause-fade length whatever the player is doing, so
+    // a stop routinely lands on an already-paused deck. A paused deck is never
+    // pulled, so a ramp armed on it would never advance — there is nothing to
+    // fade out of, and deferring the clear behind a fade that can't run would
+    // just leave the decks loaded while the UI already reads Stopped.
+    let fx = fixture()?;
+    let (rodio, mut mix) = player();
+    start(&rodio, &fx.track_a);
+    let _ = pull(&mut mix, WARMUP_FRAMES);
+
+    // `pause()` is the immediate one, so the deck is genuinely paused (no deferred
+    // op pending) before the stop — that is the state under test. Flush the pause
+    // boundary so what follows runs against steady silence.
+    rodio.pause();
+    pull_lenient(&mut mix, WARMUP_FRAMES);
+
+    let stopper = Arc::clone(&rodio);
+    drive_until(&mut mix, move || {
+        stopper.stop_with_fade(melodia::player::crossfade::PAUSE_FADE_MS);
+    });
+
+    assert_eq!(
+        rodio.check_playback_state(),
+        melodia::player::rodio_backend::PlaybackCheck::EndOfStream,
+        "the decks must be cleared by the time `stop_with_fade` returns, not \
+         behind a deferred clear waiting on a ramp that can never advance"
+    );
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_zero_length_pause_fade_silences_the_deck_at_once() -> std::io::Result<()> {
+    // Next / previous pressed *while paused* emit `PlayMedia` — which starts the
+    // deck — followed by `Pause { fade_ms: 0 }`, purely to restore the paused
+    // state. A fade there would ramp the freshly-started track down from full
+    // volume instead of pausing it, so its first quarter-second would be audible.
+    let fx = fixture()?;
+    let (rodio, mut mix) = player();
+    // Fade-on-pause ON, so the length passed in is the only thing that can make
+    // this immediate — the backend must not reach for the setting itself.
+    rodio.set_crossfade_fade_on_pause(true);
+    start(&rodio, &fx.track_a);
+    let _ = pull(&mut mix, WARMUP_FRAMES);
+
+    rodio.pause_with_fade(0);
+    // rodio applies a pause through its 5 ms `periodic_access` hook, so flush a
+    // generous window before asserting on what follows.
+    pull_lenient(&mut mix, frames_for_ms(20));
+
+    // Well inside a PAUSE_FADE_MS ramp: a fade would still be near full volume
+    // across all of this, so silence here is the whole point.
+    let after = pull(&mut mix, frames_for_ms(50));
+    assert_holds_at(&after, 0.0, 1e-4, "a zero-length pause fade");
     Ok(())
 }

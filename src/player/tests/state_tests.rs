@@ -849,6 +849,13 @@ fn view_model_light_carries_sleep_at_track_end() {
 
 // --- crossfade -------------------------------------------------------------
 
+/// The snapshot the monitor decided against. The staleness tests below build a
+/// coherent one, then perturb the *state* to model a control op winning the race
+/// between the decision and the emit lock.
+fn decision(fade_ms: u64, track_id: i64, position_ms: u64) -> CrossfadeDecision {
+    CrossfadeDecision { fade_ms, track_id: Some(track_id), position_ms }
+}
+
 #[test]
 fn crossfade_advances_the_queue_and_starts_the_next_track() {
     let mut state = PlayerState::default();
@@ -861,7 +868,7 @@ fn crossfade_advances_the_queue_and_starts_the_next_track() {
     state.duration_ms = 180_000;
     state.position_ms = 178_200;
 
-    let actions = state.build_crossfade_actions(1_800);
+    let actions = state.build_crossfade_actions(decision(1_800, 1, 178_200));
 
     // State advances at fade *start* — Now-Playing switches as the overlap begins.
     assert_eq!(state.current_track.as_ref().map(|t| t.id), Some(2));
@@ -890,8 +897,10 @@ fn crossfade_emits_nothing_when_the_queue_has_no_next_track() {
     state.queue.current_index = Some(0);
     state.current_track = Some(track1);
     state.status = PlaybackStatus::Playing;
+    state.duration_ms = 180_000;
+    state.position_ms = 178_000;
 
-    let actions = state.build_crossfade_actions(2_000);
+    let actions = state.build_crossfade_actions(decision(2_000, 1, 178_000));
 
     assert!(actions.is_empty(), "no next track means no crossfade");
     assert_eq!(state.current_track.as_ref().map(|t| t.id), Some(1));
@@ -911,7 +920,111 @@ fn crossfade_does_not_count_a_play_when_it_cannot_advance() {
     state.queue.add_tracks(vec![track1.clone()]);
     state.queue.current_index = Some(0);
     state.current_track = Some(track1);
+    state.status = PlaybackStatus::Playing;
+    state.duration_ms = 180_000;
+    state.position_ms = 178_000;
 
-    let actions = state.build_crossfade_actions(2_000);
+    let actions = state.build_crossfade_actions(decision(2_000, 1, 178_000));
     assert!(!actions.iter().any(|a| matches!(a, PlayerAction::UpdatePlayCount(_))));
+}
+
+/// The monitor decides to crossfade under the `PlayerState` lock but only
+/// executes after taking `exec_lock`, so a pause can complete in between.
+/// Forcing `Playing` back on would resurrect playback the user just stopped —
+/// and `BeginCrossfade` would call `play()` on the deck, so it really would be
+/// audible.
+#[test]
+fn crossfade_is_dropped_when_a_pause_landed_since_the_decision() {
+    let mut state = PlayerState::default();
+    let track1 = make_summary(1, "One", 180_000);
+    let track2 = make_summary(2, "Two", 200_000);
+    state.queue.add_tracks(vec![track1.clone(), track2]);
+    state.queue.current_index = Some(0);
+    state.current_track = Some(track1);
+    state.duration_ms = 180_000;
+    state.position_ms = 178_200;
+    // The pause won the race.
+    state.status = PlaybackStatus::Paused;
+
+    let actions = state.build_crossfade_actions(decision(1_800, 1, 178_200));
+
+    assert!(actions.is_empty(), "a paused player must not crossfade");
+    assert_eq!(state.status, PlaybackStatus::Paused, "the pause must stick");
+    assert_eq!(state.queue.current_index, Some(0), "the queue must not advance");
+    assert_eq!(state.current_track.as_ref().map(|t| t.id), Some(1));
+}
+
+/// Same window, but the user picked a different track instead of pausing.
+/// Advancing here would skip straight past the track they just chose.
+#[test]
+fn crossfade_is_dropped_when_the_track_changed_since_the_decision() {
+    let mut state = PlayerState::default();
+    let track1 = make_summary(1, "One", 180_000);
+    let track2 = make_summary(2, "Two", 200_000);
+    let track3 = make_summary(3, "Three", 220_000);
+    state.queue.add_tracks(vec![track1, track2.clone(), track3]);
+    // A manual jump to track 2 landed after the monitor decided on track 1.
+    state.queue.current_index = Some(1);
+    state.current_track = Some(track2);
+    state.status = PlaybackStatus::Playing;
+    state.duration_ms = 200_000;
+    state.position_ms = 900;
+
+    let actions = state.build_crossfade_actions(decision(1_800, 1, 178_200));
+
+    assert!(actions.is_empty(), "a stale decision must not crossfade");
+    assert_eq!(
+        state.queue.current_index,
+        Some(1),
+        "the track the user just picked must keep playing"
+    );
+    assert_eq!(state.current_track.as_ref().map(|t| t.id), Some(2));
+}
+
+/// One case the track id alone misses: the *same* track restarted inside the
+/// window. `play_track_inner` resets `position_ms` to 0, so the position is the
+/// tell.
+#[test]
+fn crossfade_is_dropped_when_the_same_track_restarted_since_the_decision() {
+    let mut state = PlayerState::default();
+    let track1 = make_summary(1, "One", 180_000);
+    let track2 = make_summary(2, "Two", 200_000);
+    state.queue.add_tracks(vec![track1.clone(), track2]);
+    state.queue.current_index = Some(0);
+    state.current_track = Some(track1);
+    state.status = PlaybackStatus::Playing;
+    state.duration_ms = 180_000;
+    state.position_ms = 0;
+
+    let actions = state.build_crossfade_actions(decision(1_800, 1, 178_200));
+
+    assert!(actions.is_empty(), "a restarted track must not crossfade at position 0");
+    assert_eq!(state.queue.current_index, Some(0));
+}
+
+/// The other case the id and the status both miss: a seek keeps the track and
+/// keeps `Playing`, and moves only the position. Scrubbing backwards inside the
+/// fade window would otherwise fade out and skip the track just scrubbed *into*.
+#[test]
+fn crossfade_is_dropped_when_a_seek_landed_since_the_decision() {
+    let mut state = PlayerState::default();
+    let track1 = make_summary(1, "One", 180_000);
+    let track2 = make_summary(2, "Two", 200_000);
+    state.queue.add_tracks(vec![track1.clone(), track2]);
+    state.queue.current_index = Some(0);
+    state.current_track = Some(track1);
+    state.status = PlaybackStatus::Playing;
+    state.duration_ms = 180_000;
+    // The monitor decided at 178_200; the user scrubbed back to the middle.
+    state.position_ms = 60_000;
+
+    let actions = state.build_crossfade_actions(decision(1_800, 1, 178_200));
+
+    assert!(actions.is_empty(), "a seek must invalidate the pending crossfade");
+    assert_eq!(
+        state.queue.current_index,
+        Some(0),
+        "the track the user just scrubbed into must keep playing"
+    );
+    assert_eq!(state.position_ms, 60_000, "the seek must stick");
 }

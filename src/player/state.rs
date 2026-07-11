@@ -4,6 +4,7 @@ use std::sync::MutexGuard;
 
 use serde::{Deserialize, Serialize};
 
+use super::crossfade::CrossfadeDecision;
 use super::event_sink::PlayerSinks;
 use super::queue::QueueState;
 use super::replaygain::TrackReplayGain;
@@ -209,7 +210,14 @@ pub enum PlayerAction {
         speed: f64,
     },
     Resume,
-    Pause,
+    /// `fade_ms` is the pause-fade length for a user-initiated pause, and `0`
+    /// where a fade would be wrong: next / previous pressed *while paused* emit
+    /// `PlayMedia` (which starts the deck) followed by this, purely to restore
+    /// the paused state — fading there would let the incoming track play its
+    /// first `fade_ms` out loud on arrival.
+    Pause {
+        fade_ms: u64,
+    },
     /// `fade_ms` is `0` for an internal stop (end of queue, error recovery) and
     /// the pause-fade length for a user-initiated stop.
     Stop {
@@ -321,11 +329,12 @@ impl PlayerState {
         }
     }
 
-    /// Build actions for pause command.
-    pub fn build_pause_actions(&mut self) -> Vec<PlayerAction> {
+    /// Build actions for pause command. `fade_ms` is the pause-fade length when
+    /// that setting is on, else `0` — same contract as [`Self::build_stop_actions`].
+    pub fn build_pause_actions(&mut self, fade_ms: u64) -> Vec<PlayerAction> {
         if self.status == PlaybackStatus::Playing {
             self.status = PlaybackStatus::Paused;
-            vec![PlayerAction::Pause]
+            vec![PlayerAction::Pause { fade_ms }]
         } else {
             vec![]
         }
@@ -360,7 +369,11 @@ impl PlayerState {
             actions.extend(play_track_inner(self, track, None));
             if was_paused {
                 self.status = PlaybackStatus::Paused;
-                actions.push(PlayerAction::Pause);
+                // `fade_ms: 0` — the `PlayMedia` above has just started the deck,
+                // and this only restores the paused state. A fade here would ramp
+                // the incoming track down from full volume instead of pausing it,
+                // so its first quarter-second would be audible.
+                actions.push(PlayerAction::Pause { fade_ms: 0 });
             }
         } else {
             actions.extend(stop_end_of_queue(self));
@@ -382,7 +395,8 @@ impl PlayerState {
             let mut actions = play_track_inner(self, track, None);
             if was_paused {
                 self.status = PlaybackStatus::Paused;
-                actions.push(PlayerAction::Pause);
+                // `fade_ms: 0`, for the same reason as `build_next_actions`.
+                actions.push(PlayerAction::Pause { fade_ms: 0 });
             }
             actions
         } else {
@@ -453,13 +467,42 @@ impl PlayerState {
     /// State advances at fade *start*, so Now-Playing switches to the incoming
     /// track as the overlap begins — the behaviour Strawberry and mpd have.
     /// Returns an empty vec (no crossfade) when the queue has moved on and
-    /// there is no longer a next track.
-    pub fn build_crossfade_actions(&mut self, fade_ms: u64) -> Vec<PlayerAction> {
+    /// there is no longer a next track, or when the decision has gone stale.
+    ///
+    /// `decision` carries the state the monitor was looking at when it chose to
+    /// crossfade. It makes that choice under the `PlayerState` lock but only
+    /// reaches here after acquiring `exec_lock`, so any other control op — pause,
+    /// stop, next, previous, picking a track, seeking — can complete in between.
+    /// Re-verifying here is the same discipline as the `queue.advance()` below:
+    ///
+    /// - **status** — without it, forcing `Playing` would resurrect playback the
+    ///   user just paused. `BeginCrossfade` calls `Player::play()`, so it really
+    ///   would be audible.
+    /// - **track id** — without it, `advance()` would skip straight past the
+    ///   track they just picked.
+    /// - **position** — the one the other two miss. A seek keeps both the status
+    ///   and the id and moves only the position, so a backward scrub inside the
+    ///   fade window would otherwise fade out and skip the track the user just
+    ///   scrubbed *into*. The monitor writes `position_ms` itself immediately
+    ///   before deciding, so in this window the only other writers are
+    ///   [`build_seek_actions`](Self::build_seek_actions), [`play_track_inner`]
+    ///   and [`build_previous_actions`](Self::build_previous_actions) — exactly
+    ///   the ops that must abort. Equality therefore also covers the *same* track
+    ///   being restarted (which resets the position to 0).
+    pub fn build_crossfade_actions(&mut self, decision: CrossfadeDecision) -> Vec<PlayerAction> {
         let mut actions = Vec::with_capacity(2);
 
         // The outgoing track counts as played the moment it starts fading. Same
         // accounting as `build_end_of_stream_actions`, just a few seconds early.
         let outgoing_id = self.current_track.as_ref().map(|t| t.id);
+
+        if self.status != PlaybackStatus::Playing
+            || outgoing_id.is_none()
+            || outgoing_id != decision.track_id
+            || self.position_ms != decision.position_ms
+        {
+            return actions;
+        }
 
         // Re-read the queue under the emit lock rather than trusting the
         // monitor's earlier `peek_next` — a skip could have landed in between.
@@ -483,7 +526,7 @@ impl PlayerState {
         actions.push(PlayerAction::BeginCrossfade {
             file_path,
             replaygain,
-            fade_ms,
+            fade_ms: decision.fade_ms,
             volume,
             speed,
         });

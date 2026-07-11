@@ -185,6 +185,12 @@ pub fn spawn_playback_monitor(tracker: &TaskTracker, ctx: PlaybackMonitorContext
                             same_album,
                         );
 
+                        // Carry the state this decision was made against. We hold
+                        // the `PlayerState` lock now but take `exec_lock` only
+                        // later, so a pause / stop / seek / manual track change
+                        // can land in between; `build_crossfade_actions`
+                        // re-verifies the whole snapshot under the emit lock and
+                        // bails if any of it moved.
                         let crossfade_now = crossfade::should_crossfade(
                             eligible,
                             already_preloaded,
@@ -192,7 +198,12 @@ pub fn spawn_playback_monitor(tracker: &TaskTracker, ctx: PlaybackMonitorContext
                             state.position_ms,
                             state.duration_ms,
                             xf.duration_ms,
-                        );
+                        )
+                        .map(|fade_ms| crossfade::CrossfadeDecision {
+                            fade_ms,
+                            track_id: state.current_track.as_ref().map(|t| t.id),
+                            position_ms: state.position_ms,
+                        });
 
                         // Late gapless preload: stage the next track only when the
                         // current one is within PRELOAD_LEAD_MS of ending. Doing it
@@ -248,13 +259,15 @@ pub fn spawn_playback_monitor(tracker: &TaskTracker, ctx: PlaybackMonitorContext
                         let _ = position_tx.send(Some(tick.clone()));
                     }
 
-                    if let Some(fade_ms) = crossfade_now {
+                    if let Some(decision) = crossfade_now {
                         // Advance the queue and start the incoming track on the
                         // idle deck in one serialized step. `emit_and_execute`
-                        // re-reads the queue under the exec lock, so a skip that
-                        // landed since the `peek_next` above can't be clobbered.
+                        // re-reads the queue *and* re-verifies the status, the
+                        // current track and the position under the exec lock, so
+                        // anything that landed since the decision above can't be
+                        // clobbered.
                         emit_and_execute(&rodio_player, &db, &player_state, &sinks, |state| {
-                            state.build_crossfade_actions(fade_ms)
+                            state.build_crossfade_actions(decision)
                         });
                     } else if let Some((path, rg)) = late_preload {
                         rodio_player.preload_gapless(Some(&path), rg);

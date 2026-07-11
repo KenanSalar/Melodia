@@ -39,6 +39,8 @@ pub trait PlayerBackend: Send + Sync {
     ) -> Result<(), AppError>;
     fn resume(&self);
     fn pause(&self);
+    /// Fade to silence over `fade_ms` and then pause. `0` is an immediate pause.
+    fn pause_with_fade(&self, fade_ms: u64);
     fn stop(&self);
     /// Fade to silence over `fade_ms` and then stop. `0` is an immediate stop.
     fn stop_with_fade(&self, fade_ms: u64);
@@ -62,6 +64,7 @@ where
     }
     fn resume(&self) { (**self).resume(); }
     fn pause(&self) { (**self).pause(); }
+    fn pause_with_fade(&self, fade_ms: u64) { (**self).pause_with_fade(fade_ms); }
     fn stop(&self) { (**self).stop(); }
     fn stop_with_fade(&self, fade_ms: u64) { (**self).stop_with_fade(fade_ms); }
     fn seek(&self, position_ms: u64) { (**self).seek(position_ms); }
@@ -86,6 +89,7 @@ impl PlayerBackend for RodioPlayer {
     }
     fn resume(&self) { self.resume(); }
     fn pause(&self) { self.pause(); }
+    fn pause_with_fade(&self, fade_ms: u64) { self.pause_with_fade(fade_ms); }
     fn stop(&self) { self.stop(); }
     fn stop_with_fade(&self, fade_ms: u64) { self.stop_with_fade(fade_ms); }
     fn seek(&self, position_ms: u64) { self.seek(position_ms); }
@@ -277,6 +281,18 @@ impl RodioPlayer {
         });
     }
 
+    /// Is the active deck actually playing something we could fade out of?
+    ///
+    /// A paused deck is still held for control but is never pulled, so its ramp
+    /// can't advance — there is nothing audible to fade, and a fade armed on it
+    /// would just hold silence until a deferred op cleaned it up. An empty deck
+    /// has nothing to fade at all.
+    fn active_deck_busy(&self) -> bool {
+        let decks = self.lock_decks();
+        let deck = decks.active();
+        !deck.player.empty() && !deck.player.is_paused()
+    }
+
     /// Fade length for a *manual* track change, or `0` for a hard cut.
     /// Gathers the live inputs; the decision itself is
     /// [`crossfade::manual_fade_ms`], which documents each gate.
@@ -288,15 +304,10 @@ impl RodioPlayer {
     /// itself re-checks the deck epoch before staging — so whichever of the two
     /// commits second yields.
     fn manual_fade_ms(&self, start_position_ms: Option<u64>) -> u64 {
-        let deck_busy = {
-            let decks = self.lock_decks();
-            let deck = decks.active();
-            !deck.player.empty() && !deck.player.is_paused()
-        };
         crossfade::manual_fade_ms(
             self.xf.snapshot(),
             start_position_ms.is_some(),
-            deck_busy,
+            self.active_deck_busy(),
             self.is_gapless_preloaded(),
         )
     }
@@ -502,23 +513,37 @@ impl RodioPlayer {
         }
     }
 
+    /// Pause both decks now. The caller decides whether a fade is wanted; see
+    /// [`Self::pause_with_fade`].
     pub fn pause(&self) {
-        let epoch = self.bump_epoch();
-        // Mid-crossfade, pause immediately: the outgoing deck's in-flight ramp
-        // has no start gain we could restore it to on resume. `Pausable` stops
-        // pulling the source entirely, so both ramps simply freeze.
-        if !self.xf.fade_on_pause() || self.is_crossfading() {
-            let decks = self.lock_decks();
-            for deck in &decks.decks {
-                deck.player.pause();
-            }
+        self.bump_epoch();
+        let decks = self.lock_decks();
+        for deck in &decks.decks {
+            deck.player.pause();
+        }
+    }
+
+    /// Fade to silence over `fade_ms`, then pause both decks. `0` — and any pause
+    /// that has nothing audible to fade out of — falls through to an immediate
+    /// pause. Sibling of [`Self::stop_with_fade`]; the two share every gate.
+    ///
+    /// The ramp holds at zero rather than ending its source: a self-ending fade
+    /// would drain the active deck and read as `EndOfStream`, and would be
+    /// inherited by any gapless source staged behind it.
+    pub fn pause_with_fade(&self, fade_ms: u64) {
+        // Mid-crossfade, pause immediately: the outgoing deck's in-flight ramp has
+        // no start gain we could restore it to on resume. `Pausable` stops pulling
+        // the source entirely, so both ramps simply freeze.
+        if fade_ms == 0 || !self.active_deck_busy() || self.is_crossfading() {
+            self.pause();
             return;
         }
+        let epoch = self.bump_epoch();
         {
             let decks = self.lock_decks();
-            decks.active().fade.arm(None, 0.0, crossfade::PAUSE_FADE_MS, false);
+            decks.active().fade.arm(None, 0.0, fade_ms, false);
         }
-        self.schedule_after(epoch, crossfade::PAUSE_FADE_MS, DeferredOp::PauseAll);
+        self.schedule_after(epoch, fade_ms, DeferredOp::PauseAll);
     }
 
     /// Stop playback. `Player::clear()` removes all sources and pauses automatically.
@@ -539,7 +564,13 @@ impl RodioPlayer {
     /// The ramp deliberately does *not* end its source: that would drain the
     /// active deck and read as `EndOfStream`. The deferred clear does it.
     pub fn stop_with_fade(&self, fade_ms: u64) {
-        if fade_ms == 0 || self.is_crossfading() {
+        // `player_stop` passes the pause-fade length whatever the player is doing
+        // (`build_stop_actions` doesn't look at the status), so a stop can land on
+        // an already-paused or empty deck. There is nothing audible to fade out of
+        // there, and the ramp would never advance — so don't sit on a pointless
+        // deferred clear. Short-circuits before the deck lock on the `0` path,
+        // which is every `stop_end_of_queue`.
+        if fade_ms == 0 || !self.active_deck_busy() || self.is_crossfading() {
             self.stop();
             return;
         }
