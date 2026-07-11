@@ -385,3 +385,74 @@ async fn a_zero_length_pause_fade_silences_the_deck_at_once() -> std::io::Result
     assert_holds_at(&after, 0.0, 1e-4, "a zero-length pause fade");
     Ok(())
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn stopping_with_a_gapless_track_staged_clears_both_decks_at_once() -> std::io::Result<()> {
+    // A staged gapless source shares its deck's fade cell, so a fade-out armed
+    // there would be inherited by it the moment the outgoing source drained — it
+    // would start at full volume and audibly fade out. `can_fade_out` refuses the
+    // fade while one is staged, and the immediate stop that follows takes the
+    // staged source with it.
+    //
+    // The alternative — arming the fade and clearing `gapless_pending` eagerly —
+    // leaves the flag lying for the length of the ramp: a `play_media` landing in
+    // that window would read "nothing staged", take the manual-crossfade branch
+    // (which clears only the *idle* deck), and leave the staged source sitting
+    // behind an outgoing track armed to self-end.
+    let fx = fixture()?;
+    let (rodio, mut mix) = player();
+    rodio.set_crossfade_fade_on_pause(true);
+    start(&rodio, &fx.track_a);
+    let _ = pull(&mut mix, WARMUP_FRAMES);
+
+    rodio.preload_gapless(Some(&fx.track_b), TrackReplayGain::default());
+    assert!(rodio.is_gapless_preloaded(), "the next track must really be staged");
+
+    let stopper = Arc::clone(&rodio);
+    drive_until(&mut mix, move || {
+        stopper.stop_with_fade(melodia::player::crossfade::PAUSE_FADE_MS);
+    });
+
+    // The load-bearing one: `EndOfStream` needs the active deck genuinely *empty*,
+    // so it can only hold if the staged source was removed with the outgoing one.
+    // Clearing `gapless_pending` alone would leave the deck two sources deep and
+    // still report `Playing`.
+    assert_eq!(
+        rodio.check_playback_state(),
+        melodia::player::rodio_backend::PlaybackCheck::EndOfStream,
+        "both decks — staged source included — must be cleared by the time \
+         `stop_with_fade` returns, not behind a deferred clear"
+    );
+    assert!(!rodio.is_gapless_preloaded(), "and the flag must agree");
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn pausing_with_a_gapless_track_staged_is_immediate() -> std::io::Result<()> {
+    // Same gate as the stop above, and the same reason: fading here would hold the
+    // deck at zero gain while the outgoing source drained into the staged one,
+    // which would then inherit the ramp and burn its own first quarter-second.
+    let fx = fixture()?;
+    let (rodio, mut mix) = player();
+    rodio.set_crossfade_fade_on_pause(true);
+    start(&rodio, &fx.track_a);
+    let _ = pull(&mut mix, WARMUP_FRAMES);
+
+    rodio.preload_gapless(Some(&fx.track_b), TrackReplayGain::default());
+    assert!(rodio.is_gapless_preloaded(), "the next track must really be staged");
+
+    rodio.pause_with_fade(melodia::player::crossfade::PAUSE_FADE_MS);
+    pull_lenient(&mut mix, frames_for_ms(20));
+
+    // A ramp would still be near full volume this early, so silence is the tell.
+    let after = pull(&mut mix, frames_for_ms(50));
+    assert_holds_at(&after, 0.0, 1e-4, "a pause with a gapless track staged");
+
+    // The pause keeps the deck contents (that is what makes it a pause), so the
+    // staged source — and the flag — must both survive it.
+    assert!(
+        rodio.is_gapless_preloaded(),
+        "a pause must not discard the staged source"
+    );
+    Ok(())
+}

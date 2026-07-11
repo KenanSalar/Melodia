@@ -187,28 +187,55 @@ silence instead, so the staged source never starts.
 
 ```rust
 BeginCrossfade { file_path, replaygain, fade_ms, volume, speed },
+Pause { fade_ms },  // was a unit variant
 Stop { fade_ms },   // was a unit variant
 ```
 
-`build_crossfade_actions(fade_ms)` mirrors `build_end_of_stream_actions`:
+`build_crossfade_actions(decision)` mirrors `build_end_of_stream_actions`:
 `UpdatePlayCount(outgoing)` → `queue.advance()` → reset position/duration/
 current_track → `BeginCrossfade`. State advances at fade *start*, so Now-Playing
-switches as the overlap begins — the behaviour Strawberry and mpd have. It
-re-reads the queue under the emit lock rather than trusting the monitor's
-`peek_next` (a skip may have landed in between), and pushes the play count only
-once `advance()` has confirmed somewhere to go.
+switches as the overlap begins — the behaviour Strawberry and mpd have. It pushes
+the play count only once `advance()` has confirmed somewhere to go.
+
+**The decision is re-verified under the emit lock**, because the monitor decides
+while holding the `PlayerState` lock but only executes after taking `exec_lock` —
+and every other control op (pause / stop / next / previous / track pick / seek)
+runs under that same `exec_lock` and can complete in the gap. So it re-reads the
+queue rather than trusting the monitor's earlier `peek_next` (a skip may have
+landed), **and** re-verifies the whole `crossfade::CrossfadeDecision` the monitor
+threaded through — `fade_ms` + `track_id` + `position_ms`, bundled in a struct so
+the two `u64`s can't be swapped at a call site. It bails unless the status is
+still `Playing`, the current track is still the one it decided on, and the
+position is unchanged. Each term earns its place:
+
+- **status** — forcing `Playing` back on would resurrect playback the user just
+  paused. `BeginCrossfade` calls `Player::play()`, so it really would be audible.
+- **track id** — `advance()` would skip straight past the track they just picked.
+- **position** — the only tell for the two ops that change neither status nor id:
+  a **seek** (a backward scrub inside the fade window would fade out and skip the
+  track just scrubbed *into*) and the *same* track being **restarted** (which
+  resets the position to 0). The monitor writes `position_ms` itself immediately
+  before deciding, so in that window its only other writers are
+  `build_seek_actions` / `play_track_inner` / `build_previous_actions` — exactly
+  the ops that must abort, which is why plain equality is the right test.
+
+The sibling gapless-preload path is protected from the same class of race by
+`deck_epoch`; this is the crossfade path's equivalent.
 
 `execute_actions`' `BeginCrossfade` arm mirrors `PlayMedia`'s `Path::exists()`
 pre-flight, toast, and `enqueue_auto_skip`, with one difference: it does **not**
 call `rodio.stop()`. The outgoing track is still audible on the other deck, and
-the `play_media` that the auto-skip produces clears both decks anyway — stopping
-would only insert a gap of silence.
+the `play_media` that the auto-skip produces takes over from it cleanly either way
+— hard-cutting (which clears both decks) or, with `crossfade_manual` on, fading
+out of it. Stopping here would only insert a gap of silence ahead of that.
 
 Both `Pause` and `Stop` carry `fade_ms`, and the length always comes from the
 caller — the backend never re-reads the setting itself.
 `library::playback::transport_fade_ms` is the single source: `PAUSE_FADE_MS` when
-the setting is on, `0` when it is off, and the three user-driven transport
-commands (`player_pause`, `player_toggle_play_pause`, `player_stop`) pass it in.
+the setting is on, `0` when it is off, and the three transport commands
+(`player_pause`, `player_toggle_play_pause`, `player_stop`) pass it in. Everything
+that reaches them fades — the buttons, the shortcuts, the media keys, the tray,
+and the sleep timer's expiry.
 
 Everything the machine does for its own reasons passes `0`. `stop_end_of_queue`
 does because the track has already run out of audio. `build_next_actions` /
@@ -232,14 +259,35 @@ passed a lock-free check.
 contents, and cancelling a pending deferred pause there would leave the decks
 running — silently, at the pause ramp's zero gain — while the UI reads Paused.
 
-Mid-crossfade, pause and stop are immediate: the outgoing deck's in-flight ramp
-has no start gain that could be restored on resume. So is either of them on an
-already-paused or empty deck — a paused deck is never pulled, so a ramp armed on
-it can never advance; there'd be nothing to fade and the deferred pause/clear
-would just sit there. `active_deck_busy()` is the shared predicate, and
-`pause_with_fade` / `stop_with_fade` gate on the same three terms: a `0` length,
-a deck that isn't busy, or a crossfade in flight. `RodioPlayer::pause()` and
-`stop()` stay as the plain immediate pair underneath them.
+`can_fade_out(fade_ms)` is the shared gate — `pause_with_fade` and `stop_with_fade`
+have no others, and anything it refuses falls through to the plain immediate
+`RodioPlayer::pause()` / `stop()` underneath them. Four terms:
+
+- **a `0` length** — checked first, so `stop_end_of_queue` never even takes the
+  deck lock.
+- **an idle deck** (`active_deck_busy()`) — a paused deck is never pulled, so a
+  ramp armed on it can never advance; an empty one has nothing to fade at all.
+  Either way there'd be nothing to hear and the deferred pause/clear would just
+  sit there. `player_stop` passes the fade length whatever the player is doing
+  (`build_stop_actions` doesn't look at the status), so a stop routinely lands
+  here.
+- **a staged gapless source** — it shares this deck's fade cell, so the moment the
+  outgoing source drained it would inherit the ramp and burn its own first
+  `PAUSE_FADE_MS` fading to silence. Same gate, same reason, as
+  `crossfade::manual_fade_ms`. A lock-free check can't be the last word here, so
+  both callers re-read `gapless_pending` **under the decks lock** after bumping
+  the epoch, exactly as `play_media` does: a preload decoded before the bump can
+  still be waiting on that lock, while anything reaching it *after* the bump
+  re-checks the epoch itself and drops. `stop_with_fade` therefore never clears
+  `gapless_pending` eagerly — on the fade path it is already false, and clearing
+  it early would only be a way to start lying about a source the deferred clear
+  has not removed yet.
+- **a crossfade in flight** — the outgoing deck's in-flight ramp has no start gain
+  that could be restored on resume.
+
+The cost is that pausing or stopping inside the last `PRELOAD_LEAD_MS` of a track
+is a hard pause rather than a fade. That is the quiet edge; the alternative is the
+audible one.
 
 `RodioPlayer` takes a `tokio::runtime::Handle` for this, and only this.
 `AppState::init(paths, runtime)` already has one before it constructs the player.

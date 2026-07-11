@@ -57,11 +57,16 @@ pub fn player_play(ctx: &PlaybackContext) -> Result<(), AppError> {
     Ok(())
 }
 
-/// Fade length for a *user-initiated* transport pause or stop, or `0` when the
-/// setting is off.
+/// Fade length for a transport pause or stop, or `0` when the setting is off.
 ///
-/// Only the transport commands the user drives fade. The paths that halt playback
-/// for the machine's own reasons pass `0` directly: `stop_end_of_queue` (nothing
+/// The three transport commands route through here — `player_pause`,
+/// `player_toggle_play_pause` and `player_stop` — so everything that reaches them
+/// fades: the UI buttons, the keyboard shortcuts, the OS media keys, the tray, and
+/// the sleep timer's expiry (which ends on `player_pause`, and where a fade-out is
+/// exactly what you want).
+///
+/// What must *not* fade is what the machine does for its own reasons, and those
+/// paths pass `0` directly rather than calling this: `stop_end_of_queue` (nothing
 /// left to fade), and the `Pause` that next/previous append to restore a paused
 /// deck (fading there would make the incoming track audible on arrival).
 fn transport_fade_ms(ctx: &PlaybackContext) -> u64 {

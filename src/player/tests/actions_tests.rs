@@ -105,9 +105,6 @@ impl PlayerBackend for MockBackend {
     fn resume(&self) {
         self.inner().resume_count += 1;
     }
-    fn pause(&self) {
-        self.inner().pause_count += 1;
-    }
     fn pause_with_fade(&self, fade_ms: u64) {
         let mut inner = self.inner();
         inner.pause_fade_calls.push(fade_ms);

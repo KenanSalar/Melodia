@@ -492,13 +492,11 @@ impl PlayerState {
     pub fn build_crossfade_actions(&mut self, decision: CrossfadeDecision) -> Vec<PlayerAction> {
         let mut actions = Vec::with_capacity(2);
 
-        // The outgoing track counts as played the moment it starts fading. Same
-        // accounting as `build_end_of_stream_actions`, just a few seconds early.
-        let outgoing_id = self.current_track.as_ref().map(|t| t.id);
-
+        let Some(outgoing_id) = self.current_track.as_ref().map(|t| t.id) else {
+            return actions;
+        };
         if self.status != PlaybackStatus::Playing
-            || outgoing_id.is_none()
-            || outgoing_id != decision.track_id
+            || Some(outgoing_id) != decision.track_id
             || self.position_ms != decision.position_ms
         {
             return actions;
@@ -510,11 +508,12 @@ impl PlayerState {
             return actions;
         };
 
-        if let Some(id) = outgoing_id {
-            actions.push(PlayerAction::UpdatePlayCount(id));
-        }
+        // The outgoing track counts as played the moment it starts fading. Same
+        // accounting as `build_end_of_stream_actions`, just a few seconds early —
+        // and only once `advance()` has confirmed somewhere to go.
+        actions.push(PlayerAction::UpdatePlayCount(outgoing_id));
 
-        self.status = PlaybackStatus::Playing;
+        // The status is already `Playing` — the guard above proved it.
         self.position_ms = 0;
         self.duration_ms = u64::try_from(track.duration_ms.max(0)).unwrap_or(0);
         let file_path = track.file_path.clone();
