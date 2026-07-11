@@ -443,6 +443,40 @@ msgstr "Reprendre au démarrage"
 msgid "Automatically resume the last track from where you left off when the app starts"
 msgstr "Reprendre automatiquement la dernière piste là où tu t'es arrêté au démarrage de l'application"
 
+msgid "Crossfade"
+msgstr "Fondu enchaîné"
+
+msgid "Overlap the end of one track with the start of the next"
+msgstr "Superposer la fin d'une piste avec le début de la suivante"
+
+msgid "Crossfade duration"
+msgstr "Durée du fondu"
+
+msgid "How long the two tracks overlap"
+msgstr "Durée de la superposition des deux pistes"
+
+# Unit suffix for the crossfade-duration readout, e.g. "2 s".
+msgid "{} s"
+msgstr "{} s"
+
+msgid "Except on the same album"
+msgstr "Sauf au sein d'un même album"
+
+msgid "Keep tracks from one album gapless, so continuous mixes stay seamless"
+msgstr "Garder les pistes d'un même album sans blanc, pour que les mixes continus restent fluides"
+
+msgid "Also on manual track change"
+msgstr "Aussi lors d'un changement manuel de piste"
+
+msgid "Crossfade when you skip to the next or previous track, not only at the end of one"
+msgstr "Appliquer le fondu quand tu passes à la piste suivante ou précédente, pas seulement en fin de piste"
+
+msgid "Fade out on pause"
+msgstr "Fondu en pause"
+
+msgid "Fade the music out when pausing or stopping, and back in when resuming"
+msgstr "Faire disparaître la musique en pause ou à l'arrêt, et la faire revenir à la reprise"
+
 # ---- File Watching section --------------------------------------------------
 
 msgid "File Watching"

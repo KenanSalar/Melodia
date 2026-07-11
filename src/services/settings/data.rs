@@ -7,6 +7,7 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 
+use crate::player::crossfade::DEFAULT_CROSSFADE_MS;
 use crate::player::equalizer::{DEFAULT_PRESET, NUM_BANDS};
 use crate::player::replaygain::{DEFAULT_MODE, RG_DEFAULT_PREAMP_DB};
 use crate::player::types::RepeatMode;
@@ -182,6 +183,43 @@ impl Default for ReplayGainFlags {
             rg_mode: DEFAULT_MODE.to_owned(),
             rg_preamp: RG_DEFAULT_PREAMP_DB,
             rg_prevent_clipping: true,
+        }
+    }
+}
+
+/// Crossfade preferences. Like the other audio substructs this is
+/// `#[serde(flatten)]`'d into `SettingsData` and carries a whole-struct
+/// `#[serde(default)]`, so older `settings.json` files (written before
+/// crossfade existed) deserialize to these defaults.
+///
+/// Defaults are inert: crossfade ships **off**, so a fresh install — or any
+/// older file — keeps the existing gapless behaviour untouched. When the user
+/// does enable it, `crossfade_skip_same_album` defaults **on** so continuous-mix
+/// albums stay gapless; that mirrors Strawberry's and Clementine's defaults.
+/// `crossfade_duration_ms` is clamped to the player's
+/// `MIN_CROSSFADE_MS..=MAX_CROSSFADE_MS` range when applied / persisted.
+#[allow(
+    clippy::struct_excessive_bools,
+    reason = "one serde field per independent user-facing toggle; each must round-trip through settings.json by name"
+)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct CrossfadeFlags {
+    pub crossfade_enabled: bool,
+    pub crossfade_duration_ms: u32,
+    pub crossfade_manual: bool,
+    pub crossfade_skip_same_album: bool,
+    pub crossfade_fade_on_pause: bool,
+}
+
+impl Default for CrossfadeFlags {
+    fn default() -> Self {
+        Self {
+            crossfade_enabled: false,
+            crossfade_duration_ms: DEFAULT_CROSSFADE_MS,
+            crossfade_manual: false,
+            crossfade_skip_same_album: true,
+            crossfade_fade_on_pause: false,
         }
     }
 }
@@ -480,6 +518,8 @@ pub struct SettingsData {
     #[serde(flatten)]
     pub replaygain: ReplayGainFlags,
     #[serde(flatten)]
+    pub crossfade: CrossfadeFlags,
+    #[serde(flatten)]
     pub queue: QueueFlags,
     #[serde(flatten)]
     pub window: WindowFlags,
@@ -522,6 +562,7 @@ impl Default for SettingsData {
             playback: PlaybackFlags::default(),
             equalizer: EqualizerFlags::default(),
             replaygain: ReplayGainFlags::default(),
+            crossfade: CrossfadeFlags::default(),
             queue: QueueFlags::default(),
             window: WindowFlags::default(),
             tray: TrayFlags::default(),

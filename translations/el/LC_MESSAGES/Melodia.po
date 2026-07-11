@@ -445,6 +445,40 @@ msgstr "Συνέχιση κατά την εκκίνηση"
 msgid "Automatically resume the last track from where you left off when the app starts"
 msgstr "Συνέχισε αυτόματα το τελευταίο κομμάτι από εκεί που σταμάτησες όταν ξεκινά η εφαρμογή"
 
+msgid "Crossfade"
+msgstr "Σταδιακή μετάβαση"
+
+msgid "Overlap the end of one track with the start of the next"
+msgstr "Επικάλυψε το τέλος ενός κομματιού με την αρχή του επόμενου"
+
+msgid "Crossfade duration"
+msgstr "Διάρκεια μετάβασης"
+
+msgid "How long the two tracks overlap"
+msgstr "Πόση ώρα επικαλύπτονται τα δύο κομμάτια"
+
+# Unit suffix for the crossfade-duration readout, e.g. "2 s".
+msgid "{} s"
+msgstr "{} δλ"
+
+msgid "Except on the same album"
+msgstr "Εκτός από κομμάτια του ίδιου άλμπουμ"
+
+msgid "Keep tracks from one album gapless, so continuous mixes stay seamless"
+msgstr "Κράτα τα κομμάτια ενός άλμπουμ χωρίς κενά, ώστε τα συνεχόμενα μιξ να παραμένουν αδιάκοπα"
+
+msgid "Also on manual track change"
+msgstr "Και σε χειροκίνητη αλλαγή κομματιού"
+
+msgid "Crossfade when you skip to the next or previous track, not only at the end of one"
+msgstr "Κάνε μετάβαση και όταν πηγαίνεις στο επόμενο ή στο προηγούμενο κομμάτι, όχι μόνο στο τέλος"
+
+msgid "Fade out on pause"
+msgstr "Σβήσιμο στην παύση"
+
+msgid "Fade the music out when pausing or stopping, and back in when resuming"
+msgstr "Χαμήλωσε σταδιακά τη μουσική στην παύση ή τη διακοπή και επανάφερέ την στη συνέχιση"
+
 # ---- File Watching section --------------------------------------------------
 
 msgid "File Watching"

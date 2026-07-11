@@ -196,9 +196,25 @@ pub enum PlayerAction {
         /// This track's baked `ReplayGain` tag values, applied by the audio source.
         replaygain: TrackReplayGain,
     },
+    /// Overlap the next track with the one still playing, fading between them
+    /// over `fade_ms` **media** milliseconds. Unlike `PlayMedia` this leaves the
+    /// current track audible; the backend runs the two on separate decks.
+    BeginCrossfade {
+        file_path: String,
+        /// The *incoming* track's baked `ReplayGain` values. Baked per source —
+        /// the outgoing track has its own, already applied.
+        replaygain: TrackReplayGain,
+        fade_ms: u64,
+        volume: f64,
+        speed: f64,
+    },
     Resume,
     Pause,
-    Stop,
+    /// `fade_ms` is `0` for an internal stop (end of queue, error recovery) and
+    /// the pause-fade length for a user-initiated stop.
+    Stop {
+        fade_ms: u64,
+    },
     Seek {
         position_ms: u64,
     },
@@ -316,9 +332,10 @@ impl PlayerState {
     }
 
     /// Build actions for user-initiated stop (preserves position for resume).
-    pub fn build_stop_actions(&mut self) -> Vec<PlayerAction> {
+    /// `fade_ms` is the pause-fade length when that setting is on, else `0`.
+    pub fn build_stop_actions(&mut self, fade_ms: u64) -> Vec<PlayerAction> {
         self.status = PlaybackStatus::Stopped;
-        vec![PlayerAction::Stop]
+        vec![PlayerAction::Stop { fade_ms }]
     }
 
     /// Build actions for seek command.
@@ -428,6 +445,51 @@ impl PlayerState {
         actions
     }
 
+    /// Build actions when the playback monitor decides the current track should
+    /// start overlapping the next one. Mirrors `build_end_of_stream_actions`,
+    /// but the outgoing track stays audible for `fade_ms` while the incoming
+    /// one ramps up on the other deck.
+    ///
+    /// State advances at fade *start*, so Now-Playing switches to the incoming
+    /// track as the overlap begins — the behaviour Strawberry and mpd have.
+    /// Returns an empty vec (no crossfade) when the queue has moved on and
+    /// there is no longer a next track.
+    pub fn build_crossfade_actions(&mut self, fade_ms: u64) -> Vec<PlayerAction> {
+        let mut actions = Vec::with_capacity(2);
+
+        // The outgoing track counts as played the moment it starts fading. Same
+        // accounting as `build_end_of_stream_actions`, just a few seconds early.
+        let outgoing_id = self.current_track.as_ref().map(|t| t.id);
+
+        // Re-read the queue under the emit lock rather than trusting the
+        // monitor's earlier `peek_next` — a skip could have landed in between.
+        let Some(track) = self.queue.advance().cloned() else {
+            return actions;
+        };
+
+        if let Some(id) = outgoing_id {
+            actions.push(PlayerAction::UpdatePlayCount(id));
+        }
+
+        self.status = PlaybackStatus::Playing;
+        self.position_ms = 0;
+        self.duration_ms = u64::try_from(track.duration_ms.max(0)).unwrap_or(0);
+        let file_path = track.file_path.clone();
+        let replaygain = track.replaygain();
+        let volume = self.effective_volume();
+        let speed = self.playback_speed;
+        self.current_track = Some(track);
+
+        actions.push(PlayerAction::BeginCrossfade {
+            file_path,
+            replaygain,
+            fade_ms,
+            volume,
+            speed,
+        });
+        actions
+    }
+
     /// Build actions for set-playback-speed command.
     pub fn build_set_speed_actions(&mut self, speed: f64) -> Vec<PlayerAction> {
         let speed = speed.clamp(MIN_SPEED, MAX_SPEED);
@@ -476,7 +538,9 @@ pub fn play_track_inner(
 pub fn stop_end_of_queue(state: &mut PlayerState) -> Vec<PlayerAction> {
     state.status = PlaybackStatus::Stopped;
     state.position_ms = 0;
-    vec![PlayerAction::Stop]
+    // Never faded: the track has already run out of audio, so there is nothing
+    // left to fade — and a deferred clear would only delay the silence.
+    vec![PlayerAction::Stop { fade_ms: 0 }]
 }
 
 /// Resume playback from a Stopped state. Replays the current track from the saved position.

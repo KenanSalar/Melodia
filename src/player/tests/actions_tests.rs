@@ -12,14 +12,19 @@ use crate::player::state::{PlayerAction, PlayerStateHandle};
 #[derive(Debug, Default)]
 struct MockBackendInner {
     play_media_calls: Vec<(String, f64, f64, Option<u64>)>,
+    /// `(file_path, fade_ms, volume, speed)` per `begin_crossfade`.
+    begin_crossfade_calls: Vec<(String, u64, f64, f64)>,
     resume_count: u32,
     pause_count: u32,
     stop_count: u32,
+    /// `fade_ms` per `stop_with_fade`, including the `0`s that mean "immediate".
+    stop_fade_calls: Vec<u64>,
     seek_calls: Vec<u64>,
     volume_calls: Vec<f64>,
     speed_calls: Vec<f64>,
     preload_calls: Vec<Option<String>>,
     play_media_should_fail: bool,
+    begin_crossfade_should_fail: bool,
 }
 
 struct MockBackend {
@@ -37,6 +42,15 @@ impl MockBackend {
         Self {
             inner: Mutex::new(MockBackendInner {
                 play_media_should_fail: true,
+                ..Default::default()
+            }),
+        }
+    }
+
+    fn with_crossfade_failure() -> Self {
+        Self {
+            inner: Mutex::new(MockBackendInner {
+                begin_crossfade_should_fail: true,
                 ..Default::default()
             }),
         }
@@ -68,6 +82,24 @@ impl PlayerBackend for MockBackend {
         Ok(())
     }
 
+    fn begin_crossfade(
+        &self,
+        file_path: &str,
+        _baked_rg: TrackReplayGain,
+        fade_ms: u64,
+        volume: f64,
+        speed: f64,
+    ) -> Result<(), AppError> {
+        let mut inner = self.inner();
+        if inner.begin_crossfade_should_fail {
+            return Err(AppError::Player("mock crossfade failure".to_owned()));
+        }
+        inner
+            .begin_crossfade_calls
+            .push((file_path.to_owned(), fade_ms, volume, speed));
+        Ok(())
+    }
+
     fn resume(&self) {
         self.inner().resume_count += 1;
     }
@@ -76,6 +108,11 @@ impl PlayerBackend for MockBackend {
     }
     fn stop(&self) {
         self.inner().stop_count += 1;
+    }
+    fn stop_with_fade(&self, fade_ms: u64) {
+        let mut inner = self.inner();
+        inner.stop_fade_calls.push(fade_ms);
+        inner.stop_count += 1;
     }
     fn seek(&self, position_ms: u64) {
         self.inner().seek_calls.push(position_ms);
@@ -233,7 +270,7 @@ async fn execute_resume_pause_stop() -> Result<(), AppError> {
     let actions = vec![
         PlayerAction::Resume,
         PlayerAction::Pause,
-        PlayerAction::Stop,
+        PlayerAction::Stop { fade_ms: 0 },
     ];
 
     crate::player::actions::execute_actions(
@@ -248,6 +285,94 @@ async fn execute_resume_pause_stop() -> Result<(), AppError> {
     assert_eq!(inner.resume_count, 1);
     assert_eq!(inner.pause_count, 1);
     assert_eq!(inner.stop_count, 1);
+    Ok(())
+}
+
+#[tokio::test]
+async fn execute_stop_forwards_the_fade_length() -> Result<(), AppError> {
+    // A user stop with fade-on-pause carries the ramp length; the end-of-queue
+    // stop passes 0 so it lands immediately.
+    let fx = fixture().await?;
+    let mock = MockBackend::new();
+
+    let actions = vec![
+        PlayerAction::Stop { fade_ms: 250 },
+        PlayerAction::Stop { fade_ms: 0 },
+    ];
+
+    crate::player::actions::execute_actions(actions, &mock, &fx.db, &fx.player_state, &fx.sinks);
+
+    assert_eq!(mock.inner().stop_fade_calls, vec![250, 0]);
+    Ok(())
+}
+
+#[tokio::test]
+async fn execute_begin_crossfade_calls_backend() -> Result<(), AppError> {
+    let fx = fixture().await?;
+    let mock = MockBackend::new();
+
+    let actions = vec![PlayerAction::BeginCrossfade {
+        file_path: fx.track_path.clone(),
+        replaygain: TrackReplayGain::default(),
+        fade_ms: 1_800,
+        volume: 0.8,
+        speed: 1.0,
+    }];
+
+    crate::player::actions::execute_actions(actions, &mock, &fx.db, &fx.player_state, &fx.sinks);
+
+    let inner = mock.inner();
+    assert_eq!(inner.begin_crossfade_calls.len(), 1);
+    assert_eq!(inner.begin_crossfade_calls[0].0, fx.track_path);
+    assert_eq!(inner.begin_crossfade_calls[0].1, 1_800);
+    assert!((inner.begin_crossfade_calls[0].2 - 0.8).abs() < f64::EPSILON);
+    assert_eq!(inner.stop_count, 0, "a successful crossfade must not stop the decks");
+    Ok(())
+}
+
+#[tokio::test]
+async fn execute_begin_crossfade_vanished_file_skips_without_stopping() -> Result<(), AppError> {
+    // The outgoing track is still audible on the other deck, so the crossfade
+    // arm must NOT stop the player the way `PlayMedia` does — the auto-skip's
+    // `play_media` clears both decks anyway. With an empty queue the skip lands
+    // on `stop_end_of_queue`, which is the single stop we expect.
+    let fx = fixture().await?;
+    let mock = MockBackend::new();
+
+    let actions = vec![PlayerAction::BeginCrossfade {
+        file_path: "/nonexistent/track.mp3".to_owned(),
+        replaygain: TrackReplayGain::default(),
+        fade_ms: 2_000,
+        volume: 1.0,
+        speed: 1.0,
+    }];
+
+    crate::player::actions::execute_actions(actions, &mock, &fx.db, &fx.player_state, &fx.sinks);
+
+    let inner = mock.inner();
+    assert!(inner.begin_crossfade_calls.is_empty());
+    assert_eq!(inner.stop_count, 1, "only the empty-queue auto-skip may stop");
+    Ok(())
+}
+
+#[tokio::test]
+async fn execute_begin_crossfade_decode_failure_triggers_auto_skip() -> Result<(), AppError> {
+    let fx = fixture().await?;
+    let mock = MockBackend::with_crossfade_failure();
+
+    let actions = vec![PlayerAction::BeginCrossfade {
+        file_path: fx.track_path.clone(),
+        replaygain: TrackReplayGain::default(),
+        fade_ms: 2_000,
+        volume: 1.0,
+        speed: 1.0,
+    }];
+
+    crate::player::actions::execute_actions(actions, &mock, &fx.db, &fx.player_state, &fx.sinks);
+
+    let inner = mock.inner();
+    assert!(inner.begin_crossfade_calls.is_empty());
+    assert_eq!(inner.stop_count, 1, "only the empty-queue auto-skip may stop");
     Ok(())
 }
 

@@ -189,7 +189,8 @@ fn test_stop_end_of_queue_helper() {
     assert_eq!(state.status, PlaybackStatus::Stopped);
     assert_eq!(state.position_ms, 0);
     assert!(state.current_track.is_some()); // Preserved for replay
-    assert_eq!(actions, vec![PlayerAction::Stop]);
+    // Never faded — the track already ran out of audio.
+    assert_eq!(actions, vec![PlayerAction::Stop { fade_ms: 0 }]);
 }
 
 #[test]
@@ -806,7 +807,7 @@ fn end_of_stream_stops_at_end_of_queue() {
 
     assert_eq!(state.status, PlaybackStatus::Stopped);
     assert_eq!(state.position_ms, 0);
-    assert!(actions.iter().any(|a| matches!(a, PlayerAction::Stop)));
+    assert!(actions.iter().any(|a| matches!(a, PlayerAction::Stop { .. })));
 }
 
 #[test]
@@ -833,7 +834,7 @@ fn end_of_stream_pauses_when_sleep_at_track_end_armed() {
     // Flag disarmed so a subsequent boundary advances normally.
     assert!(!state.pause_after_current_track);
     // Emitted a Stop, still counted the finished track, started no new media.
-    assert!(actions.iter().any(|a| matches!(a, PlayerAction::Stop)));
+    assert!(actions.iter().any(|a| matches!(a, PlayerAction::Stop { .. })));
     assert!(actions.iter().any(|a| matches!(a, PlayerAction::UpdatePlayCount(1))));
     assert!(!actions.iter().any(|a| matches!(a, PlayerAction::PlayMedia { .. })));
 }
@@ -844,4 +845,73 @@ fn view_model_light_carries_sleep_at_track_end() {
     assert!(!state.to_view_model_light().sleep_at_track_end);
     state.pause_after_current_track = true;
     assert!(state.to_view_model_light().sleep_at_track_end);
+}
+
+// --- crossfade -------------------------------------------------------------
+
+#[test]
+fn crossfade_advances_the_queue_and_starts_the_next_track() {
+    let mut state = PlayerState::default();
+    let track1 = make_summary(1, "One", 180_000);
+    let track2 = make_summary(2, "Two", 200_000);
+    state.queue.add_tracks(vec![track1.clone(), track2]);
+    state.queue.current_index = Some(0);
+    state.current_track = Some(track1);
+    state.status = PlaybackStatus::Playing;
+    state.duration_ms = 180_000;
+    state.position_ms = 178_200;
+
+    let actions = state.build_crossfade_actions(1_800);
+
+    // State advances at fade *start* — Now-Playing switches as the overlap begins.
+    assert_eq!(state.current_track.as_ref().map(|t| t.id), Some(2));
+    assert_eq!(state.queue.current_index, Some(1));
+    assert_eq!(state.position_ms, 0);
+    assert_eq!(state.duration_ms, 200_000);
+    assert_eq!(state.status, PlaybackStatus::Playing);
+
+    // The outgoing track counts as played, then the incoming one starts.
+    assert_eq!(actions.len(), 2);
+    assert_eq!(actions[0], PlayerAction::UpdatePlayCount(1));
+    let matched = matches!(
+        &actions[1],
+        PlayerAction::BeginCrossfade { file_path, fade_ms: 1_800, .. } if file_path == "/music/2.mp3"
+    );
+    assert!(matched, "expected BeginCrossfade for track 2, got {:?}", actions[1]);
+}
+
+#[test]
+fn crossfade_emits_nothing_when_the_queue_has_no_next_track() {
+    // The monitor's `peek_next` is read outside the emit lock, so a skip can
+    // land in between. `advance()` returning None must leave state untouched.
+    let mut state = PlayerState::default();
+    let track1 = make_summary(1, "One", 180_000);
+    state.queue.add_tracks(vec![track1.clone()]);
+    state.queue.current_index = Some(0);
+    state.current_track = Some(track1);
+    state.status = PlaybackStatus::Playing;
+
+    let actions = state.build_crossfade_actions(2_000);
+
+    assert!(actions.is_empty(), "no next track means no crossfade");
+    assert_eq!(state.current_track.as_ref().map(|t| t.id), Some(1));
+    assert_eq!(
+        state.status,
+        PlaybackStatus::Playing,
+        "the current track must keep playing to its own end"
+    );
+}
+
+#[test]
+fn crossfade_does_not_count_a_play_when_it_cannot_advance() {
+    // Guards the ordering inside `build_crossfade_actions`: the play count is
+    // only pushed once `advance()` has confirmed there is somewhere to go.
+    let mut state = PlayerState::default();
+    let track1 = make_summary(1, "One", 180_000);
+    state.queue.add_tracks(vec![track1.clone()]);
+    state.queue.current_index = Some(0);
+    state.current_track = Some(track1);
+
+    let actions = state.build_crossfade_actions(2_000);
+    assert!(!actions.iter().any(|a| matches!(a, PlayerAction::UpdatePlayCount(_))));
 }

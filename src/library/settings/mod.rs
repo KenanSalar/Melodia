@@ -4,6 +4,8 @@
 //! - [`appearance`]: theme / variant / accent, dynamic colour style,
 //!   match-unfocused, corner radius.
 //! - [`playback`]: gapless, play-button animation, resume on startup.
+//! - [`crossfade`]: crossfade on/off, duration, manual-change + same-album
+//!   exceptions, fade-on-pause.
 //! - [`view`]: locale, overflow buttons, and per-view UI state — column
 //!   visibility / widths, sort, browse path, nav index, detail ids,
 //!   section-collapse toggles — plus the `snap_to_preset` helper.
@@ -17,6 +19,7 @@
 //! writes to it serialize cleanly.
 
 pub mod appearance;
+pub mod crossfade;
 pub mod equalizer;
 pub mod folders;
 pub mod playback;
@@ -26,6 +29,10 @@ pub mod view;
 
 pub use appearance::{
     set_appearance, set_corner_radius, set_dynamic_color_style, set_match_unfocused_to_system_bg,
+};
+pub use crossfade::{
+    set_crossfade_duration_ms, set_crossfade_enabled, set_crossfade_fade_on_pause,
+    set_crossfade_manual, set_crossfade_skip_same_album,
 };
 pub use equalizer::{set_eq_band_gains_and_preset, set_eq_enabled, set_eq_preamp};
 pub use replaygain::{

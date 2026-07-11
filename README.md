@@ -51,13 +51,14 @@ _Screenshots coming soon._
 
 ### Playback
 - Gapless playback with a 2-deep Rodio queue
+- Audio crossfade (1–12 s) that overlaps the end of one track with the start of the next, running the two on separate mixer decks with a sample-accurate complementary ramp so the sum can never clip; optionally skips same-album transitions to keep continuous mixes gapless, extends to manual track changes, and fades out on pause and stop
 - Queue management with shuffle and repeat modes (Off, All, One)
 - Full-screen Now Playing view with track details, an up-next list, and album-art cross-fade transitions
 - 10-band graphic equalizer (31 Hz – 16 kHz) with adjustable preamp, nine built-in presets plus hand-tuned custom curves, and a soft-knee clip-protection limiter so boosts compress instead of clipping
 - ReplayGain loudness normalization — applies per-track or per-album gain from the file's loudness tags (Track or Album mode), with an adjustable preamp and optional peak-based clip prevention; reuses the equalizer's soft-knee limiter so a boosted track compresses instead of clipping, and works with the equalizer off
 - Playback speed control (0.25× – 2.0×)
 - Sleep timer that pauses playback after a preset (15–90 min) or custom duration, or at the end of the current track; the duration countdown is playback-linked, so pausing the music holds the timer
-- Volume control (0–200%) with mute
+- Volume control (0–100%) with mute
 - Resume playback on startup
 - OS media-key support
 - Configurable play-button animation (none, ripple, or animated equalizer bars)
@@ -233,7 +234,7 @@ src/
 ├── entities/    domain model types (track, album, artist, genre, playlist, …)
 ├── library/     playback, queue, tracks, albums, artists, genres, playlists, search, settings
 ├── media/       scanner, metadata, artwork, cover-thumbnail cache, folder watcher
-├── player/      playback state machine + Rodio backend + graphic equalizer & ReplayGain DSP
+├── player/      playback state machine + dual-deck Rodio backend + graphic equalizer, ReplayGain & crossfade DSP
 ├── tasks/       background tasks (playback monitor, file events, queue prune, Material You)
 ├── themes/      pluggable theme registry
 ├── services/    updater, desktop integration, system theme

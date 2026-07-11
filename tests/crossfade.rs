@@ -1,0 +1,316 @@
+//! End-to-end crossfade check against the real audio chain, without an audio
+//! device.
+//!
+//! rodio's `mixer()` builds a device-less `Mixer` + `MixerSource`, so we can
+//! connect two real `Player` decks to it and pull the summed output by hand.
+//! Everything downstream of the decision layer is exercised for real: the
+//! Symphonia decoder, `EqSource`'s fade stage, rodio's per-deck volume/pause
+//! wrappers, and `MixerSource`'s (unclamped) sum.
+//!
+//! The fixtures are constant-amplitude DC WAVs. Two perfectly correlated
+//! signals under a complementary *linear* crossfade sum to a constant — so the
+//! mixed output must hold steady at the source amplitude across the whole
+//! overlap, and must never exceed it. That is exactly the property that keeps
+//! rodio's unclamped mixer from clipping.
+//!
+//! ⚠ Pulling `MixerSource` *is* the audio thread here. Some `Player` calls
+//! (`clear()` on a live deck, `try_seek()`) block until that thread services
+//! them through rodio's 5 ms `periodic_access` hook, so any control op that
+//! makes one must run on a separate thread while this one keeps pulling. See
+//! [`drive_until`].
+
+use std::io::Write;
+use std::num::NonZero;
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
+
+use melodia::player::replaygain::TrackReplayGain;
+use melodia::player::rodio_backend::RodioPlayer;
+
+const RATE: u32 = 44_100;
+const CHANNELS: u16 = 2;
+/// Half scale, so the clamp in `EqSource` can never mask a summing bug.
+const AMPLITUDE: f32 = 0.5;
+/// Long enough that rodio's fixed pipeline latency (below) is a small fraction
+/// of the ramp. Also the shipped default.
+const FADE_MS: u64 = 2_000;
+
+/// Frames to discard before asserting on steady-state amplitude. rodio's queue
+/// reports a placeholder span until its first source arrives, and deck
+/// volume/pause land through a 5 ms `periodic_access` hook, so the very start
+/// of a deck's output is not representative. 100 ms is generous.
+const WARMUP_FRAMES: usize = (RATE as usize) / 10;
+
+/// Fractional slack on the summed amplitude during an overlap.
+///
+/// `Mixer::add` wraps each deck's queue in a `UniformSourceIterator`, which
+/// buffers a span's worth of samples. A freshly appended deck therefore reaches
+/// the mixer a few hundred frames behind the one already playing, so the two
+/// complementary ramps are skewed by that constant — roughly 0.4% of a 2 s fade.
+/// The skew shifts the sum by the same fraction in whichever direction the
+/// pipeline happens to lag.
+///
+/// This is deliberately far tighter than any real curve error: an equal-power
+/// crossfade would peak at √2 (+41%) and a non-complementary one would dip by
+/// tens of percent. It only absorbs pipeline latency.
+const SKEW: f32 = 0.01;
+
+fn frames_for_ms(ms: u64) -> usize {
+    let ms = usize::try_from(ms).unwrap_or(0);
+    (ms * RATE as usize) / 1_000
+}
+
+fn nz_u16(v: u16) -> rodio::ChannelCount {
+    NonZero::new(v).unwrap_or(NonZero::<u16>::MIN)
+}
+
+fn nz_u32(v: u32) -> rodio::SampleRate {
+    NonZero::new(v).unwrap_or(NonZero::<u32>::MIN)
+}
+
+/// Write a 16-bit PCM WAV of constant amplitude. Hand-rolled: the project has
+/// no WAV encoder dependency, and the 44-byte canonical header is trivial.
+fn write_dc_wav(path: &Path, seconds: u32, amplitude: f32) -> std::io::Result<()> {
+    let frames = RATE * seconds;
+    let data_len = frames * u32::from(CHANNELS) * 2;
+    let mut buf = Vec::with_capacity(44 + data_len as usize);
+
+    buf.extend_from_slice(b"RIFF");
+    buf.extend_from_slice(&(36 + data_len).to_le_bytes());
+    buf.extend_from_slice(b"WAVEfmt ");
+    buf.extend_from_slice(&16u32.to_le_bytes()); // PCM fmt chunk size
+    buf.extend_from_slice(&1u16.to_le_bytes()); // PCM
+    buf.extend_from_slice(&CHANNELS.to_le_bytes());
+    buf.extend_from_slice(&RATE.to_le_bytes());
+    buf.extend_from_slice(&(RATE * u32::from(CHANNELS) * 2).to_le_bytes()); // byte rate
+    buf.extend_from_slice(&(CHANNELS * 2).to_le_bytes()); // block align
+    buf.extend_from_slice(&16u16.to_le_bytes()); // bits per sample
+    buf.extend_from_slice(b"data");
+    buf.extend_from_slice(&data_len.to_le_bytes());
+
+    let sample = pcm_sample(amplitude);
+    for _ in 0..frames * u32::from(CHANNELS) {
+        buf.extend_from_slice(&sample.to_le_bytes());
+    }
+
+    let mut f = std::fs::File::create(path)?;
+    f.write_all(&buf)
+}
+
+#[allow(
+    clippy::cast_possible_truncation,
+    reason = "amplitude is a small constant well inside i16 range"
+)]
+fn pcm_sample(amplitude: f32) -> i16 {
+    (amplitude * f32::from(i16::MAX)) as i16
+}
+
+/// Pull `frames` interleaved frames and return the per-frame amplitude of
+/// channel 0. `MixerSource` never ends (both decks keep-alive), so a `None`
+/// here would itself be a bug.
+fn pull(src: &mut rodio::mixer::MixerSource, frames: usize) -> Vec<f32> {
+    let mut out = Vec::with_capacity(frames);
+    for _ in 0..frames {
+        let left = src.next();
+        let right = src.next();
+        assert!(left.is_some() && right.is_some(), "mixer must stay alive");
+        if let (Some(l), Some(r)) = (left, right) {
+            // Both channels carry the same DC value, so they must track. The
+            // bound is loose because the mixer's resampler can leave two decks
+            // a sample out of phase, which shows up as one ramp step of
+            // difference. Exact per-frame gain coupling is pinned by
+            // `a_fade_advances_once_per_frame_not_once_per_sample` against the
+            // raw `EqSource`, where no resampler sits in the way.
+            assert!((l - r).abs() < 1e-3, "channels sheared: {l} vs {r}");
+            out.push(l);
+        }
+    }
+    out
+}
+
+/// Run a blocking `Player` control op on another thread while this one keeps
+/// the mixer turning, then return everything that was pulled meanwhile.
+///
+/// `Player::clear()` on a live deck waits for rodio's `periodic_access` hook to
+/// process the skip, and `Player::try_seek()` waits for seek feedback — both
+/// arrive only when someone pulls samples. In production that someone is the
+/// audio callback thread; here it is us.
+fn drive_until<F>(src: &mut rodio::mixer::MixerSource, op: F) -> Vec<f32>
+where
+    F: FnOnce() + Send + 'static,
+{
+    // Bound the wait so a regression that genuinely deadlocks fails the test
+    // instead of hanging the whole suite. Two seconds of audio is orders of
+    // magnitude more than rodio's 5 ms service interval needs.
+    let cap = RATE as usize * 2;
+    let handle = std::thread::spawn(op);
+    let mut pulled = Vec::new();
+    while !handle.is_finished() {
+        assert!(pulled.len() < cap, "control op never completed — deadlock?");
+        pulled.extend(pull(src, 64));
+    }
+    assert!(handle.join().is_ok(), "control op panicked");
+    pulled
+}
+
+/// The load-bearing property: rodio's `MixerSource` sums its voices with no
+/// clamping, so two overlapping decks must never push it past the amplitude
+/// either deck carries alone. This is what a complementary linear curve buys
+/// and an equal-power one (peaking at √2) would not. Checked across the *whole*
+/// overlap, warmup included.
+fn assert_no_clipping(samples: &[f32], what: &str) {
+    let peak = samples.iter().fold(0.0_f32, |a, s| a.max(s.abs()));
+    assert!(
+        peak <= AMPLITUDE * (1.0 + SKEW),
+        "{what}: mixer summed to {peak}, past the {AMPLITUDE} each deck carries alone — the crossfade curve is not complementary"
+    );
+}
+
+/// Assert every sample sits within `tol` of `expected`. A per-sample bound, so
+/// a transient excursion can't hide behind an average.
+fn assert_holds_at(samples: &[f32], expected: f32, tol: f32, what: &str) {
+    assert!(!samples.is_empty(), "{what}: nothing sampled");
+    let worst = samples.iter().fold(0.0_f32, |a, s| a.max((s - expected).abs()));
+    assert!(
+        worst <= tol,
+        "{what}: expected ~{expected}, worst deviation {worst} (first few: {:?})",
+        &samples[..samples.len().min(4)]
+    );
+}
+
+struct Fixture {
+    _tmp: tempfile::TempDir,
+    track_a: String,
+    track_b: String,
+}
+
+fn fixture() -> std::io::Result<Fixture> {
+    let tmp = tempfile::tempdir()?;
+    let a: PathBuf = tmp.path().join("a.wav");
+    let b: PathBuf = tmp.path().join("b.wav");
+    write_dc_wav(&a, 6, AMPLITUDE)?;
+    write_dc_wav(&b, 6, AMPLITUDE)?;
+    Ok(Fixture {
+        _tmp: tmp,
+        track_a: a.to_string_lossy().into_owned(),
+        track_b: b.to_string_lossy().into_owned(),
+    })
+}
+
+/// `RodioPlayer` + the `MixerSource` its two decks feed.
+fn player() -> (Arc<RodioPlayer>, rodio::mixer::MixerSource) {
+    let (mixer, source) = rodio::mixer::mixer(nz_u16(CHANNELS), nz_u32(RATE));
+    let player = RodioPlayer::new(&mixer, tokio::runtime::Handle::current());
+    (Arc::new(player), source)
+}
+
+fn start(rodio: &RodioPlayer, path: &str) {
+    let r = rodio.play_media(path, 1.0, 1.0, None, TrackReplayGain::default());
+    assert!(r.is_ok(), "play_media failed: {:?}", r.err());
+}
+
+fn crossfade_into(rodio: &RodioPlayer, path: &str) {
+    let r = rodio.begin_crossfade(path, TrackReplayGain::default(), FADE_MS, 1.0, 1.0);
+    assert!(r.is_ok(), "begin_crossfade failed: {:?}", r.err());
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn crossfade_overlaps_two_decks_without_ever_clipping_the_mixer() -> std::io::Result<()> {
+    let fx = fixture()?;
+    let (rodio, mut mix) = player();
+    start(&rodio, &fx.track_a);
+
+    // Deck A alone, at full amplitude.
+    let solo = pull(&mut mix, WARMUP_FRAMES * 2);
+    assert_holds_at(&solo[WARMUP_FRAMES..], AMPLITUDE, 1e-3, "deck A alone");
+    assert!(!rodio.is_crossfading());
+
+    crossfade_into(&rodio, &fx.track_b);
+    assert!(rodio.is_crossfading(), "the outgoing deck is still draining");
+
+    // Pull the whole overlap. Two correlated DC signals under complementary
+    // linear ramps must sum to a constant: never above (the mixer does not
+    // clamp) and never meaningfully below.
+    let during = pull(&mut mix, frames_for_ms(FADE_MS));
+    assert_no_clipping(&during, "auto crossfade");
+    assert_holds_at(&during[WARMUP_FRAMES..], AMPLITUDE, AMPLITUDE * SKEW, "mid-overlap sum");
+
+    // Past the ramp the outgoing deck has ended itself, which is the signal the
+    // backend uses to know the overlap is over.
+    let after = pull(&mut mix, WARMUP_FRAMES * 2);
+    assert!(!rodio.is_crossfading(), "outgoing deck must drain when its ramp lands");
+    assert_holds_at(&after[WARMUP_FRAMES..], AMPLITUDE, 1e-3, "deck B alone");
+
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn seeking_mid_crossfade_drops_the_outgoing_deck_and_restores_unity() -> std::io::Result<()> {
+    let fx = fixture()?;
+    let (rodio, mut mix) = player();
+    start(&rodio, &fx.track_a);
+    let _ = pull(&mut mix, WARMUP_FRAMES);
+
+    crossfade_into(&rodio, &fx.track_b);
+
+    // Land in the middle of the overlap, where the incoming deck sits at ~half
+    // gain and the outgoing one carries the rest.
+    let _ = pull(&mut mix, frames_for_ms(FADE_MS) / 2);
+
+    // `seek` aborts the crossfade: it clears the (live) outgoing deck and
+    // seeks the survivor. Both calls block on the audio thread — us.
+    let r = rodio.clone();
+    let _ = drive_until(&mut mix, move || r.seek(0));
+    assert!(!rodio.is_crossfading(), "a seek must abort the crossfade");
+
+    // The survivor ramps from its partial fade-in gain back to unity over
+    // ABORT_RAMP_MS. If the abort had left it stranded, this would sit low.
+    let after = pull(&mut mix, WARMUP_FRAMES * 2);
+    assert_holds_at(&after[WARMUP_FRAMES..], AMPLITUDE, 1e-3, "surviving deck after abort");
+
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_manual_crossfade_also_holds_the_amplitude() -> std::io::Result<()> {
+    // With `crossfade_manual` on, `play_media` fades between decks instead of
+    // cutting. It clears the (idle) target deck first, which doesn't block.
+    let fx = fixture()?;
+    let (rodio, mut mix) = player();
+    rodio.set_crossfade_enabled(true);
+    rodio.set_crossfade_manual(true);
+    rodio.set_crossfade_duration_ms(u32::try_from(FADE_MS).unwrap_or(2_000));
+
+    start(&rodio, &fx.track_a);
+    let solo = pull(&mut mix, WARMUP_FRAMES * 2);
+    assert_holds_at(&solo[WARMUP_FRAMES..], AMPLITUDE, 1e-3, "deck A alone");
+
+    // Now a "manual next" onto the other deck.
+    let r = rodio.clone();
+    let path = fx.track_b.clone();
+    let _ = drive_until(&mut mix, move || start(&r, &path));
+    assert!(rodio.is_crossfading(), "a manual track change must fade, not cut");
+
+    let during = pull(&mut mix, frames_for_ms(FADE_MS));
+    assert_no_clipping(&during, "manual crossfade");
+    assert_holds_at(&during[WARMUP_FRAMES..], AMPLITUDE, AMPLITUDE * SKEW, "manual mid-overlap sum");
+
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_plain_play_is_transparent() -> std::io::Result<()> {
+    // Crossfade off (the default) must leave the signal exactly as decoded —
+    // the fade cell is idle, so `EqSource` keeps its bypass fast path. The
+    // mixer's own sample-rate/channel adapter sits between us and the source,
+    // so compare against the decoded PCM value rather than bit-for-bit.
+    let fx = fixture()?;
+    let (rodio, mut mix) = player();
+    start(&rodio, &fx.track_a);
+
+    let out = pull(&mut mix, WARMUP_FRAMES * 2);
+    let expected = f32::from(pcm_sample(AMPLITUDE)) / 32_768.0;
+    assert_holds_at(&out[WARMUP_FRAMES..], expected, 1e-6, "bypass passthrough");
+    assert!(!rodio.is_crossfading());
+    Ok(())
+}

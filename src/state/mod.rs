@@ -125,7 +125,9 @@ impl AppState {
             .map_err(|e| AppError::Player(format!("Failed to open audio output device: {e}")))?;
         speakers.log_on_drop(false);
         let speakers: &'static rodio::MixerDeviceSink = Box::leak(Box::new(speakers));
-        let rodio = Arc::new(RodioPlayer::new(speakers.mixer()));
+        // The runtime handle is only used to schedule the deferred half of a
+        // faded pause / stop (arm the ramp now, pause the decks once it lands).
+        let rodio = Arc::new(RodioPlayer::new(speakers.mixer(), runtime.clone()));
 
         let db = database::init_database(&paths).await?;
 
@@ -287,12 +289,12 @@ impl AppState {
     }
 }
 
-/// Seed the Rodio backend's lock-free DSP cells (graphic EQ + `ReplayGain`)
-/// from persisted settings before playback starts, so the first track is
-/// already processed when either is enabled. Both live on the Rodio backend
-/// (not `PlayerState`). Ordering is deliberate: values first, `enabled` last,
-/// so the enable's generation bump publishes a fully-seeded state to the
-/// audio thread.
+/// Seed the Rodio backend's lock-free cells (graphic EQ, `ReplayGain`,
+/// crossfade) from persisted settings before playback starts, so the first
+/// track is already processed when any of them is enabled. All three live on
+/// the Rodio backend (not `PlayerState`). Ordering is deliberate: values first,
+/// `enabled` last, so the enable's generation bump publishes a fully-seeded
+/// state to the audio thread.
 fn hydrate_audio_dsp(rodio: &RodioPlayer, settings: &settings::SettingsData) {
     // `set_eq_gains` clamps and length-normalises the (possibly hand-edited)
     // gain list; the EQ ships off by default.
@@ -309,4 +311,11 @@ fn hydrate_audio_dsp(rodio: &RodioPlayer, settings: &settings::SettingsData) {
     ));
     rodio.set_replaygain_prevent_clipping(settings.replaygain.rg_prevent_clipping);
     rodio.set_replaygain_enabled(settings.replaygain.rg_enabled);
+
+    // Crossfade ships off; `set_crossfade_duration_ms` clamps a hand-edited value.
+    rodio.set_crossfade_duration_ms(settings.crossfade.crossfade_duration_ms);
+    rodio.set_crossfade_manual(settings.crossfade.crossfade_manual);
+    rodio.set_crossfade_skip_same_album(settings.crossfade.crossfade_skip_same_album);
+    rodio.set_crossfade_fade_on_pause(settings.crossfade.crossfade_fade_on_pause);
+    rodio.set_crossfade_enabled(settings.crossfade.crossfade_enabled);
 }

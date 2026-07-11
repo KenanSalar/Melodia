@@ -1,4 +1,5 @@
 pub mod actions;
+pub mod crossfade;
 pub(crate) mod dsp;
 pub mod equalizer;
 pub mod event_sink;

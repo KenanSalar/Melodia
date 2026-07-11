@@ -140,10 +140,20 @@ fn stop_sets_stopped() {
     let mut state = state_with_queue(1);
     state.status = PlaybackStatus::Playing;
 
-    let actions = state.build_stop_actions();
+    let actions = state.build_stop_actions(0);
 
     assert_eq!(state.status, PlaybackStatus::Stopped);
-    assert_eq!(actions, vec![PlayerAction::Stop]);
+    assert_eq!(actions, vec![PlayerAction::Stop { fade_ms: 0 }]);
+}
+
+#[test]
+fn stop_forwards_the_pause_fade_length() {
+    let mut state = state_with_queue(1);
+    state.status = PlaybackStatus::Playing;
+
+    let actions = state.build_stop_actions(250);
+
+    assert_eq!(actions, vec![PlayerAction::Stop { fade_ms: 250 }]);
 }
 
 // --- seek ---
@@ -229,7 +239,7 @@ fn next_at_end_stops() {
     let actions = state.build_next_actions();
 
     assert_eq!(state.status, PlaybackStatus::Stopped);
-    assert!(actions.iter().any(|a| matches!(a, PlayerAction::Stop)));
+    assert!(actions.iter().any(|a| matches!(a, PlayerAction::Stop { .. })));
 }
 
 #[test]
@@ -442,7 +452,7 @@ fn toggle_from_stopped_with_current_track_resumes() {
     let mut state = state_with_queue(2);
     let track = make_summary(1, 180_000);
     play_track_inner(&mut state, track, None);
-    state.build_stop_actions();
+    state.build_stop_actions(0);
     assert_eq!(state.status, PlaybackStatus::Stopped);
 
     let actions = toggle(&mut state);

@@ -10,12 +10,29 @@ use crate::database::DbPool;
 use crate::database::queries;
 
 use super::actions::emit_and_execute;
+use super::crossfade;
 use super::event_sink::PlayerSinks;
 use super::rodio_backend::{PlaybackCheck, RodioPlayer};
 use super::state::{
     PlayerAction, PlayerState, PlayerStateHandle, PositionTick, lock_state,
 };
 use super::types::PlaybackStatus;
+
+/// How often the monitor wakes: tight enough that gapless preload triggers and
+/// end-of-stream detection stay responsive, loose enough not to spin.
+const POLL_INTERVAL_MS: u64 = 500;
+
+/// The crossfade trigger window is `[MIN_FADE_MS, configured duration]`, and the
+/// monitor only samples it once per poll. At the shortest configurable duration
+/// it must still be **at least one poll wide**, or a tick can step straight over
+/// it (e.g. 700 ms remaining → 200 ms remaining) and no crossfade fires. That is
+/// not a benign miss: `crossfade_eligible` has already suppressed the gapless
+/// preload by then, so the transition degrades to a decode-and-start hard cut —
+/// an audible gap, worse than the gapless behaviour crossfade replaced.
+const _: () = assert!(
+    crossfade::MIN_CROSSFADE_MS as u64 >= crossfade::MIN_FADE_MS + POLL_INTERVAL_MS,
+    "the shortest crossfade must leave a trigger window at least one poll wide"
+);
 
 /// How many ms before the end of the current track we stage the next gapless
 /// source. Generous enough that the file can decode and queue before EOS even
@@ -49,7 +66,7 @@ pub fn spawn_playback_monitor(tracker: &TaskTracker, ctx: PlaybackMonitorContext
         paths,
     } = ctx;
     tracker.spawn(async move {
-        let mut interval = tokio::time::interval(Duration::from_millis(500));
+        let mut interval = tokio::time::interval(Duration::from_millis(POLL_INTERVAL_MS));
 
         // Tick counter for OS media controls periodic position updates (~5s = every 10th tick)
         #[cfg(any(target_os = "windows", target_os = "macos"))]
@@ -137,7 +154,9 @@ pub fn spawn_playback_monitor(tracker: &TaskTracker, ctx: PlaybackMonitorContext
                     // Query position BEFORE locking PlayerState to avoid nested lock
                     let pos = rodio_player.query_position();
                     let already_preloaded = rodio_player.is_gapless_preloaded();
-                    let (tick, late_preload) = {
+                    let xf = rodio_player.crossfade_settings();
+                    let crossfading = rodio_player.is_crossfading();
+                    let (tick, late_preload, crossfade_now) = {
                         let mut state = lock_state(&player_state);
                         if state.status != PlaybackStatus::Playing {
                             continue;
@@ -148,6 +167,33 @@ pub fn spawn_playback_monitor(tracker: &TaskTracker, ctx: PlaybackMonitorContext
                             duration_ms: state.duration_ms,
                         };
 
+                        let next = state.queue.peek_next();
+                        let same_album = match (state.current_track.as_ref(), next) {
+                            (Some(cur), Some(nxt)) => crossfade::same_album(cur, nxt),
+                            _ => false,
+                        };
+                        // Timing-INDEPENDENT: does this transition belong to the
+                        // crossfade path at all? The gapless preload below is gated
+                        // on its negation, and it must not depend on the position —
+                        // a crossfade shorter than PRELOAD_LEAD_MS would otherwise
+                        // let the preload fire first, set `gapless_pending`, and
+                        // permanently block the crossfade via its own gate.
+                        let eligible = crossfade::crossfade_eligible(
+                            xf,
+                            state.pause_after_current_track,
+                            next.is_some(),
+                            same_album,
+                        );
+
+                        let crossfade_now = crossfade::should_crossfade(
+                            eligible,
+                            already_preloaded,
+                            crossfading,
+                            state.position_ms,
+                            state.duration_ms,
+                            xf.duration_ms,
+                        );
+
                         // Late gapless preload: stage the next track only when the
                         // current one is within PRELOAD_LEAD_MS of ending. Doing it
                         // late lets mid-track repeat-mode / queue mutations decide
@@ -155,6 +201,11 @@ pub fn spawn_playback_monitor(tracker: &TaskTracker, ctx: PlaybackMonitorContext
                         // choice the moment the current track started).
                         let late_preload = if state.gapless_enabled
                             && !already_preloaded
+                            // A crossfade runs the next track on the *other* deck.
+                            // A gapless source would sit on this one, behind the
+                            // outgoing track, and inherit its fade cell.
+                            && !eligible
+                            && !crossfading
                             // Sleep-timer "End of current track": suppress the
                             // gapless preload so the current track drains to
                             // `EndOfStream` (not `GaplessTransition`, which would
@@ -162,6 +213,11 @@ pub fn spawn_playback_monitor(tracker: &TaskTracker, ctx: PlaybackMonitorContext
                             // boundary the pause-at-track-end gate below can catch.
                             && !state.pause_after_current_track
                             && state.duration_ms > 0
+                            // Reject a stale position read from a deck rodio hasn't
+                            // re-anchored yet (it only zeroes the tracked position
+                            // when `clear()` actually removes a source).
+                            && state.position_ms > 0
+                            && state.position_ms <= state.duration_ms
                             && state.duration_ms.saturating_sub(state.position_ms)
                                 < PRELOAD_LEAD_MS
                         {
@@ -177,7 +233,7 @@ pub fn spawn_playback_monitor(tracker: &TaskTracker, ctx: PlaybackMonitorContext
                             None
                         };
 
-                        (tick, late_preload)
+                        (tick, late_preload, crossfade_now)
                     };
 
                     // Publish to the UI only when the whole-second has changed
@@ -192,7 +248,15 @@ pub fn spawn_playback_monitor(tracker: &TaskTracker, ctx: PlaybackMonitorContext
                         let _ = position_tx.send(Some(tick.clone()));
                     }
 
-                    if let Some((path, rg)) = late_preload {
+                    if let Some(fade_ms) = crossfade_now {
+                        // Advance the queue and start the incoming track on the
+                        // idle deck in one serialized step. `emit_and_execute`
+                        // re-reads the queue under the exec lock, so a skip that
+                        // landed since the `peek_next` above can't be clobbered.
+                        emit_and_execute(&rodio_player, &db, &player_state, &sinks, |state| {
+                            state.build_crossfade_actions(fade_ms)
+                        });
+                    } else if let Some((path, rg)) = late_preload {
                         rodio_player.preload_gapless(Some(&path), rg);
                     }
 

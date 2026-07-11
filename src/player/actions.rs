@@ -62,9 +62,44 @@ pub fn execute_actions<B: PlayerBackend>(
                     enqueue_auto_skip(&mut pending, player_state, sinks);
                 }
             }
+            PlayerAction::BeginCrossfade {
+                file_path,
+                replaygain,
+                fade_ms,
+                volume,
+                speed,
+            } => {
+                // Same pre-flight + auto-skip contract as `PlayMedia`, with one
+                // difference: no `rodio_player.stop()`. The outgoing track is
+                // still audible on the other deck, and the `play_media` that
+                // `enqueue_auto_skip` produces clears both decks anyway — so
+                // stopping here would only insert a gap of silence.
+                if !Path::new(&file_path).exists() {
+                    log::warn!("Skipping vanished file at crossfade: {file_path}");
+                    enqueue_auto_skip(&mut pending, player_state, sinks);
+                    continue;
+                }
+                if let Err(e) =
+                    rodio_player.begin_crossfade(&file_path, replaygain, fade_ms, volume, speed)
+                {
+                    log::error!("Failed to crossfade into {file_path}: {e}");
+                    let name = Path::new(&file_path)
+                        .file_name()
+                        .map_or_else(|| file_path.clone(), |n| n.to_string_lossy().into_owned());
+                    crate::services::toast::notify(
+                        crate::services::toast::ToastKind::PlaybackFailed,
+                        name,
+                    );
+                    // `build_crossfade_actions` already advanced onto this track,
+                    // so `advance_skip` correctly lands on the one after it. In
+                    // `RepeatMode::One` that also steps off the repeated track —
+                    // rare enough (the file vanished mid-play) to accept.
+                    enqueue_auto_skip(&mut pending, player_state, sinks);
+                }
+            }
             PlayerAction::Resume => rodio_player.resume(),
             PlayerAction::Pause => rodio_player.pause(),
-            PlayerAction::Stop => rodio_player.stop(),
+            PlayerAction::Stop { fade_ms } => rodio_player.stop_with_fade(fade_ms),
             PlayerAction::Seek { position_ms } => {
                 rodio_player.seek(position_ms);
             }

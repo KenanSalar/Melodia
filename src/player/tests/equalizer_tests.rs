@@ -11,6 +11,7 @@ use super::{
     BAND_FREQS, EqShared, EqSource, MAX_GAIN_DB, MAX_PREAMP_DB, MIN_GAIN_DB, MIN_PREAMP_DB,
     NUM_BANDS, PRESETS, clamp_gain, clamp_preamp, normalize_gains, preset_index,
 };
+use crate::player::crossfade::FadeShared;
 use crate::player::replaygain::{ReplayGainShared, RgMode, TrackReplayGain};
 
 // --- helpers ---------------------------------------------------------------
@@ -98,8 +99,14 @@ fn run_eq(gains: &[f32], enabled: bool, input: Vec<f32>, channels: u16) -> Vec<f
     // Inert ReplayGain (disabled, no baked tags) so these tests exercise the EQ
     // path alone.
     let rg = ReplayGainShared::new();
-    EqSource::new(TestSource::new(input, channels, 44_100), shared, rg, TrackReplayGain::default())
-        .collect()
+    EqSource::new(
+        TestSource::new(input, channels, 44_100),
+        shared,
+        rg,
+        TrackReplayGain::default(),
+        FadeShared::idle(),
+    )
+    .collect()
 }
 
 /// Collect an `EqSource` over a mono 44.1 kHz signal with the given EQ-enabled
@@ -111,7 +118,7 @@ fn run_rg(
     input: Vec<f32>,
 ) -> Vec<f32> {
     let shared = EqShared::new(eq_enabled, &[0.0; NUM_BANDS]);
-    EqSource::new(TestSource::new(input, 1, 44_100), shared, rg, baked).collect()
+    EqSource::new(TestSource::new(input, 1, 44_100), shared, rg, baked, FadeShared::idle()).collect()
 }
 
 // --- tests -----------------------------------------------------------------
@@ -194,6 +201,7 @@ fn band_outside_nyquist_is_skipped() {
         shared,
         ReplayGainShared::new(),
         TrackReplayGain::default(),
+        FadeShared::idle(),
     )
     .collect();
     assert_eq!(bits(&out), bits(&input));
@@ -216,6 +224,7 @@ fn seek_resets_filter_state() {
         shared,
         ReplayGainShared::new(),
         TrackReplayGain::default(),
+        FadeShared::idle(),
     );
     for _ in 0..400 {
         let _ = src.next();
@@ -235,6 +244,7 @@ fn live_gain_change_is_observed_via_generation() {
         shared.clone(),
         ReplayGainShared::new(),
         TrackReplayGain::default(),
+        FadeShared::idle(),
     );
 
     // First samples with a flat curve are passthrough.
@@ -277,6 +287,7 @@ fn preamp_scales_a_flat_curve() {
         shared,
         ReplayGainShared::new(),
         TrackReplayGain::default(),
+        FadeShared::idle(),
     )
     .collect();
 
@@ -297,6 +308,7 @@ fn limiter_keeps_heavy_boost_within_full_scale() {
         shared,
         ReplayGainShared::new(),
         TrackReplayGain::default(),
+        FadeShared::idle(),
     )
     .collect();
 
@@ -326,6 +338,7 @@ fn limiter_timing_is_channel_count_independent() {
             shared,
             ReplayGainShared::new(),
             TrackReplayGain::default(),
+            FadeShared::idle(),
         )
         .collect::<Vec<f32>>()
     };
@@ -424,6 +437,7 @@ fn live_replaygain_change_is_observed_via_generation() {
         shared,
         rg.clone(),
         baked,
+        FadeShared::idle(),
     );
 
     let head: Vec<f32> = (0..256).filter_map(|_| src.next()).collect();
@@ -437,4 +451,142 @@ fn live_replaygain_change_is_observed_via_generation() {
         bits(&input[256..]),
         "a live ReplayGain-only change must take effect"
     );
+}
+
+// --- crossfade ramp --------------------------------------------------------
+
+/// Ramp length in interleaved samples for a mono 1 kHz source. Keeps the media
+/// milliseconds → samples conversion easy to reason about in the assertions.
+const RATE: u32 = 1_000;
+
+/// A flat, inert `EqSource` over `input`, sharing `fade` with its deck.
+fn faded_source(input: Vec<f32>, channels: u16, fade: Arc<FadeShared>) -> EqSource<TestSource> {
+    EqSource::new(
+        TestSource::new(input, channels, RATE),
+        EqShared::new(false, &[0.0; NUM_BANDS]),
+        ReplayGainShared::new(),
+        TrackReplayGain::default(),
+        fade,
+    )
+}
+
+#[test]
+fn an_idle_fade_cell_keeps_the_bit_identical_bypass() {
+    let input = ramp(512);
+    let out: Vec<f32> = faded_source(input.clone(), 1, FadeShared::idle()).collect();
+    assert_eq!(bits(&out), bits(&input), "an idle ramp must not touch the signal");
+}
+
+#[test]
+fn a_fade_out_ends_the_source_when_the_ramp_lands() {
+    // 100 ms at 1 kHz mono = 100 interleaved samples of ramp, then the source
+    // must end — that is what drains the deck and completes the crossfade.
+    // Gains run over positions 0..99, so the last emitted sample sits at 1/100
+    // of full scale and the source ends instead of emitting an exact zero.
+    let fade = FadeShared::idle();
+    fade.arm(None, 0.0, 100, true);
+    let out: Vec<f32> = faded_source(vec![1.0; 512], 1, fade).collect();
+
+    assert_eq!(out.len(), 100, "source must end as soon as the ramp lands");
+    assert!(approx(out[0], 1.0), "fade-out starts at unity");
+    assert!(approx(out[50], 0.5), "and is linear through the midpoint");
+    assert!(approx(out[99], 0.01), "and ends a hair above silence");
+}
+
+#[test]
+fn a_fade_in_climbs_to_unity_and_restores_the_bypass() {
+    let fade = FadeShared::idle();
+    fade.arm(Some(0.0), 1.0, 100, false);
+    let out: Vec<f32> = faded_source(vec![1.0; 300], 1, fade).collect();
+
+    assert_eq!(out.len(), 300, "a fade-in must never end the source");
+    assert!(approx(out[0], 0.0));
+    assert!(approx(out[50], 0.5));
+    // Past the ramp the source disengages the fade stage entirely, so the tail
+    // is bit-identical passthrough rather than a multiply by 1.0.
+    assert_eq!(bits(&out[150..]), bits(&vec![1.0_f32; 150]));
+}
+
+#[test]
+fn complementary_ramps_on_two_decks_never_sum_past_unity() {
+    // The property that keeps rodio's unclamped mixer safe. Both "decks" run a
+    // full-scale signal; their summed output must stay inside full scale.
+    let out_fade = FadeShared::idle();
+    out_fade.arm(None, 0.0, 200, true);
+    let in_fade = FadeShared::idle();
+    in_fade.arm(Some(0.0), 1.0, 200, false);
+
+    let outgoing: Vec<f32> = faded_source(vec![1.0; 400], 1, out_fade).collect();
+    let incoming: Vec<f32> = faded_source(vec![1.0; 400], 1, in_fade).collect();
+
+    for (i, o) in outgoing.iter().enumerate() {
+        let sum = o + incoming[i];
+        assert!(sum <= 1.0 + 1e-4, "decks summed to {sum} at sample {i}");
+    }
+}
+
+#[test]
+fn a_fade_advances_once_per_frame_not_once_per_sample() {
+    // Stereo: a frame is one sample per channel, i.e. one time step. A 100 ms
+    // ramp at 1 kHz stereo is 200 interleaved samples, and both samples of a
+    // frame must carry the same gain or the stereo image shears mid-fade.
+    let fade = FadeShared::idle();
+    fade.arm(None, 0.0, 100, true);
+    let out: Vec<f32> = faded_source(vec![1.0; 1_024], 2, fade).collect();
+
+    assert_eq!(out.len(), 200, "100 frames of ramp, two samples each");
+    for frame in out.chunks_exact(2) {
+        assert!(approx(frame[0], frame[1]), "both channels of a frame share one gain");
+    }
+    assert!(approx(out[0], 1.0));
+    assert!(approx(out[100], 0.5), "frame 50 of 100 is the midpoint");
+}
+
+#[test]
+fn the_fade_engages_the_clamp_on_a_bypassed_hot_source() {
+    // Raw decoder output can exceed full scale. In the bypass path the fade
+    // must still clamp before scaling, or two overlapping decks feeding rodio's
+    // unclamped mixer could sum past unity.
+    let fade = FadeShared::idle();
+    fade.arm(Some(1.0), 1.0, 1_000, false);
+    let out: Vec<f32> = faded_source(vec![1.8; 64], 1, fade).collect();
+    assert!(out.iter().all(|s| *s <= 1.0 + 1e-6), "hot samples must be clamped");
+}
+
+#[test]
+fn a_live_fade_arm_is_observed_via_generation() {
+    // The cell is deck-scoped, so a ramp armed mid-track applies to whatever
+    // source that deck is playing.
+    let fade = FadeShared::idle();
+    let mut src = faded_source(vec![1.0; 512], 1, fade.clone());
+
+    let head: Vec<f32> = (0..64).filter_map(|_| src.next()).collect();
+    assert_eq!(bits(&head), bits(&vec![1.0_f32; 64]), "idle cell is passthrough");
+
+    fade.arm(None, 0.0, 100, true);
+    let tail: Vec<f32> = src.collect();
+    assert_eq!(tail.len(), 100, "the armed fade-out must take effect and end the source");
+    assert!(approx(tail[0], 1.0));
+}
+
+#[test]
+fn seek_does_not_disturb_an_armed_fade() {
+    // `set_speed` re-anchors the active deck with a `try_seek`, and a crossfade
+    // abort arms a ramp then seeks. Either resetting `fade_pos` would restart
+    // the ramp from its start gain.
+    let fade = FadeShared::idle();
+    fade.arm(None, 0.0, 100, true);
+    let mut src = faded_source(vec![1.0; 512], 1, fade);
+
+    let before: Vec<f32> = (0..50).filter_map(|_| src.next()).collect();
+    assert!(approx(before[49], 0.51), "ramp is halfway down");
+
+    assert!(src.try_seek(Duration::ZERO).is_ok());
+    let after = src.next();
+    // `try_seek` rewound the TestSource, but the ramp keeps its position: the
+    // next gain continues the descent rather than jumping back to unity.
+    assert!(after.is_some());
+    if let Some(g) = after {
+        assert!(approx(g, 0.5), "fade position must survive a seek, got {g}");
+    }
 }
