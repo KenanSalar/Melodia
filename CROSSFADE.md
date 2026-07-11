@@ -187,6 +187,17 @@ alive, but the ramp the successor inherits is the same one. Four defences:
    `stop_with_fade` re-check it the same way, and `begin_crossfade`
    `debug_assert!`s the invariant.
 
+And the backstop under all four: **`preload_gapless` refuses to stage behind an
+empty active deck.** The deck epoch cannot cover this on its own — neither
+`stop()` nor the deferred `ClearAll` bumps it (they empty the decks rather than
+replacing their contents), so a preload that snapshots the epoch and then decodes
+slower than the stop takes would pass its own re-check, append behind nothing, and
+re-set `gapless_pending` over decks the stop had just cleared. That is the very
+state `stop()` clears the flag to forbid, and `check_playback_state` would read it
+as a `GaplessTransition` off a stopped player. A *gapless* preload only means
+anything behind a source that is still there to be followed, so the empty-deck
+test is the invariant itself, not a patch on one path.
+
 ### State machine — `src/player/state.rs`
 
 ```rust

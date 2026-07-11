@@ -507,3 +507,41 @@ async fn a_deferred_clear_takes_a_late_preload_with_it() -> std::io::Result<()> 
     );
     Ok(())
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_preload_that_outlives_the_stop_it_raced_is_refused() -> std::io::Result<()> {
+    // The mirror of the test above, and the half the deferred clear's flag-drop
+    // cannot reach on its own: neither `stop()` nor `DeferredOp::ClearAll` bumps
+    // the deck epoch, so a preload that snapshots the epoch, decodes slowly, and
+    // only reaches the deck lock *after* the stop has emptied the decks would pass
+    // its own re-check, append behind nothing, and re-set `gapless_pending` over
+    // decks the stop just cleared — leaving `check_playback_state` to report a
+    // `GaplessTransition` out of a stopped player. `preload_gapless` refuses an
+    // empty active deck for exactly that reason.
+    //
+    // Calling the preload after `stop()` has returned *is* that race: the epoch it
+    // reads is the post-bump one either way, which is precisely why the epoch
+    // cannot be the thing that catches this.
+    let fx = fixture()?;
+    let (rodio, mut mix) = player();
+    start(&rodio, &fx.track_a);
+    let _ = pull(&mut mix, WARMUP_FRAMES);
+
+    // `stop()` clears a live deck, so it blocks on the audio thread — us.
+    let stopper = Arc::clone(&rodio);
+    drive_until(&mut mix, move || stopper.stop());
+
+    rodio.preload_gapless(Some(&fx.track_b), TrackReplayGain::default());
+
+    assert!(
+        !rodio.is_gapless_preloaded(),
+        "a preload behind an emptied deck must be refused, not staged"
+    );
+    assert_eq!(
+        rodio.check_playback_state(),
+        melodia::player::rodio_backend::PlaybackCheck::EndOfStream,
+        "and the decks must stay empty — a source staged here would read as a \
+         `GaplessTransition` off a stopped player"
+    );
+    Ok(())
+}

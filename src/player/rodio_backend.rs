@@ -285,7 +285,10 @@ impl RodioPlayer {
                 // enters after the epoch bump snapshots the *new* epoch, passes
                 // its own re-check and can still stage a source behind the deck
                 // this is about to throw away — clearing the flag here is what
-                // stops it outliving the source it describes.
+                // stops it outliving the source it describes. A preload that
+                // instead lands *after* this clear is refused by
+                // `preload_gapless`'s empty-deck gate, which is what keeps the
+                // flag from being resurrected over decks we just emptied.
                 DeferredOp::ClearAll => {
                     for deck in &guard.decks {
                         deck.player.clear();
@@ -618,7 +621,8 @@ impl RodioPlayer {
     /// is false — and clearing it eagerly would only be a way to start lying
     /// about a source the deferred clear has not removed yet. A preload that
     /// still slips in behind us stages a real source, and the deferred
-    /// [`DeferredOp::ClearAll`] drops it and the flag together.
+    /// [`DeferredOp::ClearAll`] drops it and the flag together; one that slips in
+    /// behind *the clear* finds an empty deck and is refused outright.
     pub fn stop_with_fade(&self, fade_ms: u64) {
         if !self.can_fade_out(fade_ms) {
             self.stop();
@@ -765,6 +769,26 @@ impl RodioPlayer {
                             return;
                         }
                         let deck = decks.active();
+                        // A *gapless* preload only means anything staged behind a
+                        // source that is still there to be followed. The epoch
+                        // can't say that on its own: `stop()` and the deferred
+                        // [`DeferredOp::ClearAll`] empty the decks *without*
+                        // bumping it, so a preload whose decode outran either one
+                        // would pass the re-check above, append behind nothing,
+                        // and set `gapless_pending` over a deck the stop already
+                        // cleared — the exact state `stop()` clears the flag to
+                        // forbid. `check_playback_state` would then read that as a
+                        // `GaplessTransition` off an empty deck.
+                        //
+                        // Never rejects a legitimate stage: the only caller that
+                        // passes a path is the monitor's late preload, which runs
+                        // solely in its `Playing` branch, and `play_media` appends
+                        // under this same lock, so the deck is never transiently
+                        // empty behind it.
+                        if deck.player.empty() {
+                            log::debug!("Dropping gapless preload of {path}: nothing left to follow");
+                            return;
+                        }
                         let source = EqSource::new(
                             decoded,
                             self.eq.clone(),
