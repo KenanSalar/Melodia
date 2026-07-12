@@ -2,7 +2,8 @@
 name = "Melodia"
 version = "0.8.0"
 edition = "2024"
-rust-version = "1.96"
+# Kept in lockstep with `rust-toolchain.toml` and `clippy.toml`'s `msrv`.
+rust-version = "1.97"
 description = "Cross-platform desktop music player (Slint + Rust)"
 license = "AGPL-3.0-or-later"
 repository = "https://github.com/KenanSalar/Melodia"
@@ -296,6 +297,11 @@ tokio = { version = "1.52.3", features = ["macros", "rt-multi-thread", "test-uti
 unused = { level = "warn", priority = -1 }
 unsafe_code = "deny"
 rust_2024_compatibility = { level = "warn", priority = -1 }
+# Deliberately NOT enabling 1.97's `dead_code_pub_in_binary`. It is unusable for
+# this crate's lib+bin split: a test harness is itself an executable, so under
+# `--all-targets` the lint treats every `pub` item reachable only from `main.rs`
+# as dead and flags the whole library API (670 hits — 0 on `--lib`, 0 on
+# `--bin`, all of them from the test targets).
 
 [lints.clippy]
 correctness = { level = "deny", priority = -1 }

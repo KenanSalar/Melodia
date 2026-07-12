@@ -8,6 +8,7 @@ use tempfile::TempDir;
 use super::*;
 use crate::database::queries::scan::ExistingTrackSummary;
 use crate::error::AppError;
+use crate::media::AUDIO_EXTENSIONS;
 use crate::media::artwork::CoverCache;
 
 fn create_test_files(dir: &Path, names: &[&str]) -> Result<(), AppError> {
@@ -71,6 +72,24 @@ fn collects_all_supported_extensions() -> Result<(), AppError> {
     create_test_files(tmp.path(), &names)?;
     let files = collect_media_files(tmp.path());
     assert_eq!(files.len(), AUDIO_EXTENSIONS.len());
+    Ok(())
+}
+
+/// The extension match is case-folded, so a library ripped on a system that
+/// wrote `.FLAC` is collected, and a `.JPG` cover is still not.
+#[test]
+fn extension_match_is_case_insensitive() -> Result<(), AppError> {
+    let tmp = TempDir::new()?;
+    create_test_files(
+        tmp.path(),
+        &["Track.FLAC", "Song.Mp3", "clip.AAC", "cover.JPG", "notes.TXT"],
+    )?;
+    let mut names: Vec<String> = collect_media_files(tmp.path())
+        .iter()
+        .filter_map(|p| p.file_name()?.to_str().map(str::to_owned))
+        .collect();
+    names.sort();
+    assert_eq!(names, ["Song.Mp3", "Track.FLAC", "clip.AAC"]);
     Ok(())
 }
 
@@ -172,7 +191,7 @@ fn scan_files_parallel_calls_progress_callback() -> Result<(), AppError> {
 fn existing_for(path: &Path) -> Result<HashMap<String, ExistingTrackSummary>, AppError> {
     let meta = std::fs::metadata(path)?;
     let size = i64::try_from(meta.len()).unwrap_or(i64::MAX);
-    let mtime = crate::media::metadata::extract_date_modified(path);
+    let mtime = crate::media::metadata::date_modified_from_metadata(&meta);
     let mut map = HashMap::new();
     map.insert(
         path.to_string_lossy().into_owned(),

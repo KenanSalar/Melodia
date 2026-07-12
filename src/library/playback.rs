@@ -57,26 +57,49 @@ pub fn player_play(ctx: &PlaybackContext) -> Result<(), AppError> {
     Ok(())
 }
 
+/// Fade length for a transport pause or stop, or `0` when the setting is off.
+///
+/// The three transport commands route through here — `player_pause`,
+/// `player_toggle_play_pause` and `player_stop` — so everything that reaches them
+/// fades: the UI buttons, the keyboard shortcuts, the OS media keys, the tray, and
+/// the sleep timer's expiry (which ends on `player_pause`, and where a fade-out is
+/// exactly what you want).
+///
+/// What must *not* fade is what the machine does for its own reasons, and those
+/// paths pass `0` directly rather than calling this: `stop_end_of_queue` (nothing
+/// left to fade), and the `Pause` that next/previous append to restore a paused
+/// deck (fading there would make the incoming track audible on arrival).
+fn transport_fade_ms(ctx: &PlaybackContext) -> u64 {
+    if ctx.rodio.crossfade_settings().fade_on_pause {
+        crate::player::crossfade::PAUSE_FADE_MS
+    } else {
+        0
+    }
+}
+
 pub fn player_pause(ctx: &PlaybackContext) -> Result<(), AppError> {
-    ctx.emit_and_execute(crate::player::state::PlayerState::build_pause_actions);
+    let fade_ms = transport_fade_ms(ctx);
+    ctx.emit_and_execute(move |s| s.build_pause_actions(fade_ms));
     Ok(())
 }
 
-/// User-initiated stop — preserves `current_track` and `position_ms` so `player_play` can resume
-/// from where the user stopped. Contrast with `stop_end_of_queue` which resets position to 0.
 /// Toggle play/pause based on current playback status. Branching happens inside
 /// the state lock so two near-simultaneous toggles (e.g. UI + media-key) can't
 /// race past each other.
 pub fn player_toggle_play_pause(ctx: &PlaybackContext) -> Result<(), AppError> {
-    ctx.emit_and_execute(|s| match s.status {
-        PlaybackStatus::Playing | PlaybackStatus::Loading => s.build_pause_actions(),
+    let fade_ms = transport_fade_ms(ctx);
+    ctx.emit_and_execute(move |s| match s.status {
+        PlaybackStatus::Playing | PlaybackStatus::Loading => s.build_pause_actions(fade_ms),
         PlaybackStatus::Paused | PlaybackStatus::Stopped => s.build_play_actions(),
     });
     Ok(())
 }
 
+/// User-initiated stop — preserves `current_track` and `position_ms` so `player_play` can resume
+/// from where the user stopped. Contrast with `stop_end_of_queue` which resets position to 0.
 pub fn player_stop(ctx: &PlaybackContext) -> Result<(), AppError> {
-    ctx.emit_and_execute(crate::player::state::PlayerState::build_stop_actions);
+    let fade_ms = transport_fade_ms(ctx);
+    ctx.emit_and_execute(move |s| s.build_stop_actions(fade_ms));
     Ok(())
 }
 
@@ -229,6 +252,38 @@ pub fn player_set_replaygain_preamp(ctx: &PlaybackContext, preamp_db: f32) {
 /// Toggle the static peak-based clip guard on the live player.
 pub fn player_set_replaygain_prevent_clipping(ctx: &PlaybackContext, on: bool) {
     ctx.rodio.set_replaygain_prevent_clipping(on);
+}
+
+// --- Crossfade -------------------------------------------------------------
+//
+// Crossfade settings live on a lock-free shared cell like the EQ and ReplayGain
+// ones, so these setters are synchronous and infallible. Unlike those two the
+// cell is read by the *control* layer (this backend and the playback monitor),
+// never by the audio thread — the per-deck ramp it drives lives in `FadeShared`.
+
+/// Toggle crossfade on the live player.
+pub fn player_set_crossfade_enabled(ctx: &PlaybackContext, enabled: bool) {
+    ctx.rodio.set_crossfade_enabled(enabled);
+}
+
+/// Set the crossfade length (ms) on the live player. Clamped by the backend.
+pub fn player_set_crossfade_duration_ms(ctx: &PlaybackContext, ms: u32) {
+    ctx.rodio.set_crossfade_duration_ms(ms);
+}
+
+/// Also crossfade on a manual track change (next / previous / picking a track).
+pub fn player_set_crossfade_manual(ctx: &PlaybackContext, on: bool) {
+    ctx.rodio.set_crossfade_manual(on);
+}
+
+/// Leave same-album transitions gapless.
+pub fn player_set_crossfade_skip_same_album(ctx: &PlaybackContext, on: bool) {
+    ctx.rodio.set_crossfade_skip_same_album(on);
+}
+
+/// Fade out on pause / user stop, and fade back in on resume.
+pub fn player_set_crossfade_fade_on_pause(ctx: &PlaybackContext, on: bool) {
+    ctx.rodio.set_crossfade_fade_on_pause(on);
 }
 
 #[cfg(test)]

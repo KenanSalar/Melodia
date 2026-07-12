@@ -35,13 +35,15 @@
 - `Peekable::next_if_map` (1.94) — conditional consume-and-transform without a separate peek/next pair
 - `<[T]>::array_windows::<N>()` (1.94) yields const-length `&[T; N]` windows — the compiler knows the width (good for frame-based DSP); `slice::as_array::<N>()` (1.93) is the safe `&[T]` → `Option<&[T; N]>` conversion
 
-## Language Idioms (Rust 1.88–1.96)
+## Language Idioms (Rust 1.88–1.97)
 
 - Let chains (1.88, edition 2024 only): `if let Some(a) = x && a.ready() { … }` — flatten nested `if let` towers instead of stacking indentation
 - `if let` guards on match arms (1.95): `Some(x) if let Ok(v) = parse(x) => …` — pattern-match inside a guard; guard patterns don't count toward exhaustiveness
 - `cfg_select!` (1.95) — compile-time `match` over cfgs, in std; replaces the `cfg-if` crate for platform-split code paths
 - `assert_matches!` / `debug_assert_matches!` (1.96) — prefer over `assert!(matches!(…))` in tests: supports `if` guards and prints the non-matching value on failure
 - New `Copy` range types exist in `core::range` (1.96), but `0..1` syntax still produces the legacy `Iterator` ranges — nothing to adopt yet
+- Bit-manipulation methods on every integer (1.97) — replace hand-rolled shift/mask idioms. Note the two families return **different things**: `isolate_highest_one()` / `isolate_lowest_one()` return the *value* with only that bit set (`0b1010_0100` → `0b1000_0000` / `0b0000_0100`), while `highest_one()` / `lowest_one()` return the bit *index* as `Option<u32>` (`Some(7)` / `Some(2)`; `None` for zero). `bit_width()` gives the bits needed to represent the value (`164` → `8`). The `NonZero<{int}>` equivalents return a plain `u32` rather than an `Option`, since the zero case is gone — prefer them when the value is already `NonZero`
+- `clippy::manual_assert_eq` (1.97) — `assert!(a == b)` is now a lint; use `assert_eq!(a, b)`. If the type has no `PartialEq` (so the `assert!` was comparing `mem::discriminant`s or similar), don't just wrap the discriminants in `assert_eq!` — their `Debug` prints an opaque `Discriminant(..)` on both sides of a failure. Compare a cheap injective projection instead (a token/`as_str`), which prints something readable
 
 ## Compile-Time Optimizations (release profile)
 
@@ -55,7 +57,9 @@ strip = "debuginfo"   # Drop DWARF but keep symbols — end-user panic backtrace
 
 - Set `target-cpu=native` via `RUSTFLAGS` for platform-specific SIMD optimizations
 - Since Rust 1.90, `rust-lld` is the default linker on `x86_64-unknown-linux-gnu` — dev links are fast out of the box (opt out with `-C linker-features=-lld`); `mold` is at best a marginal further gain, not a recommendation
-- `--remap-path-scope` (stable since 1.95) controls which local paths get remapped out of the binary; Cargo's `trim-paths` profile key was still nightly-only as of 1.93 — verify before recommending
+- `--remap-path-scope` (stable since 1.95) controls which local paths get remapped out of the binary; Cargo's `trim-paths` profile key is **still nightly-only as of 1.97** (verified — a `profile.*.trim-paths` key fails with ``feature `trim-paths` is required``). Don't recommend it on stable
+- **v0 symbol mangling is the default since 1.97** — nothing to configure. It pairs with the `strip = "debuginfo"` choice above (kept so end-user panic backtraces stay readable): v0 encodes generic parameters, so those frames are now unambiguous instead of collapsing distinct monomorphizations onto one legacy-mangled name
+- Cargo's `build.warnings` config (stable 1.97) can deny warnings globally. **Don't** — it applies to *every* cargo command, so a stray unused variable during a `cargo run` iteration becomes a hard error. Keep `-D warnings` on the CI clippy invocation, where the gate belongs
 
 ## Profiling
 

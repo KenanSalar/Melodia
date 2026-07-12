@@ -144,6 +144,35 @@ export global Settings {
     in-out property <bool> resume-on-startup: false;
     callback resume-on-startup-changed(bool);
 
+    // Crossfade cluster in `ui/views/settings/playback-section.slint`. The four
+    // toggles bind two-way and each `*-changed` callback applies to the live
+    // Rodio backend synchronously via `library::playback::player_set_crossfade_*`
+    // before persisting through `library::settings::set_crossfade_*` on the
+    // blocking pool — the same two-phase shape as the equalizer / ReplayGain
+    // callbacks. Seeded at startup from `settings.crossfade` in
+    // `src/ui/playback_settings.rs::install_playback_settings`.
+    //
+    // The duration is carried in **seconds** here (the slider's natural unit);
+    // Rust converts to the milliseconds the backend and `settings.json` use.
+    // `crossfade-min-secs` / `crossfade-max-secs` are `in` and seeded from
+    // `player::crossfade::{MIN,MAX}_CROSSFADE_MS`, so the range lives in exactly
+    // one place. `-changed` fires live during a drag (apply only, no disk write);
+    // `-committed` fires on release and persists — mirroring `set-volume` /
+    // `commit-volume`.
+    in-out property <bool> crossfade-enabled: false;
+    callback crossfade-enabled-changed(bool);
+    in-out property <float> crossfade-duration-secs: 2.0;
+    in property <float> crossfade-min-secs;
+    in property <float> crossfade-max-secs;
+    callback crossfade-duration-changed(float /* seconds */);
+    callback crossfade-duration-committed(float /* seconds */);
+    in-out property <bool> crossfade-skip-same-album: true;
+    callback crossfade-skip-same-album-changed(bool);
+    in-out property <bool> crossfade-manual: false;
+    callback crossfade-manual-changed(bool);
+    in-out property <bool> crossfade-fade-on-pause: false;
+    callback crossfade-fade-on-pause-changed(bool);
+
     // Watch for file changes (file-watcher) toggle. ToggleSwitch in
     // `ui/views/settings/file-watching-section.slint` binds two-way; the
     // `toggled(bool)` event fires `watch-for-file-changes-changed`. Rust

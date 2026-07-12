@@ -443,6 +443,40 @@ msgstr "Riprendi all'avvio"
 msgid "Automatically resume the last track from where you left off when the app starts"
 msgstr "Riprende automaticamente l'ultimo brano dal punto in cui l'hai lasciato all'avvio dell'app"
 
+msgid "Crossfade"
+msgstr "Dissolvenza incrociata"
+
+msgid "Overlap the end of one track with the start of the next"
+msgstr "Sovrappone la fine di un brano all'inizio del successivo"
+
+msgid "Crossfade duration"
+msgstr "Durata della dissolvenza"
+
+msgid "How long the two tracks overlap"
+msgstr "Per quanto tempo i due brani si sovrappongono"
+
+# Unit suffix for the crossfade-duration readout, e.g. "2 s".
+msgid "{} s"
+msgstr "{} s"
+
+msgid "Except on the same album"
+msgstr "Tranne all'interno dello stesso album"
+
+msgid "Keep tracks from one album gapless, so continuous mixes stay seamless"
+msgstr "Mantiene senza pause i brani di uno stesso album, così i mix continui restano fluidi"
+
+msgid "Also on manual track change"
+msgstr "Anche al cambio manuale di brano"
+
+msgid "Crossfade when you skip to the next or previous track, not only at the end of one"
+msgstr "Applica la dissolvenza anche quando passi al brano successivo o precedente, non solo a fine brano"
+
+msgid "Fade out on pause"
+msgstr "Dissolvenza in pausa"
+
+msgid "Fade the music out when pausing or stopping, and back in when resuming"
+msgstr "Abbassa gradualmente la musica in pausa o all'arresto e la riporta su alla ripresa"
+
 # ---- File Watching section --------------------------------------------------
 
 msgid "File Watching"

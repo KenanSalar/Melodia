@@ -24,9 +24,9 @@
 //! is enabled.
 
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, AtomicU8, AtomicU32, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU8, AtomicU32, Ordering};
 
-use super::dsp::db_to_linear;
+use super::dsp::{Generation, db_to_linear};
 
 /// Preamp (extra gain applied on top of the tag value) range, in decibels.
 /// Symmetric — unlike the EQ preamp — because the `ReplayGain` preamp is a
@@ -167,24 +167,22 @@ pub fn is_unity_gain(lin: f32) -> bool {
 }
 
 /// Lock-free `ReplayGain` master state shared between the control layer (writer)
-/// and the audio thread (reader). Every mutation bumps `generation` so the
+/// and the audio thread (reader). Every mutation bumps the [`Generation`] so the
 /// [`EqSource`](super::equalizer::EqSource) reading it knows to recompute its
-/// baked gain — the same generation-poll pattern as
+/// baked gain — the same poll pattern as
 /// [`EqShared`](super::equalizer::EqShared).
 pub struct ReplayGainShared {
     enabled: AtomicBool,
     mode: AtomicU8,
     preamp_bits: AtomicU32,
     prevent_clipping: AtomicBool,
-    generation: AtomicU64,
+    generation: Generation,
 }
 
 impl ReplayGainShared {
     /// Build shared state seeded inert (disabled, Album, 0 dB, prevent-clipping
-    /// on). `generation` starts at 1 so a freshly constructed [`EqSource`]
-    /// (which seeds its cached RG generation to a different value) always
-    /// rebuilds before its first sample. `AppState::init` applies the persisted
-    /// values before playback via the setters below.
+    /// on). `AppState::init` applies the persisted values before playback via the
+    /// setters below.
     #[must_use]
     pub fn new() -> Arc<Self> {
         Arc::new(Self {
@@ -192,15 +190,13 @@ impl ReplayGainShared {
             mode: AtomicU8::new(RgMode::Album.to_u8()),
             preamp_bits: AtomicU32::new(RG_DEFAULT_PREAMP_DB.to_bits()),
             prevent_clipping: AtomicBool::new(true),
-            generation: AtomicU64::new(1),
+            generation: Generation::new(),
         })
     }
 
-    /// Publish a state change. `Release` pairs with the reader's `Acquire` load
-    /// of `generation` so the preceding writes are visible once the reader
-    /// observes the new generation.
+    /// Publish a state change — see [`Generation::bump`].
     fn bump(&self) {
-        self.generation.fetch_add(1, Ordering::Release);
+        self.generation.bump();
     }
 
     pub fn set_enabled(&self, on: bool) {
@@ -245,7 +241,7 @@ impl ReplayGainShared {
 
     #[must_use]
     pub(crate) fn generation(&self) -> u64 {
-        self.generation.load(Ordering::Acquire)
+        self.generation.get()
     }
 }
 

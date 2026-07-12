@@ -445,6 +445,40 @@ msgstr "Başlangıçta Devam Et"
 msgid "Automatically resume the last track from where you left off when the app starts"
 msgstr "Uygulama başladığında son parçayı kaldığın yerden otomatik olarak devam ettir"
 
+msgid "Crossfade"
+msgstr "Çapraz Geçiş"
+
+msgid "Overlap the end of one track with the start of the next"
+msgstr "Bir parçanın sonunu sonraki parçanın başıyla üst üste bindir"
+
+msgid "Crossfade duration"
+msgstr "Çapraz geçiş süresi"
+
+msgid "How long the two tracks overlap"
+msgstr "İki parçanın ne kadar süre üst üste bineceği"
+
+# Unit suffix for the crossfade-duration readout, e.g. "2 s".
+msgid "{} s"
+msgstr "{} sn"
+
+msgid "Except on the same album"
+msgstr "Aynı albüm içinde hariç"
+
+msgid "Keep tracks from one album gapless, so continuous mixes stay seamless"
+msgstr "Aynı albümdeki parçaları boşluksuz çal, böylece kesintisiz mixler akıcı kalır"
+
+msgid "Also on manual track change"
+msgstr "Elle parça değiştirirken de"
+
+msgid "Crossfade when you skip to the next or previous track, not only at the end of one"
+msgstr "Yalnızca parça sonunda değil, sonraki veya önceki parçaya geçerken de çapraz geçiş uygula"
+
+msgid "Fade out on pause"
+msgstr "Duraklatırken kıs"
+
+msgid "Fade the music out when pausing or stopping, and back in when resuming"
+msgstr "Duraklatırken veya durdururken müziği kıs, devam ederken yeniden aç"
+
 # ---- File Watching section --------------------------------------------------
 
 msgid "File Watching"

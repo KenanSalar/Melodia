@@ -443,6 +443,40 @@ msgstr "Beim Start fortsetzen"
 msgid "Automatically resume the last track from where you left off when the app starts"
 msgstr "Letzten Titel automatisch an der Stelle fortsetzen, an der du aufgehört hast"
 
+msgid "Crossfade"
+msgstr "Überblenden"
+
+msgid "Overlap the end of one track with the start of the next"
+msgstr "Das Ende eines Titels mit dem Anfang des nächsten überlappen"
+
+msgid "Crossfade duration"
+msgstr "Überblenddauer"
+
+msgid "How long the two tracks overlap"
+msgstr "Wie lange sich die beiden Titel überlappen"
+
+# Unit suffix for the crossfade-duration readout, e.g. "2 s".
+msgid "{} s"
+msgstr "{} s"
+
+msgid "Except on the same album"
+msgstr "Außer innerhalb eines Albums"
+
+msgid "Keep tracks from one album gapless, so continuous mixes stay seamless"
+msgstr "Titel eines Albums lückenlos abspielen, damit durchgehende Mixe nahtlos bleiben"
+
+msgid "Also on manual track change"
+msgstr "Auch beim manuellen Titelwechsel"
+
+msgid "Crossfade when you skip to the next or previous track, not only at the end of one"
+msgstr "Auch überblenden, wenn du zum nächsten oder vorherigen Titel springst, nicht nur am Titelende"
+
+msgid "Fade out on pause"
+msgstr "Beim Pausieren ausblenden"
+
+msgid "Fade the music out when pausing or stopping, and back in when resuming"
+msgstr "Die Musik beim Pausieren oder Stoppen aus- und beim Fortsetzen wieder einblenden"
+
 # ---- File Watching section --------------------------------------------------
 
 msgid "File Watching"

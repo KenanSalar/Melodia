@@ -1,12 +1,16 @@
 import { Settings } from "../../settings.slint";
+import { Theme } from "../../theme.slint";
 import { SectionCard } from "../../components/settings/section-card.slint";
 import { SectionDivider } from "../../components/settings/section-divider.slint";
 import { SettingRow } from "../../components/settings/setting-row.slint";
 import { SettingRowStacked } from "../../components/settings/setting-row-stacked.slint";
 import { ToggleSwitch } from "../../components/settings/toggle-switch.slint";
 import { ChipGroup } from "../../components/settings/chip-group.slint";
+import { SliderTrack } from "../../components/slider-track.slint";
 
-// Playback section: 3 rows mirroring Tauri's `PlaybackSection.tsx`.
+// Playback section: 3 rows mirroring Tauri's `PlaybackSection.tsx`, plus the
+// crossfade cluster (a toggle, a duration slider, and three sub-toggles that
+// only mount while crossfade is on).
 // Search visibility — see header comment in `language-section.slint`.
 export component PlaybackSection inherits Rectangle {
     background: transparent;
@@ -19,6 +23,18 @@ export component PlaybackSection inherits Rectangle {
         return root.query == ""
             || Settings.matches(@tr("Playback"), root.query)
             || Settings.matches(label + " " + desc, root.query);
+    }
+
+    // Seconds ↔ 0..1 track fraction. The bounds are `in` properties on the
+    // `Settings` global, seeded from the player's crossfade constants, so this
+    // formula is the only place the mapping exists.
+    pure function secs-to-frac(s: float) -> float {
+        return (s - Settings.crossfade-min-secs)
+            / (Settings.crossfade-max-secs - Settings.crossfade-min-secs);
+    }
+    pure function frac-to-secs(f: float) -> float {
+        return Settings.crossfade-min-secs
+            + f * (Settings.crossfade-max-secs - Settings.crossfade-min-secs);
     }
 
     // Pre-computed visibility per row — used both for the inner
@@ -35,8 +51,17 @@ export component PlaybackSection inherits Rectangle {
     property <bool> show-resume: row-visible(
         @tr("Resume on Startup"),
         @tr("Automatically resume the last track from where you left off when the app starts"));
+    // The whole crossfade cluster searches as one unit — matching any of its
+    // labels reveals the toggle plus whichever sub-rows are currently mounted.
+    property <bool> show-crossfade: row-visible(
+        @tr("Crossfade"),
+        @tr("Overlap the end of one track with the start of the next"));
 
-    out property <bool> has-matches: show-gapless || show-anim || show-resume;
+    // The sub-rows only exist while crossfade is on. `if` (not `visible`) —
+    // a hidden child still claims layout space in Slint (slint#7377).
+    property <bool> show-crossfade-details: root.show-crossfade && Settings.crossfade-enabled;
+
+    out property <bool> has-matches: show-gapless || show-anim || show-resume || show-crossfade;
 
     // VerticalLayout wrapper so the Rectangle's preferred-height tracks
     // the SectionCard's natural height (Rectangle sizes from a layout
@@ -58,7 +83,80 @@ export component PlaybackSection inherits Rectangle {
         // Dividers separate consecutive visible rows. Each one is gated on
         // both the previous AND the next row being visible so we don't
         // get stranded dividers above/below a hidden row.
-        if root.show-gapless && (root.show-anim || root.show-resume): SectionDivider {}
+        if root.show-gapless && (root.show-crossfade || root.show-anim || root.show-resume): SectionDivider {}
+
+        if root.show-crossfade: SettingRow {
+            icon: "swap_horiz";
+            label: @tr("Crossfade");
+            description: @tr("Overlap the end of one track with the start of the next");
+            ToggleSwitch {
+                checked <=> Settings.crossfade-enabled;
+                toggled(v) => { Settings.crossfade-enabled-changed(v); }
+            }
+        }
+
+        if root.show-crossfade-details: SettingRowStacked {
+            icon: "history";
+            label: @tr("Crossfade duration");
+            description: @tr("How long the two tracks overlap");
+            HorizontalLayout {
+                spacing: Theme.pad-md;
+                alignment: stretch;
+                VerticalLayout {
+                    alignment: center;
+                    horizontal-stretch: 1;
+                    SliderTrack {
+                        value: root.secs-to-frac(Settings.crossfade-duration-secs);
+                        // Must match `SectionCard`'s fill or the track seam shows.
+                        seam-mask-color: Theme.surface0;
+                        // Live during the drag, persist on release.
+                        changed(v) => { Settings.crossfade-duration-changed(root.frac-to-secs(v)); }
+                        committed(v) => { Settings.crossfade-duration-committed(root.frac-to-secs(v)); }
+                    }
+                }
+                VerticalLayout {
+                    alignment: center;
+                    Text {
+                        text: @tr("{} s", round(Settings.crossfade-duration-secs * 10) / 10);
+                        color: Theme.subtext0;
+                        font-size: Theme.font-size-sm;
+                        min-width: 48px;
+                        horizontal-alignment: right;
+                    }
+                }
+            }
+        }
+
+        if root.show-crossfade-details: SettingRow {
+            icon: "album";
+            label: @tr("Except on the same album");
+            description: @tr("Keep tracks from one album gapless, so continuous mixes stay seamless");
+            ToggleSwitch {
+                checked <=> Settings.crossfade-skip-same-album;
+                toggled(v) => { Settings.crossfade-skip-same-album-changed(v); }
+            }
+        }
+
+        if root.show-crossfade-details: SettingRow {
+            icon: "queue_play_next";
+            label: @tr("Also on manual track change");
+            description: @tr("Crossfade when you skip to the next or previous track, not only at the end of one");
+            ToggleSwitch {
+                checked <=> Settings.crossfade-manual;
+                toggled(v) => { Settings.crossfade-manual-changed(v); }
+            }
+        }
+
+        if root.show-crossfade-details: SettingRow {
+            icon: "pause";
+            label: @tr("Fade out on pause");
+            description: @tr("Fade the music out when pausing or stopping, and back in when resuming");
+            ToggleSwitch {
+                checked <=> Settings.crossfade-fade-on-pause;
+                toggled(v) => { Settings.crossfade-fade-on-pause-changed(v); }
+            }
+        }
+        if root.show-crossfade && (root.show-anim || root.show-resume): SectionDivider {}
 
         if root.show-anim: SettingRowStacked {
             icon: "animation";

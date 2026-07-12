@@ -19,6 +19,13 @@
 //!   kick `library::playback::player_play(&state)` at launch. Default is
 //!   `false` (`PlaybackFlags::default()`); first launch lands with the
 //!   toggle off.
+//! - Seeds and wires the **crossfade** cluster (enable, duration, same-album
+//!   exception, manual-change, fade-on-pause). Each callback applies to the
+//!   live Rodio backend synchronously through `library::playback::player_set_crossfade_*`
+//!   and then persists via `library::settings::set_crossfade_*` on the blocking
+//!   pool — the two-phase shape the equalizer and `ReplayGain` callbacks use.
+//!   The duration slider splits `changed` (live, no disk) from `committed`
+//!   (drag release, persists), like `set-volume` / `commit-volume`.
 //!
 //! The default (`true`) is enforced in two places that already agree:
 //! `PlaybackFlags::default()` (`src/services/settings.rs`) and
@@ -29,8 +36,10 @@
 use slint::ComponentHandle;
 
 use crate::library;
+use crate::player::crossfade;
 use crate::services::settings;
 use crate::state::AppState;
+use crate::ui::settings_bind::toggle_binding;
 use crate::{AppWindow, Settings};
 
 /// Stable mapping between the on-disk token and the Slint chip index.
@@ -56,6 +65,15 @@ fn play_button_anim_token_from_idx(idx: i32) -> &'static str {
 pub fn install_playback_settings(ui: &AppWindow, state: &AppState) {
     // Seed the toggles from disk. Missing / unreadable file leaves the
     // Slint defaults in place, matching the first-launch path.
+    // The slider's range comes straight from the player's constants, so the
+    // dB-style "one source of truth" rule holds for seconds too. Seeded before
+    // the disk read so the value below always lands inside a valid track.
+    {
+        let g = ui.global::<Settings>();
+        g.set_crossfade_min_secs(crossfade::crossfade_ms_to_secs(crossfade::MIN_CROSSFADE_MS));
+        g.set_crossfade_max_secs(crossfade::crossfade_ms_to_secs(crossfade::MAX_CROSSFADE_MS));
+    }
+
     if let Ok(s) = settings::read_settings(&state.paths) {
         let g = ui.global::<Settings>();
         g.set_gapless_playback(s.playback.gapless_playback);
@@ -63,6 +81,14 @@ pub fn install_playback_settings(ui: &AppWindow, state: &AppState) {
             &s.play_button_animation,
         ));
         g.set_resume_on_startup(s.playback.resume_on_startup);
+
+        g.set_crossfade_enabled(s.crossfade.crossfade_enabled);
+        g.set_crossfade_duration_secs(crossfade::crossfade_ms_to_secs(
+            s.crossfade.crossfade_duration_ms,
+        ));
+        g.set_crossfade_skip_same_album(s.crossfade.crossfade_skip_same_album);
+        g.set_crossfade_manual(s.crossfade.crossfade_manual);
+        g.set_crossfade_fade_on_pause(s.crossfade.crossfade_fade_on_pause);
     }
 
     let state_clone = state.clone();
@@ -107,4 +133,60 @@ pub fn install_playback_settings(ui: &AppWindow, state: &AppState) {
                 library::settings::set_resume_on_startup(s, on)
             });
         });
+
+    install_crossfade_callbacks(ui, state);
+}
+
+/// The five crossfade callbacks. The four toggles are the shared
+/// apply-then-persist shape ([`toggle_binding`]); only the duration slider needs
+/// its own pair, because it splits the live drag (apply, no disk) from the
+/// release (persist), like `set-volume` / `commit-volume`.
+fn install_crossfade_callbacks(ui: &AppWindow, state: &AppState) {
+    let g = ui.global::<Settings>();
+
+    g.on_crossfade_enabled_changed(toggle_binding(
+        state,
+        "persist crossfade_enabled",
+        library::playback::player_set_crossfade_enabled,
+        library::settings::set_crossfade_enabled,
+    ));
+    g.on_crossfade_skip_same_album_changed(toggle_binding(
+        state,
+        "persist crossfade_skip_same_album",
+        library::playback::player_set_crossfade_skip_same_album,
+        library::settings::set_crossfade_skip_same_album,
+    ));
+    g.on_crossfade_manual_changed(toggle_binding(
+        state,
+        "persist crossfade_manual",
+        library::playback::player_set_crossfade_manual,
+        library::settings::set_crossfade_manual,
+    ));
+    g.on_crossfade_fade_on_pause_changed(toggle_binding(
+        state,
+        "persist crossfade_fade_on_pause",
+        library::playback::player_set_crossfade_fade_on_pause,
+        library::settings::set_crossfade_fade_on_pause,
+    ));
+
+    // Live drag: apply to the backend and write the (clamped) value back so the
+    // "N s" readout tracks the thumb. No disk write — see `commit` below.
+    let state_drag = state.clone();
+    let weak = ui.as_weak();
+    g.on_crossfade_duration_changed(move |secs| {
+        let ms = crossfade::secs_to_crossfade_ms(secs);
+        library::playback::player_set_crossfade_duration_ms(&state_drag.playback_ctx(), ms);
+        if let Some(ui) = weak.upgrade() {
+            ui.global::<Settings>()
+                .set_crossfade_duration_secs(crossfade::crossfade_ms_to_secs(ms));
+        }
+    });
+
+    let state_commit = state.clone();
+    g.on_crossfade_duration_committed(move |secs| {
+        let ms = crossfade::secs_to_crossfade_ms(secs);
+        state_commit.persist_blocking("persist crossfade_duration_ms", move |s| {
+            library::settings::set_crossfade_duration_ms(s, ms)
+        });
+    });
 }
