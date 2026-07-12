@@ -163,7 +163,7 @@ rayon = "1.12"
 blake3 = "1.8.5"
 natord = "1.0.9"
 image = { version = "0.25.10", default-features = false, features = ["jpeg", "png", "webp"] }
-lru = "0.18.0"
+lru = "0.18.1"
 
 # Material 3 dynamic colour generation (Material You). Default `std` feature
 # is what we want; `image`, `serde`, `libm` are off by default and we don't
@@ -198,7 +198,7 @@ souvlaki = "0.8.3"
 rfd = "0.17.2"
 # Hands a path to the OS default handler — used by the track-row
 # "Open Containing Folder" context-menu action.
-open = "5.3.6"
+open = "5.4.0"
 
 # Auto-updater. `minisign-verify` is zero-dep and verify-only (Ed25519
 # signature verification of the artifact + global signature of the trusted
@@ -221,7 +221,7 @@ futures-util = { version = "0.3.32", default-features = false, features = ["std"
 # Tokio 1.x runtime". Phase 13 (always-on-top) will use `zbus::blocking::*`
 # from inside `tokio::task::spawn_blocking`, which doesn't need either
 # executor flavour.
-zbus = "5.16.0"
+zbus = "5.17.0"
 
 # Linux system tray (StatusNotifierItem over D-Bus — pure-Rust, no GTK).
 # `default-features = false` drops ksni's default `tokio` feature: it turns
