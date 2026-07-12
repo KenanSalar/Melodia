@@ -36,12 +36,15 @@ pub fn collect_media_files(dir: &Path) -> Vec<PathBuf> {
         }
 
         let path = entry.path();
-        let ext = match path.extension().and_then(|e| e.to_str()) {
-            Some(e) => e.to_lowercase(),
-            None => continue,
+        let Some(ext) = path.extension().and_then(|e| e.to_str()) else {
+            continue;
         };
 
-        if AUDIO_EXTENSIONS.contains(&ext.as_str()) {
+        // Case-folded compare rather than `ext.to_lowercase()` + `contains`: this
+        // runs for *every* file in the tree (cover art, .cue, .log, .m3u, …), not
+        // just the audio ones, so lowercasing here allocated a String per walked
+        // file to answer a question that never needed one.
+        if AUDIO_EXTENSIONS.iter().any(|a| ext.eq_ignore_ascii_case(a)) {
             files.push(path.to_path_buf());
         }
     }

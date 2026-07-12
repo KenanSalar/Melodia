@@ -4,9 +4,47 @@
 //! rodio's [`Player`] *sequences* its sources — `append` schedules a source to
 //! start when the previous one ends — so two tracks can never overlap on one
 //! [`Player`]. Overlapping them needs two, summed by the shared device mixer.
-//! An idle deck costs nothing: `Player::new` builds its queue with
-//! `keep_alive_if_empty`, so it emits silence and stays attached rather than
-//! detaching.
+//! `Player::new` builds each deck's queue with `keep_alive_if_empty`, so an idle
+//! one emits silence and stays attached rather than detaching.
+//!
+//! # What an idle deck actually costs
+//!
+//! Not nothing, and the difference matters enough to write down. An empty
+//! `keep_alive_if_empty` queue synthesizes its silence in 512-sample chunks, and
+//! each refill (rodio's `queue::SourcesQueueOutput::go_next`) does a
+//! `Box::new(Zero::new_samples(..))` plus a mutex acquisition — **a heap
+//! allocation on the real-time audio callback thread**, on the order of a couple
+//! of hundred per second at 44.1 kHz. The mixer also pulls one extra source per
+//! output sample. Before the second deck existed this never fired during
+//! playback, because the one deck always had a live source; now one deck is idle
+//! essentially always.
+//!
+//! It is accepted rather than fixed, for three reasons:
+//!
+//! - It is the *same* small allocation freed and remade every time, so it stays
+//!   in glibc's lock-free per-thread tcache and never reaches the arena lock that
+//!   `mallopt(M_ARENA_MAX, 2)` makes shared with the UI and tokio threads. It does
+//!   not measure.
+//! - It cannot simply be switched off: `set_keep_alive_if_empty(false)` makes the
+//!   mixer *permanently detach* a deck once it drains, which is the exact property
+//!   this design depends on.
+//! - Connecting decks on demand instead would reintroduce the stale-`get_pos()`
+//!   problem [`Decks::cut_to`] documents, and break the "exactly two [`FadeShared`]
+//!   cells exist, one per deck" invariant a gapless successor relies on.
+//!
+//! One related hazard, noted here so it isn't rediscovered from scratch: rodio
+//! drops an exhausted source **on the audio thread** too, and that drop frees the
+//! decoder's 64 KiB `BufReader` — too big for the tcache, so it *does* take the
+//! arena lock — and closes the file. A landing fade-out ends its source
+//! ([`EqSource`] returns `None`), so a crossfade frees the outgoing decoder while
+//! the incoming deck is still filling the same callback. This predates the second
+//! deck (gapless and end-of-stream already did it), which is why it is documented
+//! rather than engineered around: the fix costs a bounded hand-off channel and a
+//! `ManuallyDrop` in the hot source struct, and should only be spent once someone
+//! can actually reproduce a click at a track transition — the way to try is to
+//! play while a full library scan is running.
+//!
+//! [`EqSource`]: super::equalizer::EqSource
 //!
 //! Nothing lands on a deck except through the three primitives that take a
 //! *builder* rather than a ready-made source — [`Decks::cut_to`],

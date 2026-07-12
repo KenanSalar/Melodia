@@ -8,6 +8,8 @@ use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 
+use rayon::prelude::*;
+
 use crate::database::queries;
 use crate::entities::folder;
 use crate::error::AppError;
@@ -271,11 +273,18 @@ pub async fn scan_folder_internal(
     // size or mtime no longer matches the stored row. Byte-unchanged files
     // keep their existing DB metadata untouched — Lofty is skipped for
     // them entirely, which is the bulk of a typical startup rescan.
+    //
+    // The filter runs on Rayon (like `scan_files_parallel` does downstream):
+    // *every* file in the library reaches it and almost none proceed past it, so
+    // its per-file `stat` is what a rescan-with-nothing-changed — the common case
+    // — actually spends its time on, and a serial syscall loop is the worst shape
+    // for it on a cold cache or a network mount. Rayon's `collect` preserves the
+    // sequential order, so `to_scan` stays byte-for-byte what it was before.
     let folder_path_owned = folder_path.to_path_buf();
     let (files, to_scan) = tokio::task::spawn_blocking(move || {
         let files = collect_media_files(&folder_path_owned);
         let to_scan: Vec<PathBuf> = files
-            .iter()
+            .par_iter()
             .filter(|path| !track_is_current(path, &existing_summaries))
             .cloned()
             .collect();

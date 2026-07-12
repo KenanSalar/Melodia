@@ -116,7 +116,11 @@ pub fn extract_metadata(
         .as_ref()
         .map_or(0, |m| i64::try_from(m.len()).unwrap_or(i64::MAX));
 
-    let date_modified = extract_date_modified(path);
+    // Derived from the `Metadata` already in hand — `extract_date_modified` would
+    // `stat` the file a second time. This is exactly what
+    // `date_modified_from_metadata` exists for; `scanner::track_is_current` is the
+    // other caller that already holds one.
+    let date_modified = fs_meta.as_ref().ok().and_then(date_modified_from_metadata);
 
     let file_hash = compute_file_hash(path)?;
 
