@@ -1,6 +1,6 @@
 pub mod actions;
 pub mod crossfade;
-pub mod decks;
+pub(crate) mod decks;
 pub(crate) mod dsp;
 pub mod equalizer;
 pub mod event_sink;

@@ -542,13 +542,13 @@ impl PlayerState {
 /// Everything a start action needs about the track the state now points at.
 /// Produced by [`begin_track`], which is the single writer of the
 /// "`current_track` + duration + position" trio.
-pub struct TrackStart {
-    pub file_path: String,
-    pub replaygain: TrackReplayGain,
-    pub volume: f64,
-    pub speed: f64,
+struct TrackStart {
+    file_path: String,
+    replaygain: TrackReplayGain,
+    volume: f64,
+    speed: f64,
     /// The resume position, clamped and normalised — `None` means "from the top".
-    pub start_position_ms: Option<u64>,
+    start_position_ms: Option<u64>,
 }
 
 /// Point `state` at `track`: status Playing, duration and position from the

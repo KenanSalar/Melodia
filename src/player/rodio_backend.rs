@@ -249,12 +249,8 @@ impl RodioPlayer {
         });
     }
 
-    /// Is the active deck actually playing something we could fade out of?
-    ///
-    /// A paused deck is still held for control but is never pulled, so its ramp
-    /// can't advance — there is nothing audible to fade, and a fade armed on it
-    /// would just hold silence until a deferred op cleaned it up. An empty deck
-    /// has nothing to fade at all.
+    /// Is the active deck actually playing something we could fade out of? See
+    /// [`Deck::busy`] for why a paused or empty deck can't carry a ramp.
     fn active_deck_busy(&self) -> bool {
         self.lock_decks().active().busy()
     }
@@ -664,9 +660,9 @@ impl RodioPlayer {
             }
         };
 
-        // Re-check the epoch, build the source off the deck's own ramp cell and
-        // append — all under one lock, so the cell the source carries always
-        // belongs to the deck it lands on.
+        // Re-check the epoch, then stage — all under one lock. `Deck::stage` takes
+        // the builder rather than a source, so the ramp cell the source carries is
+        // the one belonging to the deck it lands on, as with the other two appends.
         let decks = self.lock_decks();
         if self.deck_epoch.load(Ordering::Acquire) != epoch {
             log::debug!("Dropping stale gapless preload of {path}");
@@ -690,7 +686,7 @@ impl RodioPlayer {
             log::debug!("Dropping gapless preload of {path}: nothing left to follow");
             return;
         }
-        deck.player.append(self.build_source(decoded, baked_rg, deck));
+        deck.stage(|d| self.build_source(decoded, baked_rg, d));
         self.gapless_pending.store(true, Ordering::Release);
     }
 

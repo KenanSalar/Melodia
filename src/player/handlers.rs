@@ -285,11 +285,15 @@ pub fn spawn_playback_monitor(tracker: &TaskTracker, ctx: PlaybackMonitorContext
                         crossfading: rodio_player.is_crossfading(),
                         xf: rodio_player.crossfade_settings(),
                     };
+                    let decided = {
+                        let mut state = lock_state(&player_state);
+                        evaluate_playing_tick(&mut state, backend)
+                    };
                     let Some(PlayingTick {
                         tick,
                         late_preload,
                         crossfade: crossfade_now,
-                    }) = evaluate_playing_tick(&mut lock_state(&player_state), backend)
+                    }) = decided
                     else {
                         continue;
                     };

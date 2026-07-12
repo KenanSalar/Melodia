@@ -8,13 +8,14 @@
 //! `keep_alive_if_empty`, so it emits silence and stays attached rather than
 //! detaching.
 //!
-//! Every mutation here happens through [`Decks`], which the controller only ever
-//! reaches through the decks mutex. That is deliberate: [`Decks::crossfade_to`]
-//! takes a *builder* rather than a ready-made source, so the [`FadeShared`] cell
-//! a source carries can only have come from the deck it is appended to. Reading
-//! the deck earlier and appending later would let a concurrent op flip `active`
-//! in between and hand the source the *other* deck's ramp — which may be armed
-//! to fade out and end itself.
+//! Nothing lands on a deck except through the three primitives that take a
+//! *builder* rather than a ready-made source — [`Decks::cut_to`],
+//! [`Decks::crossfade_to`] and [`Deck::stage`]. Each hands the closure the very
+//! deck it is about to append to, so the [`FadeShared`] cell a source carries can
+//! only have come from that deck. Reading a deck earlier and appending later
+//! would let a concurrent op flip `active` in between and hand the source the
+//! *other* deck's ramp — which may be armed to fade out and end itself. The
+//! controller reaches all three only through the decks mutex.
 
 use std::sync::Arc;
 use std::sync::{Mutex, MutexGuard};
@@ -51,6 +52,20 @@ impl Deck {
         self.player.set_speed(narrow_audio_param(speed));
         self.player.append(source);
         self.player.play();
+    }
+
+    /// Queue a source *behind* whatever this deck is already playing — the
+    /// gapless stage. rodio sequences a `Player`'s sources, so the staged one
+    /// starts the instant the current one drains.
+    ///
+    /// Takes a builder for the same reason [`Decks::crossfade_to`] does: it is
+    /// the only way the ramp cell the source carries is guaranteed to be the one
+    /// belonging to the deck it lands on.
+    pub fn stage<S>(&self, build: impl FnOnce(&Self) -> S)
+    where
+        S: Source + Send + 'static,
+    {
+        self.player.append(build(self));
     }
 
     /// Drop everything on this deck and disarm its ramp.

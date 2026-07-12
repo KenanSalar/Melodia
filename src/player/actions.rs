@@ -192,10 +192,20 @@ impl StartMode {
         matches!(self, Self::Fresh)
     }
 
-    fn what(self) -> &'static str {
+    /// The verb for the decode-failure log: "Failed to *play* …" / "Failed to
+    /// *crossfade into* …".
+    fn verb(self) -> &'static str {
         match self {
             Self::Fresh => "play",
             Self::Crossfade => "crossfade into",
+        }
+    }
+
+    /// The transition the skip happened at, for the vanished-file log.
+    fn at(self) -> &'static str {
+        match self {
+            Self::Fresh => "playback",
+            Self::Crossfade => "crossfade",
         }
     }
 }
@@ -216,7 +226,7 @@ fn start_or_skip<B: PlayerBackend>(
     start: impl FnOnce() -> Result<(), AppError>,
 ) {
     if !Path::new(file_path).exists() {
-        log::warn!("Skipping vanished file ({}): {file_path}", mode.what());
+        log::warn!("Skipping vanished file at {}: {file_path}", mode.at());
         if mode.stops_on_failure() {
             rodio_player.stop();
         }
@@ -224,7 +234,7 @@ fn start_or_skip<B: PlayerBackend>(
         return;
     }
     if let Err(e) = start() {
-        log::error!("Failed to {} {file_path}: {e}", mode.what());
+        log::error!("Failed to {} {file_path}: {e}", mode.verb());
         crate::services::toast::notify(
             crate::services::toast::ToastKind::PlaybackFailed,
             toast_track_name(file_path),

@@ -80,9 +80,9 @@ struct Decks { decks: [Deck; 2], active: usize }
 
 The decks and every primitive that touches them live in `decks.rs`;
 `rodio_backend.rs` is the controller that drives them under the one mutex.
-`Deck` owns `start` / `reset` / `busy`, and `Decks` owns `active` / `idle` /
-`clear_all` / `pause_all` / `play_all` / `set_volume_all` / `set_speed_all`, plus
-the two composite transitions:
+`Deck` owns `start` / `stage` / `reset` / `busy`, and `Decks` owns `active` /
+`idle` / `clear_all` / `pause_all` / `play_all` / `set_volume_all` /
+`set_speed_all`, plus the two composite transitions:
 
 - **`cut_to(volume, speed, build)`** — clear *both* decks (so a crossfade in
   flight can't leave its outgoing track playing behind the new one) and start on
@@ -91,11 +91,12 @@ the two composite transitions:
   ramping up from silence, arm the active deck's ramp down (self-ending), and flip
   `active`.
 
-Both take a **builder**, not a source: they hand the closure the deck they are
-about to append to, which is what makes "the ramp cell a source carries belongs to
-the deck it lands on" a property of the signature rather than of a comment.
-`RodioPlayer::build_source` is that closure everywhere (`play_media`,
-`begin_crossfade`, `preload_gapless`).
+Those two and `Deck::stage` (the gapless queue-behind) are the **only** three ways
+a source reaches a deck, and all three take a **builder**, not a source: they hand
+the closure the deck they are about to append to, which is what makes "the ramp
+cell a source carries belongs to the deck it lands on" a property of the signature
+rather than of a comment. `RodioPlayer::build_source` is that closure everywhere
+(`play_media`, `begin_crossfade`, `preload_gapless`).
 
 `active` holds the currently-playing track. `preload_gapless`, `query_position`
 and `check_playback_state` read **only** the active deck, so their behaviour is
