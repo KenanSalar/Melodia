@@ -306,14 +306,18 @@ async fn handle_created(
             return Ok(false);
         };
         let file_name = file_name_owned(path);
-        let date_modified = extract_date_modified(path);
+        // `meta` was extracted from this very path, so its `date_modified` is the
+        // mtime already in hand — re-deriving it would `stat` the file again and
+        // could disagree with the row's own size/hash if the file is touched in
+        // between. `extract_date_modified` is for callers with no metadata (the
+        // rename path below).
         let repointed = queries::scan::update_track_location(
             tx,
             existing_id,
             &path_str,
             &file_name,
             folder_id,
-            date_modified.as_deref(),
+            meta.date_modified.as_deref(),
         )
         .await?;
         if repointed {

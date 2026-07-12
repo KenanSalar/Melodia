@@ -6,7 +6,7 @@ use crate::entities::browse::{BrowseFile, BrowseFolder, BrowseResult};
 use crate::entities::folder::Folder;
 use crate::entities::track::TrackListRow;
 use crate::error::AppError;
-use crate::media::AUDIO_EXTENSIONS;
+use crate::media::is_audio_extension;
 use crate::state::AppState;
 
 /// Result of the blocking filesystem scan, returned from `spawn_blocking`.
@@ -72,7 +72,7 @@ pub async fn browse_directory(
             } else if file_type.is_file() {
                 let entry_path = entry.path();
                 if let Some(ext) = entry_path.extension().and_then(|e| e.to_str())
-                    && AUDIO_EXTENSIONS.contains(&ext.to_lowercase().as_str())
+                    && is_audio_extension(ext)
                 {
                     audio_paths.push(entry_path);
                 }

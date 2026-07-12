@@ -5,7 +5,7 @@ use rayon::prelude::*;
 use serde::Serialize;
 use walkdir::WalkDir;
 
-use super::AUDIO_EXTENSIONS;
+use super::is_audio_extension;
 use crate::database::queries::scan::ExistingTrackSummary;
 use crate::media::metadata::{extract_metadata, ExtractedMetadata};
 
@@ -40,11 +40,7 @@ pub fn collect_media_files(dir: &Path) -> Vec<PathBuf> {
             continue;
         };
 
-        // Case-folded compare rather than `ext.to_lowercase()` + `contains`: this
-        // runs for *every* file in the tree (cover art, .cue, .log, .m3u, …), not
-        // just the audio ones, so lowercasing here allocated a String per walked
-        // file to answer a question that never needed one.
-        if AUDIO_EXTENSIONS.iter().any(|a| ext.eq_ignore_ascii_case(a)) {
+        if is_audio_extension(ext) {
             files.push(path.to_path_buf());
         }
     }

@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use tempfile::TempDir;
 
 use crate::entities::browse::BrowseFolder;
-use crate::media::AUDIO_EXTENSIONS;
+use crate::media::is_audio_extension;
 
 use super::*;
 
@@ -45,7 +45,7 @@ fn scan_directory(path: &std::path::Path) -> Result<DirScanResult, AppError> {
         } else if file_type.is_file() {
             let entry_path = entry.path();
             if let Some(ext) = entry_path.extension().and_then(|e| e.to_str())
-                && AUDIO_EXTENSIONS.contains(&ext.to_lowercase().as_str())
+                && is_audio_extension(ext)
             {
                 audio_paths.push(entry_path);
             }
