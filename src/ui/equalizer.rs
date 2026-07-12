@@ -21,6 +21,7 @@ use crate::library;
 use crate::player::equalizer;
 use crate::services::settings;
 use crate::state::AppState;
+use crate::ui::settings_bind::toggle_binding;
 use crate::{AppWindow, Equalizer};
 
 pub fn install_equalizer(ui: &AppWindow, state: &AppState) {
@@ -70,15 +71,12 @@ pub fn install_equalizer(ui: &AppWindow, state: &AppState) {
     eq.set_max_preamp(equalizer::MAX_PREAMP_DB);
 
     // set-enabled — live toggle + persist.
-    {
-        let state = state.clone();
-        eq.on_set_enabled(move |on| {
-            library::playback::player_set_eq_enabled(&state.playback_ctx(), on);
-            state.persist_blocking("persist eq_enabled", move |s| {
-                library::settings::set_eq_enabled(s, on)
-            });
-        });
-    }
+    eq.on_set_enabled(toggle_binding(
+        state,
+        "persist eq_enabled",
+        library::playback::player_set_eq_enabled,
+        library::settings::set_eq_enabled,
+    ));
 
     // set-band — live band change during a drag: update the model (so the
     // slider tracks), apply to the player, and flip the dropdown to "Custom".

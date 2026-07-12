@@ -3,6 +3,7 @@ use std::path::Path;
 
 use crate::database::DbPool;
 use crate::database::queries;
+use crate::error::AppError;
 
 use super::event_sink::PlayerSinks;
 use super::replaygain::TrackReplayGain;
@@ -38,29 +39,23 @@ pub fn execute_actions<B: PlayerBackend>(
                 start_position_ms,
                 replaygain,
             } => {
-                if !Path::new(&file_path).exists() {
-                    log::warn!("Skipping vanished file: {file_path}");
-                    rodio_player.stop();
-                    enqueue_auto_skip(&mut pending, player_state, sinks);
-                    continue;
-                }
-                if let Err(e) =
-                    rodio_player.play_media(&file_path, volume, speed, start_position_ms, replaygain)
-                {
-                    log::error!("Failed to play {file_path}: {e}");
-                    // Surface the failure — the music silently stopping is
-                    // otherwise invisible. (The vanished-file branch above stays
-                    // silent: it auto-recovers by skipping to the next track.)
-                    let name = Path::new(&file_path)
-                        .file_name()
-                        .map_or_else(|| file_path.clone(), |n| n.to_string_lossy().into_owned());
-                    crate::services::toast::notify(
-                        crate::services::toast::ToastKind::PlaybackFailed,
-                        name,
-                    );
-                    rodio_player.stop();
-                    enqueue_auto_skip(&mut pending, player_state, sinks);
-                }
+                start_or_skip(
+                    &mut pending,
+                    rodio_player,
+                    player_state,
+                    sinks,
+                    &file_path,
+                    StartMode::Fresh,
+                    || {
+                        rodio_player.play_media(
+                            &file_path,
+                            volume,
+                            speed,
+                            start_position_ms,
+                            replaygain,
+                        )
+                    },
+                );
             }
             PlayerAction::BeginCrossfade {
                 file_path,
@@ -69,35 +64,19 @@ pub fn execute_actions<B: PlayerBackend>(
                 volume,
                 speed,
             } => {
-                // Same pre-flight + auto-skip contract as `PlayMedia`, with one
-                // difference: no `rodio_player.stop()`. The outgoing track is
-                // still audible on the other deck, and the `play_media` that
-                // `enqueue_auto_skip` produces takes over from it cleanly either
-                // way — hard-cutting (it clears both decks) or, with
-                // `crossfade_manual` on, fading out of it. Stopping here would
-                // only insert a gap of silence ahead of that.
-                if !Path::new(&file_path).exists() {
-                    log::warn!("Skipping vanished file at crossfade: {file_path}");
-                    enqueue_auto_skip(&mut pending, player_state, sinks);
-                    continue;
-                }
-                if let Err(e) =
-                    rodio_player.begin_crossfade(&file_path, replaygain, fade_ms, volume, speed)
-                {
-                    log::error!("Failed to crossfade into {file_path}: {e}");
-                    let name = Path::new(&file_path)
-                        .file_name()
-                        .map_or_else(|| file_path.clone(), |n| n.to_string_lossy().into_owned());
-                    crate::services::toast::notify(
-                        crate::services::toast::ToastKind::PlaybackFailed,
-                        name,
-                    );
-                    // `build_crossfade_actions` already advanced onto this track,
-                    // so `advance_skip` correctly lands on the one after it. In
-                    // `RepeatMode::One` that also steps off the repeated track —
-                    // rare enough (the file vanished mid-play) to accept.
-                    enqueue_auto_skip(&mut pending, player_state, sinks);
-                }
+                // `build_crossfade_actions` already advanced onto this track, so
+                // the `advance_skip` a failure triggers correctly lands on the one
+                // after it. In `RepeatMode::One` that also steps off the repeated
+                // track — rare enough (the file vanished mid-play) to accept.
+                start_or_skip(
+                    &mut pending,
+                    rodio_player,
+                    player_state,
+                    sinks,
+                    &file_path,
+                    StartMode::Crossfade,
+                    || rodio_player.begin_crossfade(&file_path, replaygain, fade_ms, volume, speed),
+                );
             }
             PlayerAction::Resume => rodio_player.resume(),
             PlayerAction::Pause { fade_ms } => rodio_player.pause_with_fade(fade_ms),
@@ -189,6 +168,80 @@ pub fn emit_and_execute<B, F>(
     let _exec = player_state.lock_exec();
     let actions = with_state_emit(player_state, sinks, f);
     execute_actions(actions, rodio_player, db, player_state, sinks);
+}
+
+/// How a track is being started — the only thing that differs between the
+/// [`PlayerAction::PlayMedia`] and [`PlayerAction::BeginCrossfade`] arms of
+/// [`execute_actions`].
+#[derive(Copy, Clone)]
+enum StartMode {
+    /// Takes over the decks outright. A failure leaves them half-set, so stop
+    /// before skipping on.
+    Fresh,
+    /// Overlaps the track still playing on the other deck. Deliberately does
+    /// **not** stop on failure: the outgoing track is still audible, and the
+    /// `play_media` that the auto-skip produces takes over from it cleanly either
+    /// way — hard-cutting (which clears both decks) or, with `crossfade_manual`
+    /// on, fading out of it. Stopping here would only insert a gap of silence
+    /// ahead of that.
+    Crossfade,
+}
+
+impl StartMode {
+    fn stops_on_failure(self) -> bool {
+        matches!(self, Self::Fresh)
+    }
+
+    fn what(self) -> &'static str {
+        match self {
+            Self::Fresh => "play",
+            Self::Crossfade => "crossfade into",
+        }
+    }
+}
+
+/// Start a track on the backend, auto-skipping past it if it can't be played.
+///
+/// Shared by the two start actions. A file that has vanished is skipped
+/// *silently* — the auto-skip recovers on its own, and the usual cause is a
+/// stale double-click inside the watcher's debounce window. A decode failure is
+/// louder: the music silently stopping is otherwise invisible, so it toasts.
+fn start_or_skip<B: PlayerBackend>(
+    pending: &mut VecDeque<PlayerAction>,
+    rodio_player: &B,
+    player_state: &PlayerStateHandle,
+    sinks: &PlayerSinks,
+    file_path: &str,
+    mode: StartMode,
+    start: impl FnOnce() -> Result<(), AppError>,
+) {
+    if !Path::new(file_path).exists() {
+        log::warn!("Skipping vanished file ({}): {file_path}", mode.what());
+        if mode.stops_on_failure() {
+            rodio_player.stop();
+        }
+        enqueue_auto_skip(pending, player_state, sinks);
+        return;
+    }
+    if let Err(e) = start() {
+        log::error!("Failed to {} {file_path}: {e}", mode.what());
+        crate::services::toast::notify(
+            crate::services::toast::ToastKind::PlaybackFailed,
+            toast_track_name(file_path),
+        );
+        if mode.stops_on_failure() {
+            rodio_player.stop();
+        }
+        enqueue_auto_skip(pending, player_state, sinks);
+    }
+}
+
+/// The file name alone, for the failure toast — the full path is too long to
+/// read in a toast. Falls back to the whole path when there is no file name.
+fn toast_track_name(file_path: &str) -> String {
+    Path::new(file_path)
+        .file_name()
+        .map_or_else(|| file_path.to_owned(), |n| n.to_string_lossy().into_owned())
 }
 
 /// Advance past a track that turned out to be unplayable (file missing or

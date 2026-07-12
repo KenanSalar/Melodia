@@ -43,6 +43,7 @@
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicU8, Ordering};
 
+use super::dsp::Generation;
 use crate::entities::track::TrackSummary;
 
 /// Shortest crossfade the user can select.
@@ -184,7 +185,7 @@ pub struct FadeCmd {
 ///
 /// [`EqSource`]: super::equalizer::EqSource
 pub struct FadeShared {
-    generation: AtomicU64,
+    generation: Generation,
     kind: AtomicU8,
     /// `f32` bit pattern, or `f32::NAN` for [`FadeCmd::start`] = `None`.
     start_bits: AtomicU32,
@@ -199,7 +200,7 @@ impl FadeShared {
     #[must_use]
     pub fn idle() -> Arc<Self> {
         Arc::new(Self {
-            generation: AtomicU64::new(1),
+            generation: Generation::new(),
             kind: AtomicU8::new(KIND_IDLE),
             start_bits: AtomicU32::new(f32::NAN.to_bits()),
             target_bits: AtomicU32::new(1.0_f32.to_bits()),
@@ -208,11 +209,9 @@ impl FadeShared {
         })
     }
 
-    /// Publish a state change. `Release` pairs with the reader's `Acquire` load
-    /// of `generation`, so the field writes above it are visible once the
-    /// reader observes the new generation.
+    /// Publish a state change — see [`Generation::bump`].
     fn bump(&self) {
-        self.generation.fetch_add(1, Ordering::Release);
+        self.generation.bump();
     }
 
     /// Arm a ramp. Replaces any ramp already in flight on this deck.
@@ -235,7 +234,7 @@ impl FadeShared {
 
     #[must_use]
     pub fn generation(&self) -> u64 {
-        self.generation.load(Ordering::Acquire)
+        self.generation.get()
     }
 
     /// Read the current command. `None` when the cell is idle.

@@ -39,6 +39,7 @@ use crate::library;
 use crate::player::crossfade;
 use crate::services::settings;
 use crate::state::AppState;
+use crate::ui::settings_bind::toggle_binding;
 use crate::{AppWindow, Settings};
 
 /// Stable mapping between the on-disk token and the Slint chip index.
@@ -136,19 +137,37 @@ pub fn install_playback_settings(ui: &AppWindow, state: &AppState) {
     install_crossfade_callbacks(ui, state);
 }
 
-/// The five crossfade callbacks. Split out of [`install_playback_settings`] to
-/// keep that function under clippy's cognitive-complexity budget; every one is
-/// the same two-phase apply-then-persist shape.
+/// The five crossfade callbacks. The four toggles are the shared
+/// apply-then-persist shape ([`toggle_binding`]); only the duration slider needs
+/// its own pair, because it splits the live drag (apply, no disk) from the
+/// release (persist), like `set-volume` / `commit-volume`.
 fn install_crossfade_callbacks(ui: &AppWindow, state: &AppState) {
     let g = ui.global::<Settings>();
 
-    let state_enabled = state.clone();
-    g.on_crossfade_enabled_changed(move |on| {
-        library::playback::player_set_crossfade_enabled(&state_enabled.playback_ctx(), on);
-        state_enabled.persist_blocking("persist crossfade_enabled", move |s| {
-            library::settings::set_crossfade_enabled(s, on)
-        });
-    });
+    g.on_crossfade_enabled_changed(toggle_binding(
+        state,
+        "persist crossfade_enabled",
+        library::playback::player_set_crossfade_enabled,
+        library::settings::set_crossfade_enabled,
+    ));
+    g.on_crossfade_skip_same_album_changed(toggle_binding(
+        state,
+        "persist crossfade_skip_same_album",
+        library::playback::player_set_crossfade_skip_same_album,
+        library::settings::set_crossfade_skip_same_album,
+    ));
+    g.on_crossfade_manual_changed(toggle_binding(
+        state,
+        "persist crossfade_manual",
+        library::playback::player_set_crossfade_manual,
+        library::settings::set_crossfade_manual,
+    ));
+    g.on_crossfade_fade_on_pause_changed(toggle_binding(
+        state,
+        "persist crossfade_fade_on_pause",
+        library::playback::player_set_crossfade_fade_on_pause,
+        library::settings::set_crossfade_fade_on_pause,
+    ));
 
     // Live drag: apply to the backend and write the (clamped) value back so the
     // "N s" readout tracks the thumb. No disk write — see `commit` below.
@@ -168,30 +187,6 @@ fn install_crossfade_callbacks(ui: &AppWindow, state: &AppState) {
         let ms = crossfade::secs_to_crossfade_ms(secs);
         state_commit.persist_blocking("persist crossfade_duration_ms", move |s| {
             library::settings::set_crossfade_duration_ms(s, ms)
-        });
-    });
-
-    let state_album = state.clone();
-    g.on_crossfade_skip_same_album_changed(move |on| {
-        library::playback::player_set_crossfade_skip_same_album(&state_album.playback_ctx(), on);
-        state_album.persist_blocking("persist crossfade_skip_same_album", move |s| {
-            library::settings::set_crossfade_skip_same_album(s, on)
-        });
-    });
-
-    let state_manual = state.clone();
-    g.on_crossfade_manual_changed(move |on| {
-        library::playback::player_set_crossfade_manual(&state_manual.playback_ctx(), on);
-        state_manual.persist_blocking("persist crossfade_manual", move |s| {
-            library::settings::set_crossfade_manual(s, on)
-        });
-    });
-
-    let state_pause = state.clone();
-    g.on_crossfade_fade_on_pause_changed(move |on| {
-        library::playback::player_set_crossfade_fade_on_pause(&state_pause.playback_ctx(), on);
-        state_pause.persist_blocking("persist crossfade_fade_on_pause", move |s| {
-            library::settings::set_crossfade_fade_on_pause(s, on)
         });
     });
 }

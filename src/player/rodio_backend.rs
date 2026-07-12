@@ -10,7 +10,8 @@ use rodio::{Decoder, Player};
 use crate::config::Paths;
 use crate::error::AppError;
 
-use super::crossfade::{self, CrossfadeShared, FadeShared};
+use super::crossfade::{self, CrossfadeShared};
+use super::decks::{Deck, Decks, DeferredOp, lock_decks};
 use super::equalizer::{self, EqShared, EqSource};
 use super::replaygain::{ReplayGainShared, RgMode, TrackReplayGain};
 use super::types::PersistableQueue;
@@ -159,46 +160,6 @@ pub fn media_to_output_ms(media_ms: u64, speed: f64) -> u64 {
     }
 }
 
-/// One rodio "voice": an independent [`Player`] on the shared device mixer,
-/// plus the crossfade ramp cell every source appended to it reads.
-struct Deck {
-    player: Player,
-    fade: Arc<FadeShared>,
-}
-
-/// The two decks and which of them holds the currently-playing track.
-///
-/// rodio's `Player` sequences its sources, so overlapping two tracks needs two
-/// `Player`s summed by the mixer. An idle deck costs nothing: `Player::new`
-/// builds its queue with `keep_alive_if_empty`, so it emits silence and stays
-/// attached rather than detaching from the mixer.
-struct Decks {
-    decks: [Deck; 2],
-    active: usize,
-}
-
-impl Decks {
-    fn active(&self) -> &Deck {
-        &self.decks[self.active]
-    }
-
-    /// Index of the deck *not* holding the current track. During a crossfade
-    /// this is the outgoing track, still fading out.
-    fn idle_index(&self) -> usize {
-        1 - self.active
-    }
-}
-
-/// Work a fade defers until its ramp has landed. Runs on a tokio task guarded
-/// by [`RodioPlayer::deck_epoch`], so any newer control op cancels it.
-#[derive(Copy, Clone)]
-enum DeferredOp {
-    /// Pause both decks (a faded pause).
-    PauseAll,
-    /// Clear both decks (a faded stop).
-    ClearAll,
-}
-
 pub struct RodioPlayer {
     // Mutex groups multi-op sequences (clear → set_volume → append → play → seek)
     // atomically; rodio's Player is already Send+Sync on its own. `Arc` so a
@@ -234,13 +195,8 @@ pub struct RodioPlayer {
 
 impl RodioPlayer {
     pub fn new(mixer: &Mixer, runtime: tokio::runtime::Handle) -> Self {
-        let decks = std::array::from_fn(|_| {
-            let player = Player::connect_new(mixer);
-            player.pause();
-            Deck { player, fade: FadeShared::idle() }
-        });
         Self {
-            decks: Arc::new(std::sync::Mutex::new(Decks { decks, active: 0 })),
+            decks: Arc::new(std::sync::Mutex::new(Decks::connect(mixer))),
             gapless_pending: Arc::new(AtomicBool::new(false)),
             crossfade_armed: AtomicBool::new(false),
             deck_epoch: Arc::new(AtomicU64::new(0)),
@@ -268,18 +224,14 @@ impl RodioPlayer {
         let gapless_pending = self.gapless_pending.clone();
         self.runtime.spawn(async move {
             tokio::time::sleep(Duration::from_millis(delay_ms)).await;
-            let guard = lock_decks_arc(&decks);
+            let guard = lock_decks(&decks);
             if deck_epoch.load(Ordering::Acquire) != epoch {
                 return;
             }
             match op {
                 // A pause keeps the deck contents — a staged gapless source
                 // included — so it must leave `gapless_pending` alone.
-                DeferredOp::PauseAll => {
-                    for deck in &guard.decks {
-                        deck.player.pause();
-                    }
-                }
+                DeferredOp::PauseAll => guard.pause_all(),
                 // The deferred half of `stop()`, so it drops the flag exactly as
                 // `stop()` does: *after* the decks, never before. A preload that
                 // enters after the epoch bump snapshots the *new* epoch, passes
@@ -290,10 +242,7 @@ impl RodioPlayer {
                 // `preload_gapless`'s empty-deck gate, which is what keeps the
                 // flag from being resurrected over decks we just emptied.
                 DeferredOp::ClearAll => {
-                    for deck in &guard.decks {
-                        deck.player.clear();
-                        deck.fade.reset();
-                    }
+                    guard.clear_all();
                     gapless_pending.store(false, Ordering::Release);
                 }
             }
@@ -307,9 +256,7 @@ impl RodioPlayer {
     /// would just hold silence until a deferred op cleaned it up. An empty deck
     /// has nothing to fade at all.
     fn active_deck_busy(&self) -> bool {
-        let decks = self.lock_decks();
-        let deck = decks.active();
-        !deck.player.empty() && !deck.player.is_paused()
+        self.lock_decks().active().busy()
     }
 
     /// Can a fade-out ramp actually run on the active deck right now? The shared
@@ -381,53 +328,19 @@ impl RodioPlayer {
         // landed during the decode above is visible here. Downgrading to a hard
         // cut is always safe — it clears both decks, staged source included.
         let fade_ms = if self.gapless_pending.load(Ordering::Acquire) { 0 } else { fade_ms };
-        // A hard cut reuses the *live* active deck. That matters: rodio only
-        // zeroes a Player's tracked position when `clear()` actually removes a
-        // source, so starting on a long-idle deck would leave `get_pos()`
-        // reporting the previous track's position for a few milliseconds.
-        //
-        // `target` and the fade cell are read under the *same* lock the append
-        // below uses. Reading them earlier would let a concurrent op flip
-        // `decks.active` underneath us and hand the source the other deck's ramp.
-        // `EqSource::new` does no I/O — it only reads the decoder's channel count
-        // and sample rate — so building it here costs the lock nothing.
-        let target = if fade_ms > 0 { decks.idle_index() } else { decks.active };
-        let source = EqSource::new(
-            decoded,
-            self.eq.clone(),
-            self.rg.clone(),
-            baked_rg,
-            decks.decks[target].fade.clone(),
-        );
+        // The source is built by a closure the deck primitives hand the *target*
+        // deck, under the one lock they then append through — so the ramp cell it
+        // carries always belongs to the deck it lands on. `EqSource::new` does no
+        // I/O (it only reads the decoder's channel count and sample rate), so
+        // building it there costs the lock nothing.
+        let build = |deck: &Deck| self.build_source(decoded, baked_rg, deck);
         if fade_ms > 0 {
-            // Manual crossfade. The target deck may still hold a previous
-            // crossfade's outgoing track — clear it before reusing it.
-            decks.decks[target].player.clear();
-            decks.decks[target].fade.arm(Some(0.0), 1.0, fade_ms, false);
-            decks.decks[target].player.set_volume(narrow_audio_param(volume));
-            decks.decks[target].player.set_speed(narrow_audio_param(speed));
-            decks.decks[target].player.append(source);
-            decks.decks[target].player.play();
-            // Fade the outgoing deck from wherever it is — it may itself be
-            // mid-fade-in — so the two gains still sum to at most unity.
-            decks.active().fade.arm(None, 0.0, fade_ms, true);
+            decks.crossfade_to(fade_ms, volume, speed, build);
             self.crossfade_armed.store(true, Ordering::Release);
         } else {
-            // Hard cut: clear *both* decks, so a crossfade in flight can't leave
-            // its outgoing track playing behind the new one. `target` is the
-            // active deck unless a fade was downgraded above; either way both
-            // are cleared first, so appending to it is safe.
+            decks.cut_to(volume, speed, build);
             self.crossfade_armed.store(false, Ordering::Release);
-            for deck in &decks.decks {
-                deck.player.clear();
-                deck.fade.reset();
-            }
-            decks.decks[target].player.set_volume(narrow_audio_param(volume));
-            decks.decks[target].player.set_speed(narrow_audio_param(speed));
-            decks.decks[target].player.append(source);
-            decks.decks[target].player.play();
         }
-        decks.active = target;
         self.gapless_pending.store(false, Ordering::Release);
         if let Some(pos) = start_position_ms {
             log::debug!("Resuming playback at {pos}ms");
@@ -466,25 +379,32 @@ impl RodioPlayer {
             !self.gapless_pending.load(Ordering::Acquire),
             "crossfade must never race a staged gapless preload"
         );
-        let target = decks.idle_index();
-        let source = EqSource::new(
+        decks.crossfade_to(fade_ms, volume, speed, |deck| {
+            self.build_source(decoded, baked_rg, deck)
+        });
+        self.crossfade_armed.store(true, Ordering::Release);
+        self.gapless_pending.store(false, Ordering::Release);
+        Ok(())
+    }
+
+    /// Wrap a decoded track in the audio source the decks play: the graphic EQ,
+    /// this track's baked `ReplayGain`, and `deck`'s crossfade ramp cell.
+    ///
+    /// Always called with the deck the source is about to be appended to — see
+    /// the module doc of [`super::decks`] for why the two can't be split.
+    fn build_source(
+        &self,
+        decoded: Decoder<BufReader<File>>,
+        baked_rg: TrackReplayGain,
+        deck: &Deck,
+    ) -> EqSource<Decoder<BufReader<File>>> {
+        EqSource::new(
             decoded,
             self.eq.clone(),
             self.rg.clone(),
             baked_rg,
-            decks.decks[target].fade.clone(),
-        );
-        decks.decks[target].player.clear();
-        decks.decks[target].fade.arm(Some(0.0), 1.0, fade_ms, false);
-        decks.decks[target].player.set_volume(narrow_audio_param(volume));
-        decks.decks[target].player.set_speed(narrow_audio_param(speed));
-        decks.decks[target].player.append(source);
-        decks.decks[target].player.play();
-        decks.active().fade.arm(None, 0.0, fade_ms, true);
-        decks.active = target;
-        self.crossfade_armed.store(true, Ordering::Release);
-        self.gapless_pending.store(false, Ordering::Release);
-        Ok(())
+            deck.fade.clone(),
+        )
     }
 
     /// Whether a crossfade's outgoing deck is still audible.
@@ -498,8 +418,7 @@ impl RodioPlayer {
             return false;
         }
         let decks = self.lock_decks();
-        let outgoing = decks.idle_index();
-        if decks.decks[outgoing].player.empty() {
+        if decks.idle().player.empty() {
             drop(decks);
             self.crossfade_armed.store(false, Ordering::Release);
             return false;
@@ -515,9 +434,7 @@ impl RodioPlayer {
             return;
         }
         let decks = self.lock_decks();
-        let outgoing = decks.idle_index();
-        decks.decks[outgoing].player.clear();
-        decks.decks[outgoing].fade.reset();
+        decks.idle().reset();
         decks.active().fade.arm(None, 1.0, crossfade::ABORT_RAMP_MS, false);
     }
 
@@ -543,9 +460,7 @@ impl RodioPlayer {
         // one here would restart its fade-in from silence.
         let crossfading = self.is_crossfading();
         let decks = self.lock_decks();
-        for deck in &decks.decks {
-            deck.player.play();
-        }
+        decks.play_all();
         if !crossfading {
             // Unconditional, not gated on the setting: a faded pause leaves the
             // deck holding silence, and the user may have turned the setting off
@@ -559,22 +474,20 @@ impl RodioPlayer {
     /// [`Self::pause_with_fade`].
     pub fn pause(&self) {
         self.bump_epoch();
-        let decks = self.lock_decks();
-        for deck in &decks.decks {
-            deck.player.pause();
-        }
+        self.lock_decks().pause_all();
     }
 
-    /// Fade to silence over `fade_ms`, then pause both decks. Falls through to an
-    /// immediate pause whenever [`Self::can_fade_out`] says no. Sibling of
-    /// [`Self::stop_with_fade`]; the two share every gate.
+    /// Arm a fade to silence on the active deck and schedule `op` to land once
+    /// the ramp has. Returns `false` when the fade was refused — the caller then
+    /// runs the immediate op instead.
     ///
-    /// The ramp holds at zero rather than ending its source: a self-ending fade
-    /// would drain the active deck and read as `EndOfStream`.
-    pub fn pause_with_fade(&self, fade_ms: u64) {
+    /// The shared prologue of [`Self::pause_with_fade`] and [`Self::stop_with_fade`];
+    /// the two differ only in the deferred half. The ramp holds at zero rather
+    /// than ending its source: a self-ending fade would drain the active deck and
+    /// read as `EndOfStream`.
+    fn arm_fade_out(&self, fade_ms: u64, op: DeferredOp) -> bool {
         if !self.can_fade_out(fade_ms) {
-            self.pause();
-            return;
+            return false;
         }
         let epoch = self.bump_epoch();
         {
@@ -583,19 +496,26 @@ impl RodioPlayer {
             // `can_fade_out` is lock-free and the bump above is a separate step,
             // so a preload can *complete* — append its source and set the flag,
             // both under this same lock — in between the two. This re-read is what
-            // sees it. A preload arriving *after* the bump is the benign case: it
-            // stages behind a deck this fade only holds at silence and then
-            // pauses, and the resume ramps that deck back to unity — so the
-            // staged source is still the legitimate gapless successor it was
-            // meant to be.
+            // sees it. A preload arriving *after* the bump is the benign case: on
+            // the pause path it stages behind a deck this fade only holds at
+            // silence and then pauses, and the resume ramps that deck back to
+            // unity; on the stop path the deferred `ClearAll` takes the staged
+            // source and the flag together.
             if self.gapless_pending.load(Ordering::Acquire) {
-                drop(decks);
-                self.pause();
-                return;
+                return false;
             }
             decks.active().fade.arm(None, 0.0, fade_ms, false);
         }
-        self.schedule_after(epoch, fade_ms, DeferredOp::PauseAll);
+        self.schedule_after(epoch, fade_ms, op);
+        true
+    }
+
+    /// Fade to silence over `fade_ms`, then pause both decks. Falls through to an
+    /// immediate pause whenever [`Self::arm_fade_out`] refuses.
+    pub fn pause_with_fade(&self, fade_ms: u64) {
+        if !self.arm_fade_out(fade_ms, DeferredOp::PauseAll) {
+            self.pause();
+        }
     }
 
     /// Stop playback. `Player::clear()` removes all sources and pauses automatically.
@@ -603,44 +523,25 @@ impl RodioPlayer {
         self.bump_epoch();
         self.crossfade_armed.store(false, Ordering::Release);
         let decks = self.lock_decks();
-        for deck in &decks.decks {
-            deck.player.clear();
-            deck.fade.reset();
-        }
+        decks.clear_all();
         self.gapless_pending.store(false, Ordering::Release);
     }
 
     /// Fade to silence over `fade_ms`, then clear both decks. Falls through to an
-    /// immediate stop whenever [`Self::can_fade_out`] says no.
+    /// immediate stop whenever [`Self::arm_fade_out`] refuses. The deferred
+    /// [`DeferredOp::ClearAll`] is what actually empties the decks.
     ///
-    /// The ramp deliberately does *not* end its source: that would drain the
-    /// active deck and read as `EndOfStream`. The deferred clear does it.
-    ///
-    /// `gapless_pending` is deliberately *not* cleared here. The gate above has
-    /// already refused the fade if a source was staged, so on this path the flag
-    /// is false — and clearing it eagerly would only be a way to start lying
-    /// about a source the deferred clear has not removed yet. A preload that
-    /// still slips in behind us stages a real source, and the deferred
-    /// [`DeferredOp::ClearAll`] drops it and the flag together; one that slips in
-    /// behind *the clear* finds an empty deck and is refused outright.
+    /// `gapless_pending` is deliberately *not* cleared here. The gate has already
+    /// refused the fade if a source was staged, so on this path the flag is false
+    /// — and clearing it eagerly would only be a way to start lying about a source
+    /// the deferred clear has not removed yet. A preload that still slips in
+    /// behind us stages a real source, and the deferred `ClearAll` drops it and
+    /// the flag together; one that slips in behind *the clear* finds an empty deck
+    /// and is refused outright.
     pub fn stop_with_fade(&self, fade_ms: u64) {
-        if !self.can_fade_out(fade_ms) {
+        if !self.arm_fade_out(fade_ms, DeferredOp::ClearAll) {
             self.stop();
-            return;
         }
-        let epoch = self.bump_epoch();
-        {
-            let decks = self.lock_decks();
-            // Same backstop as `pause_with_fade` — a preload can complete between
-            // that lock-free read and this lock. See the comment there.
-            if self.gapless_pending.load(Ordering::Acquire) {
-                drop(decks);
-                self.stop();
-                return;
-            }
-            decks.active().fade.arm(None, 0.0, fade_ms, false);
-        }
-        self.schedule_after(epoch, fade_ms, DeferredOp::ClearAll);
     }
 
     pub fn seek(&self, position_ms: u64) {
@@ -656,10 +557,7 @@ impl RodioPlayer {
     }
 
     pub fn set_volume(&self, volume: f64) {
-        let decks = self.lock_decks();
-        for deck in &decks.decks {
-            deck.player.set_volume(narrow_audio_param(volume));
-        }
+        self.lock_decks().set_volume_all(volume);
     }
 
     pub fn set_speed(&self, speed: f64) {
@@ -670,9 +568,7 @@ impl RodioPlayer {
         let media_ms = compute_position(player.get_pos(), old_speed);
         // Both decks must run at the same speed or a crossfade would drift, but
         // only the active one carries a position worth re-anchoring.
-        for deck in &decks.decks {
-            deck.player.set_speed(narrow_audio_param(speed));
-        }
+        decks.set_speed_all(speed);
         // Re-anchor rodio's position tracker. Without this, `get_pos()` keeps
         // the output-time it accumulated at the old speed, and `query_position`'s
         // `get_pos() × new_speed` rescales that whole elapsed portion — so the
@@ -740,75 +636,62 @@ impl RodioPlayer {
     /// path, and it is mutually exclusive with a crossfade for a given
     /// transition — see `crossfade::crossfade_eligible`.
     pub fn preload_gapless(&self, file_path: Option<&str>, baked_rg: TrackReplayGain) {
-        match file_path {
-            Some(path) => {
-                // Snapshot the deck epoch before the (unlocked) decode. Every op
-                // that replaces deck contents — `play_media`, `begin_crossfade`,
-                // `stop`, `pause`, … — bumps it, so a mismatch below means the
-                // decks moved out from under this preload and the track we staged
-                // for is no longer the one playing. Staging it anyway would queue
-                // the wrong track *and*, if `decks.active` flipped, hand it the
-                // other deck's ramp cell (which may be armed to fade out and end).
-                let epoch = self.deck_epoch.load(Ordering::Acquire);
+        let Some(path) = file_path else {
+            // The action layer only ever *clears* a stale preload through here.
+            self.gapless_pending.store(false, Ordering::Release);
+            return;
+        };
 
-                // Decode (file open + Symphonia format probe — synchronous I/O)
-                // *before* taking the deck lock: the playback monitor's position
-                // query shares this mutex, so a probe under the lock stalls
-                // position publication right when a preload fires near track end.
-                match decode_file(path) {
-                    Ok(decoded) => {
-                        // Re-check the epoch, clone the ramp cell, build the
-                        // source and append — all under one lock, so the cell the
-                        // source carries always belongs to the deck it lands on.
-                        // `EqSource::new` does no I/O (it only reads the decoder's
-                        // channel count and sample rate), so it is cheap to hold
-                        // the lock across.
-                        let decks = self.lock_decks();
-                        if self.deck_epoch.load(Ordering::Acquire) != epoch {
-                            log::debug!("Dropping stale gapless preload of {path}");
-                            return;
-                        }
-                        let deck = decks.active();
-                        // A *gapless* preload only means anything staged behind a
-                        // source that is still there to be followed. The epoch
-                        // can't say that on its own: `stop()` and the deferred
-                        // [`DeferredOp::ClearAll`] empty the decks *without*
-                        // bumping it, so a preload whose decode outran either one
-                        // would pass the re-check above, append behind nothing,
-                        // and set `gapless_pending` over a deck the stop already
-                        // cleared — the exact state `stop()` clears the flag to
-                        // forbid. `check_playback_state` would then read that as a
-                        // `GaplessTransition` off an empty deck.
-                        //
-                        // Never rejects a legitimate stage: the only caller that
-                        // passes a path is the monitor's late preload, which runs
-                        // solely in its `Playing` branch, and `play_media` appends
-                        // under this same lock, so the deck is never transiently
-                        // empty behind it.
-                        if deck.player.empty() {
-                            log::debug!("Dropping gapless preload of {path}: nothing left to follow");
-                            return;
-                        }
-                        let source = EqSource::new(
-                            decoded,
-                            self.eq.clone(),
-                            self.rg.clone(),
-                            baked_rg,
-                            deck.fade.clone(),
-                        );
-                        deck.player.append(source);
-                        self.gapless_pending.store(true, Ordering::Release);
-                    }
-                    Err(e) => {
-                        log::warn!("Failed to preload gapless track {path}: {e}");
-                        self.gapless_pending.store(false, Ordering::Release);
-                    }
-                }
-            }
-            None => {
+        // Snapshot the deck epoch before the (unlocked) decode. Every op that
+        // replaces deck contents — `play_media`, `begin_crossfade`, `stop`,
+        // `pause`, … — bumps it, so a mismatch below means the decks moved out
+        // from under this preload and the track we staged for is no longer the one
+        // playing. Staging it anyway would queue the wrong track *and*, if the
+        // active deck flipped, hand it the other deck's ramp cell (which may be
+        // armed to fade out and end).
+        let epoch = self.deck_epoch.load(Ordering::Acquire);
+
+        // Decode (file open + Symphonia format probe — synchronous I/O) *before*
+        // taking the deck lock: the playback monitor's position query shares this
+        // mutex, so a probe under the lock stalls position publication right when
+        // a preload fires near track end.
+        let decoded = match decode_file(path) {
+            Ok(decoded) => decoded,
+            Err(e) => {
+                log::warn!("Failed to preload gapless track {path}: {e}");
                 self.gapless_pending.store(false, Ordering::Release);
+                return;
             }
+        };
+
+        // Re-check the epoch, build the source off the deck's own ramp cell and
+        // append — all under one lock, so the cell the source carries always
+        // belongs to the deck it lands on.
+        let decks = self.lock_decks();
+        if self.deck_epoch.load(Ordering::Acquire) != epoch {
+            log::debug!("Dropping stale gapless preload of {path}");
+            return;
         }
+        let deck = decks.active();
+        // A *gapless* preload only means anything staged behind a source that is
+        // still there to be followed. The epoch can't say that on its own:
+        // `stop()` and the deferred [`DeferredOp::ClearAll`] empty the decks
+        // *without* bumping it, so a preload whose decode outran either one would
+        // pass the re-check above, append behind nothing, and set
+        // `gapless_pending` over a deck the stop already cleared — the exact state
+        // `stop()` clears the flag to forbid. `check_playback_state` would then
+        // read that as a `GaplessTransition` off an empty deck.
+        //
+        // Never rejects a legitimate stage: the only caller that passes a path is
+        // the monitor's late preload, which runs solely in its `Playing` branch,
+        // and `play_media` appends under this same lock, so the deck is never
+        // transiently empty behind it.
+        if deck.player.empty() {
+            log::debug!("Dropping gapless preload of {path}: nothing left to follow");
+            return;
+        }
+        deck.player.append(self.build_source(decoded, baked_rg, deck));
+        self.gapless_pending.store(true, Ordering::Release);
     }
 
     /// Query the current playback position in milliseconds (media timeline).
@@ -875,17 +758,8 @@ impl RodioPlayer {
 
     /// Lock the decks mutex, recovering from poison rather than panicking.
     fn lock_decks(&self) -> std::sync::MutexGuard<'_, Decks> {
-        lock_decks_arc(&self.decks)
+        lock_decks(&self.decks)
     }
-}
-
-/// Poison-recovering lock, shared by [`RodioPlayer::lock_decks`] and the
-/// deferred pause/stop task (which owns only the `Arc`, not the player).
-fn lock_decks_arc(decks: &std::sync::Mutex<Decks>) -> std::sync::MutexGuard<'_, Decks> {
-    decks.lock().unwrap_or_else(|poisoned| {
-        log::error!("RodioPlayer decks mutex was poisoned, recovering");
-        poisoned.into_inner()
-    })
 }
 
 fn decode_file(path: &str) -> Result<Decoder<BufReader<File>>, AppError> {
@@ -925,16 +799,6 @@ pub fn load_queue_from_disk_sync(paths: &Paths) -> Option<PersistableQueue> {
     }
     let json = std::fs::read_to_string(&paths.queue_path).ok()?;
     serde_json::from_str(&json).ok()
-}
-
-/// Narrow a backend-side `f64` audio parameter (volume 0.0..=1.0, speed
-/// 0.25..=2.0) to the `f32` Rodio's API expects.
-#[allow(
-    clippy::cast_possible_truncation,
-    reason = "audio params are bounded constants whose round-trip through f32 is below the perceptual threshold"
-)]
-fn narrow_audio_param(v: f64) -> f32 {
-    v as f32
 }
 
 #[cfg(test)]

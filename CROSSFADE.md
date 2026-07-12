@@ -71,22 +71,43 @@ volume ramps make in Strawberry and Clementine.
 
 ## Architecture
 
-### Dual decks — `src/player/rodio_backend.rs`
+### Dual decks — `src/player/decks.rs`
 
 ```rust
 struct Deck  { player: Player, fade: Arc<FadeShared> }
 struct Decks { decks: [Deck; 2], active: usize }
 ```
 
+The decks and every primitive that touches them live in `decks.rs`;
+`rodio_backend.rs` is the controller that drives them under the one mutex.
+`Deck` owns `start` / `reset` / `busy`, and `Decks` owns `active` / `idle` /
+`clear_all` / `pause_all` / `play_all` / `set_volume_all` / `set_speed_all`, plus
+the two composite transitions:
+
+- **`cut_to(volume, speed, build)`** — clear *both* decks (so a crossfade in
+  flight can't leave its outgoing track playing behind the new one) and start on
+  the still-active one.
+- **`crossfade_to(fade_ms, volume, speed, build)`** — start on the idle deck
+  ramping up from silence, arm the active deck's ramp down (self-ending), and flip
+  `active`.
+
+Both take a **builder**, not a source: they hand the closure the deck they are
+about to append to, which is what makes "the ramp cell a source carries belongs to
+the deck it lands on" a property of the signature rather than of a comment.
+`RodioPlayer::build_source` is that closure everywhere (`play_media`,
+`begin_crossfade`, `preload_gapless`).
+
 `active` holds the currently-playing track. `preload_gapless`, `query_position`
 and `check_playback_state` read **only** the active deck, so their behaviour is
 unchanged. `stop` / `pause` / `resume` / `set_volume` / `set_speed` apply to both;
 `set_speed` re-anchors (seeks) only the active one.
 
-`play_media` with `fade_ms == 0` clears **both** decks and reuses the live active
-one. That last part is load-bearing: rodio only zeroes a `Player`'s tracked
-position when `clear()` actually removes a source, so starting on a long-idle
-deck reports the *previous* track's position for a few milliseconds.
+`play_media` with `fade_ms == 0` is `cut_to` — it clears **both** decks and reuses
+the live active one. That last part is load-bearing: rodio only zeroes a
+`Player`'s tracked position when `clear()` actually removes a source, so starting
+on a long-idle deck reports the *previous* track's position for a few
+milliseconds. With `crossfade_manual` on it is `crossfade_to` instead — the same
+call `begin_crossfade` makes.
 
 `is_crossfading()` is `crossfade_armed && !idle_deck.empty()`. A fade-out armed
 with `end_on_complete` returns `None` when its ramp lands, ending the source and
@@ -278,9 +299,12 @@ clear is about to throw away, and the flag must not outlive it.
 contents, and cancelling a pending deferred pause there would leave the decks
 running — silently, at the pause ramp's zero gain — while the UI reads Paused.
 
-`can_fade_out(fade_ms)` is the shared gate — `pause_with_fade` and `stop_with_fade`
-have no others, and anything it refuses falls through to the plain immediate
-`RodioPlayer::pause()` / `stop()` underneath them. Four terms:
+`can_fade_out(fade_ms)` is the shared gate, and it sits inside `arm_fade_out(fade_ms,
+op)` — the whole synchronous prologue of a faded pause or stop (gate → bump the
+epoch → re-read `gapless_pending` under the decks lock → arm the ramp → schedule
+the deferred half). `pause_with_fade` and `stop_with_fade` are three lines each and
+differ *only* in the `DeferredOp` they pass and the immediate op they fall back to
+when `arm_fade_out` returns `false`. Four terms:
 
 - **a `0` length** — checked first, so `stop_end_of_queue` never even takes the
   deck lock.
@@ -377,6 +401,12 @@ on, everything else off, 2 s default.
   no play) when there is no next track.
 - `src/player/tests/actions_tests.rs` — `MockBackend` records `begin_crossfade` /
   `stop_with_fade`; a vanished or undecodable file auto-skips **without** a stop.
+- `src/player/tests/handlers_tests.rs` — the monitor's per-tick decision
+  (`evaluate_playing_tick`) as a pure function: an eligible crossfade suppresses
+  the gapless preload; a crossfade shorter than `PRELOAD_LEAD_MS` still fires (the
+  regression the two-predicate split exists to prevent); a same-album transition
+  stays gapless; a staged source or an in-flight crossfade blocks both paths;
+  "pause at track end" suppresses the preload.
 - `tests/crossfade.rs` — **end-to-end against the real audio chain, no audio
   device.** rodio's `mixer()` builds a device-less `Mixer` + `MixerSource`, so
   two real `Player` decks are connected to it and the summed output is pulled by

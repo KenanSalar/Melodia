@@ -17,6 +17,7 @@ use crate::library;
 use crate::player::replaygain::{self, RgMode};
 use crate::services::settings;
 use crate::state::AppState;
+use crate::ui::settings_bind::toggle_binding;
 use crate::{AppWindow, ReplayGain};
 
 pub fn install_replaygain(ui: &AppWindow, state: &AppState) {
@@ -48,15 +49,12 @@ pub fn install_replaygain(ui: &AppWindow, state: &AppState) {
     rg.set_max_preamp(replaygain::RG_MAX_PREAMP_DB);
 
     // set-enabled — live toggle + persist.
-    {
-        let state = state.clone();
-        rg.on_set_enabled(move |on| {
-            library::playback::player_set_replaygain_enabled(&state.playback_ctx(), on);
-            state.persist_blocking("persist rg_enabled", move |s| {
-                library::settings::set_replaygain_enabled(s, on)
-            });
-        });
-    }
+    rg.on_set_enabled(toggle_binding(
+        state,
+        "persist rg_enabled",
+        library::playback::player_set_replaygain_enabled,
+        library::settings::set_replaygain_enabled,
+    ));
 
     // set-mode — Track / Album (dropdown index 0 / 1). Apply live + persist.
     {
@@ -71,15 +69,12 @@ pub fn install_replaygain(ui: &AppWindow, state: &AppState) {
     }
 
     // set-prevent-clipping — apply live + persist.
-    {
-        let state = state.clone();
-        rg.on_set_prevent_clipping(move |on| {
-            library::playback::player_set_replaygain_prevent_clipping(&state.playback_ctx(), on);
-            state.persist_blocking("persist rg_prevent_clipping", move |s| {
-                library::settings::set_replaygain_prevent_clipping(s, on)
-            });
-        });
-    }
+    rg.on_set_prevent_clipping(toggle_binding(
+        state,
+        "persist rg_prevent_clipping",
+        library::playback::player_set_replaygain_prevent_clipping,
+        library::settings::set_replaygain_prevent_clipping,
+    ));
 
     // set-preamp — live preamp change during a drag: apply to the player and
     // update the property so the slider's dB readout tracks. No disk write.

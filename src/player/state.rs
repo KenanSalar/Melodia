@@ -367,19 +367,26 @@ impl PlayerState {
 
         if let Some(track) = self.queue.advance_skip().cloned() {
             actions.extend(play_track_inner(self, track, None));
-            if was_paused {
-                self.status = PlaybackStatus::Paused;
-                // `fade_ms: 0` — the `PlayMedia` above has just started the deck,
-                // and this only restores the paused state. A fade here would ramp
-                // the incoming track down from full volume instead of pausing it,
-                // so its first quarter-second would be audible.
-                actions.push(PlayerAction::Pause { fade_ms: 0 });
-            }
+            self.restore_paused(was_paused, &mut actions);
         } else {
             actions.extend(stop_end_of_queue(self));
         }
 
         actions
+    }
+
+    /// Re-pause after a track change that was made while paused.
+    ///
+    /// `fade_ms: 0` is load-bearing: the `PlayMedia` this follows has just
+    /// *started* the deck, and this only restores the paused state. A fade here
+    /// would ramp the incoming track down from full volume instead of pausing it,
+    /// so its first quarter-second would be audible — and its decoder would be
+    /// that far in on resume.
+    fn restore_paused(&mut self, was_paused: bool, actions: &mut Vec<PlayerAction>) {
+        if was_paused {
+            self.status = PlaybackStatus::Paused;
+            actions.push(PlayerAction::Pause { fade_ms: 0 });
+        }
     }
 
     /// Build actions for previous-track command.
@@ -393,11 +400,7 @@ impl PlayerState {
 
         if let Some(track) = self.queue.previous().cloned() {
             let mut actions = play_track_inner(self, track, None);
-            if was_paused {
-                self.status = PlaybackStatus::Paused;
-                // `fade_ms: 0`, for the same reason as `build_next_actions`.
-                actions.push(PlayerAction::Pause { fade_ms: 0 });
-            }
+            self.restore_paused(was_paused, &mut actions);
             actions
         } else {
             self.position_ms = 0;
@@ -513,21 +516,17 @@ impl PlayerState {
         // and only once `advance()` has confirmed somewhere to go.
         actions.push(PlayerAction::UpdatePlayCount(outgoing_id));
 
-        // The status is already `Playing` — the guard above proved it.
-        self.position_ms = 0;
-        self.duration_ms = u64::try_from(track.duration_ms.max(0)).unwrap_or(0);
-        let file_path = track.file_path.clone();
-        let replaygain = track.replaygain();
-        let volume = self.effective_volume();
-        let speed = self.playback_speed;
-        self.current_track = Some(track);
+        // Same "the state now points at this track" step `play_track_inner`
+        // takes — only the action it ends in differs. (Its `status = Playing` is
+        // a no-op here; the guard above already proved it.)
+        let start = begin_track(self, track, None);
 
         actions.push(PlayerAction::BeginCrossfade {
-            file_path,
-            replaygain,
+            file_path: start.file_path,
+            replaygain: start.replaygain,
             fade_ms: decision.fade_ms,
-            volume,
-            speed,
+            volume: start.volume,
+            speed: start.speed,
         });
         actions
     }
@@ -540,14 +539,27 @@ impl PlayerState {
     }
 }
 
-/// Core playback logic — reused by commands, bus handler, position poller.
-/// Returns Vec<PlayerAction> for the caller to execute after releasing the state lock.
-/// `start_position_ms` — if `Some`, seeks to that position after starting playback (used for resume).
-pub fn play_track_inner(
+/// Everything a start action needs about the track the state now points at.
+/// Produced by [`begin_track`], which is the single writer of the
+/// "`current_track` + duration + position" trio.
+pub struct TrackStart {
+    pub file_path: String,
+    pub replaygain: TrackReplayGain,
+    pub volume: f64,
+    pub speed: f64,
+    /// The resume position, clamped and normalised — `None` means "from the top".
+    pub start_position_ms: Option<u64>,
+}
+
+/// Point `state` at `track`: status Playing, duration and position from the
+/// track, `current_track` replaced. Shared by [`play_track_inner`] (which turns
+/// it into a `PlayMedia`) and [`PlayerState::build_crossfade_actions`] (a
+/// `BeginCrossfade`), so the two can't drift on what "now playing this" means.
+fn begin_track(
     state: &mut PlayerState,
     track: Arc<TrackSummary>,
     start_position_ms: Option<u64>,
-) -> Vec<PlayerAction> {
+) -> TrackStart {
     state.status = PlaybackStatus::Playing;
     state.duration_ms = u64::try_from(track.duration_ms.max(0)).unwrap_or(0);
     // Clamp to 500ms before end to avoid immediate EOS detection by the playback monitor.
@@ -556,22 +568,38 @@ pub fn play_track_inner(
         .map(|p| p.min(max_resume_pos))
         .filter(|&p| p > 0);
     state.position_ms = clamped_pos.unwrap_or(0);
-    let file_path = track.file_path.clone();
-    let volume = state.effective_volume();
-    let speed = state.playback_speed;
-    let replaygain = track.replaygain();
+
+    let start = TrackStart {
+        file_path: track.file_path.clone(),
+        replaygain: track.replaygain(),
+        volume: state.effective_volume(),
+        speed: state.playback_speed,
+        start_position_ms: clamped_pos,
+    };
     state.current_track = Some(track);
+    start
+}
+
+/// Core playback logic — reused by commands, bus handler, position poller.
+/// Returns Vec<PlayerAction> for the caller to execute after releasing the state lock.
+/// `start_position_ms` — if `Some`, seeks to that position after starting playback (used for resume).
+pub fn play_track_inner(
+    state: &mut PlayerState,
+    track: Arc<TrackSummary>,
+    start_position_ms: Option<u64>,
+) -> Vec<PlayerAction> {
+    let start = begin_track(state, track, start_position_ms);
 
     // Gapless preload is staged late (by the playback monitor) when the
     // current track approaches its end — see `spawn_playback_monitor`. That
     // way mid-track repeat-mode / queue changes are reflected in what gets
     // preloaded, instead of being clobbered by a stale Rodio queue entry.
     vec![PlayerAction::PlayMedia {
-        file_path,
-        volume,
-        speed,
-        start_position_ms: clamped_pos,
-        replaygain,
+        file_path: start.file_path,
+        volume: start.volume,
+        speed: start.speed,
+        start_position_ms: start.start_position_ms,
+        replaygain: start.replaygain,
     }]
 }
 
