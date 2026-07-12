@@ -241,9 +241,14 @@ jobs:
           echo "::error::apt install (system deps) failed after 3 attempts"
           exit 1
 
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: ${{ matrix.target }}
+      # Installs the toolchain pinned by `rust-toolchain.toml` — release
+      # binaries are built by the same compiler as the CI gate, not by whatever
+      # stable happened to ship the day the tag landed. `-t` keeps the explicit
+      # per-matrix target; every slot runs on a native runner, so this is the
+      # host target and already present, but it preserves the previous behavior
+      # exactly and would cover a future cross-compiled slot.
+      - name: Install pinned Rust toolchain
+        run: rustup toolchain install -t ${{ matrix.target }}
 
       - uses: Swatinem/rust-cache@v2
         with:

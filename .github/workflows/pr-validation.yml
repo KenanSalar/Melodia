@@ -39,9 +39,13 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - uses: ./.github/actions/linux-system-deps
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: clippy
+      # Installs the toolchain pinned by `rust-toolchain.toml` (bare `install`
+      # takes the *active* toolchain), with the components declared there.
+      # Don't reintroduce `dtolnay/rust-toolchain` here: it calls `rustup
+      # default`, which the toolchain file outranks, so its `components:` would
+      # land on a toolchain nothing builds with and clippy would go missing.
+      - name: Install pinned Rust toolchain
+        run: rustup toolchain install
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: ci-clippy
@@ -60,9 +64,11 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - uses: ./.github/actions/linux-system-deps
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: llvm-tools-preview
+      # As in the clippy job: the pin drives the toolchain, and
+      # `llvm-tools-preview` (needed by cargo-llvm-cov) comes from its
+      # `components` list, not from a workflow input.
+      - name: Install pinned Rust toolchain
+        run: rustup toolchain install
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: ci-test

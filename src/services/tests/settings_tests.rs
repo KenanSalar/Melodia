@@ -166,9 +166,13 @@ fn test_sort_dir_token_roundtrip() {
     assert!(matches!(SortDir::from_token(""), SortDir::Asc));
     assert!(matches!(SortDir::from_token("DESC"), SortDir::Asc));
     assert!(matches!(SortDir::from_token("garbage"), SortDir::Asc));
-    // Round-trip both directions through their token form.
+    // Round-trip both directions through their token form. `SortDir` has no
+    // `PartialEq`, so compare the tokens rather than the variants — `as_str` is
+    // injective (pinned just above), so a wrong variant round-trips to a
+    // different token, and the failure prints the tokens instead of an opaque
+    // `Discriminant(..)`.
     for dir in [SortDir::Asc, SortDir::Desc] {
-        assert!(std::mem::discriminant(&dir) == std::mem::discriminant(&SortDir::from_token(dir.as_str())));
+        assert_eq!(SortDir::from_token(dir.as_str()).as_str(), dir.as_str());
     }
 }
 
