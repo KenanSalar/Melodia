@@ -16,6 +16,50 @@ struct DirScanResult {
     audio_paths: Vec<PathBuf>,
 }
 
+/// Classify one directory's entries into its visible sub-folders (name-sorted)
+/// and its audio files. Dot-entries and anything whose type can't be read are
+/// skipped; audio is decided by the one shared [`is_audio_extension`] predicate.
+///
+/// Split out of [`browse_directory`]'s blocking closure so the tests exercise
+/// the shipped walk instead of a copy of it — they can't drive the closure
+/// itself, which needs an `AppState` and the library-folder guard.
+fn classify_dir_entries(dir: &std::path::Path) -> Result<(Vec<BrowseFolder>, Vec<PathBuf>), AppError> {
+    let mut folders = Vec::new();
+    let mut audio_paths = Vec::new();
+
+    for entry in std::fs::read_dir(dir)? {
+        let entry = entry?;
+        let file_name = entry.file_name();
+        let name = file_name.to_string_lossy();
+
+        if name.starts_with('.') {
+            continue;
+        }
+
+        let Ok(file_type) = entry.file_type() else {
+            continue;
+        };
+
+        if file_type.is_dir() {
+            folders.push(BrowseFolder {
+                name: name.into_owned(),
+                path: entry.path().to_string_lossy().into_owned(),
+            });
+        } else if file_type.is_file() {
+            let entry_path = entry.path();
+            if let Some(ext) = entry_path.extension().and_then(|e| e.to_str())
+                && is_audio_extension(ext)
+            {
+                audio_paths.push(entry_path);
+            }
+        }
+    }
+
+    folders.sort_by_cached_key(|f| f.name.to_lowercase());
+
+    Ok((folders, audio_paths))
+}
+
 /// Scan `path` for subfolders + audio files. `library_folders` is the
 /// caller's already-fetched library-folder list — passed in (rather than
 /// re-queried here) so a navigation does a single `folders` read shared
@@ -48,38 +92,7 @@ pub async fn browse_directory(
             ));
         }
 
-        let mut folders = Vec::new();
-        let mut audio_paths = Vec::new();
-
-        for entry in std::fs::read_dir(&canonical)? {
-            let entry = entry?;
-            let file_name = entry.file_name();
-            let name = file_name.to_string_lossy();
-
-            if name.starts_with('.') {
-                continue;
-            }
-
-            let Ok(file_type) = entry.file_type() else {
-                continue;
-            };
-
-            if file_type.is_dir() {
-                folders.push(BrowseFolder {
-                    name: name.into_owned(),
-                    path: entry.path().to_string_lossy().into_owned(),
-                });
-            } else if file_type.is_file() {
-                let entry_path = entry.path();
-                if let Some(ext) = entry_path.extension().and_then(|e| e.to_str())
-                    && is_audio_extension(ext)
-                {
-                    audio_paths.push(entry_path);
-                }
-            }
-        }
-
-        folders.sort_by_cached_key(|f| f.name.to_lowercase());
+        let (folders, audio_paths) = classify_dir_entries(&canonical)?;
 
         Ok(DirScanResult {
             canonical,

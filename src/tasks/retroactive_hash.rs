@@ -44,10 +44,14 @@ async fn hash_unhashed_tracks(db: &DbPool) -> AppResult<()> {
             .par_iter()
             .filter_map(|(id, path_str)| {
                 let path = Path::new(path_str);
-                if !path.exists() {
+                // One `stat` answers both "is it still there" and "when was it last
+                // written" — an absent file fails here exactly as the old
+                // `path.exists()` check did, and the mtime comes from the same
+                // instant as that existence proof.
+                let Ok(meta) = std::fs::metadata(path) else {
                     log::debug!("Skipping missing file during retroactive hash: {path_str}");
                     return None;
-                }
+                };
 
                 let hash = match crate::media::metadata::compute_file_hash(path) {
                     Ok(h) => h,
@@ -57,7 +61,7 @@ async fn hash_unhashed_tracks(db: &DbPool) -> AppResult<()> {
                     }
                 };
 
-                let mtime = crate::media::metadata::extract_date_modified(path);
+                let mtime = crate::media::metadata::date_modified_from_metadata(&meta);
 
                 Some((*id, hash, mtime))
             })

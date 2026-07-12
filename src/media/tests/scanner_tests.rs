@@ -191,7 +191,7 @@ fn scan_files_parallel_calls_progress_callback() -> Result<(), AppError> {
 fn existing_for(path: &Path) -> Result<HashMap<String, ExistingTrackSummary>, AppError> {
     let meta = std::fs::metadata(path)?;
     let size = i64::try_from(meta.len()).unwrap_or(i64::MAX);
-    let mtime = crate::media::metadata::extract_date_modified(path);
+    let mtime = crate::media::metadata::date_modified_from_metadata(&meta);
     let mut map = HashMap::new();
     map.insert(
         path.to_string_lossy().into_owned(),

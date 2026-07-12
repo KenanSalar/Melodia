@@ -308,9 +308,7 @@ async fn handle_created(
         let file_name = file_name_owned(path);
         // `meta` was extracted from this very path, so its `date_modified` is the
         // mtime already in hand — re-deriving it would `stat` the file again and
-        // could disagree with the row's own size/hash if the file is touched in
-        // between. `extract_date_modified` is for callers with no metadata (the
-        // rename path below).
+        // could pair a fresh mtime with the size/hash of the earlier instant.
         let repointed = queries::scan::update_track_location(
             tx,
             existing_id,
@@ -368,7 +366,17 @@ async fn handle_renamed(
         };
 
         let file_name = file_name_owned(to);
-        let date_modified = extract_date_modified(to);
+        // Same rule as `handle_created`: `meta` (when present) already carries the
+        // mtime `extract_metadata` derived from its own `stat` of `to`. Re-`stat`ing
+        // here would store a *newer* mtime beside the size/hash of the previous scan
+        // — `update_track_location` doesn't touch those — and an in-place tag edit
+        // that happens not to change the size would then read as current forever to
+        // `scanner::track_is_current`. An older mtime only ever fails toward a
+        // re-parse. The fallback covers the one case with nothing in hand: extraction
+        // failed, or `to` vanished before the batch was extracted.
+        let date_modified = meta
+            .and_then(|m| m.date_modified.clone())
+            .or_else(|| extract_date_modified(to));
 
         // `track_id` was resolved by path inside this transaction, so the
         // row can't have vanished — the re-point bool is vacuously true.
@@ -412,3 +420,7 @@ async fn handle_modified(
 
     Ok(true)
 }
+
+#[cfg(test)]
+#[path = "../tests/reconcile_tests.rs"]
+mod tests;
