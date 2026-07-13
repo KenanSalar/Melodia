@@ -33,8 +33,12 @@ pub fn install_app_chrome(app: &AppWindow, state: &AppState) {
 }
 
 /// Container for the per-view UI handles created during `install_views`,
-/// returned so callers can wire `now_playing_favorite` (which captures all
-/// four) and the initial fetches (`tracks` / `albums` / `artists`).
+/// returned for the wiring `main()` still owns: the initial per-view fetches
+/// (`tracks` / `albums` / `artists` / `genres` / `playlists`), the playlist
+/// import/export pills (which can only be wired once the notifications stack
+/// exists), and the `cover_thumbs` consumers (Material You, Now Playing).
+/// `now_playing_favorite` / `now_playing_rating` are wired *inside*
+/// `install_views` — they need handles that don't leave this function.
 ///
 /// Only the handles a *caller* actually reads live here. `BrowseUi` /
 /// `FavoritesUi` / `SearchUi` deliberately do **not**: every `wire_*` closure

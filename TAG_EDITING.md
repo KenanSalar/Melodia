@@ -653,13 +653,15 @@ track's year is precisely when that bites. Extend the `DO UPDATE SET` to carry
 `year = COALESCE(excluded.year, albums.year)`. (`upsert_artist` and `upsert_genre` have the same
 no-op-update shape but nothing else to update, so they're fine as-is.)
 
-### P3. BPM is never read from MP3 or M4A
+### P3. ✅ DONE — BPM is never read from MP3 or M4A
 
-`metadata.rs:197` reads only `tag.get_string(ItemKey::Bpm)`, which **has no ID3v2 mapping and no
-non-freeform MP4 mapping** (see the BPM table above) — so Melodia has never shown a BPM for an
-MP3. Add the fallback: `get_string(ItemKey::Bpm).or_else(|| get_string(ItemKey::IntegerBpm))`,
-mirroring what the writer now emits. (Its `.parse::<f64>()` also skips the `is_finite()` filter
-the ReplayGain parsers use at `metadata.rs:89,95` — worth matching while in there.)
+`metadata.rs:197` read only `tag.get_string(ItemKey::Bpm)`, which **has no ID3v2 mapping and no
+non-freeform MP4 mapping** (see the BPM table above) — so Melodia had never shown a BPM for an
+MP3, and a BPM edit would have landed in `TBPM` correctly and then vanished on the next scan.
+Fixed: `get_string(ItemKey::Bpm).or_else(|| get_string(ItemKey::IntegerBpm))`, mirroring what
+the writer emits, plus the `is_finite()` filter the ReplayGain parsers use at `metadata.rs:89,95`.
+Pinned by `an_mp3_bpm_edit_is_read_back_by_extract_metadata` — a writer↔reader round-trip, since
+neither half is meaningful alone.
 
 ---
 
@@ -836,16 +838,23 @@ only exists after `install_views`).
    one Rust handler). Confirmed against the generated `app-window.rs`: `InnerDialog`'s init installs
    the `.slint` body via `set_callback_handler`, and Rust's `on_closed` (a plain `set_handler` on
    the same slot, running later) replaced it — the body really was dead code.
-1. ✅ **DONE — `tag_writer.rs`** + 19 unit tests, all green. Fixtures live in **`tests/assets/`**
+1. ✅ **DONE — `tag_writer.rs`** + 23 unit tests, all green. Fixtures live in **`tests/assets/`**
    (NOT `tests/fixtures/`, which `headless.rs` scans and asserts `scanned == 1` on). The M4A
    artwork test was confirmed to **fail** against a plain `remove_picture_type(CoverFront)` — two
    pictures come back, the old `Other` one beside the new `CoverFront` — and to pass once
    `clear_front_cover` clears both types. `ArtworkEdit::Replace` is a **unit variant**: the
    `Picture` is built once by `cover_picture_from_path` and passed alongside, so the orchestrator
-   owns the picked `PathBuf` (it needs it for `cache_image_file` anyway).
+   owns the picked `PathBuf` (it needs it for `cache_image_file` anyway) — and because the
+   `Picture` therefore travels *beside* the edit rather than inside it, `apply_edit` clears the
+   old cover **only** with a replacement in hand (plus a `debug_assert!`), so a caller that
+   forgets to thread it through can't silently turn a Replace into a Remove across a whole batch.
+   All seven containers are covered: MP3 / FLAC / M4A / WAV, plus **OGG and AIFF** — a tag type
+   says nothing about the container writer wrapped around it (OGG rewrites pages, AIFF writes an
+   ID3 chunk), and those are separate code paths in lofty.
 2. `self_writes.rs` + the `file_event_processor` filter.
 3. Queries (`TagEditRow`, `get_track_paths_by_ids`, `set_track_artwork`, `set_album_artwork`),
-   plus **P2** (the `upsert_album` year fix) and **P3** (the BPM reader fallback).
+   plus **P2** (the `upsert_album` year fix). **P3** (the BPM reader fallback) is ✅ **DONE** —
+   it shipped with the writer, since a `TBPM` the reader can't see is a BPM edit that vanishes.
 4. `library/tags.rs` orchestrator + `sync_track_summaries`.
 5. Slint: `TagEditor` global, `tag-editor-body.slint`, `multiline-input.slint`, the
    `dialog.slint` branch, the context-menu item.
@@ -890,6 +899,18 @@ only exists after `install_views`).
       unwritable fields are reported" test — it cannot pass. WAV's primary tag is ID3v2, not
       RIFF INFO; see "Every field maps" above. An earlier draft of this doc planned exactly that
       test.)
+    - **OGG and AIFF** — a full-edit round-trip each. FLAC and WAV prove the *key mappings* for
+      VorbisComments and ID3v2, but a tag type says nothing about the container writer wrapped
+      around it: OGG rewrites pages and AIFF writes an ID3 chunk, and those are separate code
+      paths in lofty — the risky half of a save. That is all seven containers Melodia scans.
+    - **BPM bounds** — `NaN` / negative / absurd inputs. `f64::clamp` does **not** absorb NaN
+      (both of its comparisons are false for NaN), so an unguarded `{:.0}` writes the literal
+      string `"NaN"` into `TBPM` — and `str::parse::<f64>()` accepts `"nan"` and `"inf"`, so the
+      dialog can hand one over. Bound once, and assert the integer and decimal keys agree.
+    - **BPM writer↔reader round-trip** — an MP3 BPM edit must come back out of
+      `extract_metadata`. Neither half means anything alone: the writer puts BPM in `TBPM`
+      because that is the only key ID3v2 maps, so the reader's `IntegerBpm` fallback (P3) is
+      what makes the edit visible in the app. See P3.
   - **Fixture placement matters.** `tests/headless.rs:34-47` adds **`tests/fixtures/` as a
     library folder**, scans it, and asserts `scanned == 1` / `tracks.len() == 1`. The scan is
     recursive, so *any* new audio file under `tests/fixtures/` — subdirectory included —

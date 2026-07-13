@@ -58,8 +58,8 @@ use lofty::tag::{Tag, TagType};
 
 use crate::error::AppError;
 
-/// Upper bound for a written BPM. Anything past this is a typo, not a tempo —
-/// and clamping keeps the integer form from rendering in scientific notation.
+/// Upper bound for a written BPM. Anything past this is a typo, not a tempo, and
+/// a tag holding a 12-digit "tempo" is worse than one holding none.
 const MAX_BPM: f64 = 1000.0;
 
 /// A per-field tri-state. The dialog reports what the user *did*, not just the
@@ -255,19 +255,27 @@ fn apply_bpm(tag: &mut Tag, edit: &FieldEdit<f64>, out: &mut Vec<&'static str>) 
             tag.remove_key(ItemKey::IntegerBpm);
         }
         FieldEdit::Set(v) => {
+            // Bound once, and write the *same* bounded value to both keys — the
+            // integer and the decimal form of one BPM must not disagree.
+            //
+            // `f64::clamp` does NOT absorb NaN: it is `if self < min {…}
+            // if self > max {…}`, and both comparisons are false for NaN, so NaN
+            // passes straight through and `{:.0}` renders it as the literal
+            // string "NaN". A dialog that parses its BPM field with
+            // `str::parse::<f64>()` accepts "nan" and "inf", so guard it here.
+            //
             // Format the rounded value straight to a string rather than casting
             // through an integer: a float→int `as` would trip
             // `cast_possible_truncation` / `cast_sign_loss` under the pedantic
-            // gate, and the tag only ever wants the decimal text anyway. `clamp`
-            // also lands NaN on the low bound rather than propagating it.
+            // gate, and the tag only ever wants the decimal text anyway.
             //
             // `.round()` before formatting is load-bearing: `{:.0}` rounds
             // half-to-even, so it would render 128.5 as "128". `f64::round` is
             // half-away-from-zero, which is what "rounded BPM" means to everyone
             // else — and once the value is integral, `{:.0}` is exact.
-            let integer = format!("{:.0}", v.clamp(0.0, MAX_BPM).round());
-            let int_ok = tag.insert_text(ItemKey::IntegerBpm, integer);
-            let dec_ok = tag.insert_text(ItemKey::Bpm, v.to_string());
+            let bpm = if v.is_nan() { 0.0 } else { v.clamp(0.0, MAX_BPM) };
+            let int_ok = tag.insert_text(ItemKey::IntegerBpm, format!("{:.0}", bpm.round()));
+            let dec_ok = tag.insert_text(ItemKey::Bpm, bpm.to_string());
             if !int_ok && !dec_ok {
                 out.push("bpm");
             }
@@ -384,8 +392,14 @@ pub fn apply_edit(tag: &mut Tag, edit: &TagEdit, picture: Option<&Picture>) -> U
         ArtworkEdit::Keep => {}
         ArtworkEdit::Remove => clear_front_cover(tag),
         ArtworkEdit::Replace => {
-            clear_front_cover(tag);
+            // Clear only with a replacement in hand. `Replace` is a unit variant
+            // (the orchestrator owns the picked `PathBuf`, which it needs for
+            // `cache_image_file` anyway), so the picture travels beside the edit
+            // and a caller *could* hand us `None` — and clearing first would
+            // silently turn a Replace into a Remove across the whole batch.
+            debug_assert!(picture.is_some(), "ArtworkEdit::Replace requires a Picture");
             if let Some(pic) = picture {
+                clear_front_cover(tag);
                 tag.push_picture(pic.clone());
             }
         }

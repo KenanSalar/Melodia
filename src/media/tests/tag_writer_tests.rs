@@ -225,6 +225,45 @@ fn bpm_writes_the_integer_key_on_id3v2_and_the_decimal_key_on_vorbis() {
     assert_eq!(text(&vorbis, ItemKey::Bpm).as_deref(), Some("128.5"));
 }
 
+/// The integer and decimal keys must never disagree, and neither may ever carry
+/// the literal string `"NaN"`.
+///
+/// `f64::clamp` does **not** absorb NaN — it compares `self < min` and
+/// `self > max`, both false for NaN — so a `"nan"` typed into the dialog's BPM
+/// field (which `str::parse::<f64>()` happily accepts) would otherwise render
+/// straight into TBPM. MP4 is the tag type that maps *both* keys, so one tag
+/// proves they agree.
+#[test]
+fn bpm_set_is_bounded_and_nan_safe() {
+    for (input, expected) in [
+        (f64::NAN, "0"),
+        (-5.0, "0"),
+        (1e9, "1000"),
+        (f64::INFINITY, "1000"),
+    ] {
+        let mut tag = Tag::new(TagType::Mp4Ilst);
+        apply_edit(
+            &mut tag,
+            &TagEdit {
+                bpm: FieldEdit::Set(input),
+                ..TagEdit::default()
+            },
+            None,
+        );
+
+        assert_eq!(
+            text(&tag, ItemKey::IntegerBpm).as_deref(),
+            Some(expected),
+            "IntegerBpm for {input}"
+        );
+        assert_eq!(
+            text(&tag, ItemKey::Bpm).as_deref(),
+            Some(expected),
+            "the decimal key must carry the same bounded value as the integer one"
+        );
+    }
+}
+
 #[test]
 fn clearing_bpm_removes_both_keys() {
     let mut tag = Tag::new(TagType::VorbisComments);
@@ -529,6 +568,33 @@ fn mp3_round_trips_a_full_edit_with_bpm_in_tbpm() -> Result<(), AppError> {
     Ok(())
 }
 
+/// The writer and the reader must agree about where `ID3v2` keeps BPM.
+///
+/// `ItemKey::Bpm` has no `ID3v2` mapping, so the writer puts BPM in `TBPM`
+/// (`IntegerBpm`). `extract_metadata` used to read `Bpm` alone, which meant a BPM
+/// edit on an MP3 landed in the file correctly and then vanished from the app on
+/// the next scan. This is the round-trip that pins the reader's fallback.
+#[test]
+fn an_mp3_bpm_edit_is_read_back_by_extract_metadata() -> Result<(), AppError> {
+    let tmp = TempDir::new()?;
+    let audio = stage(&tmp, "silence.mp3")?;
+
+    let edit = TagEdit {
+        bpm: FieldEdit::Set(128.0),
+        ..TagEdit::default()
+    };
+    apply_to_file(&audio, &edit, None)?;
+
+    let cache = artwork::new_cover_cache();
+    let meta = extract_metadata(&audio, tmp.path(), &cache, true)?;
+    assert_eq!(
+        meta.bpm,
+        Some(128.0),
+        "the reader must fall back to IntegerBpm (TBPM), which is the only key ID3v2 maps"
+    );
+    Ok(())
+}
+
 /// An MP3 carrying **only** an `ID3v1` tag must get a fresh `ID3v2` tag.
 ///
 /// This is why the writer targets `primary_tag_type()` and never `first_tag_mut()`:
@@ -602,5 +668,57 @@ fn wav_round_trips_a_full_edit_through_a_fresh_id3v2_tag() -> Result<(), AppErro
     let tag = read_primary(&audio)?;
     assert_eq!(tag.tag_type(), TagType::Id3v2);
     assert_full_edit_landed(&tag)?;
+    Ok(())
+}
+
+// ------------------------------------------------- the other two containers
+//
+// FLAC and WAV prove the *key mappings* for VorbisComments and ID3v2, but a tag
+// type says nothing about the container writer wrapped around it — OGG rewrites
+// pages and AIFF writes an ID3 chunk, and those are separate code paths in lofty.
+// These two cover the rest of what Melodia scans.
+
+#[test]
+fn ogg_round_trips_a_full_edit() -> Result<(), AppError> {
+    let tmp = TempDir::new()?;
+    let audio = stage(&tmp, "silence.ogg")?;
+
+    let unsupported = apply_to_file(&audio, &full_edit(), None)?;
+    assert!(
+        unsupported.is_empty(),
+        "VorbisComments maps every field: {:?}",
+        unsupported.0
+    );
+
+    let tag = read_primary(&audio)?;
+    assert_eq!(tag.tag_type(), TagType::VorbisComments);
+    assert_full_edit_landed(&tag)?;
+
+    // Same Vorbis key choices as FLAC: LYRICS, and BPM as the decimal key.
+    assert_eq!(text(&tag, ItemKey::Lyrics).as_deref(), Some("la la la"));
+    assert_eq!(text(&tag, ItemKey::Bpm).as_deref(), Some("128"));
+    Ok(())
+}
+
+#[test]
+fn aiff_round_trips_a_full_edit_through_id3v2() -> Result<(), AppError> {
+    let tmp = TempDir::new()?;
+    let audio = stage(&tmp, "silence.aiff")?;
+
+    let unsupported = apply_to_file(&audio, &full_edit(), None)?;
+    assert!(
+        unsupported.is_empty(),
+        "AIFF's primary tag is ID3v2, which maps every field: {:?}",
+        unsupported.0
+    );
+
+    let tag = read_primary(&audio)?;
+    assert_eq!(
+        tag.tag_type(),
+        TagType::Id3v2,
+        "not the sparse `AiffText` tag — the writer targets the primary type"
+    );
+    assert_full_edit_landed(&tag)?;
+    assert_eq!(text(&tag, ItemKey::IntegerBpm).as_deref(), Some("128"));
     Ok(())
 }
