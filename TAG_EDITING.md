@@ -851,7 +851,16 @@ only exists after `install_views`).
    All seven containers are covered: MP3 / FLAC / M4A / WAV, plus **OGG and AIFF** — a tag type
    says nothing about the container writer wrapped around it (OGG rewrites pages, AIFF writes an
    ID3 chunk), and those are separate code paths in lofty.
-2. `self_writes.rs` + the `file_event_processor` filter.
+2. ✅ **DONE — `self_writes.rs`** (`SelfWrites` on `AppState`, TTL 30 s) + the
+   `file_event_processor` filter, with 10 unit tests. The consumer half is complete; the
+   **producer** (`mark` / `unmark`) arrives with the step-4 orchestrator, which is the only thing
+   that writes files. Two notes for whoever picks that up: the time-taking `mark` / `take_recent`
+   are thin wrappers over private `mark_at(path, at)` / `take_recent_at(path, now)` so the TTL
+   sweep is testable without a 30 s sleep (and `Instant` **subtraction** is a clippy error under
+   the pedantic gate, whose suggested `checked_sub().unwrap()` is denied — the tests age an entry
+   by moving the *lookup* forward instead). The filter itself is the pure
+   `suppress_self_writes(batch, &SelfWrites)` beside the loop rather than an inline closure, so it
+   is testable without an `AppState`.
 3. Queries (`TagEditRow`, `get_track_paths_by_ids`, `set_track_artwork`, `set_album_artwork`),
    plus **P2** (the `upsert_album` year fix). **P3** (the BPM reader fallback) is ✅ **DONE** —
    it shipped with the writer, since a `TBPM` the reader can't see is a BPM edit that vanishes.

@@ -3,6 +3,7 @@ pub mod cover_thumbs;
 pub mod deezer;
 pub mod metadata;
 pub mod scanner;
+pub mod self_writes;
 pub mod tag_writer;
 pub mod watcher;
 

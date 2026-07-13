@@ -14,6 +14,7 @@ use crate::database::{self, DbPool};
 use crate::error::{AppError, AppResult};
 use crate::media::{
     artwork::CoverCache,
+    self_writes::SelfWrites,
     watcher::{FileEvent, FolderWatcher},
 };
 use crate::player::event_sink::{MediaControlsSync, PlayerSinks};
@@ -74,6 +75,10 @@ pub struct AppState {
     /// uses that to hide the progress bar in the Library settings section.
     pub scan_progress_tx: watch::Sender<Option<ScanProgressTick>>,
     pub watcher: Arc<parking_lot::Mutex<FolderWatcher>>,
+    /// Files this process wrote itself (tag edits), so the watcher can drop the
+    /// `Modified` events its own writes generate instead of paying for a full
+    /// re-ingest of a file it just retagged. See [`SelfWrites`].
+    pub self_writes: Arc<SelfWrites>,
     pub always_on_top: AlwaysOnTopCapability,
     pub search_history: Arc<SearchHistoryState>,
     pub media_controls: Option<Arc<MediaControlsHandle>>,
@@ -203,6 +208,7 @@ impl AppState {
             rescan_notice_tx,
             scan_progress_tx,
             watcher,
+            self_writes: Arc::new(SelfWrites::default()),
             always_on_top: always_on_top_capability,
             search_history,
             media_controls: Some(mc_handle),
