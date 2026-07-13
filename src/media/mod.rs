@@ -3,6 +3,7 @@ pub mod cover_thumbs;
 pub mod deezer;
 pub mod metadata;
 pub mod scanner;
+pub mod tag_writer;
 pub mod watcher;
 
 pub const AUDIO_EXTENSIONS: &[&str] = &[

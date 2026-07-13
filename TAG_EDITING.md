@@ -359,28 +359,44 @@ Load-bearing details, each verified against the lofty 0.24.0 source:
   `CoverBack` / booklet / artist pictures survive. In `apply_edit`: `Replace` →
   `clear_front_cover(tag)` + `tag.push_picture(pic.clone())`; `Remove` → `clear_front_cover(tag)`.
 
-  **Trap 2: a TIFF cover hard-errors the M4A save.** `MimeType` is PNG / JPEG / TIFF / BMP / GIF
-  + `Unknown(String)` (`picture.rs:43-56`), so `from_reader` accepts a `.tiff` and returns
-  `MimeType::Tiff` — but the MP4 `covr` writer (`mp4/ilst/write.rs:737-751`) accepts only
-  **Gif / Jpeg / Png / Bmp** and returns `FileEncodingError` on anything else. MP3 / FLAC / OGG
-  write the mime as a free string and don't care, so this is a *per-target-format* failure that a
-  single picker filter cannot express.
+  **Trap 2: the picker's accepted formats are constrained from two directions at once, and they
+  disagree.** Two facts, both verified against the 0.24.0 source:
 
-  **Normalize, don't filter.** `image` is already a direct dependency with `jpeg`, `png` and
-  **`webp`** enabled (`Cargo.toml:165`), and the orchestrator already decodes the cover exactly
-  once. So:
+  - **lofty rejects anything it can't sniff — there is no `Unknown` fallthrough.**
+    `Picture::mimetype_from_bin` (`picture.rs:956-966`) recognises exactly PNG / JPEG / GIF / BMP /
+    TIFF and otherwise returns `NotAPicture`. So a **WebP hard-errors at `from_reader`**. (An
+    earlier draft of this doc claimed it would come back as `MimeType::Unknown`. It does not —
+    `Unknown(String)` exists on the enum but `from_reader` can never produce it.)
+  - **MP4's `covr` writer** (`mp4/ilst/write.rs:737-751`) accepts only **Gif / Jpeg / Png / Bmp**
+    and returns `FileEncodingError` on anything else — so a **TIFF**, which lofty *does* sniff
+    happily, still hard-errors the save, but only on M4A/ALAC. MP3 / FLAC / OGG write the mime as a
+    free string and don't care. No single picker filter can express that difference.
 
-  1. Offer a **broad** picker: `jpg jpeg png webp gif bmp tiff`.
+  **Normalize, don't filter.** `image` is already a direct dependency — but with
+  `default-features = false, features = ["jpeg", "png", "webp"]` (`Cargo.toml:165`), so it **cannot
+  decode TIFF / BMP / GIF today**. (An earlier draft of this doc assumed it could and specified a
+  broad `jpg jpeg png webp gif bmp tiff` picker; that is not implementable without adding three
+  decoder features.) So:
+
+  1. Offer the picker `jpg jpeg png webp` — exactly what `image` can decode with the features we
+     already build.
   2. **Decode it with `image`.** This is the validation step — `from_reader` only sniffs 8 bytes
      and never decodes, so a truncated JPEG would otherwise embed happily into N files and only
      blow up later at thumbnail time. A corrupt pick now fails the whole edit up front with a
      clear toast.
-  3. If the sniffed mime is already **JPEG or PNG**, embed the original bytes untouched (no lossy
-     re-compression). Otherwise — webp / gif / bmp / tiff / `Unknown` — **re-encode to JPEG** and
-     build the `Picture` from those bytes.
+  3. If the format is **JPEG or PNG**, embed the original bytes untouched (no lossy
+     re-compression). Otherwise — today that means **WebP** — **re-encode to JPEG** and build the
+     `Picture` from those bytes.
 
-  That kills the TIFF crash, drops the "must not offer webp" carve-out, and buys decode
-  validation, in one place.
+  WebP is the case that makes the normalizer load-bearing rather than decorative: lofty refuses it
+  outright, so it can only be embedded at all by being re-encoded, and M4A is the target that
+  proves the round-trip. Consequence worth stating plainly: **the TIFF-hard-errors-M4A trap is now
+  unreachable rather than fixed** — a TIFF can no longer be picked. Widening the picker back out
+  means adding `gif`, `bmp`, `tiff` to `image`'s features, at which point step 3's "everything else
+  re-encodes to JPEG" already covers them.
+
+  Implemented as `tag_writer::cover_picture_from_path` — pure, and beside the writer rather than in
+  the orchestrator, since it has no `AppState`.
 
 - **Never touch what the user didn't edit — and by default that holds.**
   `GlobalOptions::preserve_format_specific_items` defaults to **`true`**
@@ -816,12 +832,17 @@ only exists after `install_views`).
 
 ## Order of work
 
-0. **P1** — the `Dialog.closed` teardown fix (`public function closed-teardown()` + the one Rust
-   handler), its own commit, before anything else. The tag dialog depends on it.
-1. `tag_writer.rs` + its unit tests — pure, no UI, no DB. Prove the round-trip first.
-   **Write the M4A artwork test before the fix**: it must fail against a plain
-   `remove_picture_type(CoverFront)` and pass once `clear_front_cover` lands. That is the one
-   trap nothing else in the matrix catches.
+0. ✅ **DONE — P1** — the `Dialog.closed` teardown fix (`public function closed-teardown()` + the
+   one Rust handler). Confirmed against the generated `app-window.rs`: `InnerDialog`'s init installs
+   the `.slint` body via `set_callback_handler`, and Rust's `on_closed` (a plain `set_handler` on
+   the same slot, running later) replaced it — the body really was dead code.
+1. ✅ **DONE — `tag_writer.rs`** + 19 unit tests, all green. Fixtures live in **`tests/assets/`**
+   (NOT `tests/fixtures/`, which `headless.rs` scans and asserts `scanned == 1` on). The M4A
+   artwork test was confirmed to **fail** against a plain `remove_picture_type(CoverFront)` — two
+   pictures come back, the old `Other` one beside the new `CoverFront` — and to pass once
+   `clear_front_cover` clears both types. `ArtworkEdit::Replace` is a **unit variant**: the
+   `Picture` is built once by `cover_picture_from_path` and passed alongside, so the orchestrator
+   owns the picked `PathBuf` (it needs it for `cache_image_file` anyway).
 2. `self_writes.rs` + the `file_event_processor` filter.
 3. Queries (`TagEditRow`, `get_track_paths_by_ids`, `set_track_artwork`, `set_album_artwork`),
    plus **P2** (the `upsert_album` year fix) and **P3** (the BPM reader fallback).
@@ -829,10 +850,13 @@ only exists after `install_views`).
 5. Slint: `TagEditor` global, `tag-editor-body.slint`, `multiline-input.slint`, the
    `dialog.slint` branch, the context-menu item.
 6. `ui/callbacks/tags.rs`, hooking its cover release into the P1 handler.
-7. Housekeeping picked up along the way (each a small separate edit, per the
-   fix-it-when-you-see-it convention): pin `lofty = "0.24.0"` in `Cargo.toml:155` (it is `"0.24"`
-   today, and `0.24.0` is both the resolved and the current release); fix the stale
-   `push_row_values` name in the `scan/mutations.rs:16-19` comment.
+7. ✅ **DONE** — housekeeping: `lofty` pinned to `"0.24.0"`; the stale `push_row_values` name in the
+   `scan/mutations.rs` comment corrected to the real inline `qb.push_values(…)` closure. Also
+   cleared out every `#[allow(dead_code)]` in hand-written code while in there (the eight
+   `assert_send_sync` fns became anonymous `const _: fn()` assertions; `UiHandles`'
+   `browse_ui`/`favorites_ui`/`search_ui` turned out to be keepalives guarding nothing — there is
+   no `Arc::downgrade` or `Weak<…Ui>` anywhere, every `wire_*` closure clones its own strong `Arc`
+   — and were deleted).
 8. Docs: CLAUDE.md conventions entry (and the corrected dialog-close bullet from P1).
 
 ---
@@ -857,8 +881,10 @@ only exists after `install_views`).
       `find_and_cache_artwork`, assert the returned artwork hash is the **new** image. This is
       the *only* test that catches the `pic_type`-flattening trap; write it first, and confirm
       it fails against a plain `remove_picture_type(CoverFront)`.
-    - **M4A cover format** — a TIFF (or WebP) source normalizes to JPEG and the save **succeeds**.
-      Guards the `mp4/ilst/write.rs` `FileEncodingError` path.
+    - **M4A cover format** — a **WebP** source normalizes to JPEG and the save **succeeds**.
+      Guards the `mp4/ilst/write.rs` `FileEncodingError` path. (WebP, not TIFF: lofty's
+      `from_reader` refuses a WebP outright, so it is the reachable case — see Artwork Trap 2.
+      Assert lofty really does reject the raw WebP first, or the test proves nothing.)
     - **WAV** — assert it round-trips a *full* edit through a **fresh ID3v2 tag**, and that
       `UnsupportedFields` comes back **empty**. (Do **not** write the obvious "assert the
       unwritable fields are reported" test — it cannot pass. WAV's primary tag is ID3v2, not

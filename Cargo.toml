@@ -152,7 +152,7 @@ rodio = { version = "0.22.2", default-features = false, features = [
 # `DirectForm1` keeps past inputs/outputs in its delay line, so live
 # coefficient swaps (slider drags) don't inject transients.
 biquad = "0.6.0"
-lofty = "0.24"
+lofty = "0.24.0"
 
 # Library indexing / file IO
 walkdir = "2.5"

@@ -229,8 +229,10 @@ pub fn to_slint_most_played_row(t: &MostPlayedFavorite) -> UiEntityStripRow {
     }
 }
 
-#[allow(dead_code)]
-fn assert_send_sync() {
+// Compile-time assertion, not runtime code: an anonymous `const _` is
+// type-checked but never dead-code-flagged, so the bound is enforced
+// without an `#[allow(dead_code)]` on a fn nothing calls.
+const _: fn() = || {
     fn check<T: Send + Sync>() {}
     check::<RecentlyPlayedUi>();
-}
+};

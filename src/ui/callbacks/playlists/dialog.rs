@@ -42,26 +42,40 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
         playlists.on_request_row_cover(move |path| pu.row_cover(path.as_str()));
     }
 
-    // Mirror of the album-detail Image-property release: when the
-    // dialog's close animation completes, drop the `SharedPixelBuffer`
-    // Arc pinned on `Dialog.current-artwork` (~603 KiB, pulled from
-    // the playlist grid-tier LRU at dialog-open) so it releases on the
-    // same tick the body branch unmounts. The Slint-side default
-    // `closed` handler in `globals.slint` already clears scalar / list
-    // / chrome state (`kind` / `target-id` / `input-text*` / `mosaic-*`
-    // / `pending-track-ids` / `title` / `message` / labels / destructive);
-    // the `image`-typed `current-artwork` has no Slint default literal
-    // so it lives here. Pair the Arc drop with an off-thread
-    // `heap_trim::trim()` (parity with `release_detail_artwork`) so
-    // glibc returns the freed pages instead of holding them in the
-    // arena. Trim must stay off the UI thread — it walks arena free
-    // lists.
+    // THE `Dialog.closed` handler — there is exactly one, and there must
+    // stay exactly one. `on_closed` is `Callback::set_handler`, which has
+    // a single slot: a second registration anywhere would silently clobber
+    // this one (and a default `closed => { … }` body in `globals.slint`
+    // would be clobbered BY it, which is precisely the leak this shape
+    // replaced). A new dialog kind that pins an `image` extends this
+    // handler; it does not add another.
+    //
+    // Two halves, fired once the close animation completes:
+    //
+    //   1. `invoke_closed_teardown()` — the Slint-side `public function`
+    //      that resets every scalar / list / chrome property (`kind` /
+    //      `target-id` / `input-text*` / `mosaic-*` / `pending-track-ids`
+    //      / the two picker row models / `title` / `message` / labels /
+    //      `destructive`). A `public function` has no handler slot, so it
+    //      cannot be registered away the way a callback body can.
+    //   2. `current-artwork` — the one `image`-typed property, which has
+    //      no Slint default literal and so can only be reset from Rust.
+    //      This is the ~603 KiB `SharedPixelBuffer` Arc pulled from the
+    //      playlist grid-tier LRU at dialog-open; dropping it here releases
+    //      it on the same tick the body branch unmounts.
+    //
+    // Pair the Arc drop with an off-thread `heap_trim::trim()` (parity with
+    // `release_detail_artwork`) so glibc returns the freed pages instead of
+    // holding them in the arena. Trim must stay off the UI thread — it
+    // walks arena free lists.
     {
         let weak = weak.clone();
         let s = state.clone();
         ui.global::<Dialog>().on_closed(move || {
             let Some(ui) = weak.upgrade() else { return };
-            ui.global::<Dialog>().set_current_artwork(Image::default());
+            let dlg = ui.global::<Dialog>();
+            dlg.invoke_closed_teardown();
+            dlg.set_current_artwork(Image::default());
             s.runtime.spawn_blocking(crate::tasks::heap_trim::trim);
         });
     }

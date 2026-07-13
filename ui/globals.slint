@@ -1207,17 +1207,37 @@ export global Dialog {
     cancelled => { }
 
     // Fired by `DialogOverlay` once the close animation reaches t ≈ 0
-    // (see `ui/components/dialog/dialog.slint`). The default handler below
-    // tears down all scalar / list state in pure Slint so the next
-    // open starts from a clean slate and the body branch's internal
-    // model state isn't kept alive by stale `SharedString` arrays.
-    // The `image`-typed `current-artwork` has no Slint default literal,
-    // so a Rust subscriber in `wire_playlists` resets it to
-    // `Image::default()` on this same callback — that's what drops the
-    // ~603 KiB `SharedPixelBuffer` Arc pulled from the playlist
-    // grid-tier LRU at dialog-open.
+    // (see `ui/components/dialog/dialog.slint`). It has exactly ONE
+    // handler, registered in Rust (`callbacks/playlists/dialog.rs`), and
+    // that handler drives close-time teardown in two halves:
+    //
+    //   1. `closed-teardown()` below — every scalar / list / chrome
+    //      property, reset declaratively in Slint so the next open starts
+    //      from a clean slate and no body branch is kept mounted by a
+    //      stale `kind` or a stale `SharedString` array.
+    //   2. The `image`-typed `current-artwork`, which has no Slint default
+    //      literal and so must be reset from Rust — that's what drops the
+    //      ~603 KiB `SharedPixelBuffer` Arc pulled from the playlist
+    //      grid-tier LRU at dialog-open.
+    //
+    // The teardown is a `public function`, NOT a second callback, and the
+    // distinction is load-bearing. A Slint callback has a single handler
+    // slot: a default `closed => { … }` body here is installed during
+    // `InnerDialog::new()`, and the Rust `on_closed` — which is a plain
+    // `Callback::set_handler` and necessarily runs later — silently
+    // REPLACES it. That is exactly the bug this shape fixes; the body had
+    // been dead code, so `kind` and the picker row models were never
+    // cleared and every picker row's cover Arc stayed pinned for the life
+    // of the process. A `public function` has no handler slot at all, so
+    // it cannot be registered away.
+    //
+    // Do not try to re-register `closed` from inside the `closed` handler:
+    // `Callback::call` `take()`s the handler for the duration of the call
+    // and asserts "Callback Handler set while called". Invoking a
+    // different item (as we do) is safe.
     callback closed();
-    closed => {
+
+    public function closed-teardown() {
         // Routing / kind-gated body branches.
         root.kind = "";
         root.target-id = -1;
@@ -1234,7 +1254,7 @@ export global Dialog {
         // every row's `Image { source: Playlists.request-row-cover(...) }`
         // binding so the row-tier LRU's `SharedPixelBuffer` Arcs drop.
         // Pairs with the Rust-side `heap_trim::trim()` registered for
-        // `Dialog.closed` in `callbacks/playlists.rs`.
+        // `Dialog.closed` in `callbacks/playlists/dialog.rs`.
         root.playlist-pick-rows = [];
         root.add-select-all = false;
         root.add-selected-count = 0;

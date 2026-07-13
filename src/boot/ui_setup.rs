@@ -35,30 +35,20 @@ pub fn install_app_chrome(app: &AppWindow, state: &AppState) {
 /// Container for the per-view UI handles created during `install_views`,
 /// returned so callers can wire `now_playing_favorite` (which captures all
 /// four) and the initial fetches (`tracks` / `albums` / `artists`).
+///
+/// Only the handles a *caller* actually reads live here. `BrowseUi` /
+/// `FavoritesUi` / `SearchUi` deliberately do **not**: every `wire_*` closure
+/// and `library_changed_tx` subscriber captures its own strong `Arc` clone, and
+/// those closures are owned by the `AppWindow` (and by spawned tasks) for the
+/// lifetime of the app. There is not a single `Arc::downgrade` or `Weak<…Ui>`
+/// in the tree, so a field here would have been a keepalive guarding nothing.
 pub struct UiHandles {
     pub cover_thumbs: Arc<media::cover_thumbs::CoverThumbs>,
     pub tracks_ui: Arc<ui::tracks::TracksUi>,
-    /// Held to keep the `BrowseUi`'s captured-by-callback weak references
-    /// alive across the lifetime of the app; never read directly by main.
-    #[allow(dead_code)]
-    pub browse_ui: Arc<ui::browse::BrowseUi>,
     pub albums_ui: Arc<ui::albums::AlbumsUi>,
     pub artists_ui: Arc<ui::artists::ArtistsUi>,
     pub genres_ui: Arc<ui::genres::GenresUi>,
     pub playlists_ui: Arc<ui::playlists::PlaylistsUi>,
-    /// Held to keep `FavoritesUi`'s captured-by-callback weak refs alive
-    /// for the lifetime of the app; never read directly by main, but
-    /// the `Arc` count must stay > 0 so the `library_changed_tx`
-    /// subscriber doesn't observe a dropped `FavoritesUi` mid-flight.
-    #[allow(dead_code)]
-    pub favorites_ui: Arc<ui::favorites::FavoritesUi>,
-    /// Held to keep `SearchUi`'s captured-by-callback Arc references
-    /// alive across the lifetime of the app; never read directly by
-    /// `main()`, but every `wire_search` closure clones from this
-    /// `Arc`, so dropping it would invalidate the row/strip cover
-    /// callbacks the Slint global keeps invoking.
-    #[allow(dead_code)]
-    pub search_ui: Arc<ui::search::SearchUi>,
 }
 
 /// Install the Tracks / Browse / Albums views + their callbacks. Seeds the
@@ -210,16 +200,16 @@ pub fn install_views(
     ui::artists::tune_cache_for_display(app, &artists_ui);
     ui::playlists::tune_cache_for_display(app, &playlists_ui);
 
+    // `browse_ui` / `favorites_ui` / `search_ui` are deliberately dropped here:
+    // their `wire_*` closures each hold a strong `Arc` clone, so the objects
+    // outlive this scope regardless. See the note on `UiHandles`.
     UiHandles {
         cover_thumbs,
         tracks_ui,
-        browse_ui,
         albums_ui,
         artists_ui,
         genres_ui,
         playlists_ui,
-        favorites_ui,
-        search_ui,
     }
 }
 
