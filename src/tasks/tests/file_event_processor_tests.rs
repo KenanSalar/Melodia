@@ -116,14 +116,14 @@ fn suppress_drops_modified_events_for_paths_we_wrote() {
     let self_writes = SelfWrites::default();
     self_writes.mark(Path::new("/music/edited.mp3"));
 
-    let batch = vec![
+    let mut batch = vec![
         FileEvent::Modified(PathBuf::from("/music/edited.mp3")),
         FileEvent::Modified(PathBuf::from("/music/external.mp3")),
     ];
 
-    let result = suppress_self_writes(batch, &self_writes);
+    suppress_self_writes(&mut batch, &self_writes);
     assert_eq!(
-        result,
+        batch,
         vec![FileEvent::Modified(PathBuf::from("/music/external.mp3"))]
     );
 }
@@ -136,7 +136,7 @@ fn suppress_only_filters_modified() {
     let self_writes = SelfWrites::default();
     self_writes.mark(Path::new("/music/edited.mp3"));
 
-    let batch = vec![
+    let original = vec![
         FileEvent::Created(PathBuf::from("/music/edited.mp3")),
         FileEvent::Removed(PathBuf::from("/music/edited.mp3")),
         FileEvent::Renamed {
@@ -145,8 +145,9 @@ fn suppress_only_filters_modified() {
         },
     ];
 
-    let result = suppress_self_writes(batch.clone(), &self_writes);
-    assert_eq!(result, batch);
+    let mut batch = original.clone();
+    suppress_self_writes(&mut batch, &self_writes);
+    assert_eq!(batch, original);
 }
 
 #[test]
@@ -155,10 +156,15 @@ fn suppress_consumes_the_mark_so_a_second_event_survives() {
     self_writes.mark(Path::new("/music/edited.mp3"));
 
     let echo = vec![FileEvent::Modified(PathBuf::from("/music/edited.mp3"))];
-    assert!(suppress_self_writes(echo.clone(), &self_writes).is_empty());
+
+    let mut batch = echo.clone();
+    suppress_self_writes(&mut batch, &self_writes);
+    assert!(batch.is_empty());
 
     // A later, genuinely external edit to the same file is not swallowed.
-    assert_eq!(suppress_self_writes(echo.clone(), &self_writes), echo);
+    let mut batch = echo.clone();
+    suppress_self_writes(&mut batch, &self_writes);
+    assert_eq!(batch, echo);
 }
 
 #[test]
@@ -167,10 +173,11 @@ fn suppress_can_empty_the_batch() {
     self_writes.mark(Path::new("/music/a.mp3"));
     self_writes.mark(Path::new("/music/b.mp3"));
 
-    let batch = vec![
+    let mut batch = vec![
         FileEvent::Modified(PathBuf::from("/music/a.mp3")),
         FileEvent::Modified(PathBuf::from("/music/b.mp3")),
     ];
 
-    assert!(suppress_self_writes(batch, &self_writes).is_empty());
+    suppress_self_writes(&mut batch, &self_writes);
+    assert!(batch.is_empty());
 }

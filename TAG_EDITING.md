@@ -858,13 +858,39 @@ only exists after `install_views`).
    are thin wrappers over private `mark_at(path, at)` / `take_recent_at(path, now)` so the TTL
    sweep is testable without a 30 s sleep (and `Instant` **subtraction** is a clippy error under
    the pedantic gate, whose suggested `checked_sub().unwrap()` is denied — the tests age an entry
-   by moving the *lookup* forward instead). The filter itself is the pure
-   `suppress_self_writes(batch, &SelfWrites)` beside the loop rather than an inline closure, so it
-   is testable without an `AppState`.
+   by moving the *lookup* forward instead). The filter itself is
+   `suppress_self_writes(&mut batch, &SelfWrites)` beside the loop rather than an inline closure,
+   so it is testable without an `AppState`.
 3. Queries (`TagEditRow`, `get_track_paths_by_ids`, `set_track_artwork`, `set_album_artwork`),
    plus **P2** (the `upsert_album` year fix). **P3** (the BPM reader fallback) is ✅ **DONE** —
    it shipped with the writer, since a `TBPM` the reader can't see is a BPM edit that vanishes.
 4. `library/tags.rs` orchestrator + `sync_track_summaries`.
+
+   ⚠ **The orchestrator owns the whole row, not just the tag columns.** Step 2's suppression
+   removes the watcher event that would have run `update_track_metadata` — and that statement
+   rewrites `file_hash`, `file_size` and `date_modified` alongside the tags. None of those three
+   are tag columns, and **all three change on every tag write**, because rewriting a file's tags
+   rewrites its bytes.
+
+   The `extract_metadata` call in step 3 above is what covers them: it `stat`s the file, BLAKE3-
+   hashes it (`metadata.rs:114-125` — `ExtractedMetadata.file_hash` is a non-optional `String`)
+   and re-parses the tags, and step 4 hands that whole struct to `update_track_metadata`. So
+   suppression isn't skipping that work — it's skipping the watcher's **second, redundant copy**
+   of it (and a second `library_changed_tx` bump) a few seconds later, which is exactly what §2
+   above says.
+
+   What must never happen is "optimizing" the orchestrator into a hand-built UPDATE from the tag
+   values it already knows — dropping `extract_metadata` to save a re-parse. It would still have
+   to `stat` for `date_modified`, and a fresh `date_modified` beside a stale `file_hash` is the
+   one state the boot reconcile cannot repair: `scanner::track_is_current` compares the stored
+   size and mtime and would read the row as current forever, leaving a permanently wrong hash
+   under moved-file detection and M3U8 playlist re-matching, which `retroactive_hash` won't fix
+   either (it backfills *missing* hashes, not stale ones). It would also break the artwork
+   `Remove` path, which writes back the *re-extracted* value.
+
+   And `SelfWrites::mark` must be fed the **DB `file_path`** (what `get_track_paths_by_ids`
+   returns) — the set keys on exact `PathBuf` equality, so a picker-supplied path silently
+   suppresses nothing.
 5. Slint: `TagEditor` global, `tag-editor-body.slint`, `multiline-input.slint`, the
    `dialog.slint` branch, the context-menu item.
 6. `ui/callbacks/tags.rs`, hooking its cover release into the P1 handler.

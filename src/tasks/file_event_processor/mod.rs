@@ -33,14 +33,16 @@ use reconcile::process_batch;
 ///
 /// `take_recent` consumes the entry, so a path is suppressed at most once per
 /// write. See [`SelfWrites`] for the accepted trades.
-fn suppress_self_writes(batch: Vec<FileEvent>, self_writes: &SelfWrites) -> Vec<FileEvent> {
-    batch
-        .into_iter()
-        .filter(|event| match event {
-            FileEvent::Modified(path) => !self_writes.take_recent(path),
-            _ => true,
-        })
-        .collect()
+///
+/// In place rather than `into_iter().filter().collect()`: nothing is suppressed in
+/// the overwhelmingly common case (a batch of genuine external events), and that
+/// case should not rebuild the `Vec`. `retain` visits each element exactly once, in
+/// order, which is what `take_recent`'s consume-on-hit semantics need.
+fn suppress_self_writes(batch: &mut Vec<FileEvent>, self_writes: &SelfWrites) {
+    batch.retain(|event| match event {
+        FileEvent::Modified(path) => !self_writes.take_recent(path),
+        _ => true,
+    });
 }
 
 /// Spawn the file-event-processor on the shared task lifecycle so the main
@@ -66,7 +68,7 @@ pub fn spawn(spawner: &TaskSpawner, state: &AppState, mut rx: mpsc::Receiver<Fil
                 batch.push(event);
             }
 
-            let batch = deduplicate_events(batch);
+            let mut batch = deduplicate_events(batch);
             if batch.is_empty() {
                 continue;
             }
@@ -95,7 +97,7 @@ pub fn spawn(spawner: &TaskSpawner, state: &AppState, mut rx: mpsc::Receiver<Fil
             // than `&AppState`, so this is also the only place the set is in
             // scope without widening its signature.
             let before = batch.len();
-            let batch = suppress_self_writes(batch, &state.self_writes);
+            suppress_self_writes(&mut batch, &state.self_writes);
             let suppressed = before - batch.len();
             if suppressed > 0 {
                 log::debug!("Suppressed {suppressed} watcher event(s) from our own tag writes");
