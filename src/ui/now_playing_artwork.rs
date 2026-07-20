@@ -31,6 +31,8 @@ use lru::LruCache;
 use parking_lot::Mutex;
 use slint::{Rgb8Pixel, SharedPixelBuffer};
 
+use crate::ui::util::buffer_from_rgb;
+
 /// Side length (px) the sharp cover tile is downscaled to. Roughly matches
 /// the `380 px` maximum on-screen tile — `image-fit: cover` + Skia mipmaps
 /// keep it crisp without the memory cost of a 2× `HiDPI` buffer. Each cover
@@ -175,14 +177,6 @@ fn decode_artwork(path: &Path) -> CachedArtwork {
         blur,
         accent_argb,
     })
-}
-
-/// Copy an `image` RGB8 buffer into a Slint `SharedPixelBuffer`.
-fn buffer_from_rgb(img: &image::RgbImage) -> SharedPixelBuffer<Rgb8Pixel> {
-    let (w, h) = img.dimensions();
-    let mut buf = SharedPixelBuffer::<Rgb8Pixel>::new(w, h);
-    buf.make_mut_bytes().copy_from_slice(img.as_raw());
-    buf
 }
 
 #[cfg(test)]

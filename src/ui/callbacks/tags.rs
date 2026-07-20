@@ -31,6 +31,7 @@ use crate::library::tags::TagEditReport;
 use crate::media::tag_writer::{self, ArtworkEdit, FieldEdit, TagEdit};
 use crate::state::AppState;
 use crate::ui::notifications::{NotificationParams, NotificationsUi};
+use crate::ui::util::buffer_from_rgb;
 use crate::{AppWindow, Dialog, Settings, TagEditor};
 
 /// The editable fields, in the order [`build_edit`] / `TagSession::originals`
@@ -241,8 +242,9 @@ pub fn wire_tags(ui: &AppWindow, state: &AppState, notifications: &Rc<Notificati
             };
 
             // A reflexive open-then-Save must not touch disk (lofty rewrites the
-            // tag whether or not anything changed).
-            if edit.is_noop() && edit.artwork == ArtworkEdit::Keep {
+            // tag whether or not anything changed). `is_noop()` already folds in
+            // the artwork tri-state.
+            if edit.is_noop() {
                 return;
             }
 
@@ -611,10 +613,7 @@ fn decode_cover_preview(path: &Path) -> Option<SharedPixelBuffer<Rgb8Pixel>> {
     reader.limits(limits);
 
     let rgb = reader.decode().ok()?.thumbnail(PREVIEW_SIZE, PREVIEW_SIZE).to_rgb8();
-    let (w, h) = rgb.dimensions();
-    let mut buf = SharedPixelBuffer::<Rgb8Pixel>::new(w, h);
-    buf.make_mut_bytes().copy_from_slice(rgb.as_raw());
-    Some(buf)
+    Some(buffer_from_rgb(&rgb))
 }
 
 #[cfg(test)]

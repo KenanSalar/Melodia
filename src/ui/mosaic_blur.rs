@@ -13,6 +13,8 @@ use std::path::Path;
 use image::imageops::fast_blur;
 use slint::{Rgb8Pixel, SharedPixelBuffer};
 
+use crate::ui::util::buffer_from_rgb;
+
 /// Atlas + blur target size. Matches `now_playing_artwork::BLUR_DOWNSCALE`
 /// so the GPU pipeline / cache pressure stays consistent across blur
 /// surfaces. Bigger than this gains nothing because the surface is
@@ -123,13 +125,6 @@ fn blit(dst: &mut image::RgbImage, src: &image::RgbImage, dx: u32, dy: u32, dw: 
             dst.put_pixel(dx + x, dy + y, px);
         }
     }
-}
-
-fn buffer_from_rgb(img: &image::RgbImage) -> SharedPixelBuffer<Rgb8Pixel> {
-    let (w, h) = img.dimensions();
-    let mut buf = SharedPixelBuffer::<Rgb8Pixel>::new(w, h);
-    buf.make_mut_bytes().copy_from_slice(img.as_raw());
-    buf
 }
 
 #[cfg(test)]

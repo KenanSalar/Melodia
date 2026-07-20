@@ -1,6 +1,6 @@
 use image::{ImageBuffer, Rgb, RgbImage};
 
-use super::{blit, buffer_from_rgb, compose_mosaic_blur};
+use super::{blit, compose_mosaic_blur};
 use crate::error::AppError;
 
 fn solid(w: u32, h: u32, rgb: [u8; 3]) -> RgbImage {
@@ -41,16 +41,6 @@ fn blit_with_empty_source_is_a_no_op() {
     let src: RgbImage = ImageBuffer::new(0, 0);
     blit(&mut dst, &src, 0, 0, 2, 2);
     assert_eq!(dst.get_pixel(1, 1).0, [7, 7, 7]);
-}
-
-#[test]
-fn buffer_from_rgb_round_trips_dimensions_and_bytes() {
-    let mut img = solid(3, 2, [1, 2, 3]);
-    img.put_pixel(2, 1, Rgb([9, 8, 7]));
-    let buf = buffer_from_rgb(&img);
-    assert_eq!(buf.width(), 3);
-    assert_eq!(buf.height(), 2);
-    assert_eq!(buf.as_bytes(), img.as_raw().as_slice());
 }
 
 #[test]

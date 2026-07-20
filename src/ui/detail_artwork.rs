@@ -29,6 +29,7 @@ use parking_lot::Mutex;
 use slint::{Rgb8Pixel, SharedPixelBuffer};
 
 use crate::state::AppState;
+use crate::ui::util::buffer_from_rgb;
 
 /// Side length (px) the sharp cover tile is downscaled to. Matches
 /// [`crate::ui::now_playing_artwork`]'s `COVER_SIZE` and the on-screen
@@ -189,11 +190,4 @@ fn decode_artwork(path: &Path) -> CachedArtwork {
     let blur = buffer_from_rgb(&fast_blur(&small, BLUR_SIGMA));
 
     Some(ArtworkPair { cover, blur })
-}
-
-fn buffer_from_rgb(img: &image::RgbImage) -> SharedPixelBuffer<Rgb8Pixel> {
-    let (w, h) = img.dimensions();
-    let mut buf = SharedPixelBuffer::<Rgb8Pixel>::new(w, h);
-    buf.make_mut_bytes().copy_from_slice(img.as_raw());
-    buf
 }
