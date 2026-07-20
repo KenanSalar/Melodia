@@ -1215,3 +1215,71 @@ msgstr "Ninguna pista coincide con estas reglas."
 
 msgid "Create an empty playlist"
 msgstr "Crear una lista vacía"
+
+# ---- Tag editor (Edit Track Information dialog) ------------------------------
+
+msgid "Tags"
+msgstr "Etiquetas"
+
+msgid "Lyrics"
+msgstr "Letra"
+
+msgid "Summary"
+msgstr "Resumen"
+
+msgid "Composer"
+msgstr "Compositor"
+
+msgid "Disc"
+msgstr "Disco"
+
+msgid "Original Year"
+msgstr "Año original"
+
+msgid "BPM"
+msgstr "BPM"
+
+msgid "Comment"
+msgstr "Comentario"
+
+msgid "Replace…"
+msgstr "Reemplazar…"
+
+msgid "Path"
+msgstr "Ruta"
+
+msgid "Codec"
+msgstr "Códec"
+
+msgid "Bitrate"
+msgstr "Tasa de bits"
+
+msgid "Sample Rate"
+msgstr "Frecuencia de muestreo"
+
+msgid "Bit Depth"
+msgstr "Profundidad de bits"
+
+msgid "Channels"
+msgstr "Canales"
+
+msgid "Size"
+msgstr "Tamaño"
+
+msgid "Modified"
+msgstr "Modificado"
+
+msgid "BLAKE3"
+msgstr "BLAKE3"
+
+msgid "Edit Tags…"
+msgstr "Editar etiquetas…"
+
+msgid "Edit Track Information"
+msgstr "Editar información de la pista"
+
+msgid "Edit Tags for {}"
+msgstr "Editar etiquetas de {}"
+
+msgid "Edit {} Tracks"
+msgstr "Editar {} pistas"

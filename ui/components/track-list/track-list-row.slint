@@ -1,7 +1,7 @@
 import { ScrollView } from "std-widgets.slint";
 import { Theme } from "../../theme.slint";
 import { TrackListRow } from "../../models.slint";
-import { Playlists, Dialog, Nav, PopupHighlight, RowCovers } from "../../globals.slint";
+import { Playlists, Dialog, Nav, PopupHighlight, RowCovers, TagEditor } from "../../globals.slint";
 import { MaterialIcon } from "../material-icon.slint";
 import { StarRating } from "../star-rating.slint";
 import { ArtworkImage } from "../artwork-image.slint";
@@ -794,6 +794,32 @@ export component TrackListRowItem inherits Rectangle {
                                 ctx-popup.effective-ids,
                                 !root.row-data.is_favorite,
                             );
+                        }
+                    }
+
+                    // Edit Track Information — opens the tag-editor dialog for
+                    // the right-clicked row (single) or the whole selection
+                    // (multi; batch editing is the point). Sets the dialog
+                    // chrome inline (`@tr` re-resolves on locale switch); Rust's
+                    // `request-edit` fetches the rows, populates `TagEditor`, and
+                    // flips `Dialog.open` on a fresh tick (the recursion-guard
+                    // hop, like `SmartEditor.request-edit`), so we DON'T set
+                    // `Dialog.open` here.
+                    MenuItem {
+                        label: root.multi-active
+                            ? @tr("Edit Tags for {}", root.multi-count)
+                            : @tr("Edit Tags…");
+                        icon: "edit";
+                        clicked => {
+                            Dialog.title = root.multi-active
+                                ? @tr("Edit {} Tracks", root.multi-count)
+                                : @tr("Edit Track Information");
+                            Dialog.message = "";
+                            Dialog.confirm-label = @tr("Save");
+                            Dialog.cancel-label = @tr("Cancel");
+                            Dialog.destructive = false;
+                            Dialog.kind = "edit-tags";
+                            TagEditor.request-edit(ctx-popup.effective-ids);
                         }
                     }
 

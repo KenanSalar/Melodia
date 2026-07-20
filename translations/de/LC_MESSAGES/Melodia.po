@@ -1224,3 +1224,71 @@ msgstr "Keine Titel entsprechen diesen Regeln."
 
 msgid "Create an empty playlist"
 msgstr "Eine leere Playlist erstellen"
+
+# ---- Tag editor (Edit Track Information dialog) ------------------------------
+
+msgid "Tags"
+msgstr "Tags"
+
+msgid "Lyrics"
+msgstr "Liedtext"
+
+msgid "Summary"
+msgstr "Übersicht"
+
+msgid "Composer"
+msgstr "Komponist"
+
+msgid "Disc"
+msgstr "Disc"
+
+msgid "Original Year"
+msgstr "Originaljahr"
+
+msgid "BPM"
+msgstr "BPM"
+
+msgid "Comment"
+msgstr "Kommentar"
+
+msgid "Replace…"
+msgstr "Ersetzen…"
+
+msgid "Path"
+msgstr "Pfad"
+
+msgid "Codec"
+msgstr "Codec"
+
+msgid "Bitrate"
+msgstr "Bitrate"
+
+msgid "Sample Rate"
+msgstr "Abtastrate"
+
+msgid "Bit Depth"
+msgstr "Bittiefe"
+
+msgid "Channels"
+msgstr "Kanäle"
+
+msgid "Size"
+msgstr "Größe"
+
+msgid "Modified"
+msgstr "Geändert"
+
+msgid "BLAKE3"
+msgstr "BLAKE3"
+
+msgid "Edit Tags…"
+msgstr "Tags bearbeiten…"
+
+msgid "Edit Track Information"
+msgstr "Titelinformationen bearbeiten"
+
+msgid "Edit Tags for {}"
+msgstr "Tags für {} bearbeiten"
+
+msgid "Edit {} Tracks"
+msgstr "{} Titel bearbeiten"
