@@ -327,38 +327,54 @@ fn populate(
         }};
     }
 
-    field!(common(rows.iter().map(|r| r.title.clone())), set_title, set_title_placeholder);
-    field!(common(rows.iter().map(|r| opt(r.artist.as_ref()))), set_artist, set_artist_placeholder);
+    field!(common_str(rows.iter().map(|r| r.title.as_str())), set_title, set_title_placeholder);
     field!(
-        common(rows.iter().map(|r| opt(r.album_artist.as_ref()))),
+        common_str(rows.iter().map(|r| r.artist.as_deref().unwrap_or_default())),
+        set_artist,
+        set_artist_placeholder
+    );
+    field!(
+        common_str(rows.iter().map(|r| r.album_artist.as_deref().unwrap_or_default())),
         set_album_artist,
         set_album_artist_placeholder
     );
-    field!(common(rows.iter().map(|r| opt(r.album.as_ref()))), set_album, set_album_placeholder);
-    field!(common(rows.iter().map(|r| opt(r.genre.as_ref()))), set_genre, set_genre_placeholder);
-    field!(common(rows.iter().map(|r| fmt_int(r.year))), set_year, set_year_placeholder);
     field!(
-        common(rows.iter().map(|r| fmt_int(r.original_year))),
+        common_str(rows.iter().map(|r| r.album.as_deref().unwrap_or_default())),
+        set_album,
+        set_album_placeholder
+    );
+    field!(
+        common_str(rows.iter().map(|r| r.genre.as_deref().unwrap_or_default())),
+        set_genre,
+        set_genre_placeholder
+    );
+    field!(common_by(rows.iter().map(|r| r.year), int_key, fmt_int), set_year, set_year_placeholder);
+    field!(
+        common_by(rows.iter().map(|r| r.original_year), int_key, fmt_int),
         set_original_year,
         set_original_year_placeholder
     );
     field!(
-        common(rows.iter().map(|r| fmt_int(r.track_number))),
+        common_by(rows.iter().map(|r| r.track_number), int_key, fmt_int),
         set_track_number,
         set_track_number_placeholder
     );
     field!(
-        common(rows.iter().map(|r| fmt_int(r.disc_number))),
+        common_by(rows.iter().map(|r| r.disc_number), int_key, fmt_int),
         set_disc_number,
         set_disc_number_placeholder
     );
     field!(
-        common(rows.iter().map(|r| opt(r.composer.as_ref()))),
+        common_str(rows.iter().map(|r| r.composer.as_deref().unwrap_or_default())),
         set_composer,
         set_composer_placeholder
     );
-    field!(common(rows.iter().map(|r| opt(r.comment.as_ref()))), set_comment, set_comment_placeholder);
-    field!(common(rows.iter().map(|r| fmt_bpm(r.bpm))), set_bpm, set_bpm_placeholder);
+    field!(
+        common_str(rows.iter().map(|r| r.comment.as_deref().unwrap_or_default())),
+        set_comment,
+        set_comment_placeholder
+    );
+    field!(common_by(rows.iter().map(|r| r.bpm), bpm_key, fmt_bpm), set_bpm, set_bpm_placeholder);
 
     // Lyrics (single selection only; multi mode leaves it "" ⇒ Keep).
     te.set_lyrics(SharedString::from(lyrics.as_str()));
@@ -535,21 +551,53 @@ fn diff_bpm(cur: &str, orig: &str) -> FieldEdit<f64> {
     }
 }
 
-/// Common value across the selection: `(value, disagrees)`. All rows agree ⇒
-/// that value; they differ ⇒ empty + the multi-value flag.
-fn common(mut values: impl Iterator<Item = String>) -> (String, bool) {
+/// Common value across the selection for a string field: `(value, disagrees)`.
+/// All rows agree ⇒ that value; they differ ⇒ empty + the multi-value flag.
+/// Borrows each row (`&str`) to compare and clones only the winner — vs cloning
+/// every row's value just to test agreement.
+fn common_str<'a>(mut values: impl Iterator<Item = &'a str>) -> (String, bool) {
     let Some(first) = values.next() else {
         return (String::new(), false);
     };
     if values.any(|v| v != first) {
         (String::new(), true)
     } else {
-        (first, false)
+        (first.to_owned(), false)
     }
 }
 
-fn opt(o: Option<&String>) -> String {
-    o.cloned().unwrap_or_default()
+/// Common value across the selection for a formatted (numeric) field. Compares a
+/// cheap `Copy + Eq` key so no per-row string is allocated to test agreement,
+/// and formats only the single winning value. The key must collapse together
+/// every value that *renders* identically (e.g. a `Some(0)` and a `None` year
+/// both display empty ⇒ same key), so key equality matches display equality.
+fn common_by<T: Copy, K: Eq>(
+    mut values: impl Iterator<Item = T>,
+    key: impl Fn(T) -> K,
+    fmt: impl Fn(T) -> String,
+) -> (String, bool) {
+    let Some(first) = values.next() else {
+        return (String::new(), false);
+    };
+    let first_key = key(first);
+    if values.any(|v| key(v) != first_key) {
+        (String::new(), true)
+    } else {
+        (fmt(first), false)
+    }
+}
+
+/// Display-collapsing key for an integer field: non-positive / absent all render
+/// empty (see [`fmt_int`]), so map them to one `None` bucket.
+fn int_key(v: Option<i32>) -> Option<i32> {
+    v.filter(|&n| n > 0)
+}
+
+/// Display-collapsing key for BPM: non-finite / non-positive render empty (see
+/// [`fmt_bpm`]); the finite-positive values are keyed by their bit pattern so
+/// equality is exact without a float `==` (which the pedantic gate rejects).
+fn bpm_key(v: Option<f64>) -> Option<u64> {
+    v.filter(|b| b.is_finite() && *b > 0.0).map(f64::to_bits)
 }
 
 /// `Option<i32>` → display string; empty for absent / non-positive (0 is "unset"

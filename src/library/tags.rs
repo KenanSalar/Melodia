@@ -14,7 +14,7 @@
 //! `scanner::track_is_current` reads as current forever. The re-extract is what
 //! keeps those three honest.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -81,9 +81,16 @@ pub async fn apply_tag_edit(
     if !updated_ids.is_empty() {
         // Overwrite any queued / currently-playing summary with its fresh copy
         // so the Now-Playing bar, Queue Sheet and Up Next stop showing old tags.
-        let fresh = queries::track::get_track_summaries_by_ids(&state.db, &updated_ids).await?;
-        let map: HashMap<i64, TrackSummary> = fresh.into_iter().map(|t| (t.id, t)).collect();
-        crate::player::state::sync_track_summaries(&state.player_state, &state.sinks, &map);
+        // Only pay for the refetch + resync when the player actually references
+        // an edited track — the uncommon case. `sync_track_summaries` no-ops
+        // otherwise, but the fetch + `HashMap` build run before its own check,
+        // so gate them on the same cheap membership probe.
+        let touched: HashSet<i64> = updated_ids.iter().copied().collect();
+        if crate::player::state::any_tracked(&state.player_state, |id| touched.contains(&id)) {
+            let fresh = queries::track::get_track_summaries_by_ids(&state.db, &updated_ids).await?;
+            let map: HashMap<i64, TrackSummary> = fresh.into_iter().map(|t| (t.id, t)).collect();
+            crate::player::state::sync_track_summaries(&state.player_state, &state.sinks, &map);
+        }
 
         state
             .library_changed_tx
@@ -145,14 +152,15 @@ pub(crate) async fn write_tag_edit(
         .map_err(|e| AppError::metadata_msg(format!("tag write task panicked: {e}")))??
     };
 
-    // Every path we marked before writing — unmark on a tx failure so the
-    // watcher re-ingests instead of leaving the DB permanently stale.
-    let marked: Vec<PathBuf> = files.iter().map(|f| PathBuf::from(&f.path)).collect();
-
     let updated_ids = match run_commit(db, &files, edit, cached_artwork.as_deref(), &mut report).await
     {
         Ok(ids) => ids,
         Err(e) => {
+            // Only on the (rare) tx failure: unmark every path we marked before
+            // writing, so the watcher re-ingests instead of leaving the DB
+            // permanently stale. Built here, not on the happy path, to avoid N
+            // `PathBuf` allocations per successful commit.
+            let marked: Vec<PathBuf> = files.iter().map(|f| PathBuf::from(&f.path)).collect();
             self_writes.unmark(&marked);
             return Err(e);
         }
@@ -206,6 +214,13 @@ fn run_write_pass(
     cover_cache: &CoverCache,
     self_writes: &SelfWrites,
 ) -> Vec<FileWrite> {
+    // On a Replace the re-extract's artwork is discarded: `apply_replace_artwork`
+    // overwrites every row (and album) with the batch's single `cached_artwork`,
+    // so reading the just-embedded cover back (a full decode + a redundant BLAKE3
+    // pass + an artwork-dir write, per track, un-memoized) is pure waste. Skip it
+    // for Replace only — `Remove` needs the external-cover fallback and `Keep`'s
+    // COALESCE backfills a missing `artwork_path`.
+    let skip_artwork = edit.artwork == ArtworkEdit::Replace;
     let map_files = || {
         rows.par_iter()
             .map(|(id, path)| {
@@ -215,7 +230,7 @@ fn run_write_pass(
                 // (the set keys on exact `PathBuf` equality).
                 self_writes.mark(p);
                 let outcome = match tag_writer::apply_to_file(p, edit, picture) {
-                    Ok(unsupported) => match extract_metadata(p, artwork_dir, cover_cache, false) {
+                    Ok(unsupported) => match extract_metadata(p, artwork_dir, cover_cache, skip_artwork) {
                         Ok(meta) => Ok((meta, unsupported.0)),
                         Err(e) => Err(e.to_string()),
                     },
@@ -244,6 +259,15 @@ fn run_write_pass(
     }
 }
 
+/// Cache key for `run_commit`'s FK-resolution memo. Holds everything
+/// [`queries::scan::resolve_track_context`] derives its [`ResolvedIds`] from —
+/// folder (via the parent dir, since folder lookup is a path-prefix match),
+/// artist, album, `year` (album upsert's `COALESCE`-on-conflict input), and
+/// genre — so identical keys yield identical ids. Keeping `year` in the key
+/// preserves the per-track album-year semantics: tracks with differing years
+/// land in different buckets and each still upserts.
+type ResolveKey = (PathBuf, String, String, Option<i32>, String);
+
 /// Land the successful writes in one transaction: resolve ids, refresh each
 /// track row, and apply the artwork override the metadata UPDATE can't do.
 /// Records per-file failures / unsupported fields into `report`.
@@ -257,6 +281,17 @@ async fn run_commit(
     let mut tx = db.write().begin().await?;
     let mut updated_ids: Vec<i64> = Vec::new();
     let mut album_ids: Vec<i64> = Vec::new();
+    // FK resolution is identical for every track sharing a folder + artist +
+    // album/year + genre (the whole-album batch — the flagship case), so resolve
+    // each distinct tuple once instead of re-running a folder lookup + three
+    // `INSERT … ON CONFLICT … RETURNING` upserts per track. Function-scoped, so
+    // it drops at batch end (no persistent cache).
+    let mut resolve_cache: HashMap<ResolveKey, queries::scan::ResolvedIds> = HashMap::new();
+    // Batched artwork-Remove ids: the common `None` (cover removed, no external
+    // fallback) case flushes as one `IN (…)` UPDATE after the loop; the rare
+    // external-cover survivors keep their per-track value.
+    let mut remove_null_ids: Vec<i64> = Vec::new();
+    let mut remove_ext_ids: Vec<(i64, String)> = Vec::new();
 
     for f in files {
         let (meta, unsupported) = match &f.outcome {
@@ -268,13 +303,28 @@ async fn run_commit(
         };
 
         let path = Path::new(&f.path);
-        let Some(rids) =
-            queries::scan::resolve_track_context(&mut tx, path, &f.path, meta, "Tag edit").await?
-        else {
-            report
-                .failures
-                .push((f.path.clone(), "not in a library folder".to_owned()));
-            continue;
+        // Mirror `resolve_track_context`'s own `as_deref().unwrap_or("")`
+        // normalization so a cached key matches the ids it would have produced.
+        let key: ResolveKey = (
+            path.parent().map(Path::to_path_buf).unwrap_or_default(),
+            meta.artist.clone().unwrap_or_default(),
+            meta.album.clone().unwrap_or_default(),
+            meta.year,
+            meta.genre.clone().unwrap_or_default(),
+        );
+        let rids = if let Some(cached) = resolve_cache.get(&key) {
+            *cached
+        } else {
+            let Some(resolved) =
+                queries::scan::resolve_track_context(&mut tx, path, &f.path, meta, "Tag edit").await?
+            else {
+                report
+                    .failures
+                    .push((f.path.clone(), "not in a library folder".to_owned()));
+                continue;
+            };
+            resolve_cache.insert(key, resolved);
+            resolved
         };
 
         queries::scan::update_track_metadata(&mut tx, &f.path, meta, &rids).await?;
@@ -297,15 +347,30 @@ async fn run_commit(
                 // The re-extracted value: an external `cover.jpg` if one exists,
                 // else NULL. Album artwork is left alone — blanking a whole album
                 // because one track's embedded art was removed would be wrong.
-                queries::track::set_track_artwork(&mut tx, &[f.id], meta.artwork_path.as_deref())
-                    .await?;
+                // Collected here, flushed after the loop: the `None` majority
+                // becomes one batched UPDATE instead of one per track.
+                match meta.artwork_path.as_deref() {
+                    Some(p) => remove_ext_ids.push((f.id, p.to_owned())),
+                    None => remove_null_ids.push(f.id),
+                }
             }
             ArtworkEdit::Keep => {}
         }
     }
 
-    if edit.artwork == ArtworkEdit::Replace {
-        apply_replace_artwork(&mut tx, &updated_ids, &mut album_ids, cached_artwork).await?;
+    match edit.artwork {
+        ArtworkEdit::Replace => {
+            apply_replace_artwork(&mut tx, &updated_ids, &mut album_ids, cached_artwork).await?;
+        }
+        ArtworkEdit::Remove => {
+            if !remove_null_ids.is_empty() {
+                queries::track::set_track_artwork(&mut tx, &remove_null_ids, None).await?;
+            }
+            for (id, p) in &remove_ext_ids {
+                queries::track::set_track_artwork(&mut tx, &[*id], Some(p)).await?;
+            }
+        }
+        ArtworkEdit::Keep => {}
     }
 
     tx.commit().await?;

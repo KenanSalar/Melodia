@@ -72,15 +72,46 @@ fn build_edit_touches_only_changed_fields() {
 }
 
 #[test]
-fn common_agree_disagree_single_empty() {
-    assert_eq!(common(std::iter::empty::<String>()), (String::new(), false));
-    assert_eq!(common(["A".to_owned()].into_iter()), ("A".to_owned(), false));
+fn common_str_agree_disagree_single_empty() {
+    assert_eq!(common_str(std::iter::empty::<&str>()), (String::new(), false));
+    assert_eq!(common_str(["A"].into_iter()), ("A".to_owned(), false));
+    assert_eq!(common_str(["A", "A"].into_iter()), ("A".to_owned(), false));
+    assert_eq!(common_str(["A", "B"].into_iter()), (String::new(), true));
+}
+
+#[test]
+fn common_by_collapses_display_equal_values() {
+    // Empty selection.
     assert_eq!(
-        common(["A".to_owned(), "A".to_owned()].into_iter()),
-        ("A".to_owned(), false)
+        common_by(std::iter::empty::<Option<i32>>(), int_key, fmt_int),
+        (String::new(), false)
+    );
+    // Agreement formats the winner once.
+    assert_eq!(
+        common_by([Some(5), Some(5)].into_iter(), int_key, fmt_int),
+        ("5".to_owned(), false)
+    );
+    // Some(0) and None both render empty ⇒ they must agree (not disagree).
+    assert_eq!(
+        common_by([Some(0), None].into_iter(), int_key, fmt_int),
+        (String::new(), false)
+    );
+    // Genuinely different values disagree.
+    assert_eq!(
+        common_by([Some(5), Some(6)].into_iter(), int_key, fmt_int),
+        (String::new(), true)
+    );
+    // BPM: NaN and None both render empty ⇒ agree; distinct finite values disagree.
+    assert_eq!(
+        common_by([Some(f64::NAN), None].into_iter(), bpm_key, fmt_bpm),
+        (String::new(), false)
     );
     assert_eq!(
-        common(["A".to_owned(), "B".to_owned()].into_iter()),
+        common_by([Some(128.0), Some(128.0)].into_iter(), bpm_key, fmt_bpm),
+        ("128".to_owned(), false)
+    );
+    assert_eq!(
+        common_by([Some(128.0), Some(130.0)].into_iter(), bpm_key, fmt_bpm),
         (String::new(), true)
     );
 }

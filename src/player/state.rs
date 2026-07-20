@@ -706,6 +706,22 @@ pub fn sync_current_track_if_in(
     });
 }
 
+/// True when `current_track`, any `queue.tracks` entry, or `direct_play_track`
+/// has an id the predicate accepts. Takes the state lock briefly and reads
+/// nothing else, so a caller can cheaply decide whether a resync (and the DB
+/// refetch that feeds it) is worth doing before paying for it — the membership
+/// gate [`sync_track_summaries`] uses internally, hoisted so the fetch itself
+/// can be skipped on the common "edited tracks aren't playing/queued" path.
+pub fn any_tracked(state: &PlayerStateHandle, pred: impl Fn(i64) -> bool) -> bool {
+    let g = lock_state(state);
+    g.current_track.as_ref().is_some_and(|t| pred(t.id))
+        || g.queue.tracks.iter().any(|t| pred(t.id))
+        || g.queue
+            .direct_play_track
+            .as_ref()
+            .is_some_and(|t| pred(t.id))
+}
+
 /// Overwrite every queued / currently-playing [`TrackSummary`] whose id appears
 /// in `fresh` with its fresh copy. Sibling of [`sync_current_track_if_in`], but
 /// also walks `queue.tracks` and `queue.direct_play_track` — a tag edit changes
@@ -719,21 +735,7 @@ pub fn sync_track_summaries<S: std::hash::BuildHasher>(
     sinks: &PlayerSinks,
     fresh: &HashMap<i64, TrackSummary, S>,
 ) {
-    let affects = {
-        let g = lock_state(state);
-        let current_hit = g
-            .current_track
-            .as_ref()
-            .is_some_and(|t| fresh.contains_key(&t.id));
-        let queue_hit = g.queue.tracks.iter().any(|t| fresh.contains_key(&t.id));
-        let direct_hit = g
-            .queue
-            .direct_play_track
-            .as_ref()
-            .is_some_and(|t| fresh.contains_key(&t.id));
-        current_hit || queue_hit || direct_hit
-    };
-    if !affects {
+    if !any_tracked(state, |id| fresh.contains_key(&id)) {
         return;
     }
 

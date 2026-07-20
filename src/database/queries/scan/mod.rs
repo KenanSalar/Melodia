@@ -26,6 +26,7 @@ pub use sort_key::to_natural_sort_key;
 pub use upserts::{upsert_album, upsert_artist, upsert_genre};
 
 /// Resolved foreign-key IDs for a track being inserted during a scan.
+#[derive(Clone, Copy)]
 pub struct ResolvedIds {
     pub artist_id: i64,
     pub album_id: Option<i64>,
