@@ -331,6 +331,43 @@ fn clearing_lyrics_removes_both_keys() {
     assert_eq!(text(&tag, ItemKey::UnsyncLyrics), None);
 }
 
+/// The dialog's single-selection Lyrics tab reads via `read_lyrics`, which must
+/// see whatever `apply_edit` wrote — including on MP3, where lyrics land in
+/// `USLT` (there is no `ID3v2` `Lyrics` mapping) and only the `UnsyncLyrics`
+/// fallback finds them. A writer↔reader round-trip; neither half is meaningful
+/// alone.
+#[test]
+fn read_lyrics_round_trips_on_flac_and_mp3() -> Result<(), AppError> {
+    let tmp = TempDir::new()?;
+
+    let flac = stage(&tmp, "silence.flac")?;
+    apply_to_file(
+        &flac,
+        &TagEdit {
+            lyrics: FieldEdit::Set("first line\nsecond line".into()),
+            ..TagEdit::default()
+        },
+        None,
+    )?;
+    assert_eq!(
+        read_lyrics(&flac)?.as_deref(),
+        Some("first line\nsecond line")
+    );
+
+    let mp3 = stage(&tmp, "silence.mp3")?;
+    apply_to_file(
+        &mp3,
+        &TagEdit {
+            lyrics: FieldEdit::Set("mp3 lyrics".into()),
+            ..TagEdit::default()
+        },
+        None,
+    )?;
+    assert_eq!(read_lyrics(&mp3)?.as_deref(), Some("mp3 lyrics"));
+
+    Ok(())
+}
+
 // ------------------------------------------------- M4A: the `pic_type` trap
 
 /// **The trap this whole module is shaped around.**

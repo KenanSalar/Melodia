@@ -522,6 +522,26 @@ pub fn cover_picture_from_path(path: &Path) -> Result<Picture, AppError> {
     Ok(picture)
 }
 
+/// Read a file's lyrics tag for the single-selection Lyrics tab: `Lyrics`
+/// (`VorbisComments` / MP4) falling back to `UnsyncLyrics` (`ID3v2` / MP4).
+///
+/// `ID3v2` has no `Lyrics` mapping (lofty overloads it across `SYLT` / `USLT`),
+/// so an MP3's lyrics only surface through `UnsyncLyrics` (`USLT`) — the mirror
+/// of what [`apply_edit`] writes. Blocking I/O; call under `spawn_blocking`.
+pub fn read_lyrics(path: &Path) -> Result<Option<String>, AppError> {
+    let tagged = lofty::probe::read_from_path(path).map_err(|e| {
+        AppError::metadata(format!("Failed to read tags from {}", path.display()), e)
+    })?;
+    let Some(tag) = tagged.primary_tag().or_else(|| tagged.first_tag()) else {
+        return Ok(None);
+    };
+    Ok(tag
+        .get_string(ItemKey::Lyrics)
+        .or_else(|| tag.get_string(ItemKey::UnsyncLyrics))
+        .map(str::to_owned)
+        .filter(|s| !s.is_empty()))
+}
+
 #[cfg(test)]
 #[path = "tests/tag_writer_tests.rs"]
 mod tests;

@@ -27,7 +27,9 @@ use crate::library;
 use crate::state::AppState;
 use crate::ui::callbacks::macros::release_detail_hero_images;
 use crate::ui::playlists::{self as playlists_ui_mod, PlaylistsUi};
-use crate::{AppWindow, Dialog, PlaylistDetail, PlaylistPickRow as UiPlaylistPickRow, Playlists};
+use crate::{
+    AppWindow, Dialog, PlaylistDetail, PlaylistPickRow as UiPlaylistPickRow, Playlists, TagEditor,
+};
 
 /// Wire the playlist dialog + CRUD callbacks. See [`super::wire_playlists`].
 pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<PlaylistsUi>) {
@@ -76,6 +78,11 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
             let dlg = ui.global::<Dialog>();
             dlg.invoke_closed_teardown();
             dlg.set_current_artwork(Image::default());
+            // The Edit-Tags dialog pins a decoded cover in `TagEditor.cover`
+            // (another `image`-typed property with no Slint default literal);
+            // release it here — this is the one `on_closed`, extended not
+            // duplicated.
+            ui.global::<TagEditor>().set_cover(Image::default());
             s.runtime.spawn_blocking(crate::tasks::heap_trim::trim);
         });
     }

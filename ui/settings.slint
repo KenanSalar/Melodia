@@ -448,4 +448,35 @@ export global Settings {
     add-to-playlist-message(tracks) => {
         return @tr("{n} track added" | "{n} tracks added" % tracks);
     }
+
+    // Edit-Track-Information dialog. `tag-multiple-values` is the placeholder
+    // sentinel a disagreeing field shows in a batch edit; the rest are the Save
+    // completion toast (Rust invokes them at push time so they resolve in the
+    // active locale, with the dynamic counts interpolated).
+    pure callback tag-multiple-values() -> string;
+    tag-multiple-values => {
+        return @tr("‹multiple values›");
+    }
+    pure callback tag-edit-title(int /*updated*/) -> string;
+    tag-edit-title(updated) => {
+        return @tr("{n} track updated" | "{n} tracks updated" % updated);
+    }
+    pure callback tag-edit-message(int /*failed*/, int /*unsupported*/) -> string;
+    tag-edit-message(failed, unsupported) => {
+        if (failed > 0) {
+            return @tr("{n} file failed" | "{n} files failed" % failed);
+        }
+        if (unsupported > 0) {
+            return @tr("{n} file has unsupported fields" | "{n} files have unsupported fields" % unsupported);
+        }
+        return "";
+    }
+    pure callback tag-edit-failed-title() -> string;
+    tag-edit-failed-title => {
+        return @tr("Couldn't save tags");
+    }
+    pure callback tag-edit-failed-message() -> string;
+    tag-edit-failed-message => {
+        return @tr("No tracks were updated.");
+    }
 }

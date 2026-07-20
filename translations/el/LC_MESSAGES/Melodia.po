@@ -1291,3 +1291,27 @@ msgstr "Αποθήκευση"
 
 msgid "Duration"
 msgstr "Διάρκεια"
+
+msgid "‹multiple values›"
+msgstr "‹πολλαπλές τιμές›"
+
+msgid "{n} track updated"
+msgid_plural "{n} tracks updated"
+msgstr[0] "{n} κομμάτι ενημερώθηκε"
+msgstr[1] "{n} κομμάτια ενημερώθηκαν"
+
+msgid "{n} file failed"
+msgid_plural "{n} files failed"
+msgstr[0] "{n} αρχείο απέτυχε"
+msgstr[1] "{n} αρχεία απέτυχαν"
+
+msgid "{n} file has unsupported fields"
+msgid_plural "{n} files have unsupported fields"
+msgstr[0] "{n} αρχείο με μη υποστηριζόμενα πεδία"
+msgstr[1] "{n} αρχεία με μη υποστηριζόμενα πεδία"
+
+msgid "Couldn't save tags"
+msgstr "Δεν ήταν δυνατή η αποθήκευση των ετικετών"
+
+msgid "No tracks were updated."
+msgstr "Δεν ενημερώθηκε κανένα κομμάτι."

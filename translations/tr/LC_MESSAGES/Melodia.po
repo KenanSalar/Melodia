@@ -1292,3 +1292,27 @@ msgstr "Kaydet"
 
 msgid "Duration"
 msgstr "Süre"
+
+msgid "‹multiple values›"
+msgstr "‹birden çok değer›"
+
+msgid "{n} track updated"
+msgid_plural "{n} tracks updated"
+msgstr[0] "{n} parça güncellendi"
+msgstr[1] "{n} parça güncellendi"
+
+msgid "{n} file failed"
+msgid_plural "{n} files failed"
+msgstr[0] "{n} dosya başarısız oldu"
+msgstr[1] "{n} dosya başarısız oldu"
+
+msgid "{n} file has unsupported fields"
+msgid_plural "{n} files have unsupported fields"
+msgstr[0] "{n} dosyada desteklenmeyen alanlar var"
+msgstr[1] "{n} dosyada desteklenmeyen alanlar var"
+
+msgid "Couldn't save tags"
+msgstr "Etiketler kaydedilemedi"
+
+msgid "No tracks were updated."
+msgstr "Hiçbir parça güncellenmedi."

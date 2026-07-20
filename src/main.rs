@@ -271,6 +271,11 @@ fn main() -> AppResult<()> {
     // because the completion toasts need the `Rc<NotificationsUi>`.
     ui::callbacks::wire_playlist_files(&app, &state, &views.playlists_ui, &notifications);
 
+    // 5d6. Edit-Track-Information dialog callbacks. Wired here for the same
+    // reason as the playlist pills — the Save completion toast needs the
+    // `Rc<NotificationsUi>`.
+    ui::callbacks::wire_tags(&app, &state, &notifications);
+
     // 5e. Appearance.
     let appearance_handles = match ui::appearance::install(&app, &state) {
         Ok(h) => Some(h),

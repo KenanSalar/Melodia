@@ -1289,3 +1289,27 @@ msgstr "Salva"
 
 msgid "Duration"
 msgstr "Durata"
+
+msgid "‹multiple values›"
+msgstr "‹valori multipli›"
+
+msgid "{n} track updated"
+msgid_plural "{n} tracks updated"
+msgstr[0] "{n} traccia aggiornata"
+msgstr[1] "{n} tracce aggiornate"
+
+msgid "{n} file failed"
+msgid_plural "{n} files failed"
+msgstr[0] "{n} file non riuscito"
+msgstr[1] "{n} file non riusciti"
+
+msgid "{n} file has unsupported fields"
+msgid_plural "{n} files have unsupported fields"
+msgstr[0] "{n} file con campi non supportati"
+msgstr[1] "{n} file con campi non supportati"
+
+msgid "Couldn't save tags"
+msgstr "Impossibile salvare i tag"
+
+msgid "No tracks were updated."
+msgstr "Nessuna traccia è stata aggiornata."

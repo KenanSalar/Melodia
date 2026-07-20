@@ -918,9 +918,24 @@ only exists after `install_views`).
    And `SelfWrites::mark` must be fed the **DB `file_path`** (what `get_track_paths_by_ids`
    returns) — the set keys on exact `PathBuf` equality, so a picker-supplied path silently
    suppresses nothing.
-5. Slint: `TagEditor` global, `tag-editor-body.slint`, `multiline-input.slint`, the
-   `dialog.slint` branch, the context-menu item.
-6. `ui/callbacks/tags.rs`, hooking its cover release into the P1 handler.
+5. ✅ **DONE** — Slint: `TagEditor` global, `tag-editor-body.slint`, `multiline-input.slint`, the
+   `dialog.slint` branch (mount + `max-w` + `button-enabled`), the `Dialog.accepted` dispatch arm,
+   and the track-row context-menu item.
+6. ✅ **DONE — `ui/callbacks/tags.rs` + wiring.** `wire_tags(ui, state, notifications)` implements the
+   four `TagEditor` callbacks; all three async handlers use `slint::spawn_local(Compat::new(…))` (not
+   `runtime.spawn`) so the per-open `Rc<RefCell<TagSession>>` snapshot and the `Rc<NotificationsUi>`
+   completion toast never cross a thread — the `wire_playlist_files` pattern. `request-edit` fetches
+   `TagEditRow`s, reads lyrics via a new `tag_writer::read_lyrics` + decodes the cover preview off-thread
+   (single selection), then populates + opens on a fresh tick; a disagreeing field across a batch shows
+   the `‹multiple values›` sentinel and starts empty. `commit` diffs each field against the populate-time
+   snapshot into `Keep`/`Clear`/`Set` (numbers parsed here — `u16`/`u32`, and BPM guarded against
+   NaN/inf/negative), short-circuits a no-op, applies via `library::tags::apply_tag_edit`, and toasts the
+   report (`updated`/`failures`/`unsupported`). The cover release is one line added to the **single**
+   `Dialog.on_closed` handler (`playlists/dialog.rs`), never a second registration. Wired from `main.rs`
+   after `wire_playlist_files`. New i18n strings (`tag-multiple-values`, the completion-toast callbacks)
+   in `settings.slint` + all six `.po`. Tests: pure diff/format logic (`callbacks/tests/tags_tests.rs`)
+   + a `read_lyrics` FLAC/MP3 writer↔reader round-trip (`tag_writer_tests.rs`). `clippy --all-targets`
+   and `cargo test` green.
 7. ✅ **DONE** — housekeeping: `lofty` pinned to `"0.24.0"`; the stale `push_row_values` name in the
    `scan/mutations.rs` comment corrected to the real inline `qb.push_values(…)` closure. Also
    cleared out every `#[allow(dead_code)]` in hand-written code while in there (the eight
