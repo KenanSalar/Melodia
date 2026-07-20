@@ -40,6 +40,7 @@ _Screenshots coming soon._
 - Recently-Played view listing the tracks you last listened to (newest first), with a most-played strip and a filterable track list that updates live as you play
 - Play-count and skip-count tracking per track
 - Per-track star ratings (0–5), set inline via a hover-revealed star control in any track list and from the Now Playing view
+- Edit track information (title, artist, album, album artist, genre, year, track/disc number, composer, comment, BPM, lyrics, and cover art) for one or many selected tracks at once, written straight back to the files — batch edits leave differing fields untouched and save only the fields you change
 - Natural sort ordering for file and track names
 - Customizable, resizable, and toggleable track-list columns
 - Playlist creation and management with custom thumbnails

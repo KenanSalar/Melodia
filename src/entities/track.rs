@@ -306,6 +306,58 @@ pub fn track_meta_columns() -> &'static str {
     CACHED.get_or_init(|| TRACK_META_COLUMNS.join(", "))
 }
 
+/// Projection backing the Edit-Track-Information dialog: the editable tag
+/// columns plus the read-only technical columns the Summary tab shows.
+/// Every field is a native `tracks` column (artist/album/genre are stored
+/// denormalized as text alongside their FK ids), so the fetch needs no joins.
+/// `bpm` is the `REAL` column, hence `f64`.
+#[derive(Clone, Debug, PartialEq, FromRow, Serialize, Deserialize)]
+pub struct TagEditRow {
+    pub id: i64,
+    pub file_path: String,
+    pub title: String,
+    pub artist: Option<String>,
+    pub album_artist: Option<String>,
+    pub album: Option<String>,
+    pub genre: Option<String>,
+    pub year: Option<i32>,
+    pub original_year: Option<i32>,
+    pub track_number: Option<i32>,
+    pub disc_number: Option<i32>,
+    pub composer: Option<String>,
+    pub comment: Option<String>,
+    pub bpm: Option<f64>,
+    pub artwork_path: Option<String>,
+    pub codec: Option<String>,
+    pub bitrate: Option<i32>,
+    pub sample_rate: Option<i32>,
+    pub bit_depth: Option<i32>,
+    pub channels: Option<i32>,
+    pub file_size: Option<i64>,
+    pub date_modified: Option<String>,
+    pub duration_ms: i64,
+    pub file_hash: Option<String>,
+}
+
+/// The explicit SELECT columns for `TagEditRow` queries. Listed in
+/// `TagEditRow`'s field order for legibility — sqlx's derived `FromRow`
+/// matches by column name, so the order isn't load-bearing.
+pub const TRACK_TAG_EDIT_COLUMNS: &[&str] = &[
+    "id", "file_path", "title", "artist", "album_artist", "album", "genre", "year",
+    "original_year", "track_number", "disc_number", "composer", "comment", "bpm",
+    "artwork_path", "codec", "bitrate", "sample_rate", "bit_depth", "channels",
+    "file_size", "date_modified", "duration_ms", "file_hash",
+];
+
+/// Comma-separated form of `TRACK_TAG_EDIT_COLUMNS` for direct `SELECT` usage.
+/// Built once on first access and reused (same `OnceLock` pattern as
+/// `track_summary_columns`).
+pub fn track_tag_edit_columns() -> &'static str {
+    use std::sync::OnceLock;
+    static CACHED: OnceLock<String> = OnceLock::new();
+    CACHED.get_or_init(|| TRACK_TAG_EDIT_COLUMNS.join(", "))
+}
+
 /// Full database entity: every column on the `tracks` table including
 /// playback stats, hashes, and per-track `ReplayGain`. Use this when you need
 /// the complete row (track-detail page, scan-time updates, hash backfill);

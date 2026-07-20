@@ -1,8 +1,9 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
+use crate::media::self_writes::SelfWrites;
 use crate::media::watcher::FileEvent;
 
-use super::deduplicate_events;
+use super::{deduplicate_events, suppress_self_writes};
 
 #[test]
 fn dedup_created_then_removed_cancels() {
@@ -108,4 +109,75 @@ fn dedup_rescan_supersedes_everything_in_batch() {
     ];
     let result = deduplicate_events(events);
     assert_eq!(result, vec![FileEvent::RescanNeeded]);
+}
+
+#[test]
+fn suppress_drops_modified_events_for_paths_we_wrote() {
+    let self_writes = SelfWrites::default();
+    self_writes.mark(Path::new("/music/edited.mp3"));
+
+    let mut batch = vec![
+        FileEvent::Modified(PathBuf::from("/music/edited.mp3")),
+        FileEvent::Modified(PathBuf::from("/music/external.mp3")),
+    ];
+
+    suppress_self_writes(&mut batch, &self_writes);
+    assert_eq!(
+        batch,
+        vec![FileEvent::Modified(PathBuf::from("/music/external.mp3"))]
+    );
+}
+
+#[test]
+fn suppress_only_filters_modified() {
+    // A tag write rewrites the file in place, so it can only ever produce a
+    // Modified. Anything else for the same path is a genuine external change
+    // and must pass through even while the path is marked.
+    let self_writes = SelfWrites::default();
+    self_writes.mark(Path::new("/music/edited.mp3"));
+
+    let original = vec![
+        FileEvent::Created(PathBuf::from("/music/edited.mp3")),
+        FileEvent::Removed(PathBuf::from("/music/edited.mp3")),
+        FileEvent::Renamed {
+            from: PathBuf::from("/music/edited.mp3"),
+            to: PathBuf::from("/music/moved.mp3"),
+        },
+    ];
+
+    let mut batch = original.clone();
+    suppress_self_writes(&mut batch, &self_writes);
+    assert_eq!(batch, original);
+}
+
+#[test]
+fn suppress_consumes_the_mark_so_a_second_event_survives() {
+    let self_writes = SelfWrites::default();
+    self_writes.mark(Path::new("/music/edited.mp3"));
+
+    let echo = vec![FileEvent::Modified(PathBuf::from("/music/edited.mp3"))];
+
+    let mut batch = echo.clone();
+    suppress_self_writes(&mut batch, &self_writes);
+    assert!(batch.is_empty());
+
+    // A later, genuinely external edit to the same file is not swallowed.
+    let mut batch = echo.clone();
+    suppress_self_writes(&mut batch, &self_writes);
+    assert_eq!(batch, echo);
+}
+
+#[test]
+fn suppress_can_empty_the_batch() {
+    let self_writes = SelfWrites::default();
+    self_writes.mark(Path::new("/music/a.mp3"));
+    self_writes.mark(Path::new("/music/b.mp3"));
+
+    let mut batch = vec![
+        FileEvent::Modified(PathBuf::from("/music/a.mp3")),
+        FileEvent::Modified(PathBuf::from("/music/b.mp3")),
+    ];
+
+    suppress_self_writes(&mut batch, &self_writes);
+    assert!(batch.is_empty());
 }

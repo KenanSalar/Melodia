@@ -253,6 +253,86 @@ export global ReplayGain {
     callback commit-preamp(float /*dB*/);
 }
 
+// TagEditor: drives the Edit-Track-Information dialog
+// (`Dialog.kind == "edit-tags"`), opened from a track row's context menu for
+// one *or many* selected rows. State is Rust-owned
+// (`src/ui/callbacks/tags.rs`): `request-edit` fetches the rows, populates the
+// fields, and opens the dialog on a fresh event-loop tick (the `SmartEditor`
+// hop — a synchronous `Dialog.open = true` from a click trips the recursion
+// guard). Numbers cross as strings so Rust owns parse + validation. On
+// `commit` (fired by the `Dialog.accepted` dispatcher) Rust diffs each field
+// against the populate-time snapshot to derive a Keep / Clear / Set tri-state,
+// so only touched fields are written to the file.
+//
+// Batch editing is the point: a field that disagrees across the selection
+// starts empty and shows the ‹multiple values› sentinel via its `*-placeholder`
+// (Rust-set). The Lyrics and Summary tabs are single-selection only — driven by
+// `track-count` in `tag-editor-body.slint` (the tab is not mounted in multi
+// mode, never merely disabled).
+export global TagEditor {
+    // 13 editable fields — numbers cross the boundary as strings; Rust parses
+    // and validates them into the typed `TagEdit` on commit.
+    in-out property <string> title;
+    in-out property <string> artist;
+    in-out property <string> album-artist;
+    in-out property <string> album;
+    in-out property <string> genre;
+    in-out property <string> year;
+    in-out property <string> original-year;
+    in-out property <string> track-number;
+    in-out property <string> disc-number;
+    in-out property <string> composer;
+    in-out property <string> comment;
+    in-out property <string> bpm;
+    in-out property <string> lyrics;
+
+    // Per-field placeholder — the ‹multiple values› sentinel when the
+    // selection disagrees (multi mode), else the normal hint. Rust-set.
+    in property <string> title-placeholder;
+    in property <string> artist-placeholder;
+    in property <string> album-artist-placeholder;
+    in property <string> album-placeholder;
+    in property <string> genre-placeholder;
+    in property <string> year-placeholder;
+    in property <string> original-year-placeholder;
+    in property <string> track-number-placeholder;
+    in property <string> disc-number-placeholder;
+    in property <string> composer-placeholder;
+    in property <string> comment-placeholder;
+    in property <string> bpm-placeholder;
+    in property <string> lyrics-placeholder;
+
+    // 1 = single selection (Lyrics + Summary tabs available), >1 = batch.
+    in property <int> track-count;
+    // Active tab index; Rust resets it to 0 (Tags) on every populate.
+    in-out property <int> active-tab;
+    // Decoded preview of the current / picked cover; `has-cover` gates the
+    // Remove button.
+    in-out property <image> cover;
+    in property <bool> has-cover;
+    in property <bool> lyrics-enabled;
+
+    // Read-only Summary strings (single selection only), preformatted by Rust.
+    in property <string> summary-path;
+    in property <string> summary-codec;
+    in property <string> summary-bitrate;
+    in property <string> summary-sample-rate;
+    in property <string> summary-bit-depth;
+    in property <string> summary-channels;
+    in property <string> summary-size;
+    in property <string> summary-duration;
+    in property <string> summary-modified;
+    in property <string> summary-hash;
+
+    // Entry point — fetch + populate + open the dialog (Rust-driven).
+    callback request-edit([int] /*track ids*/);
+    // Artwork picker (rfd on the UI thread) / clear the embedded cover.
+    callback pick-artwork();
+    callback remove-artwork();
+    // Fired by the `Dialog.accepted` dispatcher — diff, build `TagEdit`, write.
+    callback commit();
+}
+
 // Nav: UI-only, no Rust subscription needed in Phase 2.
 //   0=search, 1=browse,
 //   2=favorites, 3=tracks, 4=albums, 5=artists, 6=genres, 7=playlists,
@@ -1202,22 +1282,46 @@ export global Dialog {
             // Rust reconstructs a `SmartCriteria` from `SmartEditor.rules` +
             // scalars and creates / updates the smart playlist.
             SmartEditor.commit();
+        } else if (root.kind == "edit-tags") {
+            // Rust diffs the form against the populate-time snapshot, builds a
+            // `TagEdit`, and writes the tags (a no-op commit is short-circuited).
+            TagEditor.commit();
         }
     }
     cancelled => { }
 
     // Fired by `DialogOverlay` once the close animation reaches t ≈ 0
-    // (see `ui/components/dialog/dialog.slint`). The default handler below
-    // tears down all scalar / list state in pure Slint so the next
-    // open starts from a clean slate and the body branch's internal
-    // model state isn't kept alive by stale `SharedString` arrays.
-    // The `image`-typed `current-artwork` has no Slint default literal,
-    // so a Rust subscriber in `wire_playlists` resets it to
-    // `Image::default()` on this same callback — that's what drops the
-    // ~603 KiB `SharedPixelBuffer` Arc pulled from the playlist
-    // grid-tier LRU at dialog-open.
+    // (see `ui/components/dialog/dialog.slint`). It has exactly ONE
+    // handler, registered in Rust (`callbacks/playlists/dialog.rs`), and
+    // that handler drives close-time teardown in two halves:
+    //
+    //   1. `closed-teardown()` below — every scalar / list / chrome
+    //      property, reset declaratively in Slint so the next open starts
+    //      from a clean slate and no body branch is kept mounted by a
+    //      stale `kind` or a stale `SharedString` array.
+    //   2. The `image`-typed `current-artwork`, which has no Slint default
+    //      literal and so must be reset from Rust — that's what drops the
+    //      ~603 KiB `SharedPixelBuffer` Arc pulled from the playlist
+    //      grid-tier LRU at dialog-open.
+    //
+    // The teardown is a `public function`, NOT a second callback, and the
+    // distinction is load-bearing. A Slint callback has a single handler
+    // slot: a default `closed => { … }` body here is installed during
+    // `InnerDialog::new()`, and the Rust `on_closed` — which is a plain
+    // `Callback::set_handler` and necessarily runs later — silently
+    // REPLACES it. That is exactly the bug this shape fixes; the body had
+    // been dead code, so `kind` and the picker row models were never
+    // cleared and every picker row's cover Arc stayed pinned for the life
+    // of the process. A `public function` has no handler slot at all, so
+    // it cannot be registered away.
+    //
+    // Do not try to re-register `closed` from inside the `closed` handler:
+    // `Callback::call` `take()`s the handler for the duration of the call
+    // and asserts "Callback Handler set while called". Invoking a
+    // different item (as we do) is safe.
     callback closed();
-    closed => {
+
+    public function closed-teardown() {
         // Routing / kind-gated body branches.
         root.kind = "";
         root.target-id = -1;
@@ -1234,7 +1338,7 @@ export global Dialog {
         // every row's `Image { source: Playlists.request-row-cover(...) }`
         // binding so the row-tier LRU's `SharedPixelBuffer` Arcs drop.
         // Pairs with the Rust-side `heap_trim::trim()` registered for
-        // `Dialog.closed` in `callbacks/playlists.rs`.
+        // `Dialog.closed` in `callbacks/playlists/dialog.rs`.
         root.playlist-pick-rows = [];
         root.add-select-all = false;
         root.add-selected-count = 0;

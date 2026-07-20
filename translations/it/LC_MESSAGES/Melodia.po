@@ -1215,3 +1215,101 @@ msgstr "Nessun brano corrisponde a queste regole."
 
 msgid "Create an empty playlist"
 msgstr "Crea una playlist vuota"
+
+# ---- Tag editor (Edit Track Information dialog) ------------------------------
+
+msgid "Tags"
+msgstr "Tag"
+
+msgid "Lyrics"
+msgstr "Testo"
+
+msgid "Summary"
+msgstr "Riepilogo"
+
+msgid "Composer"
+msgstr "Compositore"
+
+msgid "Disc"
+msgstr "Disco"
+
+msgid "Original Year"
+msgstr "Anno originale"
+
+msgid "BPM"
+msgstr "BPM"
+
+msgid "Comment"
+msgstr "Commento"
+
+msgid "Replace…"
+msgstr "Sostituisci…"
+
+msgid "Path"
+msgstr "Percorso"
+
+msgid "Codec"
+msgstr "Codec"
+
+msgid "Bitrate"
+msgstr "Bitrate"
+
+msgid "Sample Rate"
+msgstr "Frequenza di campionamento"
+
+msgid "Bit Depth"
+msgstr "Profondità di bit"
+
+msgid "Channels"
+msgstr "Canali"
+
+msgid "Size"
+msgstr "Dimensione"
+
+msgid "Modified"
+msgstr "Modificato"
+
+msgid "BLAKE3"
+msgstr "BLAKE3"
+
+msgid "Edit Tags…"
+msgstr "Modifica tag…"
+
+msgid "Edit Track Information"
+msgstr "Modifica informazioni traccia"
+
+msgid "Edit Tags for {}"
+msgstr "Modifica tag di {}"
+
+msgid "Edit {} Tracks"
+msgstr "Modifica {} tracce"
+
+msgid "Save"
+msgstr "Salva"
+
+msgid "Duration"
+msgstr "Durata"
+
+msgid "‹multiple values›"
+msgstr "‹valori multipli›"
+
+msgid "{n} track updated"
+msgid_plural "{n} tracks updated"
+msgstr[0] "{n} traccia aggiornata"
+msgstr[1] "{n} tracce aggiornate"
+
+msgid "{n} file failed"
+msgid_plural "{n} files failed"
+msgstr[0] "{n} file non riuscito"
+msgstr[1] "{n} file non riusciti"
+
+msgid "{n} file has unsupported fields"
+msgid_plural "{n} files have unsupported fields"
+msgstr[0] "{n} file con campi non supportati"
+msgstr[1] "{n} file con campi non supportati"
+
+msgid "Couldn't save tags"
+msgstr "Impossibile salvare i tag"
+
+msgid "No tracks were updated."
+msgstr "Nessuna traccia è stata aggiornata."

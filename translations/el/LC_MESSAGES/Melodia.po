@@ -1217,3 +1217,101 @@ msgstr "Κανένα κομμάτι δεν ταιριάζει με αυτούς 
 
 msgid "Create an empty playlist"
 msgstr "Δημιουργία κενής λίστας"
+
+# ---- Tag editor (Edit Track Information dialog) ------------------------------
+
+msgid "Tags"
+msgstr "Ετικέτες"
+
+msgid "Lyrics"
+msgstr "Στίχοι"
+
+msgid "Summary"
+msgstr "Σύνοψη"
+
+msgid "Composer"
+msgstr "Συνθέτης"
+
+msgid "Disc"
+msgstr "Δίσκος"
+
+msgid "Original Year"
+msgstr "Αρχικό έτος"
+
+msgid "BPM"
+msgstr "BPM"
+
+msgid "Comment"
+msgstr "Σχόλιο"
+
+msgid "Replace…"
+msgstr "Αντικατάσταση…"
+
+msgid "Path"
+msgstr "Διαδρομή"
+
+msgid "Codec"
+msgstr "Codec"
+
+msgid "Bitrate"
+msgstr "Ρυθμός bit"
+
+msgid "Sample Rate"
+msgstr "Ρυθμός δειγματοληψίας"
+
+msgid "Bit Depth"
+msgstr "Βάθος bit"
+
+msgid "Channels"
+msgstr "Κανάλια"
+
+msgid "Size"
+msgstr "Μέγεθος"
+
+msgid "Modified"
+msgstr "Τροποποιήθηκε"
+
+msgid "BLAKE3"
+msgstr "BLAKE3"
+
+msgid "Edit Tags…"
+msgstr "Επεξεργασία ετικετών…"
+
+msgid "Edit Track Information"
+msgstr "Επεξεργασία πληροφοριών κομματιού"
+
+msgid "Edit Tags for {}"
+msgstr "Επεξεργασία ετικετών για {}"
+
+msgid "Edit {} Tracks"
+msgstr "Επεξεργασία {} κομματιών"
+
+msgid "Save"
+msgstr "Αποθήκευση"
+
+msgid "Duration"
+msgstr "Διάρκεια"
+
+msgid "‹multiple values›"
+msgstr "‹πολλαπλές τιμές›"
+
+msgid "{n} track updated"
+msgid_plural "{n} tracks updated"
+msgstr[0] "{n} κομμάτι ενημερώθηκε"
+msgstr[1] "{n} κομμάτια ενημερώθηκαν"
+
+msgid "{n} file failed"
+msgid_plural "{n} files failed"
+msgstr[0] "{n} αρχείο απέτυχε"
+msgstr[1] "{n} αρχεία απέτυχαν"
+
+msgid "{n} file has unsupported fields"
+msgid_plural "{n} files have unsupported fields"
+msgstr[0] "{n} αρχείο με μη υποστηριζόμενα πεδία"
+msgstr[1] "{n} αρχεία με μη υποστηριζόμενα πεδία"
+
+msgid "Couldn't save tags"
+msgstr "Δεν ήταν δυνατή η αποθήκευση των ετικετών"
+
+msgid "No tracks were updated."
+msgstr "Δεν ενημερώθηκε κανένα κομμάτι."

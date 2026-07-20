@@ -315,11 +315,13 @@ pub fn to_slint_album_row(a: &AlbumStats) -> UiAlbumRow {
     }
 }
 
-#[allow(dead_code)]
-fn assert_send_sync() {
+// Compile-time assertion, not runtime code: an anonymous `const _` is
+// type-checked but never dead-code-flagged, so the bound is enforced
+// without an `#[allow(dead_code)]` on a fn nothing calls.
+const _: fn() = || {
     fn check<T: Send + Sync>() {}
     check::<AlbumsUi>();
-}
+};
 
 #[cfg(test)]
 #[path = "tests/albums_tests.rs"]

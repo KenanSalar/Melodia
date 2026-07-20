@@ -587,3 +587,92 @@ async fn get_most_played_respects_limit() -> Result<(), AppError> {
     assert_eq!(rows[0].title, "Beta");
     Ok(())
 }
+
+// --- Tag-edit query tests ---
+
+#[tokio::test]
+async fn get_tag_edit_rows_by_ids_projects_and_preserves_order() -> Result<(), AppError> {
+    let db = seed_db().await?;
+    // ids ascending == insert order: Alpha, Beta, Gamma.
+    let ids: Vec<i64> = sqlx::query_scalar("SELECT id FROM tracks ORDER BY id")
+        .fetch_all(db.read())
+        .await?;
+
+    // Patch the fields `make_test_metadata` leaves empty so the projection is exercised.
+    sqlx::query(
+        "UPDATE tracks SET composer = ?, comment = ?, bpm = ?, original_year = ? WHERE id = ?",
+    )
+    .bind("Composer X")
+    .bind("A comment")
+    .bind(128.5_f64)
+    .bind(1999_i32)
+    .bind(ids[0])
+    .execute(db.write())
+    .await?;
+
+    // Request reversed so a plain re-read couldn't accidentally pass.
+    let rows = queries::track::get_tag_edit_rows_by_ids(&db, &[ids[1], ids[0]]).await?;
+    assert_eq!(rows.len(), 2);
+    assert_eq!(rows[0].id, ids[1]);
+    assert_eq!(rows[1].id, ids[0]);
+
+    let alpha = &rows[1];
+    assert_eq!(alpha.title, "Alpha");
+    assert_eq!(alpha.composer.as_deref(), Some("Composer X"));
+    assert_eq!(alpha.comment.as_deref(), Some("A comment"));
+    assert_eq!(alpha.original_year, Some(1999));
+    assert!(matches!(alpha.bpm, Some(b) if (b - 128.5).abs() < 1e-9));
+    // A technical column reads straight off `tracks`.
+    assert_eq!(alpha.codec.as_deref(), Some("Mpeg"));
+    assert_eq!(alpha.bitrate, Some(320));
+    assert_eq!(alpha.duration_ms, 180_000);
+    Ok(())
+}
+
+#[tokio::test]
+async fn get_track_paths_by_ids_returns_pairs_in_input_order() -> Result<(), AppError> {
+    let db = seed_db().await?;
+    let ids: Vec<i64> = sqlx::query_scalar("SELECT id FROM tracks ORDER BY id")
+        .fetch_all(db.read())
+        .await?;
+
+    let pairs = queries::track::get_track_paths_by_ids(&db, &[ids[2], ids[0]]).await?;
+    assert_eq!(pairs.len(), 2);
+    assert_eq!(pairs[0], (ids[2], "/music/gamma.mp3".to_owned()));
+    assert_eq!(pairs[1], (ids[0], "/music/alpha.mp3".to_owned()));
+
+    let empty = queries::track::get_track_paths_by_ids(&db, &[]).await?;
+    assert!(empty.is_empty());
+    Ok(())
+}
+
+#[tokio::test]
+async fn set_track_artwork_overwrites_and_nulls() -> Result<(), AppError> {
+    let db = seed_db().await?;
+    let id: i64 = sqlx::query_scalar("SELECT id FROM tracks LIMIT 1")
+        .fetch_one(db.read())
+        .await?;
+
+    // Set an authoritative path within a transaction.
+    let mut tx = db.write().begin().await?;
+    queries::track::set_track_artwork(&mut tx, &[id], Some("/covers/new.jpg")).await?;
+    tx.commit().await?;
+
+    let art: Option<String> = sqlx::query_scalar("SELECT artwork_path FROM tracks WHERE id = ?")
+        .bind(id)
+        .fetch_one(db.read())
+        .await?;
+    assert_eq!(art.as_deref(), Some("/covers/new.jpg"));
+
+    // `None` genuinely nulls it — no COALESCE keeping the old value.
+    let mut tx = db.write().begin().await?;
+    queries::track::set_track_artwork(&mut tx, &[id], None).await?;
+    tx.commit().await?;
+
+    let art: Option<String> = sqlx::query_scalar("SELECT artwork_path FROM tracks WHERE id = ?")
+        .bind(id)
+        .fetch_one(db.read())
+        .await?;
+    assert!(art.is_none());
+    Ok(())
+}

@@ -1,5 +1,5 @@
 import { Theme } from "../../theme.slint";
-import { Dialog as DialogGlobal, SmartEditor } from "../../globals.slint";
+import { Dialog as DialogGlobal, SmartEditor, TagEditor } from "../../globals.slint";
 import { SectionButton } from "../settings/section-button.slint";
 import { PlaylistMosaicPicker } from "playlist-mosaic-picker.slint";
 import { PlaylistPicker } from "playlist-picker.slint";
@@ -7,6 +7,7 @@ import { ExportPlaylistPicker } from "export-playlist-picker.slint";
 import { EqualizerBody } from "equalizer-body.slint";
 import { ReplayGainBody } from "replaygain-body.slint";
 import { SmartPlaylistEditorBody } from "smart-playlist-editor-body.slint";
+import { TagEditorBody } from "tag-editor-body.slint";
 import { LabeledInput } from "../labeled-input.slint";
 import { MaterialIcon } from "../material-icon.slint";
 
@@ -105,6 +106,7 @@ export component DialogOverlay inherits Rectangle {
             : DialogGlobal.kind == "replaygain" ? 480px
             : DialogGlobal.kind == "edit-playlist-artwork" ? 520px
             : DialogGlobal.kind == "smart-playlist-editor" ? 660px
+            : DialogGlobal.kind == "edit-tags" ? 720px
             : 540px;
         // Header icon for confirmation kinds — empty for form / picker
         // kinds (create-playlist, rename-playlist, edit-playlist-artwork),
@@ -269,6 +271,11 @@ export component DialogOverlay inherits Rectangle {
             // it; the dispatcher routes Accept to `SmartEditor.commit()`.
             if DialogGlobal.kind == "smart-playlist-editor": SmartPlaylistEditorBody { }
 
+            // Edit-Track-Information body — cover panel + Tags/Lyrics/Summary
+            // tabs, driven by the `TagEditor` global; Accept routes to
+            // `TagEditor.commit()`.
+            if DialogGlobal.kind == "edit-tags": TagEditorBody { }
+
             HorizontalLayout {
                 alignment: end;
                 spacing: Theme.pad-sm;
@@ -312,7 +319,11 @@ export component DialogOverlay inherits Rectangle {
                             || DialogGlobal.add-selected-count > 0)
                         // Smart-playlist editor needs a name and ≥1 rule.
                         && (DialogGlobal.kind != "smart-playlist-editor"
-                            || (SmartEditor.name != "" && SmartEditor.rules.length > 0));
+                            || (SmartEditor.name != "" && SmartEditor.rules.length > 0))
+                        // Tag editor: enabled whenever a selection is loaded (a
+                        // no-op Save is short-circuited in Rust).
+                        && (DialogGlobal.kind != "edit-tags"
+                            || TagEditor.track-count > 0);
                     clicked => {
                         DialogGlobal.accepted();
                         DialogGlobal.open = false;

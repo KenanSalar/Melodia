@@ -194,7 +194,14 @@ pub fn extract_metadata(
          replaygain_track_gain, replaygain_track_peak, replaygain_album_gain, replaygain_album_peak) =
         if let Some(tag) = tag {
             (
-                tag.get_string(ItemKey::Bpm).and_then(|s| s.parse::<f64>().ok()),
+                // `ItemKey::Bpm` has NO ID3v2 mapping — MP3 / WAV / AIFF keep BPM in `TBPM`,
+                // which lofty exposes as `IntegerBpm`. Reading only `Bpm` therefore misses it
+                // on every ID3v2 file, including the ones `tag_writer::apply_bpm` writes.
+                // Prefer the decimal key (Vorbis `BPM`, MP4 freeform); fall back to the integer.
+                tag.get_string(ItemKey::Bpm)
+                    .or_else(|| tag.get_string(ItemKey::IntegerBpm))
+                    .and_then(|s| s.trim().parse::<f64>().ok())
+                    .filter(|v| v.is_finite()),
                 tag.get_string(ItemKey::MusicBrainzRecordingId).map(|s| s.trim().to_owned()).filter(|s| !s.is_empty()),
                 tag.get_string(ItemKey::MusicBrainzReleaseId).map(|s| s.trim().to_owned()).filter(|s| !s.is_empty()),
                 tag.get_string(ItemKey::Label).map(|s| s.trim().to_owned()).filter(|s| !s.is_empty()),

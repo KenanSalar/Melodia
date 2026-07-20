@@ -15,8 +15,10 @@ use super::sort_key::to_natural_sort_key;
 
 /// Column-name list shared by [`insert_track`]'s single-row INSERT and
 /// [`insert_tracks_batch`]'s multi-row form. The bind order in
-/// `bind_track_columns` (single-row) and `push_row_values` (multi-row)
-/// MUST both match this list — change all three together.
+/// `bind_track_columns` (single-row) and in the inline `qb.push_values(…)`
+/// closure inside [`insert_tracks_batch`] (multi-row) MUST both match this list
+/// — change all three together. `update_track_metadata` shares
+/// `bind_track_columns`, so it is coupled to the same order via its SET list.
 const TRACK_INSERT_COLUMNS: &str = "file_path, file_name,
     file_hash, title, artist, album_artist, album, genre, track_number, disc_number, year, composer, comment,
     bpm, musicbrainz_track_id, musicbrainz_release_id, label, original_year,

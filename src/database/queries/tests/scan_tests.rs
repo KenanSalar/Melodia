@@ -137,6 +137,34 @@ async fn upsert_album_empty_returns_none() -> Result<(), AppError> {
 }
 
 #[tokio::test]
+async fn upsert_album_updates_year_on_conflict() -> Result<(), AppError> {
+    let db = DbPool::test_pool().await;
+    let mut tx = db.write().begin().await?;
+    let artist_id = queries::scan::upsert_artist(&mut tx, "Artist", 1).await?;
+    let id = queries::scan::upsert_album(&mut tx, "Album", artist_id, Some(2001)).await?;
+
+    // Re-upsert of the same (name, artist_id) with a new year updates it (P2).
+    let same = queries::scan::upsert_album(&mut tx, "Album", artist_id, Some(2010)).await?;
+    assert_eq!(id, same);
+    let album_id = id.ok_or_else(|| AppError::Validation("no album id".into()))?;
+
+    let year: Option<i32> = sqlx::query_scalar("SELECT year FROM albums WHERE id = ?")
+        .bind(album_id)
+        .fetch_one(&mut *tx)
+        .await?;
+    assert_eq!(year, Some(2010));
+
+    // Re-upsert with a NULL year preserves the stored value (the COALESCE arm).
+    queries::scan::upsert_album(&mut tx, "Album", artist_id, None).await?;
+    let year: Option<i32> = sqlx::query_scalar("SELECT year FROM albums WHERE id = ?")
+        .bind(album_id)
+        .fetch_one(&mut *tx)
+        .await?;
+    assert_eq!(year, Some(2010));
+    Ok(())
+}
+
+#[tokio::test]
 async fn upsert_genre_new_returns_some() -> Result<(), AppError> {
     let db = DbPool::test_pool().await;
     let mut tx = db.write().begin().await?;

@@ -37,8 +37,14 @@ pub async fn upsert_album(
         return Ok(None);
     }
     let id = sqlx::query_scalar::<_, i64>(
+        // `year = COALESCE(excluded.year, albums.year)` updates the stored year on
+        // re-ingest (e.g. a tag edit) but preserves it when the new value is NULL.
+        // `excluded.year` / `albums.year` reference already-present columns, so no
+        // extra bind — the (name, artist_id, year) bind order is unchanged.
         "INSERT INTO albums (name, artist_id, year) VALUES (?, ?, ?)
-         ON CONFLICT(name, artist_id) DO UPDATE SET name = excluded.name
+         ON CONFLICT(name, artist_id) DO UPDATE SET
+             name = excluded.name,
+             year = COALESCE(excluded.year, albums.year)
          RETURNING id"
     )
     .bind(name)
