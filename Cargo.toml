@@ -118,7 +118,7 @@ slint = { version = "1.16.1", default-features = false, features = [
 ] }
 
 # Async runtime / utilities
-tokio = { version = "1.52.3", features = ["rt-multi-thread", "macros", "sync", "time", "fs", "process"] }
+tokio = { version = "1.53.0", features = ["rt-multi-thread", "macros", "sync", "time", "fs", "process"] }
 tokio-util = { version = "0.7.18", features = ["rt"] }
 async-compat = "0.2.5"
 parking_lot = "0.12.5"
@@ -171,8 +171,8 @@ lru = "0.18.1"
 material-colors = "0.4.2"
 
 # Serde / config
-serde = { version = "1.0.228", features = ["derive"] }
-serde_json = "1.0.150"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.151"
 chrono = { version = "0.4.45", default-features = false, features = ["clock", "std"] }
 dirs = "6.0.0"
 
@@ -188,7 +188,7 @@ log = "0.4.33"
 env_logger = { version = "0.11.11", default-features = false, features = ["auto-color", "humantime"] }
 
 # Errors
-thiserror = "2.0.18"
+thiserror = "2.0.19"
 
 # Atomic file writes (settings/queue/search-history persistence)
 tempfile = "3.27.0"
@@ -210,7 +210,7 @@ open = "5.4.0"
 # buffering the full 80–150 MiB artifact. See `src/services/updater/`.
 minisign-verify = "0.2.5"
 semver = "1.0.28"
-futures-util = { version = "0.3.32", default-features = false, features = ["std"] }
+futures-util = { version = "0.3.33", default-features = false, features = ["std"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 # NOTE: do NOT enable the `tokio` feature here. Cargo unifies features across
@@ -221,7 +221,7 @@ futures-util = { version = "0.3.32", default-features = false, features = ["std"
 # Tokio 1.x runtime". Phase 13 (always-on-top) will use `zbus::blocking::*`
 # from inside `tokio::task::spawn_blocking`, which doesn't need either
 # executor flavour.
-zbus = "5.17.0"
+zbus = "5.18.0"
 
 # Linux system tray (StatusNotifierItem over D-Bus — pure-Rust, no GTK).
 # `default-features = false` drops ksni's default `tokio` feature: it turns
@@ -234,7 +234,7 @@ zbus = "5.17.0"
 # the synchronous `ksni::blocking` API so the tray runs on its own thread
 # with no tokio handle. Windows / macOS use `tray-icon` instead — see the
 # `cfg(any(windows, macos))` block below and `src/services/tray/`.
-ksni = { version = "0.3.5", default-features = false, features = ["blocking", "async-io"] }
+ksni = { version = "0.3.6", default-features = false, features = ["blocking", "async-io"] }
 
 # `libc::malloc_trim` (glibc-only extension) is called periodically by the
 # playback monitor to release free chunks the allocator is holding above its
@@ -291,7 +291,7 @@ slint-build = "1.16.1"
 winresource = "0.1.31"
 
 [dev-dependencies]
-tokio = { version = "1.52.3", features = ["macros", "rt-multi-thread", "test-util"] }
+tokio = { version = "1.53.0", features = ["macros", "rt-multi-thread", "test-util"] }
 
 [lints.rust]
 unused = { level = "warn", priority = -1 }

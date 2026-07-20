@@ -590,7 +590,7 @@ it removes entries via `queue.prune_missing()` and never touches a summary's fie
 
 These are all live today, independent of tag editing, and all three are in its blast radius.
 
-### P1. `Dialog.closed`'s Slint teardown never runs (memory leak) — **fix first, own commit**
+### P1. ✅ DONE — `Dialog.closed`'s Slint teardown never runs (memory leak)
 
 `ui/globals.slint:1219-1259` declares `callback closed();` **with a default body** that resets
 `kind`, `target-id`, `input-text{,-2}`, `mosaic-*`, `pending-track-ids`, `playlist-pick-rows`,
@@ -852,7 +852,8 @@ only exists after `install_views`).
    says nothing about the container writer wrapped around it (OGG rewrites pages, AIFF writes an
    ID3 chunk), and those are separate code paths in lofty.
 2. ✅ **DONE — `self_writes.rs`** (`SelfWrites` on `AppState`, TTL 30 s) + the
-   `file_event_processor` filter, with 10 unit tests. The consumer half is complete; the
+   `file_event_processor` filter, with 11 unit tests (7 in `self_writes_tests.rs` + 4
+   `suppress_self_writes` tests in `file_event_processor_tests.rs`). The consumer half is complete; the
    **producer** (`mark` / `unmark`) arrives with the step-4 orchestrator, which is the only thing
    that writes files. Two notes for whoever picks that up: the time-taking `mark` / `take_recent`
    are thin wrappers over private `mark_at(path, at)` / `take_recent_at(path, now)` so the TTL
