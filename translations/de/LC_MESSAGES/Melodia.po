@@ -1292,3 +1292,9 @@ msgstr "Tags für {} bearbeiten"
 
 msgid "Edit {} Tracks"
 msgstr "{} Titel bearbeiten"
+
+msgid "Save"
+msgstr "Speichern"
+
+msgid "Duration"
+msgstr "Dauer"

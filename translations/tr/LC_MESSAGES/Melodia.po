@@ -1286,3 +1286,9 @@ msgstr "{} için Etiketleri Düzenle"
 
 msgid "Edit {} Tracks"
 msgstr "{} Parçayı Düzenle"
+
+msgid "Save"
+msgstr "Kaydet"
+
+msgid "Duration"
+msgstr "Süre"

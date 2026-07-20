@@ -1285,3 +1285,9 @@ msgstr "Επεξεργασία ετικετών για {}"
 
 msgid "Edit {} Tracks"
 msgstr "Επεξεργασία {} κομματιών"
+
+msgid "Save"
+msgstr "Αποθήκευση"
+
+msgid "Duration"
+msgstr "Διάρκεια"
