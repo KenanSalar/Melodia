@@ -645,7 +645,7 @@ Also correct the two comments that assert the false belief (`playlists/dialog.rs
 scalar / list state in pure Slint"; `:1214-1218` is the *correct* note about the Rust image
 reset) and the CLAUDE.md "Dialog-close releases global Image properties" bullet.
 
-### P2. `upsert_album` never updates `albums.year`
+### P2. ✅ DONE — `upsert_album` never updates `albums.year`
 
 `scan/upserts.rs:39-48` is `ON CONFLICT(name, artist_id) DO UPDATE SET name = excluded.name` —
 it binds `year` **only on INSERT**, so `albums.year` never updates on a re-ingest. Editing a
@@ -862,9 +862,19 @@ only exists after `install_views`).
    by moving the *lookup* forward instead). The filter itself is
    `suppress_self_writes(&mut batch, &SelfWrites)` beside the loop rather than an inline closure,
    so it is testable without an `AppState`.
-3. Queries (`TagEditRow`, `get_track_paths_by_ids`, `set_track_artwork`, `set_album_artwork`),
-   plus **P2** (the `upsert_album` year fix). **P3** (the BPM reader fallback) is ✅ **DONE** —
-   it shipped with the writer, since a `TBPM` the reader can't see is a BPM edit that vanishes.
+3. ✅ **DONE — Queries + P2.** `TagEditRow` projection + `track_tag_edit_columns()`
+   (`entities/track.rs`, no joins — artist/album/genre are denormalized on `tracks`; `bpm` is the
+   `REAL`/`f64` gotcha); `get_tag_edit_rows_by_ids` + `get_track_paths_by_ids` + the tx-scoped,
+   COALESCE-free `set_track_artwork` (`queries/track.rs`); `set_album_artwork` (`queries/album.rs`,
+   overwrites an existing cover, unlike `update_album_artwork_from_tracks`'s NULL-only roll-up).
+   All mirror the `get_track_summaries_by_ids` / `set_rating` shapes; the two artwork setters differ
+   only by executing against `&mut **tx`. **P2** — `upsert_album`'s `DO UPDATE` now carries
+   `year = COALESCE(excluded.year, albums.year)` (references already-bound columns, so no new
+   bind). Tests: `track_tests.rs` (projection + input-order + artwork-null-proves-no-COALESCE),
+   `album_tests.rs` (`set_album_artwork_replaces_existing_cover`), `scan_tests.rs`
+   (`upsert_album_updates_year_on_conflict` — new year updates, `None` preserves). **P3** (the BPM
+   reader fallback) was already ✅ **DONE** — it shipped with the writer, since a `TBPM` the reader
+   can't see is a BPM edit that vanishes.
 4. `library/tags.rs` orchestrator + `sync_track_summaries`.
 
    ⚠ **The orchestrator owns the whole row, not just the tag columns.** Step 2's suppression

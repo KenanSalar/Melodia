@@ -192,6 +192,51 @@ pub async fn get_track_summaries_by_ids(
     Ok(ids.iter().filter_map(|id| map.remove(id)).collect())
 }
 
+/// Fetch `TagEditRow` projections by IDs for the Edit-Track-Information
+/// dialog, preserving the input order. Reads the editable tag columns plus
+/// the read-only technical columns the Summary tab shows — no joins, since
+/// artist/album/genre are stored denormalized on `tracks`.
+pub async fn get_tag_edit_rows_by_ids(
+    db: &DbPool,
+    ids: &[i64],
+) -> Result<Vec<track::TagEditRow>, AppError> {
+    let cols = track::track_tag_edit_columns();
+    let rows: Vec<track::TagEditRow> = chunked_in_query(
+        db.read(),
+        ids,
+        |placeholders| format!("SELECT {cols} FROM tracks WHERE id IN ({placeholders})"),
+    )
+    .await?;
+
+    let mut map: HashMap<i64, track::TagEditRow> = HashMap::with_capacity(rows.len());
+    map.extend(rows.into_iter().map(|t| (t.id, t)));
+
+    Ok(ids.iter().filter_map(|id| map.remove(id)).collect())
+}
+
+/// Fetch `(id, file_path)` pairs by IDs, preserving the input order. The tag
+/// writer marks each `file_path` in the self-write suppression set before
+/// rewriting it, so a stable order keeps the marking deterministic.
+pub async fn get_track_paths_by_ids(
+    db: &DbPool,
+    ids: &[i64],
+) -> Result<Vec<(i64, String)>, AppError> {
+    let rows: Vec<(i64, String)> = chunked_in_query(
+        db.read(),
+        ids,
+        |placeholders| format!("SELECT id, file_path FROM tracks WHERE id IN ({placeholders})"),
+    )
+    .await?;
+
+    let mut map: HashMap<i64, String> = HashMap::with_capacity(rows.len());
+    map.extend(rows);
+
+    Ok(ids
+        .iter()
+        .filter_map(|id| map.remove(id).map(|path| (*id, path)))
+        .collect())
+}
+
 /// Lightweight version of `get_all_tracks` returning only list-view columns.
 pub async fn get_all_tracks_for_list(
     db: &DbPool,
@@ -310,6 +355,35 @@ pub async fn set_rating(db: &DbPool, ids: &[i64], rating: i32) -> Result<(), App
             query = query.bind(*id);
         }
         query.execute(db.write()).await?;
+    }
+    Ok(())
+}
+
+/// Authoritatively set `artwork_path` for one or more tracks by ID, within a
+/// caller-supplied transaction. Unlike `update_track_metadata`'s
+/// `artwork_path = COALESCE(?, artwork_path)`, this is a plain overwrite — so
+/// `None` genuinely nulls the column (the artwork-Remove case), which a
+/// COALESCE can never do. Tx-scoped because the tag-edit orchestrator writes
+/// it in the same transaction as the metadata refresh.
+pub async fn set_track_artwork(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    ids: &[i64],
+    artwork_path: Option<&str>,
+) -> Result<(), AppError> {
+    if ids.is_empty() {
+        return Ok(());
+    }
+    // Reserve 1 bind slot for the `artwork_path` parameter itself.
+    for chunk in ids.chunks(crate::database::SQLITE_BIND_LIMIT - 1) {
+        let placeholders = crate::database::placeholders(chunk.len());
+        let sql = format!("UPDATE tracks SET artwork_path = ? WHERE id IN ({placeholders})");
+        let mut query = sqlx::query(AssertSqlSafe(sql))
+            .persistent(false)
+            .bind(artwork_path);
+        for id in chunk {
+            query = query.bind(*id);
+        }
+        query.execute(&mut **tx).await?;
     }
     Ok(())
 }
