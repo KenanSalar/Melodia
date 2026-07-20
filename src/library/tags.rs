@@ -128,22 +128,8 @@ pub(crate) async fn write_tag_edit(
         let cover_cache = cover_cache.clone();
         let self_writes = Arc::clone(self_writes);
         tokio::task::spawn_blocking(move || {
-            // `cover_picture_from_path` decode-validates (lofty only sniffs 8
-            // bytes) and re-encodes non-JPEG/PNG; `cache_image_file` copies the
-            // original bytes into the content-addressed artwork dir for the DB
-            // `artwork_path` write.
-            let (picture, cached_artwork) = if edit.artwork == ArtworkEdit::Replace {
-                let source = artwork_source.as_deref().ok_or_else(|| {
-                    AppError::metadata_msg(
-                        "artwork Replace requested without a source image".to_owned(),
-                    )
-                })?;
-                let picture = tag_writer::cover_picture_from_path(source)?;
-                let cached = artwork::cache_image_file(source, &artwork_dir);
-                (Some(picture), cached)
-            } else {
-                (None, None)
-            };
+            let (picture, cached_artwork) =
+                prepare_artwork(&edit, artwork_source.as_deref(), &artwork_dir)?;
 
             let files = run_write_pass(
                 &rows,
@@ -174,6 +160,30 @@ pub(crate) async fn write_tag_edit(
 
     report.updated = updated_ids.len();
     Ok((report, updated_ids))
+}
+
+/// Decode + validate the picked cover and copy it into the content-addressed
+/// artwork dir. `Keep` / `Remove` need neither, so return `(None, None)`.
+///
+/// Blocking (image decode + file copy) — call from inside the `spawn_blocking`
+/// write pass. `cover_picture_from_path` decode-validates (lofty only sniffs 8
+/// bytes) and re-encodes non-JPEG/PNG; `cache_image_file` copies the original
+/// bytes for the DB `artwork_path`. Run FIRST — a corrupt pick fails the whole
+/// edit here (via `?`), before any file is touched.
+fn prepare_artwork(
+    edit: &TagEdit,
+    artwork_source: Option<&Path>,
+    artwork_dir: &Path,
+) -> Result<(Option<lofty::picture::Picture>, Option<String>), AppError> {
+    if edit.artwork != ArtworkEdit::Replace {
+        return Ok((None, None));
+    }
+    let source = artwork_source.ok_or_else(|| {
+        AppError::metadata_msg("artwork Replace requested without a source image".to_owned())
+    })?;
+    let picture = tag_writer::cover_picture_from_path(source)?;
+    let cached = artwork::cache_image_file(source, artwork_dir);
+    Ok((Some(picture), cached))
 }
 
 /// Per-file result carried out of the blocking pass. `Ok((meta, unsupported))`
@@ -294,22 +304,36 @@ async fn run_commit(
         }
     }
 
-    // Replace: one authoritative overwrite to every updated track and its
-    // album(s), so the Albums grid card updates too (the roll-up only fills
-    // NULL rows). Skipped when the cache write failed — leaving the COALESCE'd
-    // value beats nulling a cover we can't repoint.
-    if edit.artwork == ArtworkEdit::Replace
-        && !updated_ids.is_empty()
-        && let Some(cached) = cached_artwork
-    {
-        queries::track::set_track_artwork(&mut tx, &updated_ids, Some(cached)).await?;
-        album_ids.sort_unstable();
-        album_ids.dedup();
-        queries::album::set_album_artwork(&mut tx, &album_ids, Some(cached)).await?;
+    if edit.artwork == ArtworkEdit::Replace {
+        apply_replace_artwork(&mut tx, &updated_ids, &mut album_ids, cached_artwork).await?;
     }
 
     tx.commit().await?;
     Ok(updated_ids)
+}
+
+/// Replace: one authoritative overwrite to every updated track and its album(s),
+/// so the Albums grid card updates too (the metadata roll-up only fills NULL
+/// rows). No-op when nothing was updated, or when the cache write failed
+/// (`cached_artwork` is `None`) — leaving the COALESCE'd value beats nulling a
+/// cover we can't repoint.
+async fn apply_replace_artwork(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    updated_ids: &[i64],
+    album_ids: &mut Vec<i64>,
+    cached_artwork: Option<&str>,
+) -> Result<(), AppError> {
+    if updated_ids.is_empty() {
+        return Ok(());
+    }
+    let Some(cached) = cached_artwork else {
+        return Ok(());
+    };
+    queries::track::set_track_artwork(tx, updated_ids, Some(cached)).await?;
+    album_ids.sort_unstable();
+    album_ids.dedup();
+    queries::album::set_album_artwork(tx, album_ids, Some(cached)).await?;
+    Ok(())
 }
 
 #[cfg(test)]

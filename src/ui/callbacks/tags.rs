@@ -34,9 +34,26 @@ use crate::ui::notifications::{NotificationParams, NotificationsUi};
 use crate::ui::util::buffer_from_rgb;
 use crate::{AppWindow, Dialog, Settings, TagEditor};
 
-/// The editable fields, in the order [`build_edit`] / `TagSession::originals`
-/// index them: title..bpm then lyrics.
-const FIELD_COUNT: usize = 13;
+/// Canonical field order, shared by the three positional lists that must stay
+/// aligned: the `commit` getter array, `populate`'s `field!` calls, and
+/// [`build_edit`] / `TagSession::originals`. Indexing by name (not raw `0..12`)
+/// makes the alignment explicit — reorder here and in all three sites together.
+const TITLE: usize = 0;
+const ARTIST: usize = 1;
+const ALBUM_ARTIST: usize = 2;
+const ALBUM: usize = 3;
+const GENRE: usize = 4;
+const YEAR: usize = 5;
+const ORIGINAL_YEAR: usize = 6;
+const TRACK_NUMBER: usize = 7;
+const DISC_NUMBER: usize = 8;
+const COMPOSER: usize = 9;
+const COMMENT: usize = 10;
+const BPM: usize = 11;
+const LYRICS: usize = 12;
+
+/// Number of editable fields (`title`..`lyrics`).
+const FIELD_COUNT: usize = LYRICS + 1;
 
 /// Preview cover cap — the dialog tile renders at 160 px; 384 keeps it crisp on
 /// `HiDPI` while staying a small bounded buffer (mirrors `detail_artwork`).
@@ -72,192 +89,214 @@ pub fn wire_tags(ui: &AppWindow, state: &AppState, notifications: &Rc<Notificati
     let session: Rc<RefCell<TagSession>> = Rc::new(RefCell::new(TagSession::default()));
     let te = ui.global::<TagEditor>();
 
-    // request-edit: fetch rows (+ lyrics + cover for a single selection),
-    // populate, and open on the next UI tick.
-    {
-        let weak = ui.as_weak();
-        let state = state.clone();
+    wire_request_edit(&te, ui, state, &session);
+    wire_pick_artwork(&te, ui, state, &session);
+    wire_remove_artwork(&te, ui, &session);
+    wire_commit(&te, ui, state, &session, notifications);
+}
+
+/// `request-edit`: fetch rows (+ lyrics + cover for a single selection),
+/// populate, and open the dialog on the next UI tick.
+fn wire_request_edit(
+    te: &TagEditor,
+    ui: &AppWindow,
+    state: &AppState,
+    session: &Rc<RefCell<TagSession>>,
+) {
+    let weak = ui.as_weak();
+    let state = state.clone();
+    let session = session.clone();
+    te.on_request_edit(move |ids_model| {
+        let ids: Vec<i64> = ids_model.iter().map(i64::from).collect();
+        if ids.is_empty() {
+            return;
+        }
+        let weak = weak.clone();
+        let s = state.clone();
         let session = session.clone();
-        te.on_request_edit(move |ids_model| {
-            let ids: Vec<i64> = ids_model.iter().map(i64::from).collect();
-            if ids.is_empty() {
-                return;
-            }
-            let weak = weak.clone();
-            let s = state.clone();
-            let session = session.clone();
-            let _ = slint::spawn_local(Compat::new(async move {
-                let rows = match queries::track::get_tag_edit_rows_by_ids(&s.db, &ids).await {
-                    Ok(rows) if !rows.is_empty() => rows,
-                    Ok(_) => return,
-                    Err(e) => {
-                        log::warn!("tag edit fetch: {e}");
-                        return;
-                    }
-                };
-                let single = rows.len() == 1;
-
-                // Lyrics are stored in the file, not the DB — read them for a
-                // single selection (the Lyrics tab isn't mounted otherwise).
-                let lyrics = if single {
-                    let path = PathBuf::from(&rows[0].file_path);
-                    match s
-                        .runtime
-                        .spawn_blocking(move || tag_writer::read_lyrics(&path))
-                        .await
-                    {
-                        Ok(Ok(Some(l))) => l,
-                        _ => String::new(),
-                    }
-                } else {
-                    String::new()
-                };
-
-                // Cover preview from the first row that has one (decode off the
-                // UI thread — a full-res source could jank it).
-                let cover_path = rows.iter().find_map(|r| {
-                    r.artwork_path
-                        .as_deref()
-                        .filter(|p| !p.is_empty())
-                        .map(PathBuf::from)
-                });
-                let cover = match cover_path {
-                    Some(p) => s
-                        .runtime
-                        .spawn_blocking(move || decode_cover_preview(&p))
-                        .await
-                        .ok()
-                        .flatten(),
-                    None => None,
-                };
-
-                let Some(ui) = weak.upgrade() else { return };
-                populate(&ui, &session, &rows, lyrics, cover);
-                ui.global::<Dialog>().set_open(true);
-            }));
-        });
-    }
-
-    // pick-artwork: native image picker → decode preview → stash as a Replace.
-    {
-        let weak = ui.as_weak();
-        let state = state.clone();
-        let session = session.clone();
-        te.on_pick_artwork(move || {
-            let weak = weak.clone();
-            let s = state.clone();
-            let session = session.clone();
-            let _ = slint::spawn_local(Compat::new(async move {
-                let dialog = {
-                    // Filter broadly — the orchestrator normalizes on write
-                    // (lofty's accepted set and MP4's differ; no single filter
-                    // expresses it).
-                    let mut d = rfd::AsyncFileDialog::new()
-                        .set_title("Choose Cover Image")
-                        .add_filter(
-                            "Images",
-                            &["jpg", "jpeg", "png", "webp", "gif", "bmp", "tiff"],
-                        );
-                    if let Some(ui) = weak.upgrade() {
-                        d = d.set_parent(&ui.window().window_handle());
-                    }
-                    d
-                };
-                let Some(handle) = dialog.pick_file().await else {
+        let _ = slint::spawn_local(Compat::new(async move {
+            let rows = match queries::track::get_tag_edit_rows_by_ids(&s.db, &ids).await {
+                Ok(rows) if !rows.is_empty() => rows,
+                Ok(_) => return,
+                Err(e) => {
+                    log::warn!("tag edit fetch: {e}");
                     return;
-                };
-                let path = handle.path().to_path_buf();
-                let decode_path = path.clone();
-                let buf = s
+                }
+            };
+            let single = rows.len() == 1;
+
+            // Lyrics are stored in the file, not the DB — read them for a
+            // single selection (the Lyrics tab isn't mounted otherwise).
+            let lyrics = if single {
+                let path = PathBuf::from(&rows[0].file_path);
+                match s
                     .runtime
-                    .spawn_blocking(move || decode_cover_preview(&decode_path))
+                    .spawn_blocking(move || tag_writer::read_lyrics(&path))
                     .await
-                    .ok()
-                    .flatten();
-
-                let Some(ui) = weak.upgrade() else { return };
-                let te = ui.global::<TagEditor>();
-                if let Some(buf) = buf {
-                    te.set_cover(Image::from_rgb8(buf));
-                    te.set_has_cover(true);
-                    let mut sess = session.borrow_mut();
-                    sess.artwork = ArtworkEdit::Replace;
-                    sess.picked = Some(path);
-                } else {
-                    // Preview-only failure — leave the session untouched, so
-                    // Save won't try to embed an image it couldn't even decode.
-                    log::warn!("cover preview decode failed: {}", path.display());
+                {
+                    Ok(Ok(Some(l))) => l,
+                    _ => String::new(),
                 }
-            }));
-        });
-    }
-
-    // remove-artwork: clear the preview and mark a Remove.
-    {
-        let weak = ui.as_weak();
-        let session = session.clone();
-        te.on_remove_artwork(move || {
-            let Some(ui) = weak.upgrade() else { return };
-            let te = ui.global::<TagEditor>();
-            te.set_cover(Image::default());
-            te.set_has_cover(false);
-            let mut sess = session.borrow_mut();
-            sess.artwork = ArtworkEdit::Remove;
-            sess.picked = None;
-        });
-    }
-
-    // commit: diff the form → TagEdit → apply → completion toast.
-    {
-        let weak = ui.as_weak();
-        let state = state.clone();
-        let session = session.clone();
-        let notifications = notifications.clone();
-        te.on_commit(move || {
-            let Some(ui) = weak.upgrade() else { return };
-            let te = ui.global::<TagEditor>();
-
-            let (edit, ids, artwork_source) = {
-                let sess = session.borrow();
-                if sess.originals.len() != FIELD_COUNT {
-                    return;
-                }
-                let cur = [
-                    te.get_title().to_string(),
-                    te.get_artist().to_string(),
-                    te.get_album_artist().to_string(),
-                    te.get_album().to_string(),
-                    te.get_genre().to_string(),
-                    te.get_year().to_string(),
-                    te.get_original_year().to_string(),
-                    te.get_track_number().to_string(),
-                    te.get_disc_number().to_string(),
-                    te.get_composer().to_string(),
-                    te.get_comment().to_string(),
-                    te.get_bpm().to_string(),
-                    te.get_lyrics().to_string(),
-                ];
-                let edit = build_edit(&cur, &sess.originals, sess.artwork.clone());
-                (edit, sess.ids.clone(), sess.picked.clone())
+            } else {
+                String::new()
             };
 
-            // A reflexive open-then-Save must not touch disk (lofty rewrites the
-            // tag whether or not anything changed). `is_noop()` already folds in
-            // the artwork tri-state.
-            if edit.is_noop() {
+            // Cover preview from the first row that has one (decode off the
+            // UI thread — a full-res source could jank it).
+            let cover_path = rows.iter().find_map(|r| {
+                r.artwork_path
+                    .as_deref()
+                    .filter(|p| !p.is_empty())
+                    .map(PathBuf::from)
+            });
+            let cover = match cover_path {
+                Some(p) => s
+                    .runtime
+                    .spawn_blocking(move || decode_cover_preview(&p))
+                    .await
+                    .ok()
+                    .flatten(),
+                None => None,
+            };
+
+            let Some(ui) = weak.upgrade() else { return };
+            populate(&ui, &session, &rows, lyrics, cover);
+            ui.global::<Dialog>().set_open(true);
+        }));
+    });
+}
+
+/// `pick-artwork`: native image picker → decode preview → stash as a Replace.
+fn wire_pick_artwork(
+    te: &TagEditor,
+    ui: &AppWindow,
+    state: &AppState,
+    session: &Rc<RefCell<TagSession>>,
+) {
+    let weak = ui.as_weak();
+    let state = state.clone();
+    let session = session.clone();
+    te.on_pick_artwork(move || {
+        let weak = weak.clone();
+        let s = state.clone();
+        let session = session.clone();
+        let _ = slint::spawn_local(Compat::new(async move {
+            let dialog = {
+                // Filter broadly — the orchestrator normalizes on write
+                // (lofty's accepted set and MP4's differ; no single filter
+                // expresses it).
+                let mut d = rfd::AsyncFileDialog::new()
+                    .set_title("Choose Cover Image")
+                    .add_filter(
+                        "Images",
+                        &["jpg", "jpeg", "png", "webp", "gif", "bmp", "tiff"],
+                    );
+                if let Some(ui) = weak.upgrade() {
+                    d = d.set_parent(&ui.window().window_handle());
+                }
+                d
+            };
+            let Some(handle) = dialog.pick_file().await else {
+                return;
+            };
+            let path = handle.path().to_path_buf();
+            let decode_path = path.clone();
+            let buf = s
+                .runtime
+                .spawn_blocking(move || decode_cover_preview(&decode_path))
+                .await
+                .ok()
+                .flatten();
+
+            let Some(ui) = weak.upgrade() else { return };
+            let te = ui.global::<TagEditor>();
+            if let Some(buf) = buf {
+                te.set_cover(Image::from_rgb8(buf));
+                te.set_has_cover(true);
+                let mut sess = session.borrow_mut();
+                sess.artwork = ArtworkEdit::Replace;
+                sess.picked = Some(path);
+            } else {
+                // Preview-only failure — leave the session untouched, so
+                // Save won't try to embed an image it couldn't even decode.
+                log::warn!("cover preview decode failed: {}", path.display());
+            }
+        }));
+    });
+}
+
+/// `remove-artwork`: clear the preview and mark a Remove.
+fn wire_remove_artwork(te: &TagEditor, ui: &AppWindow, session: &Rc<RefCell<TagSession>>) {
+    let weak = ui.as_weak();
+    let session = session.clone();
+    te.on_remove_artwork(move || {
+        let Some(ui) = weak.upgrade() else { return };
+        let te = ui.global::<TagEditor>();
+        te.set_cover(Image::default());
+        te.set_has_cover(false);
+        let mut sess = session.borrow_mut();
+        sess.artwork = ArtworkEdit::Remove;
+        sess.picked = None;
+    });
+}
+
+/// `commit`: diff the form → `TagEdit` → apply → completion toast.
+fn wire_commit(
+    te: &TagEditor,
+    ui: &AppWindow,
+    state: &AppState,
+    session: &Rc<RefCell<TagSession>>,
+    notifications: &Rc<NotificationsUi>,
+) {
+    let weak = ui.as_weak();
+    let state = state.clone();
+    let session = session.clone();
+    let notifications = notifications.clone();
+    te.on_commit(move || {
+        let Some(ui) = weak.upgrade() else { return };
+        let te = ui.global::<TagEditor>();
+
+        let (edit, ids, artwork_source) = {
+            let sess = session.borrow();
+            if sess.originals.len() != FIELD_COUNT {
                 return;
             }
+            // Read the live properties in canonical field order (TITLE..LYRICS).
+            let cur = [
+                te.get_title().to_string(),
+                te.get_artist().to_string(),
+                te.get_album_artist().to_string(),
+                te.get_album().to_string(),
+                te.get_genre().to_string(),
+                te.get_year().to_string(),
+                te.get_original_year().to_string(),
+                te.get_track_number().to_string(),
+                te.get_disc_number().to_string(),
+                te.get_composer().to_string(),
+                te.get_comment().to_string(),
+                te.get_bpm().to_string(),
+                te.get_lyrics().to_string(),
+            ];
+            let edit = build_edit(&cur, &sess.originals, sess.artwork.clone());
+            (edit, sess.ids.clone(), sess.picked.clone())
+        };
 
-            let s = state.clone();
-            let weak = weak.clone();
-            let notifications = notifications.clone();
-            let _ = slint::spawn_local(Compat::new(async move {
-                let result = library::tags::apply_tag_edit(&s, ids, edit, artwork_source).await;
-                let Some(ui) = weak.upgrade() else { return };
-                show_report_toast(&ui, &notifications, result);
-            }));
-        });
-    }
+        // A reflexive open-then-Save must not touch disk (lofty rewrites the
+        // tag whether or not anything changed). `is_noop()` already folds in
+        // the artwork tri-state.
+        if edit.is_noop() {
+            return;
+        }
+
+        let s = state.clone();
+        let weak = weak.clone();
+        let notifications = notifications.clone();
+        let _ = slint::spawn_local(Compat::new(async move {
+            let result = library::tags::apply_tag_edit(&s, ids, edit, artwork_source).await;
+            let Some(ui) = weak.upgrade() else { return };
+            show_report_toast(&ui, &notifications, result);
+        }));
+    });
 }
 
 /// Fill the `TagEditor` global from the fetched rows and record the snapshot.
@@ -270,7 +309,6 @@ fn populate(
 ) {
     let te = ui.global::<TagEditor>();
     let sentinel = ui.global::<Settings>().invoke_tag_multiple_values();
-    let single = rows.len() == 1;
 
     let mut originals: Vec<String> = Vec::with_capacity(FIELD_COUNT);
 
@@ -327,7 +365,19 @@ fn populate(
     te.set_lyrics_placeholder(SharedString::default());
     originals.push(lyrics);
 
-    te.set_track_count(i32::try_from(rows.len()).unwrap_or(i32::MAX));
+    finalize_populate(&te, session, rows, originals, cover);
+}
+
+/// Finish a `populate`: scalar flags, cover, Summary, and the session snapshot.
+fn finalize_populate(
+    te: &TagEditor,
+    session: &Rc<RefCell<TagSession>>,
+    rows: &[TagEditRow],
+    originals: Vec<String>,
+    cover: Option<SharedPixelBuffer<Rgb8Pixel>>,
+) {
+    let single = rows.len() == 1;
+    te.set_track_count(clamp_i32(rows.len()));
     te.set_active_tab(0);
     te.set_lyrics_enabled(single);
 
@@ -339,11 +389,8 @@ fn populate(
         te.set_has_cover(false);
     }
 
-    if single {
-        set_summary(&te, &rows[0]);
-    } else {
-        clear_summary(&te);
-    }
+    // Single row ⇒ fill the Summary tab; multi ⇒ blank it (tab unmounted).
+    set_summary(te, single.then(|| &rows[0]));
 
     *session.borrow_mut() = TagSession {
         ids: rows.iter().map(|r| r.id).collect(),
@@ -353,50 +400,24 @@ fn populate(
     };
 }
 
-/// Preformat the read-only Summary strings from a single row's technical columns.
-fn set_summary(te: &TagEditor, r: &TagEditRow) {
-    te.set_summary_path(SharedString::from(r.file_path.as_str()));
-    te.set_summary_codec(SharedString::from(
-        r.codec.as_deref().unwrap_or_default().to_uppercase(),
-    ));
-    te.set_summary_bitrate(SharedString::from(
-        r.bitrate.map(|b| format!("{b} kbps")).unwrap_or_default(),
-    ));
-    te.set_summary_sample_rate(SharedString::from(
-        r.sample_rate.map(fmt_sample_rate).unwrap_or_default(),
-    ));
-    te.set_summary_bit_depth(SharedString::from(
-        r.bit_depth.map(|d| format!("{d}-bit")).unwrap_or_default(),
-    ));
-    te.set_summary_channels(SharedString::from(
-        r.channels.map(fmt_channels).unwrap_or_default(),
-    ));
-    te.set_summary_size(SharedString::from(
-        r.file_size.map(fmt_size).unwrap_or_default(),
-    ));
-    te.set_summary_duration(SharedString::from(crate::ui::tracks::format_duration_ms(
-        r.duration_ms,
-    )));
-    te.set_summary_modified(SharedString::from(
-        r.date_modified.as_deref().unwrap_or_default(),
-    ));
-    te.set_summary_hash(SharedString::from(r.file_hash.as_deref().unwrap_or_default()));
-}
-
-/// Blank the Summary strings (multi mode — the tab isn't mounted, but stale
-/// single-select values shouldn't linger).
-fn clear_summary(te: &TagEditor) {
-    let empty = SharedString::default();
-    te.set_summary_path(empty.clone());
-    te.set_summary_codec(empty.clone());
-    te.set_summary_bitrate(empty.clone());
-    te.set_summary_sample_rate(empty.clone());
-    te.set_summary_bit_depth(empty.clone());
-    te.set_summary_channels(empty.clone());
-    te.set_summary_size(empty.clone());
-    te.set_summary_duration(empty.clone());
-    te.set_summary_modified(empty.clone());
-    te.set_summary_hash(empty);
+/// Fill the read-only Summary strings from a single row's technical columns, or
+/// blank all ten when `row` is `None` (multi mode — the tab isn't mounted, but a
+/// stale single-select value shouldn't linger).
+fn set_summary(te: &TagEditor, row: Option<&TagEditRow>) {
+    // Each field is the row's value, or "" when `row` is None.
+    fn s(row: Option<&TagEditRow>, get: impl Fn(&TagEditRow) -> String) -> SharedString {
+        SharedString::from(row.map(get).unwrap_or_default().as_str())
+    }
+    te.set_summary_path(s(row, |r| r.file_path.clone()));
+    te.set_summary_codec(s(row, |r| r.codec.as_deref().unwrap_or_default().to_uppercase()));
+    te.set_summary_bitrate(s(row, |r| r.bitrate.map(|b| format!("{b} kbps")).unwrap_or_default()));
+    te.set_summary_sample_rate(s(row, |r| r.sample_rate.map(fmt_sample_rate).unwrap_or_default()));
+    te.set_summary_bit_depth(s(row, |r| r.bit_depth.map(|d| format!("{d}-bit")).unwrap_or_default()));
+    te.set_summary_channels(s(row, |r| r.channels.map(fmt_channels).unwrap_or_default()));
+    te.set_summary_size(s(row, |r| r.file_size.map(fmt_size).unwrap_or_default()));
+    te.set_summary_duration(s(row, |r| crate::ui::tracks::format_duration_ms(r.duration_ms)));
+    te.set_summary_modified(s(row, |r| r.date_modified.as_deref().unwrap_or_default().to_owned()));
+    te.set_summary_hash(s(row, |r| r.file_hash.as_deref().unwrap_or_default().to_owned()));
 }
 
 /// Show the Save completion toast from the report — a partial failure or an
@@ -454,19 +475,19 @@ fn failure_toast(settings: &Settings) -> NotificationParams {
 /// populate-time snapshot. `cur` is fixed-length 13; `orig` is checked to match.
 fn build_edit(cur: &[String], orig: &[String], artwork: ArtworkEdit) -> TagEdit {
     TagEdit {
-        title: diff_str(&cur[0], &orig[0]),
-        artist: diff_str(&cur[1], &orig[1]),
-        album_artist: diff_str(&cur[2], &orig[2]),
-        album: diff_str(&cur[3], &orig[3]),
-        genre: diff_str(&cur[4], &orig[4]),
-        year: diff_u16(&cur[5], &orig[5]),
-        original_year: diff_u16(&cur[6], &orig[6]),
-        track_number: diff_u32(&cur[7], &orig[7]),
-        disc_number: diff_u32(&cur[8], &orig[8]),
-        composer: diff_str(&cur[9], &orig[9]),
-        comment: diff_str(&cur[10], &orig[10]),
-        bpm: diff_bpm(&cur[11], &orig[11]),
-        lyrics: diff_str(&cur[12], &orig[12]),
+        title: diff_str(&cur[TITLE], &orig[TITLE]),
+        artist: diff_str(&cur[ARTIST], &orig[ARTIST]),
+        album_artist: diff_str(&cur[ALBUM_ARTIST], &orig[ALBUM_ARTIST]),
+        album: diff_str(&cur[ALBUM], &orig[ALBUM]),
+        genre: diff_str(&cur[GENRE], &orig[GENRE]),
+        year: diff_parsed::<u16>(&cur[YEAR], &orig[YEAR]),
+        original_year: diff_parsed::<u16>(&cur[ORIGINAL_YEAR], &orig[ORIGINAL_YEAR]),
+        track_number: diff_parsed::<u32>(&cur[TRACK_NUMBER], &orig[TRACK_NUMBER]),
+        disc_number: diff_parsed::<u32>(&cur[DISC_NUMBER], &orig[DISC_NUMBER]),
+        composer: diff_str(&cur[COMPOSER], &orig[COMPOSER]),
+        comment: diff_str(&cur[COMMENT], &orig[COMMENT]),
+        bpm: diff_bpm(&cur[BPM], &orig[BPM]),
+        lyrics: diff_str(&cur[LYRICS], &orig[LYRICS]),
         artwork,
     }
 }
@@ -484,7 +505,10 @@ fn diff_str(cur: &str, orig: &str) -> FieldEdit<String> {
     }
 }
 
-fn diff_u16(cur: &str, orig: &str) -> FieldEdit<u16> {
+/// Tri-state for a numeric field that crosses the Slint boundary as its decimal
+/// string. Unchanged ⇒ `Keep`; now-blank ⇒ `Clear`; a value that doesn't parse
+/// degrades to `Keep` — never write garbage.
+fn diff_parsed<T: std::str::FromStr>(cur: &str, orig: &str) -> FieldEdit<T> {
     if cur == orig {
         return FieldEdit::Keep;
     }
@@ -492,19 +516,7 @@ fn diff_u16(cur: &str, orig: &str) -> FieldEdit<u16> {
     if t.is_empty() {
         return FieldEdit::Clear;
     }
-    // A value that doesn't parse degrades to Keep — never write garbage.
-    t.parse::<u16>().map_or(FieldEdit::Keep, FieldEdit::Set)
-}
-
-fn diff_u32(cur: &str, orig: &str) -> FieldEdit<u32> {
-    if cur == orig {
-        return FieldEdit::Keep;
-    }
-    let t = cur.trim();
-    if t.is_empty() {
-        return FieldEdit::Clear;
-    }
-    t.parse::<u32>().map_or(FieldEdit::Keep, FieldEdit::Set)
+    t.parse::<T>().map_or(FieldEdit::Keep, FieldEdit::Set)
 }
 
 fn diff_bpm(cur: &str, orig: &str) -> FieldEdit<f64> {

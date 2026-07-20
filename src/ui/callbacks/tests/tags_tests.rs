@@ -15,20 +15,20 @@ fn diff_str_keep_clear_set() {
 }
 
 #[test]
-fn diff_u16_parses_and_guards() {
-    assert_eq!(diff_u16("2020", "2020"), FieldEdit::Keep);
-    assert_eq!(diff_u16("2021", "2020"), FieldEdit::Set(2021));
-    assert_eq!(diff_u16("", "2020"), FieldEdit::Clear);
+fn diff_parsed_u16_parses_and_guards() {
+    assert_eq!(diff_parsed::<u16>("2020", "2020"), FieldEdit::Keep);
+    assert_eq!(diff_parsed::<u16>("2021", "2020"), FieldEdit::Set(2021));
+    assert_eq!(diff_parsed::<u16>("", "2020"), FieldEdit::Clear);
     // Non-numeric / out-of-range degrade to Keep — never write garbage.
-    assert_eq!(diff_u16("nope", "2020"), FieldEdit::Keep);
-    assert_eq!(diff_u16("99999", "2020"), FieldEdit::Keep);
+    assert_eq!(diff_parsed::<u16>("nope", "2020"), FieldEdit::Keep);
+    assert_eq!(diff_parsed::<u16>("99999", "2020"), FieldEdit::Keep);
 }
 
 #[test]
-fn diff_u32_parses_and_guards() {
-    assert_eq!(diff_u32("3", "1"), FieldEdit::Set(3));
-    assert_eq!(diff_u32("", "1"), FieldEdit::Clear);
-    assert_eq!(diff_u32("x", "1"), FieldEdit::Keep);
+fn diff_parsed_u32_parses_and_guards() {
+    assert_eq!(diff_parsed::<u32>("3", "1"), FieldEdit::Set(3));
+    assert_eq!(diff_parsed::<u32>("", "1"), FieldEdit::Clear);
+    assert_eq!(diff_parsed::<u32>("x", "1"), FieldEdit::Keep);
 }
 
 #[test]
