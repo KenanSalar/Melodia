@@ -875,7 +875,23 @@ only exists after `install_views`).
    (`upsert_album_updates_year_on_conflict` — new year updates, `None` preserves). **P3** (the BPM
    reader fallback) was already ✅ **DONE** — it shipped with the writer, since a `TBPM` the reader
    can't see is a BPM edit that vanishes.
-4. `library/tags.rs` orchestrator + `sync_track_summaries`.
+4. ✅ **DONE — `library/tags.rs` orchestrator + `sync_track_summaries`.** Split into a testable
+   `write_tag_edit` core (no `AppState`: `db` / `artwork_dir` / `cover_cache` / `self_writes` in,
+   `(TagEditReport, updated_ids)` out — since no library-layer test builds an `AppState`) and the
+   thin `apply_tag_edit(&AppState, ids, edit, artwork_source)` wrapper that adds the player resync +
+   the `library_changed_tx` bump. `resolve_track_context` was **hoisted** out of `reconcile.rs` into
+   `queries::scan` (`pub(crate)`, both reconcile call sites updated) so `library/` doesn't import
+   from `tasks/`. Artwork: `Replace` decodes/normalizes once up front (fails the whole edit on a bad
+   pick) then overwrites track + album art in-tx; `Remove` writes the re-extracted per-track value
+   and leaves album art alone. The fan-out is a 4-thread capped Rayon pool inside `spawn_blocking`
+   (the MP4 save clones the cover); `self_writes.mark` keys on the DB `file_path`, with an
+   `unmark`-on-tx-failure safety valve. `sync_track_summaries` walks `current_track` + `queue.tracks`
+   + `direct_play_track` and **bumps `queue.version`** on a queue patch so `with_state_emit`
+   republishes the queue VM. Tests: 3 `tags_tests.rs` cases (single-edit preserves
+   play_count/rating/favorite + hash changes; batch reports one failure + commits the rest; album
+   rename repoints `album_id`) targeting the core against temp fixtures, plus a `sync_track_summaries`
+   unit test in `state_tests.rs`. `ArtworkEdit::Replace` is a **unit variant**, so the picked path
+   rides as a separate `apply_tag_edit` parameter — the UI (step 6) supplies it.
 
    ⚠ **The orchestrator owns the whole row, not just the tag columns.** Step 2's suppression
    removes the watcher event that would have run `update_track_metadata` — and that statement

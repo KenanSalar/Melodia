@@ -236,40 +236,6 @@ pub(super) async fn process_batch(
     Ok(())
 }
 
-/// Resolve a path's library-folder + artist/album/genre rows, upserting any
-/// missing rows. Returns `None` (with a debug log under `context`) when the
-/// path is not inside any library folder — callers should short-circuit.
-async fn resolve_track_context(
-    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
-    path: &Path,
-    path_str: &str,
-    meta: &ExtractedMetadata,
-    context: &str,
-) -> AppResult<Option<queries::ResolvedIds>> {
-    let Some(folder_id) = queries::scan::find_folder_for_path(tx, path_str).await? else {
-        log::debug!(
-            "{context} file not in any library folder, skipping: {}",
-            path.display()
-        );
-        return Ok(None);
-    };
-
-    let artist_name = meta.artist.as_deref().unwrap_or("");
-    let album_name = meta.album.as_deref().unwrap_or("");
-    let genre_name = meta.genre.as_deref().unwrap_or("");
-
-    let artist_id = queries::scan::upsert_artist(tx, artist_name, 1).await?;
-    let album_id = queries::scan::upsert_album(tx, album_name, artist_id, meta.year).await?;
-    let genre_id = queries::scan::upsert_genre(tx, genre_name).await?;
-
-    Ok(Some(queries::ResolvedIds {
-        artist_id,
-        album_id,
-        genre_id,
-        folder_id,
-    }))
-}
-
 fn file_name_owned(path: &Path) -> String {
     path.file_name()
         .and_then(|f| f.to_str())
@@ -332,7 +298,9 @@ async fn handle_created(
         moved_candidates.remove(&meta.file_hash);
     }
 
-    let Some(ids) = resolve_track_context(tx, path, &path_str, meta, "Created").await? else {
+    let Some(ids) =
+        queries::scan::resolve_track_context(tx, path, &path_str, meta, "Created").await?
+    else {
         return Ok(false);
     };
 
@@ -411,7 +379,9 @@ async fn handle_modified(
         return handle_created(tx, path, meta, moved_candidates).await;
     }
 
-    let Some(ids) = resolve_track_context(tx, path, &path_str, meta, "Modified").await? else {
+    let Some(ids) =
+        queries::scan::resolve_track_context(tx, path, &path_str, meta, "Modified").await?
+    else {
         return Ok(false);
     };
 

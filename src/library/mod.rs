@@ -22,5 +22,6 @@ pub mod recently_played;
 pub mod search;
 pub mod settings;
 pub mod smart_playlists;
+pub mod tags;
 pub mod tracks;
 pub mod window;

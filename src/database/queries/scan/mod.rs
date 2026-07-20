@@ -33,6 +33,43 @@ pub struct ResolvedIds {
     pub folder_id: i64,
 }
 
+/// Resolve a path's library-folder + artist/album/genre rows, upserting any
+/// missing rows. Returns `None` (with a debug log under `context`) when the
+/// path is not inside any library folder — callers should short-circuit.
+///
+/// Shared by the file-event reconcile path and the tag-edit orchestrator: both
+/// need the same folder lookup + FK upsert sequence before writing a track row.
+pub(crate) async fn resolve_track_context(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    path: &std::path::Path,
+    path_str: &str,
+    meta: &crate::media::metadata::ExtractedMetadata,
+    context: &str,
+) -> Result<Option<ResolvedIds>, crate::error::AppError> {
+    let Some(folder_id) = find_folder_for_path(tx, path_str).await? else {
+        log::debug!(
+            "{context} file not in any library folder, skipping: {}",
+            path.display()
+        );
+        return Ok(None);
+    };
+
+    let artist_name = meta.artist.as_deref().unwrap_or("");
+    let album_name = meta.album.as_deref().unwrap_or("");
+    let genre_name = meta.genre.as_deref().unwrap_or("");
+
+    let artist_id = upsert_artist(tx, artist_name, 1).await?;
+    let album_id = upsert_album(tx, album_name, artist_id, meta.year).await?;
+    let genre_id = upsert_genre(tx, genre_name).await?;
+
+    Ok(Some(ResolvedIds {
+        artist_id,
+        album_id,
+        genre_id,
+        folder_id,
+    }))
+}
+
 #[cfg(test)]
 #[path = "../tests/scan_tests.rs"]
 mod tests;

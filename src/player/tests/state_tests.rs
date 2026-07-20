@@ -1028,3 +1028,72 @@ fn crossfade_is_dropped_when_a_seek_landed_since_the_decision() {
     );
     assert_eq!(state.position_ms, 60_000, "the seek must stick");
 }
+
+// ── sync_track_summaries ──
+
+#[test]
+fn sync_track_summaries_patches_current_queue_and_republishes() {
+    use std::collections::HashMap;
+
+    use tokio::sync::watch;
+
+    use crate::player::event_sink::PlayerSinks;
+
+    let handle = PlayerStateHandle::default();
+    let (vm_tx, _vm_rx) = watch::channel(None);
+    let (q_tx, mut q_rx) = watch::channel(None);
+    let sinks = PlayerSinks {
+        view_model: vm_tx,
+        queue: q_tx,
+        media_controls: None,
+    };
+
+    // Seed a current track + a coherent two-entry queue.
+    with_state_emit(&handle, &sinks, |s| {
+        let t1 = make_summary(1, "Old One", 1000);
+        let t2 = make_summary(2, "Old Two", 2000);
+        s.current_track = Some(Arc::clone(&t1));
+        s.queue.tracks = vec![t1, t2];
+        s.queue.play_order = vec![0, 1];
+        s.queue.current_index = Some(0);
+        Vec::<PlayerAction>::new()
+    });
+    drop(q_rx.borrow_and_update());
+    let version_before = lock_state(&handle).queue.version;
+
+    let mut fresh = HashMap::new();
+    fresh.insert(1, (*make_summary(1, "New One", 1000)).clone());
+    fresh.insert(2, (*make_summary(2, "New Two", 2000)).clone());
+    sync_track_summaries(&handle, &sinks, &fresh);
+
+    {
+        let g = lock_state(&handle);
+        assert_eq!(
+            g.current_track.as_ref().map(|t| t.title.as_str()),
+            Some("New One"),
+            "the currently-playing summary must be refreshed"
+        );
+        assert_eq!(g.queue.tracks[0].title, "New One");
+        assert_eq!(g.queue.tracks[1].title, "New Two");
+        assert!(
+            g.queue.version > version_before,
+            "a queue patch must bump the version so the queue VM republishes"
+        );
+    }
+    assert!(
+        matches!(q_rx.has_changed(), Ok(true)),
+        "the queue view-model must be republished"
+    );
+
+    // An edit touching nothing queued/playing is a no-op: no version bump, no publish.
+    drop(q_rx.borrow_and_update());
+    let version_after = lock_state(&handle).queue.version;
+    let mut absent = HashMap::new();
+    absent.insert(99, (*make_summary(99, "Nope", 1)).clone());
+    sync_track_summaries(&handle, &sinks, &absent);
+    assert_eq!(lock_state(&handle).queue.version, version_after, "no-op must not bump version");
+    assert!(
+        matches!(q_rx.has_changed(), Ok(false)),
+        "an edit touching nothing queued must not republish"
+    );
+}
