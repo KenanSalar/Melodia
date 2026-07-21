@@ -333,6 +333,19 @@ pub struct TrayFlags {
     pub close_to_tray: bool,
 }
 
+/// Scrobbling toggles. The Last.fm / `ListenBrainz` *credentials* live in a
+/// separate `scrobble_credentials.json` (never in `settings.json`); these are
+/// only the per-service on/off switches. All default `false`, so a returning
+/// install with no scrobble keys in its `settings.json` lands with scrobbling
+/// fully off. See `PlaybackFlags` for the substruct rationale.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ScrobbleFlags {
+    pub lastfm_enabled: bool,
+    pub listenbrainz_enabled: bool,
+    pub love_sync_enabled: bool,
+}
+
 /// Library-management toggles. See `PlaybackFlags` for the substruct rationale.
 ///
 /// `folder_watching_enabled` defaults to `true` — consumer music players
@@ -526,6 +539,8 @@ pub struct SettingsData {
     #[serde(flatten)]
     pub tray: TrayFlags,
     #[serde(flatten)]
+    pub scrobble: ScrobbleFlags,
+    #[serde(flatten)]
     pub library: LibraryFlags,
     #[serde(flatten)]
     pub layout: LayoutFlags,
@@ -566,6 +581,7 @@ impl Default for SettingsData {
             queue: QueueFlags::default(),
             window: WindowFlags::default(),
             tray: TrayFlags::default(),
+            scrobble: ScrobbleFlags::default(),
             library: LibraryFlags::default(),
             layout: LayoutFlags::default(),
             updates: UpdateFlags::default(),

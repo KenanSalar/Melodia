@@ -125,41 +125,58 @@ Each phase compiles and is independently verifiable. Phases 0–2 are library-la
 UI/manual verification starts in Phase 3. **Gate every phase on `cargo clippy
 --all-targets -- -D warnings` + `cargo test` green.** Do not commit unless asked.
 
-### Phase 0 — Foundations & scaffolding
-- [ ] `Cargo.toml`: add `md5` (simple crate — `format!("{:x}", md5::compute(s))`;
-      pin latest exact version via `cargo search`).
-- [ ] Last.fm app keys: `const LASTFM_API_KEY: Option<&str> =
+### Phase 0 — Foundations & scaffolding ✅ (landed)
+- [x] `Cargo.toml`: add `md5` (simple crate — `format!("{:x}", md5::compute(s))`;
+      pin latest exact version via `cargo search`). → `md5 = "0.8.1"`.
+- [x] Last.fm app keys: `const LASTFM_API_KEY: Option<&str> =
       option_env!("LASTFM_API_KEY");` + `LASTFM_SHARED_SECRET` (in
       `services/scrobble/providers/lastfm.rs`). **Not** committed constants; releases
       inject them as CI env/secrets. `LASTFM_API_KEY.is_some()` gates the whole Last.fm
       surface (setter/UI/detector) so a keyless build ships ListenBrainz-only.
-- [ ] `src/config.rs`: add `scrobble_credentials_path` + `scrobble_queue_path` to
+      → exposed as `providers::lastfm::is_configured()`.
+- [x] `src/config.rs`: add `scrobble_credentials_path` + `scrobble_queue_path` to
       `Paths` + `resolve()`.
-- [ ] `src/services/settings/data.rs`: new `ScrobbleFlags { lastfm_enabled,
+- [x] `src/services/settings/data.rs`: new `ScrobbleFlags { lastfm_enabled,
       listenbrainz_enabled, love_sync_enabled }` (default all `false`), whole-struct
       `#[serde(default)]` + `Default`, `#[serde(flatten)]` into `SettingsData` (and
-      its `Default`). **No secrets here.** (Model on `UpdateFlags`.)
-- [ ] `src/library/settings/scrobble.rs` (new) + `mod.rs` re-exports — `set_scrobble_*`
+      its `Default`). **No secrets here.** (Modeled on `TrayFlags` — derived `Default`.)
+- [x] `src/library/settings/scrobble.rs` (new) + `mod.rs` re-exports — `set_scrobble_*`
       setters through `mutate_settings`.
-- [ ] `src/services/scrobble/model.rs`: `ScrobbleTrack` (artist, track, album,
+- [x] `src/services/scrobble/model.rs`: `ScrobbleTrack` (artist, track, album,
       album_artist, duration_secs, track_number, recording_mbid, release_mbid) +
       **pure** `scrobble_threshold_ms(duration_ms) -> Option<u64>`: `duration_ms == 0`
       (unknown) → `Some(240_000)` (4-min fallback); `duration_ms <= 30_000` → `None`
       (too short); else → `Some(min(duration_ms/2, 240_000))`.
-- [ ] `src/services/scrobble/credentials.rs`: `ScrobbleCredentials` (lastfm
+- [x] `src/services/scrobble/credentials.rs`: `ScrobbleCredentials` (lastfm
       `{session_key, username}`, listenbrainz `{token, username}`), `load`/`save` — reuse
       `write_json_atomic_sync`, then a **net-new** `#[cfg(unix)]`
       `set_permissions(Permissions::from_mode(0o600))` (no existing secure-write helper).
-- [ ] `src/services/scrobble/queue.rs`: `ScrobbleQueueState` (mirror
-      `search_history.rs`), `ScrobbleQueue { VecDeque<QueuedItem> }` where `QueuedItem`
-      persists the full enriched `ScrobbleTrack` **and** the start `timestamp`
-      (UNIX-seconds captured at track start, so an offline scrobble keeps its real time) +
-      per-provider `remaining` flags; cap + drop-oldest **with `log::warn!`**.
-- [ ] `src/services/scrobble/mod.rs`: `ScrobbleService` struct + `init(&Paths)` +
+- [x] `src/services/scrobble/queue.rs`: `ScrobbleQueue { VecDeque<QueuedItem> }` (pure
+      serde model + cap logic) where `QueuedItem` persists the full enriched
+      `ScrobbleTrack` **and** the start `timestamp` (UNIX-seconds captured at track start,
+      so an offline scrobble keeps its real time) + per-provider `remaining` flags; cap
+      (`MAX_QUEUED = 5000`) + drop-oldest **with `log::warn!`**. `retain_pending()` drops
+      fully-submitted items.
+- [x] `src/services/scrobble/mod.rs`: `ScrobbleService` struct + `init` +
       `RwLock<ScrobbleRuntime>` shadow; add `Arc<ScrobbleService>` field to
       `AppState` (+ build in `AppState::init`). **No tasks/network yet.**
-- [ ] Tests: `model` (threshold edges incl. `duration_ms == 0` → 240 s and ≤30 s → None),
-      `queue` (round-trip, flag clearing, cap, timestamp preserved).
+- [x] Tests: `model` (threshold edges incl. `duration_ms == 0` → 240 s and ≤30 s → None),
+      `queue` (round-trip, flag clearing, cap, timestamp preserved), plus `mod` (service
+      credential + queue persistence round-trip). 14 tests, `cargo test` + clippy green.
+
+**Deviations from the spec above (for Phases 2–3 wiring):**
+- `ScrobbleService::init(paths: &Paths, flags: &ScrobbleFlags)` — takes the enabled
+  flags already read at `state/mod.rs:139`, avoiding a second `settings.json` read
+  (spec said `init(&Paths)`).
+- No separate `ScrobbleQueueState` handle — `ScrobbleService` **is** the managed
+  handle (`parking_lot::Mutex<ScrobbleQueue>` + `queue_path`); `ScrobbleQueue` stays the
+  pure serde model. The submitter's `Notify` + shared `reqwest::Client` join the struct
+  in **Phase 2** (kept out now to avoid unused-field `dead_code`).
+- Phase-0 service API for later phases: `status() -> ScrobbleStatus` (per-provider
+  `ProviderStatus { connected, username, enabled }` + `love_sync_enabled`), `set_flags`,
+  `set_lastfm_credentials`/`set_listenbrainz_credentials` (persist + `0o600`),
+  `queued_len`, `push_scrobble` (durable-queue primitive Phase 2's `enqueue_scrobble`
+  builds on).
 
 ### Phase 1 — Provider clients (pure + network fns, unwired)
 - [ ] `src/services/scrobble/providers/lastfm.rs`: `sign()` (sorted params + MD5 hex,

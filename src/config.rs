@@ -10,6 +10,8 @@ pub struct Paths {
     pub view_state_path: PathBuf,
     pub queue_path: PathBuf,
     pub search_history_path: PathBuf,
+    pub scrobble_credentials_path: PathBuf,
+    pub scrobble_queue_path: PathBuf,
     pub artwork_dir: PathBuf,
     pub artists_dir: PathBuf,
 }
@@ -32,6 +34,8 @@ impl Paths {
             view_state_path: data_dir.join("views.json"),
             queue_path: data_dir.join("queue.json"),
             search_history_path: data_dir.join("search_history.json"),
+            scrobble_credentials_path: data_dir.join("scrobble_credentials.json"),
+            scrobble_queue_path: data_dir.join("scrobble_queue.json"),
             artwork_dir,
             artists_dir,
             data_dir,

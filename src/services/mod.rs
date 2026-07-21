@@ -6,6 +6,7 @@ pub mod desktop_integration;
 pub mod dwm_titlebar;
 pub mod material_you;
 pub mod media_controls;
+pub mod scrobble;
 pub mod search_history;
 pub mod settings;
 #[cfg(target_os = "linux")]

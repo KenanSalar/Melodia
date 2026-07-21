@@ -176,8 +176,12 @@ serde_json = "1.0.151"
 chrono = { version = "0.4.45", default-features = false, features = ["clock", "std"] }
 dirs = "6.0.0"
 
-# HTTP (Deezer artist images)
+# HTTP (Deezer artist images, scrobbling)
 reqwest = { version = "0.13.4", default-features = false, features = ["json", "query", "rustls", "stream"] }
+
+# MD5 for Last.fm `api_sig` request signing (scrobbling). Last.fm mandates MD5;
+# not used for anything security-sensitive.
+md5 = "0.8.1"
 
 # Logging. env_logger's default `regex` feature is the *only* thing in the
 # dependency graph pulling `regex` (+ `regex-automata`, `regex-syntax`,

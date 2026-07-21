@@ -25,6 +25,7 @@ use crate::player::state::{
 use crate::services::{
     always_on_top::{self, AlwaysOnTopCapability},
     media_controls::{self, MediaControlsHandle},
+    scrobble::ScrobbleService,
     search_history::SearchHistoryState,
     settings,
 };
@@ -81,6 +82,9 @@ pub struct AppState {
     pub self_writes: Arc<SelfWrites>,
     pub always_on_top: AlwaysOnTopCapability,
     pub search_history: Arc<SearchHistoryState>,
+    /// Scrobbling service: credential/enabled shadow + durable offline queue.
+    /// Loaded at boot; the detector/submitter tasks that drive it wire in later.
+    pub scrobble: Arc<ScrobbleService>,
     pub media_controls: Option<Arc<MediaControlsHandle>>,
     /// Shared `reqwest::Client`, built lazily on first use via
     /// [`AppState::http_client`]. Only the updater and the post-scan Deezer
@@ -193,6 +197,7 @@ impl AppState {
         );
 
         let search_history = Arc::new(SearchHistoryState::init(&paths).await);
+        let scrobble = Arc::new(ScrobbleService::init(&paths, &settings.scrobble));
 
         let state = Self {
             paths: Arc::new(paths),
@@ -211,6 +216,7 @@ impl AppState {
             self_writes: Arc::new(SelfWrites::default()),
             always_on_top: always_on_top_capability,
             search_history,
+            scrobble,
             media_controls: Some(mc_handle),
             http_client: Arc::new(OnceLock::new()),
             task_tracker: TaskTracker::new(),
