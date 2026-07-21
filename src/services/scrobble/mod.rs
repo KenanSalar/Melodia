@@ -23,7 +23,7 @@ use std::time::Duration;
 
 use parking_lot::{Mutex, RwLock};
 use reqwest::Client;
-use tokio::sync::Notify;
+use tokio::sync::{Notify, watch};
 
 use crate::config::Paths;
 use crate::entities::track::ScrobbleRow;
@@ -78,6 +78,29 @@ pub struct ScrobbleService {
     /// The same lazy `OnceLock` as [`crate::state::AppState`]'s client, so the
     /// whole app shares one connection pool built on first request.
     http: Arc<OnceLock<Client>>,
+    /// Publishes a fresh [`ScrobbleStatus`] whenever the credentials or enabled
+    /// flags change, so the settings UI stays truthful for connect/disconnect
+    /// *and* the submitter's auto-disconnect (invalid Last.fm session /
+    /// `ListenBrainz` token) without polling.
+    status_tx: watch::Sender<ScrobbleStatus>,
+}
+
+/// Build a [`ScrobbleStatus`] snapshot from the raw shadow parts. Shared by
+/// `status()` and `init` (which needs it before `Self` exists).
+fn build_status(credentials: &ScrobbleCredentials, flags: &ScrobbleFlags) -> ScrobbleStatus {
+    ScrobbleStatus {
+        lastfm: ProviderStatus {
+            connected: credentials.lastfm.is_some(),
+            username: credentials.lastfm.as_ref().map(|c| c.username.clone()),
+            enabled: flags.lastfm_enabled,
+        },
+        listenbrainz: ProviderStatus {
+            connected: credentials.listenbrainz.is_some(),
+            username: credentials.listenbrainz.as_ref().map(|c| c.username.clone()),
+            enabled: flags.listenbrainz_enabled,
+        },
+        love_sync_enabled: flags.love_sync_enabled,
+    }
 }
 
 impl ScrobbleService {
@@ -88,6 +111,7 @@ impl ScrobbleService {
     pub fn init(paths: &Paths, flags: &ScrobbleFlags, http: Arc<OnceLock<Client>>) -> Self {
         let credentials = credentials::load(&paths.scrobble_credentials_path).unwrap_or_default();
         let queue = ScrobbleQueue::load(&paths.scrobble_queue_path).unwrap_or_default();
+        let (status_tx, _) = watch::channel(build_status(&credentials, flags));
         Self {
             runtime: RwLock::new(ScrobbleRuntime {
                 credentials,
@@ -98,54 +122,47 @@ impl ScrobbleService {
             queue_path: paths.scrobble_queue_path.clone(),
             notify: Notify::new(),
             http,
+            status_tx,
         }
     }
 
     /// A cheap snapshot of connection + enabled state for the settings UI.
     pub fn status(&self) -> ScrobbleStatus {
         let runtime = self.runtime.read();
-        ScrobbleStatus {
-            lastfm: ProviderStatus {
-                connected: runtime.credentials.lastfm.is_some(),
-                username: runtime
-                    .credentials
-                    .lastfm
-                    .as_ref()
-                    .map(|c| c.username.clone()),
-                enabled: runtime.flags.lastfm_enabled,
-            },
-            listenbrainz: ProviderStatus {
-                connected: runtime.credentials.listenbrainz.is_some(),
-                username: runtime
-                    .credentials
-                    .listenbrainz
-                    .as_ref()
-                    .map(|c| c.username.clone()),
-                enabled: runtime.flags.listenbrainz_enabled,
-            },
-            love_sync_enabled: runtime.flags.love_sync_enabled,
-        }
+        build_status(&runtime.credentials, &runtime.flags)
+    }
+
+    /// Subscribe to status changes. The settings UI drives its rows off this so
+    /// a background auto-disconnect is reflected without reopening the section.
+    pub fn subscribe_status(&self) -> watch::Receiver<ScrobbleStatus> {
+        self.status_tx.subscribe()
     }
 
     /// Mirror the enabled flags into the shadow after a setter has persisted
-    /// them to `settings.json`, keeping synchronous readers current.
+    /// them to `settings.json`, keeping synchronous readers current, then
+    /// publish the fresh status.
     pub fn set_flags(&self, flags: ScrobbleFlags) {
         self.runtime.write().flags = flags;
+        self.status_tx.send_replace(self.status());
     }
 
-    /// Connect / disconnect Last.fm: update the shadow, then persist the
-    /// credential file. Passing `None` disconnects.
+    /// Connect / disconnect Last.fm: update the shadow, publish the status, then
+    /// persist the credential file. Passing `None` disconnects. The status is
+    /// published from the in-memory shadow regardless of the disk write, so a
+    /// failed persist still surfaces the applied state (matching the
+    /// apply-then-persist convention elsewhere).
     pub fn set_lastfm_credentials(&self, credentials: Option<LastfmCredentials>) -> AppResult<()> {
         let snapshot = {
             let mut runtime = self.runtime.write();
             runtime.credentials.lastfm = credentials;
             runtime.credentials.clone()
         };
+        self.status_tx.send_replace(self.status());
         credentials::save(&self.creds_path, &snapshot)
     }
 
-    /// Connect / disconnect `ListenBrainz`: update the shadow, then persist the
-    /// credential file. Passing `None` disconnects.
+    /// Connect / disconnect `ListenBrainz`: update the shadow, publish the
+    /// status, then persist the credential file. Passing `None` disconnects.
     pub fn set_listenbrainz_credentials(
         &self,
         credentials: Option<ListenBrainzCredentials>,
@@ -155,6 +172,7 @@ impl ScrobbleService {
             runtime.credentials.listenbrainz = credentials;
             runtime.credentials.clone()
         };
+        self.status_tx.send_replace(self.status());
         credentials::save(&self.creds_path, &snapshot)
     }
 

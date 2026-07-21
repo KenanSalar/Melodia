@@ -260,31 +260,48 @@ UI/manual verification starts in Phase 3. **Gate every phase on `cargo clippy
   isn't blocked past the app's budget — the queue is already persisted regardless.
 
 ### Phase 3 — Settings UI + auth flows
-- [ ] `ui/settings.slint` (`Settings` global): `scrobble-{lastfm,listenbrainz}-connected
-      /-username/-enabled`, `scrobble-love-sync`, callbacks `-{connect,disconnect}`,
-      `-enabled-changed(bool)`, `scrobble-love-sync-changed(bool)`, localized `@tr`
-      status strings.
-- [ ] `ui/views/settings/scrobbling-section.slint` (per-service status + Connect/
-      Disconnect pill + enable toggle gated on connection + "Sync loved tracks"
-      toggle); mount in `settings-view.slint` + add to `has-matches` aggregate.
-- [ ] Login dialogs via `Dialog` + body + a new `ScrobbleUi` global
+- [x] `ui/settings.slint` (`Settings` global): `scrobble-{lastfm,listenbrainz}-connected
+      /-username/-enabled`, `scrobble-love-sync`, `-disconnect`, `-enabled-changed(bool)`,
+      `scrobble-love-sync-changed(bool)`, `scrobble-lastfm-configured`. (Connect opens its
+      dialog inline in the section — see deviations — so there's no `-connect` callback.)
+- [x] `ui/views/settings/scrobbling-section.slint` (per-service status + Connect/
+      Disconnect `SectionButton` + enable toggle gated on connection + "Sync loved tracks"
+      toggle); mounted in `settings-view.slint` + added to the `has-matches` aggregate.
+- [x] Login dialogs via `Dialog` + body + a new `ScrobbleUi` global
       (`ui/globals.slint`): `kind == "scrobble-lastfm-login"` (two-step: **[1]** open
       browser `getToken`, **[2]** finish `getSession`), `kind ==
-      "scrobble-listenbrainz-login"` (`LabeledInput` token + verify). Extend the
-      single `on_closed` teardown if a dialog pins any image (none expected).
-- [ ] `src/ui/scrobbling_settings.rs::install_scrobbling(app, state)` — seed/persist
-      skeleton from `install_replaygain` (sync), **plus** the async-network shape from
-      `install_sleep_timer` / `about.rs` (`runtime.spawn` + `upgrade_in_event_loop`), since
-      `install_replaygain` itself does no network. Connect/disconnect/toggle callbacks:
-      network via `state.runtime.spawn`, browser via `open::that` in `spawn_blocking`, props
-      via `upgrade_in_event_loop`, persist via `persist_blocking` + creds save + service
-      shadow update (kick-after-persist ordering). **Gate the whole Last.fm surface on
-      `LASTFM_API_KEY.is_some()`** (Connect disabled + note when `None`). Wire in
-      `boot/ui_setup.rs` beside `install_playback_settings`.
-- [ ] i18n: add all new `@tr` msgids to every shipped `Melodia.po`.
-- [ ] **Verify E2E**: ListenBrainz real token → Connected; play past threshold →
-      listen appears + "playing now" on start. Last.fm (needs `LASTFM_API_KEY` set at
-      build) → browser authorize → scrobble appears.
+      "scrobble-listenbrainz-login"` (`LabeledInput` token + verify). No image pinned →
+      the single `on_closed` teardown is untouched; login state resets on dialog open.
+- [x] `src/ui/scrobbling_settings.rs::install_scrobbling(app, state)` — sync seed +
+      status-watch subscriber (the single writer of the `Settings.scrobble-*` props) +
+      the async-network auth flows (`runtime.spawn` + `state.http_client()`, browser via
+      `open::that` in `spawn_blocking`, props via `upgrade_in_event_loop`). Enable toggles:
+      `set_flags` shadow apply + `persist_blocking`. **Last.fm surface gated on
+      `lastfm::is_configured()`.** Wired in `boot/ui_setup.rs` after `install_sleep_timer`.
+- [x] i18n: 28 new `@tr` msgids added to all six shipped `Melodia.po` (de/fr/es/tr/el/it);
+      `msgfmt -c` clean.
+- [ ] **Verify E2E** (manual — needs real credentials): ListenBrainz real token →
+      Connected; play past threshold → listen appears + "playing now" on start. Last.fm
+      (needs `LASTFM_API_KEY`/`LASTFM_SHARED_SECRET` set at build) → browser authorize →
+      scrobble appears.
+
+**Deviations / notes (for Phases 4–5):**
+- **Live status watch (net-new, backend).** `ScrobbleService` now holds a
+  `watch<ScrobbleStatus>`; its three mutators (`set_flags` / `set_*_credentials`) publish
+  after the shadow write, and the settings installer subscribes on the UI thread. So the
+  row reflects **every** credential change — the UI's own connect/disconnect *and* the
+  submitter's auto-disconnect (Last.fm error 9 / `ListenBrainz` 401). The submitter/detector
+  code is unchanged; only the setters gained a publish line. New test:
+  `status_watch_observes_credential_and_flag_changes`.
+- **Footer-primary dialogs.** The action is the dialog's footer primary button (label via a
+  per-kind ternary in `dialog.slint`, kept in Slint so `@tr` localizes); it's gated to *not*
+  auto-close for the two scrobble kinds, so Rust closes on success and errors stay inline.
+- **Connect opens inline in Slint** (the tray-toggle pattern), not via a `-connect` Rust
+  callback — keeps chrome `@tr` in Slint and dodges Slint's "recursion detected" guard on a
+  Rust-driven `Dialog.open`. The Last.fm unauthorized token round-trips through
+  `ScrobbleUi.lastfm-token` (a Slint prop, not an `Rc<RefCell>`) to stay `Send` across the
+  two async steps.
+- **Known gap:** love-sync (Phase 4) is gated on Last.fm connection only (Last.fm-primary).
 
 ### Phase 4 — Love ↔ favorite sync
 - [ ] `src/library/favorites.rs`: at the end of `set_favorite` (batch) and

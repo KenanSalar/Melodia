@@ -1316,3 +1316,88 @@ msgstr "Etiketler kaydedilemedi"
 
 msgid "No tracks were updated."
 msgstr "Hiçbir parça güncellenmedi."
+
+# ---- Scrobbling ----
+msgid "Scrobbling"
+msgstr "Scrobbling"
+
+msgid "Last.fm"
+msgstr "Last.fm"
+
+msgid "ListenBrainz"
+msgstr "ListenBrainz"
+
+msgid "Scrobble to Last.fm"
+msgstr "Last.fm'e scrobble yap"
+
+msgid "Report each play to your Last.fm account"
+msgstr "Her çalmayı Last.fm hesabına bildir"
+
+msgid "Scrobble to ListenBrainz"
+msgstr "ListenBrainz'e scrobble yap"
+
+msgid "Report each play to your ListenBrainz account"
+msgstr "Her çalmayı ListenBrainz hesabına bildir"
+
+msgid "Sync loved tracks"
+msgstr "Beğenilen parçaları eşitle"
+
+msgid "Mark tracks you love here as loved on Last.fm"
+msgstr "Burada beğendiğin parçaları Last.fm'de beğenilmiş olarak işaretle"
+
+msgid "Connected as {}"
+msgstr "{} olarak bağlanıldı"
+
+msgid "Not connected"
+msgstr "Bağlı değil"
+
+msgid "Not configured in this build"
+msgstr "Bu yapıda yapılandırılmamış"
+
+msgid "Connect"
+msgstr "Bağlan"
+
+msgid "Disconnect"
+msgstr "Bağlantıyı kes"
+
+msgid "Connect Last.fm"
+msgstr "Last.fm'e bağlan"
+
+msgid "Open Last.fm"
+msgstr "Last.fm'i aç"
+
+msgid "Connect ListenBrainz"
+msgstr "ListenBrainz'e bağlan"
+
+msgid "Finish"
+msgstr "Bitir"
+
+msgid "Click Open Last.fm to approve Melodia in your browser."
+msgstr "Melodia'yı tarayıcında yetkilendirmek için Last.fm'i aç düğmesine tıkla."
+
+msgid "After approving Melodia in your browser, click Finish."
+msgstr "Melodia'yı tarayıcında onayladıktan sonra Bitir düğmesine tıkla."
+
+msgid "Connecting…"
+msgstr "Bağlanıyor…"
+
+msgid "User token"
+msgstr "Kullanıcı belirteci"
+
+msgid "Paste your ListenBrainz user token"
+msgstr "ListenBrainz kullanıcı belirtecini yapıştır"
+
+msgid "Find your token on your ListenBrainz profile settings page."
+msgstr "Belirtecini ListenBrainz profil ayarları sayfanda bulabilirsin."
+
+msgid "That token wasn't accepted. Check it and try again."
+msgstr "Bu belirteç kabul edilmedi. Kontrol edip yeniden dene."
+
+msgid "Couldn't reach the service. Check your connection and try again."
+msgstr "Hizmete ulaşılamadı. Bağlantını kontrol edip yeniden dene."
+
+msgid "Not approved yet. Approve Melodia in your browser, then click Finish."
+msgstr "Henüz onaylanmadı. Melodia'yı tarayıcında onayla, sonra Bitir düğmesine tıkla."
+
+msgid "Couldn't save your credentials."
+msgstr "Kimlik bilgilerin kaydedilemedi."

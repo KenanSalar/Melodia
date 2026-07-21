@@ -173,6 +173,29 @@ export global Settings {
     in-out property <bool> crossfade-fade-on-pause: false;
     callback crossfade-fade-on-pause-changed(bool);
 
+    // Scrobbling (`ui/views/settings/scrobbling-section.slint`). Rust owns every
+    // property here: the `connected`/`username`/`enabled` values are painted by
+    // the `ScrobbleService` status-watch subscriber in
+    // `src/ui/scrobbling_settings.rs` (the single writer), and the toggles route
+    // their `-changed(bool)` events back to persist + shadow-refresh. `-connect`
+    // is opened inline from the section markup (not a callback) to avoid Slint's
+    // recursion guard; `-disconnect` clears the stored credential. `configured`
+    // reflects whether this build shipped Last.fm app keys — false ⇒ the section
+    // shows "Not configured in this build" with no Connect button.
+    in property <bool> scrobble-lastfm-configured;
+    in property <bool> scrobble-lastfm-connected;
+    in property <string> scrobble-lastfm-username;
+    in-out property <bool> scrobble-lastfm-enabled;
+    callback scrobble-lastfm-enabled-changed(bool);
+    callback scrobble-lastfm-disconnect();
+    in property <bool> scrobble-listenbrainz-connected;
+    in property <string> scrobble-listenbrainz-username;
+    in-out property <bool> scrobble-listenbrainz-enabled;
+    callback scrobble-listenbrainz-enabled-changed(bool);
+    callback scrobble-listenbrainz-disconnect();
+    in-out property <bool> scrobble-love-sync;
+    callback scrobble-love-sync-changed(bool);
+
     // Watch for file changes (file-watcher) toggle. ToggleSwitch in
     // `ui/views/settings/file-watching-section.slint` binds two-way; the
     // `toggled(bool)` event fires `watch-for-file-changes-changed`. Rust

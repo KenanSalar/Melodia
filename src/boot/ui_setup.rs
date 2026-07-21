@@ -233,6 +233,7 @@ pub fn install_library_settings_and_friends(
     ui::equalizer::install_equalizer(app, state);
     ui::replaygain::install_replaygain(app, state);
     ui::sleep_timer::install_sleep_timer(app, state);
+    ui::scrobbling_settings::install_scrobbling(app, state);
     let notifications = ui::notifications::install(app);
     ui::file_watching::install(app, state, &notifications);
     ui::updater_settings::install(app, state);

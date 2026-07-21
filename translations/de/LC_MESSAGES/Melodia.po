@@ -1322,3 +1322,88 @@ msgstr "Tags konnten nicht gespeichert werden"
 
 msgid "No tracks were updated."
 msgstr "Keine Titel wurden aktualisiert."
+
+# ---- Scrobbling ----
+msgid "Scrobbling"
+msgstr "Scrobbeln"
+
+msgid "Last.fm"
+msgstr "Last.fm"
+
+msgid "ListenBrainz"
+msgstr "ListenBrainz"
+
+msgid "Scrobble to Last.fm"
+msgstr "An Last.fm scrobbeln"
+
+msgid "Report each play to your Last.fm account"
+msgstr "Jede Wiedergabe an dein Last.fm-Konto melden"
+
+msgid "Scrobble to ListenBrainz"
+msgstr "An ListenBrainz scrobbeln"
+
+msgid "Report each play to your ListenBrainz account"
+msgstr "Jede Wiedergabe an dein ListenBrainz-Konto melden"
+
+msgid "Sync loved tracks"
+msgstr "Lieblingstitel synchronisieren"
+
+msgid "Mark tracks you love here as loved on Last.fm"
+msgstr "Titel, die du hier magst, auf Last.fm als Loved markieren"
+
+msgid "Connected as {}"
+msgstr "Verbunden als {}"
+
+msgid "Not connected"
+msgstr "Nicht verbunden"
+
+msgid "Not configured in this build"
+msgstr "In diesem Build nicht konfiguriert"
+
+msgid "Connect"
+msgstr "Verbinden"
+
+msgid "Disconnect"
+msgstr "Trennen"
+
+msgid "Connect Last.fm"
+msgstr "Last.fm verbinden"
+
+msgid "Open Last.fm"
+msgstr "Last.fm öffnen"
+
+msgid "Connect ListenBrainz"
+msgstr "ListenBrainz verbinden"
+
+msgid "Finish"
+msgstr "Fertigstellen"
+
+msgid "Click Open Last.fm to approve Melodia in your browser."
+msgstr "Klicke unten auf Last.fm öffnen, um Melodia im Browser zu autorisieren."
+
+msgid "After approving Melodia in your browser, click Finish."
+msgstr "Klicke auf Fertigstellen, nachdem du Melodia im Browser bestätigt hast."
+
+msgid "Connecting…"
+msgstr "Verbinden…"
+
+msgid "User token"
+msgstr "Benutzer-Token"
+
+msgid "Paste your ListenBrainz user token"
+msgstr "Füge dein ListenBrainz-Benutzer-Token ein"
+
+msgid "Find your token on your ListenBrainz profile settings page."
+msgstr "Dein Token findest du in den Profileinstellungen auf ListenBrainz."
+
+msgid "That token wasn't accepted. Check it and try again."
+msgstr "Dieses Token wurde nicht akzeptiert. Bitte prüfe es und versuche es erneut."
+
+msgid "Couldn't reach the service. Check your connection and try again."
+msgstr "Der Dienst war nicht erreichbar. Prüfe deine Verbindung und versuche es erneut."
+
+msgid "Not approved yet. Approve Melodia in your browser, then click Finish."
+msgstr "Noch nicht bestätigt. Bestätige Melodia im Browser und klicke dann auf Fertigstellen."
+
+msgid "Couldn't save your credentials."
+msgstr "Deine Anmeldedaten konnten nicht gespeichert werden."

@@ -1313,3 +1313,88 @@ msgstr "No se pudieron guardar las etiquetas"
 
 msgid "No tracks were updated."
 msgstr "No se actualizó ninguna pista."
+
+# ---- Scrobbling ----
+msgid "Scrobbling"
+msgstr "Scrobbling"
+
+msgid "Last.fm"
+msgstr "Last.fm"
+
+msgid "ListenBrainz"
+msgstr "ListenBrainz"
+
+msgid "Scrobble to Last.fm"
+msgstr "Hacer scrobbling en Last.fm"
+
+msgid "Report each play to your Last.fm account"
+msgstr "Informar de cada reproducción a tu cuenta de Last.fm"
+
+msgid "Scrobble to ListenBrainz"
+msgstr "Hacer scrobbling en ListenBrainz"
+
+msgid "Report each play to your ListenBrainz account"
+msgstr "Informar de cada reproducción a tu cuenta de ListenBrainz"
+
+msgid "Sync loved tracks"
+msgstr "Sincronizar pistas favoritas"
+
+msgid "Mark tracks you love here as loved on Last.fm"
+msgstr "Marcar como favoritas en Last.fm las pistas que te gustan aquí"
+
+msgid "Connected as {}"
+msgstr "Conectado como {}"
+
+msgid "Not connected"
+msgstr "No conectado"
+
+msgid "Not configured in this build"
+msgstr "No configurado en esta compilación"
+
+msgid "Connect"
+msgstr "Conectar"
+
+msgid "Disconnect"
+msgstr "Desconectar"
+
+msgid "Connect Last.fm"
+msgstr "Conectar Last.fm"
+
+msgid "Open Last.fm"
+msgstr "Abrir Last.fm"
+
+msgid "Connect ListenBrainz"
+msgstr "Conectar ListenBrainz"
+
+msgid "Finish"
+msgstr "Finalizar"
+
+msgid "Click Open Last.fm to approve Melodia in your browser."
+msgstr "Haz clic en Abrir Last.fm para autorizar Melodia en tu navegador."
+
+msgid "After approving Melodia in your browser, click Finish."
+msgstr "Después de autorizar Melodia en tu navegador, haz clic en Finalizar."
+
+msgid "Connecting…"
+msgstr "Conectando…"
+
+msgid "User token"
+msgstr "Token de usuario"
+
+msgid "Paste your ListenBrainz user token"
+msgstr "Pega tu token de usuario de ListenBrainz"
+
+msgid "Find your token on your ListenBrainz profile settings page."
+msgstr "Encontrarás tu token en los ajustes de tu perfil de ListenBrainz."
+
+msgid "That token wasn't accepted. Check it and try again."
+msgstr "No se aceptó ese token. Compruébalo e inténtalo de nuevo."
+
+msgid "Couldn't reach the service. Check your connection and try again."
+msgstr "No se pudo conectar con el servicio. Comprueba tu conexión e inténtalo de nuevo."
+
+msgid "Not approved yet. Approve Melodia in your browser, then click Finish."
+msgstr "Aún no autorizado. Autoriza Melodia en tu navegador y luego haz clic en Finalizar."
+
+msgid "Couldn't save your credentials."
+msgstr "No se pudieron guardar tus credenciales."

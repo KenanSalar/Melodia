@@ -130,3 +130,35 @@ fn set_flags_updates_status() -> TestResult {
     assert!(!status.listenbrainz.enabled);
     Ok(())
 }
+
+#[test]
+fn status_watch_observes_credential_and_flag_changes() -> TestResult {
+    let dir = tempfile::tempdir()?;
+    let service = init_service(&paths_in(dir.path()), &ScrobbleFlags::default());
+
+    // The initial value seeds the channel — disconnected on a fresh service.
+    let mut rx = service.subscribe_status();
+    assert!(!rx.borrow_and_update().lastfm.connected);
+
+    // A connect publishes; the receiver sees the new username.
+    service.set_lastfm_credentials(Some(LastfmCredentials {
+        session_key: "sk-abc".to_owned(),
+        username: "listener".to_owned(),
+    }))?;
+    let connected = rx.borrow_and_update().clone();
+    assert!(connected.lastfm.connected);
+    assert_eq!(connected.lastfm.username.as_deref(), Some("listener"));
+
+    // A background-style auto-disconnect (submitter path) publishes too.
+    service.set_lastfm_credentials(None)?;
+    assert!(!rx.borrow_and_update().lastfm.connected);
+
+    // A flag flip publishes without touching credentials.
+    service.set_flags(ScrobbleFlags {
+        lastfm_enabled: true,
+        listenbrainz_enabled: false,
+        love_sync_enabled: false,
+    });
+    assert!(rx.borrow_and_update().lastfm.enabled);
+    Ok(())
+}
