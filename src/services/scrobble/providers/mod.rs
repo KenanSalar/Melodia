@@ -1,4 +1,8 @@
-//! Per-provider clients. Phase 0 ships only the Last.fm app-key gate; the signing
-//! and network functions land in Phase 1, and the `ListenBrainz` client alongside.
+//! Per-provider clients: the Last.fm signed API and the `ListenBrainz` client.
+//! Each exposes pure request/payload builders plus `async` network functions
+//! that take a shared `&reqwest::Client` and return a provider-specific,
+//! retry-classified error. They stay unwired until the Phase 2 detector and
+//! submitter tasks call them.
 
 pub mod lastfm;
+pub mod listenbrainz;

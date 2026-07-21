@@ -178,19 +178,37 @@ UI/manual verification starts in Phase 3. **Gate every phase on `cargo clippy
   `queued_len`, `push_scrobble` (durable-queue primitive Phase 2's `enqueue_scrobble`
   builds on).
 
-### Phase 1 — Provider clients (pure + network fns, unwired)
-- [ ] `src/services/scrobble/providers/lastfm.rs`: `sign()` (sorted params + MD5 hex,
-      no `hex` dep), `get_token`, `get_session`, `update_now_playing`,
-      `scrobble_batch`, `love`. All take `&reqwest::Client`; POST `format=json`. **Parse
-      the in-body `{"error": code}`** into a classified result (9 = invalid session →
-      permanent/disconnect; 11/16/29 = transient → retry) — never trust HTTP 200 alone.
-- [ ] `src/services/scrobble/providers/listenbrainz.rs`: `validate_token`,
-      `submit_playing_now`, `submit_listens`. Header `Authorization: Token …`;
-      `submission_client = "Melodia"` + `submission_client_version =
-      env!("CARGO_PKG_VERSION")`; read `X-RateLimit-Reset-In` for backoff.
-- [ ] Tests: `sign()` known vector; Last.fm param maps (array indices, `format`
-      excluded from sig) + error-code classification (9 vs 11/16/29); LB JSON shapes
-      (`playing_now` has no `listened_at`).
+### Phase 1 — Provider clients (pure + network fns, unwired) ✅ (landed)
+- [x] `src/services/scrobble/providers/lastfm.rs`: `sign()` (sorted `BTreeMap` params +
+      MD5 hex via `md5`, no `hex` dep), `get_token`, `get_session`, `update_now_playing`,
+      `scrobble_batch`, `love`. All take `&reqwest::Client`; POST `format=json`. Parse the
+      in-body `{"error": code}` into a classified `LastfmError` (9 → `InvalidSession`
+      disconnect; 11/16/29 → `Transient` retry; other → `Api`; transport/decode →
+      `Transport(AppError)`). `format`/`api_sig` are excluded from the signature by never
+      being in the signed map (added post-sign via a generic `finalize_and_sign`).
+- [x] `src/services/scrobble/providers/listenbrainz.rs` (new; `pub mod listenbrainz;`):
+      `validate_token` (401 → `valid:false`, not an error), `submit_playing_now`,
+      `submit_listens` (`single`/`import`). Header `Authorization: Token …`;
+      `submission_client`/`media_player` = `"Melodia"` + `submission_client_version =
+      env!("CARGO_PKG_VERSION")`; `X-RateLimit-Reset-In` → `RateLimited { reset_in_secs }`,
+      401 → `InvalidToken`, other non-2xx → `Server`. Borrowed `Serialize` payload structs.
+- [x] Tests (8): `sign()` known vector (precomputed MD5 literal); Last.fm param maps
+      (bracketed array indices, `format`/`api_sig` excluded, love/unlove method) +
+      error-code classification (9 vs 11/16/29 vs other); LB JSON shapes (`playing_now`
+      has no `listened_at`; `single` carries it + client info; batch → `import`).
+
+**Deviations from the spec above:**
+- **`Cargo.toml`: added `"form"` to reqwest's feature list** — reqwest 0.13 gates
+  `RequestBuilder::form()` behind a `form` feature (contrary to the plan's "no Cargo
+  change" note). Pulls only `serde`/`serde_urlencoded`, both already in the tree via the
+  existing `query` feature, so `Cargo.lock` is unchanged.
+- Provider fns return **classified error enums** (`LastfmError`/`ListenBrainzError`, both
+  `thiserror` with `#[from] AppError` → `Transport`), not `AppResult` — the retry policy
+  needs the classification `AppError` can't carry. Phase 2's submitter matches on them.
+- Network fns take `api_key`/`secret`/`session_key`/`token` as `&str` params (caller gates
+  on `is_configured()` and passes the consts) — kept the fns pure/testable and unwired.
+- Batch/listen inputs are `&[(&ScrobbleTrack, i64)]` (track + start timestamp); pure param/
+  payload builders are unit-tested, the `async` POST paths stay unexercised (unwired).
 
 ### Phase 2 — Detection + submission tasks
 - [ ] `src/entities/track.rs` + `src/database/queries/track.rs`: slim `ScrobbleRow`

@@ -177,7 +177,7 @@ chrono = { version = "0.4.45", default-features = false, features = ["clock", "s
 dirs = "6.0.0"
 
 # HTTP (Deezer artist images, scrobbling)
-reqwest = { version = "0.13.4", default-features = false, features = ["json", "query", "rustls", "stream"] }
+reqwest = { version = "0.13.4", default-features = false, features = ["form", "json", "query", "rustls", "stream"] }
 
 # MD5 for Last.fm `api_sig` request signing (scrobbling). Last.fm mandates MD5;
 # not used for anything security-sensitive.
