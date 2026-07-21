@@ -102,6 +102,26 @@ pub async fn submit_listens(
     submit(client, token, &listens_payload(listens)).await
 }
 
+/// Love or clear feedback for a recording via `POST /1/feedback/recording-feedback`.
+/// `score` is `1` to love, `0` to clear (unlove). Only meaningful for a track
+/// with a known `recording_mbid` — LB feedback keys on it — so the caller gates
+/// on that. Durable/retried like a listen, sharing the same error policy.
+pub async fn submit_feedback(
+    client: &reqwest::Client,
+    token: &str,
+    recording_mbid: &str,
+    score: i8,
+) -> Result<(), ListenBrainzError> {
+    let response = client
+        .post(format!("{LB_API_BASE}/1/feedback/recording-feedback"))
+        .header(reqwest::header::AUTHORIZATION, format!("Token {token}"))
+        .json(&feedback_payload(recording_mbid, score))
+        .send()
+        .await
+        .map_err(|e| AppError::network("ListenBrainz recording-feedback request failed", e))?;
+    classify_response(response).await
+}
+
 /// POST a payload to `/1/submit-listens` and classify the response.
 async fn submit(
     client: &reqwest::Client,
@@ -115,7 +135,13 @@ async fn submit(
         .send()
         .await
         .map_err(|e| AppError::network("ListenBrainz submit-listens request failed", e))?;
+    classify_response(response).await
+}
 
+/// Turn a completed response into `Ok(())` on success, else the classified error
+/// (rate-limit / invalid-token / server). Shared by listen submission and
+/// recording feedback.
+async fn classify_response(response: reqwest::Response) -> Result<(), ListenBrainzError> {
     let status = response.status();
     if status.is_success() {
         return Ok(());
@@ -174,6 +200,14 @@ fn listens_payload<'a>(listens: &'a [(&'a ScrobbleTrack, i64)]) -> SubmitListens
     }
 }
 
+/// The `recording-feedback` body: the recording MBID and its `1`/`0` score.
+fn feedback_payload(recording_mbid: &str, score: i8) -> RecordingFeedback<'_> {
+    RecordingFeedback {
+        recording_mbid,
+        score,
+    }
+}
+
 /// Build the `track_metadata` block shared by "playing now" and listen payloads.
 fn build_metadata(track: &ScrobbleTrack) -> TrackMetadata<'_> {
     TrackMetadata {
@@ -190,6 +224,12 @@ fn build_metadata(track: &ScrobbleTrack) -> TrackMetadata<'_> {
             submission_client_version: SUBMISSION_CLIENT_VERSION,
         },
     }
+}
+
+#[derive(Serialize)]
+struct RecordingFeedback<'a> {
+    recording_mbid: &'a str,
+    score: i8,
 }
 
 #[derive(Serialize)]

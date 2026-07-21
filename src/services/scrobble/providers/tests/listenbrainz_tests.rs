@@ -1,4 +1,4 @@
-use super::{listens_payload, playing_now_payload};
+use super::{feedback_payload, listens_payload, playing_now_payload};
 use crate::services::scrobble::model::ScrobbleTrack;
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
@@ -54,5 +54,17 @@ fn multiple_listens_use_import_type() -> TestResult {
 
     assert_eq!(value["listen_type"], "import");
     assert_eq!(value["payload"].as_array().map(Vec::len), Some(2));
+    Ok(())
+}
+
+#[test]
+fn feedback_payload_maps_love_state_to_score() -> TestResult {
+    let loved = serde_json::to_value(feedback_payload("mbid-1", 1))?;
+    assert_eq!(loved["recording_mbid"], "mbid-1");
+    assert_eq!(loved["score"], 1);
+
+    // Unlove clears the feedback with score 0.
+    let cleared = serde_json::to_value(feedback_payload("mbid-1", 0))?;
+    assert_eq!(cleared["score"], 0);
     Ok(())
 }

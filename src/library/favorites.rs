@@ -19,7 +19,29 @@ pub async fn set_favorite(
     state
         .library_changed_tx
         .send_modify(|n| *n = n.wrapping_add(1));
+    sync_love(state, &ids, favorite).await;
     Ok(())
+}
+
+/// Mirror a favorite change to the scrobble services — Last.fm Loved Tracks plus
+/// best-effort `ListenBrainz` feedback. Best-effort: a lookup or enqueue failure
+/// is logged, never propagated, so it can't fail the favorite write. Skips all
+/// DB work when love-sync is off or no provider is connected.
+async fn sync_love(state: &AppState, ids: &[i64], loved: bool) {
+    if !state.scrobble.love_sync_active() {
+        return;
+    }
+    for &id in ids {
+        match queries::track::get_scrobble_row(&state.db, id).await {
+            Ok(Some(row)) => {
+                if let Err(e) = state.scrobble.enqueue_love(&row, loved) {
+                    log::warn!("love-sync enqueue failed for track {id}: {e}");
+                }
+            }
+            Ok(None) => {}
+            Err(e) => log::warn!("love-sync lookup failed for track {id}: {e}"),
+        }
+    }
 }
 
 /// If `current_track` is one of `ids`, flip its cached `is_favorite` and emit so
@@ -61,6 +83,8 @@ pub async fn toggle_current_favorite(
     state
         .library_changed_tx
         .send_modify(|n| *n = n.wrapping_add(1));
+
+    sync_love(state, &[id], new_fav).await;
 
     Ok(Some((id, new_fav)))
 }

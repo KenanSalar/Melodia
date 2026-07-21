@@ -1,8 +1,11 @@
 use std::path::Path;
 use std::sync::{Arc, OnceLock};
 
-use super::{LastfmCredentials, QueuedItem, ScrobbleService, ScrobbleTrack};
+use super::{
+    LastfmCredentials, ListenBrainzCredentials, QueuedItem, ScrobbleService, ScrobbleTrack,
+};
 use crate::config::Paths;
+use crate::entities::track::ScrobbleRow;
 use crate::services::settings::ScrobbleFlags;
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
@@ -160,5 +163,82 @@ fn status_watch_observes_credential_and_flag_changes() -> TestResult {
         love_sync_enabled: false,
     });
     assert!(rx.borrow_and_update().lastfm.enabled);
+    Ok(())
+}
+
+/// A `ScrobbleRow` with an optional recording MBID — the love-sync tests key on
+/// its presence for the `ListenBrainz` path. (Last.fm love can't be exercised
+/// here: it's gated on compile-time API keys, absent in a test build.)
+fn scrobble_row(mbid: Option<&str>) -> ScrobbleRow {
+    ScrobbleRow {
+        id: 1,
+        title: "Song".to_owned(),
+        artist: Some("Artist".to_owned()),
+        album: None,
+        album_artist: None,
+        duration_ms: 180_000,
+        track_number: None,
+        musicbrainz_track_id: mbid.map(str::to_owned),
+        musicbrainz_release_id: None,
+    }
+}
+
+/// A service with `ListenBrainz` connected + enabled and `love_sync` on/off.
+fn lb_love_service(
+    paths: &Paths,
+    love_sync: bool,
+) -> Result<ScrobbleService, Box<dyn std::error::Error>> {
+    let service = init_service(
+        paths,
+        &ScrobbleFlags {
+            lastfm_enabled: false,
+            listenbrainz_enabled: true,
+            love_sync_enabled: love_sync,
+        },
+    );
+    service.set_listenbrainz_credentials(Some(ListenBrainzCredentials {
+        token: "tok".to_owned(),
+        username: "lb-user".to_owned(),
+    }))?;
+    Ok(service)
+}
+
+#[test]
+fn enqueue_love_queues_listenbrainz_when_mbid_present() -> TestResult {
+    let dir = tempfile::tempdir()?;
+    let service = lb_love_service(&paths_in(dir.path()), true)?;
+    assert!(service.love_sync_active());
+
+    service.enqueue_love(&scrobble_row(Some("mbid-1")), true)?;
+    assert_eq!(service.queued_len(), 1);
+
+    let queue = service.queue.lock();
+    let love = queue.loves.front();
+    assert!(matches!(
+        love,
+        Some(l) if l.loved && l.listenbrainz_remaining && !l.lastfm_remaining
+    ));
+    Ok(())
+}
+
+#[test]
+fn enqueue_love_skips_listenbrainz_without_mbid() -> TestResult {
+    let dir = tempfile::tempdir()?;
+    let service = lb_love_service(&paths_in(dir.path()), true)?;
+
+    // No MBID for LB to key on and no Last.fm keys in a test build → nothing queued.
+    service.enqueue_love(&scrobble_row(None), true)?;
+    assert_eq!(service.queued_len(), 0);
+    Ok(())
+}
+
+#[test]
+fn love_sync_inactive_when_flag_disabled() -> TestResult {
+    let dir = tempfile::tempdir()?;
+    let service = lb_love_service(&paths_in(dir.path()), false)?;
+
+    assert!(!service.love_sync_active());
+    service.enqueue_love(&scrobble_row(Some("mbid-1")), true)?;
+    assert_eq!(service.queued_len(), 0);
     Ok(())
 }

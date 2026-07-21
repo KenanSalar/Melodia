@@ -39,11 +39,33 @@ impl QueuedItem {
     }
 }
 
-/// FIFO of pending scrobbles, oldest at the front. Serialized as-is to
+/// One queued love/unlove: the track, its target loved state, and a per-provider
+/// "still needs submitting" flag. Loves ride the same durable queue as scrobbles
+/// so a favorite toggled offline still reaches the services on reconnect.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LoveItem {
+    pub track: ScrobbleTrack,
+    pub loved: bool,
+    pub lastfm_remaining: bool,
+    pub listenbrainz_remaining: bool,
+}
+
+impl LoveItem {
+    /// Whether either provider still needs this love submitted.
+    pub fn is_pending(&self) -> bool {
+        self.lastfm_remaining || self.listenbrainz_remaining
+    }
+}
+
+/// FIFO of pending scrobbles and loves, oldest at the front. Serialized as-is to
 /// `scrobble_queue.json`.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ScrobbleQueue {
     pub items: VecDeque<QueuedItem>,
+    /// Pending love/unlove submissions. `#[serde(default)]` keeps queue files
+    /// written before love-sync (which carry no `loves` key) loadable.
+    #[serde(default)]
+    pub loves: VecDeque<LoveItem>,
 }
 
 impl ScrobbleQueue {
@@ -56,10 +78,31 @@ impl ScrobbleQueue {
         self.items.push_back(item);
     }
 
-    /// Drop every item both providers have already accepted, keeping only those
-    /// with work left. Called by the submitter after a drain pass.
+    /// Queue a love/unlove. If a still-pending love for the same track is already
+    /// queued, fold this into it — take the newer `loved` state and OR in the
+    /// provider flags — instead of appending, so a rapid heart→unheart submits
+    /// once. Otherwise append, dropping the oldest past the cap like `push`.
+    pub fn push_love(&mut self, item: LoveItem) {
+        if let Some(existing) = self.loves.iter_mut().find(|queued| {
+            queued.track.artist == item.track.artist && queued.track.track == item.track.track
+        }) {
+            existing.loved = item.loved;
+            existing.lastfm_remaining |= item.lastfm_remaining;
+            existing.listenbrainz_remaining |= item.listenbrainz_remaining;
+            return;
+        }
+        while self.loves.len() >= MAX_QUEUED {
+            self.loves.pop_front();
+            log::warn!("love queue at cap ({MAX_QUEUED}); dropping oldest love");
+        }
+        self.loves.push_back(item);
+    }
+
+    /// Drop every scrobble and love both providers have already accepted, keeping
+    /// only those with work left. Called by the submitter after a drain pass.
     pub fn retain_pending(&mut self) {
         self.items.retain(QueuedItem::is_pending);
+        self.loves.retain(LoveItem::is_pending);
     }
 
     /// Read the queue file, defaulting to empty on a missing or unparseable file.

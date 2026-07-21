@@ -304,23 +304,62 @@ UI/manual verification starts in Phase 3. **Gate every phase on `cargo clippy
 - **Known gap:** love-sync (Phase 4) is gated on Last.fm connection only (Last.fm-primary).
 
 ### Phase 4 — Love ↔ favorite sync
-- [ ] `src/library/favorites.rs`: at the end of `set_favorite` (batch) and
-      `toggle_current_favorite` (single), when love-sync enabled + Last.fm connected,
-      look up artist/track (reuse `get_scrobble_row`) and `state.scrobble.enqueue_love
-      (track, loved)`. Single choke point — all favorite UI already routes here.
-- [ ] LB feedback best-effort, MBID-gated (skip untagged) — optional within phase.
-- [ ] **Verify**: toggle a heart → track appears in Last.fm Loved Tracks.
+- [x] `src/library/favorites.rs`: at the end of `set_favorite` (batch) and
+      `toggle_current_favorite` (single), when love-sync enabled + a provider is
+      connected, look up artist/track (reuse `get_scrobble_row`) and
+      `state.scrobble.enqueue_love(&row, loved)`. Single choke point — all favorite UI
+      already routes here. Implemented as one private `sync_love(state, ids, loved)`
+      helper shared by both entry points; best-effort (lookup/enqueue errors logged,
+      never propagated).
+- [x] LB feedback best-effort, MBID-gated (skip untagged) — **included** (user-confirmed
+      scope). New `listenbrainz::submit_feedback(client, token, recording_mbid, score)`
+      (`POST /1/feedback/recording-feedback`, `score` 1 = love / 0 = clear).
+- [ ] **Verify**: toggle a heart → track appears in Last.fm Loved Tracks (manual —
+      needs real credentials; the LB side needs a `musicbrainz_track_id`).
+
+**Deviations from the spec above:**
+- **Loves are durable + retried** (per the architecture), not fire-and-forget. New
+  `LoveItem` + `#[serde(default)] loves: VecDeque<LoveItem>` on `ScrobbleQueue`
+  (`#[serde(default)]` keeps pre-love-sync `scrobble_queue.json` files loadable). Loves
+  fold into the existing submitter: `submit_pending` now dispatches to `submit_scrobbles`
+  (the old body) + a new `submit_loves` (one POST per love, capped per round), and
+  `queued_len` counts `items + loves` — so `tasks/scrobble.rs` (the two loops) is
+  **unchanged**.
+- **`enqueue_love(&ScrobbleRow, loved)`** takes the row and builds the `ScrobbleTrack`
+  via `ScrobbleTrack::from_row` internally, for parity with `enqueue_scrobble` (the spec
+  wrote `enqueue_love(track, loved)`).
+- **Per-provider love gating asymmetry.** Last.fm love arms on `love_sync_enabled &&
+  is_configured() && lastfm connected` (independent of the *scrobble* enable toggle —
+  love-sync is its own feature); LB feedback arms on `love_sync_enabled && lb enabled &&
+  lb connected && recording_mbid.is_some()` (MBID-gated, best-effort). `love_sync_active()`
+  is the cheap OR of the two, checked in `favorites.rs` to skip all DB work when off.
+- **`push_love` coalesces** a repeat toggle of the same track (heart→unheart folds into the
+  pending entry, newest `loved` wins) so a rapid toggle submits once, not twice.
+- **Shared `classify_response`** extracted in `listenbrainz.rs` (used by `submit` +
+  `submit_feedback`); `drop_flags` made generic over the queued type (scrobbles + loves).
+- Tests: love-queue coalesce/cap/retain + legacy-blob load, `enqueue_love` LB gating +
+  `love_sync_active`, `submit_feedback` JSON shape. The Last.fm love path stays
+  network-unexercised (gated on compile-time keys, absent in a test build), like the
+  Phase-1/2 POST paths.
 
 ### Phase 5 — Docs, offline test & polish
-- [ ] `CLAUDE.md`: new "Scrobbling" conventions block (decoupled detector, provider/
-      queue split, credential file, love-sync choke point).
-- [ ] `README.md`: feature + Last.fm API-application setup note (`option_env!` keys;
-      keyless builds are ListenBrainz-only).
-- [ ] `release.yml`: pass `LASTFM_API_KEY` / `LASTFM_SHARED_SECRET` repo secrets as build
-      env so official binaries ship with Last.fm enabled.
-- [ ] **Offline test**: kill network mid-play → queued + `scrobble_queue.json`
-      persists → reconnect → submitter drains.
-- [ ] `/usr/bin/time -v` peak-RSS sanity (idle overhead negligible; under ~200 MB).
+- [x] `CLAUDE.md`: new "Scrobbling" conventions block (seven bullets — decoupled
+      service/tasks, pure detector fires at play-end, ephemeral now-playing vs durable
+      queue, provider/queue split, credential file, `option_env!` keys, love-sync choke
+      point). Also fixed a stale release-matrix count (12→10 slots) while there.
+- [x] `README.md`: System-Integration feature bullet + a Build note on the optional
+      Last.fm API application (`option_env!` keys; keyless builds are ListenBrainz-only) +
+      the two new state files in Configuration & Data.
+- [x] `release.yml`: `LASTFM_API_KEY` / `LASTFM_SHARED_SECRET` wired as **job-level** env
+      on the `build` job (both `cargo build --release` steps + any recompile see them; all
+      packaging is `--no-build`). Hardened with `lastfm::non_empty_env` so a missing secret
+      (which GitHub substitutes as `""`, reported by `option_env!` as `Some("")`) folds back
+      to `None` — preserving the keyless-build guarantee.
+- [ ] **Offline test** (manual): kill network mid-play → queued + `scrobble_queue.json`
+      persists → reconnect → submitter drains. *(Automated coverage: queue persist
+      round-trip + drop/retain unit tests; the real network-kill drain needs manual run.)*
+- [ ] `/usr/bin/time -v` peak-RSS sanity (manual; idle overhead negligible — one idle
+      background task + a capped queue; under ~200 MB).
 
 ---
 

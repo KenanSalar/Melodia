@@ -86,6 +86,7 @@ MP3, FLAC, M4A/AAC, OGG/Vorbis, WAV, ALAC, AIFF
 - Runtime locale switching with no restart
 
 ### System Integration
+- Scrobbling to **Last.fm** and **ListenBrainz** — connect either or both, report each qualifying play plus a live "now playing" status, and mirror your favorites to their loved/feedback tracks; plays are held in a durable offline queue and submitted on reconnect
 - OS media controls (Linux: MPRIS2, Windows: SMTC)
 - Always-on-top support (Linux: KDE via KWin D-Bus, GNOME via shell extension)
 - Window state persistence (size, position, maximized)
@@ -199,6 +200,16 @@ cargo test                                      # run tests
 >
 > [winit#1881]: https://github.com/rust-windowing/winit/issues/1881
 
+> **Note — Last.fm API credentials (optional).**
+> Last.fm scrobbling needs a registered [API application](https://www.last.fm/api/account/create)
+> — a key + shared secret that identify the *app*, not any account. They're read
+> at compile time from the `LASTFM_API_KEY` / `LASTFM_SHARED_SECRET` environment
+> variables (`option_env!`), so nothing secret lives in the repo. Official
+> releases inject them as CI secrets. A build without them is fully functional —
+> **ListenBrainz** still works and the Last.fm **Connect** button reports "not
+> configured in this build". ListenBrainz needs no such setup (each user pastes
+> their own token).
+
 ## Tech Stack
 
 | Layer | Technology |
@@ -257,6 +268,8 @@ Melodia stores its data under the OS application-data directory
 | `views.json` | Per-view UI state (column widths, sort, browse path, open detail) |
 | `queue.json` | Persisted play queue |
 | `search_history.json` | Recent search terms (capped at 10) |
+| `scrobble_credentials.json` | Last.fm session key + ListenBrainz token (`0600` on Unix) |
+| `scrobble_queue.json` | Durable offline scrobble/love queue |
 | `artwork/`, `artists/` | Cached album and artist images |
 
 ## Contributing

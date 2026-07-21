@@ -21,8 +21,20 @@ use crate::error::AppError;
 use crate::services::scrobble::credentials::LastfmCredentials;
 use crate::services::scrobble::model::ScrobbleTrack;
 
-pub const LASTFM_API_KEY: Option<&str> = option_env!("LASTFM_API_KEY");
-pub const LASTFM_SHARED_SECRET: Option<&str> = option_env!("LASTFM_SHARED_SECRET");
+pub const LASTFM_API_KEY: Option<&str> = non_empty_env(option_env!("LASTFM_API_KEY"));
+pub const LASTFM_SHARED_SECRET: Option<&str> = non_empty_env(option_env!("LASTFM_SHARED_SECRET"));
+
+/// Treat a present-but-empty compile-time env var as absent. CI wires
+/// `env: LASTFM_API_KEY: ${{ secrets.LASTFM_API_KEY }}` unconditionally, and a
+/// missing secret substitutes an empty string that `option_env!` reports as
+/// `Some("")`, not `None` — folding it back to `None` keeps a keyless build
+/// ListenBrainz-only.
+const fn non_empty_env(value: Option<&str>) -> Option<&str> {
+    match value {
+        Some(s) if s.is_empty() => None,
+        other => other,
+    }
+}
 
 /// The Last.fm 2.0 API endpoint. Every method POSTs here as form-urlencoded.
 const LASTFM_ENDPOINT: &str = "https://ws.audioscrobbler.com/2.0/";
