@@ -157,6 +157,20 @@ pub async fn get_track_meta(
     Ok(row)
 }
 
+/// Single-id fetch of the columns a scrobble needs, for the Phase 2 detector's
+/// per-track-start enrichment. Sibling of `get_track_summary_by_id` /
+/// `get_track_meta`; returns `None` for a missing id (the detector then skips
+/// the scrobble).
+pub async fn get_scrobble_row(db: &DbPool, id: i64) -> Result<Option<track::ScrobbleRow>, AppError> {
+    let cols = track::scrobble_row_columns();
+    let sql = format!("SELECT {cols} FROM tracks WHERE id = ? LIMIT 1");
+    let row: Option<track::ScrobbleRow> = sqlx::query_as::<_, track::ScrobbleRow>(AssertSqlSafe(sql))
+        .bind(id)
+        .fetch_optional(db.read())
+        .await?;
+    Ok(row)
+}
+
 /// Fetch just the `file_path` column for a single track id — the
 /// leanest possible projection, used by the "Open Containing Folder"
 /// context-menu action which only needs the on-disk location. Returns

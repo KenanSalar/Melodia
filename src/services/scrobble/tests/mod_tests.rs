@@ -1,10 +1,17 @@
 use std::path::Path;
+use std::sync::{Arc, OnceLock};
 
 use super::{LastfmCredentials, QueuedItem, ScrobbleService, ScrobbleTrack};
 use crate::config::Paths;
 use crate::services::settings::ScrobbleFlags;
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
+
+/// Build a service with a fresh (never-built) shared client `OnceLock` — the
+/// credential/queue tests here never touch the network.
+fn init_service(paths: &Paths, flags: &ScrobbleFlags) -> ScrobbleService {
+    ScrobbleService::init(paths, flags, Arc::new(OnceLock::new()))
+}
 
 /// A `Paths` rooted in a throwaway dir. Only the two scrobble paths matter here,
 /// but `ScrobbleService::init` takes the whole struct.
@@ -44,7 +51,7 @@ fn sample_item() -> QueuedItem {
 #[test]
 fn fresh_service_is_disconnected_and_empty() -> TestResult {
     let dir = tempfile::tempdir()?;
-    let service = ScrobbleService::init(&paths_in(dir.path()), &ScrobbleFlags::default());
+    let service = init_service(&paths_in(dir.path()), &ScrobbleFlags::default());
 
     let status = service.status();
     assert!(!status.lastfm.connected);
@@ -59,7 +66,7 @@ fn lastfm_credentials_persist_across_reinit() -> TestResult {
     let dir = tempfile::tempdir()?;
     let paths = paths_in(dir.path());
 
-    let service = ScrobbleService::init(&paths, &ScrobbleFlags::default());
+    let service = init_service(&paths, &ScrobbleFlags::default());
     service.set_lastfm_credentials(Some(LastfmCredentials {
         session_key: "sk-abc".to_owned(),
         username: "listener".to_owned(),
@@ -67,7 +74,7 @@ fn lastfm_credentials_persist_across_reinit() -> TestResult {
     assert!(service.status().lastfm.connected);
 
     // A fresh service over the same paths must read the persisted credential.
-    let reloaded = ScrobbleService::init(&paths, &ScrobbleFlags::default());
+    let reloaded = init_service(&paths, &ScrobbleFlags::default());
     let status = reloaded.status();
     assert!(status.lastfm.connected);
     assert_eq!(status.lastfm.username.as_deref(), Some("listener"));
@@ -79,7 +86,7 @@ fn disconnect_clears_credential() -> TestResult {
     let dir = tempfile::tempdir()?;
     let paths = paths_in(dir.path());
 
-    let service = ScrobbleService::init(&paths, &ScrobbleFlags::default());
+    let service = init_service(&paths, &ScrobbleFlags::default());
     service.set_lastfm_credentials(Some(LastfmCredentials {
         session_key: "sk-abc".to_owned(),
         username: "listener".to_owned(),
@@ -87,7 +94,7 @@ fn disconnect_clears_credential() -> TestResult {
     service.set_lastfm_credentials(None)?;
     assert!(!service.status().lastfm.connected);
 
-    let reloaded = ScrobbleService::init(&paths, &ScrobbleFlags::default());
+    let reloaded = init_service(&paths, &ScrobbleFlags::default());
     assert!(!reloaded.status().lastfm.connected);
     Ok(())
 }
@@ -97,11 +104,11 @@ fn pushed_scrobble_persists_across_reinit() -> TestResult {
     let dir = tempfile::tempdir()?;
     let paths = paths_in(dir.path());
 
-    let service = ScrobbleService::init(&paths, &ScrobbleFlags::default());
+    let service = init_service(&paths, &ScrobbleFlags::default());
     service.push_scrobble(sample_item())?;
     assert_eq!(service.queued_len(), 1);
 
-    let reloaded = ScrobbleService::init(&paths, &ScrobbleFlags::default());
+    let reloaded = init_service(&paths, &ScrobbleFlags::default());
     assert_eq!(reloaded.queued_len(), 1);
     Ok(())
 }
@@ -109,7 +116,7 @@ fn pushed_scrobble_persists_across_reinit() -> TestResult {
 #[test]
 fn set_flags_updates_status() -> TestResult {
     let dir = tempfile::tempdir()?;
-    let service = ScrobbleService::init(&paths_in(dir.path()), &ScrobbleFlags::default());
+    let service = init_service(&paths_in(dir.path()), &ScrobbleFlags::default());
     assert!(!service.status().love_sync_enabled);
 
     service.set_flags(ScrobbleFlags {

@@ -22,6 +22,32 @@ pub struct ScrobbleTrack {
     pub release_mbid: Option<String>,
 }
 
+impl ScrobbleTrack {
+    /// Build a scrobble payload from a DB row, or `None` when the row can't be
+    /// scrobbled — both services require a non-empty artist and track name. Maps
+    /// `title` → `track`, `duration_ms` → `duration_secs`, the `i32` track number
+    /// to `u32`, and the two `MusicBrainz` ids to the recording/release MBIDs.
+    pub fn from_row(row: &crate::entities::track::ScrobbleRow) -> Option<Self> {
+        let artist = non_empty(row.artist.as_deref())?;
+        let track = non_empty(Some(&row.title))?;
+        Some(Self {
+            artist,
+            track,
+            album: non_empty(row.album.as_deref()),
+            album_artist: non_empty(row.album_artist.as_deref()),
+            duration_secs: u32::try_from(row.duration_ms / 1000).ok().filter(|&s| s > 0),
+            track_number: row.track_number.and_then(|n| u32::try_from(n).ok()),
+            recording_mbid: non_empty(row.musicbrainz_track_id.as_deref()),
+            release_mbid: non_empty(row.musicbrainz_release_id.as_deref()),
+        })
+    }
+}
+
+/// Trim `s` and return it owned only if it has non-whitespace content.
+fn non_empty(s: Option<&str>) -> Option<String> {
+    s.map(str::trim).filter(|t| !t.is_empty()).map(str::to_owned)
+}
+
 /// Played-time (ms) after which a track qualifies to scrobble, per the rule both
 /// services share: a track over 30 s scrobbles once it has played at least half
 /// its length **or** 4 minutes, whichever comes first.

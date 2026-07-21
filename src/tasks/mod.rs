@@ -15,6 +15,7 @@ pub mod playback_monitor;
 pub mod queue_prune;
 pub mod retroactive_hash;
 pub mod rss_sampler;
+pub mod scrobble;
 pub mod spawner;
 pub mod updater_daily;
 

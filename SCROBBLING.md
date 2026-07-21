@@ -211,7 +211,7 @@ UI/manual verification starts in Phase 3. **Gate every phase on `cargo clippy
   payload builders are unit-tested, the `async` POST paths stay unexercised (unwired).
 
 ### Phase 2 — Detection + submission tasks
-- [ ] `src/entities/track.rs` + `src/database/queries/track.rs`: slim `ScrobbleRow`
+- [x] `src/entities/track.rs` + `src/database/queries/track.rs`: slim `ScrobbleRow`
       projection (artist, track, album, album_artist, duration_ms, track_number,
       `musicbrainz_track_id`, `musicbrainz_release_id`) + `SCROBBLE_ROW_COLUMNS`/
       `scrobble_row_columns()` (copy `TagEditRow`'s struct+columns block — all native
@@ -219,21 +219,45 @@ UI/manual verification starts in Phase 3. **Gate every phase on `cargo clippy
       modeled on `get_track_summary_by_id`/`get_track_meta` (`track.rs:130-158`), **not**
       the multi-id `get_tag_edit_rows_by_ids`. (`recording_mbid ← musicbrainz_track_id`,
       `release_mbid ← musicbrainz_release_id`.)
-- [ ] `src/services/scrobble/detector.rs`: **pure** `DetectorState` +
+- [x] `src/services/scrobble/detector.rs`: **pure** `DetectorState` +
       `on_view_model` / `on_position` → `Effect{ NowPlaying | Scrobble | Finalize }`.
       Owns `started_at` capture, played-time accumulator with seek guard (`delta ∈
       [1, SEEK_GUARD_MS]`), **accumulator reset + one `NowPlaying` on `current_track.id`
       change**, restart detection (same id, position drops ~0), stop/shutdown finalize.
-- [ ] `ScrobbleService` methods: `update_now_playing` (spawn fire-and-forget POST to
+- [x] `ScrobbleService` methods: `update_now_playing` (spawn fire-and-forget POST to
       each connected provider), `enqueue_scrobble` (enrich via `get_scrobble_row`,
       push queue, `Notify`), submitter drain/batch/retry/backoff (honor
       `429`/`X-RateLimit`), final flush on shutdown.
-- [ ] `src/tasks/scrobble.rs`: `spawn(spawner, state)` → two `spawn_cancellable`
+- [x] `src/tasks/scrobble.rs`: `spawn(spawner, state)` → two `spawn_cancellable`
       loops (detector + submitter); declare in `tasks/mod.rs`; invoke from
       `src/boot/tasks.rs`. **No `ui::*` imports.**
-- [ ] Tests: `detector` pure state machine (normal→scrobble, skip-before/after
+- [x] Tests: `detector` pure state machine (normal→scrobble, skip-before/after
       threshold, seek guard, restart, pause = no accumulation, **one `NowPlaying` per
       track-start despite repeated `view_model` republishes**).
+
+**Deviations from the spec above (recorded for Phases 3–4):**
+- **Scrobble fires at play-END, not at threshold-crossing.** The three-variant
+  `Effect { NowPlaying | Scrobble | Finalize }` is only coherent if the scrobble
+  is emitted when a play *ends* (a successor track, a restart, a stop, or
+  shutdown) gated on whether accumulated played-time met the threshold — `Scrobble`
+  for a successor/restart, `Finalize` for the terminal stop/shutdown. The durable
+  queue (not mid-play firing) is what covers network outages. `on_shutdown()`
+  takes no `now_ts` (it reads the play's captured `started_at`).
+- **Shared, still-lazy client.** `ScrobbleService` holds the **same**
+  `Arc<OnceLock<reqwest::Client>>` as `AppState` (extracted builder
+  `services::build_http_client`), so `state.http_client()` and the service share
+  one pool built on first request — honoring both "shared client field" and the
+  boot/idle laziness of `http_client()`.
+- **Per-provider enqueue flags (not "both set").** `enqueue_scrobble` sets a
+  provider's `*_remaining` flag only when that provider is connected + enabled; a
+  flag for a disconnected provider would never clear and would pin the item. The
+  submitter also drops the flag for a provider that later disconnects.
+- **`enqueue_scrobble(&ScrobbleRow, timestamp)`** takes the row and builds the
+  `ScrobbleTrack` via `ScrobbleTrack::from_row` (in `model.rs`, non-empty
+  artist/title required); `update_now_playing(ScrobbleTrack)` takes the pre-built
+  track (the detector task built it for the now-playing at track start).
+- **Submitter final flush is bounded** (`tokio::time::timeout`, 2 s) so shutdown
+  isn't blocked past the app's budget — the queue is already persisted regardless.
 
 ### Phase 3 — Settings UI + auth flows
 - [ ] `ui/settings.slint` (`Settings` global): `scrobble-{lastfm,listenbrainz}-connected
