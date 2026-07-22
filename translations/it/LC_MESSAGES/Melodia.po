@@ -1313,3 +1313,124 @@ msgstr "Impossibile salvare i tag"
 
 msgid "No tracks were updated."
 msgstr "Nessuna traccia è stata aggiornata."
+
+# ---- Scrobbling ----
+msgid "Scrobbling"
+msgstr "Scrobbling"
+
+msgid "Last.fm"
+msgstr "Last.fm"
+
+msgid "ListenBrainz"
+msgstr "ListenBrainz"
+
+msgid "Scrobble to Last.fm"
+msgstr "Scrobble su Last.fm"
+
+msgid "Report each play to your Last.fm account"
+msgstr "Segnala ogni riproduzione al tuo account Last.fm"
+
+msgid "Scrobble to ListenBrainz"
+msgstr "Scrobble su ListenBrainz"
+
+msgid "Report each play to your ListenBrainz account"
+msgstr "Segnala ogni riproduzione al tuo account ListenBrainz"
+
+msgid "Sync loved tracks"
+msgstr "Sincronizza i brani preferiti"
+
+msgid "Sync loved tracks to Last.fm"
+msgstr "Sincronizza i brani preferiti con Last.fm"
+
+msgid "Mark tracks you love as loved on Last.fm — turning this on syncs your existing favorites"
+msgstr "Segna come preferiti su Last.fm i brani che ami — attivandolo si sincronizzano i preferiti esistenti"
+
+msgid "Sync loved tracks to ListenBrainz"
+msgstr "Sincronizza i brani preferiti con ListenBrainz"
+
+msgid "Mark tracks you love as loved on ListenBrainz — turning this on syncs your existing favorites (needs MusicBrainz IDs)"
+msgstr "Segna come preferiti su ListenBrainz i brani che ami — attivandolo si sincronizzano i preferiti esistenti (richiede ID MusicBrainz)"
+
+msgid "Loved tracks"
+msgstr "Brani preferiti"
+
+msgid "Mark tracks you love as loved on your connected services"
+msgstr "Segna come preferiti sui tuoi servizi collegati i brani che ami"
+
+msgid "Add MusicBrainz IDs to your music"
+msgstr "Aggiungi gli ID MusicBrainz alla tua musica"
+
+msgid "Look up and tag files so loves work on ListenBrainz"
+msgstr "Cerca ed etichetta i file così i preferiti funzionano su ListenBrainz"
+
+msgid "Look up missing IDs"
+msgstr "Cerca gli ID mancanti"
+
+msgid "Re-scan tracks that still have no MusicBrainz ID"
+msgstr "Rianalizza i brani che non hanno ancora un ID MusicBrainz"
+
+msgid "Look up"
+msgstr "Cerca"
+
+msgid "MusicBrainz IDs"
+msgstr "ID MusicBrainz"
+
+msgid "Best for files that already have correct artist and title tags. For loosely-tagged music (e.g. songs downloaded from YouTube), use MusicBrainz Picard instead — it identifies tracks by their audio, not their tags."
+msgstr "Ideale per i file che hanno già tag di artista e titolo corretti. Per musica con tag approssimativi (ad es. brani scaricati da YouTube), usa invece MusicBrainz Picard — identifica i brani dal loro audio, non dai tag."
+
+msgid "Connected as {}"
+msgstr "Connesso come {}"
+
+msgid "Not connected"
+msgstr "Non connesso"
+
+msgid "Not configured in this build"
+msgstr "Non configurato in questa build"
+
+msgid "Connect"
+msgstr "Connetti"
+
+msgid "Disconnect"
+msgstr "Disconnetti"
+
+msgid "Connect Last.fm"
+msgstr "Connetti Last.fm"
+
+msgid "Open Last.fm"
+msgstr "Apri Last.fm"
+
+msgid "Connect ListenBrainz"
+msgstr "Connetti ListenBrainz"
+
+msgid "Finish"
+msgstr "Fine"
+
+msgid "Click Open Last.fm to approve Melodia in your browser."
+msgstr "Fai clic su Apri Last.fm per autorizzare Melodia nel browser."
+
+msgid "After approving Melodia in your browser, click Finish."
+msgstr "Dopo aver autorizzato Melodia nel browser, fai clic su Fine."
+
+msgid "Connecting…"
+msgstr "Connessione…"
+
+msgid "User token"
+msgstr "Token utente"
+
+msgid "Paste your ListenBrainz user token"
+msgstr "Incolla il tuo token utente ListenBrainz"
+
+msgid "Find your token on your ListenBrainz profile settings page."
+msgstr "Trovi il tuo token nella pagina delle impostazioni del profilo ListenBrainz."
+
+msgid "That token wasn't accepted. Check it and try again."
+msgstr "Token non accettato. Controllalo e riprova."
+
+msgid "Couldn't reach the service. Check your connection and try again."
+msgstr "Impossibile raggiungere il servizio. Controlla la connessione e riprova."
+
+msgid "Not approved yet. Approve Melodia in your browser, then click Finish."
+msgstr "Non ancora autorizzato. Autorizza Melodia nel browser, poi fai clic su Fine."
+
+msgid "Couldn't save your credentials."
+msgstr "Impossibile salvare le credenziali."

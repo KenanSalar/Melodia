@@ -61,6 +61,14 @@ jobs:
     name: test
     runs-on: ubuntu-latest
     needs: [clippy]
+    # The instrumented `cargo llvm-cov` link OOM-killed the runner (143) once the
+    # crate grew. Source-based coverage needs no DWARF, so drop the debug info
+    # that dominates link memory (test targets + deps profiles); jobs=4 matches
+    # the runner's vCPUs, overriding the repo's dev-machine jobs=6.
+    env:
+      CARGO_BUILD_JOBS: 4
+      CARGO_PROFILE_DEV_DEBUG: "line-tables-only"
+      CARGO_PROFILE_TEST_DEBUG: "line-tables-only"
     steps:
       - uses: actions/checkout@v5
       - uses: ./.github/actions/linux-system-deps

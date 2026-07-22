@@ -13,15 +13,53 @@ Melodia is a Slint rewrite of a former Tauri + SolidJS application — moving of
 
 ## Screenshots
 
-<!-- TODO: add screenshots. Drop image files into docs/screenshots/ and uncomment the links below. -->
-<!--
-![Library view](docs/screenshots/library.png)
-![Now Playing](docs/screenshots/now-playing.png)
-![Album detail](docs/screenshots/album-detail.png)
-![Themes](docs/screenshots/themes.png)
--->
+### Library
 
-_Screenshots coming soon._
+<table>
+  <tr>
+    <td width="50%"><img src="assets/screenshots/albums.png" alt="Albums view"><br><sub><b>Albums</b> — a virtualized cover grid (light theme here).</sub></td>
+    <td width="50%"><img src="assets/screenshots/artists_detail.png" alt="Artist detail view"><br><sub><b>Artist detail</b> — a hero-blur backdrop, an albums strip, and the track list.</sub></td>
+  </tr>
+  <tr>
+    <td><img src="assets/screenshots/tracks.png" alt="Tracks view"><br><sub><b>Tracks</b> — every song, with sortable, resizable, toggleable columns.</sub></td>
+    <td><img src="assets/screenshots/browse.png" alt="File-system browse view"><br><sub><b>Browse</b> — navigate the library by folder.</sub></td>
+  </tr>
+</table>
+
+### Playlists & Collections
+
+<table>
+  <tr>
+    <td width="50%"><img src="assets/screenshots/favorites.png" alt="Favorites view"><br><sub><b>Favorites</b> — an artwork mosaic hero, a most-played strip, and favorite artists.</sub></td>
+    <td width="50%"><img src="assets/screenshots/recently_played.png" alt="Recently Played view"><br><sub><b>Recently Played</b> — newest first, updating live as you listen.</sub></td>
+  </tr>
+  <tr>
+    <td><img src="assets/screenshots/playlists.png" alt="Playlists view"><br><sub><b>Playlists</b> — manual and smart playlists, with M3U8 import and export.</sub></td>
+    <td><img src="assets/screenshots/playlists_detail.png" alt="Playlist detail view"><br><sub><b>Playlist detail</b> — inline favorites and hover-revealed star ratings.</sub></td>
+  </tr>
+</table>
+
+### Theming
+
+Six theme families, light and dark variants, configurable accents, and Material You dynamic color — see [Themes](#themes) below for the full list.
+
+<table>
+  <tr>
+    <td width="50%"><img src="assets/screenshots/settings.png" alt="Settings under the Catppuccin theme"><br><sub><b>Catppuccin Mocha</b> — theme, variant, and accent picker.</sub></td>
+    <td width="50%"><img src="assets/screenshots/settings_material.png" alt="Settings under the Material 3 theme"><br><sub><b>Material 3</b> — the same screen with a different palette.</sub></td>
+  </tr>
+</table>
+
+### Mini-player
+
+Shrink the window past a threshold and the full UI collapses into a compact mini-player.
+
+<table>
+  <tr>
+    <td width="60%" valign="top"><img src="assets/screenshots/miniplayer_rectangle.png" alt="Horizontal mini-player strip" width="360"><br><sub><b>Horizontal strip</b> — the most compact form.</sub></td>
+    <td width="40%" valign="top"><img src="assets/screenshots/miniplayer_square.png" alt="Square mini-player widget with up-next list" width="240"><br><sub><b>Square widget</b> — grows an up-next list when tall enough.</sub></td>
+  </tr>
+</table>
 
 ---
 
@@ -86,6 +124,8 @@ MP3, FLAC, M4A/AAC, OGG/Vorbis, WAV, ALAC, AIFF
 - Runtime locale switching with no restart
 
 ### System Integration
+- Scrobbling to **Last.fm** and **ListenBrainz** — connect either or both, report each qualifying play plus a live "now playing" status, and mirror your favorites to their loved/feedback tracks with a **per-service toggle** (each independent). Turning a service's loved-tracks sync on — or connecting it later while sync is on — **syncs your existing favorites automatically**, no need to re-toggle each heart. Plays and loves are held in a durable offline queue and submitted on reconnect
+- Optional **MusicBrainz auto-tagging** (opt-in, ListenBrainz-driven) — resolves each track's MusicBrainz Recording ID and writes it into your files, so "loved" favorites work on ListenBrainz even for an untagged library; runs automatically on new imports and on demand from Settings
 - OS media controls (Linux: MPRIS2, Windows: SMTC)
 - Always-on-top support (Linux: KDE via KWin D-Bus, GNOME via shell extension)
 - Window state persistence (size, position, maximized)
@@ -199,6 +239,36 @@ cargo test                                      # run tests
 >
 > [winit#1881]: https://github.com/rust-windowing/winit/issues/1881
 
+> **Note — Last.fm API credentials (optional).**
+> Last.fm scrobbling needs a registered [API application](https://www.last.fm/api/account/create)
+> — a key + shared secret that identify the *app*, not any account. They're read
+> at compile time from the `LASTFM_API_KEY` / `LASTFM_SHARED_SECRET` environment
+> variables (`option_env!`), so nothing secret lives in the repo. Official
+> releases inject them as CI secrets. For local development, copy `.env.example`
+> to `.env` (gitignored) and paste your keys — `build.rs` bakes them into the
+> compile automatically, no exporting needed. A build without them is fully
+> functional — **ListenBrainz** still works and the Last.fm **Connect** button
+> reports "not configured in this build". ListenBrainz needs no such setup (each
+> user pastes their own token).
+
+> **Tip — cleaning up a loosely-tagged library.**
+> The optional MusicBrainz auto-tagging (Settings → Scrobbling → *Add MusicBrainz
+> IDs to your music*) resolves each track's MusicBrainz Recording ID by looking up
+> its **artist + title** on ListenBrainz, so it only works when your files already
+> carry reasonably correct tags. For music ripped from YouTube or otherwise loosely
+> tagged — artist fields like `NoCopyrightSounds` or `<unknown>`, titles full of
+> `(Official Video)` cruft — a text lookup can't identify most
+> tracks, so they stay untagged (and can't be "loved" on ListenBrainz).
+>
+> For those, run **[MusicBrainz Picard](https://picard.musicbrainz.org/)** first.
+> Picard identifies tracks by **acoustic fingerprint** — it analyses the actual
+> audio, not the tags — then writes clean metadata plus the MusicBrainz IDs, with a
+> review step so you approve matches before they're saved. On Fedora:
+> `sudo dnf install picard` (or the `org.musicbrainz.Picard` Flatpak); add your
+> music, **Scan**, then **Save**. Melodia picks up the new tags on its next scan,
+> and both your metadata and the ListenBrainz "loved" sync then work across the
+> whole library.
+
 ## Tech Stack
 
 | Layer | Technology |
@@ -257,6 +327,8 @@ Melodia stores its data under the OS application-data directory
 | `views.json` | Per-view UI state (column widths, sort, browse path, open detail) |
 | `queue.json` | Persisted play queue |
 | `search_history.json` | Recent search terms (capped at 10) |
+| `scrobble_credentials.json` | Last.fm session key + ListenBrainz token (`0600` on Unix) |
+| `scrobble_queue.json` | Durable offline scrobble/love queue |
 | `artwork/`, `artists/` | Cached album and artist images |
 
 ## Contributing

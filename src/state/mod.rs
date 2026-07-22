@@ -25,6 +25,7 @@ use crate::player::state::{
 use crate::services::{
     always_on_top::{self, AlwaysOnTopCapability},
     media_controls::{self, MediaControlsHandle},
+    scrobble::ScrobbleService,
     search_history::SearchHistoryState,
     settings,
 };
@@ -81,6 +82,9 @@ pub struct AppState {
     pub self_writes: Arc<SelfWrites>,
     pub always_on_top: AlwaysOnTopCapability,
     pub search_history: Arc<SearchHistoryState>,
+    /// Scrobbling service: credential/enabled shadow + durable offline queue.
+    /// Loaded at boot; the detector/submitter tasks that drive it wire in later.
+    pub scrobble: Arc<ScrobbleService>,
     pub media_controls: Option<Arc<MediaControlsHandle>>,
     /// Shared `reqwest::Client`, built lazily on first use via
     /// [`AppState::http_client`]. Only the updater and the post-scan Deezer
@@ -193,6 +197,15 @@ impl AppState {
         );
 
         let search_history = Arc::new(SearchHistoryState::init(&paths).await);
+        // Shared lazy client: one `OnceLock` seeds both `http_client()` and the
+        // scrobble service, so the app has a single connection pool built on
+        // first actual request.
+        let http_client = Arc::new(OnceLock::new());
+        let scrobble = Arc::new(ScrobbleService::init(
+            &paths,
+            &settings.scrobble,
+            http_client.clone(),
+        ));
 
         let state = Self {
             paths: Arc::new(paths),
@@ -211,8 +224,9 @@ impl AppState {
             self_writes: Arc::new(SelfWrites::default()),
             always_on_top: always_on_top_capability,
             search_history,
+            scrobble,
             media_controls: Some(mc_handle),
-            http_client: Arc::new(OnceLock::new()),
+            http_client,
             task_tracker: TaskTracker::new(),
             shutdown_token: CancellationToken::new(),
             nav_history: Arc::new(parking_lot::Mutex::new(
@@ -249,49 +263,15 @@ impl AppState {
     }
 
     /// The shared `reqwest::Client`, built on first call and reused for the
-    /// process lifetime. Construction is deferred out of `init` so the rustls
-    /// TLS stack and connection pool never load at boot/idle — only the
-    /// updater and the post-scan Deezer artist-image fetch pull them in.
-    /// reqwest's connection pool lives on the client, so callers reuse this
-    /// accessor rather than constructing a new client per request.
-    ///
-    /// Timeouts: reqwest's default is "no timeout", which means a wedged CDN
-    /// socket parks the streaming download future in `bytes_stream().next()`
-    /// indefinitely (the cancellation token never fires because the future is
-    /// parked in foreign code). The fix is a per-read deadline rather than a
-    /// whole-body deadline: a legitimately-slow 200 MB download must be allowed
-    /// to take minutes, but no individual read should sit silent for 60 s.
-    /// `read_timeout` resets on every byte received, so it only trips when the
-    /// socket is genuinely dead.
-    ///
-    /// User-Agent: GitHub's API guidance asks every consumer to set a
-    /// descriptive UA. Default `reqwest/0.13` is tolerated but ours is more
-    /// useful in server logs when something goes wrong.
-    ///
-    /// Pool cap: the updater only talks to api.github.com +
-    /// objects.githubusercontent.com; 4 idle conns per host is more than enough
-    /// and bounds memory on a long-running process. Default is unbounded.
-    ///
-    /// Build is documented infallible for these options; the fallback is
-    /// paranoia. If it ever fires we'd lose the timeouts, which is why it's
-    /// logged.
+    /// process lifetime. Construction is deferred out of `init` (see
+    /// [`crate::services::build_http_client`]) so the rustls TLS stack and
+    /// connection pool never load at boot/idle — only the updater, the post-scan
+    /// Deezer artist-image fetch, and scrobbling pull them in. reqwest's
+    /// connection pool lives on the client, so callers reuse this accessor (and
+    /// `ScrobbleService`, which shares the same `OnceLock`) rather than
+    /// constructing a new client per request.
     pub fn http_client(&self) -> &reqwest::Client {
-        self.http_client.get_or_init(|| {
-            reqwest::Client::builder()
-                .connect_timeout(std::time::Duration::from_secs(10))
-                .read_timeout(std::time::Duration::from_mins(1))
-                .pool_max_idle_per_host(4)
-                .user_agent(concat!("Melodia/", env!("CARGO_PKG_VERSION")))
-                .build()
-                .unwrap_or_else(|e| {
-                    log::warn!(
-                        "reqwest::Client::builder().build() failed unexpectedly ({e}); falling \
-                         back to default client without timeouts — downloads may hang on a wedged \
-                         socket"
-                    );
-                    reqwest::Client::new()
-                })
-        })
+        self.http_client.get_or_init(crate::services::build_http_client)
     }
 }
 

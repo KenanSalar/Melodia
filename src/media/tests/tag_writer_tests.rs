@@ -69,6 +69,7 @@ fn full_edit() -> TagEdit {
         bpm: FieldEdit::Set(128.0),
         lyrics: FieldEdit::Set("la la la".into()),
         artwork: ArtworkEdit::Keep,
+        ..TagEdit::default()
     }
 }
 
@@ -602,6 +603,41 @@ fn mp3_round_trips_a_full_edit_with_bpm_in_tbpm() -> Result<(), AppError> {
     assert_eq!(text(&tag, ItemKey::IntegerBpm).as_deref(), Some("128"));
     // And lyrics to USLT, since ID3v2 has no `Lyrics` mapping.
     assert_eq!(text(&tag, ItemKey::UnsyncLyrics).as_deref(), Some("la la la"));
+    Ok(())
+}
+
+// ------------------------------------------ MusicBrainz Recording ID
+
+/// The auto-tag backfill writes a `MusicBrainz` Recording ID into the file and the
+/// scan pipeline must read the same value back via `extract_metadata`, across
+/// every primary tag type. `ID3v2` keeps this id in a `UFID` frame — not a text
+/// frame — so this pins the round-trip the `ListenBrainz` love path relies on.
+#[test]
+fn musicbrainz_recording_id_round_trips_across_formats() -> Result<(), AppError> {
+    let recording = "189002e7-3285-4e2e-92a3-7f6c30d407a2";
+    for fixture in ["silence.mp3", "silence.flac", "silence.m4a"] {
+        let tmp = TempDir::new()?;
+        let audio = stage(&tmp, fixture)?;
+
+        let edit = TagEdit {
+            musicbrainz_track_id: FieldEdit::Set(recording.into()),
+            ..TagEdit::default()
+        };
+        let unsupported = apply_to_file(&audio, &edit, None)?;
+        assert!(
+            unsupported.is_empty(),
+            "{fixture}: the recording id must map: {:?}",
+            unsupported.0
+        );
+
+        let cache = artwork::new_cover_cache();
+        let meta = extract_metadata(&audio, tmp.path(), &cache, true)?;
+        assert_eq!(
+            meta.musicbrainz_track_id.as_deref(),
+            Some(recording),
+            "{fixture}: recording id must survive write + re-extract",
+        );
+    }
     Ok(())
 }
 

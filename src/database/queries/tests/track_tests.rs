@@ -676,3 +676,31 @@ async fn set_track_artwork_overwrites_and_nulls() -> Result<(), AppError> {
     assert!(art.is_none());
     Ok(())
 }
+
+#[tokio::test]
+async fn get_tracks_missing_mbid_filters_tagged_and_metadata_less_rows() -> Result<(), AppError> {
+    let db = seed_db().await?;
+    let ids: Vec<i64> = sqlx::query_scalar("SELECT id FROM tracks ORDER BY file_path")
+        .fetch_all(db.read())
+        .await?;
+    // alpha/beta/gamma all start eligible (NULL mbid, non-empty artist + title).
+    // Tag one, and blank another's artist — both must drop out of the work-list.
+    sqlx::query("UPDATE tracks SET musicbrainz_track_id = 'rec-1' WHERE id = ?")
+        .bind(ids[0])
+        .execute(db.write())
+        .await?;
+    sqlx::query("UPDATE tracks SET artist = '' WHERE id = ?")
+        .bind(ids[1])
+        .execute(db.write())
+        .await?;
+
+    let missing = queries::track::get_tracks_missing_mbid(&db).await?;
+    let returned: Vec<i64> = missing.iter().map(|(id, ..)| *id).collect();
+    assert_eq!(returned, vec![ids[2]], "only the untagged, artist-bearing track");
+    // The row carries the fields the lookup needs.
+    let (_id, path, artist, title, _album) = &missing[0];
+    assert!(path.ends_with("gamma.mp3"));
+    assert_eq!(artist, "Alpha Artist");
+    assert_eq!(title, "Gamma");
+    Ok(())
+}

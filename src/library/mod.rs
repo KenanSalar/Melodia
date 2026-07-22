@@ -13,6 +13,7 @@ pub mod browse;
 pub mod favorites;
 pub mod genres;
 pub mod import;
+pub mod mbid;
 pub mod playback;
 pub mod playlist_files;
 pub mod playlists;

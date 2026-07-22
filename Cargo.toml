@@ -118,8 +118,8 @@ slint = { version = "1.16.1", default-features = false, features = [
 ] }
 
 # Async runtime / utilities
-tokio = { version = "1.53.0", features = ["rt-multi-thread", "macros", "sync", "time", "fs", "process"] }
-tokio-util = { version = "0.7.18", features = ["rt"] }
+tokio = { version = "1.53.1", features = ["rt-multi-thread", "macros", "sync", "time", "fs", "process"] }
+tokio-util = { version = "0.7.19", features = ["rt"] }
 async-compat = "0.2.5"
 parking_lot = "0.12.5"
 
@@ -176,8 +176,12 @@ serde_json = "1.0.151"
 chrono = { version = "0.4.45", default-features = false, features = ["clock", "std"] }
 dirs = "6.0.0"
 
-# HTTP (Deezer artist images)
-reqwest = { version = "0.13.4", default-features = false, features = ["json", "query", "rustls", "stream"] }
+# HTTP (Deezer artist images, scrobbling)
+reqwest = { version = "0.13.4", default-features = false, features = ["form", "json", "query", "rustls", "stream"] }
+
+# MD5 for Last.fm `api_sig` request signing (scrobbling). Last.fm mandates MD5;
+# not used for anything security-sensitive.
+md5 = "0.8.1"
 
 # Logging. env_logger's default `regex` feature is the *only* thing in the
 # dependency graph pulling `regex` (+ `regex-automata`, `regex-syntax`,
@@ -244,7 +248,7 @@ ksni = { version = "0.3.6", default-features = false, features = ["blocking", "a
 # pause. Calling `malloc_trim(0)` once a minute lets the arena release them.
 # cfg-gated to glibc-only at the call site — musl's allocator doesn't expose
 # this. See `src/player/handlers.rs` for usage.
-libc = "0.2.186"
+libc = "0.2.189"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 # Used only by the auto-updater's atomic-swap fallback path
@@ -291,7 +295,7 @@ slint-build = "1.16.1"
 winresource = "0.1.31"
 
 [dev-dependencies]
-tokio = { version = "1.53.0", features = ["macros", "rt-multi-thread", "test-util"] }
+tokio = { version = "1.53.1", features = ["macros", "rt-multi-thread", "test-util"] }
 
 [lints.rust]
 unused = { level = "warn", priority = -1 }

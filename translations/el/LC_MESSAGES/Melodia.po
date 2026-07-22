@@ -1315,3 +1315,124 @@ msgstr "Δεν ήταν δυνατή η αποθήκευση των ετικετ
 
 msgid "No tracks were updated."
 msgstr "Δεν ενημερώθηκε κανένα κομμάτι."
+
+# ---- Scrobbling ----
+msgid "Scrobbling"
+msgstr "Scrobbling"
+
+msgid "Last.fm"
+msgstr "Last.fm"
+
+msgid "ListenBrainz"
+msgstr "ListenBrainz"
+
+msgid "Scrobble to Last.fm"
+msgstr "Scrobble στο Last.fm"
+
+msgid "Report each play to your Last.fm account"
+msgstr "Αναφορά κάθε αναπαραγωγής στον λογαριασμό σας στο Last.fm"
+
+msgid "Scrobble to ListenBrainz"
+msgstr "Scrobble στο ListenBrainz"
+
+msgid "Report each play to your ListenBrainz account"
+msgstr "Αναφορά κάθε αναπαραγωγής στον λογαριασμό σας στο ListenBrainz"
+
+msgid "Sync loved tracks"
+msgstr "Συγχρονισμός αγαπημένων κομματιών"
+
+msgid "Sync loved tracks to Last.fm"
+msgstr "Συγχρονισμός αγαπημένων κομματιών με το Last.fm"
+
+msgid "Mark tracks you love as loved on Last.fm — turning this on syncs your existing favorites"
+msgstr "Σημειώστε ως αγαπημένα στο Last.fm τα κομμάτια που αγαπάτε — η ενεργοποίηση συγχρονίζει τα υπάρχοντα αγαπημένα σας"
+
+msgid "Sync loved tracks to ListenBrainz"
+msgstr "Συγχρονισμός αγαπημένων κομματιών με το ListenBrainz"
+
+msgid "Mark tracks you love as loved on ListenBrainz — turning this on syncs your existing favorites (needs MusicBrainz IDs)"
+msgstr "Σημειώστε ως αγαπημένα στο ListenBrainz τα κομμάτια που αγαπάτε — η ενεργοποίηση συγχρονίζει τα υπάρχοντα αγαπημένα σας (απαιτεί αναγνωριστικά MusicBrainz)"
+
+msgid "Loved tracks"
+msgstr "Αγαπημένα κομμάτια"
+
+msgid "Mark tracks you love as loved on your connected services"
+msgstr "Σημειώστε τα κομμάτια που αγαπάτε ως αγαπημένα στις συνδεδεμένες υπηρεσίες σας"
+
+msgid "Add MusicBrainz IDs to your music"
+msgstr "Προσθήκη αναγνωριστικών MusicBrainz στη μουσική σας"
+
+msgid "Look up and tag files so loves work on ListenBrainz"
+msgstr "Αναζήτηση και προσθήκη ετικετών ώστε τα αγαπημένα να λειτουργούν στο ListenBrainz"
+
+msgid "Look up missing IDs"
+msgstr "Αναζήτηση αναγνωριστικών που λείπουν"
+
+msgid "Re-scan tracks that still have no MusicBrainz ID"
+msgstr "Εκ νέου σάρωση κομματιών που δεν έχουν ακόμη αναγνωριστικό MusicBrainz"
+
+msgid "Look up"
+msgstr "Αναζήτηση"
+
+msgid "MusicBrainz IDs"
+msgstr "Αναγνωριστικά MusicBrainz"
+
+msgid "Best for files that already have correct artist and title tags. For loosely-tagged music (e.g. songs downloaded from YouTube), use MusicBrainz Picard instead — it identifies tracks by their audio, not their tags."
+msgstr "Ιδανικό για αρχεία που έχουν ήδη σωστές ετικέτες καλλιτέχνη και τίτλου. Για μουσική με ελλιπείς ετικέτες (π.χ. κομμάτια που κατεβάσατε από το YouTube), χρησιμοποιήστε το MusicBrainz Picard — αναγνωρίζει τα κομμάτια από τον ήχο τους, όχι τις ετικέτες τους."
+
+msgid "Connected as {}"
+msgstr "Συνδεδεμένος ως {}"
+
+msgid "Not connected"
+msgstr "Μη συνδεδεμένο"
+
+msgid "Not configured in this build"
+msgstr "Δεν έχει ρυθμιστεί σε αυτήν την έκδοση"
+
+msgid "Connect"
+msgstr "Σύνδεση"
+
+msgid "Disconnect"
+msgstr "Αποσύνδεση"
+
+msgid "Connect Last.fm"
+msgstr "Σύνδεση Last.fm"
+
+msgid "Open Last.fm"
+msgstr "Άνοιγμα Last.fm"
+
+msgid "Connect ListenBrainz"
+msgstr "Σύνδεση ListenBrainz"
+
+msgid "Finish"
+msgstr "Ολοκλήρωση"
+
+msgid "Click Open Last.fm to approve Melodia in your browser."
+msgstr "Κάντε κλικ στο Άνοιγμα Last.fm για να εγκρίνετε το Melodia στο πρόγραμμα περιήγησής σας."
+
+msgid "After approving Melodia in your browser, click Finish."
+msgstr "Αφού εγκρίνετε το Melodia στο πρόγραμμα περιήγησής σας, κάντε κλικ στο Ολοκλήρωση."
+
+msgid "Connecting…"
+msgstr "Σύνδεση…"
+
+msgid "User token"
+msgstr "Διακριτικό χρήστη"
+
+msgid "Paste your ListenBrainz user token"
+msgstr "Επικολλήστε το διακριτικό χρήστη ListenBrainz"
+
+msgid "Find your token on your ListenBrainz profile settings page."
+msgstr "Θα βρείτε το διακριτικό σας στη σελίδα ρυθμίσεων του προφίλ σας στο ListenBrainz."
+
+msgid "That token wasn't accepted. Check it and try again."
+msgstr "Το διακριτικό δεν έγινε δεκτό. Ελέγξτε το και δοκιμάστε ξανά."
+
+msgid "Couldn't reach the service. Check your connection and try again."
+msgstr "Δεν ήταν δυνατή η σύνδεση με την υπηρεσία. Ελέγξτε τη σύνδεσή σας και δοκιμάστε ξανά."
+
+msgid "Not approved yet. Approve Melodia in your browser, then click Finish."
+msgstr "Δεν έχει εγκριθεί ακόμη. Εγκρίνετε το Melodia στο πρόγραμμα περιήγησης και μετά κάντε κλικ στο Ολοκλήρωση."
+
+msgid "Couldn't save your credentials."
+msgstr "Δεν ήταν δυνατή η αποθήκευση των διαπιστευτηρίων σας."

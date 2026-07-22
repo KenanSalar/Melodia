@@ -333,6 +333,33 @@ pub struct TrayFlags {
     pub close_to_tray: bool,
 }
 
+/// Scrobbling toggles. The Last.fm / `ListenBrainz` *credentials* live in a
+/// separate `scrobble_credentials.json` (never in `settings.json`); these are
+/// only the per-service on/off switches. All default `false`, so a returning
+/// install with no scrobble keys in its `settings.json` lands with scrobbling
+/// fully off. See `PlaybackFlags` for the substruct rationale.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "independent scrobble toggles, serde-flattened into settings.json — nesting would change the on-disk shape and break existing installs"
+)]
+pub struct ScrobbleFlags {
+    pub lastfm_enabled: bool,
+    pub listenbrainz_enabled: bool,
+    /// Mirror favorites to Last.fm Loved Tracks. Independent of `lastfm_enabled`
+    /// (loving isn't scrobbling) and of the `ListenBrainz` love toggle. Default
+    /// `false` — opt-in.
+    pub lastfm_love_enabled: bool,
+    /// Mirror favorites to `ListenBrainz` recording feedback. Independent of
+    /// `listenbrainz_enabled` and of the Last.fm love toggle. Default `false`.
+    pub listenbrainz_love_enabled: bool,
+    /// Auto-tag scanned tracks with their `MusicBrainz` Recording ID (resolved via
+    /// `ListenBrainz`) so loves work on untagged libraries. Writes the id into both
+    /// the DB and the audio file. Default `false` — new behavior, opt-in.
+    pub mbid_auto_tag: bool,
+}
+
 /// Library-management toggles. See `PlaybackFlags` for the substruct rationale.
 ///
 /// `folder_watching_enabled` defaults to `true` — consumer music players
@@ -526,6 +553,8 @@ pub struct SettingsData {
     #[serde(flatten)]
     pub tray: TrayFlags,
     #[serde(flatten)]
+    pub scrobble: ScrobbleFlags,
+    #[serde(flatten)]
     pub library: LibraryFlags,
     #[serde(flatten)]
     pub layout: LayoutFlags,
@@ -566,6 +595,7 @@ impl Default for SettingsData {
             queue: QueueFlags::default(),
             window: WindowFlags::default(),
             tray: TrayFlags::default(),
+            scrobble: ScrobbleFlags::default(),
             library: LibraryFlags::default(),
             layout: LayoutFlags::default(),
             updates: UpdateFlags::default(),

@@ -233,6 +233,7 @@ pub fn install_library_settings_and_friends(
     ui::equalizer::install_equalizer(app, state);
     ui::replaygain::install_replaygain(app, state);
     ui::sleep_timer::install_sleep_timer(app, state);
+    ui::scrobbling_settings::install_scrobbling(app, state);
     let notifications = ui::notifications::install(app);
     ui::file_watching::install(app, state, &notifications);
     ui::updater_settings::install(app, state);
@@ -540,17 +541,48 @@ pub fn install_toast_bridge(
         while let Some(ToastRequest { kind, detail }) = rx.recv().await {
             let Some(ui) = weak.upgrade() else { break };
             let g = ui.global::<Settings>();
-            let title = match kind {
-                ToastKind::PlaybackFailed => g.invoke_toast_playback_error_title(),
-                ToastKind::OperationFailed => g.invoke_toast_operation_failed_title(),
-            };
-            notifications.show(NotificationParams {
-                variant: "error".into(),
-                title,
-                message: detail.into(),
-                action_label: slint::SharedString::default(),
-                action_kind: "error".into(),
-            });
+            match kind {
+                ToastKind::PlaybackFailed | ToastKind::OperationFailed => {
+                    let title = match kind {
+                        ToastKind::PlaybackFailed => g.invoke_toast_playback_error_title(),
+                        _ => g.invoke_toast_operation_failed_title(),
+                    };
+                    notifications.show(NotificationParams {
+                        variant: "error".into(),
+                        title,
+                        message: detail.into(),
+                        action_label: slint::SharedString::default(),
+                        action_kind: "error".into(),
+                    });
+                }
+                // Informational result of a user-triggered MBID sweep — transient,
+                // so it auto-dismisses rather than sticking like a failure.
+                ToastKind::MbidTagging => {
+                    notifications.show_auto_dismiss(
+                        NotificationParams {
+                            variant: "info".into(),
+                            title: g.invoke_toast_mbid_title(),
+                            message: detail.into(),
+                            action_label: slint::SharedString::default(),
+                            action_kind: "info".into(),
+                        },
+                        6000,
+                    );
+                }
+                // Informational result of a retroactive loved-tracks backfill.
+                ToastKind::LoveSync => {
+                    notifications.show_auto_dismiss(
+                        NotificationParams {
+                            variant: "info".into(),
+                            title: g.invoke_toast_love_sync_title(),
+                            message: detail.into(),
+                            action_label: slint::SharedString::default(),
+                            action_kind: "info".into(),
+                        },
+                        6000,
+                    );
+                }
+            }
         }
     }))
     .map(|_| ())

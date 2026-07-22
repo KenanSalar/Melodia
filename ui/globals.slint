@@ -253,6 +253,47 @@ export global ReplayGain {
     callback commit-preamp(float /*dB*/);
 }
 
+// ScrobbleUi: drives the two scrobble login dialogs
+// (`Dialog.kind == "scrobble-lastfm-login"` / `"scrobble-listenbrainz-login"`).
+// State is owned by Rust (`src/ui/scrobbling_settings.rs`); the section resets it
+// to defaults just before opening a dialog. Last.fm is a two-step browser auth:
+// `lastfm-step` 0 → `lastfm-open-auth()` fetches an unauthorized token, opens the
+// approval page, stashes the token in `lastfm-token` and advances to step 1; step
+// 1 → `lastfm-finish(token)` exchanges it for a session. ListenBrainz is one step:
+// `listenbrainz-verify(token)` validates the pasted token. `busy` gates the
+// buttons while a request is in flight; `error` carries a localized failure line
+// shown inline (Rust sets it via the `err-*` `@tr` callbacks — Slint 1.16 has no
+// Rust-callable `tr()`).
+export global ScrobbleUi {
+    in-out property <int> lastfm-step;      // 0 = open browser, 1 = finish
+    in-out property <string> lastfm-token;  // unauthorized token between steps
+    in-out property <string> lb-token;      // ListenBrainz token input
+    in-out property <bool> busy;
+    in-out property <string> error;
+
+    callback lastfm-open-auth();
+    callback lastfm-finish(string /*token*/);
+    callback listenbrainz-verify(string /*token*/);
+
+    // Localized inline-error strings, resolved in the active locale at call time.
+    pure callback err-invalid-token() -> string;
+    err-invalid-token => {
+        return @tr("That token wasn't accepted. Check it and try again.");
+    }
+    pure callback err-network() -> string;
+    err-network => {
+        return @tr("Couldn't reach the service. Check your connection and try again.");
+    }
+    pure callback err-not-authorized() -> string;
+    err-not-authorized => {
+        return @tr("Not approved yet. Approve Melodia in your browser, then click Finish.");
+    }
+    pure callback err-save-failed() -> string;
+    err-save-failed => {
+        return @tr("Couldn't save your credentials.");
+    }
+}
+
 // TagEditor: drives the Edit-Track-Information dialog
 // (`Dialog.kind == "edit-tags"`), opened from a track row's context menu for
 // one *or many* selected rows. State is Rust-owned
@@ -1286,6 +1327,18 @@ export global Dialog {
             // Rust diffs the form against the populate-time snapshot, builds a
             // `TagEdit`, and writes the tags (a no-op commit is short-circuited).
             TagEditor.commit();
+        } else if (root.kind == "scrobble-listenbrainz-login") {
+            // Validate the pasted token. The dialog stays open (dialog.slint
+            // suppresses the auto-close for this kind); Rust closes it on success.
+            ScrobbleUi.listenbrainz-verify(ScrobbleUi.lb-token);
+        } else if (root.kind == "scrobble-lastfm-login") {
+            // Two-step: step 0 opens the browser approval page, step 1 finishes
+            // the session exchange. The dialog stays open across both.
+            if (ScrobbleUi.lastfm-step == 0) {
+                ScrobbleUi.lastfm-open-auth();
+            } else {
+                ScrobbleUi.lastfm-finish(ScrobbleUi.lastfm-token);
+            }
         }
     }
     cancelled => { }

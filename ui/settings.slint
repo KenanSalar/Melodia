@@ -173,6 +173,39 @@ export global Settings {
     in-out property <bool> crossfade-fade-on-pause: false;
     callback crossfade-fade-on-pause-changed(bool);
 
+    // Scrobbling (`ui/views/settings/scrobbling-section.slint`). Rust owns every
+    // property here: the `connected`/`username`/`enabled` values are painted by
+    // the `ScrobbleService` status-watch subscriber in
+    // `src/ui/scrobbling_settings.rs` (the single writer), and the toggles route
+    // their `-changed(bool)` events back to persist + shadow-refresh. `-connect`
+    // is opened inline from the section markup (not a callback) to avoid Slint's
+    // recursion guard; `-disconnect` clears the stored credential. `configured`
+    // reflects whether this build shipped Last.fm app keys — false ⇒ the section
+    // shows "Not configured in this build" with no Connect button.
+    in property <bool> scrobble-lastfm-configured;
+    in property <bool> scrobble-lastfm-connected;
+    in property <string> scrobble-lastfm-username;
+    in-out property <bool> scrobble-lastfm-enabled;
+    callback scrobble-lastfm-enabled-changed(bool);
+    callback scrobble-lastfm-disconnect();
+    // Mirror favorites to Last.fm Loved Tracks — independent of the two.
+    in-out property <bool> scrobble-lastfm-love;
+    callback scrobble-lastfm-love-changed(bool);
+    in property <bool> scrobble-listenbrainz-connected;
+    in property <string> scrobble-listenbrainz-username;
+    in-out property <bool> scrobble-listenbrainz-enabled;
+    callback scrobble-listenbrainz-enabled-changed(bool);
+    callback scrobble-listenbrainz-disconnect();
+    // Mirror favorites to ListenBrainz recording feedback.
+    in-out property <bool> scrobble-listenbrainz-love;
+    callback scrobble-listenbrainz-love-changed(bool);
+    // Auto-tag scanned tracks with their MusicBrainz Recording ID (via
+    // ListenBrainz) so loves work on untagged libraries. The manual button
+    // forces a re-sweep of tracks still missing an id.
+    in-out property <bool> scrobble-mbid-auto-tag;
+    callback scrobble-mbid-auto-tag-changed(bool);
+    callback scrobble-lookup-missing-mbids();
+
     // Watch for file changes (file-watcher) toggle. ToggleSwitch in
     // `ui/views/settings/file-watching-section.slint` binds two-way; the
     // `toggled(bool)` event fires `watch-for-file-changes-changed`. Rust
@@ -435,6 +468,14 @@ export global Settings {
     pure callback toast-operation-failed-title() -> string;
     toast-operation-failed-title => {
         return @tr("Something went wrong");
+    }
+    pure callback toast-mbid-title() -> string;
+    toast-mbid-title => {
+        return @tr("MusicBrainz IDs");
+    }
+    pure callback toast-love-sync-title() -> string;
+    toast-love-sync-title => {
+        return @tr("Loved tracks");
     }
 
     // Add-to-Playlist multi-select commit toast (track row context menu →

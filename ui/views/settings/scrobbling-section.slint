@@ -1,0 +1,203 @@
+import { Settings } from "../../settings.slint";
+import { Theme } from "../../theme.slint";
+import { Dialog, ScrobbleUi } from "../../globals.slint";
+import { SectionCard } from "../../components/settings/section-card.slint";
+import { SectionDivider } from "../../components/settings/section-divider.slint";
+import { SettingRow } from "../../components/settings/setting-row.slint";
+import { ToggleSwitch } from "../../components/settings/toggle-switch.slint";
+import { SectionButton } from "../../components/settings/section-button.slint";
+
+// Scrobbling section: per-service status + Connect/Disconnect, an enable toggle
+// that only mounts once the service is connected, and a "Sync loved tracks"
+// toggle (Last.fm-primary, so gated on the Last.fm connection). Rust owns every
+// `Settings.scrobble-*` value; the status props are painted by the
+// `ScrobbleService` status-watch subscriber in `src/ui/scrobbling_settings.rs`.
+// Connect opens its login dialog inline here (the tray-toggle pattern) rather
+// than through a Rust callback, so the `@tr` chrome stays in Slint and we dodge
+// Slint's "recursion detected" guard on a Rust-driven `Dialog.open`.
+// Search visibility — see header comment in `playback-section.slint`.
+export component ScrobblingSection inherits Rectangle {
+    background: transparent;
+    horizontal-stretch: 1;
+    vertical-stretch: 0;
+
+    in property <string> query: Settings.search-query;
+
+    pure function row-visible(label: string, desc: string) -> bool {
+        return root.query == ""
+            || Settings.matches(@tr("Scrobbling"), root.query)
+            || Settings.matches(label + " " + desc, root.query);
+    }
+
+    // One cluster per service; the enable- and love-toggle labels are folded into
+    // the status row's search text so matching "scrobble" or "loved" reveals the
+    // whole cluster (the per-provider love toggle lives inside its cluster).
+    property <bool> show-lastfm: row-visible(
+        @tr("Last.fm") + " " + @tr("Scrobble to Last.fm") + " " + @tr("Sync loved tracks to Last.fm"),
+        @tr("Report each play to your Last.fm account"));
+    property <bool> show-listenbrainz: row-visible(
+        @tr("ListenBrainz") + " " + @tr("Scrobble to ListenBrainz") + " " + @tr("Sync loved tracks to ListenBrainz"),
+        @tr("Report each play to your ListenBrainz account"));
+    // MusicBrainz auto-tagging is ListenBrainz-driven (its token resolves the ids).
+    property <bool> show-mbid: Settings.scrobble-listenbrainz-connected && row-visible(
+        @tr("Add MusicBrainz IDs to your music"),
+        @tr("Look up and tag files so loves work on ListenBrainz"));
+
+    out property <bool> has-matches: show-lastfm || show-listenbrainz || show-mbid;
+
+    VerticalLayout {
+    if has-matches: SectionCard {
+        title: @tr("Scrobbling");
+
+        // ---- Last.fm ----
+        if root.show-lastfm: SettingRow {
+            icon: "history";
+            label: @tr("Last.fm");
+            description: Settings.scrobble-lastfm-connected
+                ? @tr("Connected as {}", Settings.scrobble-lastfm-username)
+                : (Settings.scrobble-lastfm-configured
+                    ? @tr("Not connected")
+                    : @tr("Not configured in this build"));
+
+            if Settings.scrobble-lastfm-configured && !Settings.scrobble-lastfm-connected: SectionButton {
+                label: @tr("Connect");
+                icon: "";
+                primary: true;
+                clicked => {
+                    ScrobbleUi.lastfm-step = 0;
+                    ScrobbleUi.lastfm-token = "";
+                    ScrobbleUi.busy = false;
+                    ScrobbleUi.error = "";
+                    Dialog.kind = "scrobble-lastfm-login";
+                    Dialog.title = @tr("Connect Last.fm");
+                    Dialog.message = "";
+                    Dialog.confirm-label = @tr("Open Last.fm");
+                    Dialog.cancel-label = @tr("Cancel");
+                    Dialog.destructive = false;
+                    Dialog.open = true;
+                }
+            }
+            if Settings.scrobble-lastfm-connected: SectionButton {
+                label: @tr("Disconnect");
+                icon: "";
+                primary: false;
+                clicked => { Settings.scrobble-lastfm-disconnect(); }
+            }
+        }
+
+        if root.show-lastfm && Settings.scrobble-lastfm-connected: SettingRow {
+            icon: "upload";
+            label: @tr("Scrobble to Last.fm");
+            description: @tr("Report each play to your Last.fm account");
+            ToggleSwitch {
+                checked <=> Settings.scrobble-lastfm-enabled;
+                toggled(v) => { Settings.scrobble-lastfm-enabled-changed(v); }
+            }
+        }
+
+        if root.show-lastfm && Settings.scrobble-lastfm-connected: SettingRow {
+            icon: "favorite";
+            label: @tr("Sync loved tracks to Last.fm");
+            description: @tr("Mark tracks you love as loved on Last.fm — turning this on syncs your existing favorites");
+            ToggleSwitch {
+                checked <=> Settings.scrobble-lastfm-love;
+                toggled(v) => { Settings.scrobble-lastfm-love-changed(v); }
+            }
+        }
+
+        if root.show-lastfm && root.show-listenbrainz: SectionDivider {}
+
+        // ---- ListenBrainz ----
+        if root.show-listenbrainz: SettingRow {
+            icon: "history";
+            label: @tr("ListenBrainz");
+            description: Settings.scrobble-listenbrainz-connected
+                ? @tr("Connected as {}", Settings.scrobble-listenbrainz-username)
+                : @tr("Not connected");
+
+            if !Settings.scrobble-listenbrainz-connected: SectionButton {
+                label: @tr("Connect");
+                icon: "";
+                primary: true;
+                clicked => {
+                    ScrobbleUi.lb-token = "";
+                    ScrobbleUi.busy = false;
+                    ScrobbleUi.error = "";
+                    Dialog.kind = "scrobble-listenbrainz-login";
+                    Dialog.title = @tr("Connect ListenBrainz");
+                    Dialog.message = "";
+                    Dialog.confirm-label = @tr("Connect");
+                    Dialog.cancel-label = @tr("Cancel");
+                    Dialog.destructive = false;
+                    Dialog.open = true;
+                }
+            }
+            if Settings.scrobble-listenbrainz-connected: SectionButton {
+                label: @tr("Disconnect");
+                icon: "";
+                primary: false;
+                clicked => { Settings.scrobble-listenbrainz-disconnect(); }
+            }
+        }
+
+        if root.show-listenbrainz && Settings.scrobble-listenbrainz-connected: SettingRow {
+            icon: "upload";
+            label: @tr("Scrobble to ListenBrainz");
+            description: @tr("Report each play to your ListenBrainz account");
+            ToggleSwitch {
+                checked <=> Settings.scrobble-listenbrainz-enabled;
+                toggled(v) => { Settings.scrobble-listenbrainz-enabled-changed(v); }
+            }
+        }
+
+        if root.show-listenbrainz && Settings.scrobble-listenbrainz-connected: SettingRow {
+            icon: "favorite";
+            label: @tr("Sync loved tracks to ListenBrainz");
+            description: @tr("Mark tracks you love as loved on ListenBrainz — turning this on syncs your existing favorites (needs MusicBrainz IDs)");
+            ToggleSwitch {
+                checked <=> Settings.scrobble-listenbrainz-love;
+                toggled(v) => { Settings.scrobble-listenbrainz-love-changed(v); }
+            }
+        }
+
+        // ---- MusicBrainz auto-tagging (ListenBrainz-driven, part of the LB cluster) ----
+        if root.show-mbid: SettingRow {
+            icon: "auto_awesome";
+            label: @tr("Add MusicBrainz IDs to your music");
+            description: @tr("Look up and tag files so loves work on ListenBrainz");
+            ToggleSwitch {
+                checked <=> Settings.scrobble-mbid-auto-tag;
+                toggled(v) => { Settings.scrobble-mbid-auto-tag-changed(v); }
+            }
+        }
+        // When-to-use note: this feature reads existing tags, so it only helps
+        // already-tidy libraries; Picard (audio fingerprint) is for messy ones.
+        // `max-width` caps the wrapping text into a reading column so it doesn't
+        // inflate the section card's width (same idiom as SettingRow's
+        // `description-max-width`).
+        if root.show-mbid: HorizontalLayout {
+            padding-left: Theme.pad-lg;
+            padding-right: Theme.pad-lg;
+            padding-bottom: Theme.pad-sm;
+            Text {
+                text: @tr("Best for files that already have correct artist and title tags. For loosely-tagged music (e.g. songs downloaded from YouTube), use MusicBrainz Picard instead — it identifies tracks by their audio, not their tags.");
+                color: Theme.subtext0;
+                font-size: Theme.font-size-sm;
+                wrap: word-wrap;
+                max-width: 480px;
+            }
+        }
+        if root.show-mbid && Settings.scrobble-mbid-auto-tag: SettingRow {
+            icon: "search";
+            label: @tr("Look up missing IDs");
+            description: @tr("Re-scan tracks that still have no MusicBrainz ID");
+            SectionButton {
+                label: @tr("Look up");
+                icon: "";
+                primary: false;
+                clicked => { Settings.scrobble-lookup-missing-mbids(); }
+            }
+        }
+    }
+    }
+}

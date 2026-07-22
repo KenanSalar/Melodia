@@ -358,6 +358,39 @@ pub fn track_tag_edit_columns() -> &'static str {
     CACHED.get_or_init(|| TRACK_TAG_EDIT_COLUMNS.join(", "))
 }
 
+/// The metadata a scrobble needs, projected straight off `tracks` at track
+/// start (Phase 2 detector). Every field is a native column (artist/album are
+/// denormalized text), so the fetch needs no joins. `title` is the track name;
+/// the two `musicbrainz_*` ids map to a `ScrobbleTrack`'s recording/release
+/// MBIDs. `ScrobbleTrack::from_row` does the conversion.
+#[derive(Clone, Debug, PartialEq, FromRow, Serialize, Deserialize)]
+pub struct ScrobbleRow {
+    pub id: i64,
+    pub title: String,
+    pub artist: Option<String>,
+    pub album: Option<String>,
+    pub album_artist: Option<String>,
+    pub duration_ms: i64,
+    pub track_number: Option<i32>,
+    pub musicbrainz_track_id: Option<String>,
+    pub musicbrainz_release_id: Option<String>,
+}
+
+/// Explicit SELECT columns for `ScrobbleRow` queries, in field order for
+/// legibility (sqlx `FromRow` matches by name, so order isn't load-bearing).
+pub const SCROBBLE_ROW_COLUMNS: &[&str] = &[
+    "id", "title", "artist", "album", "album_artist", "duration_ms", "track_number",
+    "musicbrainz_track_id", "musicbrainz_release_id",
+];
+
+/// Comma-separated form of `SCROBBLE_ROW_COLUMNS` for direct `SELECT` usage,
+/// built once and reused (same `OnceLock` pattern as `track_summary_columns`).
+pub fn scrobble_row_columns() -> &'static str {
+    use std::sync::OnceLock;
+    static CACHED: OnceLock<String> = OnceLock::new();
+    CACHED.get_or_init(|| SCROBBLE_ROW_COLUMNS.join(", "))
+}
+
 /// Full database entity: every column on the `tracks` table including
 /// playback stats, hashes, and per-track `ReplayGain`. Use this when you need
 /// the complete row (track-detail page, scan-time updates, hash backfill);

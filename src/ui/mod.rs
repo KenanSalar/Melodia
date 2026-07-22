@@ -32,6 +32,7 @@ pub mod playback_settings;
 pub mod playlists;
 pub mod queue_sheet;
 pub mod recently_played;
+pub mod scrobbling_settings;
 pub mod search;
 pub mod section_state;
 pub mod settings_bind;

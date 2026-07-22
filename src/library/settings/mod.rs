@@ -24,6 +24,7 @@ pub mod equalizer;
 pub mod folders;
 pub mod playback;
 pub mod replaygain;
+pub mod scrobble;
 pub mod updates;
 pub mod view;
 
@@ -38,6 +39,11 @@ pub use equalizer::{set_eq_band_gains_and_preset, set_eq_enabled, set_eq_preamp}
 pub use replaygain::{
     set_replaygain_enabled, set_replaygain_mode, set_replaygain_preamp,
     set_replaygain_prevent_clipping,
+};
+pub use scrobble::{
+    set_scrobble_lastfm_enabled, set_scrobble_lastfm_love_enabled,
+    set_scrobble_listenbrainz_enabled, set_scrobble_listenbrainz_love_enabled,
+    set_scrobble_mbid_auto_tag,
 };
 pub use folders::{
     add_folder, get_folders, reconcile_watched_folders, remove_folder, scan_folder,
