@@ -206,10 +206,12 @@ cargo test                                      # run tests
 > — a key + shared secret that identify the *app*, not any account. They're read
 > at compile time from the `LASTFM_API_KEY` / `LASTFM_SHARED_SECRET` environment
 > variables (`option_env!`), so nothing secret lives in the repo. Official
-> releases inject them as CI secrets. A build without them is fully functional —
-> **ListenBrainz** still works and the Last.fm **Connect** button reports "not
-> configured in this build". ListenBrainz needs no such setup (each user pastes
-> their own token).
+> releases inject them as CI secrets. For local development, copy `.env.example`
+> to `.env` (gitignored) and paste your keys — `build.rs` bakes them into the
+> compile automatically, no exporting needed. A build without them is fully
+> functional — **ListenBrainz** still works and the Last.fm **Connect** button
+> reports "not configured in this build". ListenBrainz needs no such setup (each
+> user pastes their own token).
 
 > **Tip — cleaning up a loosely-tagged library.**
 > The optional MusicBrainz auto-tagging (Settings → Scrobbling → *Add MusicBrainz
