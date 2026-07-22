@@ -57,6 +57,32 @@ impl LoveItem {
     }
 }
 
+/// Set-only access to a queued entry's per-provider "still needs submitting"
+/// flags, so one generic writeback can clear them on either sub-queue
+/// (`items` or `loves`) without duplicating the walk per entry type.
+pub(crate) trait ProviderFlags {
+    fn set_lastfm_remaining(&mut self, remaining: bool);
+    fn set_listenbrainz_remaining(&mut self, remaining: bool);
+}
+
+impl ProviderFlags for QueuedItem {
+    fn set_lastfm_remaining(&mut self, remaining: bool) {
+        self.lastfm_remaining = remaining;
+    }
+    fn set_listenbrainz_remaining(&mut self, remaining: bool) {
+        self.listenbrainz_remaining = remaining;
+    }
+}
+
+impl ProviderFlags for LoveItem {
+    fn set_lastfm_remaining(&mut self, remaining: bool) {
+        self.lastfm_remaining = remaining;
+    }
+    fn set_listenbrainz_remaining(&mut self, remaining: bool) {
+        self.listenbrainz_remaining = remaining;
+    }
+}
+
 /// FIFO of pending scrobbles and loves, oldest at the front. Serialized as-is to
 /// `scrobble_queue.json`.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]

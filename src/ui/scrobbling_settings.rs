@@ -19,6 +19,7 @@
 use async_compat::Compat;
 use slint::{ComponentHandle, SharedString};
 
+use crate::error::AppError;
 use crate::library;
 use crate::services::scrobble::providers::{lastfm, listenbrainz};
 use crate::services::scrobble::{
@@ -73,6 +74,86 @@ fn spawn_love_backfill(state: &AppState, target: LoveTarget) {
     });
 }
 
+/// Build the change-handler for one scrobble enable/love toggle: flip that field
+/// in a fresh flags snapshot, apply it to the shadow synchronously (so the
+/// detector/submitter see it at once), run the optional on-enable side-effect,
+/// then persist. Sibling of [`crate::ui::settings_bind::toggle_binding`] — that
+/// one applies to the Rodio backend, this one to the whole-struct `set_flags`.
+fn scrobble_toggle_binding(
+    state: &AppState,
+    label: &'static str,
+    set_field: fn(&mut ScrobbleFlags, bool),
+    persist: fn(&AppState, bool) -> Result<(), AppError>,
+    on_enable: Option<fn(&AppState)>,
+) -> impl FnMut(bool) + 'static {
+    let state = state.clone();
+    move |on| {
+        let mut flags = current_flags(&state.scrobble);
+        set_field(&mut flags, on);
+        state.scrobble.set_flags(flags);
+        if on && let Some(effect) = on_enable {
+            effect(&state);
+        }
+        state.persist_blocking(label, move |s| persist(s, on));
+    }
+}
+
+/// Turning on Last.fm love-sync retroactively pushes existing favorites.
+fn enable_lastfm_love(state: &AppState) {
+    spawn_love_backfill(state, LoveTarget::Lastfm);
+}
+
+/// `ListenBrainz` sibling of [`enable_lastfm_love`].
+fn enable_listenbrainz_love(state: &AppState) {
+    spawn_love_backfill(state, LoveTarget::ListenBrainz);
+}
+
+/// Turning on auto-tagging sweeps the library for missing `MusicBrainz` IDs now.
+fn kick_mbid(state: &AppState) {
+    state.scrobble.kick_mbid_backfill();
+}
+
+/// A disconnect handler: clear the provider's stored credential off the UI thread
+/// (blocking file I/O), toasting on failure. `provider` labels the log + toast;
+/// `disconnect` is the service's credential-clearing setter called with `None`.
+fn spawn_disconnect(
+    state: &AppState,
+    provider: &'static str,
+    disconnect: fn(&ScrobbleService) -> Result<(), AppError>,
+) -> impl Fn() + 'static {
+    let state = state.clone();
+    move || {
+        let rt = state.runtime.clone();
+        let state = state.clone();
+        rt.spawn(async move {
+            if let Err(e) = disconnect(&state.scrobble) {
+                log::warn!("{provider} disconnect: {e}");
+                toast::notify(ToastKind::OperationFailed, format!("{provider}: {e}"));
+            }
+        });
+    }
+}
+
+/// Set the login dialog busy + clear any inline error on entry to a connect flow
+/// (UI thread).
+fn begin_busy(weak: &slint::Weak<AppWindow>) {
+    if let Some(ui) = weak.upgrade() {
+        let su = ui.global::<ScrobbleUi>();
+        su.set_busy(true);
+        su.set_error(SharedString::new());
+    }
+}
+
+/// A connect succeeded: retroactively sync existing favorites to the newly
+/// connected provider, then clear busy + close the dialog on the UI thread.
+fn finish_connected(weak: &slint::Weak<AppWindow>, state: &AppState, target: LoveTarget) {
+    spawn_love_backfill(state, target);
+    let _ = weak.upgrade_in_event_loop(|ui| {
+        ui.global::<ScrobbleUi>().set_busy(false);
+        ui.global::<Dialog>().set_open(false);
+    });
+}
+
 pub fn install_scrobbling(ui: &AppWindow, state: &AppState) {
     ui.global::<Settings>()
         .set_scrobble_lastfm_configured(lastfm::is_configured());
@@ -108,72 +189,44 @@ pub fn install_scrobbling(ui: &AppWindow, state: &AppState) {
 fn wire_enable_toggles(ui: &AppWindow, state: &AppState) {
     let settings = ui.global::<Settings>();
 
-    {
-        let state = state.clone();
-        settings.on_scrobble_lastfm_enabled_changed(move |on| {
-            let mut flags = current_flags(&state.scrobble);
-            flags.lastfm_enabled = on;
-            state.scrobble.set_flags(flags);
-            state.persist_blocking("persist scrobble lastfm_enabled", move |s| {
-                library::settings::set_scrobble_lastfm_enabled(s, on)
-            });
-        });
-    }
-    {
-        let state = state.clone();
-        settings.on_scrobble_listenbrainz_enabled_changed(move |on| {
-            let mut flags = current_flags(&state.scrobble);
-            flags.listenbrainz_enabled = on;
-            state.scrobble.set_flags(flags);
-            state.persist_blocking("persist scrobble listenbrainz_enabled", move |s| {
-                library::settings::set_scrobble_listenbrainz_enabled(s, on)
-            });
-        });
-    }
-    {
-        let state = state.clone();
-        settings.on_scrobble_lastfm_love_changed(move |on| {
-            let mut flags = current_flags(&state.scrobble);
-            flags.lastfm_love_enabled = on;
-            state.scrobble.set_flags(flags);
-            // Turning it on retroactively syncs existing favorites now.
-            if on {
-                spawn_love_backfill(&state, LoveTarget::Lastfm);
-            }
-            state.persist_blocking("persist scrobble lastfm_love", move |s| {
-                library::settings::set_scrobble_lastfm_love_enabled(s, on)
-            });
-        });
-    }
-    {
-        let state = state.clone();
-        settings.on_scrobble_listenbrainz_love_changed(move |on| {
-            let mut flags = current_flags(&state.scrobble);
-            flags.listenbrainz_love_enabled = on;
-            state.scrobble.set_flags(flags);
-            if on {
-                spawn_love_backfill(&state, LoveTarget::ListenBrainz);
-            }
-            state.persist_blocking("persist scrobble listenbrainz_love", move |s| {
-                library::settings::set_scrobble_listenbrainz_love_enabled(s, on)
-            });
-        });
-    }
-    {
-        let state = state.clone();
-        settings.on_scrobble_mbid_auto_tag_changed(move |on| {
-            let mut flags = current_flags(&state.scrobble);
-            flags.mbid_auto_tag = on;
-            state.scrobble.set_flags(flags);
-            // Turning it on sweeps the library now; off just stops future work.
-            if on {
-                state.scrobble.kick_mbid_backfill();
-            }
-            state.persist_blocking("persist scrobble mbid_auto_tag", move |s| {
-                library::settings::set_scrobble_mbid_auto_tag(s, on)
-            });
-        });
-    }
+    settings.on_scrobble_lastfm_enabled_changed(scrobble_toggle_binding(
+        state,
+        "persist scrobble lastfm_enabled",
+        |f, on| f.lastfm_enabled = on,
+        library::settings::set_scrobble_lastfm_enabled,
+        None,
+    ));
+    settings.on_scrobble_listenbrainz_enabled_changed(scrobble_toggle_binding(
+        state,
+        "persist scrobble listenbrainz_enabled",
+        |f, on| f.listenbrainz_enabled = on,
+        library::settings::set_scrobble_listenbrainz_enabled,
+        None,
+    ));
+    // The love toggles additionally sync existing favorites when turned on.
+    settings.on_scrobble_lastfm_love_changed(scrobble_toggle_binding(
+        state,
+        "persist scrobble lastfm_love",
+        |f, on| f.lastfm_love_enabled = on,
+        library::settings::set_scrobble_lastfm_love_enabled,
+        Some(enable_lastfm_love),
+    ));
+    settings.on_scrobble_listenbrainz_love_changed(scrobble_toggle_binding(
+        state,
+        "persist scrobble listenbrainz_love",
+        |f, on| f.listenbrainz_love_enabled = on,
+        library::settings::set_scrobble_listenbrainz_love_enabled,
+        Some(enable_listenbrainz_love),
+    ));
+    // Turning auto-tagging on sweeps the library now; off just stops future work.
+    settings.on_scrobble_mbid_auto_tag_changed(scrobble_toggle_binding(
+        state,
+        "persist scrobble mbid_auto_tag",
+        |f, on| f.mbid_auto_tag = on,
+        library::settings::set_scrobble_mbid_auto_tag,
+        Some(kick_mbid),
+    ));
+
     {
         // Manual "look up missing ids": force a full re-sweep (the task clears its
         // attempted-set on a kick), useful after connecting LB or importing.
@@ -190,32 +243,12 @@ fn wire_enable_toggles(ui: &AppWindow, state: &AppState) {
 fn wire_disconnect(ui: &AppWindow, state: &AppState) {
     let settings = ui.global::<Settings>();
 
-    {
-        let state = state.clone();
-        settings.on_scrobble_lastfm_disconnect(move || {
-            let rt = state.runtime.clone();
-            let state = state.clone();
-            rt.spawn(async move {
-                if let Err(e) = state.scrobble.set_lastfm_credentials(None) {
-                    log::warn!("Last.fm disconnect: {e}");
-                    toast::notify(ToastKind::OperationFailed, format!("Last.fm: {e}"));
-                }
-            });
-        });
-    }
-    {
-        let state = state.clone();
-        settings.on_scrobble_listenbrainz_disconnect(move || {
-            let rt = state.runtime.clone();
-            let state = state.clone();
-            rt.spawn(async move {
-                if let Err(e) = state.scrobble.set_listenbrainz_credentials(None) {
-                    log::warn!("ListenBrainz disconnect: {e}");
-                    toast::notify(ToastKind::OperationFailed, format!("ListenBrainz: {e}"));
-                }
-            });
-        });
-    }
+    settings.on_scrobble_lastfm_disconnect(spawn_disconnect(state, "Last.fm", |s| {
+        s.set_lastfm_credentials(None)
+    }));
+    settings.on_scrobble_listenbrainz_disconnect(spawn_disconnect(state, "ListenBrainz", |s| {
+        s.set_listenbrainz_credentials(None)
+    }));
 }
 
 /// The three login callbacks on `ScrobbleUi`. Each sets `busy` on entry (UI
@@ -235,11 +268,7 @@ fn wire_login_flows(ui: &AppWindow, state: &AppState) {
             if token.is_empty() {
                 return;
             }
-            if let Some(ui) = weak.upgrade() {
-                let su = ui.global::<ScrobbleUi>();
-                su.set_busy(true);
-                su.set_error(SharedString::new());
-            }
+            begin_busy(&weak);
             let rt = state.runtime.clone();
             let state = state.clone();
             let weak = weak.clone();
@@ -251,14 +280,7 @@ fn wire_login_flows(ui: &AppWindow, state: &AppState) {
                             username: v.user_name.unwrap_or_default(),
                         };
                         match state.scrobble.set_listenbrainz_credentials(Some(credentials)) {
-                            Ok(()) => {
-                                // Connected with love-sync already on → sync existing favorites.
-                                spawn_love_backfill(&state, LoveTarget::ListenBrainz);
-                                let _ = weak.upgrade_in_event_loop(|ui| {
-                                    ui.global::<ScrobbleUi>().set_busy(false);
-                                    ui.global::<Dialog>().set_open(false);
-                                });
-                            }
+                            Ok(()) => finish_connected(&weak, &state, LoveTarget::ListenBrainz),
                             Err(e) => save_failed(&weak, "ListenBrainz", &e),
                         }
                     }
@@ -285,11 +307,7 @@ fn wire_login_flows(ui: &AppWindow, state: &AppState) {
             else {
                 return;
             };
-            if let Some(ui) = weak.upgrade() {
-                let su = ui.global::<ScrobbleUi>();
-                su.set_busy(true);
-                su.set_error(SharedString::new());
-            }
+            begin_busy(&weak);
             let rt = state.runtime.clone();
             let state = state.clone();
             let weak = weak.clone();
@@ -330,11 +348,7 @@ fn wire_login_flows(ui: &AppWindow, state: &AppState) {
             if token.is_empty() {
                 return;
             }
-            if let Some(ui) = weak.upgrade() {
-                let su = ui.global::<ScrobbleUi>();
-                su.set_busy(true);
-                su.set_error(SharedString::new());
-            }
+            begin_busy(&weak);
             let rt = state.runtime.clone();
             let state = state.clone();
             let weak = weak.clone();
@@ -342,14 +356,7 @@ fn wire_login_flows(ui: &AppWindow, state: &AppState) {
                 match lastfm::get_session(state.http_client(), api_key, secret, &token).await {
                     Ok(credentials) => match state.scrobble.set_lastfm_credentials(Some(credentials))
                     {
-                        Ok(()) => {
-                            // Connected with love-sync already on → sync existing favorites.
-                            spawn_love_backfill(&state, LoveTarget::Lastfm);
-                            let _ = weak.upgrade_in_event_loop(|ui| {
-                                ui.global::<ScrobbleUi>().set_busy(false);
-                                ui.global::<Dialog>().set_open(false);
-                            });
-                        }
+                        Ok(()) => finish_connected(&weak, &state, LoveTarget::Lastfm),
                         Err(e) => save_failed(&weak, "Last.fm", &e),
                     },
                     // Usually "not approved yet" — surface inline, keep the

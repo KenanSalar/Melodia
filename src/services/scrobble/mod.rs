@@ -13,13 +13,16 @@ pub mod model;
 pub mod providers;
 pub mod queue;
 
+mod status;
+mod submit;
+
 pub use credentials::{LastfmCredentials, ListenBrainzCredentials, ScrobbleCredentials};
 pub use model::{ScrobbleTrack, scrobble_threshold_ms};
 pub use queue::{LoveItem, QueuedItem, ScrobbleQueue};
+pub use status::{LoveTarget, ProviderStatus, ScrobbleStatus};
 
 use std::path::PathBuf;
 use std::sync::{Arc, OnceLock};
-use std::time::Duration;
 
 use parking_lot::{Mutex, RwLock};
 use reqwest::Client;
@@ -30,16 +33,9 @@ use crate::entities::track::ScrobbleRow;
 use crate::error::AppResult;
 use crate::services::build_http_client;
 use crate::services::settings::ScrobbleFlags;
-use providers::lastfm::{self, LastfmError};
-use providers::listenbrainz::{self, ListenBrainzError};
-
-/// Provider cap on listens per submission POST (Last.fm's limit; we share it for
-/// `ListenBrainz` too, which permits more).
-const SCROBBLE_BATCH_MAX: usize = 50;
-
-/// Retry delay for a `ListenBrainz` rate limit that arrived without a
-/// `X-RateLimit-Reset-In` header to honor.
-const DEFAULT_RATE_LIMIT_BACKOFF_SECS: u64 = 30;
+use providers::lastfm;
+use providers::listenbrainz;
+use status::build_status;
 
 /// In-memory shadow of the persisted credentials + enabled flags. Guarded by an
 /// `RwLock` so the (later) detector, submitter, and love-sync can read
@@ -50,30 +46,41 @@ struct ScrobbleRuntime {
     flags: ScrobbleFlags,
 }
 
-/// Connection + enable state for one provider.
-#[derive(Debug, Clone, Default)]
-pub struct ProviderStatus {
-    pub connected: bool,
-    pub username: Option<String>,
-    pub enabled: bool,
-    /// Whether favorites are mirrored to this provider's loved tracks.
-    pub love_enabled: bool,
-}
+impl ScrobbleRuntime {
+    /// Whether Last.fm could be reached right now: this build shipped app keys
+    /// and a session is stored. Named `reachable` (not `connected`) to keep it
+    /// distinct from [`ProviderStatus::connected`], which is creds-only.
+    fn lastfm_reachable(&self) -> bool {
+        lastfm::is_configured() && self.credentials.lastfm.is_some()
+    }
 
-/// A cheap snapshot of scrobble state for seeding the settings UI.
-#[derive(Debug, Clone, Default)]
-pub struct ScrobbleStatus {
-    pub lastfm: ProviderStatus,
-    pub listenbrainz: ProviderStatus,
-    pub mbid_auto_tag: bool,
-}
+    /// Whether `ListenBrainz` could be reached right now (needs no app keys —
+    /// the per-user token is the whole credential).
+    fn listenbrainz_reachable(&self) -> bool {
+        self.credentials.listenbrainz.is_some()
+    }
 
-/// Which provider a retroactive love backfill targets. Provider-scoped so
-/// enabling/connecting one service doesn't re-love the whole library on the other.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum LoveTarget {
-    Lastfm,
-    ListenBrainz,
+    /// Reachable **and** the Last.fm scrobble toggle is on.
+    fn lastfm_scrobble_ready(&self) -> bool {
+        self.lastfm_reachable() && self.flags.lastfm_enabled
+    }
+
+    /// Reachable **and** the `ListenBrainz` scrobble toggle is on.
+    fn listenbrainz_scrobble_ready(&self) -> bool {
+        self.listenbrainz_reachable() && self.flags.listenbrainz_enabled
+    }
+
+    /// Reachable **and** the Last.fm love toggle is on.
+    fn lastfm_love_armed(&self) -> bool {
+        self.lastfm_reachable() && self.flags.lastfm_love_enabled
+    }
+
+    /// Reachable **and** the `ListenBrainz` love toggle is on. Callers that queue
+    /// a love add the per-track `recording_mbid.is_some()` gate themselves (LB
+    /// feedback keys on it).
+    fn listenbrainz_love_armed(&self) -> bool {
+        self.listenbrainz_reachable() && self.flags.listenbrainz_love_enabled
+    }
 }
 
 /// Owns the scrobble credential/enabled shadow and the durable offline queue.
@@ -97,26 +104,6 @@ pub struct ScrobbleService {
     /// *and* the submitter's auto-disconnect (invalid Last.fm session /
     /// `ListenBrainz` token) without polling.
     status_tx: watch::Sender<ScrobbleStatus>,
-}
-
-/// Build a [`ScrobbleStatus`] snapshot from the raw shadow parts. Shared by
-/// `status()` and `init` (which needs it before `Self` exists).
-fn build_status(credentials: &ScrobbleCredentials, flags: &ScrobbleFlags) -> ScrobbleStatus {
-    ScrobbleStatus {
-        lastfm: ProviderStatus {
-            connected: credentials.lastfm.is_some(),
-            username: credentials.lastfm.as_ref().map(|c| c.username.clone()),
-            enabled: flags.lastfm_enabled,
-            love_enabled: flags.lastfm_love_enabled,
-        },
-        listenbrainz: ProviderStatus {
-            connected: credentials.listenbrainz.is_some(),
-            username: credentials.listenbrainz.as_ref().map(|c| c.username.clone()),
-            enabled: flags.listenbrainz_enabled,
-            love_enabled: flags.listenbrainz_love_enabled,
-        },
-        mbid_auto_tag: flags.mbid_auto_tag,
-    }
 }
 
 impl ScrobbleService {
@@ -163,34 +150,35 @@ impl ScrobbleService {
         self.status_tx.send_replace(self.status());
     }
 
-    /// Connect / disconnect Last.fm: update the shadow, publish the status, then
-    /// persist the credential file. Passing `None` disconnects. The status is
-    /// published from the in-memory shadow regardless of the disk write, so a
-    /// failed persist still surfaces the applied state (matching the
+    /// Apply a credential change to the shadow, publish the fresh status, then
+    /// persist the credential file — the shared body of the two public setters.
+    /// The status is published from the in-memory shadow regardless of the disk
+    /// write, so a failed persist still surfaces the applied state (matching the
     /// apply-then-persist convention elsewhere).
-    pub fn set_lastfm_credentials(&self, credentials: Option<LastfmCredentials>) -> AppResult<()> {
+    fn persist_credentials_change(
+        &self,
+        update: impl FnOnce(&mut ScrobbleCredentials),
+    ) -> AppResult<()> {
         let snapshot = {
             let mut runtime = self.runtime.write();
-            runtime.credentials.lastfm = credentials;
+            update(&mut runtime.credentials);
             runtime.credentials.clone()
         };
         self.status_tx.send_replace(self.status());
         credentials::save(&self.creds_path, &snapshot)
     }
 
-    /// Connect / disconnect `ListenBrainz`: update the shadow, publish the
-    /// status, then persist the credential file. Passing `None` disconnects.
+    /// Connect / disconnect Last.fm. Passing `None` disconnects.
+    pub fn set_lastfm_credentials(&self, credentials: Option<LastfmCredentials>) -> AppResult<()> {
+        self.persist_credentials_change(move |creds| creds.lastfm = credentials)
+    }
+
+    /// Connect / disconnect `ListenBrainz`. Passing `None` disconnects.
     pub fn set_listenbrainz_credentials(
         &self,
         credentials: Option<ListenBrainzCredentials>,
     ) -> AppResult<()> {
-        let snapshot = {
-            let mut runtime = self.runtime.write();
-            runtime.credentials.listenbrainz = credentials;
-            runtime.credentials.clone()
-        };
-        self.status_tx.send_replace(self.status());
-        credentials::save(&self.creds_path, &snapshot)
+        self.persist_credentials_change(move |creds| creds.listenbrainz = credentials)
     }
 
     /// The `ListenBrainz` token to use for MBID lookups — `Some` only when
@@ -257,11 +245,7 @@ impl ScrobbleService {
     /// `ListenBrainz` (love on + connected).
     pub fn love_sync_active(&self) -> bool {
         let runtime = self.runtime.read();
-        (runtime.flags.lastfm_love_enabled
-            && lastfm::is_configured()
-            && runtime.credentials.lastfm.is_some())
-            || (runtime.flags.listenbrainz_love_enabled
-                && runtime.credentials.listenbrainz.is_some())
+        runtime.lastfm_love_armed() || runtime.listenbrainz_love_armed()
     }
 
     /// Enrich a DB row into a durable love/unlove and wake the submitter. Sets a
@@ -277,12 +261,8 @@ impl ScrobbleService {
         let (lastfm_remaining, listenbrainz_remaining) = {
             let runtime = self.runtime.read();
             (
-                runtime.flags.lastfm_love_enabled
-                    && lastfm::is_configured()
-                    && runtime.credentials.lastfm.is_some(),
-                runtime.flags.listenbrainz_love_enabled
-                    && runtime.credentials.listenbrainz.is_some()
-                    && track.recording_mbid.is_some(),
+                runtime.lastfm_love_armed(),
+                runtime.listenbrainz_love_armed() && track.recording_mbid.is_some(),
             )
         };
         if !lastfm_remaining && !listenbrainz_remaining {
@@ -303,15 +283,8 @@ impl ScrobbleService {
     pub fn love_target_armed(&self, target: LoveTarget) -> bool {
         let runtime = self.runtime.read();
         match target {
-            LoveTarget::Lastfm => {
-                runtime.flags.lastfm_love_enabled
-                    && lastfm::is_configured()
-                    && runtime.credentials.lastfm.is_some()
-            }
-            LoveTarget::ListenBrainz => {
-                runtime.flags.listenbrainz_love_enabled
-                    && runtime.credentials.listenbrainz.is_some()
-            }
+            LoveTarget::Lastfm => runtime.lastfm_love_armed(),
+            LoveTarget::ListenBrainz => runtime.listenbrainz_love_armed(),
         }
     }
 
@@ -427,10 +400,8 @@ impl ScrobbleService {
         let (lastfm_remaining, listenbrainz_remaining) = {
             let runtime = self.runtime.read();
             (
-                lastfm::is_configured()
-                    && runtime.flags.lastfm_enabled
-                    && runtime.credentials.lastfm.is_some(),
-                runtime.flags.listenbrainz_enabled && runtime.credentials.listenbrainz.is_some(),
+                runtime.lastfm_scrobble_ready(),
+                runtime.listenbrainz_scrobble_ready(),
             )
         };
         if !lastfm_remaining && !listenbrainz_remaining {
@@ -445,349 +416,6 @@ impl ScrobbleService {
         self.notify.notify_one();
         Ok(())
     }
-
-    /// One drain round over both the scrobble and love queues. Returns
-    /// `Some(delay)` when a provider asked to be retried later (transient / rate
-    /// limit); `None` when idle or progress was made. Routine failures stay
-    /// silent (logged), per the no-toast-spam convention.
-    pub async fn submit_pending(&self) -> Option<Duration> {
-        let (has_items, has_loves) = {
-            let queue = self.queue.lock();
-            (!queue.items.is_empty(), !queue.loves.is_empty())
-        };
-        if !has_items && !has_loves {
-            return None;
-        }
-        let mut retry = None;
-        if has_items {
-            retry = merge_opt(retry, self.submit_scrobbles().await);
-        }
-        if has_loves {
-            retry = merge_opt(retry, self.submit_loves().await);
-        }
-        retry
-    }
-
-    /// Drain the scrobble queue: batch each connected + enabled provider (≤
-    /// `SCROBBLE_BATCH_MAX`), POST via the Phase-1 clients, clear the
-    /// per-provider flag on success, drop the flag for a now-disconnected
-    /// provider, then `retain_pending` + persist.
-    async fn submit_scrobbles(&self) -> Option<Duration> {
-        let snapshot: Vec<QueuedItem> = {
-            let queue = self.queue.lock();
-            if queue.items.is_empty() {
-                return None;
-            }
-            queue.items.iter().cloned().collect()
-        };
-
-        // One shadow read; secrets cloned out so no guard is held across a POST.
-        let (lastfm_creds, lastfm_enabled, lb_creds, lb_enabled) = {
-            let runtime = self.runtime.read();
-            (
-                runtime.credentials.lastfm.clone(),
-                runtime.flags.lastfm_enabled,
-                runtime.credentials.listenbrainz.clone(),
-                runtime.flags.listenbrainz_enabled,
-            )
-        };
-
-        let client = self.client();
-        let mut clear_lastfm: Vec<usize> = Vec::new();
-        let mut clear_lb: Vec<usize> = Vec::new();
-        let mut retry_after: Option<Duration> = None;
-
-        // ---- Last.fm ----
-        let lastfm_ready = lastfm::is_configured() && lastfm_enabled && lastfm_creds.is_some();
-        if !lastfm_ready {
-            // Nowhere to send: drop the Last.fm side of every pending item.
-            drop_flags(&snapshot, |it| it.lastfm_remaining, &mut clear_lastfm);
-        } else if let Some(creds) = lastfm_creds.as_ref()
-            && let (Some(api_key), Some(secret)) =
-                (lastfm::LASTFM_API_KEY, lastfm::LASTFM_SHARED_SECRET)
-        {
-            let (batch, idx) = take_batch(&snapshot, |it| it.lastfm_remaining);
-            if !batch.is_empty() {
-                match lastfm::scrobble_batch(&client, api_key, secret, &creds.session_key, &batch)
-                    .await
-                {
-                    Ok(()) => clear_lastfm.extend(idx),
-                    Err(LastfmError::InvalidSession) => {
-                        log::warn!("Last.fm session invalid; disconnecting");
-                        if let Err(e) = self.set_lastfm_credentials(None) {
-                            log::warn!("Failed to persist Last.fm disconnect: {e}");
-                        }
-                        drop_flags(&snapshot, |it| it.lastfm_remaining, &mut clear_lastfm);
-                    }
-                    Err(e) => {
-                        log::info!("Last.fm scrobble deferred: {e}");
-                        retry_after = Some(merge_retry(retry_after, Duration::ZERO));
-                    }
-                }
-            }
-        }
-
-        // ---- ListenBrainz ----
-        let lb_ready = lb_enabled && lb_creds.is_some();
-        if !lb_ready {
-            drop_flags(&snapshot, |it| it.listenbrainz_remaining, &mut clear_lb);
-        } else if let Some(creds) = lb_creds.as_ref() {
-            let (batch, idx) = take_batch(&snapshot, |it| it.listenbrainz_remaining);
-            if !batch.is_empty() {
-                match listenbrainz::submit_listens(&client, &creds.token, &batch).await {
-                    Ok(()) => clear_lb.extend(idx),
-                    Err(ListenBrainzError::InvalidToken) => {
-                        log::warn!("ListenBrainz token invalid; disconnecting");
-                        if let Err(e) = self.set_listenbrainz_credentials(None) {
-                            log::warn!("Failed to persist ListenBrainz disconnect: {e}");
-                        }
-                        drop_flags(&snapshot, |it| it.listenbrainz_remaining, &mut clear_lb);
-                    }
-                    Err(ListenBrainzError::RateLimited { reset_in_secs }) => {
-                        let d = Duration::from_secs(
-                            reset_in_secs.unwrap_or(DEFAULT_RATE_LIMIT_BACKOFF_SECS),
-                        );
-                        log::info!("ListenBrainz rate limited; retrying in {}s", d.as_secs());
-                        retry_after = Some(merge_retry(retry_after, d));
-                    }
-                    Err(e) => {
-                        log::info!("ListenBrainz submit deferred: {e}");
-                        retry_after = Some(merge_retry(retry_after, Duration::ZERO));
-                    }
-                }
-            }
-        }
-
-        self.apply_writeback(&clear_lastfm, &clear_lb);
-        retry_after
-    }
-
-    /// Clear the submitted providers' flags by snapshot index (bounds-checked
-    /// against a rare cap-drop shift — a double-submit is deduped by both
-    /// services), `retain_pending`, and persist only when the queue changed.
-    fn apply_writeback(&self, clear_lastfm: &[usize], clear_lb: &[usize]) {
-        let to_save: Option<ScrobbleQueue> = {
-            let mut queue = self.queue.lock();
-            let before = queue.items.len();
-            for &i in clear_lastfm {
-                if let Some(item) = queue.items.get_mut(i) {
-                    item.lastfm_remaining = false;
-                }
-            }
-            for &i in clear_lb {
-                if let Some(item) = queue.items.get_mut(i) {
-                    item.listenbrainz_remaining = false;
-                }
-            }
-            queue.retain_pending();
-            let changed =
-                !clear_lastfm.is_empty() || !clear_lb.is_empty() || queue.items.len() != before;
-            changed.then(|| queue.clone())
-        };
-        if let Some(snapshot) = to_save
-            && let Err(e) = snapshot.save(&self.queue_path)
-        {
-            log::warn!("Failed to persist scrobble queue after submit: {e}");
-        }
-    }
-
-    /// Drain the love queue: one POST per pending love (Last.fm
-    /// `track.love`/`track.unlove`, `ListenBrainz` recording feedback), clearing
-    /// the per-provider flag on success and auto-disconnecting on rejected auth —
-    /// mirroring `submit_scrobbles`. Reads the shadow fresh so a disconnect from
-    /// the scrobble pass in the same round is honored. Capped per round; the
-    /// submitter loop re-drains while loves remain.
-    async fn submit_loves(&self) -> Option<Duration> {
-        let snapshot: Vec<LoveItem> = {
-            let queue = self.queue.lock();
-            if queue.loves.is_empty() {
-                return None;
-            }
-            queue.loves.iter().cloned().collect()
-        };
-
-        // Loves drain on connection alone — the love toggles (not the scrobble
-        // toggles) gate *enqueuing*, so neither `*_enabled` flag is read here.
-        let (lastfm_creds, lb_creds) = {
-            let runtime = self.runtime.read();
-            (
-                runtime.credentials.lastfm.clone(),
-                runtime.credentials.listenbrainz.clone(),
-            )
-        };
-
-        let client = self.client();
-        let mut clear_lastfm: Vec<usize> = Vec::new();
-        let mut clear_lb: Vec<usize> = Vec::new();
-        let mut retry_after: Option<Duration> = None;
-
-        // ---- Last.fm ----
-        let lastfm_ready = lastfm::is_configured() && lastfm_creds.is_some();
-        if !lastfm_ready {
-            drop_flags(&snapshot, |it| it.lastfm_remaining, &mut clear_lastfm);
-        } else if let Some(creds) = lastfm_creds.as_ref()
-            && let (Some(api_key), Some(secret)) =
-                (lastfm::LASTFM_API_KEY, lastfm::LASTFM_SHARED_SECRET)
-        {
-            for (i, love) in snapshot.iter().enumerate() {
-                if clear_lastfm.len() >= SCROBBLE_BATCH_MAX {
-                    break;
-                }
-                if !love.lastfm_remaining {
-                    continue;
-                }
-                match lastfm::love(
-                    &client,
-                    api_key,
-                    secret,
-                    &creds.session_key,
-                    &love.track,
-                    love.loved,
-                )
-                .await
-                {
-                    Ok(()) => clear_lastfm.push(i),
-                    Err(LastfmError::InvalidSession) => {
-                        log::warn!("Last.fm session invalid; disconnecting");
-                        if let Err(e) = self.set_lastfm_credentials(None) {
-                            log::warn!("Failed to persist Last.fm disconnect: {e}");
-                        }
-                        drop_flags(&snapshot, |it| it.lastfm_remaining, &mut clear_lastfm);
-                        break;
-                    }
-                    Err(e) => {
-                        log::info!("Last.fm love deferred: {e}");
-                        retry_after = Some(merge_retry(retry_after, Duration::ZERO));
-                        break;
-                    }
-                }
-            }
-        }
-
-        // ---- ListenBrainz ----
-        let lb_ready = lb_creds.is_some();
-        if !lb_ready {
-            drop_flags(&snapshot, |it| it.listenbrainz_remaining, &mut clear_lb);
-        } else if let Some(creds) = lb_creds.as_ref() {
-            for (i, love) in snapshot.iter().enumerate() {
-                if clear_lb.len() >= SCROBBLE_BATCH_MAX {
-                    break;
-                }
-                if !love.listenbrainz_remaining {
-                    continue;
-                }
-                let Some(mbid) = love.track.recording_mbid.as_deref() else {
-                    clear_lb.push(i); // no MBID for LB to key on → nothing to do
-                    continue;
-                };
-                match listenbrainz::submit_feedback(&client, &creds.token, mbid, i8::from(love.loved))
-                    .await
-                {
-                    Ok(()) => clear_lb.push(i),
-                    Err(ListenBrainzError::InvalidToken) => {
-                        log::warn!("ListenBrainz token invalid; disconnecting");
-                        if let Err(e) = self.set_listenbrainz_credentials(None) {
-                            log::warn!("Failed to persist ListenBrainz disconnect: {e}");
-                        }
-                        drop_flags(&snapshot, |it| it.listenbrainz_remaining, &mut clear_lb);
-                        break;
-                    }
-                    Err(ListenBrainzError::RateLimited { reset_in_secs }) => {
-                        let d = Duration::from_secs(
-                            reset_in_secs.unwrap_or(DEFAULT_RATE_LIMIT_BACKOFF_SECS),
-                        );
-                        log::info!("ListenBrainz rate limited; retrying in {}s", d.as_secs());
-                        retry_after = Some(merge_retry(retry_after, d));
-                        break;
-                    }
-                    Err(e) => {
-                        log::info!("ListenBrainz feedback deferred: {e}");
-                        retry_after = Some(merge_retry(retry_after, Duration::ZERO));
-                        break;
-                    }
-                }
-            }
-        }
-
-        self.apply_love_writeback(&clear_lastfm, &clear_lb);
-        retry_after
-    }
-
-    /// Clear the submitted providers' love flags by snapshot index,
-    /// `retain_pending`, and persist only when the love queue changed.
-    fn apply_love_writeback(&self, clear_lastfm: &[usize], clear_lb: &[usize]) {
-        let to_save: Option<ScrobbleQueue> = {
-            let mut queue = self.queue.lock();
-            let before = queue.loves.len();
-            for &i in clear_lastfm {
-                if let Some(item) = queue.loves.get_mut(i) {
-                    item.lastfm_remaining = false;
-                }
-            }
-            for &i in clear_lb {
-                if let Some(item) = queue.loves.get_mut(i) {
-                    item.listenbrainz_remaining = false;
-                }
-            }
-            queue.retain_pending();
-            let changed =
-                !clear_lastfm.is_empty() || !clear_lb.is_empty() || queue.loves.len() != before;
-            changed.then(|| queue.clone())
-        };
-        if let Some(snapshot) = to_save
-            && let Err(e) = snapshot.save(&self.queue_path)
-        {
-            log::warn!("Failed to persist scrobble queue after love submit: {e}");
-        }
-    }
-}
-
-/// Fold a requested retry delay into the running maximum, so honoring several
-/// providers means honoring the longest.
-fn merge_retry(current: Option<Duration>, requested: Duration) -> Duration {
-    current.map_or(requested, |c| c.max(requested))
-}
-
-/// Combine two optional retry delays, keeping the longer — the scrobble and love
-/// drains each report one, and the loop honors whichever asks to wait longest.
-fn merge_opt(a: Option<Duration>, b: Option<Duration>) -> Option<Duration> {
-    match (a, b) {
-        (Some(x), Some(y)) => Some(x.max(y)),
-        (some, None) | (None, some) => some,
-    }
-}
-
-/// Collect the snapshot indices whose `flag` predicate holds — the entries to
-/// mark done for a provider that can't be submitted to right now. Generic over
-/// the queued type, shared by the scrobble and love drains.
-fn drop_flags<T>(snapshot: &[T], flag: impl Fn(&T) -> bool, out: &mut Vec<usize>) {
-    out.extend(
-        snapshot
-            .iter()
-            .enumerate()
-            .filter(|(_, it)| flag(it))
-            .map(|(i, _)| i),
-    );
-}
-
-/// Build a `≤ SCROBBLE_BATCH_MAX` batch of `(&track, timestamp)` from the items
-/// whose `flag` is set, returning it alongside their snapshot indices.
-fn take_batch(
-    snapshot: &[QueuedItem],
-    flag: impl Fn(&QueuedItem) -> bool,
-) -> (Vec<(&ScrobbleTrack, i64)>, Vec<usize>) {
-    let mut batch: Vec<(&ScrobbleTrack, i64)> = Vec::new();
-    let mut idx: Vec<usize> = Vec::new();
-    for (i, item) in snapshot.iter().enumerate() {
-        if batch.len() >= SCROBBLE_BATCH_MAX {
-            break;
-        }
-        if flag(item) {
-            batch.push((&item.track, item.timestamp));
-            idx.push(i);
-        }
-    }
-    (batch, idx)
 }
 
 #[cfg(test)]

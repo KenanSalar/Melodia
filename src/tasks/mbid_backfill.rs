@@ -29,11 +29,6 @@ use crate::services::toast::{self, ToastKind};
 use crate::state::AppState;
 use crate::tasks::TaskSpawner;
 
-/// Fallback wait when a 429 gives no `X-RateLimit-Reset-In`.
-const DEFAULT_BACKOFF_SECS: u64 = 30;
-/// Cap on a single rate-limit wait so a misbehaving header can't park the task
-/// for minutes; a longer real window just costs one extra retry.
-const MAX_BACKOFF_SECS: u64 = 300;
 /// Gentle pause between successful batches — `ListenBrainz` is load-sensitive, so
 /// pace lookups rather than sprint into a 429.
 const BATCH_PAUSE: Duration = Duration::from_millis(300);
@@ -219,10 +214,10 @@ async fn backfill(
                 }
             }
             Err(ListenBrainzError::RateLimited { reset_in_secs }) => {
-                let secs = reset_in_secs.unwrap_or(DEFAULT_BACKOFF_SECS).min(MAX_BACKOFF_SECS);
-                log::info!("MBID backfill rate-limited; waiting {secs}s");
+                let backoff = listenbrainz::rate_limit_backoff(reset_in_secs);
+                log::info!("MBID backfill rate-limited; waiting {}s", backoff.as_secs());
                 if shutdown
-                    .run_until_cancelled(tokio::time::sleep(Duration::from_secs(secs)))
+                    .run_until_cancelled(tokio::time::sleep(backoff))
                     .await
                     .is_none()
                 {

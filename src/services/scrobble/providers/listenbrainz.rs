@@ -9,6 +9,8 @@
 //! resets — clock-skew-proof, unlike the epoch `X-RateLimit-Reset`). The
 //! functions stay unwired until Phase 2.
 
+use std::time::Duration;
+
 use serde::{Deserialize, Serialize};
 
 use reqwest::StatusCode;
@@ -265,6 +267,25 @@ fn rate_limit_reset_in(headers: &reqwest::header::HeaderMap) -> Option<u64> {
         .get("X-RateLimit-Reset-In")
         .and_then(|value| value.to_str().ok())
         .and_then(|value| value.parse().ok())
+}
+
+/// Fallback wait when a 429 carries no `X-RateLimit-Reset-In` header to honor.
+const DEFAULT_RATE_LIMIT_BACKOFF_SECS: u64 = 30;
+/// Cap on a single rate-limit wait so a misbehaving header can't park a task for
+/// minutes; a longer real window just costs one extra retry.
+const MAX_RATE_LIMIT_BACKOFF_SECS: u64 = 300;
+
+/// The backoff to honor for a rate-limited (`429`) response: the reported
+/// seconds-until-reset (`X-RateLimit-Reset-In`, already parsed) if present, else
+/// [`DEFAULT_RATE_LIMIT_BACKOFF_SECS`], clamped to [`MAX_RATE_LIMIT_BACKOFF_SECS`].
+/// Shared by the scrobble submitter and the MBID backfill so both honor the same
+/// policy.
+pub fn rate_limit_backoff(reset_in_secs: Option<u64>) -> Duration {
+    Duration::from_secs(
+        reset_in_secs
+            .unwrap_or(DEFAULT_RATE_LIMIT_BACKOFF_SECS)
+            .min(MAX_RATE_LIMIT_BACKOFF_SECS),
+    )
 }
 
 /// A `playing_now` payload: one listen with no `listened_at`.
