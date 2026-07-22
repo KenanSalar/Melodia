@@ -1362,6 +1362,9 @@ msgstr "Αναζήτηση"
 msgid "MusicBrainz IDs"
 msgstr "Αναγνωριστικά MusicBrainz"
 
+msgid "Best for files that already have correct artist and title tags. For loosely-tagged music (e.g. songs downloaded from YouTube), use MusicBrainz Picard instead — it identifies tracks by their audio, not their tags."
+msgstr "Ιδανικό για αρχεία που έχουν ήδη σωστές ετικέτες καλλιτέχνη και τίτλου. Για μουσική με ελλιπείς ετικέτες (π.χ. κομμάτια που κατεβάσατε από το YouTube), χρησιμοποιήστε το MusicBrainz Picard — αναγνωρίζει τα κομμάτια από τον ήχο τους, όχι τις ετικέτες τους."
+
 msgid "Connected as {}"
 msgstr "Συνδεδεμένος ως {}"
 

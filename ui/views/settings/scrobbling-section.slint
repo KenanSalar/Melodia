@@ -169,6 +169,23 @@ export component ScrobblingSection inherits Rectangle {
                 toggled(v) => { Settings.scrobble-mbid-auto-tag-changed(v); }
             }
         }
+        // When-to-use note: this feature reads existing tags, so it only helps
+        // already-tidy libraries; Picard (audio fingerprint) is for messy ones.
+        // `max-width` caps the wrapping text into a reading column so it doesn't
+        // inflate the section card's width (same idiom as SettingRow's
+        // `description-max-width`).
+        if root.show-mbid: HorizontalLayout {
+            padding-left: Theme.pad-lg;
+            padding-right: Theme.pad-lg;
+            padding-bottom: Theme.pad-sm;
+            Text {
+                text: @tr("Best for files that already have correct artist and title tags. For loosely-tagged music (e.g. songs downloaded from YouTube), use MusicBrainz Picard instead — it identifies tracks by their audio, not their tags.");
+                color: Theme.subtext0;
+                font-size: Theme.font-size-sm;
+                wrap: word-wrap;
+                max-width: 480px;
+            }
+        }
         if root.show-mbid && Settings.scrobble-mbid-auto-tag: SettingRow {
             icon: "search";
             label: @tr("Look up missing IDs");

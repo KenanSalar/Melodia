@@ -1363,6 +1363,9 @@ msgstr "Ara"
 msgid "MusicBrainz IDs"
 msgstr "MusicBrainz kimlikleri"
 
+msgid "Best for files that already have correct artist and title tags. For loosely-tagged music (e.g. songs downloaded from YouTube), use MusicBrainz Picard instead — it identifies tracks by their audio, not their tags."
+msgstr "Zaten doğru sanatçı ve başlık etiketlerine sahip dosyalar için idealdir. Gevşek etiketlenmiş müzik için (ör. YouTube'dan indirilen parçalar) bunun yerine MusicBrainz Picard kullanın — parçaları etiketlerinden değil, sesinden tanır."
+
 msgid "Connected as {}"
 msgstr "{} olarak bağlanıldı"
 

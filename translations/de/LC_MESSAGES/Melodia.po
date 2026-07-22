@@ -1369,6 +1369,9 @@ msgstr "Nachschlagen"
 msgid "MusicBrainz IDs"
 msgstr "MusicBrainz-IDs"
 
+msgid "Best for files that already have correct artist and title tags. For loosely-tagged music (e.g. songs downloaded from YouTube), use MusicBrainz Picard instead — it identifies tracks by their audio, not their tags."
+msgstr "Am besten für Dateien, die bereits korrekte Interpreten- und Titel-Tags haben. Für lose getaggte Musik (z. B. von YouTube heruntergeladene Titel) verwende stattdessen MusicBrainz Picard — es erkennt Titel anhand ihres Klangs, nicht ihrer Tags."
+
 msgid "Connected as {}"
 msgstr "Verbunden als {}"
 

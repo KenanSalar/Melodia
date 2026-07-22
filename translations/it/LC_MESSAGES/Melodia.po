@@ -1360,6 +1360,9 @@ msgstr "Cerca"
 msgid "MusicBrainz IDs"
 msgstr "ID MusicBrainz"
 
+msgid "Best for files that already have correct artist and title tags. For loosely-tagged music (e.g. songs downloaded from YouTube), use MusicBrainz Picard instead — it identifies tracks by their audio, not their tags."
+msgstr "Ideale per i file che hanno già tag di artista e titolo corretti. Per musica con tag approssimativi (ad es. brani scaricati da YouTube), usa invece MusicBrainz Picard — identifica i brani dal loro audio, non dai tag."
+
 msgid "Connected as {}"
 msgstr "Connesso come {}"
 
