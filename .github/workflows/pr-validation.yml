@@ -61,6 +61,18 @@ jobs:
     name: test
     runs-on: ubuntu-latest
     needs: [clippy]
+    # Cap build parallelism for the instrumented compile. The ubuntu-24.04
+    # runner runs systemd-oomd, which kills the step's cgroup with SIGTERM
+    # (exit 143) under sustained memory/swap pressure — not the kernel OOM
+    # killer's SIGKILL (137). `cargo llvm-cov` links every test binary with
+    # coverage instrumentation, each statically pulling in the whole crate plus
+    # reqwest/rustls/slint/symphonia, so four such links in parallel spike peak
+    # RSS past the point where oomd fires — which it did consistently once the
+    # scrobbling code grew the crate (and intermittently before). `-j 2` roughly
+    # halves that peak and keeps the run under the ceiling; the cost is a little
+    # wall-clock on the leaf compile/link phase, which the warm cache keeps short.
+    env:
+      CARGO_BUILD_JOBS: 2
     steps:
       - uses: actions/checkout@v5
       - uses: ./.github/actions/linux-system-deps
