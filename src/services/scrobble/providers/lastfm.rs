@@ -58,7 +58,11 @@ pub enum LastfmError {
     /// limit): keep the work queued and back off.
     #[error("Last.fm temporarily unavailable (error {code}): {message}")]
     Transient { code: u32, message: String },
-    /// Any other API-level error code — log and retry a bounded number of times.
+    /// Any other API-level error code. Retried with the submitter's exponential
+    /// backoff; there's no per-item attempt counter, so a genuinely permanent
+    /// code (e.g. 10 invalid API key, 26 suspended) keeps its queue slot until the
+    /// cap evicts it. Kept queued deliberately — a code mis-classified as
+    /// permanent would otherwise silently lose the listen.
     #[error("Last.fm API error {code}: {message}")]
     Api { code: u32, message: String },
     /// Transport or response-decode failure (no reply, malformed JSON, …).

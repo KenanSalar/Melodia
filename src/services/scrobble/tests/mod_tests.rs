@@ -2,7 +2,7 @@ use std::path::Path;
 use std::sync::{Arc, OnceLock};
 
 use super::{
-    LastfmCredentials, ListenBrainzCredentials, LoveTarget, QueuedItem, ScrobbleService,
+    LastfmCredentials, ListenBrainzCredentials, LoveItem, LoveTarget, QueuedItem, ScrobbleService,
     ScrobbleTrack,
 };
 use crate::config::Paths;
@@ -29,6 +29,7 @@ fn paths_in(dir: &Path) -> Paths {
         search_history_path: dir.join("search_history.json"),
         scrobble_credentials_path: dir.join("scrobble_credentials.json"),
         scrobble_queue_path: dir.join("scrobble_queue.json"),
+        scrobble_mbid_state_path: dir.join("scrobble_mbid_attempted.json"),
         artwork_dir: dir.join("artwork"),
         artists_dir: dir.join("artists"),
     }
@@ -65,16 +66,18 @@ fn fresh_service_is_disconnected_and_empty() -> TestResult {
     Ok(())
 }
 
-#[test]
-fn lastfm_credentials_persist_across_reinit() -> TestResult {
+#[tokio::test]
+async fn lastfm_credentials_persist_across_reinit() -> TestResult {
     let dir = tempfile::tempdir()?;
     let paths = paths_in(dir.path());
 
     let service = init_service(&paths, &ScrobbleFlags::default());
-    service.set_lastfm_credentials(Some(LastfmCredentials {
-        session_key: "sk-abc".to_owned(),
-        username: "listener".to_owned(),
-    }))?;
+    service
+        .set_lastfm_credentials(Some(LastfmCredentials {
+            session_key: "sk-abc".to_owned(),
+            username: "listener".to_owned(),
+        }))
+        .await?;
     assert!(service.status().lastfm.connected);
 
     // A fresh service over the same paths must read the persisted credential.
@@ -85,17 +88,19 @@ fn lastfm_credentials_persist_across_reinit() -> TestResult {
     Ok(())
 }
 
-#[test]
-fn disconnect_clears_credential() -> TestResult {
+#[tokio::test]
+async fn disconnect_clears_credential() -> TestResult {
     let dir = tempfile::tempdir()?;
     let paths = paths_in(dir.path());
 
     let service = init_service(&paths, &ScrobbleFlags::default());
-    service.set_lastfm_credentials(Some(LastfmCredentials {
-        session_key: "sk-abc".to_owned(),
-        username: "listener".to_owned(),
-    }))?;
-    service.set_lastfm_credentials(None)?;
+    service
+        .set_lastfm_credentials(Some(LastfmCredentials {
+            session_key: "sk-abc".to_owned(),
+            username: "listener".to_owned(),
+        }))
+        .await?;
+    service.set_lastfm_credentials(None).await?;
     assert!(!service.status().lastfm.connected);
 
     let reloaded = init_service(&paths, &ScrobbleFlags::default());
@@ -103,13 +108,13 @@ fn disconnect_clears_credential() -> TestResult {
     Ok(())
 }
 
-#[test]
-fn pushed_scrobble_persists_across_reinit() -> TestResult {
+#[tokio::test]
+async fn pushed_scrobble_persists_across_reinit() -> TestResult {
     let dir = tempfile::tempdir()?;
     let paths = paths_in(dir.path());
 
     let service = init_service(&paths, &ScrobbleFlags::default());
-    service.push_scrobble(sample_item())?;
+    service.push_scrobble(sample_item()).await?;
     assert_eq!(service.queued_len(), 1);
 
     let reloaded = init_service(&paths, &ScrobbleFlags::default());
@@ -137,8 +142,8 @@ fn set_flags_updates_status() -> TestResult {
     Ok(())
 }
 
-#[test]
-fn status_watch_observes_credential_and_flag_changes() -> TestResult {
+#[tokio::test]
+async fn status_watch_observes_credential_and_flag_changes() -> TestResult {
     let dir = tempfile::tempdir()?;
     let service = init_service(&paths_in(dir.path()), &ScrobbleFlags::default());
 
@@ -147,16 +152,18 @@ fn status_watch_observes_credential_and_flag_changes() -> TestResult {
     assert!(!rx.borrow_and_update().lastfm.connected);
 
     // A connect publishes; the receiver sees the new username.
-    service.set_lastfm_credentials(Some(LastfmCredentials {
-        session_key: "sk-abc".to_owned(),
-        username: "listener".to_owned(),
-    }))?;
+    service
+        .set_lastfm_credentials(Some(LastfmCredentials {
+            session_key: "sk-abc".to_owned(),
+            username: "listener".to_owned(),
+        }))
+        .await?;
     let connected = rx.borrow_and_update().clone();
     assert!(connected.lastfm.connected);
     assert_eq!(connected.lastfm.username.as_deref(), Some("listener"));
 
     // A background-style auto-disconnect (submitter path) publishes too.
-    service.set_lastfm_credentials(None)?;
+    service.set_lastfm_credentials(None).await?;
     assert!(!rx.borrow_and_update().lastfm.connected);
 
     // A flag flip publishes without touching credentials.
@@ -187,7 +194,7 @@ fn scrobble_row(mbid: Option<&str>) -> ScrobbleRow {
 }
 
 /// A service with `ListenBrainz` connected and its love toggle on/off.
-fn lb_love_service(
+async fn lb_love_service(
     paths: &Paths,
     love_sync: bool,
 ) -> Result<ScrobbleService, Box<dyn std::error::Error>> {
@@ -200,20 +207,22 @@ fn lb_love_service(
             ..Default::default()
         },
     );
-    service.set_listenbrainz_credentials(Some(ListenBrainzCredentials {
-        token: "tok".to_owned(),
-        username: "lb-user".to_owned(),
-    }))?;
+    service
+        .set_listenbrainz_credentials(Some(ListenBrainzCredentials {
+            token: "tok".to_owned(),
+            username: "lb-user".to_owned(),
+        }))
+        .await?;
     Ok(service)
 }
 
-#[test]
-fn enqueue_love_queues_listenbrainz_when_mbid_present() -> TestResult {
+#[tokio::test]
+async fn enqueue_love_queues_listenbrainz_when_mbid_present() -> TestResult {
     let dir = tempfile::tempdir()?;
-    let service = lb_love_service(&paths_in(dir.path()), true)?;
+    let service = lb_love_service(&paths_in(dir.path()), true).await?;
     assert!(service.love_sync_active());
 
-    service.enqueue_love(&scrobble_row(Some("mbid-1")), true)?;
+    service.enqueue_love(&scrobble_row(Some("mbid-1")), true).await?;
     assert_eq!(service.queued_len(), 1);
 
     let queue = service.queue.lock();
@@ -225,24 +234,24 @@ fn enqueue_love_queues_listenbrainz_when_mbid_present() -> TestResult {
     Ok(())
 }
 
-#[test]
-fn enqueue_love_skips_listenbrainz_without_mbid() -> TestResult {
+#[tokio::test]
+async fn enqueue_love_skips_listenbrainz_without_mbid() -> TestResult {
     let dir = tempfile::tempdir()?;
-    let service = lb_love_service(&paths_in(dir.path()), true)?;
+    let service = lb_love_service(&paths_in(dir.path()), true).await?;
 
     // No MBID for LB to key on and no Last.fm keys in a test build → nothing queued.
-    service.enqueue_love(&scrobble_row(None), true)?;
+    service.enqueue_love(&scrobble_row(None), true).await?;
     assert_eq!(service.queued_len(), 0);
     Ok(())
 }
 
-#[test]
-fn love_sync_inactive_when_flag_disabled() -> TestResult {
+#[tokio::test]
+async fn love_sync_inactive_when_flag_disabled() -> TestResult {
     let dir = tempfile::tempdir()?;
-    let service = lb_love_service(&paths_in(dir.path()), false)?;
+    let service = lb_love_service(&paths_in(dir.path()), false).await?;
 
     assert!(!service.love_sync_active());
-    service.enqueue_love(&scrobble_row(Some("mbid-1")), true)?;
+    service.enqueue_love(&scrobble_row(Some("mbid-1")), true).await?;
     assert_eq!(service.queued_len(), 0);
     Ok(())
 }
@@ -263,10 +272,10 @@ fn favorite_row(id: i64, title: &str, mbid: Option<&str>) -> ScrobbleRow {
     }
 }
 
-#[test]
-fn backfill_loves_queues_listenbrainz_favorites_with_mbid() -> TestResult {
+#[tokio::test]
+async fn backfill_loves_queues_listenbrainz_favorites_with_mbid() -> TestResult {
     let dir = tempfile::tempdir()?;
-    let service = lb_love_service(&paths_in(dir.path()), true)?;
+    let service = lb_love_service(&paths_in(dir.path()), true).await?;
     assert!(service.love_target_armed(LoveTarget::ListenBrainz));
 
     let rows = [
@@ -275,7 +284,7 @@ fn backfill_loves_queues_listenbrainz_favorites_with_mbid() -> TestResult {
         favorite_row(3, "Song C", Some("mbid-3")),
     ];
     // One batch: only the two MBID-tagged favorites are queued.
-    let queued = service.backfill_loves(&rows, LoveTarget::ListenBrainz)?;
+    let queued = service.backfill_loves(&rows, LoveTarget::ListenBrainz).await?;
     assert_eq!(queued, 2);
     assert_eq!(service.queued_len(), 2);
 
@@ -289,21 +298,22 @@ fn backfill_loves_queues_listenbrainz_favorites_with_mbid() -> TestResult {
     Ok(())
 }
 
-#[test]
-fn backfill_loves_noop_when_target_not_armed() -> TestResult {
+#[tokio::test]
+async fn backfill_loves_noop_when_target_not_armed() -> TestResult {
     let dir = tempfile::tempdir()?;
-    let service = lb_love_service(&paths_in(dir.path()), false)?;
+    let service = lb_love_service(&paths_in(dir.path()), false).await?;
     assert!(!service.love_target_armed(LoveTarget::ListenBrainz));
 
-    let queued =
-        service.backfill_loves(&[favorite_row(1, "Song A", Some("mbid-1"))], LoveTarget::ListenBrainz)?;
+    let queued = service
+        .backfill_loves(&[favorite_row(1, "Song A", Some("mbid-1"))], LoveTarget::ListenBrainz)
+        .await?;
     assert_eq!(queued, 0);
     assert_eq!(service.queued_len(), 0);
     Ok(())
 }
 
-#[test]
-fn backfill_loves_lastfm_unarmed_in_keyless_build() -> TestResult {
+#[tokio::test]
+async fn backfill_loves_lastfm_unarmed_in_keyless_build() -> TestResult {
     // Last.fm love needs compile-time API keys, absent in a test build, so the
     // target is never armed and the backfill is a no-op regardless of the flag.
     let dir = tempfile::tempdir()?;
@@ -315,17 +325,18 @@ fn backfill_loves_lastfm_unarmed_in_keyless_build() -> TestResult {
         },
     );
     assert!(!service.love_target_armed(LoveTarget::Lastfm));
-    let queued =
-        service.backfill_loves(&[favorite_row(1, "Song A", Some("mbid-1"))], LoveTarget::Lastfm)?;
+    let queued = service
+        .backfill_loves(&[favorite_row(1, "Song A", Some("mbid-1"))], LoveTarget::Lastfm)
+        .await?;
     assert_eq!(queued, 0);
     Ok(())
 }
 
-#[test]
-fn enqueue_loves_batches_favorites_under_one_persist() -> TestResult {
+#[tokio::test]
+async fn enqueue_loves_batches_favorites_under_one_persist() -> TestResult {
     let dir = tempfile::tempdir()?;
     let paths = paths_in(dir.path());
-    let service = lb_love_service(&paths, true)?;
+    let service = lb_love_service(&paths, true).await?;
     assert!(service.love_sync_active());
 
     let rows = [
@@ -334,7 +345,7 @@ fn enqueue_loves_batches_favorites_under_one_persist() -> TestResult {
         favorite_row(3, "Song C", Some("mbid-3")),
     ];
     // One lock + one save for the whole selection; only MBID-tagged rows queue.
-    service.enqueue_loves(&rows, true)?;
+    service.enqueue_loves(&rows, true).await?;
     assert_eq!(service.queued_len(), 2);
     assert!(
         service
@@ -351,13 +362,62 @@ fn enqueue_loves_batches_favorites_under_one_persist() -> TestResult {
     Ok(())
 }
 
-#[test]
-fn enqueue_loves_noop_when_love_sync_inactive() -> TestResult {
+#[tokio::test]
+async fn enqueue_loves_noop_when_love_sync_inactive() -> TestResult {
     let dir = tempfile::tempdir()?;
-    let service = lb_love_service(&paths_in(dir.path()), false)?;
+    let service = lb_love_service(&paths_in(dir.path()), false).await?;
     assert!(!service.love_sync_active());
 
-    service.enqueue_loves(&[favorite_row(1, "Song A", Some("mbid-1"))], true)?;
+    service
+        .enqueue_loves(&[favorite_row(1, "Song A", Some("mbid-1"))], true)
+        .await?;
     assert_eq!(service.queued_len(), 0);
+    Ok(())
+}
+
+/// Regression: a favorite toggled the opposite way while a love POST is in
+/// flight coalesces a fresh `loved` into the same queued entry (`push_love`).
+/// The submit writeback clears by snapshot index, so without the `loved`-match
+/// guard it would drop that newer state. The guard must leave the reversed love
+/// pending so it goes out next round.
+#[tokio::test]
+async fn love_writeback_keeps_a_concurrently_reversed_toggle_pending() -> TestResult {
+    let dir = tempfile::tempdir()?;
+    let service = lb_love_service(&paths_in(dir.path()), true).await?;
+
+    // A love (heart) is queued, then snapshotted as the submitter would before
+    // POSTing it.
+    service.enqueue_love(&scrobble_row(Some("mbid-1")), true).await?;
+    let snapshot: Vec<LoveItem> = service.queue.lock().loves.iter().cloned().collect();
+
+    // Mid-flight, the user un-favorites the same track: the opposite `loved`
+    // coalesces into the queued entry.
+    let Some(track) = ScrobbleTrack::from_row(&scrobble_row(Some("mbid-1"))) else {
+        return Err("scrobble row should build".into());
+    };
+    service.queue.lock().push_love(LoveItem {
+        track,
+        loved: false,
+        lastfm_remaining: false,
+        listenbrainz_remaining: true,
+    });
+
+    // The writeback would clear index 0's LB flag on the POST's success, but the
+    // guard sees `loved` flipped (true → false) and skips it: nothing cleared,
+    // nothing removed.
+    let changed = service.collect_writeback(
+        |q| &mut q.loves,
+        &[],
+        &[0],
+        |i, current: &LoveItem| snapshot.get(i).is_some_and(|s| s.loved == current.loved),
+    );
+    assert!(changed.is_none());
+
+    let queue = service.queue.lock();
+    let Some(love) = queue.loves.front() else {
+        return Err("reversed love should still be queued".into());
+    };
+    assert!(!love.loved);
+    assert!(love.listenbrainz_remaining);
     Ok(())
 }

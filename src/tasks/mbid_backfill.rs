@@ -14,6 +14,7 @@
 //! itself.
 
 use std::collections::HashSet;
+use std::path::Path;
 use std::time::Duration;
 
 use tokio_util::sync::CancellationToken;
@@ -49,7 +50,11 @@ pub fn spawn(spawner: &TaskSpawner, state: &AppState) {
     let mut lib_rx = state.library_changed_tx.subscribe();
 
     spawner.spawn_cancellable(move |shutdown| async move {
-        let mut attempted: HashSet<i64> = HashSet::new();
+        // Persisted across restarts so an unmatched track isn't re-looked-up on
+        // every launch — only new/not-yet-attempted rows are. A manual kick clears
+        // it (below) for a genuine full re-sweep.
+        let state_path = state.paths.scrobble_mbid_state_path.clone();
+        let mut attempted: HashSet<i64> = load_attempted(&state_path);
 
         // Boot sweep: tags an already-enabled library (and is a no-op otherwise).
         // Silent — the user didn't ask for it just now.
@@ -70,7 +75,10 @@ pub fn spawn(spawner: &TaskSpawner, state: &AppState) {
                 () = service.mbid_kicked() => {
                     // Enable toggle / manual button: force a full re-sweep and
                     // report the result — this one the user triggered on purpose.
+                    // Clear the persisted set first so a crash mid-sweep re-sweeps
+                    // rather than resurrecting the stale skip-list.
                     attempted.clear();
+                    persist_attempted(&state_path, &attempted).await;
                     run_sweep(&state, &service, &shutdown, &mut attempted, true).await;
                 }
             }
@@ -103,6 +111,11 @@ async fn run_sweep(
                 outcome.looked_up,
                 outcome.tagged
             );
+            // Anything looked up grew the attempted set (only not-yet-attempted
+            // rows are queried) — persist so the next launch skips them.
+            if outcome.looked_up > 0 {
+                persist_attempted(&state.paths.scrobble_mbid_state_path, attempted).await;
+            }
             if announce {
                 toast::notify(ToastKind::MbidTagging, summarize(&outcome));
             }
@@ -245,4 +258,28 @@ async fn backfill(
         looked_up,
         tagged: written,
     })
+}
+
+/// Load the persisted attempted-id set, defaulting to empty on a missing or
+/// unreadable file (a fresh sweep is the safe fallback). Stored as a plain id
+/// array for stable file contents.
+fn load_attempted(path: &Path) -> HashSet<i64> {
+    crate::services::load_json_or_default_sync::<Vec<i64>>(path)
+        .unwrap_or_default()
+        .into_iter()
+        .collect()
+}
+
+/// Persist the attempted-id set off the async runtime (blocking `std::fs`).
+/// Best-effort: a failed write just means the next launch re-looks-up those ids.
+async fn persist_attempted(path: &Path, attempted: &HashSet<i64>) {
+    let path = path.to_path_buf();
+    let ids: Vec<i64> = attempted.iter().copied().collect();
+    match tokio::task::spawn_blocking(move || crate::services::write_json_atomic_sync(&path, &ids))
+        .await
+    {
+        Ok(Ok(())) => {}
+        Ok(Err(e)) => log::warn!("MBID backfill: failed to persist attempted set: {e}"),
+        Err(e) => log::warn!("MBID backfill: attempted-set persist task panicked: {e}"),
+    }
 }

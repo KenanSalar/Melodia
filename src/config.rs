@@ -12,6 +12,10 @@ pub struct Paths {
     pub search_history_path: PathBuf,
     pub scrobble_credentials_path: PathBuf,
     pub scrobble_queue_path: PathBuf,
+    /// Ids the MBID auto-tag backfill has already looked up (matched or not), so
+    /// unmatched tracks aren't re-queried on every launch. Cleared by a manual
+    /// "Look up missing IDs" kick.
+    pub scrobble_mbid_state_path: PathBuf,
     pub artwork_dir: PathBuf,
     pub artists_dir: PathBuf,
 }
@@ -36,6 +40,7 @@ impl Paths {
             search_history_path: data_dir.join("search_history.json"),
             scrobble_credentials_path: data_dir.join("scrobble_credentials.json"),
             scrobble_queue_path: data_dir.join("scrobble_queue.json"),
+            scrobble_mbid_state_path: data_dir.join("scrobble_mbid_attempted.json"),
             artwork_dir,
             artists_dir,
             data_dir,

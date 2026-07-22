@@ -16,6 +16,8 @@
 //! dialog, so `lastfm-open-auth` / `lastfm-finish` return early on the absent
 //! keys.
 
+use std::sync::Arc;
+
 use async_compat::Compat;
 use slint::{ComponentHandle, SharedString};
 
@@ -114,19 +116,26 @@ fn kick_mbid(state: &AppState) {
 }
 
 /// A disconnect handler: clear the provider's stored credential off the UI thread
-/// (blocking file I/O), toasting on failure. `provider` labels the log + toast;
-/// `disconnect` is the service's credential-clearing setter called with `None`.
-fn spawn_disconnect(
+/// (the setter offloads its blocking write), toasting on failure. `provider`
+/// labels the log + toast; `disconnect` is the service's async credential-clearing
+/// setter, invoked with `None` on an owned `Arc<ScrobbleService>` so the future
+/// owns everything it awaits.
+fn spawn_disconnect<F, Fut>(
     state: &AppState,
     provider: &'static str,
-    disconnect: fn(&ScrobbleService) -> Result<(), AppError>,
-) -> impl Fn() + 'static {
+    disconnect: F,
+) -> impl Fn() + 'static
+where
+    F: Fn(Arc<ScrobbleService>) -> Fut + Clone + Send + 'static,
+    Fut: std::future::Future<Output = Result<(), AppError>> + Send + 'static,
+{
     let state = state.clone();
     move || {
         let rt = state.runtime.clone();
-        let state = state.clone();
+        let scrobble = state.scrobble.clone();
+        let disconnect = disconnect.clone();
         rt.spawn(async move {
-            if let Err(e) = disconnect(&state.scrobble) {
+            if let Err(e) = disconnect(scrobble).await {
                 log::warn!("{provider} disconnect: {e}");
                 toast::notify(ToastKind::OperationFailed, format!("{provider}: {e}"));
             }
@@ -243,11 +252,11 @@ fn wire_enable_toggles(ui: &AppWindow, state: &AppState) {
 fn wire_disconnect(ui: &AppWindow, state: &AppState) {
     let settings = ui.global::<Settings>();
 
-    settings.on_scrobble_lastfm_disconnect(spawn_disconnect(state, "Last.fm", |s| {
-        s.set_lastfm_credentials(None)
+    settings.on_scrobble_lastfm_disconnect(spawn_disconnect(state, "Last.fm", |s: Arc<ScrobbleService>| async move {
+        s.set_lastfm_credentials(None).await
     }));
-    settings.on_scrobble_listenbrainz_disconnect(spawn_disconnect(state, "ListenBrainz", |s| {
-        s.set_listenbrainz_credentials(None)
+    settings.on_scrobble_listenbrainz_disconnect(spawn_disconnect(state, "ListenBrainz", |s: Arc<ScrobbleService>| async move {
+        s.set_listenbrainz_credentials(None).await
     }));
 }
 
@@ -279,7 +288,7 @@ fn wire_login_flows(ui: &AppWindow, state: &AppState) {
                             token,
                             username: v.user_name.unwrap_or_default(),
                         };
-                        match state.scrobble.set_listenbrainz_credentials(Some(credentials)) {
+                        match state.scrobble.set_listenbrainz_credentials(Some(credentials)).await {
                             Ok(()) => finish_connected(&weak, &state, LoveTarget::ListenBrainz),
                             Err(e) => save_failed(&weak, "ListenBrainz", &e),
                         }
@@ -354,7 +363,10 @@ fn wire_login_flows(ui: &AppWindow, state: &AppState) {
             let weak = weak.clone();
             rt.spawn(async move {
                 match lastfm::get_session(state.http_client(), api_key, secret, &token).await {
-                    Ok(credentials) => match state.scrobble.set_lastfm_credentials(Some(credentials))
+                    Ok(credentials) => match state
+                        .scrobble
+                        .set_lastfm_credentials(Some(credentials))
+                        .await
                     {
                         Ok(()) => finish_connected(&weak, &state, LoveTarget::Lastfm),
                         Err(e) => save_failed(&weak, "Last.fm", &e),

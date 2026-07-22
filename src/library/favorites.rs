@@ -43,7 +43,7 @@ async fn sync_love(state: &AppState, ids: &[i64], loved: bool) {
             return;
         }
     };
-    if let Err(e) = state.scrobble.enqueue_loves(&rows, loved) {
+    if let Err(e) = state.scrobble.enqueue_loves(&rows, loved).await {
         log::warn!("love-sync enqueue failed: {e}");
     }
 }
@@ -69,7 +69,7 @@ pub async fn backfill_loves(state: &AppState, target: LoveTarget) {
         return;
     }
     let total = rows.len();
-    let queued = match state.scrobble.backfill_loves(&rows, target) {
+    let queued = match state.scrobble.backfill_loves(&rows, target).await {
         Ok(n) => n,
         Err(e) => {
             log::warn!("love backfill: enqueue failed: {e}");

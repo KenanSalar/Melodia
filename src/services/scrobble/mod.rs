@@ -30,7 +30,7 @@ use tokio::sync::{Notify, watch};
 
 use crate::config::Paths;
 use crate::entities::track::ScrobbleRow;
-use crate::error::AppResult;
+use crate::error::{AppError, AppResult};
 use crate::services::build_http_client;
 use crate::services::settings::ScrobbleFlags;
 use providers::lastfm;
@@ -155,7 +155,7 @@ impl ScrobbleService {
     /// The status is published from the in-memory shadow regardless of the disk
     /// write, so a failed persist still surfaces the applied state (matching the
     /// apply-then-persist convention elsewhere).
-    fn persist_credentials_change(
+    async fn persist_credentials_change(
         &self,
         update: impl FnOnce(&mut ScrobbleCredentials),
     ) -> AppResult<()> {
@@ -165,20 +165,34 @@ impl ScrobbleService {
             runtime.credentials.clone()
         };
         self.status_tx.send_replace(self.status());
-        credentials::save(&self.creds_path, &snapshot)
+        // The credential JSON write is blocking `std::fs` (+ a chmod) — offload it
+        // so a connect/disconnect never stalls a tokio worker. The shadow + status
+        // are already applied above, so a failed write still surfaces the state.
+        let path = self.creds_path.clone();
+        match tokio::task::spawn_blocking(move || credentials::save(&path, &snapshot)).await {
+            Ok(result) => result,
+            Err(e) => Err(AppError::io_other(format!(
+                "scrobble credential persist task panicked: {e}"
+            ))),
+        }
     }
 
     /// Connect / disconnect Last.fm. Passing `None` disconnects.
-    pub fn set_lastfm_credentials(&self, credentials: Option<LastfmCredentials>) -> AppResult<()> {
+    pub async fn set_lastfm_credentials(
+        &self,
+        credentials: Option<LastfmCredentials>,
+    ) -> AppResult<()> {
         self.persist_credentials_change(move |creds| creds.lastfm = credentials)
+            .await
     }
 
     /// Connect / disconnect `ListenBrainz`. Passing `None` disconnects.
-    pub fn set_listenbrainz_credentials(
+    pub async fn set_listenbrainz_credentials(
         &self,
         credentials: Option<ListenBrainzCredentials>,
     ) -> AppResult<()> {
         self.persist_credentials_change(move |creds| creds.listenbrainz = credentials)
+            .await
     }
 
     /// The `ListenBrainz` token to use for MBID lookups — `Some` only when
@@ -218,13 +232,28 @@ impl ScrobbleService {
     /// Append a scrobble to the durable queue and persist it. The Phase 2
     /// submitter's `enqueue_scrobble` enriches and wakes on top of this
     /// primitive.
-    pub fn push_scrobble(&self, item: QueuedItem) -> AppResult<()> {
+    pub async fn push_scrobble(&self, item: QueuedItem) -> AppResult<()> {
         let snapshot = {
             let mut queue = self.queue.lock();
             queue.push(item);
             queue.clone()
         };
-        snapshot.save(&self.queue_path)
+        self.save_queue(snapshot).await
+    }
+
+    /// Persist a queue snapshot off the async runtime: the JSON write is blocking
+    /// `std::fs`, so it rides `spawn_blocking` rather than stalling a tokio worker.
+    /// The in-memory mutation already happened under the lock by the time this is
+    /// called, so the snapshot is owned and `self` isn't captured. Propagates the
+    /// write result; `submit::persist_queue` is the best-effort (log-only) wrapper.
+    async fn save_queue(&self, snapshot: ScrobbleQueue) -> AppResult<()> {
+        let path = self.queue_path.clone();
+        match tokio::task::spawn_blocking(move || snapshot.save(&path)).await {
+            Ok(result) => result,
+            Err(e) => Err(AppError::io_other(format!(
+                "scrobble queue persist task panicked: {e}"
+            ))),
+        }
     }
 
     /// Whether a favorite toggle should be mirrored to any provider right now —
@@ -241,8 +270,8 @@ impl ScrobbleService {
     /// the one-track case of [`Self::enqueue_loves`], which owns the per-provider
     /// arming and the `ListenBrainz` MBID gate. A no-op when the row can't be built
     /// or no provider wants it.
-    pub fn enqueue_love(&self, row: &ScrobbleRow, loved: bool) -> AppResult<()> {
-        self.enqueue_loves(std::slice::from_ref(row), loved)
+    pub async fn enqueue_love(&self, row: &ScrobbleRow, loved: bool) -> AppResult<()> {
+        self.enqueue_loves(std::slice::from_ref(row), loved).await
     }
 
     /// Queue a love/unlove for a multi-track favorite toggle under a **single**
@@ -253,7 +282,7 @@ impl ScrobbleService {
     /// (LB feedback keys on it, so untagged tracks skip LB). `push_love` still
     /// coalesces a repeat toggle of the same track; `loved` carries un-favorites
     /// too. A no-op when love-sync is off or no row wants any provider.
-    pub fn enqueue_loves(&self, rows: &[ScrobbleRow], loved: bool) -> AppResult<()> {
+    pub async fn enqueue_loves(&self, rows: &[ScrobbleRow], loved: bool) -> AppResult<()> {
         let (lastfm_armed, listenbrainz_armed) = {
             let runtime = self.runtime.read();
             (runtime.lastfm_love_armed(), runtime.listenbrainz_love_armed())
@@ -286,7 +315,7 @@ impl ScrobbleService {
         if pushed == 0 {
             return Ok(());
         }
-        snapshot.save(&self.queue_path)?;
+        self.save_queue(snapshot).await?;
         self.notify.notify_one();
         Ok(())
     }
@@ -307,7 +336,7 @@ impl ScrobbleService {
     /// wake, unlike per-track [`Self::enqueue_love`]. `ListenBrainz` skips rows
     /// without a `recording_mbid` (it keys on that). Returns how many loves were
     /// actually queued. A no-op returning `Ok(0)` when `target` isn't armed.
-    pub fn backfill_loves(&self, rows: &[ScrobbleRow], target: LoveTarget) -> AppResult<usize> {
+    pub async fn backfill_loves(&self, rows: &[ScrobbleRow], target: LoveTarget) -> AppResult<usize> {
         if !self.love_target_armed(target) {
             return Ok(0);
         }
@@ -337,7 +366,7 @@ impl ScrobbleService {
         if queued == 0 {
             return Ok(0);
         }
-        snapshot.save(&self.queue_path)?;
+        self.save_queue(snapshot).await?;
         self.notify.notify_one();
         Ok(queued)
     }
@@ -406,7 +435,7 @@ impl ScrobbleService {
     /// connected + enabled (a flag for a disconnected provider would never clear
     /// and would pin the item through `retain_pending`). A no-op when the row
     /// can't be scrobbled or no provider wants it.
-    pub fn enqueue_scrobble(&self, row: &ScrobbleRow, timestamp: i64) -> AppResult<()> {
+    pub async fn enqueue_scrobble(&self, row: &ScrobbleRow, timestamp: i64) -> AppResult<()> {
         let Some(track) = ScrobbleTrack::from_row(row) else {
             return Ok(());
         };
@@ -425,7 +454,8 @@ impl ScrobbleService {
             timestamp,
             lastfm_remaining,
             listenbrainz_remaining,
-        })?;
+        })
+        .await?;
         self.notify.notify_one();
         Ok(())
     }

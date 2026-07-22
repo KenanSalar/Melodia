@@ -21,17 +21,17 @@ impl ScrobbleService {
     /// Log the Last.fm session rejection and clear the stored credential
     /// (best-effort persist). Called from the submit drains on an invalid session
     /// — the caller then drops the pending Last.fm flags itself.
-    fn disconnect_lastfm(&self) {
+    async fn disconnect_lastfm(&self) {
         log::warn!("Last.fm session invalid; disconnecting");
-        if let Err(e) = self.set_lastfm_credentials(None) {
+        if let Err(e) = self.set_lastfm_credentials(None).await {
             log::warn!("Failed to persist Last.fm disconnect: {e}");
         }
     }
 
     /// `ListenBrainz` sibling of [`Self::disconnect_lastfm`], on a rejected token.
-    fn disconnect_listenbrainz(&self) {
+    async fn disconnect_listenbrainz(&self) {
         log::warn!("ListenBrainz token invalid; disconnecting");
-        if let Err(e) = self.set_listenbrainz_credentials(None) {
+        if let Err(e) = self.set_listenbrainz_credentials(None).await {
             log::warn!("Failed to persist ListenBrainz disconnect: {e}");
         }
     }
@@ -104,7 +104,7 @@ impl ScrobbleService {
                 {
                     Ok(()) => clear_lastfm.extend(idx),
                     Err(LastfmError::InvalidSession) => {
-                        self.disconnect_lastfm();
+                        self.disconnect_lastfm().await;
                         drop_flags(&snapshot, |it| it.lastfm_remaining, &mut clear_lastfm);
                     }
                     Err(e) => {
@@ -113,6 +113,16 @@ impl ScrobbleService {
                     }
                 }
             }
+        } else {
+            // `lastfm_ready` implies `is_configured()` (both keys present) AND a
+            // stored session, so this arm is unreachable. If a future change ever
+            // decouples that invariant, drop the flags rather than leave them set
+            // with no retry — which would spin the submitter at zero delay.
+            debug_assert!(
+                false,
+                "lastfm_ready but api keys/session absent — is_configured() invariant broke"
+            );
+            drop_flags(&snapshot, |it| it.lastfm_remaining, &mut clear_lastfm);
         }
 
         // ---- ListenBrainz ----
@@ -124,7 +134,7 @@ impl ScrobbleService {
                 match listenbrainz::submit_listens(&client, &creds.token, &batch).await {
                     Ok(()) => clear_lb.extend(idx),
                     Err(ListenBrainzError::InvalidToken) => {
-                        self.disconnect_listenbrainz();
+                        self.disconnect_listenbrainz().await;
                         drop_flags(&snapshot, |it| it.listenbrainz_remaining, &mut clear_lb);
                     }
                     Err(ListenBrainzError::RateLimited { reset_in_secs }) => {
@@ -140,43 +150,61 @@ impl ScrobbleService {
             }
         }
 
-        self.apply_writeback(|q| &mut q.items, &clear_lastfm, &clear_lb);
+        // Scrobbles never coalesce in place, so an unconditional clear is safe.
+        if let Some(snapshot) =
+            self.collect_writeback(|q| &mut q.items, &clear_lastfm, &clear_lb, |_, _| true)
+        {
+            self.persist_queue(snapshot).await;
+        }
         retry_after
     }
 
     /// Clear the submitted providers' flags by snapshot index (bounds-checked
     /// against a rare cap-drop shift — a double-submit is deduped by both
-    /// services), `retain_pending`, and persist only when the queue changed.
-    /// `select` picks the sub-queue to write back — `items` for scrobbles,
-    /// `loves` for loves — so both drains share this one walk.
-    fn apply_writeback<T: ProviderFlags>(
+    /// services), `retain_pending`, and return the new queue when it changed (for
+    /// the caller to persist off-thread). `select` picks the sub-queue —
+    /// `items` for scrobbles, `loves` for loves — so both drains share this walk.
+    ///
+    /// `keep` guards each clear against the entry having changed under the lock
+    /// while its POST was in flight: `submit_loves` passes a `loved`-match check
+    /// so a favorite toggled the opposite way mid-submit isn't cleared (its newer
+    /// state stays pending); `submit_scrobbles` passes `|_, _| true`.
+    pub(super) fn collect_writeback<T: ProviderFlags>(
         &self,
         select: impl Fn(&mut ScrobbleQueue) -> &mut VecDeque<T>,
         clear_lastfm: &[usize],
         clear_lb: &[usize],
-    ) {
-        let to_save: Option<ScrobbleQueue> = {
-            let mut queue = self.queue.lock();
-            let before = select(&mut queue).len();
-            for &i in clear_lastfm {
-                if let Some(item) = select(&mut queue).get_mut(i) {
-                    item.set_lastfm_remaining(false);
-                }
+        keep: impl Fn(usize, &T) -> bool,
+    ) -> Option<ScrobbleQueue> {
+        let mut queue = self.queue.lock();
+        let before = select(&mut queue).len();
+        let mut cleared = false;
+        for &i in clear_lastfm {
+            if let Some(item) = select(&mut queue).get_mut(i)
+                && keep(i, item)
+            {
+                item.set_lastfm_remaining(false);
+                cleared = true;
             }
-            for &i in clear_lb {
-                if let Some(item) = select(&mut queue).get_mut(i) {
-                    item.set_listenbrainz_remaining(false);
-                }
+        }
+        for &i in clear_lb {
+            if let Some(item) = select(&mut queue).get_mut(i)
+                && keep(i, item)
+            {
+                item.set_listenbrainz_remaining(false);
+                cleared = true;
             }
-            queue.retain_pending();
-            let changed = !clear_lastfm.is_empty()
-                || !clear_lb.is_empty()
-                || select(&mut queue).len() != before;
-            changed.then(|| queue.clone())
-        };
-        if let Some(snapshot) = to_save
-            && let Err(e) = snapshot.save(&self.queue_path)
-        {
+        }
+        queue.retain_pending();
+        let changed = cleared || select(&mut queue).len() != before;
+        changed.then(|| queue.clone())
+    }
+
+    /// Persist a post-drain queue snapshot off the async runtime (via
+    /// [`Self::save_queue`]). Best-effort: a failed write is logged, and the item
+    /// stays in the in-memory queue to be re-persisted on the next drain.
+    async fn persist_queue(&self, snapshot: ScrobbleQueue) {
+        if let Err(e) = self.save_queue(snapshot).await {
             log::warn!("Failed to persist scrobble queue after submit: {e}");
         }
     }
@@ -239,7 +267,7 @@ impl ScrobbleService {
                 {
                     Ok(()) => clear_lastfm.push(i),
                     Err(LastfmError::InvalidSession) => {
-                        self.disconnect_lastfm();
+                        self.disconnect_lastfm().await;
                         drop_flags(&snapshot, |it| it.lastfm_remaining, &mut clear_lastfm);
                         break;
                     }
@@ -250,6 +278,15 @@ impl ScrobbleService {
                     }
                 }
             }
+        } else {
+            // Unreachable while `lastfm_reachable()` keeps its `is_configured()`
+            // gate (see the matching arm in `submit_scrobbles`); drop rather than
+            // spin if that ever changes.
+            debug_assert!(
+                false,
+                "lastfm reachable but api keys/session absent — is_configured() invariant broke"
+            );
+            drop_flags(&snapshot, |it| it.lastfm_remaining, &mut clear_lastfm);
         }
 
         // ---- ListenBrainz ----
@@ -272,7 +309,7 @@ impl ScrobbleService {
                 {
                     Ok(()) => clear_lb.push(i),
                     Err(ListenBrainzError::InvalidToken) => {
-                        self.disconnect_listenbrainz();
+                        self.disconnect_listenbrainz().await;
                         drop_flags(&snapshot, |it| it.listenbrainz_remaining, &mut clear_lb);
                         break;
                     }
@@ -291,7 +328,19 @@ impl ScrobbleService {
             }
         }
 
-        self.apply_writeback(|q| &mut q.loves, &clear_lastfm, &clear_lb);
+        // Only clear a love whose queued `loved` still matches what we submitted:
+        // a favorite toggled the opposite way while the POST was in flight
+        // coalesces a fresh `loved` into the same entry (`push_love`), and clearing
+        // it by index would drop that newer state. Mismatches stay pending and go
+        // out next round.
+        if let Some(queue_snapshot) = self.collect_writeback(
+            |q| &mut q.loves,
+            &clear_lastfm,
+            &clear_lb,
+            |i, current: &LoveItem| snapshot.get(i).is_some_and(|s| s.loved == current.loved),
+        ) {
+            self.persist_queue(queue_snapshot).await;
+        }
         retry_after
     }
 }

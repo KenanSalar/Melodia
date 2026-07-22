@@ -130,7 +130,7 @@ async fn process_effects(
                 timestamp,
             } => {
                 if let Some(row) = fetch_row(db, track_id, last_row).await
-                    && let Err(e) = service.enqueue_scrobble(&row, timestamp)
+                    && let Err(e) = service.enqueue_scrobble(&row, timestamp).await
                 {
                     log::warn!("Failed to enqueue scrobble for track {track_id}: {e}");
                 }
