@@ -184,6 +184,23 @@ pub async fn get_favorite_scrobble_rows(db: &DbPool) -> Result<Vec<track::Scrobb
     Ok(rows)
 }
 
+/// Bulk sibling of [`get_scrobble_row`]: the scrobble projection for an
+/// arbitrary id set in one chunked `IN (…)` query. The favorite→love sync uses
+/// it to enrich a multi-selection without a per-id round-trip. Love order is
+/// irrelevant, so rows come back in query order (no order-preserving re-walk).
+pub async fn get_scrobble_rows_by_ids(
+    db: &DbPool,
+    ids: &[i64],
+) -> Result<Vec<track::ScrobbleRow>, AppError> {
+    let cols = track::scrobble_row_columns();
+    chunked_in_query(
+        db.read(),
+        ids,
+        |placeholders| format!("SELECT {cols} FROM tracks WHERE id IN ({placeholders})"),
+    )
+    .await
+}
+
 /// Fetch just the `file_path` column for a single track id — the
 /// leanest possible projection, used by the "Open Containing Folder"
 /// context-menu action which only needs the on-disk location. Returns

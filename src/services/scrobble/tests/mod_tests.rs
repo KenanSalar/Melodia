@@ -320,3 +320,44 @@ fn backfill_loves_lastfm_unarmed_in_keyless_build() -> TestResult {
     assert_eq!(queued, 0);
     Ok(())
 }
+
+#[test]
+fn enqueue_loves_batches_favorites_under_one_persist() -> TestResult {
+    let dir = tempfile::tempdir()?;
+    let paths = paths_in(dir.path());
+    let service = lb_love_service(&paths, true)?;
+    assert!(service.love_sync_active());
+
+    let rows = [
+        favorite_row(1, "Song A", Some("mbid-1")),
+        favorite_row(2, "Song B", None), // no MBID → skipped for LB (keyless build has no Last.fm)
+        favorite_row(3, "Song C", Some("mbid-3")),
+    ];
+    // One lock + one save for the whole selection; only MBID-tagged rows queue.
+    service.enqueue_loves(&rows, true)?;
+    assert_eq!(service.queued_len(), 2);
+    assert!(
+        service
+            .queue
+            .lock()
+            .loves
+            .iter()
+            .all(|l| l.loved && l.listenbrainz_remaining && !l.lastfm_remaining)
+    );
+
+    // The single persist is real — a fresh service over the same paths reads it.
+    let reloaded = init_service(&paths, &ScrobbleFlags::default());
+    assert_eq!(reloaded.queued_len(), 2);
+    Ok(())
+}
+
+#[test]
+fn enqueue_loves_noop_when_love_sync_inactive() -> TestResult {
+    let dir = tempfile::tempdir()?;
+    let service = lb_love_service(&paths_in(dir.path()), false)?;
+    assert!(!service.love_sync_active());
+
+    service.enqueue_loves(&[favorite_row(1, "Song A", Some("mbid-1"))], true)?;
+    assert_eq!(service.queued_len(), 0);
+    Ok(())
+}

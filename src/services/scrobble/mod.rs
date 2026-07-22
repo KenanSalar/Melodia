@@ -278,6 +278,51 @@ impl ScrobbleService {
         Ok(())
     }
 
+    /// Batch sibling of [`Self::enqueue_love`] for a multi-track favorite toggle:
+    /// enrich every row and queue its love under a **single** lock + save +
+    /// submitter wake, instead of one persist per id. Per-provider arming matches
+    /// `enqueue_love` (Last.fm when its love toggle is armed; `ListenBrainz`
+    /// additionally gated on a `recording_mbid`), and `push_love` still coalesces
+    /// a repeat toggle of the same track. `loved` carries un-favorites too. A
+    /// no-op when love-sync is off or no row wants any provider.
+    pub fn enqueue_loves(&self, rows: &[ScrobbleRow], loved: bool) -> AppResult<()> {
+        let (lastfm_armed, listenbrainz_armed) = {
+            let runtime = self.runtime.read();
+            (runtime.lastfm_love_armed(), runtime.listenbrainz_love_armed())
+        };
+        if !lastfm_armed && !listenbrainz_armed {
+            return Ok(());
+        }
+        let (pushed, snapshot) = {
+            let mut queue = self.queue.lock();
+            let mut pushed = 0usize;
+            for row in rows {
+                let Some(track) = ScrobbleTrack::from_row(row) else {
+                    continue;
+                };
+                // LB feedback keys on the recording MBID — skip untagged tracks.
+                let listenbrainz_remaining = listenbrainz_armed && track.recording_mbid.is_some();
+                if !lastfm_armed && !listenbrainz_remaining {
+                    continue;
+                }
+                queue.push_love(LoveItem {
+                    track,
+                    loved,
+                    lastfm_remaining: lastfm_armed,
+                    listenbrainz_remaining,
+                });
+                pushed += 1;
+            }
+            (pushed, queue.clone())
+        };
+        if pushed == 0 {
+            return Ok(());
+        }
+        snapshot.save(&self.queue_path)?;
+        self.notify.notify_one();
+        Ok(())
+    }
+
     /// Whether `target`'s love toggle can receive loves right now — the cheap
     /// gate the retroactive favorite backfill checks before fetching favorites.
     pub fn love_target_armed(&self, target: LoveTarget) -> bool {

@@ -28,21 +28,23 @@ pub async fn set_favorite(
 /// Mirror a favorite change to the scrobble services — Last.fm Loved Tracks plus
 /// best-effort `ListenBrainz` feedback. Best-effort: a lookup or enqueue failure
 /// is logged, never propagated, so it can't fail the favorite write. Skips all
-/// DB work when love-sync is off or no provider is connected.
+/// DB work when love-sync is off or no provider is connected. Fetches the whole
+/// id set in one bulk query and queues it under a single lock + save + wake
+/// (via `enqueue_loves`), so a multi-select toggle is O(1) round-trips and disk
+/// writes, not O(N).
 async fn sync_love(state: &AppState, ids: &[i64], loved: bool) {
     if !state.scrobble.love_sync_active() {
         return;
     }
-    for &id in ids {
-        match queries::track::get_scrobble_row(&state.db, id).await {
-            Ok(Some(row)) => {
-                if let Err(e) = state.scrobble.enqueue_love(&row, loved) {
-                    log::warn!("love-sync enqueue failed for track {id}: {e}");
-                }
-            }
-            Ok(None) => {}
-            Err(e) => log::warn!("love-sync lookup failed for track {id}: {e}"),
+    let rows = match queries::track::get_scrobble_rows_by_ids(&state.db, ids).await {
+        Ok(rows) => rows,
+        Err(e) => {
+            log::warn!("love-sync lookup failed for {} track(s): {e}", ids.len());
+            return;
         }
+    };
+    if let Err(e) = state.scrobble.enqueue_loves(&rows, loved) {
+        log::warn!("love-sync enqueue failed: {e}");
     }
 }
 
