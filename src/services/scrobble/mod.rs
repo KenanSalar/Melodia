@@ -38,9 +38,10 @@ use providers::listenbrainz;
 use status::build_status;
 
 /// In-memory shadow of the persisted credentials + enabled flags. Guarded by an
-/// `RwLock` so the (later) detector, submitter, and love-sync can read
-/// connection/enabled state synchronously without touching disk. All the
-/// service's methods are synchronous, so the lock is never held across `.await`.
+/// `RwLock` so the detector, submitter, and love-sync read connection/enabled
+/// state synchronously without touching disk. The service's async methods drop
+/// this guard before any `.await` (the disk write rides `spawn_blocking`), so the
+/// lock is never held across an await point.
 struct ScrobbleRuntime {
     credentials: ScrobbleCredentials,
     flags: ScrobbleFlags,
