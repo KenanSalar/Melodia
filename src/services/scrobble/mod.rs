@@ -227,17 +227,6 @@ impl ScrobbleService {
         snapshot.save(&self.queue_path)
     }
 
-    /// Append a love/unlove to the durable queue (coalescing a repeat toggle of
-    /// the same track) and persist it. `enqueue_love` gates and enriches on top.
-    fn push_love(&self, item: LoveItem) -> AppResult<()> {
-        let snapshot = {
-            let mut queue = self.queue.lock();
-            queue.push_love(item);
-            queue.clone()
-        };
-        snapshot.save(&self.queue_path)
-    }
-
     /// Whether a favorite toggle should be mirrored to any provider right now —
     /// the cheap gate `library::favorites` checks before doing per-track DB
     /// lookups. True when at least one provider's love toggle is on and can
@@ -248,43 +237,22 @@ impl ScrobbleService {
         runtime.lastfm_love_armed() || runtime.listenbrainz_love_armed()
     }
 
-    /// Enrich a DB row into a durable love/unlove and wake the submitter. Sets a
-    /// provider's flag only when it can receive the love — Last.fm when its love
-    /// toggle is on + configured + connected, `ListenBrainz` when its love toggle
-    /// is on + connected **and** the track carries a `recording_mbid` (LB feedback
-    /// keys on it, so untagged tracks skip LB). A no-op when the row can't be
-    /// built or no provider wants it.
+    /// Enrich a single DB row into a durable love/unlove and wake the submitter —
+    /// the one-track case of [`Self::enqueue_loves`], which owns the per-provider
+    /// arming and the `ListenBrainz` MBID gate. A no-op when the row can't be built
+    /// or no provider wants it.
     pub fn enqueue_love(&self, row: &ScrobbleRow, loved: bool) -> AppResult<()> {
-        let Some(track) = ScrobbleTrack::from_row(row) else {
-            return Ok(());
-        };
-        let (lastfm_remaining, listenbrainz_remaining) = {
-            let runtime = self.runtime.read();
-            (
-                runtime.lastfm_love_armed(),
-                runtime.listenbrainz_love_armed() && track.recording_mbid.is_some(),
-            )
-        };
-        if !lastfm_remaining && !listenbrainz_remaining {
-            return Ok(());
-        }
-        self.push_love(LoveItem {
-            track,
-            loved,
-            lastfm_remaining,
-            listenbrainz_remaining,
-        })?;
-        self.notify.notify_one();
-        Ok(())
+        self.enqueue_loves(std::slice::from_ref(row), loved)
     }
 
-    /// Batch sibling of [`Self::enqueue_love`] for a multi-track favorite toggle:
-    /// enrich every row and queue its love under a **single** lock + save +
-    /// submitter wake, instead of one persist per id. Per-provider arming matches
-    /// `enqueue_love` (Last.fm when its love toggle is armed; `ListenBrainz`
-    /// additionally gated on a `recording_mbid`), and `push_love` still coalesces
-    /// a repeat toggle of the same track. `loved` carries un-favorites too. A
-    /// no-op when love-sync is off or no row wants any provider.
+    /// Queue a love/unlove for a multi-track favorite toggle under a **single**
+    /// queue lock + save + submitter wake, instead of one persist per id — the
+    /// primitive [`Self::enqueue_love`] delegates its single-row case to. Arms a
+    /// provider per row only when it can receive the love: Last.fm when its love
+    /// toggle is armed; `ListenBrainz` additionally gated on a `recording_mbid`
+    /// (LB feedback keys on it, so untagged tracks skip LB). `push_love` still
+    /// coalesces a repeat toggle of the same track; `loved` carries un-favorites
+    /// too. A no-op when love-sync is off or no row wants any provider.
     pub fn enqueue_loves(&self, rows: &[ScrobbleRow], loved: bool) -> AppResult<()> {
         let (lastfm_armed, listenbrainz_armed) = {
             let runtime = self.runtime.read();
