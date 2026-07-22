@@ -347,7 +347,13 @@ pub struct TrayFlags {
 pub struct ScrobbleFlags {
     pub lastfm_enabled: bool,
     pub listenbrainz_enabled: bool,
-    pub love_sync_enabled: bool,
+    /// Mirror favorites to Last.fm Loved Tracks. Independent of `lastfm_enabled`
+    /// (loving isn't scrobbling) and of the `ListenBrainz` love toggle. Default
+    /// `false` — opt-in.
+    pub lastfm_love_enabled: bool,
+    /// Mirror favorites to `ListenBrainz` recording feedback. Independent of
+    /// `listenbrainz_enabled` and of the Last.fm love toggle. Default `false`.
+    pub listenbrainz_love_enabled: bool,
     /// Auto-tag scanned tracks with their `MusicBrainz` Recording ID (resolved via
     /// `ListenBrainz`) so loves work on untagged libraries. Writes the id into both
     /// the DB and the audio file. Default `false` — new behavior, opt-in.

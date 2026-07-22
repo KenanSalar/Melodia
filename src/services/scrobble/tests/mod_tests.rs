@@ -2,7 +2,8 @@ use std::path::Path;
 use std::sync::{Arc, OnceLock};
 
 use super::{
-    LastfmCredentials, ListenBrainzCredentials, QueuedItem, ScrobbleService, ScrobbleTrack,
+    LastfmCredentials, ListenBrainzCredentials, LoveTarget, QueuedItem, ScrobbleService,
+    ScrobbleTrack,
 };
 use crate::config::Paths;
 use crate::entities::track::ScrobbleRow;
@@ -120,17 +121,18 @@ fn pushed_scrobble_persists_across_reinit() -> TestResult {
 fn set_flags_updates_status() -> TestResult {
     let dir = tempfile::tempdir()?;
     let service = init_service(&paths_in(dir.path()), &ScrobbleFlags::default());
-    assert!(!service.status().love_sync_enabled);
+    assert!(!service.status().listenbrainz.love_enabled);
 
     service.set_flags(ScrobbleFlags {
         lastfm_enabled: true,
         listenbrainz_enabled: false,
-        love_sync_enabled: true,
+        listenbrainz_love_enabled: true,
         ..Default::default()
     });
     let status = service.status();
     assert!(status.lastfm.enabled);
-    assert!(status.love_sync_enabled);
+    assert!(status.listenbrainz.love_enabled);
+    assert!(!status.lastfm.love_enabled);
     assert!(!status.listenbrainz.enabled);
     Ok(())
 }
@@ -161,7 +163,6 @@ fn status_watch_observes_credential_and_flag_changes() -> TestResult {
     service.set_flags(ScrobbleFlags {
         lastfm_enabled: true,
         listenbrainz_enabled: false,
-        love_sync_enabled: false,
         ..Default::default()
     });
     assert!(rx.borrow_and_update().lastfm.enabled);
@@ -185,7 +186,7 @@ fn scrobble_row(mbid: Option<&str>) -> ScrobbleRow {
     }
 }
 
-/// A service with `ListenBrainz` connected + enabled and `love_sync` on/off.
+/// A service with `ListenBrainz` connected and its love toggle on/off.
 fn lb_love_service(
     paths: &Paths,
     love_sync: bool,
@@ -194,8 +195,8 @@ fn lb_love_service(
         paths,
         &ScrobbleFlags {
             lastfm_enabled: false,
-            listenbrainz_enabled: true,
-            love_sync_enabled: love_sync,
+            listenbrainz_enabled: false,
+            listenbrainz_love_enabled: love_sync,
             ..Default::default()
         },
     );
@@ -243,5 +244,79 @@ fn love_sync_inactive_when_flag_disabled() -> TestResult {
     assert!(!service.love_sync_active());
     service.enqueue_love(&scrobble_row(Some("mbid-1")), true)?;
     assert_eq!(service.queued_len(), 0);
+    Ok(())
+}
+
+/// A favorite row with a distinct title so the queue's `(artist, track)`
+/// coalescing doesn't fold a batch into one entry.
+fn favorite_row(id: i64, title: &str, mbid: Option<&str>) -> ScrobbleRow {
+    ScrobbleRow {
+        id,
+        title: title.to_owned(),
+        artist: Some("Artist".to_owned()),
+        album: None,
+        album_artist: None,
+        duration_ms: 180_000,
+        track_number: None,
+        musicbrainz_track_id: mbid.map(str::to_owned),
+        musicbrainz_release_id: None,
+    }
+}
+
+#[test]
+fn backfill_loves_queues_listenbrainz_favorites_with_mbid() -> TestResult {
+    let dir = tempfile::tempdir()?;
+    let service = lb_love_service(&paths_in(dir.path()), true)?;
+    assert!(service.love_target_armed(LoveTarget::ListenBrainz));
+
+    let rows = [
+        favorite_row(1, "Song A", Some("mbid-1")),
+        favorite_row(2, "Song B", None), // no MBID → skipped for LB
+        favorite_row(3, "Song C", Some("mbid-3")),
+    ];
+    // One batch: only the two MBID-tagged favorites are queued.
+    let queued = service.backfill_loves(&rows, LoveTarget::ListenBrainz)?;
+    assert_eq!(queued, 2);
+    assert_eq!(service.queued_len(), 2);
+
+    let queue = service.queue.lock();
+    assert!(
+        queue
+            .loves
+            .iter()
+            .all(|l| l.loved && l.listenbrainz_remaining && !l.lastfm_remaining)
+    );
+    Ok(())
+}
+
+#[test]
+fn backfill_loves_noop_when_target_not_armed() -> TestResult {
+    let dir = tempfile::tempdir()?;
+    let service = lb_love_service(&paths_in(dir.path()), false)?;
+    assert!(!service.love_target_armed(LoveTarget::ListenBrainz));
+
+    let queued =
+        service.backfill_loves(&[favorite_row(1, "Song A", Some("mbid-1"))], LoveTarget::ListenBrainz)?;
+    assert_eq!(queued, 0);
+    assert_eq!(service.queued_len(), 0);
+    Ok(())
+}
+
+#[test]
+fn backfill_loves_lastfm_unarmed_in_keyless_build() -> TestResult {
+    // Last.fm love needs compile-time API keys, absent in a test build, so the
+    // target is never armed and the backfill is a no-op regardless of the flag.
+    let dir = tempfile::tempdir()?;
+    let service = init_service(
+        &paths_in(dir.path()),
+        &ScrobbleFlags {
+            lastfm_love_enabled: true,
+            ..Default::default()
+        },
+    );
+    assert!(!service.love_target_armed(LoveTarget::Lastfm));
+    let queued =
+        service.backfill_loves(&[favorite_row(1, "Song A", Some("mbid-1"))], LoveTarget::Lastfm)?;
+    assert_eq!(queued, 0);
     Ok(())
 }

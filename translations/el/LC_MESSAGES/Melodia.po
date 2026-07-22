@@ -1341,6 +1341,21 @@ msgstr "Αναφορά κάθε αναπαραγωγής στον λογαρια
 msgid "Sync loved tracks"
 msgstr "Συγχρονισμός αγαπημένων κομματιών"
 
+msgid "Sync loved tracks to Last.fm"
+msgstr "Συγχρονισμός αγαπημένων κομματιών με το Last.fm"
+
+msgid "Mark tracks you love as loved on Last.fm — turning this on syncs your existing favorites"
+msgstr "Σημειώστε ως αγαπημένα στο Last.fm τα κομμάτια που αγαπάτε — η ενεργοποίηση συγχρονίζει τα υπάρχοντα αγαπημένα σας"
+
+msgid "Sync loved tracks to ListenBrainz"
+msgstr "Συγχρονισμός αγαπημένων κομματιών με το ListenBrainz"
+
+msgid "Mark tracks you love as loved on ListenBrainz — turning this on syncs your existing favorites (needs MusicBrainz IDs)"
+msgstr "Σημειώστε ως αγαπημένα στο ListenBrainz τα κομμάτια που αγαπάτε — η ενεργοποίηση συγχρονίζει τα υπάρχοντα αγαπημένα σας (απαιτεί αναγνωριστικά MusicBrainz)"
+
+msgid "Loved tracks"
+msgstr "Αγαπημένα κομμάτια"
+
 msgid "Mark tracks you love as loved on your connected services"
 msgstr "Σημειώστε τα κομμάτια που αγαπάτε ως αγαπημένα στις συνδεδεμένες υπηρεσίες σας"
 

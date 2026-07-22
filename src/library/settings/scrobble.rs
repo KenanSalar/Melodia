@@ -22,10 +22,20 @@ pub fn set_scrobble_listenbrainz_enabled(state: &AppState, enabled: bool) -> Res
     })
 }
 
-/// Persist the love↔favorite sync toggle. Defaults to `false` on first launch.
-pub fn set_scrobble_love_sync_enabled(state: &AppState, enabled: bool) -> Result<(), AppError> {
+/// Persist the Last.fm love↔favorite sync toggle. Defaults to `false`.
+pub fn set_scrobble_lastfm_love_enabled(state: &AppState, enabled: bool) -> Result<(), AppError> {
     services::settings::mutate_settings(&state.paths, move |settings| {
-        settings.scrobble.love_sync_enabled = enabled;
+        settings.scrobble.lastfm_love_enabled = enabled;
+    })
+}
+
+/// Persist the `ListenBrainz` love↔favorite sync toggle. Defaults to `false`.
+pub fn set_scrobble_listenbrainz_love_enabled(
+    state: &AppState,
+    enabled: bool,
+) -> Result<(), AppError> {
+    services::settings::mutate_settings(&state.paths, move |settings| {
+        settings.scrobble.listenbrainz_love_enabled = enabled;
     })
 }
 

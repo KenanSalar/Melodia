@@ -56,6 +56,8 @@ pub struct ProviderStatus {
     pub connected: bool,
     pub username: Option<String>,
     pub enabled: bool,
+    /// Whether favorites are mirrored to this provider's loved tracks.
+    pub love_enabled: bool,
 }
 
 /// A cheap snapshot of scrobble state for seeding the settings UI.
@@ -63,8 +65,15 @@ pub struct ProviderStatus {
 pub struct ScrobbleStatus {
     pub lastfm: ProviderStatus,
     pub listenbrainz: ProviderStatus,
-    pub love_sync_enabled: bool,
     pub mbid_auto_tag: bool,
+}
+
+/// Which provider a retroactive love backfill targets. Provider-scoped so
+/// enabling/connecting one service doesn't re-love the whole library on the other.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LoveTarget {
+    Lastfm,
+    ListenBrainz,
 }
 
 /// Owns the scrobble credential/enabled shadow and the durable offline queue.
@@ -98,13 +107,14 @@ fn build_status(credentials: &ScrobbleCredentials, flags: &ScrobbleFlags) -> Scr
             connected: credentials.lastfm.is_some(),
             username: credentials.lastfm.as_ref().map(|c| c.username.clone()),
             enabled: flags.lastfm_enabled,
+            love_enabled: flags.lastfm_love_enabled,
         },
         listenbrainz: ProviderStatus {
             connected: credentials.listenbrainz.is_some(),
             username: credentials.listenbrainz.as_ref().map(|c| c.username.clone()),
             enabled: flags.listenbrainz_enabled,
+            love_enabled: flags.listenbrainz_love_enabled,
         },
-        love_sync_enabled: flags.love_sync_enabled,
         mbid_auto_tag: flags.mbid_auto_tag,
     }
 }
@@ -242,39 +252,38 @@ impl ScrobbleService {
 
     /// Whether a favorite toggle should be mirrored to any provider right now —
     /// the cheap gate `library::favorites` checks before doing per-track DB
-    /// lookups. True only when love-sync is on and at least one provider can
-    /// receive a love: Last.fm (this build shipped keys + connected) or
-    /// `ListenBrainz` (enabled + connected).
+    /// lookups. True when at least one provider's love toggle is on and can
+    /// receive a love: Last.fm (love on + this build shipped keys + connected) or
+    /// `ListenBrainz` (love on + connected).
     pub fn love_sync_active(&self) -> bool {
         let runtime = self.runtime.read();
-        runtime.flags.love_sync_enabled
-            && ((lastfm::is_configured() && runtime.credentials.lastfm.is_some())
-                || (runtime.flags.listenbrainz_enabled
-                    && runtime.credentials.listenbrainz.is_some()))
+        (runtime.flags.lastfm_love_enabled
+            && lastfm::is_configured()
+            && runtime.credentials.lastfm.is_some())
+            || (runtime.flags.listenbrainz_love_enabled
+                && runtime.credentials.listenbrainz.is_some())
     }
 
-    /// Enrich a DB row into a durable love/unlove and wake the submitter. Gated
-    /// on `love_sync_enabled`; sets a provider's flag only when it can receive
-    /// the love — Last.fm when configured + connected, `ListenBrainz` when
-    /// enabled + connected **and** the track carries a `recording_mbid` (LB
-    /// feedback keys on it, so untagged tracks skip LB). A no-op when the row
-    /// can't be built or no provider wants it.
+    /// Enrich a DB row into a durable love/unlove and wake the submitter. Sets a
+    /// provider's flag only when it can receive the love — Last.fm when its love
+    /// toggle is on + configured + connected, `ListenBrainz` when its love toggle
+    /// is on + connected **and** the track carries a `recording_mbid` (LB feedback
+    /// keys on it, so untagged tracks skip LB). A no-op when the row can't be
+    /// built or no provider wants it.
     pub fn enqueue_love(&self, row: &ScrobbleRow, loved: bool) -> AppResult<()> {
         let Some(track) = ScrobbleTrack::from_row(row) else {
             return Ok(());
         };
         let (lastfm_remaining, listenbrainz_remaining) = {
             let runtime = self.runtime.read();
-            if runtime.flags.love_sync_enabled {
-                (
-                    lastfm::is_configured() && runtime.credentials.lastfm.is_some(),
-                    runtime.flags.listenbrainz_enabled
-                        && runtime.credentials.listenbrainz.is_some()
-                        && track.recording_mbid.is_some(),
-                )
-            } else {
-                (false, false)
-            }
+            (
+                runtime.flags.lastfm_love_enabled
+                    && lastfm::is_configured()
+                    && runtime.credentials.lastfm.is_some(),
+                runtime.flags.listenbrainz_love_enabled
+                    && runtime.credentials.listenbrainz.is_some()
+                    && track.recording_mbid.is_some(),
+            )
         };
         if !lastfm_remaining && !listenbrainz_remaining {
             return Ok(());
@@ -287,6 +296,64 @@ impl ScrobbleService {
         })?;
         self.notify.notify_one();
         Ok(())
+    }
+
+    /// Whether `target`'s love toggle can receive loves right now — the cheap
+    /// gate the retroactive favorite backfill checks before fetching favorites.
+    pub fn love_target_armed(&self, target: LoveTarget) -> bool {
+        let runtime = self.runtime.read();
+        match target {
+            LoveTarget::Lastfm => {
+                runtime.flags.lastfm_love_enabled
+                    && lastfm::is_configured()
+                    && runtime.credentials.lastfm.is_some()
+            }
+            LoveTarget::ListenBrainz => {
+                runtime.flags.listenbrainz_love_enabled
+                    && runtime.credentials.listenbrainz.is_some()
+            }
+        }
+    }
+
+    /// Retroactively queue a love for every favorite `row`, armed for **only**
+    /// `target` (so connecting one provider doesn't re-love everything on the
+    /// other). Batches the whole set into a single queue lock + save + submitter
+    /// wake, unlike per-track [`Self::enqueue_love`]. `ListenBrainz` skips rows
+    /// without a `recording_mbid` (it keys on that). Returns how many loves were
+    /// actually queued. A no-op returning `Ok(0)` when `target` isn't armed.
+    pub fn backfill_loves(&self, rows: &[ScrobbleRow], target: LoveTarget) -> AppResult<usize> {
+        if !self.love_target_armed(target) {
+            return Ok(0);
+        }
+        let (queued, snapshot) = {
+            let mut queue = self.queue.lock();
+            let mut queued = 0usize;
+            for row in rows {
+                let Some(track) = ScrobbleTrack::from_row(row) else {
+                    continue;
+                };
+                let (lastfm_remaining, listenbrainz_remaining) = match target {
+                    LoveTarget::Lastfm => (true, false),
+                    // LB feedback keys on the recording MBID — skip untagged tracks.
+                    LoveTarget::ListenBrainz if track.recording_mbid.is_some() => (false, true),
+                    LoveTarget::ListenBrainz => continue,
+                };
+                queue.push_love(LoveItem {
+                    track,
+                    loved: true,
+                    lastfm_remaining,
+                    listenbrainz_remaining,
+                });
+                queued += 1;
+            }
+            (queued, queue.clone())
+        };
+        if queued == 0 {
+            return Ok(0);
+        }
+        snapshot.save(&self.queue_path)?;
+        self.notify.notify_one();
+        Ok(queued)
     }
 
     /// The shared lazy `reqwest::Client`, built on first use. Clones are cheap —
@@ -539,12 +606,13 @@ impl ScrobbleService {
             queue.loves.iter().cloned().collect()
         };
 
-        let (lastfm_creds, lb_creds, lb_enabled) = {
+        // Loves drain on connection alone — the love toggles (not the scrobble
+        // toggles) gate *enqueuing*, so neither `*_enabled` flag is read here.
+        let (lastfm_creds, lb_creds) = {
             let runtime = self.runtime.read();
             (
                 runtime.credentials.lastfm.clone(),
                 runtime.credentials.listenbrainz.clone(),
-                runtime.flags.listenbrainz_enabled,
             )
         };
 
@@ -597,7 +665,7 @@ impl ScrobbleService {
         }
 
         // ---- ListenBrainz ----
-        let lb_ready = lb_enabled && lb_creds.is_some();
+        let lb_ready = lb_creds.is_some();
         if !lb_ready {
             drop_flags(&snapshot, |it| it.listenbrainz_remaining, &mut clear_lb);
         } else if let Some(creds) = lb_creds.as_ref() {

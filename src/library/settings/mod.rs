@@ -41,7 +41,8 @@ pub use replaygain::{
     set_replaygain_prevent_clipping,
 };
 pub use scrobble::{
-    set_scrobble_lastfm_enabled, set_scrobble_listenbrainz_enabled, set_scrobble_love_sync_enabled,
+    set_scrobble_lastfm_enabled, set_scrobble_lastfm_love_enabled,
+    set_scrobble_listenbrainz_enabled, set_scrobble_listenbrainz_love_enabled,
     set_scrobble_mbid_auto_tag,
 };
 pub use folders::{

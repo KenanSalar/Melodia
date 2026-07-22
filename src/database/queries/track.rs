@@ -171,6 +171,19 @@ pub async fn get_scrobble_row(db: &DbPool, id: i64) -> Result<Option<track::Scro
     Ok(row)
 }
 
+/// Every favorited track's scrobble projection — the bulk source for the
+/// retroactive love backfill (enable a love toggle / connect a service and
+/// existing favorites sync without re-toggling each heart). Carries the
+/// `MusicBrainz` ids `ScrobbleRow` needs for the `ListenBrainz` love path.
+pub async fn get_favorite_scrobble_rows(db: &DbPool) -> Result<Vec<track::ScrobbleRow>, AppError> {
+    let cols = track::scrobble_row_columns();
+    let sql = format!("SELECT {cols} FROM tracks WHERE is_favorite = TRUE");
+    let rows = sqlx::query_as::<_, track::ScrobbleRow>(AssertSqlSafe(sql))
+        .fetch_all(db.read())
+        .await?;
+    Ok(rows)
+}
+
 /// Fetch just the `file_path` column for a single track id — the
 /// leanest possible projection, used by the "Open Containing Folder"
 /// context-menu action which only needs the on-disk location. Returns

@@ -569,6 +569,19 @@ pub fn install_toast_bridge(
                         6000,
                     );
                 }
+                // Informational result of a retroactive loved-tracks backfill.
+                ToastKind::LoveSync => {
+                    notifications.show_auto_dismiss(
+                        NotificationParams {
+                            variant: "info".into(),
+                            title: g.invoke_toast_love_sync_title(),
+                            message: detail.into(),
+                            action_label: slint::SharedString::default(),
+                            action_kind: "info".into(),
+                        },
+                        6000,
+                    );
+                }
             }
         }
     }))

@@ -188,13 +188,17 @@ export global Settings {
     in-out property <bool> scrobble-lastfm-enabled;
     callback scrobble-lastfm-enabled-changed(bool);
     callback scrobble-lastfm-disconnect();
+    // Mirror favorites to Last.fm Loved Tracks — independent of the two.
+    in-out property <bool> scrobble-lastfm-love;
+    callback scrobble-lastfm-love-changed(bool);
     in property <bool> scrobble-listenbrainz-connected;
     in property <string> scrobble-listenbrainz-username;
     in-out property <bool> scrobble-listenbrainz-enabled;
     callback scrobble-listenbrainz-enabled-changed(bool);
     callback scrobble-listenbrainz-disconnect();
-    in-out property <bool> scrobble-love-sync;
-    callback scrobble-love-sync-changed(bool);
+    // Mirror favorites to ListenBrainz recording feedback.
+    in-out property <bool> scrobble-listenbrainz-love;
+    callback scrobble-listenbrainz-love-changed(bool);
     // Auto-tag scanned tracks with their MusicBrainz Recording ID (via
     // ListenBrainz) so loves work on untagged libraries. The manual button
     // forces a re-sweep of tracks still missing an id.
@@ -468,6 +472,10 @@ export global Settings {
     pure callback toast-mbid-title() -> string;
     toast-mbid-title => {
         return @tr("MusicBrainz IDs");
+    }
+    pure callback toast-love-sync-title() -> string;
+    toast-love-sync-title => {
+        return @tr("Loved tracks");
     }
 
     // Add-to-Playlist multi-select commit toast (track row context menu →

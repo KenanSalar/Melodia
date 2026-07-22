@@ -1339,6 +1339,21 @@ msgstr "Informar de cada reproducción a tu cuenta de ListenBrainz"
 msgid "Sync loved tracks"
 msgstr "Sincronizar pistas favoritas"
 
+msgid "Sync loved tracks to Last.fm"
+msgstr "Sincronizar pistas favoritas con Last.fm"
+
+msgid "Mark tracks you love as loved on Last.fm — turning this on syncs your existing favorites"
+msgstr "Marcar como favoritas en Last.fm las pistas que te gustan — al activarlo se sincronizan tus favoritas actuales"
+
+msgid "Sync loved tracks to ListenBrainz"
+msgstr "Sincronizar pistas favoritas con ListenBrainz"
+
+msgid "Mark tracks you love as loved on ListenBrainz — turning this on syncs your existing favorites (needs MusicBrainz IDs)"
+msgstr "Marcar como favoritas en ListenBrainz las pistas que te gustan — al activarlo se sincronizan tus favoritas actuales (requiere identificadores de MusicBrainz)"
+
+msgid "Loved tracks"
+msgstr "Pistas favoritas"
+
 msgid "Mark tracks you love as loved on your connected services"
 msgstr "Marcar como favoritas las pistas que te gustan en tus servicios conectados"
 

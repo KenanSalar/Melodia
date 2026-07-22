@@ -1342,6 +1342,21 @@ msgstr "Her çalmayı ListenBrainz hesabına bildir"
 msgid "Sync loved tracks"
 msgstr "Beğenilen parçaları eşitle"
 
+msgid "Sync loved tracks to Last.fm"
+msgstr "Beğenilen parçaları Last.fm ile eşitle"
+
+msgid "Mark tracks you love as loved on Last.fm — turning this on syncs your existing favorites"
+msgstr "Beğendiğin parçaları Last.fm'de beğenilmiş olarak işaretle — açtığında mevcut favorilerin eşitlenir"
+
+msgid "Sync loved tracks to ListenBrainz"
+msgstr "Beğenilen parçaları ListenBrainz ile eşitle"
+
+msgid "Mark tracks you love as loved on ListenBrainz — turning this on syncs your existing favorites (needs MusicBrainz IDs)"
+msgstr "Beğendiğin parçaları ListenBrainz'de beğenilmiş olarak işaretle — açtığında mevcut favorilerin eşitlenir (MusicBrainz kimlikleri gerekir)"
+
+msgid "Loved tracks"
+msgstr "Beğenilen parçalar"
+
 msgid "Mark tracks you love as loved on your connected services"
 msgstr "Beğendiğin parçaları bağlı servislerinde beğenilmiş olarak işaretle"
 

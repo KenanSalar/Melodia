@@ -29,25 +29,21 @@ export component ScrobblingSection inherits Rectangle {
             || Settings.matches(label + " " + desc, root.query);
     }
 
-    // One cluster per service; the enable-toggle labels are folded into the
-    // status row's search text so matching "scrobble" reveals the whole cluster.
+    // One cluster per service; the enable- and love-toggle labels are folded into
+    // the status row's search text so matching "scrobble" or "loved" reveals the
+    // whole cluster (the per-provider love toggle lives inside its cluster).
     property <bool> show-lastfm: row-visible(
-        @tr("Last.fm") + " " + @tr("Scrobble to Last.fm"),
+        @tr("Last.fm") + " " + @tr("Scrobble to Last.fm") + " " + @tr("Sync loved tracks to Last.fm"),
         @tr("Report each play to your Last.fm account"));
     property <bool> show-listenbrainz: row-visible(
-        @tr("ListenBrainz") + " " + @tr("Scrobble to ListenBrainz"),
+        @tr("ListenBrainz") + " " + @tr("Scrobble to ListenBrainz") + " " + @tr("Sync loved tracks to ListenBrainz"),
         @tr("Report each play to your ListenBrainz account"));
-    // Love sync works for whichever provider is connected, so the row shows once
-    // either is connected — hidden otherwise regardless of the search query.
-    property <bool> show-love: (Settings.scrobble-lastfm-connected || Settings.scrobble-listenbrainz-connected) && row-visible(
-        @tr("Sync loved tracks"),
-        @tr("Mark tracks you love as loved on your connected services"));
     // MusicBrainz auto-tagging is ListenBrainz-driven (its token resolves the ids).
     property <bool> show-mbid: Settings.scrobble-listenbrainz-connected && row-visible(
         @tr("Add MusicBrainz IDs to your music"),
         @tr("Look up and tag files so loves work on ListenBrainz"));
 
-    out property <bool> has-matches: show-lastfm || show-listenbrainz || show-love || show-mbid;
+    out property <bool> has-matches: show-lastfm || show-listenbrainz || show-mbid;
 
     VerticalLayout {
     if has-matches: SectionCard {
@@ -99,6 +95,16 @@ export component ScrobblingSection inherits Rectangle {
             }
         }
 
+        if root.show-lastfm && Settings.scrobble-lastfm-connected: SettingRow {
+            icon: "favorite";
+            label: @tr("Sync loved tracks to Last.fm");
+            description: @tr("Mark tracks you love as loved on Last.fm — turning this on syncs your existing favorites");
+            ToggleSwitch {
+                checked <=> Settings.scrobble-lastfm-love;
+                toggled(v) => { Settings.scrobble-lastfm-love-changed(v); }
+            }
+        }
+
         if root.show-lastfm && root.show-listenbrainz: SectionDivider {}
 
         // ---- ListenBrainz ----
@@ -144,20 +150,17 @@ export component ScrobblingSection inherits Rectangle {
             }
         }
 
-        if root.show-love && (root.show-lastfm || root.show-listenbrainz): SectionDivider {}
-
-        // ---- Love sync (whichever provider is connected) ----
-        if root.show-love: SettingRow {
+        if root.show-listenbrainz && Settings.scrobble-listenbrainz-connected: SettingRow {
             icon: "favorite";
-            label: @tr("Sync loved tracks");
-            description: @tr("Mark tracks you love as loved on your connected services");
+            label: @tr("Sync loved tracks to ListenBrainz");
+            description: @tr("Mark tracks you love as loved on ListenBrainz — turning this on syncs your existing favorites (needs MusicBrainz IDs)");
             ToggleSwitch {
-                checked <=> Settings.scrobble-love-sync;
-                toggled(v) => { Settings.scrobble-love-sync-changed(v); }
+                checked <=> Settings.scrobble-listenbrainz-love;
+                toggled(v) => { Settings.scrobble-listenbrainz-love-changed(v); }
             }
         }
 
-        if root.show-mbid && (root.show-love || root.show-lastfm || root.show-listenbrainz): SectionDivider {}
+        if root.show-mbid && (root.show-lastfm || root.show-listenbrainz): SectionDivider {}
 
         // ---- MusicBrainz auto-tagging (ListenBrainz-driven) ----
         if root.show-mbid: SettingRow {
