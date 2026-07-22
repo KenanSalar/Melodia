@@ -160,9 +160,7 @@ export component ScrobblingSection inherits Rectangle {
             }
         }
 
-        if root.show-mbid && (root.show-lastfm || root.show-listenbrainz): SectionDivider {}
-
-        // ---- MusicBrainz auto-tagging (ListenBrainz-driven) ----
+        // ---- MusicBrainz auto-tagging (ListenBrainz-driven, part of the LB cluster) ----
         if root.show-mbid: SettingRow {
             icon: "auto_awesome";
             label: @tr("Add MusicBrainz IDs to your music");
