@@ -30,6 +30,10 @@ pub enum ToastKind {
     /// A user-initiated backend operation failed (folder scan, file import,
     /// settings save, …).
     OperationFailed,
+    /// The `MusicBrainz` auto-tag backfill finished a user-initiated sweep — an
+    /// informational result (how many tracks were tagged), not a failure. Shown
+    /// as an auto-dismissing info toast.
+    MbidTagging,
 }
 
 /// A queued toast. The localized title is chosen by [`kind`](Self::kind) on the

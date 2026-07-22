@@ -1360,6 +1360,9 @@ msgstr "Hâlâ MusicBrainz kimliği olmayan parçaları yeniden tara"
 msgid "Look up"
 msgstr "Ara"
 
+msgid "MusicBrainz IDs"
+msgstr "MusicBrainz kimlikleri"
+
 msgid "Connected as {}"
 msgstr "{} olarak bağlanıldı"
 

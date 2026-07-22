@@ -25,6 +25,7 @@ use crate::services::scrobble::ScrobbleService;
 use crate::services::scrobble::providers::listenbrainz::{
     self, ListenBrainzError, LookupQuery, MAX_LOOKUPS_PER_POST,
 };
+use crate::services::toast::{self, ToastKind};
 use crate::state::AppState;
 use crate::tasks::TaskSpawner;
 
@@ -37,6 +38,14 @@ const MAX_BACKOFF_SECS: u64 = 300;
 /// pace lookups rather than sprint into a 429.
 const BATCH_PAUSE: Duration = Duration::from_millis(300);
 
+/// What one sweep accomplished, for logging + the user-facing toast.
+struct SweepOutcome {
+    /// Tracks whose lookup completed this sweep (matched or not).
+    looked_up: usize,
+    /// Tracks that got a Recording ID written.
+    tagged: usize,
+}
+
 /// Spawn the backfill loop on the shared task lifecycle so shutdown waits for an
 /// in-flight batch's DB commit.
 pub fn spawn(spawner: &TaskSpawner, state: &AppState) {
@@ -48,7 +57,8 @@ pub fn spawn(spawner: &TaskSpawner, state: &AppState) {
         let mut attempted: HashSet<i64> = HashSet::new();
 
         // Boot sweep: tags an already-enabled library (and is a no-op otherwise).
-        run_sweep(&state, &service, &shutdown, &mut attempted).await;
+        // Silent — the user didn't ask for it just now.
+        run_sweep(&state, &service, &shutdown, &mut attempted, false).await;
 
         loop {
             tokio::select! {
@@ -58,13 +68,15 @@ pub fn spawn(spawner: &TaskSpawner, state: &AppState) {
                         break;
                     }
                     let _ = lib_rx.borrow_and_update();
-                    // A real scan/import: resolve only the not-yet-attempted rows.
-                    run_sweep(&state, &service, &shutdown, &mut attempted).await;
+                    // A real scan/import: resolve only the not-yet-attempted rows,
+                    // silently (a toast on every import would be noise).
+                    run_sweep(&state, &service, &shutdown, &mut attempted, false).await;
                 }
                 () = service.mbid_kicked() => {
-                    // Enable toggle / manual button: force a full re-sweep.
+                    // Enable toggle / manual button: force a full re-sweep and
+                    // report the result — this one the user triggered on purpose.
                     attempted.clear();
-                    run_sweep(&state, &service, &shutdown, &mut attempted).await;
+                    run_sweep(&state, &service, &shutdown, &mut attempted, true).await;
                 }
             }
         }
@@ -75,18 +87,53 @@ pub fn spawn(spawner: &TaskSpawner, state: &AppState) {
 }
 
 /// Gate on the enabled+connected shadow, then sweep. A no-op when auto-tagging is
-/// off or `ListenBrainz` isn't connected.
+/// off or `ListenBrainz` isn't connected. `announce` toasts the result — set only
+/// for user-triggered sweeps (enable toggle / "Look up missing IDs" button).
 async fn run_sweep(
     state: &AppState,
     service: &ScrobbleService,
     shutdown: &CancellationToken,
     attempted: &mut HashSet<i64>,
+    announce: bool,
 ) {
     let Some(token) = service.mbid_lookup_token() else {
         return;
     };
-    if let Err(e) = backfill(state, &token, shutdown, attempted).await {
-        log::warn!("MBID backfill failed: {e}");
+    match backfill(state, &token, shutdown, attempted).await {
+        Ok(outcome) => {
+            // Always log the outcome — a zero-match sweep used to be silent, which
+            // read as "nothing happened / stuck".
+            log::info!(
+                "MBID backfill: looked up {}, tagged {}",
+                outcome.looked_up,
+                outcome.tagged
+            );
+            if announce {
+                toast::notify(ToastKind::MbidTagging, summarize(&outcome));
+            }
+        }
+        Err(e) => {
+            log::warn!("MBID backfill failed: {e}");
+            if announce {
+                toast::notify(ToastKind::MbidTagging, "Couldn't look up MusicBrainz IDs");
+            }
+        }
+    }
+}
+
+/// A one-line, human summary of a sweep for the toast body. English-only, like
+/// every other dynamic toast detail (the localized part is the title).
+fn summarize(outcome: &SweepOutcome) -> String {
+    match outcome {
+        SweepOutcome { looked_up: 0, .. } => {
+            "All eligible tracks already have a MusicBrainz ID".to_owned()
+        }
+        SweepOutcome { tagged: 0, looked_up } => format!(
+            "No matches — {looked_up} track(s) had tags MusicBrainz couldn't identify"
+        ),
+        SweepOutcome { tagged, looked_up } => {
+            format!("Tagged {tagged} of {looked_up} track(s)")
+        }
     }
 }
 
@@ -98,19 +145,23 @@ async fn backfill(
     token: &str,
     shutdown: &CancellationToken,
     attempted: &mut HashSet<i64>,
-) -> AppResult<()> {
+) -> AppResult<SweepOutcome> {
     let pending: Vec<_> = queries::track::get_tracks_missing_mbid(&state.db)
         .await?
         .into_iter()
         .filter(|(id, ..)| !attempted.contains(id))
         .collect();
     if pending.is_empty() {
-        return Ok(());
+        return Ok(SweepOutcome {
+            looked_up: 0,
+            tagged: 0,
+        });
     }
     log::info!("MBID backfill: {} track(s) to look up", pending.len());
 
     let client = state.http_client().clone();
     let mut idx = 0;
+    let mut looked_up = 0usize;
     let mut written = 0usize;
 
     while idx < pending.len() && !shutdown.is_cancelled() {
@@ -143,6 +194,11 @@ async fn backfill(
                         matched.map(|m| (*id, path.clone(), m.recording_mbid))
                     })
                     .collect();
+                log::debug!(
+                    "MBID backfill batch: {} looked up, {} matched",
+                    chunk.len(),
+                    resolved.len()
+                );
                 for (id, ..) in chunk {
                     attempted.insert(*id);
                 }
@@ -152,6 +208,7 @@ async fn backfill(
                         Err(e) => log::warn!("MBID backfill write failed: {e}"),
                     }
                 }
+                looked_up += chunk.len();
                 idx = end;
                 if shutdown
                     .run_until_cancelled(tokio::time::sleep(BATCH_PAUSE))
@@ -183,13 +240,14 @@ async fn backfill(
                 for (id, ..) in chunk {
                     attempted.insert(*id);
                 }
+                looked_up += chunk.len();
                 idx = end;
             }
         }
     }
 
-    if written > 0 {
-        log::info!("MBID backfill: tagged {written} track(s)");
-    }
-    Ok(())
+    Ok(SweepOutcome {
+        looked_up,
+        tagged: written,
+    })
 }

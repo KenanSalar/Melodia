@@ -541,17 +541,35 @@ pub fn install_toast_bridge(
         while let Some(ToastRequest { kind, detail }) = rx.recv().await {
             let Some(ui) = weak.upgrade() else { break };
             let g = ui.global::<Settings>();
-            let title = match kind {
-                ToastKind::PlaybackFailed => g.invoke_toast_playback_error_title(),
-                ToastKind::OperationFailed => g.invoke_toast_operation_failed_title(),
-            };
-            notifications.show(NotificationParams {
-                variant: "error".into(),
-                title,
-                message: detail.into(),
-                action_label: slint::SharedString::default(),
-                action_kind: "error".into(),
-            });
+            match kind {
+                ToastKind::PlaybackFailed | ToastKind::OperationFailed => {
+                    let title = match kind {
+                        ToastKind::PlaybackFailed => g.invoke_toast_playback_error_title(),
+                        _ => g.invoke_toast_operation_failed_title(),
+                    };
+                    notifications.show(NotificationParams {
+                        variant: "error".into(),
+                        title,
+                        message: detail.into(),
+                        action_label: slint::SharedString::default(),
+                        action_kind: "error".into(),
+                    });
+                }
+                // Informational result of a user-triggered MBID sweep — transient,
+                // so it auto-dismisses rather than sticking like a failure.
+                ToastKind::MbidTagging => {
+                    notifications.show_auto_dismiss(
+                        NotificationParams {
+                            variant: "info".into(),
+                            title: g.invoke_toast_mbid_title(),
+                            message: detail.into(),
+                            action_label: slint::SharedString::default(),
+                            action_kind: "info".into(),
+                        },
+                        6000,
+                    );
+                }
+            }
         }
     }))
     .map(|_| ())

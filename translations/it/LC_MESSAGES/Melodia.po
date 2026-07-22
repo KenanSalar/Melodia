@@ -1357,6 +1357,9 @@ msgstr "Rianalizza i brani che non hanno ancora un ID MusicBrainz"
 msgid "Look up"
 msgstr "Cerca"
 
+msgid "MusicBrainz IDs"
+msgstr "ID MusicBrainz"
+
 msgid "Connected as {}"
 msgstr "Connesso come {}"
 

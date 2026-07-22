@@ -211,6 +211,24 @@ cargo test                                      # run tests
 > configured in this build". ListenBrainz needs no such setup (each user pastes
 > their own token).
 
+> **Tip — cleaning up a loosely-tagged library.**
+> The optional MusicBrainz auto-tagging (Settings → Scrobbling → *Add MusicBrainz
+> IDs to your music*) resolves each track's MusicBrainz Recording ID by looking up
+> its **artist + title** on ListenBrainz, so it only works when your files already
+> carry reasonably correct tags. For music ripped from YouTube or otherwise loosely
+> tagged — artist fields like `NoCopyrightSounds` or `<unknown>`, titles full of
+> `(Official Video)` cruft — a text lookup can't identify most
+> tracks, so they stay untagged (and can't be "loved" on ListenBrainz).
+>
+> For those, run **[MusicBrainz Picard](https://picard.musicbrainz.org/)** first.
+> Picard identifies tracks by **acoustic fingerprint** — it analyses the actual
+> audio, not the tags — then writes clean metadata plus the MusicBrainz IDs, with a
+> review step so you approve matches before they're saved. On Fedora:
+> `sudo dnf install picard` (or the `org.musicbrainz.Picard` Flatpak); add your
+> music, **Scan**, then **Save**. Melodia picks up the new tags on its next scan,
+> and both your metadata and the ListenBrainz "loved" sync then work across the
+> whole library.
+
 ## Tech Stack
 
 | Layer | Technology |

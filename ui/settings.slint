@@ -465,6 +465,10 @@ export global Settings {
     toast-operation-failed-title => {
         return @tr("Something went wrong");
     }
+    pure callback toast-mbid-title() -> string;
+    toast-mbid-title => {
+        return @tr("MusicBrainz IDs");
+    }
 
     // Add-to-Playlist multi-select commit toast (track row context menu →
     // Add to Playlist → tick playlists → Add). Title pluralizes on the

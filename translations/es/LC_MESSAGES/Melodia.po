@@ -1357,6 +1357,9 @@ msgstr "Volver a analizar las pistas que aún no tienen identificador de MusicBr
 msgid "Look up"
 msgstr "Buscar"
 
+msgid "MusicBrainz IDs"
+msgstr "Identificadores de MusicBrainz"
+
 msgid "Connected as {}"
 msgstr "Conectado como {}"
 

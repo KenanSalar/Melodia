@@ -1366,6 +1366,9 @@ msgstr "Titel erneut einlesen, die noch keine MusicBrainz-ID haben"
 msgid "Look up"
 msgstr "Nachschlagen"
 
+msgid "MusicBrainz IDs"
+msgstr "MusicBrainz-IDs"
+
 msgid "Connected as {}"
 msgstr "Verbunden als {}"
 

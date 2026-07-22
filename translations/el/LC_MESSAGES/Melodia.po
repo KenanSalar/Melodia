@@ -1359,6 +1359,9 @@ msgstr "Εκ νέου σάρωση κομματιών που δεν έχουν �
 msgid "Look up"
 msgstr "Αναζήτηση"
 
+msgid "MusicBrainz IDs"
+msgstr "Αναγνωριστικά MusicBrainz"
+
 msgid "Connected as {}"
 msgstr "Συνδεδεμένος ως {}"
 
