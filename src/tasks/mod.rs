@@ -10,6 +10,7 @@ pub mod file_event_processor;
 pub mod first_launch;
 pub mod heap_trim;
 pub mod material_you;
+pub mod mbid_backfill;
 pub mod play_count_flusher;
 pub mod playback_monitor;
 pub mod queue_prune;

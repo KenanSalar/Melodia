@@ -340,10 +340,18 @@ pub struct TrayFlags {
 /// fully off. See `PlaybackFlags` for the substruct rationale.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(default)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "independent scrobble toggles, serde-flattened into settings.json — nesting would change the on-disk shape and break existing installs"
+)]
 pub struct ScrobbleFlags {
     pub lastfm_enabled: bool,
     pub listenbrainz_enabled: bool,
     pub love_sync_enabled: bool,
+    /// Auto-tag scanned tracks with their `MusicBrainz` Recording ID (resolved via
+    /// `ListenBrainz`) so loves work on untagged libraries. Writes the id into both
+    /// the DB and the audio file. Default `false` — new behavior, opt-in.
+    pub mbid_auto_tag: bool,
 }
 
 /// Library-management toggles. See `PlaybackFlags` for the substruct rationale.

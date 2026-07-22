@@ -42,6 +42,7 @@ pub use replaygain::{
 };
 pub use scrobble::{
     set_scrobble_lastfm_enabled, set_scrobble_listenbrainz_enabled, set_scrobble_love_sync_enabled,
+    set_scrobble_mbid_auto_tag,
 };
 pub use folders::{
     add_folder, get_folders, reconcile_watched_folders, remove_folder, scan_folder,

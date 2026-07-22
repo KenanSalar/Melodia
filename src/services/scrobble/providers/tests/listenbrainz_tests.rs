@@ -1,4 +1,7 @@
-use super::{feedback_payload, listens_payload, playing_now_payload};
+use super::{
+    BulkLookupResult, LookupQuery, align_bulk_results, bulk_lookup_payload, feedback_payload,
+    listens_payload, mbid_match, playing_now_payload,
+};
 use crate::services::scrobble::model::ScrobbleTrack;
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
@@ -66,5 +69,68 @@ fn feedback_payload_maps_love_state_to_score() -> TestResult {
     // Unlove clears the feedback with score 0.
     let cleared = serde_json::to_value(feedback_payload("mbid-1", 0))?;
     assert_eq!(cleared["score"], 0);
+    Ok(())
+}
+
+#[test]
+fn bulk_lookup_payload_omits_absent_release() -> TestResult {
+    let queries = [
+        LookupQuery {
+            artist: "50 Cent",
+            title: "Candy Shop",
+            release: Some("The Massacre"),
+        },
+        LookupQuery {
+            artist: "Nas",
+            title: "N.Y. State of Mind",
+            release: None,
+        },
+    ];
+    let value = serde_json::to_value(bulk_lookup_payload(&queries))?;
+
+    let recs = &value["recordings"];
+    assert_eq!(recs[0]["artist_name"], "50 Cent");
+    assert_eq!(recs[0]["recording_name"], "Candy Shop");
+    assert_eq!(recs[0]["release_name"], "The Massacre");
+    // A missing release is skipped, not serialized as null.
+    assert!(recs[1].get("release_name").is_none());
+    Ok(())
+}
+
+#[test]
+fn mbid_match_treats_blank_recording_id_as_no_match() {
+    assert!(mbid_match(None, None).is_none());
+    assert!(mbid_match(Some("   ".to_owned()), None).is_none());
+
+    let matched = mbid_match(Some("rec-1".to_owned()), Some(String::new()));
+    assert_eq!(
+        matched.as_ref().map(|m| m.recording_mbid.as_str()),
+        Some("rec-1"),
+        "a non-empty recording id is a match",
+    );
+    // A blank release id degrades to None rather than an empty string.
+    assert_eq!(matched.and_then(|m| m.release_mbid), None);
+}
+
+#[test]
+fn align_bulk_results_keys_on_index_not_position() -> TestResult {
+    // A response that is reordered and short one entry (the unmatched track is
+    // omitted here to prove alignment survives a partial, out-of-order array).
+    let results: Vec<BulkLookupResult> = serde_json::from_str(
+        r#"[
+            {"index": 2, "recording_mbid": "rec-2", "release_mbid": "rel-2"},
+            {"index": 0, "recording_mbid": "rec-0"}
+        ]"#,
+    )?;
+    let aligned = align_bulk_results(3, results);
+
+    assert_eq!(aligned.len(), 3);
+    assert_eq!(aligned[0].as_ref().map(|m| m.recording_mbid.as_str()), Some("rec-0"));
+    assert!(aligned[1].is_none()); // never returned by the server
+    assert_eq!(aligned[2].as_ref().map(|m| m.recording_mbid.as_str()), Some("rec-2"));
+    assert_eq!(
+        aligned[2].as_ref().and_then(|m| m.release_mbid.as_deref()),
+        Some("rel-2"),
+    );
     Ok(())
 }

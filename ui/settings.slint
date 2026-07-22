@@ -195,6 +195,12 @@ export global Settings {
     callback scrobble-listenbrainz-disconnect();
     in-out property <bool> scrobble-love-sync;
     callback scrobble-love-sync-changed(bool);
+    // Auto-tag scanned tracks with their MusicBrainz Recording ID (via
+    // ListenBrainz) so loves work on untagged libraries. The manual button
+    // forces a re-sweep of tracks still missing an id.
+    in-out property <bool> scrobble-mbid-auto-tag;
+    callback scrobble-mbid-auto-tag-changed(bool);
+    callback scrobble-lookup-missing-mbids();
 
     // Watch for file changes (file-watcher) toggle. ToggleSwitch in
     // `ui/views/settings/file-watching-section.slint` binds two-way; the

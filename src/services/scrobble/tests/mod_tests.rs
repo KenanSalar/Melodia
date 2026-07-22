@@ -126,6 +126,7 @@ fn set_flags_updates_status() -> TestResult {
         lastfm_enabled: true,
         listenbrainz_enabled: false,
         love_sync_enabled: true,
+        ..Default::default()
     });
     let status = service.status();
     assert!(status.lastfm.enabled);
@@ -161,6 +162,7 @@ fn status_watch_observes_credential_and_flag_changes() -> TestResult {
         lastfm_enabled: true,
         listenbrainz_enabled: false,
         love_sync_enabled: false,
+        ..Default::default()
     });
     assert!(rx.borrow_and_update().lastfm.enabled);
     Ok(())
@@ -194,6 +196,7 @@ fn lb_love_service(
             lastfm_enabled: false,
             listenbrainz_enabled: true,
             love_sync_enabled: love_sync,
+            ..Default::default()
         },
     );
     service.set_listenbrainz_credentials(Some(ListenBrainzCredentials {

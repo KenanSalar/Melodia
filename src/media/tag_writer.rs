@@ -54,7 +54,7 @@ use lofty::file::{AudioFile, TaggedFileExt};
 use lofty::picture::{Picture, PictureType};
 use lofty::prelude::{Accessor, ItemKey};
 use lofty::tag::items::Timestamp;
-use lofty::tag::{Tag, TagType};
+use lofty::tag::{ItemValue, Tag, TagItem, TagType};
 
 use crate::error::AppError;
 
@@ -106,6 +106,9 @@ pub struct TagEdit {
     pub disc_number: FieldEdit<u32>,
     pub composer: FieldEdit<String>,
     pub comment: FieldEdit<String>,
+    /// `MusicBrainz` Recording ID — written by the auto-tag backfill so `ListenBrainz`
+    /// loves (which key on it) work; not surfaced in the Edit-Tags dialog.
+    pub musicbrainz_track_id: FieldEdit<String>,
     pub bpm: FieldEdit<f64>,
     pub lyrics: FieldEdit<String>,
     pub artwork: ArtworkEdit,
@@ -130,6 +133,7 @@ impl TagEdit {
             && self.disc_number == FieldEdit::Keep
             && self.composer == FieldEdit::Keep
             && self.comment == FieldEdit::Keep
+            && self.musicbrainz_track_id == FieldEdit::Keep
             && self.bpm == FieldEdit::Keep
             && self.lyrics == FieldEdit::Keep
             && self.artwork == ArtworkEdit::Keep
@@ -189,6 +193,26 @@ fn apply_string(
         FieldEdit::Keep => {}
         FieldEdit::Clear => tag.remove_key(key),
         FieldEdit::Set(v) => set_text(tag, key, v.clone(), field, out),
+    }
+}
+
+/// Write the `MusicBrainz` **Recording** id.
+///
+/// Its own function because `ID3v2` stores this id in a binary `UFID` frame, not a
+/// text frame: the generic [`Tag::insert_text`] support-check has no key mapping
+/// for it and would refuse the write (dropping it into [`UnsupportedFields`]).
+/// Inserting the item *unchecked* stores it regardless, and lofty's
+/// `Tag → Id3v2Tag` conversion turns it into the `UFID` frame on save;
+/// `VorbisComments` and MP4 map the key directly, so the unchecked path writes them
+/// just the same. `insert_unchecked` replaces any existing item of this key.
+fn apply_recording_id(tag: &mut Tag, edit: &FieldEdit<String>) {
+    match edit {
+        FieldEdit::Keep => {}
+        FieldEdit::Clear => tag.remove_key(ItemKey::MusicBrainzRecordingId),
+        FieldEdit::Set(v) => tag.insert_unchecked(TagItem::new(
+            ItemKey::MusicBrainzRecordingId,
+            ItemValue::Text(v.clone()),
+        )),
     }
 }
 
@@ -357,6 +381,7 @@ pub fn apply_edit(tag: &mut Tag, edit: &TagEdit, picture: Option<&Picture>) -> U
     apply_string(tag, &edit.genre, ItemKey::Genre, "genre", &mut out);
     apply_string(tag, &edit.composer, ItemKey::Composer, "composer", &mut out);
     apply_string(tag, &edit.comment, ItemKey::Comment, "comment", &mut out);
+    apply_recording_id(tag, &edit.musicbrainz_track_id);
 
     apply_number(
         tag,

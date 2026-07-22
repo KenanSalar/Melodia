@@ -24,6 +24,9 @@ const MEDIA_PLAYER: &str = "Melodia";
 const SUBMISSION_CLIENT: &str = "Melodia";
 const SUBMISSION_CLIENT_VERSION: &str = env!("CARGO_PKG_VERSION");
 
+/// Server cap on `POST /1/metadata/lookup/` — the bulk MBID lookup batch size.
+pub const MAX_LOOKUPS_PER_POST: usize = 50;
+
 /// A `ListenBrainz` submission's outcome, classified for the submitter's retry
 /// policy.
 #[derive(Debug, thiserror::Error)]
@@ -122,6 +125,88 @@ pub async fn submit_feedback(
     classify_response(response).await
 }
 
+/// A resolved `MusicBrainz` mapping for one track, from `metadata/lookup`.
+#[derive(Debug, Clone)]
+pub struct MbidMatch {
+    pub recording_mbid: String,
+    pub release_mbid: Option<String>,
+}
+
+/// One recording to resolve: artist + title, with an optional release to
+/// sharpen the match.
+pub struct LookupQuery<'a> {
+    pub artist: &'a str,
+    pub title: &'a str,
+    pub release: Option<&'a str>,
+}
+
+/// Resolve a single recording's MBID via `GET /1/metadata/lookup/`. A track the
+/// mapper can't place returns an object with no `recording_mbid` → `Ok(None)`.
+pub async fn lookup_recording_mbid(
+    client: &reqwest::Client,
+    token: &str,
+    query: &LookupQuery<'_>,
+) -> Result<Option<MbidMatch>, ListenBrainzError> {
+    let mut params: Vec<(&str, &str)> = vec![
+        ("artist_name", query.artist),
+        ("recording_name", query.title),
+    ];
+    if let Some(release) = query.release {
+        params.push(("release_name", release));
+    }
+    let response = client
+        .get(format!("{LB_API_BASE}/1/metadata/lookup/"))
+        .header(reqwest::header::AUTHORIZATION, format!("Token {token}"))
+        .query(&params)
+        .send()
+        .await
+        .map_err(|e| AppError::network("ListenBrainz metadata-lookup request failed", e))?;
+
+    let status = response.status();
+    if !status.is_success() {
+        return Err(error_for(status, response).await);
+    }
+    let result = response
+        .json::<LookupResult>()
+        .await
+        .map_err(|e| AppError::network("Failed to parse ListenBrainz metadata-lookup response", e))?;
+    Ok(mbid_match(result.recording_mbid, result.release_mbid))
+}
+
+/// Resolve up to [`MAX_LOOKUPS_PER_POST`] recordings in one `POST
+/// /1/metadata/lookup/`. Returns a vec aligned 1:1 with `queries` (unmatched
+/// slots are `None`), keyed off each result's echoed `index` so a reordered or
+/// short response can't misalign a mapping onto the wrong track.
+pub async fn lookup_recording_mbids_bulk(
+    client: &reqwest::Client,
+    token: &str,
+    queries: &[LookupQuery<'_>],
+) -> Result<Vec<Option<MbidMatch>>, ListenBrainzError> {
+    if queries.is_empty() {
+        return Ok(Vec::new());
+    }
+    debug_assert!(queries.len() <= MAX_LOOKUPS_PER_POST);
+    let response = client
+        .post(format!("{LB_API_BASE}/1/metadata/lookup/"))
+        .header(reqwest::header::AUTHORIZATION, format!("Token {token}"))
+        .json(&bulk_lookup_payload(queries))
+        .send()
+        .await
+        .map_err(|e| AppError::network("ListenBrainz bulk metadata-lookup request failed", e))?;
+
+    let status = response.status();
+    if !status.is_success() {
+        return Err(error_for(status, response).await);
+    }
+    let results = response
+        .json::<Vec<BulkLookupResult>>()
+        .await
+        .map_err(|e| {
+            AppError::network("Failed to parse ListenBrainz bulk metadata-lookup response", e)
+        })?;
+    Ok(align_bulk_results(queries.len(), results))
+}
+
 /// POST a payload to `/1/submit-listens` and classify the response.
 async fn submit(
     client: &reqwest::Client,
@@ -146,15 +231,22 @@ async fn classify_response(response: reqwest::Response) -> Result<(), ListenBrai
     if status.is_success() {
         return Ok(());
     }
+    Err(error_for(status, response).await)
+}
+
+/// Classify a **non-success** response into its `ListenBrainzError`. Split out of
+/// [`classify_response`] so the lookup endpoints — which must parse the body on
+/// success — reuse the exact 429 / 401 / server policy.
+async fn error_for(status: StatusCode, response: reqwest::Response) -> ListenBrainzError {
     if status == StatusCode::TOO_MANY_REQUESTS {
-        return Err(ListenBrainzError::RateLimited {
+        return ListenBrainzError::RateLimited {
             reset_in_secs: rate_limit_reset_in(response.headers()),
-        });
+        };
     }
     if status == StatusCode::UNAUTHORIZED {
-        return Err(ListenBrainzError::InvalidToken);
+        return ListenBrainzError::InvalidToken;
     }
-    Err(server_error(status, response).await)
+    server_error(status, response).await
 }
 
 /// Read a failed response's body into a `Server` error — best-effort, so an
@@ -208,6 +300,47 @@ fn feedback_payload(recording_mbid: &str, score: i8) -> RecordingFeedback<'_> {
     }
 }
 
+/// The bulk `metadata/lookup` body: one `recordings` entry per query.
+fn bulk_lookup_payload<'a>(queries: &'a [LookupQuery<'a>]) -> BulkLookupRequest<'a> {
+    BulkLookupRequest {
+        recordings: queries
+            .iter()
+            .map(|q| LookupRecording {
+                artist: q.artist,
+                recording: q.title,
+                release: q.release,
+            })
+            .collect(),
+    }
+}
+
+/// Fold a bulk lookup response back into an input-aligned vec. Each result
+/// carries the `index` it was requested at, so out-of-order or partial responses
+/// still land on the right track; unmatched inputs stay `None`.
+fn align_bulk_results(len: usize, results: Vec<BulkLookupResult>) -> Vec<Option<MbidMatch>> {
+    let mut out: Vec<Option<MbidMatch>> = vec![None; len];
+    for result in results {
+        let index = result.index;
+        if let Some(matched) = mbid_match(result.recording_mbid, result.release_mbid)
+            && let Some(slot) = out.get_mut(index)
+        {
+            *slot = Some(matched);
+        }
+    }
+    out
+}
+
+/// Build an [`MbidMatch`] iff a non-empty `recording_mbid` is present — the one
+/// field LB feedback keys on. A blank or absent recording id is treated as "no
+/// match".
+fn mbid_match(recording_mbid: Option<String>, release_mbid: Option<String>) -> Option<MbidMatch> {
+    let recording_mbid = recording_mbid.filter(|s| !s.trim().is_empty())?;
+    Some(MbidMatch {
+        recording_mbid,
+        release_mbid: release_mbid.filter(|s| !s.trim().is_empty()),
+    })
+}
+
 /// Build the `track_metadata` block shared by "playing now" and listen payloads.
 fn build_metadata(track: &ScrobbleTrack) -> TrackMetadata<'_> {
     TrackMetadata {
@@ -230,6 +363,42 @@ fn build_metadata(track: &ScrobbleTrack) -> TrackMetadata<'_> {
 struct RecordingFeedback<'a> {
     recording_mbid: &'a str,
     score: i8,
+}
+
+#[derive(Serialize)]
+struct BulkLookupRequest<'a> {
+    recordings: Vec<LookupRecording<'a>>,
+}
+
+#[derive(Serialize)]
+struct LookupRecording<'a> {
+    #[serde(rename = "artist_name")]
+    artist: &'a str,
+    #[serde(rename = "recording_name")]
+    recording: &'a str,
+    #[serde(rename = "release_name", skip_serializing_if = "Option::is_none")]
+    release: Option<&'a str>,
+}
+
+/// A single `GET /1/metadata/lookup/` body. An unmatched track omits both mbids.
+#[derive(Deserialize)]
+struct LookupResult {
+    #[serde(default)]
+    recording_mbid: Option<String>,
+    #[serde(default)]
+    release_mbid: Option<String>,
+}
+
+/// One entry of a `POST /1/metadata/lookup/` array. `index` echoes the input
+/// position; unmatched entries carry only the echo fields, so both mbids are
+/// `#[serde(default)]`.
+#[derive(Deserialize)]
+struct BulkLookupResult {
+    index: usize,
+    #[serde(default)]
+    recording_mbid: Option<String>,
+    #[serde(default)]
+    release_mbid: Option<String>,
 }
 
 #[derive(Serialize)]

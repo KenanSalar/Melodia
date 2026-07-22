@@ -1339,8 +1339,23 @@ msgstr "Signaler chaque écoute à votre compte ListenBrainz"
 msgid "Sync loved tracks"
 msgstr "Synchroniser les titres favoris"
 
-msgid "Mark tracks you love here as loved on Last.fm"
-msgstr "Marquer les titres aimés ici comme favoris sur Last.fm"
+msgid "Mark tracks you love as loved on your connected services"
+msgstr "Marquer les titres que vous aimez comme favoris sur vos services connectés"
+
+msgid "Add MusicBrainz IDs to your music"
+msgstr "Ajouter les identifiants MusicBrainz à votre musique"
+
+msgid "Look up and tag files so loves work on ListenBrainz"
+msgstr "Rechercher et taguer les fichiers pour que les favoris fonctionnent sur ListenBrainz"
+
+msgid "Look up missing IDs"
+msgstr "Rechercher les identifiants manquants"
+
+msgid "Re-scan tracks that still have no MusicBrainz ID"
+msgstr "Réanalyser les titres qui n'ont pas encore d'identifiant MusicBrainz"
+
+msgid "Look up"
+msgstr "Rechercher"
 
 msgid "Connected as {}"
 msgstr "Connecté en tant que {}"

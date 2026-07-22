@@ -505,6 +505,9 @@ fn build_edit(cur: &[String], orig: &[String], artwork: ArtworkEdit) -> TagEdit 
         bpm: diff_bpm(&cur[BPM], &orig[BPM]),
         lyrics: diff_str(&cur[LYRICS], &orig[LYRICS]),
         artwork,
+        // The Edit-Tags dialog doesn't surface MusicBrainz ids; leaving them
+        // `Keep` preserves whatever the file (or the auto-tag backfill) wrote.
+        ..Default::default()
     }
 }
 

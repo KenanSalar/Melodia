@@ -41,6 +41,7 @@ fn paint_status(ui: &AppWindow, status: &ScrobbleStatus) {
     );
     g.set_scrobble_listenbrainz_enabled(status.listenbrainz.enabled);
     g.set_scrobble_love_sync(status.love_sync_enabled);
+    g.set_scrobble_mbid_auto_tag(status.mbid_auto_tag);
 }
 
 /// Snapshot the current enabled flags so one toggle can be flipped without
@@ -52,6 +53,7 @@ fn current_flags(service: &ScrobbleService) -> ScrobbleFlags {
         lastfm_enabled: s.lastfm.enabled,
         listenbrainz_enabled: s.listenbrainz.enabled,
         love_sync_enabled: s.love_sync_enabled,
+        mbid_auto_tag: s.mbid_auto_tag,
     }
 }
 
@@ -121,6 +123,29 @@ fn wire_enable_toggles(ui: &AppWindow, state: &AppState) {
             state.persist_blocking("persist scrobble love_sync", move |s| {
                 library::settings::set_scrobble_love_sync_enabled(s, on)
             });
+        });
+    }
+    {
+        let state = state.clone();
+        settings.on_scrobble_mbid_auto_tag_changed(move |on| {
+            let mut flags = current_flags(&state.scrobble);
+            flags.mbid_auto_tag = on;
+            state.scrobble.set_flags(flags);
+            // Turning it on sweeps the library now; off just stops future work.
+            if on {
+                state.scrobble.kick_mbid_backfill();
+            }
+            state.persist_blocking("persist scrobble mbid_auto_tag", move |s| {
+                library::settings::set_scrobble_mbid_auto_tag(s, on)
+            });
+        });
+    }
+    {
+        // Manual "look up missing ids": force a full re-sweep (the task clears its
+        // attempted-set on a kick), useful after connecting LB or importing.
+        let state = state.clone();
+        settings.on_scrobble_lookup_missing_mbids(move || {
+            state.scrobble.kick_mbid_backfill();
         });
     }
 }
