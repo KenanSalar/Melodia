@@ -13,15 +13,53 @@ Melodia is a Slint rewrite of a former Tauri + SolidJS application — moving of
 
 ## Screenshots
 
-<!-- TODO: add screenshots. Drop image files into docs/screenshots/ and uncomment the links below. -->
-<!--
-![Library view](docs/screenshots/library.png)
-![Now Playing](docs/screenshots/now-playing.png)
-![Album detail](docs/screenshots/album-detail.png)
-![Themes](docs/screenshots/themes.png)
--->
+### Library
 
-_Screenshots coming soon._
+<table>
+  <tr>
+    <td width="50%"><img src="assets/screenshots/albums.png" alt="Albums view"><br><sub><b>Albums</b> — a virtualized cover grid (light theme here).</sub></td>
+    <td width="50%"><img src="assets/screenshots/artists_detail.png" alt="Artist detail view"><br><sub><b>Artist detail</b> — a hero-blur backdrop, an albums strip, and the track list.</sub></td>
+  </tr>
+  <tr>
+    <td><img src="assets/screenshots/tracks.png" alt="Tracks view"><br><sub><b>Tracks</b> — every song, with sortable, resizable, toggleable columns.</sub></td>
+    <td><img src="assets/screenshots/browse.png" alt="File-system browse view"><br><sub><b>Browse</b> — navigate the library by folder.</sub></td>
+  </tr>
+</table>
+
+### Playlists & Collections
+
+<table>
+  <tr>
+    <td width="50%"><img src="assets/screenshots/favorites.png" alt="Favorites view"><br><sub><b>Favorites</b> — an artwork mosaic hero, a most-played strip, and favorite artists.</sub></td>
+    <td width="50%"><img src="assets/screenshots/recently_played.png" alt="Recently Played view"><br><sub><b>Recently Played</b> — newest first, updating live as you listen.</sub></td>
+  </tr>
+  <tr>
+    <td><img src="assets/screenshots/playlists.png" alt="Playlists view"><br><sub><b>Playlists</b> — manual and smart playlists, with M3U8 import and export.</sub></td>
+    <td><img src="assets/screenshots/playlists_detail.png" alt="Playlist detail view"><br><sub><b>Playlist detail</b> — inline favorites and hover-revealed star ratings.</sub></td>
+  </tr>
+</table>
+
+### Theming
+
+Six theme families, light and dark variants, configurable accents, and Material You dynamic color — see [Themes](#themes) below for the full list.
+
+<table>
+  <tr>
+    <td width="50%"><img src="assets/screenshots/settings.png" alt="Settings under the Catppuccin theme"><br><sub><b>Catppuccin Mocha</b> — theme, variant, and accent picker.</sub></td>
+    <td width="50%"><img src="assets/screenshots/settings_material.png" alt="Settings under the Material 3 theme"><br><sub><b>Material 3</b> — the same screen with a different palette.</sub></td>
+  </tr>
+</table>
+
+### Mini-player
+
+Shrink the window past a threshold and the full UI collapses into a compact mini-player.
+
+<table>
+  <tr>
+    <td width="60%" valign="top"><img src="assets/screenshots/miniplayer_rectangle.png" alt="Horizontal mini-player strip" width="360"><br><sub><b>Horizontal strip</b> — the most compact form.</sub></td>
+    <td width="40%" valign="top"><img src="assets/screenshots/miniplayer_square.png" alt="Square mini-player widget with up-next list" width="240"><br><sub><b>Square widget</b> — grows an up-next list when tall enough.</sub></td>
+  </tr>
+</table>
 
 ---
 
