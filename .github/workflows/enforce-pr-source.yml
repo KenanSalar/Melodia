@@ -9,15 +9,19 @@ jobs:
   check-source-branch:
     runs-on: ubuntu-latest
     steps:
-      - name: Check if PR is from dev branch
-        if: github.head_ref != 'dev'
+      - name: Check if PR is from an allowed branch
+        if: github.head_ref != 'dev' && !startsWith(github.head_ref, 'hotfix/')
+        env:
+          HEAD_REF: ${{ github.head_ref }}
         run: |
-          echo "::error::Pull requests to main must come from the dev branch only"
-          echo "::error::Current source branch: ${{ github.head_ref }}"
-          echo "::error::Please create your PR from dev instead"
+          echo "::error::Pull requests to main must come from the 'dev' branch or a 'hotfix/*' branch"
+          echo "::error::Current source branch: $HEAD_REF"
+          echo "::error::Please create your PR from dev or a hotfix/* branch instead"
           exit 1
 
       - name: PR source branch is valid
-        if: github.head_ref == 'dev'
+        if: github.head_ref == 'dev' || startsWith(github.head_ref, 'hotfix/')
+        env:
+          HEAD_REF: ${{ github.head_ref }}
         run: |
-          echo "✅ Pull request is from dev branch - validation passed"
+          echo "✅ Pull request source branch ('$HEAD_REF') is valid - validation passed"
