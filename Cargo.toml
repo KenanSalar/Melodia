@@ -19,6 +19,9 @@ categories = ["multimedia::audio"]
 # `melodia`.
 [lib]
 name = "melodia"
+# Nothing consumes `melodia` as a library and every doc example is an
+# `ignore` fence, so this only bought a rustdoc build per `cargo test`.
+doctest = false
 
 # cargo-deb metadata — drives the `.deb` build in release CI. Ships the
 # binary, .desktop, icon, license, and the polkit helper + policy. The

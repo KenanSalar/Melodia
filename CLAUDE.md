@@ -8,7 +8,7 @@ Guidance for Claude Code in this repo. Cross-platform desktop music player: **Sl
 cargo run                                  # debug
 cargo build --release && target/release/Melodia
 cargo clippy --all-targets -- -D warnings  # lint + check (don't run cargo check)
-cargo test
+cargo test                                 # no doctests — `[lib] doctest = false`
 cargo llvm-cov --html                      # coverage → target/llvm-cov/html/
 /usr/bin/time -v target/release/Melodia    # peak RSS (release only)
 ```
