@@ -44,6 +44,15 @@ ignore = [
     # revisit: 2026-10-06
     "RUSTSEC-2026-0192",
 
+    # rustybuzz 0.20.1 unmaintained — same chain as ttf-parser above
+    # (i-slint-compiler / i-slint-core 1.16.1 → resvg 0.47 → usvg). Text
+    # shaping for the bundled SVG icon assets only; no downloaded content
+    # reaches it. `unmaintained` flags the crate, so no version bump clears
+    # it — it lifts when Slint moves to a maintained shaper, and we're held
+    # on 1.16.1 by the 1.17 regressions tracked in SLINT_NATIVE_ADOPTION.md.
+    # revisit: 2026-10-06
+    "RUSTSEC-2026-0206",
+
     # paste 1.0.15 unmaintained — pulled via lofty 0.24.0 (direct dep) and
     # rav1e 0.8.1 (transitive: slint → image → ravif → rav1e). Lofty has
     # no migration plan; rav1e's pastey migration (PR #3430) merged
