@@ -1,6 +1,7 @@
 import { Theme } from "../../theme.slint";
 import { ArtworkImage } from "../artwork-image.slint";
 import { IconButton } from "../icon-button.slint";
+import { MaterialIcon } from "../material-icon.slint";
 
 // Reusable entity card for grid views — Albums today; Artists / Genres /
 // Playlists as they land. A square artwork tile with an elided title and
@@ -48,6 +49,11 @@ export component EntityCard inherits Rectangle {
     // inside the artwork tile region. Used by the Playlists grid to expose
     // CRUD shortcuts without a per-card overflow menu; off everywhere else.
     in property <bool> show-overlay-actions: false;
+
+    // Opt-in persistent corner badge (a Material Symbols ligature name).
+    // Empty ⇒ no badge. Used by the Playlists grid to mark smart (dynamic)
+    // playlists; off everywhere else.
+    in property <string> badge-icon: "";
 
     callback clicked();
     callback delete-clicked();
@@ -175,6 +181,27 @@ export component EntityCard inherits Rectangle {
             diameter: 30px;
             idle-bg: Theme.floating-button-bg;
             clicked => { root.edit-name-clicked(); }
+        }
+    }
+
+    // Persistent smart-playlist badge — top-left of the artwork tile, clear
+    // of the hover action trio (delete top-right, edit-artwork/name bottom).
+    // Non-interactive (no TouchArea) so card clicks pass through to `touch`.
+    badge := Rectangle {
+        visible: root.badge-icon != "";
+        x: 2 * Theme.pad-sm;
+        y: 2 * Theme.pad-sm;
+        width: 28px;
+        height: 28px;
+        border-radius: self.height / 2;
+        background: Theme.floating-button-bg;
+        MaterialIcon {
+            x: (parent.width - self.width) / 2;
+            y: (parent.height - self.height) / 2;
+            name: root.badge-icon;
+            icon-size: 18px;
+            icon-color: Theme.accent;
+            filled: true;
         }
     }
 }

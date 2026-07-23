@@ -22,6 +22,7 @@ fn mk(title: &str, artist: Option<&str>, album: Option<&str>) -> RsTrackListRow 
         artwork_path: None,
         duration_ms: 0,
         is_favorite: false,
+        rating: 0,
         album_id: None,
         artist_id: None,
         genre_id: None,
@@ -69,4 +70,22 @@ fn empty_needle_matches_any_row() {
     // contract still holds.
     let row = mk("Track", None, None);
     assert!(track_matches(&row, ""));
+}
+
+#[test]
+fn non_ascii_falls_back_to_unicode_lowering() {
+    // Exercises the allocating Unicode path (the zero-allocation byte
+    // walk only handles all-ASCII haystack + needle).
+    let row = mk("Über den Wolken", Some("Größenwahn"), None);
+    assert!(track_matches(&row, "über"));
+    assert!(track_matches(&row, "größe"));
+    assert!(!track_matches(&row, "wölken"));
+}
+
+#[test]
+fn ascii_needle_against_non_ascii_haystack_matches() {
+    // Mixed case: haystack is non-ASCII, needle is ASCII — must still
+    // route through the Unicode path and match the ASCII substring.
+    let row = mk("Café del Mar", None, None);
+    assert!(track_matches(&row, "del mar"));
 }

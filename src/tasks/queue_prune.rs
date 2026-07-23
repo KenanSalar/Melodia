@@ -14,15 +14,13 @@ use std::sync::Arc;
 
 use sqlx::FromRow;
 
-use crate::config::Paths;
 use crate::database::DbPool;
 use crate::error::AppResult;
-use crate::player::actions::execute_actions;
+use crate::player::actions::emit_and_execute;
 use crate::player::event_sink::PlayerSinks;
 use crate::player::rodio_backend::RodioPlayer;
 use crate::player::state::{
     PlayerAction, PlayerStateHandle, lock_state, play_track_inner, stop_end_of_queue,
-    with_state_emit,
 };
 use crate::state::AppState;
 use crate::tasks::TaskSpawner;
@@ -38,7 +36,6 @@ pub fn spawn(spawner: &TaskSpawner, state: &AppState) {
     let player_state = state.player_state.clone();
     let sinks = state.sinks.clone();
     let rodio = state.rodio.clone();
-    let paths = state.paths.clone();
     let mut rx = state.library_changed_tx.subscribe();
 
     spawner.spawn_cancellable(move |shutdown| async move {
@@ -50,8 +47,7 @@ pub fn spawn(spawner: &TaskSpawner, state: &AppState) {
                         break;
                     }
                     let _ = rx.borrow_and_update();
-                    if let Err(e) = reconcile_once(&db, &player_state, &sinks, &rodio, &paths).await
-                    {
+                    if let Err(e) = reconcile_once(&db, &player_state, &sinks, &rodio).await {
                         log::warn!("queue_prune reconcile failed: {e}");
                     }
                 }
@@ -73,7 +69,6 @@ async fn reconcile_once(
     player_state: &PlayerStateHandle,
     sinks: &PlayerSinks,
     rodio: &Arc<RodioPlayer>,
-    paths: &Paths,
 ) -> AppResult<()> {
     // Step 1: snapshot every track id currently referenced by the queue,
     // including the (optional) direct-play track. Brief read-only lock —
@@ -122,7 +117,7 @@ async fn reconcile_once(
     // `with_state_emit` publishes the new queue VM on `sinks.queue` and the
     // light VM on `sinks.view_model`, so the queue sheet's subscriber
     // rebuilds rows automatically.
-    let actions = with_state_emit(player_state, sinks, |s| {
+    emit_and_execute(&**rodio, db, player_state, sinks, |s| {
         let outcome = s.queue.prune_missing(&to_remove);
         if outcome.current_was_removed {
             if let Some(track) = s.queue.get_current().cloned() {
@@ -141,7 +136,5 @@ async fn reconcile_once(
             Vec::new()
         }
     });
-
-    execute_actions(actions, &**rodio, db, paths, player_state, sinks);
     Ok(())
 }

@@ -19,17 +19,18 @@ import "assets/fonts/vazirmatn/Vazirmatn-SemiBold.ttf";
 
 import { Theme } from "theme.slint";
 import { Settings } from "settings.slint";
-import { Player, Nav, NavEnterFrom, Tracks, Browse, LibrarySettings, Dialog, WindowChrome, Queue, Notifications, NowPlaying, Favorites, Albums, AlbumDetail, Artists, ArtistDetail, Genres, GenreDetail, Playlists, PlaylistDetail, PopupHighlight, Search, MelodiaUpdater } from "globals.slint";
+import { Player, Equalizer, ReplayGain, ScrobbleUi, SmartEditor, TagEditor, Nav, NavEnterFrom, CompositeScroll, MiniPlayer, Tracks, Browse, LibrarySettings, Dialog, WindowChrome, Queue, Notifications, NowPlaying, Favorites, RecentlyPlayed, Albums, AlbumDetail, Artists, ArtistDetail, Genres, GenreDetail, Playlists, PlaylistDetail, PopupHighlight, Search, MelodiaUpdater, RowCovers } from "globals.slint";
 import { TrackSummaryRow, TrackListRow, PlayerVm, QueueVm, QueueRow, FolderListRow,
          BrowseFolderRow, BreadcrumbRow, NotificationRow, TrackMetaRow,
          AlbumRow, AlbumGridRow, ArtistRow, ArtistGridRow,
          GenreRow, GenreGridRow,
-         PlaylistRow, PlaylistGridRow } from "models.slint";
+         PlaylistRow, PlaylistGridRow, SmartRuleRow } from "models.slint";
 import { Sidebar } from "layout/sidebar.slint";
 import { NowPlayingBar } from "layout/now-playing-bar.slint";
 import { PlaceholderView } from "views/placeholder-view.slint";
 import { TracksView } from "views/tracks-view.slint";
 import { FavoritesView } from "views/favorites-view.slint";
+import { RecentlyPlayedView } from "views/recently-played-view.slint";
 import { BrowseView } from "views/browse-view.slint";
 import { AlbumView } from "views/album-view.slint";
 import { AlbumDetailView } from "views/album-detail-view.slint";
@@ -42,6 +43,7 @@ import { PlaylistDetailView } from "views/playlist-detail-view.slint";
 import { SearchView } from "views/search-view.slint";
 import { SettingsView } from "views/settings-view.slint";
 import { NowPlayingView } from "views/now-playing-view.slint";
+import { MiniPlayerView } from "views/mini-player.slint";
 import { QueueSheet } from "views/queue-sheet.slint";
 import { DialogOverlay } from "components/dialog/dialog.slint";
 import { CustomTitleBar } from "components/custom-titlebar.slint";
@@ -50,12 +52,12 @@ import { ViewTransition } from "components/view-transition.slint";
 
 // Re-export so Rust can mention these from `slint::include_modules!`.
 export {
-    Theme, Settings, Player, Nav, Tracks, Browse, LibrarySettings, Dialog, WindowChrome, Queue, Notifications, NowPlaying, Favorites, Albums, AlbumDetail, Artists, ArtistDetail, Genres, GenreDetail, Playlists, PlaylistDetail, PopupHighlight, Search, MelodiaUpdater,
+    Theme, Settings, Player, Equalizer, ReplayGain, ScrobbleUi, SmartEditor, TagEditor, Nav, CompositeScroll, MiniPlayer, Tracks, Browse, LibrarySettings, Dialog, WindowChrome, Queue, Notifications, NowPlaying, Favorites, RecentlyPlayed, Albums, AlbumDetail, Artists, ArtistDetail, Genres, GenreDetail, Playlists, PlaylistDetail, PopupHighlight, Search, MelodiaUpdater, RowCovers,
     TrackSummaryRow, TrackListRow, PlayerVm, QueueVm, QueueRow, FolderListRow,
     BrowseFolderRow, BreadcrumbRow, NotificationRow, TrackMetaRow,
     AlbumRow, AlbumGridRow, ArtistRow, ArtistGridRow,
     GenreRow, GenreGridRow,
-    PlaylistRow, PlaylistGridRow,
+    PlaylistRow, PlaylistGridRow, SmartRuleRow,
 }
 
 export component AppWindow inherits Window {
@@ -69,8 +71,14 @@ export component AppWindow inherits Window {
     // content-preferred size on first show — a hardcoded
     // `preferred-width/height` here would just be that snap target.
     // Min constraints stay as size hints below.
-    min-width: 640px;
-    min-height: 420px;
+    // Floor matches the miniplayer's smallest sensible footprint
+    // (~350×90, mirrors Tauri's `setMinSize` on mini enter). The full UI
+    // is only rendered above `mini-active`'s ~550×250 threshold; below
+    // that, `MiniPlayerView` takes over. Keeping the OS-level minimum at
+    // the mini's floor lets the user drag straight down into mini mode
+    // without us having to runtime-mutate winit constraints.
+    min-width: 350px;
+    min-height: 90px;
     // Window background mode:
     //   - Custom-frame + windowed: transparent ARGB surface so the OS
     //     compositor blends our rounded outer mantle shell with the
@@ -129,7 +137,8 @@ export component AppWindow inherits Window {
         if (idx == 5) { return @tr("Artists"); }
         if (idx == 6) { return @tr("Genres"); }
         if (idx == 7) { return @tr("Playlists"); }
-        if (idx == 8) { return @tr("Settings"); }
+        if (idx == 8) { return @tr("Recently Played"); }
+        if (idx == 9) { return @tr("Settings"); }
         // App name (proper noun) — never translated.
         return "Melodia";
     }
@@ -137,7 +146,7 @@ export component AppWindow inherits Window {
     // Clear the Settings page's live search query and blur its TextInput
     // when the user navigates away. The handler lives at the AppWindow
     // level so it always fires — `SettingsView` is mounted only when
-    // `Nav.selected-index == 8`, so a `changed` handler placed inside it
+    // `Nav.selected-index == 9`, so a `changed` handler placed inside it
     // would never see the leaving transition (the component gets
     // de-instantiated before the handler runs). Slint's `changed` only
     // observes properties on the current element, not path expressions on
@@ -147,7 +156,14 @@ export component AppWindow inherits Window {
     // another page.
     property <int> watched-nav-idx: Nav.selected-index;
     changed watched-nav-idx => {
-        if (self.watched-nav-idx != 8) {
+        // A tab switch changes the mounted content view — clear any stale
+        // composite-scroll hover flag (and any accumulated, un-applied wheel
+        // delta) left by an unmounted composite view, or the winit wheel filter
+        // would keep eating vertical wheel on the new view until the next mouse
+        // move (see CompositeScroll in globals.slint).
+        CompositeScroll.hovered = false;
+        CompositeScroll.wheel-dy = 0px;
+        if (self.watched-nav-idx != 9) {
             Settings.search-query = "";
             Settings.blur-search-tick += 1;
         }
@@ -171,11 +187,123 @@ export component AppWindow inherits Window {
     // open/close transitions.
     property <bool> watched-now-playing-open: Nav.now-playing-open;
     changed watched-now-playing-open => {
+        // NP open/close swaps the mounted content view — reset composite hover
+        // and any accumulated wheel delta (see watched-nav-idx / CompositeScroll).
+        CompositeScroll.hovered = false;
+        CompositeScroll.wheel-dy = 0px;
         Nav.now-playing-open-changed(self.watched-now-playing-open);
         // Opening / closing Now Playing de-instantiates the section view
         // underneath it — same focus-orphaning risk as a sidebar nav (see
         // `watched-nav-idx`). Re-grab focus so global shortcuts survive.
         keyboard-shortcuts.focus();
+    }
+
+    // Artist Detail (a composite-scroll view) opens/closes without a nav-index
+    // change — grid ↔ detail both live under index 5 — so the watched-nav-idx
+    // reset above would miss it. Mirror the detail id and reset composite hover
+    // on any change, else a stale hover flag from the unmounting view would
+    // trap the wheel on the artist grid (see CompositeScroll).
+    property <int> watched-artist-detail-id: ArtistDetail.artist-id;
+    changed watched-artist-detail-id => {
+        CompositeScroll.hovered = false;
+        CompositeScroll.wheel-dy = 0px;
+    }
+
+    // The miniplayer swap unmounts the whole full-UI branch
+    // (`if !root.mini-render-active`) — and with it any composite view — without
+    // a nav-index change, so the resets above would miss it. Reset composite
+    // hover here too, else the unmounting view's stale flag would trap the wheel
+    // in the miniplayer (see CompositeScroll).
+    property <bool> watched-mini-render: root.mini-render-active;
+    changed watched-mini-render => {
+        CompositeScroll.hovered = false;
+        CompositeScroll.wheel-dy = 0px;
+    }
+
+    // ---- Miniplayer responsive switch ----------------------------------
+    // Tauri parity: enter the compact view when the window is either
+    // narrow OR short, pick the `square` variant (which can show an
+    // Up Next list) when the aspect ratio is roughly square or taller.
+    // Both derivations key off `self.width`/`self.height` (winit `Resized`
+    // events drive these directly), so no extra plumbing is needed to
+    // react to the OS window changing size.
+    out property <bool> mini-active: self.width < 550px || self.height < 250px;
+    out property <bool> mini-square: self.height >= self.width * 0.8;
+
+    // Shadow that lags `mini-active` by 100ms during the swap. While the
+    // fade-out is running, this hasn't flipped yet so the outgoing layout
+    // stays mounted at opacity 0; once `mini-swap-timer` fires it flips
+    // and the incoming layout mounts at the same 0 opacity, then
+    // `mini-opacity` animates back to 1 for the fade-in. Two-phase swap
+    // keeps only one branch in the tree at a time (avoids holding both
+    // sidebar grid models + the mini's up-next subscriber alive together
+    // during the swap — a memory-discipline regression).
+    property <bool> mini-render-active: false;
+    property <float> mini-opacity: 1.0;
+    animate mini-opacity { duration: 100ms; easing: ease-in-out; }
+
+    // Watched mirror so `changed` fires reliably. Slint globals can't take
+    // `changed` on path expressions; mirroring into a local property at
+    // the `AppWindow` root is the established pattern (`watched-nav-idx`
+    // above). Sets the global so child components see the new value,
+    // schedules the fade-out → swap → fade-in, closes any open Now
+    // Playing view so its artwork release path runs, and notifies the
+    // Rust subscriber via `MiniPlayer.active-changed` for the up-next
+    // gate + square-variant artwork cache lifecycle. `MiniPlayer.square`
+    // is owned by `watched-mini-square` below (and seeded once at mount
+    // by `mini-seed-timer`) — Rust re-reads it from the global on entry
+    // so no redundant write is needed here.
+    property <bool> watched-mini-active: root.mini-active;
+    changed watched-mini-active => {
+        MiniPlayer.active = self.watched-mini-active;
+        if (self.watched-mini-active && Nav.now-playing-open) {
+            Nav.now-playing-open = false;
+        }
+        root.mini-opacity = 0.0;
+        mini-swap-timer.running = true;
+        MiniPlayer.active-changed(self.watched-mini-active);
+    }
+
+    // Variant changes while inside mini (aspect crossing 0.8 either way)
+    // don't trigger a fade — they're an in-place re-layout within the
+    // same component, and a flash would be jarring on every aspect
+    // wobble during a drag. The `square-changed` callback drives the
+    // Rust-side high-res cover cache lifecycle (seed on
+    // rectangle→square, release on square→rectangle) — see
+    // `src/ui/mini_player.rs`.
+    property <bool> watched-mini-square: root.mini-square;
+    changed watched-mini-square => {
+        MiniPlayer.square = self.watched-mini-square;
+        MiniPlayer.square-changed(self.watched-mini-square);
+    }
+
+    // 1ms mount seed: `changed` doesn't fire on the first binding settle
+    // (`grid-columns-sync.slint` precedent), so without this an app
+    // launched directly into a mini-sized window would render the full
+    // UI for one frame before switching.
+    mini-seed-timer := Timer {
+        interval: 1ms;
+        triggered => {
+            MiniPlayer.active = root.mini-active;
+            MiniPlayer.square = root.mini-square;
+            root.mini-render-active = root.mini-active;
+            MiniPlayer.active-changed(root.mini-active);
+            self.running = false;
+        }
+    }
+
+    // 100ms fade-out completion: flip the render shadow, ease opacity
+    // back to 1. Self-stops; re-armed each time `watched-mini-active`
+    // flips. Single-shot, so a held key or fast wiggle just keeps
+    // restarting the same timer cleanly.
+    mini-swap-timer := Timer {
+        interval: 100ms;
+        running: false;
+        triggered => {
+            root.mini-render-active = root.mini-active;
+            root.mini-opacity = 1.0;
+            self.running = false;
+        }
     }
 
     // Mirror "the Albums section is on screen" the same way — Rust releases
@@ -184,7 +312,7 @@ export component AppWindow inherits Window {
     // `selected-index == 4` is the Albums section; `AlbumView` /
     // `AlbumDetailView` are both inside it, so grid↔detail stays `true`.
     property <bool> watched-albums-active:
-        Nav.selected-index == 4 && !Nav.now-playing-open;
+        Nav.selected-index == 4 && !Nav.now-playing-open && !root.mini-active;
     changed watched-albums-active => {
         Albums.section-active-changed(self.watched-albums-active);
     }
@@ -197,7 +325,7 @@ export component AppWindow inherits Window {
     // hero + strips + tracks via the library-changed dirty flag on
     // `true`.
     property <bool> watched-favorites-active:
-        Nav.selected-index == 2 && !Nav.now-playing-open;
+        Nav.selected-index == 2 && !Nav.now-playing-open && !root.mini-active;
     changed watched-favorites-active => {
         Favorites.section-active-changed(self.watched-favorites-active);
     }
@@ -210,7 +338,7 @@ export component AppWindow inherits Window {
     // preserved so a brief flip away and back lands on the same
     // view state.
     property <bool> watched-search-active:
-        Nav.selected-index == 0 && !Nav.now-playing-open;
+        Nav.selected-index == 0 && !Nav.now-playing-open && !root.mini-active;
     changed watched-search-active => {
         Search.section-active-changed(self.watched-search-active);
     }
@@ -219,7 +347,7 @@ export component AppWindow inherits Window {
     // `ArtistView` and `ArtistDetailView` live under this branch, so the
     // grid↔detail flip doesn't toggle the active state.
     property <bool> watched-artists-active:
-        Nav.selected-index == 5 && !Nav.now-playing-open;
+        Nav.selected-index == 5 && !Nav.now-playing-open && !root.mini-active;
     changed watched-artists-active => {
         Artists.section-active-changed(self.watched-artists-active);
     }
@@ -230,7 +358,7 @@ export component AppWindow inherits Window {
     // has no cache to release today (genres have no artwork), but it's
     // wired for symmetry with Albums / Artists.
     property <bool> watched-genres-active:
-        Nav.selected-index == 6 && !Nav.now-playing-open;
+        Nav.selected-index == 6 && !Nav.now-playing-open && !root.mini-active;
     changed watched-genres-active => {
         Genres.section-active-changed(self.watched-genres-active);
     }
@@ -241,9 +369,38 @@ export component AppWindow inherits Window {
     // releases the playlist-tier cover cache on `false` and re-warms
     // it on `true` — mirrors the Albums hook.
     property <bool> watched-playlists-active:
-        Nav.selected-index == 7 && !Nav.now-playing-open;
+        Nav.selected-index == 7 && !Nav.now-playing-open && !root.mini-active;
     changed watched-playlists-active => {
         Playlists.section-active-changed(self.watched-playlists-active);
+    }
+
+    // Same shape for the Tracks section (sidebar index 3). Unlike Albums,
+    // the Tracks view keeps its row model warm across nav-aways (no cache
+    // release on leave) — Rust uses this flag only to gate the
+    // `library_changed` refresher: hidden ⇒ mark dirty and skip the
+    // full-library re-fetch, re-enter ⇒ one deferred refresh.
+    property <bool> watched-tracks-active:
+        Nav.selected-index == 3 && !Nav.now-playing-open && !root.mini-active;
+    changed watched-tracks-active => {
+        Tracks.section-active-changed(self.watched-tracks-active);
+    }
+
+    // Same shape for the Browse section (sidebar index 1). Same gate-only
+    // role as Tracks: the `library_changed` subscriber skips re-fetching
+    // the current directory while the view is hidden.
+    property <bool> watched-browse-active:
+        Nav.selected-index == 1 && !Nav.now-playing-open && !root.mini-active;
+    changed watched-browse-active => {
+        Browse.section-active-changed(self.watched-browse-active);
+    }
+
+    // Same shape for the Recently-Played section (sidebar index 8). Like
+    // Favorites, Rust releases the section's cover cache on `false` and
+    // re-fetches on `true`.
+    property <bool> watched-recently-active:
+        Nav.selected-index == 8 && !Nav.now-playing-open && !root.mini-active;
+    changed watched-recently-active => {
+        RecentlyPlayed.section-active-changed(self.watched-recently-active);
     }
 
     // Outer mantle shell. In custom-frame + windowed mode the Window's
@@ -445,9 +602,9 @@ export component AppWindow inherits Window {
                         return accept;
                     }
                     if (ev.text == ",") {
-                        // 8 = Settings tab; see Nav comment.
-                        Nav.selected-index = 8;
-                        Nav.persist-selected-index(8);
+                        // 9 = Settings tab; see Nav comment.
+                        Nav.selected-index = 9;
+                        Nav.persist-selected-index(9);
                         return accept;
                     }
                     if (ev.text == "n") {
@@ -496,7 +653,19 @@ export component AppWindow inherits Window {
                 return reject;
             }
 
-        VerticalLayout {
+        // Full UI branch. Wrapped in a Rectangle so we can drive the
+        // miniplayer fade transition via `opacity: root.mini-opacity` on
+        // a single ancestor. Conditional on `mini-render-active` — the
+        // 100ms-delayed shadow of `mini-active`, see the
+        // `mini-swap-timer` block above — so only one branch is mounted
+        // at any time (avoids holding sidebar grid covers + the mini
+        // up-next subscriber alive together during the swap).
+        if !root.mini-render-active: Rectangle {
+            width: 100%;
+            height: 100%;
+            opacity: root.mini-opacity;
+
+            VerticalLayout {
             // Custom titlebar — only rendered in custom-frame mode. Use the
             // conditional element form (not `visible: false`) so the bar's
             // 36 px slot disappears entirely from the layout when the OS
@@ -695,6 +864,12 @@ export component AppWindow inherits Window {
                             width: parent.width;
                             height: parent.height;
                             enter-from: Nav.pending-enter-from;
+                            RecentlyPlayedView { width: 100%; height: 100%; }
+                        }
+                        if !Nav.now-playing-open && Nav.selected-index == 9: ViewTransition {
+                            width: parent.width;
+                            height: parent.height;
+                            enter-from: Nav.pending-enter-from;
                             SettingsView { width: 100%; height: 100%; }
                         }
                         if !Nav.now-playing-open
@@ -706,7 +881,8 @@ export component AppWindow inherits Window {
                             && Nav.selected-index != 5
                             && Nav.selected-index != 6
                             && Nav.selected-index != 7
-                            && Nav.selected-index != 8: ViewTransition {
+                            && Nav.selected-index != 8
+                            && Nav.selected-index != 9: ViewTransition {
                             width: parent.width;
                             height: parent.height;
                             enter-from: Nav.pending-enter-from;
@@ -751,6 +927,22 @@ export component AppWindow inherits Window {
             }
 
             NowPlayingBar {}
+            }
+        }
+
+        // Miniplayer branch — replaces the full UI when the OS window
+        // shrinks past the responsive threshold. Same opacity-binding +
+        // sibling-of-FocusScope shape as the full branch, so the fade
+        // animates symmetrically in either direction.
+        if root.mini-render-active: Rectangle {
+            width: 100%;
+            height: 100%;
+            opacity: root.mini-opacity;
+
+            MiniPlayerView {
+                width: 100%;
+                height: 100%;
+            }
         }
         }
     }

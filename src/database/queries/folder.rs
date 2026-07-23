@@ -1,3 +1,5 @@
+use sqlx::AssertSqlSafe;
+
 use crate::database::DbPool;
 use crate::entities::folder;
 use crate::error::AppError;
@@ -51,7 +53,7 @@ pub async fn delete_folders_by_ids(db: &DbPool, ids: &[i64]) -> Result<(), AppEr
     for chunk in ids.chunks(crate::database::SQLITE_BIND_LIMIT) {
         let placeholders = crate::database::placeholders(chunk.len());
         let sql = format!("DELETE FROM folders WHERE id IN ({placeholders})");
-        let mut q = sqlx::query(&sql);
+        let mut q = sqlx::query(AssertSqlSafe(sql));
         for id in chunk {
             q = q.bind(id);
         }

@@ -1,11 +1,13 @@
 import { Theme } from "../theme.slint";
-import { Playlists, Dialog } from "../globals.slint";
+import { Playlists, Dialog, SmartEditor } from "../globals.slint";
 import { SearchBar } from "../components/search-bar.slint";
-import { ActionPill, PillButton } from "../components/action-pill.slint";
+import { ActionPill, PillButton, PillDivider } from "../components/action-pill.slint";
 import { PlaylistGrid } from "../components/grid/playlist-grid.slint";
 import { GridColumnsSync } from "../components/grid-columns-sync.slint";
 import { MaterialIcon } from "../components/material-icon.slint";
 import { OverlayScrollbar } from "../components/overlay-scrollbar.slint";
+import { Tooltip } from "../components/tooltip.slint";
+import { FilterThrottle } from "../components/filter-throttle.slint";
 
 // The Playlists grid page. Mirrors `AlbumView` structure: header chrome
 // (title + count + filter + "New Playlist" action), virtualized grid
@@ -14,14 +16,9 @@ import { OverlayScrollbar } from "../components/overlay-scrollbar.slint";
 export component PlaylistsView inherits Rectangle {
     // Filter throttle — same pattern as the Tracks / Albums views.
     property <int> filter-tick-pending: 0;
-    property <int> filter-tick-applied: 0;
-    filter-throttle := Timer {
-        interval: 130ms;
-        running: root.filter-tick-pending != root.filter-tick-applied;
-        triggered() => {
-            root.filter-tick-applied = root.filter-tick-pending;
-            Playlists.apply-filter(Playlists.filter);
-        }
+    filter-throttle := FilterThrottle {
+        pending: root.filter-tick-pending;
+        fire() => { Playlists.apply-filter(Playlists.filter); }
     }
 
     // --- Responsive grid geometry --------------------------------------
@@ -86,9 +83,13 @@ export component PlaylistsView inherits Rectangle {
             VerticalLayout {
                 alignment: center;
                 ActionPill {
-                    PillButton {
+                    np := PillButton {
                         icon: "add";
                         text: @tr("New Playlist");
+                        tooltip-text: @tr("Create an empty playlist");
+                        // Tooltip rendered by the top-layer overlay below (so it
+                        // isn't occluded by the grid painted after the header).
+                        tooltip-overlay: true;
                         clicked => {
                             Dialog.title = @tr("New Playlist");
                             Dialog.message = "";
@@ -101,6 +102,66 @@ export component PlaylistsView inherits Rectangle {
                             Dialog.input-text-2 = "";
                             Dialog.pending-track-ids = [];
                             Dialog.open = true;
+                        }
+                    }
+
+                    PillDivider { }
+
+                    // "New Smart Playlist" — chrome set inline (so `@tr`
+                    // applies); the Rust `request-new` resets the `SmartEditor`
+                    // state + rules model and flips `open` from a fresh
+                    // event-loop tick (same recursion-safe hop as Export).
+                    sp := PillButton {
+                        icon: "auto_awesome";
+                        icon-filled: true;
+                        text: @tr("New Smart Playlist");
+                        tooltip-text: @tr("Create a playlist from rules");
+                        tooltip-overlay: true;
+                        clicked => {
+                            Dialog.title = @tr("New Smart Playlist");
+                            Dialog.message = "";
+                            Dialog.confirm-label = @tr("Create");
+                            Dialog.cancel-label = @tr("Cancel");
+                            Dialog.destructive = false;
+                            Dialog.kind = "smart-playlist-editor";
+                            Dialog.target-id = -1;
+                            SmartEditor.request-new();
+                        }
+                    }
+
+                    PillDivider { }
+
+                    // Import / Export to portable `.m3u8` files so playlists
+                    // survive a database wipe. Both are pure Rust flows
+                    // (native rfd dialogs); Export opens the multi-select
+                    // picker dialog, Import opens a multi-file picker.
+                    ip := PillButton {
+                        icon: "download";
+                        text: @tr("Import");
+                        tooltip-text: @tr("Import playlists from .m3u8 files");
+                        tooltip-overlay: true;
+                        clicked => { Playlists.import-playlists(); }
+                    }
+
+                    PillDivider { }
+
+                    ep := PillButton {
+                        icon: "upload";
+                        text: @tr("Export");
+                        tooltip-text: @tr("Export playlists to .m3u8 files");
+                        tooltip-overlay: true;
+                        clicked => {
+                            // Chrome set inline (so @tr applies); the Rust
+                            // callback fills the rows and flips `open` from a
+                            // fresh event-loop tick (same shape as
+                            // add-to-playlist).
+                            Dialog.title = @tr("Export Playlists");
+                            Dialog.message = @tr("Choose playlists to export, then pick a folder.");
+                            Dialog.confirm-label = @tr("Export");
+                            Dialog.cancel-label = @tr("Cancel");
+                            Dialog.destructive = false;
+                            Dialog.kind = "export-playlists";
+                            Playlists.request-export-playlists();
                         }
                     }
                 }
@@ -217,5 +278,52 @@ export component PlaylistsView inherits Rectangle {
         content-size: grid.v-viewport-height;
         offset: grid.v-offset;
         scroll-to(o) => { grid.set-v-offset(o); }
+    }
+
+    // Top-layer tooltip for the header action pills. Declared last so it paints
+    // above the grid (Slint has no z-index — paint order is declaration order),
+    // fixing the below-anchored tooltip being occluded by the grid. The frame
+    // Rectangle tracks the hovered pill's window rect via `absolute-position`
+    // (same idiom as the overlay scrollbar above); the `Tooltip` inside anchors
+    // beneath it. A plain Rectangle captures no input, so the pill underneath
+    // keeps its hover — no flicker.
+    header-tip := Rectangle {
+        property <bool> any-hover: np.hovered || sp.hovered || ip.hovered || ep.hovered;
+        property <length> px: np.hovered ? np.absolute-position.x
+            : sp.hovered ? sp.absolute-position.x
+            : ip.hovered ? ip.absolute-position.x
+            : ep.hovered ? ep.absolute-position.x
+            : 0px;
+        property <length> py: np.hovered ? np.absolute-position.y
+            : sp.hovered ? sp.absolute-position.y
+            : ip.hovered ? ip.absolute-position.y
+            : ep.hovered ? ep.absolute-position.y
+            : 0px;
+        property <length> pw: np.hovered ? np.width
+            : sp.hovered ? sp.width
+            : ip.hovered ? ip.width
+            : ep.hovered ? ep.width
+            : 0px;
+        property <length> ph: np.hovered ? np.height
+            : sp.hovered ? sp.height
+            : ip.hovered ? ip.height
+            : ep.hovered ? ep.height
+            : 0px;
+        property <string> ptext: np.hovered ? np.tooltip-text
+            : sp.hovered ? sp.tooltip-text
+            : ip.hovered ? ip.tooltip-text
+            : ep.hovered ? ep.tooltip-text
+            : "";
+        x: self.px - root.absolute-position.x;
+        y: self.py - root.absolute-position.y;
+        width: self.pw;
+        height: self.ph;
+        Tooltip {
+            text: header-tip.ptext;
+            hovered: header-tip.any-hover;
+            below: true;
+            host-width: header-tip.width;
+            host-height: header-tip.height;
+        }
     }
 }

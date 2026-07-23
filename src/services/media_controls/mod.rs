@@ -294,11 +294,7 @@ impl MediaControlsSync for MediaControlsHandle {
 
         #[cfg(target_os = "linux")]
         if volume_changed {
-            let vol = if vm.is_muted {
-                0.0
-            } else {
-                f64::from(vm.volume.min(100)) / 100.0
-            };
+            let vol = crate::player::state::volume_to_amplitude(vm.volume, vm.is_muted);
             if let Err(e) = controls.set_volume(vol) {
                 log::debug!("Failed to set media volume: {e}");
             }

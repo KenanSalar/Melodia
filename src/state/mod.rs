@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
 use souvlaki::MediaControlEvent;
 use tokio::runtime::Handle;
@@ -14,6 +14,7 @@ use crate::database::{self, DbPool};
 use crate::error::{AppError, AppResult};
 use crate::media::{
     artwork::CoverCache,
+    self_writes::SelfWrites,
     watcher::{FileEvent, FolderWatcher},
 };
 use crate::player::event_sink::{MediaControlsSync, PlayerSinks};
@@ -24,6 +25,7 @@ use crate::player::state::{
 use crate::services::{
     always_on_top::{self, AlwaysOnTopCapability},
     media_controls::{self, MediaControlsHandle},
+    scrobble::ScrobbleService,
     search_history::SearchHistoryState,
     settings,
 };
@@ -52,6 +54,15 @@ pub struct AppState {
     /// Bumped whenever the track library is mutated by a scan or watcher
     /// event. UI subscribers re-fetch the Tracks model on each tick.
     pub library_changed_tx: watch::Sender<u64>,
+    /// Bumped after every play-count flush. Split from `library_changed_tx`
+    /// so the per-song flush (every track completion) doesn't imply
+    /// "library structure changed" — the only views that depend on
+    /// play-driven data subscribe here: Favorites (hero mosaic + Most Played
+    /// strip, ranked by `play_count`) and Recently-Played (ordered by
+    /// `last_played`, written on the same flush). Everything else
+    /// (Tracks/Browse refreshers, `queue_prune`, the folder list) stays on
+    /// `library_changed_tx` and no longer fires per played song.
+    pub stats_changed_tx: watch::Sender<u64>,
     /// Bumped whenever the watcher reports a kernel-queue overflow (notify
     /// `Flag::Rescan`). A UI-thread subscriber pushes a transient
     /// "library re-syncing" toast through the notifications stack so the
@@ -65,14 +76,25 @@ pub struct AppState {
     /// uses that to hide the progress bar in the Library settings section.
     pub scan_progress_tx: watch::Sender<Option<ScanProgressTick>>,
     pub watcher: Arc<parking_lot::Mutex<FolderWatcher>>,
+    /// Files this process wrote itself (tag edits), so the watcher can drop the
+    /// `Modified` events its own writes generate instead of paying for a full
+    /// re-ingest of a file it just retagged. See [`SelfWrites`].
+    pub self_writes: Arc<SelfWrites>,
     pub always_on_top: AlwaysOnTopCapability,
     pub search_history: Arc<SearchHistoryState>,
+    /// Scrobbling service: credential/enabled shadow + durable offline queue.
+    /// Loaded at boot; the detector/submitter tasks that drive it wire in later.
+    pub scrobble: Arc<ScrobbleService>,
     pub media_controls: Option<Arc<MediaControlsHandle>>,
-    /// Shared `reqwest::Client` reused across every HTTP-using service
-    /// (Deezer artist-image search + download today; future remote calls
-    /// should reuse this rather than constructing a new client per call —
-    /// `reqwest::Client` already wraps an internal connection pool in `Arc`).
-    pub http_client: reqwest::Client,
+    /// Shared `reqwest::Client`, built lazily on first use via
+    /// [`AppState::http_client`]. Only the updater and the post-scan Deezer
+    /// artist-image fetch ever need it, so deferring construction keeps the
+    /// rustls TLS stack and connection pool off the boot/idle footprint.
+    /// `Arc<OnceLock<…>>` so every cloned `AppState` shares one client and one
+    /// initialization (`reqwest::Client` itself wraps an internal pool in
+    /// `Arc`). Future remote calls should reuse the accessor rather than
+    /// constructing a new client per call.
+    http_client: Arc<OnceLock<reqwest::Client>>,
     /// Tracks every spawned background task so shutdown can wait for them
     /// to finish their current write before the runtime is dropped.
     pub task_tracker: TaskTracker,
@@ -112,7 +134,9 @@ impl AppState {
             .map_err(|e| AppError::Player(format!("Failed to open audio output device: {e}")))?;
         speakers.log_on_drop(false);
         let speakers: &'static rodio::MixerDeviceSink = Box::leak(Box::new(speakers));
-        let rodio = Arc::new(RodioPlayer::new(speakers.mixer()));
+        // The runtime handle is only used to schedule the deferred half of a
+        // faded pause / stop (arm the ramp now, pause the decks once it lands).
+        let rodio = Arc::new(RodioPlayer::new(speakers.mixer(), runtime.clone()));
 
         let db = database::init_database(&paths).await?;
 
@@ -128,10 +152,18 @@ impl AppState {
             s.is_muted = settings.playback.is_muted;
             s.pre_mute_volume = s.volume;
             s.gapless_enabled = settings.playback.gapless_playback;
+            s.playback_speed = settings.playback.playback_speed.clamp(
+                crate::player::state::MIN_SPEED,
+                crate::player::state::MAX_SPEED,
+            );
             let vol = s.effective_volume();
+            let speed = s.playback_speed;
             drop(s);
             rodio.set_volume(vol);
+            rodio.set_speed(speed);
         }
+
+        hydrate_audio_dsp(&rodio, &settings);
 
         let cover_cache: CoverCache = crate::media::artwork::new_cover_cache();
 
@@ -139,6 +171,7 @@ impl AppState {
         let (q_tx, _) = watch::channel::<Option<QueueViewModel>>(None);
         let (position_tx, _) = watch::channel::<Option<PositionTick>>(None);
         let (library_changed_tx, _) = watch::channel::<u64>(0);
+        let (stats_changed_tx, _) = watch::channel::<u64>(0);
         let (rescan_notice_tx, _) = watch::channel::<u64>(0);
         let (scan_progress_tx, _) = watch::channel::<Option<ScanProgressTick>>(None);
 
@@ -164,46 +197,15 @@ impl AppState {
         );
 
         let search_history = Arc::new(SearchHistoryState::init(&paths).await);
-
-        // One `reqwest::Client` for the whole app — reqwest's connection pool
-        // lives on the client, so per-call construction wastes the pool every
-        // time.
-        //
-        // Timeouts: reqwest's default is "no timeout", which means a wedged
-        // CDN socket parks the streaming download future in
-        // `bytes_stream().next()` indefinitely (cancellation token never
-        // fires because the future is parked in foreign code). The fix is a
-        // per-read deadline rather than a whole-body deadline: a
-        // legitimately-slow 200 MB download must be allowed to take minutes,
-        // but no individual read should sit silent for 60 s. `read_timeout`
-        // resets on every byte received, so it only trips when the socket
-        // is genuinely dead.
-        //
-        // User-Agent: GitHub's API guidance asks every consumer to set a
-        // descriptive UA. Default `reqwest/0.13` is tolerated but ours is
-        // more useful in server logs when something goes wrong.
-        //
-        // Pool cap: the updater only talks to api.github.com +
-        // objects.githubusercontent.com; 4 idle conns per host is more
-        // than enough and bounds memory on a long-running process. Default
-        // is unbounded.
-        //
-        // Build is documented infallible for these options; the fallback
-        // is paranoia. If it ever fires we'd lose the timeouts, which is
-        // why it's logged.
-        let http_client = reqwest::Client::builder()
-            .connect_timeout(std::time::Duration::from_secs(10))
-            .read_timeout(std::time::Duration::from_secs(60))
-            .pool_max_idle_per_host(4)
-            .user_agent(concat!("Melodia/", env!("CARGO_PKG_VERSION")))
-            .build()
-            .unwrap_or_else(|e| {
-                log::warn!(
-                    "reqwest::Client::builder().build() failed unexpectedly ({e}); falling back \
-                     to default client without timeouts — downloads may hang on a wedged socket"
-                );
-                reqwest::Client::new()
-            });
+        // Shared lazy client: one `OnceLock` seeds both `http_client()` and the
+        // scrobble service, so the app has a single connection pool built on
+        // first actual request.
+        let http_client = Arc::new(OnceLock::new());
+        let scrobble = Arc::new(ScrobbleService::init(
+            &paths,
+            &settings.scrobble,
+            http_client.clone(),
+        ));
 
         let state = Self {
             paths: Arc::new(paths),
@@ -215,11 +217,14 @@ impl AppState {
             sinks,
             position_tx,
             library_changed_tx,
+            stats_changed_tx,
             rescan_notice_tx,
             scan_progress_tx,
             watcher,
+            self_writes: Arc::new(SelfWrites::default()),
             always_on_top: always_on_top_capability,
             search_history,
+            scrobble,
             media_controls: Some(mc_handle),
             http_client,
             task_tracker: TaskTracker::new(),
@@ -237,4 +242,66 @@ impl AppState {
 
         Ok((state, channels))
     }
+
+    /// Persist a settings mutation on the blocking pool, logging (never
+    /// surfacing) a failure under `label`. This is the write half of the
+    /// two-phase "apply live, then persist" shape used by the EQ / `ReplayGain`
+    /// / playback-settings installers: the caller has already applied the value
+    /// to the running player, so a failed disk write must not undo it — the
+    /// warn is the only report.
+    pub fn persist_blocking(
+        &self,
+        label: &'static str,
+        f: impl FnOnce(&AppState) -> Result<(), AppError> + Send + 'static,
+    ) {
+        let s = self.clone();
+        self.runtime.spawn_blocking(move || {
+            if let Err(e) = f(&s) {
+                log::warn!("{label}: {e}");
+            }
+        });
+    }
+
+    /// The shared `reqwest::Client`, built on first call and reused for the
+    /// process lifetime. Construction is deferred out of `init` (see
+    /// [`crate::services::build_http_client`]) so the rustls TLS stack and
+    /// connection pool never load at boot/idle — only the updater, the post-scan
+    /// Deezer artist-image fetch, and scrobbling pull them in. reqwest's
+    /// connection pool lives on the client, so callers reuse this accessor (and
+    /// `ScrobbleService`, which shares the same `OnceLock`) rather than
+    /// constructing a new client per request.
+    pub fn http_client(&self) -> &reqwest::Client {
+        self.http_client.get_or_init(crate::services::build_http_client)
+    }
+}
+
+/// Seed the Rodio backend's lock-free cells (graphic EQ, `ReplayGain`,
+/// crossfade) from persisted settings before playback starts, so the first
+/// track is already processed when any of them is enabled. All three live on
+/// the Rodio backend (not `PlayerState`). Ordering is deliberate: values first,
+/// `enabled` last, so the enable's generation bump publishes a fully-seeded
+/// state to the audio thread.
+fn hydrate_audio_dsp(rodio: &RodioPlayer, settings: &settings::SettingsData) {
+    // `set_eq_gains` clamps and length-normalises the (possibly hand-edited)
+    // gain list; the EQ ships off by default.
+    rodio.set_eq_gains(&settings.equalizer.eq_band_gains);
+    rodio.set_eq_preamp(settings.equalizer.eq_preamp);
+    rodio.set_eq_enabled(settings.equalizer.eq_enabled);
+
+    // ReplayGain master state seeds the same way — per-track gain is baked per
+    // source at play time. Ships off by default; the mode string falls back to
+    // Album on an unknown value.
+    rodio.set_replaygain_preamp(settings.replaygain.rg_preamp);
+    rodio.set_replaygain_mode(crate::player::replaygain::RgMode::from_settings_str(
+        &settings.replaygain.rg_mode,
+    ));
+    rodio.set_replaygain_prevent_clipping(settings.replaygain.rg_prevent_clipping);
+    rodio.set_replaygain_enabled(settings.replaygain.rg_enabled);
+
+    // Crossfade ships off; `set_crossfade_duration_ms` clamps a hand-edited value.
+    rodio.set_crossfade_duration_ms(settings.crossfade.crossfade_duration_ms);
+    rodio.set_crossfade_manual(settings.crossfade.crossfade_manual);
+    rodio.set_crossfade_skip_same_album(settings.crossfade.crossfade_skip_same_album);
+    rodio.set_crossfade_fade_on_pause(settings.crossfade.crossfade_fade_on_pause);
+    rodio.set_crossfade_enabled(settings.crossfade.crossfade_enabled);
 }

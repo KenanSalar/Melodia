@@ -132,6 +132,9 @@ msgstr "Warteschlange"
 msgid "More"
 msgstr "Weitere Optionen"
 
+msgid "Speed"
+msgstr "Tempo"
+
 msgid "No track playing"
 msgstr "Kein Titel wird abgespielt"
 
@@ -439,6 +442,40 @@ msgstr "Beim Start fortsetzen"
 
 msgid "Automatically resume the last track from where you left off when the app starts"
 msgstr "Letzten Titel automatisch an der Stelle fortsetzen, an der du aufgehört hast"
+
+msgid "Crossfade"
+msgstr "Überblenden"
+
+msgid "Overlap the end of one track with the start of the next"
+msgstr "Das Ende eines Titels mit dem Anfang des nächsten überlappen"
+
+msgid "Crossfade duration"
+msgstr "Überblenddauer"
+
+msgid "How long the two tracks overlap"
+msgstr "Wie lange sich die beiden Titel überlappen"
+
+# Unit suffix for the crossfade-duration readout, e.g. "2 s".
+msgid "{} s"
+msgstr "{} s"
+
+msgid "Except on the same album"
+msgstr "Außer innerhalb eines Albums"
+
+msgid "Keep tracks from one album gapless, so continuous mixes stay seamless"
+msgstr "Titel eines Albums lückenlos abspielen, damit durchgehende Mixe nahtlos bleiben"
+
+msgid "Also on manual track change"
+msgstr "Auch beim manuellen Titelwechsel"
+
+msgid "Crossfade when you skip to the next or previous track, not only at the end of one"
+msgstr "Auch überblenden, wenn du zum nächsten oder vorherigen Titel springst, nicht nur am Titelende"
+
+msgid "Fade out on pause"
+msgstr "Beim Pausieren ausblenden"
+
+msgid "Fade the music out when pausing or stopping, and back in when resuming"
+msgstr "Die Musik beim Pausieren oder Stoppen aus- und beim Fortsetzen wieder einblenden"
 
 # ---- File Watching section --------------------------------------------------
 
@@ -789,9 +826,6 @@ msgstr "Aktualisierung installiert"
 msgid "Restart Melodia to start using the new version."
 msgstr "Starten Sie Melodia neu, um die neue Version zu verwenden."
 
-msgid "Restart"
-msgstr "Neu starten"
-
 msgid "Update failed"
 msgstr "Aktualisierung fehlgeschlagen"
 
@@ -827,3 +861,585 @@ msgstr "Das Ändern des Systembereich-Symbols erfordert einen Neustart von Melod
 
 msgid "Available only while the system tray icon is active."
 msgstr "Nur verfügbar, solange das Systembereich-Symbol aktiv ist."
+
+# ---- Miniplayer --------------------------------------------------------------
+
+# Tooltip on the `open_in_full` button inside the compact miniplayer
+# (`ui/views/mini-player.slint`). Restores the OS window to its pre-mini
+# size so the full UI returns.
+msgid "Exit miniplayer"
+msgstr "Mini-Player verlassen"
+
+# ---- About -------------------------------------------------------------------
+
+# Settings → About section (`ui/views/settings/about-section.slint`): app
+# name + version, authorship, source-repository link, and license.
+msgid "About"
+msgstr "Über"
+
+# Translators: `{}` is the app version string (e.g. "0.1.0").
+msgid "Version {}"
+msgstr "Version {}"
+
+# Translators: `{}` is the author's name ("Kenan Salar") — a proper noun,
+# passed verbatim and never translated.
+msgid "Made by {}"
+msgstr "Erstellt von {}"
+
+msgid "License"
+msgstr "Lizenz"
+
+# Graphic equalizer
+msgid "On"
+msgstr "An"
+
+msgid "Off"
+msgstr "Aus"
+
+msgid "Done"
+msgstr "Fertig"
+
+msgid "Reset"
+msgstr "Zurücksetzen"
+
+msgid "Enable equalizer"
+msgstr "Equalizer aktivieren"
+
+msgid "Flat"
+msgstr "Neutral"
+
+msgid "Rock"
+msgstr "Rock"
+
+msgid "Pop"
+msgstr "Pop"
+
+msgid "Jazz"
+msgstr "Jazz"
+
+msgid "Classical"
+msgstr "Klassik"
+
+msgid "Bass Boost"
+msgstr "Bassverstärkung"
+
+msgid "Treble Boost"
+msgstr "Höhenverstärkung"
+
+msgid "Vocal"
+msgstr "Gesang"
+
+msgid "Electronic"
+msgstr "Elektronisch"
+
+msgid "Custom"
+msgstr "Benutzerdefiniert"
+
+msgid "Preamp"
+msgstr "Vorverstärkung"
+
+# ---- Playlist import / export (M3U8) ----------------------------------------
+
+msgid "Import"
+msgstr "Importieren"
+
+msgid "Export"
+msgstr "Exportieren"
+
+msgid "Export Playlists"
+msgstr "Playlists exportieren"
+
+msgid "Import playlists from .m3u8 files"
+msgstr "Playlists aus .m3u8-Dateien importieren"
+
+msgid "Export playlists to .m3u8 files"
+msgstr "Playlists in .m3u8-Dateien exportieren"
+
+msgid "Choose playlists to export, then pick a folder."
+msgstr "Wählen Sie die zu exportierenden Playlists und dann einen Ordner."
+
+msgid "Select all"
+msgstr "Alle auswählen"
+
+msgid "Import failed"
+msgstr "Import fehlgeschlagen"
+
+msgid "Playback error"
+msgstr "Wiedergabefehler"
+
+msgid "Something went wrong"
+msgstr "Etwas ist schiefgelaufen"
+
+msgid "Couldn't read the selected playlist file(s)."
+msgstr "Die ausgewählten Playlist-Dateien konnten nicht gelesen werden."
+
+msgid "Export failed"
+msgstr "Export fehlgeschlagen"
+
+msgid "Couldn't write the playlist files."
+msgstr "Die Playlist-Dateien konnten nicht geschrieben werden."
+
+msgid "Add"
+msgstr "Hinzufügen"
+
+msgid "Added to {n} playlist"
+msgid_plural "Added to {n} playlists"
+msgstr[0] "Zu {n} Playlist hinzugefügt"
+msgstr[1] "Zu {n} Playlists hinzugefügt"
+
+msgid "{n} track added"
+msgid_plural "{n} tracks added"
+msgstr[0] "{n} Lied hinzugefügt"
+msgstr[1] "{n} Lieder hinzugefügt"
+
+msgid "Saved to {}"
+msgstr "Gespeichert in {}"
+
+msgid "{n} track added · {} missing"
+msgid_plural "{n} tracks added · {} missing"
+msgstr[0] "{n} Lied hinzugefügt · {} fehlen"
+msgstr[1] "{n} Lieder hinzugefügt · {} fehlen"
+
+msgid "{n} playlist imported"
+msgid_plural "{n} playlists imported"
+msgstr[0] "{n} Playlist importiert"
+msgstr[1] "{n} Playlists importiert"
+
+msgid "{n} playlist exported"
+msgid_plural "{n} playlists exported"
+msgstr[0] "{n} Playlist exportiert"
+msgstr[1] "{n} Playlists exportiert"
+
+msgid "Rating"
+msgstr "Bewertung"
+
+msgid "ReplayGain"
+msgstr "ReplayGain"
+
+msgid "Enable ReplayGain"
+msgstr "ReplayGain aktivieren"
+
+msgid "Normalization mode"
+msgstr "Normalisierungsmodus"
+
+msgid "Track"
+msgstr "Titel"
+
+msgid "Prevent clipping"
+msgstr "Übersteuerung verhindern"
+
+msgid "ReplayGain only affects tracks that already have loudness tags. Scan your library with a tool like rsgain or loudgain to add them."
+msgstr "ReplayGain wirkt sich nur auf Titel aus, die bereits Lautstärke-Tags haben. Scanne deine Bibliothek mit einem Werkzeug wie rsgain oder loudgain, um sie hinzuzufügen."
+
+msgid "Recently Played"
+msgstr "Zuletzt gespielt"
+
+msgid "Filter recently played…"
+msgstr "Zuletzt gespielte filtern…"
+
+msgid "No recently played tracks"
+msgstr "Keine zuletzt gespielten Titel"
+
+msgid "Sleep timer"
+msgstr "Einschlaf-Timer"
+
+msgid "15 min"
+msgstr "15 Min."
+
+msgid "30 min"
+msgstr "30 Min."
+
+msgid "45 min"
+msgstr "45 Min."
+
+msgid "60 min"
+msgstr "60 Min."
+
+msgid "90 min"
+msgstr "90 Min."
+
+msgid "End of track"
+msgstr "Titelende"
+
+msgid "Track end"
+msgstr "Titelende"
+
+msgid "Start"
+msgstr "Starten"
+
+# ---- Smart / dynamic playlists ---------------------------------------------
+
+msgid "Album Artist"
+msgstr "Album-Interpret"
+
+msgid "Duration (sec)"
+msgstr "Dauer (Sek.)"
+
+msgid "Plays"
+msgstr "Wiedergaben"
+
+msgid "Skips"
+msgstr "Übersprungen"
+
+msgid "Bitrate (kbps)"
+msgstr "Bitrate (kbps)"
+
+msgid "Sample rate (Hz)"
+msgstr "Abtastrate (Hz)"
+
+msgid "File size (bytes)"
+msgstr "Dateigröße (Bytes)"
+
+msgid "Last played"
+msgstr "Zuletzt gespielt"
+
+msgid "Date added"
+msgstr "Hinzugefügt am"
+
+msgid "contains"
+msgstr "enthält"
+
+msgid "does not contain"
+msgstr "enthält nicht"
+
+msgid "is"
+msgstr "ist"
+
+msgid "is not"
+msgstr "ist nicht"
+
+msgid "starts with"
+msgstr "beginnt mit"
+
+msgid "ends with"
+msgstr "endet mit"
+
+msgid "is set"
+msgstr "ist gesetzt"
+
+msgid "is not set"
+msgstr "ist nicht gesetzt"
+
+msgid "greater than"
+msgstr "größer als"
+
+msgid "at least"
+msgstr "mindestens"
+
+msgid "less than"
+msgstr "kleiner als"
+
+msgid "at most"
+msgstr "höchstens"
+
+msgid "is true"
+msgstr "ist wahr"
+
+msgid "is false"
+msgstr "ist falsch"
+
+msgid "in the last"
+msgstr "in den letzten"
+
+msgid "not in the last"
+msgstr "nicht in den letzten"
+
+msgid "all"
+msgstr "alle"
+
+msgid "any"
+msgstr "beliebige"
+
+msgid "most recently added"
+msgstr "zuletzt hinzugefügt"
+
+msgid "least recently added"
+msgstr "zuerst hinzugefügt"
+
+msgid "most played"
+msgstr "meistgespielt"
+
+msgid "least played"
+msgstr "am wenigsten gespielt"
+
+msgid "most recently played"
+msgstr "zuletzt gespielt"
+
+msgid "least recently played"
+msgstr "am längsten nicht gespielt"
+
+msgid "highest rated"
+msgstr "am besten bewertet"
+
+msgid "random"
+msgstr "zufällig"
+
+msgid "Match"
+msgstr "Erfülle"
+
+msgid "of the following rules"
+msgstr "der folgenden Regeln"
+
+msgid "days"
+msgstr "Tage"
+
+msgid "value"
+msgstr "Wert"
+
+msgid "number"
+msgstr "Zahl"
+
+msgid "N"
+msgstr "N"
+
+msgid "Limit to"
+msgstr "Begrenzen auf"
+
+msgid "tracks by"
+msgstr "Titel nach"
+
+msgid "Add rule"
+msgstr "Regel hinzufügen"
+
+msgid "Smart playlist name"
+msgstr "Name der intelligenten Playlist"
+
+msgid "New Smart Playlist"
+msgstr "Neue intelligente Playlist"
+
+msgid "Create a playlist from rules"
+msgstr "Eine Playlist aus Regeln erstellen"
+
+msgid "Edit Rules"
+msgstr "Regeln bearbeiten"
+
+msgid "Edit rules"
+msgstr "Regeln bearbeiten"
+
+msgid "No matching tracks"
+msgstr "Keine passenden Titel"
+
+msgid "No tracks match these rules."
+msgstr "Keine Titel entsprechen diesen Regeln."
+
+msgid "Create an empty playlist"
+msgstr "Eine leere Playlist erstellen"
+
+# ---- Tag editor (Edit Track Information dialog) ------------------------------
+
+msgid "Tags"
+msgstr "Tags"
+
+msgid "Lyrics"
+msgstr "Liedtext"
+
+msgid "Summary"
+msgstr "Übersicht"
+
+msgid "Composer"
+msgstr "Komponist"
+
+msgid "Disc"
+msgstr "Disc"
+
+msgid "Original Year"
+msgstr "Originaljahr"
+
+msgid "BPM"
+msgstr "BPM"
+
+msgid "Comment"
+msgstr "Kommentar"
+
+msgid "Replace…"
+msgstr "Ersetzen…"
+
+msgid "Path"
+msgstr "Pfad"
+
+msgid "Codec"
+msgstr "Codec"
+
+msgid "Bitrate"
+msgstr "Bitrate"
+
+msgid "Sample Rate"
+msgstr "Abtastrate"
+
+msgid "Bit Depth"
+msgstr "Bittiefe"
+
+msgid "Channels"
+msgstr "Kanäle"
+
+msgid "Size"
+msgstr "Größe"
+
+msgid "Modified"
+msgstr "Geändert"
+
+msgid "BLAKE3"
+msgstr "BLAKE3"
+
+msgid "Edit Tags…"
+msgstr "Tags bearbeiten…"
+
+msgid "Edit Track Information"
+msgstr "Titelinformationen bearbeiten"
+
+msgid "Edit Tags for {}"
+msgstr "Tags für {} bearbeiten"
+
+msgid "Edit {} Tracks"
+msgstr "{} Titel bearbeiten"
+
+msgid "Save"
+msgstr "Speichern"
+
+msgid "Duration"
+msgstr "Dauer"
+
+msgid "‹multiple values›"
+msgstr "‹mehrere Werte›"
+
+msgid "{n} track updated"
+msgid_plural "{n} tracks updated"
+msgstr[0] "{n} Titel aktualisiert"
+msgstr[1] "{n} Titel aktualisiert"
+
+msgid "{n} file failed"
+msgid_plural "{n} files failed"
+msgstr[0] "{n} Datei fehlgeschlagen"
+msgstr[1] "{n} Dateien fehlgeschlagen"
+
+msgid "{n} file has unsupported fields"
+msgid_plural "{n} files have unsupported fields"
+msgstr[0] "{n} Datei mit nicht unterstützten Feldern"
+msgstr[1] "{n} Dateien mit nicht unterstützten Feldern"
+
+msgid "Couldn't save tags"
+msgstr "Tags konnten nicht gespeichert werden"
+
+msgid "No tracks were updated."
+msgstr "Keine Titel wurden aktualisiert."
+
+# ---- Scrobbling ----
+msgid "Scrobbling"
+msgstr "Scrobbeln"
+
+msgid "Last.fm"
+msgstr "Last.fm"
+
+msgid "ListenBrainz"
+msgstr "ListenBrainz"
+
+msgid "Scrobble to Last.fm"
+msgstr "An Last.fm scrobbeln"
+
+msgid "Report each play to your Last.fm account"
+msgstr "Jede Wiedergabe an dein Last.fm-Konto melden"
+
+msgid "Scrobble to ListenBrainz"
+msgstr "An ListenBrainz scrobbeln"
+
+msgid "Report each play to your ListenBrainz account"
+msgstr "Jede Wiedergabe an dein ListenBrainz-Konto melden"
+
+msgid "Sync loved tracks"
+msgstr "Lieblingstitel synchronisieren"
+
+msgid "Sync loved tracks to Last.fm"
+msgstr "Lieblingstitel mit Last.fm synchronisieren"
+
+msgid "Mark tracks you love as loved on Last.fm — turning this on syncs your existing favorites"
+msgstr "Titel, die du magst, auf Last.fm als Loved markieren — beim Aktivieren werden deine vorhandenen Favoriten synchronisiert"
+
+msgid "Sync loved tracks to ListenBrainz"
+msgstr "Lieblingstitel mit ListenBrainz synchronisieren"
+
+msgid "Mark tracks you love as loved on ListenBrainz — turning this on syncs your existing favorites (needs MusicBrainz IDs)"
+msgstr "Titel, die du magst, auf ListenBrainz als Loved markieren — beim Aktivieren werden deine vorhandenen Favoriten synchronisiert (benötigt MusicBrainz-IDs)"
+
+msgid "Loved tracks"
+msgstr "Lieblingstitel"
+
+msgid "Mark tracks you love as loved on your connected services"
+msgstr "Titel, die du magst, auf deinen verbundenen Diensten als Loved markieren"
+
+msgid "Add MusicBrainz IDs to your music"
+msgstr "MusicBrainz-IDs zu deiner Musik hinzufügen"
+
+msgid "Look up and tag files so loves work on ListenBrainz"
+msgstr "Dateien nachschlagen und taggen, damit Loved auf ListenBrainz funktioniert"
+
+msgid "Look up missing IDs"
+msgstr "Fehlende IDs nachschlagen"
+
+msgid "Re-scan tracks that still have no MusicBrainz ID"
+msgstr "Titel erneut einlesen, die noch keine MusicBrainz-ID haben"
+
+msgid "Look up"
+msgstr "Nachschlagen"
+
+msgid "MusicBrainz IDs"
+msgstr "MusicBrainz-IDs"
+
+msgid "Best for files that already have correct artist and title tags. For loosely-tagged music (e.g. songs downloaded from YouTube), use MusicBrainz Picard instead — it identifies tracks by their audio, not their tags."
+msgstr "Am besten für Dateien, die bereits korrekte Interpreten- und Titel-Tags haben. Für lose getaggte Musik (z. B. von YouTube heruntergeladene Titel) verwende stattdessen MusicBrainz Picard — es erkennt Titel anhand ihres Klangs, nicht ihrer Tags."
+
+msgid "Connected as {}"
+msgstr "Verbunden als {}"
+
+msgid "Not connected"
+msgstr "Nicht verbunden"
+
+msgid "Not configured in this build"
+msgstr "In diesem Build nicht konfiguriert"
+
+msgid "Connect"
+msgstr "Verbinden"
+
+msgid "Disconnect"
+msgstr "Trennen"
+
+msgid "Connect Last.fm"
+msgstr "Last.fm verbinden"
+
+msgid "Open Last.fm"
+msgstr "Last.fm öffnen"
+
+msgid "Connect ListenBrainz"
+msgstr "ListenBrainz verbinden"
+
+msgid "Finish"
+msgstr "Fertigstellen"
+
+msgid "Click Open Last.fm to approve Melodia in your browser."
+msgstr "Klicke unten auf Last.fm öffnen, um Melodia im Browser zu autorisieren."
+
+msgid "After approving Melodia in your browser, click Finish."
+msgstr "Klicke auf Fertigstellen, nachdem du Melodia im Browser bestätigt hast."
+
+msgid "Connecting…"
+msgstr "Verbinden…"
+
+msgid "User token"
+msgstr "Benutzer-Token"
+
+msgid "Paste your ListenBrainz user token"
+msgstr "Füge dein ListenBrainz-Benutzer-Token ein"
+
+msgid "Find your token on your ListenBrainz profile settings page."
+msgstr "Dein Token findest du in den Profileinstellungen auf ListenBrainz."
+
+msgid "That token wasn't accepted. Check it and try again."
+msgstr "Dieses Token wurde nicht akzeptiert. Bitte prüfe es und versuche es erneut."
+
+msgid "Couldn't reach the service. Check your connection and try again."
+msgstr "Der Dienst war nicht erreichbar. Prüfe deine Verbindung und versuche es erneut."
+
+msgid "Not approved yet. Approve Melodia in your browser, then click Finish."
+msgstr "Noch nicht bestätigt. Bestätige Melodia im Browser und klicke dann auf Fertigstellen."
+
+msgid "Couldn't save your credentials."
+msgstr "Deine Anmeldedaten konnten nicht gespeichert werden."

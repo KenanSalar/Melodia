@@ -17,6 +17,11 @@ fn make_summary(id: i64, title: &str, duration_ms: i64) -> Arc<TrackSummary> {
         disc_number: None,
         last_position: 0,
         is_favorite: false,
+        rating: 0,
+        replaygain_track_gain: None,
+        replaygain_track_peak: None,
+        replaygain_album_gain: None,
+        replaygain_album_peak: None,
     })
 }
 
@@ -184,7 +189,8 @@ fn test_stop_end_of_queue_helper() {
     assert_eq!(state.status, PlaybackStatus::Stopped);
     assert_eq!(state.position_ms, 0);
     assert!(state.current_track.is_some()); // Preserved for replay
-    assert_eq!(actions, vec![PlayerAction::Stop]);
+    // Never faded — the track already ran out of audio.
+    assert_eq!(actions, vec![PlayerAction::Stop { fade_ms: 0 }]);
 }
 
 #[test]
@@ -310,10 +316,13 @@ fn test_stop_at_end_of_queue_preserves_track() -> Result<(), AppError> {
 
 #[test]
 fn test_set_volume_clamps() {
-    let mut state = PlayerState { volume: 200, ..Default::default() };
-    assert_eq!(state.volume, 200);
+    let mut state = PlayerState::default();
+    // A request above the ceiling clamps down to MAX_VOLUME.
+    state.build_set_volume_actions(999);
+    assert_eq!(state.volume, MAX_VOLUME);
 
-    state.volume = 75;
+    // A valid level passes through untouched.
+    state.build_set_volume_actions(75);
     assert_eq!(state.volume, 75);
 }
 
@@ -334,13 +343,13 @@ fn test_toggle_mute() {
 
 #[test]
 fn test_set_playback_speed_clamps() {
-    let mut state = PlayerState { playback_speed: 0.1f64.clamp(0.25, 4.0), ..Default::default() };
+    let mut state = PlayerState { playback_speed: 0.1f64.clamp(0.25, 2.0), ..Default::default() };
     assert!((state.playback_speed - 0.25).abs() < f64::EPSILON);
 
-    state.playback_speed = 5.0f64.clamp(0.25, 4.0);
-    assert!((state.playback_speed - 4.0).abs() < f64::EPSILON);
+    state.playback_speed = 5.0f64.clamp(0.25, 2.0);
+    assert!((state.playback_speed - 2.0).abs() < f64::EPSILON);
 
-    state.playback_speed = 1.5f64.clamp(0.25, 4.0);
+    state.playback_speed = 1.5f64.clamp(0.25, 2.0);
     assert!((state.playback_speed - 1.5).abs() < f64::EPSILON);
 }
 
@@ -495,11 +504,17 @@ fn test_shuffle_unshuffle() {
 }
 
 #[test]
-fn test_effective_volume_caps_at_100() {
-    let mut state = PlayerState { volume: 150, ..Default::default() };
+fn test_volume_is_capped_at_max_and_converts_to_amplitude() {
+    // The ceiling is enforced when the level is stored, not inside
+    // `effective_volume`: a request above `MAX_VOLUME` clamps to it, so the
+    // backend amplitude tops out at unity gain (no dead >100% band).
+    let mut state = PlayerState::default();
+    state.build_set_volume_actions(150);
+    assert_eq!(state.volume, MAX_VOLUME);
     assert!((state.effective_volume() - 1.0).abs() < f64::EPSILON);
 
-    state.volume = 50;
+    state.build_set_volume_actions(50);
+    assert_eq!(state.volume, 50);
     assert!((state.effective_volume() - 0.5).abs() < f64::EPSILON);
 
     state.is_muted = true;
@@ -724,6 +739,11 @@ fn test_restore_queue_with_last_position() {
         disc_number: None,
         last_position: 45_000,
         is_favorite: false,
+        rating: 0,
+        replaygain_track_gain: None,
+        replaygain_track_peak: None,
+        replaygain_album_gain: None,
+        replaygain_album_peak: None,
     });
 
     let persistable = PersistableQueue {
@@ -751,4 +771,329 @@ fn test_restore_queue_index_out_of_bounds() {
     // get_current() returns None for out-of-range index, so no track loaded
     assert!(state.current_track.is_none());
     assert_eq!(state.queue.current_index, Some(99));
+}
+
+#[test]
+fn end_of_stream_advances_when_next_track_present() {
+    let mut state = PlayerState::default();
+    let track1 = make_summary(1, "Song 1", 100_000);
+    let track2 = make_summary(2, "Song 2", 100_000);
+    state.current_track = Some(track1.clone());
+    state.queue.add_tracks(vec![track1, track2]);
+    state.queue.current_index = Some(0);
+    state.status = PlaybackStatus::Playing;
+
+    let actions = state.build_end_of_stream_actions();
+
+    // Advanced to track 2 and kept playing.
+    assert_eq!(state.status, PlaybackStatus::Playing);
+    assert_eq!(state.current_track.as_ref().map(|t| t.id), Some(2));
+    assert_eq!(state.queue.current_index, Some(1));
+    assert!(actions.iter().any(|a| matches!(a, PlayerAction::PlayMedia { .. })));
+    // Counted the track that just ended.
+    assert!(actions.iter().any(|a| matches!(a, PlayerAction::UpdatePlayCount(1))));
+}
+
+#[test]
+fn end_of_stream_stops_at_end_of_queue() {
+    let mut state = PlayerState::default();
+    let track = make_summary(1, "Only Song", 100_000);
+    state.current_track = Some(track.clone());
+    state.queue.add_tracks(vec![track]);
+    state.queue.current_index = Some(0);
+    state.status = PlaybackStatus::Playing;
+
+    let actions = state.build_end_of_stream_actions();
+
+    assert_eq!(state.status, PlaybackStatus::Stopped);
+    assert_eq!(state.position_ms, 0);
+    assert!(actions.iter().any(|a| matches!(a, PlayerAction::Stop { .. })));
+}
+
+#[test]
+fn end_of_stream_pauses_when_sleep_at_track_end_armed() {
+    // ⚠ M6: with the sleep-timer "End of current track" flag armed, the
+    // end-of-stream boundary must STOP (not advance) even though a next track
+    // is queued, and disarm the flag so the following boundary advances again.
+    let mut state = PlayerState::default();
+    let track1 = make_summary(1, "Song 1", 100_000);
+    let track2 = make_summary(2, "Song 2", 100_000);
+    state.current_track = Some(track1.clone());
+    state.queue.add_tracks(vec![track1, track2]);
+    state.queue.current_index = Some(0);
+    state.status = PlaybackStatus::Playing;
+    state.pause_after_current_track = true;
+
+    let actions = state.build_end_of_stream_actions();
+
+    // Did NOT advance — current track unchanged, stopped at position 0.
+    assert_eq!(state.current_track.as_ref().map(|t| t.id), Some(1));
+    assert_eq!(state.status, PlaybackStatus::Stopped);
+    assert_eq!(state.position_ms, 0);
+    assert_eq!(state.queue.current_index, Some(0));
+    // Flag disarmed so a subsequent boundary advances normally.
+    assert!(!state.pause_after_current_track);
+    // Emitted a Stop, still counted the finished track, started no new media.
+    assert!(actions.iter().any(|a| matches!(a, PlayerAction::Stop { .. })));
+    assert!(actions.iter().any(|a| matches!(a, PlayerAction::UpdatePlayCount(1))));
+    assert!(!actions.iter().any(|a| matches!(a, PlayerAction::PlayMedia { .. })));
+}
+
+#[test]
+fn view_model_light_carries_sleep_at_track_end() {
+    let mut state = PlayerState::default();
+    assert!(!state.to_view_model_light().sleep_at_track_end);
+    state.pause_after_current_track = true;
+    assert!(state.to_view_model_light().sleep_at_track_end);
+}
+
+// --- crossfade -------------------------------------------------------------
+
+/// The snapshot the monitor decided against. The staleness tests below build a
+/// coherent one, then perturb the *state* to model a control op winning the race
+/// between the decision and the emit lock.
+fn decision(fade_ms: u64, track_id: i64, position_ms: u64) -> CrossfadeDecision {
+    CrossfadeDecision { fade_ms, track_id: Some(track_id), position_ms }
+}
+
+#[test]
+fn crossfade_advances_the_queue_and_starts_the_next_track() {
+    let mut state = PlayerState::default();
+    let track1 = make_summary(1, "One", 180_000);
+    let track2 = make_summary(2, "Two", 200_000);
+    state.queue.add_tracks(vec![track1.clone(), track2]);
+    state.queue.current_index = Some(0);
+    state.current_track = Some(track1);
+    state.status = PlaybackStatus::Playing;
+    state.duration_ms = 180_000;
+    state.position_ms = 178_200;
+
+    let actions = state.build_crossfade_actions(decision(1_800, 1, 178_200));
+
+    // State advances at fade *start* — Now-Playing switches as the overlap begins.
+    assert_eq!(state.current_track.as_ref().map(|t| t.id), Some(2));
+    assert_eq!(state.queue.current_index, Some(1));
+    assert_eq!(state.position_ms, 0);
+    assert_eq!(state.duration_ms, 200_000);
+    assert_eq!(state.status, PlaybackStatus::Playing);
+
+    // The outgoing track counts as played, then the incoming one starts.
+    assert_eq!(actions.len(), 2);
+    assert_eq!(actions[0], PlayerAction::UpdatePlayCount(1));
+    let matched = matches!(
+        &actions[1],
+        PlayerAction::BeginCrossfade { file_path, fade_ms: 1_800, .. } if file_path == "/music/2.mp3"
+    );
+    assert!(matched, "expected BeginCrossfade for track 2, got {:?}", actions[1]);
+}
+
+#[test]
+fn crossfade_emits_nothing_when_the_queue_has_no_next_track() {
+    // The monitor's `peek_next` is read outside the emit lock, so a skip can
+    // land in between. `advance()` returning None must leave state untouched.
+    let mut state = PlayerState::default();
+    let track1 = make_summary(1, "One", 180_000);
+    state.queue.add_tracks(vec![track1.clone()]);
+    state.queue.current_index = Some(0);
+    state.current_track = Some(track1);
+    state.status = PlaybackStatus::Playing;
+    state.duration_ms = 180_000;
+    state.position_ms = 178_000;
+
+    let actions = state.build_crossfade_actions(decision(2_000, 1, 178_000));
+
+    assert!(actions.is_empty(), "no next track means no crossfade");
+    assert_eq!(state.current_track.as_ref().map(|t| t.id), Some(1));
+    assert_eq!(
+        state.status,
+        PlaybackStatus::Playing,
+        "the current track must keep playing to its own end"
+    );
+}
+
+#[test]
+fn crossfade_does_not_count_a_play_when_it_cannot_advance() {
+    // Guards the ordering inside `build_crossfade_actions`: the play count is
+    // only pushed once `advance()` has confirmed there is somewhere to go.
+    let mut state = PlayerState::default();
+    let track1 = make_summary(1, "One", 180_000);
+    state.queue.add_tracks(vec![track1.clone()]);
+    state.queue.current_index = Some(0);
+    state.current_track = Some(track1);
+    state.status = PlaybackStatus::Playing;
+    state.duration_ms = 180_000;
+    state.position_ms = 178_000;
+
+    let actions = state.build_crossfade_actions(decision(2_000, 1, 178_000));
+    assert!(!actions.iter().any(|a| matches!(a, PlayerAction::UpdatePlayCount(_))));
+}
+
+/// The monitor decides to crossfade under the `PlayerState` lock but only
+/// executes after taking `exec_lock`, so a pause can complete in between.
+/// Forcing `Playing` back on would resurrect playback the user just stopped —
+/// and `BeginCrossfade` would call `play()` on the deck, so it really would be
+/// audible.
+#[test]
+fn crossfade_is_dropped_when_a_pause_landed_since_the_decision() {
+    let mut state = PlayerState::default();
+    let track1 = make_summary(1, "One", 180_000);
+    let track2 = make_summary(2, "Two", 200_000);
+    state.queue.add_tracks(vec![track1.clone(), track2]);
+    state.queue.current_index = Some(0);
+    state.current_track = Some(track1);
+    state.duration_ms = 180_000;
+    state.position_ms = 178_200;
+    // The pause won the race.
+    state.status = PlaybackStatus::Paused;
+
+    let actions = state.build_crossfade_actions(decision(1_800, 1, 178_200));
+
+    assert!(actions.is_empty(), "a paused player must not crossfade");
+    assert_eq!(state.status, PlaybackStatus::Paused, "the pause must stick");
+    assert_eq!(state.queue.current_index, Some(0), "the queue must not advance");
+    assert_eq!(state.current_track.as_ref().map(|t| t.id), Some(1));
+}
+
+/// Same window, but the user picked a different track instead of pausing.
+/// Advancing here would skip straight past the track they just chose.
+#[test]
+fn crossfade_is_dropped_when_the_track_changed_since_the_decision() {
+    let mut state = PlayerState::default();
+    let track1 = make_summary(1, "One", 180_000);
+    let track2 = make_summary(2, "Two", 200_000);
+    let track3 = make_summary(3, "Three", 220_000);
+    state.queue.add_tracks(vec![track1, track2.clone(), track3]);
+    // A manual jump to track 2 landed after the monitor decided on track 1.
+    state.queue.current_index = Some(1);
+    state.current_track = Some(track2);
+    state.status = PlaybackStatus::Playing;
+    state.duration_ms = 200_000;
+    state.position_ms = 900;
+
+    let actions = state.build_crossfade_actions(decision(1_800, 1, 178_200));
+
+    assert!(actions.is_empty(), "a stale decision must not crossfade");
+    assert_eq!(
+        state.queue.current_index,
+        Some(1),
+        "the track the user just picked must keep playing"
+    );
+    assert_eq!(state.current_track.as_ref().map(|t| t.id), Some(2));
+}
+
+/// One case the track id alone misses: the *same* track restarted inside the
+/// window. `play_track_inner` resets `position_ms` to 0, so the position is the
+/// tell.
+#[test]
+fn crossfade_is_dropped_when_the_same_track_restarted_since_the_decision() {
+    let mut state = PlayerState::default();
+    let track1 = make_summary(1, "One", 180_000);
+    let track2 = make_summary(2, "Two", 200_000);
+    state.queue.add_tracks(vec![track1.clone(), track2]);
+    state.queue.current_index = Some(0);
+    state.current_track = Some(track1);
+    state.status = PlaybackStatus::Playing;
+    state.duration_ms = 180_000;
+    state.position_ms = 0;
+
+    let actions = state.build_crossfade_actions(decision(1_800, 1, 178_200));
+
+    assert!(actions.is_empty(), "a restarted track must not crossfade at position 0");
+    assert_eq!(state.queue.current_index, Some(0));
+}
+
+/// The other case the id and the status both miss: a seek keeps the track and
+/// keeps `Playing`, and moves only the position. Scrubbing backwards inside the
+/// fade window would otherwise fade out and skip the track just scrubbed *into*.
+#[test]
+fn crossfade_is_dropped_when_a_seek_landed_since_the_decision() {
+    let mut state = PlayerState::default();
+    let track1 = make_summary(1, "One", 180_000);
+    let track2 = make_summary(2, "Two", 200_000);
+    state.queue.add_tracks(vec![track1.clone(), track2]);
+    state.queue.current_index = Some(0);
+    state.current_track = Some(track1);
+    state.status = PlaybackStatus::Playing;
+    state.duration_ms = 180_000;
+    // The monitor decided at 178_200; the user scrubbed back to the middle.
+    state.position_ms = 60_000;
+
+    let actions = state.build_crossfade_actions(decision(1_800, 1, 178_200));
+
+    assert!(actions.is_empty(), "a seek must invalidate the pending crossfade");
+    assert_eq!(
+        state.queue.current_index,
+        Some(0),
+        "the track the user just scrubbed into must keep playing"
+    );
+    assert_eq!(state.position_ms, 60_000, "the seek must stick");
+}
+
+// ── sync_track_summaries ──
+
+#[test]
+fn sync_track_summaries_patches_current_queue_and_republishes() {
+    use std::collections::HashMap;
+
+    use tokio::sync::watch;
+
+    use crate::player::event_sink::PlayerSinks;
+
+    let handle = PlayerStateHandle::default();
+    let (vm_tx, _vm_rx) = watch::channel(None);
+    let (q_tx, mut q_rx) = watch::channel(None);
+    let sinks = PlayerSinks {
+        view_model: vm_tx,
+        queue: q_tx,
+        media_controls: None,
+    };
+
+    // Seed a current track + a coherent two-entry queue.
+    with_state_emit(&handle, &sinks, |s| {
+        let t1 = make_summary(1, "Old One", 1000);
+        let t2 = make_summary(2, "Old Two", 2000);
+        s.current_track = Some(Arc::clone(&t1));
+        s.queue.tracks = vec![t1, t2];
+        s.queue.play_order = vec![0, 1];
+        s.queue.current_index = Some(0);
+        Vec::<PlayerAction>::new()
+    });
+    drop(q_rx.borrow_and_update());
+    let version_before = lock_state(&handle).queue.version;
+
+    let mut fresh = HashMap::new();
+    fresh.insert(1, (*make_summary(1, "New One", 1000)).clone());
+    fresh.insert(2, (*make_summary(2, "New Two", 2000)).clone());
+    sync_track_summaries(&handle, &sinks, &fresh);
+
+    {
+        let g = lock_state(&handle);
+        assert_eq!(
+            g.current_track.as_ref().map(|t| t.title.as_str()),
+            Some("New One"),
+            "the currently-playing summary must be refreshed"
+        );
+        assert_eq!(g.queue.tracks[0].title, "New One");
+        assert_eq!(g.queue.tracks[1].title, "New Two");
+        assert!(
+            g.queue.version > version_before,
+            "a queue patch must bump the version so the queue VM republishes"
+        );
+    }
+    assert!(
+        matches!(q_rx.has_changed(), Ok(true)),
+        "the queue view-model must be republished"
+    );
+
+    // An edit touching nothing queued/playing is a no-op: no version bump, no publish.
+    drop(q_rx.borrow_and_update());
+    let version_after = lock_state(&handle).queue.version;
+    let mut absent = HashMap::new();
+    absent.insert(99, (*make_summary(99, "Nope", 1)).clone());
+    sync_track_summaries(&handle, &sinks, &absent);
+    assert_eq!(lock_state(&handle).queue.version, version_after, "no-op must not bump version");
+    assert!(
+        matches!(q_rx.has_changed(), Ok(false)),
+        "an edit touching nothing queued must not republish"
+    );
 }

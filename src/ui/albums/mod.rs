@@ -55,7 +55,8 @@ use grid::{compute_album_cover_cap, compute_indices};
 use state::GridIndexCache;
 
 pub use detail::{
-    apply_detail_row_favorite, apply_filtered_detail, clear_detail, open_album, open_album_with,
+    apply_detail_row_favorite, apply_detail_row_rating, apply_filtered_detail, clear_detail,
+    open_album, open_album_with,
     refresh_detail, resort_detail, seed_detail_from_settings, set_filter,
 };
 pub use grid::{fetch_grid, rebuild_grid, tune_cache_for_display};
@@ -250,6 +251,17 @@ impl AlbumsUi {
         }
     }
 
+    /// Star-rating analogue of [`Self::flip_detail_favorite`] — set `rating`
+    /// on both the displayed `tracks` cache and the canonical `all_tracks` set.
+    pub fn flip_detail_rating(&self, id: i64, rating: i32) {
+        if let Some(r) = self.detail.tracks.lock().iter_mut().find(|r| r.id == id) {
+            r.rating = rating;
+        }
+        if let Some(r) = self.detail.all_tracks.lock().iter_mut().find(|r| r.id == id) {
+            r.rating = rating;
+        }
+    }
+
     /// Lazy cover lookup for an Albums **grid card** — backs
     /// `Albums.request-cover`, so a cover is decoded (or LRU-hit) only when
     /// the card is on screen. Resolves against the grid-tier
@@ -257,6 +269,15 @@ impl AlbumsUi {
     pub fn grid_cover(&self, artwork_path: &str) -> slint::Image {
         self.grid_covers
             .get_or_load_opt(Some(artwork_path).filter(|s| !s.is_empty()))
+    }
+
+    /// Shared handle to the grid-tier cover cache, for surfaces that
+    /// borrow it (Artist Detail's Albums strip resolves its cards via
+    /// [`Self::grid_cover`] and prewarms through this handle). Same LRU —
+    /// no second cache, and the existing release sites clear it for both
+    /// surfaces.
+    pub fn grid_thumbs(&self) -> Arc<CoverThumbs> {
+        self.grid_covers.clone()
     }
 }
 
@@ -294,11 +315,13 @@ pub fn to_slint_album_row(a: &AlbumStats) -> UiAlbumRow {
     }
 }
 
-#[allow(dead_code)]
-fn assert_send_sync() {
+// Compile-time assertion, not runtime code: an anonymous `const _` is
+// type-checked but never dead-code-flagged, so the bound is enforced
+// without an `#[allow(dead_code)]` on a fn nothing calls.
+const _: fn() = || {
     fn check<T: Send + Sync>() {}
     check::<AlbumsUi>();
-}
+};
 
 #[cfg(test)]
 #[path = "tests/albums_tests.rs"]

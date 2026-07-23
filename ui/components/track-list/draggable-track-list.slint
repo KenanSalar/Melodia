@@ -82,6 +82,7 @@ export component DraggableTrackList inherits Rectangle {
     callback play-next([int]);
     callback add-to-queue([int]);
     callback toggle-row-favorite([int] /*track_ids*/, bool /*new_state*/);
+    callback set-row-rating([int] /*track_ids*/, int /*rating*/);
     callback select-row(int /*idx*/, int /*id*/, bool /*shift*/, bool /*ctrl*/);
     callback request-blur-search();
     callback reorder(int /*from*/, int /*to*/);
@@ -194,6 +195,7 @@ export component DraggableTrackList inherits Rectangle {
                     play-next(ids) => { root.play-next(ids); }
                     add-to-queue(ids) => { root.add-to-queue(ids); }
                     toggle-row-favorite(ids, on) => { root.toggle-row-favorite(ids, on); }
+                    set-row-rating(ids, n) => { root.set-row-rating(ids, n); }
                     select-row(i, id, sh, ct) => { root.select-row(i, id, sh, ct); }
                     request-remove-from-playlist(ids) => { root.remove-from-playlist(ids); }
                     request-blur-search => { root.request-blur-search(); }

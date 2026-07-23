@@ -1,8 +1,9 @@
 [package]
 name = "Melodia"
-version = "0.4.2"
+version = "0.8.0"
 edition = "2024"
-rust-version = "1.93"
+# Kept in lockstep with `rust-toolchain.toml` and `clippy.toml`'s `msrv`.
+rust-version = "1.97"
 description = "Cross-platform desktop music player (Slint + Rust)"
 license = "AGPL-3.0-or-later"
 repository = "https://github.com/KenanSalar/Melodia"
@@ -117,8 +118,8 @@ slint = { version = "1.16.1", default-features = false, features = [
 ] }
 
 # Async runtime / utilities
-tokio = { version = "1.52.3", features = ["rt-multi-thread", "macros", "sync", "time", "fs", "process"] }
-tokio-util = { version = "0.7.18", features = ["rt"] }
+tokio = { version = "1.53.1", features = ["rt-multi-thread", "macros", "sync", "time", "fs", "process"] }
+tokio-util = { version = "0.7.19", features = ["rt"] }
 async-compat = "0.2.5"
 parking_lot = "0.12.5"
 
@@ -129,7 +130,7 @@ parking_lot = "0.12.5"
 # `query!` / `query_as!` machinery comes along for the ride but we don't
 # call it — all queries go through runtime `query_as::<_, T>()` /
 # `query_scalar`. `derive` covers `#[derive(sqlx::FromRow)]`.
-sqlx = { version = "0.8.6", default-features = false, features = ["runtime-tokio", "sqlite", "migrate", "derive", "macros"] }
+sqlx = { version = "0.9.0", default-features = false, features = ["runtime-tokio", "sqlite", "migrate", "derive", "macros"] }
 
 # Audio
 rodio = { version = "0.22.2", default-features = false, features = [
@@ -145,18 +146,24 @@ rodio = { version = "0.22.2", default-features = false, features = [
     "symphonia-alac",
     "symphonia-aiff",
 ] }
-lofty = "0.24"
+# Second-order IIR biquads for the graphic equalizer. Rodio 0.22 ships only
+# low/high-pass BLT filters (no peaking/parametric), so the EQ runs samples
+# through a cascade of `Type::PeakingEQ` `DirectForm1` filters from this crate.
+# `DirectForm1` keeps past inputs/outputs in its delay line, so live
+# coefficient swaps (slider drags) don't inject transients.
+biquad = "0.6.0"
+lofty = "0.24.0"
 
 # Library indexing / file IO
 walkdir = "2.5"
-rand = "0.10.1"
+rand = "0.10.2"
 notify = "8.2.0"
 notify-debouncer-full = "0.7"
 rayon = "1.12"
 blake3 = "1.8.5"
 natord = "1.0.9"
 image = { version = "0.25.10", default-features = false, features = ["jpeg", "png", "webp"] }
-lru = "0.18.0"
+lru = "0.18.1"
 
 # Material 3 dynamic colour generation (Material You). Default `std` feature
 # is what we want; `image`, `serde`, `libm` are off by default and we don't
@@ -164,24 +171,28 @@ lru = "0.18.0"
 material-colors = "0.4.2"
 
 # Serde / config
-serde = { version = "1.0.228", features = ["derive"] }
-serde_json = "1.0.149"
-chrono = { version = "0.4.44", default-features = false, features = ["clock", "std"] }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.151"
+chrono = { version = "0.4.45", default-features = false, features = ["clock", "std"] }
 dirs = "6.0.0"
 
-# HTTP (Deezer artist images)
-reqwest = { version = "0.13.3", default-features = false, features = ["json", "query", "rustls", "stream"] }
+# HTTP (Deezer artist images, scrobbling)
+reqwest = { version = "0.13.4", default-features = false, features = ["form", "json", "query", "rustls", "stream"] }
+
+# MD5 for Last.fm `api_sig` request signing (scrobbling). Last.fm mandates MD5;
+# not used for anything security-sensitive.
+md5 = "0.8.1"
 
 # Logging. env_logger's default `regex` feature is the *only* thing in the
 # dependency graph pulling `regex` (+ `regex-automata`, `regex-syntax`,
 # `aho-corasick`) — and we never use regex matching inside a `RUST_LOG`
 # directive. Dropping it keeps plain directive filtering, `humantime`
 # timestamps, and `auto-color` output.
-log = "0.4.29"
-env_logger = { version = "0.11.10", default-features = false, features = ["auto-color", "humantime"] }
+log = "0.4.33"
+env_logger = { version = "0.11.11", default-features = false, features = ["auto-color", "humantime"] }
 
 # Errors
-thiserror = "2.0.18"
+thiserror = "2.0.19"
 
 # Atomic file writes (settings/queue/search-history persistence)
 tempfile = "3.27.0"
@@ -191,7 +202,7 @@ souvlaki = "0.8.3"
 rfd = "0.17.2"
 # Hands a path to the OS default handler — used by the track-row
 # "Open Containing Folder" context-menu action.
-open = "5.3.5"
+open = "5.4.0"
 
 # Auto-updater. `minisign-verify` is zero-dep and verify-only (Ed25519
 # signature verification of the artifact + global signature of the trusted
@@ -203,7 +214,7 @@ open = "5.3.5"
 # buffering the full 80–150 MiB artifact. See `src/services/updater/`.
 minisign-verify = "0.2.5"
 semver = "1.0.28"
-futures-util = { version = "0.3.32", default-features = false, features = ["std"] }
+futures-util = { version = "0.3.33", default-features = false, features = ["std"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 # NOTE: do NOT enable the `tokio` feature here. Cargo unifies features across
@@ -214,7 +225,7 @@ futures-util = { version = "0.3.32", default-features = false, features = ["std"
 # Tokio 1.x runtime". Phase 13 (always-on-top) will use `zbus::blocking::*`
 # from inside `tokio::task::spawn_blocking`, which doesn't need either
 # executor flavour.
-zbus = "5.15.0"
+zbus = "5.18.0"
 
 # Linux system tray (StatusNotifierItem over D-Bus — pure-Rust, no GTK).
 # `default-features = false` drops ksni's default `tokio` feature: it turns
@@ -227,7 +238,7 @@ zbus = "5.15.0"
 # the synchronous `ksni::blocking` API so the tray runs on its own thread
 # with no tokio handle. Windows / macOS use `tray-icon` instead — see the
 # `cfg(any(windows, macos))` block below and `src/services/tray/`.
-ksni = { version = "0.3.4", default-features = false, features = ["blocking", "async-io"] }
+ksni = { version = "0.3.6", default-features = false, features = ["blocking", "async-io"] }
 
 # `libc::malloc_trim` (glibc-only extension) is called periodically by the
 # playback monitor to release free chunks the allocator is holding above its
@@ -237,7 +248,7 @@ ksni = { version = "0.3.4", default-features = false, features = ["blocking", "a
 # pause. Calling `malloc_trim(0)` once a minute lets the arena release them.
 # cfg-gated to glibc-only at the call site — musl's allocator doesn't expose
 # this. See `src/player/handlers.rs` for usage.
-libc = "0.2.186"
+libc = "0.2.189"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 # Used only by the auto-updater's atomic-swap fallback path
@@ -266,7 +277,7 @@ dunce = "1.0.5"
 # paths (libappindicator / X11 `xdotool`), and Linux uses `ksni` instead.
 # The tray icon is created on the UI/main thread and its menu events are
 # pumped from the winit event loop Slint owns. See `src/services/tray/`.
-tray-icon = { version = "0.24.0", default-features = false }
+tray-icon = { version = "0.24.1", default-features = false }
 
 [build-dependencies]
 slint-build = "1.16.1"
@@ -284,12 +295,17 @@ slint-build = "1.16.1"
 winresource = "0.1.31"
 
 [dev-dependencies]
-tokio = { version = "1.52.3", features = ["macros", "rt-multi-thread", "test-util"] }
+tokio = { version = "1.53.1", features = ["macros", "rt-multi-thread", "test-util"] }
 
 [lints.rust]
 unused = { level = "warn", priority = -1 }
 unsafe_code = "deny"
 rust_2024_compatibility = { level = "warn", priority = -1 }
+# Deliberately NOT enabling 1.97's `dead_code_pub_in_binary`. It is unusable for
+# this crate's lib+bin split: a test harness is itself an executable, so under
+# `--all-targets` the lint treats every `pub` item reachable only from `main.rs`
+# as dead and flags the whole library API (670 hits — 0 on `--lib`, 0 on
+# `--bin`, all of them from the test targets).
 
 [lints.clippy]
 correctness = { level = "deny", priority = -1 }

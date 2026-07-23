@@ -1,6 +1,6 @@
 import { ScrollView } from "std-widgets.slint";
 import { Theme } from "../theme.slint";
-import { ArtistDetail, Player } from "../globals.slint";
+import { ArtistDetail, Player, CompositeScroll } from "../globals.slint";
 import { DetailHeader } from "../components/detail-header.slint";
 import { ActionPill, PillLabel, PillButton, PillDivider } from "../components/action-pill.slint";
 import { ColumnTogglePopup } from "../components/track-list/column-toggle-popup.slint";
@@ -8,7 +8,9 @@ import { EntityCard } from "../components/grid/entity-card.slint";
 import { MaterialIcon } from "../components/material-icon.slint";
 import { SearchBar } from "../components/search-bar.slint";
 import { TrackList } from "../components/track-list/track-list.slint";
-import { OverlayScrollbar } from "../components/overlay-scrollbar.slint";
+import { CompositeScrollbars } from "../components/composite-scrollbars.slint";
+import { FilterThrottle } from "../components/filter-throttle.slint";
+import { CollapsibleSectionHeader } from "../components/collapsible-section-header.slint";
 
 // The full Artist Detail view. Mirrors `AlbumDetailView`:
 //
@@ -36,19 +38,14 @@ export component ArtistDetailView inherits Rectangle {
     property <length> album-card-w: 140px;
     property <length> album-card-h: 184px;
 
-    // Filter throttle (mirror of `tracks-view` / `favorites-view`):
-    // each keystroke bumps `pending`; the Timer fires the filter
-    // callback at most once per `interval` while `pending != applied`.
+    // Filter throttle: each keystroke bumps `filter-tick-pending`; the
+    // shared `FilterThrottle` fires the filter callback at most once per
+    // ~130 ms while pending is ahead of the last-applied tick.
     property <int> filter-tick-pending: 0;
-    property <int> filter-tick-applied: 0;
 
-    filter-throttle := Timer {
-        interval: 130ms;
-        running: root.filter-tick-pending != root.filter-tick-applied;
-        triggered() => {
-            root.filter-tick-applied = root.filter-tick-pending;
-            ArtistDetail.filter-changed(ArtistDetail.filter);
-        }
+    filter-throttle := FilterThrottle {
+        pending: root.filter-tick-pending;
+        fire() => { ArtistDetail.filter-changed(ArtistDetail.filter); }
     }
 
     // Backdrop catches any click that no inner TouchArea consumes
@@ -87,7 +84,7 @@ export component ArtistDetailView inherits Rectangle {
                 VerticalLayout {
                     alignment: center;
                     Text {
-                        text: "‎" + ArtistDetail.artist.name;
+                        text: "\u{200e}" + ArtistDetail.artist.name;
                         color: Theme.text;
                         font-size: 24px;
                         font-weight: Theme.page-title-weight;
@@ -169,18 +166,32 @@ export component ArtistDetailView inherits Rectangle {
         // --- Below-hero scroll container --------------------------------
         // Wraps the Albums sub-section + the All Songs TrackList in a
         // single outer vertical `ScrollView` so one scrollbar (mounted
-        // at the view root) covers both surfaces. Tradeoff identical to
-        // the Favorites view: the TrackList is sized to its full row
-        // count, defeating the inner ListView's virtualization for
-        // Artist Detail. Acceptable because (a) tracks are scoped to
-        // one artist (typically dozens to a few hundred), (b)
-        // `release_section_state` drops every row on tab leave +
-        // heap-trims, and (c) it lets the user scroll past the Albums
-        // strip on small windows to reach the tracklist (matches
-        // Favorites' unified-scroll UX).
+        // at the view root) covers both surfaces. The TrackList is
+        // capped at the outer viewport height (`min` in its `height`
+        // binding), so its inner ListView virtualizes to ~visible rows
+        // — the outer ScrollView's own travel covers just the Albums
+        // strip region, and the unified scrollbar composes both travels.
+        // The mouse WHEEL does NOT hand off between the two nested
+        // scrollers natively — Slint's inner ListView swallows the wheel
+        // at its top edge instead of bubbling to `below-sv` (see
+        // CompositeScroll). So `hover-catch` reports region hover to the
+        // winit MouseWheel filter, which routes vertical wheel through the
+        // mounted `CompositeScrollbars`' composite split; the
+        // scrollbar-drag path already composes both travels directly.
         below-hero := Rectangle {
             vertical-stretch: 1;
             clip: true;
+
+            // Ancestor hover sentinel (see CompositeScroll). Forwards every
+            // event to the ScrollView child — row clicks, drags and native
+            // horizontal scroll are unaffected; only its `has-hover` is
+            // observed. Empty-space clicks fall through to here (rows grab
+            // their own), reproducing the root backdrop's blur-on-empty-click.
+            hover-catch := TouchArea {
+                width: 100%;
+                height: 100%;
+                changed has-hover => { CompositeScroll.hovered = self.has-hover; }
+                clicked => { ArtistDetail.blur-search-tick += 1; }
 
             below-sv := ScrollView {
                 width: 100%;
@@ -210,62 +221,13 @@ export component ArtistDetailView inherits Rectangle {
             padding-bottom: Theme.pad-lg;
             spacing: Theme.pad-sm;
 
-            // Clickable header: "Albums" label + chevron. Hit area is
-            // the chevron + label only (compact), not the whole row
-            // width — clicking dead space to the right of the chevron
-            // shouldn't toggle. Chevron mirrors the convention used
-            // elsewhere in the app: down (`expand_more`) when collapsed
-            // ("click to expand downward"), up (`expand_less`) when
-            // expanded ("click to collapse upward").
             HorizontalLayout {
                 alignment: start;
 
-                header-target := Rectangle {
-                    width: header-row.preferred-width;
-                    height: 28px;
-                    // Pill chrome on hover — matches `PillButton`'s
-                    // `border-radius: self.height / 2`.
-                    border-radius: self.height / 2;
-                    background: header-touch.has-hover
-                        ? Theme.surface1
-                        : transparent;
-                    animate background { duration: Theme.dur-fast; easing: ease-in-out; }
-
-                    header-row := HorizontalLayout {
-                        // 10 px matches `PillButton`'s horizontal padding —
-                        // keeps the rounded pill ends from crowding the
-                        // text on the left and the chevron on the right.
-                        // With 4 px the text optically hugs the left curve.
-                        padding-left: 10px;
-                        padding-right: 10px;
-                        spacing: 2px;
-                        alignment: start;
-
-                        VerticalLayout {
-                            alignment: center;
-                            Text {
-                                text: @tr("Albums");
-                                color: Theme.text;
-                                font-size: Theme.font-size-lg;
-                                font-weight: 600;
-                            }
-                        }
-                        VerticalLayout {
-                            alignment: center;
-                            MaterialIcon {
-                                name: ArtistDetail.albums-collapsed
-                                    ? "expand_more"
-                                    : "expand_less";
-                                icon-size: 20px;
-                                icon-color: Theme.subtext0;
-                            }
-                        }
-                    }
-
-                    header-touch := TouchArea {
-                        mouse-cursor: pointer;
-                        clicked => { ArtistDetail.toggle-albums-collapsed(); }
-                    }
+                CollapsibleSectionHeader {
+                    label: @tr("Albums");
+                    collapsed: ArtistDetail.albums-collapsed;
+                    toggled => { ArtistDetail.toggle-albums-collapsed(); }
                 }
             }
 
@@ -340,11 +302,18 @@ export component ArtistDetailView inherits Rectangle {
             tl := TrackList {
                 horizontal-stretch: 1;
                 vertical-stretch: 0;
-                height: max(1, ArtistDetail.tracks.length)
-                    * (ArtistDetail.show-artwork
-                        ? Theme.row-h
-                        : Theme.row-h-compact)
-                    + 32px + Theme.pad-xs;
+                // Capped at the outer viewport: small lists keep the
+                // content-tall layout (the outer ScrollView never needs
+                // to scroll past them), large lists pin to the visible
+                // region so the inner ListView virtualizes to ~visible
+                // rows instead of instantiating every TrackListRowItem.
+                height: min(
+                    max(1, ArtistDetail.tracks.length)
+                        * (ArtistDetail.show-artwork
+                            ? Theme.row-h
+                            : Theme.row-h-compact)
+                        + 32px + Theme.pad-xs,
+                    below-sv.visible-height);
 
                 rows: ArtistDetail.tracks;
 
@@ -375,6 +344,7 @@ export component ArtistDetailView inherits Rectangle {
                 play-next(ids) => { ArtistDetail.play-next(ids); }
                 add-to-queue(ids) => { ArtistDetail.add-to-queue(ids); }
                 toggle-row-favorite(ids, on) => { ArtistDetail.toggle-row-favorite(ids, on); }
+                set-row-rating(ids, n) => { ArtistDetail.set-row-rating(ids, n); }
                 select-row(idx, id, sh, ct) => { ArtistDetail.select-row(idx, id, sh, ct); }
                 request-blur-search => { ArtistDetail.blur-search-tick += 1; }
                 go-to-album(aid) => { ArtistDetail.go-to-album(aid); }
@@ -384,35 +354,30 @@ export component ArtistDetailView inherits Rectangle {
         }
                 }
             }
+            }
         }
     }
 
-    // Outer vertical scrollbar covers the Albums sub-section + the
-    // tracklist together (driving `below-sv`, NOT the TrackList's
-    // internal v-scroll). Pinned to the right edge of the below-hero
-    // region so it starts exactly under the hero banner.
-    OverlayScrollbar {
-        horizontal: false;
-        x: parent.width - self.width;
-        y: below-hero.absolute-position.y - root.absolute-position.y;
-        width: 10px;
-        height: below-hero.height;
-        visible-size: below-sv.visible-height;
-        content-size: below-sv.viewport-height;
-        offset: -below-sv.viewport-y;
-        scroll-to(o) => { below-sv.viewport-y = -o; }
-    }
-
-    // Horizontal scrollbar still drives the TrackList's column pan.
-    OverlayScrollbar {
-        horizontal: true;
-        x: tl.absolute-position.x - root.absolute-position.x;
-        y: parent.height - self.height;
-        width: tl.width - 10px;
-        height: 10px;
-        visible-size: tl.h-visible-width;
-        content-size: tl.h-viewport-width;
-        offset: tl.h-offset;
-        scroll-to(o) => { tl.set-h-offset(o); }
+    // Composite scroll: unified vbar over the Albums sub-section + the
+    // tracklist, column-pan hbar, and the CompositeScroll wheel routing —
+    // owned by the shared component.
+    CompositeScrollbars {
+        x: 0; y: 0;
+        width: 100%; height: 100%;
+        outer-viewport-y <=> below-sv.viewport-y;
+        outer-viewport-height: below-sv.viewport-height;
+        outer-visible-height: below-sv.visible-height;
+        inner-offset: tl.v-offset;
+        inner-viewport-height: tl.v-viewport-height;
+        inner-visible-height: tl.v-visible-height;
+        set-inner-offset(o) => { tl.set-v-offset(o); }
+        h-offset: tl.h-offset;
+        h-viewport-width: tl.h-viewport-width;
+        h-visible-width: tl.h-visible-width;
+        set-h-offset(o) => { tl.set-h-offset(o); }
+        v-region-y: below-hero.absolute-position.y - root.absolute-position.y;
+        v-region-height: below-hero.height;
+        h-region-x: tl.absolute-position.x - root.absolute-position.x;
+        h-region-width: tl.width;
     }
 }

@@ -51,7 +51,8 @@ use grid::{compute_artist_cover_cap, compute_indices};
 use state::GridIndexCache;
 
 pub use detail::{
-    apply_detail_row_favorite, apply_filtered_detail, clear_detail, open_artist, open_artist_with,
+    apply_detail_row_favorite, apply_detail_row_rating, apply_filtered_detail, clear_detail,
+    open_artist, open_artist_with,
     refresh_detail, resort_detail, seed_detail_from_settings, set_filter,
 };
 pub use grid::{fetch_grid, rebuild_grid, tune_cache_for_display};
@@ -71,6 +72,14 @@ pub struct ArtistsUi {
     /// (see [`Self::release_section_state`]) whenever the user leaves the
     /// Artists section, and re-warmed on return.
     grid_covers: Arc<CoverThumbs>,
+    /// Borrowed handle to the **Albums** grid tier
+    /// ([`crate::ui::albums::AlbumsUi::grid_thumbs`]). The Artist Detail
+    /// Albums strip resolves its cards through `AlbumsUi::grid_cover`
+    /// (decode-on-miss on the UI thread), so [`detail::open_artist`]'s
+    /// fetch prewarms the strip's covers into this cache off-thread first.
+    /// Not released here — `wire_artists` already clears the shared LRU on
+    /// section-leave / detail-close via the `AlbumsUi` handle.
+    albums_grid_covers: Arc<CoverThumbs>,
     /// Detail-tier `(cover, blur)` pair cache for the Artist Detail header.
     /// Released on section exit.
     detail_artwork: Arc<DetailArtwork>,
@@ -80,7 +89,7 @@ pub struct ArtistsUi {
 }
 
 impl ArtistsUi {
-    pub fn new(cover_thumbs: Arc<CoverThumbs>) -> Self {
+    pub fn new(cover_thumbs: Arc<CoverThumbs>, albums_grid_covers: Arc<CoverThumbs>) -> Self {
         Self {
             grid: ArtistGridState {
                 data: Mutex::new(Arc::new(GridData::new(Vec::new()))),
@@ -99,6 +108,7 @@ impl ArtistsUi {
                 GRID_COVER_SIZE,
                 DEFAULT_GRID_COVER_CAP,
             )),
+            albums_grid_covers,
             detail_artwork: Arc::new(DetailArtwork::new()),
             section: SectionState::new(),
         }
@@ -215,6 +225,17 @@ impl ArtistsUi {
         }
     }
 
+    /// Star-rating analogue of [`Self::flip_detail_favorite`] — set `rating`
+    /// on both the displayed `tracks` cache and the canonical `all_tracks` set.
+    pub fn flip_detail_rating(&self, id: i64, rating: i32) {
+        if let Some(r) = self.detail.tracks.lock().iter_mut().find(|r| r.id == id) {
+            r.rating = rating;
+        }
+        if let Some(r) = self.detail.all_tracks.lock().iter_mut().find(|r| r.id == id) {
+            r.rating = rating;
+        }
+    }
+
     /// Lazy cover lookup for an Artists **grid card** — backs
     /// `Artists.request-cover`. Resolves against the grid-tier
     /// (`GRID_COVER_SIZE`) cache.
@@ -258,11 +279,13 @@ pub fn to_slint_artist_row(a: &ArtistStats) -> UiArtistRow {
     }
 }
 
-#[allow(dead_code)]
-fn assert_send_sync() {
+// Compile-time assertion, not runtime code: an anonymous `const _` is
+// type-checked but never dead-code-flagged, so the bound is enforced
+// without an `#[allow(dead_code)]` on a fn nothing calls.
+const _: fn() = || {
     fn check<T: Send + Sync>() {}
     check::<ArtistsUi>();
-}
+};
 
 #[cfg(test)]
 #[path = "tests/artists_tests.rs"]

@@ -43,7 +43,7 @@ pub struct ViewStateData {
     /// Sidebar tab active at last shutdown. Hydrated into
     /// `Nav.selected-index` at startup. Indices follow the `Nav` global
     /// comment (0=search, 1=browse, 2=favorites, 3=tracks, 4=albums,
-    /// 5=artists, 6=genres, 7=playlists, 8=settings).
+    /// 5=artists, 6=genres, 7=playlists, 8=recently-played, 9=settings).
     pub last_nav_index: i32,
     /// Detail-view ids open at last shutdown, keyed by view-id string.
     /// Entry present ⇒ that view's detail page is hydrated at startup;

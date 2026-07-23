@@ -9,7 +9,7 @@ use notify_debouncer_full::{
 use tokio::sync::mpsc;
 
 use crate::error::AppError;
-use crate::media::AUDIO_EXTENSIONS;
+use crate::media::is_audio_extension;
 
 /// Classified file system event sent through the mpsc channel to the event processor.
 #[derive(Debug, Clone, PartialEq)]
@@ -84,7 +84,7 @@ impl FolderWatcher {
                 }
             },
         )
-        .map_err(|e| AppError::Watcher(format!("Failed to create watcher: {e}")))?;
+        .map_err(|e| AppError::watcher("Failed to create watcher", e))?;
 
         for path in paths {
             if path.exists() {
@@ -169,15 +169,9 @@ fn classify_event(kind: EventKind, paths: &[PathBuf]) -> Vec<FileEvent> {
 }
 
 pub(crate) fn is_audio_file(path: &Path) -> bool {
-    let ext = path
-        .extension()
+    path.extension()
         .and_then(|e| e.to_str())
-        .map(str::to_lowercase);
-
-    match ext {
-        Some(ext) => AUDIO_EXTENSIONS.contains(&ext.as_str()),
-        None => false,
-    }
+        .is_some_and(is_audio_extension)
 }
 
 #[cfg(test)]

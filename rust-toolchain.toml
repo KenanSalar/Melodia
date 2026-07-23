@@ -1,0 +1,19 @@
+# Pins the compiler for local dev, CI and release builds alike.
+#
+# Without this, CI floated on `dtolnay/rust-toolchain@stable` while local dev sat
+# on whatever `rustup update` last fetched. Since `[lints.clippy]` sets pedantic /
+# style / complexity to `warn` and CI runs `-D warnings`, *every* new lint in
+# *every* new stable became an automatic CI failure on an unrelated PR — which is
+# exactly how 1.97's `manual_assert_eq` broke a branch that never touched the line.
+#
+# `components` is load-bearing, not decoration: this file outranks `rustup default`
+# in rustup's override hierarchy, so the `dtolnay` action's toolchain choice (and
+# its `with: components:` inputs) no longer apply. clippy and llvm-tools-preview
+# must be requested here or the CI clippy and coverage jobs lose their tooling.
+# CI installs from this file with a bare `rustup toolchain install`.
+#
+# Bumping Rust means moving four things together — see the toolchain bullet in
+# CLAUDE.md's Important Conventions.
+[toolchain]
+channel = "1.97.0"
+components = ["clippy", "llvm-tools-preview"]

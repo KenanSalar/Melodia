@@ -12,9 +12,8 @@ use super::{
 use crate::entities::track::TrackListRow as RsTrackListRow;
 use crate::error::AppResult;
 use crate::library;
-use crate::media::cover_thumbs::CoverThumbs;
 use crate::state::AppState;
-use crate::ui::track_sort;
+use crate::ui::{model_patch, track_sort};
 use crate::{AppWindow, TrackListRow as UiTrackListRow, Tracks};
 
 /// Re-fetch the full list from the DB, store it in `tracks_ui`, then push the
@@ -50,13 +49,24 @@ pub async fn fetch_and_apply(
 
     // Pre-warm the thumbnail cache off the runtime worker pool. Album art
     // decoding is CPU-bound; Rayon parallelizes across cores while
-    // `spawn_blocking` keeps the tokio runtime responsive.
+    // `spawn_blocking` keeps the tokio runtime responsive. Walked in
+    // DISPLAY order (through the `order` permutation, not raw fetch order)
+    // and truncated at the LRU capacity: `prewarm` decodes at most that
+    // many anyway, and on a library with more unique covers than the cache
+    // holds, the surviving entries are the ones the user sees first.
+    // Stopping the build at `cap` avoids allocating a path Vec longer than
+    // the cache can ever hold.
     let unique_paths: Vec<PathBuf> = {
         let full = tracks_ui.full.lock().clone();
-        let cap = (full.len() / 8).max(16);
-        let mut seen: HashSet<&str> = HashSet::with_capacity(cap);
-        let mut out: Vec<PathBuf> = Vec::with_capacity(cap);
-        for r in full.iter() {
+        let order = tracks_ui.order.lock().clone();
+        let cap = tracks_ui.cover_thumbs.capacity();
+        let prealloc = ((full.len() / 8).max(16)).min(cap);
+        let mut seen: HashSet<&str> = HashSet::with_capacity(prealloc);
+        let mut out: Vec<PathBuf> = Vec::with_capacity(prealloc);
+        for r in order.iter().filter_map(|&i| full.get(i)) {
+            if out.len() >= cap {
+                break;
+            }
             if let Some(p) = r.artwork_path.as_deref()
                 && !p.is_empty()
                 && seen.insert(p)
@@ -77,9 +87,8 @@ pub async fn fetch_and_apply(
     let snapshot = tracks_ui.full.lock().clone();
     let keys = tracks_ui.search_keys.lock().clone();
     let order = tracks_ui.order.lock().clone();
-    let thumbs = tracks_ui.cover_thumbs.clone();
     let _ = weak.upgrade_in_event_loop(move |ui| {
-        let visible = build_visible(&snapshot, &keys, &order, &filter, &thumbs);
+        let visible = build_visible(&snapshot, &keys, &order, &filter);
         apply_visible(&ui, visible, total);
     });
     Ok(())
@@ -92,9 +101,8 @@ pub fn refilter(weak: &Weak<AppWindow>, tracks_ui: &TracksUi, filter: String) {
     let keys = tracks_ui.search_keys.lock().clone();
     let order = tracks_ui.order.lock().clone();
     let total = i32::try_from(snapshot.len()).unwrap_or(i32::MAX);
-    let thumbs = tracks_ui.cover_thumbs.clone();
     let _ = weak.upgrade_in_event_loop(move |ui| {
-        let visible = build_visible(&snapshot, &keys, &order, &filter, &thumbs);
+        let visible = build_visible(&snapshot, &keys, &order, &filter);
         apply_visible(&ui, visible, total);
     });
 }
@@ -119,34 +127,29 @@ pub fn resort_and_apply(
     let order = Arc::new(track_sort::compute_track_order(&snapshot, sort_field, sort_dir));
     *tracks_ui.order.lock() = order.clone();
     let total = i32::try_from(snapshot.len()).unwrap_or(i32::MAX);
-    let thumbs = tracks_ui.cover_thumbs.clone();
     let _ = weak.upgrade_in_event_loop(move |ui| {
-        let visible = build_visible(&snapshot, &keys, &order, &filter, &thumbs);
+        let visible = build_visible(&snapshot, &keys, &order, &filter);
         apply_visible(&ui, visible, total);
     });
 }
 
-/// Flip `is_favorite` on a single row in both the canonical Vec and the
-/// Slint `VecModel`. Only touches the affected row — scroll position and
-/// neighbouring rows stay put.
+/// Flip `is_favorite` on a single row in the Slint `VecModel`. Only touches
+/// the affected row — scroll position and neighbouring rows stay put.
 pub fn apply_row_favorite(weak: &Weak<AppWindow>, id: i64, fav: bool) {
     let _ = weak.upgrade_in_event_loop(move |ui| {
-        let rows = ui.global::<Tracks>().get_rows();
-        let Some(vec_model) =
-            rows.as_any().downcast_ref::<VecModel<UiTrackListRow>>()
-        else {
-            return;
-        };
-        for i in 0..vec_model.row_count() {
-            let Some(mut r) = vec_model.row_data(i) else {
-                continue;
-            };
-            if i64::from(r.id) == id {
-                r.is_favorite = fav;
-                vec_model.set_row_data(i, r);
-                break;
-            }
-        }
+        model_patch::patch_track_row_by_id(&ui.global::<Tracks>().get_rows(), id, |r| {
+            r.is_favorite = fav;
+        });
+    });
+}
+
+/// Set `rating` on a single row in the Slint `VecModel` — the star-rating
+/// analogue of [`apply_row_favorite`].
+pub fn apply_row_rating(weak: &Weak<AppWindow>, id: i64, rating: i32) {
+    let _ = weak.upgrade_in_event_loop(move |ui| {
+        model_patch::patch_track_row_by_id(&ui.global::<Tracks>().get_rows(), id, |r| {
+            r.rating = rating;
+        });
     });
 }
 
@@ -163,7 +166,6 @@ fn build_visible(
     keys: &[RowSearchKey],
     order: &[usize],
     filter: &str,
-    thumbs: &CoverThumbs,
 ) -> Vec<UiTrackListRow> {
     let needle = filter.trim().to_lowercase();
     if needle.is_empty() {
@@ -171,7 +173,7 @@ fn build_visible(
             .iter()
             .filter_map(|&i| {
                 let r = full.get(i)?;
-                Some(finish_track_list_row(prepare_track_list_row(r), thumbs))
+                Some(finish_track_list_row(prepare_track_list_row(r)))
             })
             .collect();
     }
@@ -181,7 +183,7 @@ fn build_visible(
             let r = full.get(i)?;
             keys.get(i)?
                 .matches(&needle)
-                .then(|| finish_track_list_row(prepare_track_list_row(r), thumbs))
+                .then(|| finish_track_list_row(prepare_track_list_row(r)))
         })
         .collect()
 }

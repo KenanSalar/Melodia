@@ -56,7 +56,8 @@ pub use hero::refresh_hero;
 pub use sections::{apply_filtered_strips, refresh_strips};
 pub use selection::{clear_selection, handle_select_row};
 pub use tracks::{
-    apply_filtered_tracks, current_filter, current_sort, refresh_tracks, set_filter, set_sort,
+    apply_filtered_tracks, apply_row_rating, current_filter, current_sort, refresh_tracks,
+    set_filter, set_sort,
 };
 
 /// Rust-side state for the Favorites view. Shared between the UI
@@ -157,6 +158,9 @@ impl FavoritesUi {
         self.inner.most_played.lock().clear();
         self.inner.fav_artists.lock().clear();
         self.inner.applied_selection.lock().clear();
+        // Forget the last-composed mosaic covers so a re-enter recomposes the
+        // hero blur (the LRU tiles were just dropped above).
+        self.inner.last_mosaic_paths.lock().clear();
         crate::tasks::heap_trim::trim();
     }
 
@@ -204,14 +208,6 @@ impl FavoritesUi {
             .get_or_load_opt(Some(artwork_path).filter(|s| !s.is_empty()))
     }
 
-    /// Lazy cover lookup for the All Songs row column. Routed via
-    /// `Favorites.request-row-cover`; backed by the shared row-tier
-    /// cache so cache parity with Tracks / Browse stays free.
-    pub fn row_cover(&self, artwork_path: &str) -> Image {
-        self.cover_thumbs
-            .get_or_load_opt(Some(artwork_path).filter(|s| !s.is_empty()))
-    }
-
     /// Track ids of the post-filter All Songs list, in display order.
     /// `play-all` / `shuffle-all` / `play-row` use this to recover ids
     /// without round-tripping the Slint model.
@@ -248,6 +244,15 @@ impl FavoritesUi {
             tracks.retain(|r| r.id != id);
         } else if let Some(r) = tracks.iter_mut().find(|r| r.id == id) {
             r.is_favorite = true;
+        }
+    }
+
+    /// Surgically set `rating` on a cached All Songs row. Unlike
+    /// [`Self::flip_or_remove_track`], rating never affects membership (the
+    /// list stays keyed on `is_favorite = TRUE`), so the row is only patched.
+    pub fn flip_track_rating(&self, id: i64, rating: i32) {
+        if let Some(r) = self.inner.tracks_all.lock().iter_mut().find(|r| r.id == id) {
+            r.rating = rating;
         }
     }
 }
@@ -303,8 +308,10 @@ pub fn to_slint_fav_artist_row(a: &FavoriteArtist, subtitle: SharedString) -> Ui
     }
 }
 
-#[allow(dead_code)]
-fn assert_send_sync() {
+// Compile-time assertion, not runtime code: an anonymous `const _` is
+// type-checked but never dead-code-flagged, so the bound is enforced
+// without an `#[allow(dead_code)]` on a fn nothing calls.
+const _: fn() = || {
     fn check<T: Send + Sync>() {}
     check::<FavoritesUi>();
-}
+};

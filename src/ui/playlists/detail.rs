@@ -19,6 +19,7 @@ use crate::state::AppState;
 use crate::ui::detail_artwork::decode_detail_pair;
 use crate::ui::detail_filter::FilterRefs;
 use crate::ui::detail_view::{impl_detail_view_helpers, resolve_view_sort};
+use crate::ui::model_patch;
 use crate::ui::track_list_view::view_id;
 use crate::ui::track_sort::sort_track_rows_by;
 use crate::ui::tracks::PreparedTrackRow;
@@ -36,10 +37,23 @@ async fn fetch_playlist_detail(
     playlists_ui: &PlaylistsUi,
     playlist_id: i64,
 ) -> AppResult<(PlaylistStats, Vec<RsTrackListRow>)> {
-    let detail = library::playlists::get_playlist_detail(state, playlist_id).await?;
-    let tracks = library::playlists::get_playlist_tracks(state, playlist_id).await?;
+    let mut detail = library::playlists::get_playlist_detail(state, playlist_id).await?;
+    let tracks = if detail.is_smart {
+        // Smart playlists have no `playlist_items` rows — resolve membership
+        // live from the stored criteria, and derive the header stats from the
+        // resolved set (the junction-maintained `track_count`/`total_duration_ms`
+        // stay 0 for a virtual playlist).
+        let criteria =
+            crate::entities::smart_criteria::SmartCriteria::from_json_opt(detail.smart_criteria.as_deref());
+        let rows = library::smart_playlists::evaluate(state, &criteria).await?;
+        detail.track_count = i32::try_from(rows.len()).unwrap_or(i32::MAX);
+        detail.total_duration_ms = rows.iter().map(|t| t.duration_ms).sum();
+        rows
+    } else {
+        library::playlists::get_playlist_tracks(state, playlist_id).await?
+    };
 
-    let track_covers: Vec<PathBuf> = super::grid::unique_artwork_paths(
+    let track_covers: Vec<PathBuf> = crate::ui::grid_prewarm::unique_artwork_paths(
         tracks.iter().map(|t| t.artwork_path.as_deref()),
     );
     if !track_covers.is_empty() {
@@ -89,17 +103,22 @@ pub async fn open_playlist(
 
     // Inform the OS file-drop coalescer that this playlist is the
     // current drop target — used only when the Queue Sheet is closed
-    // (queue takes priority when both are open).
-    crate::ui::window_chrome::set_current_playlist_id(playlist_id);
+    // (queue takes priority when both are open). Smart playlists can't
+    // accept manual file drops (membership is derived), so a smart detail
+    // registers no drop target — drops fall through to the library import.
+    crate::ui::window_chrome::set_current_playlist_id(if detail.is_smart {
+        -1
+    } else {
+        playlist_id
+    });
 
-    let thumbs = playlists_ui.cover_thumbs.clone();
     let playlists_ui = playlists_ui.clone();
     let state_for_history = state.clone();
     let _ = weak.upgrade_in_event_loop(move |ui| {
         let g = ui.global::<PlaylistDetail>();
         let ui_tracks: Vec<UiTrackListRow> = prepared
             .into_iter()
-            .map(|p| crate::ui::tracks::finish_track_list_row(p, &thumbs))
+            .map(crate::ui::tracks::finish_track_list_row)
             .collect();
         let header = to_slint_playlist_row(&detail);
         g.set_playlist(header);
@@ -153,7 +172,6 @@ pub async fn refresh_detail(
     // before we permute `tracks` to the user's chosen sort.
     let position_order_snapshot: Vec<i64> = tracks.iter().map(|t| t.id).collect();
 
-    let thumbs = playlists_ui.cover_thumbs.clone();
     let playlists_ui = playlists_ui.clone();
     let _ = weak.upgrade_in_event_loop(move |ui| {
         let g = ui.global::<PlaylistDetail>();
@@ -205,7 +223,7 @@ pub async fn refresh_detail(
             if let Some(vm) = model.as_any().downcast_ref::<VecModel<UiTrackListRow>>() {
                 for (i, t) in tracks.iter().enumerate() {
                     let Some(old) = vm.row_data(i) else { continue };
-                    let mut fresh = crate::ui::tracks::to_slint_track_list_row(t, &thumbs);
+                    let mut fresh = crate::ui::tracks::to_slint_track_list_row(t);
                     fresh.selected = old.selected;
                     if fresh != old {
                         vm.set_row_data(i, fresh);
@@ -219,7 +237,7 @@ pub async fn refresh_detail(
         } else {
             let ui_tracks: Vec<UiTrackListRow> = tracks
                 .iter()
-                .map(|t| crate::ui::tracks::to_slint_track_list_row(t, &thumbs))
+                .map(crate::ui::tracks::to_slint_track_list_row)
                 .collect();
             replace_tracks_model(&g, ui_tracks);
             playlists_ui.detail.applied_selection.lock().clear();
@@ -394,24 +412,24 @@ pub fn apply_filtered_detail(ui: &AppWindow, playlists_ui: &PlaylistsUi) {
             applied: &playlists_ui.detail.applied_selection,
             filter: &playlists_ui.detail.filter,
         },
-        &playlists_ui.cover_thumbs,
     );
 }
 
 pub fn apply_detail_row_favorite(weak: &Weak<AppWindow>, id: i64, fav: bool) {
     let _ = weak.upgrade_in_event_loop(move |ui| {
-        let rows = ui.global::<PlaylistDetail>().get_tracks();
-        let Some(vm) = rows.as_any().downcast_ref::<VecModel<UiTrackListRow>>() else {
-            return;
-        };
-        for i in 0..vm.row_count() {
-            let Some(mut r) = vm.row_data(i) else { continue };
-            if i64::from(r.id) == id {
-                r.is_favorite = fav;
-                vm.set_row_data(i, r);
-                break;
-            }
-        }
+        model_patch::patch_track_row_by_id(&ui.global::<PlaylistDetail>().get_tracks(), id, |r| {
+            r.is_favorite = fav;
+        });
+    });
+}
+
+/// Set `rating` on a single detail row in the Slint `VecModel`. Mirrors
+/// `apply_detail_row_favorite`.
+pub fn apply_detail_row_rating(weak: &Weak<AppWindow>, id: i64, rating: i32) {
+    let _ = weak.upgrade_in_event_loop(move |ui| {
+        model_patch::patch_track_row_by_id(&ui.global::<PlaylistDetail>().get_tracks(), id, |r| {
+            r.rating = rating;
+        });
     });
 }
 

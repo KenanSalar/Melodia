@@ -6,7 +6,7 @@ use serde::Serialize;
 use crate::database::queries;
 use crate::entities::track::TrackSummary;
 use crate::error::AppError;
-use crate::media::AUDIO_EXTENSIONS;
+use crate::media::is_audio_extension;
 use crate::media::scanner::scan_files_parallel;
 use crate::state::AppState;
 
@@ -37,11 +37,11 @@ pub async fn import_files_to_library(
     let mut valid_paths: Vec<String> = Vec::with_capacity(file_paths.len());
     for file_path in file_paths {
         let path = PathBuf::from(file_path);
-        let ext = if let Some(e) = path.extension().and_then(|e| e.to_str()) { e.to_lowercase() } else {
-            failed_paths.push(file_path.clone());
-            continue;
-        };
-        if !AUDIO_EXTENSIONS.contains(&ext.as_str()) {
+        let is_audio = path
+            .extension()
+            .and_then(|e| e.to_str())
+            .is_some_and(is_audio_extension);
+        if !is_audio {
             failed_paths.push(file_path.clone());
             continue;
         }
@@ -80,7 +80,7 @@ pub async fn import_files_to_library(
             scan_files_parallel(&new_paths_clone, &artwork_dir, &cover_cache_clone, &|_, _| {})
         })
         .await
-        .map_err(|e| AppError::Scanner(format!("Scan task failed: {e}")))?;
+        .map_err(|e| AppError::scanner("Scan task failed", e))?;
 
         if !scanned_files.is_empty() {
             let mut tx = state.db.write().begin().await?;
@@ -104,9 +104,9 @@ pub async fn import_files_to_library(
             queries::stats::enable_stats_triggers(&mut tx).await?;
             tx.commit().await?;
 
-            // IDs come straight from `insert_track`'s `last_insert_rowid()`,
-            // collected during ingest — no follow-up `WHERE file_path IN (…)`
-            // round-trip needed.
+            // IDs come from `insert_tracks_batch`'s `RETURNING id, file_path`
+            // (remapped to input/drop order via the returned path), collected
+            // during ingest — no follow-up `WHERE file_path IN (…)` round-trip.
             all_track_ids.extend(result.inserted_track_ids);
         }
     }

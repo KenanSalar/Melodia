@@ -18,6 +18,7 @@ use crate::library;
 use crate::state::AppState;
 use crate::ui::detail_filter::FilterRefs;
 use crate::ui::detail_view::{impl_detail_view_helpers, resolve_view_sort};
+use crate::ui::model_patch;
 use crate::ui::track_list_view::view_id;
 use crate::ui::track_sort::sort_track_list_rows;
 use crate::ui::tracks::PreparedTrackRow;
@@ -39,7 +40,7 @@ async fn fetch_genre_detail(
     // shared row-tier cache. Unlike Albums / Artists Detail there is no
     // separate header tile or hero blur — the header has no artwork at
     // all (genres are procedural; see the module-level doc).
-    let track_covers: Vec<PathBuf> = unique_artwork_paths(
+    let track_covers: Vec<PathBuf> = crate::ui::grid_prewarm::unique_artwork_paths(
         tracks.iter().map(|t| t.artwork_path.as_deref()),
     );
     if !track_covers.is_empty() {
@@ -50,24 +51,6 @@ async fn fetch_genre_detail(
         .await;
     }
     Ok((detail, tracks))
-}
-
-/// Deduplicated, non-empty artwork paths from an iterator of optional
-/// path strings — fed to `CoverThumbs::prewarm`. Copied verbatim from
-/// `albums::grid::unique_artwork_paths`'s contract (not re-exported
-/// from there to avoid a `pub(crate)` widening), since the helper is
-/// trivial.
-fn unique_artwork_paths<'a>(
-    paths: impl Iterator<Item = Option<&'a str>>,
-) -> Vec<PathBuf> {
-    let mut seen: std::collections::HashSet<&str> = std::collections::HashSet::new();
-    let mut out: Vec<PathBuf> = Vec::new();
-    for p in paths.flatten() {
-        if !p.is_empty() && seen.insert(p) {
-            out.push(PathBuf::from(p));
-        }
-    }
-    out
 }
 
 /// Fetch a genre's header + track list, prewarm thumbnails, and
@@ -100,7 +83,6 @@ pub async fn open_genre(
 
     *genres_ui.detail.genre_id.lock() = genre_id;
 
-    let thumbs = genres_ui.cover_thumbs.clone();
     let genres_ui = genres_ui.clone();
     let state_for_history = state.clone();
     let _ = weak.upgrade_in_event_loop(move |ui| {
@@ -108,7 +90,7 @@ pub async fn open_genre(
         // UI-thread step: just the cover lookups + the model swap.
         let ui_tracks: Vec<UiTrackListRow> = prepared
             .into_iter()
-            .map(|p| crate::ui::tracks::finish_track_list_row(p, &thumbs))
+            .map(crate::ui::tracks::finish_track_list_row)
             .collect();
         let header = to_slint_genre_row(&detail);
         g.set_genre(header);
@@ -148,7 +130,6 @@ pub async fn refresh_detail(
 ) -> AppResult<()> {
     let (detail, mut tracks) = fetch_genre_detail(state, genres_ui, genre_id).await?;
 
-    let thumbs = genres_ui.cover_thumbs.clone();
     let genres_ui = genres_ui.clone();
     let _ = weak.upgrade_in_event_loop(move |ui| {
         let g = ui.global::<GenreDetail>();
@@ -208,7 +189,7 @@ pub async fn refresh_detail(
             if let Some(vm) = model.as_any().downcast_ref::<VecModel<UiTrackListRow>>() {
                 for (i, t) in tracks.iter().enumerate() {
                     let Some(old) = vm.row_data(i) else { continue };
-                    let mut fresh = crate::ui::tracks::to_slint_track_list_row(t, &thumbs);
+                    let mut fresh = crate::ui::tracks::to_slint_track_list_row(t);
                     // Selection is unchanged on this branch — keep it.
                     fresh.selected = old.selected;
                     if fresh != old {
@@ -222,7 +203,7 @@ pub async fn refresh_detail(
         } else {
             let ui_tracks: Vec<UiTrackListRow> = tracks
                 .iter()
-                .map(|t| crate::ui::tracks::to_slint_track_list_row(t, &thumbs))
+                .map(crate::ui::tracks::to_slint_track_list_row)
                 .collect();
             replace_tracks_model(&g, ui_tracks);
             // The fresh rows all carry `selected: false`, so the
@@ -321,7 +302,6 @@ pub fn apply_filtered_detail(ui: &AppWindow, genres_ui: &GenresUi) {
             applied: &genres_ui.detail.applied_selection,
             filter: &genres_ui.detail.filter,
         },
-        &genres_ui.cover_thumbs,
     );
 }
 
@@ -330,20 +310,19 @@ pub fn apply_filtered_detail(ui: &AppWindow, genres_ui: &GenresUi) {
 /// put. Mirrors `albums::apply_detail_row_favorite`.
 pub fn apply_detail_row_favorite(weak: &Weak<AppWindow>, id: i64, fav: bool) {
     let _ = weak.upgrade_in_event_loop(move |ui| {
-        let rows = ui.global::<GenreDetail>().get_tracks();
-        let Some(vm) = rows.as_any().downcast_ref::<VecModel<UiTrackListRow>>() else {
-            return;
-        };
-        for i in 0..vm.row_count() {
-            let Some(mut r) = vm.row_data(i) else {
-                continue;
-            };
-            if i64::from(r.id) == id {
-                r.is_favorite = fav;
-                vm.set_row_data(i, r);
-                break;
-            }
-        }
+        model_patch::patch_track_row_by_id(&ui.global::<GenreDetail>().get_tracks(), id, |r| {
+            r.is_favorite = fav;
+        });
+    });
+}
+
+/// Set `rating` on a single detail row in the Slint `VecModel`. Mirrors
+/// [`apply_detail_row_favorite`].
+pub fn apply_detail_row_rating(weak: &Weak<AppWindow>, id: i64, rating: i32) {
+    let _ = weak.upgrade_in_event_loop(move |ui| {
+        model_patch::patch_track_row_by_id(&ui.global::<GenreDetail>().get_tracks(), id, |r| {
+            r.rating = rating;
+        });
     });
 }
 

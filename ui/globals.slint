@@ -2,7 +2,8 @@ import { PlayerVm, QueueVm, QueueRow, TrackListRow, FolderListRow,
          BrowseFolderRow, BreadcrumbRow, NotificationRow, TrackMetaRow,
          AlbumRow, AlbumGridRow, ArtistRow, ArtistGridRow,
          GenreRow, GenreGridRow,
-         PlaylistRow, PlaylistGridRow, PlaylistPickRow,
+         PlaylistRow, PlaylistGridRow, PlaylistPickRow, PlaylistExportPickRow,
+         SmartRuleRow,
          EntityStripRow } from "models.slint";
 import { Theme } from "theme.slint";
 
@@ -105,10 +106,37 @@ export global Player {
     callback seek(int);          // position in ms
     callback set-volume(int);    // 0..100, fires continuously during drag
     callback commit-volume();    // fires on slider release; persists to settings.json
+    // Playback-rate multiplier (e.g. 0.5, 1.0, 1.5). Fired by the speed
+    // flyout in the now-playing bar's overflow menu. Applies to the live
+    // player immediately AND persists to settings.json (speed survives
+    // restarts). The active value is read back via `vm.playback_speed`.
+    callback set-playback-speed(float);
     callback toggle-mute();
     callback toggle-shuffle();
     callback cycle-repeat();
     callback toggle-favorite();
+    // Set the star rating (0–5) on the currently playing track. Mirrors
+    // `toggle-favorite`: applies to `current_track` + fans out to the row
+    // surfaces. The active value is read back via `vm.track.rating`.
+    callback set-current-rating(int /*rating*/);
+
+    // Session-only sleep timer, fired by the overflow menu's sleep flyout.
+    // `minutes`: 0 = off, > 0 = duration timer, -1 = "End of current track".
+    // Applies live only (never persisted — resets each launch). See
+    // `src/ui/sleep_timer.rs`.
+    callback set-sleep-timer(int /*minutes*/);
+    // Custom duration from the flyout's ±stepper Start pill (seconds). Rust
+    // clamps to [30 s, 2 h] and arms a duration timer.
+    callback set-sleep-timer-seconds(int /*seconds*/);
+    // Active armed *duration* in seconds (0 = no duration timer). Drives the
+    // flyout preset rows' active highlight (a preset matches when
+    // `value*60 == this`) and the collapsed row. End-of-track mode is separate —
+    // it rides on `vm.sleep_at_track_end`.
+    in-out property <int> sleep-timer-total-seconds: 0;
+    // Live "M:SS" / "H:MM:SS" remaining string, written by the countdown task each second.
+    // Standalone (NOT a `vm` field) so the per-second update only invalidates
+    // the row that reads it — same rationale as `position-ms` / `duration-ms`.
+    in-out property <string> sleep-timer-remaining: "";
 
     // Bumped each time the user changes volume via the keyboard handler
     // in `ui/app-window.slint` (↑ / ↓ / Ctrl+↑ / Ctrl+↓). `VolumePopup`
@@ -119,6 +147,231 @@ export global Player {
     // drags **don't** bump this — they already raise the VolumePopup
     // chrome.
     in-out property <int> volume-hud-tick: 0;
+}
+
+// Equalizer: drives the graphic-EQ dialog (`Dialog.kind == "equalizer"`).
+// State is owned by Rust (`src/ui/equalizer.rs`): `enabled` + the `band-gains`
+// model are seeded from `settings.json` at boot and updated on every user
+// action; the dialog body reads them and fires the callbacks below. Each
+// callback applies to the live Rodio player AND (for non-drag actions, or on
+// drag release via `commit-band`) persists to `settings.json` — mirroring the
+// `set-volume` / `commit-volume` split.
+//
+// `band-gains` is a Rust-owned `Rc<VecModel<f32>>` (gain in dB per band,
+// low → high), length == `equalizer::NUM_BANDS` (10). `preset-idx` indexes the
+// dropdown: `0..PRESET_COUNT-1` are the built-in presets (Flat first), and
+// `PRESET_COUNT` (the last entry) is the synthetic "Custom" shown once the user
+// hand-edits a band. `min-gain` / `max-gain` are seeded from
+// `equalizer::{MIN,MAX}_GAIN_DB` by `install_equalizer` (Rust is the single
+// source of truth — no literals to drift here).
+export global Equalizer {
+    in-out property <bool> enabled;
+    in-out property <[float]> band-gains;
+    in-out property <int> preset-idx;
+    in property <float> min-gain;
+    in property <float> max-gain;
+
+    // Preamp / master gain (dB) — transparent headroom for boosting without
+    // clipping. `min-preamp` / `max-preamp` are seeded from
+    // `equalizer::{MIN,MAX}_PREAMP_DB` by `install_equalizer`.
+    in-out property <float> preamp;
+    in property <float> min-preamp;
+    in property <float> max-preamp;
+
+    callback set-enabled(bool);
+    // Live band change during a drag — apply to the player, don't persist.
+    callback set-band(int /*band index*/, float /*gain dB*/);
+    // Drag release — persist the current curve.
+    callback commit-band(int /*band index*/, float /*gain dB*/);
+    callback select-preset(int /*dropdown index*/);
+    callback reset();
+    // Preamp: live during drag (apply only), persist on release — same split.
+    callback set-preamp(float /*dB*/);
+    callback commit-preamp(float /*dB*/);
+}
+
+// SmartEditor: drives the Smart-Playlist rule-builder dialog
+// (`Dialog.kind == "smart-playlist-editor"`). State is Rust-owned
+// (`src/ui/callbacks/playlists/smart.rs`): the `rules` model is a
+// `VecModel<SmartRuleRow>`, and the scalar properties are read back on `commit`.
+// Entry points (`request-new` / `request-edit`) populate everything and open the
+// dialog on a fresh event-loop tick (Rust hop — avoids the recursion guard that
+// a synchronous `Dialog.open = true` from a click would trip). `commit` is fired
+// by the `Dialog.accepted` dispatcher and reconstructs a `SmartCriteria` from
+// the model + scalars, then creates (target-id < 0) or updates the playlist.
+export global SmartEditor {
+    in-out property <[SmartRuleRow]> rules;
+    // 0 = match all (AND), 1 = match any (OR).
+    in-out property <int> match-mode-index;
+    in-out property <string> name;
+    in-out property <string> description;
+    // Optional result cap.
+    in-out property <bool> limit-enabled;
+    in-out property <string> limit-count-text: "25";
+    in-out property <int> limit-order-index;
+    // -1 = create a new smart playlist; otherwise the playlist id being edited.
+    in-out property <int> target-id: -1;
+
+    // Entry points — reset/populate state and open the dialog (Rust-driven).
+    callback request-new();
+    callback request-edit(int /*playlist_id*/);
+
+    // Rule-row mutations (Rust rewrites the model row, recomputing
+    // field-kind / input-kind).
+    callback add-rule();
+    callback remove-rule(int /*row*/);
+    callback set-rule-field(int /*row*/, int /*field index*/);
+    callback set-rule-op(int /*row*/, int /*op index*/);
+    callback set-rule-value(int /*row*/, string);
+
+    // Fired by the `Dialog.accepted` dispatcher — reconstruct + persist.
+    callback commit();
+}
+
+// ReplayGain: drives the loudness-normalization dialog
+// (`Dialog.kind == "replaygain"`). State is owned by Rust
+// (`src/ui/replaygain.rs`): seeded from `settings.json` at boot and updated on
+// every user action. Each callback applies to the live Rodio player AND
+// persists to `settings.json` (the preamp uses the live `set-preamp` /
+// release `commit-preamp` split, like the EQ preamp and volume). `mode-idx`:
+// 0 = Track, 1 = Album (matches `player::replaygain::RgMode`). `min-preamp` /
+// `max-preamp` are seeded from `replaygain::RG_{MIN,MAX}_PREAMP_DB` by
+// `install_replaygain` (Rust is the single source of truth — no literals here).
+export global ReplayGain {
+    in-out property <bool> enabled;
+    in-out property <int> mode-idx;
+    in-out property <bool> prevent-clipping;
+    in-out property <float> preamp;
+    in property <float> min-preamp;
+    in property <float> max-preamp;
+
+    callback set-enabled(bool);
+    callback set-mode(int /*0 = Track, 1 = Album*/);
+    callback set-prevent-clipping(bool);
+    // Preamp: live during drag (apply only), persist on release — same split.
+    callback set-preamp(float /*dB*/);
+    callback commit-preamp(float /*dB*/);
+}
+
+// ScrobbleUi: drives the two scrobble login dialogs
+// (`Dialog.kind == "scrobble-lastfm-login"` / `"scrobble-listenbrainz-login"`).
+// State is owned by Rust (`src/ui/scrobbling_settings.rs`); the section resets it
+// to defaults just before opening a dialog. Last.fm is a two-step browser auth:
+// `lastfm-step` 0 → `lastfm-open-auth()` fetches an unauthorized token, opens the
+// approval page, stashes the token in `lastfm-token` and advances to step 1; step
+// 1 → `lastfm-finish(token)` exchanges it for a session. ListenBrainz is one step:
+// `listenbrainz-verify(token)` validates the pasted token. `busy` gates the
+// buttons while a request is in flight; `error` carries a localized failure line
+// shown inline (Rust sets it via the `err-*` `@tr` callbacks — Slint 1.16 has no
+// Rust-callable `tr()`).
+export global ScrobbleUi {
+    in-out property <int> lastfm-step;      // 0 = open browser, 1 = finish
+    in-out property <string> lastfm-token;  // unauthorized token between steps
+    in-out property <string> lb-token;      // ListenBrainz token input
+    in-out property <bool> busy;
+    in-out property <string> error;
+
+    callback lastfm-open-auth();
+    callback lastfm-finish(string /*token*/);
+    callback listenbrainz-verify(string /*token*/);
+
+    // Localized inline-error strings, resolved in the active locale at call time.
+    pure callback err-invalid-token() -> string;
+    err-invalid-token => {
+        return @tr("That token wasn't accepted. Check it and try again.");
+    }
+    pure callback err-network() -> string;
+    err-network => {
+        return @tr("Couldn't reach the service. Check your connection and try again.");
+    }
+    pure callback err-not-authorized() -> string;
+    err-not-authorized => {
+        return @tr("Not approved yet. Approve Melodia in your browser, then click Finish.");
+    }
+    pure callback err-save-failed() -> string;
+    err-save-failed => {
+        return @tr("Couldn't save your credentials.");
+    }
+}
+
+// TagEditor: drives the Edit-Track-Information dialog
+// (`Dialog.kind == "edit-tags"`), opened from a track row's context menu for
+// one *or many* selected rows. State is Rust-owned
+// (`src/ui/callbacks/tags.rs`): `request-edit` fetches the rows, populates the
+// fields, and opens the dialog on a fresh event-loop tick (the `SmartEditor`
+// hop — a synchronous `Dialog.open = true` from a click trips the recursion
+// guard). Numbers cross as strings so Rust owns parse + validation. On
+// `commit` (fired by the `Dialog.accepted` dispatcher) Rust diffs each field
+// against the populate-time snapshot to derive a Keep / Clear / Set tri-state,
+// so only touched fields are written to the file.
+//
+// Batch editing is the point: a field that disagrees across the selection
+// starts empty and shows the ‹multiple values› sentinel via its `*-placeholder`
+// (Rust-set). The Lyrics and Summary tabs are single-selection only — driven by
+// `track-count` in `tag-editor-body.slint` (the tab is not mounted in multi
+// mode, never merely disabled).
+export global TagEditor {
+    // 13 editable fields — numbers cross the boundary as strings; Rust parses
+    // and validates them into the typed `TagEdit` on commit.
+    in-out property <string> title;
+    in-out property <string> artist;
+    in-out property <string> album-artist;
+    in-out property <string> album;
+    in-out property <string> genre;
+    in-out property <string> year;
+    in-out property <string> original-year;
+    in-out property <string> track-number;
+    in-out property <string> disc-number;
+    in-out property <string> composer;
+    in-out property <string> comment;
+    in-out property <string> bpm;
+    in-out property <string> lyrics;
+
+    // Per-field placeholder — the ‹multiple values› sentinel when the
+    // selection disagrees (multi mode), else the normal hint. Rust-set.
+    in property <string> title-placeholder;
+    in property <string> artist-placeholder;
+    in property <string> album-artist-placeholder;
+    in property <string> album-placeholder;
+    in property <string> genre-placeholder;
+    in property <string> year-placeholder;
+    in property <string> original-year-placeholder;
+    in property <string> track-number-placeholder;
+    in property <string> disc-number-placeholder;
+    in property <string> composer-placeholder;
+    in property <string> comment-placeholder;
+    in property <string> bpm-placeholder;
+    in property <string> lyrics-placeholder;
+
+    // 1 = single selection (Lyrics + Summary tabs available), >1 = batch.
+    in property <int> track-count;
+    // Active tab index; Rust resets it to 0 (Tags) on every populate.
+    in-out property <int> active-tab;
+    // Decoded preview of the current / picked cover; `has-cover` gates the
+    // Remove button.
+    in-out property <image> cover;
+    in property <bool> has-cover;
+    in property <bool> lyrics-enabled;
+
+    // Read-only Summary strings (single selection only), preformatted by Rust.
+    in property <string> summary-path;
+    in property <string> summary-codec;
+    in property <string> summary-bitrate;
+    in property <string> summary-sample-rate;
+    in property <string> summary-bit-depth;
+    in property <string> summary-channels;
+    in property <string> summary-size;
+    in property <string> summary-duration;
+    in property <string> summary-modified;
+    in property <string> summary-hash;
+
+    // Entry point — fetch + populate + open the dialog (Rust-driven).
+    callback request-edit([int] /*track ids*/);
+    // Artwork picker (rfd on the UI thread) / clear the embedded cover.
+    callback pick-artwork();
+    callback remove-artwork();
+    // Fired by the `Dialog.accepted` dispatcher — diff, build `TagEdit`, write.
+    callback commit();
 }
 
 // Nav: UI-only, no Rust subscription needed in Phase 2.
@@ -174,6 +427,70 @@ export global Nav {
     in-out property <bool> sidebar-dragging: false;
 }
 
+// CompositeScroll: bridges the winit `MouseWheel` filter
+// (`src/ui/window_chrome/winit_filter.rs`) to whichever *composite* view is
+// currently mounted — Favorites, Recently Played, Artist Detail, Browse. Those
+// views wrap a strip section + a height-capped (virtualized) `TrackList` in a
+// single outer `below-sv := ScrollView`. Slint's inner `ListView` swallows the
+// vertical wheel at its scroll edge instead of bubbling to `below-sv` (verified
+// in `i-slint-core` `flickable.rs::process_wheel_event`), so the strips/hero
+// can't be wheeled back once scrolled away. Fixing this in pure Slint is
+// impossible without breaking row clicks (a wrapping TouchArea forwards the
+// wheel to the ListView first; an overlay one grabs presses), so the winit
+// layer intercepts vertical-dominant wheel over the region and drives the
+// existing composite scroll math here. The height cap — and thus
+// virtualization — is left completely untouched.
+export global CompositeScroll {
+    // Set true by the mounted composite view's hover sentinel while the cursor
+    // is over its below-hero scroll region. Reset to false on any content-view
+    // switch (see `app-window.slint`) so a view unmounting mid-hover can't
+    // leave the flag stuck. The winit filter reads it to decide whether to take
+    // over the wheel or let Slint scroll natively (sidebar, other views).
+    in-out property <bool> hovered: false;
+    // Accumulated wheel delta in Slint logical px, +y = scroll up (matches
+    // `flickable.rs`'s sign: `viewport-y += delta`). Rust *adds* the event delta
+    // then bumps `wheel-tick`; the mounted view's `CompositeScrollbars` instance
+    // (`ui/components/composite-scrollbars.slint` — the shared vbar/hbar +
+    // wheel-routing component every composite view mounts) mirrors the tick,
+    // applies one composite scroll step, and zeroes `wheel-dy`. Accumulating
+    // (rather than overwriting) survives Slint coalescing several wheel events
+    // into one `changed wheel-tick` firing — no delta is dropped on fast flicks.
+    in-out property <length> wheel-dy: 0px;
+    in-out property <int> wheel-tick: 0;
+}
+
+// MiniPlayer: drives the compact miniplayer that replaces the full UI when
+// the OS window is shrunk past a threshold. Tauri parity: enter when
+// `width < 550px || height < 250px`, pick the `square` variant when
+// `height >= width * 0.8`. Source of truth is the live window size — both
+// `active` and `square` are written from `AppWindow`'s derived
+// `mini-active`/`mini-square` root properties via mirror+changed handlers.
+//
+// Entry AND exit are resize-only — there are no in-UI buttons. Rust hooks
+// `active-changed(bool)` to flip the Up Next subscriber gate and manage
+// the high-res cover cache; `square-changed(bool)` fires when the
+// variant flips between rectangle and square while already in
+// mini-active, so Rust can seed (or release) the high-res cover cache
+// that only the square variant uses.
+export global MiniPlayer {
+    in-out property <bool> active: false;
+    in-out property <bool> square: false;
+    callback active-changed(bool);
+    callback square-changed(bool);
+}
+
+// Shared lazy cover lookup for every `TrackListRowItem` thumbnail (Tracks,
+// Browse, Favorites, Search, Album/Artist/Genre/Playlist detail, and the
+// draggable playlist variant — they all render the same row component).
+// One global instead of per-view forwarding: Rust wires it once to the
+// shared row-tier (72 px) `CoverThumbs` LRU. Rows carry only
+// `artwork_path`; the decode (or LRU hit) happens here, per *instantiated*
+// row — virtualized lists pay for ~visible rows only, and model rows no
+// longer pin pixel buffers the LRU already evicted.
+export global RowCovers {
+    pure callback request(string /*artwork_path*/) -> image;
+}
+
 // Tracks: drives the Tracks view. The `rows` model is owned by Rust
 // (`Rc<VecModel<TrackListRow>>` in `src/ui/tracks.rs`) and pushed in via
 // `set_rows(ModelRc::from(...))`. The full unfiltered Vec lives on the Rust
@@ -221,7 +538,12 @@ export global Tracks {
     callback play-next([int] /*track_ids*/);
     callback add-to-queue([int]);
     callback toggle-row-favorite([int] /*track_ids*/, bool /*new*/);
+    callback set-row-rating([int] /*track_ids*/, int /*rating*/);
     callback request-refresh();
+    // Mirrors "the Tracks section is on screen" — see `watched-tracks-active`
+    // in app-window.slint. Rust uses it to skip `library_changed` refreshes
+    // while the view is hidden and run one deferred re-fetch on re-enter.
+    callback section-active-changed(bool);
     // Cross-tab navigation from a row's right-click "Go to …" entry.
     callback go-to-album(int /*album_id*/);
     callback go-to-artist(int /*artist_id*/);
@@ -327,12 +649,17 @@ export global Browse {
     callback play-next([int] /*track_ids*/);
     callback add-to-queue([int] /*track_ids*/);
     callback toggle-row-favorite([int] /*track_ids*/, bool /*new_state*/);
+    callback set-row-rating([int] /*track_ids*/, int /*rating*/);
     callback select-row(int /*idx*/, int /*id*/, bool /*shift*/, bool /*ctrl*/);
     callback clear-selection();
     callback request-sort(string /*field*/);
     callback toggle-column(string /*column_id*/);
     callback play-all();
     callback refresh();
+    // Mirrors "the Browse section is on screen" — see `watched-browse-active`
+    // in app-window.slint. Rust uses it to skip `library_changed` re-fetches
+    // while the view is hidden and run one deferred re-fetch on re-enter.
+    callback section-active-changed(bool);
     // Cross-tab navigation from a row's right-click "Go to …" entry.
     callback go-to-album(int /*album_id*/);
     callback go-to-artist(int /*artist_id*/);
@@ -583,10 +910,17 @@ export global Playlists {
     callback apply-mosaic(int /*id*/, [string] /*paths*/);
     callback clear-artwork(int /*id*/);
 
-    // Add the given tracks to an existing playlist by id. Wired into
-    // every track row's Add-to-Playlist submenu so any track context can
-    // append into any playlist without leaving the current view.
-    callback add-tracks(int /*playlist_id*/, [int] /*track_ids*/);
+    // Add-to-Playlist picker row interactions — Rust mutates the VecModel
+    // (`set_row_data`) since Slint can't push/remove ergonomically.
+    // `toggle-add-pick` no-ops on disabled (fully-contained) rows;
+    // `set-all-add-picks` only flips the enabled rows.
+    callback toggle-add-pick(int /*playlist_id*/);
+    callback set-all-add-picks(bool /*selected*/);
+
+    // Fired by the `Dialog.accepted` dispatcher on Add. Rust reads the
+    // selected (enabled) rows off `Dialog.playlist-pick-rows` and adds
+    // `Dialog.pending-track-ids` into each, then toasts a summary.
+    callback add-tracks-to-selected();
 
     // Toggle a candidate artwork path in `Dialog.mosaic-selection`.
     // Rust handles the array mutation (Slint can't `push` / `remove`
@@ -623,6 +957,32 @@ export global Playlists {
         [int] /*track_ids*/,
         int /*exclude_playlist_id*/,
     );
+
+    // --- Import / export to M3U8 files ---------------------------------
+    // Header-pill actions on the Playlists view. Both are pure Rust flows
+    // (native rfd dialogs), so — unlike the create/rename dialogs — they
+    // don't write `Dialog.*` synchronously from the click handler and so
+    // don't risk Slint's property-recursion guard.
+
+    // Open a native multi-file picker (.m3u8/.m3u), import each into a new
+    // playlist, then toast a summary.
+    callback import-playlists();
+
+    // Open the Export picker dialog. Rust fetches all playlists, fills
+    // `Dialog.export-pick-rows` (none selected — the user opts in), then
+    // flips `Dialog.open = true` with `kind == "export-playlists"` — same
+    // populate-then-open shape as `request-add-to-playlist`.
+    callback request-export-playlists();
+
+    // Fired by the `Dialog.accepted` dispatcher on Export. Rust reads the
+    // selected rows off `Dialog.export-pick-rows`, opens a folder picker,
+    // writes one `.m3u8` per selected playlist, and toasts.
+    callback export-selected-playlists();
+
+    // Export-picker row interactions — Rust mutates the VecModel
+    // (`set_row_data`) since Slint can't push/remove ergonomically.
+    callback toggle-export-pick(int /*playlist_id*/);
+    callback set-all-export-picks(bool /*selected*/);
 }
 
 // PlaylistDetail: drives the full Playlist Detail view. `playlist-id ==
@@ -714,6 +1074,7 @@ export global PlaylistDetail {
     callback play-next([int] /*track_ids*/);
     callback add-to-queue([int]);
     callback toggle-row-favorite([int] /*track_ids*/, bool /*new*/);
+    callback set-row-rating([int] /*track_ids*/, int /*rating*/);
     callback select-row(int /*idx*/, int /*id*/, bool /*shift*/, bool /*ctrl*/);
     callback clear-selection();
     callback request-sort(string /*field*/);
@@ -845,8 +1206,8 @@ export global Dialog {
     // dispatch.
     //
     // Also reused by the `"add-to-playlist"` picker dialog as the canonical
-    // list of tracks being added — each row commits with
-    // `Playlists.add-tracks(r.id, Dialog.pending-track-ids)`.
+    // list of tracks being added — the Add dispatcher adds these into every
+    // selected playlist via `Playlists.add-tracks-to-selected()`.
     in-out property <[int]> pending-track-ids;
 
     // Rows shown inside the Add-to-Playlist picker (`kind ==
@@ -854,9 +1215,26 @@ export global Dialog {
     // `on_request_add_to_playlist` once `library::playlists::get_playlists`
     // + `count_tracks_in_playlists_for_selection` resolve, then `open` is
     // flipped — so the dialog opens already populated (mirrors the
-    // `request-edit-artwork` flow). Cleared in `closed` below so the next
-    // open starts from a clean model.
+    // `request-edit-artwork` flow). The picker is multi-select: `add-select-all`
+    // mirrors the header "Select all" checkbox and `add-selected-count` is
+    // maintained by Rust on every toggle (counting only enabled rows) so the
+    // footer's Add button can disable when nothing is selected without
+    // iterating the model in Slint. All three cleared in `closed` below.
     in-out property <[PlaylistPickRow]> playlist-pick-rows;
+    in-out property <bool> add-select-all: false;
+    in-out property <int> add-selected-count: 0;
+
+    // Rows shown inside the Export-playlists picker (`kind ==
+    // "export-playlists"`). Populated by Rust's `on_request_export_playlists`
+    // (all `selected: false` — the user opts in) before `open` is flipped.
+    // `export-select-all`
+    // mirrors the header "Select all" checkbox; `export-selected-count` is
+    // maintained by Rust on every toggle so the footer's Export button can
+    // disable when nothing is selected without iterating the model in Slint.
+    // All three cleared in `closed` below.
+    in-out property <[PlaylistExportPickRow]> export-pick-rows;
+    in-out property <bool> export-select-all: false;
+    in-out property <int> export-selected-count: 0;
 
     // Size of `pending-track-ids` at the moment the picker was opened —
     // cached so picker rows can derive `disabled` (`contained-count >=
@@ -933,22 +1311,70 @@ export global Dialog {
             }
         } else if (root.kind == "remove-playlist-selected") {
             PlaylistDetail.remove-selected();
+        } else if (root.kind == "export-playlists") {
+            // Rust reads the selected rows off `export-pick-rows`, then
+            // opens the folder picker and writes the files.
+            Playlists.export-selected-playlists();
+        } else if (root.kind == "add-to-playlist") {
+            // Rust reads the selected (enabled) rows off `playlist-pick-rows`
+            // and adds `pending-track-ids` into each, then toasts.
+            Playlists.add-tracks-to-selected();
+        } else if (root.kind == "smart-playlist-editor") {
+            // Rust reconstructs a `SmartCriteria` from `SmartEditor.rules` +
+            // scalars and creates / updates the smart playlist.
+            SmartEditor.commit();
+        } else if (root.kind == "edit-tags") {
+            // Rust diffs the form against the populate-time snapshot, builds a
+            // `TagEdit`, and writes the tags (a no-op commit is short-circuited).
+            TagEditor.commit();
+        } else if (root.kind == "scrobble-listenbrainz-login") {
+            // Validate the pasted token. The dialog stays open (dialog.slint
+            // suppresses the auto-close for this kind); Rust closes it on success.
+            ScrobbleUi.listenbrainz-verify(ScrobbleUi.lb-token);
+        } else if (root.kind == "scrobble-lastfm-login") {
+            // Two-step: step 0 opens the browser approval page, step 1 finishes
+            // the session exchange. The dialog stays open across both.
+            if (ScrobbleUi.lastfm-step == 0) {
+                ScrobbleUi.lastfm-open-auth();
+            } else {
+                ScrobbleUi.lastfm-finish(ScrobbleUi.lastfm-token);
+            }
         }
     }
     cancelled => { }
 
     // Fired by `DialogOverlay` once the close animation reaches t ≈ 0
-    // (see `ui/components/dialog/dialog.slint`). The default handler below
-    // tears down all scalar / list state in pure Slint so the next
-    // open starts from a clean slate and the body branch's internal
-    // model state isn't kept alive by stale `SharedString` arrays.
-    // The `image`-typed `current-artwork` has no Slint default literal,
-    // so a Rust subscriber in `wire_playlists` resets it to
-    // `Image::default()` on this same callback — that's what drops the
-    // ~603 KiB `SharedPixelBuffer` Arc pulled from the playlist
-    // grid-tier LRU at dialog-open.
+    // (see `ui/components/dialog/dialog.slint`). It has exactly ONE
+    // handler, registered in Rust (`callbacks/playlists/dialog.rs`), and
+    // that handler drives close-time teardown in two halves:
+    //
+    //   1. `closed-teardown()` below — every scalar / list / chrome
+    //      property, reset declaratively in Slint so the next open starts
+    //      from a clean slate and no body branch is kept mounted by a
+    //      stale `kind` or a stale `SharedString` array.
+    //   2. The `image`-typed `current-artwork`, which has no Slint default
+    //      literal and so must be reset from Rust — that's what drops the
+    //      ~603 KiB `SharedPixelBuffer` Arc pulled from the playlist
+    //      grid-tier LRU at dialog-open.
+    //
+    // The teardown is a `public function`, NOT a second callback, and the
+    // distinction is load-bearing. A Slint callback has a single handler
+    // slot: a default `closed => { … }` body here is installed during
+    // `InnerDialog::new()`, and the Rust `on_closed` — which is a plain
+    // `Callback::set_handler` and necessarily runs later — silently
+    // REPLACES it. That is exactly the bug this shape fixes; the body had
+    // been dead code, so `kind` and the picker row models were never
+    // cleared and every picker row's cover Arc stayed pinned for the life
+    // of the process. A `public function` has no handler slot at all, so
+    // it cannot be registered away.
+    //
+    // Do not try to re-register `closed` from inside the `closed` handler:
+    // `Callback::call` `take()`s the handler for the duration of the call
+    // and asserts "Callback Handler set while called". Invoking a
+    // different item (as we do) is safe.
     callback closed();
-    closed => {
+
+    public function closed-teardown() {
         // Routing / kind-gated body branches.
         root.kind = "";
         root.target-id = -1;
@@ -965,9 +1391,15 @@ export global Dialog {
         // every row's `Image { source: Playlists.request-row-cover(...) }`
         // binding so the row-tier LRU's `SharedPixelBuffer` Arcs drop.
         // Pairs with the Rust-side `heap_trim::trim()` registered for
-        // `Dialog.closed` in `callbacks/playlists.rs`.
+        // `Dialog.closed` in `callbacks/playlists/dialog.rs`.
         root.playlist-pick-rows = [];
+        root.add-select-all = false;
+        root.add-selected-count = 0;
         root.pick-total-tracks = 0;
+        // Export picker state.
+        root.export-pick-rows = [];
+        root.export-select-all = false;
+        root.export-selected-count = 0;
         // Chrome / labels — clearing these lets the conditional message
         // Text and Cancel button (`if Dialog.message != ""` /
         // `if Dialog.cancel-label != ""` in `dialog.slint`) unmount
@@ -1335,6 +1767,7 @@ export global AlbumDetail {
     callback play-next([int] /*track_ids*/);
     callback add-to-queue([int]);
     callback toggle-row-favorite([int] /*track_ids*/, bool /*new*/);
+    callback set-row-rating([int] /*track_ids*/, int /*rating*/);
     callback select-row(int /*idx*/, int /*id*/, bool /*shift*/, bool /*ctrl*/);
     // Cross-tab navigation from a row's right-click "Go to …" entry.
     callback go-to-album(int /*album_id*/);
@@ -1435,12 +1868,12 @@ export global Favorites {
     in-out property <int>   selection-anchor: -1;
 
     // Lazy cover callbacks — one per cache tier so Rust can route each
-    // surface into the right LRU (row-tier 72 px for mosaic + All Songs
-    // rows; dedicated thumbs for most-played + circular artist).
+    // surface into the right LRU (row-tier 72 px for the mosaic;
+    // dedicated thumbs for most-played + circular artist). All Songs
+    // rows resolve through the shared `RowCovers` global.
     pure callback request-mosaic-cover(string)      -> image;
     pure callback request-most-played-cover(string) -> image;
     pure callback request-artist-cover(string)      -> image;
-    pure callback request-row-cover(string)         -> image;
 
     // Hero actions
     callback play-all();
@@ -1467,6 +1900,7 @@ export global Favorites {
     callback play-next([int] /*track_ids*/);
     callback add-to-queue([int]);
     callback toggle-row-favorite([int] /*track_ids*/, bool /*new*/);
+    callback set-row-rating([int] /*track_ids*/, int /*rating*/);
     callback select-row(int /*idx*/, int /*id*/, bool /*shift*/, bool /*ctrl*/);
     callback clear-selection();
     callback request-sort(string /*field*/);
@@ -1494,6 +1928,99 @@ export global Favorites {
     artist-favorite-subtitle(count) => {
         return @tr("{n} favorite" | "{n} favorites" % count);
     }
+}
+
+// RecentlyPlayed: drives the Recently-Played view (a trimmed Favorites).
+// Owned by `src/ui/recently_played`. No hero mosaic / artist strip — just a
+// header (count + duration + Play All / Shuffle), a non-collapsible "Most
+// Played" strip, and a filterable `TrackList` of the 200 most-recently-played
+// tracks. Membership is fixed to that set; filter + column sort re-walk the
+// cache in memory (no re-query).
+export global RecentlyPlayed {
+    // Hero — 2×2 cover mosaic of the up-to-4 most-recently-played distinct
+    // covers. Empty list renders the empty-state tile.
+    in-out property <[string]> mosaic-paths;
+
+    // Hero blur cross-fade — two slots, never cleared (outgoing slot stays
+    // painted through the fade so a mosaic refresh never flashes). `has-blur`
+    // ⇒ either slot is non-empty (gates the accent-gradient floor fallback).
+    // Same dual-slot contract as `Favorites`.
+    in-out property <image> blur-img-a;
+    in-out property <image> blur-img-b;
+    in-out property <bool>  blur-use-a;
+    in-out property <bool>  has-blur;
+
+    // Most Played strip — library-wide top tracks by play_count. Reuses the
+    // unified `EntityStripRow` shape.
+    in-out property <[EntityStripRow]> most-played-rows;
+
+    // Recency list — `TrackList` data + filter + sort. `tracks` is the
+    // post-filter/sort view Rust writes. `sort-field` defaults to the synthetic
+    // "recency" (keep fetch order); a column header click swaps in a real field.
+    in-out property <[TrackListRow]> tracks;
+    in-out property <int>            filtered-count;
+    in-out property <string>         filter;
+    in-out property <int>            blur-search-tick: 0;
+    in-out property <string>         sort-field: "recency";  // recency | track_number | title | artist | album | genre | year | length
+    in-out property <string>         sort-dir: "desc";
+
+    // Header stats over the full recency set.
+    in-out property <int>    track-count;
+    in-out property <string> duration-text;   // "12h 34m"
+
+    // Per-column widths / visibility for the `TrackList` — mirrors the shape
+    // `Favorites` / `Tracks` use. Hydrated from
+    // `settings.view_columns["recently_played"]` +
+    // `settings.view_column_widths["recently_played"]`.
+    in-out property <length> w-number: 56px;
+    in-out property <length> w-title: 320px;
+    in-out property <length> w-artist: 200px;
+    in-out property <length> w-album: 220px;
+    in-out property <length> w-genre: 140px;
+    in-out property <length> w-year: 72px;
+    in-out property <length> w-length: 88px;
+
+    in-out property <bool> show-number: false;
+    in-out property <bool> show-artist: true;
+    in-out property <bool> show-album: true;
+    in-out property <bool> show-genre: false;
+    in-out property <bool> show-year: false;
+    in-out property <bool> show-artwork: true;
+
+    in-out property <[int]> selected-ids;
+    in-out property <int>   selection-anchor: -1;
+
+    // Lazy cover callbacks — the hero 2×2 mosaic tiles and the Most Played
+    // strip cards. The list rows resolve through the shared `RowCovers` global.
+    pure callback request-mosaic-cover(string)      -> image;
+    pure callback request-most-played-cover(string) -> image;
+
+    // Header actions.
+    callback play-all();
+    callback shuffle-all();
+
+    // Most Played card click ⇒ start playback in that scope.
+    callback play-track(int /*track_id*/);
+
+    // List row interactions — same shape as Tracks / Favorites.
+    callback play-row(int /*track_id*/, int /*index*/);
+    callback play-next([int] /*track_ids*/);
+    callback add-to-queue([int]);
+    callback toggle-row-favorite([int] /*track_ids*/, bool /*new*/);
+    callback set-row-rating([int] /*track_ids*/, int /*rating*/);
+    callback select-row(int /*idx*/, int /*id*/, bool /*shift*/, bool /*ctrl*/);
+    callback clear-selection();
+    callback request-sort(string /*field*/);
+    callback toggle-column(string /*column_id*/);
+    callback filter-changed(string);
+    // Cross-tab navigation from a row's right-click "Go to …" entry.
+    callback go-to-album(int /*album_id*/);
+    callback go-to-artist(int /*artist_id*/);
+    callback go-to-genre(int /*genre_id*/);
+
+    // Section-visible signal — driven by `watched-recently-active` in
+    // `app-window.slint`.
+    callback section-active-changed(bool);
 }
 
 // Artists: drives the Artist grid view. Same ownership + filter / sort /
@@ -1598,6 +2125,7 @@ export global ArtistDetail {
     callback play-next([int] /*track_ids*/);
     callback add-to-queue([int]);
     callback toggle-row-favorite([int] /*track_ids*/, bool /*new*/);
+    callback set-row-rating([int] /*track_ids*/, int /*rating*/);
     callback select-row(int /*idx*/, int /*id*/, bool /*shift*/, bool /*ctrl*/);
     callback clear-selection();
     callback request-sort(string /*field*/);
@@ -1723,6 +2251,7 @@ export global GenreDetail {
     callback play-next([int] /*track_ids*/);
     callback add-to-queue([int]);
     callback toggle-row-favorite([int] /*track_ids*/, bool /*new*/);
+    callback set-row-rating([int] /*track_ids*/, int /*rating*/);
     callback select-row(int /*idx*/, int /*id*/, bool /*shift*/, bool /*ctrl*/);
     callback clear-selection();
     callback request-sort(string /*field*/);
@@ -1812,8 +2341,8 @@ export global Search {
     in-out property <[int]> selected-ids;
     in-out property <int>   selection-anchor: -1;
 
-    // --- Lazy cover lookups (3 LRU tiers + per-kind routing for top) --
-    pure callback request-row-cover(string)          -> image;
+    // --- Lazy cover lookups (strip tiers + per-kind routing for top;
+    // result rows go through the shared `RowCovers` global) ---
     pure callback request-album-strip-cover(string)  -> image;
     pure callback request-artist-strip-cover(string) -> image;
     pure callback request-top-result-cover(string)   -> image;
@@ -1841,6 +2370,7 @@ export global Search {
     callback play-next([int] /*track_ids*/);
     callback add-to-queue([int]);
     callback toggle-row-favorite([int] /*track_ids*/, bool /*new*/);
+    callback set-row-rating([int] /*track_ids*/, int /*rating*/);
     callback select-row(int /*idx*/, int /*id*/, bool /*shift*/, bool /*ctrl*/);
     callback clear-selection();
     callback request-sort(string /*field*/);

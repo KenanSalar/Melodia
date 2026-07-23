@@ -53,7 +53,7 @@ fn test_volume_clamped_to_max() -> Result<(), AppError> {
     let mut settings: SettingsData = serde_json::from_str(json).map_err(|e| json_err(&e))?;
     // Simulate the clamping that read_settings performs
     settings.volume = settings.volume.min(crate::player::state::MAX_VOLUME);
-    assert_eq!(settings.volume, 200);
+    assert_eq!(settings.volume, crate::player::state::MAX_VOLUME);
     Ok(())
 }
 
@@ -71,6 +71,31 @@ fn test_settings_roundtrip_volume_mute() -> Result<(), AppError> {
     let deserialized: SettingsData = serde_json::from_str(&json).map_err(|e| json_err(&e))?;
     assert_eq!(deserialized.volume, 42);
     assert!(deserialized.playback.is_muted);
+    Ok(())
+}
+
+#[test]
+fn test_settings_roundtrip_playback_speed() -> Result<(), AppError> {
+    let settings = SettingsData {
+        playback: PlaybackFlags {
+            playback_speed: 1.5,
+            ..PlaybackFlags::default()
+        },
+        ..SettingsData::default()
+    };
+    let json = serde_json::to_string(&settings).map_err(|e| json_err(&e))?;
+    let deserialized: SettingsData = serde_json::from_str(&json).map_err(|e| json_err(&e))?;
+    assert!((deserialized.playback.playback_speed - 1.5).abs() < f64::EPSILON);
+    Ok(())
+}
+
+#[test]
+fn test_playback_speed_defaults_when_missing() -> Result<(), AppError> {
+    // Settings files written before this field existed must still load,
+    // defaulting the speed to 1.0 (the `#[serde(default)]` on PlaybackFlags).
+    let json = r#"{"volume": 80}"#;
+    let settings: SettingsData = serde_json::from_str(json).map_err(|e| json_err(&e))?;
+    assert!((settings.playback.playback_speed - 1.0).abs() < f64::EPSILON);
     Ok(())
 }
 
@@ -141,9 +166,13 @@ fn test_sort_dir_token_roundtrip() {
     assert!(matches!(SortDir::from_token(""), SortDir::Asc));
     assert!(matches!(SortDir::from_token("DESC"), SortDir::Asc));
     assert!(matches!(SortDir::from_token("garbage"), SortDir::Asc));
-    // Round-trip both directions through their token form.
+    // Round-trip both directions through their token form. `SortDir` has no
+    // `PartialEq`, so compare the tokens rather than the variants — `as_str` is
+    // injective (pinned just above), so a wrong variant round-trips to a
+    // different token, and the failure prints the tokens instead of an opaque
+    // `Discriminant(..)`.
     for dir in [SortDir::Asc, SortDir::Desc] {
-        assert!(std::mem::discriminant(&dir) == std::mem::discriminant(&SortDir::from_token(dir.as_str())));
+        assert_eq!(SortDir::from_token(dir.as_str()).as_str(), dir.as_str());
     }
 }
 
@@ -386,4 +415,37 @@ fn corner_radius_by_desktop_environment() {
 
     unsafe { std::env::remove_var("XDG_CURRENT_DESKTOP") };
     assert_eq!(get_os_corner_radius(), 6, "missing env should return 6");
+}
+
+#[test]
+fn test_replaygain_defaults_when_absent() -> Result<(), AppError> {
+    // An older settings.json (written before ReplayGain existed) deserializes to
+    // the inert defaults: off, "album" mode, 0 dB preamp, prevent-clipping on.
+    let json = r#"{"theme_id": "catppuccin"}"#;
+    let settings: SettingsData = serde_json::from_str(json).map_err(|e| json_err(&e))?;
+    assert!(!settings.replaygain.rg_enabled);
+    assert_eq!(settings.replaygain.rg_mode, "album");
+    assert!((settings.replaygain.rg_preamp - 0.0).abs() < f32::EPSILON);
+    assert!(settings.replaygain.rg_prevent_clipping);
+    Ok(())
+}
+
+#[test]
+fn test_replaygain_roundtrip() -> Result<(), AppError> {
+    let settings = SettingsData {
+        replaygain: ReplayGainFlags {
+            rg_enabled: true,
+            rg_mode: "track".to_owned(),
+            rg_preamp: -3.0,
+            rg_prevent_clipping: false,
+        },
+        ..SettingsData::default()
+    };
+    let json = serde_json::to_string(&settings).map_err(|e| json_err(&e))?;
+    let deserialized: SettingsData = serde_json::from_str(&json).map_err(|e| json_err(&e))?;
+    assert!(deserialized.replaygain.rg_enabled);
+    assert_eq!(deserialized.replaygain.rg_mode, "track");
+    assert!((deserialized.replaygain.rg_preamp - (-3.0)).abs() < f32::EPSILON);
+    assert!(!deserialized.replaygain.rg_prevent_clipping);
+    Ok(())
 }

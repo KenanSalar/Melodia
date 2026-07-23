@@ -1,0 +1,86 @@
+name: Deploy Coverage
+
+# On merge to `dev`, publish the latest successful PR coverage report to Pages.
+on:
+  push:
+    branches: [ dev ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read      # read artifacts from the pr-validation workflow
+  pages: write
+  id-token: write
+
+# GitHub removes Node 20 on 2026-09-16; without this, Node-20 JS actions
+# (dawidd6/action-download-artifact@v11) fail once it's gone. Mirrors release.yml.
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+# Never cancel an in-flight Pages deployment; just queue the next one.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy-coverage:
+    name: deploy-coverage
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      # Pull the `coverage-report` artifact (the llvm-cov HTML tree, which has
+      # its own index.html at the root) from the most recent successful
+      # pr-validation run.
+      - name: Download coverage report
+        id: download
+        continue-on-error: true
+        uses: dawidd6/action-download-artifact@v11
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          workflow: pr-validation.yml
+          workflow_conclusion: success
+          name: coverage-report
+          path: site
+          search_artifacts: true
+          if_no_artifact_found: warn
+
+      - name: Retry download on failure
+        if: steps.download.outcome == 'failure'
+        continue-on-error: true
+        uses: dawidd6/action-download-artifact@v11
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          workflow: pr-validation.yml
+          workflow_conclusion: success
+          name: coverage-report
+          path: site
+          search_artifacts: true
+          if_no_artifact_found: warn
+
+      - name: Check artifact
+        id: check
+        run: |
+          if [ -d site ] && [ -n "$(ls -A site 2>/dev/null)" ]; then
+            echo "found=true" >> "$GITHUB_OUTPUT"
+            echo "Coverage artifact found"
+          else
+            echo "found=false" >> "$GITHUB_OUTPUT"
+            echo "No coverage artifact found - skipping deployment"
+          fi
+
+      - name: Setup Pages
+        if: steps.check.outputs.found == 'true'
+        uses: actions/configure-pages@v6
+
+      - name: Upload to Pages
+        if: steps.check.outputs.found == 'true'
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: site
+
+      - name: Deploy to GitHub Pages
+        if: steps.check.outputs.found == 'true'
+        id: deployment
+        uses: actions/deploy-pages@v5

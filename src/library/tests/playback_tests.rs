@@ -21,6 +21,11 @@ fn make_summary(id: i64, duration_ms: i64) -> Arc<TrackSummary> {
         disc_number: None,
         last_position: 0,
         is_favorite: false,
+        rating: 0,
+        replaygain_track_gain: None,
+        replaygain_track_peak: None,
+        replaygain_album_gain: None,
+        replaygain_album_peak: None,
     })
 }
 
@@ -111,10 +116,12 @@ fn pause_when_playing_pauses() {
     let mut state = state_with_queue(1);
     state.status = PlaybackStatus::Playing;
 
-    let actions = state.build_pause_actions();
+    // A user pause carries the ramp length when fade-on-pause is on; `player_pause`
+    // resolves the setting, exactly as `player_stop` does for `build_stop_actions`.
+    let actions = state.build_pause_actions(250);
 
     assert_eq!(state.status, PlaybackStatus::Paused);
-    assert_eq!(actions, vec![PlayerAction::Pause]);
+    assert_eq!(actions, vec![PlayerAction::Pause { fade_ms: 250 }]);
 }
 
 #[test]
@@ -122,7 +129,7 @@ fn pause_when_not_playing_noop() {
     let mut state = state_with_queue(1);
     state.status = PlaybackStatus::Stopped;
 
-    let actions = state.build_pause_actions();
+    let actions = state.build_pause_actions(250);
 
     assert_eq!(state.status, PlaybackStatus::Stopped);
     assert!(actions.is_empty());
@@ -135,10 +142,20 @@ fn stop_sets_stopped() {
     let mut state = state_with_queue(1);
     state.status = PlaybackStatus::Playing;
 
-    let actions = state.build_stop_actions();
+    let actions = state.build_stop_actions(0);
 
     assert_eq!(state.status, PlaybackStatus::Stopped);
-    assert_eq!(actions, vec![PlayerAction::Stop]);
+    assert_eq!(actions, vec![PlayerAction::Stop { fade_ms: 0 }]);
+}
+
+#[test]
+fn stop_forwards_the_pause_fade_length() {
+    let mut state = state_with_queue(1);
+    state.status = PlaybackStatus::Playing;
+
+    let actions = state.build_stop_actions(250);
+
+    assert_eq!(actions, vec![PlayerAction::Stop { fade_ms: 250 }]);
 }
 
 // --- seek ---
@@ -224,11 +241,11 @@ fn next_at_end_stops() {
     let actions = state.build_next_actions();
 
     assert_eq!(state.status, PlaybackStatus::Stopped);
-    assert!(actions.iter().any(|a| matches!(a, PlayerAction::Stop)));
+    assert!(actions.iter().any(|a| matches!(a, PlayerAction::Stop { .. })));
 }
 
 #[test]
-fn next_while_paused_stays_paused() {
+fn next_while_paused_stays_paused_without_fading() {
     let mut state = state_with_queue(3);
     let track = make_summary(1, 180_000);
     play_track_inner(&mut state, track, None);
@@ -237,7 +254,15 @@ fn next_while_paused_stays_paused() {
     let actions = state.build_next_actions();
 
     assert_eq!(state.status, PlaybackStatus::Paused);
-    assert!(actions.iter().any(|a| matches!(a, PlayerAction::Pause)));
+    // `fade_ms` MUST be 0. The `PlayMedia` ahead of this starts the deck, so a
+    // fade here would ramp the incoming track down from full volume instead of
+    // pausing it — its first quarter-second would be audible.
+    assert!(
+        actions
+            .iter()
+            .any(|a| matches!(a, PlayerAction::Pause { fade_ms: 0 })),
+        "next-while-paused must restore the pause without a fade, got {actions:?}"
+    );
 }
 
 // --- previous ---
@@ -337,8 +362,8 @@ fn set_playback_speed_clamps_min() {
 fn set_playback_speed_clamps_max() {
     let mut state = PlayerState::default();
     let actions = state.build_set_speed_actions(10.0);
-    assert!((state.playback_speed - 4.0).abs() < f64::EPSILON);
-    assert_eq!(actions, vec![PlayerAction::SetSpeed(4.0)]);
+    assert!((state.playback_speed - 2.0).abs() < f64::EPSILON);
+    assert_eq!(actions, vec![PlayerAction::SetSpeed(2.0)]);
 }
 
 #[test]
@@ -402,7 +427,7 @@ fn previous_from_start_stays_at_current() {
 
 fn toggle(state: &mut PlayerState) -> Vec<PlayerAction> {
     match state.status {
-        PlaybackStatus::Playing | PlaybackStatus::Loading => state.build_pause_actions(),
+        PlaybackStatus::Playing | PlaybackStatus::Loading => state.build_pause_actions(250),
         PlaybackStatus::Paused | PlaybackStatus::Stopped => state.build_play_actions(),
     }
 }
@@ -416,7 +441,7 @@ fn toggle_from_playing_pauses() {
 
     let actions = toggle(&mut state);
     assert_eq!(state.status, PlaybackStatus::Paused);
-    assert!(matches!(actions.as_slice(), [PlayerAction::Pause]));
+    assert!(matches!(actions.as_slice(), [PlayerAction::Pause { fade_ms: 250 }]));
 }
 
 #[test]
@@ -424,7 +449,7 @@ fn toggle_from_paused_resumes() {
     let mut state = state_with_queue(1);
     let track = make_summary(1, 180_000);
     play_track_inner(&mut state, track, None);
-    state.build_pause_actions();
+    state.build_pause_actions(250);
     assert_eq!(state.status, PlaybackStatus::Paused);
 
     let actions = toggle(&mut state);
@@ -437,7 +462,7 @@ fn toggle_from_stopped_with_current_track_resumes() {
     let mut state = state_with_queue(2);
     let track = make_summary(1, 180_000);
     play_track_inner(&mut state, track, None);
-    state.build_stop_actions();
+    state.build_stop_actions(0);
     assert_eq!(state.status, PlaybackStatus::Stopped);
 
     let actions = toggle(&mut state);

@@ -16,6 +16,7 @@ export struct TrackSummaryRow {
     // otherwise.
     cover_img: image,
     is_favorite: bool,
+    rating: int,   // 0–5, 0 = unrated
 }
 
 // Mirror of `entities::track::TrackListRow`. Slint structs can't express
@@ -37,13 +38,13 @@ export struct TrackListRow {
     track_number: int,   // 0 = unknown
     duration_ms: int,
     is_favorite: bool,
+    rating: int,   // 0–5, 0 = unrated
     artwork_path: string,
-    // Decoded cover image. Populated on the Rust side via
-    // `slint::Image::load_from_path`; empty (`width == 0`) when the track has
-    // no artwork or the file failed to load. Slint defers decoding until the
-    // `Image` element renders, so attaching this to every row in a virtualized
-    // ListView only pays the decode cost for visible rows.
-    cover_img: image,
+    // No decoded cover field: the row thumbnail resolves lazily through
+    // `RowCovers.request(artwork_path)` per instantiated row (same contract
+    // as the grids' `request-cover`). Embedding an `image` here made every
+    // model row pin its pixel buffer even after LRU eviction — resident
+    // artwork scaled with the whole library instead of the visible rows.
     // Pre-formatted "mm:ss" / "h:mm:ss" length string. Computed once on the
     // Rust side instead of via `Theme.format-duration(duration_ms)` per row,
     // because that function call would re-evaluate on every property
@@ -167,6 +168,10 @@ export struct PlaylistRow {
     artwork_path: string,
     track_count: int,
     total_duration_ms: int,
+    // A smart (dynamic) playlist: membership is derived from stored rules, not
+    // a curated track list. Surfaces a badge and disables manual editing
+    // (reorder / add / remove) on the grid card and detail view.
+    is_smart: bool,
 }
 
 // One virtualized row of the Playlists grid: up to `Playlists.columns`
@@ -180,17 +185,55 @@ export struct PlaylistGridRow {
 // "add-to-playlist"`). Built on the Rust side from `PlaylistStats` plus
 // the per-selection overlap count returned by
 // `library::playlists::count_tracks_in_playlists_for_selection`. The
-// picker grays + disables rows where `contained-count >=
+// picker is multi-select (mirrors the Export picker): the `selected` flag is
+// toggled via `Playlists.toggle-add-pick` (Rust `set_row_data`) and en-masse
+// via `Playlists.set-all-add-picks`; the Add dispatcher reads it back to
+// decide which playlists to add into. Rows where `contained-count >=
 // Dialog.pick-total-tracks` (every selected track is already in this
-// playlist), and shows an `X of Y already added` badge for partial
-// overlap. `artwork-path` feeds the row's 40 px thumbnail via
-// `Playlists.request-row-cover` — same 72 px LRU tier the track list
-// rows use, so there are no extra decodes.
+// playlist) are grayed + disabled (unselectable), with an `X of Y already
+// added` subtitle for partial overlap. `artwork-path` feeds the row's
+// thumbnail via `Playlists.request-row-cover` — same 72 px LRU tier the track
+// list rows use, so there are no extra decodes.
 export struct PlaylistPickRow {
     id: int,
     name: string,
     artwork_path: string,
     contained_count: int,
+    selected: bool,
+}
+
+// One row in the Export-playlists picker (`Dialog.kind ==
+// "export-playlists"`). Built on the Rust side from `PlaylistStats`. The
+// per-row `selected` flag is toggled via `Playlists.toggle-export-pick`
+// (Rust `set_row_data`) and en-masse via `Playlists.set-all-export-picks`;
+// the Export dispatcher reads it back to decide which playlists to write.
+export struct PlaylistExportPickRow {
+    id: int,
+    name: string,
+    artwork_path: string,
+    track_count: int,
+    selected: bool,
+}
+
+// One rule row in the Smart-Playlist editor (`Dialog.kind ==
+// "smart-playlist-editor"`, driven by the `SmartEditor` global). The model is
+// Rust-owned (`VecModel<SmartRuleRow>`); the editor mutates it through
+// `SmartEditor.set-rule-*` callbacks, and Rust reconstructs a `SmartCriteria`
+// from it on commit. All values are indices/codes so no translated string ever
+// round-trips through Rust — the dropdown label arrays are inline `@tr` in the
+// editor body (see `smart-playlist-editor-body.slint`), mirrored by index to
+// Rust's `entities::smart_criteria::{FIELDS, ops_for}`.
+//   * field-index — index into the field-name dropdown (Rust `FIELDS`).
+//   * op-index    — index into this field-kind's operator array.
+//   * field-kind  — 0 text · 1 number · 2 bool · 3 date (selects the op array).
+//   * input-kind  — 0 none · 1 text · 2 number (selects the value widget).
+//   * value-text  — the raw value input (empty for none/bool operators).
+export struct SmartRuleRow {
+    field-index: int,
+    op-index: int,
+    field-kind: int,
+    input-kind: int,
+    value-text: string,
 }
 
 // `position_ms`, `duration_ms`, and `progress` deliberately live on the
@@ -213,6 +256,10 @@ export struct PlayerVm {
     is_muted: bool,
     playback_speed: float,
     gapless: bool,
+    // Sleep-timer "End of current track" armed state. Backend-owned (mirrors
+    // `PlayerState::pause_after_current_track`); the overflow menu's sleep row
+    // reads it directly so the row auto-clears when the monitor fires.
+    sleep_at_track_end: bool,
     has_next: bool,
     has_previous: bool,
 }

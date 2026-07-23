@@ -137,6 +137,34 @@ async fn upsert_album_empty_returns_none() -> Result<(), AppError> {
 }
 
 #[tokio::test]
+async fn upsert_album_updates_year_on_conflict() -> Result<(), AppError> {
+    let db = DbPool::test_pool().await;
+    let mut tx = db.write().begin().await?;
+    let artist_id = queries::scan::upsert_artist(&mut tx, "Artist", 1).await?;
+    let id = queries::scan::upsert_album(&mut tx, "Album", artist_id, Some(2001)).await?;
+
+    // Re-upsert of the same (name, artist_id) with a new year updates it (P2).
+    let same = queries::scan::upsert_album(&mut tx, "Album", artist_id, Some(2010)).await?;
+    assert_eq!(id, same);
+    let album_id = id.ok_or_else(|| AppError::Validation("no album id".into()))?;
+
+    let year: Option<i32> = sqlx::query_scalar("SELECT year FROM albums WHERE id = ?")
+        .bind(album_id)
+        .fetch_one(&mut *tx)
+        .await?;
+    assert_eq!(year, Some(2010));
+
+    // Re-upsert with a NULL year preserves the stored value (the COALESCE arm).
+    queries::scan::upsert_album(&mut tx, "Album", artist_id, None).await?;
+    let year: Option<i32> = sqlx::query_scalar("SELECT year FROM albums WHERE id = ?")
+        .bind(album_id)
+        .fetch_one(&mut *tx)
+        .await?;
+    assert_eq!(year, Some(2010));
+    Ok(())
+}
+
+#[tokio::test]
 async fn upsert_genre_new_returns_some() -> Result<(), AppError> {
     let db = DbPool::test_pool().await;
     let mut tx = db.write().begin().await?;
@@ -417,5 +445,55 @@ async fn get_track_id_by_path_returns_none_when_missing() -> Result<(), AppError
     let mut tx = db.write().begin().await?;
     let id = queries::scan::get_track_id_by_path(&mut tx, "/nonexistent.mp3").await?;
     assert!(id.is_none());
+    Ok(())
+}
+
+// === Tests for update_track_location ===
+
+#[tokio::test]
+async fn update_track_location_repoints_existing_row() -> Result<(), AppError> {
+    let db = DbPool::test_pool().await;
+    let folder = queries::folder::insert_folder(&db, "/music", true).await?;
+    let id = insert_test_track(&db, "/music/old.mp3", "Song", "Artist", "Album", "Rock").await?;
+
+    let mut tx = db.write().begin().await?;
+    let repointed = queries::scan::update_track_location(
+        &mut tx,
+        id,
+        "/music/new.mp3",
+        "new.mp3",
+        folder.id,
+        None,
+    )
+    .await?;
+    assert!(repointed);
+    let moved = queries::scan::get_track_id_by_path(&mut tx, "/music/new.mp3").await?;
+    assert_eq!(moved, Some(id));
+    Ok(())
+}
+
+#[tokio::test]
+async fn update_track_location_false_when_row_deleted_in_tx() -> Result<(), AppError> {
+    // The reconcile move-detection candidate map is resolved before the
+    // write transaction opens; a Removed event processed earlier in the
+    // same batch can delete the candidate row. The re-point must report
+    // "no row hit" so `handle_created` falls back to a fresh insert
+    // instead of silently dropping the track.
+    let db = DbPool::test_pool().await;
+    let folder = queries::folder::insert_folder(&db, "/music", true).await?;
+    let id = insert_test_track(&db, "/music/old.mp3", "Song", "Artist", "Album", "Rock").await?;
+
+    let mut tx = db.write().begin().await?;
+    assert!(queries::scan::delete_track_by_path(&mut tx, "/music/old.mp3").await?);
+    let repointed = queries::scan::update_track_location(
+        &mut tx,
+        id,
+        "/music/new.mp3",
+        "new.mp3",
+        folder.id,
+        None,
+    )
+    .await?;
+    assert!(!repointed);
     Ok(())
 }

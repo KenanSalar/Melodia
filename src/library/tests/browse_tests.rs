@@ -2,13 +2,12 @@ use std::path::PathBuf;
 
 use tempfile::TempDir;
 
-use crate::entities::browse::BrowseFolder;
-use crate::media::AUDIO_EXTENSIONS;
-
 use super::*;
 
-/// Helper: replicate the directory scanning logic from `browse_directory`'s `spawn_blocking` closure.
-/// This allows testing the filesystem classification without a full `AppState`.
+/// Drive the production walk ([`classify_dir_entries`]) behind the same
+/// canonicalize + `is_dir` guards `browse_directory` applies, minus the
+/// library-folder check (which needs an `AppState`). The classification itself
+/// is the shipped code, not a copy of it.
 fn scan_directory(path: &std::path::Path) -> Result<DirScanResult, AppError> {
     let canonical = crate::utils::canonicalize_path(path).map_err(|_| {
         AppError::Validation(format!("Path does not exist: {}", path.display()))
@@ -21,38 +20,7 @@ fn scan_directory(path: &std::path::Path) -> Result<DirScanResult, AppError> {
         )));
     }
 
-    let mut folders = Vec::new();
-    let mut audio_paths = Vec::new();
-
-    for entry in std::fs::read_dir(&canonical)? {
-        let entry = entry?;
-        let file_name = entry.file_name();
-        let name = file_name.to_string_lossy();
-
-        if name.starts_with('.') {
-            continue;
-        }
-
-        let Ok(file_type) = entry.file_type() else {
-            continue;
-        };
-
-        if file_type.is_dir() {
-            folders.push(BrowseFolder {
-                name: name.into_owned(),
-                path: entry.path().to_string_lossy().into_owned(),
-            });
-        } else if file_type.is_file() {
-            let entry_path = entry.path();
-            if let Some(ext) = entry_path.extension().and_then(|e| e.to_str())
-                && AUDIO_EXTENSIONS.contains(&ext.to_lowercase().as_str())
-            {
-                audio_paths.push(entry_path);
-            }
-        }
-    }
-
-    folders.sort_by_cached_key(|f| f.name.to_lowercase());
+    let (folders, audio_paths) = classify_dir_entries(&canonical)?;
 
     Ok(DirScanResult {
         canonical,

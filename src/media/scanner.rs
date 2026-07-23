@@ -5,7 +5,7 @@ use rayon::prelude::*;
 use serde::Serialize;
 use walkdir::WalkDir;
 
-use super::AUDIO_EXTENSIONS;
+use super::is_audio_extension;
 use crate::database::queries::scan::ExistingTrackSummary;
 use crate::media::metadata::{extract_metadata, ExtractedMetadata};
 
@@ -36,12 +36,11 @@ pub fn collect_media_files(dir: &Path) -> Vec<PathBuf> {
         }
 
         let path = entry.path();
-        let ext = match path.extension().and_then(|e| e.to_str()) {
-            Some(e) => e.to_lowercase(),
-            None => continue,
+        let Some(ext) = path.extension().and_then(|e| e.to_str()) else {
+            continue;
         };
 
-        if AUDIO_EXTENSIONS.contains(&ext.as_str()) {
+        if is_audio_extension(ext) {
             files.push(path.to_path_buf());
         }
     }

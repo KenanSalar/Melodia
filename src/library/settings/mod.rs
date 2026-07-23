@@ -4,6 +4,8 @@
 //! - [`appearance`]: theme / variant / accent, dynamic colour style,
 //!   match-unfocused, corner radius.
 //! - [`playback`]: gapless, play-button animation, resume on startup.
+//! - [`crossfade`]: crossfade on/off, duration, manual-change + same-album
+//!   exceptions, fade-on-pause.
 //! - [`view`]: locale, overflow buttons, and per-view UI state — column
 //!   visibility / widths, sort, browse path, nav index, detail ids,
 //!   section-collapse toggles — plus the `snap_to_preset` helper.
@@ -17,19 +19,39 @@
 //! writes to it serialize cleanly.
 
 pub mod appearance;
+pub mod crossfade;
+pub mod equalizer;
 pub mod folders;
 pub mod playback;
+pub mod replaygain;
+pub mod scrobble;
 pub mod updates;
 pub mod view;
 
 pub use appearance::{
     set_appearance, set_corner_radius, set_dynamic_color_style, set_match_unfocused_to_system_bg,
 };
+pub use crossfade::{
+    set_crossfade_duration_ms, set_crossfade_enabled, set_crossfade_fade_on_pause,
+    set_crossfade_manual, set_crossfade_skip_same_album,
+};
+pub use equalizer::{set_eq_band_gains_and_preset, set_eq_enabled, set_eq_preamp};
+pub use replaygain::{
+    set_replaygain_enabled, set_replaygain_mode, set_replaygain_preamp,
+    set_replaygain_prevent_clipping,
+};
+pub use scrobble::{
+    set_scrobble_lastfm_enabled, set_scrobble_lastfm_love_enabled,
+    set_scrobble_listenbrainz_enabled, set_scrobble_listenbrainz_love_enabled,
+    set_scrobble_mbid_auto_tag,
+};
 pub use folders::{
     add_folder, get_folders, reconcile_watched_folders, remove_folder, scan_folder,
     scan_folder_internal, set_folder_watching_enabled, toggle_folder_watching,
 };
-pub use playback::{set_gapless_playback, set_play_button_animation, set_resume_on_startup};
+pub use playback::{
+    set_gapless_playback, set_play_button_animation, set_playback_speed, set_resume_on_startup,
+};
 pub use updates::{
     record_check_failure, record_check_success, reset_skipped_release, set_auto_check_enabled,
     set_skipped_release,

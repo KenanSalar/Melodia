@@ -480,6 +480,119 @@ async fn ingest_detects_moved_file() -> Result<(), AppError> {
 }
 
 #[tokio::test]
+async fn ingest_batched_inserts_preserve_input_order_across_chunks() -> Result<(), AppError> {
+    // More files than one multi-row INSERT chunk holds, so the batch path
+    // flushes mid-loop at least once. `inserted_track_ids` must come back
+    // in input order (the DnD import queues tracks in drop order), and
+    // every id must point at the right row — the mapping goes through
+    // `RETURNING id, file_path` because SQLite's RETURNING output order
+    // is unspecified.
+    let db = DbPool::test_pool().await;
+    queries::folder::insert_folder(&db, "/music", true).await?;
+
+    let n = queries::scan::INSERT_CHUNK_ROWS + 5;
+    let files: Vec<ScannedFile> = (0..n)
+        .map(|i| {
+            make_scanned_file_with_hash(
+                &format!("/music/batch/{i:04}.mp3"),
+                &format!("Track {i:04}"),
+                &format!("{i:064}"),
+            )
+        })
+        .collect();
+
+    let mut tx = db.write().begin().await?;
+    let result = ingest_scanned_files(
+        &mut tx,
+        &files,
+        &FolderResolution::Fixed(1),
+        "2024-01-01T00:00:00Z",
+        false,
+    )
+    .await?;
+    tx.commit().await?;
+
+    assert_eq!(result.inserted_count, u32::try_from(n).unwrap_or(u32::MAX));
+    assert_eq!(result.inserted_track_ids.len(), n);
+
+    // Each returned id (in input order) must resolve to the matching path.
+    for (i, id) in result.inserted_track_ids.iter().enumerate() {
+        let path: (String,) = sqlx::query_as("SELECT file_path FROM tracks WHERE id = ?")
+            .bind(id)
+            .fetch_one(db.read())
+            .await?;
+        assert_eq!(path.0, format!("/music/batch/{i:04}.mp3"));
+    }
+
+    // Playback defaults from the literal block.
+    let defaults: (i64, i64, bool) = sqlx::query_as(
+        "SELECT play_count, last_position, is_favorite FROM tracks WHERE file_path = '/music/batch/0000.mp3'",
+    )
+    .fetch_one(db.read())
+    .await?;
+    assert_eq!(defaults.0, 0);
+    assert_eq!(defaults.1, 0);
+    assert!(!defaults.2);
+    Ok(())
+}
+
+#[tokio::test]
+async fn ingest_duplicate_hash_repoints_once_inserts_second() -> Result<(), AppError> {
+    // Two new files carrying the same content hash + one existing row
+    // whose old path is gone from disk: the first file claims the move,
+    // and the second must fall through to a fresh insert instead of
+    // re-pointing (stealing) the same row again — consume-once, mirroring
+    // the reconcile path's moved-candidates map.
+    let db = DbPool::test_pool().await;
+    queries::folder::insert_folder(&db, "/music", true).await?;
+
+    let old_id =
+        insert_test_track(&db, "/music/old/song.mp3", "Song", "Art", "Alb", "Rock").await?;
+    let hash: (String,) = sqlx::query_as("SELECT file_hash FROM tracks WHERE id = ?")
+        .bind(old_id)
+        .fetch_one(db.read())
+        .await?;
+
+    let files = vec![
+        make_scanned_file_with_hash("/music/new/copy-a.mp3", "Song", &hash.0),
+        make_scanned_file_with_hash("/music/new/copy-b.mp3", "Song", &hash.0),
+    ];
+
+    let mut tx = db.write().begin().await?;
+    let result = ingest_scanned_files(
+        &mut tx,
+        &files,
+        &FolderResolution::Fixed(1),
+        "2024-01-01T00:00:00Z",
+        false,
+    )
+    .await?;
+    tx.commit().await?;
+
+    assert_eq!(result.moved_count, 1);
+    assert_eq!(result.inserted_count, 1);
+
+    // The existing row was re-pointed to the FIRST new path…
+    let repointed: (String,) = sqlx::query_as("SELECT file_path FROM tracks WHERE id = ?")
+        .bind(old_id)
+        .fetch_one(db.read())
+        .await?;
+    assert_eq!(repointed.0, "/music/new/copy-a.mp3");
+
+    // …and the second file got its own fresh row — no path lost.
+    let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM tracks")
+        .fetch_one(db.read())
+        .await?;
+    assert_eq!(count.0, 2);
+    let second: (i64,) =
+        sqlx::query_as("SELECT COUNT(*) FROM tracks WHERE file_path = '/music/new/copy-b.mp3'")
+            .fetch_one(db.read())
+            .await?;
+    assert_eq!(second.0, 1);
+    Ok(())
+}
+
+#[tokio::test]
 async fn ingest_does_not_move_when_hash_differs() -> Result<(), AppError> {
     let db = DbPool::test_pool().await;
     queries::folder::insert_folder(&db, "/music", true).await?;

@@ -1,5 +1,7 @@
 use std::collections::HashMap;
 
+use sqlx::AssertSqlSafe;
+
 use crate::database::DbPool;
 use crate::entities::{playlist, playlist_item, track};
 use crate::error::AppError;
@@ -23,6 +25,55 @@ pub async fn create_playlist(
     .fetch_one(db.write())
     .await?;
     Ok(result)
+}
+
+/// Create a smart (dynamic) playlist. Identical to [`create_playlist`] except
+/// `is_smart = TRUE` and `smart_criteria` holds the serialized
+/// [`crate::entities::smart_criteria::SmartCriteria`] JSON. Smart playlists
+/// never get `playlist_items` rows — their membership is resolved live from the
+/// criteria (see [`crate::database::queries::smart_playlist`]).
+pub async fn create_smart_playlist(
+    db: &DbPool,
+    name: &str,
+    description: Option<&str>,
+    criteria_json: &str,
+) -> Result<playlist::Playlist, AppError> {
+    let now = crate::utils::now_rfc3339();
+
+    let result = sqlx::query_as::<_, playlist::Playlist>(
+        "INSERT INTO playlists (name, description, thumbnail_path, is_smart, smart_criteria, created_at, updated_at)
+         VALUES (?, ?, NULL, TRUE, ?, ?, ?)
+         RETURNING *"
+    )
+    .bind(name)
+    .bind(description)
+    .bind(criteria_json)
+    .bind(&now)
+    .bind(&now)
+    .fetch_one(db.write())
+    .await?;
+    Ok(result)
+}
+
+/// Replace a smart playlist's rule set. Only `smart_criteria` (+ `updated_at`)
+/// change; name/description go through [`update_playlist`] like a regular
+/// playlist's.
+pub async fn update_smart_criteria(
+    db: &DbPool,
+    id: i64,
+    criteria_json: &str,
+) -> Result<playlist::Playlist, AppError> {
+    let now = crate::utils::now_rfc3339();
+
+    sqlx::query_as::<_, playlist::Playlist>(
+        "UPDATE playlists SET smart_criteria = ?, updated_at = ? WHERE id = ? RETURNING *",
+    )
+    .bind(criteria_json)
+    .bind(&now)
+    .bind(id)
+    .fetch_optional(db.write())
+    .await?
+    .ok_or_else(|| AppError::not_found("Playlist", id))
 }
 
 pub async fn get_all_playlists(db: &DbPool) -> Result<Vec<playlist::PlaylistStats>, AppError> {
@@ -95,6 +146,7 @@ pub async fn delete_playlist(db: &DbPool, id: i64) -> Result<(), AppError> {
     Ok(())
 }
 
+#[cfg(test)]
 pub async fn get_playlist_tracks(
     db: &DbPool,
     playlist_id: i64,
@@ -123,7 +175,28 @@ pub async fn get_playlist_tracks_for_list(
          WHERE pi.playlist_id = ? \
          ORDER BY pi.position ASC"
     );
-    let tracks = sqlx::query_as::<_, track::TrackListRow>(&sql)
+    let tracks = sqlx::query_as::<_, track::TrackListRow>(AssertSqlSafe(sql))
+        .bind(playlist_id)
+        .fetch_all(db.read())
+        .await?;
+    Ok(tracks)
+}
+
+/// Slim projection for M3U export — `file_path`, `file_hash`, title, artist,
+/// `duration_ms` in playlist order. Far cheaper than `get_playlist_tracks`
+/// (full `Track`) which the export path doesn't need.
+pub async fn get_playlist_tracks_for_export(
+    db: &DbPool,
+    playlist_id: i64,
+) -> Result<Vec<track::PlaylistExportRow>, AppError> {
+    let cols = track::playlist_export_columns_prefixed("t");
+    let sql = format!(
+        "SELECT {cols} FROM tracks t \
+         JOIN playlist_items pi ON pi.track_id = t.id \
+         WHERE pi.playlist_id = ? \
+         ORDER BY pi.position ASC"
+    );
+    let tracks = sqlx::query_as::<_, track::PlaylistExportRow>(AssertSqlSafe(sql))
         .bind(playlist_id)
         .fetch_all(db.read())
         .await?;
@@ -220,13 +293,14 @@ pub async fn remove_tracks_from_playlist_batch(
 
     let mut tx = db.write().begin().await?;
 
-    // Chunk to stay within SQLite bind limit (999 total, 1 for playlist_id)
-    for chunk in track_ids.chunks(998) {
+    // Chunk to stay within the SQLite bind limit — one slot is the
+    // `playlist_id`, the rest are the `track_id` IN-list.
+    for chunk in track_ids.chunks(crate::database::SQLITE_BIND_LIMIT - 1) {
         let placeholders = crate::database::placeholders(chunk.len());
         let sql = format!(
             "DELETE FROM playlist_items WHERE playlist_id = ? AND track_id IN ({placeholders})"
         );
-        let mut query = sqlx::query(&sql).bind(playlist_id);
+        let mut query = sqlx::query(AssertSqlSafe(sql)).bind(playlist_id);
         for &id in chunk {
             query = query.bind(id);
         }
@@ -330,7 +404,7 @@ async fn batch_update_positions_pairs(
     sql.push_str(&crate::database::placeholders(pairs.len()));
     sql.push(')');
 
-    let mut query = sqlx::query(&sql);
+    let mut query = sqlx::query(AssertSqlSafe(sql));
     for &(id, pos) in pairs {
         query = query.bind(id).bind(pos);
     }

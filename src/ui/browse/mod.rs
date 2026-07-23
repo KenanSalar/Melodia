@@ -55,12 +55,13 @@ use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 use crate::entities::browse::BrowseFile;
 use crate::media::cover_thumbs::CoverThumbs;
 use crate::services::view_state;
+use crate::ui::section_state::SectionState;
 use crate::state::AppState;
 use crate::{
     AppWindow, Browse, BrowseFolderRow as UiBrowseFolderRow, TrackListRow as UiTrackListRow,
 };
 
-pub use fetch::{apply_row_favorite, fetch_and_apply, resort_and_apply};
+pub use fetch::{apply_row_favorite, apply_row_rating, fetch_and_apply, resort_and_apply};
 pub use selection::{clear_selection, handle_select_row};
 
 /// Rust-side state for the Browse view. Shared between the UI callbacks
@@ -88,6 +89,12 @@ pub struct BrowseUi {
     pub(super) cover_thumbs: Arc<CoverThumbs>,
     /// Stale-fetch guard. See module-level comment.
     pub(super) fetch_token: AtomicU64,
+    /// Visibility and staleness bookkeeping (`section-active-changed`
+    /// shadow plus dirty flag). Browse releases nothing on leave —
+    /// `dirty` is set only by the `library_changed` subscriber when a
+    /// bump arrives while the section is hidden, and consumed on
+    /// re-enter to re-fetch the current directory once.
+    section: SectionState,
 }
 
 impl BrowseUi {
@@ -100,7 +107,31 @@ impl BrowseUi {
             sort_dir: Mutex::new("asc".to_owned()),
             cover_thumbs,
             fetch_token: AtomicU64::new(0),
+            section: SectionState::new(),
         }
+    }
+
+    /// Mirror the Browse-section-visible flag (`section-active-changed`).
+    pub fn set_section_active(&self, active: bool) {
+        self.section.set_active(active);
+    }
+
+    /// Whether the Browse section is currently on screen.
+    pub fn section_active(&self) -> bool {
+        self.section.active()
+    }
+
+    /// Mark the cached directory listing stale — a `library_changed` bump
+    /// arrived while the section was hidden. See [`Self::take_dirty`].
+    pub fn mark_dirty(&self) {
+        self.section.mark_dirty();
+    }
+
+    /// Atomically read-and-clear the dirty flag. `true` on section-enter
+    /// means a library mutation happened while hidden and the current
+    /// directory must be re-fetched.
+    pub fn take_dirty(&self) -> bool {
+        self.section.take_dirty()
     }
 
     pub fn current_path(&self) -> String {
@@ -180,6 +211,15 @@ impl BrowseUi {
             f.row.is_favorite = fav;
         }
     }
+
+    /// Surgically set `rating` on the cached `last_files` row — the rating
+    /// analogue of [`Self::flip_favorite`].
+    pub fn flip_rating(&self, id: i64, rating: i32) {
+        let mut files = self.last_files.lock();
+        if let Some(f) = files.iter_mut().find(|f| f.row.id == id) {
+            f.row.rating = rating;
+        }
+    }
 }
 
 /// Build empty `VecModel`s for `folders`, `rows`, and `breadcrumbs` and
@@ -235,9 +275,9 @@ use crate::BreadcrumbRow as UiBreadcrumbRow;
 /// component renders. In-library files reuse the Tracks-view converter
 /// (full data, `enabled: true`); disk-only files become a sparse,
 /// dimmed, non-interactive row (`id == 0`, `enabled: false`).
-pub fn to_slint_browse_track_row(f: &BrowseFile, thumbs: &CoverThumbs) -> UiTrackListRow {
+pub fn to_slint_browse_track_row(f: &BrowseFile) -> UiTrackListRow {
     if f.in_library {
-        let mut row = crate::ui::tracks::to_slint_track_list_row(&f.row, thumbs);
+        let mut row = crate::ui::tracks::to_slint_track_list_row(&f.row);
         row.enabled = true;
         row
     } else {
@@ -251,8 +291,8 @@ pub fn to_slint_browse_track_row(f: &BrowseFile, thumbs: &CoverThumbs) -> UiTrac
             track_number: 0,
             duration_ms: 0,
             is_favorite: false,
+            rating: 0,
             artwork_path: SharedString::from(""),
-            cover_img: thumbs.get_or_load_opt(None),
             display_duration: SharedString::from(""),
             selected: false,
             enabled: false,
@@ -263,8 +303,10 @@ pub fn to_slint_browse_track_row(f: &BrowseFile, thumbs: &CoverThumbs) -> UiTrac
     }
 }
 
-#[allow(dead_code)]
-fn assert_send_sync() {
+// Compile-time assertion, not runtime code: an anonymous `const _` is
+// type-checked but never dead-code-flagged, so the bound is enforced
+// without an `#[allow(dead_code)]` on a fn nothing calls.
+const _: fn() = || {
     fn check<T: Send + Sync>() {}
     check::<BrowseUi>();
-}
+};

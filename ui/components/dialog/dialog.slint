@@ -1,8 +1,15 @@
 import { Theme } from "../../theme.slint";
-import { Dialog as DialogGlobal } from "../../globals.slint";
+import { Dialog as DialogGlobal, SmartEditor, TagEditor, ScrobbleUi } from "../../globals.slint";
 import { SectionButton } from "../settings/section-button.slint";
 import { PlaylistMosaicPicker } from "playlist-mosaic-picker.slint";
 import { PlaylistPicker } from "playlist-picker.slint";
+import { ExportPlaylistPicker } from "export-playlist-picker.slint";
+import { EqualizerBody } from "equalizer-body.slint";
+import { ReplayGainBody } from "replaygain-body.slint";
+import { SmartPlaylistEditorBody } from "smart-playlist-editor-body.slint";
+import { TagEditorBody } from "tag-editor-body.slint";
+import { ScrobbleLastfmBody } from "scrobble-lastfm-body.slint";
+import { ScrobbleListenbrainzBody } from "scrobble-listenbrainz-body.slint";
 import { LabeledInput } from "../labeled-input.slint";
 import { MaterialIcon } from "../material-icon.slint";
 
@@ -96,8 +103,15 @@ export component DialogOverlay inherits Rectangle {
         // preview tile + wrapping candidate grid room without
         // pinching, but stays close to the regular dialog footprint
         // (Tauri shipped its `EditPlaylistDialog` at 480 px).
-        property <length> max-w: DialogGlobal.kind == "edit-playlist-artwork"
-            ? 520px : 540px;
+        property <length> max-w:
+            DialogGlobal.kind == "equalizer" ? 600px
+            : DialogGlobal.kind == "replaygain" ? 480px
+            : DialogGlobal.kind == "edit-playlist-artwork" ? 520px
+            : DialogGlobal.kind == "smart-playlist-editor" ? 660px
+            : DialogGlobal.kind == "edit-tags" ? 720px
+            : DialogGlobal.kind == "scrobble-lastfm-login" ? 460px
+            : DialogGlobal.kind == "scrobble-listenbrainz-login" ? 460px
+            : 540px;
         // Header icon for confirmation kinds — empty for form / picker
         // kinds (create-playlist, rename-playlist, edit-playlist-artwork),
         // which keep the simple title-only header. Mapped by kind so
@@ -239,11 +253,39 @@ export component DialogOverlay inherits Rectangle {
             if DialogGlobal.kind == "edit-playlist-artwork": PlaylistMosaicPicker { }
 
             // Add-to-Playlist picker body — rendered for the
-            // `"add-to-playlist"` kind. Each row commits inline on
-            // click (`Playlists.add-tracks` + `Dialog.open = false`);
-            // there is no `accepted` branch and the primary/Apply
-            // button below is suppressed for this kind.
+            // `"add-to-playlist"` kind. Multi-select: the footer's primary
+            // (Add) button commits the selection through the `accepted`
+            // dispatcher, same as the Export picker.
             if DialogGlobal.kind == "add-to-playlist": PlaylistPicker { }
+
+            // Export-playlists picker — selectable list + "Select all". Like
+            // the add-to-playlist picker, this one commits through the
+            // footer's primary (Export) button.
+            if DialogGlobal.kind == "export-playlists": ExportPlaylistPicker { }
+
+            // Graphic-equalizer body — enable toggle + preset dropdown + ten
+            // band sliders + reset. Drives the `Equalizer` global; changes
+            // apply live and persist. The footer keeps just the "Done" button
+            // (the caller sets `cancel-label` empty).
+            if DialogGlobal.kind == "equalizer": EqualizerBody { }
+
+            if DialogGlobal.kind == "replaygain": ReplayGainBody { }
+
+            // Smart-playlist rule-builder body — the `SmartEditor` global drives
+            // it; the dispatcher routes Accept to `SmartEditor.commit()`.
+            if DialogGlobal.kind == "smart-playlist-editor": SmartPlaylistEditorBody { }
+
+            // Edit-Track-Information body — cover panel + Tags/Lyrics/Summary
+            // tabs, driven by the `TagEditor` global; Accept routes to
+            // `TagEditor.commit()`.
+            if DialogGlobal.kind == "edit-tags": TagEditorBody { }
+
+            // Scrobble login bodies — driven by the `ScrobbleUi` global. The
+            // primary button (labelled below) drives the flow; the dialog stays
+            // open across the async round-trip (see the confirm handler) and Rust
+            // closes it on success.
+            if DialogGlobal.kind == "scrobble-lastfm-login": ScrobbleLastfmBody { }
+            if DialogGlobal.kind == "scrobble-listenbrainz-login": ScrobbleListenbrainzBody { }
 
             HorizontalLayout {
                 alignment: end;
@@ -264,14 +306,16 @@ export component DialogOverlay inherits Rectangle {
                     }
                 }
 
-                // The `"add-to-playlist"` picker commits inline on row
-                // click (no separate Apply), so its primary button is
-                // unmounted entirely. The Cancel button still renders
-                // (its `if cancel-label != ""` guard above keeps it
-                // alive because the menu click sets a non-empty
-                // `cancel-label`).
-                if DialogGlobal.kind != "add-to-playlist": SectionButton {
-                    label: DialogGlobal.confirm-label;
+                SectionButton {
+                    // Scrobble login kinds drive their label off `ScrobbleUi`
+                    // (kept in Slint so the `@tr` literals localize): Last.fm is
+                    // two-step, ListenBrainz one-step. Every other kind uses the
+                    // caller-set `confirm-label`.
+                    label: DialogGlobal.kind == "scrobble-lastfm-login"
+                        ? (ScrobbleUi.lastfm-step == 0 ? @tr("Open Last.fm") : @tr("Finish"))
+                        : DialogGlobal.kind == "scrobble-listenbrainz-login"
+                        ? @tr("Connect")
+                        : DialogGlobal.confirm-label;
                     icon: "";
                     primary: true;
                     destructive: DialogGlobal.destructive;
@@ -285,10 +329,35 @@ export component DialogOverlay inherits Rectangle {
                     button-enabled: DialogGlobal.open
                         && ((DialogGlobal.kind != "create-playlist"
                                 && DialogGlobal.kind != "rename-playlist")
-                            || DialogGlobal.input-text != "");
+                            || DialogGlobal.input-text != "")
+                        // Export needs at least one playlist selected.
+                        && (DialogGlobal.kind != "export-playlists"
+                            || DialogGlobal.export-selected-count > 0)
+                        // Add-to-Playlist needs at least one playlist selected.
+                        && (DialogGlobal.kind != "add-to-playlist"
+                            || DialogGlobal.add-selected-count > 0)
+                        // Smart-playlist editor needs a name and ≥1 rule.
+                        && (DialogGlobal.kind != "smart-playlist-editor"
+                            || (SmartEditor.name != "" && SmartEditor.rules.length > 0))
+                        // Tag editor: enabled whenever a selection is loaded (a
+                        // no-op Save is short-circuited in Rust).
+                        && (DialogGlobal.kind != "edit-tags"
+                            || TagEditor.track-count > 0)
+                        // ListenBrainz: needs a token and no in-flight request.
+                        && (DialogGlobal.kind != "scrobble-listenbrainz-login"
+                            || (ScrobbleUi.lb-token != "" && !ScrobbleUi.busy))
+                        // Last.fm: just gate on the in-flight request.
+                        && (DialogGlobal.kind != "scrobble-lastfm-login"
+                            || !ScrobbleUi.busy);
                     clicked => {
                         DialogGlobal.accepted();
-                        DialogGlobal.open = false;
+                        // Scrobble login kinds stay open across the async
+                        // round-trip; Rust closes them on success. Everything
+                        // else closes immediately on confirm.
+                        if (DialogGlobal.kind != "scrobble-lastfm-login"
+                                && DialogGlobal.kind != "scrobble-listenbrainz-login") {
+                            DialogGlobal.open = false;
+                        }
                     }
                 }
             }

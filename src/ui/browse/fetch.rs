@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
 
-use slint::{ComponentHandle, Model, SharedString, VecModel, Weak};
+use slint::{ComponentHandle, SharedString, Weak};
 
 use super::breadcrumbs::{build_breadcrumbs, folder_basename, sort_browse_files};
 use super::models::{replace_breadcrumb_model, replace_folder_model, replace_rows_model};
@@ -15,6 +15,7 @@ use super::{BrowseUi, to_slint_browse_track_row};
 use crate::error::AppResult;
 use crate::library;
 use crate::state::AppState;
+use crate::ui::model_patch;
 use crate::{
     AppWindow, Browse, BrowseFolderRow as UiBrowseFolderRow, TrackListRow as UiTrackListRow,
 };
@@ -157,20 +158,18 @@ pub async fn fetch_and_apply(
             let has_playable = files.iter().any(|f| f.in_library);
             let can_go_back = !browse_ui.history.lock().is_empty();
             let current_path = res.path.clone();
-            let thumbs = browse_ui.cover_thumbs.clone();
             let browse_ui = browse_ui.clone();
 
             let _ = weak.upgrade_in_event_loop(move |ui| {
                 let g = ui.global::<Browse>();
-                // `to_slint_browse_track_row` builds a `slint::Image`
-                // (which is `!Send`), so the rows must be built here on
-                // the UI thread. Build them from `&files`, then move
-                // `files` itself into the `last_files` cache as the final
-                // step — one move, no clone (the old `clone_from` deep-
-                // cloned the whole `Vec<BrowseFile>` a second time).
+                // Build the rows from `&files`, then move `files` itself
+                // into the `last_files` cache as the final step — one
+                // move, no clone (the old `clone_from` deep-cloned the
+                // whole `Vec<BrowseFile>` a second time). Covers resolve
+                // lazily per visible row via `RowCovers.request`.
                 let ui_rows: Vec<UiTrackListRow> = files
                     .iter()
-                    .map(|f| to_slint_browse_track_row(f, &thumbs))
+                    .map(to_slint_browse_track_row)
                     .collect();
                 replace_folder_model(&g, ui_folders);
                 replace_rows_model(&g, ui_rows);
@@ -223,14 +222,10 @@ pub async fn fetch_and_apply(
 pub fn resort_and_apply(ui: &AppWindow, browse_ui: &Arc<BrowseUi>) {
     let sort_field = browse_ui.sort_field();
     let sort_dir = browse_ui.sort_dir();
-    let thumbs = browse_ui.cover_thumbs.clone();
     let ui_rows: Vec<UiTrackListRow> = {
         let mut files = browse_ui.last_files.lock();
         sort_browse_files(&mut files, &sort_field, &sort_dir);
-        files
-            .iter()
-            .map(|f| to_slint_browse_track_row(f, &thumbs))
-            .collect()
+        files.iter().map(to_slint_browse_track_row).collect()
     };
     let g = ui.global::<Browse>();
     replace_rows_model(&g, ui_rows);
@@ -242,19 +237,18 @@ pub fn resort_and_apply(ui: &AppWindow, browse_ui: &Arc<BrowseUi>) {
 /// Mirrors `tracks::apply_row_favorite`.
 pub fn apply_row_favorite(weak: &Weak<AppWindow>, id: i64, fav: bool) {
     let _ = weak.upgrade_in_event_loop(move |ui| {
-        let rows = ui.global::<Browse>().get_rows();
-        let Some(vm) = rows.as_any().downcast_ref::<VecModel<UiTrackListRow>>() else {
-            return;
-        };
-        for i in 0..vm.row_count() {
-            let Some(mut r) = vm.row_data(i) else {
-                continue;
-            };
-            if i64::from(r.id) == id {
-                r.is_favorite = fav;
-                vm.set_row_data(i, r);
-                break;
-            }
-        }
+        model_patch::patch_track_row_by_id(&ui.global::<Browse>().get_rows(), id, |r| {
+            r.is_favorite = fav;
+        });
+    });
+}
+
+/// Set `rating` on a single row in the Slint `VecModel` — the rating analogue
+/// of [`apply_row_favorite`].
+pub fn apply_row_rating(weak: &Weak<AppWindow>, id: i64, rating: i32) {
+    let _ = weak.upgrade_in_event_loop(move |ui| {
+        model_patch::patch_track_row_by_id(&ui.global::<Browse>().get_rows(), id, |r| {
+            r.rating = rating;
+        });
     });
 }

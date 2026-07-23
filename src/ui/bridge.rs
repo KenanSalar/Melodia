@@ -39,7 +39,18 @@ pub fn spawn_view_model_subscriber(
             if let Some(vm) = snapshot {
                 let player = ui.global::<Player>();
                 let prev_vm = player.get_vm();
-                let new_vm = to_slint_player_vm(&vm, &cover_thumbs);
+                let mut new_vm = to_slint_player_vm(&vm, &cover_thumbs);
+                // Stable artwork identity: when the artwork path is
+                // unchanged, reuse the previous `Image` handle instead of
+                // the fresh one minted by `to_slint_track`. Slint compares
+                // `Image` by identity, so a new handle per emit dirties
+                // every binding reading `vm` and forces FemtoVG to treat
+                // the cover as a brand-new texture on each volume step /
+                // seek / queue edit. Same pixels either way — both handles
+                // wrap the same cached RGB8 buffer.
+                if new_vm.track.artwork_path == prev_vm.track.artwork_path {
+                    new_vm.track.cover_img = prev_vm.track.cover_img.clone();
+                }
                 let new_position_ms = clamp_to_i32(vm.position_ms);
                 let new_duration_ms = clamp_to_i32(vm.duration_ms);
                 let new_progress = if vm.duration_ms > 0 {
@@ -64,7 +75,13 @@ pub fn spawn_view_model_subscriber(
                 player.set_position_ms(new_position_ms);
                 player.set_duration_ms(new_duration_ms);
                 player.set_progress(new_progress);
-                player.set_vm(new_vm);
+                // Slint's property set dirties dependents unconditionally —
+                // skip the write when the VM is value-identical (e.g. a
+                // seek emit: position lives outside `vm`, so nothing the
+                // struct carries actually changed).
+                if new_vm != prev_vm {
+                    player.set_vm(new_vm);
+                }
             }
         }
         log::debug!("ui::bridge view-model subscriber stopped");
@@ -149,6 +166,7 @@ pub fn to_slint_track(t: &TrackSummary, cover_thumbs: &CoverThumbs) -> TrackSumm
         artwork_path: SharedString::from(t.artwork_path.as_deref().unwrap_or("")),
         cover_img,
         is_favorite: t.is_favorite,
+        rating: t.rating,
     }
 }
 
@@ -175,6 +193,7 @@ pub fn to_slint_player_vm(
         is_muted: vm.is_muted,
         playback_speed: speed_to_f32(vm.playback_speed),
         gapless: vm.gapless_enabled,
+        sleep_at_track_end: vm.sleep_at_track_end,
         has_next: vm.has_next,
         has_previous: vm.has_previous,
     }
@@ -183,7 +202,7 @@ pub fn to_slint_player_vm(
 /// Narrow playback speed (f64 backend, f32 Slint) for UI consumption.
 #[allow(
     clippy::cast_possible_truncation,
-    reason = "playback speed values (0.25..=4.0) round-trip through f32 without observable loss"
+    reason = "playback speed values (0.25..=2.0) round-trip through f32 without observable loss"
 )]
 fn speed_to_f32(speed: f64) -> f32 {
     speed as f32

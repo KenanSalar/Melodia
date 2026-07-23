@@ -65,13 +65,13 @@ pub async fn fetch_latest_manifest(
     let resp = req
         .send()
         .await
-        .map_err(|e| AppError::Network(format!("fetch latest.json failed: {e}")))?;
+        .map_err(|e| AppError::network("fetch latest.json failed", e))?;
 
     if resp.status() == StatusCode::NOT_MODIFIED {
         return Ok(FetchOutcome::NotModified);
     }
     if !resp.status().is_success() {
-        return Err(AppError::Network(format!(
+        return Err(AppError::network_msg(format!(
             "fetch latest.json returned HTTP {}",
             resp.status()
         )));
@@ -85,7 +85,7 @@ pub async fn fetch_latest_manifest(
     let body = resp
         .bytes()
         .await
-        .map_err(|e| AppError::Network(format!("read latest.json body failed: {e}")))?;
+        .map_err(|e| AppError::network("read latest.json body failed", e))?;
 
     // Fetch the sibling .minisig. A missing or non-200 response is
     // treated as a verification failure — we'd rather refuse to install
@@ -98,7 +98,7 @@ pub async fn fetch_latest_manifest(
         .get(LATEST_JSON_SIG_URL)
         .send()
         .await
-        .map_err(|e| AppError::Network(format!("fetch latest.json.minisig failed: {e}")))?;
+        .map_err(|e| AppError::network("fetch latest.json.minisig failed", e))?;
     if !sig_resp.status().is_success() {
         return Err(AppError::Validation(format!(
             "manifest signature missing or unreachable: HTTP {} on latest.json.minisig",
@@ -108,7 +108,7 @@ pub async fn fetch_latest_manifest(
     let sig_text = sig_resp
         .text()
         .await
-        .map_err(|e| AppError::Network(format!("read latest.json.minisig body failed: {e}")))?;
+        .map_err(|e| AppError::network("read latest.json.minisig body failed", e))?;
 
     let pubkey = minisign::embedded_pubkey()
         .map_err(|e| AppError::Validation(format!("embedded updater pubkey is invalid: {e}")))?;

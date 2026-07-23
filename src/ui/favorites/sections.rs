@@ -16,6 +16,7 @@
 //! before writing the Slint models. So the search bar in the hero
 //! filters the strips and the tracklist in lockstep.
 
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use slint::{ComponentHandle, Model, VecModel, Weak};
@@ -65,6 +66,39 @@ pub async fn refresh_strips(
             *fav_ui.state().fav_artists.lock() = fav_artists;
         }
         Err(e) => log::warn!("favorites::refresh_strips fav_artists: {e}"),
+    }
+
+    // Prewarm both strip tiers off-thread before the rows land in the
+    // Slint models: the cards' `request-*-cover` lookups decode on miss
+    // *on the UI thread*, so a cold section enter would otherwise pay
+    // one synchronous full-res decode per visible card at first paint.
+    // `prewarm` dedupes its input, so the raw per-row path lists are fine.
+    let most_played_covers: Vec<PathBuf> = fav_ui
+        .state()
+        .most_played
+        .lock()
+        .iter()
+        .filter_map(|t| t.artwork_path.as_deref().map(PathBuf::from))
+        .collect();
+    let artist_covers: Vec<PathBuf> = fav_ui
+        .state()
+        .fav_artists
+        .lock()
+        .iter()
+        .filter_map(|a| a.image_path.as_deref().map(PathBuf::from))
+        .collect();
+    if !most_played_covers.is_empty() || !artist_covers.is_empty() {
+        let mp_thumbs = fav_ui.most_played_thumbs.clone();
+        let ar_thumbs = fav_ui.artist_thumbs.clone();
+        let _ = tokio::task::spawn_blocking(move || {
+            if !most_played_covers.is_empty() {
+                mp_thumbs.prewarm(&most_played_covers);
+            }
+            if !artist_covers.is_empty() {
+                ar_thumbs.prewarm(&artist_covers);
+            }
+        })
+        .await;
     }
 
     // Both fetches resolved (or logged); push filtered models so the

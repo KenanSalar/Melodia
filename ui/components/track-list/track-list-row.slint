@@ -1,8 +1,9 @@
 import { ScrollView } from "std-widgets.slint";
 import { Theme } from "../../theme.slint";
 import { TrackListRow } from "../../models.slint";
-import { Playlists, Dialog, Nav, PopupHighlight } from "../../globals.slint";
+import { Playlists, Dialog, Nav, PopupHighlight, RowCovers, TagEditor } from "../../globals.slint";
 import { MaterialIcon } from "../material-icon.slint";
+import { StarRating } from "../star-rating.slint";
 import { ArtworkImage } from "../artwork-image.slint";
 import { MenuItem, MenuSeparator } from "context-menu.slint";
 import { DataCell } from "track-list-cell.slint";
@@ -186,6 +187,9 @@ export component TrackListRowItem inherits Rectangle {
     callback play-next([int]);
     callback add-to-queue([int]);
     callback toggle-row-favorite([int] /*track_ids*/, bool /*new_state*/);
+    // Star rating (0–5). Batch-shaped like `toggle-row-favorite`; the hover
+    // strip emits a 1-element array today, leaving room for multi-select later.
+    callback set-row-rating([int] /*track_ids*/, int /*rating*/);
     callback select-row(int /*idx*/, int /*id*/, bool /*shift*/, bool /*ctrl*/);
     // Fired when the context menu's "Remove from playlist" entry is
     // clicked. Only emitted when `view-context == "playlist-detail"`.
@@ -495,7 +499,10 @@ export component TrackListRowItem inherits Rectangle {
                         alignment: center;
                         ArtworkImage {
                             artwork-path: root.row-data.artwork_path;
-                            cover: root.row-data.cover_img;
+                            // Lazy per-instantiated-row lookup — only the
+                            // ~visible rows of a virtualized list hit the
+                            // shared row-tier LRU (decode on miss).
+                            cover: RowCovers.request(root.row-data.artwork_path);
                             tile-size: 36px;
                             tile-radius: Theme.radius-sm;
                         }
@@ -528,6 +535,22 @@ export component TrackListRowItem inherits Rectangle {
                             icon-size: 18px;
                             icon-color: Theme.red;
                             filled: true;
+                        }
+                    }
+                    // Star rating — revealed on row hover, to the RIGHT of the
+                    // title text. The title `VerticalLayout` keeps
+                    // `horizontal-stretch: 1`, so it elides to make room; the
+                    // title is never swapped out (unlike the Length-cell favorite
+                    // toggle). Gated on `root.enabled` so disk-only Browse rows
+                    // (id 0) can't be rated. The per-star TouchAreas are
+                    // descendants of `touch`, so hovering a star keeps the row
+                    // hovered and this strip mounted.
+                    if touch.has-hover && root.enabled: VerticalLayout {
+                        alignment: center;
+                        StarRating {
+                            rating: root.row-data.rating;
+                            star-size: 16px;
+                            rated(n) => { root.set-row-rating([root.row-data.id], n); }
                         }
                     }
                 }
@@ -743,6 +766,7 @@ export component TrackListRowItem inherits Rectangle {
                                 ? @tr("Add {} to Playlist", root.multi-count)
                                 : @tr("Add to Playlist");
                             Dialog.message = "";
+                            Dialog.confirm-label = @tr("Add");
                             Dialog.cancel-label = @tr("Cancel");
                             Dialog.destructive = false;
                             Dialog.kind = "add-to-playlist";
@@ -770,6 +794,32 @@ export component TrackListRowItem inherits Rectangle {
                                 ctx-popup.effective-ids,
                                 !root.row-data.is_favorite,
                             );
+                        }
+                    }
+
+                    // Edit Track Information — opens the tag-editor dialog for
+                    // the right-clicked row (single) or the whole selection
+                    // (multi; batch editing is the point). Sets the dialog
+                    // chrome inline (`@tr` re-resolves on locale switch); Rust's
+                    // `request-edit` fetches the rows, populates `TagEditor`, and
+                    // flips `Dialog.open` on a fresh tick (the recursion-guard
+                    // hop, like `SmartEditor.request-edit`), so we DON'T set
+                    // `Dialog.open` here.
+                    MenuItem {
+                        label: root.multi-active
+                            ? @tr("Edit Tags for {}", root.multi-count)
+                            : @tr("Edit Tags…");
+                        icon: "edit";
+                        clicked => {
+                            Dialog.title = root.multi-active
+                                ? @tr("Edit {} Tracks", root.multi-count)
+                                : @tr("Edit Track Information");
+                            Dialog.message = "";
+                            Dialog.confirm-label = @tr("Save");
+                            Dialog.cancel-label = @tr("Cancel");
+                            Dialog.destructive = false;
+                            Dialog.kind = "edit-tags";
+                            TagEditor.request-edit(ctx-popup.effective-ids);
                         }
                     }
 

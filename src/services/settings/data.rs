@@ -7,6 +7,9 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 
+use crate::player::crossfade::DEFAULT_CROSSFADE_MS;
+use crate::player::equalizer::{DEFAULT_PRESET, NUM_BANDS};
+use crate::player::replaygain::{DEFAULT_MODE, RG_DEFAULT_PREAMP_DB};
 use crate::player::types::RepeatMode;
 
 pub const MAX_CORNER_RADIUS: u32 = 15;
@@ -91,16 +94,21 @@ impl Default for ColumnWidths {
     }
 }
 
-/// Audio-playback toggles persisted with the rest of `SettingsData`. Grouped
-/// into a substruct so each toggle still serializes at the top level of the
-/// JSON file (`#[serde(flatten)]` on the parent field) while keeping the
-/// `clippy::struct_excessive_bools` budget per struct manageable.
+/// Audio-playback preferences persisted with the rest of `SettingsData`.
+/// Grouped into a substruct so each field still serializes at the top level
+/// of the JSON file (`#[serde(flatten)]` on the parent field) while keeping
+/// the `clippy::struct_excessive_bools` budget per struct manageable.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct PlaybackFlags {
     pub gapless_playback: bool,
     pub resume_on_startup: bool,
     pub is_muted: bool,
+    /// Playback-rate multiplier (1.0 = normal). Clamped to the player's
+    /// `MIN_SPEED..=MAX_SPEED` range when applied / persisted. The struct's
+    /// `#[serde(default)]` makes older `settings.json` files (written before
+    /// this field existed) deserialize it to `1.0`.
+    pub playback_speed: f64,
 }
 
 impl Default for PlaybackFlags {
@@ -109,6 +117,109 @@ impl Default for PlaybackFlags {
             gapless_playback: true,
             resume_on_startup: false,
             is_muted: false,
+            playback_speed: 1.0,
+        }
+    }
+}
+
+/// Graphic-equalizer preferences. Like the other audio substructs this is
+/// `#[serde(flatten)]`'d into `SettingsData` so each field serializes at the
+/// top level of `settings.json`, and `#[serde(default)]` makes older files
+/// (written before the EQ existed) deserialize to the neutral defaults.
+///
+/// Defaults are deliberately inert: the EQ ships **off** with a flat curve, so
+/// a fresh install — or any older `settings.json` — sounds bit-identical to no
+/// EQ until the user opts in. Gains are stored in dB; the loader
+/// (`equalizer::normalize_gains`) clamps the range and fixes the list length on
+/// read, so a hand-edited or wrong-length array can't pin a bad value.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct EqualizerFlags {
+    pub eq_enabled: bool,
+    pub eq_band_gains: Vec<f32>,
+    pub eq_selected_preset: String,
+    /// Preamp / master gain in dB (0 = unity). Clamped to the player's
+    /// `MIN_PREAMP_DB..=MAX_PREAMP_DB` range when applied / persisted; the
+    /// `#[serde(default)]` makes older files deserialize it to `0.0`.
+    pub eq_preamp: f32,
+}
+
+impl Default for EqualizerFlags {
+    fn default() -> Self {
+        Self {
+            eq_enabled: false,
+            eq_band_gains: vec![0.0; NUM_BANDS],
+            eq_selected_preset: DEFAULT_PRESET.to_owned(),
+            eq_preamp: 0.0,
+        }
+    }
+}
+
+/// `ReplayGain` (loudness normalization) preferences. Like the other audio
+/// substructs this is `#[serde(flatten)]`'d into `SettingsData` and carries a
+/// whole-struct `#[serde(default)]` so older `settings.json` files (written
+/// before `ReplayGain` existed) deserialize to these neutral defaults.
+///
+/// Defaults are inert: `ReplayGain` ships **off**, so a fresh install — or any
+/// older file — plays at the raw recorded level until the user opts in. The
+/// `rg_prevent_clipping` guard defaults **on** so a boosted track never clips
+/// once `ReplayGain` is enabled. `rg_mode` is stored as a lowercase token
+/// (`"track"` / `"album"`); the loader falls back to Album on an unknown value.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ReplayGainFlags {
+    pub rg_enabled: bool,
+    pub rg_mode: String,
+    /// Extra preamp in dB (0 = unity), clamped to the player's
+    /// `RG_MIN_PREAMP_DB..=RG_MAX_PREAMP_DB` range when applied / persisted.
+    pub rg_preamp: f32,
+    pub rg_prevent_clipping: bool,
+}
+
+impl Default for ReplayGainFlags {
+    fn default() -> Self {
+        Self {
+            rg_enabled: false,
+            rg_mode: DEFAULT_MODE.to_owned(),
+            rg_preamp: RG_DEFAULT_PREAMP_DB,
+            rg_prevent_clipping: true,
+        }
+    }
+}
+
+/// Crossfade preferences. Like the other audio substructs this is
+/// `#[serde(flatten)]`'d into `SettingsData` and carries a whole-struct
+/// `#[serde(default)]`, so older `settings.json` files (written before
+/// crossfade existed) deserialize to these defaults.
+///
+/// Defaults are inert: crossfade ships **off**, so a fresh install — or any
+/// older file — keeps the existing gapless behaviour untouched. When the user
+/// does enable it, `crossfade_skip_same_album` defaults **on** so continuous-mix
+/// albums stay gapless; that mirrors Strawberry's and Clementine's defaults.
+/// `crossfade_duration_ms` is clamped to the player's
+/// `MIN_CROSSFADE_MS..=MAX_CROSSFADE_MS` range when applied / persisted.
+#[allow(
+    clippy::struct_excessive_bools,
+    reason = "one serde field per independent user-facing toggle; each must round-trip through settings.json by name"
+)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct CrossfadeFlags {
+    pub crossfade_enabled: bool,
+    pub crossfade_duration_ms: u32,
+    pub crossfade_manual: bool,
+    pub crossfade_skip_same_album: bool,
+    pub crossfade_fade_on_pause: bool,
+}
+
+impl Default for CrossfadeFlags {
+    fn default() -> Self {
+        Self {
+            crossfade_enabled: false,
+            crossfade_duration_ms: DEFAULT_CROSSFADE_MS,
+            crossfade_manual: false,
+            crossfade_skip_same_album: true,
+            crossfade_fade_on_pause: false,
         }
     }
 }
@@ -220,6 +331,33 @@ impl Default for WindowFlags {
 pub struct TrayFlags {
     pub tray_enabled: bool,
     pub close_to_tray: bool,
+}
+
+/// Scrobbling toggles. The Last.fm / `ListenBrainz` *credentials* live in a
+/// separate `scrobble_credentials.json` (never in `settings.json`); these are
+/// only the per-service on/off switches. All default `false`, so a returning
+/// install with no scrobble keys in its `settings.json` lands with scrobbling
+/// fully off. See `PlaybackFlags` for the substruct rationale.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "independent scrobble toggles, serde-flattened into settings.json — nesting would change the on-disk shape and break existing installs"
+)]
+pub struct ScrobbleFlags {
+    pub lastfm_enabled: bool,
+    pub listenbrainz_enabled: bool,
+    /// Mirror favorites to Last.fm Loved Tracks. Independent of `lastfm_enabled`
+    /// (loving isn't scrobbling) and of the `ListenBrainz` love toggle. Default
+    /// `false` — opt-in.
+    pub lastfm_love_enabled: bool,
+    /// Mirror favorites to `ListenBrainz` recording feedback. Independent of
+    /// `listenbrainz_enabled` and of the Last.fm love toggle. Default `false`.
+    pub listenbrainz_love_enabled: bool,
+    /// Auto-tag scanned tracks with their `MusicBrainz` Recording ID (resolved via
+    /// `ListenBrainz`) so loves work on untagged libraries. Writes the id into both
+    /// the DB and the audio file. Default `false` — new behavior, opt-in.
+    pub mbid_auto_tag: bool,
 }
 
 /// Library-management toggles. See `PlaybackFlags` for the substruct rationale.
@@ -403,11 +541,19 @@ pub struct SettingsData {
     #[serde(flatten)]
     pub playback: PlaybackFlags,
     #[serde(flatten)]
+    pub equalizer: EqualizerFlags,
+    #[serde(flatten)]
+    pub replaygain: ReplayGainFlags,
+    #[serde(flatten)]
+    pub crossfade: CrossfadeFlags,
+    #[serde(flatten)]
     pub queue: QueueFlags,
     #[serde(flatten)]
     pub window: WindowFlags,
     #[serde(flatten)]
     pub tray: TrayFlags,
+    #[serde(flatten)]
+    pub scrobble: ScrobbleFlags,
     #[serde(flatten)]
     pub library: LibraryFlags,
     #[serde(flatten)]
@@ -443,9 +589,13 @@ impl Default for SettingsData {
             overflow_buttons: Vec::new(),
             locale: default_locale(),
             playback: PlaybackFlags::default(),
+            equalizer: EqualizerFlags::default(),
+            replaygain: ReplayGainFlags::default(),
+            crossfade: CrossfadeFlags::default(),
             queue: QueueFlags::default(),
             window: WindowFlags::default(),
             tray: TrayFlags::default(),
+            scrobble: ScrobbleFlags::default(),
             library: LibraryFlags::default(),
             layout: LayoutFlags::default(),
             updates: UpdateFlags::default(),

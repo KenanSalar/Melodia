@@ -28,8 +28,16 @@ pub fn spawn_background_tasks(
     tasks::play_count_flusher::spawn(
         spawner,
         state.db.clone(),
-        state.library_changed_tx.clone(),
+        state.stats_changed_tx.clone(),
     );
+    // Scrobble detector + submitter: watch the player view-model/position seam,
+    // enqueue qualifying plays, and drain the durable queue to Last.fm /
+    // ListenBrainz. Inert until a provider is connected + enabled.
+    tasks::scrobble::spawn(spawner, state);
+    // Auto-tag scanned tracks with their MusicBrainz Recording ID via
+    // ListenBrainz so loves work on untagged libraries. Inert until the user
+    // enables it + ListenBrainz is connected.
+    tasks::mbid_backfill::spawn(spawner, state);
 
     // OS media controls → SlintEventSink: souvlaki events drive the same
     // library::* paths the UI does, so MPRIS / SMTC stays in lockstep.

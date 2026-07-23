@@ -128,12 +128,9 @@ fn wire_language_changed(ui: &AppWindow, state: &AppState, shadow: PersistedLoca
         // reader sees the new code before the disk catches up.
         code.clone_into(&mut *shadow.lock());
 
-        let s_clone = s.clone();
         let code_owned = code.to_owned();
-        s.runtime.spawn_blocking(move || {
-            if let Err(e) = library::settings::set_locale(&s_clone, code_owned) {
-                log::warn!("persist locale: {e}");
-            }
+        s.persist_blocking("persist locale", move |s| {
+            library::settings::set_locale(s, code_owned)
         });
     });
 }

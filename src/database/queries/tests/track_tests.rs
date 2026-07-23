@@ -203,6 +203,33 @@ async fn get_track_ids_by_paths() -> Result<(), AppError> {
     Ok(())
 }
 
+#[tokio::test]
+async fn get_track_ids_by_hashes() -> Result<(), AppError> {
+    let db = seed_db().await?;
+    // `make_test_metadata` sets file_hash = blake3(title), so each seeded
+    // track's hash is deterministic from its title.
+    let alpha = blake3::hash(b"Alpha").to_hex().to_string();
+    let beta = blake3::hash(b"Beta").to_hex().to_string();
+    let unknown = blake3::hash(b"Nope").to_hex().to_string();
+
+    let map = queries::track::get_track_ids_by_hashes(
+        &db,
+        &[alpha.clone(), beta.clone(), unknown.clone()],
+    )
+    .await?;
+
+    assert_eq!(map.len(), 2);
+    assert!(map.contains_key(&alpha));
+    assert!(map.contains_key(&beta));
+    assert!(!map.contains_key(&unknown));
+
+    // The alpha hash resolves to the same id as the alpha path.
+    let by_path = queries::track::get_track_ids_by_paths(&db, &["/music/alpha.mp3".to_owned()])
+        .await?;
+    assert_eq!(map.get(&alpha), by_path.get("/music/alpha.mp3"));
+    Ok(())
+}
+
 // --- Duplicate detection tests ---
 
 #[tokio::test]
@@ -356,6 +383,54 @@ async fn set_favorite_empty_ids_is_noop() -> Result<(), AppError> {
 }
 
 #[tokio::test]
+async fn set_rating_updates_value() -> Result<(), AppError> {
+    let db = seed_db().await?;
+    let id: i64 = sqlx::query_scalar("SELECT id FROM tracks LIMIT 1")
+        .fetch_one(db.read())
+        .await?;
+
+    // Default rating is 0 (unrated).
+    let t = queries::track::get_track_by_id(&db, id).await?;
+    assert_eq!(t.rating, 0);
+
+    queries::track::set_rating(&db, &[id], 4).await?;
+    let t = queries::track::get_track_by_id(&db, id).await?;
+    assert_eq!(t.rating, 4);
+
+    // Clearing back to 0 works.
+    queries::track::set_rating(&db, &[id], 0).await?;
+    let t = queries::track::get_track_by_id(&db, id).await?;
+    assert_eq!(t.rating, 0);
+    Ok(())
+}
+
+#[tokio::test]
+async fn set_rating_targets_only_given_ids() -> Result<(), AppError> {
+    let db = seed_db().await?;
+    let all = queries::track::get_all_tracks(&db, None, None).await?;
+    assert!(all.len() >= 2);
+
+    queries::track::set_rating(&db, &[all[0].id], 5).await?;
+
+    let rated = queries::track::get_track_by_id(&db, all[0].id).await?;
+    assert_eq!(rated.rating, 5);
+    // Untargeted rows stay at the default 0.
+    for other in &all[1..] {
+        let t = queries::track::get_track_by_id(&db, other.id).await?;
+        assert_eq!(t.rating, 0, "id {} must be untouched", other.id);
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn set_rating_empty_ids_is_noop() -> Result<(), AppError> {
+    let db = seed_db().await?;
+    // Should not error.
+    queries::track::set_rating(&db, &[], 3).await?;
+    Ok(())
+}
+
+#[tokio::test]
 async fn get_favorite_stats_orders_artwork_by_play_count() -> Result<(), AppError> {
     let db = seed_db().await?;
     let all = queries::track::get_all_tracks(&db, None, None).await?;
@@ -433,5 +508,199 @@ async fn get_favorite_stats_empty_when_favorites_have_no_artwork() -> Result<(),
         "no artworks among favorites ⇒ empty list, got {:?}",
         stats.artwork_paths
     );
+    Ok(())
+}
+
+#[tokio::test]
+async fn get_recently_played_orders_newest_first_and_excludes_null() -> Result<(), AppError> {
+    let db = seed_db().await?;
+
+    // Distinct, lexically-ordered RFC-3339 timestamps on two tracks; leave
+    // Gamma's `last_played` NULL (never played) so it must be excluded.
+    sqlx::query("UPDATE tracks SET last_played = '2026-01-01T00:00:00+00:00' WHERE title = 'Alpha'")
+        .execute(db.write())
+        .await?;
+    sqlx::query("UPDATE tracks SET last_played = '2026-06-01T00:00:00+00:00' WHERE title = 'Beta'")
+        .execute(db.write())
+        .await?;
+
+    let rows = queries::track::get_recently_played(&db, 200).await?;
+    let titles: Vec<&str> = rows.iter().map(|r| r.title.as_str()).collect();
+    assert_eq!(
+        titles,
+        vec!["Beta", "Alpha"],
+        "newest-played first; the NULL-last_played track is excluded"
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn get_recently_played_respects_limit() -> Result<(), AppError> {
+    let db = seed_db().await?;
+    sqlx::query("UPDATE tracks SET last_played = '2026-01-01T00:00:00+00:00' WHERE title = 'Alpha'")
+        .execute(db.write())
+        .await?;
+    sqlx::query("UPDATE tracks SET last_played = '2026-06-01T00:00:00+00:00' WHERE title = 'Beta'")
+        .execute(db.write())
+        .await?;
+
+    let rows = queries::track::get_recently_played(&db, 1).await?;
+    assert_eq!(rows.len(), 1, "LIMIT caps the result set");
+    assert_eq!(rows[0].title, "Beta", "the single row is the most recent");
+    Ok(())
+}
+
+#[tokio::test]
+async fn get_most_played_orders_by_count_and_excludes_zero() -> Result<(), AppError> {
+    let db = seed_db().await?;
+
+    // Beta highest, Alpha lower, Gamma left at play_count 0 (must be excluded).
+    sqlx::query("UPDATE tracks SET play_count = 3 WHERE title = 'Alpha'")
+        .execute(db.write())
+        .await?;
+    sqlx::query("UPDATE tracks SET play_count = 9 WHERE title = 'Beta'")
+        .execute(db.write())
+        .await?;
+
+    let rows = queries::track::get_most_played(&db, 200).await?;
+    let titles: Vec<&str> = rows.iter().map(|r| r.title.as_str()).collect();
+    assert_eq!(
+        titles,
+        vec!["Beta", "Alpha"],
+        "play_count DESC; the play_count == 0 track is excluded (no favorite filter)"
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn get_most_played_respects_limit() -> Result<(), AppError> {
+    let db = seed_db().await?;
+    sqlx::query("UPDATE tracks SET play_count = 3 WHERE title = 'Alpha'")
+        .execute(db.write())
+        .await?;
+    sqlx::query("UPDATE tracks SET play_count = 9 WHERE title = 'Beta'")
+        .execute(db.write())
+        .await?;
+
+    let rows = queries::track::get_most_played(&db, 1).await?;
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].title, "Beta");
+    Ok(())
+}
+
+// --- Tag-edit query tests ---
+
+#[tokio::test]
+async fn get_tag_edit_rows_by_ids_projects_and_preserves_order() -> Result<(), AppError> {
+    let db = seed_db().await?;
+    // ids ascending == insert order: Alpha, Beta, Gamma.
+    let ids: Vec<i64> = sqlx::query_scalar("SELECT id FROM tracks ORDER BY id")
+        .fetch_all(db.read())
+        .await?;
+
+    // Patch the fields `make_test_metadata` leaves empty so the projection is exercised.
+    sqlx::query(
+        "UPDATE tracks SET composer = ?, comment = ?, bpm = ?, original_year = ? WHERE id = ?",
+    )
+    .bind("Composer X")
+    .bind("A comment")
+    .bind(128.5_f64)
+    .bind(1999_i32)
+    .bind(ids[0])
+    .execute(db.write())
+    .await?;
+
+    // Request reversed so a plain re-read couldn't accidentally pass.
+    let rows = queries::track::get_tag_edit_rows_by_ids(&db, &[ids[1], ids[0]]).await?;
+    assert_eq!(rows.len(), 2);
+    assert_eq!(rows[0].id, ids[1]);
+    assert_eq!(rows[1].id, ids[0]);
+
+    let alpha = &rows[1];
+    assert_eq!(alpha.title, "Alpha");
+    assert_eq!(alpha.composer.as_deref(), Some("Composer X"));
+    assert_eq!(alpha.comment.as_deref(), Some("A comment"));
+    assert_eq!(alpha.original_year, Some(1999));
+    assert!(matches!(alpha.bpm, Some(b) if (b - 128.5).abs() < 1e-9));
+    // A technical column reads straight off `tracks`.
+    assert_eq!(alpha.codec.as_deref(), Some("Mpeg"));
+    assert_eq!(alpha.bitrate, Some(320));
+    assert_eq!(alpha.duration_ms, 180_000);
+    Ok(())
+}
+
+#[tokio::test]
+async fn get_track_paths_by_ids_returns_pairs_in_input_order() -> Result<(), AppError> {
+    let db = seed_db().await?;
+    let ids: Vec<i64> = sqlx::query_scalar("SELECT id FROM tracks ORDER BY id")
+        .fetch_all(db.read())
+        .await?;
+
+    let pairs = queries::track::get_track_paths_by_ids(&db, &[ids[2], ids[0]]).await?;
+    assert_eq!(pairs.len(), 2);
+    assert_eq!(pairs[0], (ids[2], "/music/gamma.mp3".to_owned()));
+    assert_eq!(pairs[1], (ids[0], "/music/alpha.mp3".to_owned()));
+
+    let empty = queries::track::get_track_paths_by_ids(&db, &[]).await?;
+    assert!(empty.is_empty());
+    Ok(())
+}
+
+#[tokio::test]
+async fn set_track_artwork_overwrites_and_nulls() -> Result<(), AppError> {
+    let db = seed_db().await?;
+    let id: i64 = sqlx::query_scalar("SELECT id FROM tracks LIMIT 1")
+        .fetch_one(db.read())
+        .await?;
+
+    // Set an authoritative path within a transaction.
+    let mut tx = db.write().begin().await?;
+    queries::track::set_track_artwork(&mut tx, &[id], Some("/covers/new.jpg")).await?;
+    tx.commit().await?;
+
+    let art: Option<String> = sqlx::query_scalar("SELECT artwork_path FROM tracks WHERE id = ?")
+        .bind(id)
+        .fetch_one(db.read())
+        .await?;
+    assert_eq!(art.as_deref(), Some("/covers/new.jpg"));
+
+    // `None` genuinely nulls it — no COALESCE keeping the old value.
+    let mut tx = db.write().begin().await?;
+    queries::track::set_track_artwork(&mut tx, &[id], None).await?;
+    tx.commit().await?;
+
+    let art: Option<String> = sqlx::query_scalar("SELECT artwork_path FROM tracks WHERE id = ?")
+        .bind(id)
+        .fetch_one(db.read())
+        .await?;
+    assert!(art.is_none());
+    Ok(())
+}
+
+#[tokio::test]
+async fn get_tracks_missing_mbid_filters_tagged_and_metadata_less_rows() -> Result<(), AppError> {
+    let db = seed_db().await?;
+    let ids: Vec<i64> = sqlx::query_scalar("SELECT id FROM tracks ORDER BY file_path")
+        .fetch_all(db.read())
+        .await?;
+    // alpha/beta/gamma all start eligible (NULL mbid, non-empty artist + title).
+    // Tag one, and blank another's artist — both must drop out of the work-list.
+    sqlx::query("UPDATE tracks SET musicbrainz_track_id = 'rec-1' WHERE id = ?")
+        .bind(ids[0])
+        .execute(db.write())
+        .await?;
+    sqlx::query("UPDATE tracks SET artist = '' WHERE id = ?")
+        .bind(ids[1])
+        .execute(db.write())
+        .await?;
+
+    let missing = queries::track::get_tracks_missing_mbid(&db).await?;
+    let returned: Vec<i64> = missing.iter().map(|(id, ..)| *id).collect();
+    assert_eq!(returned, vec![ids[2]], "only the untagged, artist-bearing track");
+    // The row carries the fields the lookup needs.
+    let (_id, path, artist, title, _album) = &missing[0];
+    assert!(path.ends_with("gamma.mp3"));
+    assert_eq!(artist, "Alpha Artist");
+    assert_eq!(title, "Gamma");
     Ok(())
 }

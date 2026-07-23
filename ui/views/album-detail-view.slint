@@ -6,6 +6,7 @@ import { ColumnTogglePopup } from "../components/track-list/column-toggle-popup.
 import { SearchBar } from "../components/search-bar.slint";
 import { TrackList } from "../components/track-list/track-list.slint";
 import { OverlayScrollbar } from "../components/overlay-scrollbar.slint";
+import { FilterThrottle } from "../components/filter-throttle.slint";
 
 // The full Album Detail view. Mounted by `app-window.slint` for nav index
 // 4 when `AlbumDetail.album-id >= 0`. A reusable `DetailHeader` (hero
@@ -28,19 +29,14 @@ export component AlbumDetailView inherits Rectangle {
         + @tr("{n} track" | "{n} tracks" % AlbumDetail.album.track_count)
         + " · " + Theme.format-duration(AlbumDetail.album.total_duration_ms);
 
-    // Filter throttle (mirror of `artist-detail-view`): each keystroke
-    // bumps `pending`; the Timer fires the filter callback at most once
-    // per `interval` while `pending != applied`.
+    // Filter throttle: each keystroke bumps `filter-tick-pending`; the
+    // shared `FilterThrottle` fires the filter callback at most once per
+    // ~130 ms while pending is ahead of the last-applied tick.
     property <int> filter-tick-pending: 0;
-    property <int> filter-tick-applied: 0;
 
-    filter-throttle := Timer {
-        interval: 130ms;
-        running: root.filter-tick-pending != root.filter-tick-applied;
-        triggered() => {
-            root.filter-tick-applied = root.filter-tick-pending;
-            AlbumDetail.filter-changed(AlbumDetail.filter);
-        }
+    filter-throttle := FilterThrottle {
+        pending: root.filter-tick-pending;
+        fire() => { AlbumDetail.filter-changed(AlbumDetail.filter); }
     }
 
     // Backdrop catches any click that no inner TouchArea consumes and
@@ -235,6 +231,7 @@ export component AlbumDetailView inherits Rectangle {
                 play-next(ids) => { AlbumDetail.play-next(ids); }
                 add-to-queue(ids) => { AlbumDetail.add-to-queue(ids); }
                 toggle-row-favorite(ids, on) => { AlbumDetail.toggle-row-favorite(ids, on); }
+                set-row-rating(ids, n) => { AlbumDetail.set-row-rating(ids, n); }
                 select-row(idx, id, sh, ct) => { AlbumDetail.select-row(idx, id, sh, ct); }
                 // A click in the track list blurs the hero SearchBar.
                 request-blur-search => { AlbumDetail.blur-search-tick += 1; }

@@ -144,6 +144,68 @@ export global Settings {
     in-out property <bool> resume-on-startup: false;
     callback resume-on-startup-changed(bool);
 
+    // Crossfade cluster in `ui/views/settings/playback-section.slint`. The four
+    // toggles bind two-way and each `*-changed` callback applies to the live
+    // Rodio backend synchronously via `library::playback::player_set_crossfade_*`
+    // before persisting through `library::settings::set_crossfade_*` on the
+    // blocking pool — the same two-phase shape as the equalizer / ReplayGain
+    // callbacks. Seeded at startup from `settings.crossfade` in
+    // `src/ui/playback_settings.rs::install_playback_settings`.
+    //
+    // The duration is carried in **seconds** here (the slider's natural unit);
+    // Rust converts to the milliseconds the backend and `settings.json` use.
+    // `crossfade-min-secs` / `crossfade-max-secs` are `in` and seeded from
+    // `player::crossfade::{MIN,MAX}_CROSSFADE_MS`, so the range lives in exactly
+    // one place. `-changed` fires live during a drag (apply only, no disk write);
+    // `-committed` fires on release and persists — mirroring `set-volume` /
+    // `commit-volume`.
+    in-out property <bool> crossfade-enabled: false;
+    callback crossfade-enabled-changed(bool);
+    in-out property <float> crossfade-duration-secs: 2.0;
+    in property <float> crossfade-min-secs;
+    in property <float> crossfade-max-secs;
+    callback crossfade-duration-changed(float /* seconds */);
+    callback crossfade-duration-committed(float /* seconds */);
+    in-out property <bool> crossfade-skip-same-album: true;
+    callback crossfade-skip-same-album-changed(bool);
+    in-out property <bool> crossfade-manual: false;
+    callback crossfade-manual-changed(bool);
+    in-out property <bool> crossfade-fade-on-pause: false;
+    callback crossfade-fade-on-pause-changed(bool);
+
+    // Scrobbling (`ui/views/settings/scrobbling-section.slint`). Rust owns every
+    // property here: the `connected`/`username`/`enabled` values are painted by
+    // the `ScrobbleService` status-watch subscriber in
+    // `src/ui/scrobbling_settings.rs` (the single writer), and the toggles route
+    // their `-changed(bool)` events back to persist + shadow-refresh. `-connect`
+    // is opened inline from the section markup (not a callback) to avoid Slint's
+    // recursion guard; `-disconnect` clears the stored credential. `configured`
+    // reflects whether this build shipped Last.fm app keys — false ⇒ the section
+    // shows "Not configured in this build" with no Connect button.
+    in property <bool> scrobble-lastfm-configured;
+    in property <bool> scrobble-lastfm-connected;
+    in property <string> scrobble-lastfm-username;
+    in-out property <bool> scrobble-lastfm-enabled;
+    callback scrobble-lastfm-enabled-changed(bool);
+    callback scrobble-lastfm-disconnect();
+    // Mirror favorites to Last.fm Loved Tracks — independent of the two.
+    in-out property <bool> scrobble-lastfm-love;
+    callback scrobble-lastfm-love-changed(bool);
+    in property <bool> scrobble-listenbrainz-connected;
+    in property <string> scrobble-listenbrainz-username;
+    in-out property <bool> scrobble-listenbrainz-enabled;
+    callback scrobble-listenbrainz-enabled-changed(bool);
+    callback scrobble-listenbrainz-disconnect();
+    // Mirror favorites to ListenBrainz recording feedback.
+    in-out property <bool> scrobble-listenbrainz-love;
+    callback scrobble-listenbrainz-love-changed(bool);
+    // Auto-tag scanned tracks with their MusicBrainz Recording ID (via
+    // ListenBrainz) so loves work on untagged libraries. The manual button
+    // forces a re-sweep of tracks still missing an id.
+    in-out property <bool> scrobble-mbid-auto-tag;
+    callback scrobble-mbid-auto-tag-changed(bool);
+    callback scrobble-lookup-missing-mbids();
+
     // Watch for file changes (file-watcher) toggle. ToggleSwitch in
     // `ui/views/settings/file-watching-section.slint` binds two-way; the
     // `toggled(bool)` event fires `watch-for-file-changes-changed`. Rust
@@ -247,6 +309,11 @@ export global Settings {
     // dependency tracking handles re-evaluation on `search-query` changes.
     pure callback matches(string /*haystack*/, string /*needle*/) -> bool;
 
+    // About section — opens the project's source repository
+    // (`CARGO_PKG_REPOSITORY`) in the system browser. Action callback
+    // (Slint → Rust); wired in `src/ui/about.rs`, no Slint-side handler.
+    callback open-repository();
+
     // Translated strings for the "File watching disabled" notification.
     // Surfaced as `pure callback`s so the Rust side can resolve them
     // through Slint's bundled-translation pipeline (`@tr(...)`) without
@@ -345,5 +412,112 @@ export global Settings {
             return @tr("Couldn't write the downloaded update to disk.");
         }
         return @tr("Update failed. See logs for details.");
+    }
+
+    // Translated strings for the playlist import/export notification toasts
+    // (header pills on the Playlists view). Same `pure callback` shape as
+    // the updater strings — Rust invokes them at push time so they resolve
+    // in the active locale, with the dynamic counts interpolated.
+    pure callback playlist-import-title(int /*imported*/) -> string;
+    playlist-import-title(imported) => {
+        return @tr("{n} playlist imported" | "{n} playlists imported" % imported);
+    }
+    pure callback playlist-import-message(int /*tracks*/, int /*missing*/) -> string;
+    playlist-import-message(tracks, missing) => {
+        // Pluralized on the track count (`{n}`); the no-missing branch reuses
+        // the same `{n} track(s) added` msgid as `add-to-playlist-message`.
+        return missing > 0
+            ? @tr("{n} track added · {} missing" | "{n} tracks added · {} missing" % tracks, missing)
+            : @tr("{n} track added" | "{n} tracks added" % tracks);
+    }
+    pure callback playlist-import-failed-title() -> string;
+    playlist-import-failed-title => {
+        return @tr("Import failed");
+    }
+    pure callback playlist-import-failed-message() -> string;
+    playlist-import-failed-message => {
+        return @tr("Couldn't read the selected playlist file(s).");
+    }
+
+    pure callback playlist-export-title(int /*exported*/) -> string;
+    playlist-export-title(exported) => {
+        return @tr("{n} playlist exported" | "{n} playlists exported" % exported);
+    }
+    pure callback playlist-export-message(string /*folder*/) -> string;
+    playlist-export-message(folder) => {
+        return @tr("Saved to {}", folder);
+    }
+    pure callback playlist-export-failed-title() -> string;
+    playlist-export-failed-title => {
+        return @tr("Export failed");
+    }
+    pure callback playlist-export-failed-message() -> string;
+    playlist-export-failed-message => {
+        return @tr("Couldn't write the playlist files.");
+    }
+
+    // Titles for the generic backend-failure toasts pushed from Rust through
+    // the `services::toast` bridge. Same `pure callback` shape as the playlist
+    // toasts — the UI-thread consumer resolves the localized title by toast
+    // kind at push time; the dynamic detail (a path or error message) rides on
+    // the toast body and is not translated.
+    pure callback toast-playback-error-title() -> string;
+    toast-playback-error-title => {
+        return @tr("Playback error");
+    }
+    pure callback toast-operation-failed-title() -> string;
+    toast-operation-failed-title => {
+        return @tr("Something went wrong");
+    }
+    pure callback toast-mbid-title() -> string;
+    toast-mbid-title => {
+        return @tr("MusicBrainz IDs");
+    }
+    pure callback toast-love-sync-title() -> string;
+    toast-love-sync-title => {
+        return @tr("Loved tracks");
+    }
+
+    // Add-to-Playlist multi-select commit toast (track row context menu →
+    // Add to Playlist → tick playlists → Add). Title pluralizes on the
+    // number of playlists, message on the number of tracks added.
+    pure callback add-to-playlist-title(int /*playlists*/) -> string;
+    add-to-playlist-title(playlists) => {
+        return @tr("Added to {n} playlist" | "Added to {n} playlists" % playlists);
+    }
+    pure callback add-to-playlist-message(int /*tracks*/) -> string;
+    add-to-playlist-message(tracks) => {
+        return @tr("{n} track added" | "{n} tracks added" % tracks);
+    }
+
+    // Edit-Track-Information dialog. `tag-multiple-values` is the placeholder
+    // sentinel a disagreeing field shows in a batch edit; the rest are the Save
+    // completion toast (Rust invokes them at push time so they resolve in the
+    // active locale, with the dynamic counts interpolated).
+    pure callback tag-multiple-values() -> string;
+    tag-multiple-values => {
+        return @tr("‹multiple values›");
+    }
+    pure callback tag-edit-title(int /*updated*/) -> string;
+    tag-edit-title(updated) => {
+        return @tr("{n} track updated" | "{n} tracks updated" % updated);
+    }
+    pure callback tag-edit-message(int /*failed*/, int /*unsupported*/) -> string;
+    tag-edit-message(failed, unsupported) => {
+        if (failed > 0) {
+            return @tr("{n} file failed" | "{n} files failed" % failed);
+        }
+        if (unsupported > 0) {
+            return @tr("{n} file has unsupported fields" | "{n} files have unsupported fields" % unsupported);
+        }
+        return "";
+    }
+    pure callback tag-edit-failed-title() -> string;
+    tag-edit-failed-title => {
+        return @tr("Couldn't save tags");
+    }
+    pure callback tag-edit-failed-message() -> string;
+    tag-edit-failed-message => {
+        return @tr("No tracks were updated.");
     }
 }

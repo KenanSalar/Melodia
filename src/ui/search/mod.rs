@@ -170,15 +170,6 @@ impl SearchUi {
         &self.inner
     }
 
-    /// Lazy cover lookup for the Songs row column. Routed via
-    /// `Search.request-row-cover`; backed by the shared row-tier
-    /// cache so cache parity with Tracks / Browse / Favorites stays
-    /// free.
-    pub fn row_cover(&self, artwork_path: &str) -> Image {
-        self.cover_thumbs
-            .get_or_load_opt(Some(artwork_path).filter(|s| !s.is_empty()))
-    }
-
     /// Lazy cover lookup for the Albums-strip cards. Routed via
     /// `Search.request-album-strip-cover`.
     pub fn album_strip_cover(&self, artwork_path: &str) -> Image {
@@ -246,8 +237,10 @@ pub fn to_slint_artist_strip_row(a: &ArtistStats, subtitle: &str) -> UiEntityStr
     }
 }
 
-#[allow(dead_code)]
-fn assert_send_sync() {
+// Compile-time assertion, not runtime code: an anonymous `const _` is
+// type-checked but never dead-code-flagged, so the bound is enforced
+// without an `#[allow(dead_code)]` on a fn nothing calls.
+const _: fn() = || {
     fn check<T: Send + Sync>() {}
     check::<SearchUi>();
-}
+};

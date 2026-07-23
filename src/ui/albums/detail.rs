@@ -17,6 +17,7 @@ use crate::state::AppState;
 use crate::ui::detail_artwork::decode_detail_pair;
 use crate::ui::detail_filter::FilterRefs;
 use crate::ui::detail_view::{impl_detail_view_helpers, resolve_view_sort};
+use crate::ui::model_patch;
 use crate::ui::track_list_view::view_id;
 use crate::ui::track_sort::sort_track_list_rows;
 use crate::ui::tracks::PreparedTrackRow;
@@ -43,7 +44,7 @@ async fn fetch_album_detail(
     // shared row-tier cache. The big header tile + hero blur are handled
     // separately — `decode_detail_pair` (called from `open_album` /
     // `refresh_detail`) decodes that pair into the `detail_artwork` LRU.
-    let track_covers: Vec<PathBuf> = super::grid::unique_artwork_paths(
+    let track_covers: Vec<PathBuf> = crate::ui::grid_prewarm::unique_artwork_paths(
         tracks.iter().map(|t| t.artwork_path.as_deref()),
     );
     if !track_covers.is_empty() {
@@ -127,7 +128,6 @@ where
 
     *albums_ui.detail.album_id.lock() = album_id;
 
-    let thumbs = albums_ui.cover_thumbs.clone();
     let albums_ui = albums_ui.clone();
     let state_for_history = state.clone();
     let _ = weak.upgrade_in_event_loop(move |ui| {
@@ -135,7 +135,7 @@ where
         // UI-thread step: just the cover lookups + the model swap.
         let ui_tracks: Vec<UiTrackListRow> = prepared
             .into_iter()
-            .map(|p| crate::ui::tracks::finish_track_list_row(p, &thumbs))
+            .map(crate::ui::tracks::finish_track_list_row)
             .collect();
         let header = to_slint_album_row(&detail);
         g.set_album(header);
@@ -206,7 +206,6 @@ pub async fn refresh_detail(
     )
     .await;
 
-    let thumbs = albums_ui.cover_thumbs.clone();
     let albums_ui = albums_ui.clone();
     let _ = weak.upgrade_in_event_loop(move |ui| {
         let g = ui.global::<AlbumDetail>();
@@ -273,7 +272,7 @@ pub async fn refresh_detail(
             if let Some(vm) = model.as_any().downcast_ref::<VecModel<UiTrackListRow>>() {
                 for (i, t) in tracks.iter().enumerate() {
                     let Some(old) = vm.row_data(i) else { continue };
-                    let mut fresh = crate::ui::tracks::to_slint_track_list_row(t, &thumbs);
+                    let mut fresh = crate::ui::tracks::to_slint_track_list_row(t);
                     // Selection is unchanged on this branch — keep it.
                     fresh.selected = old.selected;
                     if fresh != old {
@@ -287,7 +286,7 @@ pub async fn refresh_detail(
         } else {
             let ui_tracks: Vec<UiTrackListRow> = tracks
                 .iter()
-                .map(|t| crate::ui::tracks::to_slint_track_list_row(t, &thumbs))
+                .map(crate::ui::tracks::to_slint_track_list_row)
                 .collect();
             replace_tracks_model(&g, ui_tracks);
             // The fresh rows all carry `selected: false`, so the `applied`
@@ -389,7 +388,6 @@ pub fn apply_filtered_detail(ui: &AppWindow, albums_ui: &AlbumsUi) {
             applied: &albums_ui.detail.applied_selection,
             filter: &albums_ui.detail.filter,
         },
-        &albums_ui.cover_thumbs,
     );
 }
 
@@ -398,20 +396,19 @@ pub fn apply_filtered_detail(ui: &AppWindow, albums_ui: &AlbumsUi) {
 /// put. Mirrors `tracks::apply_row_favorite`.
 pub fn apply_detail_row_favorite(weak: &Weak<AppWindow>, id: i64, fav: bool) {
     let _ = weak.upgrade_in_event_loop(move |ui| {
-        let rows = ui.global::<AlbumDetail>().get_tracks();
-        let Some(vm) = rows.as_any().downcast_ref::<VecModel<UiTrackListRow>>() else {
-            return;
-        };
-        for i in 0..vm.row_count() {
-            let Some(mut r) = vm.row_data(i) else {
-                continue;
-            };
-            if i64::from(r.id) == id {
-                r.is_favorite = fav;
-                vm.set_row_data(i, r);
-                break;
-            }
-        }
+        model_patch::patch_track_row_by_id(&ui.global::<AlbumDetail>().get_tracks(), id, |r| {
+            r.is_favorite = fav;
+        });
+    });
+}
+
+/// Set `rating` on a single detail row in the Slint `VecModel`. Mirrors
+/// [`apply_detail_row_favorite`].
+pub fn apply_detail_row_rating(weak: &Weak<AppWindow>, id: i64, rating: i32) {
+    let _ = weak.upgrade_in_event_loop(move |ui| {
+        model_patch::patch_track_row_by_id(&ui.global::<AlbumDetail>().get_tracks(), id, |r| {
+            r.rating = rating;
+        });
     });
 }
 

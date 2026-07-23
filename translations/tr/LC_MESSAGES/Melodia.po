@@ -132,6 +132,9 @@ msgstr "Sıra"
 msgid "More"
 msgstr "Diğer Seçenekler"
 
+msgid "Speed"
+msgstr "Hız"
+
 msgid "No track playing"
 msgstr "Çalan parça yok"
 
@@ -441,6 +444,40 @@ msgstr "Başlangıçta Devam Et"
 
 msgid "Automatically resume the last track from where you left off when the app starts"
 msgstr "Uygulama başladığında son parçayı kaldığın yerden otomatik olarak devam ettir"
+
+msgid "Crossfade"
+msgstr "Çapraz Geçiş"
+
+msgid "Overlap the end of one track with the start of the next"
+msgstr "Bir parçanın sonunu sonraki parçanın başıyla üst üste bindir"
+
+msgid "Crossfade duration"
+msgstr "Çapraz geçiş süresi"
+
+msgid "How long the two tracks overlap"
+msgstr "İki parçanın ne kadar süre üst üste bineceği"
+
+# Unit suffix for the crossfade-duration readout, e.g. "2 s".
+msgid "{} s"
+msgstr "{} sn"
+
+msgid "Except on the same album"
+msgstr "Aynı albüm içinde hariç"
+
+msgid "Keep tracks from one album gapless, so continuous mixes stay seamless"
+msgstr "Aynı albümdeki parçaları boşluksuz çal, böylece kesintisiz mixler akıcı kalır"
+
+msgid "Also on manual track change"
+msgstr "Elle parça değiştirirken de"
+
+msgid "Crossfade when you skip to the next or previous track, not only at the end of one"
+msgstr "Yalnızca parça sonunda değil, sonraki veya önceki parçaya geçerken de çapraz geçiş uygula"
+
+msgid "Fade out on pause"
+msgstr "Duraklatırken kıs"
+
+msgid "Fade the music out when pausing or stopping, and back in when resuming"
+msgstr "Duraklatırken veya durdururken müziği kıs, devam ederken yeniden aç"
 
 # ---- File Watching section --------------------------------------------------
 
@@ -786,9 +823,6 @@ msgstr "Güncelleme yüklendi"
 msgid "Restart Melodia to start using the new version."
 msgstr "Yeni sürümü kullanmak için Melodia'yı yeniden başlatın."
 
-msgid "Restart"
-msgstr "Yeniden başlat"
-
 msgid "Update failed"
 msgstr "Güncelleme başarısız"
 
@@ -824,3 +858,582 @@ msgstr "Sistem tepsisi simgesini değiştirmek Melodia'yı yeniden başlatmayı 
 
 msgid "Available only while the system tray icon is active."
 msgstr "Yalnızca sistem tepsisi simgesi etkinken kullanılabilir."
+
+# ---- Miniplayer --------------------------------------------------------------
+
+msgid "Exit miniplayer"
+msgstr "Mini oynatıcıdan çık"
+
+# ---- About -------------------------------------------------------------------
+
+# Settings → About section (`ui/views/settings/about-section.slint`): app
+# name + version, authorship, source-repository link, and license.
+msgid "About"
+msgstr "Hakkında"
+
+# Translators: `{}` is the app version string (e.g. "0.1.0").
+msgid "Version {}"
+msgstr "Sürüm {}"
+
+# Translators: `{}` is the author's name ("Kenan Salar") — a proper noun,
+# passed verbatim and never translated.
+msgid "Made by {}"
+msgstr "{} tarafından yapıldı"
+
+msgid "License"
+msgstr "Lisans"
+
+# Graphic equalizer
+msgid "On"
+msgstr "Açık"
+
+msgid "Off"
+msgstr "Kapalı"
+
+msgid "Done"
+msgstr "Tamam"
+
+msgid "Reset"
+msgstr "Sıfırla"
+
+msgid "Enable equalizer"
+msgstr "Ekolayzırı etkinleştir"
+
+msgid "Flat"
+msgstr "Düz"
+
+msgid "Rock"
+msgstr "Rock"
+
+msgid "Pop"
+msgstr "Pop"
+
+msgid "Jazz"
+msgstr "Caz"
+
+msgid "Classical"
+msgstr "Klasik"
+
+msgid "Bass Boost"
+msgstr "Bas Yükseltme"
+
+msgid "Treble Boost"
+msgstr "Tiz Yükseltme"
+
+msgid "Vocal"
+msgstr "Vokal"
+
+msgid "Electronic"
+msgstr "Elektronik"
+
+msgid "Custom"
+msgstr "Özel"
+
+msgid "Preamp"
+msgstr "Ön yükseltici"
+
+# ---- Playlist import / export (M3U8) ----------------------------------------
+
+msgid "Import"
+msgstr "İçe aktar"
+
+msgid "Export"
+msgstr "Dışa aktar"
+
+msgid "Export Playlists"
+msgstr "Çalma listelerini dışa aktar"
+
+msgid "Import playlists from .m3u8 files"
+msgstr ".m3u8 dosyalarından çalma listelerini içe aktar"
+
+msgid "Export playlists to .m3u8 files"
+msgstr "Çalma listelerini .m3u8 dosyalarına dışa aktar"
+
+msgid "Choose playlists to export, then pick a folder."
+msgstr "Dışa aktarılacak çalma listelerini seçin, ardından bir klasör belirleyin."
+
+msgid "Select all"
+msgstr "Tümünü seç"
+
+msgid "Import failed"
+msgstr "İçe aktarma başarısız"
+
+msgid "Playback error"
+msgstr "Oynatma hatası"
+
+msgid "Something went wrong"
+msgstr "Bir şeyler ters gitti"
+
+msgid "Couldn't read the selected playlist file(s)."
+msgstr "Seçilen çalma listesi dosyaları okunamadı."
+
+msgid "Export failed"
+msgstr "Dışa aktarma başarısız"
+
+msgid "Couldn't write the playlist files."
+msgstr "Çalma listesi dosyaları yazılamadı."
+
+msgid "Add"
+msgstr "Ekle"
+
+msgid "Added to {n} playlist"
+msgid_plural "Added to {n} playlists"
+msgstr[0] "{n} çalma listesine eklendi"
+msgstr[1] "{n} çalma listesine eklendi"
+
+msgid "{n} track added"
+msgid_plural "{n} tracks added"
+msgstr[0] "{n} parça eklendi"
+msgstr[1] "{n} parça eklendi"
+
+msgid "Saved to {}"
+msgstr "{} konumuna kaydedildi"
+
+msgid "{n} track added · {} missing"
+msgid_plural "{n} tracks added · {} missing"
+msgstr[0] "{n} parça eklendi · {} eksik"
+msgstr[1] "{n} parça eklendi · {} eksik"
+
+msgid "{n} playlist imported"
+msgid_plural "{n} playlists imported"
+msgstr[0] "{n} çalma listesi içe aktarıldı"
+msgstr[1] "{n} çalma listesi içe aktarıldı"
+
+msgid "{n} playlist exported"
+msgid_plural "{n} playlists exported"
+msgstr[0] "{n} çalma listesi dışa aktarıldı"
+msgstr[1] "{n} çalma listesi dışa aktarıldı"
+
+msgid "Rating"
+msgstr "Derecelendirme"
+
+msgid "ReplayGain"
+msgstr "ReplayGain"
+
+msgid "Enable ReplayGain"
+msgstr "ReplayGain'i etkinleştir"
+
+msgid "Normalization mode"
+msgstr "Normalleştirme modu"
+
+msgid "Track"
+msgstr "Parça"
+
+msgid "Prevent clipping"
+msgstr "Kırpılmayı önle"
+
+msgid "ReplayGain only affects tracks that already have loudness tags. Scan your library with a tool like rsgain or loudgain to add them."
+msgstr "ReplayGain yalnızca ses düzeyi etiketleri olan parçaları etkiler. Bunları eklemek için kitaplığınızı rsgain veya loudgain gibi bir araçla tarayın."
+
+msgid "Recently Played"
+msgstr "Son Çalınanlar"
+
+msgid "Filter recently played…"
+msgstr "Son çalınanları filtrele…"
+
+msgid "No recently played tracks"
+msgstr "Son çalınan parça yok"
+
+msgid "Sleep timer"
+msgstr "Uyku zamanlayıcısı"
+
+msgid "15 min"
+msgstr "15 dk"
+
+msgid "30 min"
+msgstr "30 dk"
+
+msgid "45 min"
+msgstr "45 dk"
+
+msgid "60 min"
+msgstr "60 dk"
+
+msgid "90 min"
+msgstr "90 dk"
+
+msgid "End of track"
+msgstr "Parça sonu"
+
+msgid "Track end"
+msgstr "Parça sonu"
+
+msgid "Start"
+msgstr "Başlat"
+
+# ---- Smart / dynamic playlists ---------------------------------------------
+
+msgid "Album Artist"
+msgstr "Albüm Sanatçısı"
+
+msgid "Duration (sec)"
+msgstr "Süre (sn)"
+
+msgid "Plays"
+msgstr "Çalınma"
+
+msgid "Skips"
+msgstr "Atlanan"
+
+msgid "Bitrate (kbps)"
+msgstr "Bit hızı (kbps)"
+
+msgid "Sample rate (Hz)"
+msgstr "Örnekleme hızı (Hz)"
+
+msgid "File size (bytes)"
+msgstr "Dosya boyutu (bayt)"
+
+msgid "Last played"
+msgstr "Son çalınma"
+
+msgid "Date added"
+msgstr "Eklenme tarihi"
+
+msgid "contains"
+msgstr "içerir"
+
+msgid "does not contain"
+msgstr "içermez"
+
+msgid "is"
+msgstr "eşittir"
+
+msgid "is not"
+msgstr "eşit değil"
+
+msgid "starts with"
+msgstr "ile başlar"
+
+msgid "ends with"
+msgstr "ile biter"
+
+msgid "is set"
+msgstr "ayarlanmış"
+
+msgid "is not set"
+msgstr "ayarlanmamış"
+
+msgid "greater than"
+msgstr "büyüktür"
+
+msgid "at least"
+msgstr "en az"
+
+msgid "less than"
+msgstr "küçüktür"
+
+msgid "at most"
+msgstr "en fazla"
+
+msgid "is true"
+msgstr "doğru"
+
+msgid "is false"
+msgstr "yanlış"
+
+msgid "in the last"
+msgstr "son"
+
+msgid "not in the last"
+msgstr "son olmayan"
+
+msgid "all"
+msgstr "tümü"
+
+msgid "any"
+msgstr "herhangi biri"
+
+msgid "most recently added"
+msgstr "en son eklenen"
+
+msgid "least recently added"
+msgstr "en önce eklenen"
+
+msgid "most played"
+msgstr "en çok çalınan"
+
+msgid "least played"
+msgstr "en az çalınan"
+
+msgid "most recently played"
+msgstr "en son çalınan"
+
+msgid "least recently played"
+msgstr "en önce çalınan"
+
+msgid "highest rated"
+msgstr "en yüksek puanlı"
+
+msgid "random"
+msgstr "rastgele"
+
+msgid "Match"
+msgstr "Eşleştir"
+
+msgid "of the following rules"
+msgstr "şu kurallardan"
+
+msgid "days"
+msgstr "gün"
+
+msgid "value"
+msgstr "değer"
+
+msgid "number"
+msgstr "sayı"
+
+msgid "N"
+msgstr "N"
+
+msgid "Limit to"
+msgstr "Sınırla:"
+
+msgid "tracks by"
+msgstr "parça, şuna göre:"
+
+msgid "Add rule"
+msgstr "Kural ekle"
+
+msgid "Smart playlist name"
+msgstr "Akıllı liste adı"
+
+msgid "New Smart Playlist"
+msgstr "Yeni Akıllı Liste"
+
+msgid "Create a playlist from rules"
+msgstr "Kurallardan liste oluştur"
+
+msgid "Edit Rules"
+msgstr "Kuralları düzenle"
+
+msgid "Edit rules"
+msgstr "Kuralları düzenle"
+
+msgid "No matching tracks"
+msgstr "Eşleşen parça yok"
+
+msgid "No tracks match these rules."
+msgstr "Bu kurallarla eşleşen parça yok."
+
+msgid "Create an empty playlist"
+msgstr "Boş liste oluştur"
+
+# ---- Tag editor (Edit Track Information dialog) ------------------------------
+
+msgid "Tags"
+msgstr "Etiketler"
+
+msgid "Lyrics"
+msgstr "Şarkı Sözleri"
+
+msgid "Summary"
+msgstr "Özet"
+
+msgid "Composer"
+msgstr "Besteci"
+
+msgid "Disc"
+msgstr "Disk"
+
+msgid "Original Year"
+msgstr "Orijinal Yıl"
+
+msgid "BPM"
+msgstr "BPM"
+
+msgid "Comment"
+msgstr "Yorum"
+
+msgid "Replace…"
+msgstr "Değiştir…"
+
+msgid "Path"
+msgstr "Yol"
+
+msgid "Codec"
+msgstr "Codec"
+
+msgid "Bitrate"
+msgstr "Bit Hızı"
+
+msgid "Sample Rate"
+msgstr "Örnekleme Hızı"
+
+msgid "Bit Depth"
+msgstr "Bit Derinliği"
+
+msgid "Channels"
+msgstr "Kanallar"
+
+msgid "Size"
+msgstr "Boyut"
+
+msgid "Modified"
+msgstr "Değiştirilme"
+
+msgid "BLAKE3"
+msgstr "BLAKE3"
+
+msgid "Edit Tags…"
+msgstr "Etiketleri Düzenle…"
+
+msgid "Edit Track Information"
+msgstr "Parça Bilgilerini Düzenle"
+
+msgid "Edit Tags for {}"
+msgstr "{} için Etiketleri Düzenle"
+
+msgid "Edit {} Tracks"
+msgstr "{} Parçayı Düzenle"
+
+msgid "Save"
+msgstr "Kaydet"
+
+msgid "Duration"
+msgstr "Süre"
+
+msgid "‹multiple values›"
+msgstr "‹birden çok değer›"
+
+msgid "{n} track updated"
+msgid_plural "{n} tracks updated"
+msgstr[0] "{n} parça güncellendi"
+msgstr[1] "{n} parça güncellendi"
+
+msgid "{n} file failed"
+msgid_plural "{n} files failed"
+msgstr[0] "{n} dosya başarısız oldu"
+msgstr[1] "{n} dosya başarısız oldu"
+
+msgid "{n} file has unsupported fields"
+msgid_plural "{n} files have unsupported fields"
+msgstr[0] "{n} dosyada desteklenmeyen alanlar var"
+msgstr[1] "{n} dosyada desteklenmeyen alanlar var"
+
+msgid "Couldn't save tags"
+msgstr "Etiketler kaydedilemedi"
+
+msgid "No tracks were updated."
+msgstr "Hiçbir parça güncellenmedi."
+
+# ---- Scrobbling ----
+msgid "Scrobbling"
+msgstr "Scrobbling"
+
+msgid "Last.fm"
+msgstr "Last.fm"
+
+msgid "ListenBrainz"
+msgstr "ListenBrainz"
+
+msgid "Scrobble to Last.fm"
+msgstr "Last.fm'e scrobble yap"
+
+msgid "Report each play to your Last.fm account"
+msgstr "Her çalmayı Last.fm hesabına bildir"
+
+msgid "Scrobble to ListenBrainz"
+msgstr "ListenBrainz'e scrobble yap"
+
+msgid "Report each play to your ListenBrainz account"
+msgstr "Her çalmayı ListenBrainz hesabına bildir"
+
+msgid "Sync loved tracks"
+msgstr "Beğenilen parçaları eşitle"
+
+msgid "Sync loved tracks to Last.fm"
+msgstr "Beğenilen parçaları Last.fm ile eşitle"
+
+msgid "Mark tracks you love as loved on Last.fm — turning this on syncs your existing favorites"
+msgstr "Beğendiğin parçaları Last.fm'de beğenilmiş olarak işaretle — açtığında mevcut favorilerin eşitlenir"
+
+msgid "Sync loved tracks to ListenBrainz"
+msgstr "Beğenilen parçaları ListenBrainz ile eşitle"
+
+msgid "Mark tracks you love as loved on ListenBrainz — turning this on syncs your existing favorites (needs MusicBrainz IDs)"
+msgstr "Beğendiğin parçaları ListenBrainz'de beğenilmiş olarak işaretle — açtığında mevcut favorilerin eşitlenir (MusicBrainz kimlikleri gerekir)"
+
+msgid "Loved tracks"
+msgstr "Beğenilen parçalar"
+
+msgid "Mark tracks you love as loved on your connected services"
+msgstr "Beğendiğin parçaları bağlı servislerinde beğenilmiş olarak işaretle"
+
+msgid "Add MusicBrainz IDs to your music"
+msgstr "Müziğine MusicBrainz kimliklerini ekle"
+
+msgid "Look up and tag files so loves work on ListenBrainz"
+msgstr "Beğeniler ListenBrainz'de çalışsın diye dosyaları arayıp etiketle"
+
+msgid "Look up missing IDs"
+msgstr "Eksik kimlikleri ara"
+
+msgid "Re-scan tracks that still have no MusicBrainz ID"
+msgstr "Hâlâ MusicBrainz kimliği olmayan parçaları yeniden tara"
+
+msgid "Look up"
+msgstr "Ara"
+
+msgid "MusicBrainz IDs"
+msgstr "MusicBrainz kimlikleri"
+
+msgid "Best for files that already have correct artist and title tags. For loosely-tagged music (e.g. songs downloaded from YouTube), use MusicBrainz Picard instead — it identifies tracks by their audio, not their tags."
+msgstr "Zaten doğru sanatçı ve başlık etiketlerine sahip dosyalar için idealdir. Gevşek etiketlenmiş müzik için (ör. YouTube'dan indirilen parçalar) bunun yerine MusicBrainz Picard kullanın — parçaları etiketlerinden değil, sesinden tanır."
+
+msgid "Connected as {}"
+msgstr "{} olarak bağlanıldı"
+
+msgid "Not connected"
+msgstr "Bağlı değil"
+
+msgid "Not configured in this build"
+msgstr "Bu yapıda yapılandırılmamış"
+
+msgid "Connect"
+msgstr "Bağlan"
+
+msgid "Disconnect"
+msgstr "Bağlantıyı kes"
+
+msgid "Connect Last.fm"
+msgstr "Last.fm'e bağlan"
+
+msgid "Open Last.fm"
+msgstr "Last.fm'i aç"
+
+msgid "Connect ListenBrainz"
+msgstr "ListenBrainz'e bağlan"
+
+msgid "Finish"
+msgstr "Bitir"
+
+msgid "Click Open Last.fm to approve Melodia in your browser."
+msgstr "Melodia'yı tarayıcında yetkilendirmek için Last.fm'i aç düğmesine tıkla."
+
+msgid "After approving Melodia in your browser, click Finish."
+msgstr "Melodia'yı tarayıcında onayladıktan sonra Bitir düğmesine tıkla."
+
+msgid "Connecting…"
+msgstr "Bağlanıyor…"
+
+msgid "User token"
+msgstr "Kullanıcı belirteci"
+
+msgid "Paste your ListenBrainz user token"
+msgstr "ListenBrainz kullanıcı belirtecini yapıştır"
+
+msgid "Find your token on your ListenBrainz profile settings page."
+msgstr "Belirtecini ListenBrainz profil ayarları sayfanda bulabilirsin."
+
+msgid "That token wasn't accepted. Check it and try again."
+msgstr "Bu belirteç kabul edilmedi. Kontrol edip yeniden dene."
+
+msgid "Couldn't reach the service. Check your connection and try again."
+msgstr "Hizmete ulaşılamadı. Bağlantını kontrol edip yeniden dene."
+
+msgid "Not approved yet. Approve Melodia in your browser, then click Finish."
+msgstr "Henüz onaylanmadı. Melodia'yı tarayıcında onayla, sonra Bitir düğmesine tıkla."
+
+msgid "Couldn't save your credentials."
+msgstr "Kimlik bilgilerin kaydedilemedi."

@@ -13,15 +13,53 @@ Melodia is a Slint rewrite of a former Tauri + SolidJS application — moving of
 
 ## Screenshots
 
-<!-- TODO: add screenshots. Drop image files into docs/screenshots/ and uncomment the links below. -->
-<!--
-![Library view](docs/screenshots/library.png)
-![Now Playing](docs/screenshots/now-playing.png)
-![Album detail](docs/screenshots/album-detail.png)
-![Themes](docs/screenshots/themes.png)
--->
+### Library
 
-_Screenshots coming soon._
+<table>
+  <tr>
+    <td width="50%"><img src="assets/screenshots/albums.png" alt="Albums view"><br><sub><b>Albums</b> — a virtualized cover grid (light theme here).</sub></td>
+    <td width="50%"><img src="assets/screenshots/artists_detail.png" alt="Artist detail view"><br><sub><b>Artist detail</b> — a hero-blur backdrop, an albums strip, and the track list.</sub></td>
+  </tr>
+  <tr>
+    <td><img src="assets/screenshots/tracks.png" alt="Tracks view"><br><sub><b>Tracks</b> — every song, with sortable, resizable, toggleable columns.</sub></td>
+    <td><img src="assets/screenshots/browse.png" alt="File-system browse view"><br><sub><b>Browse</b> — navigate the library by folder.</sub></td>
+  </tr>
+</table>
+
+### Playlists & Collections
+
+<table>
+  <tr>
+    <td width="50%"><img src="assets/screenshots/favorites.png" alt="Favorites view"><br><sub><b>Favorites</b> — an artwork mosaic hero, a most-played strip, and favorite artists.</sub></td>
+    <td width="50%"><img src="assets/screenshots/recently_played.png" alt="Recently Played view"><br><sub><b>Recently Played</b> — newest first, updating live as you listen.</sub></td>
+  </tr>
+  <tr>
+    <td><img src="assets/screenshots/playlists.png" alt="Playlists view"><br><sub><b>Playlists</b> — manual and smart playlists, with M3U8 import and export.</sub></td>
+    <td><img src="assets/screenshots/playlists_detail.png" alt="Playlist detail view"><br><sub><b>Playlist detail</b> — inline favorites and hover-revealed star ratings.</sub></td>
+  </tr>
+</table>
+
+### Theming
+
+Six theme families, light and dark variants, configurable accents, and Material You dynamic color — see [Themes](#themes) below for the full list.
+
+<table>
+  <tr>
+    <td width="50%"><img src="assets/screenshots/settings.png" alt="Settings under the Catppuccin theme"><br><sub><b>Catppuccin Mocha</b> — theme, variant, and accent picker.</sub></td>
+    <td width="50%"><img src="assets/screenshots/settings_material.png" alt="Settings under the Material 3 theme"><br><sub><b>Material 3</b> — the same screen with a different palette.</sub></td>
+  </tr>
+</table>
+
+### Mini-player
+
+Shrink the window past a threshold and the full UI collapses into a compact mini-player.
+
+<table>
+  <tr>
+    <td width="60%" valign="top"><img src="assets/screenshots/miniplayer_rectangle.png" alt="Horizontal mini-player strip" width="360"><br><sub><b>Horizontal strip</b> — the most compact form.</sub></td>
+    <td width="40%" valign="top"><img src="assets/screenshots/miniplayer_square.png" alt="Square mini-player widget with up-next list" width="240"><br><sub><b>Square widget</b> — grows an up-next list when tall enough.</sub></td>
+  </tr>
+</table>
 
 ---
 
@@ -37,24 +75,34 @@ _Screenshots coming soon._
 - Dedicated detail pages for albums, artists, genres, and playlists
 - Deezer-backed artist image fetching with local caching
 - Favorites view with a hero header, artwork mosaic, most-played section, and a filterable track list
+- Recently-Played view listing the tracks you last listened to (newest first), with a most-played strip and a filterable track list that updates live as you play
 - Play-count and skip-count tracking per track
+- Per-track star ratings (0–5), set inline via a hover-revealed star control in any track list and from the Now Playing view
+- Edit track information (title, artist, album, album artist, genre, year, track/disc number, composer, comment, BPM, lyrics, and cover art) for one or many selected tracks at once, written straight back to the files — batch edits leave differing fields untouched and save only the fields you change
 - Natural sort ordering for file and track names
 - Customizable, resizable, and toggleable track-list columns
 - Playlist creation and management with custom thumbnails
+- Smart (dynamic) playlists whose membership is defined by rules rather than a fixed track list — match **all** or **any** of a set of conditions across fields like genre, artist, rating, year, play count, favorite, or when a track was last played/added, with an optional size cap and ordering (e.g. "50 most-played" or "top-rated"); membership is resolved live, so a smart playlist keeps itself up to date as your library and listening change
+- Import and export playlists as standard `.m3u8` files (with embedded BLAKE3 content hashes) so they survive a database reset and interoperate with other players
 - Drag-and-drop file import to playlists and the queue
 - Drag-and-drop track reordering in playlists and the play queue
 - Automatic pre-migration database backups
 
 ### Playback
 - Gapless playback with a 2-deep Rodio queue
+- Audio crossfade (1–12 s) that overlaps the end of one track with the start of the next, running the two on separate mixer decks with a sample-accurate complementary ramp so the sum can never clip; optionally skips same-album transitions to keep continuous mixes gapless, extends to manual track changes, and fades out on pause and stop
 - Queue management with shuffle and repeat modes (Off, All, One)
 - Full-screen Now Playing view with track details, an up-next list, and album-art cross-fade transitions
-- Playback speed control (0.25× – 4.0×)
-- Volume control (0–200%) with mute
+- 10-band graphic equalizer (31 Hz – 16 kHz) with adjustable preamp, nine built-in presets plus hand-tuned custom curves, and a soft-knee clip-protection limiter so boosts compress instead of clipping
+- ReplayGain loudness normalization — applies per-track or per-album gain from the file's loudness tags (Track or Album mode), with an adjustable preamp and optional peak-based clip prevention; reuses the equalizer's soft-knee limiter so a boosted track compresses instead of clipping, and works with the equalizer off
+- Playback speed control (0.25× – 2.0×)
+- Sleep timer that pauses playback after a preset (15–90 min) or custom duration, or at the end of the current track; the duration countdown is playback-linked, so pausing the music holds the timer
+- Volume control (0–100%) with mute
 - Resume playback on startup
 - OS media-key support
 - Configurable play-button animation (none, ripple, or animated equalizer bars)
 - Customizable player bar — relocate secondary controls into a compact overflow menu
+- Responsive mini-player — shrinking the window past a threshold collapses the full UI into a compact horizontal strip or a square widget (the square grows an up-next list when tall enough); restore the full window from the mini-player's expand button
 
 ### Themes
 Six theme families, each with light and dark variants and configurable accent colors:
@@ -76,6 +124,8 @@ MP3, FLAC, M4A/AAC, OGG/Vorbis, WAV, ALAC, AIFF
 - Runtime locale switching with no restart
 
 ### System Integration
+- Scrobbling to **Last.fm** and **ListenBrainz** — connect either or both, report each qualifying play plus a live "now playing" status, and mirror your favorites to their loved/feedback tracks with a **per-service toggle** (each independent). Turning a service's loved-tracks sync on — or connecting it later while sync is on — **syncs your existing favorites automatically**, no need to re-toggle each heart. Plays and loves are held in a durable offline queue and submitted on reconnect
+- Optional **MusicBrainz auto-tagging** (opt-in, ListenBrainz-driven) — resolves each track's MusicBrainz Recording ID and writes it into your files, so "loved" favorites work on ListenBrainz even for an untagged library; runs automatically on new imports and on demand from Settings
 - OS media controls (Linux: MPRIS2, Windows: SMTC)
 - Always-on-top support (Linux: KDE via KWin D-Bus, GNOME via shell extension)
 - Window state persistence (size, position, maximized)
@@ -151,7 +201,7 @@ gh attestation verify <file> --repo KenanSalar/Melodia
 
 ### Prerequisites
 
-- [Rust](https://rustup.rs/) — stable, **≥ 1.93**, edition 2024
+- [Rust](https://rustup.rs/) — **1.97.0**, edition 2024 (pinned by `rust-toolchain.toml`; rustup installs it automatically)
 
 **Linux** — development packages for Slint's FemtoVG renderer (no WebKitGTK required):
 
@@ -189,6 +239,36 @@ cargo test                                      # run tests
 >
 > [winit#1881]: https://github.com/rust-windowing/winit/issues/1881
 
+> **Note — Last.fm API credentials (optional).**
+> Last.fm scrobbling needs a registered [API application](https://www.last.fm/api/account/create)
+> — a key + shared secret that identify the *app*, not any account. They're read
+> at compile time from the `LASTFM_API_KEY` / `LASTFM_SHARED_SECRET` environment
+> variables (`option_env!`), so nothing secret lives in the repo. Official
+> releases inject them as CI secrets. For local development, copy `.env.example`
+> to `.env` (gitignored) and paste your keys — `build.rs` bakes them into the
+> compile automatically, no exporting needed. A build without them is fully
+> functional — **ListenBrainz** still works and the Last.fm **Connect** button
+> reports "not configured in this build". ListenBrainz needs no such setup (each
+> user pastes their own token).
+
+> **Tip — cleaning up a loosely-tagged library.**
+> The optional MusicBrainz auto-tagging (Settings → Scrobbling → *Add MusicBrainz
+> IDs to your music*) resolves each track's MusicBrainz Recording ID by looking up
+> its **artist + title** on ListenBrainz, so it only works when your files already
+> carry reasonably correct tags. For music ripped from YouTube or otherwise loosely
+> tagged — artist fields like `NoCopyrightSounds` or `<unknown>`, titles full of
+> `(Official Video)` cruft — a text lookup can't identify most
+> tracks, so they stay untagged (and can't be "loved" on ListenBrainz).
+>
+> For those, run **[MusicBrainz Picard](https://picard.musicbrainz.org/)** first.
+> Picard identifies tracks by **acoustic fingerprint** — it analyses the actual
+> audio, not the tags — then writes clean metadata plus the MusicBrainz IDs, with a
+> review step so you approve matches before they're saved. On Fedora:
+> `sudo dnf install picard` (or the `org.musicbrainz.Picard` Flatpak); add your
+> music, **Scan**, then **Save**. Melodia picks up the new tags on its next scan,
+> and both your metadata and the ListenBrainz "loved" sync then work across the
+> whole library.
+
 ## Tech Stack
 
 | Layer | Technology |
@@ -197,6 +277,7 @@ cargo test                                      # run tests
 | Backend | Pure Rust — direct calls + tokio channels, no IPC |
 | Async runtime | [Tokio](https://tokio.rs/) |
 | Audio | [Rodio](https://github.com/RustAudio/rodio) + [Symphonia](https://github.com/pdeljanov/Symphonia) |
+| Equalizer DSP | [biquad](https://crates.io/crates/biquad) (peaking-filter bands) |
 | Media Controls | [Souvlaki](https://github.com/Sinono3/souvlaki) (MPRIS2, SMTC) |
 | Metadata | [Lofty](https://github.com/Serial-ATA/lofty-rs) |
 | File Hashing | [BLAKE3](https://github.com/BLAKE3-team/BLAKE3) |
@@ -224,7 +305,7 @@ src/
 ├── entities/    domain model types (track, album, artist, genre, playlist, …)
 ├── library/     playback, queue, tracks, albums, artists, genres, playlists, search, settings
 ├── media/       scanner, metadata, artwork, cover-thumbnail cache, folder watcher
-├── player/      playback state machine + Rodio backend
+├── player/      playback state machine + dual-deck Rodio backend + graphic equalizer, ReplayGain & crossfade DSP
 ├── tasks/       background tasks (playback monitor, file events, queue prune, Material You)
 ├── themes/      pluggable theme registry
 ├── services/    updater, desktop integration, system theme
@@ -246,6 +327,8 @@ Melodia stores its data under the OS application-data directory
 | `views.json` | Per-view UI state (column widths, sort, browse path, open detail) |
 | `queue.json` | Persisted play queue |
 | `search_history.json` | Recent search terms (capped at 10) |
+| `scrobble_credentials.json` | Last.fm session key + ListenBrainz token (`0600` on Unix) |
+| `scrobble_queue.json` | Durable offline scrobble/love queue |
 | `artwork/`, `artists/` | Cached album and artist images |
 
 ## Contributing
@@ -258,6 +341,12 @@ Contributions are welcome. Before opening a pull request:
 - Follow the existing [Conventional Commits](https://www.conventionalcommits.org/)
   style used in the git history.
 - Open pull requests against the `main` branch.
+
+Every pull request runs the **PR Validation** workflow — `clippy` (with
+`-D warnings`) and the full test suite under coverage — and the
+`pr-validation` check must pass before merging. Test coverage from the latest
+run is published to GitHub Pages at
+[kenansalar.github.io/Melodia](https://kenansalar.github.io/Melodia/).
 
 ## License
 

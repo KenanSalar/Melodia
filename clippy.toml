@@ -1,4 +1,5 @@
-msrv = "1.93.0"
+# Overrides `Cargo.toml`'s `rust-version` for clippy — both must move together.
+msrv = "1.97.0"
 
 cognitive-complexity-threshold = 30
 too-many-arguments-threshold   = 8

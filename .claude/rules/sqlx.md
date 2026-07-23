@@ -5,6 +5,7 @@
 - Use **two-pool architecture** for SQLite:
   - Write pool: `max_connections(1)` — SQLite only supports one concurrent writer
   - Read pool: `max_connections(num_cpus)` with `.read_only(true)` — multiple concurrent readers in WAL mode
+    - **Desktop caveat (Melodia):** a single-user desktop app issues tiny, effectively-sequential reads, so scaling per-core just multiplies idle per-connection page-cache/statement-cache memory. Clamp to a small fixed band (`.clamp(2, 4)`) and add an `idle_timeout` so boot-burst connections get reaped. See `init_database` in `src/database/mod.rs`.
 - A single shared pool degrades write performance by ~20x due to reader/writer contention
 
 ## Pragmas & Configuration
@@ -20,6 +21,7 @@
 - Prefer `query_as!` macro for compile-time checked queries when schemas are stable
 - Use `query_as()` runtime function for dynamic/generated queries
 - Always use parameterized queries — never string concatenation
+- Query strings are `impl SqlSafeStr` (0.9): string literals and named `const &'static str` pass as-is; a runtime-built `String` must be wrapped in `sqlx::AssertSqlSafe(sql)` (impls for `String`, `&str`, `Box<str>`, `Arc<str>`, `Cow<'static, str>`). The wrapper is an explicit no-injection assertion — keep data in `.bind()`s and interpolate only SQL *structure* (placeholder lists, column projections)
 - Guard against empty `IN` clauses — SQLx errors on empty bind lists; check before executing
 - Build dynamic `?` placeholders in a loop for IN clauses and bind values sequentially
 
@@ -45,6 +47,8 @@
 - Index columns used in WHERE, JOIN, and ORDER BY clauses
 - Use partial indexes for filtered queries (e.g., `WHERE deleted = 0`)
 - Avoid over-indexing — every index slows writes
+- `Migrate` trait methods (`ensure_migrations_table`, `list_applied_migrations`, `dirty_version`, …) take a `table_name` arg in 0.9 — pass the default `_sqlx_migrations` unless relocated; `Migrator` builder methods (`set_ignore_missing`, `set_locking`) return `&mut Self`
+- A per-crate `sqlx.toml` (0.9) can relocate the migrations table (`[migrate] table-name`), set global type overrides, and rename the database-URL env var for multi-database workspaces — changing the table name on a live database loses migration history unless the old table is copied first
 
 ## Performance
 
@@ -76,6 +80,16 @@
 
 ## SQLite-Specific Pragmas
 
-- `PRAGMA cache_size = -64000` (64MB page cache) — significantly improves read performance for large DBs
+- `PRAGMA cache_size = -64000` (64MB page cache) — significantly improves read performance for large DBs. For a small single-user desktop DB (Melodia), size it modestly (e.g. `-16000`); with `mmap_size` set, cold pages stay cheaply file-backed instead of being copied into per-connection heap cache, so a large cache there is just idle resident overhead multiplied across the pool.
 - `PRAGMA wal_autocheckpoint = 1000` — tune how often WAL is checkpointed (default 1000 pages)
 - `PRAGMA optimize` — run periodically (e.g. on app close) to update query planner statistics; fast and safe
+
+## 0.9 Upgrade Notes
+
+- MSRV is 1.94; the project moved to the `transact-rs` GitHub org (crate name unchanged)
+- Upstream dropped its `Cargo.lock` — install the CLI with plain `cargo install sqlx-cli` (`--locked` no longer resolves)
+- Runtime/TLS features are split-only — the combined `runtime-tokio-native-tls`-style features are gone; use `runtime-tokio` plus a `tls-*` feature only when TLS is actually needed
+- New opt-in SQLite features: `sqlite-deserialize`, `sqlite-load-extension` (extension loading now requires `unsafe`), `sqlite-unlock-notify`
+- `SqliteValue` is `!Sync` and `SqliteValueRef` is `!Send` — don't stash raw values across threads; decoding through `FromRow` into owned structs is unaffected
+- `libsqlite3-sys` is version-ranged — the bundled SQLite version can bump within 0.9.x patch releases
+- `RawSql::fetch_optional` returns `Result<Option<Row>>` (was `Result<Row>`)

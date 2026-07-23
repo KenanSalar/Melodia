@@ -1,0 +1,57 @@
+import { Theme } from "../theme.slint";
+import { MaterialIcon } from "material-icon.slint";
+
+// Clickable collapsible-section header pill: label + expand chevron.
+// Hit area is the chevron + label only (compact), not the whole row
+// width — clicking dead space to the right of the chevron shouldn't
+// toggle. Chevron mirrors the app convention: down (`expand_more`)
+// when collapsed ("click to expand downward"), up (`expand_less`)
+// when expanded ("click to collapse upward").
+//
+// Pill chrome on hover matches `PillButton` (`border-radius:
+// self.height / 2`, 10 px horizontal padding so the rounded ends
+// don't crowd the text / chevron). Callers wrap it in a
+// `HorizontalLayout { alignment: start; }` so the pill hugs its
+// natural width.
+export component CollapsibleSectionHeader inherits Rectangle {
+    in property <string> label;
+    in property <bool> collapsed;
+
+    callback toggled();
+
+    width: row.preferred-width;
+    height: 28px;
+    border-radius: self.height / 2;
+    background: touch.has-hover ? Theme.surface1 : transparent;
+    animate background { duration: Theme.dur-fast; easing: ease-in-out; }
+
+    row := HorizontalLayout {
+        padding-left: 10px;
+        padding-right: 10px;
+        spacing: 2px;
+        alignment: start;
+
+        VerticalLayout {
+            alignment: center;
+            Text {
+                text: root.label;
+                color: Theme.text;
+                font-size: Theme.font-size-lg;
+                font-weight: 600;
+            }
+        }
+        VerticalLayout {
+            alignment: center;
+            MaterialIcon {
+                name: root.collapsed ? "expand_more" : "expand_less";
+                icon-size: 20px;
+                icon-color: Theme.subtext0;
+            }
+        }
+    }
+
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.toggled(); }
+    }
+}

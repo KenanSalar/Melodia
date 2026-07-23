@@ -60,3 +60,29 @@ async fn get_all_albums_track_counts() -> Result<(), AppError> {
     assert_eq!(two.track_count, 1);
     Ok(())
 }
+
+#[tokio::test]
+async fn set_album_artwork_replaces_existing_cover() -> Result<(), AppError> {
+    let db = setup_seeded_db().await?;
+    let album_id: i64 = sqlx::query_scalar("SELECT id FROM albums WHERE name = 'Album One'")
+        .fetch_one(db.read())
+        .await?;
+
+    // Give the album an existing cover — the roll-up refuses to touch this case.
+    sqlx::query("UPDATE albums SET artwork_path = ? WHERE id = ?")
+        .bind("/covers/old.jpg")
+        .bind(album_id)
+        .execute(db.write())
+        .await?;
+
+    let mut tx = db.write().begin().await?;
+    queries::album::set_album_artwork(&mut tx, &[album_id], Some("/covers/new.jpg")).await?;
+    tx.commit().await?;
+
+    let art: Option<String> = sqlx::query_scalar("SELECT artwork_path FROM albums WHERE id = ?")
+        .bind(album_id)
+        .fetch_one(db.read())
+        .await?;
+    assert_eq!(art.as_deref(), Some("/covers/new.jpg"));
+    Ok(())
+}

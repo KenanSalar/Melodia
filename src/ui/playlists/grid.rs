@@ -1,7 +1,6 @@
 //! Playlists grid: DB fetch + filter / sort / chunk / prewarm logic, plus
 //! the display-aware cover-cache cap tuner. Mirrors `albums::grid`.
 
-use std::collections::HashSet;
 use std::num::NonZeroUsize;
 use std::path::PathBuf;
 use std::rc::Rc;
@@ -13,12 +12,26 @@ use super::state::{
     DEFAULT_GRID_COVER_CAP, GRID_PREWARM_AHEAD, GridData, GridIndexCache,
 };
 use super::{PlaylistsUi, to_slint_playlist_row};
+use crate::entities::smart_criteria::SmartCriteria;
 use crate::error::AppResult;
 use crate::library;
 use crate::state::AppState;
 use crate::{
     AppWindow, PlaylistGridRow as UiPlaylistGridRow, PlaylistRow as UiPlaylistRow, Playlists,
 };
+
+/// How much smart-playlist counting a grid refresh pays for.
+#[derive(Clone, Copy)]
+enum RefreshKind {
+    /// Recount every smart playlist — structure may have changed (scan,
+    /// watcher, CRUD, criteria edit).
+    Full,
+    /// A play-count-flush-driven refresh: recount only smart playlists whose
+    /// criteria depend on play stats; carry the rest forward from the previous
+    /// grid data (a criteria edit bumps `library_changed`, forcing a `Full`
+    /// refresh, so the prior stat-dependence flags stay valid here).
+    StatsOnly,
+}
 
 /// Fetch the playlist list from the DB, prewarm cover thumbnails, then
 /// rebuild the grid model on the UI thread. The flat `Playlists.rows`
@@ -29,7 +42,96 @@ pub async fn fetch_grid(
     playlists_ui: &Arc<PlaylistsUi>,
     weak: Weak<AppWindow>,
 ) -> AppResult<()> {
-    let playlists = library::playlists::get_playlists(state).await?;
+    fetch_grid_inner(state, playlists_ui, weak, RefreshKind::Full).await
+}
+
+/// `stats_changed`-driven grid refresh: recount only the stat-dependent smart
+/// playlists (others keep their previous counts, which a play stat change can't
+/// move). Gated upstream by `has_stat_dependent_smart_playlists`.
+pub async fn fetch_grid_stats(
+    state: &AppState,
+    playlists_ui: &Arc<PlaylistsUi>,
+    weak: Weak<AppWindow>,
+) -> AppResult<()> {
+    fetch_grid_inner(state, playlists_ui, weak, RefreshKind::StatsOnly).await
+}
+
+async fn fetch_grid_inner(
+    state: &AppState,
+    playlists_ui: &Arc<PlaylistsUi>,
+    weak: Weak<AppWindow>,
+    kind: RefreshKind,
+) -> AppResult<()> {
+    let mut playlists = library::playlists::get_playlists(state).await?;
+
+    // Smart playlists have no `playlist_items` rows, so the trigger-maintained
+    // `track_count` / `total_duration_ms` stay 0 — resolve them from the stored
+    // criteria. On a `StatsOnly` refresh only the stat-dependent rows can have
+    // changed, so the rest carry their previous counts forward (the previous
+    // grid data is the source, cloned once up front — a cheap `Arc` bump).
+    //
+    // Transient-staleness note: `prev` is snapshotted and the counts computed
+    // before `section.gate()` is acquired, so the gate serializes only the final
+    // write (against the wipe and sibling writes), not the snapshot→compute→write
+    // as a whole — the final write is therefore last-writer-wins. If a
+    // `library_changed`-driven `Full` refresh (e.g. a scan that changed a
+    // stat-*independent* smart playlist's membership) commits while this
+    // `StatsOnly` pass is mid-flight, the count carried forward for that row can
+    // be briefly stale. Display-only, and it self-heals on the next `Full`
+    // refresh (next `library_changed` / section re-enter).
+    let prev = playlists_ui.grid.data.lock().clone();
+    let mut to_count: Vec<usize> = Vec::new();
+    for (i, p) in playlists.iter_mut().enumerate() {
+        if !p.is_smart {
+            continue;
+        }
+        let recount = match kind {
+            RefreshKind::Full => true,
+            RefreshKind::StatsOnly => match prev.row_stats_by_id(p.id) {
+                Some((count, duration, stat_dependent)) if !stat_dependent => {
+                    // A play stat change can't move this row — carry forward.
+                    p.track_count = count;
+                    p.total_duration_ms = duration;
+                    false
+                }
+                // Stat-dependent, or absent from the previous data → recount.
+                _ => true,
+            },
+        };
+        if recount {
+            to_count.push(i);
+        }
+    }
+
+    // Parse each selected row's criteria once, then fan the COUNT/SUM queries
+    // out across the read pool (WAL allows concurrent readers) instead of
+    // awaiting them serially. Results are written back by index — order-
+    // independent — so `join_all` completion order doesn't matter.
+    let parsed: Vec<(usize, SmartCriteria)> = to_count
+        .iter()
+        .map(|&i| {
+            (
+                i,
+                SmartCriteria::from_json_opt(playlists[i].smart_criteria.as_deref()),
+            )
+        })
+        .collect();
+    let counts = futures_util::future::join_all(
+        parsed
+            .iter()
+            .map(|(i, criteria)| async move { (*i, library::smart_playlists::count(state, criteria).await) }),
+    )
+    .await;
+    for (i, result) in counts {
+        match result {
+            Ok((count, duration)) => {
+                playlists[i].track_count = i32::try_from(count).unwrap_or(i32::MAX);
+                playlists[i].total_duration_ms = duration;
+            }
+            Err(e) => log::warn!("smart playlist {} count failed: {e}", playlists[i].id),
+        }
+    }
+
     let data = Arc::new(GridData::new(playlists));
     {
         let _gate = playlists_ui.section.gate();
@@ -167,25 +269,12 @@ fn sort_playlist_indices(indices: &mut [usize], data: &GridData, field: &str, di
 }
 
 pub(super) fn first_screenful_paths(data: &GridData) -> Vec<PathBuf> {
-    unique_artwork_paths(
+    crate::ui::grid_prewarm::unique_artwork_paths(
         data.playlists
             .iter()
             .take(GRID_PREWARM_AHEAD)
             .map(|p| p.thumbnail_path.as_deref()),
     )
-}
-
-pub(super) fn unique_artwork_paths<'a>(
-    paths: impl Iterator<Item = Option<&'a str>>,
-) -> Vec<PathBuf> {
-    let mut seen: HashSet<&str> = HashSet::new();
-    let mut out: Vec<PathBuf> = Vec::new();
-    for p in paths.flatten() {
-        if !p.is_empty() && seen.insert(p) {
-            out.push(PathBuf::from(p));
-        }
-    }
-    out
 }
 
 // --- Cap tuning -----------------------------------------------------------

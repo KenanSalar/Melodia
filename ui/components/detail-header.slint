@@ -1,5 +1,6 @@
 import { Theme } from "../theme.slint";
 import { ArtworkImage } from "artwork-image.slint";
+import { HeroBlurBackdrop } from "hero-blur-backdrop.slint";
 import { IconButton } from "icon-button.slint";
 
 // Reusable large-artwork detail header — Album Detail today; Artist /
@@ -63,50 +64,21 @@ export component DetailHeader inherits Rectangle {
     clip: true;
 
     // --- Hero blur backdrop (full-bleed, behind everything) ----------
-    // Tint gradient floor — always painted. When `has-hero-blur` is
-    // false (no artwork / failed decode) both blur slots fade to 0 and
-    // this floor shows through. Caller-overridable via
-    // `hero-tint-start` / `hero-tint-end`; defaults paint the original
-    // accent-mix-to-base diagonal that Albums / Artists use.
-    // `width/height: 100%` is mandatory — `Image` (and a positioned
-    // `Rectangle`) does NOT auto-fill its parent in Slint; without
-    // these the blur renders at its native 128 × 128 buffer size
-    // centred in the layout, which is wrong.
-    Rectangle {
+    // Shared component: tint gradient floor (always painted; shows
+    // through when `has-hero-blur` is false) + the dual-slot crossfade
+    // + crust scrim. Caller-overridable via `hero-tint-start` /
+    // `hero-tint-end`.
+    HeroBlurBackdrop {
         x: 0;
         y: 0;
         width: 100%;
         height: 100%;
-        background: @linear-gradient(135deg,
-            root.hero-tint-start,
-            root.hero-tint-end);
-    }
-    Image {
-        x: 0;
-        y: 0;
-        width: 100%;
-        height: 100%;
-        source: root.hero-blur-a;
-        image-fit: ImageFit.cover;
-        opacity: (root.has-hero-blur && root.hero-blur-use-a) ? 1.0 : 0.0;
-        animate opacity { duration: Theme.dur-med; easing: ease-in-out; }
-    }
-    Image {
-        x: 0;
-        y: 0;
-        width: 100%;
-        height: 100%;
-        source: root.hero-blur-b;
-        image-fit: ImageFit.cover;
-        opacity: (root.has-hero-blur && !root.hero-blur-use-a) ? 1.0 : 0.0;
-        animate opacity { duration: Theme.dur-med; easing: ease-in-out; }
-    }
-    Rectangle {
-        x: 0;
-        y: 0;
-        width: 100%;
-        height: 100%;
-        background: Theme.crust.with-alpha(0.45);
+        blur-a: root.hero-blur-a;
+        blur-b: root.hero-blur-b;
+        use-a: root.hero-blur-use-a;
+        has-blur: root.has-hero-blur;
+        tint-start: root.hero-tint-start;
+        tint-end: root.hero-tint-end;
     }
 
     // --- Content -----------------------------------------------------

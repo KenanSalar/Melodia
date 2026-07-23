@@ -1,23 +1,42 @@
+use std::collections::HashMap;
 use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::Arc;
 use std::sync::MutexGuard;
 
 use serde::{Deserialize, Serialize};
 
+use super::crossfade::CrossfadeDecision;
 use super::event_sink::PlayerSinks;
 use super::queue::QueueState;
+use super::replaygain::TrackReplayGain;
 use crate::entities::track::TrackSummary;
 
 use super::types::{PersistableQueue, PlaybackStatus, RepeatMode};
 
 /// Restart-from-beginning threshold for Previous command (ms).
 pub const RESTART_THRESHOLD_MS: u64 = 3000;
-/// Maximum UI volume level (stored in `PlayerState`).
-pub const MAX_VOLUME: u32 = 200;
+/// Maximum volume level (percent) stored in `PlayerState` and reachable from the
+/// UI. Playback amplitude tops out at unity gain (see [`volume_to_amplitude`]),
+/// so this is the true ceiling — there is no boost band above it.
+pub const MAX_VOLUME: u32 = 100;
 /// Minimum playback speed multiplier.
 pub const MIN_SPEED: f64 = 0.25;
-/// Maximum playback speed multiplier.
-pub const MAX_SPEED: f64 = 4.0;
+/// Maximum playback speed multiplier. Capped at 2× — rodio's `set_speed` is
+/// naive resampling (it shifts pitch), so beyond 2× the audio degrades into
+/// chipmunk territory with little practical use for music.
+pub const MAX_SPEED: f64 = 2.0;
+
+/// Single source of truth for converting a stored volume level (percent,
+/// `[0, MAX_VOLUME]`) plus a mute flag into the linear amplitude `[0.0, 1.0]`
+/// the audio backend and OS media controls (MPRIS) both expect. Muted → 0.0.
+/// `MAX_VOLUME` is the ceiling, so the result never exceeds unity gain.
+pub fn volume_to_amplitude(volume: u32, is_muted: bool) -> f64 {
+    if is_muted {
+        0.0
+    } else {
+        f64::from(volume) / 100.0
+    }
+}
 
 pub struct PlayerState {
     pub status: PlaybackStatus,
@@ -29,6 +48,13 @@ pub struct PlayerState {
     pub pre_mute_volume: u32,
     pub playback_speed: f64,
     pub gapless_enabled: bool,
+    /// Sleep-timer "End of current track" mode: when armed, the playback
+    /// monitor pauses at the next end-of-stream boundary instead of advancing
+    /// the queue. Session-only (never persisted). Set via
+    /// [`crate::library::playback::player_set_pause_at_track_end`]; surfaced to
+    /// the UI as `sleep_at_track_end` on the light `ViewModel` so the overflow
+    /// menu's sleep row auto-clears once the monitor fires and disarms it.
+    pub pause_after_current_track: bool,
     pub queue: QueueState,
 }
 
@@ -44,6 +70,7 @@ impl Default for PlayerState {
             pre_mute_volume: 100,
             playback_speed: 1.0,
             gapless_enabled: true,
+            pause_after_current_track: false,
             queue: QueueState::default(),
         }
     }
@@ -56,6 +83,15 @@ pub struct PlayerStateHandle {
     mutex: std::sync::Mutex<PlayerState>,
     /// Mirror of `PlayerState::status` as a `u8`, updated after every state change.
     pub status_atomic: AtomicU8,
+    /// Serializes the *side-effect* phase across tasks. `with_state_emit` makes a
+    /// single state mutation atomic, but the `execute_actions` that follows runs
+    /// on whatever tokio worker the caller happens to be on. Without this,
+    /// two batches (e.g. the monitor's EOS-advance and a UI `Stop`) can interleave
+    /// their rodio side effects on separate workers and leave state and backend
+    /// disagreeing. `emit_and_execute` holds this across *both* the mutation and
+    /// the execution so mutation order equals side-effect order. Held only across
+    /// synchronous work (never an `.await`), so a blocking mutex is correct.
+    exec_lock: std::sync::Mutex<()>,
 }
 
 impl Default for PlayerStateHandle {
@@ -63,7 +99,21 @@ impl Default for PlayerStateHandle {
         Self {
             mutex: std::sync::Mutex::new(PlayerState::default()),
             status_atomic: AtomicU8::new(PlaybackStatus::Stopped as u8),
+            exec_lock: std::sync::Mutex::new(()),
         }
+    }
+}
+
+impl PlayerStateHandle {
+    /// Acquire the execution lock, recovering from poison rather than panicking
+    /// (mirrors [`lock_state`] / `RodioPlayer::lock_player`). The guarded unit
+    /// carries no data — poison only means a prior holder panicked mid-batch, and
+    /// the guard exists purely to serialize the next batch.
+    pub fn lock_exec(&self) -> MutexGuard<'_, ()> {
+        self.exec_lock.lock().unwrap_or_else(|poisoned| {
+            log::error!("PlayerState exec lock was poisoned, recovering");
+            poisoned.into_inner()
+        })
     }
 }
 
@@ -97,6 +147,7 @@ pub struct PlayerViewModel {
     pub is_muted: bool,
     pub playback_speed: f64,
     pub gapless_enabled: bool,
+    pub sleep_at_track_end: bool,
     pub queue_tracks: Vec<Arc<TrackSummary>>,
     pub queue_index: i32,
     pub shuffle_enabled: bool,
@@ -121,6 +172,7 @@ pub struct PlayerViewModelLight {
     pub is_muted: bool,
     pub playback_speed: f64,
     pub gapless_enabled: bool,
+    pub sleep_at_track_end: bool,
     pub has_next: bool,
     pub has_previous: bool,
 }
@@ -143,10 +195,35 @@ pub enum PlayerAction {
         volume: f64,
         speed: f64,
         start_position_ms: Option<u64>,
+        /// This track's baked `ReplayGain` tag values, applied by the audio source.
+        replaygain: TrackReplayGain,
+    },
+    /// Overlap the next track with the one still playing, fading between them
+    /// over `fade_ms` **media** milliseconds. Unlike `PlayMedia` this leaves the
+    /// current track audible; the backend runs the two on separate decks.
+    BeginCrossfade {
+        file_path: String,
+        /// The *incoming* track's baked `ReplayGain` values. Baked per source —
+        /// the outgoing track has its own, already applied.
+        replaygain: TrackReplayGain,
+        fade_ms: u64,
+        volume: f64,
+        speed: f64,
     },
     Resume,
-    Pause,
-    Stop,
+    /// `fade_ms` is the pause-fade length for a user-initiated pause, and `0`
+    /// where a fade would be wrong: next / previous pressed *while paused* emit
+    /// `PlayMedia` (which starts the deck) followed by this, purely to restore
+    /// the paused state — fading there would let the incoming track play its
+    /// first `fade_ms` out loud on arrival.
+    Pause {
+        fade_ms: u64,
+    },
+    /// `fade_ms` is `0` for an internal stop (end of queue, error recovery) and
+    /// the pause-fade length for a user-initiated stop.
+    Stop {
+        fade_ms: u64,
+    },
     Seek {
         position_ms: u64,
     },
@@ -159,7 +236,6 @@ pub enum PlayerAction {
         track_id: i64,
         position_ms: u64,
     },
-    SaveQueue(PersistableQueue),
 }
 
 impl PlayerState {
@@ -197,6 +273,7 @@ impl PlayerState {
             is_muted: self.is_muted,
             playback_speed: self.playback_speed,
             gapless_enabled: self.gapless_enabled,
+            sleep_at_track_end: self.pause_after_current_track,
             queue_tracks: self.queue.tracks_in_play_order(),
             queue_index: super::queue::current_index_to_i32(self.queue.current_index),
             shuffle_enabled: self.queue.shuffle_enabled,
@@ -218,6 +295,7 @@ impl PlayerState {
             is_muted: self.is_muted,
             playback_speed: self.playback_speed,
             gapless_enabled: self.gapless_enabled,
+            sleep_at_track_end: self.pause_after_current_track,
             has_next: self.has_next(),
             has_previous: self.has_previous(),
         }
@@ -235,14 +313,11 @@ impl PlayerState {
         }
     }
 
-    /// Convert volume for audio backend: stored [0, 200], backend gets [0.0, 1.0].
-    /// Caps at 100 before dividing to prevent audio clipping. Returns 0.0 when muted.
+    /// Convert this state's volume for the audio backend: stored `[0, MAX_VOLUME]`,
+    /// backend gets `[0.0, 1.0]`. Returns 0.0 when muted. Thin wrapper over the
+    /// shared [`volume_to_amplitude`] so the MPRIS path can reuse the same math.
     pub fn effective_volume(&self) -> f64 {
-        if self.is_muted {
-            0.0
-        } else {
-            f64::from(self.volume.min(100)) / 100.0
-        }
+        volume_to_amplitude(self.volume, self.is_muted)
     }
 
     /// Build actions for play/resume command.
@@ -255,20 +330,22 @@ impl PlayerState {
         }
     }
 
-    /// Build actions for pause command.
-    pub fn build_pause_actions(&mut self) -> Vec<PlayerAction> {
+    /// Build actions for pause command. `fade_ms` is the pause-fade length when
+    /// that setting is on, else `0` — same contract as [`Self::build_stop_actions`].
+    pub fn build_pause_actions(&mut self, fade_ms: u64) -> Vec<PlayerAction> {
         if self.status == PlaybackStatus::Playing {
             self.status = PlaybackStatus::Paused;
-            vec![PlayerAction::Pause]
+            vec![PlayerAction::Pause { fade_ms }]
         } else {
             vec![]
         }
     }
 
     /// Build actions for user-initiated stop (preserves position for resume).
-    pub fn build_stop_actions(&mut self) -> Vec<PlayerAction> {
+    /// `fade_ms` is the pause-fade length when that setting is on, else `0`.
+    pub fn build_stop_actions(&mut self, fade_ms: u64) -> Vec<PlayerAction> {
         self.status = PlaybackStatus::Stopped;
-        vec![PlayerAction::Stop]
+        vec![PlayerAction::Stop { fade_ms }]
     }
 
     /// Build actions for seek command.
@@ -291,15 +368,26 @@ impl PlayerState {
 
         if let Some(track) = self.queue.advance_skip().cloned() {
             actions.extend(play_track_inner(self, track, None));
-            if was_paused {
-                self.status = PlaybackStatus::Paused;
-                actions.push(PlayerAction::Pause);
-            }
+            self.restore_paused(was_paused, &mut actions);
         } else {
             actions.extend(stop_end_of_queue(self));
         }
 
         actions
+    }
+
+    /// Re-pause after a track change that was made while paused.
+    ///
+    /// `fade_ms: 0` is load-bearing: the `PlayMedia` this follows has just
+    /// *started* the deck, and this only restores the paused state. A fade here
+    /// would ramp the incoming track down from full volume instead of pausing it,
+    /// so its first quarter-second would be audible — and its decoder would be
+    /// that far in on resume.
+    fn restore_paused(&mut self, was_paused: bool, actions: &mut Vec<PlayerAction>) {
+        if was_paused {
+            self.status = PlaybackStatus::Paused;
+            actions.push(PlayerAction::Pause { fade_ms: 0 });
+        }
     }
 
     /// Build actions for previous-track command.
@@ -313,10 +401,7 @@ impl PlayerState {
 
         if let Some(track) = self.queue.previous().cloned() {
             let mut actions = play_track_inner(self, track, None);
-            if was_paused {
-                self.status = PlaybackStatus::Paused;
-                actions.push(PlayerAction::Pause);
-            }
+            self.restore_paused(was_paused, &mut actions);
             actions
         } else {
             self.position_ms = 0;
@@ -350,12 +435,150 @@ impl PlayerState {
         vec![PlayerAction::SetVolume(self.effective_volume())]
     }
 
+    /// Build actions when the current source drains to end-of-stream (the
+    /// playback monitor's `EndOfStream` branch). Normally advances the queue
+    /// (or stops at the end), but when the sleep-timer's "End of current track"
+    /// mode is armed it disarms the flag and stops instead of advancing —
+    /// leaving `current_track` at position 0 for replay-from-start. Always
+    /// counts a play for the track that just ended.
+    pub fn build_end_of_stream_actions(&mut self) -> Vec<PlayerAction> {
+        let mut actions = Vec::with_capacity(4);
+
+        if let Some(ref track) = self.current_track {
+            actions.push(PlayerAction::UpdatePlayCount(track.id));
+        }
+
+        if self.pause_after_current_track {
+            self.pause_after_current_track = false;
+            actions.extend(stop_end_of_queue(self));
+            return actions;
+        }
+
+        if let Some(track) = self.queue.advance().cloned() {
+            actions.extend(play_track_inner(self, track, None));
+        } else {
+            actions.extend(stop_end_of_queue(self));
+        }
+
+        actions
+    }
+
+    /// Build actions when the playback monitor decides the current track should
+    /// start overlapping the next one. Mirrors `build_end_of_stream_actions`,
+    /// but the outgoing track stays audible for `fade_ms` while the incoming
+    /// one ramps up on the other deck.
+    ///
+    /// State advances at fade *start*, so Now-Playing switches to the incoming
+    /// track as the overlap begins — the behaviour Strawberry and mpd have.
+    /// Returns an empty vec (no crossfade) when the queue has moved on and
+    /// there is no longer a next track, or when the decision has gone stale.
+    ///
+    /// `decision` carries the state the monitor was looking at when it chose to
+    /// crossfade. It makes that choice under the `PlayerState` lock but only
+    /// reaches here after acquiring `exec_lock`, so any other control op — pause,
+    /// stop, next, previous, picking a track, seeking — can complete in between.
+    /// Re-verifying here is the same discipline as the `queue.advance()` below:
+    ///
+    /// - **status** — without it, forcing `Playing` would resurrect playback the
+    ///   user just paused. `BeginCrossfade` calls `Player::play()`, so it really
+    ///   would be audible.
+    /// - **track id** — without it, `advance()` would skip straight past the
+    ///   track they just picked.
+    /// - **position** — the one the other two miss. A seek keeps both the status
+    ///   and the id and moves only the position, so a backward scrub inside the
+    ///   fade window would otherwise fade out and skip the track the user just
+    ///   scrubbed *into*. The monitor writes `position_ms` itself immediately
+    ///   before deciding, so in this window the only other writers are
+    ///   [`build_seek_actions`](Self::build_seek_actions), [`play_track_inner`]
+    ///   and [`build_previous_actions`](Self::build_previous_actions) — exactly
+    ///   the ops that must abort. Equality therefore also covers the *same* track
+    ///   being restarted (which resets the position to 0).
+    pub fn build_crossfade_actions(&mut self, decision: CrossfadeDecision) -> Vec<PlayerAction> {
+        let mut actions = Vec::with_capacity(2);
+
+        let Some(outgoing_id) = self.current_track.as_ref().map(|t| t.id) else {
+            return actions;
+        };
+        if self.status != PlaybackStatus::Playing
+            || Some(outgoing_id) != decision.track_id
+            || self.position_ms != decision.position_ms
+        {
+            return actions;
+        }
+
+        // Re-read the queue under the emit lock rather than trusting the
+        // monitor's earlier `peek_next` — a skip could have landed in between.
+        let Some(track) = self.queue.advance().cloned() else {
+            return actions;
+        };
+
+        // The outgoing track counts as played the moment it starts fading. Same
+        // accounting as `build_end_of_stream_actions`, just a few seconds early —
+        // and only once `advance()` has confirmed somewhere to go.
+        actions.push(PlayerAction::UpdatePlayCount(outgoing_id));
+
+        // Same "the state now points at this track" step `play_track_inner`
+        // takes — only the action it ends in differs. (Its `status = Playing` is
+        // a no-op here; the guard above already proved it.)
+        let start = begin_track(self, track, None);
+
+        actions.push(PlayerAction::BeginCrossfade {
+            file_path: start.file_path,
+            replaygain: start.replaygain,
+            fade_ms: decision.fade_ms,
+            volume: start.volume,
+            speed: start.speed,
+        });
+        actions
+    }
+
     /// Build actions for set-playback-speed command.
     pub fn build_set_speed_actions(&mut self, speed: f64) -> Vec<PlayerAction> {
         let speed = speed.clamp(MIN_SPEED, MAX_SPEED);
         self.playback_speed = speed;
         vec![PlayerAction::SetSpeed(speed)]
     }
+}
+
+/// Everything a start action needs about the track the state now points at.
+/// Produced by [`begin_track`], which is the single writer of the
+/// "`current_track` + duration + position" trio.
+struct TrackStart {
+    file_path: String,
+    replaygain: TrackReplayGain,
+    volume: f64,
+    speed: f64,
+    /// The resume position, clamped and normalised — `None` means "from the top".
+    start_position_ms: Option<u64>,
+}
+
+/// Point `state` at `track`: status Playing, duration and position from the
+/// track, `current_track` replaced. Shared by [`play_track_inner`] (which turns
+/// it into a `PlayMedia`) and [`PlayerState::build_crossfade_actions`] (a
+/// `BeginCrossfade`), so the two can't drift on what "now playing this" means.
+fn begin_track(
+    state: &mut PlayerState,
+    track: Arc<TrackSummary>,
+    start_position_ms: Option<u64>,
+) -> TrackStart {
+    state.status = PlaybackStatus::Playing;
+    state.duration_ms = u64::try_from(track.duration_ms.max(0)).unwrap_or(0);
+    // Clamp to 500ms before end to avoid immediate EOS detection by the playback monitor.
+    let max_resume_pos = state.duration_ms.saturating_sub(500);
+    let clamped_pos = start_position_ms
+        .map(|p| p.min(max_resume_pos))
+        .filter(|&p| p > 0);
+    state.position_ms = clamped_pos.unwrap_or(0);
+
+    let start = TrackStart {
+        file_path: track.file_path.clone(),
+        replaygain: track.replaygain(),
+        volume: state.effective_volume(),
+        speed: state.playback_speed,
+        start_position_ms: clamped_pos,
+    };
+    state.current_track = Some(track);
+    start
 }
 
 /// Core playback logic — reused by commands, bus handler, position poller.
@@ -366,28 +589,18 @@ pub fn play_track_inner(
     track: Arc<TrackSummary>,
     start_position_ms: Option<u64>,
 ) -> Vec<PlayerAction> {
-    state.status = PlaybackStatus::Playing;
-    state.duration_ms = u64::try_from(track.duration_ms.max(0)).unwrap_or(0);
-    // Clamp to 500ms before end to avoid immediate EOS detection by the playback monitor.
-    let max_resume_pos = state.duration_ms.saturating_sub(500);
-    let clamped_pos = start_position_ms
-        .map(|p| p.min(max_resume_pos))
-        .filter(|&p| p > 0);
-    state.position_ms = clamped_pos.unwrap_or(0);
-    let file_path = track.file_path.clone();
-    let volume = state.effective_volume();
-    let speed = state.playback_speed;
-    state.current_track = Some(track);
+    let start = begin_track(state, track, start_position_ms);
 
     // Gapless preload is staged late (by the playback monitor) when the
     // current track approaches its end — see `spawn_playback_monitor`. That
     // way mid-track repeat-mode / queue changes are reflected in what gets
     // preloaded, instead of being clobbered by a stale Rodio queue entry.
     vec![PlayerAction::PlayMedia {
-        file_path,
-        volume,
-        speed,
-        start_position_ms: clamped_pos,
+        file_path: start.file_path,
+        volume: start.volume,
+        speed: start.speed,
+        start_position_ms: start.start_position_ms,
+        replaygain: start.replaygain,
     }]
 }
 
@@ -396,7 +609,9 @@ pub fn play_track_inner(
 pub fn stop_end_of_queue(state: &mut PlayerState) -> Vec<PlayerAction> {
     state.status = PlaybackStatus::Stopped;
     state.position_ms = 0;
-    vec![PlayerAction::Stop]
+    // Never faded: the track has already run out of audio, so there is nothing
+    // left to fade — and a deferred clear would only delay the silence.
+    vec![PlayerAction::Stop { fade_ms: 0 }]
 }
 
 /// Resume playback from a Stopped state. Replays the current track from the saved position.
@@ -459,6 +674,102 @@ where
     let _ = sinks.view_model.send(Some(vm_light));
 
     result
+}
+
+/// If `current_track` is one of `ids`, apply `apply` to its cached
+/// [`TrackSummary`] and emit so the Now-Playing surfaces reflect a per-track
+/// field edited from a list row (favorite heart, rating stars). Skips the emit
+/// entirely when the playing track isn't in the set (the common case) to avoid
+/// a spurious view-model publish.
+pub fn sync_current_track_if_in(
+    state: &PlayerStateHandle,
+    sinks: &PlayerSinks,
+    ids: &[i64],
+    apply: impl FnOnce(&mut TrackSummary),
+) {
+    let affects_current = {
+        let g = lock_state(state);
+        g.current_track.as_ref().is_some_and(|t| ids.contains(&t.id))
+    };
+    if !affects_current {
+        return;
+    }
+    with_state_emit(state, sinks, |s| {
+        // Re-check the id under the emit lock — the track may have advanced
+        // between the pre-check and here.
+        if let Some(track) = s.current_track.as_mut()
+            && ids.contains(&track.id)
+        {
+            apply(Arc::make_mut(track));
+        }
+        Vec::<PlayerAction>::new()
+    });
+}
+
+/// True when `current_track`, any `queue.tracks` entry, or `direct_play_track`
+/// has an id the predicate accepts. Takes the state lock briefly and reads
+/// nothing else, so a caller can cheaply decide whether a resync (and the DB
+/// refetch that feeds it) is worth doing before paying for it — the membership
+/// gate [`sync_track_summaries`] uses internally, hoisted so the fetch itself
+/// can be skipped on the common "edited tracks aren't playing/queued" path.
+pub fn any_tracked(state: &PlayerStateHandle, pred: impl Fn(i64) -> bool) -> bool {
+    let g = lock_state(state);
+    g.current_track.as_ref().is_some_and(|t| pred(t.id))
+        || g.queue.tracks.iter().any(|t| pred(t.id))
+        || g.queue
+            .direct_play_track
+            .as_ref()
+            .is_some_and(|t| pred(t.id))
+}
+
+/// Overwrite every queued / currently-playing [`TrackSummary`] whose id appears
+/// in `fresh` with its fresh copy. Sibling of [`sync_current_track_if_in`], but
+/// also walks `queue.tracks` and `queue.direct_play_track` — a tag edit changes
+/// exactly the title/artist/album fields the Queue Sheet and Up Next render, not
+/// just the Now-Playing bar.
+///
+/// Pre-checks membership outside the emit lock so an edit touching nothing
+/// queued/playing skips the publish entirely (the common case).
+pub fn sync_track_summaries<S: std::hash::BuildHasher>(
+    state: &PlayerStateHandle,
+    sinks: &PlayerSinks,
+    fresh: &HashMap<i64, TrackSummary, S>,
+) {
+    if !any_tracked(state, |id| fresh.contains_key(&id)) {
+        return;
+    }
+
+    with_state_emit(state, sinks, |s| {
+        if let Some(track) = s.current_track.as_mut()
+            && let Some(f) = fresh.get(&track.id)
+        {
+            *Arc::make_mut(track) = f.clone();
+        }
+
+        let mut queue_touched = false;
+        for track in &mut s.queue.tracks {
+            if let Some(f) = fresh.get(&track.id) {
+                *Arc::make_mut(track) = f.clone();
+                queue_touched = true;
+            }
+        }
+        if let Some(track) = s.queue.direct_play_track.as_mut()
+            && let Some(f) = fresh.get(&track.id)
+        {
+            *Arc::make_mut(track) = f.clone();
+            queue_touched = true;
+        }
+
+        // A field-level `Arc::make_mut` doesn't advance the queue version on its
+        // own, but `with_state_emit` only republishes the queue view-model when
+        // the version changed — so bump it whenever a queued/direct entry was
+        // patched, or the Queue Sheet / Up Next would keep the stale summary.
+        if queue_touched {
+            s.queue.version += 1;
+        }
+
+        Vec::<PlayerAction>::new()
+    });
 }
 
 /// Restore queue from persisted data. Shared by startup (lib.rs) and `queue_load` command.

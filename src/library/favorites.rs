@@ -3,7 +3,9 @@ use std::sync::Arc;
 use crate::database::queries;
 use crate::entities::{album, artist, track};
 use crate::error::AppError;
-use crate::player::state::{PlayerAction, lock_state, with_state_emit};
+use crate::player::state::{PlayerAction, lock_state, sync_current_track_if_in, with_state_emit};
+use crate::services::scrobble::LoveTarget;
+use crate::services::toast::{self, ToastKind};
 use crate::state::AppState;
 
 pub async fn set_favorite(
@@ -12,10 +14,91 @@ pub async fn set_favorite(
     favorite: bool,
 ) -> Result<(), AppError> {
     queries::track::set_favorite(&state.db, &ids, favorite).await?;
+    // If the currently-playing track was one of the toggled ids, mirror the new
+    // flag onto `current_track` so the Now-Playing heart updates without waiting
+    // for the next track load (parity with `toggle_current_favorite`).
+    sync_current_track_favorite(state, &ids, favorite);
     state
         .library_changed_tx
         .send_modify(|n| *n = n.wrapping_add(1));
+    sync_love(state, &ids, favorite).await;
     Ok(())
+}
+
+/// Mirror a favorite change to the scrobble services — Last.fm Loved Tracks plus
+/// best-effort `ListenBrainz` feedback. Best-effort: a lookup or enqueue failure
+/// is logged, never propagated, so it can't fail the favorite write. Skips all
+/// DB work when love-sync is off or no provider is connected. Fetches the whole
+/// id set in one bulk query and queues it under a single lock + save + wake
+/// (via `enqueue_loves`), so a multi-select toggle is O(1) round-trips and disk
+/// writes, not O(N).
+async fn sync_love(state: &AppState, ids: &[i64], loved: bool) {
+    if !state.scrobble.love_sync_active() {
+        return;
+    }
+    let rows = match queries::track::get_scrobble_rows_by_ids(&state.db, ids).await {
+        Ok(rows) => rows,
+        Err(e) => {
+            log::warn!("love-sync lookup failed for {} track(s): {e}", ids.len());
+            return;
+        }
+    };
+    if let Err(e) = state.scrobble.enqueue_loves(&rows, loved).await {
+        log::warn!("love-sync enqueue failed: {e}");
+    }
+}
+
+/// Retroactively push every existing favorite to `target`'s loved tracks — run
+/// when a user turns on a provider's love toggle or connects that service while
+/// its love toggle is already on, so they don't have to re-toggle each heart.
+/// Best-effort and idempotent (loves coalesce and re-loving is a no-op on both
+/// services); every failure is logged, never propagated. Reports the result as
+/// an info toast. A no-op when `target` isn't armed or there are no favorites.
+pub async fn backfill_loves(state: &AppState, target: LoveTarget) {
+    if !state.scrobble.love_target_armed(target) {
+        return;
+    }
+    let rows = match queries::track::get_favorite_scrobble_rows(&state.db).await {
+        Ok(rows) => rows,
+        Err(e) => {
+            log::warn!("love backfill: favorites fetch failed: {e}");
+            return;
+        }
+    };
+    if rows.is_empty() {
+        return;
+    }
+    let total = rows.len();
+    let queued = match state.scrobble.backfill_loves(&rows, target).await {
+        Ok(n) => n,
+        Err(e) => {
+            log::warn!("love backfill: enqueue failed: {e}");
+            return;
+        }
+    };
+    let provider = match target {
+        LoveTarget::Lastfm => "Last.fm",
+        LoveTarget::ListenBrainz => "ListenBrainz",
+    };
+    log::info!("love backfill: queued {queued}/{total} favorites for {provider}");
+    let detail = if queued > 0 {
+        format!("Syncing {queued} loved track(s) to {provider}")
+    } else if matches!(target, LoveTarget::ListenBrainz) {
+        // Armed with favorites, but none carry a MusicBrainz ID for LB to key on.
+        "No favorites have a MusicBrainz ID yet — turn on \"Add MusicBrainz IDs to your music\""
+            .to_owned()
+    } else {
+        return;
+    };
+    toast::notify(ToastKind::LoveSync, detail);
+}
+
+/// If `current_track` is one of `ids`, flip its cached `is_favorite` and emit so
+/// the Now-Playing surfaces reflect a favorite toggled from a list row.
+fn sync_current_track_favorite(state: &AppState, ids: &[i64], favorite: bool) {
+    sync_current_track_if_in(&state.player_state, &state.sinks, ids, |t| {
+        t.is_favorite = favorite;
+    });
 }
 
 /// Toggle the favorite flag on the currently playing track. Persists to DB,
@@ -36,7 +119,11 @@ pub async fn toggle_current_favorite(
     queries::track::set_favorite(&state.db, &[id], new_fav).await?;
 
     with_state_emit(&state.player_state, &state.sinks, |s| {
-        if let Some(track) = s.current_track.as_mut() {
+        // Guard against a track change between the id read above and here: only
+        // flip the cached flag if `current_track` is still the track we wrote.
+        if let Some(track) = s.current_track.as_mut()
+            && track.id == id
+        {
             Arc::make_mut(track).is_favorite = new_fav;
         }
         Vec::<PlayerAction>::new()
@@ -45,6 +132,8 @@ pub async fn toggle_current_favorite(
     state
         .library_changed_tx
         .send_modify(|n| *n = n.wrapping_add(1));
+
+    sync_love(state, &[id], new_fav).await;
 
     Ok(Some((id, new_fav)))
 }

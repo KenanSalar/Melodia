@@ -6,10 +6,12 @@ pub mod desktop_integration;
 pub mod dwm_titlebar;
 pub mod material_you;
 pub mod media_controls;
+pub mod scrobble;
 pub mod search_history;
 pub mod settings;
 #[cfg(target_os = "linux")]
 pub mod system_theme;
+pub mod toast;
 pub mod tray;
 pub mod updater;
 pub mod view_state;
@@ -67,7 +69,56 @@ pub fn write_json_atomic_sync<T: Serialize>(path: &Path, value: &T) -> AppResult
     {
         let mut writer = BufWriter::new(tmp.as_file_mut());
         serde_json::to_writer_pretty(&mut writer, value)
-            .map_err(|e| AppError::io_other(e.to_string()))?;
+            .map_err(AppError::io_source)?;
+        writer.flush()?;
+    }
+    tmp.persist(path).map_err(|e| AppError::Io(e.error))?;
+    Ok(())
+}
+
+/// Build the process-wide shared `reqwest::Client`. Kept out of any `new`/
+/// constructor so the rustls TLS stack and connection pool only load the first
+/// time something actually makes a request (the updater, the Deezer artist-image
+/// fetch, or a scrobble). Both [`crate::state::AppState::http_client`] and
+/// [`crate::services::scrobble::ScrobbleService`] init a single shared
+/// `OnceLock` with this, so the whole app reuses one connection pool.
+///
+/// Timeouts use a per-read (not whole-body) deadline: a legitimately slow large
+/// download may take minutes, but no single read should sit silent for a minute
+/// on a wedged socket. `read_timeout` resets on every byte, so it only trips
+/// when the socket is genuinely dead. The pool cap and descriptive User-Agent
+/// bound idle memory and make server logs useful. The build is documented
+/// infallible for these options; the fallback is logged paranoia (losing the
+/// timeouts if it ever fires).
+pub(crate) fn build_http_client() -> reqwest::Client {
+    reqwest::Client::builder()
+        .connect_timeout(std::time::Duration::from_secs(10))
+        .read_timeout(std::time::Duration::from_mins(1))
+        .pool_max_idle_per_host(4)
+        .user_agent(concat!("Melodia/", env!("CARGO_PKG_VERSION")))
+        .build()
+        .unwrap_or_else(|e| {
+            log::warn!(
+                "reqwest::Client::builder().build() failed unexpectedly ({e}); falling back to \
+                 default client without timeouts — downloads may hang on a wedged socket"
+            );
+            reqwest::Client::new()
+        })
+}
+
+/// Atomically write plain `text` to `path` via a temp file in the same
+/// directory + rename on success. Plain-text sibling of
+/// [`write_json_atomic_sync`] (used by M3U playlist export). Bytes are
+/// written verbatim — the caller owns line endings and trailing newline.
+pub fn write_text_atomic_sync(path: &Path, text: &str) -> AppResult<()> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let dir = path.parent().unwrap_or_else(|| Path::new("."));
+    let mut tmp = tempfile::NamedTempFile::new_in(dir)?;
+    {
+        let mut writer = BufWriter::new(tmp.as_file_mut());
+        writer.write_all(text.as_bytes())?;
         writer.flush()?;
     }
     tmp.persist(path).map_err(|e| AppError::Io(e.error))?;

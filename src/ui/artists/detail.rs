@@ -21,6 +21,7 @@ use crate::state::AppState;
 use crate::ui::detail_artwork::decode_detail_pair;
 use crate::ui::detail_filter::{restamp_selection, track_matches};
 use crate::ui::detail_view::{impl_detail_view_helpers, resolve_view_sort};
+use crate::ui::model_patch;
 use crate::ui::track_list_view::view_id;
 use crate::ui::track_sort::sort_track_list_rows;
 use crate::ui::tracks::PreparedTrackRow;
@@ -46,13 +47,27 @@ async fn fetch_artist_detail(
     let albums = library::artists::get_artist_albums(state, artist_id).await?;
     let tracks = library::artists::get_artist_tracks(state, artist_id).await?;
 
-    let track_covers: Vec<PathBuf> = super::grid::unique_artwork_paths(
+    let track_covers: Vec<PathBuf> = crate::ui::grid_prewarm::unique_artwork_paths(
         tracks.iter().map(|t| t.artwork_path.as_deref()),
     );
-    if !track_covers.is_empty() {
+    // The Albums strip resolves its cards through the borrowed Albums
+    // grid tier (`request-album-cover` → `AlbumsUi::grid_cover`,
+    // decode-on-miss on the UI thread). Prewarm those covers alongside
+    // the track rows so a detail open with a cold cache doesn't freeze
+    // the UI for one full-res decode per album card at first paint.
+    let strip_covers: Vec<PathBuf> = crate::ui::grid_prewarm::unique_artwork_paths(
+        albums.iter().map(|a| a.artwork_path.as_deref()),
+    );
+    if !track_covers.is_empty() || !strip_covers.is_empty() {
         let row_thumbs = artists_ui.cover_thumbs.clone();
+        let strip_thumbs = artists_ui.albums_grid_covers.clone();
         let _ = tokio::task::spawn_blocking(move || {
-            row_thumbs.prewarm(&track_covers);
+            if !track_covers.is_empty() {
+                row_thumbs.prewarm(&track_covers);
+            }
+            if !strip_covers.is_empty() {
+                strip_thumbs.prewarm(&strip_covers);
+            }
         })
         .await;
     }
@@ -121,7 +136,6 @@ where
 
     *artists_ui.detail.artist_id.lock() = artist_id;
 
-    let thumbs = artists_ui.cover_thumbs.clone();
     let artists_ui = artists_ui.clone();
     let state_for_history = state.clone();
     let _ = weak.upgrade_in_event_loop(move |ui| {
@@ -129,7 +143,7 @@ where
 
         let ui_tracks: Vec<UiTrackListRow> = prepared
             .into_iter()
-            .map(|p| crate::ui::tracks::finish_track_list_row(p, &thumbs))
+            .map(crate::ui::tracks::finish_track_list_row)
             .collect();
 
         let header = to_slint_artist_row(&detail);
@@ -196,7 +210,6 @@ pub async fn refresh_detail(
 
     let weak_for_filter = weak.clone();
     let artists_ui_clone = artists_ui.clone();
-    let thumbs = artists_ui.cover_thumbs.clone();
     let artists_ui = artists_ui.clone();
     let _ = weak.upgrade_in_event_loop(move |ui| {
         let g = ui.global::<ArtistDetail>();
@@ -235,10 +248,6 @@ pub async fn refresh_detail(
 
         // Hand off the model swap to `apply_filtered_detail` so the
         // filter + selection re-stamp pass runs in one place.
-        // `thumbs` is kept in scope through the closure capture but
-        // unused here — `apply_filtered_detail` uses its own clone
-        // from `artists_ui.cover_thumbs`.
-        let _ = thumbs;
         drop(g);
         apply_filtered_detail(&weak_for_filter, &artists_ui_clone);
     });
@@ -309,7 +318,6 @@ pub fn set_filter(artists_ui: &ArtistsUi, needle: &str) {
 /// filtered rows so existing selections survive a filter change.
 pub fn apply_filtered_detail(weak: &Weak<AppWindow>, artists_ui: &Arc<ArtistsUi>) {
     let needle = artists_ui.detail.filter.lock().clone();
-    let thumbs = artists_ui.cover_thumbs.clone();
 
     let displayed_tracks: Vec<RsTrackListRow> = {
         let all = artists_ui.detail.all_tracks.lock();
@@ -350,7 +358,7 @@ pub fn apply_filtered_detail(weak: &Weak<AppWindow>, artists_ui: &Arc<ArtistsUi>
 
         let mut ui_tracks: Vec<UiTrackListRow> = prepared
             .into_iter()
-            .map(|p| crate::ui::tracks::finish_track_list_row(p, &thumbs))
+            .map(crate::ui::tracks::finish_track_list_row)
             .collect();
         restamp_selection(&g, &mut ui_tracks);
         // Keep the displayed `tracks` cache in lockstep with the model.
@@ -369,20 +377,19 @@ pub fn apply_filtered_detail(weak: &Weak<AppWindow>, artists_ui: &Arc<ArtistsUi>
 /// Flip `is_favorite` on a single detail row in the Slint `VecModel`.
 pub fn apply_detail_row_favorite(weak: &Weak<AppWindow>, id: i64, fav: bool) {
     let _ = weak.upgrade_in_event_loop(move |ui| {
-        let rows = ui.global::<ArtistDetail>().get_tracks();
-        let Some(vm) = rows.as_any().downcast_ref::<VecModel<UiTrackListRow>>() else {
-            return;
-        };
-        for i in 0..vm.row_count() {
-            let Some(mut r) = vm.row_data(i) else {
-                continue;
-            };
-            if i64::from(r.id) == id {
-                r.is_favorite = fav;
-                vm.set_row_data(i, r);
-                break;
-            }
-        }
+        model_patch::patch_track_row_by_id(&ui.global::<ArtistDetail>().get_tracks(), id, |r| {
+            r.is_favorite = fav;
+        });
+    });
+}
+
+/// Set `rating` on a single detail row in the Slint `VecModel`. Mirrors
+/// [`apply_detail_row_favorite`].
+pub fn apply_detail_row_rating(weak: &Weak<AppWindow>, id: i64, rating: i32) {
+    let _ = weak.upgrade_in_event_loop(move |ui| {
+        model_patch::patch_track_row_by_id(&ui.global::<ArtistDetail>().get_tracks(), id, |r| {
+            r.rating = rating;
+        });
     });
 }
 

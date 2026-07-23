@@ -142,4 +142,46 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
             }
         }));
     }
+
+    // stats_changed subscriber — play-count / last-played flushes bump this
+    // channel (NOT library_changed, by design, to avoid churning every view on
+    // each played song). Only smart playlists whose rules depend on play stats
+    // ("most played", "recently played", "never played") can change, so this is
+    // gated on the presence of a *stat-dependent* smart playlist and the refresh
+    // recounts only that subset — a static-rule ("Genre is Rock") smart playlist
+    // is neither woken nor recounted here (it can't have moved).
+    {
+        let s = state.clone();
+        let pu = playlists_ui.clone();
+        let weak = weak.clone();
+        let mut rx = state.stats_changed_tx.subscribe();
+        let _ = slint::spawn_local(Compat::new(async move {
+            rx.mark_unchanged();
+            while rx.changed().await.is_ok() {
+                // Hidden section: the library_changed / section-enter path
+                // already re-fetches on return, so nothing to do here. And
+                // nothing to do unless a smart playlist could actually have
+                // moved (stricter than a plain any-smart-playlist check).
+                if !pu.section_active() || !pu.has_stat_dependent_smart_playlists() {
+                    continue;
+                }
+                let open_id = pu.detail_playlist_id();
+                let open_smart = open_id >= 0 && pu.is_playlist_smart_stat_dependent(open_id);
+                {
+                    let s = s.clone();
+                    let pu = pu.clone();
+                    let weak = weak.clone();
+                    spawn_logged!(s, "playlists::stats_changed",
+                        playlists_ui_mod::fetch_grid_stats(&s, &pu, weak));
+                }
+                if open_smart {
+                    let s = s.clone();
+                    let pu = pu.clone();
+                    let weak = weak.clone();
+                    spawn_logged!(s, "playlists::stats_changed_detail",
+                        playlists_ui_mod::refresh_detail(&s, &pu, weak, open_id));
+                }
+            }
+        }));
+    }
 }

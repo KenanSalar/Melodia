@@ -1,0 +1,101 @@
+import { ScrollView } from "std-widgets.slint";
+import { Theme } from "../theme.slint";
+import { OverlayScrollbar } from "overlay-scrollbar.slint";
+
+// Multi-line, word-wrapping text box — the one editable control the tree
+// lacked (every other `TextInput` is `single-line: true`, and std-widgets'
+// `TextEdit` forwards no appearance properties, so it can't be themed to match
+// a Catppuccin dialog). The scrolling recipe is copied from Slint's own
+// `widgets/common/textedit-base.slint`; the chrome mirrors `labeled-input.slint`
+// / `search-bar.slint`.
+//
+// HiDPI note (CLAUDE.md "a rounded `clip: true` on an element that contains
+// text/children blurs + upscales that subtree on FemtoVG"): the root paints
+// only a rounded *fill* — no `clip`, no `border`. The inner `ScrollView` clips
+// its viewport rectangularly (a cheap scissor, no layer), and the rounded 1 px
+// border is a childless overlay `Rectangle` sibling. This is the `PickerListCard`
+// shape. Never put `border-radius` + `clip: true` on the box holding the
+// `TextInput`.
+export component MultilineInput inherits Rectangle {
+    in property <string> placeholder;
+    in-out property <string> text;
+    callback edited();
+
+    private property <length> pad: Theme.pad-sm;
+
+    background: Theme.surface1;
+    border-radius: Theme.radius-md;
+
+    sv := ScrollView {
+        x: root.pad;
+        y: root.pad;
+        width: parent.width - 2 * root.pad;
+        height: parent.height - 2 * root.pad;
+        horizontal-scrollbar-policy: always-off;
+        vertical-scrollbar-policy: always-off;
+        // Word-wrap ⇒ lock content width to the viewport so lines wrap instead
+        // of scrolling sideways. `viewport-height: max(visible, preferred)` is
+        // REQUIRED — without it the viewport never grows past the visible
+        // height, so there is no vertical travel and the caret-nudge handler
+        // has nothing to scroll (long text runs off the bottom).
+        viewport-width: self.visible-width;
+        viewport-height: max(self.visible-height, ti.preferred-height);
+
+        ti := TextInput {
+            text <=> root.text;
+            color: Theme.text;
+            font-size: Theme.font-size-md;
+            single-line: false;
+            wrap: word-wrap;
+            page-height: sv.visible-height;
+            edited => { root.edited(); }
+            // Keep the caret on screen. Under word-wrap the x-axis is inert, so
+            // only the y-branch of the upstream recipe is kept. One line height
+            // is estimated from the font size rather than upstream's hardcoded
+            // `20px` FIXME.
+            cursor-position-changed(cpos) => {
+                if (cpos.y + sv.viewport-y < 12px) {
+                    sv.viewport-y = min(0px, max(sv.visible-height - self.height, -cpos.y + 12px));
+                } else if (cpos.y + sv.viewport-y > sv.visible-height - 12px - Theme.font-size-md * 1.5) {
+                    sv.viewport-y = min(0px, max(sv.visible-height - self.height, sv.visible-height - cpos.y - 12px - Theme.font-size-md * 1.5));
+                }
+            }
+        }
+    }
+
+    // Faked placeholder — `TextInput` has no `placeholder-text`. Painted at the
+    // scroll origin, hidden the moment the user types.
+    Text {
+        x: sv.x;
+        y: sv.y;
+        width: sv.width;
+        vertical-alignment: top;
+        text: root.text == "" ? root.placeholder : "";
+        color: Theme.overlay0;
+        font-size: Theme.font-size-md;
+        wrap: word-wrap;
+    }
+
+    // Rounded 1 px border, painted after the text (above it). Childless ⇒ a
+    // direct rounded-rect stroke, never a compositing layer, so the text subtree
+    // isn't rasterized-then-upscaled. A plain Rectangle has no TouchArea, so it
+    // doesn't intercept clicks or the wheel underneath.
+    Rectangle {
+        border-radius: Theme.radius-md;
+        border-width: 1px;
+        border-color: ti.has-focus ? Theme.accent : Theme.border;
+        animate border-color { duration: Theme.dur-fast; easing: ease-in-out; }
+    }
+
+    OverlayScrollbar {
+        horizontal: false;
+        x: parent.width - self.width - 2px;
+        y: root.pad;
+        width: 10px;
+        height: parent.height - 2 * root.pad;
+        visible-size: sv.visible-height;
+        content-size: sv.viewport-height;
+        offset: -sv.viewport-y;
+        scroll-to(o) => { sv.viewport-y = -o; }
+    }
+}

@@ -107,6 +107,30 @@ fn main() -> AppResult<()> {
         libc::mallopt(-8, 2);
     }
 
+    // Give PipeWire's ALSA-compat layer a clean stream name. CPAL (via
+    // Rodio) opens the default ALSA device; under PipeWire that PCM
+    // becomes a graph node auto-named `alsa_playback.<prgname>`, which
+    // EasyEffects / pavucontrol show verbatim. `PIPEWIRE_ALSA` is read by
+    // pipewire-alsa when the PCM is opened (it accepts SPA-JSON
+    // `alsa.properties` / `stream.properties`); setting `node.name`
+    // overrides the auto-name and `application.name` fills the app-name
+    // column those mixers display, so the stream reads simply "Melodia".
+    // No-op on bare ALSA (the real plugin ignores it) and on non-PipeWire
+    // systems. Must be set before any thread spawns — both for the unsafe
+    // `set_var` soundness and so the audio device (opened later in
+    // `AppState::init`) inherits it.
+    #[cfg(target_os = "linux")]
+    #[allow(
+        unsafe_code,
+        reason = "set_var before any thread spawns; main() is single-threaded here"
+    )]
+    unsafe {
+        std::env::set_var(
+            "PIPEWIRE_ALSA",
+            "{ application.name = \"Melodia\" node.name = \"Melodia\" }",
+        );
+    }
+
     env_logger::init();
     log::info!("Melodia starting");
 
@@ -183,20 +207,33 @@ fn main() -> AppResult<()> {
             } else {
                 attrs
             };
-            // Pin the Wayland `app_id` / X11 `WM_CLASS` to the
-            // brand-cased "Melodia". Without this winit leaves it
-            // empty and the compositor falls back to the binary
-            // basename — lowercase `melodia` for the RPM/DEB-installed
-            // `/usr/bin/melodia`, but `Melodia` for the `cargo run`
-            // target binary. Setting it explicitly matches the
-            // `.desktop` file's `StartupWMClass=Melodia`, so the
-            // compositor shows `Name=Melodia` in the taskbar/dock.
+            // Pin the window identity so the compositor resolves our
+            // icon and label. The two protocols match differently:
+            //
+            //   * X11: `WM_CLASS` res_class "Melodia" is matched against
+            //     the `.desktop` file's `StartupWMClass=Melodia`. Without
+            //     it winit leaves the class empty and the compositor falls
+            //     back to the binary basename (lowercase `melodia` for the
+            //     RPM/DEB `/usr/bin/melodia`, `Melodia` for `cargo run`).
+            //   * Wayland: clients cannot set a window icon at all — the
+            //     compositor finds it by matching the `app_id` to a
+            //     `.desktop` file of the *same basename*, then reads its
+            //     `Icon=`. `StartupWMClass` is not consulted on Wayland.
+            //     Our desktop file installs as
+            //     `com.github.kenansalar.melodia.desktop`
+            //     (see `services::desktop_integration`), so the `app_id`
+            //     must be that reverse-DNS id — not "Melodia" — or KWin
+            //     shows the generic Wayland placeholder in Alt+Tab.
             #[cfg(target_os = "linux")]
             let attrs = {
                 use slint::winit_030::winit::platform::wayland::WindowAttributesExtWayland;
                 use slint::winit_030::winit::platform::x11::WindowAttributesExtX11;
                 let attrs = WindowAttributesExtX11::with_name(attrs, "Melodia", "Melodia");
-                WindowAttributesExtWayland::with_name(attrs, "Melodia", "Melodia")
+                WindowAttributesExtWayland::with_name(
+                    attrs,
+                    "com.github.kenansalar.melodia",
+                    "com.github.kenansalar.melodia",
+                )
             };
             attrs
         })
@@ -228,6 +265,16 @@ fn main() -> AppResult<()> {
     // 5d–5d4. Library Settings + playback toggle + notifications stack +
     // file-watcher toggle.
     let notifications = boot::ui_setup::install_library_settings_and_friends(&app, &state)?;
+
+    // 5d5. Playlist import/export (M3U8) header pills. Wired here — after
+    // both the playlists UI handle and the notifications stack exist —
+    // because the completion toasts need the `Rc<NotificationsUi>`.
+    ui::callbacks::wire_playlist_files(&app, &state, &views.playlists_ui, &notifications);
+
+    // 5d6. Edit-Track-Information dialog callbacks. Wired here for the same
+    // reason as the playlist pills — the Save completion toast needs the
+    // `Rc<NotificationsUi>`.
+    ui::callbacks::wire_tags(&app, &state, &notifications);
 
     // 5e. Appearance.
     let appearance_handles = match ui::appearance::install(&app, &state) {
@@ -284,8 +331,22 @@ fn main() -> AppResult<()> {
     // 6c. Full-screen Now Playing view (owns its own small `(cover, blur)`
     // LRU separate from `cover_thumbs`).
     let np_artwork = Arc::new(ui::now_playing_artwork::NowPlayingArtwork::new());
-    if let Err(e) = ui::now_playing::install(&app, &state, &views.cover_thumbs, &np_artwork) {
-        log::warn!("now_playing::install: {e}");
+    let np_state = match ui::now_playing::install(&app, &state, &views.cover_thumbs, &np_artwork)
+    {
+        Ok(s) => Some(s),
+        Err(e) => {
+            log::warn!("now_playing::install: {e}");
+            None
+        }
+    };
+    // Miniplayer wiring depends on `np_state` so the up-next subscriber
+    // gate can flip on/off as the responsive mini state changes. Skip
+    // if `now_playing::install` failed — without it the gate would
+    // never affect anything visible.
+    if let Some(ref np_state) = np_state
+        && let Err(e) = ui::mini_player::install(&app, &state, &np_artwork, np_state)
+    {
+        log::warn!("mini_player::install: {e}");
     }
 
     // 7. Seed `Player.vm` / `Player.queue` once with the current state.
@@ -299,11 +360,16 @@ fn main() -> AppResult<()> {
     boot::ui_setup::spawn_initial_genres_fetch(&state, &views.genres_ui, weak.clone());
     boot::ui_setup::spawn_initial_playlists_fetch(&state, &views.playlists_ui, weak.clone());
 
-    // 9. Re-fetch Tracks whenever the library mutates.
-    boot::ui_setup::install_library_changed_refresher(&state, weak.clone())?;
+    // 9. Re-fetch Tracks whenever the library mutates (deferred to the next
+    // section-enter while the view is hidden).
+    boot::ui_setup::install_library_changed_refresher(&state, &views.tracks_ui, weak.clone())?;
 
     // 9b. Toast on watcher-overflow rescan (kernel queue dropped events).
     boot::ui_setup::install_rescan_notice_subscriber(&state, weak.clone(), notifications.clone())?;
+
+    // 9c. Surface backend failures (playback decode errors, failed scans /
+    // imports / saves) pushed through the `services::toast` bridge as toasts.
+    boot::ui_setup::install_toast_bridge(weak.clone(), notifications.clone())?;
 
     // 10. Opt-in memory sampler (`MELODIA_RSS_SAMPLE=1`). No-op when unset.
     // Lives on the UI thread so it can read the Nav / *Detail globals for

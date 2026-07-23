@@ -44,10 +44,10 @@ pub struct ExtractedMetadata {
 /// Uses `update_reader` for optimized streaming I/O with SIMD-friendly buffering.
 pub fn compute_file_hash(path: &Path) -> Result<String, AppError> {
     let mut file = std::fs::File::open(path)
-        .map_err(|e| AppError::Metadata(format!("Failed to open {} for hashing: {}", path.display(), e)))?;
+        .map_err(|e| AppError::metadata(format!("Failed to open {} for hashing", path.display()), e))?;
     let mut hasher = blake3::Hasher::new();
     hasher.update_reader(&mut file)
-        .map_err(|e| AppError::Metadata(format!("Failed to hash {}: {}", path.display(), e)))?;
+        .map_err(|e| AppError::metadata(format!("Failed to hash {}", path.display()), e))?;
     Ok(hasher.finalize().to_hex().to_string())
 }
 
@@ -81,14 +81,18 @@ pub fn extract_date_modified(path: &Path) -> Option<String> {
         .and_then(date_modified_from_metadata)
 }
 
-/// Parse a `ReplayGain` gain string like "-6.50 dB" to f64
+/// Parse a `ReplayGain` gain string like "-6.50 dB" to f64. Rejects non-finite
+/// values (`"nan"`, `"inf"` parse successfully as floats in Rust) so a malformed
+/// tag can't poison the playback DSP — the value is baked into the audio source
+/// and a `NaN`/`inf` gain would render the track as silence.
 fn parse_replaygain_gain(s: &str) -> Option<f64> {
-    s.trim().trim_end_matches("dB").trim().parse::<f64>().ok()
+    s.trim().trim_end_matches("dB").trim().parse::<f64>().ok().filter(|v| v.is_finite())
 }
 
-/// Parse a `ReplayGain` peak string (linear scale, e.g. "0.988553") to f64
+/// Parse a `ReplayGain` peak string (linear scale, e.g. "0.988553") to f64.
+/// Rejects non-finite values for the same reason as the gain parser.
 fn parse_replaygain_peak(s: &str) -> Option<f64> {
-    s.trim().parse::<f64>().ok()
+    s.trim().parse::<f64>().ok().filter(|v| v.is_finite())
 }
 
 pub fn extract_metadata(
@@ -110,10 +114,13 @@ pub fn extract_metadata(
     let fs_meta = std::fs::metadata(path);
     let file_size = fs_meta
         .as_ref()
-        .map(|m| i64::try_from(m.len()).unwrap_or(i64::MAX))
-        .unwrap_or(0);
+        .map_or(0, |m| i64::try_from(m.len()).unwrap_or(i64::MAX));
 
-    let date_modified = extract_date_modified(path);
+    // Derived from the `Metadata` already in hand — `extract_date_modified` would
+    // `stat` the file a second time. This is exactly what
+    // `date_modified_from_metadata` exists for; `scanner::track_is_current` is the
+    // other caller that already holds one.
+    let date_modified = fs_meta.as_ref().ok().and_then(date_modified_from_metadata);
 
     let file_hash = compute_file_hash(path)?;
 
@@ -121,13 +128,13 @@ pub fn extract_metadata(
         // Skip reading embedded pictures — significant speedup for rescans
         let parse_opts = lofty::config::ParseOptions::new().read_cover_art(false);
         lofty::probe::Probe::open(path)
-            .map_err(|e| AppError::Metadata(format!("Failed to open {}: {}", path.display(), e)))?
+            .map_err(|e| AppError::metadata(format!("Failed to open {}", path.display()), e))?
             .options(parse_opts)
             .read()
-            .map_err(|e| AppError::Metadata(format!("Failed to read tags from {}: {}", path.display(), e)))?
+            .map_err(|e| AppError::metadata(format!("Failed to read tags from {}", path.display()), e))?
     } else {
         lofty::probe::read_from_path(path)
-            .map_err(|e| AppError::Metadata(format!("Failed to read tags from {}: {}", path.display(), e)))?
+            .map_err(|e| AppError::metadata(format!("Failed to read tags from {}", path.display()), e))?
     };
 
     let properties = tagged_file.properties();
@@ -187,7 +194,14 @@ pub fn extract_metadata(
          replaygain_track_gain, replaygain_track_peak, replaygain_album_gain, replaygain_album_peak) =
         if let Some(tag) = tag {
             (
-                tag.get_string(ItemKey::Bpm).and_then(|s| s.parse::<f64>().ok()),
+                // `ItemKey::Bpm` has NO ID3v2 mapping — MP3 / WAV / AIFF keep BPM in `TBPM`,
+                // which lofty exposes as `IntegerBpm`. Reading only `Bpm` therefore misses it
+                // on every ID3v2 file, including the ones `tag_writer::apply_bpm` writes.
+                // Prefer the decimal key (Vorbis `BPM`, MP4 freeform); fall back to the integer.
+                tag.get_string(ItemKey::Bpm)
+                    .or_else(|| tag.get_string(ItemKey::IntegerBpm))
+                    .and_then(|s| s.trim().parse::<f64>().ok())
+                    .filter(|v| v.is_finite()),
                 tag.get_string(ItemKey::MusicBrainzRecordingId).map(|s| s.trim().to_owned()).filter(|s| !s.is_empty()),
                 tag.get_string(ItemKey::MusicBrainzReleaseId).map(|s| s.trim().to_owned()).filter(|s| !s.is_empty()),
                 tag.get_string(ItemKey::Label).map(|s| s.trim().to_owned()).filter(|s| !s.is_empty()),

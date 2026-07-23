@@ -241,19 +241,24 @@ export component Sidebar inherits Rectangle {
 
                 Divider {}
 
-                // Library
-                SidebarItem { index: 2; label: @tr("Favorites");  icon: "favorite";        }
-                SidebarItem { index: 3; label: @tr("Tracks");     icon: "library_music";   }
-                SidebarItem { index: 4; label: @tr("Albums");     icon: "album";           }
-                SidebarItem { index: 5; label: @tr("Artists");    icon: "person";          }
-                SidebarItem { index: 6; label: @tr("Genres");     icon: "theater_comedy";  }
-                SidebarItem { index: 7; label: @tr("Playlists");  icon: "playlist_play";   }
+                // Library. Recently-Played keeps routing index 8 (see the
+                // `Nav` index map / `view_state.rs`) but renders here, right
+                // below Favorites: the sidebar's visual order follows source
+                // order, not the `index` value, so placing it here avoids
+                // renumbering every tab below it.
+                SidebarItem { index: 2; label: @tr("Favorites");       icon: "favorite";       }
+                SidebarItem { index: 8; label: @tr("Recently Played"); icon: "history";        }
+                SidebarItem { index: 3; label: @tr("Tracks");          icon: "library_music";  }
+                SidebarItem { index: 4; label: @tr("Albums");          icon: "album";          }
+                SidebarItem { index: 5; label: @tr("Artists");         icon: "person";         }
+                SidebarItem { index: 6; label: @tr("Genres");          icon: "theater_comedy"; }
+                SidebarItem { index: 7; label: @tr("Playlists");       icon: "playlist_play";  }
             }
         }
 
         Divider {}
 
-        SidebarItem { index: 8; label: @tr("Settings"); icon: "settings"; }
+        SidebarItem { index: 9; label: @tr("Settings"); icon: "settings"; }
     }
 
     // Drag-resize handle on the right edge — only meaningful when expanded.

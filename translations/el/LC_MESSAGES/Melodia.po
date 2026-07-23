@@ -132,6 +132,9 @@ msgstr "Ουρά"
 msgid "More"
 msgstr "Περισσότερα"
 
+msgid "Speed"
+msgstr "Ταχύτητα"
+
 msgid "No track playing"
 msgstr "Δεν παίζει κομμάτι"
 
@@ -441,6 +444,40 @@ msgstr "Συνέχιση κατά την εκκίνηση"
 
 msgid "Automatically resume the last track from where you left off when the app starts"
 msgstr "Συνέχισε αυτόματα το τελευταίο κομμάτι από εκεί που σταμάτησες όταν ξεκινά η εφαρμογή"
+
+msgid "Crossfade"
+msgstr "Σταδιακή μετάβαση"
+
+msgid "Overlap the end of one track with the start of the next"
+msgstr "Επικάλυψε το τέλος ενός κομματιού με την αρχή του επόμενου"
+
+msgid "Crossfade duration"
+msgstr "Διάρκεια μετάβασης"
+
+msgid "How long the two tracks overlap"
+msgstr "Πόση ώρα επικαλύπτονται τα δύο κομμάτια"
+
+# Unit suffix for the crossfade-duration readout, e.g. "2 s".
+msgid "{} s"
+msgstr "{} δλ"
+
+msgid "Except on the same album"
+msgstr "Εκτός από κομμάτια του ίδιου άλμπουμ"
+
+msgid "Keep tracks from one album gapless, so continuous mixes stay seamless"
+msgstr "Κράτα τα κομμάτια ενός άλμπουμ χωρίς κενά, ώστε τα συνεχόμενα μιξ να παραμένουν αδιάκοπα"
+
+msgid "Also on manual track change"
+msgstr "Και σε χειροκίνητη αλλαγή κομματιού"
+
+msgid "Crossfade when you skip to the next or previous track, not only at the end of one"
+msgstr "Κάνε μετάβαση και όταν πηγαίνεις στο επόμενο ή στο προηγούμενο κομμάτι, όχι μόνο στο τέλος"
+
+msgid "Fade out on pause"
+msgstr "Σβήσιμο στην παύση"
+
+msgid "Fade the music out when pausing or stopping, and back in when resuming"
+msgstr "Χαμήλωσε σταδιακά τη μουσική στην παύση ή τη διακοπή και επανάφερέ την στη συνέχιση"
 
 # ---- File Watching section --------------------------------------------------
 
@@ -785,9 +822,6 @@ msgstr "Η ενημέρωση εγκαταστάθηκε"
 msgid "Restart Melodia to start using the new version."
 msgstr "Επανεκκινήστε το Melodia για να χρησιμοποιήσετε τη νέα έκδοση."
 
-msgid "Restart"
-msgstr "Επανεκκίνηση"
-
 msgid "Update failed"
 msgstr "Αποτυχία ενημέρωσης"
 
@@ -823,3 +857,582 @@ msgstr "Η αλλαγή του εικονιδίου περιοχής ειδοπ�
 
 msgid "Available only while the system tray icon is active."
 msgstr "Διαθέσιμο μόνο όταν το εικονίδιο περιοχής ειδοποιήσεων είναι ενεργό."
+
+# ---- Miniplayer --------------------------------------------------------------
+
+msgid "Exit miniplayer"
+msgstr "Έξοδος από το μίνι πρόγραμμα αναπαραγωγής"
+
+# ---- About -------------------------------------------------------------------
+
+# Settings → About section (`ui/views/settings/about-section.slint`): app
+# name + version, authorship, source-repository link, and license.
+msgid "About"
+msgstr "Σχετικά"
+
+# Translators: `{}` is the app version string (e.g. "0.1.0").
+msgid "Version {}"
+msgstr "Έκδοση {}"
+
+# Translators: `{}` is the author's name ("Kenan Salar") — a proper noun,
+# passed verbatim and never translated.
+msgid "Made by {}"
+msgstr "Δημιουργήθηκε από {}"
+
+msgid "License"
+msgstr "Άδεια"
+
+# Graphic equalizer
+msgid "On"
+msgstr "Ενεργό"
+
+msgid "Off"
+msgstr "Ανενεργό"
+
+msgid "Done"
+msgstr "Τέλος"
+
+msgid "Reset"
+msgstr "Επαναφορά"
+
+msgid "Enable equalizer"
+msgstr "Ενεργοποίηση ισοσταθμιστή"
+
+msgid "Flat"
+msgstr "Επίπεδο"
+
+msgid "Rock"
+msgstr "Rock"
+
+msgid "Pop"
+msgstr "Pop"
+
+msgid "Jazz"
+msgstr "Jazz"
+
+msgid "Classical"
+msgstr "Κλασική"
+
+msgid "Bass Boost"
+msgstr "Ενίσχυση μπάσων"
+
+msgid "Treble Boost"
+msgstr "Ενίσχυση πρίμων"
+
+msgid "Vocal"
+msgstr "Φωνητικά"
+
+msgid "Electronic"
+msgstr "Ηλεκτρονική"
+
+msgid "Custom"
+msgstr "Προσαρμοσμένο"
+
+msgid "Preamp"
+msgstr "Προενίσχυση"
+
+# ---- Playlist import / export (M3U8) ----------------------------------------
+
+msgid "Import"
+msgstr "Εισαγωγή"
+
+msgid "Export"
+msgstr "Εξαγωγή"
+
+msgid "Export Playlists"
+msgstr "Εξαγωγή λιστών"
+
+msgid "Import playlists from .m3u8 files"
+msgstr "Εισαγωγή λιστών από αρχεία .m3u8"
+
+msgid "Export playlists to .m3u8 files"
+msgstr "Εξαγωγή λιστών σε αρχεία .m3u8"
+
+msgid "Choose playlists to export, then pick a folder."
+msgstr "Επιλέξτε λίστες για εξαγωγή και έπειτα έναν φάκελο."
+
+msgid "Select all"
+msgstr "Επιλογή όλων"
+
+msgid "Import failed"
+msgstr "Η εισαγωγή απέτυχε"
+
+msgid "Playback error"
+msgstr "Σφάλμα αναπαραγωγής"
+
+msgid "Something went wrong"
+msgstr "Κάτι πήγε στραβά"
+
+msgid "Couldn't read the selected playlist file(s)."
+msgstr "Δεν ήταν δυνατή η ανάγνωση των επιλεγμένων αρχείων λίστας."
+
+msgid "Export failed"
+msgstr "Η εξαγωγή απέτυχε"
+
+msgid "Couldn't write the playlist files."
+msgstr "Δεν ήταν δυνατή η εγγραφή των αρχείων λίστας."
+
+msgid "Add"
+msgstr "Προσθήκη"
+
+msgid "Added to {n} playlist"
+msgid_plural "Added to {n} playlists"
+msgstr[0] "Προστέθηκε σε {n} λίστα"
+msgstr[1] "Προστέθηκε σε {n} λίστες"
+
+msgid "{n} track added"
+msgid_plural "{n} tracks added"
+msgstr[0] "{n} κομμάτι προστέθηκε"
+msgstr[1] "{n} κομμάτια προστέθηκαν"
+
+msgid "Saved to {}"
+msgstr "Αποθηκεύτηκε στο {}"
+
+msgid "{n} track added · {} missing"
+msgid_plural "{n} tracks added · {} missing"
+msgstr[0] "{n} κομμάτι προστέθηκε · {} λείπουν"
+msgstr[1] "{n} κομμάτια προστέθηκαν · {} λείπουν"
+
+msgid "{n} playlist imported"
+msgid_plural "{n} playlists imported"
+msgstr[0] "{n} λίστα εισήχθη"
+msgstr[1] "{n} λίστες εισήχθησαν"
+
+msgid "{n} playlist exported"
+msgid_plural "{n} playlists exported"
+msgstr[0] "{n} λίστα εξήχθη"
+msgstr[1] "{n} λίστες εξήχθησαν"
+
+msgid "Rating"
+msgstr "Βαθμολογία"
+
+msgid "ReplayGain"
+msgstr "ReplayGain"
+
+msgid "Enable ReplayGain"
+msgstr "Ενεργοποίηση ReplayGain"
+
+msgid "Normalization mode"
+msgstr "Λειτουργία κανονικοποίησης"
+
+msgid "Track"
+msgstr "Κομμάτι"
+
+msgid "Prevent clipping"
+msgstr "Αποτροπή ψαλιδίσματος"
+
+msgid "ReplayGain only affects tracks that already have loudness tags. Scan your library with a tool like rsgain or loudgain to add them."
+msgstr "Το ReplayGain επηρεάζει μόνο κομμάτια που έχουν ήδη ετικέτες έντασης ήχου. Σαρώστε τη βιβλιοθήκη σας με ένα εργαλείο όπως το rsgain ή το loudgain για να τις προσθέσετε."
+
+msgid "Recently Played"
+msgstr "Πρόσφατα αναπαραγόμενα"
+
+msgid "Filter recently played…"
+msgstr "Φιλτράρισμα πρόσφατα αναπαραγόμενων…"
+
+msgid "No recently played tracks"
+msgstr "Δεν υπάρχουν πρόσφατα αναπαραγόμενα κομμάτια"
+
+msgid "Sleep timer"
+msgstr "Χρονοδιακόπτης ύπνου"
+
+msgid "15 min"
+msgstr "15 λεπτά"
+
+msgid "30 min"
+msgstr "30 λεπτά"
+
+msgid "45 min"
+msgstr "45 λεπτά"
+
+msgid "60 min"
+msgstr "60 λεπτά"
+
+msgid "90 min"
+msgstr "90 λεπτά"
+
+msgid "End of track"
+msgstr "Τέλος κομματιού"
+
+msgid "Track end"
+msgstr "Τέλος κομματιού"
+
+msgid "Start"
+msgstr "Έναρξη"
+
+# ---- Smart / dynamic playlists ---------------------------------------------
+
+msgid "Album Artist"
+msgstr "Καλλιτέχνης άλμπουμ"
+
+msgid "Duration (sec)"
+msgstr "Διάρκεια (δευτ.)"
+
+msgid "Plays"
+msgstr "Αναπαραγωγές"
+
+msgid "Skips"
+msgstr "Παραλείψεις"
+
+msgid "Bitrate (kbps)"
+msgstr "Ρυθμός bit (kbps)"
+
+msgid "Sample rate (Hz)"
+msgstr "Ρυθμός δειγματοληψίας (Hz)"
+
+msgid "File size (bytes)"
+msgstr "Μέγεθος αρχείου (bytes)"
+
+msgid "Last played"
+msgstr "Τελευταία αναπαραγωγή"
+
+msgid "Date added"
+msgstr "Ημερομηνία προσθήκης"
+
+msgid "contains"
+msgstr "περιέχει"
+
+msgid "does not contain"
+msgstr "δεν περιέχει"
+
+msgid "is"
+msgstr "είναι"
+
+msgid "is not"
+msgstr "δεν είναι"
+
+msgid "starts with"
+msgstr "ξεκινά με"
+
+msgid "ends with"
+msgstr "τελειώνει με"
+
+msgid "is set"
+msgstr "έχει οριστεί"
+
+msgid "is not set"
+msgstr "δεν έχει οριστεί"
+
+msgid "greater than"
+msgstr "μεγαλύτερο από"
+
+msgid "at least"
+msgstr "τουλάχιστον"
+
+msgid "less than"
+msgstr "μικρότερο από"
+
+msgid "at most"
+msgstr "το πολύ"
+
+msgid "is true"
+msgstr "είναι αληθές"
+
+msgid "is false"
+msgstr "είναι ψευδές"
+
+msgid "in the last"
+msgstr "στις τελευταίες"
+
+msgid "not in the last"
+msgstr "όχι στις τελευταίες"
+
+msgid "all"
+msgstr "όλων"
+
+msgid "any"
+msgstr "οποιουδήποτε"
+
+msgid "most recently added"
+msgstr "πιο πρόσφατα προστεθέντα"
+
+msgid "least recently added"
+msgstr "λιγότερο πρόσφατα προστεθέντα"
+
+msgid "most played"
+msgstr "με τις περισσότερες αναπαραγωγές"
+
+msgid "least played"
+msgstr "με τις λιγότερες αναπαραγωγές"
+
+msgid "most recently played"
+msgstr "πιο πρόσφατα αναπαραγόμενα"
+
+msgid "least recently played"
+msgstr "λιγότερο πρόσφατα αναπαραγόμενα"
+
+msgid "highest rated"
+msgstr "με την υψηλότερη βαθμολογία"
+
+msgid "random"
+msgstr "τυχαία"
+
+msgid "Match"
+msgstr "Αντιστοίχιση"
+
+msgid "of the following rules"
+msgstr "από τους παρακάτω κανόνες"
+
+msgid "days"
+msgstr "ημέρες"
+
+msgid "value"
+msgstr "τιμή"
+
+msgid "number"
+msgstr "αριθμός"
+
+msgid "N"
+msgstr "N"
+
+msgid "Limit to"
+msgstr "Περιορισμός σε"
+
+msgid "tracks by"
+msgstr "κομμάτια κατά"
+
+msgid "Add rule"
+msgstr "Προσθήκη κανόνα"
+
+msgid "Smart playlist name"
+msgstr "Όνομα έξυπνης λίστας"
+
+msgid "New Smart Playlist"
+msgstr "Νέα έξυπνη λίστα"
+
+msgid "Create a playlist from rules"
+msgstr "Δημιουργία λίστας από κανόνες"
+
+msgid "Edit Rules"
+msgstr "Επεξεργασία κανόνων"
+
+msgid "Edit rules"
+msgstr "Επεξεργασία κανόνων"
+
+msgid "No matching tracks"
+msgstr "Κανένα κομμάτι δεν ταιριάζει"
+
+msgid "No tracks match these rules."
+msgstr "Κανένα κομμάτι δεν ταιριάζει με αυτούς τους κανόνες."
+
+msgid "Create an empty playlist"
+msgstr "Δημιουργία κενής λίστας"
+
+# ---- Tag editor (Edit Track Information dialog) ------------------------------
+
+msgid "Tags"
+msgstr "Ετικέτες"
+
+msgid "Lyrics"
+msgstr "Στίχοι"
+
+msgid "Summary"
+msgstr "Σύνοψη"
+
+msgid "Composer"
+msgstr "Συνθέτης"
+
+msgid "Disc"
+msgstr "Δίσκος"
+
+msgid "Original Year"
+msgstr "Αρχικό έτος"
+
+msgid "BPM"
+msgstr "BPM"
+
+msgid "Comment"
+msgstr "Σχόλιο"
+
+msgid "Replace…"
+msgstr "Αντικατάσταση…"
+
+msgid "Path"
+msgstr "Διαδρομή"
+
+msgid "Codec"
+msgstr "Codec"
+
+msgid "Bitrate"
+msgstr "Ρυθμός bit"
+
+msgid "Sample Rate"
+msgstr "Ρυθμός δειγματοληψίας"
+
+msgid "Bit Depth"
+msgstr "Βάθος bit"
+
+msgid "Channels"
+msgstr "Κανάλια"
+
+msgid "Size"
+msgstr "Μέγεθος"
+
+msgid "Modified"
+msgstr "Τροποποιήθηκε"
+
+msgid "BLAKE3"
+msgstr "BLAKE3"
+
+msgid "Edit Tags…"
+msgstr "Επεξεργασία ετικετών…"
+
+msgid "Edit Track Information"
+msgstr "Επεξεργασία πληροφοριών κομματιού"
+
+msgid "Edit Tags for {}"
+msgstr "Επεξεργασία ετικετών για {}"
+
+msgid "Edit {} Tracks"
+msgstr "Επεξεργασία {} κομματιών"
+
+msgid "Save"
+msgstr "Αποθήκευση"
+
+msgid "Duration"
+msgstr "Διάρκεια"
+
+msgid "‹multiple values›"
+msgstr "‹πολλαπλές τιμές›"
+
+msgid "{n} track updated"
+msgid_plural "{n} tracks updated"
+msgstr[0] "{n} κομμάτι ενημερώθηκε"
+msgstr[1] "{n} κομμάτια ενημερώθηκαν"
+
+msgid "{n} file failed"
+msgid_plural "{n} files failed"
+msgstr[0] "{n} αρχείο απέτυχε"
+msgstr[1] "{n} αρχεία απέτυχαν"
+
+msgid "{n} file has unsupported fields"
+msgid_plural "{n} files have unsupported fields"
+msgstr[0] "{n} αρχείο με μη υποστηριζόμενα πεδία"
+msgstr[1] "{n} αρχεία με μη υποστηριζόμενα πεδία"
+
+msgid "Couldn't save tags"
+msgstr "Δεν ήταν δυνατή η αποθήκευση των ετικετών"
+
+msgid "No tracks were updated."
+msgstr "Δεν ενημερώθηκε κανένα κομμάτι."
+
+# ---- Scrobbling ----
+msgid "Scrobbling"
+msgstr "Scrobbling"
+
+msgid "Last.fm"
+msgstr "Last.fm"
+
+msgid "ListenBrainz"
+msgstr "ListenBrainz"
+
+msgid "Scrobble to Last.fm"
+msgstr "Scrobble στο Last.fm"
+
+msgid "Report each play to your Last.fm account"
+msgstr "Αναφορά κάθε αναπαραγωγής στον λογαριασμό σας στο Last.fm"
+
+msgid "Scrobble to ListenBrainz"
+msgstr "Scrobble στο ListenBrainz"
+
+msgid "Report each play to your ListenBrainz account"
+msgstr "Αναφορά κάθε αναπαραγωγής στον λογαριασμό σας στο ListenBrainz"
+
+msgid "Sync loved tracks"
+msgstr "Συγχρονισμός αγαπημένων κομματιών"
+
+msgid "Sync loved tracks to Last.fm"
+msgstr "Συγχρονισμός αγαπημένων κομματιών με το Last.fm"
+
+msgid "Mark tracks you love as loved on Last.fm — turning this on syncs your existing favorites"
+msgstr "Σημειώστε ως αγαπημένα στο Last.fm τα κομμάτια που αγαπάτε — η ενεργοποίηση συγχρονίζει τα υπάρχοντα αγαπημένα σας"
+
+msgid "Sync loved tracks to ListenBrainz"
+msgstr "Συγχρονισμός αγαπημένων κομματιών με το ListenBrainz"
+
+msgid "Mark tracks you love as loved on ListenBrainz — turning this on syncs your existing favorites (needs MusicBrainz IDs)"
+msgstr "Σημειώστε ως αγαπημένα στο ListenBrainz τα κομμάτια που αγαπάτε — η ενεργοποίηση συγχρονίζει τα υπάρχοντα αγαπημένα σας (απαιτεί αναγνωριστικά MusicBrainz)"
+
+msgid "Loved tracks"
+msgstr "Αγαπημένα κομμάτια"
+
+msgid "Mark tracks you love as loved on your connected services"
+msgstr "Σημειώστε τα κομμάτια που αγαπάτε ως αγαπημένα στις συνδεδεμένες υπηρεσίες σας"
+
+msgid "Add MusicBrainz IDs to your music"
+msgstr "Προσθήκη αναγνωριστικών MusicBrainz στη μουσική σας"
+
+msgid "Look up and tag files so loves work on ListenBrainz"
+msgstr "Αναζήτηση και προσθήκη ετικετών ώστε τα αγαπημένα να λειτουργούν στο ListenBrainz"
+
+msgid "Look up missing IDs"
+msgstr "Αναζήτηση αναγνωριστικών που λείπουν"
+
+msgid "Re-scan tracks that still have no MusicBrainz ID"
+msgstr "Εκ νέου σάρωση κομματιών που δεν έχουν ακόμη αναγνωριστικό MusicBrainz"
+
+msgid "Look up"
+msgstr "Αναζήτηση"
+
+msgid "MusicBrainz IDs"
+msgstr "Αναγνωριστικά MusicBrainz"
+
+msgid "Best for files that already have correct artist and title tags. For loosely-tagged music (e.g. songs downloaded from YouTube), use MusicBrainz Picard instead — it identifies tracks by their audio, not their tags."
+msgstr "Ιδανικό για αρχεία που έχουν ήδη σωστές ετικέτες καλλιτέχνη και τίτλου. Για μουσική με ελλιπείς ετικέτες (π.χ. κομμάτια που κατεβάσατε από το YouTube), χρησιμοποιήστε το MusicBrainz Picard — αναγνωρίζει τα κομμάτια από τον ήχο τους, όχι τις ετικέτες τους."
+
+msgid "Connected as {}"
+msgstr "Συνδεδεμένος ως {}"
+
+msgid "Not connected"
+msgstr "Μη συνδεδεμένο"
+
+msgid "Not configured in this build"
+msgstr "Δεν έχει ρυθμιστεί σε αυτήν την έκδοση"
+
+msgid "Connect"
+msgstr "Σύνδεση"
+
+msgid "Disconnect"
+msgstr "Αποσύνδεση"
+
+msgid "Connect Last.fm"
+msgstr "Σύνδεση Last.fm"
+
+msgid "Open Last.fm"
+msgstr "Άνοιγμα Last.fm"
+
+msgid "Connect ListenBrainz"
+msgstr "Σύνδεση ListenBrainz"
+
+msgid "Finish"
+msgstr "Ολοκλήρωση"
+
+msgid "Click Open Last.fm to approve Melodia in your browser."
+msgstr "Κάντε κλικ στο Άνοιγμα Last.fm για να εγκρίνετε το Melodia στο πρόγραμμα περιήγησής σας."
+
+msgid "After approving Melodia in your browser, click Finish."
+msgstr "Αφού εγκρίνετε το Melodia στο πρόγραμμα περιήγησής σας, κάντε κλικ στο Ολοκλήρωση."
+
+msgid "Connecting…"
+msgstr "Σύνδεση…"
+
+msgid "User token"
+msgstr "Διακριτικό χρήστη"
+
+msgid "Paste your ListenBrainz user token"
+msgstr "Επικολλήστε το διακριτικό χρήστη ListenBrainz"
+
+msgid "Find your token on your ListenBrainz profile settings page."
+msgstr "Θα βρείτε το διακριτικό σας στη σελίδα ρυθμίσεων του προφίλ σας στο ListenBrainz."
+
+msgid "That token wasn't accepted. Check it and try again."
+msgstr "Το διακριτικό δεν έγινε δεκτό. Ελέγξτε το και δοκιμάστε ξανά."
+
+msgid "Couldn't reach the service. Check your connection and try again."
+msgstr "Δεν ήταν δυνατή η σύνδεση με την υπηρεσία. Ελέγξτε τη σύνδεσή σας και δοκιμάστε ξανά."
+
+msgid "Not approved yet. Approve Melodia in your browser, then click Finish."
+msgstr "Δεν έχει εγκριθεί ακόμη. Εγκρίνετε το Melodia στο πρόγραμμα περιήγησης και μετά κάντε κλικ στο Ολοκλήρωση."
+
+msgid "Couldn't save your credentials."
+msgstr "Δεν ήταν δυνατή η αποθήκευση των διαπιστευτηρίων σας."

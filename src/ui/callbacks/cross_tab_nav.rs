@@ -35,7 +35,7 @@ use crate::ui::nav_transition;
 use crate::ui::track_list_view::view_id;
 use crate::{
     AlbumDetail, AppWindow, ArtistDetail, Browse, Favorites, GenreDetail, Nav, NavEnterFrom,
-    PlaylistDetail, Search, Tracks,
+    PlaylistDetail, RecentlyPlayed, Search, Tracks,
 };
 
 // Sidebar indices — kept local so this module doesn't depend on each
@@ -97,6 +97,12 @@ pub fn wire_cross_tab_nav(
 
     // --- GenreDetail -------------------------------------------------
     let g = ui.global::<GenreDetail>();
+    g.on_go_to_album(make_go_to_album(state, albums_ui, weak.clone()));
+    g.on_go_to_artist(make_go_to_artist(state, artists_ui, weak.clone()));
+    g.on_go_to_genre(make_go_to_genre(state, genres_ui, weak.clone()));
+
+    // --- RecentlyPlayed ----------------------------------------------
+    let g = ui.global::<RecentlyPlayed>();
     g.on_go_to_album(make_go_to_album(state, albums_ui, weak.clone()));
     g.on_go_to_artist(make_go_to_artist(state, artists_ui, weak.clone()));
     g.on_go_to_genre(make_go_to_genre(state, genres_ui, weak.clone()));

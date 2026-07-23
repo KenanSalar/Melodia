@@ -2,19 +2,14 @@
 //!
 //! On every `library_changed_tx` tick the Favorites view is visible
 //! for, this re-fetches `library::favorites::get_favorite_stats` and
-//! produces a fresh hero blur from the top-4 most-played covers. The
-//! blur is composed by tiling the source covers into a 2×2 atlas,
-//! downscaling to the now-playing-tier `BLUR_DOWNSCALE` (192 px), and
-//! running `image::imageops::fast_blur` (parity with
-//! `now_playing_artwork::decode_artwork`). Write goes through
-//! `write_crossfade_slot` so switching mosaics fades the previous blur
-//! to the new one — outgoing slot stays painted for the full fade so
-//! the hero never flashes empty.
+//! produces a fresh hero blur from the top-4 most-played covers via the
+//! shared [`crate::ui::mosaic_blur`] atlas+blur recipe. Write goes
+//! through `write_crossfade_slot` so switching mosaics fades the
+//! previous blur to the new one — outgoing slot stays painted for the
+//! full fade so the hero never flashes empty.
 
-use std::path::Path;
 use std::sync::Arc;
 
-use image::imageops::fast_blur;
 use slint::{ComponentHandle, Image, Model, Rgb8Pixel, SharedPixelBuffer, SharedString, VecModel,
     Weak};
 
@@ -23,26 +18,9 @@ use crate::entities::track::FavoriteStats;
 use crate::error::AppResult;
 use crate::library;
 use crate::state::AppState;
+use crate::ui::mosaic_blur::compose_mosaic_blur;
 use crate::ui::now_playing::write_crossfade_slot;
 use crate::{AppWindow, Favorites};
-
-/// Atlas + blur target size. Matches `now_playing_artwork::BLUR_DOWNSCALE`
-/// so the GPU pipeline / cache pressure stays consistent across blur
-/// surfaces. Bigger than this gains nothing because the surface is
-/// `image-fit: cover`-stretched.
-const BLUR_TARGET: u32 = 192;
-
-/// `fast_blur` sigma. Mirrors `now_playing_artwork::BLUR_SIGMA` so the
-/// Favorites hero blur reads the same as the Now Playing backdrop.
-const BLUR_SIGMA: f32 = 24.0;
-
-/// Per-tile source decode cap before atlasing. Each tile is a quarter
-/// of the atlas, so decoding above this is wasted work. Stays well
-/// below the artwork hard cap so a forged dimension header in a tag
-/// can't trigger an absurd allocation. Same hard cap as
-/// `now_playing_artwork::MAX_SOURCE_DIM` / `cover_thumbs::MAX_DIM`.
-const MAX_SOURCE_DIM: u32 = 8192;
-const PER_TILE: u32 = BLUR_TARGET / 2;
 
 /// Fetch fresh stats, push the count + duration text + mosaic paths
 /// into `Favorites`, then kick a blocking composition+blur task whose
@@ -63,8 +41,23 @@ pub async fn refresh_hero(
 
     let paths = stats.artwork_paths.clone();
     if paths.is_empty() {
+        // Reset the guard so the next non-empty refresh (even with covers
+        // identical to a pre-empty state) recomposes.
+        fav_ui.state().last_mosaic_paths.lock().clear();
         clear_hero_blur(weak);
         return Ok(());
+    }
+
+    // Skip the decode+blur when the mosaic covers are unchanged from the last
+    // composed set — the blur already on screen is still correct, so a
+    // library/stats tick with the same top-4 covers costs nothing. Reset on
+    // section-leave so a genuine re-enter recomposes.
+    {
+        let mut last = fav_ui.state().last_mosaic_paths.lock();
+        if *last == paths {
+            return Ok(());
+        }
+        last.clone_from(&paths);
     }
 
     // Composition + blur is CPU-bound — runs on the blocking pool to
@@ -81,6 +74,9 @@ pub async fn refresh_hero(
     apply_hero_blur(weak, blur_buf, animate);
     Ok(())
 }
+
+// The atlas composition itself lives in `crate::ui::mosaic_blur` — shared
+// with the Recently-Played hero so both surfaces read identically.
 
 fn push_stats_to_slint(stats: &FavoriteStats, weak: &Weak<AppWindow>) {
     let count = i32::try_from(stats.count).unwrap_or(i32::MAX);
@@ -145,110 +141,3 @@ fn apply_hero_blur(
     });
 }
 
-/// Compose up to 4 source images into a `BLUR_TARGET × BLUR_TARGET`
-/// 2×2 atlas, then blur. Mirrors the picker's mosaic layout for the
-/// 4-tile case; the 1 / 2 / 3 / 0 cases fall back to "fill the whole
-/// atlas with the available tiles" so a partially-populated mosaic
-/// still produces a usable hero backdrop. Runs on the blocking pool.
-///
-/// Returns `None` when every source decode failed — the caller clears
-/// `has-blur` so the accent gradient floor shows through.
-fn compose_mosaic_blur(paths: &[String]) -> Option<SharedPixelBuffer<Rgb8Pixel>> {
-    use image::{ImageBuffer, RgbImage};
-
-    if paths.is_empty() {
-        return None;
-    }
-
-    let mut atlas: RgbImage = ImageBuffer::new(BLUR_TARGET, BLUR_TARGET);
-
-    // Decode each source (capped at 4) into a per-tile thumbnail.
-    let mut tiles: Vec<RgbImage> = Vec::with_capacity(4);
-    for p in paths.iter().take(4) {
-        if let Some(tile) = decode_tile(Path::new(p)) {
-            tiles.push(tile);
-        }
-    }
-    if tiles.is_empty() {
-        return None;
-    }
-
-    // Lay tiles into the atlas. Layouts mirror the CoverMosaic
-    // component for visual parity with the foreground mosaic:
-    //   1 tile  → fill whole atlas
-    //   2 tiles → left / right halves
-    //   3 tiles → left full-height + right column split top/bottom
-    //   4 tiles → 2×2 grid
-    // The atlas is then heavily blurred so the exact layout is
-    // imperceptible — but the tile-count branching keeps colour
-    // distribution consistent with the visible mosaic above.
-    match tiles.len() {
-        1 => {
-            blit(&mut atlas, &tiles[0], 0, 0, BLUR_TARGET, BLUR_TARGET);
-        }
-        2 => {
-            blit(&mut atlas, &tiles[0], 0, 0, PER_TILE, BLUR_TARGET);
-            blit(&mut atlas, &tiles[1], PER_TILE, 0, PER_TILE, BLUR_TARGET);
-        }
-        3 => {
-            blit(&mut atlas, &tiles[0], 0, 0, PER_TILE, BLUR_TARGET);
-            blit(&mut atlas, &tiles[1], PER_TILE, 0, PER_TILE, PER_TILE);
-            blit(&mut atlas, &tiles[2], PER_TILE, PER_TILE, PER_TILE, PER_TILE);
-        }
-        _ => {
-            blit(&mut atlas, &tiles[0], 0, 0, PER_TILE, PER_TILE);
-            blit(&mut atlas, &tiles[1], PER_TILE, 0, PER_TILE, PER_TILE);
-            blit(&mut atlas, &tiles[2], 0, PER_TILE, PER_TILE, PER_TILE);
-            blit(&mut atlas, &tiles[3], PER_TILE, PER_TILE, PER_TILE, PER_TILE);
-        }
-    }
-
-    let blurred = fast_blur(&atlas, BLUR_SIGMA);
-    Some(buffer_from_rgb(&blurred))
-}
-
-/// Decode one cover at its tile size. Bounded so a forged header can't
-/// allocate gigabytes before the downscale kicks in.
-fn decode_tile(path: &Path) -> Option<image::RgbImage> {
-    let mut reader = image::ImageReader::open(path).ok()?.with_guessed_format().ok()?;
-    let mut limits = image::Limits::default();
-    limits.max_image_width = Some(MAX_SOURCE_DIM);
-    limits.max_image_height = Some(MAX_SOURCE_DIM);
-    reader.limits(limits);
-    let decoded = reader.decode().ok()?;
-    Some(decoded.thumbnail_exact(BLUR_TARGET, BLUR_TARGET).to_rgb8())
-}
-
-/// Stretch-copy `src` into `dst` at the given destination rectangle.
-/// `src` is already a square `BLUR_TARGET × BLUR_TARGET` thumbnail
-/// (`decode_tile`'s output), so the per-tile blit is a sub-block of
-/// the larger atlas; sampling is nearest-neighbour because the blur
-/// pass that immediately follows obliterates any aliasing.
-fn blit(
-    dst: &mut image::RgbImage,
-    src: &image::RgbImage,
-    dx: u32,
-    dy: u32,
-    dw: u32,
-    dh: u32,
-) {
-    let (sw, sh) = src.dimensions();
-    if sw == 0 || sh == 0 {
-        return;
-    }
-    for y in 0..dh {
-        for x in 0..dw {
-            let sx = x * sw / dw;
-            let sy = y * sh / dh;
-            let px = *src.get_pixel(sx, sy);
-            dst.put_pixel(dx + x, dy + y, px);
-        }
-    }
-}
-
-fn buffer_from_rgb(img: &image::RgbImage) -> SharedPixelBuffer<Rgb8Pixel> {
-    let (w, h) = img.dimensions();
-    let mut buf = SharedPixelBuffer::<Rgb8Pixel>::new(w, h);
-    buf.make_mut_bytes().copy_from_slice(img.as_raw());
-    buf
-}

@@ -1,10 +1,36 @@
-use std::sync::Arc;
+use std::collections::HashSet;
+use std::sync::{Arc, OnceLock};
+
+use parking_lot::Mutex;
 
 use crate::config::Paths;
 use crate::database::DbPool;
 use crate::database::queries;
 use crate::error::AppResult;
 use crate::media::deezer;
+
+/// Session-scoped negative memo: artist ids whose Deezer search returned a
+/// definitive "no match" this session. `spawn_fetch` runs after every scan
+/// completion, so without this every image-less artist is re-queried over
+/// the network per scan — and the answer won't change until tags change
+/// (which usually creates new artist rows anyway). Transient failures
+/// (transport/HTTP errors, failed downloads) are deliberately NOT memoized
+/// so a later scan retries them. Cleared only by process restart; bounded
+/// by the artist-table size (bare `i64`s).
+fn attempted_no_match() -> &'static Mutex<HashSet<i64>> {
+    static ATTEMPTED: OnceLock<Mutex<HashSet<i64>>> = OnceLock::new();
+    ATTEMPTED.get_or_init(|| Mutex::new(HashSet::new()))
+}
+
+/// Per-artist result of one Deezer round-trip.
+enum FetchOutcome {
+    /// Image found, downloaded, and cached at this path.
+    Cached(String),
+    /// Deezer answered definitively with no usable result — memoized.
+    NoMatch,
+    /// Transport/HTTP/download failure — retry on a later scan.
+    Transient,
+}
 
 /// Fetch artist images from Deezer for artists that don't have one yet.
 /// Processes in batches of 5 concurrent requests with rate limiting. Uses the
@@ -15,7 +41,11 @@ pub async fn fetch_artist_images(
     db: &DbPool,
     client: &reqwest::Client,
 ) -> AppResult<u32> {
-    let artists = queries::artist::get_artists_without_images(db).await?;
+    let mut artists = queries::artist::get_artists_without_images(db).await?;
+    {
+        let attempted = attempted_no_match().lock();
+        artists.retain(|a| !attempted.contains(&a.id));
+    }
     if artists.is_empty() {
         return Ok(0);
     }
@@ -38,37 +68,39 @@ pub async fn fetch_artist_images(
             set.spawn(async move {
                 let url = match deezer::search_artist_image_url(&client, &name).await {
                     Ok(Some(url)) => url,
-                    Ok(None) => return (id, name, None),
+                    Ok(None) => return (id, name, FetchOutcome::NoMatch),
                     Err(e) => {
                         log::warn!("Deezer search failed for '{name}': {e}");
-                        return (id, name, None);
+                        return (id, name, FetchOutcome::Transient);
                     }
                 };
 
-                let path = match deezer::download_and_cache_artist_image(&client, &url, &dir).await
-                {
-                    Ok(Some(path)) => Some(path),
-                    Ok(None) => None,
+                match deezer::download_and_cache_artist_image(&client, &url, &dir).await {
+                    Ok(Some(path)) => (id, name, FetchOutcome::Cached(path)),
+                    // A found URL that yielded no cacheable image could be a
+                    // CDN hiccup — treat as transient so a later scan retries.
+                    Ok(None) => (id, name, FetchOutcome::Transient),
                     Err(e) => {
                         log::warn!("Failed to download image for '{name}': {e}");
-                        None
+                        (id, name, FetchOutcome::Transient)
                     }
-                };
-
-                (id, name, path)
+                }
             });
         }
 
         while let Some(result) = set.join_next().await {
             match result {
-                Ok((id, name, Some(path))) => {
+                Ok((id, name, FetchOutcome::Cached(path))) => {
                     if let Err(e) = queries::artist::update_artist_image_path(db, id, &path).await {
                         log::warn!("Failed to update artist image path for '{name}': {e}");
                     } else {
                         fetched_count += 1;
                     }
                 }
-                Ok((_id, _name, None)) => {}
+                Ok((id, _name, FetchOutcome::NoMatch)) => {
+                    attempted_no_match().lock().insert(id);
+                }
+                Ok((_id, _name, FetchOutcome::Transient)) => {}
                 Err(e) => log::error!("Artist image fetch task failed: {e}"),
             }
         }
@@ -79,7 +111,7 @@ pub async fn fetch_artist_images(
 }
 
 /// Spawn a background task to fetch artist images. Fire-and-forget.
-/// `client` is the shared `AppState::http_client`.
+/// `client` is the shared client from `AppState::http_client()`.
 pub fn spawn_fetch(paths: Arc<Paths>, db: DbPool, client: reqwest::Client) {
     tokio::spawn(async move {
         if let Err(e) = fetch_artist_images(&paths, &db, &client).await {

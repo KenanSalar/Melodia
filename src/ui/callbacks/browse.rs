@@ -7,7 +7,7 @@ use async_compat::Compat;
 use slint::{ComponentHandle, Model, SharedString};
 
 use super::collect_nonzero_track_ids;
-use super::macros::{spawn_logged, spawn_logged_sync};
+use super::macros::{spawn_logged, spawn_logged_sync, wire_row_flag};
 use crate::library;
 use crate::state::AppState;
 use crate::ui::browse::{self as browse_ui_mod, BrowseUi};
@@ -28,6 +28,31 @@ pub fn wire_browse(ui: &AppWindow, state: &AppState, browse_ui: &Arc<BrowseUi>) 
         g.set_sort_field(SharedString::from(field.as_str()));
         g.set_sort_dir(SharedString::from(dir));
         browse_ui.set_sort(field, dir.to_owned());
+    }
+
+    // section-active-changed: mirror visibility into the synchronous shadow
+    // and, on re-enter, re-fetch the current directory once if a
+    // `library_changed` bump arrived while the section was hidden (the
+    // subscriber below marks dirty instead of re-fetching a view the user
+    // can't see). Seed the shadow from the current nav state — `changed`
+    // in `AppWindow` won't fire for a session that *starts* on Browse
+    // (sidebar index 1).
+    browse_ui.set_section_active(ui.global::<crate::Nav>().get_selected_index() == 1);
+    {
+        let s = state.clone();
+        let bu = browse_ui.clone();
+        let weak = weak.clone();
+        g.on_section_active_changed(move |active| {
+            bu.set_section_active(active);
+            if active && bu.take_dirty() {
+                let path = bu.current_path();
+                let s = s.clone();
+                let bu = bu.clone();
+                let weak = weak.clone();
+                spawn_logged!(s, "browse::section_enter",
+                    browse_ui_mod::fetch_and_apply(&s, &bu, weak, path));
+            }
+        });
     }
 
     // open-folder: push current path onto history, spawn fetch for the
@@ -173,34 +198,33 @@ pub fn wire_browse(ui: &AppWindow, state: &AppState, browse_ui: &Arc<BrowseUi>) 
         });
     }
 
-    // toggle-row-favorite: write through, then surgically update each
-    // row (no re-fetch, so scroll position holds and there's no flash).
-    // Disk-only rows can't be favorited.
+    // toggle-row-favorite / set-row-rating: write through, then surgically
+    // update each row (no re-fetch, so scroll position holds and there's no
+    // flash). Disk-only rows have id 0 and are filtered out by
+    // `collect_nonzero_track_ids`; rating never changes list membership.
     {
-        let s = state.clone();
-        let weak = weak.clone();
         let bu = browse_ui.clone();
-        g.on_toggle_row_favorite(move |ids, fav| {
-            let id_vec = collect_nonzero_track_ids(&ids);
-            if id_vec.is_empty() {
-                return;
-            }
-            let s = s.clone();
-            let weak = weak.clone();
-            let bu = bu.clone();
-            s.runtime.clone().spawn(async move {
-                if let Err(e) =
-                    library::favorites::set_favorite(&s, id_vec.clone(), fav).await
-                {
-                    log::warn!("browse::set_favorite: {e}");
-                    return;
-                }
+        wire_row_flag!(g, on_toggle_row_favorite, state, "browse::set_favorite",
+            library::favorites::set_favorite, collect_nonzero_track_ids,
+            captures: [weak, bu],
+            after: |id_vec, fav| {
                 for id in &id_vec {
                     bu.flip_favorite(*id, fav);
                     browse_ui_mod::apply_row_favorite(&weak, *id, fav);
                 }
             });
-        });
+    }
+    {
+        let bu = browse_ui.clone();
+        wire_row_flag!(g, on_set_row_rating, state, "browse::set_rating",
+            library::ratings::set_rating, collect_nonzero_track_ids,
+            captures: [weak, bu],
+            after: |id_vec, rating| {
+                for id in &id_vec {
+                    bu.flip_rating(*id, rating);
+                    browse_ui_mod::apply_row_rating(&weak, *id, rating);
+                }
+            });
     }
 
     // request-sort: clicking a header column. Same field flips dir; new
@@ -314,6 +338,16 @@ pub fn wire_browse(ui: &AppWindow, state: &AppState, browse_ui: &Arc<BrowseUi>) 
             // at; mark it seen so we don't re-fetch immediately.
             rx.mark_unchanged();
             while rx.changed().await.is_ok() {
+                // Skip the directory re-fetch (read_dir + a full-index LIKE
+                // scan) while the section is hidden — play-count flushes
+                // bump this channel after every track completion, so an
+                // ungated re-fetch would run O(library) work per song
+                // during plain listening. Mark dirty so the next
+                // section-enter re-fetches once instead.
+                if !bu.section_active() {
+                    bu.mark_dirty();
+                    continue;
+                }
                 let path = bu.current_path();
                 let s = s.clone();
                 let bu = bu.clone();

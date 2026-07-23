@@ -47,7 +47,7 @@ use crate::tasks::TaskSpawner;
 use crate::{AppWindow, MelodiaUpdater};
 
 const STARTUP_DELAY: Duration = Duration::from_secs(30);
-const NORMAL_CADENCE: Duration = Duration::from_secs(6 * 60 * 60);
+const NORMAL_CADENCE: Duration = Duration::from_hours(6);
 const ONE_DAY_SECS: i64 = 24 * 60 * 60;
 
 /// Exponential backoff schedule after consecutive failures. Indexed by
@@ -61,9 +61,9 @@ const ONE_DAY_SECS: i64 = 24 * 60 * 60;
 /// user for a full week — 12h and 24h give the network time to recover
 /// without thrashing 6h-after-6h-after-6h.
 const BACKOFF_LADDER: &[Duration] = &[
-    Duration::from_secs(12 * 60 * 60),     // 12h
-    Duration::from_secs(24 * 60 * 60),     // 24h
-    Duration::from_secs(7 * 24 * 60 * 60), // 7d (cap)
+    Duration::from_hours(12),
+    Duration::from_hours(24),
+    Duration::from_hours(7 * 24), // cap
 ];
 
 /// Spawn the daily updater loop on the shared `TaskSpawner`. The loop
@@ -134,7 +134,7 @@ async fn run_one_iteration(
     // 304 round-trips zero bytes and zero JSON parses. The "Check for
     // updates" button bypasses the etag — see check_for_update's doc.
     let result =
-        check_for_update(&state.http_client, etag, env!("CARGO_PKG_VERSION"), false).await;
+        check_for_update(state.http_client(), etag, env!("CARGO_PKG_VERSION"), false).await;
     set_is_checking(weak, false);
 
     let now = Utc::now();
@@ -260,8 +260,7 @@ fn persist_success(
 
 fn pick_next_delay(state: &AppState) -> Duration {
     let count = settings::read_settings(&state.paths)
-        .map(|s| s.updates.consecutive_failures)
-        .unwrap_or(0);
+        .map_or(0, |s| s.updates.consecutive_failures);
     let delay = backoff_delay_for(count);
     if count >= 2 {
         log::info!(
@@ -388,9 +387,9 @@ mod tests {
 
     #[test]
     fn backoff_delay_for_climbs_the_ladder() {
-        assert_eq!(backoff_delay_for(2), Duration::from_secs(12 * 60 * 60));
-        assert_eq!(backoff_delay_for(3), Duration::from_secs(24 * 60 * 60));
-        assert_eq!(backoff_delay_for(4), Duration::from_secs(7 * 24 * 60 * 60));
+        assert_eq!(backoff_delay_for(2), Duration::from_hours(12));
+        assert_eq!(backoff_delay_for(3), Duration::from_hours(24));
+        assert_eq!(backoff_delay_for(4), Duration::from_hours(7 * 24));
     }
 
     #[test]
@@ -398,8 +397,8 @@ mod tests {
         // Years of consecutive failures shouldn't blow past the
         // ladder; the saturating add on the counter + ladder index
         // clamp keep us at the 7d ceiling forever.
-        assert_eq!(backoff_delay_for(u8::MAX), Duration::from_secs(7 * 24 * 60 * 60));
-        assert_eq!(backoff_delay_for(100), Duration::from_secs(7 * 24 * 60 * 60));
+        assert_eq!(backoff_delay_for(u8::MAX), Duration::from_hours(7 * 24));
+        assert_eq!(backoff_delay_for(100), Duration::from_hours(7 * 24));
     }
 }
 

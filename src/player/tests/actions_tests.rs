@@ -2,9 +2,9 @@ use std::sync::Mutex;
 
 use tokio::sync::watch;
 
-use crate::config::Paths;
 use crate::error::AppError;
 use crate::player::event_sink::PlayerSinks;
+use crate::player::replaygain::TrackReplayGain;
 use crate::player::rodio_backend::PlayerBackend;
 use crate::player::state::{PlayerAction, PlayerStateHandle};
 
@@ -12,14 +12,23 @@ use crate::player::state::{PlayerAction, PlayerStateHandle};
 #[derive(Debug, Default)]
 struct MockBackendInner {
     play_media_calls: Vec<(String, f64, f64, Option<u64>)>,
+    /// `(file_path, fade_ms, volume, speed)` per `begin_crossfade`.
+    begin_crossfade_calls: Vec<(String, u64, f64, f64)>,
     resume_count: u32,
-    pause_count: u32,
+    /// `fade_ms` per `pause_with_fade`, including the `0`s that mean "immediate".
+    /// `pause_with_fade` is the only pause on the trait, so this is also the
+    /// pause count — unlike `stop_count`, which has to cover the bare `stop()`
+    /// the auto-skip path calls outside any `PlayerAction`.
+    pause_fade_calls: Vec<u64>,
     stop_count: u32,
+    /// `fade_ms` per `stop_with_fade`, including the `0`s that mean "immediate".
+    stop_fade_calls: Vec<u64>,
     seek_calls: Vec<u64>,
     volume_calls: Vec<f64>,
     speed_calls: Vec<f64>,
     preload_calls: Vec<Option<String>>,
     play_media_should_fail: bool,
+    begin_crossfade_should_fail: bool,
 }
 
 struct MockBackend {
@@ -42,6 +51,15 @@ impl MockBackend {
         }
     }
 
+    fn with_crossfade_failure() -> Self {
+        Self {
+            inner: Mutex::new(MockBackendInner {
+                begin_crossfade_should_fail: true,
+                ..Default::default()
+            }),
+        }
+    }
+
     fn inner(&self) -> std::sync::MutexGuard<'_, MockBackendInner> {
         self.inner
             .lock()
@@ -56,6 +74,7 @@ impl PlayerBackend for MockBackend {
         volume: f64,
         speed: f64,
         start_position_ms: Option<u64>,
+        _baked_rg: TrackReplayGain,
     ) -> Result<(), AppError> {
         let mut inner = self.inner();
         if inner.play_media_should_fail {
@@ -67,14 +86,37 @@ impl PlayerBackend for MockBackend {
         Ok(())
     }
 
+    fn begin_crossfade(
+        &self,
+        file_path: &str,
+        _baked_rg: TrackReplayGain,
+        fade_ms: u64,
+        volume: f64,
+        speed: f64,
+    ) -> Result<(), AppError> {
+        let mut inner = self.inner();
+        if inner.begin_crossfade_should_fail {
+            return Err(AppError::Player("mock crossfade failure".to_owned()));
+        }
+        inner
+            .begin_crossfade_calls
+            .push((file_path.to_owned(), fade_ms, volume, speed));
+        Ok(())
+    }
+
     fn resume(&self) {
         self.inner().resume_count += 1;
     }
-    fn pause(&self) {
-        self.inner().pause_count += 1;
+    fn pause_with_fade(&self, fade_ms: u64) {
+        self.inner().pause_fade_calls.push(fade_ms);
     }
     fn stop(&self) {
         self.inner().stop_count += 1;
+    }
+    fn stop_with_fade(&self, fade_ms: u64) {
+        let mut inner = self.inner();
+        inner.stop_fade_calls.push(fade_ms);
+        inner.stop_count += 1;
     }
     fn seek(&self, position_ms: u64) {
         self.inner().seek_calls.push(position_ms);
@@ -85,7 +127,7 @@ impl PlayerBackend for MockBackend {
     fn set_speed(&self, speed: f64) {
         self.inner().speed_calls.push(speed);
     }
-    fn preload_gapless(&self, file_path: Option<&str>) {
+    fn preload_gapless(&self, file_path: Option<&str>, _baked_rg: TrackReplayGain) {
         self.inner()
             .preload_calls
             .push(file_path.map(std::borrow::ToOwned::to_owned));
@@ -111,7 +153,6 @@ fn make_test_sinks() -> PlayerSinks {
 /// at `track_path` so the `Path::exists()` pre-flight check in
 /// `execute_actions` lets `PlayMedia` reach the (mock) backend.
 struct ActionsFixture {
-    paths: Paths,
     db: crate::database::DbPool,
     player_state: PlayerStateHandle,
     sinks: PlayerSinks,
@@ -121,22 +162,10 @@ struct ActionsFixture {
 
 async fn fixture() -> Result<ActionsFixture, AppError> {
     let tmp = tempfile::tempdir()?;
-    let root = tmp.path().to_owned();
-    let track_path = root.join("track.mp3");
+    let track_path = tmp.path().join("track.mp3");
     std::fs::write(&track_path, b"")?;
-    let paths = Paths {
-        db_path: root.join("melodia.db"),
-        settings_path: root.join("settings.json"),
-        view_state_path: root.join("views.json"),
-        queue_path: root.join("queue.json"),
-        search_history_path: root.join("search_history.json"),
-        artwork_dir: root.join("artwork"),
-        artists_dir: root.join("artists"),
-        data_dir: root,
-    };
     let db = crate::database::DbPool::test_pool().await;
     Ok(ActionsFixture {
-        paths,
         db,
         player_state: PlayerStateHandle::default(),
         sinks: make_test_sinks(),
@@ -155,13 +184,13 @@ async fn execute_play_media_calls_backend() -> Result<(), AppError> {
         volume: 0.8,
         speed: 1.0,
         start_position_ms: Some(5000),
+        replaygain: TrackReplayGain::default(),
     }];
 
     crate::player::actions::execute_actions(
         actions,
         &mock,
         &fx.db,
-        &fx.paths,
         &fx.player_state,
         &fx.sinks,
     );
@@ -190,13 +219,13 @@ async fn execute_play_media_decode_failure_triggers_auto_skip() -> Result<(), Ap
         volume: 0.5,
         speed: 1.0,
         start_position_ms: None,
+        replaygain: TrackReplayGain::default(),
     }];
 
     crate::player::actions::execute_actions(
         actions,
         &mock,
         &fx.db,
-        &fx.paths,
         &fx.player_state,
         &fx.sinks,
     );
@@ -220,13 +249,13 @@ async fn execute_play_media_vanished_file_pre_flights() -> Result<(), AppError> 
         volume: 1.0,
         speed: 1.0,
         start_position_ms: None,
+        replaygain: TrackReplayGain::default(),
     }];
 
     crate::player::actions::execute_actions(
         actions,
         &mock,
         &fx.db,
-        &fx.paths,
         &fx.player_state,
         &fx.sinks,
     );
@@ -244,23 +273,129 @@ async fn execute_resume_pause_stop() -> Result<(), AppError> {
 
     let actions = vec![
         PlayerAction::Resume,
-        PlayerAction::Pause,
-        PlayerAction::Stop,
+        PlayerAction::Pause { fade_ms: 0 },
+        PlayerAction::Stop { fade_ms: 0 },
     ];
 
     crate::player::actions::execute_actions(
         actions,
         &mock,
         &fx.db,
-        &fx.paths,
         &fx.player_state,
         &fx.sinks,
     );
 
     let inner = mock.inner();
     assert_eq!(inner.resume_count, 1);
-    assert_eq!(inner.pause_count, 1);
+    assert_eq!(inner.pause_fade_calls, vec![0]);
     assert_eq!(inner.stop_count, 1);
+    Ok(())
+}
+
+#[tokio::test]
+async fn execute_stop_forwards_the_fade_length() -> Result<(), AppError> {
+    // A user stop with fade-on-pause carries the ramp length; the end-of-queue
+    // stop passes 0 so it lands immediately.
+    let fx = fixture().await?;
+    let mock = MockBackend::new();
+
+    let actions = vec![
+        PlayerAction::Stop { fade_ms: 250 },
+        PlayerAction::Stop { fade_ms: 0 },
+    ];
+
+    crate::player::actions::execute_actions(actions, &mock, &fx.db, &fx.player_state, &fx.sinks);
+
+    assert_eq!(mock.inner().stop_fade_calls, vec![250, 0]);
+    Ok(())
+}
+
+#[tokio::test]
+async fn execute_pause_forwards_the_fade_length() -> Result<(), AppError> {
+    // A user pause with fade-on-pause carries the ramp length; the `Pause` that
+    // next/previous append to restore a paused deck passes 0, so the incoming
+    // track can never be heard fading out on arrival.
+    let fx = fixture().await?;
+    let mock = MockBackend::new();
+
+    let actions = vec![
+        PlayerAction::Pause { fade_ms: 250 },
+        PlayerAction::Pause { fade_ms: 0 },
+    ];
+
+    crate::player::actions::execute_actions(actions, &mock, &fx.db, &fx.player_state, &fx.sinks);
+
+    assert_eq!(mock.inner().pause_fade_calls, vec![250, 0]);
+    Ok(())
+}
+
+#[tokio::test]
+async fn execute_begin_crossfade_calls_backend() -> Result<(), AppError> {
+    let fx = fixture().await?;
+    let mock = MockBackend::new();
+
+    let actions = vec![PlayerAction::BeginCrossfade {
+        file_path: fx.track_path.clone(),
+        replaygain: TrackReplayGain::default(),
+        fade_ms: 1_800,
+        volume: 0.8,
+        speed: 1.0,
+    }];
+
+    crate::player::actions::execute_actions(actions, &mock, &fx.db, &fx.player_state, &fx.sinks);
+
+    let inner = mock.inner();
+    assert_eq!(inner.begin_crossfade_calls.len(), 1);
+    assert_eq!(inner.begin_crossfade_calls[0].0, fx.track_path);
+    assert_eq!(inner.begin_crossfade_calls[0].1, 1_800);
+    assert!((inner.begin_crossfade_calls[0].2 - 0.8).abs() < f64::EPSILON);
+    assert_eq!(inner.stop_count, 0, "a successful crossfade must not stop the decks");
+    Ok(())
+}
+
+#[tokio::test]
+async fn execute_begin_crossfade_vanished_file_skips_without_stopping() -> Result<(), AppError> {
+    // The outgoing track is still audible on the other deck, so the crossfade
+    // arm must NOT stop the player the way `PlayMedia` does — the auto-skip's
+    // `play_media` clears both decks anyway. With an empty queue the skip lands
+    // on `stop_end_of_queue`, which is the single stop we expect.
+    let fx = fixture().await?;
+    let mock = MockBackend::new();
+
+    let actions = vec![PlayerAction::BeginCrossfade {
+        file_path: "/nonexistent/track.mp3".to_owned(),
+        replaygain: TrackReplayGain::default(),
+        fade_ms: 2_000,
+        volume: 1.0,
+        speed: 1.0,
+    }];
+
+    crate::player::actions::execute_actions(actions, &mock, &fx.db, &fx.player_state, &fx.sinks);
+
+    let inner = mock.inner();
+    assert!(inner.begin_crossfade_calls.is_empty());
+    assert_eq!(inner.stop_count, 1, "only the empty-queue auto-skip may stop");
+    Ok(())
+}
+
+#[tokio::test]
+async fn execute_begin_crossfade_decode_failure_triggers_auto_skip() -> Result<(), AppError> {
+    let fx = fixture().await?;
+    let mock = MockBackend::with_crossfade_failure();
+
+    let actions = vec![PlayerAction::BeginCrossfade {
+        file_path: fx.track_path.clone(),
+        replaygain: TrackReplayGain::default(),
+        fade_ms: 2_000,
+        volume: 1.0,
+        speed: 1.0,
+    }];
+
+    crate::player::actions::execute_actions(actions, &mock, &fx.db, &fx.player_state, &fx.sinks);
+
+    let inner = mock.inner();
+    assert!(inner.begin_crossfade_calls.is_empty());
+    assert_eq!(inner.stop_count, 1, "only the empty-queue auto-skip may stop");
     Ok(())
 }
 
@@ -275,7 +410,6 @@ async fn execute_seek_calls_backend() -> Result<(), AppError> {
         actions,
         &mock,
         &fx.db,
-        &fx.paths,
         &fx.player_state,
         &fx.sinks,
     );
@@ -299,7 +433,6 @@ async fn execute_set_volume_and_speed() -> Result<(), AppError> {
         actions,
         &mock,
         &fx.db,
-        &fx.paths,
         &fx.player_state,
         &fx.sinks,
     );
@@ -324,7 +457,6 @@ async fn execute_preload_gapless_with_and_without_path() -> Result<(), AppError>
         actions,
         &mock,
         &fx.db,
-        &fx.paths,
         &fx.player_state,
         &fx.sinks,
     );
@@ -350,6 +482,7 @@ async fn execute_multiple_actions_in_order() -> Result<(), AppError> {
             volume: 1.0,
             speed: 1.0,
             start_position_ms: None,
+            replaygain: TrackReplayGain::default(),
         },
         PlayerAction::PreloadGapless(Some("/music/next.mp3".to_owned())),
         PlayerAction::SetVolume(0.5),
@@ -359,7 +492,6 @@ async fn execute_multiple_actions_in_order() -> Result<(), AppError> {
         actions,
         &mock,
         &fx.db,
-        &fx.paths,
         &fx.player_state,
         &fx.sinks,
     );
@@ -380,7 +512,6 @@ async fn execute_empty_actions_is_noop() -> Result<(), AppError> {
         vec![],
         &mock,
         &fx.db,
-        &fx.paths,
         &fx.player_state,
         &fx.sinks,
     );

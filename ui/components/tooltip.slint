@@ -1,8 +1,8 @@
 import { Theme } from "../theme.slint";
 
-// Reusable tooltip pill — anchors above its parent and fades in on
-// hover. Replaces what was the Tauri HTML `title=` attribute (Slint
-// has no native HTML-like tooltip).
+// Reusable tooltip pill — anchors above its parent (or below it when
+// `below: true`) and fades in on hover. Replaces what was the Tauri HTML
+// `title=` attribute (Slint has no native HTML-like tooltip).
 //
 // Usage: place inside the element you want a tooltip for, set
 // `text` and feed `hovered` from the parent's TouchArea. The 500 ms
@@ -15,6 +15,13 @@ export component Tooltip inherits Rectangle {
     // component's root binding in Slint, so callers pass it
     // explicitly: `host-width: parent.width`.
     in property <length> host-width;
+    // Height of the host element — only needed when `below: true` (the
+    // tooltip anchors at `host-height + gap`).
+    in property <length> host-height;
+    // Anchor below the host instead of above it. Use for hosts pinned to
+    // the top of the window, where an above-tooltip would clip off-screen
+    // (e.g. the Playlists header action pills).
+    in property <bool> below: false;
     // Vertical gap between the tooltip and the host element.
     in property <length> gap: 6px;
     // External force-show flag — bypasses the 500 ms hover delay and
@@ -30,10 +37,15 @@ export component Tooltip inherits Rectangle {
     width: tip-text.preferred-width + 16px;
     height: tip-text.preferred-height + 8px;
     x: (root.host-width - self.width) / 2;
-    y: -self.height - root.gap;
+    y: root.below
+        ? (root.host-height + root.gap)
+        : (-self.height - root.gap);
 
-    background: Theme.surface2;
-    border-color: Theme.surface1;
+    // Match the ActionPill chrome (Theme.surface0 fill + Theme.surface2 border)
+    // so a tooltip reads as part of the same control family as the pill it
+    // annotates.
+    background: Theme.surface0;
+    border-color: Theme.surface2;
     border-width: 1px;
     border-radius: 6px;
     opacity: (shown || root.force-shown) ? 1.0 : 0.0;

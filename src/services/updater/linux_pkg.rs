@@ -104,8 +104,7 @@ fn owned_by_rpm(path: &PathBuf) -> bool {
         .arg("--")
         .arg(path)
         .output()
-        .map(|o| o.status.success())
-        .unwrap_or(false)
+        .is_ok_and(|o| o.status.success())
 }
 
 fn owned_by_dpkg(path: &PathBuf) -> bool {
@@ -117,8 +116,7 @@ fn owned_by_dpkg(path: &PathBuf) -> bool {
         .arg("--")
         .arg(path)
         .output()
-        .map(|o| o.status.success())
-        .unwrap_or(false)
+        .is_ok_and(|o| o.status.success())
 }
 
 /// Returns the `(program, must-precede-args)` pair to drive an elevated
@@ -173,8 +171,7 @@ fn is_executable_file(path: &Path) -> bool {
     {
         use std::os::unix::fs::PermissionsExt;
         std::fs::metadata(path)
-            .map(|m| m.is_file() && (m.permissions().mode() & 0o111) != 0)
-            .unwrap_or(false)
+            .is_ok_and(|m| m.is_file() && (m.permissions().mode() & 0o111) != 0)
     }
     #[cfg(not(unix))]
     {

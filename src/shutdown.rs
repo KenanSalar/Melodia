@@ -74,6 +74,7 @@ pub fn save_state_on_exit(
             ui::track_list_view::snapshot_genre_detail_view(app, &mut vs);
             ui::track_list_view::snapshot_playlist_detail_view(app, &mut vs);
             ui::track_list_view::snapshot_favorites_view(app, &mut vs);
+            ui::track_list_view::snapshot_recently_played_view(app, &mut vs);
             ui::track_list_view::snapshot_search_view(app, &mut vs);
             if let Err(e) = services::view_state::write_view_state(&state.paths, &vs) {
                 log::warn!("save_state_on_exit: write views.json: {e}");

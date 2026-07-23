@@ -125,6 +125,13 @@ $RECYCLE.BIN/
 __pycache__/
 *.pyc
 
+# ─── Fonts ───────────────────────────────────────────────────────────────────
+# Pristine (full) Material Symbols source faces fed to `scripts/subset-icon-fonts.sh`.
+# The bundled TTFs under `ui/assets/fonts/` are the trimmed *outputs* (committed);
+# the multi-MiB un-subset sources live here, are never committed, and are
+# re-downloadable from google/material-design-icons. See the script header.
+/scripts/fonts-src/
+
 # ─── Misc ────────────────────────────────────────────────────────────────────
 # Personal scratch space — useful but should not be committed
 /scratch/

@@ -18,7 +18,9 @@ mod genres;
 mod library_settings;
 mod now_playing;
 mod playlists;
+mod recently_played;
 mod search;
+mod tags;
 mod tracks;
 mod updater;
 
@@ -40,9 +42,11 @@ pub use cross_tab_nav::wire_cross_tab_nav;
 pub use favorites::wire_favorites;
 pub use genres::wire_genres;
 pub use library_settings::wire_library_settings;
-pub use now_playing::wire_now_playing_favorite;
-pub use playlists::wire_playlists;
+pub use now_playing::{wire_now_playing_favorite, wire_now_playing_rating};
+pub use playlists::{wire_playlist_files, wire_playlists};
+pub use recently_played::wire_recently_played;
 pub use search::wire_search;
+pub use tags::wire_tags;
 pub use tracks::wire_tracks;
 pub use updater::wire as wire_updater;
 
@@ -123,8 +127,34 @@ pub fn wire_all(ui: &AppWindow, state: &AppState) {
         let s = state.clone();
         player.on_set_volume(move |level| {
             let s = s.clone();
-            let vol = u32::try_from(level.clamp(0, 200)).unwrap_or(0);
+            // Negative → 0 (try_from fails); then cap at the volume ceiling.
+            let vol = u32::try_from(level).unwrap_or(0).min(crate::player::state::MAX_VOLUME);
             spawn_logged_sync!(s, "set_volume", library::playback::player_set_volume(&s.playback_ctx(), vol));
+        });
+    }
+
+    // set_playback_speed: apply to the live player AND persist (speed
+    // survives restarts — mirrors repeat/shuffle/volume). The flyout only
+    // ever sends valid preset values; downstream clamps anyway, so no
+    // clamp is needed here. Two steps like the gapless callback in
+    // `src/ui/playback_settings.rs`: (a) fast synchronous runtime apply,
+    // (b) blocking-pool disk write.
+    {
+        let s = state.clone();
+        player.on_set_playback_speed(move |speed| {
+            let speed = f64::from(speed);
+            let s_apply = s.clone();
+            spawn_logged_sync!(
+                s_apply,
+                "set_playback_speed",
+                library::playback::player_set_playback_speed(&s_apply.playback_ctx(), speed)
+            );
+            let s_disk = s.clone();
+            s.runtime.spawn_blocking(move || {
+                if let Err(e) = library::settings::set_playback_speed(&s_disk, speed) {
+                    log::warn!("persist playback_speed: {e}");
+                }
+            });
         });
     }
 

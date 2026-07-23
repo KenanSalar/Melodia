@@ -1,0 +1,61 @@
+import { Theme } from "../theme.slint";
+
+// Full-bleed hero blur backdrop: an accent-tinted gradient floor, two
+// stacked cross-fade `Image` slots, and a crust scrim. One Slint-side
+// source of truth for the dual-slot crossfade contract that Rust's
+// `write_crossfade_slot` drives — the outgoing slot is never cleared, so
+// a blur refresh fades A↔B without flashing, and when `has-blur` is
+// false both slots fade to 0 and the gradient floor shows through.
+//
+// Consumed by `DetailHeader` (fills its whole hero) and the Favorites /
+// Recently-Played heroes (top `hero-height` band). The caller sizes the
+// component (`x/y/width/height`); children fill it.
+//
+// `width/height: 100%` on the children is mandatory — `Image` does NOT
+// auto-fill its parent in Slint; without these the blur renders at its
+// native buffer size centred in the layout, which is wrong.
+export component HeroBlurBackdrop inherits Rectangle {
+    in property <image> blur-a;
+    in property <image> blur-b;
+    in property <bool> use-a;
+    in property <bool> has-blur;
+
+    // Gradient floor stops. Kept as two explicit colours rather than a
+    // `brush` so the caller can supply any color expression (theme mix,
+    // raw `color`, `hsv(...)`, …) and the gradient is composed here in
+    // one place. Defaults paint the accent-mix-to-base diagonal that
+    // Albums / Artists use; Genre Detail passes its hash-derived stops,
+    // the Favorites / Recently-Played heroes a slightly stronger mix.
+    in property <color> tint-start: Theme.accent.mix(Theme.base, 0.2);
+    in property <color> tint-end: Theme.base;
+
+    background: @linear-gradient(135deg, root.tint-start, root.tint-end);
+
+    Image {
+        x: 0;
+        y: 0;
+        width: 100%;
+        height: 100%;
+        source: root.blur-a;
+        image-fit: ImageFit.cover;
+        opacity: (root.has-blur && root.use-a) ? 1.0 : 0.0;
+        animate opacity { duration: Theme.dur-med; easing: ease-in-out; }
+    }
+    Image {
+        x: 0;
+        y: 0;
+        width: 100%;
+        height: 100%;
+        source: root.blur-b;
+        image-fit: ImageFit.cover;
+        opacity: (root.has-blur && !root.use-a) ? 1.0 : 0.0;
+        animate opacity { duration: Theme.dur-med; easing: ease-in-out; }
+    }
+    Rectangle {
+        x: 0;
+        y: 0;
+        width: 100%;
+        height: 100%;
+        background: Theme.crust.with-alpha(0.45);
+    }
+}

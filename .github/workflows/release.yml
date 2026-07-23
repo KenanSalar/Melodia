@@ -202,6 +202,14 @@ jobs:
     runs-on: ${{ matrix.runner }}
     env:
       TAG: ${{ needs.prepare.outputs.tag }}
+      # Last.fm app credentials, baked into the binary at compile time via
+      # option_env! in services/scrobble/providers/lastfm.rs. Set job-wide so
+      # the single `cargo build --release` on every slot picks them up (all
+      # packaging steps reuse that binary with --no-build). Absent secrets
+      # substitute an empty string, which non_empty_env() folds to None — a
+      # keyless build ships ListenBrainz-only.
+      LASTFM_API_KEY: ${{ secrets.LASTFM_API_KEY }}
+      LASTFM_SHARED_SECRET: ${{ secrets.LASTFM_SHARED_SECRET }}
     steps:
       - uses: actions/checkout@v5
 
@@ -241,9 +249,14 @@ jobs:
           echo "::error::apt install (system deps) failed after 3 attempts"
           exit 1
 
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: ${{ matrix.target }}
+      # Installs the toolchain pinned by `rust-toolchain.toml` — release
+      # binaries are built by the same compiler as the CI gate, not by whatever
+      # stable happened to ship the day the tag landed. `-t` keeps the explicit
+      # per-matrix target; every slot runs on a native runner, so this is the
+      # host target and already present, but it preserves the previous behavior
+      # exactly and would cover a future cross-compiled slot.
+      - name: Install pinned Rust toolchain
+        run: rustup toolchain install -t ${{ matrix.target }}
 
       - uses: Swatinem/rust-cache@v2
         with:

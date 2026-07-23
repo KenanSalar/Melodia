@@ -6,7 +6,7 @@ use std::sync::Arc;
 use slint::{ComponentHandle, Model, SharedString};
 
 use super::collect_track_ids;
-use super::macros::{spawn_logged, spawn_logged_sync};
+use super::macros::{spawn_logged, spawn_logged_sync, wire_row_flag};
 use crate::library;
 use crate::state::AppState;
 use crate::ui::track_list_view::{TrackListColumnState, view_id};
@@ -25,6 +25,27 @@ pub fn wire_tracks(ui: &AppWindow, state: &AppState, tracks_ui: &Arc<TracksUi>) 
     if let Some((field, dir)) = super::persisted_sort(state, view_id::TRACKS) {
         tracks.set_sort_field(SharedString::from(field.as_str()));
         tracks.set_sort_dir(SharedString::from(dir));
+    }
+
+    // section-active-changed: mirror visibility into the synchronous shadow
+    // and, on re-enter, run the deferred refresh if a `library_changed` bump
+    // arrived while the section was hidden (the refresher marks dirty
+    // instead of re-fetching a view the user can't see). Seed the shadow
+    // from the current nav state — `changed` in `AppWindow` won't fire for
+    // a session that *starts* on Tracks (sidebar index 3).
+    tracks_ui.set_section_active(ui.global::<crate::Nav>().get_selected_index() == 3);
+    {
+        let tu = tracks_ui.clone();
+        let weak = weak.clone();
+        tracks.on_section_active_changed(move |active| {
+            tu.set_section_active(active);
+            if active && tu.take_dirty() {
+                let Some(ui) = weak.upgrade() else { return };
+                // Reuse the request-refresh path so the deferred fetch
+                // picks up the current sort + filter.
+                ui.global::<Tracks>().invoke_request_refresh();
+            }
+        });
     }
 
     // request-sort: clicking a header column. Same field flips dir; new field
@@ -117,33 +138,32 @@ pub fn wire_tracks(ui: &AppWindow, state: &AppState, tracks_ui: &Arc<TracksUi>) 
         });
     }
 
-    // toggle-row-favorite: write through, then surgically update each
-    // affected row (no list re-fetch, so scroll position holds and
-    // there's no flash). The Slint side passes an `[int]` so a single-
-    // row click and a multi-select batch share one code path.
+    // toggle-row-favorite / set-row-rating: write through, then surgically
+    // update each affected row (no list re-fetch, so scroll position holds
+    // and there's no flash). Rating never changes list membership.
     {
-        let s = state.clone();
-        let weak = weak.clone();
         let tu = tracks_ui.clone();
-        tracks.on_toggle_row_favorite(move |ids, fav| {
-            let id_vec = collect_track_ids(&ids);
-            if id_vec.is_empty() {
-                return;
-            }
-            let s = s.clone();
-            let weak = weak.clone();
-            let tu = tu.clone();
-            s.runtime.clone().spawn(async move {
-                if let Err(e) = library::favorites::set_favorite(&s, id_vec.clone(), fav).await {
-                    log::warn!("set_favorite: {e}");
-                    return;
-                }
+        wire_row_flag!(tracks, on_toggle_row_favorite, state, "set_favorite",
+            library::favorites::set_favorite, collect_track_ids,
+            captures: [weak, tu],
+            after: |id_vec, fav| {
                 for id in &id_vec {
                     tu.flip_favorite(*id, fav);
                     tracks_ui_mod::apply_row_favorite(&weak, *id, fav);
                 }
             });
-        });
+    }
+    {
+        let tu = tracks_ui.clone();
+        wire_row_flag!(tracks, on_set_row_rating, state, "set_rating",
+            library::ratings::set_rating, collect_track_ids,
+            captures: [weak, tu],
+            after: |id_vec, rating| {
+                for id in &id_vec {
+                    tu.flip_rating(*id, rating);
+                    tracks_ui_mod::apply_row_rating(&weak, *id, rating);
+                }
+            });
     }
 
     // select-row: modifier-aware click handler. Computes the new selected

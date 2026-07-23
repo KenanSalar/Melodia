@@ -27,7 +27,9 @@ use crate::library;
 use crate::state::AppState;
 use crate::ui::callbacks::macros::release_detail_hero_images;
 use crate::ui::playlists::{self as playlists_ui_mod, PlaylistsUi};
-use crate::{AppWindow, Dialog, PlaylistDetail, PlaylistPickRow as UiPlaylistPickRow, Playlists};
+use crate::{
+    AppWindow, Dialog, PlaylistDetail, PlaylistPickRow as UiPlaylistPickRow, Playlists, TagEditor,
+};
 
 /// Wire the playlist dialog + CRUD callbacks. See [`super::wire_playlists`].
 pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<PlaylistsUi>) {
@@ -42,26 +44,45 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
         playlists.on_request_row_cover(move |path| pu.row_cover(path.as_str()));
     }
 
-    // Mirror of the album-detail Image-property release: when the
-    // dialog's close animation completes, drop the `SharedPixelBuffer`
-    // Arc pinned on `Dialog.current-artwork` (~603 KiB, pulled from
-    // the playlist grid-tier LRU at dialog-open) so it releases on the
-    // same tick the body branch unmounts. The Slint-side default
-    // `closed` handler in `globals.slint` already clears scalar / list
-    // / chrome state (`kind` / `target-id` / `input-text*` / `mosaic-*`
-    // / `pending-track-ids` / `title` / `message` / labels / destructive);
-    // the `image`-typed `current-artwork` has no Slint default literal
-    // so it lives here. Pair the Arc drop with an off-thread
-    // `heap_trim::trim()` (parity with `release_detail_artwork`) so
-    // glibc returns the freed pages instead of holding them in the
-    // arena. Trim must stay off the UI thread — it walks arena free
-    // lists.
+    // THE `Dialog.closed` handler — there is exactly one, and there must
+    // stay exactly one. `on_closed` is `Callback::set_handler`, which has
+    // a single slot: a second registration anywhere would silently clobber
+    // this one (and a default `closed => { … }` body in `globals.slint`
+    // would be clobbered BY it, which is precisely the leak this shape
+    // replaced). A new dialog kind that pins an `image` extends this
+    // handler; it does not add another.
+    //
+    // Two halves, fired once the close animation completes:
+    //
+    //   1. `invoke_closed_teardown()` — the Slint-side `public function`
+    //      that resets every scalar / list / chrome property (`kind` /
+    //      `target-id` / `input-text*` / `mosaic-*` / `pending-track-ids`
+    //      / the two picker row models / `title` / `message` / labels /
+    //      `destructive`). A `public function` has no handler slot, so it
+    //      cannot be registered away the way a callback body can.
+    //   2. `current-artwork` — the one `image`-typed property, which has
+    //      no Slint default literal and so can only be reset from Rust.
+    //      This is the ~603 KiB `SharedPixelBuffer` Arc pulled from the
+    //      playlist grid-tier LRU at dialog-open; dropping it here releases
+    //      it on the same tick the body branch unmounts.
+    //
+    // Pair the Arc drop with an off-thread `heap_trim::trim()` (parity with
+    // `release_detail_artwork`) so glibc returns the freed pages instead of
+    // holding them in the arena. Trim must stay off the UI thread — it
+    // walks arena free lists.
     {
         let weak = weak.clone();
         let s = state.clone();
         ui.global::<Dialog>().on_closed(move || {
             let Some(ui) = weak.upgrade() else { return };
-            ui.global::<Dialog>().set_current_artwork(Image::default());
+            let dlg = ui.global::<Dialog>();
+            dlg.invoke_closed_teardown();
+            dlg.set_current_artwork(Image::default());
+            // The Edit-Tags dialog pins a decoded cover in `TagEditor.cover`
+            // (another `image`-typed property with no Slint default literal);
+            // release it here — this is the one `on_closed`, extended not
+            // duplicated.
+            ui.global::<TagEditor>().set_cover(Image::default());
             s.runtime.spawn_blocking(crate::tasks::heap_trim::trim);
         });
     }
@@ -316,40 +337,11 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
         });
     }
 
-    // add-tracks: from any track row's Add-to-Playlist > [existing
-    // playlist]. Background-add + refresh; toast on completion.
-    {
-        let s = state.clone();
-        let pu = playlists_ui.clone();
-        let weak = weak.clone();
-        playlists.on_add_tracks(move |playlist_id, track_ids| {
-            let pid = i64::from(playlist_id);
-            let ids: Vec<i64> = track_ids.iter().map(i64::from).collect();
-            if ids.is_empty() {
-                return;
-            }
-            let count = ids.len();
-            let s = s.clone();
-            let pu = pu.clone();
-            let weak = weak.clone();
-            s.runtime.clone().spawn(async move {
-                if let Err(e) = library::playlists::add_to_playlist(&s, pid, ids).await {
-                    log::warn!("playlists::add_tracks({pid}): {e}");
-                    return;
-                }
-                if let Err(e) = playlists_ui_mod::fetch_grid(&s, &pu, weak.clone()).await {
-                    log::warn!("playlists::add_tracks refetch grid: {e}");
-                }
-                if pu.detail_playlist_id() == pid
-                    && let Err(e) =
-                        playlists_ui_mod::refresh_detail(&s, &pu, weak, pid).await
-                {
-                    log::warn!("playlists::add_tracks refresh detail: {e}");
-                }
-                log::info!("playlists::add_tracks({pid}): {count} track(s)");
-            });
-        });
-    }
+    // Add-to-Playlist commit (`add-tracks-to-selected`) + the per-row /
+    // select-all toggles live in `files.rs` alongside the Export picker's
+    // selection handlers — they share the model-mutation + selection-meta
+    // pattern, and the commit needs the `Rc<NotificationsUi>` for its
+    // completion toast (wired after the notifications stack exists).
 
     // request-add-to-playlist: track row's "Add to Playlist" entry
     // (single-row or multi-select). Runs two short SELECTs in parallel
@@ -388,12 +380,17 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
                 let _ = weak.upgrade_in_event_loop(move |ui| {
                     // Skip rows whose i64 playlist id can't fit in the
                     // Slint-side i32 (`PlaylistPickRow.id`). The picker's
-                    // click handler routes back into Rust through
-                    // `Playlists.add-tracks(int, [int])` — surfacing the
-                    // row with a clamped id would no-op on click.
+                    // toggle / commit route back into Rust by that id
+                    // (`Playlists.toggle-add-pick` / `add-tracks-to-selected`)
+                    // — surfacing a row with a clamped id would mis-target.
                     let rows: Vec<UiPlaylistPickRow> = playlist_stats
                         .into_iter()
                         .filter(|p| p.id != exclude)
+                        // Smart playlists derive membership from rules — adding
+                        // tracks would write orphan `playlist_items` rows that
+                        // never surface. Exclude them as targets (same gate as
+                        // reorder / remove / file-drop).
+                        .filter(|p| !p.is_smart)
                         .filter_map(|p| {
                             let id = i32::try_from(p.id).ok().or_else(|| {
                                 log::warn!(
@@ -412,11 +409,16 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
                                     p.thumbnail_path.as_deref().unwrap_or(""),
                                 ),
                                 contained_count: contained,
+                                // Multi-select: start with nothing ticked; the
+                                // user opts in per playlist (or via "Select all").
+                                selected: false,
                             })
                         })
                         .collect();
                     let dlg = ui.global::<Dialog>();
                     dlg.set_playlist_pick_rows(ModelRc::new(VecModel::from(rows)));
+                    dlg.set_add_select_all(false);
+                    dlg.set_add_selected_count(0);
                     dlg.set_open(true);
                 });
             });
