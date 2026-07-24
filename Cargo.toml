@@ -1,6 +1,6 @@
 [package]
 name = "Melodia"
-version = "0.8.0"
+version = "0.9.0"
 edition = "2024"
 # Kept in lockstep with `rust-toolchain.toml` and `clippy.toml`'s `msrv`.
 rust-version = "1.97"
