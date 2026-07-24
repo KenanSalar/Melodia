@@ -15,8 +15,13 @@ use super::model::Presence;
 const ASSET_LOGO: &str = "melodia";
 /// Art-asset key for the paused badge.
 const ASSET_PAUSED: &str = "paused";
+/// Art-asset key for the playing badge — the small corner overlay shown over an
+/// album cover while playing (in place of the app logo).
+const ASSET_PLAYING: &str = "playing";
 /// Small-image caption while paused.
 const PAUSED_TEXT: &str = "Paused";
+/// Small-image caption while playing.
+const PLAYING_TEXT: &str = "Playing";
 
 /// The single fixed profile button. Deliberately not the resolved album link —
 /// a fixed target has no per-track state and can never point somewhere wrong.
@@ -98,12 +103,12 @@ struct AssetsDto<'a> {
 fn activity_dto(p: &Presence) -> ActivityDto<'_> {
     let large_image = p.large_image.as_deref().unwrap_or(ASSET_LOGO);
     let has_cover = p.large_image.is_some();
-    // Paused → paused badge; a cover in the large slot → app logo as the corner
-    // badge; otherwise the large slot already is the logo, so no small badge.
+    // Paused → paused badge; a cover in the large slot → a play badge over it;
+    // otherwise the large slot already is the logo, so no small badge.
     let (small_image, small_text) = if p.paused {
         (Some(ASSET_PAUSED), Some(PAUSED_TEXT))
     } else if has_cover {
-        (Some(ASSET_LOGO), None)
+        (Some(ASSET_PLAYING), Some(PLAYING_TEXT))
     } else {
         (None, None)
     };

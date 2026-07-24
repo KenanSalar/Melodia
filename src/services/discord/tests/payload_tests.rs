@@ -44,17 +44,17 @@ fn playing_activity_json_carries_type_and_timestamps() {
 }
 
 #[test]
-fn cover_url_fills_large_image_and_swaps_logo_to_badge() {
+fn cover_url_fills_large_image_and_shows_play_badge() {
     let with_cover = Presence {
         large_image: Some("https://cdn.example/cover.jpg".to_owned()),
         ..playing_card()
     };
     let value = parse(&set_activity_json(&with_cover, 1, "1-1"));
     let activity = &value["args"]["activity"];
-    // The cover fills the large slot; the logo drops to the corner badge.
+    // The cover fills the large slot; a play badge overlays the corner.
     assert_eq!(activity["assets"]["large_image"], "https://cdn.example/cover.jpg");
-    assert_eq!(activity["assets"]["small_image"], "melodia");
-    assert!(activity["assets"]["small_text"].is_null());
+    assert_eq!(activity["assets"]["small_image"], "playing");
+    assert_eq!(activity["assets"]["small_text"], "Playing");
     assert_eq!(activity["buttons"][0]["label"], "Get Melodia");
 }
 
