@@ -380,6 +380,11 @@ async fn run_commit(
     // tag editor didn't, leaving a moved track's new album with a blank cover.
     queries::scan::update_album_artwork_from_tracks(&mut tx).await?;
 
+    // Retagging a track into a different album or genre can strand its old album
+    // (and that album's artist) or old genre with zero tracks; nothing else deletes
+    // an emptied row, so sweep orphans here before committing.
+    queries::scan::prune_orphans(&mut tx).await?;
+
     tx.commit().await?;
     Ok(updated_ids)
 }

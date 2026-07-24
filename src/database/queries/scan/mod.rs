@@ -19,7 +19,7 @@ pub use lookups::{
 };
 pub use mutations::{
     INSERT_CHUNK_ROWS, NewTrackRow, delete_track_by_path, delete_tracks_by_paths_batch,
-    insert_track, insert_tracks_batch, update_album_artwork_from_tracks,
+    insert_track, insert_tracks_batch, prune_orphans, update_album_artwork_from_tracks,
     update_track_artwork_if_missing, update_track_location, update_track_metadata,
 };
 pub use sort_key::to_natural_sort_key;
