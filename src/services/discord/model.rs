@@ -1,50 +1,24 @@
 //! Pure Discord Rich Presence projection: turn the player's published
-//! view-model into a Discord "activity" payload, plus the dedupe rule that keeps
+//! view-model into a [`Presence`] card, plus the dedupe rule that keeps
 //! a state-change-only `watch` from becoming an IPC write per volume tap.
 //!
 //! No I/O, no locks, no clock reads — `now_ts` (UNIX **seconds**) is an input,
 //! the same shape as [`crate::services::scrobble::detector`] and
 //! `player::handlers::evaluate_playing_tick`. The impure task in
-//! [`crate::tasks::discord_presence`] drives it; [`super::ipc`] ships the bytes
-//! the `*_json` builders here produce.
-
-use serde::Serialize;
+//! [`crate::tasks::discord_presence`] drives it; [`super::payload`] serializes
+//! the [`Presence`] it produces and [`super::ipc`] ships the bytes.
 
 use crate::entities::track::TrackSummary;
 use crate::player::state::PlayerViewModelLight;
 use crate::services::settings::DiscordFlags;
 
-/// Art-asset key for the app logo (uploaded under this name in the Discord
-/// application's Art Assets). The large image when there's no cover, and the
-/// small corner badge when a cover fills the large slot.
-const ASSET_LOGO: &str = "melodia";
-/// Art-asset key for the paused badge.
-const ASSET_PAUSED: &str = "paused";
 /// Fallback album line / large-image caption when a track is untagged.
 const APP_NAME: &str = "Melodia";
-/// Small-image caption while paused.
-const PAUSED_TEXT: &str = "Paused";
 
 /// Discord truncates `details`/`state` past 128 characters and rejects a value
 /// shorter than 2, so we clamp both before the string leaves the model.
 const MAX_FIELD_CHARS: usize = 128;
 const MIN_FIELD_CHARS: usize = 2;
-
-/// The single fixed profile button. Deliberately not the resolved album link —
-/// a fixed target has no per-track state and can never point somewhere wrong.
-/// English-only, like the tray labels. (Discord hides a button from the owner
-/// and shows it to everyone else viewing the profile.)
-const MELODIA_BUTTON: ButtonDto = ButtonDto {
-    label: "Get Melodia",
-    url: "https://github.com/KenanSalar/Melodia",
-};
-
-/// Activity type 2 = "Listening" — the only value that renders "Listening to …"
-/// and permits an `end` timestamp (the progress bar).
-const ACTIVITY_LISTENING: u8 = 2;
-/// `status_display_type` 2 = Details, so the member-list line shows the song
-/// title rather than the application name.
-const STATUS_DISPLAY_DETAILS: u8 = 2;
 
 /// How far the anchored start may drift (seconds) and still count as the same
 /// play. Absorbs the ~500 ms-stale monitor position and second truncation, so a
@@ -53,7 +27,7 @@ const ANCHOR_TOLERANCE_SECS: u64 = 2;
 
 /// A fully-resolved presence card, owned so it can cross the worker channel.
 /// Built by [`PresenceState`] from the view-model; serialized to the Discord
-/// activity object by [`set_activity_json`].
+/// activity object by [`super::payload::set_activity_json`].
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Presence {
     /// Card title (Discord `details`) — the song title.
@@ -242,130 +216,6 @@ fn clamp_field(s: &str) -> Option<String> {
         return Some(trimmed.to_owned());
     }
     Some(trimmed.chars().take(MAX_FIELD_CHARS).collect())
-}
-
-// ── Wire payloads (serialize mirrors, never hand-rolled impls) ──────────────
-
-#[derive(Serialize)]
-struct HandshakeDto<'a> {
-    v: u8,
-    client_id: &'a str,
-}
-
-#[derive(Serialize)]
-struct SetActivityDto<'a> {
-    cmd: &'static str,
-    args: SetActivityArgs<'a>,
-    nonce: &'a str,
-}
-
-#[derive(Serialize)]
-struct SetActivityArgs<'a> {
-    pid: u32,
-    /// `null` clears the presence; omitting it would instead leave it unchanged.
-    activity: Option<ActivityDto<'a>>,
-}
-
-#[derive(Serialize)]
-struct ActivityDto<'a> {
-    #[serde(rename = "type")]
-    activity_type: u8,
-    status_display_type: u8,
-    details: &'a str,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    state: Option<&'a str>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    timestamps: Option<TimestampsDto>,
-    assets: AssetsDto<'a>,
-    /// One fixed profile button — always present on a set (never on a clear,
-    /// which sends `activity: null`).
-    buttons: [ButtonDto; 1],
-}
-
-#[derive(Serialize)]
-struct ButtonDto {
-    label: &'static str,
-    url: &'static str,
-}
-
-#[derive(Serialize)]
-struct TimestampsDto {
-    start: u64,
-    end: u64,
-}
-
-#[derive(Serialize)]
-struct AssetsDto<'a> {
-    large_image: &'a str,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    large_text: Option<&'a str>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    small_image: Option<&'a str>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    small_text: Option<&'a str>,
-}
-
-fn activity_dto(p: &Presence) -> ActivityDto<'_> {
-    let large_image = p.large_image.as_deref().unwrap_or(ASSET_LOGO);
-    let has_cover = p.large_image.is_some();
-    // Paused → paused badge; a cover in the large slot → app logo as the corner
-    // badge; otherwise the large slot already is the logo, so no small badge.
-    let (small_image, small_text) = if p.paused {
-        (Some(ASSET_PAUSED), Some(PAUSED_TEXT))
-    } else if has_cover {
-        (Some(ASSET_LOGO), None)
-    } else {
-        (None, None)
-    };
-    let timestamps = match (p.start_ts, p.end_ts) {
-        (Some(start), Some(end)) => Some(TimestampsDto { start, end }),
-        _ => None,
-    };
-    ActivityDto {
-        activity_type: ACTIVITY_LISTENING,
-        status_display_type: STATUS_DISPLAY_DETAILS,
-        details: &p.details,
-        state: p.state.as_deref(),
-        timestamps,
-        assets: AssetsDto {
-            large_image,
-            large_text: p.large_text.as_deref(),
-            small_image,
-            small_text,
-        },
-        buttons: [MELODIA_BUTTON],
-    }
-}
-
-/// The handshake payload — `{"v":1,"client_id":…}`, opcode 0.
-pub fn handshake_json(client_id: &str) -> Vec<u8> {
-    serde_json::to_vec(&HandshakeDto { v: 1, client_id }).unwrap_or_default()
-}
-
-/// A `SET_ACTIVITY` frame body that sets `presence`.
-pub fn set_activity_json(presence: &Presence, pid: u32, nonce: &str) -> Vec<u8> {
-    serde_json::to_vec(&SetActivityDto {
-        cmd: "SET_ACTIVITY",
-        args: SetActivityArgs {
-            pid,
-            activity: Some(activity_dto(presence)),
-        },
-        nonce,
-    })
-    .unwrap_or_default()
-}
-
-/// A `SET_ACTIVITY` frame body that clears the presence (`activity: null`).
-pub fn clear_activity_json(pid: u32, nonce: &str) -> Vec<u8> {
-    serde_json::to_vec(&SetActivityDto {
-        cmd: "SET_ACTIVITY",
-        args: SetActivityArgs {
-            pid,
-            activity: None,
-        },
-        nonce,
-    })
-    .unwrap_or_default()
 }
 
 #[cfg(test)]

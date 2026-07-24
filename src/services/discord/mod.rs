@@ -11,6 +11,7 @@
 mod artwork;
 pub mod ipc;
 pub mod model;
+pub mod payload;
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, OnceLock, mpsc};
@@ -154,8 +155,7 @@ impl DiscordPresenceService {
         *self.runtime.write() = flags;
         self.status.set_enabled(enabled);
         if enabled {
-            self.ensure_worker();
-            self.send(Command::Enable);
+            self.arm();
         } else {
             self.send(Command::Disable);
         }
@@ -168,8 +168,7 @@ impl DiscordPresenceService {
     /// disabled, and `ensure_worker` skips an already-spawned worker.
     pub fn start_if_enabled(&self) {
         if self.armed() {
-            self.ensure_worker();
-            self.send(Command::Enable);
+            self.arm();
         }
     }
 
@@ -185,6 +184,13 @@ impl DiscordPresenceService {
     /// Clear the card (playback stopped) while staying connected.
     pub fn clear(&self) {
         self.send(Command::Clear);
+    }
+
+    /// Spawn the worker if needed and tell it the feature is on — the shared tail
+    /// of `set_flags` (toggle) and `start_if_enabled` (boot).
+    fn arm(&self) {
+        self.ensure_worker();
+        self.send(Command::Enable);
     }
 
     /// Lazily spawn the detached worker thread on first use, storing its sender.

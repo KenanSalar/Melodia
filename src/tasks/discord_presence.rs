@@ -46,33 +46,14 @@ async fn run_detector(
     service: Arc<DiscordPresenceService>,
     mut vm_rx: watch::Receiver<Option<PlayerViewModelLight>>,
 ) {
-    let mut presence = PresenceState::new();
-    // False→true edge means the feature was just enabled — the card was cleared
-    // while off, so the dedupe state must forget it (else the re-enable dedupes).
-    let mut was_armed = false;
-    // When the last update actually reached the worker — the throttle anchor.
-    let mut last_update: Option<Instant> = None;
-    // The last track whose cover we resolved, and its URL. Keyed on `track.id` so
-    // pause/resume/seek reuse it (no cache lock, no network) — only a genuine
-    // track change resolves.
-    let mut last_art: Option<(i64, Option<String>)> = None;
-
-    prime(
-        &service,
-        &mut presence,
-        &mut vm_rx,
-        &mut was_armed,
-        &mut last_update,
-        &mut last_art,
-    )
-    .await;
+    let mut detector = Detector::new(service);
+    detector.prime(&mut vm_rx).await;
 
     loop {
         tokio::select! {
             biased;
             () = shutdown.cancelled() => {
-                service.clear();
-                log::info!("Discord presence task stopped");
+                detector.shutdown_clear();
                 return;
             }
             changed = vm_rx.changed() => {
@@ -82,27 +63,21 @@ async fn run_detector(
             }
         }
 
-        if !service.armed() {
-            // Disabled: the settings path already cleared the card. Mark the
-            // value seen, drop the throttle anchor (so a later re-enable paints
-            // immediately), and reset the arming edge.
-            let _ = vm_rx.borrow_and_update();
-            was_armed = false;
-            last_update = None;
+        if !detector.service.armed() {
+            detector.on_disabled(&mut vm_rx);
             continue;
         }
 
         // Enforce the throttle by waiting out the remaining window first, so the
         // model is only ever evaluated (and its dedupe state advanced) at the
         // moment we actually send — on current truth re-read after the sleep.
-        if let Some(last) = last_update {
+        if let Some(last) = detector.last_update {
             let elapsed = last.elapsed();
             if elapsed < MIN_UPDATE_INTERVAL {
                 tokio::select! {
                     biased;
                     () = shutdown.cancelled() => {
-                        service.clear();
-                        log::info!("Discord presence task stopped");
+                        detector.shutdown_clear();
                         return;
                     }
                     () = tokio::time::sleep(MIN_UPDATE_INTERVAL.saturating_sub(elapsed)) => {}
@@ -110,91 +85,108 @@ async fn run_detector(
             }
         }
 
-        evaluate_and_send(
-            &service,
-            &mut presence,
-            &mut vm_rx,
-            &mut was_armed,
-            &mut last_update,
-            &mut last_art,
-        )
-        .await;
+        detector.evaluate_and_send(&mut vm_rx).await;
     }
 }
 
-/// Handle the receiver's primed value once before the loop.
-async fn prime(
-    service: &DiscordPresenceService,
-    presence: &mut PresenceState,
-    vm_rx: &mut watch::Receiver<Option<PlayerViewModelLight>>,
-    was_armed: &mut bool,
-    last_update: &mut Option<Instant>,
-    last_art: &mut Option<(i64, Option<String>)>,
-) {
-    if service.armed() {
-        evaluate_and_send(service, presence, vm_rx, was_armed, last_update, last_art).await;
-    } else {
+/// The detector's mutable working state, threaded through the loop. Bundling it
+/// keeps the per-step signatures to `&mut self` + the watch receiver.
+struct Detector {
+    service: Arc<DiscordPresenceService>,
+    presence: PresenceState,
+    /// False→true edge means the feature was just enabled — the card was cleared
+    /// while off, so the dedupe state must forget it (else the re-enable dedupes).
+    was_armed: bool,
+    /// When the last update actually reached the worker — the throttle anchor.
+    last_update: Option<Instant>,
+    /// The last track whose cover we resolved, and its URL. Keyed on `track.id`
+    /// so pause/resume/seek reuse it (no cache lock, no network) — only a genuine
+    /// track change resolves.
+    last_art: Option<(i64, Option<String>)>,
+}
+
+impl Detector {
+    fn new(service: Arc<DiscordPresenceService>) -> Self {
+        Self {
+            service,
+            presence: PresenceState::new(),
+            was_armed: false,
+            last_update: None,
+            last_art: None,
+        }
+    }
+
+    /// Handle the receiver's primed value once before the loop.
+    async fn prime(&mut self, vm_rx: &mut watch::Receiver<Option<PlayerViewModelLight>>) {
+        if self.service.armed() {
+            self.evaluate_and_send(vm_rx).await;
+        } else {
+            let _ = vm_rx.borrow_and_update();
+        }
+    }
+
+    /// Feature is off: the settings path already cleared the card. Mark the value
+    /// seen, drop the throttle anchor (so a later re-enable paints immediately),
+    /// and reset the arming edge.
+    fn on_disabled(&mut self, vm_rx: &mut watch::Receiver<Option<PlayerViewModelLight>>) {
         let _ = vm_rx.borrow_and_update();
+        self.was_armed = false;
+        self.last_update = None;
     }
-}
 
-/// Read current truth from the watch, project it through the model, and push any
-/// resulting update. Assumes the feature is armed. Records the send time so the
-/// throttle window starts from it.
-async fn evaluate_and_send(
-    service: &DiscordPresenceService,
-    presence: &mut PresenceState,
-    vm_rx: &mut watch::Receiver<Option<PlayerViewModelLight>>,
-    was_armed: &mut bool,
-    last_update: &mut Option<Instant>,
-    last_art: &mut Option<(i64, Option<String>)>,
-) {
-    if !*was_armed {
-        presence.reset();
-        *was_armed = true;
+    /// Clear the card on shutdown, logging the stop once.
+    fn shutdown_clear(&self) {
+        self.service.clear();
+        log::info!("Discord presence task stopped");
     }
-    // Clone out of the watch so we can `.await` the cover lookup without holding
-    // the borrow.
-    let vm = vm_rx.borrow_and_update().clone();
-    let flags = service.flags();
-    let Some(update) = presence.on_view_model(vm.as_ref(), now_ts(), &flags) else {
-        return; // deduped, or holding through a `loading` transition
-    };
-    match update {
-        Update::Set(mut card) => {
-            if flags.discord_rpc_artwork {
-                card.large_image = resolve_cover(service, vm.as_ref(), last_art).await;
+
+    /// Read current truth from the watch, project it through the model, and push
+    /// any resulting update. Assumes the feature is armed. Records the send time
+    /// so the throttle window starts from it.
+    async fn evaluate_and_send(&mut self, vm_rx: &mut watch::Receiver<Option<PlayerViewModelLight>>) {
+        if !self.was_armed {
+            self.presence.reset();
+            self.was_armed = true;
+        }
+        // Clone out of the watch so we can `.await` the cover lookup without
+        // holding the borrow.
+        let vm = vm_rx.borrow_and_update().clone();
+        let flags = self.service.flags();
+        let Some(update) = self.presence.on_view_model(vm.as_ref(), now_ts(), &flags) else {
+            return; // deduped, or holding through a `loading` transition
+        };
+        match update {
+            Update::Set(mut card) => {
+                if flags.discord_rpc_artwork {
+                    card.large_image = self.resolve_cover(vm.as_ref()).await;
+                }
+                self.service.apply(card);
             }
-            service.apply(card);
+            Update::Clear => {
+                self.last_art = None;
+                self.service.clear();
+            }
         }
-        Update::Clear => {
-            *last_art = None;
-            service.clear();
-        }
+        self.last_update = Some(Instant::now());
     }
-    *last_update = Some(Instant::now());
-}
 
-/// Resolve the current track's cover URL, reusing the last one for the same
-/// track. Only a genuine track change (both tags present) hits the service —
-/// pause/resume/seek land on the `track.id` fast path with no lock or network.
-async fn resolve_cover(
-    service: &DiscordPresenceService,
-    vm: Option<&PlayerViewModelLight>,
-    last_art: &mut Option<(i64, Option<String>)>,
-) -> Option<String> {
-    let track = vm.and_then(|v| v.current_track.as_ref())?;
-    if let Some((id, url)) = last_art.as_ref()
-        && *id == track.id
-    {
-        return url.clone();
+    /// Resolve the current track's cover URL, reusing the last one for the same
+    /// track. Only a genuine track change (both tags present) hits the service —
+    /// pause/resume/seek land on the `track.id` fast path with no lock or network.
+    async fn resolve_cover(&mut self, vm: Option<&PlayerViewModelLight>) -> Option<String> {
+        let track = vm.and_then(|v| v.current_track.as_ref())?;
+        if let Some((id, url)) = self.last_art.as_ref()
+            && *id == track.id
+        {
+            return url.clone();
+        }
+        // A new track: resolve only when both tags are present (an untagged
+        // library would otherwise spend a request per track searching for nothing).
+        let url = match (track.artist.as_deref(), track.album.as_deref()) {
+            (Some(artist), Some(album)) => self.service.resolve_artwork(artist, album).await,
+            _ => None,
+        };
+        self.last_art = Some((track.id, url.clone()));
+        url
     }
-    // A new track: resolve only when both tags are present (an untagged library
-    // would otherwise spend a request per track searching for nothing).
-    let url = match (track.artist.as_deref(), track.album.as_deref()) {
-        (Some(artist), Some(album)) => service.resolve_artwork(artist, album).await,
-        _ => None,
-    };
-    *last_art = Some((track.id, url.clone()));
-    url
 }

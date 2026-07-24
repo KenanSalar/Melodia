@@ -18,8 +18,8 @@ use std::time::Duration;
 #[cfg(unix)]
 use std::os::unix::net::UnixStream;
 
-use super::model::{self, Presence};
-use super::{DISCORD_APP_ID, StatusCell};
+use super::model::Presence;
+use super::{DISCORD_APP_ID, StatusCell, payload};
 
 const OP_HANDSHAKE: u32 = 0;
 const OP_FRAME: u32 = 1;
@@ -94,22 +94,18 @@ pub(crate) fn run_worker(rx: &mpsc::Receiver<Command>, status: &Arc<StatusCell>)
         }
 
         let Some(mut conn) = connect() else {
-            status.set_connected(false);
-            match idle_wait(rx, backoff, &mut desired, &mut enabled) {
+            match wait_and_backoff(rx, status, &mut backoff, &mut desired, &mut enabled) {
                 WaitOutcome::Exit => return,
-                WaitOutcome::Continue => backoff = (backoff * 2).min(CONNECT_BACKOFF_MAX),
+                WaitOutcome::Continue => continue,
             }
-            continue;
         };
 
         if let Err(e) = handshake(&mut conn) {
             log::debug!("discord: handshake failed: {e}");
-            status.set_connected(false);
-            match idle_wait(rx, backoff, &mut desired, &mut enabled) {
+            match wait_and_backoff(rx, status, &mut backoff, &mut desired, &mut enabled) {
                 WaitOutcome::Exit => return,
-                WaitOutcome::Continue => backoff = (backoff * 2).min(CONNECT_BACKOFF_MAX),
+                WaitOutcome::Continue => continue,
             }
-            continue;
         }
 
         backoff = CONNECT_BACKOFF_MIN;
@@ -118,7 +114,7 @@ pub(crate) fn run_worker(rx: &mpsc::Receiver<Command>, status: &Arc<StatusCell>)
         // Repaint the held presence after a (re)connect — a Discord restart
         // mid-song brings the card back.
         if let Some(presence) = &desired {
-            let body = model::set_activity_json(presence, pid, &next_nonce(pid, &mut nonce));
+            let body = payload::set_activity_json(presence, pid, &next_nonce(pid, &mut nonce));
             if let Err(e) = send_frame_and_ack(&mut conn, &body) {
                 log::debug!("discord: re-apply failed: {e}");
                 status.set_connected(false);
@@ -154,8 +150,8 @@ fn serve(
 
         if *desired != prev {
             let body = match desired.as_ref() {
-                Some(presence) => model::set_activity_json(presence, pid, &next_nonce(pid, nonce)),
-                None => model::clear_activity_json(pid, &next_nonce(pid, nonce)),
+                Some(presence) => payload::set_activity_json(presence, pid, &next_nonce(pid, nonce)),
+                None => payload::clear_activity_json(pid, &next_nonce(pid, nonce)),
             };
             if let Err(e) = send_frame_and_ack(conn, &body) {
                 log::debug!("discord: send failed: {e}");
@@ -195,6 +191,24 @@ fn idle_wait(
     }
 }
 
+/// After a failed connect or handshake: mark disconnected, wait out the current
+/// backoff (applying any command that lands during it), and grow the backoff on
+/// a plain timeout. `Exit` means all senders dropped — the caller ends the worker.
+fn wait_and_backoff(
+    rx: &mpsc::Receiver<Command>,
+    status: &Arc<StatusCell>,
+    backoff: &mut Duration,
+    desired: &mut Option<Presence>,
+    enabled: &mut bool,
+) -> WaitOutcome {
+    status.set_connected(false);
+    let outcome = idle_wait(rx, *backoff, desired, enabled);
+    if matches!(outcome, WaitOutcome::Continue) {
+        *backoff = (*backoff * 2).min(CONNECT_BACKOFF_MAX);
+    }
+    outcome
+}
+
 fn handle_command(cmd: Command, desired: &mut Option<Presence>, enabled: &mut bool) {
     match cmd {
         Command::Enable => *enabled = true,
@@ -222,7 +236,7 @@ fn next_nonce(pid: u32, nonce: &mut u64) -> String {
 /// Send the handshake and read Discord's `READY` dispatch. Connected once it
 /// returns `Ok`.
 fn handshake(conn: &mut Connection) -> io::Result<()> {
-    write_frame(conn, OP_HANDSHAKE, &model::handshake_json(DISCORD_APP_ID))?;
+    write_frame(conn, OP_HANDSHAKE, &payload::handshake_json(DISCORD_APP_ID))?;
     read_reply(conn)?;
     Ok(())
 }
