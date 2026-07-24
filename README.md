@@ -257,7 +257,8 @@ cargo test                                      # run tests
 > when the album-cover option is on, an **album-cover URL** — to your running
 > Discord client over its local IPC socket. Resolving that cover is the feature's
 > one outbound network call: the artist + album are looked up on **Deezer's public
-> API**, and Discord's own CDN then fetches the returned URL server-side (Melodia
+> API**, falling back to Apple's keyless **iTunes Search API** when Deezer has no
+> match, and Discord's own CDN then fetches the returned URL server-side (Melodia
 > never uploads your files anywhere). Nothing leaves the machine while the feature
 > is off, or while Discord isn't running. Building a **fork** needs its own Discord
 > **application ID** — it's public (it ships in every presence payload, so no CI

@@ -373,6 +373,12 @@ async fn run_commit(
         ArtworkEdit::Keep => {}
     }
 
+    // Backfill album covers from their tracks (null-only, never an overwrite), so
+    // retagging a track into a different album lets that album inherit the track's
+    // existing artwork — the scan/import/reconcile paths already do this, but the
+    // tag editor didn't, leaving a moved track's new album with a blank cover.
+    queries::scan::update_album_artwork_from_tracks(&mut tx).await?;
+
     tx.commit().await?;
     Ok(updated_ids)
 }
