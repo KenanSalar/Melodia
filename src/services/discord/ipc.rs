@@ -140,15 +140,20 @@ fn serve(
     desired: &mut Option<Presence>,
     enabled: &mut bool,
 ) -> ServeOutcome {
+    // The card most recently written to the socket, diffed against `desired`
+    // after each command batch so an update that changes nothing visible (a lone
+    // `Enable`, or a re-applied identical card) doesn't spend an IPC write. Seeded
+    // from `desired` because the caller already repainted it on (re)connect, and
+    // cloned only when we actually send — far cheaper than cloning every command.
+    let mut last_sent = desired.clone();
     loop {
         let Ok(cmd) = rx.recv() else {
             return ServeOutcome::Exit;
         };
-        let prev = desired.clone();
         handle_command(cmd, desired, enabled);
         drain_commands(rx, desired, enabled);
 
-        if *desired != prev {
+        if *desired != last_sent {
             let body = match desired.as_ref() {
                 Some(presence) => payload::set_activity_json(presence, pid, &next_nonce(pid, nonce)),
                 None => payload::clear_activity_json(pid, &next_nonce(pid, nonce)),
@@ -157,6 +162,7 @@ fn serve(
                 log::debug!("discord: send failed: {e}");
                 return ServeOutcome::Disconnected;
             }
+            last_sent.clone_from(desired);
         }
         if !*enabled {
             return ServeOutcome::Disabled;
@@ -315,26 +321,33 @@ const SOCKET_SUBDIRS: &[&str] = &[
 ];
 
 /// Runtime dirs to probe, in order — `XDG_RUNTIME_DIR` first, then the temp-dir
-/// env vars, then `/tmp`.
+/// env vars, then `/tmp`. Env-derived and fixed for the process's lifetime, so
+/// it's resolved once and shared rather than rebuilt on every reconnect probe.
 #[cfg(unix)]
-fn socket_bases() -> Vec<String> {
-    let mut bases: Vec<String> = ["XDG_RUNTIME_DIR", "TMPDIR", "TMP", "TEMP"]
-        .into_iter()
-        .filter_map(|var| std::env::var(var).ok())
-        .filter(|value| !value.is_empty())
-        .collect();
-    bases.push("/tmp".to_owned());
-    bases
+fn socket_bases() -> &'static [String] {
+    static BASES: std::sync::LazyLock<Vec<String>> = std::sync::LazyLock::new(|| {
+        let mut bases: Vec<String> = ["XDG_RUNTIME_DIR", "TMPDIR", "TMP", "TEMP"]
+            .into_iter()
+            .filter_map(|var| std::env::var(var).ok())
+            .filter(|value| !value.is_empty())
+            .collect();
+        bases.push("/tmp".to_owned());
+        bases
+    });
+    &BASES
 }
 
 /// Probe `discord-ipc-{0..10}` across every base/subdir and take the first that
 /// opens. `None` when Discord isn't running.
 #[cfg(unix)]
 fn connect() -> Option<Connection> {
+    use std::fmt::Write as _;
+    let mut path = String::with_capacity(64);
     for base in socket_bases() {
         for sub in SOCKET_SUBDIRS {
             for i in 0..10 {
-                let path = format!("{base}/{sub}discord-ipc-{i}");
+                path.clear();
+                let _ = write!(path, "{base}/{sub}discord-ipc-{i}");
                 if let Ok(stream) = UnixStream::connect(&path) {
                     let _ = stream.set_read_timeout(Some(READ_TIMEOUT));
                     log::info!("discord: connected via {path}");

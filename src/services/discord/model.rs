@@ -126,41 +126,66 @@ impl PresenceState {
         now_ts: i64,
         flags: &DiscordFlags,
     ) -> Option<Update> {
-        let (identity, update) = classify(vm, now_ts, flags)?;
+        let (identity, decision) = classify(vm, now_ts, flags)?;
         if self.last.matches(identity) {
             return None;
         }
         self.last = identity;
+        // Build the (allocating) card only now that this is a genuine change — a
+        // deduped republish never pays for a presence it would immediately discard.
+        let update = match decision {
+            Decision::Clear => Update::Clear,
+            Decision::Set {
+                track,
+                paused,
+                anchor,
+                duration_ms,
+            } => Update::Set(build_presence(track, paused, anchor, duration_ms)),
+        };
         Some(update)
     }
 }
 
+/// A decision before its (allocating) card is built. Holds only cheap ingredients
+/// — a borrow plus copies — so an evaluation can be classified and deduped without
+/// building a [`Presence`] that a republish would discard.
+enum Decision<'a> {
+    /// Remove the card.
+    Clear,
+    /// Show a card built from these inputs by [`build_presence`].
+    Set {
+        track: &'a TrackSummary,
+        paused: bool,
+        anchor: u64,
+        duration_ms: u64,
+    },
+}
+
 /// The decision, with its dedupe identity. `None` means "hold the current card"
 /// (only the `loading` transition), distinct from a `Clear`.
-fn classify(
-    vm: Option<&PlayerViewModelLight>,
+fn classify<'a>(
+    vm: Option<&'a PlayerViewModelLight>,
     now_ts: i64,
     flags: &DiscordFlags,
-) -> Option<(Identity, Update)> {
+) -> Option<(Identity, Decision<'a>)> {
     let Some(vm) = vm else {
-        return Some((Identity::Cleared, Update::Clear));
+        return Some((Identity::Cleared, Decision::Clear));
     };
     match vm.status {
         // Every track change passes through `loading`; mapping it to a clear
         // would flash the card off and back on (and spend an update window).
         "loading" => None,
-        "stopped" => Some((Identity::Cleared, Update::Clear)),
+        "stopped" => Some((Identity::Cleared, Decision::Clear)),
         _ => {
-            let Some(track) = vm.current_track.as_ref() else {
-                return Some((Identity::Cleared, Update::Clear));
+            let Some(track) = vm.current_track.as_deref() else {
+                return Some((Identity::Cleared, Decision::Clear));
             };
             let paused = vm.status == "paused";
             if paused && flags.discord_rpc_hide_when_paused {
-                return Some((Identity::Cleared, Update::Clear));
+                return Some((Identity::Cleared, Decision::Clear));
             }
             let now_secs = u64::try_from(now_ts).unwrap_or(0);
             let anchor = now_secs.saturating_sub(vm.position_ms / 1000);
-            let presence = build_presence(track, paused, anchor, vm.duration_ms);
             let identity = if paused {
                 Identity::Paused { track_id: track.id }
             } else {
@@ -169,7 +194,15 @@ fn classify(
                     start_ts: anchor,
                 }
             };
-            Some((identity, Update::Set(presence)))
+            Some((
+                identity,
+                Decision::Set {
+                    track,
+                    paused,
+                    anchor,
+                    duration_ms: vm.duration_ms,
+                },
+            ))
         }
     }
 }
