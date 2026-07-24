@@ -1316,6 +1316,31 @@ msgstr "Δεν ήταν δυνατή η αποθήκευση των ετικετ
 msgid "No tracks were updated."
 msgstr "Δεν ενημερώθηκε κανένα κομμάτι."
 
+# ---- Discord ----
+msgid "Show the track you're playing on your Discord profile"
+msgstr "Εμφάνιση του κομματιού που ακούς στο προφίλ σου στο Discord"
+
+msgid "Status"
+msgstr "Κατάσταση"
+
+msgid "Connected to Discord"
+msgstr "Συνδεδεμένο με το Discord"
+
+msgid "Discord not running"
+msgstr "Το Discord δεν εκτελείται"
+
+msgid "Show album artwork"
+msgstr "Εμφάνιση εξωφύλλου άλμπουμ"
+
+msgid "Look up cover art online (via Deezer) to show on the card"
+msgstr "Αναζήτηση εξωφύλλου στο διαδίκτυο (μέσω Deezer) για εμφάνιση στην κάρτα"
+
+msgid "Hide while paused"
+msgstr "Απόκρυψη κατά την παύση"
+
+msgid "Remove the card when paused instead of showing a paused marker"
+msgstr "Αφαίρεση της κάρτας κατά την παύση αντί για εμφάνιση ένδειξης παύσης"
+
 # ---- Scrobbling ----
 msgid "Scrobbling"
 msgstr "Scrobbling"

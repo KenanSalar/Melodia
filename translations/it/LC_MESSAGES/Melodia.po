@@ -1314,6 +1314,31 @@ msgstr "Impossibile salvare i tag"
 msgid "No tracks were updated."
 msgstr "Nessuna traccia è stata aggiornata."
 
+# ---- Discord ----
+msgid "Show the track you're playing on your Discord profile"
+msgstr "Mostra il brano che stai ascoltando sul tuo profilo Discord"
+
+msgid "Status"
+msgstr "Stato"
+
+msgid "Connected to Discord"
+msgstr "Connesso a Discord"
+
+msgid "Discord not running"
+msgstr "Discord non è in esecuzione"
+
+msgid "Show album artwork"
+msgstr "Mostra la copertina dell'album"
+
+msgid "Look up cover art online (via Deezer) to show on the card"
+msgstr "Cerca la copertina online (tramite Deezer) per mostrarla sulla scheda"
+
+msgid "Hide while paused"
+msgstr "Nascondi in pausa"
+
+msgid "Remove the card when paused instead of showing a paused marker"
+msgstr "Rimuovi la scheda in pausa invece di mostrare un indicatore di pausa"
+
 # ---- Scrobbling ----
 msgid "Scrobbling"
 msgstr "Scrobbling"

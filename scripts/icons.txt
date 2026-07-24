@@ -10,6 +10,7 @@ balance
 bedtime
 brush
 category
+chat
 check
 check_circle
 chevron_left

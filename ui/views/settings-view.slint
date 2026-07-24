@@ -10,6 +10,7 @@ import { OverflowMenuSection } from "settings/overflow-menu-section.slint";
 import { LanguageSection } from "settings/language-section.slint";
 import { PlaybackSection } from "settings/playback-section.slint";
 import { ScrobblingSection } from "settings/scrobbling-section.slint";
+import { DiscordSection } from "settings/discord-section.slint";
 import { FileWatchingSection } from "settings/file-watching-section.slint";
 import { UpdateSection } from "settings/update-section.slint";
 import { AboutSection } from "settings/about-section.slint";
@@ -110,6 +111,7 @@ export component SettingsView inherits Rectangle {
                         lang-sec := LanguageSection {}
                         pb-sec   := PlaybackSection {}
                         scrob-sec := ScrobblingSection {}
+                        disc-sec := DiscordSection {}
                         fw-sec   := FileWatchingSection {}
                         upd-sec  := UpdateSection {}
                         about-sec := AboutSection {}
@@ -126,6 +128,7 @@ export component SettingsView inherits Rectangle {
                                 && !lang-sec.has-matches
                                 && !pb-sec.has-matches
                                 && !scrob-sec.has-matches
+                                && !disc-sec.has-matches
                                 && !fw-sec.has-matches
                                 && !upd-sec.has-matches
                                 && !about-sec.has-matches: Rectangle {

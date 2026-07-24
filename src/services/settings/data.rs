@@ -360,6 +360,36 @@ pub struct ScrobbleFlags {
     pub mbid_auto_tag: bool,
 }
 
+/// Discord Rich Presence toggles. Like the other substructs these are
+/// `#[serde(flatten)]`'d into `settings.json` with a whole-struct
+/// `#[serde(default)]`, so an install written before this feature still loads
+/// (every field defaults). Discord has no *credentials* here — the application
+/// id is a compile-time constant, not a secret — so nothing lives outside
+/// `settings.json`. `discord_rpc_artwork` defaults on but is inert until the
+/// parent toggle is enabled, hence the manual `Default`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct DiscordFlags {
+    /// Master switch — off by default (opt-in, per the shipped-app rule for new
+    /// visible behavior).
+    pub discord_rpc_enabled: bool,
+    /// Show album artwork on the card. Drives an outbound cover lookup, so it
+    /// gets its own toggle; only takes effect under an enabled parent.
+    pub discord_rpc_artwork: bool,
+    /// Hide the card entirely while paused instead of showing a paused marker.
+    pub discord_rpc_hide_when_paused: bool,
+}
+
+impl Default for DiscordFlags {
+    fn default() -> Self {
+        Self {
+            discord_rpc_enabled: false,
+            discord_rpc_artwork: true,
+            discord_rpc_hide_when_paused: false,
+        }
+    }
+}
+
 /// Library-management toggles. See `PlaybackFlags` for the substruct rationale.
 ///
 /// `folder_watching_enabled` defaults to `true` — consumer music players
@@ -555,6 +585,8 @@ pub struct SettingsData {
     #[serde(flatten)]
     pub scrobble: ScrobbleFlags,
     #[serde(flatten)]
+    pub discord: DiscordFlags,
+    #[serde(flatten)]
     pub library: LibraryFlags,
     #[serde(flatten)]
     pub layout: LayoutFlags,
@@ -596,6 +628,7 @@ impl Default for SettingsData {
             window: WindowFlags::default(),
             tray: TrayFlags::default(),
             scrobble: ScrobbleFlags::default(),
+            discord: DiscordFlags::default(),
             library: LibraryFlags::default(),
             layout: LayoutFlags::default(),
             updates: UpdateFlags::default(),

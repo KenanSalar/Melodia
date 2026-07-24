@@ -9,6 +9,7 @@ pub mod detail_artwork;
 pub mod detail_filter;
 pub mod detail_selection;
 pub mod detail_view;
+pub mod discord_settings;
 pub mod equalizer;
 pub mod replaygain;
 pub mod event_sink;

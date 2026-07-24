@@ -19,30 +19,77 @@ reverted to 1.16.1 because 1.17.0 regressed us twice:
    animations (confirmed on the queue sheet). No in-app mitigation; needs an upstream issue
    with our numbers if it persists on ≥ 1.17.1.
 
-Re-migration checklist lives in the plan file from the 1.17.0 attempt; once we're stable on
-1.17.x, items below unblock individually.
+**Upstream status — checked 2026-07-23.** 1.17.1 (2026-07-07) is still the newest release; no
+1.17.2, and master's `CHANGELOG.md` has no Unreleased section. Neither regression has a
+released fix, so there is nothing new to re-attempt yet. Blocker 2 has **no upstream issue at
+all** — slint#11397 is the closed work that *introduced* the eager `ensure_instantiated` pass,
+and nothing tracks its per-frame cost. Filing that issue with our queue-sheet numbers is the
+highest-value action available: every 🟢 item below queues behind it.
+
+## Re-migration checklist
+
+Run this when a release lands that clears both blockers. (The 1.17.0-attempt plan file this
+used to point at is gone — the checklist lives here now.)
+
+- [ ] Bump `slint` (`Cargo.toml:110`) + `slint-build` (`Cargo.toml:283`) + `Cargo.lock`. No
+      feature renames touch our set — `unstable-winit-030` and `slint::winit_030` are
+      unchanged in 1.17.x, and `i-slint-backend-winit` still wants `winit = "0.30.2"`, so the
+      vendored fork's `[patch.crates-io]` keeps applying. MSRV 1.92 vs our 1.97.0 pin: fine.
+- [ ] Re-apply the blocker-1 fix in `ui/components/view-transition.slint` — read the animated
+      properties once in `init` so 1.17's eager instantiation still establishes a from-value.
+      It was reverted with the rollback; the file is currently back to the plain 1ms-Timer form.
+- [ ] Re-measure frame pacing on the queue sheet (blocker 2) before touching anything else.
+- [ ] Peak RSS via `/usr/bin/time -v` against the current release build — eager `if`/`for`
+      instantiation touches ~134 `if`-gated mounts.
+- [ ] **Locale decimal separator** — 1.17 routes float→string through the locale's separator
+      (exposed as `Platform.decimal-separator`). Exactly one site yields a fractional value:
+      `ui/views/settings/playback-section.slint:120`, which renders `2,5 s` instead of `2.5 s`
+      in de/fr/es/tr/el/it. Arguably the correct localization; check the `.po` strings still
+      read naturally. Everything else is integer-valued (the `round(…)` dB/volume readouts) or
+      a string literal (`current-speed-label()`), so unaffected.
+- [ ] Default font size is now read from system settings on Windows/Linux. We pin
+      `default-font-size` at `ui/app-window.slint:129` and have a single `Window` root, so this
+      should be inert — visual-check on a non-default font scale anyway, since the patched
+      Vazirmatn metrics assume our size.
+- [ ] Visual-check every popup: 1.17.1 changed non-native popup clipping (#12324).
+- [ ] `Tooltip` name shadowing is benign (all 7 call sites import ours explicitly), but confirm
+      the compiler stays quiet about it.
 
 Legend: 🟢 adoptable once on 1.17.x · 🟡 shipped upstream but wait/verify first · 🔭 upstream
 foundation only — watch, not yet usable.
 
 ---
 
-## 🔭 OS drag-and-drop → retire the vendored winit fork (the big one)
+## 🟡 OS drag-and-drop → retire the vendored winit fork (the big one)
 
 - **Today:** `winit/` vendored fork (0.30.13 + 3 Wayland-DnD commits from abandoned winit
   PR #4009), wired via `[patch.crates-io]`. Flow: `winit_filter.rs::DroppedFile` →
   `drop_coalescer.rs` → `queue_import_files`; `HoveredFile{,Cancelled}` → `Queue.is-drop-hovered`.
 - **Upstream in 1.17:** `DragArea`/`DropArea` elements + `data-transfer` type — **in-process
-  only** for now. Cross-application drag/drop (external file drops included) is in development
-  in **winit PR #4571** (this supersedes the #1881/#4009 lineage our fork is based on; update
-  the CLAUDE.md watch reference).
-- **Trigger:** winit release containing #4571 + a Slint release that plumbs external drops
-  into `DropArea` with file paths.
+  only** in the released 1.17.x.
+- **Moved 2026-07-16 (was 🔭):** winit **PR #4571 "New drag and drop API" merged**. Receive
+  *and* initiate on Wayland/Windows/macOS; X11 receive-only (initiating explicitly out of
+  scope). Written expressly to support Slint's DnD work (slint#1967, closed 2026-07-19). Slint
+  is already plumbing it on the **`feature/winit-0.31` branch** — `Add native drag-and-drop to
+  the winit backend (#12294)` on 2026-07-17, `Support dragging and dropping images (#12549)` on
+  2026-07-20; tracking issue slint#11243 still open. Both halves of the trigger are now in
+  motion rather than speculative — this is the nearest-term large retirement available.
+- **Trigger:** a winit **0.31 release** carrying #4571 (newest tag is 0.31.0-beta.2) + a Slint
+  release cut from `feature/winit-0.31` that surfaces external drops as file paths on
+  `DropArea`. Note this also means `unstable-winit-030` → `unstable-winit-031` and a
+  `slint::winit_030` → `winit_031` rename across `winit_filter.rs`, `main.rs`,
+  `ui/albums/grid.rs` — the fork retirement and the winit major bump land together.
 - **Migration:** delete `winit/` + the `[patch.crates-io]` block; replace the `winit_filter`
   DnD arms + `drop_coalescer` with a `DropArea` over the content panel feeding
   `queue_import_files`; re-check the queue-sheet drop gating (`is_open` atomic filter).
-- **Risk:** the fork also carries the `WindowId` fix and URI percent-decoding — verify upstream
-  covers both before deleting.
+- **Risk:** #4571 is a **rewrite** around a new `DataTransfer` abstraction, not a continuation
+  of #4009 — so the fork's `WindowId` fix and URI percent-decoding aren't "did they take our
+  commits" questions, they're entirely different code. Re-test percent-decoded paths (spaces,
+  non-ASCII) empirically on the new API before deleting the fork.
+- **Also update `CLAUDE.md` on retirement** — three sites still cite the superseded lineage:
+  `CLAUDE.md:130` (fork provenance, PR #4009), `:192` ("winit#1881 open since 2021"), `:254`
+  ("Retires … when upstream lands native Wayland DnD (winit#1881)"). winit#1881 is still open
+  but #4571 supersedes it in practice.
 
 ## 🟡 `SystemTrayIcon` element → retire the dual tray stack
 
@@ -60,12 +107,20 @@ foundation only — watch, not yet usable.
   pin worry entirely.
 - **Risk:** feature parity on all three platforms; check idle-RSS impact per Memory Discipline.
 
-## 🟢 Built-in `Tooltip` element → retire our tooltip component
+## 🟡 Built-in `Tooltip` element → retire our tooltip component
 
-- **Today:** `ui/components/tooltip.slint` (hand-rolled, reveal-timer at line ~43) — our
+- **Today:** `ui/components/tooltip.slint` (hand-rolled, `reveal-timer` at line 55) — our
   component name shadows the new built-in, which compiles fine but is confusing long-term.
-- **Upstream in 1.17:** native `Tooltip` element; 1.17.0 has a known clipping issue near window
-  edges (upstream #12260) — check its status first.
+  Seven call sites, all importing ours explicitly: `icon-button.slint:119`,
+  `macos-traffic-light.slint:112`, `action-pill.slint:182`, `settings/color-dot-grid.slint:43`,
+  `playlists-view.slint:321`, `custom-titlebar.slint:83`, `now-playing/play-button.slint:160`.
+- **Upstream in 1.17:** native `Tooltip` element.
+- **Blocked (was 🟢; re-checked 2026-07-23):** slint#12260 *"Tooltip is clipped when the anchor
+  widget is near the edge of the window"* is **still open** (filed 2026-06-26). The 1.17.1
+  popup-clipping fix (#12324) is a *different* bug — non-native popups — and does not resolve
+  it. Several of our call sites are edge-adjacent (`custom-titlebar.slint:83`,
+  `macos-traffic-light.slint:112`), so adopting today would regress them.
+- **Trigger:** #12260 closed and released.
 - **Migration:** swap call sites (IconButton `tooltip-text`, etc.), delete our component, drop
   the name shadowing.
 - **Risk:** styling parity with our popup chrome (`PopupSurface` look); reveal-delay behavior.
@@ -96,6 +151,28 @@ foundation only — watch, not yet usable.
 - **Risk:** high regression surface (custom titlebar, maximize seed, resize ring gating,
   `RESPAWN_AFTER_EXIT`). The winit path works; migrate only if it meaningfully simplifies
   `window_chrome/`. Low priority.
+
+## 🔭 `WindowMoveArea` → retire the winit drag-window intercept
+
+- **Today:** dragging the custom titlebar goes through the winit layer because `drag_window()`
+  called from a Slint `pointer-event(down)` leaks the input grab. A `TouchArea` reports
+  `has-hover` via `WindowChrome.drag-region-hover-changed` into an atomic, and
+  `winit_filter.rs` intercepts `MouseInput { Pressed, Left }` when that atomic is true →
+  `drag_window()` → `PreventDefault`.
+- **Upstream:** `WindowMoveArea` element — landed on master **2026-07-07**, **not in 1.17.1**
+  (verified against the `v1.17.1` tag), so it ships in 1.18. Its own docs target our exact
+  case: *"such as a custom title bar in a window without native decorations (`no-frame: true`)
+  … A plain click doesn't move the window, so child elements like TouchArea stay interactive.
+  The windowing system performs the move."* That last clause is the grab-leak problem we
+  worked around. Carries an `enabled` property, so the maximized/native-titlebar gating stays
+  expressible declaratively.
+- **Trigger:** the 1.18 release (plus the two blockers above cleared).
+- **Migration:** wrap the titlebar drag region in `WindowMoveArea`; delete the
+  `drag-region-hover-changed` callback, its atomic, and the `MouseInput` arm in
+  `winit_filter.rs`. The DnD arms and the `MouseWheel`/`CompositeScroll` arm in that file are
+  unrelated and stay.
+- **Risk:** verify the drag threshold doesn't swallow clicks on titlebar buttons (traffic
+  lights, window controls) — that's the whole reason we route through `has-hover` today.
 
 ## 🟢 `PopupWindow` geometry reactivity + `is-open` → simplify popup plumbing
 
@@ -151,14 +228,12 @@ foundation only — watch, not yet usable.
 
 ## Not yet upstream — watching
 
-- **External drag-and-drop**: winit PR #4571 (see top item). The single biggest vendor-code
-  retirement available to us.
 - **Public Rust-callable translations** (`tr("…")` equivalent): would retire the
   `Settings` pure-callback `@tr` bridges for toast strings (`playlist-{import,export}-*` etc.).
   Still `i_slint_core`-internal as of 1.17.
 - **`direction: rtl` / bidi-aware layouts**: blocks fa/ar/he locales; still absent in 1.17.
 - **Entry/mount animation semantics**: if Slint grows a first-class "animate on mount"
   mechanism, the `ViewTransition` 1ms-Timer pattern (and its 1.17 init-read adaptation) can go.
-- **Slint-native window drag without input-grab leak**: `drag_window()` from Slint
-  `pointer-event(down)` still leaks the grab; our winit-layer intercept stays until upstream
-  changes.
+
+*Promoted out of this list on 2026-07-23: external drag-and-drop (winit #4571 merged) and
+Slint-native window drag (`WindowMoveArea` on master) — both now have their own sections.*

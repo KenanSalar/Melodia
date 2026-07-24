@@ -450,6 +450,8 @@ pub async fn scan_folder_internal(
 
     if any_changes {
         queries::scan::update_album_artwork_from_tracks(&mut tx).await?;
+        // Purged orphan tracks can leave their album/artist/genre empty; sweep those.
+        queries::scan::prune_orphans(&mut tx).await?;
     }
     // Small deltas (`!is_bulk`) never dropped the triggers, so per-row
     // maintenance already kept the stats correct — no recalc needed at all.

@@ -230,6 +230,8 @@ pub(super) async fn process_batch(
 
     if changes > 0 {
         queries::scan::update_album_artwork_from_tracks(&mut tx).await?;
+        // A deleted file can empty its album/artist/genre; prune the stranded rows.
+        queries::scan::prune_orphans(&mut tx).await?;
     }
     tx.commit().await?;
 
