@@ -126,6 +126,7 @@ MP3, FLAC, M4A/AAC, OGG/Vorbis, WAV, ALAC, AIFF
 ### System Integration
 - Scrobbling to **Last.fm** and **ListenBrainz** — connect either or both, report each qualifying play plus a live "now playing" status, and mirror your favorites to their loved/feedback tracks with a **per-service toggle** (each independent). Turning a service's loved-tracks sync on — or connecting it later while sync is on — **syncs your existing favorites automatically**, no need to re-toggle each heart. Plays and loves are held in a durable offline queue and submitted on reconnect
 - Optional **MusicBrainz auto-tagging** (opt-in, ListenBrainz-driven) — resolves each track's MusicBrainz Recording ID and writes it into your files, so "loved" favorites work on ListenBrainz even for an untagged library; runs automatically on new imports and on demand from Settings
+- **Discord Rich Presence** (opt-in, off by default) — shows **Listening to \<song\>** on your Discord profile with artist, album cover, a live progress bar, and a link button; updates on track change, pause, resume, seek and stop, and clears when playback stops or you quit. A **Hide while paused** option and an album-cover toggle live in Settings → Discord
 - OS media controls (Linux: MPRIS2, Windows: SMTC)
 - Always-on-top support (Linux: KDE via KWin D-Bus, GNOME via shell extension)
 - Window state persistence (size, position, maximized)
@@ -250,6 +251,18 @@ cargo test                                      # run tests
 > functional — **ListenBrainz** still works and the Last.fm **Connect** button
 > reports "not configured in this build". ListenBrainz needs no such setup (each
 > user pastes their own token).
+
+> **Note — Discord Rich Presence (optional, off by default).**
+> When enabled, Melodia sends the current track's **title, artist, album** — and,
+> when the album-cover option is on, an **album-cover URL** — to your running
+> Discord client over its local IPC socket. Resolving that cover is the feature's
+> one outbound network call: the artist + album are looked up on **Deezer's public
+> API**, and Discord's own CDN then fetches the returned URL server-side (Melodia
+> never uploads your files anywhere). Nothing leaves the machine while the feature
+> is off, or while Discord isn't running. Building a **fork** needs its own Discord
+> **application ID** — it's public (it ships in every presence payload, so no CI
+> secret, unlike the Last.fm keys); hardcoded in `services/discord/mod.rs` with a
+> `MELODIA_DISCORD_APP_ID` compile-time override.
 
 > **Tip — cleaning up a loosely-tagged library.**
 > The optional MusicBrainz auto-tagging (Settings → Scrobbling → *Add MusicBrainz

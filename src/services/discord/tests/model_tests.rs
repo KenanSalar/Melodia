@@ -300,6 +300,25 @@ fn playing_activity_json_carries_type_and_timestamps() {
     assert_eq!(activity["assets"]["large_image"], "melodia");
     assert!(activity["timestamps"]["start"].is_number());
     assert!(activity["timestamps"]["end"].is_number());
+
+    // The fixed link button rides on every set.
+    assert_eq!(activity["buttons"][0]["label"], "Get Melodia");
+    assert_eq!(activity["buttons"][0]["url"], "https://github.com/KenanSalar/Melodia");
+}
+
+#[test]
+fn cover_url_fills_large_image_and_swaps_logo_to_badge() {
+    let with_cover = Presence {
+        large_image: Some("https://cdn.example/cover.jpg".to_owned()),
+        ..playing_card()
+    };
+    let value = parse(&set_activity_json(&with_cover, 1, "1-1"));
+    let activity = &value["args"]["activity"];
+    // The cover fills the large slot; the logo drops to the corner badge.
+    assert_eq!(activity["assets"]["large_image"], "https://cdn.example/cover.jpg");
+    assert_eq!(activity["assets"]["small_image"], "melodia");
+    assert!(activity["assets"]["small_text"].is_null());
+    assert_eq!(activity["buttons"][0]["label"], "Get Melodia");
 }
 
 #[test]

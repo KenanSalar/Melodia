@@ -211,9 +211,13 @@ impl AppState {
             &settings.scrobble,
             http_client.clone(),
         ));
-        // Stateless — the application id is a compile-time constant, not a
-        // secret to persist, so unlike scrobble it needs no `&paths`/`http`.
-        let discord = Arc::new(DiscordPresenceService::init(&settings.discord));
+        // Persists nothing (the application id is a compile-time constant, not a
+        // secret), so unlike scrobble it needs no `&paths` — but it shares the
+        // one `http_client` pool for the album-cover lookup.
+        let discord = Arc::new(DiscordPresenceService::init(
+            &settings.discord,
+            http_client.clone(),
+        ));
 
         let state = Self {
             paths: Arc::new(paths),

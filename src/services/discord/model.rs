@@ -30,6 +30,15 @@ const PAUSED_TEXT: &str = "Paused";
 const MAX_FIELD_CHARS: usize = 128;
 const MIN_FIELD_CHARS: usize = 2;
 
+/// The single fixed profile button. Deliberately not the resolved album link —
+/// a fixed target has no per-track state and can never point somewhere wrong.
+/// English-only, like the tray labels. (Discord hides a button from the owner
+/// and shows it to everyone else viewing the profile.)
+const MELODIA_BUTTON: ButtonDto = ButtonDto {
+    label: "Get Melodia",
+    url: "https://github.com/KenanSalar/Melodia",
+};
+
 /// Activity type 2 = "Listening" — the only value that renders "Listening to …"
 /// and permits an `end` timestamp (the progress bar).
 const ACTIVITY_LISTENING: u8 = 2;
@@ -54,7 +63,8 @@ pub struct Presence {
     /// Large-image tooltip — the album, falling back to the app name.
     pub large_text: Option<String>,
     /// External `https://` cover URL for the large image; `None` uses the app
-    /// logo asset. Always `None` until the artwork phase.
+    /// logo asset. Populated by the detector task on a track change (the pure
+    /// model leaves it `None` — the lookup is I/O).
     pub large_image: Option<String>,
     pub paused: bool,
     /// Progress-bar anchor `now - elapsed`, UNIX **seconds**. `None` while paused
@@ -267,6 +277,15 @@ struct ActivityDto<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     timestamps: Option<TimestampsDto>,
     assets: AssetsDto<'a>,
+    /// One fixed profile button — always present on a set (never on a clear,
+    /// which sends `activity: null`).
+    buttons: [ButtonDto; 1],
+}
+
+#[derive(Serialize)]
+struct ButtonDto {
+    label: &'static str,
+    url: &'static str,
 }
 
 #[derive(Serialize)]
@@ -314,6 +333,7 @@ fn activity_dto(p: &Presence) -> ActivityDto<'_> {
             small_image,
             small_text,
         },
+        buttons: [MELODIA_BUTTON],
     }
 }
 

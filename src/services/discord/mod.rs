@@ -8,12 +8,12 @@
 //! detached `std::thread` + `std::sync::mpsc` channel rather than a tokio task.
 //! See [`ipc`] for the transport and [`model`] for the pure projection.
 
+mod artwork;
 pub mod ipc;
 pub mod model;
 
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::mpsc;
+use std::sync::{Arc, OnceLock, mpsc};
 
 use parking_lot::{Mutex, RwLock};
 use tokio::sync::watch;
@@ -91,11 +91,16 @@ pub struct DiscordPresenceService {
     /// Command channel to the worker — `None` until the feature is first enabled
     /// (a user who never turns it on pays for no thread, no socket probing).
     worker: Mutex<Option<mpsc::Sender<Command>>>,
+    /// Shared lazy HTTP client (same `OnceLock` as `AppState`/scrobble) for the
+    /// album-cover lookup — one connection pool built on first actual request.
+    http: Arc<OnceLock<reqwest::Client>>,
+    /// Cover-URL cache, keyed case-insensitively on `(artist, album)`.
+    artwork_cache: artwork::ArtworkCache,
 }
 
 impl DiscordPresenceService {
     /// Seed the shadow from `settings.json`. Infallible — nothing to load.
-    pub fn init(flags: &DiscordFlags) -> Self {
+    pub fn init(flags: &DiscordFlags, http: Arc<OnceLock<reqwest::Client>>) -> Self {
         let (tx, _) = watch::channel(DiscordStatus {
             enabled: flags.discord_rpc_enabled,
             connected: false,
@@ -109,6 +114,8 @@ impl DiscordPresenceService {
             runtime: RwLock::new(flags.clone()),
             status,
             worker: Mutex::new(None),
+            http,
+            artwork_cache: artwork::new_cache(),
         }
     }
 
@@ -118,9 +125,19 @@ impl DiscordPresenceService {
         self.runtime.read().discord_rpc_enabled
     }
 
-    /// A snapshot of the flags for the task (hide-while-paused, and later artwork).
+    /// A snapshot of the flags for the task (hide-while-paused, artwork).
     pub fn flags(&self) -> DiscordFlags {
         self.runtime.read().clone()
+    }
+
+    /// Resolve an album cover URL for the presence card's `large_image`, cache
+    /// first. Driven by the detector task on a track change only.
+    pub async fn resolve_artwork(&self, artist: &str, album: &str) -> Option<String> {
+        let client = self
+            .http
+            .get_or_init(crate::services::build_http_client)
+            .clone();
+        artwork::resolve_album_cover(&client, &self.artwork_cache, artist, album).await
     }
 
     pub fn status(&self) -> DiscordStatus {

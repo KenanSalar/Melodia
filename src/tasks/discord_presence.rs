@@ -52,8 +52,20 @@ async fn run_detector(
     let mut was_armed = false;
     // When the last update actually reached the worker — the throttle anchor.
     let mut last_update: Option<Instant> = None;
+    // The last track whose cover we resolved, and its URL. Keyed on `track.id` so
+    // pause/resume/seek reuse it (no cache lock, no network) — only a genuine
+    // track change resolves.
+    let mut last_art: Option<(i64, Option<String>)> = None;
 
-    prime(&service, &mut presence, &mut vm_rx, &mut was_armed, &mut last_update);
+    prime(
+        &service,
+        &mut presence,
+        &mut vm_rx,
+        &mut was_armed,
+        &mut last_update,
+        &mut last_art,
+    )
+    .await;
 
     loop {
         tokio::select! {
@@ -104,20 +116,23 @@ async fn run_detector(
             &mut vm_rx,
             &mut was_armed,
             &mut last_update,
-        );
+            &mut last_art,
+        )
+        .await;
     }
 }
 
 /// Handle the receiver's primed value once before the loop.
-fn prime(
+async fn prime(
     service: &DiscordPresenceService,
     presence: &mut PresenceState,
     vm_rx: &mut watch::Receiver<Option<PlayerViewModelLight>>,
     was_armed: &mut bool,
     last_update: &mut Option<Instant>,
+    last_art: &mut Option<(i64, Option<String>)>,
 ) {
     if service.armed() {
-        evaluate_and_send(service, presence, vm_rx, was_armed, last_update);
+        evaluate_and_send(service, presence, vm_rx, was_armed, last_update, last_art).await;
     } else {
         let _ = vm_rx.borrow_and_update();
     }
@@ -126,25 +141,60 @@ fn prime(
 /// Read current truth from the watch, project it through the model, and push any
 /// resulting update. Assumes the feature is armed. Records the send time so the
 /// throttle window starts from it.
-fn evaluate_and_send(
+async fn evaluate_and_send(
     service: &DiscordPresenceService,
     presence: &mut PresenceState,
     vm_rx: &mut watch::Receiver<Option<PlayerViewModelLight>>,
     was_armed: &mut bool,
     last_update: &mut Option<Instant>,
+    last_art: &mut Option<(i64, Option<String>)>,
 ) {
     if !*was_armed {
         presence.reset();
         *was_armed = true;
     }
+    // Clone out of the watch so we can `.await` the cover lookup without holding
+    // the borrow.
     let vm = vm_rx.borrow_and_update().clone();
     let flags = service.flags();
     let Some(update) = presence.on_view_model(vm.as_ref(), now_ts(), &flags) else {
         return; // deduped, or holding through a `loading` transition
     };
     match update {
-        Update::Set(card) => service.apply(card),
-        Update::Clear => service.clear(),
+        Update::Set(mut card) => {
+            if flags.discord_rpc_artwork {
+                card.large_image = resolve_cover(service, vm.as_ref(), last_art).await;
+            }
+            service.apply(card);
+        }
+        Update::Clear => {
+            *last_art = None;
+            service.clear();
+        }
     }
     *last_update = Some(Instant::now());
+}
+
+/// Resolve the current track's cover URL, reusing the last one for the same
+/// track. Only a genuine track change (both tags present) hits the service —
+/// pause/resume/seek land on the `track.id` fast path with no lock or network.
+async fn resolve_cover(
+    service: &DiscordPresenceService,
+    vm: Option<&PlayerViewModelLight>,
+    last_art: &mut Option<(i64, Option<String>)>,
+) -> Option<String> {
+    let track = vm.and_then(|v| v.current_track.as_ref())?;
+    if let Some((id, url)) = last_art.as_ref()
+        && *id == track.id
+    {
+        return url.clone();
+    }
+    // A new track: resolve only when both tags are present (an untagged library
+    // would otherwise spend a request per track searching for nothing).
+    let url = match (track.artist.as_deref(), track.album.as_deref()) {
+        (Some(artist), Some(album)) => service.resolve_artwork(artist, album).await,
+        _ => None,
+    };
+    *last_art = Some((track.id, url.clone()));
+    url
 }

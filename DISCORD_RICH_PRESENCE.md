@@ -10,8 +10,8 @@
 | 1 — IPC transport (`services/discord/ipc.rs`) | ✅ done |
 | 2 — Pure presence model + detector task | ✅ done |
 | 3 — Settings: flags, persistence, section card | ✅ done |
-| 4 — Album artwork + link button | ☐ |
-| 5 — Docs + gates | ☐ |
+| 4 — Album artwork + link button | ✅ done |
+| 5 — Docs + gates | ⏳ CLAUDE.md + README done; clippy+test green; **release-RSS gate + file deletion deferred to the post-Phase-0 live pass** |
 
 > **Phase 0 deferred.** The application id is scaffolded as a placeholder const
 > (`services/discord/mod.rs::DISCORD_APP_ID`, with a `MELODIA_DISCORD_APP_ID`
@@ -434,6 +434,22 @@ synchronously (so the task and worker see it at once), then `state.persist_block
 shipped `translations/<lang>/LC_MESSAGES/Melodia.po` files (English is the msgid baseline).
 
 ## Phase 4 — Album artwork + link button
+
+> **✅ Landed, with these deltas from the sketch below:** the pure model stays
+> pure — `build_presence` still leaves `large_image` `None`, and the detector task
+> *injects* the resolved URL onto the returned `Update::Set(card)` before
+> `apply` (the model can't do the async lookup). Track-change dedup lives in the
+> **task** as a `last_art: Option<(i64, Option<String>)>` keyed on `track.id`, so
+> pause/resume/seek reuse the last URL with no cache lock and no network; only a
+> new `track.id` (both tags present) calls `service.resolve_artwork`. The service
+> now takes the shared `http` client + a 64-entry `Mutex<LruCache>` (deferred from
+> Phase 2). `evaluate_and_send`/`prime` became `async` — trivial, since they
+> already *clone* the view-model out of the watch. The Deezer response struct is
+> `DeezerAlbumSearchResponse` (matching the file's existing `DeezerSearchResponse`,
+> not the sketch's `DeezerAlbumSearch`). The `buttons` array is baked into
+> `ActivityDto` as a fixed `[ButtonDto; 1]` constant. **`DISCORD_APP_ID` is still
+> the placeholder** — the code + unit tests land without it, but a live cover on a
+> real profile needs Phase 0's registered app id first.
 
 **`src/media/deezer.rs`** — add `search_album_cover(client, artist, album)` alongside
 `search_artist_image_url`. Match the sibling's exact shape: signature returns
