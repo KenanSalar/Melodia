@@ -182,10 +182,13 @@ is on the table.
 | Windows | named pipe | `OpenOptions::new().access_mode(0x3).open(r"\\?\pipe\discord-ipc-{i}")`, `i in 0..10` |
 
 The Windows form is the one `discord-rich-presence`'s `ipc_windows.rs` uses and was verified against
-it: `std::os::windows::fs::OpenOptionsExt::access_mode(0x3)` (`GENERIC_READ | GENERIC_WRITE`) on the
-`\\?\pipe\` device path, then plain `write_all` / `read_exact` on the resulting `std::fs::File`. No
-winapi, no `OVERLAPPED`, no `unsafe` — so it satisfies the crate's `unsafe_code = "deny"` with no
-scoped allow. The single platform difference is the read timeout below.
+it: `std::os::windows::fs::OpenOptionsExt::access_mode(0x3)` on the `\\?\pipe\` device path, then
+plain `write_all` / `read_exact` on the resulting `std::fs::File`. No winapi, no `OVERLAPPED`, no
+`unsafe` — so it satisfies the crate's `unsafe_code = "deny"` with no scoped allow. Copy the crate's
+literal `0x3` verbatim and do **not** "fix" it to the `GENERIC_*` constants: `0x3` is
+`FILE_READ_DATA | FILE_WRITE_DATA` (the file-specific read/write pair a named pipe accepts), **not**
+`GENERIC_READ | GENERIC_WRITE`, which is `0xC0000000`. The single platform difference is the read
+timeout below.
 
 **Framing** — `write_all` the LE opcode, the LE length, then the body; reads take an 8-byte header
 then exactly `len` bytes. A length above a sane cap (say 64 KiB) is a protocol desync → drop the
@@ -195,8 +198,12 @@ connection rather than allocate on a bogus header.
 dispatch). Connected once that returns.
 
 **Draining** — Discord replies with one frame per command, so we read one reply per write, keeping
-the socket buffer balanced without any peeking. If a read yields opcode 3 (`PING`), echo the same
-payload back as opcode 4 (`PONG`) — cheap insurance; the desktop IPC rarely pings. On Unix,
+the socket buffer balanced without any peeking. The read is a small loop rather than a single
+`read_frame`: if a read yields opcode 3 (`PING`), echo the same payload back as opcode 4 (`PONG`) and
+**keep reading** until the command's opcode-1 `FRAME` reply arrives — a stray unsolicited `PING`
+consumed *as* the reply would otherwise leave the real reply buffered and desync the
+one-reply-per-write accounting for the rest of the connection. Cheap insurance; the desktop IPC
+rarely pings, but the loop makes the accounting robust either way. On Unix,
 `set_read_timeout(Some(2s))` means a wedged Discord surfaces as `WouldBlock` / `TimedOut` → drop and
 reconnect instead of parking the thread. Windows' std named-pipe handle has no read-timeout API, so
 it keeps the plain blocking read and inherits that edge — survivable precisely because the worker is
@@ -218,7 +225,13 @@ reconnect-backoff-while-idle loop for free, which tokio's channel has no blockin
   Discord restart mid-song repaints the card.
 - Connect backoff 5 s → 60 s doubling, reset on success. While disabled, park on a plain blocking
   `recv()` — no polling thread while the feature is off.
-- A write error means the socket died → drop it, publish `connected: false`, reconnect.
+- A write error means the socket died → drop it, publish `connected: false`, reconnect. Connect and
+  reconnect failures stay **silent** — no toast, only the `connected: false` status the settings row
+  reflects ("Discord not running") plus a log line. This is the deliberate opposite of Last.fm's
+  *user-initiated* OAuth connect (which toasts `OperationFailed`): the Discord socket is probed in
+  the background on a loop, so toasting each failed attempt would spam. Matches the repo convention
+  that routine/background failures stay silent while only user-triggered actions surface a toast.
+  The worker holds no `ui::*` types — same rule as `tasks/` and `services/scrobble/`.
 - Detached thread, **not** registered with `TaskTracker`. `main()` ends in `process::exit(0)`, so a
   teardown handshake wouldn't reliably land anyway — and doesn't need to: **at quit the mechanism is
   the socket closing**, which makes Discord drop the card on its own. The commands that genuinely
@@ -234,6 +247,12 @@ so the artwork lookup reuses the one connection pool:
 ```rust
 DiscordPresenceService::init(&settings.discord, http_client.clone())
 ```
+
+Note the signature is `(flags, http)` — two args, not the three of
+`ScrobbleService::init(&paths, &flags, http)`. The service owns **no on-disk state of its own**: no
+durable queue, no credentials file (the app ID is a compile-time `const`, not a secret to persist),
+and its only settings live in `settings.json` via the flags struct. So it needs no `&Paths`, which
+is the one field the scrobble service carries that this one drops.
 
 Fields mirror `ScrobbleService`: `runtime: RwLock<DiscordFlags>` (read synchronously, never across
 `.await`), `status_tx: watch::Sender<DiscordStatus>` (`{ enabled, connected }` — written by
@@ -252,15 +271,26 @@ Gate: `cargo clippy --all-targets -- -D warnings`.
 `services/scrobble/detector.rs` and `player::handlers::evaluate_playing_tick`.
 
 - `struct Presence { details, state, large_text, large_image: Option<String>, paused, start_ts,
-  end_ts }` with a `Serialize` impl (or a small serde mirror struct) emitting the activity JSON
-  directly — owned `String`s, since it crosses a channel.
-- Field mapping: `details` = title, `state` = artist, `large_text` = album (fallback `"Melodia"`),
-  `"type": 2` (Listening — RPC accepts only 0/2/3/5) and `"status_display_type": 2` (Details) so the
-  member-list line reads "Listening to \<song\>" rather than "…to Melodia". `status_display_type` is
-  documented for the Social SDK and the gateway activity object (0 Name / 1 State / 2 Details) but
-  **not** in the RPC command reference, so send it and confirm at runtime (verification step 2). The
-  failure mode is graceful — Discord ignores activity fields it doesn't know, so an unsupported
-  client just falls back to the app name.
+  end_ts }` — owned `String`s, since it crosses a channel. **Serialize via a `#[derive(Serialize)]`
+  mirror DTO, not a hand-written `Serialize` impl.** The activity JSON is highly conditional
+  (timestamps omitted when paused, `large_image` omitted when `None`, `small_image`/`small_text`
+  swapping on pause), which is exactly what `#[serde(skip_serializing_if = "Option::is_none")]` on a
+  derived struct expresses cleanly; the repo's own serde rule is "always prefer derive — manual impls
+  are error-prone and rarely needed." Build the DTO from `Presence` at send time and hand it to
+  `serde_json::to_vec`. The one field that can't be a bare `Option` is the pause-driven `small_image`
+  swap (`paused` asset vs. `melodia`), which is a plain match into two owned fields, not a skip.
+- Field mapping — all three read off `vm.current_track: Option<Arc<TrackSummary>>` (the VM carries no
+  flat `title`/`artist`/`album`; identity is the `Arc<TrackSummary>` or `None`): `details` =
+  `title` (a plain `String`), `state` = `artist` (`Option<String>`), `large_text` = `album`
+  (`Option<String>`, fallback `"Melodia"`). Plus `"type": 2` (Listening — RPC accepts only 0/2/3/5)
+  and `"status_display_type": 2` (Details) so the member-list line reads "Listening to \<song\>"
+  rather than "…to Melodia". **Activity `type` over the RPC `SET_ACTIVITY` IPC path is a *recent*
+  client capability** — Playing/Listening/Watching/Competing only started being honored over local
+  IPC around mid-2024; older clients ignored `type` and forced "Playing". `status_display_type` is a
+  further step: documented for the Social SDK and the gateway activity object (0 Name / 1 State /
+  2 Details) but **not** in the RPC command reference, so send it and confirm at runtime
+  (verification step 2). Both failure modes are graceful — Discord ignores activity fields it doesn't
+  know, so an old client just falls back to the app name; nothing else on the card breaks.
 - `timestamps.start = now_ts - position_secs`, `end = start + duration_secs`, **seconds not ms**
   (matching Discord's own `time(nullptr)` example), emitted **only when playing** with a known
   duration. Discord animates the bar client-side off that anchor, which is what makes a throttle as
@@ -272,7 +302,11 @@ Gate: `cargo clippy --all-targets -- -D warnings`.
 - `truncate_field(&str) -> String` — 128 chars max on a **char boundary**; a field under 2 chars is
   padded/omitted (older Discord clients reject 1-char `state` / `details`).
 - `PresenceState::on_view_model(vm: Option<&PlayerViewModelLight>, now_ts, &DiscordFlags)
-  -> Option<Update>` where `Update = Set(Presence) | Clear`.
+  -> Option<Update>` where `Update = Set(Presence) | Clear`. It reads `vm.status` — a
+  **`&'static str`**, one of `"stopped"` / `"playing"` / `"paused"` / `"loading"` (from
+  `PlaybackStatus::as_str()`), so the branch conditions below are plain `&str` matches, not enum
+  arms — `vm.current_track` (the `Option<Arc<TrackSummary>>`), and `vm.position_ms` / `vm.duration_ms`
+  (both `u64` on the VM). There is no separate `paused` bool: pause is `status == "paused"`.
 
 The dedupe rule is the load-bearing bit — `view_model` republishes on *every* state change
 including volume, and each republish must not become an IPC write:
@@ -320,8 +354,11 @@ matches a fixture (`type: 2`, no timestamps when paused).
 
 ## Phase 3 — Settings: flags, persistence, section card
 
-**`src/services/settings/data.rs`** — `DiscordFlags`, `#[serde(flatten)]`'d into `SettingsData` next
-to `ScrobbleFlags`:
+**`src/services/settings/data.rs`** — `DiscordFlags`, `#[derive(Default)]` + `#[serde(default)]` on
+the struct, `#[serde(flatten)]`'d into `SettingsData` next to `ScrobbleFlags`. The `#[serde(default)]`
+is not optional: Melodia is publicly released with a live updater, so an existing user's
+`settings.json` predates these keys and must still load — the struct-level default fills every field
+when the keys are absent, exactly as `ScrobbleFlags` does. Fields:
 
 | field | default | note |
 |---|---|---|
@@ -348,7 +385,11 @@ term or the placeholder stops appearing entirely. Copy the
 toggle (description names Discord and what is broadcast), a status line ("Connected to Discord" /
 "Discord not running"), then `if Settings.discord-enabled:` the artwork toggle (description naming
 the Deezer lookup) and the hide-while-paused toggle. Sub-rows mount under `if`, never
-`visible: false` (slint#7377).
+`visible: false` (slint#7377). Note the sub-rows gate on `discord-enabled` (the feature toggle),
+**deliberately unlike** `scrobbling-section.slint`, which gates its sub-rows on the per-provider
+`scrobble-*-connected` state: artwork and hide-while-paused are meaningful to configure whenever the
+feature is enabled, regardless of whether Discord happens to be running right now — don't "align" it
+to the connected-gated scrobble shape.
 
 **`src/ui/discord_settings.rs`** — `install_discord(app, state)`, called from `boot/ui_setup.rs`
 after `install_scrobbling`. Seed from `service.status()`, then a `subscribe_status()`
@@ -365,18 +406,27 @@ shipped `translations/<lang>/LC_MESSAGES/Melodia.po` files (English is the msgid
 
 ## Phase 4 — Album artwork + link button
 
-**`src/media/deezer.rs`** — add
-`search_album_cover(client, artist, album) -> AppResult<Option<String>>` alongside
-`search_artist_image_url`, same request shape (`https://api.deezer.com/search/album`, `limit=1`,
-non-success → `Ok(None)`), returning Deezer's `cover_big` (500×500; Discord renders ~300). The
-album's `link` is deliberately *not* returned — the button below is fixed, so nothing would read it.
-No download, no disk cache: Discord's CDN fetches the URL server-side, so we only pass the string
-along.
+**`src/media/deezer.rs`** — add `search_album_cover(client, artist, album)` alongside
+`search_artist_image_url`. Match the sibling's exact shape: signature returns
+**`Result<Option<String>, AppError>`** (the explicit form the existing fn uses — *not* the
+`AppResult<T>` alias), request is `https://api.deezer.com/search/album` with `q` + `limit=1`,
+non-success status → `Ok(None)`, errors wrapped with `AppError::network(msg, source)`. It needs its
+**own** response struct — albums expose `cover_big` / `cover_medium`, so the existing private
+`DeezerArtist { picture_medium }` can't be reused; add a parallel `DeezerAlbum { cover_big: Option<String> }`
++ `DeezerAlbumSearch { data: Vec<DeezerAlbum> }` and return `body.data.first().and_then(|a| a.cover_big.clone())`.
+`cover_big` is 500×500 (Discord renders ~300). The album's `link` is deliberately *not* returned —
+the button below is fixed, so nothing would read it. No download, no disk cache: Discord's CDN
+fetches the URL server-side, so we only pass the string along. The `q` should combine artist + album
+(e.g. `artist:"…" album:"…"` or a plain concatenation) for a tighter match than album title alone.
 
 **`src/services/discord/artwork.rs`** — `LruCache<ArtKey, Option<String>>` behind a
 `parking_lot::Mutex` on the service, cap 64, keyed on lowercased `(artist, album)`. Bounded well
 inside the memory rules. `None` → fall back to the `melodia` asset key. A 2 s timeout keeps presence
-from lagging behind a slow Deezer.
+from lagging behind a slow Deezer — and it has to be an explicit
+`tokio::time::timeout(Duration::from_secs(2), search_album_cover(...))` wrapper, because the shared
+`reqwest::Client` from `build_http_client` carries a `read_timeout` of **one minute** (fine for the
+updater's large downloads, far too slow for a presence update). The client's timeout is the backstop;
+the 2 s budget is the presence-specific cap layered on top.
 
 Only a **definitive** miss is cached — Deezer answered and matched nothing, so a repeat-play must not
 re-query. A timeout or transport error caches nothing: caching one would blank that album's cover for
@@ -400,8 +450,11 @@ behavior — buttons are invisible to *you* and render for everyone else viewing
   worker is a detached `std::sync::mpsc` thread rather than
   `spawn_blocking`; **why the IPC is hand-rolled** (the candidate crate's `uuid ^0.8` pin vs the
   tree's 1.x, and a nonce only needs uniqueness) with the frame layout and the socket-path table
-  called out as the load-bearing bits; that external URLs work for `large_image` only; and that the
-  app ID is public (no CI secret, unlike the Last.fm keys).
+  called out as the load-bearing bits; the two non-obvious protocol gotchas — activity
+  `timestamps` are Unix **seconds** not milliseconds, and the Windows pipe `access_mode(0x3)` literal
+  is `FILE_READ_DATA | FILE_WRITE_DATA`, not the `GENERIC_*` pair, so don't "correct" it; that
+  external `https://` URLs work for `large_image` only; and that the app ID is public (no CI secret,
+  unlike the Last.fm keys).
 - **README** — feature bullet beside the scrobbling one and a note block near the Last.fm
   credentials note: what leaves the machine (track/artist/album/artwork URL → Discord; artist+album
   → Deezer when artwork is on), that it is off by default, and the Discord application ID
