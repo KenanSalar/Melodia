@@ -20,6 +20,7 @@
 
 pub mod appearance;
 pub mod crossfade;
+pub mod discord;
 pub mod equalizer;
 pub mod folders;
 pub mod playback;
@@ -34,6 +35,9 @@ pub use appearance::{
 pub use crossfade::{
     set_crossfade_duration_ms, set_crossfade_enabled, set_crossfade_fade_on_pause,
     set_crossfade_manual, set_crossfade_skip_same_album,
+};
+pub use discord::{
+    set_discord_rpc_artwork, set_discord_rpc_enabled, set_discord_rpc_hide_when_paused,
 };
 pub use equalizer::{set_eq_band_gains_and_preset, set_eq_enabled, set_eq_preamp};
 pub use replaygain::{

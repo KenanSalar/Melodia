@@ -1314,6 +1314,31 @@ msgstr "No se pudieron guardar las etiquetas"
 msgid "No tracks were updated."
 msgstr "No se actualizó ninguna pista."
 
+# ---- Discord ----
+msgid "Show the track you're playing on your Discord profile"
+msgstr "Muestra la canción que estás escuchando en tu perfil de Discord"
+
+msgid "Status"
+msgstr "Estado"
+
+msgid "Connected to Discord"
+msgstr "Conectado a Discord"
+
+msgid "Discord not running"
+msgstr "Discord no está en ejecución"
+
+msgid "Show album artwork"
+msgstr "Mostrar la carátula del álbum"
+
+msgid "Look up cover art online (via Deezer) to show on the card"
+msgstr "Buscar la carátula en línea (mediante Deezer) para mostrarla en la tarjeta"
+
+msgid "Hide while paused"
+msgstr "Ocultar en pausa"
+
+msgid "Remove the card when paused instead of showing a paused marker"
+msgstr "Quitar la tarjeta al pausar en lugar de mostrar un indicador de pausa"
+
 # ---- Scrobbling ----
 msgid "Scrobbling"
 msgstr "Scrobbling"

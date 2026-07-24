@@ -234,6 +234,7 @@ pub fn install_library_settings_and_friends(
     ui::replaygain::install_replaygain(app, state);
     ui::sleep_timer::install_sleep_timer(app, state);
     ui::scrobbling_settings::install_scrobbling(app, state);
+    ui::discord_settings::install_discord(app, state);
     let notifications = ui::notifications::install(app);
     ui::file_watching::install(app, state, &notifications);
     ui::updater_settings::install(app, state);

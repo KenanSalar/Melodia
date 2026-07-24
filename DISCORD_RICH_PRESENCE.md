@@ -9,7 +9,7 @@
 | 0 — Discord application + working doc | ⏳ working doc done; **app registration deferred** (see note) |
 | 1 — IPC transport (`services/discord/ipc.rs`) | ✅ done |
 | 2 — Pure presence model + detector task | ✅ done |
-| 3 — Settings: flags, persistence, section card | ☐ (`DiscordFlags` struct + `AppState` wiring landed early with 1–2) |
+| 3 — Settings: flags, persistence, section card | ✅ done |
 | 4 — Album artwork + link button | ☐ |
 | 5 — Docs + gates | ☐ |
 

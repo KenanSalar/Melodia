@@ -206,6 +206,22 @@ export global Settings {
     callback scrobble-mbid-auto-tag-changed(bool);
     callback scrobble-lookup-missing-mbids();
 
+    // Discord Rich Presence (`ui/views/settings/discord-section.slint`). Rust
+    // owns every property here: `discord-rpc-connected` (and `-enabled`) are
+    // painted by the `DiscordPresenceService` status-watch subscriber in
+    // `src/ui/discord_settings.rs` (the single writer), so a Discord restart
+    // flips the status row live; the toggles route their `-changed(bool)` events
+    // back to persist + shadow-refresh (`set_flags` starts/stops the IPC
+    // worker). No credentials / login dialog — the application id is a
+    // compile-time constant, so unlike scrobbling everything fits on `Settings`.
+    in property <bool> discord-rpc-connected;
+    in-out property <bool> discord-rpc-enabled;
+    callback discord-rpc-enabled-changed(bool);
+    in-out property <bool> discord-rpc-artwork;
+    callback discord-rpc-artwork-changed(bool);
+    in-out property <bool> discord-rpc-hide-when-paused;
+    callback discord-rpc-hide-when-paused-changed(bool);
+
     // Watch for file changes (file-watcher) toggle. ToggleSwitch in
     // `ui/views/settings/file-watching-section.slint` binds two-way; the
     // `toggled(bool)` event fires `watch-for-file-changes-changed`. Rust

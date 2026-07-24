@@ -1317,6 +1317,31 @@ msgstr "Etiketler kaydedilemedi"
 msgid "No tracks were updated."
 msgstr "Hiçbir parça güncellenmedi."
 
+# ---- Discord ----
+msgid "Show the track you're playing on your Discord profile"
+msgstr "Dinlediğin parçayı Discord profilinde göster"
+
+msgid "Status"
+msgstr "Durum"
+
+msgid "Connected to Discord"
+msgstr "Discord'a bağlandı"
+
+msgid "Discord not running"
+msgstr "Discord çalışmıyor"
+
+msgid "Show album artwork"
+msgstr "Albüm kapağını göster"
+
+msgid "Look up cover art online (via Deezer) to show on the card"
+msgstr "Kartta göstermek için kapağı çevrimiçi ara (Deezer üzerinden)"
+
+msgid "Hide while paused"
+msgstr "Duraklatıldığında gizle"
+
+msgid "Remove the card when paused instead of showing a paused marker"
+msgstr "Duraklatıldığında duraklama işareti göstermek yerine kartı kaldır"
+
 # ---- Scrobbling ----
 msgid "Scrobbling"
 msgstr "Scrobbling"
