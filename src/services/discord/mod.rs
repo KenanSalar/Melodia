@@ -27,9 +27,8 @@ use model::Presence;
 /// `option_env!` override for a fork building against its own application.
 const DISCORD_APP_ID: &str = match non_empty_env(option_env!("MELODIA_DISCORD_APP_ID")) {
     Some(id) => id,
-    // TODO(phase 0): replace with the registered "Melodia" application id. A
-    // placeholder still compiles/tests; only a real handshake needs the true id.
-    None => "0000000000000000000",
+    // The registered "Melodia" application id — public, ships in every payload.
+    None => "1530168119954374666",
 };
 
 /// Treat a present-but-empty compile-time env var as absent — a CI env that
@@ -159,6 +158,18 @@ impl DiscordPresenceService {
             self.send(Command::Enable);
         } else {
             self.send(Command::Disable);
+        }
+    }
+
+    /// Start the IPC worker if the feature is already enabled — called once at
+    /// boot so a persisted `discord_rpc_enabled: true` connects (and shows its
+    /// status) while idle, instead of waiting for the first `apply` (which only
+    /// fires once a track is playing) or a toggle. Idempotent: a no-op when
+    /// disabled, and `ensure_worker` skips an already-spawned worker.
+    pub fn start_if_enabled(&self) {
+        if self.armed() {
+            self.ensure_worker();
+            self.send(Command::Enable);
         }
     }
 

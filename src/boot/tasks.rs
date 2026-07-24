@@ -40,8 +40,11 @@ pub fn spawn_background_tasks(
     tasks::mbid_backfill::spawn(spawner, state);
     // Discord Rich Presence: project the player view-model into a Discord
     // activity card over a hand-rolled IPC transport. Inert until the user
-    // enables it (Settings toggle lands in a later phase).
+    // enables it in Settings. Start the worker now if it's already enabled
+    // from a previous session, so the card/status connects while idle rather
+    // than waiting for the first track to play.
     tasks::discord_presence::spawn(spawner, state);
+    state.discord.start_if_enabled();
 
     // OS media controls → SlintEventSink: souvlaki events drive the same
     // library::* paths the UI does, so MPRIS / SMTC stays in lockstep.
