@@ -38,6 +38,10 @@ pub fn spawn_background_tasks(
     // ListenBrainz so loves work on untagged libraries. Inert until the user
     // enables it + ListenBrainz is connected.
     tasks::mbid_backfill::spawn(spawner, state);
+    // Discord Rich Presence: project the player view-model into a Discord
+    // activity card over a hand-rolled IPC transport. Inert until the user
+    // enables it (Settings toggle lands in a later phase).
+    tasks::discord_presence::spawn(spawner, state);
 
     // OS media controls → SlintEventSink: souvlaki events drive the same
     // library::* paths the UI does, so MPRIS / SMTC stays in lockstep.

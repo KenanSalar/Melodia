@@ -24,6 +24,7 @@ use crate::player::state::{
 };
 use crate::services::{
     always_on_top::{self, AlwaysOnTopCapability},
+    discord::DiscordPresenceService,
     media_controls::{self, MediaControlsHandle},
     scrobble::ScrobbleService,
     search_history::SearchHistoryState,
@@ -85,6 +86,10 @@ pub struct AppState {
     /// Scrobbling service: credential/enabled shadow + durable offline queue.
     /// Loaded at boot; the detector/submitter tasks that drive it wire in later.
     pub scrobble: Arc<ScrobbleService>,
+    /// Discord Rich Presence: enable-flags shadow + connection-status watch,
+    /// lazily spawning a blocking IPC worker thread. Stateless (no on-disk
+    /// state); the detector task in `tasks::discord_presence` drives it.
+    pub discord: Arc<DiscordPresenceService>,
     pub media_controls: Option<Arc<MediaControlsHandle>>,
     /// Shared `reqwest::Client`, built lazily on first use via
     /// [`AppState::http_client`]. Only the updater and the post-scan Deezer
@@ -206,6 +211,9 @@ impl AppState {
             &settings.scrobble,
             http_client.clone(),
         ));
+        // Stateless — the application id is a compile-time constant, not a
+        // secret to persist, so unlike scrobble it needs no `&paths`/`http`.
+        let discord = Arc::new(DiscordPresenceService::init(&settings.discord));
 
         let state = Self {
             paths: Arc::new(paths),
@@ -225,6 +233,7 @@ impl AppState {
             always_on_top: always_on_top_capability,
             search_history,
             scrobble,
+            discord,
             media_controls: Some(mc_handle),
             http_client,
             task_tracker: TaskTracker::new(),

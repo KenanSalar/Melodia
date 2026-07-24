@@ -6,6 +6,7 @@
 //! live in this directory directly; a handful still delegate into
 //! `player/` for state-machine-coupled work.
 
+pub mod discord_presence;
 pub mod file_event_processor;
 pub mod first_launch;
 pub mod heap_trim;

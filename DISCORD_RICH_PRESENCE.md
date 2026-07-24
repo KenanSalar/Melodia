@@ -6,12 +6,20 @@
 
 | Phase | Status |
 |---|---|
-| 0 — Discord application + working doc | ⏳ in progress |
-| 1 — IPC transport (`services/discord/ipc.rs`) | ☐ |
-| 2 — Pure presence model + detector task | ☐ |
-| 3 — Settings: flags, persistence, section card | ☐ |
+| 0 — Discord application + working doc | ⏳ working doc done; **app registration deferred** (see note) |
+| 1 — IPC transport (`services/discord/ipc.rs`) | ✅ done |
+| 2 — Pure presence model + detector task | ✅ done |
+| 3 — Settings: flags, persistence, section card | ☐ (`DiscordFlags` struct + `AppState` wiring landed early with 1–2) |
 | 4 — Album artwork + link button | ☐ |
 | 5 — Docs + gates | ☐ |
+
+> **Phase 0 deferred.** The application id is scaffolded as a placeholder const
+> (`services/discord/mod.rs::DISCORD_APP_ID`, with a `MELODIA_DISCORD_APP_ID`
+> `option_env!` override). Registration + art-asset upload aren't needed to
+> compile/lint/test and can't be exercised until Phase 3 adds the enable toggle,
+> so do them **before the first live verification** (around Phase 3/4). Entry
+> point: sign in at <https://discord.com/developers>, then **Applications → New
+> Application**, name it exactly `Melodia`.
 
 ## Context
 
@@ -152,6 +160,17 @@ the way `services/tray/` isolates `ksni::blocking`.
 
 ## Phase 1 — The IPC transport (`src/services/discord/ipc.rs`)
 
+> **✅ Landed (round 1), with these deltas from the sketch below:** framing
+> (`write_frame`/`read_frame`) is generic over `impl Write`/`impl Read` and
+> returns `io::Result`, not `AppResult` — any error just drops the connection, so
+> the transport needs no `AppError` classification. `Command` gained an `Enable`
+> variant (alongside `Apply`/`Clear`/`Disable`) so re-enabling while the worker is
+> parked wakes it; there is no `Shutdown` variant (the sender lives for the
+> program, so `recv()` only errors at exit). Connection status is published to the
+> UI through a small shared `Arc<StatusCell>` held by both the service and the
+> worker (enable/connect atomics + the `watch` sender) — the split that lets the
+> worker report `connected` without an `Arc<Service>` cycle.
+
 Roughly 200 lines of blocking `std`, no new dependencies. Unit-testable in two halves: the framing
 and the payload JSON are pure; only `connect` touches the OS.
 
@@ -266,6 +285,16 @@ Public surface: `armed()` (the cheap synchronous gate the task checks), `set_fla
 Gate: `cargo clippy --all-targets -- -D warnings`.
 
 ## Phase 2 — Pure presence model + the detector task
+
+> **✅ Landed (round 1), with these deltas from the sketch below:** the throttle
+> is applied *before* evaluating the model — the task waits out the remaining
+> window, then re-reads the watch and calls `on_view_model` *once* at send time,
+> so the model's dedupe `last` only advances on an actual send (deferring after a
+> compute would have deduped the deferred update into a no-op). The service `init`
+> takes `&DiscordFlags` **only** (no `http` arg / artwork LRU yet — those arrive
+> in Phase 4 when they're read, to avoid an unread field). The detector subscribes
+> to `sinks.view_model` alone (no `position_tx` — the anchor is invariant across
+> republishes, so per-second ticks aren't needed).
 
 **`src/services/discord/model.rs`** — no I/O, no clock reads (`now_ts` is an input), matching
 `services/scrobble/detector.rs` and `player::handlers::evaluate_playing_tick`.
