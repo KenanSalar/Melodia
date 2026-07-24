@@ -5,8 +5,8 @@
 //! and imports no `ui::*`.
 //!
 //! Always spawned; inert while the feature is disabled (self-gates on
-//! `service.armed()`, like `mbid_backfill`). Throttled to Discord's
-//! one-update-per-15 s cap: an update landing inside the window is deferred to
+//! `service.armed()`, like `mbid_backfill`). Self-throttled between writes (see
+//! `MIN_UPDATE_INTERVAL`): an update landing inside the window is deferred to
 //! the window's end and re-read from the (latest-only) watch, so suppressed
 //! intermediates collapse into a single write on current truth — the progress
 //! bar keeps animating client-side off the last anchor meanwhile.
@@ -23,9 +23,13 @@ use crate::services::discord::model::{PresenceState, Update};
 use crate::state::AppState;
 use crate::tasks::TaskSpawner;
 
-/// Discord silently drops presence updates faster than one per 15 s (there is no
-/// error and no client-side newest-wins queue over raw IPC), so we self-throttle.
-const MIN_UPDATE_INTERVAL: Duration = Duration::from_secs(15);
+/// Self-throttle between presence writes. The Rich Presence SDK docs cite one
+/// update per 15 s, but that's the conservative legacy figure: over raw IPC the
+/// local Discord client accepts updates far faster and only drops the presence
+/// under real hammering (discord-api-docs#668), so 4 s keeps skips responsive
+/// while staying well clear of that. (The 5-per-20 s cap people cite is the
+/// gateway/bot presence limit — a different transport, not this one.)
+const MIN_UPDATE_INTERVAL: Duration = Duration::from_secs(4);
 
 /// Spawn the presence detector on the shared task lifecycle.
 pub fn spawn(spawner: &TaskSpawner, state: &AppState) {
