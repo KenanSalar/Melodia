@@ -473,20 +473,38 @@ async fn resolve_ids(
         id
     };
 
-    // Resolve album (two-level cache)
+    // Resolve the album-artist (album_artist tag, else the track artist) — the album
+    // groups by this so a per-track featured credit doesn't split it. Reuses the
+    // artist cache.
+    let album_artist_name = meta
+        .album_artist
+        .as_deref()
+        .filter(|s| !s.is_empty())
+        .unwrap_or(artist_name);
+    let album_artist_id = if album_artist_name == artist_name {
+        artist_id
+    } else if let Some(&id) = caches.artist.get(album_artist_name) {
+        id
+    } else {
+        let id = queries::scan::upsert_artist(tx, album_artist_name, UNKNOWN_ARTIST_ID).await?;
+        caches.artist.insert(album_artist_name.to_owned(), id);
+        id
+    };
+
+    // Resolve album (two-level cache, keyed on the album-artist)
     let album_id = if let Some(&id) = caches
         .album
         .get(album_name)
-        .and_then(|by_artist| by_artist.get(&artist_id))
+        .and_then(|by_artist| by_artist.get(&album_artist_id))
     {
         id
     } else {
-        let id = queries::scan::upsert_album(tx, album_name, artist_id, meta.year).await?;
+        let id = queries::scan::upsert_album(tx, album_name, album_artist_id, meta.year).await?;
         caches
             .album
             .entry(album_name.to_owned())
             .or_default()
-            .insert(artist_id, id);
+            .insert(album_artist_id, id);
         id
     };
 

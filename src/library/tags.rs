@@ -262,11 +262,11 @@ fn run_write_pass(
 /// Cache key for `run_commit`'s FK-resolution memo. Holds everything
 /// [`queries::scan::resolve_track_context`] derives its [`ResolvedIds`] from —
 /// folder (via the parent dir, since folder lookup is a path-prefix match),
-/// artist, album, `year` (album upsert's `COALESCE`-on-conflict input), and
-/// genre — so identical keys yield identical ids. Keeping `year` in the key
-/// preserves the per-track album-year semantics: tracks with differing years
-/// land in different buckets and each still upserts.
-type ResolveKey = (PathBuf, String, String, Option<i32>, String);
+/// artist, album, album-artist (the album's grouping key), `year` (album upsert's
+/// `COALESCE`-on-conflict input), and genre — so identical keys yield identical
+/// ids. Keeping `year` in the key preserves the per-track album-year semantics:
+/// tracks with differing years land in different buckets and each still upserts.
+type ResolveKey = (PathBuf, String, String, String, Option<i32>, String);
 
 /// Land the successful writes in one transaction: resolve ids, refresh each
 /// track row, and apply the artwork override the metadata UPDATE can't do.
@@ -309,6 +309,7 @@ async fn run_commit(
             path.parent().map(Path::to_path_buf).unwrap_or_default(),
             meta.artist.clone().unwrap_or_default(),
             meta.album.clone().unwrap_or_default(),
+            meta.album_artist.clone().unwrap_or_default(),
             meta.year,
             meta.genre.clone().unwrap_or_default(),
         );
