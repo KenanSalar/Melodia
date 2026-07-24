@@ -248,11 +248,36 @@ fn handshake(conn: &mut Connection) -> io::Result<()> {
 }
 
 /// Write a `FRAME` command and consume its one reply, keeping the
-/// one-reply-per-write socket accounting balanced.
+/// one-reply-per-write socket accounting balanced. Discord answers a *rejected*
+/// `SET_ACTIVITY` with an `evt: "ERROR"` frame at the same opcode as a success,
+/// so a bad payload would otherwise look sent — surface it (log-only: a
+/// deterministic rejection can't be fixed by a retry, and dropping the
+/// connection over it would be worse).
 fn send_frame_and_ack(conn: &mut Connection, body: &[u8]) -> io::Result<()> {
     write_frame(conn, OP_FRAME, body)?;
-    read_reply(conn)?;
+    let (_opcode, reply) = read_reply(conn)?;
+    log_error_ack(&reply);
     Ok(())
+}
+
+/// Log a Discord `evt: "ERROR"` reply (code + message); a non-error or
+/// unparseable ACK is ignored.
+fn log_error_ack(reply: &[u8]) {
+    let Ok(value) = serde_json::from_slice::<serde_json::Value>(reply) else {
+        return;
+    };
+    if value.get("evt").and_then(serde_json::Value::as_str) != Some("ERROR") {
+        return;
+    }
+    let data = value.get("data");
+    let code = data
+        .and_then(|d| d.get("code"))
+        .and_then(serde_json::Value::as_i64);
+    let message = data
+        .and_then(|d| d.get("message"))
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("unknown");
+    log::debug!("discord: activity rejected (code {code:?}): {message}");
 }
 
 /// Read frames until the command's reply arrives, echoing a stray `PING` as a
