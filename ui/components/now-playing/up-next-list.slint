@@ -12,12 +12,11 @@ import { OverlayScrollbar } from "../overlay-scrollbar.slint";
 // duration column) so a handful of rows fit inside a window the user is
 // deliberately shrinking.
 //
-// Hover uses `Player.np-accent.with-alpha(0.22)` for both variants. The
-// miniplayer paints on `Theme.mantle` rather than a blurred backdrop, but
-// the accent tint still reads as a subtle hover indication and keeps the
-// two surfaces visually consistent. It flips without an `animate`, matching
-// the shared `TrackListRow` — an eased fade reads as lag when the cursor
-// crosses rows.
+// Hover uses `Player.np-accent-bright.with-alpha(0.16)` for both variants. The
+// miniplayer paints on `Theme.mantle` rather than a blurred backdrop, but the
+// accent tint still reads as a subtle hover indication and keeps the two
+// surfaces visually consistent. It flips without an `animate`, matching the
+// shared `TrackListRow` — an eased fade reads as lag when crossing rows.
 component UpNextRow inherits Rectangle {
     in property <QueueRow> data;
     in property <bool> compact;
@@ -26,7 +25,7 @@ component UpNextRow inherits Rectangle {
     height: compact ? 36px : 52px;
 
     Rectangle {
-        background: touch.has-hover ? Player.np-accent.with-alpha(0.22) : transparent;
+        background: touch.has-hover ? Player.np-accent-bright.with-alpha(0.16) : transparent;
         border-radius: compact ? Theme.radius-sm : Theme.radius-md;
 
         HorizontalLayout {

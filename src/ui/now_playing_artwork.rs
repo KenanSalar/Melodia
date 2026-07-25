@@ -79,9 +79,8 @@ pub struct ArtworkPair {
     /// Dominant accent extracted via `material_you::extract_source_argb_from_rgb8`
     /// from the blur buffer (192² is plenty of pixels for `QuantizerCelebi`
     /// and re-quantizing the sharp tile would burn ~4× more CPU for no
-    /// perceptual gain). Surfaced into `Player.np-accent` so the Up Next
-    /// hover slab and metadata chip strip on the Now Playing view harmonize
-    /// with the blurred backdrop.
+    /// perceptual gain). Tone-floored into `Player.np-accent-bright` so the
+    /// Now Playing view's tinted chrome harmonizes with the blurred backdrop.
     pub accent_argb: Option<u32>,
 }
 

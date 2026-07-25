@@ -187,25 +187,17 @@ pub(super) async fn apply_track_change(
     *np_state.chip_texts.borrow_mut() = chip_texts;
     player.set_track_meta(meta);
 
-    // Per-artwork accent → `Player.np-accent`, plus a tone-floored sibling in
-    // `np-accent-bright` for the surfaces that paint it opaque (the visualizer
-    // bars, and the star / heart / divider group in the Now-Playing header,
-    // which share it so the view reads as one colour family). Both fall back to
-    // the live `Theme.accent` so non-MY users keep a
-    // static-accent tint and a missing-artwork / failed-decode track doesn't
-    // strand the slots on the previous track's colour — that fallback is
-    // already bright enough to need no lift. Theme changes naturally propagate
-    // via it on the next track change.
-    let (accent, accent_bright) = if let Some(argb) = accent_argb {
-        (
-            crate::themes::brush(argb),
-            crate::themes::brush(material_you::lift_to_min_tone(argb, MIN_OPAQUE_ACCENT_TONE)),
-        )
-    } else {
-        let theme_accent = ui.global::<ThemeGlobal>().get_accent();
-        (theme_accent.clone(), theme_accent)
+    // Per-artwork accent → `Player.np-accent-bright` (see `globals.slint` for
+    // why it's tone-floored). Falls back to the live `Theme.accent` so non-MY
+    // users keep a static tint and a missing-artwork / failed-decode track
+    // doesn't strand the slot on the previous track's colour; theme changes
+    // propagate via it on the next track change.
+    let accent_bright = match accent_argb {
+        Some(argb) => {
+            crate::themes::brush(material_you::lift_to_min_tone(argb, MIN_OPAQUE_ACCENT_TONE))
+        }
+        None => ui.global::<ThemeGlobal>().get_accent(),
     };
-    player.set_np_accent(accent);
     player.set_np_accent_bright(accent_bright);
 
     write_crossfade_slot(

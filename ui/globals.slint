@@ -88,28 +88,17 @@ export global Player {
     // `track-meta` using the last-reported width cached on the Rust side.
     callback recompute-chip-rows(length);
 
-    // Per-artwork accent tint for chrome inside the full-screen Now Playing
-    // view (the Up Next row hover slab + the metadata chip strip). Extracted
-    // from the current track's blur buffer at decode time via
-    // `services::material_you::extract_source_argb_from_rgb8` and written by
-    // the `track_change` subscriber in `src/ui/now_playing/`. Defaults to
-    // `Theme.accent` so non-MY users get a sensible static tint and a
-    // missing-artwork track naturally falls back. Consumed via
-    // `.with-alpha(…)` — same idiom as the existing `Theme.crust.with-alpha`
-    // scrim — so it reads as part of the same colour family as the blur
-    // rather than as a dark rectangle floating over it.
-    in-out property <brush> np-accent: Theme.accent;
-
-    // Same accent, floored to a minimum HCT tone by `material_you` so it stays
-    // legible when painted at **full opacity** on the Now-Playing backdrop.
-    // `np-accent` above is only ever used at low alpha, where a dark album's
-    // near-black accent is harmless; the visualizer bars are solid, so a dark
-    // album would otherwise paint them invisibly against the scrimmed blur.
-    // The Now-Playing header's stars, heart and Up-Next divider share it — the
-    // quieter of each pair takes it at reduced alpha rather than picking a
-    // different hue, so the whole view reads as one colour family.
-    // Don't substitute Slint's `.brighter()` here — it scales HSV value, so it
-    // can't lift a near-black colour at all. Falls back to `Theme.accent`.
+    // Per-artwork accent for the Now Playing view's tinted surfaces —
+    // visualizer bars, stars/heart, Up-Next heading/divider/hover, chips.
+    // Extracted from the blur buffer at decode time, floored to a minimum HCT
+    // tone, written by the `track_change` subscriber. Falls back to
+    // `Theme.accent`, which needs no lift.
+    //
+    // The floor lets one brush serve solid and translucent surfaces alike: a
+    // dark cover's raw accent is near-black, invisible both as a solid bar on
+    // the scrimmed blur and as a low-alpha fill over it. Callers vary alpha off
+    // this brush rather than picking another hue. Not `.brighter()` — it scales
+    // HSV value and can't lift near-black at all.
     in-out property <brush> np-accent-bright: Theme.accent;
 
     callback play-pause();

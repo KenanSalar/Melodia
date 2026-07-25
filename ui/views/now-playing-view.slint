@@ -17,10 +17,8 @@ component MetaChip inherits Rectangle {
     // height.
     border-radius: self.height / 2;
     // Soft per-artwork accent tint instead of the opaque `Theme.surface0`
-    // slab — the chip strip now reads as part of the same colour family as
-    // the blurred backdrop. Defaults to `Theme.accent` when no artwork (see
-    // `Player.np-accent` in `globals.slint`).
-    background: Player.np-accent.with-alpha(0.22);
+    // slab, so the strip reads as part of the backdrop's colour family.
+    background: Player.np-accent-bright.with-alpha(0.16);
 
     HorizontalLayout {
         padding-left: Theme.pad-md;
@@ -29,7 +27,9 @@ component MetaChip inherits Rectangle {
             alignment: center;
             Text {
                 text: root.text;
-                color: Theme.subtext1;
+                // Solid, unlike the pill behind it — the label is the part
+                // that has to stay readable on a dark cover.
+                color: Player.np-accent-bright;
                 font-size: Theme.font-size-sm;
             }
         }
@@ -332,7 +332,10 @@ export component NowPlayingView inherits Rectangle {
 
                 Text {
                     text: @tr("Up Next");
-                    color: Theme.text;
+                    // Accent-tinted like the divider under it, but solid — a
+                    // heading carries it at full alpha where a hairline can't.
+                    // Row text below keeps the neutral list palette.
+                    color: Player.np-accent-bright;
                     font-size: Theme.font-size-lg;
                     font-weight: 600;
                 }
