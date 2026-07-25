@@ -73,7 +73,10 @@ samples the DSP has already produced, and the whole path is a no-op when disable
 - Reuse FFT input/output/scratch vecs across ticks (`process_with_scratch`), never re-plan.
 - Apply a **Hann window** before the FFT to cut spectral leakage.
 - **Logarithmic** frequency banding — human pitch perception is geometric; linear bins waste
-  the display on treble.
+  the display on treble. (Strawberry's analyzer is linear, and the standing complaint against
+  it is that "the entire right half is occupied by the frequency band between about 10.025 kHz
+  and 22.05 kHz".) Keep the band edges **fractional**: rounding them to whole bins reintroduces
+  the same unevenness at the *bottom* of the range instead.
 - **Temporal smoothing** — fast attack / slow decay so bars feel alive but not twitchy.
 
 ---
@@ -101,7 +104,8 @@ instances + hands out reusable scratch buffers.
 | Ring capacity | `4096` f32 (16 KiB) | ≥ 2× FFT size so a snapshot always has a full recent window |
 | Sample domain | **mono** (average channels at frame boundary) | one FFT, half the ring; stereo split is not worth it for bars |
 | Bands | `64` default (const, room to make it a setting later) | reads well at the strip's NP-view width; cheap to draw |
-| Band spacing | logarithmic (geometric edges) | perceptual frequency mapping |
+| Band spacing | logarithmic (geometric, **fractional** bin edges) | perceptual frequency mapping; fractional edges keep every bar the same width in octaves |
+| Frequency range | `50 Hz` – `16 kHz`, top `min`'d with Nyquist | 50 Hz matches CAVA / `DeaDBeeF`; 16 kHz matches the EQ's top ISO band and every lossy lowpass |
 | Magnitude | `norm()` → scaled log/dB → normalized 0..1 | wide dynamic range compressed for display |
 | Smoothing | peak-follow: instant/fast attack, exponential decay (~0.8/frame) | lively but calm |
 | Redraw | Slint `Timer`, ~16 ms, **mounted inside the NP view** | self-gates: unmounts (stops) when NP closes |
@@ -327,10 +331,10 @@ Goal: samples → normalized, smoothed band magnitudes, as pure functions with n
 part worth testing.
 
 - **`src/player/spectrum.rs` (new)** — the pipeline as free functions, each unit-tested:
-  `hann_window(size)`, `coherent_gain_scale(window)`, `band_bins(bands, fft_size, fs)`,
-  `level_from_magnitude(mag)`, `bands_from_spectrum(spectrum, map, scale, out)` and
+  `hann_window(size)`, `coherent_gain_scale(window)`, `band_edges(bands, fft_size, fs)`,
+  `level_from_magnitude(mag)`, `bands_from_spectrum(spectrum, edges, scale, out)` and
   `smooth(levels, next, attack, decay)`. Consts: `FFT_SIZE 2048`, `NUM_BANDS 64`,
-  `MIN_HZ 20`, `FLOOR_DB -70`, `ATTACK 0.0`, `DECAY 0.8`.
+  `MIN_HZ 50`, `MAX_HZ 16_000`, `FLOOR_DB -70`, `ATTACK 0.0`, `DECAY 0.8`.
 - **`SpectrumAnalyzer`** is the only stateful piece — it holds exactly what must not be
   rebuilt per frame (the `realfft` plan + its three buffers, the Hann table and its scale,
   the bin→band map plus the rate it was built for, and the two band buffers). Nothing in

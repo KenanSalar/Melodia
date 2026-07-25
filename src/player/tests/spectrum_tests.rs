@@ -82,65 +82,84 @@ fn an_empty_window_has_no_scale() {
     approx(coherent_gain_scale(&[]), 0.0);
 }
 
-// --- band_bins ---------------------------------------------------------------
+// --- band_edges --------------------------------------------------------------
 
 const RATES: [f32; 3] = [44_100.0, 48_000.0, 96_000.0];
 
+/// The frequency a (fractional) bin position sits at.
+fn bin_to_hz(bin: f32, fft_size: usize, sample_rate: f32) -> f32 {
+    bin * sample_rate / index_to_f32(fft_size)
+}
+
 #[test]
-fn every_band_gets_at_least_one_bin() {
+fn there_is_one_more_edge_than_there_are_bands() {
     for rate in RATES {
-        let map = band_bins(NUM_BANDS, FFT_SIZE, rate);
-        assert_eq!(map.len(), NUM_BANDS, "at {rate} Hz");
-        for (i, range) in map.iter().enumerate() {
-            assert!(range.end > range.start, "band {i} is empty at {rate} Hz");
-        }
+        let edges = band_edges(NUM_BANDS, FFT_SIZE, rate);
+        assert_eq!(edges.len(), NUM_BANDS + 1, "at {rate} Hz");
     }
 }
 
 #[test]
-fn bands_are_contiguous_and_monotonic() {
+fn edges_ascend_and_never_touch_dc() {
     for rate in RATES {
-        let map = band_bins(NUM_BANDS, FFT_SIZE, rate);
-        // No band starts on DC, and each one picks up where the last left off.
-        assert!(map.first().is_some_and(|r| r.start >= 1), "band 0 includes DC at {rate} Hz");
-        for pair in map.windows(2) {
+        let edges = band_edges(NUM_BANDS, FFT_SIZE, rate);
+        // Bin 0 is DC. A band reaching it would plot any offset in the signal.
+        assert!(edges.iter().all(|&e| e >= 1.0), "an edge reached DC at {rate} Hz");
+        for pair in edges.windows(2) {
             if let [prev, next] = pair {
-                assert_eq!(prev.end, next.start, "gap or overlap at {rate} Hz");
+                assert!(next > prev, "edges {prev} -> {next} do not ascend at {rate} Hz");
             }
         }
     }
 }
 
 #[test]
-fn no_band_reaches_past_the_nyquist_bin() {
-    let bin_count = FFT_SIZE / 2 + 1;
+fn the_range_runs_from_the_floor_to_the_cap() {
     for rate in RATES {
-        let map = band_bins(NUM_BANDS, FFT_SIZE, rate);
-        for range in &map {
-            assert!(range.end <= bin_count, "band ends at {} past {bin_count}", range.end);
-        }
-        // The top band should actually reach the top — otherwise treble is lost.
-        assert!(map.last().is_some_and(|r| r.end == bin_count), "at {rate} Hz");
+        let edges = band_edges(NUM_BANDS, FFT_SIZE, rate);
+        let hz = |bin: f32| bin_to_hz(bin, FFT_SIZE, rate);
+        assert!(edges.first().is_some_and(|&e| (hz(e) - MIN_HZ).abs() < 1.0), "at {rate} Hz");
+        // Every one of these rates has Nyquist above the cap, so the cap wins.
+        assert!(edges.last().is_some_and(|&e| (hz(e) - MAX_HZ).abs() < 1.0), "at {rate} Hz");
     }
 }
 
 #[test]
-fn a_nonsense_sample_rate_yields_an_empty_map() {
-    for rate in [0.0, -44_100.0, f32::NAN, f32::INFINITY, 30.0] {
-        assert!(band_bins(NUM_BANDS, FFT_SIZE, rate).is_empty(), "rate {rate}");
-    }
-    assert!(band_bins(0, FFT_SIZE, 44_100.0).is_empty());
-    assert!(band_bins(NUM_BANDS, 1, 44_100.0).is_empty());
+fn the_cap_yields_to_nyquist_on_a_low_rate_file() {
+    // A 22.05 kHz file has no 16 kHz to show. Letting the edges run to the cap
+    // anyway would clamp the top several bands onto the final bin, so they would
+    // all read the same value — or, once clamped, span nothing at all.
+    let rate = 22_050.0;
+    let edges = band_edges(NUM_BANDS, FFT_SIZE, rate);
+    let nyquist = rate / 2.0;
+    let top = edges.last().map_or(0.0, |&e| bin_to_hz(e, FFT_SIZE, rate));
+    assert!((top - nyquist).abs() < 1.0, "top band should reach Nyquist, reached {top} Hz");
+    assert!(top < MAX_HZ, "the cap must not win over a lower Nyquist");
+    // ...and the pile-up the clamp would have caused must not be there.
+    let max_bin = index_to_f32(FFT_SIZE / 2);
+    let pinned = edges.iter().filter(|&&e| e >= max_bin).count();
+    assert_eq!(pinned, 1, "only the final edge may sit on the last bin");
 }
 
 #[test]
-fn more_bands_than_bins_leaves_the_tail_empty_but_valid() {
-    // A 16-point transform has 9 bins, so 64 bands cannot each have one.
-    let map = band_bins(NUM_BANDS, 16, 44_100.0);
-    assert_eq!(map.len(), NUM_BANDS);
-    for range in &map {
-        assert!(range.start <= range.end, "range {range:?} is inverted");
-        assert!(range.end <= 9, "range {range:?} runs past the spectrum");
+fn a_nonsense_sample_rate_yields_no_edges() {
+    // The last of these is a rate whose Nyquist is below the band floor.
+    for rate in [0.0, -44_100.0, f32::NAN, f32::INFINITY, 80.0] {
+        assert!(band_edges(NUM_BANDS, FFT_SIZE, rate).is_empty(), "rate {rate}");
+    }
+    assert!(band_edges(0, FFT_SIZE, 44_100.0).is_empty());
+    assert!(band_edges(NUM_BANDS, 1, 44_100.0).is_empty());
+}
+
+#[test]
+fn more_bands_than_bins_stays_in_range() {
+    // A 16-point transform has 9 bins, far fewer than the bands want. The edges
+    // must still land inside it rather than off the end of the spectrum.
+    let edges = band_edges(NUM_BANDS, 16, 44_100.0);
+    assert_eq!(edges.len(), NUM_BANDS + 1);
+    for &edge in &edges {
+        assert!(edge.is_finite(), "edge {edge} is not a number");
+        assert!((1.0..=8.0).contains(&edge), "edge {edge} is outside the spectrum");
     }
 }
 
@@ -190,9 +209,9 @@ fn a_band_takes_its_loudest_bin() {
         Complex::new(0.0, 0.0),
         Complex::new(0.0, 0.0),
     ];
-    let map = [1..3, 3..6];
+    // Two bands, each spanning whole bins: 1..=2 then 3..=5.
     let mut out = [0.0; 2];
-    bands_from_spectrum(&spectrum, &map, 1.0, &mut out);
+    bands_from_spectrum(&spectrum, &[1.0, 3.0, 6.0], 1.0, &mut out);
     // The 1.0 bin wins over its quieter neighbour, so the bar is full...
     approx(out[0], 1.0);
     // ...and it stays out of the next band.
@@ -200,15 +219,58 @@ fn a_band_takes_its_loudest_bin() {
 }
 
 #[test]
-fn bands_beyond_the_map_read_as_silence() {
+fn a_band_narrower_than_a_bin_interpolates_between_its_neighbours() {
+    // Bin 1 is silent, bin 2 is full scale. A band sitting entirely between them
+    // has no bin of its own, so it must read the slope rather than seize either.
+    let spectrum = [Complex::new(0.0, 0.0), Complex::new(0.0, 0.0), Complex::new(1.0, 0.0)];
+    let quarter = level_from_magnitude(0.25);
+    let half = level_from_magnitude(0.5);
+
+    // Centre 1.25 -> a quarter of the way from bin 1 to bin 2.
+    let mut out = [0.0; 1];
+    bands_from_spectrum(&spectrum, &[1.2, 1.3], 1.0, &mut out);
+    approx(out[0], quarter);
+
+    // Centre 1.5 -> halfway. Strictly louder than the band below it, which is the
+    // property the old whole-bin snapping destroyed: both would have read bin 1.
+    bands_from_spectrum(&spectrum, &[1.45, 1.55], 1.0, &mut out);
+    approx(out[0], half);
+    assert!(half > quarter, "adjacent sub-bin bands must slope, not step");
+}
+
+#[test]
+fn a_sub_bin_band_on_the_last_bin_holds_rather_than_fading() {
+    // Nothing above the final bin to interpolate toward — reading a phantom zero
+    // there would notch the top bar on every frame.
+    let spectrum = [Complex::new(0.0, 0.0), Complex::new(1.0, 0.0)];
+    let mut out = [0.0; 1];
+    bands_from_spectrum(&spectrum, &[1.4, 1.6], 1.0, &mut out);
+    approx(out[0], 1.0);
+}
+
+#[test]
+fn bands_beyond_the_edges_read_as_silence() {
     let spectrum = [Complex::new(1.0, 0.0); 4];
     let mut out = [0.5; 4];
-    bands_from_spectrum(&spectrum, &[0..2, 2..4], 1.0, &mut out);
+    // Three edges describe two bands, leaving two output slots unclaimed. The top
+    // edge stays on the last bin, as `band_edges`' clamp guarantees in production.
+    bands_from_spectrum(&spectrum, &[1.0, 2.0, 3.0], 1.0, &mut out);
     approx(out[0], 1.0);
     approx(out[1], 1.0);
     // Stale heights left in the tail would freeze on screen.
     approx(out[2], 0.0);
     approx(out[3], 0.0);
+}
+
+#[test]
+fn no_edges_at_all_silences_every_band() {
+    let spectrum = [Complex::new(1.0, 0.0); 4];
+    let mut out = [0.5; 3];
+    bands_from_spectrum(&spectrum, &[], 1.0, &mut out);
+    for (i, &level) in out.iter().enumerate() {
+        approx(level, 0.0);
+        assert!(level.abs() < 1e-4, "band {i} kept a stale height");
+    }
 }
 
 // --- smooth ------------------------------------------------------------------
@@ -263,9 +325,13 @@ fn a_full_scale_sine_lands_in_the_band_containing_its_frequency() {
     let levels = analyzer.analyze(rate);
 
     let (peak_band, peak_level) = loudest(levels);
-    let tone_bin = hz_to_bin(1_000.0, FFT_SIZE, rate_to_f32(rate), FFT_SIZE / 2);
-    let map = band_bins(NUM_BANDS, FFT_SIZE, rate_to_f32(rate));
-    assert_eq!(map.iter().position(|r| r.contains(&tone_bin)), Some(peak_band));
+    let tone_bin = hz_to_bin(1_000.0, FFT_SIZE, rate_to_f32(rate));
+    let edges = band_edges(NUM_BANDS, FFT_SIZE, rate_to_f32(rate));
+    let holds_tone = edges.windows(2).position(|pair| match pair {
+        [lo, hi] => (*lo..*hi).contains(&tone_bin),
+        _ => false,
+    });
+    assert_eq!(holds_tone, Some(peak_band));
 
     // Full scale reads near the top of the bar; Hann's worst-case scalloping
     // loss is ~1.4 dB, which is a hair off full height on a 70 dB scale.
@@ -310,15 +376,15 @@ fn the_bars_decay_once_the_signal_stops() {
 }
 
 #[test]
-fn changing_the_sample_rate_rebuilds_the_band_map() {
+fn changing_the_sample_rate_rebuilds_the_band_edges() {
     let mut analyzer = SpectrumAnalyzer::new(FFT_SIZE, NUM_BANDS);
     analyzer.window_mut().fill(0.0);
     analyzer.analyze(44_100);
     assert_eq!(analyzer.mapped_rate, 44_100);
-    let first: Vec<_> = analyzer.map.to_vec();
+    let first: Vec<_> = analyzer.edges.to_vec();
 
     analyzer.window_mut().fill(0.0);
     analyzer.analyze(96_000);
     assert_eq!(analyzer.mapped_rate, 96_000);
-    assert_ne!(analyzer.map.to_vec(), first, "band edges must follow the sample rate");
+    assert_ne!(analyzer.edges.to_vec(), first, "band edges must follow the sample rate");
 }
