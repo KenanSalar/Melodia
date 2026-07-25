@@ -191,8 +191,10 @@ pub struct RodioPlayer {
     // the playback monitor) — never by the audio thread, so no generation counter.
     xf: Arc<CrossfadeShared>,
     // Lock-free sample ring for the audio visualizer. Written by every source we
-    // append (see `build_source`) and read by the UI; off by default, and a
-    // no-op on the audio thread while it is.
+    // append (see `build_source`) and read by the UI. Constructed disarmed and
+    // armed from `settings.json` by `hydrate_audio_dsp` — which, alone among the
+    // audio features, ships it *on* (see `VisualizerFlags`). Disarmed it is a
+    // no-op on the audio thread.
     viz: Arc<VisualizerShared>,
     // Used only to schedule the deferred half of a faded pause / stop.
     runtime: tokio::runtime::Handle,
@@ -575,6 +577,10 @@ impl RodioPlayer {
         // Both decks must run at the same speed or a crossfade would drift, but
         // only the active one carries a position worth re-anchoring.
         decks.set_speed_all(speed);
+        // The visualizer taps the sources *under* rodio's speed stage, so its
+        // analyzer needs the factor to place band edges on the pitch you hear.
+        // This is that cell's only writer — see `VisualizerShared::set_speed`.
+        self.viz.set_speed(speed);
         // Re-anchor rodio's position tracker. Without this, `get_pos()` keeps
         // the output-time it accumulated at the old speed, and `query_position`'s
         // `get_pos() × new_speed` rescales that whole elapsed portion — so the

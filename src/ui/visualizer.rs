@@ -12,10 +12,12 @@
 //! 2048-point real FFT is sub-millisecond, so it stays on the UI thread rather
 //! than paying for a third thread and a second shared cell.
 //!
-//! Every gate that keeps this cheap lives elsewhere and composes for free: the
+//! Most of what keeps this cheap lives elsewhere and composes for free: the
 //! strip only mounts while the visualizer is enabled, the Now-Playing view only
 //! mounts while it's open, and the Timer stops once a paused player's bars have
-//! decayed (see `idle` below).
+//! decayed (see `idle` below). The one gate the mount tree can't provide is
+//! window visibility — a hidden window's Timers keep firing — so `tick` folds
+//! that into the same check that skips the transform on a paused player.
 
 use std::rc::Rc;
 
@@ -26,6 +28,7 @@ use crate::player::spectrum::{FFT_SIZE, NUM_BANDS, SpectrumAnalyzer};
 use crate::services::settings;
 use crate::state::AppState;
 use crate::ui::settings_bind::toggle_binding;
+use crate::ui::tray_bridge;
 use crate::{AppWindow, Visualizer};
 
 /// Below this level a bar is visually at rest. Once every band is under it the
@@ -69,13 +72,19 @@ pub fn install_visualizer(ui: &AppWindow, state: &AppState) {
         viz_global.on_tick(move |playing| {
             // A pause stops the tap but leaves the last window of audio sitting
             // in the ring, so re-analysing it would freeze the bars on a stale
-            // spectrum. Passing rate 0 skips the FFT entirely and lets the
-            // smoother decay them to rest instead.
-            let sample_rate = if playing {
+            // spectrum. A hidden window has nothing to draw for at all — the
+            // strip's Timer fires off the event loop, not the render loop, and
+            // the loop stays alive through a close-to-tray hide. Either way the
+            // saving is the snapshot and the FFT; the decay path below still
+            // runs, so `idle` stays truthful and the Timer can still stop.
+            let analyzing = playing && tray_bridge::is_window_visible();
+            let sample_rate = if analyzing {
                 // Straight into the FFT's own input buffer — no intermediate
                 // window, no per-tick copy.
                 viz.snapshot(analyzer.window_mut());
-                viz.sample_rate()
+                // Not `sample_rate()`: the tap sits under rodio's speed stage,
+                // so the analysis rate has to fold the speed back in.
+                viz.analysis_rate()
             } else {
                 0
             };

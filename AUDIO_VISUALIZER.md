@@ -6,11 +6,14 @@ view. A reviewer flagged that Melodia lacks the visualizations that established 
 Now-Playing surface (blur mosaic, accent-tinted chrome), so a visualizer is the natural
 next step for "now playing" immersion.
 
-> **Status:** Phases 1–4 shipped — the feature is complete and usable: audio tap + lock-free
-> ring, the DSP analyzer, the Now-Playing bars strip, and a persisted toggle in
-> Settings → Playback. Phases 5–6 are optional extras; Phase 7 (docs + perf pass) is what remains before this
-> file can go. This is a working doc — keep the phase checkboxes current and delete the file
-> when the feature ships.
+> **Status:** Shipped. Phases 1–4 (audio tap + lock-free ring, the DSP analyzer, the
+> Now-Playing bars strip, a persisted toggle in Settings → Playback) and Phase 7's docs are
+> all done — CLAUDE.md carries the conventions bullet and README the feature line. What's
+> left of Phase 7 is the release gate, not code: `cargo clippy --all-targets -- -D warnings`
+> and a release-build RSS reading.
+>
+> Retained deliberately, against the usual delete-on-ship rule, as the reference for the
+> optional Phases 5–6 (extra styles, exact crossfade mix). Delete it if those are ruled out.
 
 ---
 
@@ -515,9 +518,12 @@ Replace the single shared ring with a **per-deck** ring (deck-scoped like `FadeS
 the true mixer output — correct spectrum through crossfades, no interleave artifact. Skip
 unless the Phase 1 caveat proves visible in practice.
 
-### Phase 7 — Polish, perf, docs `[ ]`
+### Phase 7 — Polish, perf, docs `[~]`
 
-- **Perf pass:** with the visualizer on and NP open, run
+- **Docs `[x]`:** the "spectrum visualizer is a read-only tap" bullet is in CLAUDE.md's
+  audio-feature conventions (tap point, ring, UI-Timer render, gating, persistence) and the
+  feature line is in `README.md`.
+- **Perf pass `[ ]`:** with the visualizer on and NP open, run
   `/usr/bin/time -v target/release/Melodia` and confirm no idle-RSS regression; if the
   UI-thread FFT ever shows jank (it shouldn't at 2048), move Phase 2 into a background
   `TaskSpawner::spawn_cancellable` analysis loop publishing bands into a second lock-free cell,
@@ -525,9 +531,22 @@ unless the Phase 1 caveat proves visible in practice.
   write — the UI-layer installer still owns the property write) and, being `spawn_cancellable`,
   is dropped by the shutdown token so it never pins the force-exit path. Verify
   `cargo clippy --all-targets -- -D warnings` clean.
-- **Docs:** add a "Graphic/spectrum visualizer" bullet to CLAUDE.md's audio-feature conventions
-  (tap point, ring, UI-Timer render, gating, persistence) and a feature line to `README.md`.
-- **Delete this file** once shipped.
+
+Two post-review fixes landed on top of Phase 4 and are worth carrying forward if Phase 5
+adds a style:
+
+- **Speed-aware band edges.** The tap sits *inside* rodio's `Speed` wrapper, which forwards
+  samples verbatim and only reports a multiplied `sample_rate()` upward. `VisualizerShared`
+  therefore carries the speed too, and the analyzer reads `analysis_rate()` (rate × speed)
+  rather than `sample_rate()` — otherwise a 2× listener sees the file's pitch, an octave
+  below what they hear. Any future style reading the raw snapshot needs the same rate.
+- **Visibility gate.** Slint `Timer`s fire off the event loop, not the render loop, and the
+  loop stays alive through a close-to-tray hide — so `tick` ANDs
+  `tray_bridge::is_window_visible()` into the same gate that skips the transform on a paused
+  player. It must not be an early return: `idle` is written at the *end* of `tick`, and the
+  Timer's `running` reads it, so returning early leaves a hidden-then-paused player spinning
+  at 60 Hz forever. Feeding rate `0` skips the snapshot and the FFT but keeps the decay path,
+  so the bars settle and the Timer stops. A second style's driver needs the same guard.
 
 ---
 

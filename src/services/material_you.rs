@@ -232,7 +232,9 @@ pub fn extract_source_argb_from_rgb8(buf: &SharedPixelBuffer<Rgb8Pixel>) -> Opti
 /// original chroma, so a saturated seed comes back a little less saturated.
 /// That's the correct trade — legibility is the point.
 ///
-/// `min_tone` is clamped to the valid 0..=100 HCT range by `set_tone`.
+/// A `min_tone` outside the valid 0..=100 HCT range doesn't panic: `set_tone`
+/// forwards to the solver, which answers an out-of-range lightness with a plain
+/// greyscale `Argb::from_lstar`. Callers should still pass a sane tone.
 pub fn lift_to_min_tone(argb: u32, min_tone: f64) -> u32 {
     let mut hct = Hct::new(Argb::from_u32(argb));
     if hct.get_tone() >= min_tone {

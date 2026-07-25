@@ -83,6 +83,16 @@ pub fn set_window_visible(visible: bool) {
     WINDOW_VISIBLE.store(visible, Ordering::Relaxed);
 }
 
+/// Read the visibility shadow. For UI work that keeps running off a `Timer`
+/// while the window is hidden — Slint timers fire off the event loop, not the
+/// render loop, and the loop deliberately stays alive through a close-to-tray
+/// hide. Covers the tray hide and the custom titlebar's minimize; a native
+/// titlebar's minimize has no hook, so this is a cheap gate, not a guarantee.
+#[must_use]
+pub fn is_window_visible() -> bool {
+    WINDOW_VISIBLE.load(Ordering::Relaxed)
+}
+
 /// Hide the main window to the tray. Snapshots the current size + position
 /// first so `show_window` can restore it. Runs on the UI thread.
 ///

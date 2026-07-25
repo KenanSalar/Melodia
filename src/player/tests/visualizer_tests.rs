@@ -189,6 +189,49 @@ fn the_sample_rate_round_trips() {
     assert_eq!(viz.sample_rate(), 48_000);
 }
 
+#[test]
+fn the_analysis_rate_is_the_sample_rate_at_unity_speed() {
+    let viz = VisualizerShared::new(true);
+    viz.set_sample_rate(44_100);
+    // Unity is the default and must round-trip exactly, not through the cast.
+    assert_eq!(viz.analysis_rate(), 44_100);
+    viz.set_speed(1.0);
+    assert_eq!(viz.analysis_rate(), 44_100);
+}
+
+#[test]
+fn the_analysis_rate_follows_the_playback_speed() {
+    // The tap sits under rodio's speed stage, so a 2x listener hears every
+    // frequency an octave up — the band edges have to follow or the bars plot
+    // the file's pitch instead of the one playing.
+    let viz = VisualizerShared::new(true);
+    viz.set_sample_rate(44_100);
+    viz.set_speed(2.0);
+    assert_eq!(viz.analysis_rate(), 88_200);
+    viz.set_speed(0.25);
+    assert_eq!(viz.analysis_rate(), 11_025);
+}
+
+#[test]
+fn the_analysis_rate_is_zero_until_something_has_played() {
+    // No rate to scale. Zero is what tells the analyzer to skip the transform.
+    let viz = VisualizerShared::new(true);
+    viz.set_speed(2.0);
+    assert_eq!(viz.analysis_rate(), 0);
+}
+
+#[test]
+fn a_nonsense_speed_leaves_the_analysis_rate_unscaled() {
+    // Falling back to the unscaled rate misplaces the bands; falling through to
+    // a rate of zero would blank the display entirely.
+    for speed in [0.0, -2.0, f64::NAN, f64::INFINITY] {
+        let viz = VisualizerShared::new(true);
+        viz.set_sample_rate(44_100);
+        viz.set_speed(speed);
+        assert_eq!(viz.analysis_rate(), 44_100, "speed {speed}");
+    }
+}
+
 // --- VisualizerTap ---------------------------------------------------------
 
 #[test]

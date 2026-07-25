@@ -278,7 +278,8 @@ impl SpectrumAnalyzer {
     /// Build an analyzer for a given transform size and bar count, allocating
     /// everything it will ever need. `fft_size` should be an even number ≥ 2 —
     /// [`FFT_SIZE`] in production, where a power of two also buys the planner's
-    /// fastest path.
+    /// fastest path. (`realfft` will plan an odd length too, on its separate
+    /// half-length path, but the bin maths here reads the even one's layout.)
     #[must_use]
     pub fn new(fft_size: usize, bands: usize) -> Self {
         let fft = RealFftPlanner::<f32>::new().plan_fft_forward(fft_size);

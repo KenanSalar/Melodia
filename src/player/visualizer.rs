@@ -27,7 +27,9 @@
 //! One value per interleaved *frame*, not per sample — the channels of a frame
 //! are one time step, and averaging them is the cheapest honest downmix. So the
 //! ring fills at the source's per-channel sample rate, which is what
-//! [`VisualizerShared::sample_rate`] reports.
+//! [`VisualizerShared::sample_rate`] reports. The *analyzer* wants
+//! [`VisualizerShared::analysis_rate`] instead, which folds in the playback
+//! speed the tap sits underneath.
 //!
 //! # Crossfade
 //!
@@ -73,6 +75,10 @@ pub struct VisualizerShared {
     /// before anything has played. The analyzer needs it to place band edges,
     /// and it varies from track to track.
     sample_rate: AtomicU32,
+    /// Live playback speed as `f32` bits. Written by the control side, read by
+    /// the UI — see [`analysis_rate`](Self::analysis_rate) for why the analyzer
+    /// can't use `sample_rate` alone.
+    speed: AtomicU32,
     /// Total samples ever pushed. Monotonic — at 192 kHz a `usize` takes some
     /// millions of years to wrap, so the modulo below is the only wrapping.
     write_cursor: AtomicUsize,
@@ -86,6 +92,7 @@ impl VisualizerShared {
         Arc::new(Self {
             enabled: AtomicBool::new(enabled),
             sample_rate: AtomicU32::new(0),
+            speed: AtomicU32::new(1.0_f32.to_bits()),
             write_cursor: AtomicUsize::new(0),
             // `AtomicU32` isn't `Clone`, so this can't be `vec![…; N]`; collecting
             // also keeps the 16 KiB off the stack on its way to the heap.
@@ -145,11 +152,55 @@ impl VisualizerShared {
         self.enabled.load(Ordering::Relaxed)
     }
 
+    /// Publish the live playback speed. Takes `f64` to match the rest of the
+    /// player API; the cell is `f32` because that's what the analysis is in.
+    ///
+    /// `RodioPlayer::set_speed` is the single writer: boot hydration goes
+    /// through it, and `play_media` / `begin_crossfade` only ever re-apply the
+    /// value it already published. Don't add redundant calls there.
+    #[allow(
+        clippy::cast_possible_truncation,
+        reason = "speed is bounded to 0.25..=2.0, where f32 has far more precision than the UI's 8 presets can express"
+    )]
+    pub fn set_speed(&self, speed: f64) {
+        self.speed.store((speed as f32).to_bits(), Ordering::Relaxed);
+    }
+
     /// Per-channel rate (Hz) of the source currently feeding the ring, or `0`
-    /// if nothing has played yet.
+    /// if nothing has played yet. The rate the samples were *decoded* at — see
+    /// [`analysis_rate`](Self::analysis_rate) for the one the analyzer wants.
     #[must_use]
     pub fn sample_rate(&self) -> u32 {
         self.sample_rate.load(Ordering::Relaxed)
+    }
+
+    /// The rate the analyzer should place its band edges against: the source's
+    /// own rate scaled by the live playback speed.
+    ///
+    /// The tap sits *inside* rodio's `Speed` wrapper, which forwards samples
+    /// verbatim and implements speed purely by reporting a multiplied
+    /// `sample_rate()` upward — the mixer then resamples. So the ring holds the
+    /// media samples at the media rate, and analysing them against that rate
+    /// would plot the *file's* pitch: at 2× a 1 kHz tone is heard an octave up
+    /// while the 1 kHz bar lights. Scaling here puts the bars back on what you
+    /// actually hear.
+    #[allow(
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        clippy::cast_precision_loss,
+        reason = "audio rates are well below 2^24 Hz and speed is bounded to 0.25..=2.0, so the product is exact in f32 and far inside u32"
+    )]
+    #[must_use]
+    pub fn analysis_rate(&self) -> u32 {
+        let base = self.sample_rate();
+        let speed = f32::from_bits(self.speed.load(Ordering::Relaxed));
+        // Unity is the overwhelmingly common case and must round-trip exactly;
+        // a corrupt speed falls back to the unscaled rate rather than a rate of
+        // zero, which would blank the bars.
+        if base == 0 || !speed.is_finite() || speed <= 0.0 || (speed - 1.0).abs() < f32::EPSILON {
+            return base;
+        }
+        (base as f32 * speed).round() as u32
     }
 }
 
