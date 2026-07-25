@@ -147,6 +147,11 @@ export component NowPlayingView inherits Rectangle {
                 StarRating {
                     rating: Player.vm.track.rating;
                     star-size: 22px;
+                    // Accent-tinted rather than the list views' yellow — see
+                    // the heart below for why this whole group shares the
+                    // spectrum bars' colour.
+                    filled-color: Player.np-accent-bright;
+                    empty-color: Player.np-accent-bright.with-alpha(0.6);
                     rated(n) => { Player.set-current-rating(n); }
                 }
             }
@@ -160,13 +165,18 @@ export component NowPlayingView inherits Rectangle {
                     button-enabled: Player.vm.has_track;
                     diameter: 36px;
                     icon-size: 22px;
-                    // Match the back button's translucent chrome. `active-bg`
-                    // mirrors `idle-bg` so favouriting (which flips `active:
-                    // true`) doesn't drop the chrome to transparent — the
-                    // disc stays visible regardless of state, and the icon
-                    // colour alone carries the favourited indication.
-                    idle-bg: Theme.floating-button-bg;
-                    active-bg: Theme.floating-button-bg;
+                    // A bare glyph like the stars beside it — no chrome disc
+                    // in any state, hover included, so `hover-bg` has to be
+                    // overridden too (it defaults to a solid `Theme.surface0`).
+                    // Hover reads through the icon colour instead.
+                    hover-bg: transparent;
+                    // Same accent the spectrum bars paint with, so the whole
+                    // group reads as one family against the artwork blur. The
+                    // outlined-vs-filled glyph carries the favourited state, so
+                    // the unfavourited variant only needs to be quieter.
+                    idle-fg: Player.np-accent-bright.with-alpha(0.6);
+                    hover-fg: Player.np-accent-bright;
+                    active-fg: Player.np-accent-bright;
                     clicked => { Player.toggle-favorite(); }
                 }
             }
@@ -318,7 +328,10 @@ export component NowPlayingView inherits Rectangle {
                 }
                 Rectangle {
                     height: 1px;
-                    background: Theme.border;
+                    // Accent-tinted like the stars and heart above. Weaker than
+                    // they are — it's a hairline, not a glyph, so it carries at
+                    // a lower alpha without turning into a stripe.
+                    background: Player.np-accent-bright.with-alpha(0.45);
                 }
 
                 // Shared list body — slide animation, outgoing-row

@@ -189,7 +189,9 @@ pub(super) async fn apply_track_change(
 
     // Per-artwork accent → `Player.np-accent`, plus a tone-floored sibling in
     // `np-accent-bright` for the surfaces that paint it opaque (the visualizer
-    // bars). Both fall back to the live `Theme.accent` so non-MY users keep a
+    // bars, and the star / heart / divider group in the Now-Playing header,
+    // which share it so the view reads as one colour family). Both fall back to
+    // the live `Theme.accent` so non-MY users keep a
     // static-accent tint and a missing-artwork / failed-decode track doesn't
     // strand the slots on the previous track's colour — that fallback is
     // already bright enough to need no lift. Theme changes naturally propagate

@@ -105,6 +105,9 @@ export global Player {
     // `np-accent` above is only ever used at low alpha, where a dark album's
     // near-black accent is harmless; the visualizer bars are solid, so a dark
     // album would otherwise paint them invisibly against the scrimmed blur.
+    // The Now-Playing header's stars, heart and Up-Next divider share it — the
+    // quieter of each pair takes it at reduced alpha rather than picking a
+    // different hue, so the whole view reads as one colour family.
     // Don't substitute Slint's `.brighter()` here — it scales HSV value, so it
     // can't lift a near-black colour at all. Falls back to `Theme.accent`.
     in-out property <brush> np-accent-bright: Theme.accent;
