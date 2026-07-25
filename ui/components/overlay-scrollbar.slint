@@ -5,6 +5,9 @@ import { Theme } from "../theme.slint";
 // free. Thumb stays the same size at all times; only the colour shifts on
 // hover/drag (surface2 → accent).
 //
+// Colours come from `track-color` / `thumb-color` / `thumb-active-color`,
+// defaulting to that Catppuccin treatment.
+//
 // Generic across both axes: set `horizontal: true` for the bottom bar.
 // Reads `visible-size` (viewport extent on the scrolled axis) and
 // `content-size` (total scrollable extent), renders the thumb proportionally,
@@ -33,6 +36,22 @@ export component OverlayScrollbar inherits Rectangle {
     in property <length> bar-thickness: 8px;
     in property <length> bar-radius: 4px;
     in property <length> min-thumb: 28px;
+
+    // Defaults are the neutral Catppuccin treatment every list view uses, and
+    // the only override in the tree is the full-screen Now-Playing "Up Next"
+    // list, which tints the bar with the per-artwork accent to match the
+    // spectrum strip. Pass the same brush for both thumb states to drop the
+    // thumb's own hover shift — the track's opacity ramp below still reports
+    // hover.
+    in property <brush> track-color: Theme.surface0;
+    in property <brush> thumb-color: Theme.surface2;
+    in property <brush> thumb-active-color: Theme.accent;
+    // The track's idle / hover alpha. A knob rather than a baked-in alpha on
+    // `track-color` because it animates between the two on hover; the thumb
+    // has no such ramp, so a caller wanting a translucent thumb bakes the
+    // alpha into its two brushes instead.
+    in property <float> track-opacity: 0.5;
+    in property <float> track-opacity-active: 0.85;
 
     out property <bool> dragging: touch.pressed;
 
@@ -66,8 +85,8 @@ export component OverlayScrollbar inherits Rectangle {
         width: root.horizontal ? root.width : root.bar-thickness;
         height: root.horizontal ? root.bar-thickness : root.height;
         border-radius: root.bar-radius;
-        background: Theme.surface0;
-        opacity: root.active ? 0.85 : 0.5;
+        background: root.track-color;
+        opacity: root.active ? root.track-opacity-active : root.track-opacity;
         animate opacity { duration: Theme.dur-fast; easing: ease-in-out; }
     }
 
@@ -82,7 +101,7 @@ export component OverlayScrollbar inherits Rectangle {
         width: root.horizontal ? root.thumb-len : root.bar-thickness;
         height: root.horizontal ? root.bar-thickness : root.thumb-len;
         border-radius: root.bar-radius;
-        background: root.active ? Theme.accent : Theme.surface2;
+        background: root.active ? root.thumb-active-color : root.thumb-color;
         animate background { duration: Theme.dur-fast; easing: ease-in-out; }
     }
 
