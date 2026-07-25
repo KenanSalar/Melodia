@@ -13,8 +13,10 @@ import { Player, Visualizer } from "../../globals.slint";
 // subtree through FemtoVG's offscreen layer (the HiDPI clip-blur pitfall).
 export component SpectrumBars inherits Rectangle {
     // Floor height, so a silent track still reads as a baseline rather than
-    // vanishing.
-    property <length> bar-floor: 2px;
+    // vanishing. Tall enough that a resting bar is legibly a *bar*: at a couple
+    // of pixels it degrades into a dashed rule, which reads as a broken strip
+    // rather than an idle one.
+    property <length> bar-floor: 6px;
 
     background: transparent;
     min-height: 56px;
@@ -39,7 +41,10 @@ export component SpectrumBars inherits Rectangle {
                 width: parent.width;
                 height: max(root.bar-floor, parent.height * level);
                 y: parent.height - self.height;
-                border-radius: min(self.width / 2, 3px);
+                // Clamped on *both* axes: FemtoVG clamps a corner's x- and
+                // y-radii independently, so a radius past half the height
+                // turns a floored bar into an ellipse rather than a stadium.
+                border-radius: min(self.width / 2, self.height / 2, 3px);
                 // The per-artwork accent, so the strip harmonizes with the
                 // blur — but the tone-floored variant, since these bars are
                 // painted opaque: a dark album's raw accent would sink into
