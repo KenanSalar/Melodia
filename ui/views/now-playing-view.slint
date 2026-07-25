@@ -305,6 +305,13 @@ export component NowPlayingView inherits Rectangle {
                 // artwork above it.
                 if Visualizer.enabled: HorizontalLayout {
                     alignment: center;
+                    // Sits lower than the column's shared 12 px spacing would
+                    // put it, so it reads as the base of the cover → title →
+                    // chips group rather than one more line of metadata. The
+                    // column is centred, so this splits between the two ends:
+                    // the strip drops by half of it, everything above rises by
+                    // the other half.
+                    padding-top: Theme.pad-md;
                     SpectrumBars {
                         width: max(root.cover-size, root.content-width * 0.75);
                     }
