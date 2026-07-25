@@ -1,0 +1,65 @@
+import { Player, Visualizer } from "../../globals.slint";
+
+// Spectrum-analyzer strip for the Now-Playing view: one bar per frequency
+// band, bass on the left, treble on the right.
+//
+// Heights come straight from `Visualizer.bars` (normalized 0..1, low → high),
+// which Rust has already smoothed with a fast attack and a slow decay. That is
+// why there is deliberately **no** `animate` on the bar height: animating an
+// already-smoothed value phase-lags, and a single shared Timer plus
+// math-derived bindings is cheaper at vsync than N concurrent `animate` blocks.
+//
+// Each bar is a childless Rectangle, so its rounded cap never pushes the
+// subtree through FemtoVG's offscreen layer (the HiDPI clip-blur pitfall).
+export component SpectrumBars inherits Rectangle {
+    // Floor height, so a silent track still reads as a baseline rather than
+    // vanishing.
+    property <length> bar-floor: 2px;
+
+    background: transparent;
+    min-height: 56px;
+    max-height: 56px;
+    // The host column is `alignment: center`, and the strip must not grow into
+    // the space the cover and title need on a short window.
+    vertical-stretch: 0;
+
+    HorizontalLayout {
+        spacing: 3px;
+
+        for level in Visualizer.bars: Rectangle {
+            background: transparent;
+            horizontal-stretch: 1;
+
+            // Bottom-anchored fill. Computed geometry rather than a layout, in
+            // the idiom of `dialog/eq-band-slider.slint`.
+            Rectangle {
+                width: parent.width;
+                height: max(root.bar-floor, parent.height * level);
+                y: parent.height - self.height;
+                border-radius: min(self.width / 2, 3px);
+                // The per-artwork accent, so the strip harmonizes with the
+                // blur — but the tone-floored variant, since these bars are
+                // painted opaque: a dark album's raw accent would sink into
+                // the scrimmed backdrop.
+                background: Player.np-accent-bright;
+            }
+        }
+    }
+
+    // One shared Timer drives every bar: it runs a full snapshot → FFT → bands
+    // → model pass in Rust and is the only thing that reads the sample ring.
+    //
+    // `running` is deliberately not just `is_playing`. Pausing stops the audio
+    // tap but leaves the last window of samples in the ring, so freezing the
+    // Timer would strand the bars on a stale spectrum. Instead the tick keeps
+    // firing past a pause — feeding the smoother silence rather than the ring —
+    // until Rust reports every bar has settled, and only then stops. A paused,
+    // decayed visualizer costs nothing.
+    Timer {
+        interval: 16ms;
+        running: Player.vm.is_playing || !Visualizer.idle;
+        triggered() => {
+            Visualizer.tick(Player.vm.is_playing);
+        }
+    }
+}

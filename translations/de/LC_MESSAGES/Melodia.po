@@ -1016,6 +1016,12 @@ msgstr "Bewertung"
 msgid "ReplayGain"
 msgstr "ReplayGain"
 
+msgid "Visualizer"
+msgstr "Visualisierung"
+
+msgid "Show a spectrum analyzer on the Now Playing screen"
+msgstr "Einen Spektrumanalysator im Wiedergabe-Bildschirm anzeigen"
+
 msgid "Enable ReplayGain"
 msgstr "ReplayGain aktivieren"
 

@@ -224,6 +224,32 @@ impl Default for CrossfadeFlags {
     }
 }
 
+/// Audio-visualizer preferences. Like the other audio substructs this is
+/// `#[serde(flatten)]`'d into `SettingsData` and carries a whole-struct
+/// `#[serde(default)]`, so older `settings.json` files deserialize to the
+/// default.
+///
+/// Unlike the other audio features the visualizer ships **on** — it's a
+/// presentation flourish confined to the Now-Playing view, not something that
+/// alters what you hear, so there's nothing to surprise a user with. Note the
+/// combination with `#[serde(default)]`: an upgrading install has no
+/// `viz_enabled` key, so it picks up the new default and the bars appear.
+/// Turning it off writes `false`, which then persists.
+///
+/// A later visualizer *style* would land here as another `#[serde(default)]`
+/// field.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct VisualizerFlags {
+    pub viz_enabled: bool,
+}
+
+impl Default for VisualizerFlags {
+    fn default() -> Self {
+        Self { viz_enabled: true }
+    }
+}
+
 /// Queue-behavior preferences. Split out from `PlaybackFlags` so each
 /// substruct stays under the `clippy::struct_excessive_bools` budget
 /// (≤3 bools). Like the other substructs, this is `#[serde(flatten)]`'d
@@ -577,6 +603,8 @@ pub struct SettingsData {
     #[serde(flatten)]
     pub crossfade: CrossfadeFlags,
     #[serde(flatten)]
+    pub visualizer: VisualizerFlags,
+    #[serde(flatten)]
     pub queue: QueueFlags,
     #[serde(flatten)]
     pub window: WindowFlags,
@@ -624,6 +652,7 @@ impl Default for SettingsData {
             equalizer: EqualizerFlags::default(),
             replaygain: ReplayGainFlags::default(),
             crossfade: CrossfadeFlags::default(),
+            visualizer: VisualizerFlags::default(),
             queue: QueueFlags::default(),
             window: WindowFlags::default(),
             tray: TrayFlags::default(),

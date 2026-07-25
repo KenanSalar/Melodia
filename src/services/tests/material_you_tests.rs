@@ -4,7 +4,18 @@ use tempfile::NamedTempFile;
 
 use crate::services::material_you::{
     SchemeStyle, extract_source_argb, extract_source_argb_from_rgb8, generate_palette,
+    lift_to_min_tone,
 };
+
+/// sRGB relative luminance of a `0x00RRGGBB` value, 0..1. Independent of the
+/// HCT machinery under test, so the assertions below can't pass by agreeing
+/// with a bug in it.
+fn relative_luminance(rgb: u32) -> f64 {
+    let r = f64::from((rgb >> 16) & 0xFF) / 255.0;
+    let g = f64::from((rgb >> 8) & 0xFF) / 255.0;
+    let b = f64::from(rgb & 0xFF) / 255.0;
+    0.2126 * r + 0.7152 * g + 0.0722 * b
+}
 
 #[test]
 fn scheme_style_id_round_trips() {
@@ -133,4 +144,66 @@ fn extract_source_argb_from_rgb8_produces_seed_for_uniform_colour() {
         r > b,
         "expected red-dominant seed for orange input, got 0x{seed:06X}"
     );
+}
+
+// --- lift_to_min_tone --------------------------------------------------------
+//
+// The visualizer bars paint an artwork accent opaquely over the Now-Playing
+// backdrop, so a dark album's near-black accent has to be lifted or it's
+// invisible. These pin the guarantee that lift provides.
+
+#[test]
+fn lift_to_min_tone_leaves_an_already_light_colour_alone() {
+    // Near-white sits far above any floor we'd ask for, so it must be returned
+    // byte-identical — no gratuitous gamut round-trip.
+    let light = 0x00F0_F0F0;
+    assert_eq!(lift_to_min_tone(light, 70.0), light);
+}
+
+#[test]
+fn lift_to_min_tone_brightens_pure_black() {
+    // The case a multiplicative brighten cannot fix: scaling HSV value leaves
+    // black black forever, which is exactly how a dark cover used to sink the
+    // bars into the backdrop.
+    let lifted = lift_to_min_tone(0x0000_0000, 70.0);
+    assert!(
+        relative_luminance(lifted) > 0.3,
+        "black should lift well clear of the backdrop, got 0x{lifted:06X}"
+    );
+}
+
+#[test]
+fn lift_to_min_tone_brightens_a_dark_chromatic_accent() {
+    // A deep navy — the realistic dark-album case, not the degenerate one.
+    let lifted = lift_to_min_tone(0x0010_1A3A, 70.0);
+    assert!(
+        relative_luminance(lifted) > relative_luminance(0x0010_1A3A),
+        "expected a lift, got 0x{lifted:06X}"
+    );
+    assert!(
+        relative_luminance(lifted) > 0.3,
+        "lifted navy should clear the backdrop, got 0x{lifted:06X}"
+    );
+}
+
+#[test]
+fn lift_to_min_tone_keeps_the_dominant_hue() {
+    // Tone is the only axis we move: a dark red must come back a light red,
+    // not a neutral. That's what keeps the bars recognisably the album's colour.
+    let lifted = lift_to_min_tone(0x0033_0000, 70.0);
+    let r = (lifted >> 16) & 0xFF;
+    let g = (lifted >> 8) & 0xFF;
+    let b = lifted & 0xFF;
+    assert!(
+        r > g && r > b,
+        "expected a red-dominant lift, got 0x{lifted:06X}"
+    );
+}
+
+#[test]
+fn lift_to_min_tone_is_idempotent() {
+    // A second pass must be a no-op, or repeated track changes would creep the
+    // colour lighter each time.
+    let once = lift_to_min_tone(0x0010_1A3A, 70.0);
+    assert_eq!(lift_to_min_tone(once, 70.0), once);
 }

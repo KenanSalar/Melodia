@@ -1009,6 +1009,12 @@ msgstr "Βαθμολογία"
 msgid "ReplayGain"
 msgstr "ReplayGain"
 
+msgid "Visualizer"
+msgstr "Οπτικοποίηση"
+
+msgid "Show a spectrum analyzer on the Now Playing screen"
+msgstr "Εμφάνιση αναλυτή φάσματος στην οθόνη αναπαραγωγής"
+
 msgid "Enable ReplayGain"
 msgstr "Ενεργοποίηση ReplayGain"
 

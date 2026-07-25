@@ -100,6 +100,15 @@ export global Player {
     // rather than as a dark rectangle floating over it.
     in-out property <brush> np-accent: Theme.accent;
 
+    // Same accent, floored to a minimum HCT tone by `material_you` so it stays
+    // legible when painted at **full opacity** on the Now-Playing backdrop.
+    // `np-accent` above is only ever used at low alpha, where a dark album's
+    // near-black accent is harmless; the visualizer bars are solid, so a dark
+    // album would otherwise paint them invisibly against the scrimmed blur.
+    // Don't substitute Slint's `.brighter()` here — it scales HSV value, so it
+    // can't lift a near-black colour at all. Falls back to `Theme.accent`.
+    in-out property <brush> np-accent-bright: Theme.accent;
+
     callback play-pause();
     callback next();
     callback previous();
@@ -251,6 +260,32 @@ export global ReplayGain {
     // Preamp: live during drag (apply only), persist on release — same split.
     callback set-preamp(float /*dB*/);
     callback commit-preamp(float /*dB*/);
+}
+
+// Visualizer: drives the spectrum-analyzer strip in the Now-Playing view. State
+// is owned by Rust (`src/ui/visualizer.rs`): `enabled` is seeded from
+// `settings.json` at boot, then two-way bound by the Settings → Playback
+// toggle, which also fires `set-enabled` to arm the tap and persist. Ships
+// **on** — see `VisualizerFlags`.
+//
+// `bars` is a Rust-owned `Rc<VecModel<f32>>` of normalized 0..1 heights, low →
+// high frequency, length == `spectrum::NUM_BANDS`. It is already smoothed
+// (fast attack / slow decay) in Rust, so the bars must NOT be `animate`d —
+// animating an already-smoothed value phase-lags.
+//
+// `tick` is fired by the strip's own 16 ms Timer and does the whole
+// snapshot → FFT → band → model pass. `idle` reports back that every bar has
+// decayed to rest, which lets that Timer stop once a paused player's bars have
+// settled: pausing halts the audio tap but leaves stale samples in the ring, so
+// re-analysing them would freeze the bars mid-spectrum instead of letting them
+// fall.
+export global Visualizer {
+    in-out property <bool> enabled: true;
+    in property <[float]> bars;
+    in property <bool> idle: true;
+
+    callback set-enabled(bool);
+    callback tick(bool /*is-playing*/);
 }
 
 // ScrobbleUi: drives the two scrobble login dialogs

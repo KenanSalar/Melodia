@@ -6,8 +6,11 @@ view. A reviewer flagged that Melodia lacks the visualizations that established 
 Now-Playing surface (blur mosaic, accent-tinted chrome), so a visualizer is the natural
 next step for "now playing" immersion.
 
-> **Status:** planning. This is a working doc — keep the phase checkboxes current and
-> delete the file when the feature ships. No code has been written yet.
+> **Status:** Phases 1–4 shipped — the feature is complete and usable: audio tap + lock-free
+> ring, the DSP analyzer, the Now-Playing bars strip, and a persisted toggle in
+> Settings → Playback. Phases 5–6 are optional extras; Phase 7 (docs + perf pass) is what remains before this
+> file can go. This is a working doc — keep the phase checkboxes current and delete the file
+> when the feature ships.
 
 ---
 
@@ -105,7 +108,7 @@ instances + hands out reusable scratch buffers.
 | Bar smoothing | done in **Rust** (decay), **no** Slint `animate` on height | avoids the "animate a value that's already animated" phase-lag pitfall |
 | FFT precision | `f32`, power-of-two size | half the bandwidth of `f64`, ample for display; power-of-two hits the SIMD/AVX planner fast path |
 | Compute gate | only while NP view open **and** playing | a paused/closed player runs no FFT — biggest idle-CPU saver |
-| Default state | **OFF** | new visible behavior ships off (project convention for a live/public app) |
+| Default state | **ON** | deliberate exception to "new visible behavior ships off" — the visualizer is a Now-Playing flourish that changes nothing audible, so there's no surprise to guard against, and a feature nobody discovers is a feature nobody has. Upgraders pick it up via `#[serde(default)]`; turning it off persists |
 
 ---
 
@@ -259,156 +262,230 @@ phases below.
 Each phase is independently reviewable and leaves the tree compiling. File anchors below are
 current `file:line` references — treat them as "near here", they'll drift as code changes.
 
-### Phase 1 — Audio tap & lock-free ring `[ ]`
+### Phase 1 — Audio tap & lock-free ring `[x]`
 
 Goal: post-DSP samples land in a shared ring buffer, gated by an enabled flag, with zero
 playback impact.
 
-- **Add `src/player/visualizer.rs`** defining `VisualizerShared` and its `Arc` constructor,
-  mirroring the *ownership* convention of `EqShared`/`ReplayGainShared`/`FadeShared`
-  (`src/player/dsp.rs:11-42` documents the family) — but **not** the `Generation` poll pattern.
-  That pattern is control-thread-writer → audio-reader; the visualizer is the *inverse*
-  (audio-writer → UI-reader, continuous), so no `bump()`/poll is involved. Fields:
-  - `enabled: AtomicBool` — the whole feature's on/off; checked first in the push.
-  - `sample_rate: AtomicU32` — current source's per-channel rate (f32 bits), written by
-    `EqSource` on start so the UI banding knows the true `fs` (it varies per track).
-  - `write_cursor: AtomicUsize` + `ring: Box<[AtomicU32; RING_CAP]>` — samples as f32 bits.
-    Wait-free `push(sample)`: store at `cursor % CAP`, `fetch_add` the cursor (`Relaxed` is
-    fine — visualization tolerates a torn read). `Sync`, cloneable via `Arc`, writable through
-    `&self` so multiple transient `EqSource`s can hold it.
-  - `snapshot(out: &mut [f32; FFT_SIZE])` — reader-side: copy the most-recent `FFT_SIZE`
-    samples ending at the current cursor.
-  - **Conventions:** store f32 via `to_bits`/`from_bits` over `AtomicU32` (mirrors `EqShared`'s
-    `gains_bits: [AtomicU32; 10]`, no `unwrap`); add a `const _: fn() = || { … };` `Send + Sync`
-    assertion beside the type like the existing eight `assert_send_sync` fns (CLAUDE.md).
-- **Thread it through `RodioPlayer`** (`src/player/rodio_backend.rs`):
-  - add `viz: Arc<VisualizerShared>` field beside `eq`/`rg`/`xf` (~`:183-191`);
-  - seed it in `new()` (~`:203`);
-  - `.clone()` it into the source in `build_source()` (~`:397`) — the single wrap point every
-    playing/preloaded/crossfaded source goes through.
-  - add infallible `set_visualizer_enabled(bool)` next to `set_eq_enabled` (~`:584`).
-- **Extend `EqSource`** (`src/player/equalizer.rs`):
-  - `EqSource::new(...)` (`:415`) takes the new `Arc<VisualizerShared>`; store it + write
-    `sample_rate` into the shared cell once.
-  - Push a mono sample at all **three** leaf return paths so the tap works EQ-on *and* EQ-off:
-    - active DSP path — after the final write loop (`:753-759`), where `self.frame[..frame_len]`
-      is the finished interleaved frame: average the channels → one mono sample → `viz.push(...)`.
-    - `next_bypass()` (`:677`) and `next_bypass_faded()` (`:692`) — accumulate channel samples
-      across `frame_phase` and push one mono value per completed frame (frame-boundary aligned;
-      `frame_phase == 0` is the boundary, per `advance_frame_phase` `:523-529`).
-  - **Every push early-returns when `!viz.enabled`** — disabled is truly zero cost, matching
-    the `EqSource` bypass philosophy.
-  - **Frame-parity constraint (load-bearing).** The push is a *pure side-read* taken **after**
-    the sample is produced. It must **not** be folded into the `frame_phase == 0`
-    generation-poll gate, nor alter frame advancement or the fade-end path — CLAUDE.md notes a
-    half-frame end permanently flips that deck's mixer channel parity. Read `viz.enabled`, push,
-    touch nothing else in `next()`.
-- **Crossfade caveat (documented, accepted for v1):** during a crossfade two `EqSource`s (one
-  per deck) both hold the shared ring and both push, interleaving for the ~1–2 s overlap → a
-  slightly noisier spectrum. Cosmetically irrelevant. Phase 6 offers an exact two-ring-sum fix.
+> **The shipped shape differs from the original sketch.** This phase was planned as a tap
+> *inside* `EqSource` (6th ctor param + pushes at its three leaf return paths). It shipped
+> instead as a thin **wrapper source**, `VisualizerTap<S>`, applied at the one existing wrap
+> point. It sees byte-for-byte the same samples, but leaves `src/player/equalizer.rs`
+> untouched — which keeps Phase 1 clear of that file's load-bearing `frame_phase == 0` poll
+> gate and bit-identical bypass path, and leaves the ~10 `EqSource::new` call sites in
+> `equalizer_tests.rs` alone. The whole feature lives in one new file, which is what §5's SRP
+> split asked for anyway.
+
+- **`src/player/visualizer.rs` (new)** holds both halves.
+  - **`VisualizerShared`** — the ring, and nothing else. Mirrors the *ownership* convention of
+    `EqShared`/`FadeShared` (`Arc`, `&self` mutation, f32 held as bit patterns in atomics) but
+    **not** the `Generation` poll pattern (`src/player/dsp.rs:11-42`): that pattern is
+    control-thread-writer → audio-reader; this is the *inverse* — audio-writer → UI-reader,
+    continuous — so there is nothing to poll. Fields: `enabled: AtomicBool` (checked first in
+    the push), `sample_rate: AtomicU32` (**integer Hz**, not f32 bits — it comes straight off
+    `SampleRate::get()`), `write_cursor: AtomicUsize` (monotonic), and
+    `ring: Box<[AtomicU32]>` of `RING_CAP = 4096`.
+    - Producer: `push(sample)` early-returns on `!enabled`, then `fetch_add`s the cursor and
+      stores `to_bits()` at `idx % RING_CAP`. All `Relaxed`; wait-free, allocation-free. A
+      torn read is possible and cosmetically invisible.
+    - Consumer: `snapshot(out: &mut [f32])` fills any width, oldest-first, padding at the
+      **front** when history is short so the newest sample is always the last element. A
+      request wider than `RING_CAP` is answered for the last `RING_CAP` only.
+    - A `const _: fn() = || { … };` `Send + Sync` assertion beside the type, like the existing
+      eight (CLAUDE.md) — no `#[allow(dead_code)]`.
+  - **`VisualizerTap<S>`** — a Rodio `Source` that forwards every sample untouched while
+    accumulating one **mono** value per interleaved frame (`accum * inv_channels`). Channel
+    count, its reciprocal and the rate are captured once at construction.
+    - **The rate is published on the first completed frame, not in `new`** — a gapless
+      successor is *built* when it is staged, seconds before it plays, so announcing its rate
+      then would leave a differently-rated current track's tail analysed against the wrong `fs`.
+    - `try_seek` forwards, then resets the accumulator and phase: `EqSource::try_seek` restarts
+      its own interleave phase at 0, and a tap left half-full would straddle frames from there on.
+    - Cost with the visualizer off: one float add, one increment and one compare per sample,
+      plus a per-frame `Relaxed` load that early-returns.
+- **`RodioPlayer`** (`src/player/rodio_backend.rs`): `viz: Arc<VisualizerShared>` field beside
+  `eq`/`rg`/`xf`, seeded `VisualizerShared::new(false)` in `new()`; `build_source` wraps its
+  `EqSource` in a `VisualizerTap` — the single point every playing / preloaded / crossfaded
+  source goes through; infallible `set_visualizer_enabled(bool)` plus a `visualizer()` accessor
+  (the handle Phase 3 reaches through `state.rodio`) next to the EQ setters.
+- **Crossfade caveat (documented, accepted for v1):** during a crossfade both decks' taps push
+  into the one shared ring, interleaving for the ~1–2 s overlap → a slightly noisier spectrum.
+  Cosmetically irrelevant. Phase 6 offers an exact two-ring-sum fix.
+
+**Tests:** `src/player/tests/visualizer_tests.rs` — 13, covering the ring (disabled push is a
+true no-op, mid-stream enable, most-recent-window ordering, front padding, wraparound,
+over-wide request, rate round-trip) and the tap (bit-identical passthrough enabled *and*
+disabled, stereo channel-average, mono 1:1, partial trailing frame dropped, first-frame rate
+publish, seek realignment). `tests/crossfade.rs` now pulls through `VisualizerTap` over a real
+device-less mixer, so its amplitude assertions double as the transparency check.
 
 **Memory:** ring 16 KiB + one `Arc` — resident always, trivial. Push is O(1) wait-free.
 
-### Phase 2 — DSP analysis (pure, unit-tested) `[ ]`
+### Phase 2 — DSP analysis (pure, unit-tested) `[x]`
 
 Goal: samples → normalized, smoothed band magnitudes, as pure functions with no I/O — the
 part worth testing.
 
-- **Add `src/player/spectrum.rs`** (pure DSP; owns no audio/UI types):
-  - `hann_window(size) -> Box<[f32]>` — precomputed table, applied element-wise to the snapshot.
-  - a `SpectrumAnalyzer` struct owning the reusable `realfft` plan + `input`/`spectrum`/`scratch`
-    vecs (allocated once; `process_with_scratch` each call — **no per-tick allocation**).
-  - `magnitudes_to_bands(spectrum, fs, bands) -> Vec<f32>` — geometric (log) band edges from
-    ~20 Hz to Nyquist; per band take the max (or mean) magnitude, compress via log/dB, normalize
-    to 0..1. Bins past Nyquist skipped.
-  - `smooth(prev: &mut [f32], next: &[f32], attack, decay)` — peak-follow: rise fast, fall slow.
-- **Tests** in `src/player/tests/spectrum_tests.rs` (wired via
-  `#[cfg(test)] #[path = "tests/spectrum_tests.rs"] mod tests;`, per project convention):
-  - Hann window endpoints ≈ 0, midpoint ≈ 1, symmetry.
-  - a synthesized single-frequency sine lands in the expected band, silence → all-zero bands.
-  - `smooth` rises immediately to a spike and decays monotonically toward a lower next value.
+- **`src/player/spectrum.rs` (new)** — the pipeline as free functions, each unit-tested:
+  `hann_window(size)`, `coherent_gain_scale(window)`, `band_bins(bands, fft_size, fs)`,
+  `level_from_magnitude(mag)`, `bands_from_spectrum(spectrum, map, scale, out)` and
+  `smooth(levels, next, attack, decay)`. Consts: `FFT_SIZE 2048`, `NUM_BANDS 32`,
+  `MIN_HZ 20`, `FLOOR_DB -70`, `ATTACK 0.0`, `DECAY 0.8`.
+- **`SpectrumAnalyzer`** is the only stateful piece — it holds exactly what must not be
+  rebuilt per frame (the `realfft` plan + its three buffers, the Hann table and its scale,
+  the bin→band map plus the rate it was built for, and the two band buffers). Nothing in
+  `analyze` allocates.
+
+> **Two deliberate departures from the sketch above.**
+> 1. **`window_mut()` + `analyze(fs)`, not `magnitudes_to_bands(...) -> Vec<f32>`.** Returning
+>    a `Vec` would allocate every frame, against §6's own rule. Handing out the FFT's own
+>    input buffer lets Phase 3 snapshot the ring *straight into* the buffer the transform
+>    reads — no intermediate window, no per-tick copy. (`realfft` treats `input` as scratch
+>    and clobbers it, which is exactly right here: it is refilled every tick.)
+> 2. **The analyzer owns the smoothing buffer**, not `ui/visualizer.rs` as Phase 3 sketches.
+>    §5 says the UI layer carries "no DSP math", and smoothing state *is* DSP state. Phase 3's
+>    tick is correspondingly a two-liner: `viz.snapshot(a.window_mut())` then
+>    `a.analyze(viz.sample_rate())` → write the `VecModel`.
+
+Details worth keeping: bin 0 (DC) is excluded from every band; a band takes its **loudest**
+bin, not the mean (a wide treble band averaged against its empty bins reads dead); the map
+is rebuilt only when the sample rate changes; `fs == 0` (nothing played yet) skips the FFT
+but still smooths, so bars **decay** rather than freezing; and `process_with_scratch`'s
+`Result` is never unwrapped — its buffers come from its own plan, so on the unreachable
+`Err` the bars decay instead of panicking on the UI thread.
+
+`src/player/dsp.rs` gained `linear_to_db`, the missing inverse of `db_to_linear`, which also
+replaced the open-coded `20.0 * peak.log10()` in the EQ limiter.
+
+**Tests:** `src/player/tests/spectrum_tests.rs` — 25, covering the Hann window (endpoints,
+midpoint at both odd and even lengths, symmetry, degenerate sizes, coherent gain ≈ ½), the
+band map (non-empty / contiguous / monotonic / never past Nyquist, swept over 44.1 / 48 /
+96 kHz; nonsense rates; more bands than bins), level compression (silence, full scale,
+clamping, the floor), per-band max and tail-zeroing, peak-follow smoothing (instant rise,
+gradual fall, convergence, never below the band), and end-to-end: a 1 kHz full-scale sine
+peaks in the band containing bin 46 at > 0.95 with the bass band < 0.2.
 
 **Memory:** plan + 3 FFT buffers + Hann table ≈ 30–40 KiB, allocated once and held by the
 UI-side analyzer instance. Negligible.
 
-### Phase 3 — UI rendering: spectrum bars `[ ]`
+### Phase 3 — UI rendering: spectrum bars `[x]`
 
 Goal: bars render and react while the NP view is open, colored to the artwork accent.
 
-- **`ui/globals.slint` — add a `Visualizer` global:** `in property <[float]> bars;`
-  (0..1 heights, owned by Rust), `in property <bool> enabled;`, `in property <string> style;`,
-  and `callback tick();` (fired by the Slint Timer each frame). Register the global in
-  `app-window.slint`'s import **and** `export {}` re-export (Slint prunes un-re-exported
-  globals from the Rust API).
-- **`ui/components/now-playing/spectrum-bars.slint` — new component:** a `HorizontalLayout`
-  with `for h[i] in Visualizer.bars: Rectangle { ... height: parent.height * h; ... }`, radius
-  on top, filled with `Player.np-accent` (`ui/globals.slint:101` — the existing per-artwork
-  accent, so the visualizer harmonizes with the blur). Mirror `eq-band-slider.slint`'s
-  computed-geometry approach. Keep bars **childless** (no text inside) so rounded corners never
-  trip the FemtoVG HiDPI clip-blur pitfall (CLAUDE.md). **No `animate height`** — Rust already
-  smooths; animating a smoothed value phase-lags (documented Slint pitfall).
-- **Mount in `ui/views/now-playing-view.slint`:** at the **bottom of the centered artwork
-  column** (`:170-268`) — as the last child, directly **after** the metadata chip strip
-  (the `if Player.vm.has_track: chip-area` block ends ~`:267`, before the column's closing
-  brace ~`:268`). This keeps the natural cover → title → chips grouping intact and makes the
-  visualizer a **base strip** under the whole block; the column is `alignment: center`, so the
-  group simply re-centers as a whole when the strip mounts. Gate it `if Visualizer.enabled`.
-  Give the strip a **modest fixed height** (~48–72 px via `min-height`/`max-height`,
-  `vertical-stretch: 0`) so it never crowds the title on narrow windows (where the cover
-  clamps to 200 px) — don't let it stretch.
-- **Driving Timer** — add it beside the strip in the same view (precedent: the
-  `Timer { interval: 1ms; ... }` at `:248-255`):
-  `Timer { interval: 16ms; running: Visualizer.enabled && <playing>; triggered => { Visualizer.tick(); } }`,
-  where `<playing>` is the VM's playback-status flag — so a **paused** player runs no FFT
-  (§6). Because the Timer lives inside `NowPlayingView` — mounted only under
-  `if Nav.now-playing-open` (`app-window.slint:900-905`) — it **also stops automatically when
-  the view closes**. Both gates together mean the analyzer only runs when it's actually visible
-  and moving.
-- **`src/ui/visualizer.rs` — `install_visualizer(ui: &AppWindow, state: &AppState)`** following
-  the `install_equalizer`/`install_replaygain` shape (`src/ui/equalizer.rs:27`,
-  `src/ui/replaygain.rs:23`). It:
-  - captures an `Arc<VisualizerShared>` clone (reachable via `state.rodio`) + `ui.as_weak()`
-    (never a strong `AppWindow` handle in the callback — slint.md);
-  - owns a `SpectrumAnalyzer` + a smoothing state buffer + the bars `VecModel<f32>` across ticks
-    (held in an `Rc<RefCell<…>>` — UI-thread only, no `AppState` widening);
-  - registers `Visualizer.on_tick`: snapshot ring → Hann → FFT → bands → smooth → write the
-    `VecModel`. All on the UI thread, sub-millisecond.
-  - Because it needs the `state.rodio` ring handle, call it from `src/main.rs` after `state`
-    exists (like `now_playing::install` at `main.rs:333-338`), or from
-    `install_library_settings_and_friends` (`boot/ui_setup.rs:233`) if a `&AppState` is enough.
+- **`ui/globals.slint` — the `Visualizer` global** (after `ReplayGain`, so the three audio-DSP
+  globals sit together): `in-out property <bool> enabled;`, `in property <[float]> bars;`,
+  `in property <bool> idle: true;`, `callback set-enabled(bool);` and
+  `callback tick(bool /*is-playing*/);`. Registered in `app-window.slint`'s import **and**
+  `export {}` re-export (Slint prunes un-re-exported globals from the Rust API).
+  **No `style` property** — Phase 5 is optional and may never land, so shipping an unswitched
+  style token would be dead weight; adding it later is purely additive.
+- **`ui/components/now-playing/spectrum-bars.slint`:** a `HorizontalLayout` of
+  `for level in Visualizer.bars`, each a stretching transparent container holding one
+  **childless** bottom-anchored `Rectangle` (`height: max(2px, parent.height * level)`,
+  `y: parent.height - self.height`) filled with `Player.np-accent-bright`. Mirrors
+  `eq-band-slider.slint`'s computed-geometry idiom. Childless keeps the rounded cap off
+  FemtoVG's offscreen-layer path (the HiDPI clip-blur pitfall); the 2 px floor keeps a visible
+  baseline on silence. **No `animate height`** — Rust already smooths, and animating a smoothed
+  value phase-lags. Fixed 56 px via `min-height`/`max-height` + `vertical-stretch: 0`, so the
+  strip can't crowd the title on a short window.
+- **Mounted in `ui/views/now-playing-view.slint`** as the last child of the centered artwork
+  column, after the metadata chip strip — a base strip under the whole cover → title → chips
+  group, which simply re-centers as a whole (the column is `alignment: center`). Gated
+  `if Visualizer.enabled` and wrapped in a centring `HorizontalLayout`, because a fixed-width
+  child doesn't centre in a wider `VerticalLayout` — the same reason the cover above it is
+  wrapped. The cover's `clamp(root.width * 0.22, 200px, 380px)` was hoisted to a
+  `cover-size` property on the view root so the cover and the strip stay aligned from one
+  source.
+
+> **The bars use a tone-floored accent, not the raw one.** Shipping with plain
+> `Player.np-accent` made the strip nearly invisible on dark album art: the extracted accent
+> *is* the artwork's dominant colour, so a dark cover yields a near-black accent painted over
+> a backdrop the view's `Theme.crust.with-alpha(0.45)` scrim already darkens. Every other
+> `np-accent` consumer draws it at `with-alpha(0.22)`, where that's harmless — the bars are the
+> first surface to paint it **opaque**. Fix is a sibling `Player.np-accent-bright`, written
+> beside `np-accent` in `track_change.rs` from
+> `material_you::lift_to_min_tone(argb, 70.0)` — HCT tone is M3's contrast axis, so flooring
+> it lifts the colour into view while hue and chroma (hence the album's identity) survive.
+> Slint's `.brighter()` is **not** a substitute: it scales HSV value, so it can't lift a
+> near-black colour at all. No upper cap is needed — the scrim keeps the backdrop from ever
+> getting brighter than mid, which is the same reason the foreground text is legible over any
+> cover. Five tests in `material_you_tests.rs` pin the guarantee (black lifts, hue survives,
+> already-light is untouched, idempotent).
+
+> **The Timer lives inside the strip component, and its gate is not just "playing".**
+> Phase 3 was sketched as `running: Visualizer.enabled && <playing>`. That freezes the bars:
+> pausing stops the tap but leaves the last window of audio in the ring, so halting the Timer
+> strands them on a stale spectrum rather than letting them fall. What shipped is
+> `running: Player.vm.is_playing || !Visualizer.idle` — the tick keeps firing past a pause,
+> feeding the smoother silence (`analyze(0)`, which skips the FFT entirely) until Rust reports
+> every band under `IDLE_LEVEL`, then stops. Decay is geometric at `DECAY = 0.8`, so the tail
+> is ~31 frames (~0.5 s) and a paused, settled visualizer costs nothing — §6's idle-CPU goal,
+> without the artifact. The two *other* gates still come for free: the component only mounts
+> under `if Visualizer.enabled`, and the view only under `if Nav.now-playing-open`.
+
+- **`src/ui/visualizer.rs` — `install_visualizer(ui: &AppWindow, state: &AppState)`**, shaped
+  like `install_equalizer`, called from `boot/ui_setup.rs` right after `install_replaygain`
+  (`&AppState` is enough — `state.rodio` is public, so the `main.rs` call site isn't needed).
+  It seeds the global from `settings.json`, owns the bars `VecModel<f32>`, and registers two
+  callbacks. `on_tick` captures the `Arc<VisualizerShared>` + `ui.as_weak()` (never a strong
+  handle) and **owns the `SpectrumAnalyzer` by value** — Slint callbacks are `FnMut`, so no
+  `Rc<RefCell<…>>` is needed. The tick is
+  `viz.snapshot(analyzer.window_mut())` → `analyzer.analyze(rate)` → `set_row_data` per band.
+  `set_row_data`, **not** `set_vec`: the latter takes a `Vec` by value and would allocate every
+  frame. Smoothing state lives inside the analyzer (Phase 2), so the UI layer holds no DSP
+  state.
 
 **Memory:** bars `VecModel` = 32 floats; the analyzer buffers from Phase 2. Nothing renders or
 computes while the NP view is closed. Well under the ~200 MB ceiling — no RSS follow-up needed.
 
-### Phase 4 — Settings, persistence & toggle UI `[ ]`
+### Phase 4 — Settings, persistence & toggle UI `[x]`
 
-Goal: the user can turn it on/pick a style, and the choice persists.
+Goal: the user can turn it off, and the choice persists.
 
-- **`src/services/settings/data.rs` — add `VisualizerFlags`** (mirror `EqualizerFlags`
-  `:135-156`): `#[serde(default)] enabled: bool` (default **false**), `#[serde(default)]
-  style: String` (default `"bars"`). `#[serde(flatten)]` it into `SettingsData` (~`:562`) and
-  `SettingsData::default()` (~`:601`). (`#[serde(default)]` keeps already-shipped
-  `settings.json` files loadable — required for the live/public build.)
-- **`src/library/settings/visualizer.rs` — setters** mirroring
-  `library/settings/equalizer.rs`: apply to the live backend synchronously via
-  `ui::settings_bind::toggle_binding`, then `persist_blocking`.
-- **Live-apply plumbing:** add `player_set_visualizer_enabled(ctx, bool)` in
-  `src/library/playback.rs` beside `player_set_eq_*` (`:210-227`), calling
-  `RodioPlayer::set_visualizer_enabled` from Phase 1.
-- **Boot hydration:** seed enabled/style in `install_visualizer` by reading
-  `settings::read_settings(&state.paths)` (the UI-feature hydration path, like
-  `install_equalizer` `equalizer.rs:35-52`) and pushing `VisualizerShared.enabled`.
-- **Toggle surface — pick one (recommend the overflow row):**
-  - *Now-Playing overflow menu row* (recommended): a permanent "Visualizer" `OverflowRow`
-    (`ui/components/now-playing/overflow-menu.slint`) that toggles on/off, matching the
-    Equalizer/ReplayGain rows. Adding it makes the overflow **6 permanent rows** — bump the
-    `menu-h` row count (CLAUDE.md documents this). Style selection can be a small left-side
-    flyout like the speed/sleep flyouts, or deferred to Settings.
-  - *Settings → Playback* (alternative/complement): a section with the enable toggle + a style
-    dropdown, wired via `ui/settings_bind::toggle_binding` like the crossfade toggles.
-- **i18n:** any new literal (row label, style names, settings copy) gets `@tr(...)` and the
-  same msgid/msgstr added to **every** `translations/<lang>/LC_MESSAGES/Melodia.po`
-  (en, de, fr, es, tr, el, it). Don't translate the style *ids* (`"bars"`), only labels.
+Shipped alongside Phase 3 — the toggle is the feature's only control surface, so splitting them
+would have left one half untestable.
+
+- **`src/services/settings/data.rs` — `VisualizerFlags { viz_enabled: bool }`**, whole-struct
+  `#[serde(default)]` + `#[serde(flatten)]` into `SettingsData` and its `default()`, mirroring
+  `EqualizerFlags`. Ships **true** (see §4) via a hand-written `impl Default` — `#[derive]`
+  would give `false`. Because the flag is `#[serde(default)]`, an upgrading install (no
+  `viz_enabled` key) picks the new default up and the bars appear; an explicit *off* writes
+  `false` and sticks. **One field, no `style`** — see the Phase 3 note; adding it later is
+  purely additive.
+  > The default-on choice has one non-obvious consequence: `install_visualizer`'s
+  > `read_settings` failure fallback must be `VisualizerFlags::default().viz_enabled`, **not** a
+  > literal. `AppState::init` falls back to a whole `SettingsData::default()` on the same
+  > failure, so a hardcoded `false` there would arm the tap while leaving the bars hidden.
+- **`src/library/settings/visualizer.rs`** — `set_visualizer_enabled`, a `mutate_settings`
+  two-liner mirroring `equalizer.rs::set_eq_enabled`.
+- **Live-apply plumbing:** `player_set_visualizer_enabled(ctx, bool)` in
+  `src/library/playback.rs` beside `player_set_eq_*`, calling Phase 1's
+  `RodioPlayer::set_visualizer_enabled`. Infallible and lock-free like its siblings.
+- **Boot hydration is split, deliberately.** The *backend* tap is armed in
+  `hydrate_audio_dsp` (`src/state/mod.rs`), which already seeds EQ / ReplayGain / crossfade at
+  `AppState::init` and is the one place that owns backend hydration; `install_visualizer`'s own
+  `read_settings` seeds only the Slint property. (The original sketch put both in the
+  installer.)
+- **Toggle surface: Settings → Playback**, a `SettingRow` + `ToggleSwitch` after "Resume on
+  Startup". It binds `checked <=> Visualizer.enabled` and fires `Visualizer.set-enabled(v)` —
+  binding the **`Visualizer` global directly** rather than mirroring the flag onto `Settings`,
+  the way the EQ dialog binds `Equalizer.enabled`, so the visualizer keeps its state and
+  callback in its own module. Because the two-way binding already lands the value, the Rust
+  handler is a plain `toggle_binding` with no write-back (the crossfade / gapless shape).
+  The row joins the section's `row-visible` search filter, and the three upstream
+  `SectionDivider` gates each gained `|| root.show-visualizer` so a hidden neighbour can't
+  strand a divider. **No overflow-menu row** — an earlier revision put one there; it was
+  removed and `menu-h` reverted 6 → 5.
+- **Icon:** `bar_chart` (`graphic_eq` and `tune` are taken by the Equalizer and ReplayGain
+  overflow rows). Added to `scripts/icons.txt` and re-subset via
+  `scripts/subset-icon-fonts.sh`; `scripts/check-icons.py` passes on both faces.
+- **i18n:** two new msgids — `"Visualizer"` and the row description
+  `"Show a spectrum analyzer on the Now Playing screen"` — in all six shipped `.po` files.
+
+**Tests:** none added. Phase 1–2 already cover the ring, tap and the whole DSP pipeline (37
+tests); what Phases 3–4 add is Slint markup and callback wiring, which the project keeps
+deliberately untested — and `EqualizerFlags` / `CrossfadeFlags` have no settings tests either,
+so there was no precedent to follow.
 
 ### Phase 5 — Additional styles (optional) `[ ]`
 
@@ -449,24 +526,34 @@ unless the Phase 1 caveat proves visible in practice.
 ## 8. Files touched (summary)
 
 **New**
-- `src/player/visualizer.rs` — `VisualizerShared` (ring + atomics).
-- `src/player/spectrum.rs` + `src/player/tests/spectrum_tests.rs` — pure DSP + tests.
-- `src/ui/visualizer.rs` — `install_visualizer`, UI-thread analyzer + render loop.
-- `src/library/settings/visualizer.rs` — persistence setters.
-- `ui/components/now-playing/spectrum-bars.slint` — bars component.
+- `src/player/visualizer.rs` + `src/player/tests/visualizer_tests.rs` — `VisualizerShared`
+  (ring + atomics) and `VisualizerTap` (the transparent tap source). **Done.**
+- `src/player/spectrum.rs` + `src/player/tests/spectrum_tests.rs` — pure DSP + `SpectrumAnalyzer`
+  + tests. **Done.**
+- `src/ui/visualizer.rs` — `install_visualizer`, UI-thread analyzer + render loop. **Done.**
+- `src/library/settings/visualizer.rs` — persistence setter. **Done.**
+- `ui/components/now-playing/spectrum-bars.slint` — bars component + driving Timer. **Done.**
 
 **Changed**
-- `Cargo.toml` — add `realfft = "3.5.0"`.
-- `src/player/rodio_backend.rs` — `viz` field, seed in `new()`, clone in `build_source`,
-  `set_visualizer_enabled`.
-- `src/player/equalizer.rs` — `EqSource::new` arg + pushes at the three leaf paths + `fs` write.
-- `src/library/playback.rs` — `player_set_visualizer_enabled`.
-- `src/services/settings/data.rs` — `VisualizerFlags` + flatten + default.
-- `ui/globals.slint` — `Visualizer` global (+ `app-window.slint` import/export).
-- `ui/views/now-playing-view.slint` — mount bars + driving Timer.
-- `ui/components/now-playing/overflow-menu.slint` (+ `menu-h` row count) — toggle row.
-- `src/main.rs` **or** `src/boot/ui_setup.rs` — call `install_visualizer`.
-- `translations/*/LC_MESSAGES/Melodia.po` — new `@tr` strings (7 locales).
+- `Cargo.toml` — `realfft = "3.5.0"` in the `# Audio` group (+ `Cargo.lock`). **Done.**
+- `src/player/dsp.rs` — `linear_to_db`, the inverse of `db_to_linear`. **Done.**
+- `src/player/equalizer.rs` — the limiter's `20.0 * peak.log10()` now calls `linear_to_db`.
+  **Done.**
+- `src/player/mod.rs` — `pub mod visualizer;`, `pub mod spectrum;`. **Done.**
+- `src/player/rodio_backend.rs` — `viz` field, seed in `new()`, `VisualizerTap` wrap in
+  `build_source`, `set_visualizer_enabled` + `visualizer()`. **Done.**
+- `src/library/playback.rs` — `player_set_visualizer_enabled`. **Done.**
+- `src/library/settings/mod.rs` — `pub mod visualizer;` + re-export. **Done.**
+- `src/services/settings/data.rs` — `VisualizerFlags` + flatten + default. **Done.**
+- `src/state/mod.rs` — arm the tap in `hydrate_audio_dsp`. **Done.**
+- `src/services/material_you.rs` (+ tests) — `lift_to_min_tone`. **Done.**
+- `src/ui/now_playing/track_change.rs` — write `np-accent-bright`. **Done.**
+- `ui/globals.slint` — `Visualizer` global (+ `app-window.slint` import/export). **Done.**
+- `ui/views/now-playing-view.slint` — mount the strip; hoist `cover-size`. **Done.**
+- `ui/views/settings/playback-section.slint` — toggle row + divider gates. **Done.**
+- `src/ui/mod.rs` + `src/boot/ui_setup.rs` — register + call `install_visualizer`. **Done.**
+- `scripts/icons.txt` + both subset TTFs — `bar_chart`. **Done.**
+- `translations/*/LC_MESSAGES/Melodia.po` — `"Visualizer"` (6 locales). **Done.**
 
 ---
 

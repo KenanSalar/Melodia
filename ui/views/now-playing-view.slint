@@ -1,9 +1,10 @@
 import { Theme } from "../theme.slint";
-import { Player, Nav, NowPlaying } from "../globals.slint";
+import { Player, Nav, NowPlaying, Visualizer } from "../globals.slint";
 import { IconButton } from "../components/icon-button.slint";
 import { StarRating } from "../components/star-rating.slint";
 import { NowPlayingCover } from "../components/now-playing/now-playing-cover.slint";
 import { UpNextList } from "../components/now-playing/up-next-list.slint";
+import { SpectrumBars } from "../components/now-playing/spectrum-bars.slint";
 
 // One technical-metadata chip (codec / bitrate / sample rate / …). The
 // caller only instantiates it when the matching `Player.track-meta` field
@@ -48,6 +49,10 @@ component MetaChip inherits Rectangle {
 // `UpNextList` component (`components/now-playing/up-next-list.slint`) so
 // the mini-player's square variant reuses the same behaviour.
 export component NowPlayingView inherits Rectangle {
+    // Edge of the square cover tile. Also the width of the visualizer strip
+    // below it, so the two stay aligned as the window resizes.
+    property <length> cover-size: clamp(root.width * 0.22, 200px, 380px);
+
     // --- Background: accent gradient floor + dual-slot blurred cross-fade -
     // The gradient is always painted. For a track WITH artwork the blur
     // slots fade in over it; for an art-less track `blur-has-image` is
@@ -179,7 +184,7 @@ export component NowPlayingView inherits Rectangle {
                 HorizontalLayout {
                     alignment: center;
                     NowPlayingCover {
-                        tile-size: clamp(root.width * 0.22, 200px, 380px);
+                        tile-size: root.cover-size;
                     }
                 }
 
@@ -263,6 +268,17 @@ export component NowPlayingView inherits Rectangle {
                                 text: t;
                             }
                         }
+                    }
+                }
+
+                // Spectrum strip, as a base under the whole cover → title →
+                // chips group. Wrapped in a centring HorizontalLayout because
+                // a fixed-width child does not centre in a wider
+                // VerticalLayout, the same reason the cover above is wrapped.
+                if Visualizer.enabled: HorizontalLayout {
+                    alignment: center;
+                    SpectrumBars {
+                        width: root.cover-size;
                     }
                 }
             }

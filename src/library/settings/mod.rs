@@ -28,6 +28,7 @@ pub mod replaygain;
 pub mod scrobble;
 pub mod updates;
 pub mod view;
+pub mod visualizer;
 
 pub use appearance::{
     set_appearance, set_corner_radius, set_dynamic_color_style, set_match_unfocused_to_system_bg,
@@ -44,6 +45,7 @@ pub use replaygain::{
     set_replaygain_enabled, set_replaygain_mode, set_replaygain_preamp,
     set_replaygain_prevent_clipping,
 };
+pub use visualizer::set_visualizer_enabled;
 pub use scrobble::{
     set_scrobble_lastfm_enabled, set_scrobble_lastfm_love_enabled,
     set_scrobble_listenbrainz_enabled, set_scrobble_listenbrainz_love_enabled,

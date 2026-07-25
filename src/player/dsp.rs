@@ -8,6 +8,17 @@ pub(crate) fn db_to_linear(db: f32) -> f32 {
     10.0_f32.powf(db / 20.0)
 }
 
+/// Convert a linear amplitude factor to decibels — the inverse of
+/// [`db_to_linear`].
+///
+/// Silence has no decibel value (`log10(0)` is `-inf`), so callers guard the
+/// domain before calling. Both of them already do it for their own reasons: the
+/// limiter returns unity below its knee, and the spectrum analyzer floors quiet
+/// bins at zero.
+pub(crate) fn linear_to_db(lin: f32) -> f32 {
+    20.0 * lin.log10()
+}
+
 /// A lock-free change counter for state shared with the audio thread.
 ///
 /// The control side mutates a cell's fields (plain `Relaxed` atomics) and then

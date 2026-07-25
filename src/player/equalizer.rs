@@ -47,7 +47,7 @@ use rodio::source::SeekError;
 use rodio::{ChannelCount, Sample, SampleRate, Source};
 
 use super::crossfade::{self, FadeShared};
-use super::dsp::{Generation, db_to_linear};
+use super::dsp::{Generation, db_to_linear, linear_to_db};
 use super::replaygain::{self, ReplayGainShared, TrackReplayGain};
 
 /// Number of equalizer bands.
@@ -299,7 +299,7 @@ impl Limiter {
         if peak <= self.knee_low_linear {
             return 1.0;
         }
-        let peak_db = 20.0 * peak.log10();
+        let peak_db = linear_to_db(peak);
         let over = peak_db - LIMITER_THRESHOLD_DB;
         let half_knee = LIMITER_KNEE_DB / 2.0;
         let reduction_db = if over >= half_knee {

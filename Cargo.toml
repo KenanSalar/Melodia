@@ -155,6 +155,12 @@ rodio = { version = "0.22.2", default-features = false, features = [
 # `DirectForm1` keeps past inputs/outputs in its delay line, so live
 # coefficient swaps (slider drags) don't inject transients.
 biquad = "0.6.0"
+# Real-to-complex FFT for the spectrum visualizer. Preferred over raw `rustfft`
+# (which it wraps): a real input yields N/2+1 bins from a half-length internal
+# complex FFT, so there's no manual complex packing and half the work. Its
+# planner caches twiddle factors and hands out reusable scratch buffers, which
+# is what lets the per-frame analysis allocate nothing.
+realfft = "3.5.0"
 lofty = "0.24.0"
 
 # Library indexing / file IO

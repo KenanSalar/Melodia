@@ -286,6 +286,16 @@ pub fn player_set_crossfade_fade_on_pause(ctx: &PlaybackContext, on: bool) {
     ctx.rodio.set_crossfade_fade_on_pause(on);
 }
 
+// --- Visualizer ------------------------------------------------------------
+
+/// Arm / disarm the visualizer's sample tap on the live player. Lock-free and
+/// infallible like the EQ and `ReplayGain` setters — the tap is a pure
+/// side-read, so toggling it can't affect what you hear. Disarmed, it costs one
+/// predictable branch per audio frame.
+pub fn player_set_visualizer_enabled(ctx: &PlaybackContext, enabled: bool) {
+    ctx.rodio.set_visualizer_enabled(enabled);
+}
+
 #[cfg(test)]
 #[path = "tests/playback_tests.rs"]
 mod tests;

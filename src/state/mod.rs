@@ -317,4 +317,9 @@ fn hydrate_audio_dsp(rodio: &RodioPlayer, settings: &settings::SettingsData) {
     rodio.set_crossfade_skip_same_album(settings.crossfade.crossfade_skip_same_album);
     rodio.set_crossfade_fade_on_pause(settings.crossfade.crossfade_fade_on_pause);
     rodio.set_crossfade_enabled(settings.crossfade.crossfade_enabled);
+
+    // The visualizer's sample tap ships on (the one audio flag that does — see
+    // `VisualizerFlags`); armed, it copies one mono value per frame into the
+    // ring the Now-Playing analyzer reads.
+    rodio.set_visualizer_enabled(settings.visualizer.viz_enabled);
 }

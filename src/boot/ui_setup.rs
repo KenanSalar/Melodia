@@ -232,6 +232,7 @@ pub fn install_library_settings_and_friends(
     ui::playback_settings::install_playback_settings(app, state);
     ui::equalizer::install_equalizer(app, state);
     ui::replaygain::install_replaygain(app, state);
+    ui::visualizer::install_visualizer(app, state);
     ui::sleep_timer::install_sleep_timer(app, state);
     ui::scrobbling_settings::install_scrobbling(app, state);
     ui::discord_settings::install_discord(app, state);

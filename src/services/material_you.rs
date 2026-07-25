@@ -219,6 +219,29 @@ pub fn extract_source_argb_from_rgb8(buf: &SharedPixelBuffer<Rgb8Pixel>) -> Opti
     Some(argb_to_u32(*best))
 }
 
+/// Raise `argb` to at least `min_tone` HCT lightness, leaving hue and chroma
+/// alone; returns it unchanged when it is already that light.
+///
+/// This is the M3 way to make an arbitrary extracted colour legible on a known
+/// surface: tone *is* the contrast axis, so flooring it lifts a near-black
+/// artwork accent into view while keeping the colour recognisably the album's.
+/// A naive multiplicative brighten (Slint's `.brighter()`) can't do this — it
+/// scales HSV value, so anything near black stays near black.
+///
+/// Note the round-trip is gamut-mapped: at high tones sRGB can't hold the
+/// original chroma, so a saturated seed comes back a little less saturated.
+/// That's the correct trade — legibility is the point.
+///
+/// `min_tone` is clamped to the valid 0..=100 HCT range by `set_tone`.
+pub fn lift_to_min_tone(argb: u32, min_tone: f64) -> u32 {
+    let mut hct = Hct::new(Argb::from_u32(argb));
+    if hct.get_tone() >= min_tone {
+        return argb;
+    }
+    hct.set_tone(min_tone);
+    argb_to_u32(Argb::from(hct))
+}
+
 /// Build a `DynamicScheme` of `style` × `is_dark` (contrast = default)
 /// from the seed and map the M3 roles to a [`themes::Palette`] +
 /// accent hex. Matches the M3 → palette role mapping from Tauri's

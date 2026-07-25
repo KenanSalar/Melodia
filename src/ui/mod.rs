@@ -12,6 +12,7 @@ pub mod detail_view;
 pub mod discord_settings;
 pub mod equalizer;
 pub mod replaygain;
+pub mod visualizer;
 pub mod event_sink;
 pub mod favorites;
 pub mod file_watching;

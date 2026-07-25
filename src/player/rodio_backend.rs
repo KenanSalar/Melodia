@@ -15,6 +15,7 @@ use super::decks::{Deck, Decks, DeferredOp, lock_decks};
 use super::equalizer::{self, EqShared, EqSource};
 use super::replaygain::{ReplayGainShared, RgMode, TrackReplayGain};
 use super::types::PersistableQueue;
+use super::visualizer::{VisualizerShared, VisualizerTap};
 
 /// Trait abstracting audio playback operations.
 /// Implemented by `RodioPlayer` for production and mock backends for testing.
@@ -189,6 +190,10 @@ pub struct RodioPlayer {
     // Lock-free crossfade settings, read by the control layer (this backend and
     // the playback monitor) — never by the audio thread, so no generation counter.
     xf: Arc<CrossfadeShared>,
+    // Lock-free sample ring for the audio visualizer. Written by every source we
+    // append (see `build_source`) and read by the UI; off by default, and a
+    // no-op on the audio thread while it is.
+    viz: Arc<VisualizerShared>,
     // Used only to schedule the deferred half of a faded pause / stop.
     runtime: tokio::runtime::Handle,
 }
@@ -203,6 +208,7 @@ impl RodioPlayer {
             eq: EqShared::new(false, &[0.0; equalizer::NUM_BANDS]),
             rg: ReplayGainShared::new(),
             xf: CrossfadeShared::new(),
+            viz: VisualizerShared::new(false),
             runtime,
         }
     }
@@ -384,7 +390,8 @@ impl RodioPlayer {
     }
 
     /// Wrap a decoded track in the audio source the decks play: the graphic EQ,
-    /// this track's baked `ReplayGain`, and `deck`'s crossfade ramp cell.
+    /// this track's baked `ReplayGain`, and `deck`'s crossfade ramp cell — then
+    /// the visualizer tap, which reads the finished signal without altering it.
     ///
     /// Always called with the deck the source is about to be appended to — see
     /// the module doc of [`super::decks`] for why the two can't be split.
@@ -393,13 +400,16 @@ impl RodioPlayer {
         decoded: Decoder<BufReader<File>>,
         baked_rg: TrackReplayGain,
         deck: &Deck,
-    ) -> EqSource<Decoder<BufReader<File>>> {
-        EqSource::new(
-            decoded,
-            self.eq.clone(),
-            self.rg.clone(),
-            baked_rg,
-            deck.fade.clone(),
+    ) -> VisualizerTap<EqSource<Decoder<BufReader<File>>>> {
+        VisualizerTap::new(
+            EqSource::new(
+                decoded,
+                self.eq.clone(),
+                self.rg.clone(),
+                baked_rg,
+                deck.fade.clone(),
+            ),
+            self.viz.clone(),
         )
     }
 
@@ -619,6 +629,17 @@ impl RodioPlayer {
     /// Enable / disable the static peak-based clip guard. Lock-free.
     pub fn set_replaygain_prevent_clipping(&self, on: bool) {
         self.rg.set_prevent_clipping(on);
+    }
+
+    /// Enable / disable the visualizer's sample tap. Lock-free, like the EQ and
+    /// `ReplayGain` setters — while it is off the tap never touches the ring.
+    pub fn set_visualizer_enabled(&self, on: bool) {
+        self.viz.set_enabled(on);
+    }
+
+    /// The visualizer's sample ring, for the UI-side analyzer to snapshot.
+    pub fn visualizer(&self) -> Arc<VisualizerShared> {
+        self.viz.clone()
     }
 
     /// Whether a gapless source is currently staged behind the playing one.

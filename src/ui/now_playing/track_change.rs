@@ -13,9 +13,19 @@ use super::write_crossfade_slot;
 use super::NowPlayingState;
 use crate::entities::track::TrackSummary;
 use crate::library;
+use crate::services::material_you;
 use crate::state::AppState;
 use crate::ui::now_playing_artwork::NowPlayingArtwork;
 use crate::{AppWindow, Player, Theme as ThemeGlobal, TrackMetaRow};
+
+/// Minimum HCT tone for an artwork accent painted at full opacity over the
+/// Now-Playing backdrop. The backdrop is always darkened (the view's
+/// `Theme.crust.with-alpha(0.45)` scrim), which is what keeps the foreground
+/// text legible whatever the cover looks like; this is the same guarantee for
+/// opaque accent-coloured graphics. 70 sits in M3's "on dark surface" band —
+/// clearly lit, without pushing so far up the tone scale that sRGB gamut
+/// mapping washes the hue out.
+const MIN_OPAQUE_ACCENT_TONE: f64 = 70.0;
 
 /// Subscribe to `sinks.view_model`, react only to actual track changes.
 /// Always stashes the current track into `NowPlayingState::current_track`;
@@ -177,15 +187,24 @@ pub(super) async fn apply_track_change(
     *np_state.chip_texts.borrow_mut() = chip_texts;
     player.set_track_meta(meta);
 
-    // Per-artwork accent → `Player.np-accent`. Falls back to the live
-    // `Theme.accent` so non-MY users keep a static-accent tint and a missing-
-    // artwork / failed-decode track doesn't strand the slot on the previous
-    // track's colour. Theme changes naturally propagate via this fallback on
-    // the next track change.
-    player.set_np_accent(match accent_argb {
-        Some(argb) => crate::themes::brush(argb),
-        None => ui.global::<ThemeGlobal>().get_accent(),
-    });
+    // Per-artwork accent → `Player.np-accent`, plus a tone-floored sibling in
+    // `np-accent-bright` for the surfaces that paint it opaque (the visualizer
+    // bars). Both fall back to the live `Theme.accent` so non-MY users keep a
+    // static-accent tint and a missing-artwork / failed-decode track doesn't
+    // strand the slots on the previous track's colour — that fallback is
+    // already bright enough to need no lift. Theme changes naturally propagate
+    // via it on the next track change.
+    let (accent, accent_bright) = if let Some(argb) = accent_argb {
+        (
+            crate::themes::brush(argb),
+            crate::themes::brush(material_you::lift_to_min_tone(argb, MIN_OPAQUE_ACCENT_TONE)),
+        )
+    } else {
+        let theme_accent = ui.global::<ThemeGlobal>().get_accent();
+        (theme_accent.clone(), theme_accent)
+    };
+    player.set_np_accent(accent);
+    player.set_np_accent_bright(accent_bright);
 
     write_crossfade_slot(
         blurred,

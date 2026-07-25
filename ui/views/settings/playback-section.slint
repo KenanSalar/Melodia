@@ -1,4 +1,5 @@
 import { Settings } from "../../settings.slint";
+import { Visualizer } from "../../globals.slint";
 import { Theme } from "../../theme.slint";
 import { SectionCard } from "../../components/settings/section-card.slint";
 import { SectionDivider } from "../../components/settings/section-divider.slint";
@@ -10,7 +11,7 @@ import { SliderTrack } from "../../components/slider-track.slint";
 
 // Playback section: 3 rows mirroring Tauri's `PlaybackSection.tsx`, plus the
 // crossfade cluster (a toggle, a duration slider, and three sub-toggles that
-// only mount while crossfade is on).
+// only mount while crossfade is on) and the visualizer toggle.
 // Search visibility — see header comment in `language-section.slint`.
 export component PlaybackSection inherits Rectangle {
     background: transparent;
@@ -57,11 +58,16 @@ export component PlaybackSection inherits Rectangle {
         @tr("Crossfade"),
         @tr("Overlap the end of one track with the start of the next"));
 
+    property <bool> show-visualizer: row-visible(
+        @tr("Visualizer"),
+        @tr("Show a spectrum analyzer on the Now Playing screen"));
+
     // The sub-rows only exist while crossfade is on. `if` (not `visible`) —
     // a hidden child still claims layout space in Slint (slint#7377).
     property <bool> show-crossfade-details: root.show-crossfade && Settings.crossfade-enabled;
 
-    out property <bool> has-matches: show-gapless || show-anim || show-resume || show-crossfade;
+    out property <bool> has-matches:
+        show-gapless || show-anim || show-resume || show-crossfade || show-visualizer;
 
     // VerticalLayout wrapper so the Rectangle's preferred-height tracks
     // the SectionCard's natural height (Rectangle sizes from a layout
@@ -83,7 +89,7 @@ export component PlaybackSection inherits Rectangle {
         // Dividers separate consecutive visible rows. Each one is gated on
         // both the previous AND the next row being visible so we don't
         // get stranded dividers above/below a hidden row.
-        if root.show-gapless && (root.show-crossfade || root.show-anim || root.show-resume): SectionDivider {}
+        if root.show-gapless && (root.show-crossfade || root.show-anim || root.show-resume || root.show-visualizer): SectionDivider {}
 
         if root.show-crossfade: SettingRow {
             icon: "swap_horiz";
@@ -156,7 +162,7 @@ export component PlaybackSection inherits Rectangle {
                 toggled(v) => { Settings.crossfade-fade-on-pause-changed(v); }
             }
         }
-        if root.show-crossfade && (root.show-anim || root.show-resume): SectionDivider {}
+        if root.show-crossfade && (root.show-anim || root.show-resume || root.show-visualizer): SectionDivider {}
 
         if root.show-anim: SettingRowStacked {
             icon: "animation";
@@ -171,7 +177,7 @@ export component PlaybackSection inherits Rectangle {
                 selected(i) => { Settings.play-button-animation-changed(i); }
             }
         }
-        if root.show-anim && root.show-resume: SectionDivider {}
+        if root.show-anim && (root.show-resume || root.show-visualizer): SectionDivider {}
 
         if root.show-resume: SettingRow {
             icon: "play_circle";
@@ -180,6 +186,22 @@ export component PlaybackSection inherits Rectangle {
             ToggleSwitch {
                 checked <=> Settings.resume-on-startup;
                 toggled(v) => { Settings.resume-on-startup-changed(v); }
+            }
+        }
+        if root.show-resume && root.show-visualizer: SectionDivider {}
+
+        // Binds the `Visualizer` global directly rather than mirroring the flag
+        // onto `Settings` — the visualizer owns its own state and callback
+        // (`src/ui/visualizer.rs`), the same way the EQ dialog binds
+        // `Equalizer.enabled`. `set-enabled` arms the live sample tap, then
+        // persists.
+        if root.show-visualizer: SettingRow {
+            icon: "bar_chart";
+            label: @tr("Visualizer");
+            description: @tr("Show a spectrum analyzer on the Now Playing screen");
+            ToggleSwitch {
+                checked <=> Visualizer.enabled;
+                toggled(v) => { Visualizer.set-enabled(v); }
             }
         }
     }

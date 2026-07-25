@@ -1,0 +1,260 @@
+//! Tests for the visualizer's sample ring and its tap source.
+
+use std::num::NonZero;
+use std::time::Duration;
+
+use rodio::source::SeekError;
+use rodio::{ChannelCount, Sample, SampleRate, Source};
+
+use super::{RING_CAP, VisualizerShared, VisualizerTap};
+
+// --- helpers ---------------------------------------------------------------
+
+fn nz_u16(v: u16) -> ChannelCount {
+    match NonZero::new(v) {
+        Some(n) => n,
+        None => NonZero::<u16>::MIN,
+    }
+}
+
+fn nz_u32(v: u32) -> SampleRate {
+    match NonZero::new(v) {
+        Some(n) => n,
+        None => NonZero::<u32>::MIN,
+    }
+}
+
+/// Bit patterns of a slice — lets us assert *bit-identical* passthrough (and
+/// exact ring contents) without float `==`.
+fn bits(v: &[f32]) -> Vec<u32> {
+    v.iter().map(|s| s.to_bits()).collect()
+}
+
+/// `len` samples, every one distinct and exactly representable — so a snapshot
+/// can't pass by accidentally matching at the wrong offset. `u16 → f32` is
+/// lossless and the divisor is a power of two, so no value is rounded.
+fn counted(len: usize) -> Vec<f32> {
+    (0..len)
+        .map(|i| f32::from(u16::try_from(i + 1).unwrap_or(u16::MAX)) / 65_536.0)
+        .collect()
+}
+
+/// In-memory source. `try_seek` rewinds to the start, like a decoder seeking to 0.
+struct TestSource {
+    data: Vec<f32>,
+    pos: usize,
+    channels: u16,
+    sample_rate: u32,
+}
+
+impl TestSource {
+    fn new(data: Vec<f32>, channels: u16, sample_rate: u32) -> Self {
+        Self { data, pos: 0, channels, sample_rate }
+    }
+}
+
+impl Iterator for TestSource {
+    type Item = Sample;
+    fn next(&mut self) -> Option<Sample> {
+        let s = self.data.get(self.pos).copied();
+        if s.is_some() {
+            self.pos += 1;
+        }
+        s
+    }
+}
+
+impl Source for TestSource {
+    fn current_span_len(&self) -> Option<usize> {
+        None
+    }
+    fn channels(&self) -> ChannelCount {
+        nz_u16(self.channels)
+    }
+    fn sample_rate(&self) -> SampleRate {
+        nz_u32(self.sample_rate)
+    }
+    fn total_duration(&self) -> Option<Duration> {
+        None
+    }
+    fn try_seek(&mut self, _pos: Duration) -> Result<(), SeekError> {
+        self.pos = 0;
+        Ok(())
+    }
+}
+
+/// Drain a tap over `input` and return `(passed-through samples, ring window)`.
+fn run_tap(
+    input: Vec<f32>,
+    channels: u16,
+    sample_rate: u32,
+    enabled: bool,
+    window: usize,
+) -> (Vec<f32>, Vec<f32>) {
+    let viz = VisualizerShared::new(enabled);
+    let out: Vec<f32> = VisualizerTap::new(
+        TestSource::new(input, channels, sample_rate),
+        viz.clone(),
+    )
+    .collect();
+    let mut ring = vec![0.0; window];
+    viz.snapshot(&mut ring);
+    (out, ring)
+}
+
+// --- VisualizerShared ------------------------------------------------------
+
+#[test]
+fn a_disabled_push_never_touches_the_ring() {
+    let viz = VisualizerShared::new(false);
+    for s in counted(64) {
+        viz.push(s);
+    }
+    let mut out = vec![f32::NAN; 8];
+    viz.snapshot(&mut out);
+    assert_eq!(bits(&out), bits(&[0.0; 8]));
+}
+
+#[test]
+fn enabling_starts_the_ring_mid_stream() {
+    let viz = VisualizerShared::new(false);
+    viz.push(0.5);
+    viz.set_enabled(true);
+    assert!(viz.is_enabled());
+    viz.push(0.25);
+
+    let mut out = vec![0.0; 2];
+    viz.snapshot(&mut out);
+    // Only the second push landed, and it sits at the newest end.
+    assert_eq!(bits(&out), bits(&[0.0, 0.25]));
+}
+
+#[test]
+fn snapshot_returns_the_most_recent_samples_oldest_first() {
+    let viz = VisualizerShared::new(true);
+    let pushed = counted(64);
+    for &s in &pushed {
+        viz.push(s);
+    }
+    let mut out = vec![0.0; 8];
+    viz.snapshot(&mut out);
+    assert_eq!(bits(&out), bits(&pushed[56..]));
+}
+
+#[test]
+fn a_short_history_is_padded_at_the_front() {
+    let viz = VisualizerShared::new(true);
+    let pushed = counted(3);
+    for &s in &pushed {
+        viz.push(s);
+    }
+    let mut out = vec![0.0; 8];
+    viz.snapshot(&mut out);
+    let mut want = vec![0.0; 5];
+    want.extend_from_slice(&pushed);
+    assert_eq!(bits(&out), bits(&want));
+}
+
+#[test]
+fn the_ring_wraps_without_losing_the_newest_window() {
+    let viz = VisualizerShared::new(true);
+    // Two and a half laps, so the window we ask for spans a wrap point.
+    let pushed = counted(RING_CAP * 5 / 2);
+    for &s in &pushed {
+        viz.push(s);
+    }
+    let mut out = vec![0.0; 1024];
+    viz.snapshot(&mut out);
+    assert_eq!(bits(&out), bits(&pushed[pushed.len() - 1024..]));
+}
+
+#[test]
+fn a_window_wider_than_the_ring_is_padded_not_repeated() {
+    let viz = VisualizerShared::new(true);
+    let pushed = counted(RING_CAP * 2);
+    for &s in &pushed {
+        viz.push(s);
+    }
+    let mut out = vec![f32::NAN; RING_CAP + 16];
+    viz.snapshot(&mut out);
+    assert_eq!(bits(&out[..16]), bits(&[0.0; 16]));
+    assert_eq!(bits(&out[16..]), bits(&pushed[pushed.len() - RING_CAP..]));
+}
+
+#[test]
+fn the_sample_rate_round_trips() {
+    let viz = VisualizerShared::new(true);
+    assert_eq!(viz.sample_rate(), 0);
+    viz.set_sample_rate(48_000);
+    assert_eq!(viz.sample_rate(), 48_000);
+}
+
+// --- VisualizerTap ---------------------------------------------------------
+
+#[test]
+fn the_tap_is_bit_identical_whether_enabled_or_not() {
+    let input = counted(512);
+    let (on, _) = run_tap(input.clone(), 2, 44_100, true, 8);
+    let (off, _) = run_tap(input.clone(), 2, 44_100, false, 8);
+    // The tap is transparent both ways round; only the ring differs.
+    assert_eq!(bits(&on), bits(&input));
+    assert_eq!(bits(&off), bits(&input));
+}
+
+#[test]
+fn a_stereo_frame_is_pushed_as_its_channel_average() {
+    // Four frames: (-1.0, 1.0) (-0.5, 0.5) (0.25, 0.75) (1.0, 0.0).
+    let input = vec![-1.0, 1.0, -0.5, 0.5, 0.25, 0.75, 1.0, 0.0];
+    let (_, ring) = run_tap(input, 2, 44_100, true, 4);
+    assert_eq!(bits(&ring), bits(&[0.0, 0.0, 0.5, 0.5]));
+}
+
+#[test]
+fn a_mono_source_pushes_one_value_per_sample() {
+    let input = counted(6);
+    let (_, ring) = run_tap(input.clone(), 1, 44_100, true, 6);
+    assert_eq!(bits(&ring), bits(&input));
+}
+
+#[test]
+fn the_tap_publishes_its_rate_on_the_first_frame() {
+    let viz = VisualizerShared::new(true);
+    let mut tap = VisualizerTap::new(TestSource::new(counted(4), 2, 48_000), viz.clone());
+    // Constructing it announces nothing — a gapless successor is built long
+    // before it plays.
+    assert_eq!(viz.sample_rate(), 0);
+    let _ = tap.next();
+    assert_eq!(viz.sample_rate(), 0);
+    let _ = tap.next();
+    assert_eq!(viz.sample_rate(), 48_000);
+}
+
+#[test]
+fn a_partial_trailing_frame_is_dropped() {
+    // Three samples of a stereo stream: one whole frame, then a stray sample
+    // whose partner never arrives.
+    let input = vec![0.25, 0.75, 1.0];
+    let (out, ring) = run_tap(input.clone(), 2, 44_100, true, 4);
+    assert_eq!(bits(&out), bits(&input));
+    assert_eq!(bits(&ring), bits(&[0.0, 0.0, 0.0, 0.5]));
+}
+
+#[test]
+fn seeking_realigns_the_downmix_to_the_frame_grid() {
+    let viz = VisualizerShared::new(true);
+    // Two stereo frames, averaging to 0.75 and 0.5.
+    let data = vec![0.5, 1.0, 0.25, 0.75];
+    let mut tap = VisualizerTap::new(TestSource::new(data.clone(), 2, 44_100), viz.clone());
+    // Consume half a frame, then seek. `TestSource::try_seek` rewinds to 0, so a
+    // tap that kept its half-full accumulator would pair the pre-seek sample with
+    // the first post-seek one and stay a channel out of step from there on.
+    let _ = tap.next();
+    assert!(matches!(tap.try_seek(Duration::ZERO), Ok(())));
+
+    let rest: Vec<f32> = tap.collect();
+    assert_eq!(bits(&rest), bits(&data));
+
+    let mut ring = vec![0.0; 2];
+    viz.snapshot(&mut ring);
+    assert_eq!(bits(&ring), bits(&[0.75, 0.5]));
+}
