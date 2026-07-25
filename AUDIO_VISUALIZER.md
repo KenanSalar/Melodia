@@ -100,7 +100,7 @@ instances + hands out reusable scratch buffers.
 | FFT size | `2048` (const, power of two) | ~46 ms window @ 44.1 kHz — good bass resolution, still responsive |
 | Ring capacity | `4096` f32 (16 KiB) | ≥ 2× FFT size so a snapshot always has a full recent window |
 | Sample domain | **mono** (average channels at frame boundary) | one FFT, half the ring; stereo split is not worth it for bars |
-| Bands | `32` default (const, room to make it a setting later) | reads well at NP-view width; cheap to draw |
+| Bands | `64` default (const, room to make it a setting later) | reads well at the strip's NP-view width; cheap to draw |
 | Band spacing | logarithmic (geometric edges) | perceptual frequency mapping |
 | Magnitude | `norm()` → scaled log/dB → normalized 0..1 | wide dynamic range compressed for display |
 | Smoothing | peak-follow: instant/fast attack, exponential decay (~0.8/frame) | lively but calm |
@@ -193,7 +193,7 @@ Slint docs (context7).
   math-derived heights beats N concurrent `animate` blocks.
 - **Keep the `for` body trivial.** Bind `height` to a precomputed 0..1 value and a cached
   brush; do all math in Rust, none per-bar per-frame.
-- **Modest bar count (32) and frame rate.** 60 fps (16 ms) is smooth; 30 fps (33 ms) halves
+- **Modest bar count (64) and frame rate.** 60 fps (16 ms) is smooth; 30 fps (33 ms) halves
   the work and is usually indistinguishable for bars — keep it a one-line change to dial down.
 - **Gate compute on visibility *and* playback.** The Timer only exists while the NP view is
   mounted (auto), and its `running` should also track playback status so a **paused/stopped**
@@ -203,7 +203,7 @@ Slint docs (context7).
 - Slint's guidance is "minimal work on the main thread." A 2048-pt f32 FFT is sub-millisecond,
   so v1 runs it on the UI Timer for simplicity. **If** a profile ever shows main-thread jank,
   Phase 7's background-analysis-task variant moves FFT + banding to a `spawn_cancellable`
-  worker publishing bands into a second lock-free cell, leaving the UI to copy only 32 floats.
+  worker publishing bands into a second lock-free cell, leaving the UI to copy only 64 floats.
 
 **Memory:** everything is allocated once (ring 16 KiB, FFT buffers + Hann ~30–40 KiB, bars
 model ~128 B) and reused — no per-frame allocation anywhere, nothing resident-heavy, nothing
@@ -329,7 +329,7 @@ part worth testing.
 - **`src/player/spectrum.rs` (new)** — the pipeline as free functions, each unit-tested:
   `hann_window(size)`, `coherent_gain_scale(window)`, `band_bins(bands, fft_size, fs)`,
   `level_from_magnitude(mag)`, `bands_from_spectrum(spectrum, map, scale, out)` and
-  `smooth(levels, next, attack, decay)`. Consts: `FFT_SIZE 2048`, `NUM_BANDS 32`,
+  `smooth(levels, next, attack, decay)`. Consts: `FFT_SIZE 2048`, `NUM_BANDS 64`,
   `MIN_HZ 20`, `FLOOR_DB -70`, `ATTACK 0.0`, `DECAY 0.8`.
 - **`SpectrumAnalyzer`** is the only stateful piece — it holds exactly what must not be
   rebuilt per frame (the `realfft` plan + its three buffers, the Hann table and its scale,
@@ -393,9 +393,13 @@ Goal: bars render and react while the NP view is open, colored to the artwork ac
   group, which simply re-centers as a whole (the column is `alignment: center`). Gated
   `if Visualizer.enabled` and wrapped in a centring `HorizontalLayout`, because a fixed-width
   child doesn't centre in a wider `VerticalLayout` — the same reason the cover above it is
-  wrapped. The cover's `clamp(root.width * 0.22, 200px, 380px)` was hoisted to a
-  `cover-size` property on the view root so the cover and the strip stay aligned from one
-  source.
+  wrapped. Width is `max(cover-size, content-width * 0.75)`: three quarters of the column the
+  metadata chips wrap against, so the strip reads as the base of the whole cover → title →
+  chips group rather than of the cover alone. `content-width` is a view-root property
+  (the panel minus its left padding, the inter-column gap and `up-next-width`) — derived
+  arithmetically rather than read off `chip-area`, which only exists inside
+  `if Player.vm.has_track`. The `max` is load-bearing: at the window's 350 px floor
+  `content-width` goes negative.
 
 > **The bars use a tone-floored accent, not the raw one.** Shipping with plain
 > `Player.np-accent` made the strip nearly invisible on dark album art: the extracted accent
@@ -435,7 +439,7 @@ Goal: bars render and react while the NP view is open, colored to the artwork ac
   frame. Smoothing state lives inside the analyzer (Phase 2), so the UI layer holds no DSP
   state.
 
-**Memory:** bars `VecModel` = 32 floats; the analyzer buffers from Phase 2. Nothing renders or
+**Memory:** bars `VecModel` = 64 floats; the analyzer buffers from Phase 2. Nothing renders or
 computes while the NP view is closed. Well under the ~200 MB ceiling — no RSS follow-up needed.
 
 ### Phase 4 — Settings, persistence & toggle UI `[x]`

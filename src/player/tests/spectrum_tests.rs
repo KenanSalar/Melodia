@@ -135,7 +135,7 @@ fn a_nonsense_sample_rate_yields_an_empty_map() {
 
 #[test]
 fn more_bands_than_bins_leaves_the_tail_empty_but_valid() {
-    // A 16-point transform has 9 bins, so 32 bands cannot each have one.
+    // A 16-point transform has 9 bins, so 64 bands cannot each have one.
     let map = band_bins(NUM_BANDS, 16, 44_100.0);
     assert_eq!(map.len(), NUM_BANDS);
     for range in &map {

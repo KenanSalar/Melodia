@@ -24,7 +24,10 @@ export component SpectrumBars inherits Rectangle {
     vertical-stretch: 0;
 
     HorizontalLayout {
-        spacing: 3px;
+        // Bars are `horizontal-stretch: 1`, so each one is what's left of the
+        // strip after the gaps. Kept tight because there are enough bands that
+        // a wider gap would start eating the bars themselves on a narrow window.
+        spacing: 2px;
 
         for level in Visualizer.bars: Rectangle {
             background: transparent;

@@ -49,9 +49,20 @@ component MetaChip inherits Rectangle {
 // `UpNextList` component (`components/now-playing/up-next-list.slint`) so
 // the mini-player's square variant reuses the same behaviour.
 export component NowPlayingView inherits Rectangle {
-    // Edge of the square cover tile. Also the width of the visualizer strip
-    // below it, so the two stay aligned as the window resizes.
+    // Edge of the square cover tile.
     property <length> cover-size: clamp(root.width * 0.22, 200px, 380px);
+
+    // The "Up Next" column, on a readable 280 px floor and a 420 px ceiling
+    // that matches its old fixed value. Named rather than inlined because the
+    // body row's left column — and so the chip strip's wrapping ceiling — is
+    // the panel minus this.
+    property <length> up-next-width: clamp(root.width * 0.35, 280px, 420px);
+
+    // Width the artwork / title / chip column gets inside the body row: the
+    // panel minus its left padding, the inter-column gap and the Up Next
+    // column. This is the width `Player.recompute-chip-rows` chunks the chips
+    // against, and what the visualizer strip below takes its share of.
+    property <length> content-width: root.width - Theme.pad-lg - Theme.pad-md - root.up-next-width;
 
     // --- Background: accent gradient floor + dual-slot blurred cross-fade -
     // The gradient is always painted. For a track WITH artwork the blur
@@ -275,23 +286,28 @@ export component NowPlayingView inherits Rectangle {
                 // chips group. Wrapped in a centring HorizontalLayout because
                 // a fixed-width child does not centre in a wider
                 // VerticalLayout, the same reason the cover above is wrapped.
+                //
+                // Three quarters of the column the chips wrap against, so the
+                // strip reads as the base of that group rather than of the
+                // cover alone. The `max` is not cosmetic: at the window's
+                // 350 px floor `content-width` goes negative, and flooring at
+                // the cover keeps the strip from ever being narrower than the
+                // artwork above it.
                 if Visualizer.enabled: HorizontalLayout {
                     alignment: center;
                     SpectrumBars {
-                        width: root.cover-size;
+                        width: max(root.cover-size, root.content-width * 0.75);
                     }
                 }
             }
 
             // -- "Up Next" list ------------------------------------------
-            // Responsive width so a narrow window doesn't squeeze the chip
-            // strip first — clamps to a readable 280 px floor and a 420 px
-            // ceiling that matches the old fixed value. Mirrors the
-            // artwork tile's `clamp(root.width * 0.22, …)` pattern. Reaches
-            // the panel's right edge — the overlay scrollbar inside
-            // `list-wrap` sits flush with that edge at any width.
+            // Width comes from `up-next-width` (see the root properties) —
+            // responsive, so a narrow window doesn't squeeze the chip strip
+            // first. Reaches the panel's right edge — the overlay scrollbar
+            // inside `list-wrap` sits flush with that edge at any width.
             VerticalLayout {
-                width: clamp(root.width * 0.35, 280px, 420px);
+                width: root.up-next-width;
                 spacing: Theme.pad-sm;
 
                 Text {

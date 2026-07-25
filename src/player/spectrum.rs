@@ -38,7 +38,7 @@ use super::dsp::linear_to_db;
 pub const FFT_SIZE: usize = 2048;
 
 /// Bars drawn across the display.
-pub const NUM_BANDS: usize = 32;
+pub const NUM_BANDS: usize = 64;
 
 /// Bottom edge of the lowest band. Below this is inaudible rumble and, at bin 0,
 /// any DC offset — neither belongs in a bass bar.
