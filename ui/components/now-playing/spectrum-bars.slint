@@ -1,7 +1,9 @@
 import { Player, Visualizer } from "../../globals.slint";
 
 // Spectrum-analyzer strip for the Now-Playing view: one bar per frequency
-// band, bass on the left, treble on the right.
+// band, bass on the left, treble on the right. A silent band rests as a dot and
+// stretches upward out of it as it gets loud, so an idle strip reads as a row of
+// beads rather than as a flat rule waiting for something to happen.
 //
 // Heights come straight from `Visualizer.bars` (normalized 0..1, low → high),
 // which Rust has already smoothed with a fast attack and a slow decay. That is
@@ -12,12 +14,6 @@ import { Player, Visualizer } from "../../globals.slint";
 // Each bar is a childless Rectangle, so its rounded cap never pushes the
 // subtree through FemtoVG's offscreen layer (the HiDPI clip-blur pitfall).
 export component SpectrumBars inherits Rectangle {
-    // Floor height, so a silent track still reads as a baseline rather than
-    // vanishing. Tall enough that a resting bar is legibly a *bar*: at a couple
-    // of pixels it degrades into a dashed rule, which reads as a broken strip
-    // rather than an idle one.
-    property <length> bar-floor: 6px;
-
     background: transparent;
     min-height: 56px;
     max-height: 56px;
@@ -39,12 +35,20 @@ export component SpectrumBars inherits Rectangle {
             // the idiom of `dialog/eq-band-slider.slint`.
             Rectangle {
                 width: parent.width;
-                height: max(root.bar-floor, parent.height * level);
+                // Floored at the band's own column width, so a silent band is a
+                // dot and grows out of it as its level rises. A floor in fixed
+                // px can't do that: the column width follows the strip width,
+                // so the resting shape would only come out round at one window
+                // size and read as a squashed dash at every other.
+                height: max(parent.width, parent.height * level);
                 y: parent.height - self.height;
-                // Clamped on *both* axes: FemtoVG clamps a corner's x- and
-                // y-radii independently, so a radius past half the height
-                // turns a floored bar into an ellipse rather than a stadium.
-                border-radius: min(self.width / 2, self.height / 2, 3px);
+                // Half the short axis — a circle at the floor, semicircular
+                // caps once the band is taller than it is wide. Taking the
+                // `min` rather than assuming the width is the short one is what
+                // keeps it a capsule: FemtoVG clamps a corner's x- and y-radii
+                // independently, so a radius past half the height pinches the
+                // shape into a lens instead of clamping to a stadium.
+                border-radius: min(self.width, self.height) / 2;
                 // The per-artwork accent, so the strip harmonizes with the
                 // blur — but the tone-floored variant, since these bars are
                 // painted opaque: a dark album's raw accent would sink into
