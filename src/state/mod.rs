@@ -318,8 +318,8 @@ fn hydrate_audio_dsp(rodio: &RodioPlayer, settings: &settings::SettingsData) {
     rodio.set_crossfade_fade_on_pause(settings.crossfade.crossfade_fade_on_pause);
     rodio.set_crossfade_enabled(settings.crossfade.crossfade_enabled);
 
-    // The visualizer's sample tap ships on (the one audio flag that does — see
-    // `VisualizerFlags`); armed, it copies one mono value per frame into the
-    // ring the Now-Playing analyzer reads.
-    rodio.set_visualizer_enabled(settings.visualizer.viz_enabled);
+    // The visualizer is deliberately absent: its tap is armed by the
+    // Now-Playing view being on screen, not by a persisted flag, so it must
+    // stay disarmed until `Visualizer.set-active` fires. See
+    // `crate::ui::visualizer`.
 }

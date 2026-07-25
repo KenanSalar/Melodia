@@ -105,9 +105,11 @@ impl VisualizerShared {
     /// Append one mono sample.
     ///
     /// Wait-free and allocation-free: an atomic load, a `fetch_add` and a store.
-    /// When the visualizer is off it is a single predictable branch — the ring
-    /// isn't touched at all, so a disabled visualizer costs the audio thread
-    /// nothing worth measuring.
+    /// When the tap is disarmed it is a single predictable branch — the ring
+    /// isn't touched at all. That matters more than it looks: the tap is armed
+    /// only while the Now-Playing view is on screen (see
+    /// `crate::ui::visualizer`), so for most of a listening session this is the
+    /// branch and nothing else.
     pub fn push(&self, sample: f32) {
         if !self.is_enabled() {
             return;

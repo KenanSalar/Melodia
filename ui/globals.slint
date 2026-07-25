@@ -265,8 +265,14 @@ export global ReplayGain {
 // Visualizer: drives the spectrum-analyzer strip in the Now-Playing view. State
 // is owned by Rust (`src/ui/visualizer.rs`): `enabled` is seeded from
 // `settings.json` at boot, then two-way bound by the Settings → Playback
-// toggle, which also fires `set-enabled` to arm the tap and persist. Ships
-// **on** — see `VisualizerFlags`.
+// toggle, which also fires `set-enabled` to persist the choice. Ships **on** —
+// see `VisualizerFlags`.
+//
+// `enabled` and `set-active` are deliberately separate. `enabled` is the
+// persisted setting and decides whether the strip mounts at all; `set-active`
+// is session state — the strip is mounted *and* the window is on screen — and
+// is the only thing that arms the backend sample tap. Without the split the
+// audio thread would keep filling the ring for a view nobody has open.
 //
 // `bars` is a Rust-owned `Rc<VecModel<f32>>` of normalized 0..1 heights, low →
 // high frequency, length == `spectrum::NUM_BANDS`. It is already smoothed
@@ -285,6 +291,10 @@ export global Visualizer {
     in property <bool> idle: true;
 
     callback set-enabled(bool);
+    // Fired by `AppWindow`'s `watched-viz-active` mirror, not by the strip —
+    // `NowPlayingView` is destroyed while closed and Slint has no unmount
+    // callback, so the gate has to live somewhere always mounted.
+    callback set-active(bool);
     callback tick(bool /*is-playing*/);
 }
 

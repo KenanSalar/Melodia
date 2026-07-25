@@ -191,10 +191,10 @@ pub struct RodioPlayer {
     // the playback monitor) — never by the audio thread, so no generation counter.
     xf: Arc<CrossfadeShared>,
     // Lock-free sample ring for the audio visualizer. Written by every source we
-    // append (see `build_source`) and read by the UI. Constructed disarmed and
-    // armed from `settings.json` by `hydrate_audio_dsp` — which, alone among the
-    // audio features, ships it *on* (see `VisualizerFlags`). Disarmed it is a
-    // no-op on the audio thread.
+    // append (see `build_source`) and read by the UI. Unlike the cells above it
+    // is *not* seeded from `settings.json` at boot: it stays disarmed until the
+    // Now-Playing view is actually on screen (see `crate::ui::visualizer`), so
+    // the audio thread never fills a ring nobody reads. Disarmed it is a no-op.
     viz: Arc<VisualizerShared>,
     // Used only to schedule the deferred half of a faded pause / stop.
     runtime: tokio::runtime::Handle,
@@ -637,8 +637,10 @@ impl RodioPlayer {
         self.rg.set_prevent_clipping(on);
     }
 
-    /// Enable / disable the visualizer's sample tap. Lock-free, like the EQ and
+    /// Arm / disarm the visualizer's sample tap. Lock-free, like the EQ and
     /// `ReplayGain` setters — while it is off the tap never touches the ring.
+    /// `crate::ui::visualizer` is the only caller, and drives it off the
+    /// Now-Playing view's visibility rather than off a persisted setting.
     pub fn set_visualizer_enabled(&self, on: bool) {
         self.viz.set_enabled(on);
     }

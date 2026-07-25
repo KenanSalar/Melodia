@@ -437,8 +437,9 @@ Goal: bars render and react while the NP view is open, colored to the artwork ac
 - **`src/ui/visualizer.rs` — `install_visualizer(ui: &AppWindow, state: &AppState)`**, shaped
   like `install_equalizer`, called from `boot/ui_setup.rs` right after `install_replaygain`
   (`&AppState` is enough — `state.rodio` is public, so the `main.rs` call site isn't needed).
-  It seeds the global from `settings.json`, owns the bars `VecModel<f32>`, and registers two
-  callbacks. `on_tick` captures the `Arc<VisualizerShared>` + `ui.as_weak()` (never a strong
+  It seeds the global from `settings.json`, owns the bars `VecModel<f32>`, and registers three
+  callbacks (`tick`, `set-active`, `set-enabled` — see the Phase 7 note on the last two).
+  `on_tick` captures the `Arc<VisualizerShared>` + `ui.as_weak()` (never a strong
   handle) and **owns the `SpectrumAnalyzer` by value** — Slint callbacks are `FnMut`, so no
   `Rc<RefCell<…>>` is needed. The tick is
   `viz.snapshot(analyzer.window_mut())` → `analyzer.analyze(rate)` → `set_row_data` per band.
@@ -463,26 +464,22 @@ would have left one half untestable.
   `viz_enabled` key) picks the new default up and the bars appear; an explicit *off* writes
   `false` and sticks. **One field, no `style`** — see the Phase 3 note; adding it later is
   purely additive.
-  > The default-on choice has one non-obvious consequence: `install_visualizer`'s
-  > `read_settings` failure fallback must be `VisualizerFlags::default().viz_enabled`, **not** a
-  > literal. `AppState::init` falls back to a whole `SettingsData::default()` on the same
-  > failure, so a hardcoded `false` there would arm the tap while leaving the bars hidden.
+  > The flag decides whether the strip *mounts*, and nothing else — the Phase 7 producer gate
+  > below took arming the tap away from it, so the `read_settings` failure fallback is no
+  > longer load-bearing for keeping the two halves in step.
 - **`src/library/settings/visualizer.rs`** — `set_visualizer_enabled`, a `mutate_settings`
   two-liner mirroring `equalizer.rs::set_eq_enabled`.
-- **Live-apply plumbing:** `player_set_visualizer_enabled(ctx, bool)` in
-  `src/library/playback.rs` beside `player_set_eq_*`, calling Phase 1's
-  `RodioPlayer::set_visualizer_enabled`. Infallible and lock-free like its siblings.
-- **Boot hydration is split, deliberately.** The *backend* tap is armed in
-  `hydrate_audio_dsp` (`src/state/mod.rs`), which already seeds EQ / ReplayGain / crossfade at
-  `AppState::init` and is the one place that owns backend hydration; `install_visualizer`'s own
-  `read_settings` seeds only the Slint property. (The original sketch put both in the
-  installer.)
+- **No live-apply half, unlike its audio siblings.** It briefly had one
+  (`player_set_visualizer_enabled` in `src/library/playback.rs`, plus arming in
+  `hydrate_audio_dsp`); the Phase 7 producer gate removed both, since the tap now follows the
+  view's visibility rather than the setting.
 - **Toggle surface: Settings → Playback**, a `SettingRow` + `ToggleSwitch` after "Resume on
   Startup". It binds `checked <=> Visualizer.enabled` and fires `Visualizer.set-enabled(v)` —
   binding the **`Visualizer` global directly** rather than mirroring the flag onto `Settings`,
   the way the EQ dialog binds `Equalizer.enabled`, so the visualizer keeps its state and
   callback in its own module. Because the two-way binding already lands the value, the Rust
-  handler is a plain `toggle_binding` with no write-back (the crossfade / gapless shape).
+  handler needs no write-back — and since Phase 7 it needs no apply half either, so it is a
+  bare `persist_blocking` rather than the siblings' `toggle_binding`.
   The row joins the section's `row-visible` search filter, and the three upstream
   `SectionDivider` gates each gained `|| root.show-visualizer` so a hidden neighbour can't
   strand a divider. **No overflow-menu row** — an earlier revision put one there; it was
@@ -547,6 +544,22 @@ adds a style:
   Timer's `running` reads it, so returning early leaves a hidden-then-paused player spinning
   at 60 Hz forever. Feeding rate `0` skips the snapshot and the FFT but keeps the decay path,
   so the bars settle and the Timer stops. A second style's driver needs the same guard.
+- **Producer gate — `enabled` vs `set-active`.** The two gates above only silence the
+  *consumer*. The tap itself was armed from `viz_enabled`, which ships on, so the audio thread
+  kept filling the ring for a view nobody had open and for a window hidden to tray. The setting
+  and the arm state are now separate things: `Visualizer.enabled` decides only whether the
+  strip mounts, and a new `Visualizer.set-active` — mirrored out of `AppWindow` as
+  `watched-viz-active: Nav.now-playing-open && Visualizer.enabled` — arms the tap. It has to be
+  a mirror on the always-mounted root (`NowPlayingView` is destroyed while closed and Slint has
+  no unmount callback), and its own property rather than a second handler on
+  `Nav.now-playing-open-changed`, whose single slot belongs to `wire_now_playing_open`.
+  `src/ui/visualizer.rs` is the sole writer of the arm state, from exactly two places:
+  `set-active` at the mount/unmount boundary and `tick` in steady state
+  (`viz.set_enabled(analyzing)`, which picks up pause, minimise and hide-to-tray for free).
+  Hence `hydrate_audio_dsp` skips the visualizer — `VisualizerShared::new(false)` is the
+  correct boot state. Re-arming can miss one 16 ms window; `snapshot` front-pads with silence,
+  so the first frame back reads a touch low, never wrong. A second style must not reintroduce
+  a settings-driven arm.
 
 ---
 
@@ -569,13 +582,15 @@ adds a style:
 - `src/player/mod.rs` — `pub mod visualizer;`, `pub mod spectrum;`. **Done.**
 - `src/player/rodio_backend.rs` — `viz` field, seed in `new()`, `VisualizerTap` wrap in
   `build_source`, `set_visualizer_enabled` + `visualizer()`. **Done.**
-- `src/library/playback.rs` — `player_set_visualizer_enabled`. **Done.**
+- `src/library/playback.rs` — briefly held `player_set_visualizer_enabled`; removed by the
+  Phase 7 producer gate. **Done.**
 - `src/library/settings/mod.rs` — `pub mod visualizer;` + re-export. **Done.**
 - `src/services/settings/data.rs` — `VisualizerFlags` + flatten + default. **Done.**
-- `src/state/mod.rs` — arm the tap in `hydrate_audio_dsp`. **Done.**
+- `src/state/mod.rs` — `hydrate_audio_dsp` deliberately skips the tap (Phase 7). **Done.**
 - `src/services/material_you.rs` (+ tests) — `lift_to_min_tone`. **Done.**
 - `src/ui/now_playing/track_change.rs` — write `np-accent-bright`. **Done.**
-- `ui/globals.slint` — `Visualizer` global (+ `app-window.slint` import/export). **Done.**
+- `ui/globals.slint` — `Visualizer` global (+ `app-window.slint` import/export, and its
+  `watched-viz-active` mirror from Phase 7). **Done.**
 - `ui/views/now-playing-view.slint` — mount the strip; hoist `cover-size`. **Done.**
 - `ui/views/settings/playback-section.slint` — toggle row + divider gates. **Done.**
 - `src/ui/mod.rs` + `src/boot/ui_setup.rs` — register + call `install_visualizer`. **Done.**

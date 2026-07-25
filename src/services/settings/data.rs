@@ -236,6 +236,11 @@ impl Default for CrossfadeFlags {
 /// `viz_enabled` key, so it picks up the new default and the bars appear.
 /// Turning it off writes `false`, which then persists.
 ///
+/// It decides whether the strip *mounts*, and nothing more — the audio-thread
+/// sample tap is armed by the Now-Playing view being on screen (see
+/// `crate::ui::visualizer`), so leaving this on costs nothing while the view is
+/// closed.
+///
 /// A later visualizer *style* would land here as another `#[serde(default)]`
 /// field.
 #[derive(Debug, Clone, Serialize, Deserialize)]

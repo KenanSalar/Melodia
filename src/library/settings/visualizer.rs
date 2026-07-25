@@ -1,8 +1,8 @@
-//! Visualizer-section setter. The runtime effect (arming the Rodio sample tap)
-//! is done synchronously by the UI callback through
-//! `library::playback::player_set_visualizer_enabled` *before* this async disk
-//! write, so the bars react immediately and the `settings.json` commit only
-//! persists the choice. Mirrors the shape of [`super::equalizer`].
+//! Visualizer-section setter. Unlike its audio siblings there is no runtime
+//! half to pair with: the flag only decides whether the Now-Playing strip
+//! mounts, and the Slint two-way binding has already applied that by the time
+//! this runs. Arming the Rodio sample tap follows from the strip being on
+//! screen — see [`crate::ui::visualizer`].
 
 use crate::error::AppError;
 use crate::services;
