@@ -15,7 +15,9 @@ import { OverlayScrollbar } from "../overlay-scrollbar.slint";
 // Hover uses `Player.np-accent.with-alpha(0.22)` for both variants. The
 // miniplayer paints on `Theme.mantle` rather than a blurred backdrop, but
 // the accent tint still reads as a subtle hover indication and keeps the
-// two surfaces visually consistent.
+// two surfaces visually consistent. It flips without an `animate`, matching
+// the shared `TrackListRow` — an eased fade reads as lag when the cursor
+// crosses rows.
 component UpNextRow inherits Rectangle {
     in property <QueueRow> data;
     in property <bool> compact;
@@ -26,7 +28,6 @@ component UpNextRow inherits Rectangle {
     Rectangle {
         background: touch.has-hover ? Player.np-accent.with-alpha(0.22) : transparent;
         border-radius: compact ? Theme.radius-sm : Theme.radius-md;
-        animate background { duration: Theme.dur-fast; easing: ease-in-out; }
 
         HorizontalLayout {
             padding-left: Theme.pad-sm;

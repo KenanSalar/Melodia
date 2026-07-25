@@ -184,18 +184,21 @@ export component NowPlayingView inherits Rectangle {
 
         // Body — centred artwork group on the left, fixed-width "Up Next"
         // column on the right. Both float directly on the backdrop (no card
-        // chrome). No right padding: the Up Next column reaches the panel
-        // edge so its scrollbar lands flush there.
+        // chrome). No right or bottom padding: the Up Next column reaches the
+        // panel edge on both axes, so its overlay scrollbar lands flush and
+        // rows scroll off the bottom edge instead of under a strip of
+        // backdrop. The bottom inset the artwork group wants is applied to
+        // that column alone.
         HorizontalLayout {
             vertical-stretch: 1;
             padding-left: Theme.pad-lg;
-            padding-bottom: Theme.pad-lg;
             spacing: Theme.pad-md;
 
             // -- Artwork + title + chips, vertically centred -------------
             VerticalLayout {
                 horizontal-stretch: 1;
                 alignment: center;
+                padding-bottom: Theme.pad-lg;
                 spacing: Theme.pad-md;
 
                 // Large foreground cover. The frame is static — only the
