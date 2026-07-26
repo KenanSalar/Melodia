@@ -6,36 +6,47 @@ import { MaterialIcon } from "../material-icon.slint";
 import { ArtworkImage } from "../artwork-image.slint";
 import { OverlayScrollbar } from "../overlay-scrollbar.slint";
 
-// One row inside the Up Next list. `compact: false` is the full-screen
-// Now Playing variant (52 px, larger artwork + fonts, shows duration);
-// `compact: true` is the miniplayer variant (36 px, tighter padding, no
-// duration column) so a handful of rows fit inside a window the user is
-// deliberately shrinking.
+// One row inside the Up Next list. The two variants differ only in scale and
+// in palette — same three cells, same typography, so a track reads the same
+// way in the miniplayer as it does full-screen.
 //
-// Hover is per-variant. The full-screen host paints on the artwork blur, so it
-// takes the backdrop-solved accent; the miniplayer paints on `Theme.mantle` and
-// takes the shared `TrackListRow` hover, because the accent is always solved
-// *light* for the blur and a light tint on a light theme's mantle is no hover
-// indication at all. It flips without an `animate`, matching `TrackListRow` —
-// an eased fade reads as lag when crossing rows.
+// **Scale**: the row height comes from the host (one source of truth, shared
+// with the slide animation); the tile and vertical padding step down with it.
+// The miniplayer sits a little tighter than the full-screen view so more of
+// the queue fits in a window the user is deliberately shrinking, but not so
+// much tighter that it becomes a different list.
+//
+// **Palette** is the `compact` flag's real job. The full-screen host paints on
+// the artwork blur and takes the backdrop-solved brushes; the miniplayer paints
+// on ordinary `Theme.mantle` chrome and takes the neutral list palette,
+// including the shared `TrackListRow` hover — the Now-Playing accent is always
+// solved *light* for the blur, and a light tint on a light theme's mantle is no
+// hover indication at all. Restated in each branch because Slint can't apply a
+// property conditionally. Hover flips without an `animate`, matching
+// `TrackListRow` — an eased fade reads as lag when crossing rows.
 component UpNextRow inherits Rectangle {
     in property <QueueRow> data;
     in property <bool> compact;
+    // Owned by the host so the row and the slide animation can't disagree
+    // about how tall a row is.
+    in property <length> row-height;
     callback clicked();
 
-    height: compact ? 36px : 52px;
+    height: row-height;
+
+    property <length> pad-v: compact ? Theme.pad-xs : Theme.pad-sm;
 
     Rectangle {
         background: touch.has-hover
             ? (compact ? Theme.surface0 : Player.np-accent-bright.with-alpha(0.16))
             : transparent;
-        border-radius: compact ? Theme.radius-sm : Theme.radius-md;
+        border-radius: Theme.radius-md;
 
         HorizontalLayout {
             padding-left: Theme.pad-sm;
             padding-right: Theme.pad-sm;
-            padding-top: compact ? 0 : Theme.pad-sm;
-            padding-bottom: compact ? 0 : Theme.pad-sm;
+            padding-top: root.pad-v;
+            padding-bottom: root.pad-v;
             spacing: Theme.pad-sm;
             alignment: stretch;
 
@@ -44,8 +55,8 @@ component UpNextRow inherits Rectangle {
                 ArtworkImage {
                     artwork-path: root.data.artwork_path;
                     cover: root.data.cover_img;
-                    tile-size: compact ? 28px : 38px;
-                    tile-radius: compact ? Theme.radius-sm : Theme.radius-md;
+                    tile-size: compact ? 34px : 38px;
+                    tile-radius: Theme.radius-md;
                 }
             }
 
@@ -57,36 +68,28 @@ component UpNextRow inherits Rectangle {
                 horizontal-stretch: 1;
                 VerticalLayout {
                     alignment: center;
-                    spacing: compact ? 1px : 2px;
-                    // Full-screen Now Playing paints on the artwork blur, so
-                    // its text is backdrop-solved; the miniplayer sits on
-                    // ordinary `Theme.mantle` chrome and keeps the neutral list
-                    // palette. Restated in both `compact` branches because
-                    // Slint can't apply a property conditionally — same reason
-                    // as the scrollbar block further down.
+                    spacing: 2px;
                     Text {
                         text: "‎" + root.data.title;
                         color: compact ? Theme.text : Player.np-on-backdrop;
-                        font-size: compact ? Theme.font-size-sm : Theme.font-size-row;
+                        font-size: Theme.font-size-row;
                         overflow: elide;
                     }
                     Text {
                         text: "‎" + root.data.artist;
                         color: compact ? Theme.subtext0 : Player.np-on-backdrop-muted;
-                        font-size: compact ? 10px : Theme.font-size-sm;
+                        font-size: Theme.font-size-sm;
                         overflow: elide;
                         visible: root.data.artist != "";
                     }
                 }
             }
 
-            // Non-compact only, so no `compact` ternary is needed — this cell
-            // never renders in the miniplayer.
-            if !compact: VerticalLayout {
+            VerticalLayout {
                 alignment: center;
                 Text {
                     text: root.data.display_duration;
-                    color: Player.np-on-backdrop-muted;
+                    color: compact ? Theme.subtext0 : Player.np-on-backdrop-muted;
                     font-size: Theme.font-size-sm;
                 }
             }
@@ -112,9 +115,10 @@ component UpNextRow inherits Rectangle {
 // only one local `slide-timer` ever runs.
 //
 // `compact: true` is the miniplayer variant; `compact: false` is the
-// full-screen Now Playing variant. Sizing of the row, scrollbar slot,
-// list right-inset, and the empty-state glyph all key off this single
-// flag so callers don't have to thread half a dozen props.
+// full-screen Now Playing variant. Row height, scrollbar slot, list
+// right-inset, the empty-state glyph and — the part that matters — which
+// palette the rows paint all key off this single flag, so callers don't have
+// to thread half a dozen props.
 export component UpNextList inherits Rectangle {
     in property <bool> compact;
     // Right-edge inset for the list body. Must exceed `scrollbar-width`
@@ -130,7 +134,11 @@ export component UpNextList inherits Rectangle {
     // host gives the user a 1 px hit-test margin on each side.
     in property <length> scrollbar-width: compact ? 8px : 10px;
 
-    property <length> row-h: compact ? 36px : 52px;
+    // The one place a row's height is decided — handed to every `UpNextRow`
+    // and to the slide animation below, so the two can't drift. The compact
+    // variant is a step down from the full-screen one rather than a different
+    // list: same typography, same three cells, just tighter.
+    property <length> row-h: compact ? 46px : 52px;
     property <int> slide-frames: 18;         // ~288ms at 16ms
     property <float> slide-raw: clamp(1.0 * NowPlaying.slide-phase / root.slide-frames, 0.0, 1.0);
     // Ease-out cubic so the row decelerates into place instead of stopping
@@ -172,6 +180,7 @@ export component UpNextList inherits Rectangle {
         for row[idx] in NowPlaying.up-next-rows: UpNextRow {
             data: row;
             compact: root.compact;
+            row-height: root.row-h;
             clicked => {
                 // With repeat-all the list wraps past the end of the
                 // queue, so the play-order index is taken modulo the
@@ -197,6 +206,7 @@ export component UpNextList inherits Rectangle {
         x: 0;
         width: parent.width - root.list-inset-right;
         compact: root.compact;
+        row-height: root.row-h;
         y: NowPlaying.slide-direction == 1
             ? -root.slide-p * root.row-h
             : parent.height - (1.0 - root.slide-p) * root.row-h;
