@@ -7,9 +7,10 @@
 //! own 16 ms `Timer` in `ui/components/now-playing/visualizer-strip.slint`, and
 //! is the only consumer of the sample ring. What it does with a snapshot depends
 //! on the active style: the bars run snapshot → FFT → bands → model, the
-//! waveform runs snapshot → trigger → downsample → path string and **no FFT at
-//! all**. Either way a 2048-point real FFT is sub-millisecond, so this stays on
-//! the UI thread rather than paying for a third thread and a second shared cell.
+//! waveform runs snapshot → trigger → min/max columns → path string and **no
+//! FFT at all**. Either way a 2048-point real FFT is sub-millisecond, so this
+//! stays on the UI thread rather than paying for a third thread and a second
+//! shared cell.
 //!
 //! Most of what keeps that cheap composes for free from the mount tree: the
 //! strip only mounts while the visualizer is enabled, and the Now-Playing view
@@ -37,7 +38,8 @@ use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel};
 
 use crate::library;
 use crate::player::spectrum::{FFT_SIZE, NUM_BANDS, SpectrumAnalyzer};
-use crate::player::waveform::{self, WAVE_POINTS, WAVE_WINDOW, WaveformAnalyzer};
+use crate::player::visualizer::RING_CAP;
+use crate::player::waveform::{self, MAX_COLUMNS, WaveformAnalyzer};
 use crate::services::settings;
 use crate::state::AppState;
 use crate::ui::tray_bridge;
@@ -114,12 +116,15 @@ pub fn install_visualizer(ui: &AppWindow, state: &AppState) {
         let style = style.clone();
         let weak = ui.as_weak();
         let mut spectrum = SpectrumAnalyzer::new(FFT_SIZE, NUM_BANDS);
-        let mut wave = WaveformAnalyzer::new(WAVE_WINDOW, WAVE_POINTS);
-        // Sized once for the whole trace so the per-frame rebuild only ever
-        // writes into capacity it already has.
-        let mut path = String::with_capacity(WAVE_POINTS * 16);
+        // A window wider than the ring would only be padded with silence, so the
+        // ring's capacity is the analyzer's too.
+        let mut wave = WaveformAnalyzer::new(RING_CAP, MAX_COLUMNS);
+        // Sized once for the widest trace — two vertices a column, ~17 bytes a
+        // vertex — so the per-frame rebuild only ever writes into capacity it
+        // already has.
+        let mut path = String::with_capacity(MAX_COLUMNS * 2 * 20);
 
-        viz_global.on_tick(move |playing| {
+        viz_global.on_tick(move |playing, strip_width| {
             // A pause leaves the last window of audio sitting in the ring, so
             // re-analysing it would freeze the drawing on a stale shape instead
             // of letting it fall. A hidden window has nothing to draw for at
@@ -138,15 +143,25 @@ pub fn install_visualizer(ui: &AppWindow, state: &AppState) {
 
             let waveform = is_waveform(style.get());
             let idle = if waveform {
-                // Straight into the analyzer's own window — no intermediate
-                // buffer, no per-tick copy. Only when there's something to read:
-                // `analyze` decays the last trace instead.
-                if analyzing {
-                    viz.snapshot(wave.window_mut());
+                // The trace's span is a fixed number of milliseconds, so how
+                // many samples that is depends on the rate — and on the speed,
+                // which `analysis_rate` folds in, keeping the span 40 ms of what
+                // you *hear* rather than of the file.
+                let rate = if analyzing { viz.analysis_rate() } else { 0 };
+                // Nothing has played yet, so there is no rate to size a window
+                // against; `analyze` decays the last trace instead.
+                let live = rate > 0;
+                if live {
+                    // Straight into the analyzer's own window — no intermediate
+                    // buffer, no per-tick copy.
+                    viz.snapshot(wave.window_mut(rate));
                 }
-                let points = wave.analyze(analyzing);
-                waveform::write_path_commands(points, &mut path);
-                points.iter().all(|point| point.abs() < IDLE_LEVEL)
+                let columns =
+                    wave.analyze(live, rate, waveform::columns_for_width(strip_width));
+                waveform::write_path_commands(columns, &mut path);
+                columns
+                    .iter()
+                    .all(|c| c.max.abs() < IDLE_LEVEL && c.min.abs() < IDLE_LEVEL)
             } else {
                 let sample_rate = if analyzing {
                     // Straight into the FFT's own input buffer.

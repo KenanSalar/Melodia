@@ -1,14 +1,17 @@
 import { Player, Visualizer } from "../../globals.slint";
 
-// Oscilloscope trace for the Now-Playing view: the signal itself rather than
-// its spectrum, drawn as a single stroked polyline.
+// Oscilloscope trace for the Now-Playing view: the signal itself rather than its
+// spectrum, drawn as the band between the loudest and quietest sample of each
+// column — the shape `DeaDBeeF`'s scope and every audio editor's waveform view
+// draw, because a column of a few hundred pixels always covers several samples
+// and any single one of them misrepresents the rest.
 //
 // The geometry arrives as an SVG command string rather than as `LineTo`
 // children, because Slint rejects `for`-generated path elements outright
 // ("Path elements are not supported with `for`-`in` syntax, yet",
 // slint-ui/slint#754). Rust rebuilds the string each tick; there is no `animate`
-// here for the same reason the bars have none — the trace is already a smoothed
-// value, and animating one phase-lags.
+// here for the same reason the bars have none — the envelope is already a
+// smoothed value, and animating one phase-lags.
 export component WaveformTrace inherits Rectangle {
     background: transparent;
 
@@ -16,7 +19,7 @@ export component WaveformTrace inherits Rectangle {
         commands: Visualizer.wave-path;
 
         // Rust normalizes to this box — x across 0..1, y as the sample's own
-        // -1..1 — so the viewbox is a constant and no vertex count has to be
+        // -1..1 — so the viewbox is a constant and no column count has to be
         // kept in step across the language boundary.
         //
         // The viewbox is not optional: without one, Slint fits the path's *own*
@@ -31,13 +34,18 @@ export component WaveformTrace inherits Rectangle {
         fit: fill;
 
         // The per-artwork accent, so the trace harmonizes with the blur — but
-        // the tone-floored variant, since this is painted opaque: a dark album's
-        // raw accent would sink into the scrimmed backdrop.
+        // the tone-floored variant, since this is painted over a scrimmed
+        // backdrop a dark album's raw accent would sink into.
+        //
+        // A wash inside a defined edge, in the same translucency language as the
+        // metadata chips: the fill alone reads as a shapeless blob at this
+        // height, and the stroke alone loses the sense of a body of sound. The
+        // stroke also does the work of a resting state — silence collapses the
+        // two edges onto each other, leaving a figure with no area to fill and
+        // only its outline to draw, which lands as a hairline on the centre.
+        fill: Player.np-accent-bright.transparentize(0.55);
         stroke: Player.np-accent-bright;
-        stroke-width: 2px;
-        // Rounded joins keep the corners from spiking where a transient turns
-        // the trace back on itself within a couple of vertices.
-        stroke-line-cap: round;
+        stroke-width: 1.25px;
         stroke-line-join: round;
     }
 }

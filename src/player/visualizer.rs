@@ -50,7 +50,14 @@ use rodio::{ChannelCount, Sample, SampleRate, Source};
 /// Ring capacity, in mono samples. A power of two so the wrap is a mask rather
 /// than a division, and comfortably wider than one analysis window so a snapshot
 /// always has a full recent one to work from.
-pub const RING_CAP: usize = 4096;
+///
+/// Sized for the *widest* window any style asks for, at the highest rate a music
+/// file plausibly carries: the waveform's span plus its trigger slack is a fixed
+/// number of **milliseconds**, so at 192 kHz it wants ~11.5k samples where the
+/// spectrum only ever wants [`FFT_SIZE`](super::spectrum::FFT_SIZE). At 4 bytes
+/// a slot this is 64 KiB, resident for the life of the player and never
+/// reallocated.
+pub const RING_CAP: usize = 16_384;
 
 /// The sample ring shared between the audio thread (single writer) and the UI
 /// thread (single reader).

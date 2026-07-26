@@ -559,55 +559,95 @@ Goal: a live trace of the raw signal, in place of the band bars.
 > tree. So the geometry is a Rust-built SVG string, the fallback column plot was never needed,
 > and the trace is a real polyline.
 
+> **A column is a range, not a point — and that was the second thing the phase got wrong.**
+> The trace first shipped reducing ~5 samples per drawn point to their *signed peak* and joining
+> the points with a 2 px line. It scribbled: peak-picking selects the local extreme, so above a
+> couple of kHz consecutive points land on opposite extremes and the line whips top to bottom.
+> A survey of what actually ships found nobody does this. There are exactly four strategies —
+> draw every sample and let the overdraw form a band (`foobar2000`, ~4400 vertices a frame,
+> unaffordable through a `Path` string); **min/max per column** (`DeaDBeeF`'s
+> `ddb_scope_point_t { ymin, ymax }`, and every audio editor); resample properly before drawing
+> (`foobar2000`, opt-in); or point-sample and accept honest aliasing (Winamp / Audacious, 75
+> points with a hardcoded 2× gain). Three of the four converge on the same idea, and the second
+> is the one this architecture can afford, so that is what it now does. The write-up of the
+> survey is in the conversation that produced it; the numbers that mattered are folded in below.
+
 - **New data:** `Visualizer.wave-path: string` — SVG commands, not a `[float]` model, for the
   reason above. `src/player/waveform.rs` is a **sibling of `spectrum.rs`, not an addition to
   it**: `spectrum.rs` is named for the spectrum and its every line is FFT/banding, so the trace
   got its own leaf module and its own `tests/waveform_tests.rs`. It reads the raw snapshot and
   bypasses banding entirely — this style runs **no FFT at all**, which is the OCP payoff §5
   predicted, arriving one sub-phase earlier than expected.
-- **Per-frame allocation was the risk, not the drawing**, and it lands at exactly one
-  `SharedString` per frame: `write_path_commands` clears and refills a `String` the installer
-  owns (reserved once at `WAVE_POINTS * 16`; a 192-vertex trace measures 2775 bytes, so it never
-  regrows), and only the `SharedString` handed to Slint allocates. Slint re-parses that string
-  with lyon on every render and caches nothing, which is fine against geometry that changes
-  every frame anyway.
+- **`min_max_columns` reduces the span to one `Column { min, max }` per drawn column**, and
+  `write_path_commands` closes the two edges into **one filled figure** — upper edge left to
+  right, lower edge back, `Z`. Nothing is skipped, so nothing can alias. The figure cannot fold
+  over itself because `min <= max` by construction.
+- **Columns follow the strip width**, `columns_for_width` at one per 2 logical px, clamped to
+  `64..=512`. `DeaDBeeF` uses one per pixel; one per two is indistinguishable under the
+  envelope's own 1.25 px stroke and halves the string, its re-parse and the tessellation — which
+  matters here in a way it doesn't for a scope drawing straight to a canvas. The width crosses
+  as a `float` argument on `tick`, so a garbage value (NaN, the pre-layout zero) draws the
+  *cheapest* trace rather than the most expensive.
+- **The span is milliseconds, not samples.** `WAVE_SPAN_MS 40` + `TRIGGER_SLACK_MS 20`, resolved
+  against `analysis_rate()` — so it stays 40 ms of what you *hear* regardless of the file's rate
+  or the playback speed. A fixed sample count showed a 96 kHz file half the music of a 44.1 kHz
+  one. **`RING_CAP` moved 4096 → 16384** to hold 60 ms at 192 kHz; above that the window clamps
+  and the trace just narrows in time.
+- **No gain stage, deliberately.** Winamp's hardcoded 2× works because it draws a *trace*, which
+  crosses zero constantly and so never fills. A peak envelope with the same gain pins to full
+  height on almost anything and becomes a fat wobbling bar. Envelope or gain, not both.
+- **Per-frame allocation** lands at exactly one `SharedString`: `write_path_commands` clears and
+  refills a `String` the installer owns (reserved at `MAX_COLUMNS * 2 * 20`; 512 columns measure
+  14 848 bytes, so it never regrows). Slint re-parses that string with lyon on every render and
+  caches nothing, which is fine against geometry that changes every frame anyway.
 - **A viewbox is mandatory and `fit` must be `fill`.** `Path::fitted_path_events` fits the path
   to the element; with no viewbox it fits the path's *own bounding box*, which renormalizes
   every frame — a whisper would draw as loud as a chorus. `fit` defaults to `contain`
   (`FitStyle::Min`), which would letterbox the 1×2 box into a sliver. The declared box is
-  `0 -1 1 2` and Rust normalizes into it, so no vertex count crosses the language boundary.
-- **Screen y grows downward**, so `write_path_commands` flips the sample — otherwise positive
+  `0 -1 1 2` and Rust normalizes into it, so no column count crosses the language boundary.
+- **Screen y grows downward**, so `write_path_commands` flips both edges — otherwise positive
   peaks draw *below* the centre line and the whole trace is upside down. It subtracts from zero
-  rather than negating, so a resting trace formats as `0.000` and not 192 × `-0.000`.
+  rather than negating, so a resting trace formats as `0.000` and not hundreds of `-0.000`.
 - **Trigger alignment was required, not polish.** Consecutive snapshots start at an arbitrary
   phase, so an untriggered trace slides sideways every frame and reads as broken.
   `find_trigger` takes the **most recent** rising zero crossing in the slack region (lowest
   latency; every candidate is the same polarity, so which one is picked changes the latency and
   not the shape) and needs **hysteresis** — without it the trigger chases noise around the axis
-  and jitters exactly as if it had none.
-- **`downsample` takes each bucket's signed peak, not its mean.** At ~5 samples per bucket a
-  mean is a lowpass, and a bright mix would draw as a nearly flat line.
-- **Window:** `WAVE_WINDOW 2048` snapshotted, `WAVE_SPAN 1024` drawn (~23 ms at 44.1 kHz — a
-  couple of bass periods), the other 1024 being the trigger's search slack; `WAVE_POINTS 192`.
-- **Speed:** unlike the band edges, playback speed is not a correctness bug here — it only
-  changes how much wall-clock time the trace spans. Commented so nobody "fixes" it.
-- **Idle:** an inactive tick decays the trace toward the centre line rather than re-reading the
-  ring, so a paused player collapses and settles instead of freezing mid-shape — the bars'
-  behaviour, reusing the hoisted Timer's gate unchanged.
-- **Colour:** `Player.np-accent-bright` as stroke, same tone-floored accent as the bars, with
-  round caps and joins.
+  and jitters exactly as if it had none. Only `foobar2000` has a trigger at all and it ships
+  *off*, taking the *first* crossing with a three-sample confirmation; keeping ours is a
+  deliberate divergence, and it costs nothing.
+- **Idle:** an inactive tick decays the whole column buffer toward the centre line rather than
+  re-reading the ring, so a paused player collapses and settles instead of freezing mid-shape —
+  the bars' behaviour, reusing the hoisted Timer's gate unchanged. The *whole* buffer, not the
+  drawn prefix, so a strip resized while paused can't widen an undecayed column back into view.
+- **Colour:** `Player.np-accent-bright` — the same tone-floored accent as the bars — as a
+  `transparentize(0.55)` fill inside a 1.25 px stroke of the same brush. The fill alone is a
+  shapeless blob at 56 px and the stroke alone loses the body; together they read in the
+  translucency language the metadata chips already use. The stroke also **is** the resting
+  state: silence collapses the two edges onto each other, leaving a figure with no area to fill
+  and only its outline to draw, which lands as a hairline on the centre.
+- **The refresh is per style**, `33ms` for the trace against the bars' `16ms`, set on the
+  hoisted Timer's `interval`. Bars want every frame — their decay is an animation and 60 Hz is
+  what makes it smooth. A trace has no animation to be smooth, so a high rate only makes it look
+  frantic; `foobar2000` caps its oscilloscope at 20 Hz by default for the same reason.
+- **Speed:** unlike the band edges, playback speed is not a correctness bug here — folding it in
+  via `analysis_rate()` just keeps the span 40 ms of wall clock. Commented so nobody "fixes" it.
 
-**Tests:** `src/player/tests/waveform_tests.rs` — 25, covering the trigger (rising crossing on a
+**Tests:** `src/player/tests/waveform_tests.rs` — 32, covering the trigger (rising crossing on a
 sine, most-recent selection, `search_len` bound, silence, both DC polarities, sub-hysteresis
-noise, empty), `downsample` (every slot filled, signed peak, per-bucket independence,
-nearest-sample hold when upsampling, empty either side), `write_path_commands` (the `M`-then-`L`
-shape, the 0..1 x span, the y flip, no negative zeroes, buffer reuse, empty and single-vertex),
-and the analyzer end to end (a full-scale sine reaches the top; two snapshots of the same tone
-taken at different phases draw the same trace — the point of triggering; an inactive analyzer
-decays to rest without re-reading its window). Slint markup stays untested per convention.
+noise, empty), `min_max_columns` (the full range of each column, column independence,
+`min <= max` never inverting, no sample ever skipped, nearest-sample hold when upsampling, empty
+either side), `columns_for_width` (follows the width, bounded both ends, nonsense input),
+`write_path_commands` (one closed figure with both edges, the 0..1 x span out and back, the y
+flip, no negative zeroes, buffer reuse, empty), and the analyzer end to end (equal time span at
+44.1 / 48 / 96 kHz, the window never outrunning its buffer, the requested column count honoured,
+a full-scale sine reaching the top, two snapshots of the same tone at different phases drawing
+the same trace — the point of triggering, decay to rest without re-reading the window, and a
+column widened back into view while paused having decayed with the rest). Slint markup stays
+untested per convention.
 
-**Memory:** a 2048-sample window, a 192-point trace and a ~3 KiB string buffer, all allocated
-once. Negligible.
+**Memory:** the ring at 64 KiB (up from 16), a 512-column buffer and a ~20 KiB string buffer,
+all allocated once. Negligible.
 
 #### Phase 5.2 — Mirrored bars `[ ]`
 
@@ -717,8 +757,8 @@ adds a style:
   UI-thread analyzers + render loop, the `STYLES` key table and its `.slint` pins. **Done.**
 - `src/library/settings/visualizer.rs` — persistence setters. **Done.**
 - `ui/components/now-playing/spectrum-bars.slint` — bars component. **Done.**
-- `src/player/waveform.rs` + `src/player/tests/waveform_tests.rs` — trigger, downsample, path
-  string + `WaveformAnalyzer` (Phase 5.1). **Done.**
+- `src/player/waveform.rs` + `src/player/tests/waveform_tests.rs` — trigger, min/max columns,
+  path string + `WaveformAnalyzer` (Phase 5.1). **Done.**
 - `ui/components/now-playing/visualizer-strip.slint` — footprint, style switch, the one driving
   Timer (Phase 5.1). **Done.**
 - `ui/components/now-playing/waveform-trace.slint` — the stroked `Path` (Phase 5.1). **Done.**
@@ -729,6 +769,8 @@ adds a style:
 - `src/player/equalizer.rs` — the limiter's `20.0 * peak.log10()` now calls `linear_to_db`.
   **Done.**
 - `src/player/mod.rs` — `pub mod visualizer;`, `pub mod spectrum;`. **Done.**
+- `src/player/visualizer.rs` — `RING_CAP` 4096 → 16384, so a millisecond-denominated waveform
+  window fits at any rate a music file plausibly carries (Phase 5.1). **Done.**
 - `src/player/rodio_backend.rs` — `viz` field, seed in `new()`, `VisualizerTap` wrap in
   `build_source`, `set_visualizer_enabled` + `visualizer()`. **Done.**
 - `src/library/playback.rs` — briefly held `player_set_visualizer_enabled`; removed by the

@@ -278,12 +278,16 @@ export global ReplayGain {
 //    high frequency, length == `spectrum::NUM_BANDS`. Already smoothed (fast
 //    attack / slow decay) in Rust, so the bars must NOT be `animate`d —
 //    animating an already-smoothed value phase-lags.
-//  - `wave-path` — SVG path commands for the oscilloscope trace, x over 0..1 and
-//    y over -1..1 against the `Path`'s fixed viewbox. A string because Slint
-//    rejects `for`-generated path elements (slint-ui/slint#754).
+//  - `wave-path` — SVG path commands for the oscilloscope trace: one closed
+//    figure whose upper and lower edges are the loudest and quietest sample of
+//    each drawn column, x over 0..1 and y over -1..1 against the `Path`'s fixed
+//    viewbox. A string because Slint rejects `for`-generated path elements
+//    (slint-ui/slint#754).
 //
-// `tick` is fired by `VisualizerStrip`'s 16 ms Timer and does the whole
-// snapshot → analysis → property pass. `idle` reports back that the drawing has
+// `tick` is fired by `VisualizerStrip`'s Timer and does the whole
+// snapshot → analysis → property pass. It carries the strip's width because the
+// trace draws one column per couple of pixels rather than a fixed count, so its
+// resolution has to follow the window. `idle` reports back that the drawing has
 // decayed to rest, which lets that Timer stop once a paused player has settled:
 // pausing halts the audio tap but leaves stale samples in the ring, so
 // re-analysing them would freeze the drawing mid-shape instead of letting it
@@ -302,7 +306,7 @@ export global Visualizer {
     // `NowPlayingView` is destroyed while closed and Slint has no unmount
     // callback, so the gate has to live somewhere always mounted.
     callback set-active(bool);
-    callback tick(bool /*is-playing*/);
+    callback tick(bool /*is-playing*/, float /*strip width, logical px*/);
 }
 
 // ScrobbleUi: drives the two scrobble login dialogs

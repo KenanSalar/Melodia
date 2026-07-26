@@ -1,43 +1,69 @@
 //! Oscilloscope trace for the audio visualizer.
 //!
 //! The waveform style draws the signal itself rather than its spectrum, so it
-//! skips [`spectrum`] entirely — no window, no FFT, no banding. What it needs
-//! instead is a *stable* view: consecutive snapshots of the ring start at an
-//! arbitrary phase, so a trace drawn straight off them slides sideways every
-//! frame and reads as broken. The fix is the same one every oscilloscope uses —
-//! trigger on a rising zero crossing and draw from there.
+//! skips [`spectrum`] entirely — no window, no FFT, no banding.
+//!
+//! # A column is a range, not a point
+//!
+//! The strip is a few hundred pixels wide and the span it shows is a few
+//! thousand samples, so several samples always share a column. Picking one of
+//! them — the loudest, the nearest, the mean — throws away the others, and every
+//! way of picking is wrong in its own way: the loudest alternates between
+//! opposite extremes and scribbles, the nearest aliases, the mean acts as a
+//! lowpass and flattens anything bright.
+//!
+//! So a column carries the **whole range** its samples covered: a
+//! [`Column`] of `min` and `max`, and the strip is drawn as the area between the
+//! two edges. Nothing is skipped, so nothing can alias, and the shape reads as
+//! the music rather than as noise. `DeaDBeeF`'s scope
+//! (`ddb_scope_point_t { ymin, ymax }`) and every audio editor's waveform view
+//! resolve the same problem the same way; `foobar2000`'s oscilloscope arrives
+//! somewhere similar by brute force, drawing every single sample and letting the
+//! overdraw fill the band in.
 //!
 //! The pipeline, once per drawn frame:
 //!
 //! 1. [`find_trigger`] over the leading part of the snapshot, leaving a full
 //!    span of samples behind it to draw,
-//! 2. [`downsample`] that span to one point per drawn vertex,
-//! 3. [`write_path_commands`] turns the points into the SVG string the Slint
-//!    `Path` renders.
+//! 2. [`min_max_columns`] reduces that span to one range per drawn column,
+//! 3. [`write_path_commands`] closes the two edges into the single filled figure
+//!    the Slint `Path` renders.
 //!
 //! Like [`spectrum`], everything here is a free function over slices;
 //! [`WaveformAnalyzer`] exists only to hold the two buffers that must not be
 //! reallocated every frame.
 //!
-//! Playback speed needs no handling, unlike the spectrum's band edges: the tap
-//! sits under rodio's speed stage either way, but for a trace that only changes
-//! how much wall-clock time the drawn span covers, which is not wrong.
-//!
 //! [`spectrum`]: super::spectrum
 
 use std::fmt::Write as _;
 
-/// Samples copied out of the ring per frame. The excess over [`WAVE_SPAN`] is
-/// the slack [`find_trigger`] searches.
-pub const WAVE_WINDOW: usize = 2048;
+/// Milliseconds of audio drawn across the strip.
+///
+/// Time, not samples: a fixed sample count would show 23 ms of a 44.1 kHz file
+/// and 10 ms of a 96 kHz one, so the same music would draw differently depending
+/// on how it was mastered. `DeaDBeeF` defaults to 50 ms and `foobar2000` to 100;
+/// this sits between them, low enough that a bass note still reads as a wave
+/// rather than a blur at the strip's height.
+pub const WAVE_SPAN_MS: u32 = 40;
 
-/// Samples actually drawn — ~23 ms at 44.1 kHz, a couple of periods of a bass
-/// note. Short enough that the shape reads, long enough that it doesn't twitch.
-pub const WAVE_SPAN: usize = 1024;
+/// Extra milliseconds snapshotted *ahead* of the drawn span, giving
+/// [`find_trigger`] somewhere to look. Also the trace's worst-case latency.
+pub const TRIGGER_SLACK_MS: u32 = 20;
 
-/// Vertices in the drawn polyline. Well above the pixel budget of the strip at
-/// any window size, and short enough that the per-frame path string stays small.
-pub const WAVE_POINTS: usize = 192;
+/// Logical pixels per drawn column.
+///
+/// `DeaDBeeF` uses one column per pixel. One per two is visually
+/// indistinguishable under the envelope's own 1.25 px stroke and halves
+/// everything downstream — the path string, its re-parse, and the tessellation
+/// of the filled figure — which matters here in a way it doesn't for a scope
+/// drawing straight to a canvas.
+const LOGICAL_PX_PER_COLUMN: f32 = 2.0;
+
+/// Column bounds. The floor keeps a sub-100 px strip from degenerating into a
+/// handful of very wide columns; the ceiling bounds the per-frame path string,
+/// and is what the analyzer's buffer is sized to.
+const MIN_COLUMNS: usize = 64;
+pub const MAX_COLUMNS: usize = 512;
 
 /// How far below zero the signal must dip before a crossing back up counts.
 /// Without it the trigger latches onto noise around the axis and the trace
@@ -50,10 +76,41 @@ const DECAY: f32 = 0.8;
 
 #[allow(
     clippy::cast_precision_loss,
-    reason = "vertex indices are counts in the low hundreds, which convert to f32 exactly"
+    reason = "column indices are counts in the low hundreds, which convert to f32 exactly"
 )]
 fn index_to_f32(i: usize) -> f32 {
     i as f32
+}
+
+/// Samples spanning `ms` at `sample_rate`. Saturates rather than wrapping; the
+/// caller clamps to its buffer anyway.
+fn samples_for_ms(sample_rate: u32, ms: u32) -> usize {
+    usize::try_from(u64::from(sample_rate) * u64::from(ms) / 1000).unwrap_or(usize::MAX)
+}
+
+/// The range of sample values one drawn column covers.
+///
+/// `min <= max` always holds for a column produced by [`min_max_columns`], which
+/// is what keeps the drawn figure from folding over itself.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct Column {
+    pub min: f32,
+    pub max: f32,
+}
+
+/// Drawn columns for a strip `width` logical pixels wide.
+#[must_use]
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    reason = "clamped into MIN_COLUMNS..=MAX_COLUMNS before the cast, so the value is small and positive"
+)]
+pub fn columns_for_width(width: f32) -> usize {
+    if !width.is_finite() || width <= 0.0 {
+        return MIN_COLUMNS;
+    }
+    (width / LOGICAL_PX_PER_COLUMN).clamp(index_to_f32(MIN_COLUMNS), index_to_f32(MAX_COLUMNS))
+        as usize
 }
 
 /// Index of the most recent rising zero crossing within `samples[..search_len]`,
@@ -62,7 +119,8 @@ fn index_to_f32(i: usize) -> f32 {
 /// "Most recent" rather than "first" keeps the drawn span as close to live as
 /// the slack allows; because every candidate is a crossing of the *same*
 /// polarity, which one is picked doesn't change the shape that gets drawn, only
-/// its latency.
+/// its latency. (`foobar2000` takes the first instead, and confirms with a third
+/// sample where this uses a hysteresis threshold.)
 ///
 /// The `0` fallback is an untriggered trace, which is the right answer for the
 /// two signals that have no crossing to find: silence, and a window sitting
@@ -82,55 +140,69 @@ pub fn find_trigger(samples: &[f32], search_len: usize) -> usize {
     trigger
 }
 
-/// Reduce `src` to one value per slot of `out`, oldest first.
+/// Reduce `src` to one [`Column`] per slot of `out`, oldest first.
 ///
-/// Each slot takes the sample of largest magnitude in its bucket, **sign
-/// intact**. Averaging would be the obvious alternative and is wrong here: at a
-/// few samples per bucket it acts as a lowpass, so a bright mix draws as a
-/// nearly flat line. Taking the peak keeps transients, which is what makes the
-/// trace look like the music.
-///
-/// More slots than samples is handled by holding the nearest sample, so `out` is
-/// always filled.
-pub fn downsample(src: &[f32], out: &mut [f32]) {
+/// Each column spans the samples that fall in it and reports their full range,
+/// so no sample is skipped and no column can misrepresent what it covered. More
+/// slots than samples is handled by holding the nearest sample, giving a column
+/// of zero height rather than a gap.
+pub fn min_max_columns(src: &[f32], out: &mut [Column]) {
     if src.is_empty() {
-        out.fill(0.0);
+        out.fill(Column::default());
         return;
     }
     let buckets = out.len();
-    for (i, slot) in out.iter_mut().enumerate() {
+    for (i, column) in out.iter_mut().enumerate() {
         let lo = i * src.len() / buckets;
         // At least one sample per bucket, so upsampling holds rather than
-        // reading an empty range.
+        // reading an empty range — which is also what makes the fold below
+        // guaranteed to see a value.
         let hi = ((i + 1) * src.len() / buckets).max(lo + 1).min(src.len());
-        *slot = src[lo..hi]
-            .iter()
-            .fold(0.0, |peak: f32, &s| if s.abs() > peak.abs() { s } else { peak });
+        let mut range = Column {
+            min: f32::MAX,
+            max: f32::MIN,
+        };
+        for &sample in &src[lo..hi] {
+            if sample < range.min {
+                range.min = sample;
+            }
+            if sample > range.max {
+                range.max = sample;
+            }
+        }
+        *column = range;
     }
 }
 
-/// Write `points` into `out` as SVG path commands: one `M`, then an `L` per
-/// remaining vertex.
+/// Write `columns` into `out` as SVG path commands: the upper edge left to
+/// right, the lower edge back, closed into one filled figure.
 ///
 /// Coordinates are normalized — x across `0..1`, y over `-1..1` — so the
-/// `Path`'s viewbox is a constant and no vertex count has to be kept in step
+/// `Path`'s viewbox is a constant and no column count has to be kept in step
 /// across the language boundary. `out` is reused between frames; this is the one
 /// place in the visualizer that touches a heap buffer per frame, and clearing
 /// rather than reallocating is what keeps that to the `SharedString` the caller
 /// hands to Slint.
-pub fn write_path_commands(points: &[f32], out: &mut String) {
+///
+/// Silence collapses the two edges onto each other. That is deliberate: the
+/// figure then has no area to fill and only its stroke draws, so a resting trace
+/// is a hairline on the centre rather than an invisible gap — the trace's
+/// equivalent of the bars resting as dots.
+pub fn write_path_commands(columns: &[Column], out: &mut String) {
     out.clear();
-    // A lone point has no span to normalize against. It lands at x = 0 and
-    // draws nothing, which is the honest answer for a one-vertex trace.
-    let span = index_to_f32(points.len().saturating_sub(1)).max(1.0);
-    for (i, &sample) in points.iter().enumerate() {
+    if columns.is_empty() {
+        return;
+    }
+    // A lone column has no span to normalize against; it lands at x = 0.
+    let span = index_to_f32(columns.len() - 1).max(1.0);
+
+    // Screen coordinates grow downward, amplitude grows upward, so both edges
+    // are flipped to put positive peaks at the top of the strip where a scope
+    // draws them. `0.0 - v` rather than `-v` because the latter turns a silent
+    // sample into `-0.000`, and a resting trace is a whole line of them.
+    for (i, column) in columns.iter().enumerate() {
         let x = index_to_f32(i) / span;
-        // Screen coordinates grow downward, amplitude grows upward, so the
-        // sample is flipped to put positive peaks at the top of the strip where
-        // a scope draws them. `0.0 - sample` rather than `-sample` because the
-        // latter turns a silent sample into `-0.000`, and a resting trace is a
-        // whole line of them.
-        let y = 0.0 - sample;
+        let y = 0.0 - column.max;
         // Writing into a String cannot fail. The space before each `L` is not
         // required by the SVG grammar — a command letter terminates the number
         // before it — but it costs a byte a vertex and leaves nothing to the
@@ -141,55 +213,82 @@ pub fn write_path_commands(points: &[f32], out: &mut String) {
             write!(out, " L{x:.4} {y:.3}")
         };
     }
+    for (i, column) in columns.iter().enumerate().rev() {
+        let x = index_to_f32(i) / span;
+        let y = 0.0 - column.min;
+        let _ = write!(out, " L{x:.4} {y:.3}");
+    }
+    out.push('Z');
 }
 
-/// Holds the sample window and the drawn points, both allocated once.
+/// Holds the sample window and the drawn columns, both allocated once at their
+/// widest and used a prefix at a time.
 ///
 /// Usage mirrors [`SpectrumAnalyzer`]: fill [`window_mut`](Self::window_mut)
-/// from the ring, then call [`analyze`](Self::analyze).
+/// from the ring, then call [`analyze`](Self::analyze). Both take the sample
+/// rate and derive the same window length from it, so there is no order-dependent
+/// state between them.
 ///
 /// [`SpectrumAnalyzer`]: super::spectrum::SpectrumAnalyzer
 pub struct WaveformAnalyzer {
     window: Vec<f32>,
-    points: Box<[f32]>,
+    columns: Vec<Column>,
 }
 
 impl WaveformAnalyzer {
-    /// Build an analyzer over a `window`-sample snapshot drawn as `points`
-    /// vertices — [`WAVE_WINDOW`] and [`WAVE_POINTS`] in production.
+    /// Build an analyzer that can snapshot up to `window_cap` samples and draw
+    /// up to `column_cap` columns. In production `window_cap` is
+    /// [`RING_CAP`](super::visualizer::RING_CAP) — a window wider than the ring
+    /// would only be padded with silence.
     #[must_use]
-    pub fn new(window: usize, points: usize) -> Self {
+    pub fn new(window_cap: usize, column_cap: usize) -> Self {
         Self {
-            window: vec![0.0; window],
-            points: vec![0.0; points].into_boxed_slice(),
+            window: vec![0.0; window_cap],
+            columns: vec![Column::default(); column_cap],
         }
+    }
+
+    /// Samples to snapshot at `sample_rate`: the drawn span plus the trigger's
+    /// slack, capped at what the buffer (and so the ring) can hold. Above about
+    /// 192 kHz the cap bites and the trace narrows in time; nothing breaks, it
+    /// just shows less.
+    fn window_len(&self, sample_rate: u32) -> usize {
+        samples_for_ms(sample_rate, WAVE_SPAN_MS + TRIGGER_SLACK_MS).clamp(2, self.window.len())
     }
 
     /// The buffer the next [`analyze`](Self::analyze) call reads. Fill it with
     /// the most recent samples, oldest first.
-    pub fn window_mut(&mut self) -> &mut [f32] {
-        &mut self.window
+    pub fn window_mut(&mut self, sample_rate: u32) -> &mut [f32] {
+        let len = self.window_len(sample_rate);
+        &mut self.window[..len]
     }
 
-    /// Produce this frame's trace.
+    /// Produce this frame's columns, at most `columns` of them.
     ///
     /// `active` is false when there is nothing to draw from — a paused player, a
-    /// hidden window. The ring still holds the last window of audio then, so
-    /// re-reading it would freeze the trace mid-shape; instead the previous one
-    /// collapses toward the centre line, which is both the better look and what
-    /// lets the caller's idle check eventually stop the driving timer.
-    pub fn analyze(&mut self, active: bool) -> &[f32] {
+    /// hidden window, a track that hasn't started. The ring still holds the last
+    /// window of audio then, so re-reading it would freeze the trace mid-shape;
+    /// instead the previous one collapses toward the centre line, which is both
+    /// the better look and what lets the caller's idle check eventually stop the
+    /// driving timer.
+    pub fn analyze(&mut self, active: bool, sample_rate: u32, columns: usize) -> &[Column] {
+        let width = columns.clamp(1, self.columns.len());
         if active {
-            let slack = self.window.len().saturating_sub(WAVE_SPAN);
-            let start = find_trigger(&self.window, slack);
-            let end = (start + WAVE_SPAN).min(self.window.len());
-            downsample(&self.window[start..end], &mut self.points);
+            let window = self.window_len(sample_rate);
+            let span = samples_for_ms(sample_rate, WAVE_SPAN_MS).clamp(1, window);
+            let trigger = find_trigger(&self.window[..window], window - span);
+            let drawn = &self.window[trigger..trigger + span];
+            min_max_columns(drawn, &mut self.columns[..width]);
         } else {
-            for point in &mut self.points {
-                *point *= DECAY;
+            // The whole buffer, not just the drawn prefix: the strip can be
+            // resized while paused, and a column that widened back into view
+            // undecayed would pop.
+            for column in &mut self.columns {
+                column.min *= DECAY;
+                column.max *= DECAY;
             }
         }
-        &self.points
+        &self.columns[..width]
     }
 }
 

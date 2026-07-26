@@ -27,6 +27,13 @@ export component VisualizerStrip inherits Rectangle {
     // One shared Timer: it runs a full snapshot → analysis → property pass in
     // Rust and is the only thing that reads the sample ring.
     //
+    // The interval is per style, not shared. The bars want every frame — their
+    // decay is a smooth animation and 60 Hz is what makes it read as one. A
+    // trace doesn't: it has no animation to be smooth, so a high rate only makes
+    // it look frantic, and `foobar2000`'s oscilloscope ships capped at 20 Hz for
+    // exactly that reason. 30 Hz also thirds the trace's per-frame path string
+    // and the re-parse Slint does of it.
+    //
     // `running` is deliberately not just `is_playing`. Pausing stops the audio
     // tap but leaves the last window of samples in the ring, so freezing the
     // Timer would strand the drawing on a stale shape. Instead the tick keeps
@@ -34,10 +41,12 @@ export component VisualizerStrip inherits Rectangle {
     // until Rust reports everything has settled, and only then stops. A paused,
     // decayed visualizer costs nothing.
     Timer {
-        interval: 16ms;
+        interval: Visualizer.style == "waveform" ? 33ms : 16ms;
         running: Player.vm.is_playing || !Visualizer.idle;
         triggered() => {
-            Visualizer.tick(Player.vm.is_playing);
+            // The width goes with it because the trace's column count follows
+            // the strip rather than being a constant; the bars ignore it.
+            Visualizer.tick(Player.vm.is_playing, root.width / 1px);
         }
     }
 }
