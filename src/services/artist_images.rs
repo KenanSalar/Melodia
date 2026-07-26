@@ -106,7 +106,8 @@ pub async fn fetch_artist_images(
         }
     }
 
-    // TODO(phase 2): emit "artist-images-fetched" to UI when wired.
+    // Fetched images land in the DB but nothing signals the UI, so a grid
+    // that's already painted won't pick them up until its next refresh.
     Ok(fetched_count)
 }
 

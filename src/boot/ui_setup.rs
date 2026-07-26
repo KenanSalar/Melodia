@@ -342,7 +342,7 @@ pub fn hydrate_ui_from_settings(
 
 /// The Slint side already clamps `Nav.sidebar-width` to
 /// `[Theme.sidebar-min-w, Theme.sidebar-max-w]` at the use site
-/// (`ui/layout/sidebar.slint:84`), so no Rust-side clamp is needed.
+/// (`ui/layout/sidebar.slint`), so no Rust-side clamp is needed.
 fn apply_sidebar_width(app: &AppWindow, settings: &services::settings::SettingsData) {
     // Persisted sidebar width is f64 (settings.json) — Slint uses f32. Widths
     // are tens-to-hundreds of pixels, well within f32 precision.

@@ -1,23 +1,19 @@
 //! Album-art decode + cache for the Album Detail header.
 //!
-//! The detail view needs the active cover in two forms — a sharp
-//! `tile-size`-rendered header tile and a heavily-blurred, full-bleed hero
-//! backdrop. Both derive from the *same* source image, so this module
-//! decodes it **once** per album and produces both buffers from that single
-//! `DynamicImage`. The result is an [`ArtworkPair`] held in one small LRU
-//! keyed by artwork path.
+//! The detail view needs the active cover in two forms — a sharp header tile
+//! and a heavily-blurred, full-bleed hero backdrop. Both derive from the
+//! *same* source image, so this module decodes it **once** per album and
+//! produces both buffers from that single `DynamicImage`, held as an
+//! [`ArtworkPair`] in one small LRU keyed by artwork path.
 //!
 //! Modelled on [`crate::ui::now_playing_artwork`] — same shape, same knobs,
 //! same `Send`-able buffer return type so the decode can run inside
-//! `tokio::task::spawn_blocking`. The caller wraps each half in a
-//! `slint::Image` on the UI thread.
-//!
-//! This is deliberately a **separate, small** cache from
-//! [`crate::media::cover_thumbs::CoverThumbs`] (the row-tier 72 px LRU) and
-//! from the Albums grid-tier cover cache: mixing 384 px + 128 px paired
-//! buffers into either would pollute it and waste memory. The working set
-//! here is the currently-open album plus a handful of recently-opened ones
-//! — back-and-forth between cards stays a cache hit.
+//! `tokio::task::spawn_blocking`, with the caller wrapping each half in a
+//! `slint::Image` on the UI thread. Kept separate from both the row-tier
+//! [`crate::media::cover_thumbs::CoverThumbs`] and the Albums grid-tier
+//! cache for the same reason: these paired buffers are far larger, and would
+//! evict the small tiles wholesale. The working set is the open album plus a
+//! few recently-opened ones, so back-and-forth between cards stays a hit.
 
 use std::num::NonZeroUsize;
 use std::path::{Path, PathBuf};
@@ -32,20 +28,17 @@ use crate::state::AppState;
 use crate::ui::util::buffer_from_rgb;
 
 /// Side length (px) the sharp cover tile is downscaled to. Matches
-/// [`crate::ui::now_playing_artwork`]'s `COVER_SIZE` and the on-screen
-/// header tile's `clamp(width*0.22, 200px, 380px)` ceiling — `image-fit:
-/// cover` + Skia mipmaps keep it crisp without the memory cost of a 2×
-/// `HiDPI` buffer. Each cover buffer is at most `384 × 384 × 3 ≈ 432 KiB`.
+/// [`crate::ui::now_playing_artwork`]'s `COVER_SIZE` and the on-screen header
+/// tile's `clamp(width*0.22, 200px, 380px)` ceiling, so it neither upscales
+/// nor pays for a 2× `HiDPI` buffer.
 const COVER_SIZE: u32 = 384;
 
-/// Width / height the cover is downscaled to before blurring. Source
-/// album art is always 1:1, but the detail-view hero region paints
-/// landscape (full content-panel width × ~250 px tall), so a 3:2
-/// landscape source matches the target aspect better than a square
-/// when `image-fit: cover`-stretched. Downscaling first makes the blur
-/// cheap (box-pass cost scales with pixel count) and bounds the
-/// blurred buffer at `192 × 128 × 3 ≈ 72 KiB`. Squashing a square
-/// source into the landscape buffer is invisible after the heavy blur.
+/// Width / height the cover is downscaled to before blurring. Source album
+/// art is always 1:1, but the hero region paints landscape (full
+/// content-panel width × ~250 px tall), so a 3:2 buffer matches the target
+/// aspect better than a square under `image-fit: cover` — and squashing a
+/// square source into it is invisible after the blur. Downscaling first also
+/// makes the blur cheap: box-pass cost scales with pixel count.
 const BLUR_WIDTH: u32 = 192;
 const BLUR_HEIGHT: u32 = 128;
 

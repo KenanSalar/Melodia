@@ -16,26 +16,24 @@ import { TrackListRowItem } from "track-list-row.slint";
 // outer panel's rounded edges (instead of inside whatever padding the host
 // applies to TrackList).
 //
-// Designed to be embedded in any view that needs a track table — Tracks
-// today, Favorites / Album Detail / Playlist Detail in upcoming phases —
-// with each consumer owning its own column-width state and persistence.
+// Embedded by every view that needs a track table (Tracks, Browse, Search,
+// Favorites, Recently Played, and the Album / Artist / Genre / Playlist
+// detail pages), each owning its own column state and persistence.
 //
 // Property contract:
-//   * `rows`            — the model to render. Use `Rc<VecModel<TrackListRow>>`
-//                          on the Rust side so the host can swap it in via
-//                          `set_rows(ModelRc::from(...))`.
-//   * `w-*`             — per-column widths (in-out, two-way bound to host
-//                          state so resize-handle drags propagate up).
-//   * `show-*`          — per-column visibility (in-out for the same
-//                          reason; toggling from a column-toggle popup
-//                          flips host state synchronously).
+//   * `rows`            — the model to render. Back it with
+//                          `Rc<VecModel<TrackListRow>>` so the host can swap
+//                          via `set_rows(ModelRc::from(...))`.
+//   * `w-*` / `show-*`  — per-column width and visibility. `in-out` so a
+//                          resize drag or a column-toggle popup writes host
+//                          state synchronously.
 //   * `sort-field` /
-//     `sort-dir`        — drives the chevron in the header. Pure inputs;
-//                          clicking a header fires `request-sort`.
-//   * `playing-track-id`— the row with this id flips its cell colours to
-//                          accent. Typically bound to `Player.vm.track.id`
-//                          but the component does not import Player so it
-//                          can be reused outside player contexts.
+//     `sort-dir`        — drive the header chevron. Pure inputs; clicking a
+//                          header fires `request-sort`.
+//   * `playing-track-id`— this row's cells flip to accent. Usually bound to
+//                          `Player.vm.track.id`, but the component imports no
+//                          globals, so it stays reusable outside player
+//                          contexts.
 //
 // Callbacks fire on user actions; the host is expected to dispatch them to
 // the appropriate `library::*` function via a tokio runtime spawn, then

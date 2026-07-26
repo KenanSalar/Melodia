@@ -1,6 +1,6 @@
 //! Daily auto-check loop.
 //!
-//! Cadence (matches the Phase 14 footer in `MIGRATION.md`):
+//! Cadence:
 //!
 //! - **30 s after launch**: one-shot first check (gives the runtime time
 //!   to settle and avoids racing the first-launch folder scan for

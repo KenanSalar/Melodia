@@ -42,7 +42,7 @@ cargo llvm-cov --html                      # coverage → target/llvm-cov/html/
 
 Non-obvious wiring only — read the code for file roles.
 
-- `main.rs` (~210 LOC): arena cap → runtime → `AppState::init` → `boot::*` → `app.show()` + `slint::run_event_loop_until_quit()` (stays alive while close-to-tray hides the window) → `shutdown::*` → `process::exit(0)`.
+- `main.rs`: arena cap → runtime → `AppState::init` → `boot::*` → `app.show()` + `slint::run_event_loop_until_quit()` (stays alive while close-to-tray hides the window) → `shutdown::*` → `process::exit(0)`.
 - `state/` — `AppState`; `PlaybackContext` via `state.playback_ctx()`. `error.rs` = `AppError` (thiserror).
 - `database/` — SQLx + SQLite (WAL, two-pool R/W, `sqlx::migrate!`, FTS5).
 - `media/` — scanner (Rayon), metadata (Lofty 0.24), artwork; **`cover_thumbs.rs`** path-keyed RGB8 LRU → `slint::Image`+`SharedPixelBuffer` (row 72/grid 448/detail 384 px); **watcher** (notify + debouncer → tokio mpsc).

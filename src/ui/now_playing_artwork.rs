@@ -1,27 +1,20 @@
 //! Album-art decode + cache for the full-screen Now Playing view.
 //!
-//! The view needs the active cover in two forms — a sharp high-resolution
-//! tile and a heavily-blurred backdrop. Both derive from the *same* source
-//! image, so this module decodes it **once** per track and produces both
-//! buffers from that single `DynamicImage`. The result is an
-//! [`ArtworkPair`] held in one small LRU keyed by artwork path. (It
-//! replaces the earlier two near-identical `now_playing_blur` /
-//! `now_playing_cover` modules, which decoded the same file twice.)
+//! The view needs the active cover in two forms — a sharp tile and a
+//! heavily-blurred backdrop. Both derive from the *same* source image, so
+//! this module decodes it **once** per track and produces both buffers from
+//! that single `DynamicImage`, held as an [`ArtworkPair`] in one small LRU
+//! keyed by artwork path.
 //!
-//! This is deliberately a **separate, small** cache from
-//! [`crate::media::cover_thumbs::CoverThumbs`] (~1 500 sharp 72 px row tiles):
-//! mixing large 640 px / blurred 256 px buffers into that LRU would pollute
-//! it and waste memory. Here the working set is just the active track plus
-//! a handful of neighbours — the "Up Next" list surfaces ~20 tracks and the
-//! user skips through / clicks around them — so [`ARTWORK_CACHE_CAP`] is a
-//! small fixed cap that still re-shows recent covers without re-decoding.
+//! Deliberately a **separate, small** cache from the row-tier
+//! [`crate::media::cover_thumbs::CoverThumbs`]: mixing these much larger
+//! buffers into that LRU would evict row thumbnails wholesale. The working
+//! set here is the active track plus a handful of neighbours, so
+//! [`ARTWORK_CACHE_CAP`] is small.
 //!
-//! ## Why we cache buffers, not `Image`
-//!
-//! `slint::Image` is intentionally not `Send`/`Sync`, so it can't cross the
-//! `spawn_blocking` boundary the decode runs on. `SharedPixelBuffer<Rgb8Pixel>`
-//! *is* `Send + Sync`; the caller builds the two `Image`s on the UI thread
-//! via `Image::from_rgb8`.
+//! Caches buffers rather than `Image` because `slint::Image` is not
+//! `Send`/`Sync` and so can't cross the `spawn_blocking` boundary the decode
+//! runs on; the caller builds both `Image`s on the UI thread.
 
 use std::num::NonZeroUsize;
 use std::path::{Path, PathBuf};
@@ -34,23 +27,19 @@ use slint::{Rgb8Pixel, SharedPixelBuffer};
 use crate::ui::util::buffer_from_rgb;
 
 /// Side length (px) the sharp cover tile is downscaled to. Roughly matches
-/// the `380 px` maximum on-screen tile — `image-fit: cover` + Skia mipmaps
-/// keep it crisp without the memory cost of a 2× `HiDPI` buffer. Each cover
-/// buffer is at most `384 × 384 × 3 ≈ 432 KiB`. Matches the Albums grid /
-/// detail tier ([`crate::media::cover_thumbs::CoverThumbs`] `with_config`) —
-/// all three large-tile surfaces decode at one size.
+/// the 380 px maximum on-screen tile, so it neither upscales nor pays for a
+/// 2× `HiDPI` buffer. Matches the Album Detail header tier so every
+/// large-tile surface decodes at one size.
 const COVER_SIZE: u32 = 384;
 
-/// Side length the cover is downscaled to before blurring. A blurred
-/// backdrop carries no fine detail and is stretched to full-window
-/// `ImageFit.cover`, so 192 px is plenty — downscaling first makes the
-/// blur cheap (the box-pass cost scales with pixel count) and bounds the
-/// blurred buffer at `192 × 192 × 3 ≈ 108 KiB`.
+/// Side length the cover is downscaled to before blurring. The backdrop
+/// carries no fine detail and is stretched to full-window `ImageFit.cover`,
+/// and downscaling first makes the blur cheap — box-pass cost scales with
+/// pixel count.
 const BLUR_DOWNSCALE: u32 = 192;
 
-/// `fast_blur` sigma. Tuned to roughly match the heavy `blur(60px)` the
-/// Tauri version applied — at the 192 px `BLUR_DOWNSCALE` this reads as a
-/// soft wash of colour with no recognisable shapes.
+/// `fast_blur` sigma. At [`BLUR_DOWNSCALE`] this reads as a soft wash of
+/// colour with no recognisable shapes.
 const BLUR_SIGMA: f32 = 24.0;
 
 /// Hard cap on accepted source resolution — mirrors `CoverThumbs`'s guard
@@ -58,11 +47,10 @@ const BLUR_SIGMA: f32 = 24.0;
 /// allocation before we get a chance to downscale.
 const MAX_SOURCE_DIM: u32 = 8192;
 
-/// LRU capacity. The "Up Next" list surfaces ~20 tracks and the user clicks
-/// around / skips through neighbours, so the previous cap of 4 thrashed on
-/// exactly the interaction the feature exists for. 8 covers the realistic
-/// working set; at one `(cover, blur)` pair per entry ≈ `432 KiB + 108 KiB`,
-/// the cache caps at ≈ 4.3 MiB — comfortably under the RSS ceiling.
+/// LRU capacity. "Up Next" surfaces ~20 tracks and the user skips through
+/// neighbours, so too small a cap thrashes on exactly the interaction the
+/// feature exists for; this covers the realistic working set while keeping
+/// the resident `(cover, blur)` pairs bounded.
 const ARTWORK_CACHE_CAP: NonZeroUsize = match NonZeroUsize::new(8) {
     Some(n) => n,
     None => panic!("ARTWORK_CACHE_CAP > 0"),

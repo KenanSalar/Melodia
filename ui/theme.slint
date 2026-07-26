@@ -94,7 +94,7 @@ export global Theme {
     // `radius-md` so component-level radii stay constant when the user
     // nudges the shell rounding.
     //
-    // `in-out` so `src/ui/appearance.rs` can write the persisted value
+    // `in-out` so `src/ui/appearance/` can write the persisted value
     // at startup and on every change — the callback path is:
     //   Settings.corner-radius-changed(int)
     //     → wire_corner_radius_changed (appearance.rs)
@@ -153,7 +153,7 @@ export global Theme {
     // `.content.nativeDecContent`). When `false` the custom titlebar
     // (`ui/components/custom-titlebar.slint`) renders and the top-left
     // rounds to match the shell's outer chrome (Tauri's `.content` +
-    // `.shell`). `in-out` so `src/ui/window_chrome.rs` can hydrate this
+    // `.shell`). `in-out` so `src/ui/window_chrome/` can hydrate this
     // from the persisted `WindowFlags.use_native_titlebar` after
     // `AppWindow::new()` and before `app.run()` — Slint reads
     // `Window.no-frame` once when the OS window first shows, so the
@@ -200,7 +200,7 @@ export global Theme {
     // track-list row (length cell) and the now-playing bar.
     public pure function format-duration(ms: int) -> string {
         // Output `h:mm:ss` for tracks ≥ 1 h, `m:ss` otherwise. Must stay
-        // byte-identical to `format_duration_ms` in `src/ui/tracks.rs` — the
+        // byte-identical to `format_duration_ms` in `src/ui/tracks/` — the
         // track-list rows use the Rust-precomputed string while the
         // now-playing bar still calls this Slint helper, so any divergence
         // shows up as inconsistent length labels for long tracks.

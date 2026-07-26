@@ -44,7 +44,7 @@ pub fn set_play_button_animation(
 /// effect at toggle time — the flag is consulted once, at the next
 /// `main.rs` startup after `restore_persisted_queue`, so a single-phase
 /// disk write is all that's needed. The on-disk default is `false`
-/// (`PlaybackFlags::default()` in `src/services/settings.rs`), so
+/// (`PlaybackFlags::default()` in `src/services/settings/data.rs`), so
 /// first-launch users land with auto-resume off.
 pub fn set_resume_on_startup(state: &AppState, on: bool) -> Result<(), AppError> {
     services::settings::mutate_settings(&state.paths, move |settings| {

@@ -28,7 +28,7 @@ use crate::{AppWindow, NavEnterFrom, PlaylistDetail, TrackListRow as UiTrackList
 
 // `apply_detail_artwork` (cover + hero-blur write) and
 // `replace_tracks_model` (in-place `tracks` `VecModel` swap) — see
-// `ui/detail_view.rs`. Playlist Detail keeps its own position-aware
+// `src/ui/detail_view.rs`. Playlist Detail keeps its own position-aware
 // `sort_playlist_tracks` below.
 impl_detail_view_helpers!(artwork PlaylistDetail);
 

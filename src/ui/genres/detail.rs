@@ -1,5 +1,5 @@
 //! Genre Detail header + track list: fetch, re-sort, refresh-preserving,
-//! startup seed. Mirror of `ui/albums/detail.rs` minus everything related
+//! startup seed. Mirror of `src/ui/albums/detail.rs` minus everything related
 //! to artwork (`decode_detail_pair`, `apply_detail_artwork`,
 //! `write_crossfade_slot`): genres have no intrinsic image.
 
@@ -369,5 +369,5 @@ pub(super) fn reset_detail_selection(g: &GenreDetail, genres_ui: &GenresUi) {
 
 // `replace_tracks_model` — in-place `tracks` `VecModel` swap. Genres
 // have no header artwork, so the `no_artwork` arm omits
-// `apply_detail_artwork`. See `ui/detail_view.rs`.
+// `apply_detail_artwork`. See `src/ui/detail_view.rs`.
 impl_detail_view_helpers!(no_artwork GenreDetail);

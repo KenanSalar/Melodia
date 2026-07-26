@@ -120,12 +120,11 @@ pub fn hide_window(window: &slint::Window) {
 /// 2. **`None`**: surface is still mapped, but the window was minimized via
 ///    the titlebar button. Wayland exposes no client-side un-minimize:
 ///    `xdg_toplevel` has `set_minimized` but no inverse, and winit's
-///    `focus_window` is a documented no-op on Wayland
-///    (`winit/src/platform_impl/linux/wayland/window/mod.rs:629`). The only
-///    reliable way to bring the surface back from inside the app is to
-///    destroy and recreate it via `hide()` + `show()`. The current geometry
-///    is snapshotted first so the recreated surface lands where the
-///    button-minimized window was, not at the content-preferred minimum.
+///    `focus_window` is an empty no-op on Wayland
+///    (`winit/src/platform_impl/linux/wayland/window/mod.rs`). The only way
+///    back from inside the app is to destroy and recreate the surface via
+///    `hide()` + `show()`. Geometry is snapshotted first so it lands where
+///    the minimized window was, not at the content-preferred minimum.
 ///
 /// Both branches converge on the same `set_size` + `reschedule_geometry_restore`
 /// path: Slint's first layout pass on the new winit window snaps it to the

@@ -7,7 +7,7 @@ import { EntityCard } from "entity-card.slint";
 // rows of `EntityCard`s + lazy `request-cover` lookup + host-mounted
 // scrollbar via `v-*` out properties). The `rows` model is
 // `[PlaylistGridRow]`; Rust chunks the flat playlist list into rows of
-// `columns` cards in `src/ui/playlists.rs`.
+// `columns` cards in `src/ui/playlists/`.
 //
 // Cover thumbnails are pulled lazily: each on-screen card's `cover`
 // binding invokes `request-cover(artwork_path)`, which the host

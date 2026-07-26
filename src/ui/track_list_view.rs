@@ -4,8 +4,8 @@
 //! Browse, Favorites, Search and the Album / Artist / Genre / Playlist
 //! detail views) owns its own per-view Slint global mirroring the same
 //! column-width and column-visibility shape. This module captures the
-//! hydrate-on-startup / snapshot-on-shutdown flow generically so adding a
-//! new view in a future phase is a matter of:
+//! hydrate-on-startup / snapshot-on-shutdown flow generically, so adding a
+//! new view is a matter of:
 //!
 //! 1. Declaring the new global in `ui/globals.slint` mirroring `Tracks`.
 //! 2. Adding a `view_id::*` constant and one

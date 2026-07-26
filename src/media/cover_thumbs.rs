@@ -1,67 +1,47 @@
 //! Decoded cover thumbnails for the Tracks view.
 //!
-//! `slint::Image::load_from_path` decodes the source eagerly and never
-//! caches by path — every call re-reads the file and produces a fresh
-//! full-resolution RGBA bitmap. Album art is commonly 1000 × 1000 (~4 MB
-//! decoded); naively assigning a fresh `Image` per row pushed RSS past
-//! 500 MB on a real library. This module fixes that with four layers:
+//! `slint::Image::load_from_path` decodes eagerly and never caches by path —
+//! every call re-reads the file and produces a fresh full-resolution RGBA
+//! bitmap, so a fresh `Image` per row is one full decode per *track* rather
+//! than per cover. This module puts a bounded cache in front of that:
 //!
-//! 1. **Dedup by path.** Many tracks share the same album cover, so the
-//!    cache returns a cheap clone of the same `SharedPixelBuffer` instead
-//!    of re-decoding the file once per track.
-//! 2. **Thumbnail downscale.** Each unique cover is decoded once and
-//!    immediately reduced to `THUMB_SIZE × THUMB_SIZE`; the downscaled
-//!    pixels are what we hand to Slint. For typical 1000×1000 sources this
-//!    cuts memory by ~190× per cover (1000×1000×4 → 72×72×3).
-//! 3. **RGB8, not RGBA8.** Album art is overwhelmingly JPEG/PNG-without-
-//!    alpha. Decoding to RGB8 saves 25% per cover at no quality cost; the
-//!    Skia backend converts to RGBA8 once on GPU upload, so the conversion
-//!    is paid per-cover (bounded), not per-draw.
-//! 4. **LRU eviction.** The cache is capped at `CACHE_CAP` entries; on
-//!    overflow the least-recently-used cover is evicted. Without this, a
-//!    catalogue with thousands of unique covers grows the cache forever.
-//! 5. **Defensive decoder limits.** `image::Limits` caps the maximum
-//!    source resolution we'll attempt, so a pathological 32 K × 32 K
-//!    file in a tag can't allocate gigabytes.
+//! 1. **Dedup by path** — many tracks share one album cover, so a hit is a
+//!    refcount bump on the same `SharedPixelBuffer`.
+//! 2. **Thumbnail downscale** — each unique cover is decoded once and
+//!    reduced to `thumb_size` square before it reaches Slint.
+//! 3. **RGB8, not RGBA8** — album art is overwhelmingly alpha-free, so the
+//!    fourth channel is dead weight. `FemtoVG` converts on upload, once per
+//!    cover rather than per draw.
+//! 4. **LRU eviction** — without a cap, a catalogue with thousands of
+//!    unique covers grows the cache forever.
+//! 5. **Decoder limits** — `image::Limits` bounds the source resolution, so
+//!    a forged dimension header can't allocate gigabytes.
 //!
-//! Pair this with [`CoverThumbs::prewarm`] from the call site to decode
-//! unique paths in parallel via Rayon (inside a `spawn_blocking` task)
-//! before the model is built — tracks then appear quickly because the
-//! per-row lookup is a hashmap hit.
+//! [`CoverThumbs::prewarm`] decodes a batch in parallel (Rayon, inside
+//! `spawn_blocking`) before the model is built, so per-row lookups are hits.
 //!
 //! ## Sizing rationale
 //!
-//! The thumbnail side length is **per-instance** (`thumb_size`), not a
-//! global constant — different views display artwork at wildly different
-//! sizes, and a one-size cache either pixelates the big tiles or wastes
-//! memory on the small ones. Two tiers exist today:
+//! `thumb_size` is **per-instance**, not global — views display artwork at
+//! wildly different sizes, and one size either softens the big tiles or
+//! wastes memory on the small ones. `FemtoVG` minifies with plain bilinear and
+//! no mipmaps, so each tier is sized near its on-screen size:
 //!
-//!   * **Row tier** ([`CoverThumbs::new`] / [`Default`], [`THUMB_SIZE`] =
-//!     72 px) — the 36 px track-row tile and the `clamp(bar-w * 0.07,
-//!     36px, 46px)` now-playing-bar tile. 72 px is 2× `HiDPI` of the
-//!     largest, which Skia's mipmaps render crisply at any DPR; smaller
-//!     would soften the bar tile, larger would waste memory across the
-//!     `CACHE_CAP`-entry cache.
+//!   * **Row tier** ([`CoverThumbs::new`], [`THUMB_SIZE`]) — the 36 px
+//!     track-row tile and the `clamp(bar-w * 0.07, 36px, 46px)`
+//!     now-playing-bar tile.
 //!   * **Album tiers** ([`CoverThumbs::with_config`]) — the Albums grid
-//!     cards (448 px, flex-filled well past 280 px on wide panels) and the
-//!     Album Detail header tile (384 px). `src/ui/albums.rs` owns a
-//!     dedicated instance per tier; mixing those large buffers into the
-//!     row-tier LRU would pollute it, so each gets its own (small-capped)
-//!     cache — same separation rationale as
+//!     cards (flex-filled well past 280 px on wide panels) and the Album
+//!     Detail header tile. `src/ui/albums/` owns an instance per tier;
+//!     mixing those larger buffers into the row-tier LRU would evict row
+//!     thumbnails wholesale. Same separation as
 //!     [`crate::ui::now_playing_artwork::NowPlayingArtwork`].
 //!
-//! ## Why we cache buffers, not `Image`
-//!
-//! `slint::Image` wraps an internal `VRc` that contains `*mut ()`, so the
-//! type is intentionally **not** `Send` or `Sync`. We can't put it in a
-//! cross-thread cache, and Rayon's parallel pipeline can't produce it.
-//! `slint::SharedPixelBuffer<Rgb8Pixel>` *is* `Send + Sync` and is
-//! ref-counted, so:
-//!   * the cache stores buffers (one decoded RGB payload per unique
-//!     cover, shared across all tracks that reference it),
-//!   * decoding happens in parallel on background threads,
-//!   * `Image::from_rgb8(buf.clone())` runs on the UI thread when
-//!     building rows; the clone is a refcount bump, not a copy.
+//! Buffers are cached rather than `Image` because `slint::Image` holds a
+//! `*mut ()` internally and is deliberately neither `Send` nor `Sync`, so it
+//! can neither live in a cross-thread cache nor come out of a Rayon
+//! pipeline. `SharedPixelBuffer<Rgb8Pixel>` is both, and refcounted — the UI
+//! thread wraps a clone via `Image::from_rgb8` when building rows.
 
 use std::num::NonZeroUsize;
 use std::path::{Path, PathBuf};
@@ -72,11 +52,10 @@ use parking_lot::Mutex;
 use rayon::prelude::*;
 use slint::{Image, Rgb8Pixel, SharedPixelBuffer};
 
-/// Default ("row tier") square thumbnail size, in pixels. 72 px = 2× the
-/// 36 px row tile and 1.56× the 46 px now-playing bar tile, which Skia's
-/// mipmaps render crisply on `HiDPI`. Each cached thumbnail occupies
-/// 72 × 72 × 3 ≈ 15.5 KB. Larger tiers ([`CoverThumbs::with_config`]) pass
-/// their own size — see the module docs' "Sizing rationale".
+/// Default ("row tier") square thumbnail size, in pixels — 2× the 36 px row
+/// tile and 1.56× the 46 px now-playing bar tile, so both stay sharp on
+/// `HiDPI`. Larger tiers ([`CoverThumbs::with_config`]) pass their own size;
+/// see the module docs' "Sizing rationale".
 const THUMB_SIZE: u32 = 72;
 
 /// Hard cap on accepted source resolution. Real album art is well under
@@ -84,16 +63,10 @@ const THUMB_SIZE: u32 = 72;
 /// header from triggering an absurd allocation.
 const MAX_SOURCE_DIM: u32 = 8192;
 
-/// Maximum number of entries kept in the cache — counts unique album
-/// *covers* (one entry per artwork file), not tracks, so it tracks
-/// library size, not queue / playback. At ~15.5 KB per entry (RGB8 /
-/// 72 px), 512 entries ≈ 8 MB peak. Older entries are evicted LRU-style
-/// on overflow; a missed cover just re-decodes inline on scroll-back (a
-/// few ms for one 72 px thumbnail — no flash, no glitch). Most libraries
-/// have a few hundred unique covers, well under the cap; only a very
-/// large library (~6 000+ tracks) reaches eviction at all, and it
-/// degrades gracefully there. The previous 1 500-entry cap budgeted
-/// ~23 MB of headroom realistic libraries never used.
+/// Maximum entries kept in the row-tier cache — counts unique *covers*, not
+/// tracks, so it scales with library size rather than queue length. Most
+/// libraries sit well under it; past the cap, eviction just means a
+/// scroll-back re-decodes one thumbnail inline, with no visible flash.
 const CACHE_CAP: NonZeroUsize = match NonZeroUsize::new(512) {
     Some(n) => n,
     None => panic!("CACHE_CAP > 0"),
@@ -104,12 +77,11 @@ const CACHE_CAP: NonZeroUsize = match NonZeroUsize::new(512) {
 type CachedBuf = Option<SharedPixelBuffer<Rgb8Pixel>>;
 
 /// Dedicated, bounded Rayon pool for [`CoverThumbs::prewarm`]'s parallel
-/// decode. Each decode briefly holds a full-resolution `DynamicImage`
-/// before downscaling (a 3000×3000 cover ≈ 27 MiB); fanning that across the
-/// global pool — `num_cpus` wide — can spike RSS by hundreds of MiB during
-/// a prewarm burst. A small dedicated pool caps how many full-res decodes
-/// coexist *and* isolates the burst from the library scanner's use of the
-/// global pool. `None` if the pool fails to build — `prewarm` then falls
+/// decode. Each decode briefly holds a full-resolution `DynamicImage` before
+/// downscaling, so fanning across the `num_cpus`-wide global pool would let
+/// that many full-res bitmaps coexist at the peak. A small dedicated pool
+/// bounds that *and* isolates the burst from the library scanner's use of
+/// the global pool. `None` if the pool fails to build — `prewarm` then falls
 /// back to the global pool.
 static DECODE_POOL: OnceLock<Option<rayon::ThreadPool>> = OnceLock::new();
 
@@ -147,18 +119,18 @@ impl Default for CoverThumbs {
 }
 
 impl CoverThumbs {
-    /// Row-tier cache: 72 px thumbnails, `CACHE_CAP` entries. Used by the
-    /// Tracks / Browse views and the now-playing bar (shared instance) and
-    /// by the queue sheet (its own private instance, released on close).
+    /// Row-tier cache ([`THUMB_SIZE`], [`CACHE_CAP`]). Shared by the Tracks /
+    /// Browse views and the now-playing bar; the queue sheet keeps its own
+    /// private instance, released on close.
     pub fn new() -> Self {
         Self::default()
     }
 
-    /// A cache tier with a caller-chosen thumbnail size and LRU capacity.
-    /// Used for views that display artwork far larger than the 72 px row
-    /// tile (e.g. the Albums grid / detail at 448 / 384 px) — see the module
-    /// docs' "Sizing rationale" for why each size gets its own instance.
-    /// The capacity can later be retuned with [`Self::resize`].
+    /// A cache tier with a caller-chosen thumbnail size and LRU capacity, for
+    /// views displaying artwork far larger than the row tile (the Albums grid
+    /// and detail header). See the module docs' "Sizing rationale" for why
+    /// each size gets its own instance. Capacity is retunable via
+    /// [`Self::resize`].
     pub fn with_config(thumb_size: u32, cache_cap: NonZeroUsize) -> Self {
         Self {
             cache: Mutex::new(LruCache::new(cache_cap)),
@@ -248,11 +220,9 @@ impl CoverThumbs {
 
     /// Same caching contract as [`Self::get_or_load`] but returns the raw
     /// [`SharedPixelBuffer<Rgb8Pixel>`] backing the cache entry instead of
-    /// wrapping it in a [`slint::Image`]. Used by Material You to consume
-    /// the already-decoded 72×72 thumbnail buffer when generating a
-    /// dynamic palette seed — avoids opening + decoding the artwork file
-    /// a second time, which on large embedded covers (1500–3000 px) was
-    /// the source of a ~30 MiB residual heap delta on the current track.
+    /// wrapping it in a [`slint::Image`]. Material You seeds its palette from
+    /// the already-decoded thumbnail this way, rather than opening and
+    /// decoding the full-resolution artwork a second time.
     ///
     /// Returns `None` if a cached prior decode failed for this path; the
     /// failure is remembered so callers don't retry the same broken file.

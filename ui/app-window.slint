@@ -102,7 +102,7 @@ export component AppWindow inherits Window {
     //     no separate fullscreen guard. If a fullscreen toggle ever
     //     lands, mirror `is-maximized` with an `is-fullscreen` flag.)
     //     `WindowChrome.is-maximized` is reactively maintained by
-    //     `src/ui/window_chrome.rs`'s `WindowEvent::Resized` filter via
+    //     `src/ui/window_chrome/`'s `WindowEvent::Resized` filter via
     //     `winit::Window::is_maximized`, so the toggle flips on every
     //     maximize/restore.
     background: (Theme.use-native-titlebar || WindowChrome.is-maximized)
@@ -113,7 +113,7 @@ export component AppWindow inherits Window {
     // chrome. Slint reads `no-frame` once when the OS window first
     // shows, so `Theme.use-native-titlebar` must be hydrated from
     // `WindowFlags.use_native_titlebar` *before* `app.run()` —
-    // `src/ui/window_chrome.rs::install` does that. With `no-frame`
+    // `src/ui/window_chrome/`'s `install` does that. With `no-frame`
     // on, winit no longer paints resize edges, so a 4 px
     // `resize-border-width` restores them; in native-frame mode the OS
     // owns resizing, so the inner border drops to 0. The width must
@@ -487,8 +487,8 @@ export component AppWindow inherits Window {
             }
 
             // Volume step: 0..100 clamp matches the slider's actual emit
-            // range (`ui/components/now-playing/volume-popup.slint:221`, `clamp(0,1) *
-            // 100`). Pushes `set-volume` immediately so audio adjusts on
+            // range (`volume-popup.slint`'s `clamp(…, 0, 1) * 100`).
+            // Pushes `set-volume` immediately so audio adjusts on
             // the keystroke, but defers `commit-volume` (settings.json
             // persistence) to the trailing-edge debounce above — held
             // arrow keys would otherwise commit ~20×/s. Bumps
@@ -773,7 +773,7 @@ export component AppWindow inherits Window {
                         // Index 0 (Search) — query-driven mixed-results
                         // page. Backed by FTS5 + LIKE via
                         // `library::search::search_all`. Wiring in
-                        // `src/ui/callbacks/search.rs`.
+                        // `src/ui/callbacks/search/`.
                         if !Nav.now-playing-open && Nav.selected-index == 0: ViewTransition {
                             width: parent.width;
                             height: parent.height;

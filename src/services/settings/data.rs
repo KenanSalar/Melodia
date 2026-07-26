@@ -530,7 +530,7 @@ fn default_match_unfocused_to_system_bg() -> bool {
 // from `SettingsData::default()` and `default_match_unfocused_to_system_bg`,
 // both inside this file, and (b) the `library/` layer should depend on
 // `services/`, not the other way around. UI code that needs them
-// (`src/ui/appearance.rs`) imports from `services::settings::` directly.
+// (`src/ui/appearance/`) imports from `services::settings::` directly.
 
 /// True iff the active session is KDE Plasma — read from
 /// `$XDG_CURRENT_DESKTOP`. Drives the default seed for

@@ -10,7 +10,7 @@
 //! on the next launch from the persisted flag.
 //!
 //! The default (`true`) is enforced by `LibraryFlags::default()`
-//! (`src/services/settings.rs`). First-launch installs read no
+//! (`src/services/settings/`). First-launch installs read no
 //! `settings.json`, fall through to defaults, and the toggle paints ON —
 //! consumer music players (Apple Music, Groove, Windows Media Player,
 //! Spotify) all auto-watch with no toggle, and a fresh install with

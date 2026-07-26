@@ -1,6 +1,6 @@
 // Settings global — single source of truth for the Settings page's
 // reactive state. Rust populates the lists and indices at startup
-// (`src/ui/appearance.rs::install`) and on every chip / dot click; the
+// (`src/ui/appearance/install.rs`) and on every chip / dot click; the
 // Settings UI binds chip groups + colour-dot grids to these properties
 // and forwards `selected(int)` events to the change callbacks.
 
@@ -243,7 +243,7 @@ export global Settings {
     // chip group binds here, and Rust mirrors the value into
     // `Theme.shell-radius` on every change so the rounded outer mantle
     // shell + inner content panel repaint reactively. Set once at
-    // startup in `src/ui/appearance.rs::install` from
+    // startup in `src/ui/appearance/install.rs` from
     // `services::settings::SettingsData.corner_radius` (clamped to
     // `MAX_CORNER_RADIUS = 15` and snapped to the nearest chip preset
     // via `library::settings::snap_to_preset`, so the value here is
@@ -320,7 +320,7 @@ export global Settings {
 
     // Pure case-insensitive substring test. Slint 1.16 has no `.contains()`
     // on string, so the substring check is wired in Rust
-    // (`src/ui/appearance.rs::install`). Used inside `visible:` /
+    // (`src/ui/appearance/install.rs`). Used inside `visible:` /
     // `if`-block expressions in the section files; Slint's reactive
     // dependency tracking handles re-evaluation on `search-query` changes.
     pure callback matches(string /*haystack*/, string /*needle*/) -> bool;

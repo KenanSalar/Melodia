@@ -104,8 +104,8 @@ pub(super) struct AlbumDetailState {
 
 /// Square decode size (px) for the Albums **grid card** tiles. Bigger than
 /// the detail header tier because the flex-filled grid cards get large on a
-/// wide panel (well past 280 px); 448 px keeps them crisp under
-/// `image-fit: cover` + Skia mipmaps. The knob to retune grid sharpness.
+/// wide panel (well past 280 px), and a tile upscaled past its decode size
+/// visibly softens. The knob to retune grid sharpness.
 pub(super) const GRID_COVER_SIZE: u32 = 448;
 
 /// Fallback LRU capacity for the **grid** cover cache, used at construction

@@ -18,10 +18,9 @@ import { ProgressBar } from "../../components/settings/progress-bar.slint";
 //   - error              when error-message != ""
 //
 // All state comes from the `MelodiaUpdater` global (owned by Rust, see
-// `src/services/updater/state.rs` for the underlying enum). The local
-// `in-out property` declarations the placeholder phase used were
-// removed in Phase C — read-bindings to `MelodiaUpdater.*` replace them so
-// the section is genuinely reactive to backend state changes.
+// `src/services/updater/state.rs` for the underlying enum). Every row
+// read-binds to `MelodiaUpdater.*` rather than mirroring into local
+// properties, so the section stays reactive to backend state changes.
 //
 // Search visibility — see header comment in `language-section.slint`.
 // Each row's visibility ANDs the existing state condition with the search

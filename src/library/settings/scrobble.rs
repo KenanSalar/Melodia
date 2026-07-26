@@ -1,6 +1,6 @@
 //! Scrobbling-section setters. These persist the per-service enable toggles to
 //! `settings.json`; the in-memory shadow on `ScrobbleService` is refreshed
-//! separately by the UI callback (Phase 3) once the write commits, mirroring the
+//! separately by the UI callback once the write commits, mirroring the
 //! kick-after-persist ordering the appearance/EQ setters use. Shaped like
 //! [`super::replaygain`].
 

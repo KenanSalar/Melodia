@@ -114,9 +114,9 @@ pub struct AppState {
     pub ui_handles: Arc<crate::ui::nav_history::UiHandles>,
 }
 
-/// Receivers handed back from `AppState::init` for sub-phase I to consume.
-/// Holding them on `AppState` would force a `Mutex<Option<...>>` shape that
-/// Phase 1 doesn't need; returning them keeps the struct stable.
+/// Receivers handed back from `AppState::init` for `boot::tasks` to consume.
+/// Holding them on `AppState` would force a `Mutex<Option<…>>` shape nothing
+/// needs; returning them keeps the struct stable.
 pub struct StartupChannels {
     pub media_control_rx: Option<mpsc::Receiver<MediaControlEvent>>,
     pub file_event_rx: mpsc::Receiver<FileEvent>,

@@ -33,8 +33,7 @@ export component DetailHeader inherits Rectangle {
     // avatar as a disc (Tauri parity).
     in property <bool>   circular-artwork: false;
     // Forwarded to the inner `ArtworkImage.fallback-icon`. Artist Detail
-    // passes `"person"`; defaults to `"music-note"` for albums and the
-    // other entity-detail callers that will land later.
+    // passes `"person"`; every other entity detail takes the default.
     in property <string> fallback-icon: "music-note";
 
     // The two colours making up the full-bleed hero gradient floor.

@@ -1,54 +1,41 @@
 //! "Should the in-app updater UI be hidden?" check.
 //!
 //! Hides the in-app "Download & Install" button (and skips spawning
-//! the daily check task in `src/main.rs:226-227`) when there's no
-//! viable in-app update path for the current install. The in-app
+//! `tasks::updater_daily`) when there's no viable in-app update path. The
 //! updater is wired for:
 //!
 //!   - Per-user installs whose directory we can `rename(2)` directly:
-//!     `AppImage`, the tarball + `install-linux.sh` path.
-//!   - **Direct-download RPM/.deb installs** (`dnf` / `apt` package
-//!     ownership detected via [`super::linux_pkg::detect`]). These go
-//!     to `/usr/bin/melodia` — not user-writable — but
-//!     [`super::install::download_and_install`] runs the verified
-//!     package through `pkexec dnf install` / `pkexec apt install`
-//!     instead of a raw `pkexec mv`, so the package manager DB stays
-//!     consistent and dependencies are re-resolved.
-//!   - **Per-machine Windows MSI installs to `C:\Program Files\`.**
-//!     The install dir is SYSTEM-owned (no direct write), but the
-//!     in-app updater downloads the next signed MSI and hands it to
-//!     `msiexec /i` — UAC prompts, the `MajorUpgrade` element in
-//!     `wix/main.wxs` replaces the running version, and Restart
-//!     Manager handles the live binary swap.
-//!     The current target key is the discriminator (`windows-*-msi`),
-//!     mirroring the [`super::linux_pkg::detect`] escape hatch for
-//!     root-owned RPM/.deb installs.
+//!     `AppImage` and the tarball + `install-linux.sh` path.
+//!   - **Direct-download RPM/.deb installs** ([`super::linux_pkg::detect`]).
+//!     `/usr/bin/melodia` isn't user-writable, but
+//!     [`super::install::download_and_install`] runs the verified package
+//!     through `pkexec dnf/apt install` rather than a raw `pkexec mv`, so the
+//!     package DB stays consistent and dependencies are re-resolved.
+//!   - **Per-machine Windows MSI installs** under `C:\Program Files\`. The
+//!     directory is SYSTEM-owned, but handing the next signed MSI to
+//!     `msiexec /i` lets UAC, `wix/main.wxs`'s `MajorUpgrade` and Restart
+//!     Manager do the swap. Keyed on the `windows-*-msi` target, mirroring the
+//!     `linux_pkg` escape hatch.
 //!
-//! What *still* reports as system-managed (hiding the in-app UI and
-//! surfacing the "Updates managed by your package manager" hint in
+//! What still reports as system-managed (hiding the UI and surfacing the
+//! "managed by your package manager" hint in
 //! `ui/views/settings/update-section.slint`):
 //!
-//!   - A hand-installed tarball dropped under a root-owned directory
-//!     (`/opt/melodia/`) — file isn't owned by `rpm` or `dpkg`, no
-//!     package manager can drive an update. The pkexec-mv path in
-//!     `install.rs` exists for this case but the UI stays hidden to
-//!     keep the happy path obvious.
-//!   - A **portable extract on Windows** (e.g. user unzipped a
-//!     `Melodia.exe` to their Desktop or a USB stick instead of
-//!     running the MSI). The current target key still resolves to
-//!     `windows-*-msi` (it's `cfg!`-derived from the build target, not
-//!     the runtime path), so left unguarded the updater would happily
-//!     download an MSI and `msiexec /i` it — orphaning the portable
-//!     copy under a fresh `C:\Program Files\Melodia\bin\` install.
-//!     The Windows arm of [`probe`] gates on
-//!     [`is_under_program_files`] before the MSI escape hatch so this
-//!     case falls through to "no clean update path" and the UI hides.
+//!   - A tarball hand-dropped under a root-owned directory (`/opt/melodia/`) —
+//!     no package manager owns the file, so none can drive the update. The
+//!     `pkexec mv` path exists for it, but the UI stays hidden to keep the
+//!     happy path obvious.
+//!   - A **portable extract on Windows** (unzipped rather than MSI-installed).
+//!     The target key is `cfg!`-derived from the build target, not the runtime
+//!     path, so it still resolves to `windows-*-msi`; left unguarded the
+//!     updater would `msiexec /i` and orphan the portable copy under a fresh
+//!     `C:\Program Files\` install. [`probe`]'s Windows arm gates on
+//!     [`is_under_program_files`] before the MSI escape hatch.
 //!
 //! Probe is keyed on `install_target().parent()`, **not**
-//! `current_exe().parent()` — on `AppImage` runs the latter would
-//! resolve to a temporary squashfs mount under `/tmp/.mount_…/usr/bin/`,
-//! which is read-only and would wrongly mark a user-installed
-//! `AppImage` as "system-managed".
+//! `current_exe().parent()` — under `AppImage` the latter resolves to a
+//! read-only squashfs mount in `/tmp`, wrongly marking a user install as
+//! system-managed.
 
 use std::sync::OnceLock;
 

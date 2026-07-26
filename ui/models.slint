@@ -282,7 +282,7 @@ export struct QueueVm {
 //
 // `selected` is UI-state, not persisted on the Rust side. It rides on
 // the row because Slint expressions can't iterate to do an in-set check.
-// `src/ui/queue_sheet.rs` mutates this through a shadow `Vec<QueueRow>`
+// `src/ui/queue_sheet/` mutates this through a shadow `Vec<QueueRow>`
 // (so Rust-side callbacks like `remove_selected` can read selection
 // state without round-tripping through Slint) and immediately pushes
 // the updated row into the live `VecModel` so the UI flips synchronously.

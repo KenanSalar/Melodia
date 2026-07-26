@@ -1,8 +1,9 @@
 //! Top-level "is there a newer version?" query.
 //!
-//! Phase B exposes only [`check_for_update`] — the manifest fetch + semver
-//! gate. Phase D adds the notification-pushing wrapper that pairs with
-//! the daily-check task.
+//! [`check_for_update`] is the whole surface: manifest fetch + semver gate +
+//! platform-asset resolution. Notifying the user is deliberately not here —
+//! `tasks::updater_daily` owns the cadence and pushes toasts over its
+//! `event_tx`, so this stays a pure query.
 
 use crate::error::{AppError, AppResult};
 
@@ -42,9 +43,8 @@ pub enum CheckOutcome {
 /// Fetch `latest.json`, semver-gate against the running binary's
 /// version, and resolve the platform-specific asset.
 ///
-/// `current_version` is normally `env!("CARGO_PKG_VERSION")`; the
-/// parameter exists for testability (and for Phase D's `check_and_notify`
-/// to pass the same value through).
+/// `current_version` is normally `env!("CARGO_PKG_VERSION")`; the parameter
+/// exists for testability.
 ///
 /// `force_refresh` controls whether the inner [`fetch_latest_manifest`]
 /// sends `If-None-Match`. Daily-task checks pass `false` (cache-friendly,

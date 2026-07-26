@@ -9,11 +9,11 @@
 //!   polls a generation counter and only recomputes coefficients on change.
 //! - [`EqSource`]: a custom Rodio [`Source`] wrapping a decoder. Each sample
 //!   runs through a preamp gain then a cascade of ten `Type::PeakingEQ` biquads
-//!   — one [`DirectForm1`] per band, **per channel** (rodio's own `BltFilter`
-//!   keeps a single filter state across interleaved channels, which is part of
-//!   why it's "probably buggy"; we keep independent per-channel state). A
-//!   coupled soft-knee peak [`Limiter`] then catches any residual peaks so heavy
-//!   boosts compress instead of hard-clipping.
+//!   — one [`DirectForm1`] per band, **per channel**. Per-channel state is the
+//!   point: rodio's own `BltFilter` runs one filter state across interleaved
+//!   channels, which cross-contaminates them. A coupled soft-knee peak
+//!   [`Limiter`] then catches residual peaks so heavy boosts compress instead
+//!   of hard-clipping.
 //!
 //! `DirectForm1` is used (not `DirectForm2Transposed`) because its delay line
 //! holds past inputs/outputs that stay valid when coefficients change at

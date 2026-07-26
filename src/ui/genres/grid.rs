@@ -1,6 +1,6 @@
 //! Genres grid: DB fetch + filter / sort / chunk logic.
 //!
-//! Mirror of `ui/albums/grid.rs` minus everything cover-related: no
+//! Mirror of `src/ui/albums/grid.rs` minus everything cover-related: no
 //! prewarm step, no cap-tuning function, no `first_screenful_paths`.
 //! Genres have no artwork (see the `Genres` global comment in
 //! `ui/globals.slint`).
@@ -27,7 +27,7 @@ use crate::{
 /// keystroke on the UI thread.
 ///
 /// No prewarm step: genres have no artwork to decode (compare
-/// `ui/albums/grid.rs::fetch_grid`, which prewarms the first screenful
+/// `src/ui/albums/grid.rs::fetch_grid`, which prewarms the first screenful
 /// of grid-tier covers).
 pub async fn fetch_grid(
     state: &AppState,

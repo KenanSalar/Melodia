@@ -82,20 +82,15 @@ fn main() -> AppResult<()> {
             let _ = std::fs::remove_file(stale);
         }
     }
-    // Cap glibc's per-thread malloc arenas to 2. The default
-    // `8 × num_cpus` (typically 32–128) gives every long-lived thread its
-    // own 64 MiB virtual arena; only the touched pages commit, but a
-    // 33-thread process with album-art prewarming + queue restore + Slint
-    // + souvlaki + SQLx accumulates ~17 distinct arenas × ~3 MiB committed
-    // = ~50 MiB of resident anonymous memory that's effectively per-thread
-    // free-list overhead. smaps showed those arenas as 64 MiB-aligned anon
-    // mmaps; capping at 2 forces threads to share, dropping idle RSS by
-    // ~30–45 MiB at the cost of some malloc contention under heavy
-    // parallel allocation (which Melodia, an idle-most-of-the-time
-    // desktop player, doesn't have). Must run before any thread is
-    // spawned that does its first malloc — `env_logger::init()` and the
-    // tokio runtime builder both allocate; staying first in `main()`
-    // covers them.
+    // Cap glibc's per-thread malloc arenas to 2. The default `8 × num_cpus`
+    // gives every long-lived thread its own 64 MiB virtual arena, and this
+    // process runs enough of them (album-art prewarm, queue restore, Slint,
+    // souvlaki, SQLx) that the committed slack across those arenas is pure
+    // per-thread free-list overhead. Capping forces threads to share, trading
+    // it for malloc contention under heavy parallel allocation — which an
+    // idle-most-of-the-time desktop player doesn't have. Must run before any
+    // thread does its first malloc; `env_logger::init()` and the tokio
+    // runtime builder both allocate, so staying first in `main()` covers it.
     //
     // `M_ARENA_MAX = -8` per glibc's `malloc.h`.
     #[cfg(all(target_os = "linux", target_env = "gnu"))]
@@ -147,9 +142,8 @@ fn main() -> AppResult<()> {
         .build()
         .map_err(|e| AppError::Settings(format!("tokio runtime: {e}")))?;
 
-    // Slint's a11y/D-Bus thread looks up a tokio reactor on UI-thread tasks
-    // (see Phase 0 footnote in MIGRATION.md). Keep the guard alive for the
-    // entire `app.run()` window.
+    // Slint's a11y/D-Bus thread looks up a tokio reactor from UI-thread tasks,
+    // so the guard has to stay alive for the entire `app.run()` window.
     let runtime_guard = runtime.enter();
 
     let paths = Paths::resolve()?;
@@ -498,11 +492,10 @@ fn main() -> AppResult<()> {
     //
     // Same closure also pushes the embedded EXE icon onto the winit window.
     // `build.rs` (via `winresource`) compiles `assets/melodia.ico` into the
-    // EXE under ordinal 1; the taskbar reads it directly from the EXE
-    // binding so it shows correctly, but the *caption* icon is sourced from
-    // the window's WNDCLASS — which winit registers with `hIcon: 0`
-    // (`winit/src/platform_impl/windows/window.rs:1417`). Without an
-    // explicit `set_window_icon` the titlebar's top-left stays generic.
+    // EXE under ordinal 1, which the taskbar reads directly — but the
+    // *caption* icon comes from the window's WNDCLASS, and winit registers
+    // that with `hIcon: 0` (`winit/src/platform_impl/windows/window.rs`).
+    // Without an explicit `set_window_icon` the titlebar stays generic.
     #[cfg(target_os = "windows")]
     {
         let weak = app.as_weak();

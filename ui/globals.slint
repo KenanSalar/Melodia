@@ -15,7 +15,7 @@ import { Theme } from "theme.slint";
 export enum NavEnterFrom { below, right, left }
 
 // Player: bound to the Rust backend via watch channels (push) + library::*
-// (pull). Rust wires every callback in src/ui/callbacks.rs.
+// (pull). Rust wires every callback in `src/ui/callbacks/`.
 export global Player {
     in-out property <PlayerVm> vm;
     in-out property <QueueVm> queue;
@@ -474,10 +474,12 @@ export global TagEditor {
     callback commit();
 }
 
-// Nav: UI-only, no Rust subscription needed in Phase 2.
-//   0=search, 1=browse,
-//   2=favorites, 3=tracks, 4=albums, 5=artists, 6=genres, 7=playlists,
-//   8=settings
+// Nav: which content view the shell shows. Rust persists the index into
+// `views.json` and drives cross-tab navigation off it.
+//   0=search, 1=browse, 2=favorites, 3=tracks, 4=albums, 5=artists,
+//   6=genres, 7=playlists, 8=recently-played, 9=settings
+// Sidebar order is source order, not index order — Recently Played renders
+// under Favorites while keeping index 8.
 export global Nav {
     in-out property <int> selected-index: 3;
     // True while the full-screen Now Playing view replaces the main content
@@ -487,7 +489,7 @@ export global Nav {
     // `app-window.slint` renders `NowPlayingView` when this is true and
     // gates the regular view branches on `!now-playing-open`.
     in-out property <bool> now-playing-open: false;
-    // Mirror of `now-playing-open` into Rust (`src/ui/now_playing.rs`).
+    // Mirror of `now-playing-open` into Rust (`src/ui/now_playing/`).
     // The Up Next subscriber skips its ~20-row rebuild while the view is
     // closed (the rows aren't on screen) and rebuilds once on open. Slint
     // globals can't have `changed` handlers on their own properties
@@ -498,7 +500,7 @@ export global Nav {
     // Fire after the user clicks a sidebar item (the SidebarItem TouchArea
     // invokes this right after assigning `selected-index`). Rust persists
     // the new index into `settings.last_nav_index` so the next launch
-    // reopens on the same section. Wired in `src/ui/callbacks.rs`.
+    // reopens on the same section. Wired in `src/ui/callbacks/`.
     callback persist-selected-index(int);
     // Right-click "Open Containing Folder" on any track row. Carries the
     // track id; Rust (`callbacks::wire_all`) resolves the file path from
@@ -592,7 +594,7 @@ export global RowCovers {
 }
 
 // Tracks: drives the Tracks view. The `rows` model is owned by Rust
-// (`Rc<VecModel<TrackListRow>>` in `src/ui/tracks.rs`) and pushed in via
+// (`Rc<VecModel<TrackListRow>>` in `src/ui/tracks/`) and pushed in via
 // `set_rows(ModelRc::from(...))`. The full unfiltered Vec lives on the Rust
 // side too; `apply-filter` re-derives `rows` without hitting the DB,
 // `request-sort` does hit the DB.
@@ -668,35 +670,23 @@ export global Tracks {
     in-out property <int> blur-search-tick: 0;
 }
 
-// Browse: drives the Browse view. The three list models
-// (`folders`, `rows`, `breadcrumbs`) are owned by Rust
-// (`Rc<VecModel<_>>` in `src/ui/browse.rs`) and pushed in once at
-// startup via `install_browse_models`; `BrowseUi::fetch_and_apply`
-// mutates the existing VecModels in place on every navigation.
+// Browse: drives the Browse view. The three list models are owned by Rust
+// (`src/ui/browse/`, which documents the ownership and fetch rules); this
+// global is just their Slint-side surface.
 //
-// `rows` is rendered by the shared `TrackList` component (the same one
-// the Tracks view uses), so the column-width / column-visibility / sort
-// / selection shape mirrors the `Tracks` global. Disk-only audio files
-// (present on disk inside a library folder but not in the DB) arrive as
-// `TrackListRow`s with `id == 0` and `enabled == false` — they render
-// dimmed and non-interactive.
+// `rows` renders through the shared `TrackList`, so the column / sort /
+// selection shape mirrors the `Tracks` global. Disk-only files (on disk
+// inside a library folder but not in the DB) arrive with `id == 0` and
+// `enabled == false`, rendering dimmed and non-interactive.
 //
-// `current-path == ""` is the special root state: instead of calling
-// `library::browse::browse_directory` (which would reject an empty
-// path), Rust fetches the library folder list via
-// `library::settings::get_folders` and renders them as drillable folder
-// rows. `has-library-folders` flips false when that list is empty so
-// the view paints a "No music folders configured" CTA.
+// `current-path == ""` is the root state — Rust lists the library folders
+// as drillable rows, and `has-library-folders` flips false when there are
+// none so the view paints its CTA instead.
 //
-// `loading` is a single bool — the fetch is fast enough that a spinner
-// isn't always needed, but the view gates the "Empty folder" empty-state
-// on `!loading` so a stale "Empty" message doesn't flash during a
-// drill-down. `error-message` is empty in the happy path; non-empty
-// when `browse_directory` returns Err (folder deleted, permission
-// denied, …) — the view shows it instead of folder/track rows.
-//
-// `can-go-back` is owned by Rust (it mirrors the back-stack length);
-// the back button binds to it for `enabled:`.
+// `loading` gates the "Empty folder" empty-state so a stale "Empty" can't
+// flash during a drill-down. `error-message` is non-empty only when the
+// fetch failed (folder deleted, permission denied), and replaces the rows.
+// `can-go-back` mirrors the Rust-side back-stack length.
 export global Browse {
     in-out property <string> current-path;             // "" = root (library list)
     in-out property <[BrowseFolderRow]> folders;
@@ -785,35 +775,22 @@ export global LibrarySettings {
 }
 
 // WindowChrome: actions and state for the custom titlebar. Owned by Rust
-// (`src/ui/window_chrome.rs`); Slint is the dumb renderer. `is-maximized`
+// (`src/ui/window_chrome/`); Slint is the dumb renderer. `is-maximized`
 // is fed from a winit `WindowEvent::Resized` subscription so the
 // maximize/restore icon stays correct under Win+↑ / window-tile shortcuts
 // that bypass our buttons.
 //
-// Window dragging is **not** handled inside Slint. Calling winit's
-// `drag_window()` from a `TouchArea`'s `pointer-event` would leak the
-// grab: on Wayland the compositor takes pointer ownership for
-// `xdg_toplevel.move`, on X11 winit's docs say it un-grabs the cursor,
-// and on macOS the release event may not arrive. Slint's TouchArea
-// returns `GrabMouse` on Pressed and never sees the matching Released,
-// so it stays "pressed" forever — every subsequent click in the window
-// is routed back to the orphaned TouchArea and triggers another drag.
-// Instead, Rust intercepts `WindowEvent::MouseInput { Pressed, Left }`
-// at the winit layer (mirroring how Slint's own resize-border handler
-// works in `i-slint-backend-winit::event_loop`) and returns
-// `EventResult::PreventDefault` so the press never reaches Slint —
-// the TouchArea grab is never engaged. The Slint side only reports
-// hover state via `drag-region-hover-changed` so Rust knows when the
-// cursor is over the draggable area.
+// Window dragging is **not** handled inside Slint — a `TouchArea` that calls
+// `drag_window()` leaks its mouse grab and wedges the whole window. Rust
+// intercepts the press at the winit layer instead, and the Slint side only
+// reports hover through `drag-region-hover-changed`. Full rationale lives in
+// `src/ui/window_chrome/`'s module docs.
 //
-// `restart-app` is invoked by the `Dialog` router when the user confirms
-// the native-titlebar toggle: persists the new value via
-// `library::window::set_use_native_titlebar` (using the `target-id` left
-// in `Dialog`) and respawns the binary (Slint reads `no-frame` only at
-// first window show — runtime toggling requires a fresh process).
-// `restart-tray` mirrors it for the "System Tray Icon" toggle: persists
-// `tray.enabled` via `library::window::set_tray_enabled` and respawns, so
-// the startup gate in `main.rs` either runs or skips the tray subsystem.
+// `restart-app` is invoked by the `Dialog` router when the user confirms the
+// native-titlebar toggle: persist via `library::window::set_use_native_titlebar`
+// (keyed on the `target-id` left in `Dialog`), then respawn, since Slint reads
+// `no-frame` only at first window show. `restart-tray` mirrors it for the
+// System Tray toggle so `main.rs`'s startup gate re-evaluates.
 export global WindowChrome {
     in property <bool> is-maximized;
 
@@ -840,7 +817,7 @@ export global WindowChrome {
 }
 
 // Queue: drives the bottom-sheet queue inspector. The `rows` model is
-// owned by Rust (`Rc<VecModel<QueueRow>>` in `src/ui/queue_sheet.rs`)
+// owned by Rust (`Rc<VecModel<QueueRow>>` in `src/ui/queue_sheet/`)
 // and pushed in via `set_rows(ModelRc::from(...))`. Rust subscribes to
 // the same `sinks.queue` watch as `Player.queue` and writes both row
 // data and `current-index` on every queue mutation.
@@ -1089,7 +1066,7 @@ export global Playlists {
 // -1` ⇒ the grid is shown; `>= 0` ⇒ `PlaylistDetailView` replaces it
 // (mirrors the `Nav.now-playing-open` swap in `app-window.slint`).
 // `tracks` is owned by Rust (`Rc<VecModel<TrackListRow>>` in
-// `src/ui/playlists.rs`); `playlist` carries the header data.
+// `src/ui/playlists/`); `playlist` carries the header data.
 //
 // The track table is the shared `TrackList` component, so the
 // column-width / visibility / sort / selection shape mirrors the
@@ -1453,25 +1430,23 @@ export global Dialog {
     //      from a clean slate and no body branch is kept mounted by a
     //      stale `kind` or a stale `SharedString` array.
     //   2. The `image`-typed `current-artwork`, which has no Slint default
-    //      literal and so must be reset from Rust — that's what drops the
-    //      ~603 KiB `SharedPixelBuffer` Arc pulled from the playlist
-    //      grid-tier LRU at dialog-open.
+    //      literal and so has to be reset from Rust — that's what releases
+    //      the `SharedPixelBuffer` Arc taken from the playlist grid-tier LRU
+    //      at dialog-open.
     //
     // The teardown is a `public function`, NOT a second callback, and the
-    // distinction is load-bearing. A Slint callback has a single handler
-    // slot: a default `closed => { … }` body here is installed during
-    // `InnerDialog::new()`, and the Rust `on_closed` — which is a plain
-    // `Callback::set_handler` and necessarily runs later — silently
-    // REPLACES it. That is exactly the bug this shape fixes; the body had
-    // been dead code, so `kind` and the picker row models were never
-    // cleared and every picker row's cover Arc stayed pinned for the life
-    // of the process. A `public function` has no handler slot at all, so
-    // it cannot be registered away.
+    // distinction is load-bearing: a callback has a single handler slot, so a
+    // default `closed => { … }` body here is installed during
+    // `InnerDialog::new()` and then silently REPLACED by the Rust `on_closed`
+    // (a plain `Callback::set_handler`, necessarily later). That made the body
+    // dead code, leaving `kind` and the picker row models uncleared and every
+    // picker row's cover Arc pinned for the life of the process. A
+    // `public function` has no slot to clobber.
     //
-    // Do not try to re-register `closed` from inside the `closed` handler:
-    // `Callback::call` `take()`s the handler for the duration of the call
-    // and asserts "Callback Handler set while called". Invoking a
-    // different item (as we do) is safe.
+    // Don't re-register `closed` from inside the `closed` handler:
+    // `Callback::call` `take()`s the handler for the duration of the call and
+    // asserts "Callback Handler set while called". Invoking a *different*
+    // item, as we do, is safe.
     callback closed();
 
     public function closed-teardown() {
@@ -1517,102 +1492,58 @@ export global Dialog {
 }
 
 // PopupHighlight: lets a popup-trigger button keep its hover background
-// painted while its `PopupWindow` is open. Slint 1.16's `PopupWindow` has
-// no `closed` callback, so trigger buttons can't observe their popup's
-// open/close transitions directly — the `IconButton`'s `touch.has-hover`
-// flips false the moment the popup steals input. While a popup is open
-// Slint also stops dispatching mouse events to main-window items (see
-// `i-slint-core-1.16.0/window.rs` ~683–715), so an AppWindow-level scrim
-// TouchArea cannot catch the dismissing click either.
+// painted while its `PopupWindow` is open. Slint 1.16's `PopupWindow` has no
+// `closed` callback, so a trigger can't observe its own popup's transitions —
+// `touch.has-hover` flips false the moment the popup steals input. Slint also
+// stops dispatching mouse events to main-window items while a popup is open
+// (`i-slint-core`'s `window.rs`), so an AppWindow-level scrim `TouchArea`
+// can't catch the dismissing click either.
 //
 // Contract:
-//   - A trigger writes its own discriminator string to `id` on click
-//     (e.g. "overflow", "volume", "columns") right before `pop.show()`.
-//   - The trigger button binds `force-bg: PopupHighlight.id == "<my-id>"`
-//     so its disc keeps the surface0 fill until cleared.
+//   - A trigger writes its own discriminator to `id` right before
+//     `pop.show()`, and binds `force-bg: PopupHighlight.id == "<my-id>"`.
+//     A string rather than a bool so distinct triggers don't cross-talk.
 //   - `id` is cleared at the winit layer on every mouse Release (see
-//     `src/ui/window_chrome/winit_filter.rs`) — by then the press has
-//     already triggered Slint's `close-on-click-outside` policy, so the
-//     two events resolve in the same input round. ESC-triggered close
-//     leaves the highlight set until the next mouse click; acceptable.
-//   - Popup-internal interactive areas that DO NOT close the popup
-//     (volume slider, column-toggle rows) re-set `id` from their
-//     `pointer-event(up)` handler so the release-side clear doesn't
-//     drop the highlight while the popup stays open.
-//   - Popup-internal interactive areas that DO close the popup
-//     (OverflowMenu rows, volume-popup left-strip catcher) explicitly
-//     clear `id` alongside `pop.close()` — belt-and-braces with the
-//     winit Release path.
+//     `src/ui/window_chrome/winit_filter.rs`); by then the press has already
+//     driven Slint's `close-on-click-outside`, so both resolve in one input
+//     round. An ESC close leaves the highlight until the next click.
+//   - Popup-internal areas that DON'T close the popup (volume slider,
+//     column toggles) re-set `id` from `pointer-event(up)` so the
+//     release-side clear can't drop the highlight while it stays open.
+//   - Areas that DO close it clear `id` alongside `pop.close()` —
+//     belt-and-braces with the winit Release path.
 //
-// `id` is a string (not a bool) so multiple distinct trigger buttons can
-// coexist without their highlights cross-talking.
-//
-// `row-ctx-id` tracks the track id of the row whose right-click context
-// menu is currently shown (or `-1` for "none"). It exists for two
-// reasons:
-//   1. To gate the `FocusLossWatcher` instance inside `TrackListRowItem`
-//      via `if root.row-data.id == PopupHighlight.row-ctx-id` — only the
-//      open row gets a live watcher, so the focus-loss dispatch stays
-//      O(1) regardless of how many rows are visible.
-//   2. The winit Release path clears it alongside `id`, so click-outside
-//      dismissal doesn't leave the gate stuck on a stale row id (which
-//      would block a fresh open on the same row).
+// `row-ctx-id` is the track id of the row whose right-click menu is open
+// (`-1` for none). It gates the `FocusLossWatcher` inside `TrackListRowItem`
+// so only the open row carries a live watcher, keeping focus-loss dispatch
+// O(1) in visible rows; the winit Release path clears it alongside `id` so a
+// click-outside can't strand the gate on a stale id and block re-opening the
+// same row.
 export global PopupHighlight {
     in-out property <string> id: "";
     in-out property <int> row-ctx-id: -1;
 }
 
-// Notifications: bottom-right transient overlay stack. Used for in-app
-// messages that don't need modal confirmation — file watching disabled,
-// (future) update available / installed / failed. Owned by Rust
-// (`src/ui/notifications.rs`) which holds the backing
-// `Rc<VecModel<NotificationRow>>` and pushes via `Notifications.set_rows`.
-//
-// Strategy mirrors `Dialog`:
-//   - `rows` is the live model; the `NotificationStack` component
-//     renders one card per row, bottom-right anchored, newest on top
-//   - `dismiss(id)` is wired from the close-X TouchArea inside each
-//     card; Rust handles the actual `VecModel::remove` via the
-//     callback registration in `install`
-//   - `action(id, kind)` is fired from the optional action button. The
-//     default handler on this global routes by `kind` to the matching
-//     backend action — same one-place dispatcher idea `Dialog.accepted`
-//     uses. For now there are no kinds in flight (the file-watching
-//     notification is action-less); future update-feature branches go
-//     here (e.g. `if (kind == "install-update") { Updater.install();
-//     Notifications.dismiss(id); }`)
-//
 // MelodiaUpdater: in-app auto-update state. Owned by Rust
-// (`src/ui/updater_settings.rs` + `src/ui/callbacks/updater.rs`); the
-// `UpdaterState` enum in `src/services/updater/state.rs` is the
-// underlying source of truth, projected onto these properties via
-// `MelodiaUpdater.set_*` from the UI thread. Imported in
-// `update-section.slint` aliased back to `Updater` for ergonomics.
+// (`src/ui/updater_settings.rs` + `src/ui/callbacks/updater/`); the
+// `UpdaterState` enum in `src/services/updater/state.rs` is the source of
+// truth, projected onto these properties from the UI thread.
+// `update-section.slint` imports it aliased back to `Updater`.
 //
-// Name: `MelodiaUpdater` rather than the more natural `Updater`
-// because Slint's codegen mangles the bare `Updater` identifier
-// (a name-resolution heuristic; the bare name gets an internal
-// `_NNNN` suffix and is not re-exported, so `crate::Updater` won't
-// resolve). The prefix `Melodia` keeps the global publicly exported.
+// Named `MelodiaUpdater` and not the natural `Updater` because Slint's
+// codegen mangles that bare identifier — it gets an internal `_NNNN` suffix
+// and isn't re-exported, so `crate::Updater` won't resolve. The prefix keeps
+// the global publicly exported.
 //
-// Properties grouped by direction:
-//   - `in`     : Rust → Slint only (current-version, system-managed)
-//   - `in-out` : two-way (button states the UI reads + Rust mutates)
+// Wire flow: user click → callback → `runtime.spawn` → back through
+// `invoke_from_event_loop` to push new state → bindings re-render.
 //
-// Wire flow:
-//   user click → callback → `runtime.spawn` background task →
-//   `slint::invoke_from_event_loop` to push new state → reactive bindings
-//   in `update-section.slint` re-render.
+// `notes-short` is plain text; `scripts/build-latest-json.py` strips the
+// Markdown server-side.
 //
-// `notes-short` is plain-text (Markdown stripped server-side by
-// `scripts/build-latest-json.py`); the full release notes live on the
-// GitHub release page and are reachable from the section via the
-// "View full changelog" link (Phase D wires the `open` crate).
-//
-// Declared BEFORE `Notifications` so the `Notifications.action`
-// dispatcher's forward reference (which fires `MelodiaUpdater.install`
-// and `MelodiaUpdater.restart`) resolves at parse time without
-// triggering Slint's name-mangling on the forward target.
+// Declared BEFORE `Notifications` so that global's `action` dispatcher can
+// forward-reference `install` / `restart` without triggering the same
+// name-mangling on the forward target.
 export global MelodiaUpdater {
     in-out property <bool> is-checking;
     in-out property <bool> up-to-date;
@@ -1654,26 +1585,25 @@ export global MelodiaUpdater {
     callback auto-check-changed(bool);
 }
 
-// `kind` lives on the row itself (not on the global) because multiple
-// notifications can be visible simultaneously, each with its own kind —
-// the Dialog pattern's single-global `kind` field wouldn't survive
-// stacking.
+// Notifications: bottom-right transient overlay stack, for messages that
+// don't warrant a modal. Owned by Rust (`src/ui/notifications.rs`), which
+// holds the backing `Rc<VecModel<NotificationRow>>` and does the actual
+// `VecModel::remove` behind `dismiss`. `NotificationStack` renders one card
+// per row, newest on top.
+//
+// Unlike `Dialog`, `kind` lives on the *row* rather than the global —
+// several notifications can be visible at once, each with its own, and a
+// single-global field wouldn't survive stacking.
 export global Notifications {
     in-out property <[NotificationRow]> rows: [];
     callback dismiss(int /*id*/);
     callback action(int /*id*/, string /*kind*/);
 
-    // Default action-routing dispatcher. Mirrors `Dialog.accepted` —
-    // adding a new action flow is a single branch here plus a
-    // `Notifications.show(...)` call on the Rust side. Branches:
-    //   - "install-update": user clicked Install on the
-    //     "Update available" toast → fire the same flow as the
-    //     Download & Install button in Settings → Updates.
-    //   - "update-restart": user clicked Restart on the
-    //     "Update installed" toast → respawn into the new binary.
-    // Toast close-X dismisses without skipping (re-appears next launch);
-    // permanent "Skip this version" lives in Settings → Updates where
-    // it's discoverable + permanent semantics are obvious.
+    // Default action-routing dispatcher. Mirrors `Dialog.accepted` — a new
+    // action flow is one branch here plus a `Notifications.show(...)` on the
+    // Rust side. The close-X dismisses without skipping, so the toast
+    // re-appears next launch; permanent "Skip this version" lives in
+    // Settings → Updates, where those semantics are obvious.
     action(id, kind) => {
         if (kind == "install-update") {
             MelodiaUpdater.install();
@@ -1689,7 +1619,7 @@ export global Notifications {
 // view. Kept as its own global (rather than more fields on the already
 // large `Player` global) and mirrors the `Queue` global's ownership
 // pattern — the `up-next-rows` model is owned by Rust
-// (`Rc<VecModel<QueueRow>>` in `src/ui/now_playing.rs`) and pushed in via
+// (`Rc<VecModel<QueueRow>>` in `src/ui/now_playing/`) and pushed in via
 // `set_up_next_rows(ModelRc::from(...))`. A subscriber on `sinks.queue`
 // rebuilds it on every queue mutation.
 export global NowPlaying {
@@ -1743,7 +1673,7 @@ export global NowPlaying {
 }
 
 // Albums: drives the Album grid view. `grid-rows` is owned by Rust
-// (`Rc<VecModel<AlbumGridRow>>` in `src/ui/albums.rs`), installed once at
+// (`Rc<VecModel<AlbumGridRow>>` in `src/ui/albums/`), installed once at
 // startup and rebuilt in place on every filter / sort / column-count
 // change. The canonical unfiltered album list lives Rust-side; both
 // `apply-filter` and `request-sort` re-derive `grid-rows` *without* a DB
@@ -1788,7 +1718,7 @@ export global Albums {
 // AlbumDetail: drives the full Album Detail view. `album-id == -1` ⇒ the
 // grid is shown; `>= 0` ⇒ `AlbumDetailView` replaces it (mirrors the
 // `Nav.now-playing-open` swap in `app-window.slint`). `tracks` is owned by
-// Rust (`Rc<VecModel<TrackListRow>>` in `src/ui/albums.rs`); `album`
+// Rust (`Rc<VecModel<TrackListRow>>` in `src/ui/albums/`); `album`
 // carries the header data.
 //
 // The track table is the shared `TrackList` component, so the column-width
@@ -2283,7 +2213,7 @@ export global Genres {
 // GenreDetail: drives the full Genre Detail view. `genre-id == -1` ⇒ the
 // grid is shown; `>= 0` ⇒ `GenreDetailView` replaces it (mirrors the
 // `Nav.now-playing-open` swap in `app-window.slint`). `tracks` is owned
-// by Rust (`Rc<VecModel<TrackListRow>>` in `src/ui/genres.rs`); `genre`
+// by Rust (`Rc<VecModel<TrackListRow>>` in `src/ui/genres/`); `genre`
 // carries the header data.
 //
 // The track table is the shared `TrackList` component, so the
@@ -2460,7 +2390,7 @@ export global Search {
     // --- Cross-tab nav (Search → AlbumDetail / ArtistDetail) -------
     // Each stamps `*Detail.origin-nav-index = NAV_SEARCH (0)` *before*
     // flipping `Nav.selected-index` so the detail-view back arrow
-    // returns here. Wired in `src/ui/callbacks/search.rs`.
+    // returns here. Wired in `src/ui/callbacks/search/`.
     callback open-album(int /*album_id*/);
     callback open-artist(int /*artist_id*/);
     callback open-top-result();         // resolves top-kind/top-id

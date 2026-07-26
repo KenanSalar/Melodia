@@ -5,9 +5,9 @@
 use serde::{Deserialize, Serialize};
 
 /// One scrobble's worth of track metadata, normalized to what both Last.fm and
-/// `ListenBrainz` accept. Enriched from a DB row at track start (Phase 2) and
-/// persisted verbatim in the offline queue, so it derives `Serialize` /
-/// `Deserialize` and owns its strings.
+/// `ListenBrainz` accept. Enriched from a DB row at track start and persisted
+/// verbatim in the offline queue, so it derives `Serialize` / `Deserialize`
+/// and owns its strings.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ScrobbleTrack {
     pub artist: String,
