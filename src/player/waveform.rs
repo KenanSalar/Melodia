@@ -74,6 +74,19 @@ const TRIGGER_HYSTERESIS: f32 = 0.02;
 /// Matched to the spectrum's decay so both styles settle at the same rate.
 const DECAY: f32 = 0.8;
 
+/// Half-thickness, in viewbox units, that a drawn column never falls below.
+///
+/// It earns its place twice. A silent trace has to rest as a visible rule rather
+/// than vanish, the way a silent band rests as a dot. And — the part that is not
+/// cosmetic — a column whose two edges land on each other contributes no area,
+/// so a wholly silent trace closes a **zero-area polygon**: geometry no renderer
+/// owes anything sensible for, and in practice what turned the resting line into
+/// dashes. A floor keeps the figure a real shape at every amplitude.
+///
+/// The viewbox is two units tall across the strip's fixed 56 px, so this is
+/// almost exactly a pixel either side of the centre.
+const MIN_HALF_THICKNESS: f32 = 0.036;
+
 #[allow(
     clippy::cast_precision_loss,
     reason = "column indices are counts in the low hundreds, which convert to f32 exactly"
@@ -184,10 +197,10 @@ pub fn min_max_columns(src: &[f32], out: &mut [Column]) {
 /// rather than reallocating is what keeps that to the `SharedString` the caller
 /// hands to Slint.
 ///
-/// Silence collapses the two edges onto each other. That is deliberate: the
-/// figure then has no area to fill and only its stroke draws, so a resting trace
-/// is a hairline on the centre rather than an invisible gap — the trace's
-/// equivalent of the bars resting as dots.
+/// A silent column is drawn [`MIN_HALF_THICKNESS`] tall either side of the axis
+/// rather than flat, so a resting trace is a visible rule — the trace's
+/// equivalent of the bars resting as dots — and, more importantly, so the figure
+/// always encloses real area.
 pub fn write_path_commands(columns: &[Column], out: &mut String) {
     out.clear();
     if columns.is_empty() {
@@ -196,13 +209,14 @@ pub fn write_path_commands(columns: &[Column], out: &mut String) {
     // A lone column has no span to normalize against; it lands at x = 0.
     let span = index_to_f32(columns.len() - 1).max(1.0);
 
-    // Screen coordinates grow downward, amplitude grows upward, so both edges
-    // are flipped to put positive peaks at the top of the strip where a scope
-    // draws them. `0.0 - v` rather than `-v` because the latter turns a silent
-    // sample into `-0.000`, and a resting trace is a whole line of them.
+    // Lower edge left to right, then upper edge back. That order rather than the
+    // reverse is what gives the closed figure a *positive* signed area, which is
+    // what Slint's femtovg renderer reads to decide whether a subpath is solid
+    // or a hole — and a lone subpath handed over as a hole is not a thing to
+    // rely on the renderer being sensible about.
     for (i, column) in columns.iter().enumerate() {
         let x = index_to_f32(i) / span;
-        let y = 0.0 - column.max;
+        let y = edges(*column).1;
         // Writing into a String cannot fail. The space before each `L` is not
         // required by the SVG grammar — a command letter terminates the number
         // before it — but it costs a byte a vertex and leaves nothing to the
@@ -215,10 +229,23 @@ pub fn write_path_commands(columns: &[Column], out: &mut String) {
     }
     for (i, column) in columns.iter().enumerate().rev() {
         let x = index_to_f32(i) / span;
-        let y = 0.0 - column.min;
+        let y = edges(*column).0;
         let _ = write!(out, " L{x:.4} {y:.3}");
     }
     out.push('Z');
+}
+
+/// A column's two screen-space edges, `(upper, lower)`.
+///
+/// Screen coordinates grow downward and amplitude grows upward, so the column is
+/// flipped to put positive peaks at the top of the strip where a scope draws
+/// them. The floor is applied about the column's own midpoint, so a loud
+/// asymmetric column keeps its centre and only a near-silent one is opened up.
+fn edges(column: Column) -> (f32, f32) {
+    let mid = 0.5 * (column.min + column.max);
+    let half = (0.5 * (column.max - column.min)).max(MIN_HALF_THICKNESS);
+    let flipped = 0.0 - mid;
+    (flipped - half, flipped + half)
 }
 
 /// Holds the sample window and the drawn columns, both allocated once at their

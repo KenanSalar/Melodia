@@ -249,9 +249,9 @@ fn the_path_spans_x_from_zero_to_one_and_back() {
     let mut out = String::new();
     write_path_commands(&columns, &mut out);
 
-    assert!(out.starts_with("M0.0000 "), "upper edge does not start at x = 0: {out}");
+    assert!(out.starts_with("M0.0000 "), "lower edge does not start at x = 0: {out}");
     assert!(out.contains("L1.0000 "), "the edges never reach x = 1: {out}");
-    assert!(out.ends_with("L0.0000 0.000Z"), "lower edge does not return to x = 0: {out}");
+    assert!(out.ends_with("L0.0000 -0.036Z"), "upper edge does not return to x = 0: {out}");
 }
 
 #[test]
@@ -261,17 +261,75 @@ fn the_path_flips_both_edges_so_peaks_point_upward() {
     let mut out = String::new();
     write_path_commands(&[Column { min: -0.25, max: 0.75 }], &mut out);
 
-    assert_eq!(out, "M0.0000 -0.750 L0.0000 0.250Z");
+    assert_eq!(out, "M0.0000 0.250 L0.0000 -0.750Z");
 }
 
 #[test]
-fn a_resting_trace_has_no_negative_zeroes() {
-    // Cosmetic, but a flat line rendered as hundreds of `-0.000` vertices is the
-    // sort of thing that looks like a bug in a debugger.
+fn a_silent_column_is_drawn_a_visible_band_tall() {
+    // Not cosmetic: two edges that land on each other close a zero-area polygon,
+    // which is what left the resting line rendering as dashes.
     let mut out = String::new();
     write_path_commands(&[Column::default(); 3], &mut out);
 
-    assert!(!out.contains('-'), "silence formatted with a sign: {out}");
+    assert!(out.contains("0.036"), "silence collapsed onto the axis: {out}");
+    assert!(out.contains("-0.036"), "silence has no upper edge: {out}");
+}
+
+#[test]
+fn the_thickness_floor_opens_a_column_about_its_own_midpoint() {
+    // A loud but lopsided column keeps its centre; only a near-silent one is
+    // opened up, and always symmetrically.
+    let mut out = String::new();
+    write_path_commands(&[Column { min: 0.5, max: 0.5 }], &mut out);
+
+    // Midpoint 0.5, flipped to -0.5, then a floor either side of it.
+    assert_eq!(out, "M0.0000 -0.464 L0.0000 -0.536Z");
+}
+
+#[test]
+fn a_loud_column_is_not_widened() {
+    // The floor is a floor, not a bias — anything already thicker passes through.
+    let mut out = String::new();
+    write_path_commands(&[Column { min: -0.8, max: 0.6 }], &mut out);
+
+    assert_eq!(out, "M0.0000 0.800 L0.0000 -0.600Z");
+}
+
+#[test]
+fn the_closed_figure_winds_positively() {
+    // Slint's femtovg renderer reads a subpath's signed area to decide whether
+    // it is solid or a hole, so the edges have to be emitted lower-first.
+    let columns = [
+        Column { min: -0.5, max: 0.5 },
+        Column { min: -0.5, max: 0.5 },
+    ];
+    let mut out = String::new();
+    write_path_commands(&columns, &mut out);
+
+    // `area += (x - prev.x) * (y + prev.y)` over the emitted vertices, the
+    // calculation `i-slint-renderer-femtovg` runs verbatim.
+    let vertices: Vec<(f32, f32)> = out
+        .trim_end_matches('Z')
+        .split(' ')
+        .collect::<Vec<_>>()
+        .chunks(2)
+        .filter_map(|pair| match pair {
+            [x, y] => Some((
+                x.trim_start_matches(['M', 'L']).parse().ok()?,
+                y.parse().ok()?,
+            )),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(vertices.len(), columns.len() * 2);
+
+    let mut area = 0.0;
+    let mut prev = vertices[0];
+    for &(x, y) in &vertices[1..] {
+        area += (x - prev.0) * (y + prev.1);
+        prev = (x, y);
+    }
+    assert!(area > 0.0, "figure winds as a hole, not a solid: area {area}");
 }
 
 #[test]

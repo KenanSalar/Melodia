@@ -579,9 +579,34 @@ Goal: a live trace of the raw signal, in place of the band bars.
   bypasses banding entirely — this style runs **no FFT at all**, which is the OCP payoff §5
   predicted, arriving one sub-phase earlier than expected.
 - **`min_max_columns` reduces the span to one `Column { min, max }` per drawn column**, and
-  `write_path_commands` closes the two edges into **one filled figure** — upper edge left to
-  right, lower edge back, `Z`. Nothing is skipped, so nothing can alias. The figure cannot fold
+  `write_path_commands` closes the two edges into **one filled figure** — lower edge left to
+  right, upper edge back, `Z`. Nothing is skipped, so nothing can alias. The figure cannot fold
   over itself because `min <= max` by construction.
+- **The figure is never degenerate, and never a hole.** Two rendering traps, both found on
+  screen rather than in a test:
+  - `MIN_HALF_THICKNESS` floors each column about its own midpoint, so a silent trace draws a
+    2 px band rather than collapsing both edges onto the axis. That started as the resting look
+    — the trace's answer to the bars' resting dots — but the real reason is that coincident
+    edges close a **zero-area polygon**, which is geometry no renderer owes you anything
+    sensible for. It rendered as a dashed line.
+  - The edges are emitted **lower-first** because that is what gives the closed figure a
+    *positive* signed area. `i-slint-renderer-femtovg`'s `draw_path` runs
+    `area += (x - prev.x) * (y + prev.y)` over each subpath and hands femtovg
+    `Solidity::Hole` when it comes out negative — which upper-first does. A lone subpath
+    declared as a hole is not a thing to rely on a renderer being sensible about.
+- **Fill only, opaque, no stroke.** The figure doubles back on itself by construction, so
+  wherever the trace is thin the outbound and return strokes land on each other; asking a
+  renderer to stroke a self-overlapping path is asking for whatever it feels like giving you,
+  and what it gave was the dashes above. The floor makes the *fill* carry the resting state
+  honestly, so the stroke has no job left. Opaque `np-accent-bright`, the brush the bars already
+  paint themselves with — the tone-floored accent exists precisely because these surfaces are
+  painted opaque over the scrim.
+- **The trace is seeded at install.** The bars come up at rest for free — their `VecModel`
+  carries a level per band and each floors at a dot — but the trace's only source is the Timer,
+  and at boot the Timer isn't running (nothing is playing, `idle` is true). Without a seed a
+  Now-Playing view opened on a freshly started app shows an empty strip. `install_visualizer`
+  writes the resting figure through the real `write_path_commands`, so it is exactly what a
+  decayed trace settles to rather than a hand-written literal.
 - **Columns follow the strip width**, `columns_for_width` at one per 2 logical px, clamped to
   `64..=512`. `DeaDBeeF` uses one per pixel; one per two is indistinguishable under the
   envelope's own 1.25 px stroke and halves the string, its re-parse and the tessellation — which
@@ -620,12 +645,6 @@ Goal: a live trace of the raw signal, in place of the band bars.
   re-reading the ring, so a paused player collapses and settles instead of freezing mid-shape —
   the bars' behaviour, reusing the hoisted Timer's gate unchanged. The *whole* buffer, not the
   drawn prefix, so a strip resized while paused can't widen an undecayed column back into view.
-- **Colour:** `Player.np-accent-bright` — the same tone-floored accent as the bars — as a
-  `transparentize(0.55)` fill inside a 1.25 px stroke of the same brush. The fill alone is a
-  shapeless blob at 56 px and the stroke alone loses the body; together they read in the
-  translucency language the metadata chips already use. The stroke also **is** the resting
-  state: silence collapses the two edges onto each other, leaving a figure with no area to fill
-  and only its outline to draw, which lands as a hairline on the centre.
 - **The refresh is per style**, `33ms` for the trace against the bars' `16ms`, set on the
   hoisted Timer's `interval`. Bars want every frame — their decay is an animation and 60 Hz is
   what makes it smooth. A trace has no animation to be smooth, so a high rate only makes it look
@@ -633,13 +652,15 @@ Goal: a live trace of the raw signal, in place of the band bars.
 - **Speed:** unlike the band edges, playback speed is not a correctness bug here — folding it in
   via `analysis_rate()` just keeps the span 40 ms of wall clock. Commented so nobody "fixes" it.
 
-**Tests:** `src/player/tests/waveform_tests.rs` — 32, covering the trigger (rising crossing on a
+**Tests:** `src/player/tests/waveform_tests.rs` — 35, covering the trigger (rising crossing on a
 sine, most-recent selection, `search_len` bound, silence, both DC polarities, sub-hysteresis
 noise, empty), `min_max_columns` (the full range of each column, column independence,
 `min <= max` never inverting, no sample ever skipped, nearest-sample hold when upsampling, empty
 either side), `columns_for_width` (follows the width, bounded both ends, nonsense input),
 `write_path_commands` (one closed figure with both edges, the 0..1 x span out and back, the y
-flip, no negative zeroes, buffer reuse, empty), and the analyzer end to end (equal time span at
+flip, the thickness floor opening a silent column about its own midpoint without widening a loud
+one, the positive winding — computed with femtovg's own area formula — buffer reuse, empty), and
+the analyzer end to end (equal time span at
 44.1 / 48 / 96 kHz, the window never outrunning its buffer, the requested column count honoured,
 a full-scale sine reaching the top, two snapshots of the same tone at different phases drawing
 the same trace — the point of triggering, decay to rest without re-reading the window, and a

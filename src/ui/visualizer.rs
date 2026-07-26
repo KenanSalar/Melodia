@@ -105,6 +105,18 @@ pub fn install_visualizer(ui: &AppWindow, state: &AppState) {
     viz_global.set_bars(ModelRc::from(model.clone()));
     viz_global.set_idle(true);
 
+    // The bars come up at rest for free: their model is seeded with a level per
+    // band and each one floors at a dot. The trace has no model to fall back on,
+    // and the Timer that would write its path doesn't run until something plays
+    // — nothing is playing and `idle` is true — so a Now-Playing view opened on
+    // a freshly started app would show an empty strip. Seed the resting figure
+    // through the real writer, so it is exactly what a decayed trace settles to.
+    {
+        let mut resting = String::new();
+        waveform::write_path_commands(&[waveform::Column::default(); 2], &mut resting);
+        viz_global.set_wave_path(SharedString::from(resting.as_str()));
+    }
+
     // tick — one frame of analysis. Slint callbacks are `FnMut`, so both
     // analyzers (the FFT plan and its buffers, the Hann table, the bin→band map,
     // the smoothing state, the sample window and the trace) are simply owned by
