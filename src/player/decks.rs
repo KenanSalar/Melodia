@@ -40,11 +40,12 @@
 //! Nothing lands on a deck except through the three primitives that take a
 //! *builder* rather than a ready-made source — [`Decks::cut_to`],
 //! [`Decks::crossfade_to`] and [`Deck::stage`]. Each hands the closure the very
-//! deck it is about to append to, so a source's [`FadeShared`] cell can only
-//! have come from that deck; reading a deck earlier and appending later would
-//! let a concurrent op flip `active` in between and hand the source the *other*
-//! deck's ramp, which may be armed to fade out and end itself. The controller
-//! reaches all three only through the decks mutex.
+//! deck it is about to append to, so a source's [`FadeShared`] cell — and its
+//! visualizer ring slot — can only have come from that deck; reading a deck
+//! earlier and appending later would let a concurrent op flip `active` in
+//! between and hand the source the *other* deck's ramp, which may be armed to
+//! fade out and end itself. The controller reaches all three only through the
+//! decks mutex.
 
 use std::sync::Arc;
 use std::sync::{Mutex, MutexGuard};
@@ -54,21 +55,28 @@ use rodio::{Player, Source};
 
 use super::crossfade::FadeShared;
 
+/// How many voices the player alternates between. The visualizer keeps one
+/// sample ring per deck, so the two counts have to agree.
+pub const DECK_COUNT: usize = 2;
+
 /// One rodio voice: an independent [`Player`] on the shared device mixer, plus
 /// the crossfade ramp cell every source appended to it reads.
 pub struct Deck {
     pub player: Player,
     pub fade: Arc<FadeShared>,
+    /// Which of the visualizer's rings sources on this deck write into.
+    pub viz_slot: usize,
 }
 
 impl Deck {
     /// A fresh deck, connected to the mixer and paused.
-    fn connect(mixer: &Mixer) -> Self {
+    fn connect(mixer: &Mixer, viz_slot: usize) -> Self {
         let player = Player::connect_new(mixer);
         player.pause();
         Self {
             player,
             fade: FadeShared::idle(),
+            viz_slot,
         }
     }
 
@@ -115,7 +123,7 @@ impl Deck {
 
 /// The two decks and which of them holds the currently-playing track.
 pub struct Decks {
-    decks: [Deck; 2],
+    decks: [Deck; DECK_COUNT],
     active: usize,
 }
 
@@ -123,7 +131,7 @@ impl Decks {
     /// Both decks connected to `mixer`, deck 0 active.
     pub fn connect(mixer: &Mixer) -> Self {
         Self {
-            decks: std::array::from_fn(|_| Deck::connect(mixer)),
+            decks: std::array::from_fn(|slot| Deck::connect(mixer, slot)),
             active: 0,
         }
     }

@@ -1,42 +1,36 @@
 //! The audio visualizer's sample tap.
 //!
-//! The visualizer needs to see what you actually *hear*, and it must never be
-//! able to change it. Two pieces get that:
+//! The visualizer must see what you actually *hear* and must never be able to
+//! change it. [`VisualizerShared`] is the transport — a lock-free ring per deck,
+//! written by the audio thread and snapshotted by the UI as a mix — and
+//! [`VisualizerTap`] is a Rodio [`Source`] wrapping [`EqSource`] that copies one
+//! downmixed value out of each frame it forwards. Samples pass through
+//! untouched: the audio is bit-identical with the tap on or off.
 //!
-//! - [`VisualizerShared`]: a lock-free ring the audio thread writes mono samples
-//!   into and the UI thread snapshots. Pure transport — it knows nothing about
-//!   FFTs, frequency bands or Slint.
-//! - [`VisualizerTap`]: a Rodio [`Source`] that wraps [`EqSource`] and copies a
-//!   downmixed sample out of every frame it passes through. It returns each
-//!   sample *untouched*, so the audio is bit-identical whether the visualizer is
-//!   on or off.
+//! Tapping [`EqSource`]'s output puts it after the EQ bands, `ReplayGain`, the
+//! limiter's clamp and the crossfade ramp but before rodio's speed / pause /
+//! volume wrappers — the signal is finished, and turning the volume down
+//! shouldn't flatten the bars. Wrapping rather than living inside that module
+//! keeps its invariants (the `frame_phase == 0` poll gate, the bit-identical
+//! bypass path) clear of a change with nothing to do with them.
 //!
-//! The tap sits directly on [`EqSource`]'s output, which puts it after the EQ
-//! bands, `ReplayGain`, the limiter's clamp and the crossfade ramp, but before
-//! rodio's speed / pause / volume wrappers. That is the point in the chain where
-//! the signal is finished but not yet scaled by the volume slider — turning the
-//! volume down shouldn't flatten the bars.
-//!
-//! Wrapping [`EqSource`] rather than living inside it is deliberate: that module
-//! carries invariants (the `frame_phase == 0` generation-poll gate, the
-//! bit-identical bypass path) where a mistake is a permanent channel-parity flip
-//! on a deck, and none of them have anything to do with visualisation.
-//!
-//! # Cadence
-//!
-//! One value per interleaved *frame*, not per sample — the channels of a frame
-//! are one time step, and averaging them is the cheapest honest downmix. So the
-//! ring fills at the source's per-channel sample rate, which is what
-//! [`VisualizerShared::sample_rate`] reports. The *analyzer* wants
-//! [`VisualizerShared::analysis_rate`] instead, which folds in the playback
-//! speed the tap sits underneath.
+//! One value per interleaved *frame*, since a frame's channels are one time
+//! step, so a ring fills at its source's per-channel rate
+//! ([`VisualizerShared::sample_rate`]). The analyzer wants
+//! [`VisualizerShared::analysis_rate`], which folds in the playback speed the
+//! tap sits underneath.
 //!
 //! # Crossfade
 //!
-//! During an overlap both decks carry a tap and both push into the one shared
-//! ring, so their samples interleave for the length of the fade and the spectrum
-//! reads a little noisy. It is a second of cosmetic fuzz on a decoration; a
-//! per-deck ring summed at analysis time is the exact fix if it ever matters.
+//! [`VisualizerShared::snapshot`] sums the rings being written, which is why
+//! there is one per deck: rodio's mixer pulls a sample from *every* live voice
+//! per output sample, so two taps sharing a ring would interleave rather than
+//! sum — both tracks at half rate plus a square wave at Nyquist, for the whole
+//! overlap. Each ring holds its deck's already-ramped signal, so the sum is the
+//! mixer's own output. Decks at different *rates* fill at different rates
+//! though, and one `sample_rate` is analysed against (the incoming track's), so
+//! the outgoing one reads time-scaled by the ratio until the fade lands — under
+//! a semitone, on a decoration.
 //!
 //! [`EqSource`]: super::equalizer::EqSource
 
@@ -47,6 +41,8 @@ use std::time::Duration;
 use rodio::source::SeekError;
 use rodio::{ChannelCount, Sample, SampleRate, Source};
 
+use super::decks::DECK_COUNT;
+
 /// Ring capacity, in mono samples. A power of two so the wrap is a mask rather
 /// than a division, and comfortably wider than one analysis window so a snapshot
 /// always has a full recent one to work from.
@@ -55,12 +51,105 @@ use rodio::{ChannelCount, Sample, SampleRate, Source};
 /// file plausibly carries: the waveform's span plus its trigger slack is a fixed
 /// number of **milliseconds**, so at 192 kHz it wants ~11.5k samples where the
 /// spectrum only ever wants [`FFT_SIZE`](super::spectrum::FFT_SIZE). At 4 bytes
-/// a slot this is 64 KiB, resident for the life of the player and never
+/// a slot this is 64 KiB per deck, resident for the life of the player and never
 /// reallocated.
 pub const RING_CAP: usize = 16_384;
 
-/// The sample ring shared between the audio thread (single writer) and the UI
-/// thread (single reader).
+/// One deck's ring, plus the bookkeeping that says whether anything is currently
+/// filling it and how far back its current run reaches.
+struct DeckRing {
+    /// Sources feeding this ring right now. Bracketed by [`DeckRun`], so it is
+    /// non-zero exactly while a tapped source is alive on this deck — the signal
+    /// [`VisualizerShared::snapshot`] mixes on.
+    sources: AtomicUsize,
+    /// Cursor value the current run started at. Everything before it belongs to
+    /// whatever this deck played *last*, which is a different track from a
+    /// different time and must never be mixed in.
+    valid_from: AtomicUsize,
+    /// Total samples ever pushed. Monotonic — at 192 kHz a `usize` takes some
+    /// millions of years to wrap, so the modulo below is the only wrapping.
+    write_cursor: AtomicUsize,
+    /// `RING_CAP` `f32` bit patterns.
+    ring: Box<[AtomicU32]>,
+}
+
+impl DeckRing {
+    fn new() -> Self {
+        Self {
+            sources: AtomicUsize::new(0),
+            valid_from: AtomicUsize::new(0),
+            write_cursor: AtomicUsize::new(0),
+            // `AtomicU32` isn't `Clone`, so this can't be `vec![…; N]`; collecting
+            // also keeps the 64 KiB off the stack on its way to the heap.
+            ring: (0..RING_CAP).map(|_| AtomicU32::new(0)).collect(),
+        }
+    }
+
+    #[inline]
+    fn push(&self, sample: f32) {
+        let idx = self.write_cursor.fetch_add(1, Ordering::Relaxed);
+        self.ring[idx % RING_CAP].store(sample.to_bits(), Ordering::Relaxed);
+    }
+
+    /// Forget everything written so far, so the next window starts from silence.
+    fn drop_history(&self) {
+        self.valid_from
+            .store(self.write_cursor.load(Ordering::Relaxed), Ordering::Relaxed);
+    }
+
+    /// Open a run. The first source on an idle deck drops the previous run's
+    /// tail; a second one joining a live deck (a gapless successor staged behind
+    /// the playing track) keeps it, because gapless audio is continuous.
+    ///
+    /// The read-then-add is not atomic, and doesn't need to be: taps are only
+    /// ever built under the decks lock, so there is one opener at a time. The
+    /// `Release` publishes the stamp above to whoever loads `sources` next.
+    fn open(&self) {
+        if self.sources.load(Ordering::Relaxed) == 0 {
+            self.drop_history();
+        }
+        self.sources.fetch_add(1, Ordering::Release);
+    }
+
+    fn close(&self) {
+        self.sources.fetch_sub(1, Ordering::Release);
+    }
+
+    fn is_live(&self) -> bool {
+        self.sources.load(Ordering::Acquire) > 0
+    }
+
+    #[inline]
+    fn sample_at(&self, cursor: usize) -> f32 {
+        f32::from_bits(self.ring[cursor % RING_CAP].load(Ordering::Relaxed))
+    }
+
+    /// Write (or add) the most recent `out.len()` samples of this run into `out`,
+    /// oldest first. Short history is padded at the **front**, so the newest
+    /// sample is always the last element — a deck that started a moment ago
+    /// contributes its handful of samples over silence, which is exactly what it
+    /// contributed to the mixer.
+    fn read_into(&self, out: &mut [f32], add: bool) {
+        let end = self.write_cursor.load(Ordering::Relaxed);
+        let run = end.saturating_sub(self.valid_from.load(Ordering::Relaxed));
+        let avail = out.len().min(RING_CAP).min(run);
+        let (head, tail) = out.split_at_mut(out.len() - avail);
+        let start = end - avail;
+        if add {
+            for (i, slot) in tail.iter_mut().enumerate() {
+                *slot += self.sample_at(start + i);
+            }
+        } else {
+            head.fill(0.0);
+            for (i, slot) in tail.iter_mut().enumerate() {
+                *slot = self.sample_at(start + i);
+            }
+        }
+    }
+}
+
+/// The sample rings shared between the audio thread (one writer per deck) and
+/// the UI thread (single reader).
 ///
 /// Ownership follows [`EqShared`] / [`FadeShared`]: an `Arc`, mutated through
 /// `&self`, with `f32`s held as bit patterns in atomics. It deliberately does
@@ -69,7 +158,7 @@ pub const RING_CAP: usize = 16_384;
 /// round: the audio thread writes, continuously, and the UI reads whenever it
 /// feels like drawing.
 ///
-/// A snapshot taken while the writer laps the reader can mix samples from two
+/// A snapshot taken while a writer laps the reader can mix samples from two
 /// passes of the ring. For a spectrum display that is invisible, so nothing is
 /// spent defending against it.
 ///
@@ -78,19 +167,16 @@ pub const RING_CAP: usize = 16_384;
 /// [`Generation`]: super::dsp::Generation
 pub struct VisualizerShared {
     enabled: AtomicBool,
-    /// Per-channel rate (Hz) of the source currently feeding the ring, or `0`
-    /// before anything has played. The analyzer needs it to place band edges,
-    /// and it varies from track to track.
+    /// Per-channel rate (Hz) of the source most recently started, or `0` before
+    /// anything has played. The analyzer needs it to place band edges, and it
+    /// varies from track to track.
     sample_rate: AtomicU32,
     /// Live playback speed as `f32` bits. Written by the control side, read by
     /// the UI — see [`analysis_rate`](Self::analysis_rate) for why the analyzer
     /// can't use `sample_rate` alone.
     speed: AtomicU32,
-    /// Total samples ever pushed. Monotonic — at 192 kHz a `usize` takes some
-    /// millions of years to wrap, so the modulo below is the only wrapping.
-    write_cursor: AtomicUsize,
-    /// `RING_CAP` `f32` bit patterns.
-    ring: Box<[AtomicU32]>,
+    /// One ring per deck, indexed by [`Deck::viz_slot`](super::decks::Deck).
+    decks: [DeckRing; DECK_COUNT],
 }
 
 impl VisualizerShared {
@@ -100,59 +186,71 @@ impl VisualizerShared {
             enabled: AtomicBool::new(enabled),
             sample_rate: AtomicU32::new(0),
             speed: AtomicU32::new(1.0_f32.to_bits()),
-            write_cursor: AtomicUsize::new(0),
-            // `AtomicU32` isn't `Clone`, so this can't be `vec![…; N]`; collecting
-            // also keeps the 16 KiB off the stack on its way to the heap.
-            ring: (0..RING_CAP).map(|_| AtomicU32::new(0)).collect(),
+            decks: std::array::from_fn(|_| DeckRing::new()),
         })
     }
 
     // --- producer side (audio thread) --------------------------------------
 
-    /// Append one mono sample.
+    /// Open a run on `deck` and hand back the handle its source pushes through.
     ///
-    /// Wait-free and allocation-free: an atomic load, a `fetch_add` and a store.
-    /// When the tap is disarmed it is a single predictable branch — the ring
-    /// isn't touched at all. That matters more than it looks: the tap is armed
-    /// only while the Now-Playing view is on screen (see
-    /// `crate::ui::visualizer`), so for most of a listening session this is the
-    /// branch and nothing else.
-    pub fn push(&self, sample: f32) {
-        if !self.is_enabled() {
-            return;
+    /// An index no deck owns yields a handle that does nothing, rather than a
+    /// panic on the audio thread.
+    #[must_use]
+    pub fn begin_run(self: &Arc<Self>, deck: usize) -> DeckRun {
+        if let Some(ring) = self.decks.get(deck) {
+            ring.open();
         }
-        let idx = self.write_cursor.fetch_add(1, Ordering::Relaxed);
-        self.ring[idx % RING_CAP].store(sample.to_bits(), Ordering::Relaxed);
+        DeckRun {
+            viz: self.clone(),
+            deck,
+        }
     }
 
-    /// Publish the rate of the source now feeding the ring.
+    /// Publish the rate of the source now feeding a ring.
     pub fn set_sample_rate(&self, hz: u32) {
         self.sample_rate.store(hz, Ordering::Relaxed);
     }
 
     // --- consumer side (UI thread) -----------------------------------------
 
-    /// Copy the most recent `out.len()` samples into `out`, oldest first.
+    /// Copy the most recent `out.len()` samples into `out`, oldest first,
+    /// summing every deck currently being written.
     ///
-    /// Short history is padded at the **front**, so the newest sample is always
-    /// the last element and a window that spans the start of playback ramps in
-    /// out of silence. A request wider than [`RING_CAP`] is answered for the last
-    /// `RING_CAP` samples only; the rest stays silent rather than repeating
-    /// wrapped data.
+    /// Outside a crossfade exactly one deck is live and this is a plain copy of
+    /// its window. During one it is the mixer's own sum — see the module docs.
+    /// A request wider than [`RING_CAP`] is answered for the last `RING_CAP`
+    /// samples only; the rest stays silent rather than repeating wrapped data.
     pub fn snapshot(&self, out: &mut [f32]) {
-        let end = self.write_cursor.load(Ordering::Relaxed);
-        let avail = out.len().min(RING_CAP).min(end);
-        let (head, tail) = out.split_at_mut(out.len() - avail);
-        head.fill(0.0);
-        let start = end - avail;
-        for (i, slot) in tail.iter_mut().enumerate() {
-            *slot = f32::from_bits(self.ring[(start + i) % RING_CAP].load(Ordering::Relaxed));
+        let mut written = false;
+        for deck in &self.decks {
+            if !deck.is_live() {
+                continue;
+            }
+            deck.read_into(out, written);
+            written = true;
+        }
+        if !written {
+            out.fill(0.0);
         }
     }
 
     // --- both sides ---------------------------------------------------------
 
+    /// Arm or disarm the tap.
+    ///
+    /// Arming drops whatever history the rings still hold: it is called when the
+    /// Now-Playing view comes back on screen, and the newest samples down there
+    /// may be from before it was closed. The read-then-store is single-writer —
+    /// `crate::ui::visualizer` drives this from the UI thread and nothing else
+    /// writes it — and the stamp lands *before* the flag so no armed sample is
+    /// thrown away.
     pub fn set_enabled(&self, on: bool) {
+        if on && !self.is_enabled() {
+            for deck in &self.decks {
+                deck.drop_history();
+            }
+        }
         self.enabled.store(on, Ordering::Relaxed);
     }
 
@@ -175,8 +273,8 @@ impl VisualizerShared {
         self.speed.store((speed as f32).to_bits(), Ordering::Relaxed);
     }
 
-    /// Per-channel rate (Hz) of the source currently feeding the ring, or `0`
-    /// if nothing has played yet. The rate the samples were *decoded* at — see
+    /// Per-channel rate (Hz) of the source most recently started, or `0` if
+    /// nothing has played yet. The rate the samples were *decoded* at — see
     /// [`analysis_rate`](Self::analysis_rate) for the one the analyzer wants.
     #[must_use]
     pub fn sample_rate(&self) -> u32 {
@@ -221,17 +319,63 @@ const _: fn() = || {
     check::<VisualizerShared>();
 };
 
+/// One source's claim on a deck's ring, held for exactly as long as that source
+/// is alive.
+///
+/// The claim is what tells the reader which rings to mix: a deck whose last
+/// source has been dropped still holds a full window of audio, and mixing that
+/// frozen tail into every later frame would leave a ghost of the track that
+/// ended. rodio drops a source as soon as it is exhausted or cleared — and
+/// `Player::clear()` blocks until the audio thread has serviced it — so the
+/// claim is released promptly enough to key the mix on.
+pub struct DeckRun {
+    viz: Arc<VisualizerShared>,
+    deck: usize,
+}
+
+impl DeckRun {
+    /// Append one mono sample.
+    ///
+    /// Wait-free and allocation-free: an atomic load, a `fetch_add` and a store.
+    /// When the tap is disarmed it is a single predictable branch — no ring is
+    /// touched at all. That matters more than it looks: the tap is armed only
+    /// while the Now-Playing view is on screen (see `crate::ui::visualizer`), so
+    /// for most of a listening session this is the branch and nothing else.
+    #[inline]
+    pub fn push(&self, sample: f32) {
+        if !self.viz.is_enabled() {
+            return;
+        }
+        if let Some(ring) = self.viz.decks.get(self.deck) {
+            ring.push(sample);
+        }
+    }
+
+    /// Publish the rate of the source holding this run.
+    pub fn set_sample_rate(&self, hz: u32) {
+        self.viz.set_sample_rate(hz);
+    }
+}
+
+impl Drop for DeckRun {
+    fn drop(&mut self) {
+        if let Some(ring) = self.viz.decks.get(self.deck) {
+            ring.close();
+        }
+    }
+}
+
 /// A transparent [`Source`] that copies a downmixed sample out of every frame it
 /// forwards.
 ///
 /// Every source the decks play is built through
 /// [`RodioPlayer::build_source`](super::rodio_backend::RodioPlayer), which wraps
 /// the track's [`EqSource`](super::equalizer::EqSource) in one of these — so the
-/// playing track, a gapless successor and both sides of a crossfade all feed the
-/// same ring.
+/// playing track, a gapless successor and both sides of a crossfade all feed a
+/// ring, each the one belonging to the deck it was built for.
 pub struct VisualizerTap<S> {
     input: S,
-    viz: Arc<VisualizerShared>,
+    run: DeckRun,
     /// Channel count and its reciprocal, read once — both are constant for a
     /// decoded source's life, and the reciprocal turns the downmix into a
     /// multiply.
@@ -246,7 +390,7 @@ pub struct VisualizerTap<S> {
 }
 
 impl<S: Source> VisualizerTap<S> {
-    pub fn new(input: S, viz: Arc<VisualizerShared>) -> Self {
+    pub fn new(input: S, viz: &Arc<VisualizerShared>, deck: usize) -> Self {
         let channels = input.channels().get();
         Self {
             channels: usize::from(channels),
@@ -254,8 +398,8 @@ impl<S: Source> VisualizerTap<S> {
             // is lossless.
             inv_channels: 1.0 / f32::from(channels),
             rate_hz: input.sample_rate().get(),
+            run: viz.begin_run(deck),
             input,
-            viz,
             accum: 0.0,
             phase: 0,
             rate_published: false,
@@ -277,10 +421,10 @@ impl<S: Source> Iterator for VisualizerTap<S> {
             // rate then would leave the tail of a differently-rated current track
             // being analysed against the wrong one.
             if !self.rate_published {
-                self.viz.set_sample_rate(self.rate_hz);
+                self.run.set_sample_rate(self.rate_hz);
                 self.rate_published = true;
             }
-            self.viz.push(self.accum * self.inv_channels);
+            self.run.push(self.accum * self.inv_channels);
             self.accum = 0.0;
             self.phase = 0;
         }

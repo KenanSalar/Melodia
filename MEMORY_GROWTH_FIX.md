@@ -60,9 +60,6 @@ branch off `dev` instead and accept the merge later.
 git switch -c fix/general-improvements
 ```
 
-Note `AUDIO_VISUALIZER.md` is currently modified and uncommitted — it will follow onto the
-new branch. Commit or stash it on `feat/visualization` first if it belongs there.
-
 ## Phase 1 — Prove the diagnosis before changing anything
 
 No rebuild, no code change. Uses the existing sampler (`tasks/rss_sampler.rs`, gated on

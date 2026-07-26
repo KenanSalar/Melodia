@@ -190,11 +190,14 @@ pub struct RodioPlayer {
     // Lock-free crossfade settings, read by the control layer (this backend and
     // the playback monitor) — never by the audio thread, so no generation counter.
     xf: Arc<CrossfadeShared>,
-    // Lock-free sample ring for the audio visualizer. Written by every source we
-    // append (see `build_source`) and read by the UI. Unlike the cells above it
-    // is *not* seeded from `settings.json` at boot: it stays disarmed until the
-    // Now-Playing view is actually on screen (see `crate::ui::visualizer`), so
-    // the audio thread never fills a ring nobody reads. Disarmed it is a no-op.
+    // Lock-free sample rings for the audio visualizer, one per deck. Written by
+    // every source we append (see `build_source`) into the ring of the deck it
+    // lands on, and read by the UI as their sum — which is what makes a
+    // crossfade read as the mix rather than as two interleaved tracks. Unlike
+    // the cells above it is *not* seeded from `settings.json` at boot: it stays
+    // disarmed until the Now-Playing view is actually on screen (see
+    // `crate::ui::visualizer`), so the audio thread never fills a ring nobody
+    // reads. Disarmed it is a no-op.
     viz: Arc<VisualizerShared>,
     // Used only to schedule the deferred half of a faded pause / stop.
     runtime: tokio::runtime::Handle,
@@ -393,7 +396,8 @@ impl RodioPlayer {
 
     /// Wrap a decoded track in the audio source the decks play: the graphic EQ,
     /// this track's baked `ReplayGain`, and `deck`'s crossfade ramp cell — then
-    /// the visualizer tap, which reads the finished signal without altering it.
+    /// the visualizer tap, which reads the finished signal without altering it
+    /// and writes it into `deck`'s own ring.
     ///
     /// Always called with the deck the source is about to be appended to — see
     /// the module doc of [`super::decks`] for why the two can't be split.
@@ -411,7 +415,8 @@ impl RodioPlayer {
                 baked_rg,
                 deck.fade.clone(),
             ),
-            self.viz.clone(),
+            &self.viz,
+            deck.viz_slot,
         )
     }
 
