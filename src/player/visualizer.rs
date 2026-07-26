@@ -268,7 +268,7 @@ impl VisualizerShared {
     /// `RodioPlayer::set_speed` is the single writer: boot hydration goes
     /// through it, and `play_media` / `begin_crossfade` only ever re-apply the
     /// value it already published. Don't add redundant calls there.
-    #[allow(
+    #[expect(
         clippy::cast_possible_truncation,
         reason = "speed is bounded to 0.25..=2.0, where f32 has far more precision than the UI's 8 presets can express"
     )]
@@ -294,7 +294,7 @@ impl VisualizerShared {
     /// would plot the *file's* pitch: at 2× a 1 kHz tone is heard an octave up
     /// while the 1 kHz bar lights. Scaling here puts the bars back on what you
     /// actually hear.
-    #[allow(
+    #[expect(
         clippy::cast_possible_truncation,
         clippy::cast_sign_loss,
         clippy::cast_precision_loss,
@@ -349,6 +349,15 @@ pub struct DeckRun {
 }
 
 impl DeckRun {
+    /// The ring this run claimed, or `None` for a deck index that doesn't
+    /// exist. `begin_run` already validated it, so the miss is unreachable —
+    /// but keeping the lookup total costs one branch and no panic path on the
+    /// audio thread.
+    #[inline]
+    fn ring(&self) -> Option<&DeckRing> {
+        self.viz.decks.get(self.deck)
+    }
+
     /// Append one mono sample.
     ///
     /// Wait-free and allocation-free: an atomic load, a `fetch_add` and a store.
@@ -361,7 +370,7 @@ impl DeckRun {
         if !self.viz.is_enabled() {
             return;
         }
-        if let Some(ring) = self.viz.decks.get(self.deck) {
+        if let Some(ring) = self.ring() {
             ring.push(sample);
         }
     }
@@ -374,7 +383,7 @@ impl DeckRun {
 
 impl Drop for DeckRun {
     fn drop(&mut self) {
-        if let Some(ring) = self.viz.decks.get(self.deck) {
+        if let Some(ring) = self.ring() {
             ring.close();
         }
     }

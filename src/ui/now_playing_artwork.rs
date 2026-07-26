@@ -24,28 +24,8 @@ use lru::LruCache;
 use parking_lot::Mutex;
 use slint::{Rgb8Pixel, SharedPixelBuffer};
 
-use crate::ui::util::buffer_from_rgb;
-
-/// Side length (px) the sharp cover tile is downscaled to. Roughly matches
-/// the 380 px maximum on-screen tile, so it neither upscales nor pays for a
-/// 2× `HiDPI` buffer. Matches the Album Detail header tier so every
-/// large-tile surface decodes at one size.
-const COVER_SIZE: u32 = 384;
-
-/// Side length the cover is downscaled to before blurring. The backdrop
-/// carries no fine detail and is stretched to full-window `ImageFit.cover`,
-/// and downscaling first makes the blur cheap — box-pass cost scales with
-/// pixel count.
-const BLUR_DOWNSCALE: u32 = 192;
-
-/// `fast_blur` sigma. At [`BLUR_DOWNSCALE`] this reads as a soft wash of
-/// colour with no recognisable shapes.
-const BLUR_SIGMA: f32 = 24.0;
-
-/// Hard cap on accepted source resolution — mirrors `CoverThumbs`'s guard
-/// so a forged dimension header in a tag can't trigger an absurd
-/// allocation before we get a chance to downscale.
-const MAX_SOURCE_DIM: u32 = 8192;
+use crate::media::image_decode::{MAX_SOURCE_DIM, decode_capped};
+use crate::ui::util::{BLUR_SIGMA, BLUR_TARGET, COVER_SIZE, buffer_from_rgb};
 
 /// LRU capacity. "Up Next" surfaces ~20 tracks and the user skips through
 /// neighbours, so too small a cap thrashes on exactly the interaction the
@@ -62,7 +42,7 @@ const ARTWORK_CACHE_CAP: NonZeroUsize = match NonZeroUsize::new(8) {
 pub struct ArtworkPair {
     /// Sharp, aspect-preserved cover tile (≤ `COVER_SIZE` on its long edge).
     pub cover: SharedPixelBuffer<Rgb8Pixel>,
-    /// Heavily-blurred `BLUR_DOWNSCALE`-square backdrop.
+    /// Heavily-blurred `BLUR_TARGET`-square backdrop.
     pub blur: SharedPixelBuffer<Rgb8Pixel>,
     /// Dominant accent extracted via `material_you::extract_source_argb_from_rgb8`
     /// from the blur buffer (192² is plenty of pixels for `QuantizerCelebi`
@@ -133,16 +113,7 @@ impl NowPlayingArtwork {
 /// Decode `path` **once**, then derive both the sharp cover tile and the
 /// blurred backdrop from that single `DynamicImage`.
 fn decode_artwork(path: &Path) -> CachedArtwork {
-    let mut reader = image::ImageReader::open(path)
-        .ok()?
-        .with_guessed_format()
-        .ok()?;
-    let mut limits = image::Limits::default();
-    limits.max_image_width = Some(MAX_SOURCE_DIM);
-    limits.max_image_height = Some(MAX_SOURCE_DIM);
-    reader.limits(limits);
-
-    let decoded = reader.decode().ok()?;
+    let decoded = decode_capped(path, MAX_SOURCE_DIM).ok()?;
 
     // Sharp cover tile: `thumbnail` (not `thumbnail_exact`) preserves aspect
     // ratio and fits the image inside `COVER_SIZE × COVER_SIZE`. A non-square
@@ -157,9 +128,7 @@ fn decode_artwork(path: &Path) -> CachedArtwork {
     // cover`. `fast_blur` is a 3-pass box blur — much cheaper than
     // `imageops::blur`'s true Gaussian and indistinguishable at this scale
     // for a backdrop.
-    let small = decoded
-        .thumbnail_exact(BLUR_DOWNSCALE, BLUR_DOWNSCALE)
-        .to_rgb8();
+    let small = decoded.thumbnail_exact(BLUR_TARGET, BLUR_TARGET).to_rgb8();
     let blur = buffer_from_rgb(&fast_blur(&small, BLUR_SIGMA));
 
     // Both statistics come off the same buffer in one place: the quantize the

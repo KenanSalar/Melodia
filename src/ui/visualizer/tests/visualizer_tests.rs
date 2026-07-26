@@ -7,11 +7,13 @@
 //! here against the `.slint` sources.
 
 use super::*;
+use crate::services::settings::{DEFAULT_VIZ_STYLE, VisualizerFlags};
 
-const PLAYBACK_SECTION: &str = include_str!("../../../ui/views/settings/playback-section.slint");
-const FLYOUT_PRESETS: &str = include_str!("../../../ui/components/now-playing/flyout-presets.slint");
-const STRIP: &str = include_str!("../../../ui/components/now-playing/visualizer-strip.slint");
-const SPECTRUM_BARS: &str = include_str!("../../../ui/components/now-playing/spectrum-bars.slint");
+const PLAYBACK_SECTION: &str = include_str!("../../../../ui/views/settings/playback-section.slint");
+const FLYOUT_PRESETS: &str =
+    include_str!("../../../../ui/components/now-playing/flyout-presets.slint");
+const STRIP: &str = include_str!("../../../../ui/components/now-playing/visualizer-strip.slint");
+const SPECTRUM_BARS: &str = include_str!("../../../../ui/components/now-playing/spectrum-bars.slint");
 
 #[test]
 fn the_picker_names_one_style_per_key() {
@@ -89,10 +91,28 @@ fn only_the_waveform_index_selects_the_waveform() {
 }
 
 #[test]
-fn the_default_settings_style_is_a_known_key() {
-    let default = crate::services::settings::VisualizerFlags::default().viz_style;
-    assert!(
-        STYLES.contains(&default.as_str()),
-        "VisualizerFlags defaults to {default:?}, which is not in STYLES"
+fn a_picker_index_outside_the_table_falls_back_the_same_way() {
+    // Both fallbacks have to agree, or a drifted picker and a hand-edited file
+    // would land on different styles.
+    for (i, _) in STYLES.iter().enumerate() {
+        assert_eq!(style_index_from_i32(i32::try_from(i).unwrap_or(0)), i);
+    }
+    assert_eq!(style_index_from_i32(-1), 0);
+    assert_eq!(style_index_from_i32(i32::MIN), 0);
+    assert_eq!(style_index_from_i32(i32::MAX), 0);
+    assert_eq!(
+        style_index_from_i32(i32::try_from(STYLES.len()).unwrap_or(0)),
+        0
     );
+}
+
+#[test]
+fn the_persisted_default_is_the_tables_first_entry() {
+    // `style_index`'s miss and `style_index_from_i32`'s both answer 0, so the
+    // key `VisualizerFlags` ships with has to be the key at that index — else a
+    // fresh install and a corrupt one would disagree about the default style.
+    // The two are spelled out independently, in `data.rs` and in the table, so
+    // this compares literals rather than restating one of them.
+    assert_eq!(STYLES.first().copied(), Some(DEFAULT_VIZ_STYLE));
+    assert_eq!(VisualizerFlags::default().viz_style, DEFAULT_VIZ_STYLE);
 }

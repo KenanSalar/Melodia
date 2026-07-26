@@ -11,7 +11,7 @@ import { VizStylePresets } from "flyout-presets.slint";
 // component just renders the rows and emits `pick(index)`.
 //
 // The style rows use their loop index directly, so the leading "Off" row can't
-// shift them out of step with `STYLES` in `src/ui/visualizer.rs`.
+// shift them out of step with `STYLES` in `src/ui/visualizer/mod.rs`.
 export component VisualizerFlyout inherits PopupSurface {
     // Whether the visualizer is on at all. It wins over the style: while it is
     // off the picked style is still persisted, but nothing is drawn — so "Off"

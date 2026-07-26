@@ -38,7 +38,7 @@ component UpNextRow inherits Rectangle {
 
     Rectangle {
         background: touch.has-hover
-            ? (compact ? Theme.surface0 : Player.np-accent-bright.with-alpha(0.16))
+            ? (compact ? Theme.surface0 : Player.np-accent-pill)
             : transparent;
         border-radius: Theme.radius-md;
 
@@ -230,7 +230,7 @@ export component UpNextList inherits Rectangle {
         track-color: root.compact ? Theme.surface0 : Player.np-accent-bright;
         track-opacity: root.compact ? 0.5 : 0.25;
         track-opacity-active: root.compact ? 0.85 : 0.4;
-        thumb-color: root.compact ? Theme.surface2 : Player.np-accent-bright.with-alpha(0.6);
+        thumb-color: root.compact ? Theme.surface2 : Player.np-accent-dim;
         thumb-active-color: root.compact ? Theme.accent : Player.np-accent-bright.with-alpha(0.8);
         scroll-to(o) => { up-next-list.viewport-y = -o; }
     }

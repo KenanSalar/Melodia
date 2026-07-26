@@ -13,3 +13,8 @@ pub mod state;
 pub mod types;
 pub mod visualizer;
 pub mod waveform;
+
+#[cfg(test)]
+pub(crate) mod tests {
+    pub(crate) mod helpers;
+}

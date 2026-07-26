@@ -31,7 +31,7 @@ use std::sync::Arc;
 use realfft::num_complex::Complex;
 use realfft::{RealFftPlanner, RealToComplex};
 
-use super::dsp::{db_to_linear, linear_to_db};
+use super::dsp::{VISUALIZER_DECAY, db_to_linear, index_to_f32, linear_to_db};
 
 /// Samples per analysis window. At 44.1 kHz this is ~46 ms — long enough to
 /// resolve bass, short enough to keep the bars in step with what you hear. A
@@ -89,21 +89,9 @@ const TILT_PIVOT_HZ: f32 = 1000.0;
 /// straight to a new peak, which is what makes a transient read as a hit.
 const ATTACK: f32 = 0.0;
 
-/// Fraction of its height a bar keeps per frame while falling — a bar never
-/// drops below the band's current level, it just takes its time getting there.
-const DECAY: f32 = 0.8;
-
 // --- casts -------------------------------------------------------------------
 
-#[allow(
-    clippy::cast_precision_loss,
-    reason = "window and bin indices are counts in the low thousands, which convert to f32 exactly"
-)]
-fn index_to_f32(i: usize) -> f32 {
-    i as f32
-}
-
-#[allow(
+#[expect(
     clippy::cast_precision_loss,
     reason = "audio sample rates are well below 2^24 Hz and convert to f32 exactly"
 )]
@@ -126,7 +114,7 @@ fn bin_to_hz(bin: f32, fft_size: usize, sample_rate: f32) -> f32 {
 /// A bin position as an index. Callers pass values already clamped into
 /// `1.0..=max_bin`, and every read then goes through `get`, so a bad cast cannot
 /// reach past the spectrum.
-#[allow(
+#[expect(
     clippy::cast_possible_truncation,
     clippy::cast_sign_loss,
     reason = "bin positions are clamped into 1.0..=max_bin before the cast, so they are small and non-negative"
@@ -381,10 +369,11 @@ impl Transform {
 /// their buffers, the Hann tables and scales, the bin→band maps with their tilt
 /// gains, and the smoothed levels carried between frames.
 ///
-/// Usage is two calls per frame — fill both windows from
-/// [`windows_mut`](Self::windows_mut), then [`analyze`](Self::analyze). Handing
-/// out the transforms' own input buffers keeps the sample copy zero-cost: the
-/// ring snapshots straight into what they read.
+/// Usage is two calls per frame — [`fill_windows`](Self::fill_windows), then
+/// [`analyze`](Self::analyze). Handing the sample source the transforms' own
+/// input buffers keeps the copy zero-cost: the ring snapshots straight into what
+/// they read. ([`windows_mut`](Self::windows_mut) is the primitive underneath,
+/// and the way a test drives the two transforms independently.)
 ///
 /// **Two transforms, because one can't serve both ends.** A window short enough
 /// to keep treble responsive can't resolve bass: at [`FFT_SIZE`] and 44.1 kHz a
@@ -434,10 +423,32 @@ impl SpectrumAnalyzer {
     }
 
     /// The two windows the next [`analyze`](Self::analyze) call will transform,
-    /// bass first. Fill both with the most recent samples, oldest last — their
+    /// bass first. Fill both with the most recent samples, newest last — their
     /// previous contents are spent scratch, not history.
+    ///
+    /// Production fills them through [`fill_windows`](Self::fill_windows); this
+    /// is the primitive underneath, and the way a test drives the two
+    /// transforms independently.
     pub fn windows_mut(&mut self) -> (&mut [f32], &mut [f32]) {
         (&mut self.bass.input, &mut self.main.input)
+    }
+
+    /// Fill both windows from a single read of the sample source.
+    ///
+    /// `read` is handed a buffer to fill with the most recent samples, oldest
+    /// first. It runs **once**: the short window is the newest tail of the long
+    /// one, so copying it across is both cheaper than a second read and more
+    /// correct — two reads land a few samples apart, leaving the transforms
+    /// analysing slightly different instants. The fallback only exists for a
+    /// main window longer than the bass one, which production never builds.
+    pub fn fill_windows(&mut self, read: impl Fn(&mut [f32])) {
+        let (bass, main) = self.windows_mut();
+        // Reborrowed, not handed over — `bass` is read again below.
+        read(&mut *bass);
+        match bass.len().checked_sub(main.len()) {
+            Some(tail) => main.copy_from_slice(&bass[tail..]),
+            None => read(main),
+        }
     }
 
     /// Analyse the filled windows and return the smoothed 0..1 band levels.
@@ -449,15 +460,7 @@ impl SpectrumAnalyzer {
         if sample_rate == 0 {
             self.raw.fill(0.0);
         } else {
-            let bands = self.raw.len();
-            if sample_rate != self.mapped_rate {
-                let rate = rate_to_f32(sample_rate);
-                self.bass.remap(bands, rate);
-                self.main.remap(bands, rate);
-                self.crossover = crossover_band(&self.main.edges);
-                self.gains = band_tilt_gains(&self.main.edges, self.main.input.len(), rate);
-                self.mapped_rate = sample_rate;
-            }
+            self.remap_for_rate(sample_rate);
             // Unreachable otherwise: every buffer came from its own plan, so
             // their sizes agree. Decaying beats panicking on the UI thread.
             if self.bass.run() && self.main.run() {
@@ -466,8 +469,25 @@ impl SpectrumAnalyzer {
                 self.raw.fill(0.0);
             }
         }
-        smooth(&mut self.levels, &self.raw, ATTACK, DECAY);
+        smooth(&mut self.levels, &self.raw, ATTACK, VISUALIZER_DECAY);
         &self.levels
+    }
+
+    /// Rebuild the band edges, crossover and tilt gains for `sample_rate`.
+    ///
+    /// A no-op unless the rate actually changed — which is once per track at
+    /// most, against sixty frames a second.
+    fn remap_for_rate(&mut self, sample_rate: u32) {
+        if sample_rate == self.mapped_rate {
+            return;
+        }
+        let rate = rate_to_f32(sample_rate);
+        let bands = self.raw.len();
+        self.bass.remap(bands, rate);
+        self.main.remap(bands, rate);
+        self.crossover = crossover_band(&self.main.edges);
+        self.gains = band_tilt_gains(&self.main.edges, self.main.input.len(), rate);
+        self.mapped_rate = sample_rate;
     }
 
     /// Read each half of the display off the transform that resolves it.

@@ -1,20 +1,14 @@
 //! Wire the Now-Playing audio visualizer to Rust.
 //!
 //! Seeds the `Visualizer` global from `settings.json` at startup and owns the
-//! four callbacks.
+//! four callbacks. The per-frame analysis lives in [`frame`]; this module is
+//! wiring, and the tick handler here is the dispatcher between the two styles.
 //!
-//! `tick` is the render loop. It runs on the UI thread, driven by the strip's
-//! own 16 ms `Timer` in `ui/components/now-playing/visualizer-strip.slint`, and
-//! is the only consumer of the sample ring. What it does with a snapshot depends
-//! on the active style: the bars run snapshot → FFT → bands → model, the
-//! waveform runs snapshot → trigger → min/max columns → path string and **no
-//! FFT at all**. Either way a 2048-point real FFT is sub-millisecond, so this
-//! stays on the UI thread rather than paying for a third thread and a second
-//! shared cell.
-//!
-//! Most of what keeps that cheap composes for free from the mount tree: the
-//! strip only mounts while the visualizer is enabled, and the Now-Playing view
-//! only mounts while it's open, so a closed view costs nothing at all.
+//! A 2048-point real FFT is sub-millisecond, so the render loop stays on the UI
+//! thread rather than paying for a third thread and a second shared cell. Most
+//! of what keeps that cheap composes for free from the mount tree: the strip
+//! only mounts while the visualizer is enabled, and the Now-Playing view only
+//! mounts while it's open, so a closed view costs nothing at all.
 //!
 //! # Arming the tap
 //!
@@ -31,23 +25,21 @@
 //! Between them the tap is armed exactly while something is drawing it. The
 //! style has no say in it: every style reads the same ring.
 
+mod frame;
+
 use std::cell::Cell;
 use std::rc::Rc;
 
-use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel};
+use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 
 use crate::library;
 use crate::player::spectrum::{FFT_SIZE, NUM_BANDS, SpectrumAnalyzer};
 use crate::player::visualizer::RING_CAP;
 use crate::player::waveform::{self, MAX_COLUMNS, WaveformAnalyzer};
-use crate::services::settings;
 use crate::state::AppState;
+use crate::ui::settings_bind::read_or_default;
 use crate::ui::tray_bridge;
 use crate::{AppWindow, Visualizer};
-
-/// Below this level a drawing is visually at rest. Once everything is under it
-/// the strip has finished decaying and its driving Timer can stop.
-const IDLE_LEVEL: f32 = 0.001;
 
 const STYLE_BARS: &str = "bars";
 const STYLE_WAVEFORM: &str = "waveform";
@@ -61,6 +53,11 @@ const STYLE_MIRRORED: &str = "mirrored";
 /// Settings chips and the Now-Playing view's flyout — and the branch in
 /// `visualizer-strip.slint` that mounts on the key. `tests/visualizer_tests.rs`
 /// pins both against this array.
+///
+/// A third mirror is [`DEFAULT_VIZ_STYLE`], which has to be the key at index 0 —
+/// where both of the fallbacks below land. It is spelled out separately rather
+/// than substituted in here on purpose: the test that pins the two together can
+/// only fail if they are two literals.
 const STYLES: [&str; 3] = [STYLE_BARS, STYLE_MIRRORED, STYLE_WAVEFORM];
 
 /// Picker index for a persisted key. An unrecognized key — a hand-edited file,
@@ -70,24 +67,34 @@ fn style_index(key: &str) -> usize {
     STYLES.iter().position(|&style| style == key).unwrap_or(0)
 }
 
-/// Whether an index selects the waveform. Out-of-range indices can only come
-/// from a picker that has drifted out of step with [`STYLES`], and they answer
-/// the same way an unknown key does.
+/// Picker index for the index a picker sent. Out of range can only come from a
+/// picker that has drifted out of step with [`STYLES`], and it answers the same
+/// way an unknown key does.
+fn style_index_from_i32(index: i32) -> usize {
+    usize::try_from(index)
+        .ok()
+        .filter(|&i| i < STYLES.len())
+        .unwrap_or(0)
+}
+
+/// Whether an index selects the waveform. The remaining two styles are the same
+/// bars under a different anchor, and Slint resolves that from the key.
 fn is_waveform(index: usize) -> bool {
     STYLES.get(index).copied() == Some(STYLE_WAVEFORM)
 }
 
+/// Publish both halves of the style: the key the strip mounts on and the index
+/// the pickers bind to.
+fn publish_style(global: &Visualizer, index: usize) {
+    global.set_style(SharedString::from(STYLES[index]));
+    global.set_style_idx(i32::try_from(index).unwrap_or_default());
+}
+
 pub fn install_visualizer(ui: &AppWindow, state: &AppState) {
-    // Read the persisted settings. `enabled` only decides whether the strip
-    // mounts — the backend tap stays disarmed until `set-active` says a mounted
-    // strip is on screen, so an unreadable file can't leave the two out of step.
-    let flags = match settings::read_settings(&state.paths) {
-        Ok(s) => s.visualizer,
-        Err(e) => {
-            log::warn!("read settings for visualizer: {e}");
-            settings::VisualizerFlags::default()
-        }
-    };
+    // `enabled` only decides whether the strip mounts — the backend tap stays
+    // disarmed until `set-active` says a mounted strip is on screen, so an
+    // unreadable file can't leave the two out of step.
+    let flags = read_or_default(state, "visualizer").visualizer;
     let selected = style_index(&flags.viz_style);
 
     // Backing model for the `bars` `[float]` global property. Kept here (cloned
@@ -102,8 +109,7 @@ pub fn install_visualizer(ui: &AppWindow, state: &AppState) {
 
     let viz_global = ui.global::<Visualizer>();
     viz_global.set_enabled(flags.viz_enabled);
-    viz_global.set_style(SharedString::from(STYLES[selected]));
-    viz_global.set_style_idx(i32::try_from(selected).unwrap_or_default());
+    publish_style(&viz_global, selected);
     viz_global.set_bars(ModelRc::from(model.clone()));
     viz_global.set_idle(true);
 
@@ -119,10 +125,10 @@ pub fn install_visualizer(ui: &AppWindow, state: &AppState) {
         viz_global.set_wave_path(SharedString::from(resting.as_str()));
     }
 
-    // tick — one frame of analysis. Slint callbacks are `FnMut`, so both
-    // analyzers (the FFT plan and its buffers, the Hann table, the bin→band map,
-    // the smoothing state, the sample window and the trace) are simply owned by
-    // the closure and reused across ticks; nothing here allocates except the one
+    // tick — dispatch one frame. Slint callbacks are `FnMut`, so both analyzers
+    // (the FFT plans and their buffers, the Hann tables, the bin→band map, the
+    // smoothing state, the sample window and the trace) are simply owned by the
+    // closure and reused across ticks; nothing here allocates except the one
     // `SharedString` the waveform path has to be handed to Slint as.
     {
         let viz = state.rodio.visualizer();
@@ -137,6 +143,10 @@ pub fn install_visualizer(ui: &AppWindow, state: &AppState) {
         // vertex — so the per-frame rebuild only ever writes into capacity it
         // already has.
         let mut path = String::with_capacity(MAX_COLUMNS * 2 * 20);
+        // Shadows `Visualizer.idle`, so an unchanged value doesn't dirty the
+        // property sixty times a second. Seeded to match the value published
+        // above.
+        let was_idle = Cell::new(true);
 
         viz_global.on_tick(move |playing, strip_width| {
             // A pause leaves the last window of audio sitting in the ring, so
@@ -155,57 +165,33 @@ pub fn install_visualizer(ui: &AppWindow, state: &AppState) {
             // silence over one window rather than resuming on a stale shape.
             viz.set_enabled(analyzing);
 
+            // Not `sample_rate()`: the tap sits under rodio's speed stage, so
+            // the analysis rate has to fold the speed back in. Zero is the "draw
+            // nothing new" signal both styles decay on.
+            let rate = if analyzing { viz.analysis_rate() } else { 0 };
+
             let waveform = is_waveform(style.get());
             let idle = if waveform {
-                // The trace's span is a fixed number of milliseconds, so how
-                // many samples that is depends on the rate — and on the speed,
-                // which `analysis_rate` folds in, keeping the span 40 ms of what
-                // you *hear* rather than of the file.
-                let rate = if analyzing { viz.analysis_rate() } else { 0 };
-                // Nothing has played yet, so there is no rate to size a window
-                // against; `analyze` decays the last trace instead.
-                let live = rate > 0;
-                if live {
-                    // Straight into the analyzer's own window — no intermediate
-                    // buffer, no per-tick copy.
-                    viz.snapshot(wave.window_mut(rate));
-                }
-                let columns =
-                    wave.analyze(live, rate, waveform::columns_for_width(strip_width));
-                waveform::write_path_commands(columns, &mut path);
-                columns
-                    .iter()
-                    .all(|c| c.max.abs() < IDLE_LEVEL && c.min.abs() < IDLE_LEVEL)
+                frame::waveform(&viz, &mut wave, &mut path, rate, strip_width)
             } else {
-                let sample_rate = if analyzing {
-                    // Straight into the two transforms' own input buffers — no
-                    // intermediate copy. They overlap, the long one simply
-                    // reaching further back.
-                    let (bass, main) = spectrum.windows_mut();
-                    viz.snapshot(bass);
-                    viz.snapshot(main);
-                    // Not `sample_rate()`: the tap sits under rodio's speed
-                    // stage, so the analysis rate has to fold the speed back in.
-                    viz.analysis_rate()
-                } else {
-                    0
-                };
-                let levels = spectrum.analyze(sample_rate);
-                let idle = levels.iter().all(|&level| level < IDLE_LEVEL);
-                for (band, &level) in levels.iter().enumerate() {
-                    model.set_row_data(band, level);
-                }
-                idle
+                frame::bars(&viz, &mut spectrum, &model, rate)
             };
 
-            if let Some(ui) = weak.upgrade() {
-                let global = ui.global::<Visualizer>();
-                // Only the mounted style's property is written — the other one's
-                // consumer isn't in the tree to read it.
-                if waveform {
-                    global.set_wave_path(SharedString::from(path.as_str()));
+            // The bars' levels ride their own model, which the loop above has
+            // already written; only the trace and the idle flag come through
+            // here. `idle` gates the strip's Timer, so it can't be skipped —
+            // but it changes twice a track, not sixty times a second.
+            if waveform || idle != was_idle.get() {
+                if let Some(ui) = weak.upgrade() {
+                    let global = ui.global::<Visualizer>();
+                    // Only the mounted style's property is written — the other
+                    // one's consumer isn't in the tree to read it.
+                    if waveform {
+                        global.set_wave_path(SharedString::from(path.as_str()));
+                    }
+                    global.set_idle(idle);
                 }
-                global.set_idle(idle);
+                was_idle.set(idle);
             }
         });
     }
@@ -243,18 +229,10 @@ pub fn install_visualizer(ui: &AppWindow, state: &AppState) {
         let style = style.clone();
         let weak = ui.as_weak();
         viz_global.on_set_style(move |index| {
-            // A negative or out-of-range index can only come from a picker that
-            // has drifted out of step with `STYLES`; it falls back to the
-            // default style, the same way an unknown key does.
-            let picked = usize::try_from(index)
-                .ok()
-                .filter(|&i| i < STYLES.len())
-                .unwrap_or_default();
+            let picked = style_index_from_i32(index);
             style.set(picked);
             if let Some(ui) = weak.upgrade() {
-                let global = ui.global::<Visualizer>();
-                global.set_style(SharedString::from(STYLES[picked]));
-                global.set_style_idx(i32::try_from(picked).unwrap_or_default());
+                publish_style(&ui.global::<Visualizer>(), picked);
             }
             let key = STYLES[picked].to_owned();
             state.persist_blocking("persist viz_style", move |s| {

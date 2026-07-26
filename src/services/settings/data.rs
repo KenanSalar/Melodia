@@ -252,11 +252,16 @@ pub struct VisualizerFlags {
     pub viz_style: String,
 }
 
+/// The style key a fresh install starts on, and the one an unrecognized key
+/// resolves back to. `crate::ui::visualizer`'s style table has to *head with the
+/// same key* — its own fallbacks land on index 0 — which its tests pin.
+pub const DEFAULT_VIZ_STYLE: &str = "bars";
+
 impl Default for VisualizerFlags {
     fn default() -> Self {
         Self {
             viz_enabled: true,
-            viz_style: "bars".to_owned(),
+            viz_style: DEFAULT_VIZ_STYLE.to_owned(),
         }
     }
 }

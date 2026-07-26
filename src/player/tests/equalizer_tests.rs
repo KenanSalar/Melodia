@@ -1,11 +1,9 @@
 //! Tests for the graphic-equalizer DSP core.
 
-use std::num::NonZero;
 use std::sync::Arc;
 use std::time::Duration;
 
-use rodio::source::SeekError;
-use rodio::{ChannelCount, Sample, SampleRate, Source};
+use rodio::Source;
 
 use super::{
     BAND_FREQS, EqShared, EqSource, MAX_GAIN_DB, MAX_PREAMP_DB, MIN_GAIN_DB, MIN_PREAMP_DB,
@@ -13,85 +11,15 @@ use super::{
 };
 use crate::player::crossfade::FadeShared;
 use crate::player::replaygain::{ReplayGainShared, RgMode, TrackReplayGain};
+use crate::player::tests::helpers::{TestSource, approx_eq as approx, bits};
 
 // --- helpers ---------------------------------------------------------------
-
-fn nz_u16(v: u16) -> ChannelCount {
-    match NonZero::new(v) {
-        Some(n) => n,
-        None => NonZero::<u16>::MIN,
-    }
-}
-
-fn nz_u32(v: u32) -> SampleRate {
-    match NonZero::new(v) {
-        Some(n) => n,
-        None => NonZero::<u32>::MIN,
-    }
-}
-
-/// Scalar near-equality — avoids `clippy::float_cmp` on intentional exact
-/// checks (clamp bounds, preset values).
-fn approx(a: f32, b: f32) -> bool {
-    (a - b).abs() < 1e-4
-}
-
-/// Bit pattern of each sample — lets us assert *bit-identical* passthrough
-/// (and divergence) without float `==`.
-fn bits(v: &[f32]) -> Vec<u32> {
-    v.iter().map(|s| s.to_bits()).collect()
-}
 
 /// Deterministic non-trivial signal in [-1, 1] with broadband content, built
 /// without int→float casts.
 fn ramp(len: usize) -> Vec<f32> {
     const PATTERN: [f32; 8] = [-1.0, -0.6, -0.2, 0.2, 0.6, 1.0, 0.4, -0.4];
     (0..len).map(|i| PATTERN[i % PATTERN.len()]).collect()
-}
-
-/// In-memory source for tests. `try_seek` rewinds to the start (like a decoder
-/// seeking to 0) so a post-seek run can be compared against a fresh run.
-struct TestSource {
-    data: Vec<f32>,
-    pos: usize,
-    channels: u16,
-    sample_rate: u32,
-}
-
-impl TestSource {
-    fn new(data: Vec<f32>, channels: u16, sample_rate: u32) -> Self {
-        Self { data, pos: 0, channels, sample_rate }
-    }
-}
-
-impl Iterator for TestSource {
-    type Item = Sample;
-    fn next(&mut self) -> Option<Sample> {
-        let s = self.data.get(self.pos).copied();
-        if s.is_some() {
-            self.pos += 1;
-        }
-        s
-    }
-}
-
-impl Source for TestSource {
-    fn current_span_len(&self) -> Option<usize> {
-        None
-    }
-    fn channels(&self) -> ChannelCount {
-        nz_u16(self.channels)
-    }
-    fn sample_rate(&self) -> SampleRate {
-        nz_u32(self.sample_rate)
-    }
-    fn total_duration(&self) -> Option<Duration> {
-        None
-    }
-    fn try_seek(&mut self, _pos: Duration) -> Result<(), SeekError> {
-        self.pos = 0;
-        Ok(())
-    }
 }
 
 fn run_eq(gains: &[f32], enabled: bool, input: Vec<f32>, channels: u16) -> Vec<f32> {

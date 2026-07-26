@@ -52,16 +52,13 @@ use parking_lot::Mutex;
 use rayon::prelude::*;
 use slint::{Image, Rgb8Pixel, SharedPixelBuffer};
 
+use super::image_decode::{MAX_SOURCE_DIM, decode_capped};
+
 /// Default ("row tier") square thumbnail size, in pixels — 2× the 36 px row
 /// tile and 1.56× the 46 px now-playing bar tile, so both stay sharp on
 /// `HiDPI`. Larger tiers ([`CoverThumbs::with_config`]) pass their own size;
 /// see the module docs' "Sizing rationale".
 const THUMB_SIZE: u32 = 72;
-
-/// Hard cap on accepted source resolution. Real album art is well under
-/// this; the limit just prevents a malformed file with a forged dimension
-/// header from triggering an absurd allocation.
-const MAX_SOURCE_DIM: u32 = 8192;
 
 /// Maximum entries kept in the row-tier cache — counts unique *covers*, not
 /// tracks, so it scales with library size rather than queue length. Most
@@ -311,14 +308,7 @@ fn buf_to_image(buf: &CachedBuf) -> Image {
 }
 
 fn decode_thumb_buffer(path: &Path, thumb_size: u32) -> CachedBuf {
-    let mut reader = image::ImageReader::open(path)
-        .ok()?
-        .with_guessed_format()
-        .ok()?;
-    let mut limits = image::Limits::default();
-    limits.max_image_width = Some(MAX_SOURCE_DIM);
-    limits.max_image_height = Some(MAX_SOURCE_DIM);
-    reader.limits(limits);
+    let dyn_img = decode_capped(path, MAX_SOURCE_DIM).ok()?;
 
     // `thumbnail_exact` uses an integer-only fast algorithm and outputs
     // exactly `thumb_size × thumb_size`. Album art is overwhelmingly
@@ -327,7 +317,6 @@ fn decode_thumb_buffer(path: &Path, thumb_size: u32) -> CachedBuf {
     // Slint side would have re-cropped anyway. Roughly 10× faster than
     // `resize_to_fill` with a high-quality filter, and the difference is
     // imperceptible.
-    let dyn_img = reader.decode().ok()?;
     let thumb = dyn_img.thumbnail_exact(thumb_size, thumb_size).to_rgb8();
     let (w, h) = thumb.dimensions();
     let mut buf = SharedPixelBuffer::<Rgb8Pixel>::new(w, h);

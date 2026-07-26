@@ -45,7 +45,6 @@ pub use replaygain::{
     set_replaygain_enabled, set_replaygain_mode, set_replaygain_preamp,
     set_replaygain_prevent_clipping,
 };
-pub use visualizer::{set_visualizer_enabled, set_visualizer_style};
 pub use scrobble::{
     set_scrobble_lastfm_enabled, set_scrobble_lastfm_love_enabled,
     set_scrobble_listenbrainz_enabled, set_scrobble_listenbrainz_love_enabled,
@@ -67,6 +66,7 @@ pub use view::{
     set_favorites_most_played_collapsed, set_last_detail_id, set_last_nav_index, set_locale,
     set_overflow_button, set_view_sort, snap_to_preset, update_view_columns,
 };
+pub use visualizer::{set_visualizer_enabled, set_visualizer_style};
 
 use crate::error::AppError;
 use crate::services::{self, settings::SettingsData, view_state::ViewStateData};

@@ -1,6 +1,7 @@
 import { Theme } from "../theme.slint";
 import { Player, Nav, NowPlaying, Visualizer } from "../globals.slint";
 import { IconButton } from "../components/icon-button.slint";
+import { AccentDiscButton } from "../components/now-playing/accent-disc-button.slint";
 import { StarRating } from "../components/star-rating.slint";
 import { NowPlayingCover } from "../components/now-playing/now-playing-cover.slint";
 import { UpNextList } from "../components/now-playing/up-next-list.slint";
@@ -19,7 +20,7 @@ component MetaChip inherits Rectangle {
     border-radius: self.height / 2;
     // Soft per-artwork accent tint instead of the opaque `Theme.surface0`
     // slab, so the strip reads as part of the backdrop's colour family.
-    background: Player.np-accent-bright.with-alpha(0.16);
+    background: Player.np-accent-pill;
 
     HorizontalLayout {
         padding-left: Theme.pad-md;
@@ -142,19 +143,8 @@ export component NowPlayingView inherits Rectangle {
 
             VerticalLayout {
                 alignment: center;
-                IconButton {
+                AccentDiscButton {
                     icon: "arrow_back";
-                    diameter: 36px;
-                    icon-size: 22px;
-                    // Accent-tinted disc rather than the detail views' shared
-                    // `Theme.floating-button-bg`, so the top bar reads as one
-                    // family with the stars, heart and chips. Only the disc is
-                    // translucent — the glyph stays solid. `hover-bg` has to be
-                    // overridden too; it defaults to an opaque `Theme.surface0`.
-                    idle-bg: Player.np-accent-bright.with-alpha(0.2);
-                    hover-bg: Player.np-accent-bright.with-alpha(0.32);
-                    idle-fg: Player.np-accent-bright;
-                    hover-fg: Player.np-accent-bright;
                     clicked => { Nav.now-playing-open = false; }
                 }
             }
@@ -171,7 +161,7 @@ export component NowPlayingView inherits Rectangle {
                     // the heart below for why this whole group shares the
                     // spectrum bars' colour.
                     filled-color: Player.np-accent-bright;
-                    empty-color: Player.np-accent-bright.with-alpha(0.6);
+                    empty-color: Player.np-accent-dim;
                     rated(n) => { Player.set-current-rating(n); }
                 }
             }
@@ -194,7 +184,7 @@ export component NowPlayingView inherits Rectangle {
                     // group reads as one family against the artwork blur. The
                     // outlined-vs-filled glyph carries the favourited state, so
                     // the unfavourited variant only needs to be quieter.
-                    idle-fg: Player.np-accent-bright.with-alpha(0.6);
+                    idle-fg: Player.np-accent-dim;
                     hover-fg: Player.np-accent-bright;
                     active-fg: Player.np-accent-bright;
                     clicked => { Player.toggle-favorite(); }

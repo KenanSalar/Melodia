@@ -204,7 +204,7 @@ export component PlaybackSection inherits Rectangle {
 
         // Binds the `Visualizer` global directly rather than mirroring the flags
         // onto `Settings` — the visualizer owns its own state and callbacks
-        // (`src/ui/visualizer.rs`), the same way the EQ dialog binds
+        // (`src/ui/visualizer/mod.rs`), the same way the EQ dialog binds
         // `Equalizer.enabled`. Both two-way bindings have already landed the
         // value by the time the callback fires, so the callbacks only persist.
         if root.show-visualizer: SettingRow {

@@ -10,7 +10,7 @@ use crate::ui::now_playing::backdrop::{
 /// solve tests below.
 const SEED: u32 = 0x00cb_a6f7;
 
-/// Build a `BLUR_DOWNSCALE`-ish square buffer from a per-pixel closure.
+/// Build a `BLUR_TARGET`-ish square buffer from a per-pixel closure.
 fn buffer_from(side: u32, f: impl Fn(u32, u32) -> [u8; 3]) -> SharedPixelBuffer<Rgb8Pixel> {
     let mut buf = SharedPixelBuffer::<Rgb8Pixel>::new(side, side);
     let px = buf.make_mut_slice();

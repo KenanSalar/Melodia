@@ -1,6 +1,7 @@
 //! Tests for the visualizer's oscilloscope trace.
 
 use super::*;
+use crate::player::tests::helpers::assert_approx as approx;
 
 const RATE: u32 = 44_100;
 /// A window generous enough for any rate these tests use, matching the ring the
@@ -9,21 +10,11 @@ const WINDOW_CAP: usize = 16_384;
 
 // --- helpers -----------------------------------------------------------------
 
-/// Fill a buffer with a full-scale sine of `periods` whole cycles.
-#[allow(
-    clippy::cast_precision_loss,
-    reason = "test buffers are a few thousand samples, which convert to f32 exactly"
-)]
+/// Fill a buffer with a full-scale sine of `periods` whole cycles. Expressed
+/// against the buffer's own length, so it needs no rate.
 fn fill_sine(buf: &mut [f32], periods: f32) {
-    let len = buf.len() as f32;
-    for (i, sample) in buf.iter_mut().enumerate() {
-        *sample = (2.0 * std::f32::consts::PI * periods * i as f32 / len).sin();
-    }
-}
-
-/// Assert two values are equal to within a tight tolerance.
-fn approx(a: f32, b: f32) {
-    assert!((a - b).abs() < 1e-4, "expected {b}, got {a}");
+    let len = index_to_f32(buf.len());
+    crate::player::tests::helpers::fill_sine(buf, periods, len, 1.0);
 }
 
 /// The tallest half-height any column reaches.

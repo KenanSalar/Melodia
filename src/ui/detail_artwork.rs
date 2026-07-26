@@ -24,35 +24,21 @@ use lru::LruCache;
 use parking_lot::Mutex;
 use slint::{Rgb8Pixel, SharedPixelBuffer};
 
+use crate::media::image_decode::{MAX_SOURCE_DIM, decode_capped};
 use crate::state::AppState;
-use crate::ui::util::buffer_from_rgb;
+use crate::ui::util::{BLUR_TARGET, COVER_SIZE, buffer_from_rgb};
 
-/// Side length (px) the sharp cover tile is downscaled to. Matches
-/// [`crate::ui::now_playing_artwork`]'s `COVER_SIZE` and the on-screen header
-/// tile's `clamp(width*0.22, 200px, 380px)` ceiling, so it neither upscales
-/// nor pays for a 2× `HiDPI` buffer.
-const COVER_SIZE: u32 = 384;
-
-/// Width / height the cover is downscaled to before blurring. Source album
-/// art is always 1:1, but the hero region paints landscape (full
-/// content-panel width × ~250 px tall), so a 3:2 buffer matches the target
-/// aspect better than a square under `image-fit: cover` — and squashing a
-/// square source into it is invisible after the blur. Downscaling first also
-/// makes the blur cheap: box-pass cost scales with pixel count.
-const BLUR_WIDTH: u32 = 192;
+/// Height the cover is downscaled to before blurring, against the shared
+/// [`BLUR_TARGET`] width. Source album art is always 1:1, but the hero region
+/// paints landscape (full content-panel width × ~250 px tall), so a 3:2 buffer
+/// matches the target aspect better than a square under `image-fit: cover` —
+/// and squashing a square source into it is invisible after the blur.
 const BLUR_HEIGHT: u32 = 128;
 
-/// `fast_blur` sigma. Approximates a `blur(50px)` CSS filter — at this
-/// downscale it reads as a soft wash of colour with no recognisable
-/// shapes. Slightly lighter than `now_playing_artwork::BLUR_SIGMA`
-/// (24.0 ≈ blur(60px)) — the detail hero's gradient floor + crust
-/// scrim sit on top, so a softer blur is enough.
+/// `fast_blur` sigma. Deliberately lighter than the shared
+/// [`crate::ui::util::BLUR_SIGMA`]: the hero's gradient floor and crust scrim
+/// sit on top of this blur, so it needs less of its own.
 const BLUR_SIGMA: f32 = 20.0;
-
-/// Hard cap on accepted source resolution — mirrors `CoverThumbs`'s guard
-/// so a forged dimension header in a tag can't trigger an absurd
-/// allocation before we get a chance to downscale.
-const MAX_SOURCE_DIM: u32 = 8192;
 
 /// LRU capacity. The working set for the Album Detail view is the
 /// currently-open album plus a handful of recently-opened ones (the
@@ -70,7 +56,7 @@ const ARTWORK_CACHE_CAP: NonZeroUsize = match NonZeroUsize::new(12) {
 pub struct ArtworkPair {
     /// Sharp, aspect-preserved cover tile (≤ `COVER_SIZE` on its long edge).
     pub cover: SharedPixelBuffer<Rgb8Pixel>,
-    /// Heavily-blurred `BLUR_WIDTH × BLUR_HEIGHT` landscape backdrop.
+    /// Heavily-blurred `BLUR_TARGET × BLUR_HEIGHT` landscape backdrop.
     pub blur: SharedPixelBuffer<Rgb8Pixel>,
 }
 
@@ -164,22 +150,11 @@ pub(crate) async fn decode_detail_pair(
 }
 
 fn decode_artwork(path: &Path) -> CachedArtwork {
-    let mut reader = image::ImageReader::open(path)
-        .ok()?
-        .with_guessed_format()
-        .ok()?;
-    let mut limits = image::Limits::default();
-    limits.max_image_width = Some(MAX_SOURCE_DIM);
-    limits.max_image_height = Some(MAX_SOURCE_DIM);
-    reader.limits(limits);
-
-    let decoded = reader.decode().ok()?;
+    let decoded = decode_capped(path, MAX_SOURCE_DIM).ok()?;
 
     let cover = buffer_from_rgb(&decoded.thumbnail(COVER_SIZE, COVER_SIZE).to_rgb8());
 
-    let small = decoded
-        .thumbnail_exact(BLUR_WIDTH, BLUR_HEIGHT)
-        .to_rgb8();
+    let small = decoded.thumbnail_exact(BLUR_TARGET, BLUR_HEIGHT).to_rgb8();
     let blur = buffer_from_rgb(&fast_blur(&small, BLUR_SIGMA));
 
     Some(ArtworkPair { cover, blur })

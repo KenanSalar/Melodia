@@ -20,7 +20,6 @@
 use std::num::NonZeroUsize;
 use std::path::{Path, PathBuf};
 
-use image::ImageReader;
 use image::imageops::FilterType;
 use lru::LruCache;
 use material_colors::color::Argb;
@@ -33,6 +32,7 @@ use material_colors::scheme::variant::{
 use material_colors::score::Score;
 use slint::{Rgb8Pixel, SharedPixelBuffer};
 
+use crate::media::image_decode::decode_capped;
 use crate::themes::Palette;
 
 /// One of the seven Material 3 dynamic-colour scheme variants exposed by
@@ -120,37 +120,10 @@ const MATERIAL_YOU_MAX_SOURCE_DIM: u32 = 2048;
 /// `0xAARRGGBB` ARGB integer, or `None` on decode/score miss. **Blocking**
 /// — call from `tokio::task::spawn_blocking` only.
 pub fn extract_source_argb(artwork_path: &Path) -> Option<u32> {
-    let reader = match ImageReader::open(artwork_path) {
-        Ok(r) => r,
-        Err(e) => {
-            log::warn!(
-                "material_you: open artwork {}: {e}",
-                artwork_path.display()
-            );
-            return None;
-        }
-    };
-    let mut reader = match reader.with_guessed_format() {
-        Ok(r) => r,
-        Err(e) => {
-            log::warn!(
-                "material_you: guess format {}: {e}",
-                artwork_path.display()
-            );
-            return None;
-        }
-    };
-    let mut limits = image::Limits::default();
-    limits.max_image_width = Some(MATERIAL_YOU_MAX_SOURCE_DIM);
-    limits.max_image_height = Some(MATERIAL_YOU_MAX_SOURCE_DIM);
-    reader.limits(limits);
-    let decoded = match reader.decode() {
+    let decoded = match decode_capped(artwork_path, MATERIAL_YOU_MAX_SOURCE_DIM) {
         Ok(d) => d,
         Err(e) => {
-            log::warn!(
-                "material_you: decode {}: {e}",
-                artwork_path.display()
-            );
+            log::warn!("material_you: decode {}: {e}", artwork_path.display());
             return None;
         }
     };

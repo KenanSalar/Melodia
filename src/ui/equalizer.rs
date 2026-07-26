@@ -19,9 +19,8 @@ use slint::{ComponentHandle, Model, ModelRc, VecModel};
 
 use crate::library;
 use crate::player::equalizer;
-use crate::services::settings;
 use crate::state::AppState;
-use crate::ui::settings_bind::toggle_binding;
+use crate::ui::settings_bind::{read_or_default, toggle_binding};
 use crate::{AppWindow, Equalizer};
 
 pub fn install_equalizer(ui: &AppWindow, state: &AppState) {
@@ -30,26 +29,15 @@ pub fn install_equalizer(ui: &AppWindow, state: &AppState) {
     // conversion never truncates.
     let custom_idx = i32::try_from(equalizer::PRESET_COUNT).unwrap_or(0);
 
-    // Read persisted EQ config; a missing / unreadable file falls back to the
-    // inert defaults (off, flat, "Flat").
-    let (enabled, gains, preset_idx, preamp) = match settings::read_settings(&state.paths) {
-        Ok(s) => {
-            let gains = equalizer::normalize_gains(&s.equalizer.eq_band_gains);
-            let idx = equalizer::preset_index(&s.equalizer.eq_selected_preset)
-                .and_then(|i| i32::try_from(i).ok())
-                .unwrap_or(custom_idx);
-            (
-                s.equalizer.eq_enabled,
-                gains,
-                idx,
-                equalizer::clamp_preamp(s.equalizer.eq_preamp),
-            )
-        }
-        Err(e) => {
-            log::warn!("read settings for equalizer: {e}");
-            (false, equalizer::normalize_gains(&[]), 0, 0.0)
-        }
-    };
+    // A missing / unreadable file falls back to the inert defaults (off, flat,
+    // "Flat").
+    let flags = read_or_default(state, "equalizer").equalizer;
+    let enabled = flags.eq_enabled;
+    let gains = equalizer::normalize_gains(&flags.eq_band_gains);
+    let preset_idx = equalizer::preset_index(&flags.eq_selected_preset)
+        .and_then(|i| i32::try_from(i).ok())
+        .unwrap_or(custom_idx);
+    let preamp = equalizer::clamp_preamp(flags.eq_preamp);
 
     // Backing model for the `band-gains` `[float]` global property. Kept here
     // (cloned into the callbacks) so preset / reset / drag updates mutate the

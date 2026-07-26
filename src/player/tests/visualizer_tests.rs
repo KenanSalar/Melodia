@@ -1,34 +1,13 @@
 //! Tests for the visualizer's sample rings and its tap source.
 
-use std::num::NonZero;
 use std::time::Duration;
 
-use rodio::source::SeekError;
-use rodio::{ChannelCount, Sample, SampleRate, Source};
+use rodio::Source;
 
 use super::{RING_CAP, VisualizerShared, VisualizerTap};
+use crate::player::tests::helpers::{TestSource, bits};
 
 // --- helpers ---------------------------------------------------------------
-
-fn nz_u16(v: u16) -> ChannelCount {
-    match NonZero::new(v) {
-        Some(n) => n,
-        None => NonZero::<u16>::MIN,
-    }
-}
-
-fn nz_u32(v: u32) -> SampleRate {
-    match NonZero::new(v) {
-        Some(n) => n,
-        None => NonZero::<u32>::MIN,
-    }
-}
-
-/// Bit patterns of a slice — lets us assert *bit-identical* passthrough (and
-/// exact ring contents) without float `==`.
-fn bits(v: &[f32]) -> Vec<u32> {
-    v.iter().map(|s| s.to_bits()).collect()
-}
 
 /// `len` samples, every one distinct and exactly representable — so a snapshot
 /// can't pass by accidentally matching at the wrong offset. `u16 → f32` is
@@ -37,50 +16,6 @@ fn counted(len: usize) -> Vec<f32> {
     (0..len)
         .map(|i| f32::from(u16::try_from(i + 1).unwrap_or(u16::MAX)) / 65_536.0)
         .collect()
-}
-
-/// In-memory source. `try_seek` rewinds to the start, like a decoder seeking to 0.
-struct TestSource {
-    data: Vec<f32>,
-    pos: usize,
-    channels: u16,
-    sample_rate: u32,
-}
-
-impl TestSource {
-    fn new(data: Vec<f32>, channels: u16, sample_rate: u32) -> Self {
-        Self { data, pos: 0, channels, sample_rate }
-    }
-}
-
-impl Iterator for TestSource {
-    type Item = Sample;
-    fn next(&mut self) -> Option<Sample> {
-        let s = self.data.get(self.pos).copied();
-        if s.is_some() {
-            self.pos += 1;
-        }
-        s
-    }
-}
-
-impl Source for TestSource {
-    fn current_span_len(&self) -> Option<usize> {
-        None
-    }
-    fn channels(&self) -> ChannelCount {
-        nz_u16(self.channels)
-    }
-    fn sample_rate(&self) -> SampleRate {
-        nz_u32(self.sample_rate)
-    }
-    fn total_duration(&self) -> Option<Duration> {
-        None
-    }
-    fn try_seek(&mut self, _pos: Duration) -> Result<(), SeekError> {
-        self.pos = 0;
-        Ok(())
-    }
 }
 
 /// Drain a tap over `input` and return `(passed-through samples, ring window)`.

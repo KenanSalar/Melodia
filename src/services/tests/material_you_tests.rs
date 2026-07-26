@@ -72,8 +72,8 @@ fn generate_palette_light_and_dark_differ() {
 )]
 #[test]
 fn extract_source_argb_rejects_oversized_source() {
-    // `extract_source_argb`'s defensive `image::Limits` caps source
-    // dimensions at `MATERIAL_YOU_MAX_SOURCE_DIM` (2048) — emit a 2200×2200
+    // `decode_capped` bounds the decode at the cap its caller passes, here
+    // `MATERIAL_YOU_MAX_SOURCE_DIM` (2048) — emit a 2200×2200
     // uniform-colour PNG to a temp file and assert the decoder bails before
     // the multi-MB pixel buffer is allocated. Uniform colour keeps the PNG
     // small on disk; the test verifies the limit fires, not encode speed.

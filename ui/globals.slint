@@ -135,6 +135,21 @@ export global Player {
     // near-black accent at all.
     in-out property <brush> np-accent-bright: #cba6f7;
 
+    // The translucent tiers off that one brush. Derived here rather than at each
+    // call site: the same four alphas were being re-spelled across six files,
+    // so a change to any of them meant finding every copy — and two surfaces
+    // meant to match could drift apart without anything failing.
+    //
+    // The disc pair is read only by `AccentDiscButton`, which is itself the
+    // shared surface — they are named anyway so the set reads as one ladder of
+    // weights rather than two rules. A genuine one-off (the Up-Next divider,
+    // its scrollbar's hover) stays inline where it is, since naming it would
+    // just move the number without sharing it.
+    out property <brush> np-accent-pill: root.np-accent-bright.with-alpha(0.16);
+    out property <brush> np-accent-disc: root.np-accent-bright.with-alpha(0.2);
+    out property <brush> np-accent-disc-hover: root.np-accent-bright.with-alpha(0.32);
+    out property <brush> np-accent-dim: root.np-accent-bright.with-alpha(0.6);
+
     // Body text on the backdrop. Solved for 4.5:1 and chroma-capped, so it
     // reads as near-white carrying a whisper of the album's warmth rather than
     // as coloured type — the tier above is where the hue gets to be loud.
@@ -299,7 +314,7 @@ export global ReplayGain {
 }
 
 // Visualizer: drives the audio-visualizer strip in the Now-Playing view. State
-// is owned by Rust (`src/ui/visualizer.rs`): `enabled` is seeded from
+// is owned by Rust (`src/ui/visualizer/mod.rs`): `enabled` is seeded from
 // `settings.json` at boot, then two-way bound by the Settings → Playback
 // toggle, which also fires `set-enabled` to persist the choice. Ships **on** —
 // see `VisualizerFlags`.

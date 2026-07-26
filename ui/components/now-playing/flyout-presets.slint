@@ -53,11 +53,12 @@ export global SleepPresets {
 }
 
 export global VizStylePresets {
-    // Mirrors `STYLES` in `src/ui/visualizer.rs` **by position** — a row's loop
+    // Mirrors `STYLES` in `src/ui/visualizer/mod.rs` **by position** — a row's loop
     // index IS the index `Visualizer.set-style` takes, so there is no separate
     // value to keep in step. Seeded from Rust it would render untranslated
     // (`@tr()` only translates literals at codegen), so it stays a literal
-    // array; `src/ui/tests/visualizer_tests.rs` pins its length against `STYLES`.
+    // array; `src/ui/visualizer/tests/visualizer_tests.rs` pins its length
+    // against `STYLES`.
     //
     // Read by both the Settings → Playback chips and the Now-Playing view's
     // visualizer flyout, so the two pickers can't drift apart.
@@ -72,7 +73,10 @@ export global FlyoutMetrics {
     // Height of one `FlyoutOption` row (and the sleep flyout's stepper /
     // Start-pill rows, which match it for a uniform rhythm).
     out property <length> option-row-h: 32px;
-    // Vertical chrome allowance per flyout: 8 px inner pad + 2 px border
-    // + 2 px slack — the same allowance the menu column uses.
+    // Height of one `OverflowRow` in a menu column. Taller than a flyout row:
+    // the menu is the outer surface and reads as the coarser rhythm.
+    out property <length> menu-row-h: 36px;
+    // Vertical chrome allowance for a flyout *or* a menu column: 8 px inner pad
+    // + 2 px border + 2 px slack.
     out property <length> chrome-h: 12px;
 }

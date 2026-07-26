@@ -1,8 +1,8 @@
 import { Theme } from "../../theme.slint";
 import { Player, PopupHighlight, Visualizer } from "../../globals.slint";
-import { IconButton } from "../icon-button.slint";
-import { PopupSurface } from "../popup-surface.slint";
-import { FocusLossWatcher } from "../focus-loss-watcher.slint";
+import { AccentDiscButton } from "./accent-disc-button.slint";
+import { MenuSurface } from "./menu-surface.slint";
+import { PopupDismissCatcher } from "./popup-dismiss-catcher.slint";
 import { OverflowRow } from "./overflow-row.slint";
 import { VisualizerFlyout } from "./visualizer-flyout.slint";
 import { FlyoutMetrics, VizStylePresets } from "./flyout-presets.slint";
@@ -22,14 +22,23 @@ export component NowPlayingViewMenu inherits Rectangle {
     height: btn.height;
 
     // Whether the visualizer flyout is expanded. Reset to collapsed on every
-    // (re)open via the trigger, and by every close path below.
+    // (re)open via the trigger, and by `dismiss()`.
     property <bool> viz-flyout-open: false;
 
-    // Menu column height = 36 px for the single row + 8 px inner pad + 2 px
-    // border + 2 px slack. (The content-driven *width* `menu-w` is declared on
-    // the PopupWindow below — Slint forbids the enclosing component from
-    // reading a property *inside* a PopupWindow, so it can't live up here.)
-    property <length> menu-h: 36px + 12px;
+    // Every close path: drop the popup, collapse the flyout, release the
+    // trigger highlight. A function rather than a callback because that's what
+    // it is — the rows invoke it, nothing subscribes to it.
+    public function dismiss() {
+        pop.close();
+        root.viz-flyout-open = false;
+        PopupHighlight.id = "";
+    }
+
+    // Menu column height: the single row plus the shared chrome allowance. (The
+    // content-driven *width* `menu-w` is declared on the PopupWindow below —
+    // Slint forbids the enclosing component from reading a property *inside* a
+    // PopupWindow, so it can't live up here.)
+    property <length> menu-h: FlyoutMetrics.menu-row-h + FlyoutMetrics.chrome-h;
 
     // Visualizer flyout geometry. Height derives from the shared style list +
     // metrics (`flyout-presets.slint`) plus the leading "Off" row, so adding a
@@ -42,24 +51,15 @@ export component NowPlayingViewMenu inherits Rectangle {
     // they read as two separate floating chromes.
     property <length> gap: 8px;
 
-    btn := IconButton {
+    btn := AccentDiscButton {
         icon: "more_vert";
         press-shrink: true;
-        diameter: 36px;
-        icon-size: 22px;
         // No `tooltip-text` — the back button and the heart flanking it in the
         // view's top bar don't have one either.
         //
         // Keep the disc highlighted while the popup is open. Cleared by any
         // close path below, or by the AppWindow scrim catching an outside click.
         force-bg: PopupHighlight.id == "np-view-menu";
-        // Accent-tinted disc with a solid glyph — see the back button in
-        // `views/now-playing-view.slint` for the shared recipe. `hover-bg` has
-        // to be overridden too; it defaults to an opaque `Theme.surface0`.
-        idle-bg: Player.np-accent-bright.with-alpha(0.2);
-        hover-bg: Player.np-accent-bright.with-alpha(0.32);
-        idle-fg: Player.np-accent-bright;
-        hover-fg: Player.np-accent-bright;
         clicked => {
             // Always (re)open collapsed.
             root.viz-flyout-open = false;
@@ -90,18 +90,11 @@ export component NowPlayingViewMenu inherits Rectangle {
         y: btn.height + 8px;
         close-policy: close-on-click-outside;
 
-        // Transparent catcher over the whole popup. Declared first so the
-        // menu/flyout rows (real TouchAreas, drawn on top) win their own
-        // clicks; clicks on empty regions inside the popup rect fall through to
-        // here and close (close-on-click-outside only fires for clicks truly
-        // outside the rect).
-        TouchArea {
+        PopupDismissCatcher {
             width: parent.width;
             height: parent.height;
             clicked => {
-                pop.close();
-                root.viz-flyout-open = false;
-                PopupHighlight.id = "";
+                root.dismiss();
             }
         }
 
@@ -129,29 +122,19 @@ export component NowPlayingViewMenu inherits Rectangle {
                     }
                     Visualizer.set-style(i);
                 }
-                pop.close();
-                root.viz-flyout-open = false;
-                PopupHighlight.id = "";
+                root.dismiss();
             }
         }
 
         // Menu column — right, top-anchored under the trigger.
-        menu-surface := PopupSurface {
+        MenuSurface {
+            popup-id: "np-view-menu";
             x: parent.width - pop.menu-w;
             y: 0;
             width: pop.menu-w;
             height: root.menu-h;
-
-            // Live only while this popup is the one currently open — the
-            // trigger sets `PopupHighlight.id = "np-view-menu"` before
-            // `pop.show()`, and the winit Release path (or any close handler
-            // here) clears it back to "".
-            if PopupHighlight.id == "np-view-menu": FocusLossWatcher {
-                close => {
-                    pop.close();
-                    root.viz-flyout-open = false;
-                    PopupHighlight.id = "";
-                }
+            close-requested => {
+                root.dismiss();
             }
 
             menu-vl := VerticalLayout {

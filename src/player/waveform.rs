@@ -37,6 +37,8 @@
 
 use std::fmt::Write as _;
 
+use super::dsp::{VISUALIZER_DECAY, index_to_f32};
+
 /// Milliseconds of audio drawn across the strip.
 ///
 /// Time, not samples: a fixed sample count would show 23 ms of a 44.1 kHz file
@@ -70,10 +72,6 @@ pub const MAX_COLUMNS: usize = 512;
 /// jitters exactly as if it had none.
 const TRIGGER_HYSTERESIS: f32 = 0.02;
 
-/// Fraction of its height the trace keeps per frame once the audio stops.
-/// Matched to the spectrum's decay so both styles settle at the same rate.
-const DECAY: f32 = 0.8;
-
 /// Half-thickness, in viewbox units, that a drawn column never falls below.
 ///
 /// A column whose two edges land on each other contributes no area, so a wholly
@@ -88,14 +86,6 @@ const DECAY: f32 = 0.8;
 /// strokes still overlap and a resting trace reads as one line rather than as a
 /// pair of rails, far enough that they are nowhere near coincident.
 const MIN_HALF_THICKNESS: f32 = 0.018;
-
-#[allow(
-    clippy::cast_precision_loss,
-    reason = "column indices are counts in the low hundreds, which convert to f32 exactly"
-)]
-fn index_to_f32(i: usize) -> f32 {
-    i as f32
-}
 
 /// Samples spanning `ms` at `sample_rate`. Saturates rather than wrapping; the
 /// caller clamps to its buffer anyway.
@@ -115,7 +105,7 @@ pub struct Column {
 
 /// Drawn columns for a strip `width` logical pixels wide.
 #[must_use]
-#[allow(
+#[expect(
     clippy::cast_possible_truncation,
     clippy::cast_sign_loss,
     reason = "clamped into MIN_COLUMNS..=MAX_COLUMNS before the cast, so the value is small and positive"
@@ -313,8 +303,8 @@ impl WaveformAnalyzer {
             // resized while paused, and a column that widened back into view
             // undecayed would pop.
             for column in &mut self.columns {
-                column.min *= DECAY;
-                column.max *= DECAY;
+                column.min *= VISUALIZER_DECAY;
+                column.max *= VISUALIZER_DECAY;
             }
         }
         &self.columns[..width]

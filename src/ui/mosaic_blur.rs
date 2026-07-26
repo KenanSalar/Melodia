@@ -13,24 +13,10 @@ use std::path::Path;
 use image::imageops::fast_blur;
 use slint::{Rgb8Pixel, SharedPixelBuffer};
 
-use crate::ui::util::buffer_from_rgb;
+use crate::media::image_decode::{MAX_SOURCE_DIM, decode_capped};
+use crate::ui::util::{BLUR_SIGMA, BLUR_TARGET, buffer_from_rgb};
 
-/// Atlas + blur target size. Matches `now_playing_artwork::BLUR_DOWNSCALE`
-/// so the GPU pipeline / cache pressure stays consistent across blur
-/// surfaces. Bigger than this gains nothing because the surface is
-/// `image-fit: cover`-stretched.
-const BLUR_TARGET: u32 = 192;
-
-/// `fast_blur` sigma. Mirrors `now_playing_artwork::BLUR_SIGMA` so the hero
-/// blurs read the same as the Now Playing backdrop.
-const BLUR_SIGMA: f32 = 24.0;
-
-/// Per-tile source decode cap before atlasing. Each tile is a quarter
-/// of the atlas, so decoding above this is wasted work. Stays well
-/// below the artwork hard cap so a forged dimension header in a tag
-/// can't trigger an absurd allocation. Same hard cap as
-/// `now_playing_artwork::MAX_SOURCE_DIM` / `cover_thumbs::MAX_DIM`.
-const MAX_SOURCE_DIM: u32 = 8192;
+/// Side length of one tile in the 2×2 atlas.
 const PER_TILE: u32 = BLUR_TARGET / 2;
 
 /// Compose up to 4 source images into a `BLUR_TARGET × BLUR_TARGET`
@@ -98,12 +84,7 @@ pub fn compose_mosaic_blur(paths: &[String]) -> Option<SharedPixelBuffer<Rgb8Pix
 /// Decode one cover at its tile size. Bounded so a forged header can't
 /// allocate gigabytes before the downscale kicks in.
 fn decode_tile(path: &Path) -> Option<image::RgbImage> {
-    let mut reader = image::ImageReader::open(path).ok()?.with_guessed_format().ok()?;
-    let mut limits = image::Limits::default();
-    limits.max_image_width = Some(MAX_SOURCE_DIM);
-    limits.max_image_height = Some(MAX_SOURCE_DIM);
-    reader.limits(limits);
-    let decoded = reader.decode().ok()?;
+    let decoded = decode_capped(path, MAX_SOURCE_DIM).ok()?;
     Some(decoded.thumbnail_exact(BLUR_TARGET, BLUR_TARGET).to_rgb8())
 }
 

@@ -1,5 +1,6 @@
 import { Theme } from "../../theme.slint";
 import { MaterialIcon } from "../material-icon.slint";
+import { FlyoutMetrics } from "./flyout-presets.slint";
 
 // One row inside a now-playing popup menu. Renders the same icon + label pair
 // shown inline in the now-playing bar; active colour mirrors the inline
@@ -24,7 +25,7 @@ export component OverflowRow inherits Rectangle {
 
     callback clicked();
 
-    height: 36px;
+    height: FlyoutMetrics.menu-row-h;
     border-radius: Theme.radius-sm;
     background: touch.has-hover && root.button-enabled ? Theme.surface1 : transparent;
     animate background { duration: Theme.dur-fast; easing: ease-in-out; }

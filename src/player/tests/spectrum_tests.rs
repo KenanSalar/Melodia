@@ -1,25 +1,12 @@
 //! Tests for the visualizer's spectrum analysis.
 
+use std::cell::Cell;
+
 use super::*;
-use crate::player::dsp::db_to_linear;
+use crate::player::dsp::{VISUALIZER_DECAY, db_to_linear};
+use crate::player::tests::helpers::{assert_approx as approx, fill_sine};
 
 // --- helpers -----------------------------------------------------------------
-
-/// Assert two values are equal to within a tight tolerance.
-fn approx(a: f32, b: f32) {
-    assert!((a - b).abs() < 1e-4, "expected {b}, got {a}");
-}
-
-/// Fill a buffer with a sine of the given amplitude.
-#[allow(
-    clippy::cast_precision_loss,
-    reason = "test buffers are a few thousand samples, which convert to f32 exactly"
-)]
-fn fill_sine(buf: &mut [f32], freq_hz: f32, sample_rate: f32, amplitude: f32) {
-    for (i, sample) in buf.iter_mut().enumerate() {
-        *sample = amplitude * (2.0 * std::f32::consts::PI * freq_hz * i as f32 / sample_rate).sin();
-    }
-}
 
 /// Fill both of an analyzer's windows with the same sine.
 fn fill_both(analyzer: &mut SpectrumAnalyzer, freq_hz: f32, sample_rate: f32, amplitude: f32) {
@@ -453,7 +440,7 @@ fn no_edges_at_all_silences_every_band() {
 #[test]
 fn levels_rise_immediately_to_a_higher_value() {
     let mut levels = [0.0, 0.2];
-    smooth(&mut levels, &[1.0, 0.9], ATTACK, DECAY);
+    smooth(&mut levels, &[1.0, 0.9], ATTACK, VISUALIZER_DECAY);
     approx(levels[0], 1.0);
     approx(levels[1], 0.9);
 }
@@ -463,7 +450,7 @@ fn levels_decay_gradually_toward_a_lower_value() {
     let mut levels = [1.0];
     let mut previous = 1.0;
     for _ in 0..8 {
-        smooth(&mut levels, &[0.0], ATTACK, DECAY);
+        smooth(&mut levels, &[0.0], ATTACK, VISUALIZER_DECAY);
         assert!(levels[0] < previous, "level should fall, went {previous} -> {}", levels[0]);
         previous = levels[0];
     }
@@ -475,7 +462,7 @@ fn levels_decay_gradually_toward_a_lower_value() {
 fn decayed_levels_converge_to_zero() {
     let mut levels = [1.0];
     for _ in 0..200 {
-        smooth(&mut levels, &[0.0], ATTACK, DECAY);
+        smooth(&mut levels, &[0.0], ATTACK, VISUALIZER_DECAY);
     }
     approx(levels[0], 0.0);
 }
@@ -484,13 +471,46 @@ fn decayed_levels_converge_to_zero() {
 fn a_level_never_decays_below_its_band() {
     let mut levels = [1.0];
     for _ in 0..50 {
-        smooth(&mut levels, &[0.4], ATTACK, DECAY);
+        smooth(&mut levels, &[0.4], ATTACK, VISUALIZER_DECAY);
         assert!(levels[0] >= 0.4, "decayed past the band's own level: {}", levels[0]);
     }
     approx(levels[0], 0.4);
 }
 
 // --- SpectrumAnalyzer --------------------------------------------------------
+
+#[test]
+fn both_windows_are_filled_from_one_read_of_the_newest_samples() {
+    // The short window has to be the newest *tail* of the long one. Taking its
+    // head instead would hand the treble transform samples a whole bass window
+    // old — inaudible in every other assertion here, since both windows would
+    // still hold real audio.
+    let mut analyzer = SpectrumAnalyzer::new(FFT_SIZE, NUM_BANDS);
+    let reads = Cell::new(0_usize);
+    // A distinct value per position, so a window taken from the wrong end
+    // cannot match by coincidence.
+    analyzer.fill_windows(|window| {
+        reads.set(reads.get() + 1);
+        for (i, sample) in window.iter_mut().enumerate() {
+            *sample = index_to_f32(i);
+        }
+    });
+
+    assert_eq!(
+        reads.get(),
+        1,
+        "a second read lands at a later instant, leaving the transforms on different moments"
+    );
+
+    let (bass, main) = analyzer.windows_mut();
+    assert_eq!(bass.len(), BASS_FFT_SIZE);
+    assert_eq!(main.len(), FFT_SIZE);
+    let tail = bass.len() - main.len();
+    // The scalar first: it reports "expected 6144, got 0" where the slice
+    // comparison below would lead with ten thousand floats.
+    approx(main[0], index_to_f32(tail));
+    assert_eq!(&main[..], &bass[tail..], "the short window is not the long one's tail");
+}
 
 #[test]
 fn a_sine_lands_in_the_band_containing_its_frequency() {

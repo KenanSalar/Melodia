@@ -56,6 +56,7 @@ use lofty::prelude::{Accessor, ItemKey};
 use lofty::tag::items::Timestamp;
 use lofty::tag::{ItemValue, Tag, TagItem, TagType};
 
+use super::image_decode;
 use crate::error::AppError;
 
 /// Upper bound for a written BPM. Anything past this is a typo, not a tempo, and
@@ -506,11 +507,15 @@ pub fn cover_picture_from_path(path: &Path) -> Result<Picture, AppError> {
     let bytes = std::fs::read(path)
         .map_err(|e| AppError::metadata(format!("Failed to read cover {}", path.display()), e))?;
 
-    let reader = image::ImageReader::new(Cursor::new(&bytes))
+    let mut reader = image::ImageReader::new(Cursor::new(&bytes))
         .with_guessed_format()
         .map_err(|e| {
             AppError::metadata(format!("Unrecognized image format: {}", path.display()), e)
         })?;
+    // Same bound every other artwork decode runs under. This one reads from
+    // memory rather than a path, so it can't go through `decode_capped` — but a
+    // forged header shouldn't get a bigger allocation for being hand-picked.
+    reader.limits(image_decode::capped_limits(image_decode::MAX_SOURCE_DIM));
 
     let format = reader.format();
     let decoded = reader.decode().map_err(|e| {
