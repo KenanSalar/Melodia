@@ -251,7 +251,7 @@ fn the_path_spans_x_from_zero_to_one_and_back() {
 
     assert!(out.starts_with("M0.0000 "), "lower edge does not start at x = 0: {out}");
     assert!(out.contains("L1.0000 "), "the edges never reach x = 1: {out}");
-    assert!(out.ends_with("L0.0000 -0.036Z"), "upper edge does not return to x = 0: {out}");
+    assert!(out.ends_with("L0.0000 -0.018Z"), "upper edge does not return to x = 0: {out}");
 }
 
 #[test]
@@ -271,8 +271,8 @@ fn a_silent_column_is_drawn_a_visible_band_tall() {
     let mut out = String::new();
     write_path_commands(&[Column::default(); 3], &mut out);
 
-    assert!(out.contains("0.036"), "silence collapsed onto the axis: {out}");
-    assert!(out.contains("-0.036"), "silence has no upper edge: {out}");
+    assert!(out.contains("0.018"), "silence collapsed onto the axis: {out}");
+    assert!(out.contains("-0.018"), "silence has no upper edge: {out}");
 }
 
 #[test]
@@ -283,7 +283,7 @@ fn the_thickness_floor_opens_a_column_about_its_own_midpoint() {
     write_path_commands(&[Column { min: 0.5, max: 0.5 }], &mut out);
 
     // Midpoint 0.5, flipped to -0.5, then a floor either side of it.
-    assert_eq!(out, "M0.0000 -0.464 L0.0000 -0.536Z");
+    assert_eq!(out, "M0.0000 -0.482 L0.0000 -0.518Z");
 }
 
 #[test]

@@ -33,17 +33,22 @@ export component WaveformTrace inherits Rectangle {
         // would letterbox this 1×2 box into a sliver down the middle.
         fit: fill;
 
-        // Fill only, and opaque — the same brush the bars paint themselves with,
-        // for the same reason: `np-accent-bright` is the tone-floored accent, so
-        // a dark album's colour still reads against the scrimmed backdrop.
+        // The per-artwork accent, so the trace harmonizes with the blur — but
+        // the tone-floored variant, since this is painted over a scrimmed
+        // backdrop a dark album's raw accent would sink into.
         //
-        // No stroke. The figure doubles back on itself by construction — upper
-        // edge out, lower edge home — so wherever the trace is thin the two
-        // strokes land on each other, and asking a renderer to stroke a path
-        // that overlaps itself is asking for whatever it feels like giving you.
-        // The resting state comes from `waveform::MIN_HALF_THICKNESS` instead,
-        // which keeps the figure a real shape at every amplitude and is a thing
-        // the fill can draw honestly.
-        fill: Player.np-accent-bright;
+        // A wash inside a defined edge, in the same translucency language as the
+        // metadata chips: the fill alone reads as a shapeless blob at this
+        // height, and the stroke alone loses the sense of a body of sound.
+        //
+        // The figure doubles back on itself by construction, so the two edges'
+        // strokes converge as the trace thins. `waveform::MIN_HALF_THICKNESS`
+        // is what keeps them a real distance apart at every amplitude — without
+        // it a silent trace lands both edges on the axis, and stroking a path
+        // that lies exactly on top of itself renders as a dashed line.
+        fill: Player.np-accent-bright.transparentize(0.55);
+        stroke: Player.np-accent-bright;
+        stroke-width: 1.25px;
+        stroke-line-join: round;
     }
 }

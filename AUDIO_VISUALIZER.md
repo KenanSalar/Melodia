@@ -584,23 +584,23 @@ Goal: a live trace of the raw signal, in place of the band bars.
   over itself because `min <= max` by construction.
 - **The figure is never degenerate, and never a hole.** Two rendering traps, both found on
   screen rather than in a test:
-  - `MIN_HALF_THICKNESS` floors each column about its own midpoint, so a silent trace draws a
-    2 px band rather than collapsing both edges onto the axis. That started as the resting look
-    — the trace's answer to the bars' resting dots — but the real reason is that coincident
-    edges close a **zero-area polygon**, which is geometry no renderer owes you anything
-    sensible for. It rendered as a dashed line.
+  - `MIN_HALF_THICKNESS` floors each column about its own midpoint, so a silent trace never
+    lands both edges on the axis. Coincident edges close a **zero-area polygon** *and* lay the
+    outline exactly on top of itself, which is geometry nothing owes you anything sensible for
+    — it rendered as a dashed line. The floor's *size* is then chosen against the stroke: half
+    a pixel either side, close enough that the two 1.25 px strokes still overlap into one line
+    at rest rather than reading as a pair of rails.
   - The edges are emitted **lower-first** because that is what gives the closed figure a
     *positive* signed area. `i-slint-renderer-femtovg`'s `draw_path` runs
     `area += (x - prev.x) * (y + prev.y)` over each subpath and hands femtovg
     `Solidity::Hole` when it comes out negative — which upper-first does. A lone subpath
     declared as a hole is not a thing to rely on a renderer being sensible about.
-- **Fill only, opaque, no stroke.** The figure doubles back on itself by construction, so
-  wherever the trace is thin the outbound and return strokes land on each other; asking a
-  renderer to stroke a self-overlapping path is asking for whatever it feels like giving you,
-  and what it gave was the dashes above. The floor makes the *fill* carry the resting state
-  honestly, so the stroke has no job left. Opaque `np-accent-bright`, the brush the bars already
-  paint themselves with — the tone-floored accent exists precisely because these surfaces are
-  painted opaque over the scrim.
+- **Colour:** `Player.np-accent-bright` — the same tone-floored accent as the bars — as a
+  `transparentize(0.55)` fill inside a 1.25 px stroke of the same brush. The fill alone reads as
+  a shapeless blob at this height and the stroke alone loses the sense of a body of sound;
+  together they sit in the translucency language the metadata chips already use. (Dropping the
+  stroke and painting the fill opaque was tried as part of the dashed-line fix and reverted —
+  the floor is what fixes the geometry, and the paint was never the problem.)
 - **The trace is seeded at install.** The bars come up at rest for free — their `VecModel`
   carries a level per band and each floors at a dot — but the trace's only source is the Timer,
   and at boot the Timer isn't running (nothing is playing, `idle` is true). Without a seed a

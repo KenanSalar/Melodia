@@ -76,16 +76,18 @@ const DECAY: f32 = 0.8;
 
 /// Half-thickness, in viewbox units, that a drawn column never falls below.
 ///
-/// It earns its place twice. A silent trace has to rest as a visible rule rather
-/// than vanish, the way a silent band rests as a dot. And — the part that is not
-/// cosmetic — a column whose two edges land on each other contributes no area,
-/// so a wholly silent trace closes a **zero-area polygon**: geometry no renderer
-/// owes anything sensible for, and in practice what turned the resting line into
-/// dashes. A floor keeps the figure a real shape at every amplitude.
+/// A column whose two edges land on each other contributes no area, so a wholly
+/// silent trace closes a **zero-area polygon** and hands the renderer an outline
+/// lying exactly on top of itself — geometry nothing owes you anything sensible
+/// for, and in practice what drew the resting line as dashes. The floor keeps
+/// the figure a real shape at every amplitude.
 ///
-/// The viewbox is two units tall across the strip's fixed 56 px, so this is
-/// almost exactly a pixel either side of the centre.
-const MIN_HALF_THICKNESS: f32 = 0.036;
+/// Its size is chosen against the stroke rather than for its own sake. The
+/// viewbox is two units tall across the strip's fixed 56 px, so this is half a
+/// pixel either side of the centre — close enough that the two edges' 1.25 px
+/// strokes still overlap and a resting trace reads as one line rather than as a
+/// pair of rails, far enough that they are nowhere near coincident.
+const MIN_HALF_THICKNESS: f32 = 0.018;
 
 #[allow(
     clippy::cast_precision_loss,
