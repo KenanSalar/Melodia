@@ -11,6 +11,7 @@ use super::*;
 const PLAYBACK_SECTION: &str = include_str!("../../../ui/views/settings/playback-section.slint");
 const FLYOUT_PRESETS: &str = include_str!("../../../ui/components/now-playing/flyout-presets.slint");
 const STRIP: &str = include_str!("../../../ui/components/now-playing/visualizer-strip.slint");
+const SPECTRUM_BARS: &str = include_str!("../../../ui/components/now-playing/spectrum-bars.slint");
 
 #[test]
 fn the_picker_names_one_style_per_key() {
@@ -48,11 +49,18 @@ fn the_strip_branches_on_a_key_the_table_knows() {
         "the strip lost its fallback branch"
     );
     // Mirrored has no component of its own — it rides the catch-all branch and
-    // only flips the bars' anchor, so the key has to appear there instead.
+    // only flips the bars' anchor, so what has to hold is the whole binding,
+    // not just the key appearing somewhere in the file. Both ends are pinned:
+    // a dead comparison left behind after `centred:` was dropped would pass the
+    // first assertion, and the two files drift independently.
     assert!(STYLES.contains(&STYLE_MIRRORED));
     assert!(
-        STRIP.contains(&format!("Visualizer.style == \"{STYLE_MIRRORED}\"")),
+        STRIP.contains(&format!("centred: Visualizer.style == \"{STYLE_MIRRORED}\"")),
         "the strip no longer anchors the bars off STYLE_MIRRORED"
+    );
+    assert!(
+        SPECTRUM_BARS.contains("in property <bool> centred;"),
+        "SpectrumBars no longer takes the anchor flag the strip sets"
     );
 }
 

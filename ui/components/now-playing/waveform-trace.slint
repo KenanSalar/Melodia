@@ -13,8 +13,6 @@ import { Player, Visualizer } from "../../globals.slint";
 // here for the same reason the bars have none — the envelope is already a
 // smoothed value, and animating one phase-lags.
 export component WaveformTrace inherits Rectangle {
-    background: transparent;
-
     Path {
         commands: Visualizer.wave-path;
 

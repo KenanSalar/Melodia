@@ -695,7 +695,7 @@ Goal: the same bands, growing symmetrically from a centre line.
 > geometry whose two load-bearing parts (the column-width floor and the two-axis radius clamp)
 > are exactly the ones that must not drift. So `in property <bool> centred` switches the anchor
 > and `visualizer-strip.slint` sets it from the key on the catch-all branch. Switching
-> Bars↔Mirrored now re-evaluates one binding instead of destroying and rebuilding 64 Rectangles.
+> Bars↔Mirrored now re-evaluates one binding instead of rebuilding the whole 64-band subtree.
 > **A style is not necessarily a component** — the strip branches on the key either way.
 
 > **"Mirrored" is an overloaded word, and this is the vertical one.** audioMotion's `mirror` and
@@ -706,7 +706,7 @@ Goal: the same bands, growing symmetrically from a centre line.
 
 - **Amplitude halves; the height binding is untouched.** `parent.height * level` is the bar's
   *total* height, so centring puts `level * H/2` either side and a mirrored bar carries the same
-  ink as a baseline one at the same level. Six shipped implementations agree and none disagree:
+  ink as a baseline one at the same level. Four shipped implementations agree and none disagree:
   CAVA divides its own output by 2 for `ORIENT_SPLIT_H`, wavesurfer draws against a `halfHeight`,
   audioMotion's documented "perfect mirror" is `reflexRatio: 0.5`, and Cavasik scales by `-0.5`
   before re-running a full-height draw. Doubling would also clip past level 0.5 in a 56 px strip.
@@ -725,11 +725,13 @@ Goal: the same bands, growing symmetrically from a centre line.
   the shared `VizStylePresets` global: Settings binds `options: VizStylePresets.viz-style-names`
   and the Now-Playing flyout derives `flyout-h` from its `.length`, so both pickers grew on their
   own. Neither `playback-section.slint` nor any of the three view-menu files was touched.
-- **One free subtraction while in the file:** the two `background: transparent` lines are gone. A
-  binding promotes an element out of Slint's `Empty` native class *whether or not the value
-  paints anything*, and the FemtoVG item renderer builds the path before it checks the paint — so
-  they cost a discarded `Path` + `PathCache` per band per frame to draw nothing. `Rectangle`
-  already defaults to transparent. See the CLAUDE.md pitfall.
+- **One free subtraction across all three files:** every `background: transparent` line is gone —
+  both in `spectrum-bars.slint` (the root plus the per-band column, where it actually cost
+  something) and, for consistency with the rule, the one-off roots of `visualizer-strip.slint` and
+  `waveform-trace.slint`. A binding promotes an element out of Slint's `Empty` native class
+  *whether or not the value paints anything*, and the FemtoVG item renderer builds the path before
+  it checks the paint — so they cost a discarded `Path` + `PathCache` per band per frame to draw
+  nothing. `Rectangle` already defaults to transparent. See the CLAUDE.md pitfall.
 
 **Perf** (read off `i-slint-core`/`i-slint-renderer-femtovg`/`i-slint-compiler` 1.16.1 and
 femtovg 0.23.2, not assumed): the anchor is free. The inner bar sets `y`, so it never contributes
@@ -742,10 +744,14 @@ rect at a different offset, and the FemtoVG renderer has no partial rendering, s
 whole window every frame regardless. The one real difference is cosmetic: a centred bar moves
 *both* antialiased edges by half a height delta, so expect marginally more edge shimmer.
 
-**Tests:** no new ones — no new Rust logic. Three existing cases in
+**Tests:** no new cases — no new Rust logic. Three existing ones in
 `src/ui/tests/visualizer_tests.rs` moved: the unknown-key sentinel was **literally `"mirrored"`**
 and had to be retargeted to `"not-a-style"`, the strip pin gained `STYLE_MIRRORED`, and
-`is_waveform` is now asserted false for it. **Memory:** none.
+`is_waveform` is now asserted false for it. The strip pin matches the **whole binding**
+(`centred: Visualizer.style == "mirrored"`) rather than the key alone — a dead comparison left
+behind after `centred:` was dropped would satisfy the looser form — and `spectrum-bars.slint` is
+`include_str!`'d alongside it so the receiving `in property <bool> centred` is pinned too.
+**Memory:** none.
 
 #### Phase 5.3 — Ambient pulse `[ ]`
 
@@ -840,7 +846,7 @@ adds a style:
 - `src/player/waveform.rs` + `src/player/tests/waveform_tests.rs` — trigger, min/max columns,
   path string + `WaveformAnalyzer` (Phase 5.1). **Done.**
 - `ui/components/now-playing/visualizer-strip.slint` — footprint, style switch, the one driving
-  Timer (Phase 5.1). **Done.**
+  Timer (Phase 5.1); passes `centred` on the catch-all branch (Phase 5.2). **Done.**
 - `ui/components/now-playing/waveform-trace.slint` — the stroked `Path` (Phase 5.1). **Done.**
 
 **Changed**
@@ -870,9 +876,10 @@ adds a style:
 - `src/player/mod.rs` — `pub mod waveform;` (Phase 5.1). **Done.**
 - `scripts/icons.txt` + both subset TTFs — `bar_chart`, plus `show_chart` (Phase 5.1). **Done.**
 - `ui/components/now-playing/flyout-presets.slint` — `VizStylePresets.viz-style-names`, the one
-  array both pickers render; `"Mirrored"` appended (Phase 5.2). **Done.**
+  array both pickers render; `"Mirrored"` inserted after `"Bars"` so the two spectrum styles sit
+  together — safe because the setting persists by key, never by index (Phase 5.2). **Done.**
 - `translations/*/LC_MESSAGES/Melodia.po` — `"Visualizer"`, plus `"Visualizer Style"` /
-  `"Bars"` / `"Waveform"` / `"Mirrored"` / the style description, and the toggle's own
+  `"Bars"` / `"Mirrored"` / `"Waveform"` / the style description, and the toggle's own
   description reworded off "spectrum analyzer" now that it isn't only one (6 locales). **Done.**
 
 ---
