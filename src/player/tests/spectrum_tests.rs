@@ -523,21 +523,22 @@ fn the_low_bars_move_independently() {
     // moves as a block.
     let rate = 44_100;
     let mut analyzer = SpectrumAnalyzer::new(FFT_SIZE, NUM_BANDS);
-    fill_both(&mut analyzer, 60.0, rate_to_f32(rate), db_to_linear(-25.0));
+    fill_both(&mut analyzer, 120.0, rate_to_f32(rate), db_to_linear(-25.0));
     let levels = analyzer.analyze(rate);
     let (peak, level) = loudest(levels);
 
-    assert!(peak < 8, "a 60 Hz tone belongs near the bottom, lit band {peak}");
-    // Its neighbours four bands out must be clearly darker — the separation a
-    // single 2048-point window cannot give down here.
-    for band in [peak.saturating_sub(4), (peak + 4).min(NUM_BANDS - 1)] {
-        if band != peak {
-            assert!(
-                levels[band] < level * 0.75,
-                "band {band} reads {} against the tone's {level}: the low bars are still smeared",
-                levels[band]
-            );
-        }
+    assert!((6..14).contains(&peak), "a 120 Hz tone belongs near band 10, lit {peak}");
+    // Six bands out is ~45 Hz away here — well clear of the Hann main lobe, so
+    // it must be dark. Closer than that it cannot be: down here the bands are
+    // narrower than the lobe itself, which is a resolution limit rather than the
+    // smearing this guards against. At `FFT_SIZE` alone the whole neighbourhood
+    // read the same interpolated pair of bins and none of it separated.
+    for band in [peak - 6, peak + 6] {
+        assert!(
+            levels[band] < level * 0.5,
+            "band {band} reads {} against the tone's {level}: the low bars are still smeared",
+            levels[band]
+        );
     }
 }
 

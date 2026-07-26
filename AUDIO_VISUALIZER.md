@@ -817,8 +817,21 @@ Three causes, measured, and the first was the big one:
 - **`FLOOR_DB -70 .. 0 dBFS` wasted its top.** Now `-75 .. -15`. Nothing surveyed uses full
   scale (Rainmeter spans 35 dB, Audacious 40, audioMotion 60 topping at −25).
 
-Modelled over four material profiles the display goes from 0–38 dead bands to 0–6, and treble
-from 0.00–0.08 to 0.22–0.60, with nothing pinned.
+**The tilt was then set by measurement, not by the model.** A throwaway harness decoded 24 real
+tracks spread across a library, ran them through the actual `SpectrumAnalyzer` at the real 16 ms
+tick, and reported per-band mean / p50 / p90 / pinned% / dead% over 72 k frames. It caught an
+error the synthetic model had hidden: the first pick, 4.5 dB/octave, **double-counted the
+correction.** Root-sum-square already tilts broadband ~3 dB/octave for free, so the total was 7.5
+— above everything surveyed — and it inverted the original fault, leaving the bass the deadest
+part of the display (band 0 mean 0.15, dead 47 % of frames). At **2.0** the total lands at ~5,
+beside CAVA's 5.1.
+
+**p90 is the number to read, not the mean.** A mean over a band is dragged to zero by every track
+with nothing in it — half a library of unaccompanied vocal has no bass, and lossy sources have no
+12 kHz — where p90 asks how tall a bar gets *when there is something to show*. Measured at 2.0 it
+spans **0.65 → 0.88 → 0.68** across the whole display: every band reaches two thirds height on
+peaks, and pinning tops out at 5.5 % in the 650 Hz region. The mean/dead figures at the two ends
+stay low and that is the material, not the pipeline.
 
 **Bass resolution `[x]` — the dual transform.** The other half of the same complaint: bands 0–16
 were fed by **8.4 bins** at `FFT_SIZE 2048`, several of them interpolating the *same* pair, so

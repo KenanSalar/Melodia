@@ -71,9 +71,16 @@ const FLOOR_DB: f32 = -75.0;
 const CEILING_DB: f32 = -15.0;
 
 /// Decibels added per octave above [`TILT_PIVOT_HZ`], subtracted below it. Music
-/// is roughly pink, so an untilted display pins its bass and leaves its treble
-/// dead. CAVA bakes in 5.1, foobar2000 exposes a knob, 4.5 is the music default.
-const TILT_DB_PER_OCTAVE: f32 = 4.5;
+/// is roughly pink, so an untilted display leans bass.
+///
+/// **This is the correction on top of the one [`band_magnitude`] already
+/// applies**, and that is why it is smaller than the 3–5 dB/octave analyzers
+/// usually quote: summing broadband energy across a band whose width grows with
+/// frequency is itself ~3 dB/octave, so the total lands at ~5 — beside CAVA's
+/// 5.1, between Rainmeter's 3 and Audacious's 6. Set by measurement over a real
+/// library, where 4.5 here (7.5 total) inverted the original fault and left the
+/// bass the deadest part of the display.
+const TILT_DB_PER_OCTAVE: f32 = 2.0;
 
 /// The one frequency the tilt leaves alone.
 const TILT_PIVOT_HZ: f32 = 1000.0;
