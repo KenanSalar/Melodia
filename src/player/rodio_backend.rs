@@ -401,6 +401,11 @@ impl RodioPlayer {
     ///
     /// Always called with the deck the source is about to be appended to — see
     /// the module doc of [`super::decks`] for why the two can't be split.
+    ///
+    /// Building the tap also *claims* `deck`'s visualizer ring for as long as the
+    /// value lives, and stamps that ring's history away if the deck was idle. Both
+    /// are only correct for a source that is about to play, so don't build one
+    /// anywhere it might be held or discarded instead.
     fn build_source(
         &self,
         decoded: Decoder<BufReader<File>>,

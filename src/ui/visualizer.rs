@@ -150,9 +150,9 @@ pub fn install_visualizer(ui: &AppWindow, state: &AppState) {
 
             // The steady-state writer of the tap's arm state, so pause, minimise
             // and hide-to-tray all silence the producer as well as the analysis.
-            // Re-arming can miss up to one 16 ms window of audio; `snapshot`
-            // pads the front with silence, so the first frame back is a touch
-            // low rather than wrong.
+            // Arming *discards* whatever the rings still hold — samples that may
+            // predate the pause by minutes — so the drawing ramps back in from
+            // silence over one window rather than resuming on a stale shape.
             viz.set_enabled(analyzing);
 
             let waveform = is_waveform(style.get());
