@@ -79,9 +79,14 @@ pub struct ArtworkPair {
     /// Dominant accent extracted via `material_you::extract_source_argb_from_rgb8`
     /// from the blur buffer (192² is plenty of pixels for `QuantizerCelebi`
     /// and re-quantizing the sharp tile would burn ~4× more CPU for no
-    /// perceptual gain). Tone-floored into `Player.np-accent-bright` so the
-    /// Now Playing view's tinted chrome harmonizes with the blurred backdrop.
+    /// perceptual gain). Supplies the *hue* for every colour the Now Playing
+    /// view solves in [`crate::ui::now_playing::backdrop`].
     pub accent_argb: Option<u32>,
+    /// 90th-percentile lightness (L*) of `blur` — how bright the backdrop
+    /// actually is, and the input the scrim opacity is solved from. See
+    /// [`crate::ui::now_playing::backdrop::luma_p90`] for why it's a
+    /// percentile and not a mean. `None` only for an empty buffer.
+    pub backdrop_luma: Option<f64>,
 }
 
 /// `None` records a previously-attempted decode that failed — cached so a
@@ -169,12 +174,17 @@ fn decode_artwork(path: &Path) -> CachedArtwork {
         .to_rgb8();
     let blur = buffer_from_rgb(&fast_blur(&small, BLUR_SIGMA));
 
+    // Both statistics come off the same buffer in one place: the quantize the
+    // hue is scored from, and the percentile the scrim is sized from. The
+    // percentile pass is linear over ~110 KiB — noise beside the quantize.
     let accent_argb = crate::services::material_you::extract_source_argb_from_rgb8(&blur);
+    let backdrop_luma = crate::ui::now_playing::backdrop::luma_p90(&blur);
 
     Some(ArtworkPair {
         cover,
         blur,
         accent_argb,
+        backdrop_luma,
     })
 }
 

@@ -210,10 +210,35 @@ fn write_palette(ui: &AppWindow, p: &Palette, accent_hex: u32, mantle_unfocused_
 /// accent (extracted via `services::material_you::extract_source_argb_from_rgb8`)
 /// into a Slint brush property.
 pub(crate) fn brush(rgb: u32) -> Brush {
+    Brush::SolidColor(color(rgb))
+}
+
+/// Unpack a `0x00RRGGBB` value into an opaque `Color`. The `brush` sibling
+/// above wraps this; the Now Playing gradient floor needs the bare `Color`,
+/// because Slint's `.mix()` and gradient stops take `color`, not `brush`.
+pub(crate) fn color(rgb: u32) -> Color {
     let r = ((rgb >> 16) & 0xff) as u8;
     let g = ((rgb >> 8) & 0xff) as u8;
     let b = (rgb & 0xff) as u8;
-    Brush::SolidColor(Color::from_rgb_u8(r, g, b))
+    Color::from_rgb_u8(r, g, b)
+}
+
+/// Pack a `0x00RRGGBB` value plus a separate `alpha` into a translucent solid
+/// `Brush`. The Now Playing scrim is the caller: its opacity is solved per
+/// artwork, and baking it into the brush keeps the Slint side a single
+/// `background: Player.np-scrim` instead of a colour plus a float the view
+/// would have to recombine.
+pub(crate) fn brush_with_alpha(rgb: u32, alpha: u8) -> Brush {
+    Brush::SolidColor(color(rgb).with_alpha(f32::from(alpha) / 255.0))
+}
+
+/// Unpack a solid `Brush` back to `0x00RRGGBB`, dropping alpha. Used to read a
+/// live `Theme` brush back out of the Slint global when the Now Playing view
+/// needs the theme accent's *hue* as an artwork-less fallback. A gradient
+/// brush answers with its first stop, which is the right approximation here.
+pub(crate) fn brush_to_rgb(brush: &Brush) -> u32 {
+    let c = brush.color();
+    (u32::from(c.red()) << 16) | (u32::from(c.green()) << 8) | u32::from(c.blue())
 }
 
 /// Pick a contrast colour for text/icons rendered on top of `accent_hex`:

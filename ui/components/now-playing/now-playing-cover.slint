@@ -19,7 +19,12 @@ export component NowPlayingCover inherits Rectangle {
     width: tile-size;
     height: tile-size;
     border-radius: Theme.radius-lg;
-    background: Theme.surface0;
+    // Backdrop-solved rather than `Theme.surface0`: this tile sits on the
+    // artwork blur, and a light theme's surface is bright enough to read as a
+    // white square during the cover cross-fade. Low alpha keeps it a recess in
+    // the backdrop rather than a slab on it. Only the Now Playing view mounts
+    // this component, so there's no miniplayer branch to restate.
+    background: Player.np-on-backdrop.with-alpha(0.08);
     clip: true;
 
     // Placeholder glyph — painted underneath the cover slots and faded out
@@ -34,7 +39,7 @@ export component NowPlayingCover inherits Rectangle {
                 MaterialIcon {
                     name: "music_note";
                     icon-size: root.height * 0.4;
-                    icon-color: Theme.overlay0;
+                    icon-color: Player.np-on-backdrop-muted.with-alpha(0.5);
                 }
             }
         }

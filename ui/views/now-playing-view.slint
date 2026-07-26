@@ -70,10 +70,15 @@ export component NowPlayingView inherits Rectangle {
     // slots fade in over it; for an art-less track `blur-has-image` is
     // false and both slots fade to 0, leaving this accent-tinted gradient
     // visible (Tauri parity). Either way there is never an empty frame.
+    //
+    // Both stops come from Rust rather than from `Theme.accent.mix(Theme.base,
+    // …)`, because this is the surface an art-less track's title sits on: a
+    // theme-derived floor is bright on a light theme, and the foreground here
+    // is solved light. The stops keep the theme's hue and drop its polarity.
     Rectangle {
         width: 100%;
         height: 100%;
-        background: @linear-gradient(135deg, Theme.accent.mix(Theme.base, 0.2), Theme.base);
+        background: @linear-gradient(135deg, Player.np-floor-start, Player.np-floor-end);
     }
 
     // Two stacked Image slots. Rust writes the new blurred cover into the
@@ -102,12 +107,21 @@ export component NowPlayingView inherits Rectangle {
         animate opacity { duration: Theme.dur-med; easing: ease-in-out; }
     }
 
-    // Scrim — darkens the backdrop a touch so the foreground text / chips
-    // stay legible regardless of cover (or accent) colour.
+    // Scrim — drives the *composited* backdrop into a known dark band so the
+    // foreground stays legible whatever the cover looks like. Its opacity is
+    // solved per artwork in Rust and baked into the brush, which is why there
+    // is no `with-alpha` here: a fixed alpha of a theme colour can't do this
+    // job (on a light theme `Theme.crust` is near-white, so raising it
+    // *brightens* the backdrop), and a white sleeve needs roughly twice the
+    // opacity a black one does.
+    //
+    // Animated on the same duration as the blur slots above so the two ride
+    // one curve — a scrim that snapped mid-cross-fade would read as a glitch.
     Rectangle {
         width: 100%;
         height: 100%;
-        background: Theme.crust.with-alpha(0.45);
+        background: Player.np-scrim;
+        animate background { duration: Theme.dur-med; easing: ease-in-out; }
     }
 
     // --- Foreground ------------------------------------------------------
@@ -228,11 +242,16 @@ export component NowPlayingView inherits Rectangle {
                 // Title / artist / album, centred under the artwork.
                 VerticalLayout {
                     spacing: 4px;
+                    // Backdrop-solved rather than `Theme.text` / `subtext1` /
+                    // `overlay2`: these sit on the blur, so a fixed theme
+                    // brush lands light-on-light on a light theme. The album
+                    // line takes the muted tier at reduced alpha, keeping the
+                    // three-line hierarchy without a third solved tone.
                     Text {
                         text: Player.vm.has_track
                             ? "‎" + Player.vm.track.title
                             : @tr("No track playing");
-                        color: Theme.text;
+                        color: Player.np-on-backdrop;
                         font-size: Theme.page-title-size;
                         font-weight: 600;
                         horizontal-alignment: center;
@@ -244,14 +263,14 @@ export component NowPlayingView inherits Rectangle {
                                 ? @tr("Unknown artist")
                                 : Player.vm.track.artist)
                             : "—";
-                        color: Theme.subtext1;
+                        color: Player.np-on-backdrop-muted;
                         font-size: Theme.font-size-lg;
                         horizontal-alignment: center;
                         overflow: elide;
                     }
                     Text {
                         text: "‎" + Player.vm.track.album;
-                        color: Theme.overlay2;
+                        color: Player.np-on-backdrop-muted.with-alpha(0.75);
                         font-size: Theme.font-size-md;
                         horizontal-alignment: center;
                         overflow: elide;

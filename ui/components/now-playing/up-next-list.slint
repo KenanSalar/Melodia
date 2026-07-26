@@ -12,11 +12,12 @@ import { OverlayScrollbar } from "../overlay-scrollbar.slint";
 // duration column) so a handful of rows fit inside a window the user is
 // deliberately shrinking.
 //
-// Hover uses `Player.np-accent-bright.with-alpha(0.16)` for both variants. The
-// miniplayer paints on `Theme.mantle` rather than a blurred backdrop, but the
-// accent tint still reads as a subtle hover indication and keeps the two
-// surfaces visually consistent. It flips without an `animate`, matching the
-// shared `TrackListRow` — an eased fade reads as lag when crossing rows.
+// Hover is per-variant. The full-screen host paints on the artwork blur, so it
+// takes the backdrop-solved accent; the miniplayer paints on `Theme.mantle` and
+// takes the shared `TrackListRow` hover, because the accent is always solved
+// *light* for the blur and a light tint on a light theme's mantle is no hover
+// indication at all. It flips without an `animate`, matching `TrackListRow` —
+// an eased fade reads as lag when crossing rows.
 component UpNextRow inherits Rectangle {
     in property <QueueRow> data;
     in property <bool> compact;
@@ -25,7 +26,9 @@ component UpNextRow inherits Rectangle {
     height: compact ? 36px : 52px;
 
     Rectangle {
-        background: touch.has-hover ? Player.np-accent-bright.with-alpha(0.16) : transparent;
+        background: touch.has-hover
+            ? (compact ? Theme.surface0 : Player.np-accent-bright.with-alpha(0.16))
+            : transparent;
         border-radius: compact ? Theme.radius-sm : Theme.radius-md;
 
         HorizontalLayout {
@@ -55,15 +58,21 @@ component UpNextRow inherits Rectangle {
                 VerticalLayout {
                     alignment: center;
                     spacing: compact ? 1px : 2px;
+                    // Full-screen Now Playing paints on the artwork blur, so
+                    // its text is backdrop-solved; the miniplayer sits on
+                    // ordinary `Theme.mantle` chrome and keeps the neutral list
+                    // palette. Restated in both `compact` branches because
+                    // Slint can't apply a property conditionally — same reason
+                    // as the scrollbar block further down.
                     Text {
                         text: "‎" + root.data.title;
-                        color: Theme.text;
+                        color: compact ? Theme.text : Player.np-on-backdrop;
                         font-size: compact ? Theme.font-size-sm : Theme.font-size-row;
                         overflow: elide;
                     }
                     Text {
                         text: "‎" + root.data.artist;
-                        color: Theme.subtext0;
+                        color: compact ? Theme.subtext0 : Player.np-on-backdrop-muted;
                         font-size: compact ? 10px : Theme.font-size-sm;
                         overflow: elide;
                         visible: root.data.artist != "";
@@ -71,11 +80,13 @@ component UpNextRow inherits Rectangle {
                 }
             }
 
+            // Non-compact only, so no `compact` ternary is needed — this cell
+            // never renders in the miniplayer.
             if !compact: VerticalLayout {
                 alignment: center;
                 Text {
                     text: root.data.display_duration;
-                    color: Theme.subtext0;
+                    color: Player.np-on-backdrop-muted;
                     font-size: Theme.font-size-sm;
                 }
             }
@@ -226,12 +237,14 @@ export component UpNextList inherits Rectangle {
                     MaterialIcon {
                         name: "queue_music";
                         icon-size: compact ? 28px : 40px;
-                        icon-color: Theme.surface2;
+                        icon-color: compact
+                            ? Theme.surface2
+                            : Player.np-on-backdrop-muted.with-alpha(0.5);
                     }
                 }
                 Text {
                     text: @tr("No tracks up next");
-                    color: Theme.subtext0;
+                    color: compact ? Theme.subtext0 : Player.np-on-backdrop-muted;
                     font-size: compact ? Theme.font-size-sm : Theme.font-size-md;
                     horizontal-alignment: center;
                 }

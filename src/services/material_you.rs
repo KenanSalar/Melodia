@@ -244,6 +244,28 @@ pub fn lift_to_min_tone(argb: u32, min_tone: f64) -> u32 {
     argb_to_u32(Argb::from(hct))
 }
 
+/// Drive `argb` to exactly `tone`, capping chroma at `max_chroma` and keeping
+/// the hue.
+///
+/// The sibling of [`lift_to_min_tone`] for surfaces that want the source
+/// colour's *identity* but not its saturation — Now-Playing body text, which
+/// should read as near-white carrying a whisper of the album's warmth rather
+/// than as coloured type. Tone is set unconditionally (not floored): the
+/// caller has already solved it for a contrast target, so landing above it
+/// would be as wrong as landing below.
+///
+/// Order matters — chroma is capped *before* the tone is set, because the
+/// solver gamut-maps against the chroma it is given and a saturated seed
+/// pushed to a high tone comes back desaturated anyway.
+pub fn to_tone_capped_chroma(argb: u32, tone: f64, max_chroma: f64) -> u32 {
+    let mut hct = Hct::new(Argb::from_u32(argb));
+    if hct.get_chroma() > max_chroma {
+        hct.set_chroma(max_chroma);
+    }
+    hct.set_tone(tone);
+    argb_to_u32(Argb::from(hct))
+}
+
 /// Build a `DynamicScheme` of `style` × `is_dark` (contrast = default)
 /// from the seed and map the M3 roles to a [`themes::Palette`] +
 /// accent hex. Matches the M3 → palette role mapping from Tauri's

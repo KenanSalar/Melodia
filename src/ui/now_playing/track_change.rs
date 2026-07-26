@@ -8,24 +8,20 @@ use std::sync::Arc;
 use async_compat::Compat;
 use slint::{ComponentHandle, Image, Weak};
 
+use super::backdrop;
 use super::metadata::to_slint_track_meta;
 use super::write_crossfade_slot;
 use super::NowPlayingState;
 use crate::entities::track::TrackSummary;
 use crate::library;
-use crate::services::material_you;
 use crate::state::AppState;
+use crate::themes::{brush, brush_to_rgb, brush_with_alpha, color};
 use crate::ui::now_playing_artwork::NowPlayingArtwork;
 use crate::{AppWindow, Player, Theme as ThemeGlobal, TrackMetaRow};
 
-/// Minimum HCT tone for an artwork accent painted at full opacity over the
-/// Now-Playing backdrop. The backdrop is always darkened (the view's
-/// `Theme.crust.with-alpha(0.45)` scrim), which is what keeps the foreground
-/// text legible whatever the cover looks like; this is the same guarantee for
-/// opaque accent-coloured graphics. 70 sits in M3's "on dark surface" band —
-/// clearly lit, without pushing so far up the tone scale that sRGB gamut
-/// mapping washes the hue out.
-const MIN_OPAQUE_ACCENT_TONE: f64 = 70.0;
+/// What one artwork decode hands back to the UI thread: the sharp cover, the
+/// blurred backdrop, the hue quantized out of it, and how bright it measured.
+type DecodedArtwork = (Option<Image>, Option<Image>, Option<u32>, Option<f64>);
 
 /// Subscribe to `sinks.view_model`, react only to actual track changes.
 /// Always stashes the current track into `NowPlayingState::current_track`;
@@ -135,8 +131,7 @@ pub(super) async fn apply_track_change(
         .and_then(|t| t.artwork_path.clone())
         .filter(|p| !p.is_empty());
 
-    let (cover, blurred, accent_argb): (Option<Image>, Option<Image>, Option<u32>) = match artwork
-    {
+    let (cover, blurred, accent_argb, backdrop_luma): DecodedArtwork = match artwork {
         Some(path) => {
             let np = np_artwork.clone();
             match state
@@ -148,15 +143,16 @@ pub(super) async fn apply_track_change(
                     Some(Image::from_rgb8(pair.cover)),
                     Some(Image::from_rgb8(pair.blur)),
                     pair.accent_argb,
+                    pair.backdrop_luma,
                 ),
-                Ok(None) => (None, None, None),
+                Ok(None) => (None, None, None, None),
                 Err(e) => {
                     log::warn!("ui::now_playing artwork task join: {e}");
-                    (None, None, None)
+                    (None, None, None, None)
                 }
             }
         }
-        None => (None, None, None),
+        None => (None, None, None, None),
     };
 
     // --- Write to Slint (UI thread) ---
@@ -187,18 +183,35 @@ pub(super) async fn apply_track_change(
     *np_state.chip_texts.borrow_mut() = chip_texts;
     player.set_track_meta(meta);
 
-    // Per-artwork accent → `Player.np-accent-bright` (see `globals.slint` for
-    // why it's tone-floored). Falls back to the live `Theme.accent` so non-MY
-    // users keep a static tint and a missing-artwork / failed-decode track
-    // doesn't strand the slot on the previous track's colour; theme changes
-    // propagate via it on the next track change.
-    let accent_bright = match accent_argb {
-        Some(argb) => {
-            crate::themes::brush(material_you::lift_to_min_tone(argb, MIN_OPAQUE_ACCENT_TONE))
-        }
-        None => ui.global::<ThemeGlobal>().get_accent(),
-    };
-    player.set_np_accent_bright(accent_bright);
+    // Every colour the view paints on the backdrop, solved together from one
+    // hue and one brightness measurement — see `backdrop` for the reasoning
+    // and `globals.slint` for what each brush drives.
+    //
+    // The hue falls back to the live `Theme.accent` so a missing-artwork or
+    // failed-decode track doesn't strand the slots on the previous track's
+    // colour, and a theme change propagates on the next track change. Only the
+    // hue is borrowed: `backdrop::solve` owns every tone, so the view looks the
+    // same whether the theme underneath it is light or dark.
+    let seed = accent_argb
+        .unwrap_or_else(|| brush_to_rgb(&ui.global::<ThemeGlobal>().get_accent()));
+    // No blur to measure means the gradient floor is what shows, and both of
+    // its stops are ours — so this is a known value, not a guess, and the
+    // artwork-less path runs through the same solve as every other cover.
+    let luma = backdrop_luma.unwrap_or_else(backdrop::floor_luma);
+    let colors = backdrop::solve(seed, luma);
+
+    player.set_np_accent_bright(brush(colors.chrome));
+    player.set_np_on_backdrop(brush(colors.text));
+    player.set_np_on_backdrop_muted(brush(colors.muted));
+    player.set_np_floor_start(color(colors.floor_start));
+    player.set_np_floor_end(color(colors.floor_end));
+    #[expect(
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        reason = "solved alpha is clamped to 0..=1 by `backdrop::scrim_alpha`"
+    )]
+    let scrim_alpha = (colors.scrim_alpha * 255.0).round() as u8;
+    player.set_np_scrim(brush_with_alpha(colors.scrim, scrim_alpha));
 
     write_crossfade_slot(
         blurred,

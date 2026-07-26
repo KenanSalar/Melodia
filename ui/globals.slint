@@ -88,18 +88,62 @@ export global Player {
     // `track-meta` using the last-reported width cached on the Rust side.
     callback recompute-chip-rows(length);
 
-    // Per-artwork accent for the Now Playing view's tinted surfaces —
-    // visualizer bars, stars/heart, Up-Next heading/divider/hover, chips.
-    // Extracted from the blur buffer at decode time, floored to a minimum HCT
-    // tone, written by the `track_change` subscriber. Falls back to
-    // `Theme.accent`, which needs no lift.
+    // --- Now Playing backdrop colour set ---------------------------------
+    // Six properties, all written together by the `track_change` subscriber
+    // from `ui::now_playing::backdrop::solve` — read that module for the
+    // reasoning; this is the contract.
     //
-    // The floor lets one brush serve solid and translucent surfaces alike: a
-    // dark cover's raw accent is near-black, invisible both as a solid bar on
-    // the scrimmed blur and as a low-alpha fill over it. Callers vary alpha off
-    // this brush rather than picking another hue. Not `.brighter()` — it scales
-    // HSV value and can't lift near-black at all.
-    in-out property <brush> np-accent-bright: Theme.accent;
+    // The view floats its chrome on a blurred cover, so none of these can be
+    // theme constants: a white sleeve and a black one need opposite treatment.
+    // They take their *hue* from the accent quantized out of the cover (or
+    // `Theme.accent` for an art-less track) and their *tone* from a solve
+    // against how bright the backdrop measured. That split is why the view
+    // looks the same under Mocha, Latte, macOS Light and Material You — the
+    // theme lends its colour, never its light/dark polarity.
+    //
+    // Don't reach for `Theme.text` / `subtext0` / `crust` / `base` anywhere
+    // that paints on the blur. They're fixed, so on a light theme they land
+    // light-on-light here.
+    //
+    // The defaults below are literals rather than `Theme.*` bindings for the
+    // same reason: they're what the view paints in the frame or two before the
+    // first solve lands, and a theme binding would make *that* frame the one
+    // broken case on a light theme. They're the default accent solved against
+    // the floor, so the set is self-consistent from the very first paint.
+
+    // Scrim over the blur slots, alpha baked in. Solved so the *composited*
+    // backdrop lands in a known dark band whatever the cover — which is what
+    // lets one light foreground be correct on all of them. Heavier on a bright
+    // sleeve, lighter than the fixed 45% it replaces on a dark one.
+    in-out property <brush> np-scrim: #0a0a0e73;
+
+    // Gradient-floor stops, under the blur slots — so what shows for an
+    // art-less or failed-decode track. Two `color`s, not one `brush`: gradient
+    // stops and `.mix()` need `color` operands.
+    in-out property <color> np-floor-start: #2b2135;
+    in-out property <color> np-floor-end: #14101a;
+
+    // The hue-carrying tier: visualizer bars and trace, stars, heart, back
+    // button, view-menu trigger, chips, Up-Next heading / divider / hover /
+    // scrollbar. Solved for WCAG's 3:1 non-text bar against the composited
+    // backdrop, then floored — a cover whose accent is already brighter keeps
+    // its own tone, and so its own saturation.
+    //
+    // One brush serves solid and translucent surfaces alike; callers vary alpha
+    // off it rather than picking another hue, so the view reads as one colour
+    // family. Never `.brighter()` — that scales HSV value and can't lift a
+    // near-black accent at all.
+    in-out property <brush> np-accent-bright: #cba6f7;
+
+    // Body text on the backdrop. Solved for 4.5:1 and chroma-capped, so it
+    // reads as near-white carrying a whisper of the album's warmth rather than
+    // as coloured type — the tier above is where the hue gets to be loud.
+    in-out property <brush> np-on-backdrop: #c4c0cc;
+
+    // Secondary text on the backdrop (artist, album, Up-Next artist /
+    // duration). 3:1 in its own dimmer band, so the hierarchy under the cover
+    // survives on every backdrop.
+    in-out property <brush> np-on-backdrop-muted: #ada9b5;
 
     callback play-pause();
     callback next();
