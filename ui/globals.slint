@@ -254,7 +254,7 @@ export global ReplayGain {
     callback commit-preamp(float /*dB*/);
 }
 
-// Visualizer: drives the spectrum-analyzer strip in the Now-Playing view. State
+// Visualizer: drives the audio-visualizer strip in the Now-Playing view. State
 // is owned by Rust (`src/ui/visualizer.rs`): `enabled` is seeded from
 // `settings.json` at boot, then two-way bound by the Settings → Playback
 // toggle, which also fires `set-enabled` to persist the choice. Ships **on** —
@@ -266,23 +266,38 @@ export global ReplayGain {
 // is the only thing that arms the backend sample tap. Without the split the
 // audio thread would keep filling the ring for a view nobody has open.
 //
-// `bars` is a Rust-owned `Rc<VecModel<f32>>` of normalized 0..1 heights, low →
-// high frequency, length == `spectrum::NUM_BANDS`. It is already smoothed
-// (fast attack / slow decay) in Rust, so the bars must NOT be `animate`d —
-// animating an already-smoothed value phase-lags.
+// `style` and `style-idx` are one choice in two shapes, both written by Rust:
+// `VisualizerStrip` mounts on the **key**, so reordering the picker can never
+// repoint an existing install's setting, while the Settings chips need the
+// index. `set-style(i)` carries the picker's index back and Rust answers with
+// both.
 //
-// `tick` is fired by the strip's own 16 ms Timer and does the whole
-// snapshot → FFT → band → model pass. `idle` reports back that every bar has
-// decayed to rest, which lets that Timer stop once a paused player's bars have
-// settled: pausing halts the audio tap but leaves stale samples in the ring, so
-// re-analysing them would freeze the bars mid-spectrum instead of letting them
+// Each style feeds off its own property, and `tick` fills only the active one:
+//
+//  - `bars` — a Rust-owned `Rc<VecModel<f32>>` of normalized 0..1 heights, low →
+//    high frequency, length == `spectrum::NUM_BANDS`. Already smoothed (fast
+//    attack / slow decay) in Rust, so the bars must NOT be `animate`d —
+//    animating an already-smoothed value phase-lags.
+//  - `wave-path` — SVG path commands for the oscilloscope trace, x over 0..1 and
+//    y over -1..1 against the `Path`'s fixed viewbox. A string because Slint
+//    rejects `for`-generated path elements (slint-ui/slint#754).
+//
+// `tick` is fired by `VisualizerStrip`'s 16 ms Timer and does the whole
+// snapshot → analysis → property pass. `idle` reports back that the drawing has
+// decayed to rest, which lets that Timer stop once a paused player has settled:
+// pausing halts the audio tap but leaves stale samples in the ring, so
+// re-analysing them would freeze the drawing mid-shape instead of letting it
 // fall.
 export global Visualizer {
     in-out property <bool> enabled: true;
+    in-out property <string> style: "bars";
+    in-out property <int> style-idx;
     in property <[float]> bars;
+    in property <string> wave-path;
     in property <bool> idle: true;
 
     callback set-enabled(bool);
+    callback set-style(int);
     // Fired by `AppWindow`'s `watched-viz-active` mirror, not by the strip —
     // `NowPlayingView` is destroyed while closed and Slint has no unmount
     // callback, so the gate has to live somewhere always mounted.

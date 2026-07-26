@@ -1,19 +1,22 @@
 # Audio Visualizer — Implementation Plan
 
-A real-time, audio-reactive **spectrum visualizer** for the full-screen Now-Playing
-view. A reviewer flagged that Melodia lacks the visualizations that established players
+A real-time, audio-reactive **visualizer** for the full-screen Now-Playing view — spectrum
+bars or an oscilloscope trace. A reviewer flagged that Melodia lacks the visualizations that established players
 (Winamp, foobar2000, VLC, iTunes) have long shipped. Melodia already has a rich
 Now-Playing surface (blur mosaic, accent-tinted chrome), so a visualizer is the natural
 next step for "now playing" immersion.
 
 > **Status:** Shipped. Phases 1–4 (audio tap + lock-free ring, the DSP analyzer, the
-> Now-Playing bars strip, a persisted toggle in Settings → Playback) and Phase 7's docs are
-> all done — CLAUDE.md carries the conventions bullet and README the feature line. What's
-> left of Phase 7 is the release gate, not code: `cargo clippy --all-targets -- -D warnings`
-> and a release-build RSS reading.
+> Now-Playing bars strip, a persisted toggle in Settings → Playback), **Phase 5's shared
+> groundwork and 5.1 (the waveform style)**, and Phase 7's docs are all done — CLAUDE.md
+> carries the conventions bullet and README the feature line. What's left of Phase 7 is the
+> release gate, not code: `cargo clippy --all-targets -- -D warnings` and a release-build RSS
+> reading.
 >
-> Retained deliberately, against the usual delete-on-ship rule, as the reference for the
-> optional Phases 5–6 (extra styles, exact crossfade mix). Delete it if those are ruled out.
+> Retained deliberately, against the usual delete-on-ship rule: **5.2 (mirrored bars) and 5.3
+> (ambient pulse) are committed and not yet built**, and Phase 6 (exact crossfade mix) stays
+> optional. Both are now cheap — the style token, the picker and the shared driver all exist,
+> so each is a key plus a component. Delete this file once they ship and Phase 6 is ruled out.
 
 ---
 
@@ -384,8 +387,8 @@ Goal: bars render and react while the NP view is open, colored to the artwork ac
   `in property <bool> idle: true;`, `callback set-enabled(bool);` and
   `callback tick(bool /*is-playing*/);`. Registered in `app-window.slint`'s import **and**
   `export {}` re-export (Slint prunes un-re-exported globals from the Rust API).
-  **No `style` property** — Phase 5 is optional and may never land, so shipping an unswitched
-  style token would be dead weight; adding it later is purely additive.
+  **No `style` property** — shipping an unswitched style token would have been dead weight
+  while bars were the only style; it arrives with Phase 5, purely additively.
 - **`ui/components/now-playing/spectrum-bars.slint`:** a `HorizontalLayout` of
   `for level in Visualizer.bars`, each a stretching transparent container holding one
   **childless** bottom-anchored `Rectangle` (`height: max(2px, parent.height * level)`,
@@ -462,11 +465,12 @@ would have left one half untestable.
   `EqualizerFlags`. Ships **true** (see §4) via a hand-written `impl Default` — `#[derive]`
   would give `false`. Because the flag is `#[serde(default)]`, an upgrading install (no
   `viz_enabled` key) picks the new default up and the bars appear; an explicit *off* writes
-  `false` and sticks. **One field, no `style`** — see the Phase 3 note; adding it later is
-  purely additive.
+  `false` and sticks. **One field, no `style`** — see the Phase 3 note; Phase 5 adds it
+  additively.
   > The flag decides whether the strip *mounts*, and nothing else — the Phase 7 producer gate
   > below took arming the tap away from it, so the `read_settings` failure fallback is no
-  > longer load-bearing for keeping the two halves in step.
+  > longer load-bearing for keeping the two halves in step. Phase 5 adds a sibling `style`
+  > field beside it.
 - **`src/library/settings/visualizer.rs`** — `set_visualizer_enabled`, a `mutate_settings`
   two-liner mirroring `equalizer.rs::set_eq_enabled`.
 - **No live-apply half, unlike its audio siblings.** It briefly had one
@@ -495,18 +499,157 @@ tests); what Phases 3–4 add is Slint markup and callback wiring, which the pro
 deliberately untested — and `EqualizerFlags` / `CrossfadeFlags` have no settings tests either,
 so there was no precedent to follow.
 
-### Phase 5 — Additional styles (optional) `[ ]`
+### Phase 5 — Additional styles `[ ]`
 
-Only if there's appetite after bars ship. Each is a new `style` value + a Slint component
-switched on `Visualizer.style`; the Phase 1–2 pipeline is unchanged (waveform reads the raw
-snapshot instead of bands).
+Three styles beside the shipped bars, each a new `style` value + a Slint component switched on
+`Visualizer.style`. The Phase 1–2 pipeline is **unchanged** — this is the OCP payoff from §5:
+the tap, ring and analyzer stay as they are, and a style either consumes the existing band
+model or reads the raw snapshot.
 
-- **Waveform / oscilloscope** — introduces Slint's `Path` element (currently unused in the
-  project): a polyline of `LineTo` points bound to a `[float]` model of the downsampled
-  snapshot. Prototype the `Path` API in isolation first — it's new ground here.
-- **Mirrored bars** — bars growing from a center line; pure Slint, reuses the bands model.
-- **Ambient pulse** — a single accent-tinted `Rectangle`/glow whose opacity/scale tracks total
-  RMS energy; cheapest, best match for the blur aesthetic.
+**Shared groundwork `[x]`.** Phases 3 and 4 both deliberately shipped *without* a style token,
+so every sub-phase queued behind it. It shipped with 5.1; four things, none of them
+style-specific:
+
+- **`Visualizer.style` as a string key, not an int index.** `VisualizerFlags` gained
+  `viz_style: String` (whole-struct `#[serde(default)]` → `"bars"`), matching how `themes/`
+  keys its registry and how `MATERIAL_YOU_ACCENT_ID` / `CUSTOM_PRESET` work. An index would
+  silently repoint every existing install's setting the day the list is reordered — and the app
+  is publicly released. The key table is `STYLES` in `src/ui/visualizer.rs`; an unrecognized key
+  resolves to index 0 rather than erroring, so a file from a newer build degrades.
+  **Two Slint properties, one Rust writer:** `style` (the key, what the strip mounts on) and
+  `style-idx` (what the picker binds). The mount branch reading the key is what makes a
+  reordered picker a non-event.
+- **`ChipGroup` in Settings → Playback, not a `Dropdown`.** The sketch above assumed four
+  styles; with two, the row is a copy of the "Play Button Animation" row 25 lines above it in
+  the same section — `SettingRowStacked` + `ChipGroup`, default (non-`manual`) mode with a
+  two-way `<=>` on `style-idx`, which sidesteps the orphaned-binding pitfall a one-way binding
+  would have needed `manual: true` for. Gated `if Visualizer.enabled` (never `visible: false`,
+  slint#7377), the crossfade sub-row precedent. The toggle and the picker **search as one
+  unit**, like the crossfade cluster — that is also what leaves the three upstream
+  `SectionDivider` gates correct without touching them.
+- **The name list is a named `@tr` literal array at the use site** (`viz-style-names`),
+  mirroring `STYLES` **by position** — `@tr()` only translates literals at codegen, so a
+  `[string]` seeded from Rust renders untranslated. `src/ui/tests/visualizer_tests.rs` pins the
+  length against `STYLES` with the same `include_str!` + `split_once` shape
+  `smart_criteria_tests` uses, and also pins the strip's mount branch to `STYLE_WAVEFORM`.
+- **The Timer is hoisted out of `spectrum-bars.slint` into `visualizer-strip.slint`.** This was
+  the load-bearing one. The 16 ms Timer *and* its three-part gate used to live inside the bars
+  component: `running: Player.vm.is_playing || !Visualizer.idle`, the
+  `tray_bridge::is_window_visible()` AND, and the rule that `idle` is written at the **end** of
+  `tick` so an early return strands the Timer spinning at 60 Hz forever. Phase 7 warns twice
+  that a second style's driver needs the same guard, so rather than duplicate it,
+  `VisualizerStrip` owns the footprint and the one driver and the style components are pure
+  render. `Visualizer.set-active` is unaffected — every style arms the tap identically.
+
+The tick branches on the active style, so a style that needs no bands runs no FFT (see 5.3);
+5.1 already exercises that path. Build order was to have been 5.2 → 5.3 → 5.1 by ascending
+risk, but 5.1 shipped first: its one unknown (Slint `Path`) resolved on inspection rather than
+by spike — see below — which left it no riskier than the others.
+
+#### Phase 5.1 — Waveform / oscilloscope `[x]`
+
+Goal: a live trace of the raw signal, in place of the band bars.
+
+> **The `Path` question resolved by reading the compiler, not by a spike.** §9 listed Slint
+> `Path` as unproven, and the specific open question was whether it can take `for`-generated
+> `LineTo` children. It cannot: `i-slint-compiler`'s `passes/compile_paths.rs` errors with
+> *"Path elements are not supported with `for`-`in` syntax, yet"* (slint-ui/slint#754). The same
+> pass does accept **any** binding whose type is `String` for `commands`, routing it to
+> `PathData::Commands` — the software-renderer caveat there doesn't apply to this FemtoVG-only
+> tree. So the geometry is a Rust-built SVG string, the fallback column plot was never needed,
+> and the trace is a real polyline.
+
+- **New data:** `Visualizer.wave-path: string` — SVG commands, not a `[float]` model, for the
+  reason above. `src/player/waveform.rs` is a **sibling of `spectrum.rs`, not an addition to
+  it**: `spectrum.rs` is named for the spectrum and its every line is FFT/banding, so the trace
+  got its own leaf module and its own `tests/waveform_tests.rs`. It reads the raw snapshot and
+  bypasses banding entirely — this style runs **no FFT at all**, which is the OCP payoff §5
+  predicted, arriving one sub-phase earlier than expected.
+- **Per-frame allocation was the risk, not the drawing**, and it lands at exactly one
+  `SharedString` per frame: `write_path_commands` clears and refills a `String` the installer
+  owns (reserved once at `WAVE_POINTS * 16`; a 192-vertex trace measures 2775 bytes, so it never
+  regrows), and only the `SharedString` handed to Slint allocates. Slint re-parses that string
+  with lyon on every render and caches nothing, which is fine against geometry that changes
+  every frame anyway.
+- **A viewbox is mandatory and `fit` must be `fill`.** `Path::fitted_path_events` fits the path
+  to the element; with no viewbox it fits the path's *own bounding box*, which renormalizes
+  every frame — a whisper would draw as loud as a chorus. `fit` defaults to `contain`
+  (`FitStyle::Min`), which would letterbox the 1×2 box into a sliver. The declared box is
+  `0 -1 1 2` and Rust normalizes into it, so no vertex count crosses the language boundary.
+- **Screen y grows downward**, so `write_path_commands` flips the sample — otherwise positive
+  peaks draw *below* the centre line and the whole trace is upside down. It subtracts from zero
+  rather than negating, so a resting trace formats as `0.000` and not 192 × `-0.000`.
+- **Trigger alignment was required, not polish.** Consecutive snapshots start at an arbitrary
+  phase, so an untriggered trace slides sideways every frame and reads as broken.
+  `find_trigger` takes the **most recent** rising zero crossing in the slack region (lowest
+  latency; every candidate is the same polarity, so which one is picked changes the latency and
+  not the shape) and needs **hysteresis** — without it the trigger chases noise around the axis
+  and jitters exactly as if it had none.
+- **`downsample` takes each bucket's signed peak, not its mean.** At ~5 samples per bucket a
+  mean is a lowpass, and a bright mix would draw as a nearly flat line.
+- **Window:** `WAVE_WINDOW 2048` snapshotted, `WAVE_SPAN 1024` drawn (~23 ms at 44.1 kHz — a
+  couple of bass periods), the other 1024 being the trigger's search slack; `WAVE_POINTS 192`.
+- **Speed:** unlike the band edges, playback speed is not a correctness bug here — it only
+  changes how much wall-clock time the trace spans. Commented so nobody "fixes" it.
+- **Idle:** an inactive tick decays the trace toward the centre line rather than re-reading the
+  ring, so a paused player collapses and settles instead of freezing mid-shape — the bars'
+  behaviour, reusing the hoisted Timer's gate unchanged.
+- **Colour:** `Player.np-accent-bright` as stroke, same tone-floored accent as the bars, with
+  round caps and joins.
+
+**Tests:** `src/player/tests/waveform_tests.rs` — 25, covering the trigger (rising crossing on a
+sine, most-recent selection, `search_len` bound, silence, both DC polarities, sub-hysteresis
+noise, empty), `downsample` (every slot filled, signed peak, per-bucket independence,
+nearest-sample hold when upsampling, empty either side), `write_path_commands` (the `M`-then-`L`
+shape, the 0..1 x span, the y flip, no negative zeroes, buffer reuse, empty and single-vertex),
+and the analyzer end to end (a full-scale sine reaches the top; two snapshots of the same tone
+taken at different phases draw the same trace — the point of triggering; an inactive analyzer
+decays to rest without re-reading its window). Slint markup stays untested per convention.
+
+**Memory:** a 2048-sample window, a 192-point trace and a ~3 KiB string buffer, all allocated
+once. Negligible.
+
+#### Phase 5.2 — Mirrored bars `[ ]`
+
+Goal: the same bands, growing symmetrically from a centre line.
+
+- **Pure Slint — no Rust changes at all.** Reuses `Visualizer.bars` untouched, which is why it
+  goes first: it exercises the style switch end-to-end with nothing else in flight.
+- **Geometry:** `height: max(floor, parent.height * level)` with
+  `y: (parent.height - self.height) / 2`, against the shipped bars' bottom anchoring.
+- **Childless `Rectangle`s**, as in Phase 3 — a child would put the rounded cap on FemtoVG's
+  offscreen-layer path (the HiDPI clip-blur pitfall).
+- **Clamp the corner radius on both axes** — `min(self.width / 2, self.height / 2, <cap>)`.
+  FemtoVG clamps a corner's x- and y-radii independently, so a short wide bar with a large
+  radius pinches into a lens. The strip has already been bitten by this twice (the paused-bar
+  fix, then the resting-dot change); a mirrored bar is the same size-varying shape.
+- **Resting shape:** bars currently rest as dots rather than a floored bar — the mirrored
+  variant should rest as a dot on the midline, or the strip reads as a dashed rule.
+
+**Tests:** none — no new Rust. **Memory:** none.
+
+#### Phase 5.3 — Ambient pulse `[ ]`
+
+Goal: an accent-tinted glow breathing with overall energy, matching the blur aesthetic rather
+than reading as an analyzer.
+
+- **New data:** `Visualizer.energy: float`, from a pure `rms(samples)` in `spectrum.rs`, smoothed
+  through the existing peak-follow `smooth` so it inherits the same attack/decay feel as the bars
+  (and the same pause-decay behaviour for free).
+- **This style runs no FFT.** With the tick branching on style, ambient is snapshot → RMS →
+  smooth and skips the transform entirely — cheaper than bars, not merely equal. That it's a
+  branch rather than a rewrite is exactly what §5's layering bought.
+- **Render:** a childless accent `Rectangle` whose opacity and/or scale derive from `energy`.
+  **No `animate`** — Rust already smooths, and animating a smoothed value phase-lags (documented
+  pitfall). Clamp the radius on both axes if it's rounded, per 5.2.
+- **The design risk is compositional, not technical.** It shares a surface with the artwork blur,
+  the `Theme.crust.with-alpha(0.45)` scrim and the accent-tinted chips — a full-bleed pulsing
+  glow can easily fight all three. Prototype inside the existing strip's footprint before letting
+  it spread behind the cover.
+
+**Tests:** `rms` is pure → unit tests (silence, full-scale sine, DC offset, empty slice).
+
+**Memory:** one float. Negligible.
 
 ### Phase 6 — Exact crossfade mix (optional refinement) `[ ]`
 
@@ -570,9 +713,15 @@ adds a style:
   (ring + atomics) and `VisualizerTap` (the transparent tap source). **Done.**
 - `src/player/spectrum.rs` + `src/player/tests/spectrum_tests.rs` — pure DSP + `SpectrumAnalyzer`
   + tests. **Done.**
-- `src/ui/visualizer.rs` — `install_visualizer`, UI-thread analyzer + render loop. **Done.**
-- `src/library/settings/visualizer.rs` — persistence setter. **Done.**
-- `ui/components/now-playing/spectrum-bars.slint` — bars component + driving Timer. **Done.**
+- `src/ui/visualizer.rs` (+ `src/ui/tests/visualizer_tests.rs`) — `install_visualizer`,
+  UI-thread analyzers + render loop, the `STYLES` key table and its `.slint` pins. **Done.**
+- `src/library/settings/visualizer.rs` — persistence setters. **Done.**
+- `ui/components/now-playing/spectrum-bars.slint` — bars component. **Done.**
+- `src/player/waveform.rs` + `src/player/tests/waveform_tests.rs` — trigger, downsample, path
+  string + `WaveformAnalyzer` (Phase 5.1). **Done.**
+- `ui/components/now-playing/visualizer-strip.slint` — footprint, style switch, the one driving
+  Timer (Phase 5.1). **Done.**
+- `ui/components/now-playing/waveform-trace.slint` — the stroked `Path` (Phase 5.1). **Done.**
 
 **Changed**
 - `Cargo.toml` — `realfft = "3.5.0"` in the `# Audio` group (+ `Cargo.lock`). **Done.**
@@ -585,17 +734,22 @@ adds a style:
 - `src/library/playback.rs` — briefly held `player_set_visualizer_enabled`; removed by the
   Phase 7 producer gate. **Done.**
 - `src/library/settings/mod.rs` — `pub mod visualizer;` + re-export. **Done.**
-- `src/services/settings/data.rs` — `VisualizerFlags` + flatten + default. **Done.**
+- `src/services/settings/data.rs` — `VisualizerFlags` + flatten + default; `viz_style` key
+  (Phase 5.1). **Done.**
 - `src/state/mod.rs` — `hydrate_audio_dsp` deliberately skips the tap (Phase 7). **Done.**
 - `src/services/material_you.rs` (+ tests) — `lift_to_min_tone`. **Done.**
 - `src/ui/now_playing/track_change.rs` — write `np-accent-bright`. **Done.**
 - `ui/globals.slint` — `Visualizer` global (+ `app-window.slint` import/export, and its
   `watched-viz-active` mirror from Phase 7). **Done.**
 - `ui/views/now-playing-view.slint` — mount the strip; hoist `cover-size`. **Done.**
-- `ui/views/settings/playback-section.slint` — toggle row + divider gates. **Done.**
+- `ui/views/settings/playback-section.slint` — toggle row + divider gates; the style chip row
+  and its `viz-style-names` array (Phase 5.1). **Done.**
 - `src/ui/mod.rs` + `src/boot/ui_setup.rs` — register + call `install_visualizer`. **Done.**
-- `scripts/icons.txt` + both subset TTFs — `bar_chart`. **Done.**
-- `translations/*/LC_MESSAGES/Melodia.po` — `"Visualizer"` (6 locales). **Done.**
+- `src/player/mod.rs` — `pub mod waveform;` (Phase 5.1). **Done.**
+- `scripts/icons.txt` + both subset TTFs — `bar_chart`, plus `show_chart` (Phase 5.1). **Done.**
+- `translations/*/LC_MESSAGES/Melodia.po` — `"Visualizer"`, plus `"Visualizer Style"` /
+  `"Bars"` / `"Waveform"` / the style description, and the toggle's own description reworded off
+  "spectrum analyzer" now that it isn't only one (6 locales). **Done.**
 
 ---
 
@@ -609,8 +763,10 @@ adds a style:
 - **Crossfade interleave** — see Phase 1 caveat / Phase 6 fix.
 - **Variable sample rate** across tracks — handled by carrying `fs` in the shared cell so
   band edges are computed against the true rate.
-- **Slint `Path` is unproven here** — only Phase 5's waveform needs it; bars use the existing
-  `Rectangle` idiom, so the primary deliverable carries no new-primitive risk.
+- **Slint `Path`** — *resolved in 5.1.* `for`-generated path elements are rejected outright
+  (slint-ui/slint#754), so the waveform's geometry is a dynamic `commands` string with a fixed
+  viewbox. Bars still use the `Rectangle` idiom, so the primary deliverable never carried the
+  new-primitive risk.
 - **Memory** — total resident footprint of the feature is on the order of tens of KiB, all
   allocated once, and no compute runs while the NP view is closed. No memory-discipline concern.
 

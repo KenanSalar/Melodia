@@ -4,7 +4,7 @@ import { IconButton } from "../components/icon-button.slint";
 import { StarRating } from "../components/star-rating.slint";
 import { NowPlayingCover } from "../components/now-playing/now-playing-cover.slint";
 import { UpNextList } from "../components/now-playing/up-next-list.slint";
-import { SpectrumBars } from "../components/now-playing/spectrum-bars.slint";
+import { VisualizerStrip } from "../components/now-playing/visualizer-strip.slint";
 
 // One technical-metadata chip (codec / bitrate / sample rate / …). The
 // caller only instantiates it when the matching `Player.track-meta` field
@@ -295,7 +295,7 @@ export component NowPlayingView inherits Rectangle {
                     }
                 }
 
-                // Spectrum strip, as a base under the whole cover → title →
+                // Visualizer strip, as a base under the whole cover → title →
                 // chips group. Wrapped in a centring HorizontalLayout because
                 // a fixed-width child does not centre in a wider
                 // VerticalLayout, the same reason the cover above is wrapped.
@@ -315,7 +315,7 @@ export component NowPlayingView inherits Rectangle {
                     // it, everything above rises by the other half — budget
                     // twice the drop you actually want.
                     padding-top: Theme.pad-lg * 2.5;
-                    SpectrumBars {
+                    VisualizerStrip {
                         width: max(root.cover-size, root.content-width * 0.75);
                     }
                 }

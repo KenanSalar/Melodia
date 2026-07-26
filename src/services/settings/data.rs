@@ -236,22 +236,28 @@ impl Default for CrossfadeFlags {
 /// `viz_enabled` key, so it picks up the new default and the bars appear.
 /// Turning it off writes `false`, which then persists.
 ///
-/// It decides whether the strip *mounts*, and nothing more — the audio-thread
-/// sample tap is armed by the Now-Playing view being on screen (see
+/// `viz_enabled` decides whether the strip *mounts*, and nothing more — the
+/// audio-thread sample tap is armed by the Now-Playing view being on screen (see
 /// `crate::ui::visualizer`), so leaving this on costs nothing while the view is
 /// closed.
 ///
-/// A later visualizer *style* would land here as another `#[serde(default)]`
-/// field.
+/// `viz_style` is a **key**, not an index into the picker. An index would
+/// silently repoint every existing install's setting the day the style list is
+/// reordered, and this app ships to users. An unrecognized key resolves back to
+/// the default, so a file written by a newer build degrades instead of breaking.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct VisualizerFlags {
     pub viz_enabled: bool,
+    pub viz_style: String,
 }
 
 impl Default for VisualizerFlags {
     fn default() -> Self {
-        Self { viz_enabled: true }
+        Self {
+            viz_enabled: true,
+            viz_style: "bars".to_owned(),
+        }
     }
 }
 

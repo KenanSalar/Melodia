@@ -70,6 +70,7 @@ search
 search_off
 settings
 shield
+show_chart
 shuffle
 speed
 star

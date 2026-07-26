@@ -12,3 +12,4 @@ pub mod spectrum;
 pub mod state;
 pub mod types;
 pub mod visualizer;
+pub mod waveform;

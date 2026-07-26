@@ -45,7 +45,7 @@ pub use replaygain::{
     set_replaygain_enabled, set_replaygain_mode, set_replaygain_preamp,
     set_replaygain_prevent_clipping,
 };
-pub use visualizer::set_visualizer_enabled;
+pub use visualizer::{set_visualizer_enabled, set_visualizer_style};
 pub use scrobble::{
     set_scrobble_lastfm_enabled, set_scrobble_lastfm_love_enabled,
     set_scrobble_listenbrainz_enabled, set_scrobble_listenbrainz_love_enabled,

@@ -1013,8 +1013,20 @@ msgstr "ReplayGain"
 msgid "Visualizer"
 msgstr "Görselleştirici"
 
-msgid "Show a spectrum analyzer on the Now Playing screen"
-msgstr "Şimdi çalınıyor ekranında bir spektrum analizörü göster"
+msgid "Show an audio visualizer on the Now Playing screen"
+msgstr "Şimdi çalınıyor ekranında bir ses görselleştirici göster"
+
+msgid "Visualizer Style"
+msgstr "Görselleştirici Stili"
+
+msgid "Choose how the visualizer draws the audio"
+msgstr "Görselleştiricinin sesi nasıl çizeceğini seçin"
+
+msgid "Bars"
+msgstr "Çubuklar"
+
+msgid "Waveform"
+msgstr "Dalga formu"
 
 msgid "Enable ReplayGain"
 msgstr "ReplayGain'i etkinleştir"

@@ -1010,8 +1010,20 @@ msgstr "ReplayGain"
 msgid "Visualizer"
 msgstr "Visualizzatore"
 
-msgid "Show a spectrum analyzer on the Now Playing screen"
-msgstr "Mostra un analizzatore di spettro nella schermata di riproduzione"
+msgid "Show an audio visualizer on the Now Playing screen"
+msgstr "Mostra un visualizzatore audio nella schermata di riproduzione"
+
+msgid "Visualizer Style"
+msgstr "Stile del visualizzatore"
+
+msgid "Choose how the visualizer draws the audio"
+msgstr "Scegli come il visualizzatore disegna l'audio"
+
+msgid "Bars"
+msgstr "Barre"
+
+msgid "Waveform"
+msgstr "Forma d'onda"
 
 msgid "Enable ReplayGain"
 msgstr "Abilita ReplayGain"

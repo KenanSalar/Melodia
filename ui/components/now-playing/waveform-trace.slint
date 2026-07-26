@@ -1,0 +1,43 @@
+import { Player, Visualizer } from "../../globals.slint";
+
+// Oscilloscope trace for the Now-Playing view: the signal itself rather than
+// its spectrum, drawn as a single stroked polyline.
+//
+// The geometry arrives as an SVG command string rather than as `LineTo`
+// children, because Slint rejects `for`-generated path elements outright
+// ("Path elements are not supported with `for`-`in` syntax, yet",
+// slint-ui/slint#754). Rust rebuilds the string each tick; there is no `animate`
+// here for the same reason the bars have none — the trace is already a smoothed
+// value, and animating one phase-lags.
+export component WaveformTrace inherits Rectangle {
+    background: transparent;
+
+    Path {
+        commands: Visualizer.wave-path;
+
+        // Rust normalizes to this box — x across 0..1, y as the sample's own
+        // -1..1 — so the viewbox is a constant and no vertex count has to be
+        // kept in step across the language boundary.
+        //
+        // The viewbox is not optional: without one, Slint fits the path's *own*
+        // bounding box to the element, which renormalizes every frame and would
+        // draw a whisper as loud as a chorus.
+        viewbox-x: 0;
+        viewbox-y: -1;
+        viewbox-width: 1;
+        viewbox-height: 2;
+        // `contain` (the default) preserves the viewbox's aspect ratio, which
+        // would letterbox this 1×2 box into a sliver down the middle.
+        fit: fill;
+
+        // The per-artwork accent, so the trace harmonizes with the blur — but
+        // the tone-floored variant, since this is painted opaque: a dark album's
+        // raw accent would sink into the scrimmed backdrop.
+        stroke: Player.np-accent-bright;
+        stroke-width: 2px;
+        // Rounded joins keep the corners from spiking where a transient turns
+        // the trace back on itself within a couple of vertices.
+        stroke-line-cap: round;
+        stroke-line-join: round;
+    }
+}

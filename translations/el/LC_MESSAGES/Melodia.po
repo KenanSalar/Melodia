@@ -1012,8 +1012,20 @@ msgstr "ReplayGain"
 msgid "Visualizer"
 msgstr "Οπτικοποίηση"
 
-msgid "Show a spectrum analyzer on the Now Playing screen"
-msgstr "Εμφάνιση αναλυτή φάσματος στην οθόνη αναπαραγωγής"
+msgid "Show an audio visualizer on the Now Playing screen"
+msgstr "Εμφάνιση οπτικοποίησης ήχου στην οθόνη αναπαραγωγής"
+
+msgid "Visualizer Style"
+msgstr "Στυλ οπτικοποίησης"
+
+msgid "Choose how the visualizer draws the audio"
+msgstr "Επιλέξτε πώς σχεδιάζει τον ήχο η οπτικοποίηση"
+
+msgid "Bars"
+msgstr "Μπάρες"
+
+msgid "Waveform"
+msgstr "Κυματομορφή"
 
 msgid "Enable ReplayGain"
 msgstr "Ενεργοποίηση ReplayGain"

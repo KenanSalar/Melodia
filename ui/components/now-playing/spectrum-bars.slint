@@ -1,6 +1,6 @@
 import { Player, Visualizer } from "../../globals.slint";
 
-// Spectrum-analyzer strip for the Now-Playing view: one bar per frequency
+// Spectrum-analyzer style for the Now-Playing view: one bar per frequency
 // band, bass on the left, treble on the right. A silent band rests as a dot and
 // stretches upward out of it as it gets loud, so an idle strip reads as a row of
 // beads rather than as a flat rule waiting for something to happen.
@@ -11,15 +11,13 @@ import { Player, Visualizer } from "../../globals.slint";
 // already-smoothed value phase-lags, and a single shared Timer plus
 // math-derived bindings is cheaper at vsync than N concurrent `animate` blocks.
 //
+// Pure render — the footprint and the driving Timer belong to the host,
+// `visualizer-strip.slint`.
+//
 // Each bar is a childless Rectangle, so its rounded cap never pushes the
 // subtree through FemtoVG's offscreen layer (the HiDPI clip-blur pitfall).
 export component SpectrumBars inherits Rectangle {
     background: transparent;
-    min-height: 56px;
-    max-height: 56px;
-    // The host column is `alignment: center`, and the strip must not grow into
-    // the space the cover and title need on a short window.
-    vertical-stretch: 0;
 
     HorizontalLayout {
         // Bars are `horizontal-stretch: 1`, so each one is what's left of the
@@ -55,23 +53,6 @@ export component SpectrumBars inherits Rectangle {
                 // the scrimmed backdrop.
                 background: Player.np-accent-bright;
             }
-        }
-    }
-
-    // One shared Timer drives every bar: it runs a full snapshot → FFT → bands
-    // → model pass in Rust and is the only thing that reads the sample ring.
-    //
-    // `running` is deliberately not just `is_playing`. Pausing stops the audio
-    // tap but leaves the last window of samples in the ring, so freezing the
-    // Timer would strand the bars on a stale spectrum. Instead the tick keeps
-    // firing past a pause — feeding the smoother silence rather than the ring —
-    // until Rust reports every bar has settled, and only then stops. A paused,
-    // decayed visualizer costs nothing.
-    Timer {
-        interval: 16ms;
-        running: Player.vm.is_playing || !Visualizer.idle;
-        triggered() => {
-            Visualizer.tick(Player.vm.is_playing);
         }
     }
 }
