@@ -135,19 +135,14 @@ export global Player {
     // near-black accent at all.
     in-out property <brush> np-accent-bright: #cba6f7;
 
-    // The translucent tiers off that one brush. Derived here rather than at each
-    // call site: the same four alphas were being re-spelled across six files,
-    // so a change to any of them meant finding every copy — and two surfaces
-    // meant to match could drift apart without anything failing.
-    //
-    // The disc pair is read only by `AccentDiscButton`, which is itself the
-    // shared surface — they are named anyway so the set reads as one ladder of
-    // weights rather than two rules. A genuine one-off (the Up-Next divider,
-    // its scrollbar's hover) stays inline where it is, since naming it would
-    // just move the number without sharing it.
+    // The translucent tiers off that one brush, derived here rather than at each
+    // call site so surfaces meant to match can't drift apart. `np-accent-pill`
+    // is the resting weight for every tinted surface in the view — metadata
+    // chips and the two disc buttons alike. One-offs (the Up-Next divider, its
+    // scrollbar's hover) stay inline; naming them would move the number without
+    // sharing it.
     out property <brush> np-accent-pill: root.np-accent-bright.with-alpha(0.16);
-    out property <brush> np-accent-disc: root.np-accent-bright.with-alpha(0.2);
-    out property <brush> np-accent-disc-hover: root.np-accent-bright.with-alpha(0.32);
+    out property <brush> np-accent-disc-hover: root.np-accent-bright.with-alpha(0.3);
     out property <brush> np-accent-dim: root.np-accent-bright.with-alpha(0.6);
 
     // Body text on the backdrop. Solved for 4.5:1 and chroma-capped, so it
