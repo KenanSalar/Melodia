@@ -2,8 +2,8 @@ import { Player, Visualizer } from "../../globals.slint";
 
 // Spectrum-analyzer style for the Now-Playing view: one bar per frequency
 // band, bass on the left, treble on the right. A silent band rests as a dot and
-// stretches upward out of it as it gets loud, so an idle strip reads as a row of
-// beads rather than as a flat rule waiting for something to happen.
+// grows out of it as it gets loud, so an idle strip reads as a row of beads
+// rather than as a flat rule waiting for something to happen.
 //
 // Heights come straight from `Visualizer.bars` (normalized 0..1, low → high),
 // which Rust has already smoothed with a fast attack and a slow decay. That is
@@ -17,7 +17,8 @@ import { Player, Visualizer } from "../../globals.slint";
 // Each bar is a childless Rectangle, so its rounded cap never pushes the
 // subtree through FemtoVG's offscreen layer (the HiDPI clip-blur pitfall).
 export component SpectrumBars inherits Rectangle {
-    background: transparent;
+    // Centre-line anchoring instead of the baseline — the "Mirrored" style.
+    in property <bool> centred;
 
     HorizontalLayout {
         // Bars are `horizontal-stretch: 1`, so each one is what's left of the
@@ -26,11 +27,10 @@ export component SpectrumBars inherits Rectangle {
         spacing: 2px;
 
         for level in Visualizer.bars: Rectangle {
-            background: transparent;
             horizontal-stretch: 1;
 
-            // Bottom-anchored fill. Computed geometry rather than a layout, in
-            // the idiom of `dialog/eq-band-slider.slint`.
+            // Computed geometry rather than a layout, in the idiom of
+            // `dialog/eq-band-slider.slint`.
             Rectangle {
                 width: parent.width;
                 // Floored at the band's own column width, so a silent band is a
@@ -39,7 +39,11 @@ export component SpectrumBars inherits Rectangle {
                 // so the resting shape would only come out round at one window
                 // size and read as a squashed dash at every other.
                 height: max(parent.width, parent.height * level);
-                y: parent.height - self.height;
+                // Height is the total in both anchorings, so a centred bar puts
+                // half either side of the axis rather than a full bar each way.
+                y: root.centred
+                    ? (parent.height - self.height) / 2
+                    : parent.height - self.height;
                 // Half the short axis — a circle at the floor, semicircular
                 // caps once the band is taller than it is wide. Taking the
                 // `min` rather than assuming the width is the short one is what

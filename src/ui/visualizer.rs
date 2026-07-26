@@ -51,6 +51,7 @@ const IDLE_LEVEL: f32 = 0.001;
 
 const STYLE_BARS: &str = "bars";
 const STYLE_WAVEFORM: &str = "waveform";
+const STYLE_MIRRORED: &str = "mirrored";
 
 /// Style keys in picker order.
 ///
@@ -60,7 +61,7 @@ const STYLE_WAVEFORM: &str = "waveform";
 /// Settings chips and the Now-Playing view's flyout — and the branch in
 /// `visualizer-strip.slint` that mounts on the key. `tests/visualizer_tests.rs`
 /// pins both against this array.
-const STYLES: [&str; 2] = [STYLE_BARS, STYLE_WAVEFORM];
+const STYLES: [&str; 3] = [STYLE_BARS, STYLE_WAVEFORM, STYLE_MIRRORED];
 
 /// Picker index for a persisted key. An unrecognized key — a hand-edited file,
 /// or one written by a newer build — falls back to the default style rather

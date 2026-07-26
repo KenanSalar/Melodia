@@ -17,12 +17,15 @@ export component VisualizerStrip inherits Rectangle {
     // the space the cover and title need on a short window.
     vertical-stretch: 0;
 
-    // Matched on the key, not on an index, so reordering the Settings picker
-    // can't repoint an existing install's saved style. `!=` rather than
-    // `== "bars"` makes bars the catch-all: a key from a newer build, or a
-    // hand-edited one, degrades to the default instead of drawing nothing.
+    // Matched on the key, not on an index, so reordering the pickers can't
+    // repoint an existing install's saved style. `!=` rather than `== "bars"`
+    // makes bars the catch-all: a key from a newer build, or a hand-edited one,
+    // degrades to the default instead of drawing nothing. "mirrored" is the
+    // same bars under a different anchor, so it rides that branch too.
     if Visualizer.style == "waveform": WaveformTrace { }
-    if Visualizer.style != "waveform": SpectrumBars { }
+    if Visualizer.style != "waveform": SpectrumBars {
+        centred: Visualizer.style == "mirrored";
+    }
 
     // One shared Timer: it runs a full snapshot → analysis → property pass in
     // Rust and is the only thing that reads the sample ring.

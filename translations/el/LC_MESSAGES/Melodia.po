@@ -1027,6 +1027,9 @@ msgstr "Μπάρες"
 msgid "Waveform"
 msgstr "Κυματομορφή"
 
+msgid "Mirrored"
+msgstr "Κατοπτρικό"
+
 msgid "Enable ReplayGain"
 msgstr "Ενεργοποίηση ReplayGain"
 

@@ -8,15 +8,15 @@ next step for "now playing" immersion.
 
 > **Status:** Shipped. Phases 1–4 (audio tap + lock-free ring, the DSP analyzer, the
 > Now-Playing bars strip, a persisted toggle in Settings → Playback), **Phase 5's shared
-> groundwork and 5.1 (the waveform style)**, and Phase 7's docs are all done — CLAUDE.md
-> carries the conventions bullet and README the feature line. What's left of Phase 7 is the
-> release gate, not code: `cargo clippy --all-targets -- -D warnings` and a release-build RSS
-> reading.
+> groundwork, 5.1 (waveform) and 5.2 (mirrored bars)**, and Phase 7's docs are all done —
+> CLAUDE.md carries the conventions bullet and README the feature line. What's left of Phase 7
+> is the release gate, not code: `cargo clippy --all-targets -- -D warnings` and a release-build
+> RSS reading.
 >
-> Retained deliberately, against the usual delete-on-ship rule: **5.2 (mirrored bars) and 5.3
-> (ambient pulse) are committed and not yet built**, and Phase 6 (exact crossfade mix) stays
-> optional. Both are now cheap — the style token, the picker and the shared driver all exist,
-> so each is a key plus a component. Delete this file once they ship and Phase 6 is ruled out.
+> Retained deliberately, against the usual delete-on-ship rule: **5.3 (ambient pulse) is
+> committed and not yet built**, and Phase 6 (exact crossfade mix) stays optional. 5.3 is now
+> cheap — the style token, both pickers and the shared driver all exist, and 5.2 proved a style
+> need not even be its own component. Delete this file once it ships and Phase 6 is ruled out.
 
 ---
 
@@ -685,24 +685,67 @@ untested per convention.
 **Memory:** the ring at 64 KiB (up from 16), a 512-column buffer and a ~20 KiB string buffer,
 all allocated once. Negligible.
 
-#### Phase 5.2 — Mirrored bars `[ ]`
+#### Phase 5.2 — Mirrored bars `[x]`
 
 Goal: the same bands, growing symmetrically from a centre line.
 
-- **Pure Slint — no Rust changes at all.** Reuses `Visualizer.bars` untouched, which is why it
-  goes first: it exercises the style switch end-to-end with nothing else in flight.
-- **Geometry:** `height: max(floor, parent.height * level)` with
-  `y: (parent.height - self.height) / 2`, against the shipped bars' bottom anchoring.
-- **Childless `Rectangle`s**, as in Phase 3 — a child would put the rounded cap on FemtoVG's
-  offscreen-layer path (the HiDPI clip-blur pitfall).
-- **Clamp the corner radius on both axes** — `min(self.width / 2, self.height / 2, <cap>)`.
-  FemtoVG clamps a corner's x- and y-radii independently, so a short wide bar with a large
-  radius pinches into a lens. The strip has already been bitten by this twice (the paused-bar
-  fix, then the resting-dot change); a mirrored bar is the same size-varying shape.
-- **Resting shape:** bars currently rest as dots rather than a floored bar — the mirrored
-  variant should rest as a dot on the midline, or the strip reads as a dashed rule.
+> **It shipped as a flag on `SpectrumBars`, not as a second component.** The sketch below
+> assumed a `mirrored-bars.slint` beside the other two styles. The mirrored variant differs from
+> the shipped bars by the `y` binding **alone** — a fork would have duplicated ~30 lines of
+> geometry whose two load-bearing parts (the column-width floor and the two-axis radius clamp)
+> are exactly the ones that must not drift. So `in property <bool> centred` switches the anchor
+> and `visualizer-strip.slint` sets it from the key on the catch-all branch. Switching
+> Bars↔Mirrored now re-evaluates one binding instead of destroying and rebuilding 64 Rectangles.
+> **A style is not necessarily a component** — the strip branches on the key either way.
 
-**Tests:** none — no new Rust. **Memory:** none.
+> **"Mirrored" is an overloaded word, and this is the vertical one.** audioMotion's `mirror` and
+> CAVA's `channels = stereo` both mean the *horizontal* fold (bass in the centre); the vertical
+> one is audioMotion's "reflex" and CAVA's `orientation = horizontal` ("bars go up and down from
+> center"). We build and label the vertical one. The horizontal fold stays out of scope — it
+> would need a Rust-side band reorder, not a Slint anchor.
+
+- **Amplitude halves; the height binding is untouched.** `parent.height * level` is the bar's
+  *total* height, so centring puts `level * H/2` either side and a mirrored bar carries the same
+  ink as a baseline one at the same level. Six shipped implementations agree and none disagree:
+  CAVA divides its own output by 2 for `ORIENT_SPLIT_H`, wavesurfer draws against a `halfHeight`,
+  audioMotion's documented "perfect mirror" is `reflexRatio: 0.5`, and Cavasik scales by `-0.5`
+  before re-running a full-height draw. Doubling would also clip past level 0.5 in a 56 px strip.
+- **One rect, no centre gap, one brush.** wavesurfer draws a single rect straight through the
+  axis; Cavasik's `mirror-offset` defaults to 0; audioMotion's `reflexFit` exists precisely so
+  integer truncation can't leave a seam. Two-pass mirroring only appears where the renderer is a
+  whole-frame blit (audioMotion, Winamp AVS) or the widget model forces it (Rainmeter needs two
+  `Bar` meters per band; Cavasik's `normal+overlapping` reaches 22 Cairo passes a frame). The
+  dimmed lower half some of them ship is a *reflection on a surface*; a centred bar is a
+  *symmetric meter*, which is why CAVA, ncmpcpp and Cavasik all keep both halves identical.
+- **The existing floor and radius clamp needed no change.** At rest `height == parent.width`, so
+  the centred anchor puts that circle on the midline — the dot the sketch asked for, out of the
+  floor that was already there. `min(self.width, self.height) / 2` is already the both-axes clamp
+  (same value as `min(w/2, h/2)`); no cap was added, matching the shipped bars.
+- **Adding the style cost one `@tr` entry**, because `ca1943b` had just moved the name array into
+  the shared `VizStylePresets` global: Settings binds `options: VizStylePresets.viz-style-names`
+  and the Now-Playing flyout derives `flyout-h` from its `.length`, so both pickers grew on their
+  own. Neither `playback-section.slint` nor any of the three view-menu files was touched.
+- **One free subtraction while in the file:** the two `background: transparent` lines are gone. A
+  binding promotes an element out of Slint's `Empty` native class *whether or not the value
+  paints anything*, and the FemtoVG item renderer builds the path before it checks the paint — so
+  they cost a discarded `Path` + `PathCache` per band per frame to draw nothing. `Rectangle`
+  already defaults to transparent. See the CLAUDE.md pitfall.
+
+**Perf** (read off `i-slint-core`/`i-slint-renderer-femtovg`/`i-slint-compiler` 1.16.1 and
+femtovg 0.23.2, not assumed): the anchor is free. The inner bar sets `y`, so it never contributes
+to its parent's preferred size, and `Rectangle`/`BorderRectangle` return a geometry-independent
+`LayoutInfo` — a model write dirties `model_data → height → {y, border-radius}` and nothing else,
+the identical set for both anchors. No binding-loop risk (`y` reads `height`; `height` never
+reads `y`, and `binding_analysis.rs` would reject it at build time anyway). The per-frame-varying
+radius costs nothing extra because Slint caches no paths at all. Fill rate is identical — same
+rect at a different offset, and the FemtoVG renderer has no partial rendering, so it repaints the
+whole window every frame regardless. The one real difference is cosmetic: a centred bar moves
+*both* antialiased edges by half a height delta, so expect marginally more edge shimmer.
+
+**Tests:** no new ones — no new Rust logic. Three existing cases in
+`src/ui/tests/visualizer_tests.rs` moved: the unknown-key sentinel was **literally `"mirrored"`**
+and had to be retargeted to `"not-a-style"`, the strip pin gained `STYLE_MIRRORED`, and
+`is_waveform` is now asserted false for it. **Memory:** none.
 
 #### Phase 5.3 — Ambient pulse `[ ]`
 
@@ -792,7 +835,8 @@ adds a style:
 - `src/ui/visualizer.rs` (+ `src/ui/tests/visualizer_tests.rs`) — `install_visualizer`,
   UI-thread analyzers + render loop, the `STYLES` key table and its `.slint` pins. **Done.**
 - `src/library/settings/visualizer.rs` — persistence setters. **Done.**
-- `ui/components/now-playing/spectrum-bars.slint` — bars component. **Done.**
+- `ui/components/now-playing/spectrum-bars.slint` — bars component; gained the `centred` anchor
+  flag and lost its two `background: transparent` lines (Phase 5.2). **Done.**
 - `src/player/waveform.rs` + `src/player/tests/waveform_tests.rs` — trigger, min/max columns,
   path string + `WaveformAnalyzer` (Phase 5.1). **Done.**
 - `ui/components/now-playing/visualizer-strip.slint` — footprint, style switch, the one driving
@@ -825,9 +869,11 @@ adds a style:
 - `src/ui/mod.rs` + `src/boot/ui_setup.rs` — register + call `install_visualizer`. **Done.**
 - `src/player/mod.rs` — `pub mod waveform;` (Phase 5.1). **Done.**
 - `scripts/icons.txt` + both subset TTFs — `bar_chart`, plus `show_chart` (Phase 5.1). **Done.**
+- `ui/components/now-playing/flyout-presets.slint` — `VizStylePresets.viz-style-names`, the one
+  array both pickers render; `"Mirrored"` appended (Phase 5.2). **Done.**
 - `translations/*/LC_MESSAGES/Melodia.po` — `"Visualizer"`, plus `"Visualizer Style"` /
-  `"Bars"` / `"Waveform"` / the style description, and the toggle's own description reworded off
-  "spectrum analyzer" now that it isn't only one (6 locales). **Done.**
+  `"Bars"` / `"Waveform"` / `"Mirrored"` / the style description, and the toggle's own
+  description reworded off "spectrum analyzer" now that it isn't only one (6 locales). **Done.**
 
 ---
 

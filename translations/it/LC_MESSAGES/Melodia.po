@@ -1025,6 +1025,9 @@ msgstr "Barre"
 msgid "Waveform"
 msgstr "Forma d'onda"
 
+msgid "Mirrored"
+msgstr "Speculare"
+
 msgid "Enable ReplayGain"
 msgstr "Abilita ReplayGain"
 

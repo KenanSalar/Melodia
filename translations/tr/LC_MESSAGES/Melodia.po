@@ -1028,6 +1028,9 @@ msgstr "Çubuklar"
 msgid "Waveform"
 msgstr "Dalga formu"
 
+msgid "Mirrored"
+msgstr "Aynalı"
+
 msgid "Enable ReplayGain"
 msgstr "ReplayGain'i etkinleştir"
 

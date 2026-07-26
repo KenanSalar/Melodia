@@ -1034,6 +1034,9 @@ msgstr "Balken"
 msgid "Waveform"
 msgstr "Wellenform"
 
+msgid "Mirrored"
+msgstr "Gespiegelt"
+
 msgid "Enable ReplayGain"
 msgstr "ReplayGain aktivieren"
 

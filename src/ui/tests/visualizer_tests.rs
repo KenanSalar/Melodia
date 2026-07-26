@@ -47,6 +47,13 @@ fn the_strip_branches_on_a_key_the_table_knows() {
         STRIP.contains(&format!("Visualizer.style != \"{STYLE_WAVEFORM}\"")),
         "the strip lost its fallback branch"
     );
+    // Mirrored has no component of its own — it rides the catch-all branch and
+    // only flips the bars' anchor, so the key has to appear there instead.
+    assert!(STYLES.contains(&STYLE_MIRRORED));
+    assert!(
+        STRIP.contains(&format!("Visualizer.style == \"{STYLE_MIRRORED}\"")),
+        "the strip no longer anchors the bars off STYLE_MIRRORED"
+    );
 }
 
 #[test]
@@ -58,15 +65,17 @@ fn every_style_key_round_trips_through_its_index() {
 
 #[test]
 fn an_unknown_style_key_falls_back_to_the_default() {
-    assert_eq!(style_index("mirrored"), 0);
+    assert_eq!(style_index("not-a-style"), 0);
     assert_eq!(style_index(""), 0);
-    assert_eq!(STYLES[style_index("mirrored")], STYLE_BARS);
+    assert_eq!(STYLES[style_index("not-a-style")], STYLE_BARS);
 }
 
 #[test]
 fn only_the_waveform_index_selects_the_waveform() {
     assert!(!is_waveform(style_index(STYLE_BARS)));
     assert!(is_waveform(style_index(STYLE_WAVEFORM)));
+    // Mirrored takes the bars path, so it must not answer here.
+    assert!(!is_waveform(style_index(STYLE_MIRRORED)));
     // Past the end of the table, so it draws the default rather than nothing.
     assert!(!is_waveform(STYLES.len()));
 }
