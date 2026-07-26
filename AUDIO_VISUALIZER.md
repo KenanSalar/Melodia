@@ -761,12 +761,24 @@ behind after `centred:` was dropped would satisfy the looser form — and `spect
 Goal: an accent-tinted glow breathing with overall energy, matching the blur aesthetic rather
 than reading as an analyzer.
 
-- **New data:** `Visualizer.energy: float`, from a pure `rms(samples)` in `spectrum.rs`, smoothed
-  through the existing peak-follow `smooth` so it inherits the same attack/decay feel as the bars
-  (and the same pause-decay behaviour for free).
-- **This style runs no FFT.** With the tick branching on style, ambient is snapshot → RMS →
-  smooth and skips the transform entirely — cheaper than bars, not merely equal. That it's a
-  branch rather than a rewrite is exactly what §5's layering bought.
+- **New data:** `Visualizer.energy: float`, from a pure `rms(samples)` smoothed through the
+  existing peak-follow `smooth`, so it inherits the bars' attack/decay feel and their pause-decay
+  behaviour for free. **Not in `spectrum.rs`, despite what this bullet used to say** — 5.1 set the
+  precedent that a style needing no FFT gets its own leaf module (`waveform.rs`), for the reason
+  that every line of `spectrum.rs` is transform-and-banding. A third sibling, or a home in
+  `dsp.rs` beside `linear_to_db`, both beat widening the spectrum module.
+- **This style runs no FFT — but that is no longer free, as 5.1/5.2 left the tick.** `on_tick`
+  branches *binary*, `is_waveform(style)` against an else-arm that serves every other key, so a
+  new `"ambient"` key would land in the bars arm and run both transforms anyway. Making it
+  genuinely skip them means a three-way branch, and `is_waveform` wants replacing with something
+  that answers "which analyzer" rather than a bool. This is the one real Rust change 5.3 needs
+  that 5.2 did not — 5.2 touched `on_tick` not at all.
+- **The 5.2 precedent does not apply here.** That phase established that a style needn't be its
+  own component, but only because "mirrored" *is* the bars under a different anchor. Ambient is a
+  different shape, so it gets its own component and its own `if` branch in the strip. Note the
+  strip's fallback is `!= "waveform"`, which is a catch-all — adding a third component means
+  narrowing it, and `visualizer_tests.rs` pins both that string and `STYLE_MIRRORED` against the
+  file.
 - **Render:** a childless accent `Rectangle` whose opacity and/or scale derive from `energy`.
   **No `animate`** — Rust already smooths, and animating a smoothed value phase-lags (documented
   pitfall). Clamp the radius on both axes if it's rounded, per 5.2.
