@@ -10,15 +10,29 @@ fn approx(a: f32, b: f32) {
     assert!((a - b).abs() < 1e-4, "expected {b}, got {a}");
 }
 
-/// Fill a buffer with a full-scale sine.
+/// Fill a buffer with a sine of the given amplitude.
 #[allow(
     clippy::cast_precision_loss,
     reason = "test buffers are a few thousand samples, which convert to f32 exactly"
 )]
-fn fill_sine(buf: &mut [f32], freq_hz: f32, sample_rate: f32) {
+fn fill_sine(buf: &mut [f32], freq_hz: f32, sample_rate: f32, amplitude: f32) {
     for (i, sample) in buf.iter_mut().enumerate() {
-        *sample = (2.0 * std::f32::consts::PI * freq_hz * i as f32 / sample_rate).sin();
+        *sample = amplitude * (2.0 * std::f32::consts::PI * freq_hz * i as f32 / sample_rate).sin();
     }
+}
+
+/// Fill both of an analyzer's windows with the same sine.
+fn fill_both(analyzer: &mut SpectrumAnalyzer, freq_hz: f32, sample_rate: f32, amplitude: f32) {
+    let (bass, main) = analyzer.windows_mut();
+    fill_sine(bass, freq_hz, sample_rate, amplitude);
+    fill_sine(main, freq_hz, sample_rate, amplitude);
+}
+
+/// Silence both of an analyzer's windows.
+fn silence_both(analyzer: &mut SpectrumAnalyzer) {
+    let (bass, main) = analyzer.windows_mut();
+    bass.fill(0.0);
+    main.fill(0.0);
 }
 
 /// Index and value of the loudest band.
@@ -85,11 +99,6 @@ fn an_empty_window_has_no_scale() {
 // --- band_edges --------------------------------------------------------------
 
 const RATES: [f32; 3] = [44_100.0, 48_000.0, 96_000.0];
-
-/// The frequency a (fractional) bin position sits at.
-fn bin_to_hz(bin: f32, fft_size: usize, sample_rate: f32) -> f32 {
-    bin * sample_rate / index_to_f32(fft_size)
-}
 
 #[test]
 fn there_is_one_more_edge_than_there_are_bands() {
@@ -163,6 +172,120 @@ fn more_bands_than_bins_stays_in_range() {
     }
 }
 
+// --- band_tilt_gains ---------------------------------------------------------
+
+#[test]
+fn there_is_one_tilt_gain_per_band() {
+    for rate in RATES {
+        let edges = band_edges(NUM_BANDS, FFT_SIZE, rate);
+        let gains = band_tilt_gains(&edges, FFT_SIZE, rate);
+        assert_eq!(gains.len(), NUM_BANDS, "at {rate} Hz");
+        assert!(
+            gains.iter().all(|g| g.is_finite() && *g > 0.0),
+            "a gain was not a positive number at {rate} Hz"
+        );
+    }
+}
+
+#[test]
+fn no_edges_yield_no_tilt_gains() {
+    assert!(band_tilt_gains(&[], FFT_SIZE, 44_100.0).is_empty());
+    // One edge describes no band, so it has no gain either.
+    assert!(band_tilt_gains(&[4.0], FFT_SIZE, 44_100.0).is_empty());
+}
+
+#[test]
+fn the_tilt_cuts_the_bass_lifts_the_treble_and_spares_the_pivot() {
+    let rate = 44_100.0;
+    let edges = band_edges(NUM_BANDS, FFT_SIZE, rate);
+    let gains = band_tilt_gains(&edges, FFT_SIZE, rate);
+
+    for pair in gains.windows(2) {
+        if let [prev, next] = pair {
+            assert!(next > prev, "the tilt must ascend, went {prev} -> {next}");
+        }
+    }
+    assert!(gains.first().is_some_and(|&g| g < 1.0), "the bass end must be cut");
+    assert!(gains.last().is_some_and(|&g| g > 1.0), "the treble end must be lifted");
+
+    // The band holding the pivot keeps its level: it sits within half a band of
+    // it, so a fraction of an octave of tilt.
+    let pivot = hz_to_bin(TILT_PIVOT_HZ, FFT_SIZE, rate);
+    let at_pivot = edges
+        .windows(2)
+        .position(|pair| matches!(pair, [lo, hi] if (*lo..*hi).contains(&pivot)));
+    assert!(
+        at_pivot
+            .and_then(|band| gains.get(band))
+            .is_some_and(|&g| linear_to_db(g).abs() < 0.5),
+        "the band holding {TILT_PIVOT_HZ} Hz should be left near unity"
+    );
+}
+
+#[test]
+fn the_tilt_is_the_stated_number_of_db_per_octave() {
+    // Edges an octave apart, so consecutive gains differ by exactly one octave.
+    let rate = 44_100.0;
+    let bin = |hz: f32| hz_to_bin(hz, FFT_SIZE, rate);
+    let gains = band_tilt_gains(&[bin(250.0), bin(500.0), bin(1000.0), bin(2000.0)], FFT_SIZE, rate);
+    assert_eq!(gains.len(), 3);
+    for pair in gains.windows(2) {
+        if let [prev, next] = pair {
+            approx(linear_to_db(*next) - linear_to_db(*prev), TILT_DB_PER_OCTAVE);
+        }
+    }
+}
+
+// --- crossover_band ----------------------------------------------------------
+
+#[test]
+fn the_crossover_is_the_first_band_the_main_transform_resolves() {
+    for rate in RATES {
+        let edges = band_edges(NUM_BANDS, FFT_SIZE, rate);
+        let split = crossover_band(&edges);
+        assert!(split > 0, "the bass transform must own something at {rate} Hz");
+        assert!(split < NUM_BANDS, "the main transform must own something at {rate} Hz");
+        // Every band below it is narrower than a bin, every band above it is not.
+        for (band, pair) in edges.windows(2).enumerate() {
+            if let [lo, hi] = pair {
+                assert_eq!(
+                    hi - lo >= 1.0,
+                    band >= split,
+                    "band {band} sits on the wrong side of the crossover at {rate} Hz"
+                );
+            }
+        }
+        // And every band the main transform keeps takes the summing path, never
+        // the sub-bin interpolation — an interval a bin wide contains one.
+        for pair in edges.windows(2).skip(split) {
+            if let [lo, hi] = pair {
+                assert!(hi.floor() >= lo.ceil(), "a kept band has no whole bin at {rate} Hz");
+            }
+        }
+    }
+}
+
+#[test]
+fn a_coarser_transform_pushes_the_crossover_up() {
+    // The whole point of deriving it: a higher rate widens every bin, so more
+    // bands go unresolved and the bass transform has to own more of them.
+    let low = crossover_band(&band_edges(NUM_BANDS, FFT_SIZE, 44_100.0));
+    let high = crossover_band(&band_edges(NUM_BANDS, FFT_SIZE, 96_000.0));
+    assert!(high > low, "96 kHz should need more bass bands than 44.1, got {high} vs {low}");
+    // ...and a longer window resolves more of them, which is why the bass one is
+    // long: at 44.1 kHz it leaves almost nothing unresolved.
+    let bass = crossover_band(&band_edges(NUM_BANDS, BASS_FFT_SIZE, 44_100.0));
+    assert!(bass < low, "the bass transform should resolve more, got {bass} vs {low}");
+}
+
+#[test]
+fn an_unresolved_display_falls_back_to_the_bass_transform() {
+    assert_eq!(crossover_band(&[]), 0);
+    // Three edges, two bands, neither of them a fifth of a bin wide: nothing is
+    // resolved, so the main transform is handed none of it.
+    assert_eq!(crossover_band(&[1.0, 1.2, 1.4]), 2);
+}
+
 // --- dsp::linear_to_db -------------------------------------------------------
 
 #[test]
@@ -185,22 +308,25 @@ fn silence_maps_to_a_zero_level() {
 }
 
 #[test]
-fn full_scale_maps_to_a_full_level() {
+fn the_ceiling_maps_to_a_full_level() {
+    approx(level_from_magnitude(db_to_linear(CEILING_DB)), 1.0);
+    // Anything louder clamps rather than overshooting the bar — including full
+    // scale, which now sits above the ceiling rather than on it.
     approx(level_from_magnitude(1.0), 1.0);
-    // Anything louder clamps rather than overshooting the bar.
     approx(level_from_magnitude(4.0), 1.0);
 }
 
 #[test]
 fn the_floor_maps_to_a_zero_level() {
     approx(level_from_magnitude(db_to_linear(FLOOR_DB)), 0.0);
-    approx(level_from_magnitude(db_to_linear(FLOOR_DB / 2.0)), 0.5);
+    // Halfway up the bar is halfway between the two ends, not half the floor.
+    approx(level_from_magnitude(db_to_linear(f32::midpoint(FLOOR_DB, CEILING_DB))), 0.5);
 }
 
 // --- bands_from_spectrum -----------------------------------------------------
 
 #[test]
-fn a_band_takes_its_loudest_bin() {
+fn a_band_reads_the_energy_of_the_bins_it_covers() {
     let spectrum = [
         Complex::new(0.0, 0.0),
         Complex::new(0.25, 0.0),
@@ -211,29 +337,78 @@ fn a_band_takes_its_loudest_bin() {
     ];
     // Two bands, each spanning whole bins: 1..=2 then 3..=5.
     let mut out = [0.0; 2];
-    bands_from_spectrum(&spectrum, &[1.0, 3.0, 6.0], 1.0, &mut out);
-    // The 1.0 bin wins over its quieter neighbour, so the bar is full...
-    approx(out[0], 1.0);
-    // ...and it stays out of the next band.
+    bands_from_spectrum(&spectrum, &[1.0, 3.0, 6.0], &[1.0, 1.0], 1.0, &mut out);
+    // Root-sum-square over the two bins, not the louder of them.
+    approx(out[0], level_from_magnitude(0.25_f32.hypot(1.0)));
+    // ...and nothing leaks into the silent band.
     approx(out[1], 0.0);
 }
 
 #[test]
+fn a_lone_bin_reads_the_same_however_wide_its_band() {
+    // What root-sum-square buys over a mean: a tone is not divided by the width
+    // of whichever band it happens to land in, so the mids keep their bite.
+    let mut spectrum = [Complex::new(0.0, 0.0); 12];
+    spectrum[2] = Complex::new(db_to_linear(-40.0), 0.0);
+
+    let mut narrow = [0.0; 1];
+    bands_from_spectrum(&spectrum, &[2.0, 4.0], &[1.0], 1.0, &mut narrow);
+    let mut wide = [0.0; 1];
+    bands_from_spectrum(&spectrum, &[2.0, 11.0], &[1.0], 1.0, &mut wide);
+
+    approx(wide[0], narrow[0]);
+}
+
+#[test]
+fn broadband_energy_accumulates_across_a_wider_band() {
+    // The other half of the same property, and the reason a peak leaned bass: a
+    // band holding signal in every bin outreads a narrow one, which is the free
+    // ~3 dB/octave the explicit tilt is sized on top of.
+    let spectrum = [Complex::new(db_to_linear(-50.0), 0.0); 12];
+    let mut narrow = [0.0; 1];
+    bands_from_spectrum(&spectrum, &[2.0, 3.0], &[1.0], 1.0, &mut narrow);
+    let mut wide = [0.0; 1];
+    bands_from_spectrum(&spectrum, &[2.0, 6.0], &[1.0], 1.0, &mut wide);
+
+    assert!(
+        wide[0] > narrow[0],
+        "broadband energy must accumulate, got {} vs {}",
+        wide[0],
+        narrow[0]
+    );
+}
+
+#[test]
+fn a_bands_tilt_gain_scales_its_level() {
+    // Quiet enough that neither reading clamps at the ceiling.
+    let quiet = db_to_linear(-40.0);
+    let spectrum = [Complex::new(0.0, 0.0), Complex::new(quiet, 0.0), Complex::new(quiet, 0.0)];
+    let mut plain = [0.0; 1];
+    bands_from_spectrum(&spectrum, &[1.0, 2.0], &[1.0], 1.0, &mut plain);
+    let mut lifted = [0.0; 1];
+    bands_from_spectrum(&spectrum, &[1.0, 2.0], &[2.0], 1.0, &mut lifted);
+    // A ×2 gain is +6 dB, which on this scale is a fixed fraction of the bar.
+    approx(lifted[0] - plain[0], 6.020_6 / (CEILING_DB - FLOOR_DB));
+}
+
+#[test]
 fn a_band_narrower_than_a_bin_interpolates_between_its_neighbours() {
-    // Bin 1 is silent, bin 2 is full scale. A band sitting entirely between them
-    // has no bin of its own, so it must read the slope rather than seize either.
-    let spectrum = [Complex::new(0.0, 0.0), Complex::new(0.0, 0.0), Complex::new(1.0, 0.0)];
-    let quarter = level_from_magnitude(0.25);
-    let half = level_from_magnitude(0.5);
+    // Bin 1 is silent, bin 2 is loud — but quiet enough that neither reading
+    // clamps at the ceiling. A band sitting entirely between them has no bin of
+    // its own, so it must read the slope rather than seize either.
+    let loud = db_to_linear(-45.0);
+    let spectrum = [Complex::new(0.0, 0.0), Complex::new(0.0, 0.0), Complex::new(loud, 0.0)];
+    let quarter = level_from_magnitude(0.25 * loud);
+    let half = level_from_magnitude(0.5 * loud);
 
     // Centre 1.25 -> a quarter of the way from bin 1 to bin 2.
     let mut out = [0.0; 1];
-    bands_from_spectrum(&spectrum, &[1.2, 1.3], 1.0, &mut out);
+    bands_from_spectrum(&spectrum, &[1.2, 1.3], &[1.0], 1.0, &mut out);
     approx(out[0], quarter);
 
     // Centre 1.5 -> halfway. Strictly louder than the band below it, which is the
     // property the old whole-bin snapping destroyed: both would have read bin 1.
-    bands_from_spectrum(&spectrum, &[1.45, 1.55], 1.0, &mut out);
+    bands_from_spectrum(&spectrum, &[1.45, 1.55], &[1.0], 1.0, &mut out);
     approx(out[0], half);
     assert!(half > quarter, "adjacent sub-bin bands must slope, not step");
 }
@@ -244,7 +419,7 @@ fn a_sub_bin_band_on_the_last_bin_holds_rather_than_fading() {
     // there would notch the top bar on every frame.
     let spectrum = [Complex::new(0.0, 0.0), Complex::new(1.0, 0.0)];
     let mut out = [0.0; 1];
-    bands_from_spectrum(&spectrum, &[1.4, 1.6], 1.0, &mut out);
+    bands_from_spectrum(&spectrum, &[1.4, 1.6], &[1.0], 1.0, &mut out);
     approx(out[0], 1.0);
 }
 
@@ -254,7 +429,7 @@ fn bands_beyond_the_edges_read_as_silence() {
     let mut out = [0.5; 4];
     // Three edges describe two bands, leaving two output slots unclaimed. The top
     // edge stays on the last bin, as `band_edges`' clamp guarantees in production.
-    bands_from_spectrum(&spectrum, &[1.0, 2.0, 3.0], 1.0, &mut out);
+    bands_from_spectrum(&spectrum, &[1.0, 2.0, 3.0], &[1.0, 1.0], 1.0, &mut out);
     approx(out[0], 1.0);
     approx(out[1], 1.0);
     // Stale heights left in the tail would freeze on screen.
@@ -266,7 +441,7 @@ fn bands_beyond_the_edges_read_as_silence() {
 fn no_edges_at_all_silences_every_band() {
     let spectrum = [Complex::new(1.0, 0.0); 4];
     let mut out = [0.5; 3];
-    bands_from_spectrum(&spectrum, &[], 1.0, &mut out);
+    bands_from_spectrum(&spectrum, &[], &[], 1.0, &mut out);
     for (i, &level) in out.iter().enumerate() {
         approx(level, 0.0);
         assert!(level.abs() < 1e-4, "band {i} kept a stale height");
@@ -318,10 +493,12 @@ fn a_level_never_decays_below_its_band() {
 // --- SpectrumAnalyzer --------------------------------------------------------
 
 #[test]
-fn a_full_scale_sine_lands_in_the_band_containing_its_frequency() {
+fn a_sine_lands_in_the_band_containing_its_frequency() {
     let rate = 44_100;
     let mut analyzer = SpectrumAnalyzer::new(FFT_SIZE, NUM_BANDS);
-    fill_sine(analyzer.window_mut(), 1_000.0, rate_to_f32(rate));
+    // Well under the ceiling on purpose: a full-scale tone clamps its whole
+    // neighbourhood at 1.0, and the tie would leave `loudest` picking the first.
+    fill_both(&mut analyzer, 1_000.0, rate_to_f32(rate), db_to_linear(-25.0));
     let levels = analyzer.analyze(rate);
 
     let (peak_band, peak_level) = loudest(levels);
@@ -333,17 +510,71 @@ fn a_full_scale_sine_lands_in_the_band_containing_its_frequency() {
     });
     assert_eq!(holds_tone, Some(peak_band));
 
-    // Full scale reads near the top of the bar; Hann's worst-case scalloping
-    // loss is ~1.4 dB, which is a hair off full height on a 70 dB scale.
-    assert!(peak_level > 0.95, "expected a near-full bar, got {peak_level}");
+    assert!(peak_level > 0.5, "expected a tall bar, got {peak_level}");
     // ...and the rest of the display stays down.
     assert!(levels[0] < 0.2, "bass leaked from a 1 kHz tone: {}", levels[0]);
 }
 
 #[test]
+fn the_low_bars_move_independently() {
+    // What the bass transform is for. At `FFT_SIZE` the bottom bands are all
+    // interpolations of the same handful of bins, so a tone sitting in one of
+    // them lights its neighbours just as brightly and the left of the display
+    // moves as a block.
+    let rate = 44_100;
+    let mut analyzer = SpectrumAnalyzer::new(FFT_SIZE, NUM_BANDS);
+    fill_both(&mut analyzer, 60.0, rate_to_f32(rate), db_to_linear(-25.0));
+    let levels = analyzer.analyze(rate);
+    let (peak, level) = loudest(levels);
+
+    assert!(peak < 8, "a 60 Hz tone belongs near the bottom, lit band {peak}");
+    // Its neighbours four bands out must be clearly darker — the separation a
+    // single 2048-point window cannot give down here.
+    for band in [peak.saturating_sub(4), (peak + 4).min(NUM_BANDS - 1)] {
+        if band != peak {
+            assert!(
+                levels[band] < level * 0.75,
+                "band {band} reads {} against the tone's {level}: the low bars are still smeared",
+                levels[band]
+            );
+        }
+    }
+}
+
+#[test]
+fn a_band_reads_the_same_either_side_of_the_crossover() {
+    // Root-sum-square makes the join self-levelling: per-bin magnitude falls as
+    // 1/√N, a fixed-width band holds ∝N bins. Broadband noise is the case that
+    // would show a step, since a tone lands in one bin either way.
+    let rate = 44_100;
+    let mut analyzer = SpectrumAnalyzer::new(FFT_SIZE, NUM_BANDS);
+    {
+        let (bass, main) = analyzer.windows_mut();
+        // Same deterministic broadband signal in both windows.
+        let noise = |i: usize| ((index_to_f32(i) * 12.9898).sin() * 43_758.547).fract() - 0.5;
+        for (i, s) in bass.iter_mut().enumerate() {
+            *s = noise(i) * 0.05;
+        }
+        for (i, s) in main.iter_mut().enumerate() {
+            *s = noise(i) * 0.05;
+        }
+    }
+    let levels = analyzer.analyze(rate);
+    let split = crossover_band(&band_edges(NUM_BANDS, FFT_SIZE, rate_to_f32(rate)));
+
+    // The two bands straddling the join come from different transforms; a
+    // missing correction factor would show up as a step between them.
+    let (below, above) = (levels[split - 1], levels[split]);
+    assert!(
+        (below - above).abs() < 0.15,
+        "a step across the crossover: {below} -> {above}"
+    );
+}
+
+#[test]
 fn silence_produces_all_zero_bands() {
     let mut analyzer = SpectrumAnalyzer::new(FFT_SIZE, NUM_BANDS);
-    analyzer.window_mut().fill(0.0);
+    silence_both(&mut analyzer);
     let levels = analyzer.analyze(44_100);
     assert_eq!(levels.len(), NUM_BANDS);
     for (i, &level) in levels.iter().enumerate() {
@@ -354,7 +585,7 @@ fn silence_produces_all_zero_bands() {
 #[test]
 fn an_unknown_sample_rate_produces_no_bands() {
     let mut analyzer = SpectrumAnalyzer::new(FFT_SIZE, NUM_BANDS);
-    fill_sine(analyzer.window_mut(), 1_000.0, 44_100.0);
+    fill_both(&mut analyzer, 1_000.0, 44_100.0, 1.0);
     // Nothing has played, so there is no rate to place band edges against.
     let levels = analyzer.analyze(0);
     for (i, &level) in levels.iter().enumerate() {
@@ -366,10 +597,10 @@ fn an_unknown_sample_rate_produces_no_bands() {
 fn the_bars_decay_once_the_signal_stops() {
     let rate = 44_100;
     let mut analyzer = SpectrumAnalyzer::new(FFT_SIZE, NUM_BANDS);
-    fill_sine(analyzer.window_mut(), 1_000.0, rate_to_f32(rate));
+    fill_both(&mut analyzer, 1_000.0, rate_to_f32(rate), db_to_linear(-25.0));
     let loud = loudest(analyzer.analyze(rate));
 
-    analyzer.window_mut().fill(0.0);
+    silence_both(&mut analyzer);
     let quiet = analyzer.analyze(rate);
     assert!(quiet[loud.0] < loud.1, "the bar should start falling once the tone stops");
     assert!(quiet[loud.0] > 0.0, "it should fall gently, not cut out");
@@ -378,13 +609,13 @@ fn the_bars_decay_once_the_signal_stops() {
 #[test]
 fn changing_the_sample_rate_rebuilds_the_band_edges() {
     let mut analyzer = SpectrumAnalyzer::new(FFT_SIZE, NUM_BANDS);
-    analyzer.window_mut().fill(0.0);
+    silence_both(&mut analyzer);
     analyzer.analyze(44_100);
     assert_eq!(analyzer.mapped_rate, 44_100);
-    let first: Vec<_> = analyzer.edges.to_vec();
+    let first: Vec<_> = analyzer.main.edges.to_vec();
 
-    analyzer.window_mut().fill(0.0);
+    silence_both(&mut analyzer);
     analyzer.analyze(96_000);
     assert_eq!(analyzer.mapped_rate, 96_000);
-    assert_ne!(analyzer.edges.to_vec(), first, "band edges must follow the sample rate");
+    assert_ne!(analyzer.main.edges.to_vec(), first, "band edges must follow the sample rate");
 }

@@ -8,19 +8,21 @@
 //!
 //! The pipeline, once per drawn frame:
 //!
-//! 1. multiply the window by a precomputed **Hann** table (cuts the spectral
+//! 1. multiply each window by a precomputed **Hann** table (cuts the spectral
 //!    leakage a rectangular window would smear across neighbouring bands),
-//! 2. a real-to-complex **FFT** into `FFT_SIZE / 2 + 1` bins,
+//! 2. **two** real-to-complex **FFTs** — a long one for the bass, a short one for
+//!    everything above the crossover, since no single window serves both,
 //! 3. read [`NUM_BANDS`] **geometric** bands off those bins — pitch perception is
 //!    geometric, so linear bands would spend most of the display on treble,
-//! 4. compress each band's magnitude to a 0..1 height on a decibel scale,
-//! 5. **peak-follow smoothing** — rise at once, fall gently — so the bars read as
+//! 4. **tilt** each band, since music is roughly pink,
+//! 5. compress each band's magnitude to a 0..1 height on a decibel scale,
+//! 6. **peak-follow smoothing** — rise at once, fall gently — so the bars read as
 //!    lively rather than twitchy.
 //!
 //! [`SpectrumAnalyzer`] is the only stateful piece, and it exists purely to hold
 //! what must not be rebuilt every frame: the FFT plan, its three buffers, the
-//! Hann table, the bin→band map and the smoothed levels. Nothing in the analysis
-//! path allocates.
+//! Hann table, the bin→band map with its tilt gains, and the smoothed levels.
+//! Nothing in the analysis path allocates.
 //!
 //! [`VisualizerShared::snapshot`]: super::visualizer::VisualizerShared::snapshot
 
@@ -29,12 +31,17 @@ use std::sync::Arc;
 use realfft::num_complex::Complex;
 use realfft::{RealFftPlanner, RealToComplex};
 
-use super::dsp::linear_to_db;
+use super::dsp::{db_to_linear, linear_to_db};
 
 /// Samples per analysis window. At 44.1 kHz this is ~46 ms — long enough to
 /// resolve bass, short enough to keep the bars in step with what you hear. A
 /// power of two hits the FFT planner's fastest path.
 pub const FFT_SIZE: usize = 2048;
+
+/// Samples per analysis window for the bands below the crossover. ~186 ms at
+/// 44.1 kHz — far too laggy for treble, but the only way to separate bars a few
+/// Hz apart, and bass is slow enough not to mind. CAVA pairs the same two sizes.
+pub const BASS_FFT_SIZE: usize = 8192;
 
 /// Bars drawn across the display.
 pub const NUM_BANDS: usize = 64;
@@ -55,9 +62,21 @@ const MIN_HZ: f32 = 50.0;
 /// [`BAND_FREQS`]: super::equalizer::BAND_FREQS
 const MAX_HZ: f32 = 16_000.0;
 
-/// Level mapped to a bar height of zero. Everything from here up to full scale
-/// is spread across the bar, so this sets how much quiet detail is visible.
-const FLOOR_DB: f32 = -70.0;
+/// Empty-bar level. With [`CEILING_DB`] it sets how much quiet detail shows.
+const FLOOR_DB: f32 = -75.0;
+
+/// Full-bar level. Below full scale on purpose — only a lone bass tone gets near
+/// 0 dBFS, so a ceiling there wastes the top of every bar's travel. No shipping
+/// analyzer uses full scale either.
+const CEILING_DB: f32 = -15.0;
+
+/// Decibels added per octave above [`TILT_PIVOT_HZ`], subtracted below it. Music
+/// is roughly pink, so an untilted display pins its bass and leaves its treble
+/// dead. CAVA bakes in 5.1, foobar2000 exposes a knob, 4.5 is the music default.
+const TILT_DB_PER_OCTAVE: f32 = 4.5;
+
+/// The one frequency the tilt leaves alone.
+const TILT_PIVOT_HZ: f32 = 1000.0;
 
 /// Fraction of the remaining distance a bar *keeps* when rising: `0.0` snaps
 /// straight to a new peak, which is what makes a transient read as a hit.
@@ -89,6 +108,12 @@ fn rate_to_f32(hz: u32) -> f32 {
 /// lands on a whole bin and rounding it is exactly what this module must not do.
 fn hz_to_bin(hz: f32, fft_size: usize, sample_rate: f32) -> f32 {
     hz * index_to_f32(fft_size) / sample_rate
+}
+
+/// The frequency a — possibly fractional — bin sits at: the inverse of
+/// [`hz_to_bin`].
+fn bin_to_hz(bin: f32, fft_size: usize, sample_rate: f32) -> f32 {
+    bin * sample_rate / index_to_f32(fft_size)
 }
 
 /// A bin position as an index. Callers pass values already clamped into
@@ -171,7 +196,8 @@ pub fn band_edges(bands: usize, fft_size: usize, sample_rate: f32) -> Box<[f32]>
         .collect()
 }
 
-/// Compress a scaled linear magnitude to a 0..1 bar height on a decibel scale.
+/// Compress a scaled linear magnitude to a 0..1 bar height, [`FLOOR_DB`] to
+/// [`CEILING_DB`] across the bar.
 ///
 /// Silence has no decibel value, so it short-circuits before the logarithm —
 /// which is also the only way `-inf` could reach the bars.
@@ -180,19 +206,39 @@ pub fn level_from_magnitude(magnitude: f32) -> f32 {
     if magnitude <= 0.0 {
         return 0.0;
     }
-    ((linear_to_db(magnitude) - FLOOR_DB) / -FLOOR_DB).clamp(0.0, 1.0)
+    ((linear_to_db(magnitude) - FLOOR_DB) / (CEILING_DB - FLOOR_DB)).clamp(0.0, 1.0)
 }
 
-/// The magnitude a band spanning `lo..hi` (fractional bin positions) reads.
+/// One linear gain per band of `edges`, tilting [`TILT_DB_PER_OCTAVE`] dB per
+/// octave about [`TILT_PIVOT_HZ`], evaluated at each band's **geometric** centre
+/// — its true midpoint on the log axis the bands sit on. Depends only on the
+/// band map, so it is built alongside it and reused every frame.
+#[must_use]
+pub fn band_tilt_gains(edges: &[f32], fft_size: usize, sample_rate: f32) -> Box<[f32]> {
+    edges
+        .iter()
+        .zip(edges.iter().skip(1))
+        .map(|(&lo, &hi)| {
+            let lo_hz = bin_to_hz(lo, fft_size, sample_rate);
+            let hi_hz = bin_to_hz(hi, fft_size, sample_rate);
+            db_to_linear(TILT_DB_PER_OCTAVE * ((lo_hz * hi_hz).sqrt() / TILT_PIVOT_HZ).log2())
+        })
+        .collect()
+}
+
+/// The magnitude a band spanning `lo..hi` (fractional bin positions) reads: the
+/// **root-sum-square** of the whole bins it contains — the total energy in the
+/// band — or, for a band narrower than one bin, the spectrum interpolated at its
+/// centre.
 ///
-/// A band wide enough to contain whole bins takes its **loudest** one rather than
-/// the mean: the high bands span hundreds of bins, and averaging a peak against
-/// all the empty ones either side of it leaves the top of the display dead.
+/// Power-domain summing is load-bearing: a **peak** runs high wherever a band
+/// holds many bins, favouring tonal content over broadband, which pins the bass
+/// and kills the treble; a **mean** overcorrects, dividing a lone tone by its
+/// band's width. RSS does neither, and grows as `√bins` for broadband.
 ///
-/// A band narrower than a single bin has no bin of its own to take, so it samples
-/// the spectrum *between* the two that bracket its centre. That is the whole point
-/// of keeping the edges fractional: without it every band down there would seize
-/// the next bin outright and neighbouring bars would step rather than slope.
+/// Keeping the edges fractional is what makes the narrow case possible at all:
+/// without it every band down there would seize the next bin outright and
+/// neighbouring bars would step rather than slope.
 fn band_magnitude(spectrum: &[Complex<f32>], lo: f32, hi: f32) -> f32 {
     let first = lo.ceil();
     let last = hi.floor();
@@ -201,7 +247,7 @@ fn band_magnitude(spectrum: &[Complex<f32>], lo: f32, hi: f32) -> f32 {
         let bins = bin_to_index(first)..=bin_to_index(last);
         return spectrum
             .get(bins)
-            .map_or(0.0, |bins| bins.iter().map(|bin| bin.norm()).fold(0.0, f32::max));
+            .map_or(0.0, |bins| bins.iter().map(Complex::norm_sqr).sum::<f32>().sqrt());
     }
 
     let centre = 0.5 * (lo + hi);
@@ -217,14 +263,23 @@ fn band_magnitude(spectrum: &[Complex<f32>], lo: f32, hi: f32) -> f32 {
 
 /// Fold `spectrum` into one 0..1 level per band of `edges`, written to `out`.
 ///
-/// `edges` holds one more entry than there are bands — see [`band_edges`].
-pub fn bands_from_spectrum(spectrum: &[Complex<f32>], edges: &[f32], scale: f32, out: &mut [f32]) {
+/// `edges` holds one more entry than there are bands — see [`band_edges`] — and
+/// `gains` one entry per band, from [`band_tilt_gains`].
+pub fn bands_from_spectrum(
+    spectrum: &[Complex<f32>],
+    edges: &[f32],
+    gains: &[f32],
+    scale: f32,
+    out: &mut [f32],
+) {
     let pairs = edges.iter().zip(edges.iter().skip(1));
-    for (slot, (&lo, &hi)) in out.iter_mut().zip(pairs) {
-        *slot = level_from_magnitude(band_magnitude(spectrum, lo, hi) * scale);
+    let mut bands = 0;
+    for ((slot, (&lo, &hi)), &gain) in out.iter_mut().zip(pairs).zip(gains) {
+        *slot = level_from_magnitude(band_magnitude(spectrum, lo, hi) * scale * gain);
+        bands += 1;
     }
-    // Bands the edges don't reach (fewer edges than output slots) read as silence.
-    if let Some(rest) = out.get_mut(edges.len().saturating_sub(1)..) {
+    // Bands no edge pair or gain reached read as silence.
+    if let Some(rest) = out.get_mut(bands..) {
         rest.fill(0.0);
     }
 }
@@ -245,17 +300,33 @@ pub fn smooth(levels: &mut [f32], next: &[f32], attack: f32, decay: f32) {
     }
 }
 
+/// The first band the main transform resolves — the first one a whole bin wide.
+/// Everything below it is read from the bass transform instead.
+///
+/// **Width, not "contains a whole bin".** The latter is what [`band_magnitude`]
+/// branches on, but it is not monotonic down here: a band far narrower than a
+/// bin still contains one whenever it happens to straddle an integer, so the
+/// first match lands several bands below where the display actually stops being
+/// resolved. Width is monotonic, because the bands are geometric — and an
+/// interval a bin wide always contains a whole bin, so every band above the
+/// crossover still takes the summing path.
+///
+/// Derived rather than fixed in Hz, so it follows the sample rate: a 96 kHz
+/// file's bins are wider and its crossover moves up to match. If no band is
+/// resolved, every band belongs to the bass transform.
+#[must_use]
+pub fn crossover_band(main_edges: &[f32]) -> usize {
+    main_edges
+        .iter()
+        .zip(main_edges.iter().skip(1))
+        .position(|(&lo, &hi)| hi - lo >= 1.0)
+        .unwrap_or_else(|| main_edges.len().saturating_sub(1))
+}
+
 // --- the analyzer ------------------------------------------------------------
 
-/// Owns everything the per-frame analysis must not rebuild: the FFT plan and its
-/// buffers, the Hann table and its scale, the bin→band map, and the smoothed
-/// levels carried between frames.
-///
-/// Usage is two calls per frame — fill [`window_mut`](Self::window_mut) with the
-/// most recent samples, then [`analyze`](Self::analyze). Handing out the FFT's
-/// own input buffer keeps the sample copy zero-cost: the ring snapshots straight
-/// into the buffer the transform reads.
-pub struct SpectrumAnalyzer {
+/// One windowed real transform, plus the band map for the bins it resolves.
+struct Transform {
     fft: Arc<dyn RealToComplex<f32>>,
     /// The analysis window. Filled by the caller, then windowed and **consumed**
     /// by the transform — `realfft` uses it as scratch, so nothing may be read
@@ -265,25 +336,13 @@ pub struct SpectrumAnalyzer {
     scratch: Vec<Complex<f32>>,
     window: Box<[f32]>,
     scale: f32,
-    /// Band edges, and the sample rate they were built for. Edges depend on the
-    /// rate, which changes from track to track but not from frame to frame.
     edges: Box<[f32]>,
-    mapped_rate: u32,
-    /// This frame's band levels, and the smoothed ones the caller draws.
-    raw: Box<[f32]>,
-    levels: Box<[f32]>,
 }
 
-impl SpectrumAnalyzer {
-    /// Build an analyzer for a given transform size and bar count, allocating
-    /// everything it will ever need. `fft_size` should be an even number ≥ 2 —
-    /// [`FFT_SIZE`] in production, where a power of two also buys the planner's
-    /// fastest path. (`realfft` will plan an odd length too, on its separate
-    /// half-length path, but the bin maths here reads the even one's layout.)
-    #[must_use]
-    pub fn new(fft_size: usize, bands: usize) -> Self {
-        let fft = RealFftPlanner::<f32>::new().plan_fft_forward(fft_size);
-        let window = hann_window(fft_size);
+impl Transform {
+    fn new(size: usize) -> Self {
+        let fft = RealFftPlanner::<f32>::new().plan_fft_forward(size);
+        let window = hann_window(size);
         Self {
             input: fft.make_input_vec(),
             spectrum: fft.make_output_vec(),
@@ -292,49 +351,138 @@ impl SpectrumAnalyzer {
             window,
             fft,
             edges: Box::default(),
+        }
+    }
+
+    fn remap(&mut self, bands: usize, rate: f32) {
+        self.edges = band_edges(bands, self.input.len(), rate);
+    }
+
+    /// Window and transform the filled input. `false` only if the plan rejected
+    /// its own buffers, which their construction rules out.
+    fn run(&mut self) -> bool {
+        for (sample, weight) in self.input.iter_mut().zip(&self.window) {
+            *sample *= weight;
+        }
+        self.fft
+            .process_with_scratch(&mut self.input, &mut self.spectrum, &mut self.scratch)
+            .is_ok()
+    }
+}
+
+/// Owns everything the per-frame analysis must not rebuild: the two FFT plans and
+/// their buffers, the Hann tables and scales, the bin→band maps with their tilt
+/// gains, and the smoothed levels carried between frames.
+///
+/// Usage is two calls per frame — fill both windows from
+/// [`windows_mut`](Self::windows_mut), then [`analyze`](Self::analyze). Handing
+/// out the transforms' own input buffers keeps the sample copy zero-cost: the
+/// ring snapshots straight into what they read.
+///
+/// **Two transforms, because one can't serve both ends.** A window short enough
+/// to keep treble responsive can't resolve bass: at [`FFT_SIZE`] and 44.1 kHz a
+/// bin spans ~21.5 Hz, while the lowest bands are a few Hz wide, so seventeen
+/// bars end up interpolating the same handful of bins and move as one block. A
+/// window long enough to separate them ([`BASS_FFT_SIZE`], ~186 ms) would smear
+/// every cymbal. So the bass reads the long transform and everything above the
+/// crossover reads the short one — CAVA's arrangement, and for the same reason.
+///
+/// The join needs no correction factor, which is a property of the
+/// root-sum-square in [`band_magnitude`]: per-bin magnitude falls as `1/√N` once
+/// [`coherent_gain_scale`] is applied, while a band of fixed width holds `∝ N`
+/// bins, so a band reads the same either side of the crossover. (CAVA needs a
+/// `log2` fudge there precisely because it uses a mean, which does not cancel.)
+pub struct SpectrumAnalyzer {
+    bass: Transform,
+    main: Transform,
+    /// First band read from `main`; everything below it comes from `bass`.
+    crossover: usize,
+    /// Per-band tilt gains, and the sample rate every map above was built for.
+    /// All of it depends on the rate, which changes from track to track but not
+    /// from frame to frame.
+    gains: Box<[f32]>,
+    mapped_rate: u32,
+    /// This frame's band levels, and the smoothed ones the caller draws.
+    raw: Box<[f32]>,
+    levels: Box<[f32]>,
+}
+
+impl SpectrumAnalyzer {
+    /// Build an analyzer for a given main transform size and bar count,
+    /// allocating everything it will ever need. `fft_size` should be an even
+    /// number ≥ 2 — [`FFT_SIZE`] in production, where a power of two also buys
+    /// the planner's fastest path. (`realfft` will plan an odd length too, on its
+    /// separate half-length path, but the bin maths here reads the even layout.)
+    #[must_use]
+    pub fn new(fft_size: usize, bands: usize) -> Self {
+        Self {
+            bass: Transform::new(BASS_FFT_SIZE),
+            main: Transform::new(fft_size),
+            crossover: 0,
+            gains: Box::default(),
             mapped_rate: 0,
             raw: vec![0.0; bands].into_boxed_slice(),
             levels: vec![0.0; bands].into_boxed_slice(),
         }
     }
 
-    /// The window the next [`analyze`](Self::analyze) call will transform. Fill
-    /// it with the most recent samples, oldest first — its previous contents are
-    /// spent scratch, not history.
-    pub fn window_mut(&mut self) -> &mut [f32] {
-        &mut self.input
+    /// The two windows the next [`analyze`](Self::analyze) call will transform,
+    /// bass first. Fill both with the most recent samples, oldest last — their
+    /// previous contents are spent scratch, not history.
+    pub fn windows_mut(&mut self) -> (&mut [f32], &mut [f32]) {
+        (&mut self.bass.input, &mut self.main.input)
     }
 
-    /// Analyse the filled window and return the smoothed 0..1 band levels.
+    /// Analyse the filled windows and return the smoothed 0..1 band levels.
     ///
     /// `sample_rate` is the rate the samples were captured at; `0` means nothing
     /// has played yet, in which case there is no spectrum to compute and the
-    /// bars simply decay. The band map is rebuilt only when the rate changes.
+    /// bars simply decay. The band maps are rebuilt only when the rate changes.
     pub fn analyze(&mut self, sample_rate: u32) -> &[f32] {
         if sample_rate == 0 {
             self.raw.fill(0.0);
         } else {
+            let bands = self.raw.len();
             if sample_rate != self.mapped_rate {
-                self.edges = band_edges(self.raw.len(), self.input.len(), rate_to_f32(sample_rate));
+                let rate = rate_to_f32(sample_rate);
+                self.bass.remap(bands, rate);
+                self.main.remap(bands, rate);
+                self.crossover = crossover_band(&self.main.edges);
+                self.gains = band_tilt_gains(&self.main.edges, self.main.input.len(), rate);
                 self.mapped_rate = sample_rate;
             }
-            for (sample, weight) in self.input.iter_mut().zip(&self.window) {
-                *sample *= weight;
-            }
-            let transformed = self
-                .fft
-                .process_with_scratch(&mut self.input, &mut self.spectrum, &mut self.scratch)
-                .is_ok();
-            if transformed {
-                bands_from_spectrum(&self.spectrum, &self.edges, self.scale, &mut self.raw);
+            // Unreachable otherwise: every buffer came from its own plan, so
+            // their sizes agree. Decaying beats panicking on the UI thread.
+            if self.bass.run() && self.main.run() {
+                self.fold_bands();
             } else {
-                // Unreachable: every buffer came from this plan, so their sizes
-                // agree by construction. Decaying beats panicking on the UI thread.
                 self.raw.fill(0.0);
             }
         }
         smooth(&mut self.levels, &self.raw, ATTACK, DECAY);
         &self.levels
+    }
+
+    /// Read each half of the display off the transform that resolves it.
+    fn fold_bands(&mut self) {
+        let split = self.crossover.min(self.raw.len());
+        let (low, high) = self.raw.split_at_mut(split);
+        // `edges` carries one more entry than bands, so both slices keep the
+        // boundary they share.
+        bands_from_spectrum(
+            &self.bass.spectrum,
+            self.bass.edges.get(..=split).unwrap_or_default(),
+            self.gains.get(..split).unwrap_or_default(),
+            self.bass.scale,
+            low,
+        );
+        bands_from_spectrum(
+            &self.main.spectrum,
+            self.main.edges.get(split..).unwrap_or_default(),
+            self.gains.get(split..).unwrap_or_default(),
+            self.main.scale,
+            high,
+        );
     }
 }
 

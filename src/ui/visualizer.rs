@@ -178,8 +178,12 @@ pub fn install_visualizer(ui: &AppWindow, state: &AppState) {
                     .all(|c| c.max.abs() < IDLE_LEVEL && c.min.abs() < IDLE_LEVEL)
             } else {
                 let sample_rate = if analyzing {
-                    // Straight into the FFT's own input buffer.
-                    viz.snapshot(spectrum.window_mut());
+                    // Straight into the two transforms' own input buffers — no
+                    // intermediate copy. They overlap, the long one simply
+                    // reaching further back.
+                    let (bass, main) = spectrum.windows_mut();
+                    viz.snapshot(bass);
+                    viz.snapshot(main);
                     // Not `sample_rate()`: the tap sits under rodio's speed
                     // stage, so the analysis rate has to fold the speed back in.
                     viz.analysis_rate()

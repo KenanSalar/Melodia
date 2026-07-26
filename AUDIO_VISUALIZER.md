@@ -106,13 +106,13 @@ instances + hands out reusable scratch buffers.
 
 | Knob | Choice | Rationale |
 |------|--------|-----------|
-| FFT size | `2048` (const, power of two) | ~46 ms window @ 44.1 kHz — good bass resolution, still responsive |
-| Ring capacity | `4096` f32 (16 KiB) | ≥ 2× FFT size so a snapshot always has a full recent window |
+| FFT size | `2048`, plus `8192` for the bands below the crossover | 46 ms keeps treble responsive; 186 ms is the only way to separate the bass bars — see the balance note under Phase 7 |
+| Ring capacity | `16384` f32 (64 KiB) | holds the longest window (the bass transform) with room |
 | Sample domain | **mono** (average channels at frame boundary) | one FFT, half the ring; stereo split is not worth it for bars |
 | Bands | `64` default (const, room to make it a setting later) | reads well at the strip's NP-view width; cheap to draw |
 | Band spacing | logarithmic (geometric, **fractional** bin edges) | perceptual frequency mapping; fractional edges keep every bar the same width in octaves |
 | Frequency range | `50 Hz` – `16 kHz`, top `min`'d with Nyquist | 50 Hz matches CAVA / `DeaDBeeF`; 16 kHz matches the EQ's top ISO band and every lossy lowpass |
-| Magnitude | `norm()` → scaled log/dB → normalized 0..1 | wide dynamic range compressed for display |
+| Magnitude | root-sum-square over the band → tilt → dB → normalized 0..1 | band *energy*, not a peak — see the balance note under Phase 7 |
 | Smoothing | peak-follow: instant/fast attack, exponential decay (~0.8/frame) | lively but calm |
 | Redraw | Slint `Timer`, ~16 ms, **mounted inside the NP view** | self-gates: unmounts (stops) when NP closes |
 | Bar smoothing | done in **Rust** (decay), **no** Slint `animate` on height | avoids the "animate a value that's already animated" phase-lag pitfall |
@@ -339,8 +339,11 @@ part worth testing.
 - **`src/player/spectrum.rs` (new)** — the pipeline as free functions, each unit-tested:
   `hann_window(size)`, `coherent_gain_scale(window)`, `band_edges(bands, fft_size, fs)`,
   `level_from_magnitude(mag)`, `bands_from_spectrum(spectrum, edges, scale, out)` and
-  `smooth(levels, next, attack, decay)`. Consts: `FFT_SIZE 2048`, `NUM_BANDS 64`,
-  `MIN_HZ 50`, `MAX_HZ 16_000`, `FLOOR_DB -70`, `ATTACK 0.0`, `DECAY 0.8`.
+  `smooth(levels, next, attack, decay)`. Consts: `FFT_SIZE 2048`, `BASS_FFT_SIZE 8192`,
+  `NUM_BANDS 64`,
+  `MIN_HZ 50`, `MAX_HZ 16_000`, `FLOOR_DB -75`, `CEILING_DB -15`, `ATTACK 0.0`,
+  `DECAY 0.8`, plus `band_tilt_gains` / `TILT_DB_PER_OCTAVE 4.5` /
+  `TILT_PIVOT_HZ 1000` (added later — see the balance note under Phase 7).
 - **`SpectrumAnalyzer`** is the only stateful piece — it holds exactly what must not be
   rebuilt per frame (the `realfft` plan + its three buffers, the Hann table and its scale,
   the bin→band map plus the rate it was built for, and the two band buffers). Nothing in
@@ -796,6 +799,55 @@ unless the Phase 1 caveat proves visible in practice.
   write — the UI-layer installer still owns the property write) and, being `spawn_cancellable`,
   is dropped by the shutdown token so it never pins the force-exit path. Verify
   `cargo clippy --all-targets -- -D warnings` clean.
+
+**Frequency balance `[x]` — the bass bars pinned, and it wasn't the mirrored style.** Shipping
+5.2 made an existing DSP fault legible: centred, a pinned band is a slab through the midline and
+a quiet one collapses to a dot, where bottom-anchored the same data still read as a profile.
+Three causes, measured, and the first was the big one:
+
+- **`band_magnitude` took the *peak* bin.** A peak is a maximum, not an energy, so it runs high
+  wherever a band holds many bins — favouring *tonal* content over broadband. A mix's bass is
+  tonal and its treble is noise-like, so the display leaned bass by construction. Now
+  **root-sum-square** over the band: a tone keeps its magnitude at any band width, broadband
+  grows as `√bins`. A plain mean was tried first and rejected — it divides a lone tone by its
+  band's width, and modelling put it 0.26 short on treble against RSS's 0.47.
+- **No tilt.** `band_tilt_gains` precomputes a per-band gain beside the edges (same rebuild
+  cadence, zero per-frame cost): `TILT_DB_PER_OCTAVE 4.5` about `TILT_PIVOT_HZ 1000`. CAVA bakes
+  in 5.1, foobar2000 ships the identical formula as a knob already pivoted at 1 kHz.
+- **`FLOOR_DB -70 .. 0 dBFS` wasted its top.** Now `-75 .. -15`. Nothing surveyed uses full
+  scale (Rainmeter spans 35 dB, Audacious 40, audioMotion 60 topping at −25).
+
+Modelled over four material profiles the display goes from 0–38 dead bands to 0–6, and treble
+from 0.00–0.08 to 0.22–0.60, with nothing pinned.
+
+**Bass resolution `[x]` — the dual transform.** The other half of the same complaint: bands 0–16
+were fed by **8.4 bins** at `FFT_SIZE 2048`, several of them interpolating the *same* pair, so
+the left quarter could not move independently however well it was balanced. Fixed by CAVA's
+arrangement — a second `BASS_FFT_SIZE 8192` transform for the bands below the crossover, the
+existing 2048 for the rest. Those seventeen bars now read **33.7 bins**.
+
+- **A single 8192 was the wrong answer**, which is why option 4 became option 5. Measured on the
+  dev machine: 2048 costs 1.3 µs/frame, 8192 costs 5.9, both transforms together 7.1 — 0.04 % of
+  a 16 ms frame. CPU was never the constraint; **window length is**. One 8192 window is 186 ms,
+  so every bar would answer to a 186 ms average and every cymbal would smear. Dual gives the bass
+  its long window (186 ms is fine — you cannot resolve 50 Hz faster) and keeps the rest at 46 ms.
+- **The crossover is derived, not fixed in Hz**: `crossover_band` returns the first band a whole
+  main-transform bin *wide*, so it follows the rate — band 17 (231 Hz) at 44.1 kHz, band 26
+  (521 Hz) at 96 kHz — where CAVA hardcodes 100 Hz. It must be **width**, not "contains a whole
+  bin": that is the test `band_magnitude` branches on, but it isn't monotonic down there, since a
+  band far narrower than a bin still contains one whenever it straddles an integer. Using it put
+  the crossover at band 2.
+- **The join needs no correction factor**, and that falls out of the root-sum-square above:
+  per-bin magnitude falls as `1/√N` once `coherent_gain_scale` is applied while a fixed-width
+  band holds `∝N` bins, so a band reads the same either side. CAVA needs a `log2(FFTsize)` fudge
+  there only because it uses a mean. A test pins the continuity with broadband noise.
+- **Structure:** a private `Transform` (plan + buffers + Hann + scale + edges) so the analyzer
+  holds two without duplication; `fold_bands` splits `raw` at the crossover and calls the
+  existing `bands_from_spectrum` twice, so the aggregation itself gained no new code path.
+
+Cost: **+130 KiB** (second plan, buffers and Hann table) and ~6 µs/frame. `RING_CAP` already
+held 16384, so the 8192 window fits with room. **GPU and render path unchanged** — still 64
+`Rectangle`s reading the same model.
 
 Two post-review fixes landed on top of Phase 4 and are worth carrying forward if Phase 5
 adds a style:
