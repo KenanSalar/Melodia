@@ -56,7 +56,8 @@ const STYLE_WAVEFORM: &str = "waveform";
 ///
 /// Two things mirror this **by position** and neither can be checked by the
 /// compiler: the `viz-style-names` `@tr` array in
-/// `ui/views/settings/playback-section.slint`, and the branch in
+/// `ui/components/now-playing/flyout-presets.slint` — rendered by both the
+/// Settings chips and the Now-Playing view's flyout — and the branch in
 /// `visualizer-strip.slint` that mounts on the key. `tests/visualizer_tests.rs`
 /// pins both against this array.
 const STYLES: [&str; 2] = [STYLE_BARS, STYLE_WAVEFORM];

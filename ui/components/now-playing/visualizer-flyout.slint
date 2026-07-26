@@ -1,0 +1,42 @@
+import { Theme } from "../../theme.slint";
+import { PopupSurface } from "../popup-surface.slint";
+import { FlyoutOption } from "flyout-option.slint";
+import { VizStylePresets } from "flyout-presets.slint";
+
+// The visualizer-option flyout: an "Off" row plus one row per style from the
+// shared `VizStylePresets` global. Lives inside the Now-Playing view menu's
+// single PopupWindow (no nested PopupWindow — the app's deliberate single-popup
+// discipline), positioned to the LEFT of the menu column. The host sets
+// `width`/`height`/`x`/`y` (computed from `viz-style-names.length`); this
+// component just renders the rows and emits `pick(index)`.
+//
+// The style rows use their loop index directly, so the leading "Off" row can't
+// shift them out of step with `STYLES` in `src/ui/visualizer.rs`.
+export component VisualizerFlyout inherits PopupSurface {
+    // Whether the visualizer is on at all. It wins over the style: while it is
+    // off the picked style is still persisted, but nothing is drawn — so "Off"
+    // is the active row regardless of `current-index`.
+    in property <bool> viz-enabled;
+    // Live picker index, used to mark the active style row.
+    in property <int> current-index;
+
+    // `-1` = "Off"; otherwise an index into `VizStylePresets.viz-style-names`.
+    callback pick(int);
+
+    VerticalLayout {
+        padding: Theme.pad-xs;
+        spacing: 0;
+
+        FlyoutOption {
+            label: @tr("Off");
+            active: !root.viz-enabled;
+            clicked => { root.pick(-1); }
+        }
+
+        for name[i] in VizStylePresets.viz-style-names: FlyoutOption {
+            label: name;
+            active: root.viz-enabled && i == root.current-index;
+            clicked => { root.pick(i); }
+        }
+    }
+}

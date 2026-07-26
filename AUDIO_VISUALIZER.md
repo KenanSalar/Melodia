@@ -527,11 +527,26 @@ style-specific:
   slint#7377), the crossfade sub-row precedent. The toggle and the picker **search as one
   unit**, like the crossfade cluster — that is also what leaves the three upstream
   `SectionDivider` gates correct without touching them.
-- **The name list is a named `@tr` literal array at the use site** (`viz-style-names`),
-  mirroring `STYLES` **by position** — `@tr()` only translates literals at codegen, so a
-  `[string]` seeded from Rust renders untranslated. `src/ui/tests/visualizer_tests.rs` pins the
-  length against `STYLES` with the same `include_str!` + `split_once` shape
-  `smart_criteria_tests` uses, and also pins the strip's mount branch to `STYLE_WAVEFORM`.
+- **The name list is a named `@tr` literal array** (`viz-style-names`), mirroring `STYLES`
+  **by position** — `@tr()` only translates literals at codegen, so a `[string]` seeded from
+  Rust renders untranslated. It lives in `flyout-presets.slint` beside the speed/sleep preset
+  lists, because a **second** picker renders it: the Now-Playing view's own menu (below).
+  `src/ui/tests/visualizer_tests.rs` pins the length against `STYLES` with the same
+  `include_str!` + `split_once` shape `smart_criteria_tests` uses, pins that the Settings
+  chips still bind the shared array rather than a local copy, and pins the strip's mount
+  branch to `STYLE_WAVEFORM`.
+- **A second picker in the Now-Playing view itself** (`view-menu.slint` + `visualizer-flyout.slint`),
+  so a style can be tried without a round trip through Settings. A `more_vert` `IconButton`
+  beside the favourite heart opens the `overflow-menu.slint` popup shape mirrored on the
+  vertical axis — trigger at the top, so the popup opens **downward** and both columns are
+  top-anchored (`y: 0`) rather than bottom-anchored. Its one row opens a flyout listing
+  **Off + one row per style**; the style rows use their `for name[i]` loop index directly, so
+  the leading Off row can't shift them out of step with `STYLES`. Off writes
+  `Visualizer.enabled` (both halves — the two-way binding for the Settings toggle and
+  `watched-viz-active`, the callback to persist), a style re-enables first if needed. **No
+  Rust changes:** `set-style` already resolves the index, publishes both shapes and persists.
+  The row shape (`OverflowRow`) was lifted out of `overflow-menu.slint` into its own file so
+  both menus share it.
 - **The Timer is hoisted out of `spectrum-bars.slint` into `visualizer-strip.slint`.** This was
   the load-bearing one. The 16 ms Timer *and* its three-part gate used to live inside the bars
   component: `running: Player.vm.is_playing || !Visualizer.idle`, the

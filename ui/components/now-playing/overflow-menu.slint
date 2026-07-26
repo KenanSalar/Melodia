@@ -6,85 +6,10 @@ import { MaterialIcon } from "../material-icon.slint";
 import { StarRating } from "../star-rating.slint";
 import { PopupSurface } from "../popup-surface.slint";
 import { FocusLossWatcher } from "../focus-loss-watcher.slint";
+import { OverflowRow } from "./overflow-row.slint";
 import { SpeedFlyout } from "./speed-flyout.slint";
 import { SleepTimerFlyout } from "./sleep-timer-flyout.slint";
 import { FlyoutMetrics, SleepPresets, SpeedPresets } from "./flyout-presets.slint";
-
-// One row inside the overflow popup. Renders the same icon + label pair
-// shown inline in the now-playing bar; active colour mirrors the inline
-// IconButton's `active-fg` (Theme.accent). Optional trailing slots
-// (`trailing-text` + `trailing-icon`) are used by the permanent
-// "Speed" row to show the current rate and a flyout chevron.
-component OverflowRow inherits Rectangle {
-    in property <string> icon;
-    in property <string> label;
-    in property <bool> active;
-    // FILL=1 variant for active glyphs that should read as solid (favorite,
-    // pin). Mirrors `IconButton.filled` for the inline siblings.
-    in property <bool> filled;
-    in property <bool> button-enabled: true;
-    // Optional right-aligned slots (empty ⇒ not rendered). The label VL
-    // stretches, so these dock to the row's right edge.
-    in property <string> trailing-text;
-    in property <string> trailing-icon;
-
-    callback clicked();
-
-    height: 36px;
-    border-radius: Theme.radius-sm;
-    background: touch.has-hover && root.button-enabled ? Theme.surface1 : transparent;
-    animate background { duration: Theme.dur-fast; easing: ease-in-out; }
-    opacity: root.button-enabled ? 1 : 0.5;
-
-    HorizontalLayout {
-        padding-left: Theme.pad-sm;
-        padding-right: Theme.pad-sm;
-        spacing: Theme.pad-sm;
-        alignment: stretch;
-
-        VerticalLayout {
-            alignment: center;
-            MaterialIcon {
-                name: root.icon;
-                icon-size: 20px;
-                icon-color: root.active ? Theme.accent : Theme.text;
-                filled: root.filled;
-            }
-        }
-        VerticalLayout {
-            alignment: center;
-            horizontal-stretch: 1;
-            Text {
-                text: root.label;
-                color: root.active ? Theme.accent : Theme.text;
-                font-size: Theme.font-size-md;
-            }
-        }
-        if root.trailing-text != "": VerticalLayout {
-            alignment: center;
-            Text {
-                text: root.trailing-text;
-                color: root.active ? Theme.accent : Theme.subtext0;
-                font-size: Theme.font-size-md;
-            }
-        }
-        if root.trailing-icon != "": VerticalLayout {
-            alignment: center;
-            MaterialIcon {
-                name: root.trailing-icon;
-                icon-size: 18px;
-                icon-color: root.active ? Theme.accent : Theme.subtext0;
-            }
-        }
-    }
-
-    touch := TouchArea {
-        mouse-cursor: root.button-enabled ? pointer : default;
-        clicked => {
-            if (root.button-enabled) { root.clicked(); }
-        }
-    }
-}
 
 // `more_vert` IconButton + PopupWindow listing the permanent "Speed"
 // row (with its left-opening preset flyout) plus every button the

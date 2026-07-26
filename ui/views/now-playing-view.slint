@@ -4,6 +4,7 @@ import { IconButton } from "../components/icon-button.slint";
 import { StarRating } from "../components/star-rating.slint";
 import { NowPlayingCover } from "../components/now-playing/now-playing-cover.slint";
 import { UpNextList } from "../components/now-playing/up-next-list.slint";
+import { NowPlayingViewMenu } from "../components/now-playing/view-menu.slint";
 import { VisualizerStrip } from "../components/now-playing/visualizer-strip.slint";
 
 // One technical-metadata chip (codec / bitrate / sample rate / …). The
@@ -131,10 +132,15 @@ export component NowPlayingView inherits Rectangle {
                     icon: "arrow_back";
                     diameter: 36px;
                     icon-size: 22px;
-                    // Translucent disc so the back button reads against the
-                    // scrim+blur like the detail-view back buttons do. Shared
-                    // `Theme.floating-button-bg` keeps both surfaces in sync.
-                    idle-bg: Theme.floating-button-bg;
+                    // Accent-tinted disc rather than the detail views' shared
+                    // `Theme.floating-button-bg`, so the top bar reads as one
+                    // family with the stars, heart and chips. Only the disc is
+                    // translucent — the glyph stays solid. `hover-bg` has to be
+                    // overridden too; it defaults to an opaque `Theme.surface0`.
+                    idle-bg: Player.np-accent-bright.with-alpha(0.2);
+                    hover-bg: Player.np-accent-bright.with-alpha(0.32);
+                    idle-fg: Player.np-accent-bright;
+                    hover-fg: Player.np-accent-bright;
                     clicked => { Nav.now-playing-open = false; }
                 }
             }
@@ -179,6 +185,13 @@ export component NowPlayingView inherits Rectangle {
                     active-fg: Player.np-accent-bright;
                     clicked => { Player.toggle-favorite(); }
                 }
+            }
+
+            // View-scoped menu (visualizer options). Not gated on
+            // `vm.has_track` — its options are meaningful with an empty queue.
+            VerticalLayout {
+                alignment: center;
+                NowPlayingViewMenu { }
             }
         }
 
