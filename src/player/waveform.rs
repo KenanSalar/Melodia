@@ -27,7 +27,8 @@
 //!    span of samples behind it to draw,
 //! 2. [`min_max_columns`] reduces that span to one range per drawn column,
 //! 3. the two edges are closed into the single filled figure the Slint `Path`
-//!    renders.
+//!    renders — [`WaveformAnalyzer::trace`] on the per-frame path,
+//!    [`write_path_commands`] for a figure drawn once.
 //!
 //! Like [`spectrum`], everything here is a free function over slices;
 //! [`WaveformAnalyzer`] exists only to hold the buffers that must not be
@@ -182,8 +183,12 @@ pub fn min_max_columns(src: &[f32], out: &mut [Column]) {
     }
 }
 
-/// Write `columns` into `out` as SVG path commands: the upper edge left to
-/// right, the lower edge back, closed into one filled figure.
+/// Write `columns` into `out` as SVG path commands: the lower edge left to
+/// right, the upper edge back, closed into one filled figure.
+///
+/// That order is not a detail — it is what gives the figure a positive signed
+/// area, which is what femtovg reads to decide solid from hole. The writer says
+/// so where it does it, and `the_closed_figure_winds_positively` pins it.
 ///
 /// Coordinates are normalized — x across `0..1`, y over `-1..1` — so the
 /// `Path`'s viewbox is a constant and no column count has to be kept in step
@@ -206,8 +211,18 @@ pub fn write_path_commands(columns: &[Column], out: &mut String) {
     write_path(columns, &prefixes, out);
 }
 
-/// Bytes one entry of [`XPrefixes`] takes: `" L0.1234 "`.
-const X_PREFIX_BYTES: usize = 9;
+/// Bytes one entry of [`XPrefixes`] takes: `"0.1234 "`.
+const X_PREFIX_BYTES: usize = 7;
+
+/// What every vertex but the first opens with. Not part of the cached entry: a
+/// two-byte `push_str` costs nothing next to the float format it sits beside,
+/// and keeping it here is what lets the opening `M` vertex reuse the same entry
+/// rather than slice a lead off it.
+///
+/// The space before the `L` is not required by the SVG grammar — a command
+/// letter terminates the number before it — but it costs a byte a vertex and
+/// leaves nothing to the parser's discretion.
+const LINE_TO: &str = " L";
 
 /// The `x` half of every vertex the trace emits, held as text.
 ///
@@ -220,12 +235,12 @@ const X_PREFIX_BYTES: usize = 9;
 /// frame's two FFTs.
 ///
 /// One packed string plus each entry's end offset, so a resize rebuilds a single
-/// buffer rather than reallocating a string per column. Entries are built
-/// through the same `write!` the per-frame path used to run, so the bytes are
-/// identical by construction rather than by a second float formatter agreeing
-/// with `core::fmt`'s rounding.
+/// buffer rather than reallocating a string per column. Entries are written with
+/// the same `{x:.4}` the per-frame path used to run, so the bytes are identical
+/// by construction rather than by a second float formatter agreeing with
+/// `core::fmt`'s rounding at every tie.
 struct XPrefixes {
-    /// `" L0.1234 "` per column, packed end to end.
+    /// `"0.1234 "` per column, packed end to end.
     text: String,
     /// Where each column's slice ends in [`text`](Self::text).
     ends: Vec<usize>,
@@ -258,18 +273,17 @@ impl XPrefixes {
         let span = index_to_f32(columns.saturating_sub(1)).max(1.0);
         for i in 0..columns {
             let x = index_to_f32(i) / span;
-            // Writing into a String cannot fail. The space before each `L` is
-            // not required by the SVG grammar — a command letter terminates the
-            // number before it — but it costs a byte a vertex and leaves nothing
-            // to the parser's discretion.
-            let _ = write!(self.text, " L{x:.4} ");
+            // Writing into a String cannot fail.
+            let _ = write!(self.text, "{x:.4} ");
             self.ends.push(self.text.len());
         }
     }
 
-    /// Column `i`'s `" L<x> "`, or an empty slice for an index no entry covers.
+    /// Column `i`'s `"<x> "`, or an empty slice for an index no entry covers.
     fn get(&self, i: usize) -> &str {
-        let end = self.ends.get(i).copied().unwrap_or_default();
+        let Some(&end) = self.ends.get(i) else {
+            return "";
+        };
         let start = i
             .checked_sub(1)
             .and_then(|previous| self.ends.get(previous))
@@ -279,9 +293,10 @@ impl XPrefixes {
     }
 }
 
-/// The one writer. [`write_path_commands`] builds a throwaway table for the two
-/// callers that don't keep one; [`WaveformAnalyzer::trace`] passes the table it
-/// owns. Neither has its own copy of the geometry.
+/// The one writer. [`write_path_commands`] builds a throwaway table for the
+/// callers that draw a figure once — the resting trace, and the tests;
+/// [`WaveformAnalyzer::trace`] passes the table it owns. Neither has its own
+/// copy of the geometry.
 fn write_path(columns: &[Column], prefixes: &XPrefixes, out: &mut String) {
     out.clear();
     if columns.is_empty() {
@@ -295,19 +310,15 @@ fn write_path(columns: &[Column], prefixes: &XPrefixes, out: &mut String) {
     // rely on the renderer being sensible about.
     for (i, column) in columns.iter().enumerate() {
         let y = edges(*column).1;
-        let x = prefixes.get(i);
-        if i == 0 {
-            // The figure opens on a move rather than a line, and the entry
-            // carries the `L` every other vertex needs — so skip past it.
-            out.push('M');
-            out.push_str(x.get(2..).unwrap_or_default());
-        } else {
-            out.push_str(x);
-        }
+        // The figure opens on a move rather than a line; every vertex after it
+        // is a line to.
+        out.push_str(if i == 0 { "M" } else { LINE_TO });
+        out.push_str(prefixes.get(i));
         let _ = write!(out, "{y:.3}");
     }
     for (i, column) in columns.iter().enumerate().rev() {
         let y = edges(*column).0;
+        out.push_str(LINE_TO);
         out.push_str(prefixes.get(i));
         let _ = write!(out, "{y:.3}");
     }
@@ -379,7 +390,9 @@ impl WaveformAnalyzer {
         &mut self.window[..len]
     }
 
-    /// Produce this frame's columns, at most `columns` of them.
+    /// Produce this frame's columns, at most `columns` of them, without drawing
+    /// them. The seam the tests reduce against — production goes through
+    /// [`trace`](Self::trace), which is these columns plus the path they make.
     ///
     /// `active` is false when there is nothing to draw from — a paused player, a
     /// hidden window, a track that hasn't started. The ring still holds the last
