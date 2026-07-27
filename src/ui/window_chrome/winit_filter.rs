@@ -198,8 +198,11 @@ pub(super) fn install(app: &AppWindow, state: &AppState, drag_hover: Arc<AtomicB
                 // `Focused(false)` on its own is ambiguous — another window
                 // got focus, not necessarily that we're hidden — so ask the
                 // OS which it was. See `schedule_minimize_probe` for why the
-                // question is deferred rather than asked here.
-                if !focused {
+                // question is deferred rather than asked here. Only worth
+                // asking while we still believe the window is up: a tray hide
+                // and our own minimize button both lower the shadow first, and
+                // on X11 the answer costs a round-trip on the UI thread.
+                if !focused && crate::ui::tray_bridge::is_window_visible() {
                     schedule_minimize_probe(weak.clone());
                 }
                 let _ = weak.upgrade_in_event_loop(move |ui| {

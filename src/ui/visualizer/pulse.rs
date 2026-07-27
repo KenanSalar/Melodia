@@ -35,8 +35,26 @@ static FRAMES: AtomicU64 = AtomicU64::new(0);
 /// `true` once the notifier is installed and [`FRAMES`] means something.
 static COUNTING: AtomicBool = AtomicBool::new(false);
 
-/// Start counting. Called once, from `install_visualizer`.
+/// `true` once [`install`] has run, successfully or not.
+///
+/// Gates the call rather than its result: `set_rendering_notifier` swaps the new
+/// callback in *before* it decides to return `AlreadySet`, so a second call would
+/// silently replace ours rather than be refused.
+static INSTALLED: AtomicBool = AtomicBool::new(false);
+
+/// Start counting. Called from `set-active` the first time a strip mounts rather
+/// than at startup: a live notifier costs the renderer an extra flush on every
+/// drawn frame — the whole window's, not the strip's — and a user who never opens
+/// Now Playing shouldn't pay for a signal nothing is reading.
+///
+/// Deferring costs one thing: `RenderingState::RenderingSetup` has already been
+/// consumed by the first frame, so this callback never sees it. It only wants
+/// `BeforeRendering`, but anything added here that needs the setup phase would
+/// have to move the install back to startup.
 pub(super) fn install(ui: &AppWindow) {
+    if INSTALLED.swap(true, Ordering::Relaxed) {
+        return;
+    }
     match ui.window().set_rendering_notifier(|state, _| {
         if matches!(state, RenderingState::BeforeRendering) {
             FRAMES.fetch_add(1, Ordering::Relaxed);

@@ -371,6 +371,11 @@ export global Visualizer {
     // `NowPlayingView` is destroyed while closed and Slint has no unmount
     // callback, so the gate has to live somewhere always mounted.
     callback set-active(bool);
+    // Fired by whoever lowers `window-shown`. The tick is the steady-state writer
+    // of the audio tap's arm state, but it can't be relied on here: `window-shown`
+    // also gates the strip's Timer, so a hide landing on an already-settled
+    // drawing stops it in the same pass and no further tick arrives.
+    callback window-hidden();
     callback tick(bool /*is-playing*/, float /*strip width, logical px*/);
 }
 

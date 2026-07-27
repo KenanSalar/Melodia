@@ -1,5 +1,5 @@
 //! Tests for the parts of the visualizer no compiler checks: the style table's
-//! mirrors, and the strip Timer's gate.
+//! mirrors, the strip Timer's gate, and the stall rule behind `dormant`.
 //!
 //! `STYLES` is mirrored by two things the compiler can't see: the translated
 //! name array both pickers render, and the key `VisualizerStrip` branches on.
@@ -11,6 +11,9 @@
 //! worse when they drift: Rust would still publish every property, the strip
 //! would still look right on screen, and the only symptom would be a tick
 //! running at 60 Hz for a window nobody is looking at.
+//!
+//! [`FrameWatch`] is here for the opposite reason — it is ordinary logic, but the
+//! only way to reach it in the running app is to stop painting the window.
 
 use super::*;
 use crate::services::settings::{DEFAULT_VIZ_STYLE, VisualizerFlags};
@@ -93,6 +96,54 @@ fn a_dormant_strip_polls_rather_than_running_at_frame_rate() {
         STRIP.contains("Visualizer.dormant ? 500ms"),
         "the strip's Timer lost its dormant polling interval"
     );
+}
+
+/// A watch that has never seen a frame, so a test controls the whole count.
+fn watch() -> FrameWatch {
+    FrameWatch {
+        last: 0,
+        stalled_ticks: 0,
+    }
+}
+
+#[test]
+fn a_standing_frame_count_reads_as_painting_until_the_stall_threshold() {
+    let mut watch = watch();
+    // The count never moves, so every tick is a stalled one. The last tick that
+    // still counts as painting is the one *before* the threshold.
+    for tick in 1..FRAME_STALL_TICKS {
+        assert!(
+            watch.painting(Some(0)),
+            "stood down after only {tick} stalled tick(s)"
+        );
+    }
+    assert!(!watch.painting(Some(0)));
+    // And it stays down rather than oscillating.
+    assert!(!watch.painting(Some(0)));
+}
+
+#[test]
+fn one_painted_frame_resets_the_stall() {
+    let mut watch = watch();
+    for _ in 0..FRAME_STALL_TICKS {
+        watch.painting(Some(0));
+    }
+    assert!(!watch.painting(Some(0)));
+    // A window that started being drawn again has to be believed on the first
+    // frame — `ATTACK` is 0, so the strip repaints within that same tick.
+    assert!(watch.painting(Some(1)));
+}
+
+#[test]
+fn an_uncounted_window_is_assumed_to_be_painting() {
+    let mut watch = watch();
+    // No notifier means no evidence either way, and an inference with none
+    // behind it must not be what blanks the strip — however long it runs.
+    for _ in 0..FRAME_STALL_TICKS * 2 {
+        assert!(watch.painting(None));
+    }
+    // Nor may those ticks have accrued against a later real count.
+    assert!(watch.painting(Some(0)));
 }
 
 #[test]

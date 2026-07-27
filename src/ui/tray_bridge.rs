@@ -84,7 +84,9 @@ pub fn should_hide_to_tray() -> bool {
 ///
 /// `Visualizer.window-shown` moves with it. The visualizer's Timer gates on
 /// the Slint half and its tick reads the atomic, so the two must never
-/// disagree — hence one writer rather than two.
+/// disagree — hence one writer rather than two. That gate is also why hiding
+/// has to hand the visualizer its own notice rather than leave it to the next
+/// tick: lowering `window-shown` can stop the Timer that would have run it.
 pub fn set_window_visible(ui: &AppWindow, visible: bool) {
     WINDOW_VISIBLE.store(visible, Ordering::Relaxed);
     let viz = ui.global::<Visualizer>();
@@ -95,6 +97,11 @@ pub fn set_window_visible(ui: &AppWindow, visible: bool) {
         // second to work out that it is being drawn again. This *is* that
         // notice, so hand it over rather than making it infer the same thing.
         viz.set_dormant(false);
+    } else {
+        // The audio tap can't wait for the strip's next tick to be disarmed:
+        // `window-shown` gates that Timer too, so on an already-settled drawing
+        // the `set_window_shown` above just stopped it outright.
+        viz.invoke_window_hidden();
     }
 }
 

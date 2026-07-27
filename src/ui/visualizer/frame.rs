@@ -21,6 +21,11 @@ use crate::player::waveform::{self, WaveformAnalyzer};
 const IDLE_LEVEL: f32 = 0.001;
 
 /// One bars (or mirrored) frame: snapshot → two FFTs → bands → model.
+///
+/// Every band is written every tick, changed or not, and that is load-bearing
+/// beyond the drawing: the repaint it asks for is what [`super::pulse`] counts to
+/// tell a window being drawn from one that isn't. Skipping unchanged levels would
+/// weaken that signal, not just save a few model writes.
 pub(super) fn bars(
     viz: &VisualizerShared,
     analyzer: &mut SpectrumAnalyzer,

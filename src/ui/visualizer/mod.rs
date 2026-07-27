@@ -16,11 +16,13 @@
 //! keep filling the ring for a view nobody has open, and for a window hidden to
 //! tray. So the persisted setting and the tap's arm state are deliberately two
 //! different things: `set-enabled` (the Settings → Playback toggle) only
-//! persists, and this module is the sole writer of the arm state, from two
+//! persists, and this module is the sole writer of the arm state, from three
 //! places on the UI thread:
 //!
 //! - `set-active` — the mount/unmount boundary, mirrored out of `AppWindow`.
 //! - `tick` — the steady state, which folds in pause and window visibility.
+//! - `window-hidden` — the one case the tick can't cover, because the same
+//!   signal stops the Timer it runs off.
 //!
 //! Between them the tap is armed exactly while something is drawing it. The
 //! style has no say in it: every style reads the same ring.
@@ -92,10 +94,7 @@ struct Analyzers {
     /// doesn't dirty the property sixty times a second.
     was_idle: bool,
     was_dormant: bool,
-    /// Painted-frame count as of the last tick, and how many ticks it has sat
-    /// unchanged.
-    last_frames: u64,
-    stalled_ticks: u32,
+    frames: FrameWatch,
 }
 
 impl Analyzers {
@@ -108,25 +107,41 @@ impl Analyzers {
             path: String::with_capacity(MAX_COLUMNS * 2 * 20),
             was_idle: true,
             was_dormant: false,
-            last_frames: pulse::frames().unwrap_or_default(),
+            frames: FrameWatch::new(),
+        }
+    }
+}
+
+/// How long the painted-frame count has stood still, in ticks.
+struct FrameWatch {
+    last: u64,
+    stalled_ticks: u32,
+}
+
+impl FrameWatch {
+    /// Seeded from the count as it stands, so a session always opens believing it
+    /// is being drawn.
+    fn new() -> Self {
+        Self {
+            last: pulse::frames().unwrap_or_default(),
             stalled_ticks: 0,
         }
     }
 
     /// Whether the window has painted recently enough to be worth drawing for.
     ///
-    /// Every tick dirties a property, so a window being shown paints on every
-    /// one of them and a window that isn't leaves the count where it was.
-    fn painting(&mut self) -> bool {
-        let Some(frames) = pulse::frames() else {
-            // Nothing is counting, so there is no evidence either way — and an
-            // inference with none behind it must not be what blanks the strip.
+    /// Every tick dirties a property, so a window being shown paints on every one
+    /// of them and a window that isn't leaves the count where it was. `None` means
+    /// nothing is counting: no evidence either way, and an inference with none
+    /// behind it must not be what blanks the strip.
+    fn painting(&mut self, frames: Option<u64>) -> bool {
+        let Some(frames) = frames else {
             return true;
         };
-        if frames == self.last_frames {
+        if frames == self.last {
             self.stalled_ticks = self.stalled_ticks.saturating_add(1);
         } else {
-            self.last_frames = frames;
+            self.last = frames;
             self.stalled_ticks = 0;
         }
         self.stalled_ticks < FRAME_STALL_TICKS
@@ -200,8 +215,6 @@ pub fn install_visualizer(ui: &AppWindow, state: &AppState) {
     // tick's borrow never outlives one frame.
     let analyzers: Rc<RefCell<Option<Analyzers>>> = Rc::new(RefCell::new(None));
 
-    pulse::install(ui);
-
     let viz_global = ui.global::<Visualizer>();
     viz_global.set_enabled(flags.viz_enabled);
     publish_style(&viz_global, selected);
@@ -245,7 +258,7 @@ pub fn install_visualizer(ui: &AppWindow, state: &AppState) {
             // signals rather than one. Computed rather than returned early on:
             // the decay path below still has to run, so `idle` stays truthful
             // and the Timer can still stop.
-            let painting = session.painting();
+            let painting = session.frames.painting(pulse::frames());
             let analyzing = playing && painting && tray_bridge::is_window_visible();
 
             // The steady-state writer of the tap's arm state, so pause, minimise
@@ -307,6 +320,11 @@ pub fn install_visualizer(ui: &AppWindow, state: &AppState) {
         viz_global.on_set_active(move |active| {
             viz.set_enabled(active && tray_bridge::is_window_visible());
             if active {
+                // Where the frame counter starts. It isn't free — see `pulse` —
+                // so it waits here for a strip that will actually read it.
+                if let Some(ui) = weak.upgrade() {
+                    pulse::install(&ui);
+                }
                 return;
             }
             *analyzers.borrow_mut() = None;
@@ -320,6 +338,17 @@ pub fn install_visualizer(ui: &AppWindow, state: &AppState) {
                 global.set_dormant(false);
             }
         });
+    }
+
+    // window-hidden — the third writer of the arm state, and the reason the tick
+    // isn't enough on its own. `window-shown` gates the strip's Timer, so a hide
+    // that lands on an already-settled drawing (digital silence, or the first
+    // frames of a track while the window refills) stops the Timer in the same
+    // pass as it drops the gate: `Timer::stop` takes effect at once, no final
+    // trigger fires, and the tick that would have disarmed the tap never runs.
+    {
+        let viz = state.rodio.visualizer();
+        viz_global.on_window_hidden(move || viz.set_enabled(false));
     }
 
     // set-enabled — persist only. Arming is the mirrored `set-active` above:
