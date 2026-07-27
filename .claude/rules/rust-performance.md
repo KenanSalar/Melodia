@@ -1,6 +1,8 @@
 ---
 paths:
   - src/**/*.rs
+  - tests/**/*.rs
+  - build.rs
   - Cargo.toml
 ---
 

@@ -1,7 +1,29 @@
-# src/ui/visualizer/
+---
+paths:
+  - src/ui/visualizer/**/*.rs
+  - ui/views/now-playing-view.slint
+  - ui/views/settings/playback-section.slint
+  - ui/components/now-playing/visualizer-strip.slint
+  - ui/components/now-playing/visualizer-flyout.slint
+  - ui/components/now-playing/spectrum-bars.slint
+  - ui/components/now-playing/waveform-trace.slint
+  - ui/components/now-playing/view-menu.slint
+  - ui/components/now-playing/overflow-menu.slint
+  - ui/components/now-playing/menu-surface.slint
+  - ui/components/now-playing/flyout-presets.slint
+---
 
-The Now-Playing visualizer's UI half — wiring, the per-frame tick, and the gates
-that decide when any of it runs. The DSP is `src/player/{visualizer,spectrum,waveform}.rs`.
+# The Now-Playing visualizer — UI half
+
+Wiring, the per-frame tick, and the gates that decide when any of it runs.
+The DSP is `src/player/{visualizer,spectrum,waveform}.rs` — those modules argue
+themselves in their `//!` docs, and what spans them is `src/player/CLAUDE.md`.
+
+This is a rule rather than a `CLAUDE.md` beside the code because the subject isn't
+a directory: the Rust is `src/ui/visualizer/`, the strip and both pickers are
+`.slint` under `ui/`, and the tap is in `src/player/`. A per-directory file loads
+only for reads under its own directory, so it would reach one of the three and
+silently miss the rest.
 
 `mod.rs` argues arming and off-screen windows in its `//!` docs and `pulse.rs`
 argues the frame counter in its own; both are worth reading before changing a gate.
@@ -9,7 +31,7 @@ What follows is what those can't say, because it lives in another file.
 
 ## Arming the producer
 
-- **`enabled` vs `set-active` is the split, and it is why there's no Rust runtime half.** `VisualizerFlags.viz_enabled` (→ `Visualizer.enabled`) is the persisted setting and decides only whether the strip *mounts*. The tap is armed by `Visualizer.set-active`, mirrored out of `AppWindow` as `watched-viz-active: Nav.now-playing-open && Visualizer.enabled` — a local mirror, since `NowPlayingView` is destroyed while closed and Slint has no unmount callback, and its own property rather than a second handler on `Nav.now-playing-open-changed` (single slot, owned by `wire_now_playing_open`). So `hydrate_audio_dsp` deliberately **skips** the visualizer (`VisualizerShared::new(false)` is the correct boot state) and `library::settings::set_visualizer_enabled` has **no `library::playback` runtime half** — this directory is the sole writer of the arm state.
+- **`enabled` vs `set-active` is the split, and it is why there's no Rust runtime half.** `VisualizerFlags.viz_enabled` (→ `Visualizer.enabled`) is the persisted setting and decides only whether the strip *mounts*. The tap is armed by `Visualizer.set-active`, mirrored out of `AppWindow` as `watched-viz-active: Nav.now-playing-open && Visualizer.enabled` — a local mirror, since `NowPlayingView` is destroyed while closed and Slint has no unmount callback, and its own property rather than a second handler on `Nav.now-playing-open-changed` (single slot, owned by `wire_now_playing_open`). So `hydrate_audio_dsp` deliberately **skips** the visualizer (`VisualizerShared::new(false)` is the correct boot state) and `library::settings::set_visualizer_enabled` has **no `library::playback` runtime half** — `src/ui/visualizer/` is the sole writer of the arm state.
 - **Re-arming drops the rings' history** — the newest samples down there may predate the close — and `snapshot` front-pads with silence, so the first frame back reads a touch low rather than stale.
 - **`set-active(false)` also drops the session's buffers.** The two FFT plans with their windows, spectra and scratch, plus the trace's window and path string, live in an `Rc<RefCell<Option<Analyzers>>>` the tick builds on its first frame (`get_or_insert_with` — the one construction site, so no mount ordering can leave the tick without them) and that callback clears, so a user who never opens Now Playing never pays for the plans. The tick's shadows (`was_idle`, `was_dormant`, the `FrameWatch`) live in that same struct rather than beside it: dropping it resets them to the resting values `set-active` publishes on the way out, instead of leaving each to be reset by hand.
 
@@ -23,7 +45,7 @@ What follows is what those can't say, because it lives in another file.
 
 - **Width is `max(cover-size, content-width * 0.75)`** — three quarters of the column the metadata chips wrap against, derived arithmetically from view-root properties rather than read off `chip-area` (which lives inside `if Player.vm.has_track`, and would risk a binding loop). The `max` is load-bearing at the window's 350 px floor, where `content-width` goes negative.
 - **A style needn't be its own component.** "Mirrored" is the same bars under a different anchor: `SpectrumBars` takes an `in property <bool> centred` and the strip sets it from the key on the *catch-all* branch, so switching Bars↔Mirrored re-evaluates one binding instead of tearing down and rebuilding the whole 64-band subtree, and the column-width floor and two-axis radius clamp stay in one copy rather than drifting across two. The bar's `height` binding is its **total** height in both anchorings, so a centred bar puts `level * H/2` either side rather than a full bar each way — matching every mirrored analyzer that ships (CAVA divides its output by 2 for `ORIENT_SPLIT_H`, wavesurfer draws against a `halfHeight`, audioMotion's "perfect mirror" is `reflexRatio: 0.5`); doubling would clip past level 0.5 in a 56 px strip. Note "mirrored" is overloaded — audioMotion's `mirror` and CAVA's `channels = stereo` mean the *horizontal* fold (bass in the centre), which we don't build.
-- **`waveform` ticks at 33 ms, not 16** — `visualizer-strip.slint`'s Timer interval is per style, since a trace has no decay animation to keep smooth and a high rate only makes it look frantic (`foobar2000`'s scope caps at 20 Hz). Its geometry crosses the boundary as an SVG `commands` string with a fixed viewbox rather than as a model — see the `Path` entry under Slint Pitfalls in the root `CLAUDE.md`.
+- **`waveform` ticks at 33 ms, not 16** — `visualizer-strip.slint`'s Timer interval is per style, since a trace has no decay animation to keep smooth and a high rate only makes it look frantic (`foobar2000`'s scope caps at 20 Hz). Its geometry crosses the boundary as an SVG `commands` string with a fixed viewbox rather than as a model — see the `Path` entry in `slint-pitfalls.md`.
 
 ## The two style pickers
 

@@ -8,7 +8,7 @@ spans more than one module, or what breaks from outside the directory.
 
 ## Playback machine
 
-- **Lock discipline** — `with_state_emit()` releases the `PlayerState` lock before side effects; `emit_and_execute` (`actions.rs`) serializes the mutate+execute pair across tasks, so a bare `with_state_emit`+`execute_actions` pair is a bug. Ordering is `exec_lock → PlayerState → rodio Player`, never reversed.
+- **Lock discipline is repo-wide — the rule is in the root `CLAUDE.md`.** The halves live here: `with_state_emit` (`state.rs`), `emit_and_execute` (`actions.rs`), ordering `exec_lock → PlayerState → rodio Player`. What it costs *this* directory is that the monitor decides under the `PlayerState` lock but acts after taking `exec_lock`, so a decision can go stale in the gap — which is why the crossfade builder re-verifies it (below).
 - **Gapless playback** — Rodio queue 2-deep on the **active deck** via `preload_gapless()`; transition via polling `Player::len()` (single lock, avoid TOCTOU). Mutually exclusive with a crossfade *per transition*.
 - **Position polling** — 500 ms `tokio::time::interval`; media position = `get_pos()` × `speed()`.
 - **Speed/position live in two timelines.** rodio builds `source.speed(f).track_position()`, so `get_pos()` returns *output* time (`media / speed`) and `try_seek` is also output-time. Hence media position = `get_pos() × speed`; seeking a MEDIA position goes through `RodioPlayer::seek_to_media` = `try_seek(media / speed)`. **`set_speed` must re-anchor**: capture media position under the old speed, set the new speed, then `seek_to_media` — else the old-speed-accumulated time × the new speed rescales the elapsed portion and the slider jumps. rodio's `set_speed` is naive resampling (shifts pitch); pitch-preserved time-stretch is intentionally not done — hence the 2× cap.
@@ -40,7 +40,8 @@ ReplayGain pre-gain → EQ bands → limiter → clamp → crossfade ramp → Vi
 
 `visualizer.rs` and `spectrum.rs` argue the design in their `//!` docs and justify
 every tuning constant at its definition; `waveform.rs` does the same for the trace.
-The UI half — arming, window-visibility gating, styles — is `src/ui/visualizer/`.
+The UI half — arming, window-visibility gating, styles — is `.claude/rules/visualizer.md`,
+which spans `src/ui/visualizer/` and the strip's `.slint` under `ui/`.
 What lives here is what crosses modules:
 
 - **The tap is read-only and bit-identical.** `VisualizerTap<S>` wraps `EqSource` — after the bands, ReplayGain, the limiter's clamp and the crossfade ramp, but *before* rodio's speed/pause/volume wrappers, so the volume slider can't flatten the bars. Wrapping rather than living inside `EqSource` is what keeps that module's `frame_phase == 0` poll gate and bypass path clear of a change with nothing to do with them. (Clementine's per-pipeline probe and Audacious's post-effect, pre-volume vis buffer tap at the same point.)

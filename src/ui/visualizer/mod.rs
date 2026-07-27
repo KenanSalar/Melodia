@@ -4,6 +4,10 @@
 //! four callbacks. The per-frame analysis lives in [`frame`]; this module is
 //! wiring, and the tick handler here is the dispatcher between the two styles.
 //!
+//! The contract spanning this directory, the `.slint` strip and both style
+//! pickers is `.claude/rules/visualizer.md`. It isn't a `CLAUDE.md` beside this
+//! code because most of what it governs lives under `ui/`.
+//!
 //! A 2048-point real FFT is sub-millisecond, so the render loop stays on the UI
 //! thread rather than paying for a third thread and a second shared cell. Most
 //! of what keeps that cheap composes for free from the mount tree: the strip

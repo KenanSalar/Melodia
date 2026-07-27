@@ -2,6 +2,8 @@
 paths:
   - src/database/**/*.rs
   - src/entities/**/*.rs
+  - src/library/**/*.rs
+  - src/tasks/**/*.rs
   - migrations/**/*.sql
 ---
 

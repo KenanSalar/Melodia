@@ -3,6 +3,7 @@ paths:
   - src/media/**/*.rs
   - src/tasks/**/*.rs
   - src/library/**/*.rs
+  - src/database/queries/**/*.rs
 ---
 
 # Rayon Best Practices
