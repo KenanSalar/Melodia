@@ -141,30 +141,43 @@ jobs:
           ctl.!default { type null }
           EOF
 
-      # Built in two phases, because the memory peak here is CONCURRENCY, not
-      # instrumentation — dropping coverage from this job did not change it. The
-      # crate emits four large link targets (the lib test binary, the `Melodia`
-      # bin, and the two integration tests) and each links the ~390k-line
-      # generated `app-window.rs` at roughly 5.3 GiB. Cargo runs three at once,
-      # which measured 21.5 GiB against the runner's 16 GB. It does not fail, it
-      # swaps, and the job silently takes the better part of an hour.
+      # Built in two phases, because `cargo test` compiles this crate TWICE and
+      # runs both at once. It needs `melodia` as a plain rlib (the bin and the
+      # integration tests link it) AND as a `--test` harness; the two are
+      # independent, so cargo schedules them side by side. With the ~390k-line
+      # generated `app-window.rs` in it, each rustc reaches ~10 GiB — measured
+      # 11.07 + 9.89 = 20.96 GiB against the runner's 16 GB. Over the ceiling it
+      # does not fail, it swaps, and the job silently runs for most of an hour.
       #
-      # Phase 1 builds only the lib target, so the ~600 dependencies still
-      # compile at full width — they are many small units and never the problem.
-      # Phase 2 then has just the remaining links left and runs them one at a
-      # time. Measured 10.25 GiB peak, which is what lets this job keep the
-      # profile's default debug info instead of trading backtraces for headroom.
+      # Phase 1 builds the harness compilation alone, which also gets the ~600
+      # dependencies built at full width — they are many small units and never
+      # the problem; it peaks at 10.25 GiB and sets this job's ceiling. Phase 2
+      # then builds the rlib with the harness already done, so only one big
+      # rustc runs at a time. That is what lets this job keep the profile's
+      # default debug info instead of trading backtraces for headroom.
       #
-      # Do NOT collapse these into one `cargo test`: the margin is the point, and
-      # losing it looks like a hang rather than an error.
+      # jobs=2 in phase 2 rather than 4: a rustc's LLVM codegen threads draw
+      # jobserver tokens, so the job count scales one process's peak — measured
+      # 8.58 / 10.04 / 11.55 GiB at jobs=1/2/4. At 2 the cost hides under phase
+      # 1's 10.25 GiB and is free; at 4 phase 2 becomes the ceiling and raises
+      # the whole job by ~1.3 GiB to save under a minute. Not worth it while the
+      # failure mode is a silent swap rather than an error.
+      #
+      # Keeping the two phases APART is what buys the margin — don't collapse
+      # them into one `cargo test`, and don't reach for the cheap levers
+      # instead: every one was measured and none of them move this.
+      # split-debuginfo=unpacked, debug=0 and dropping coverage instrumentation
+      # are worth ~0.5 GiB each; codegen-units does nothing across 16..4096 and
+      # is worse at 1; fewer test binaries does nothing at all (they are small
+      # crates linking a prebuilt rlib, not copies of the generated unit).
       - name: Build dependencies and lib target (parallel)
         env:
           CARGO_BUILD_JOBS: 4
         run: cargo test --locked --no-run --lib
 
-      - name: Build remaining targets and run tests (serialized links)
+      - name: Build remaining targets and run tests (capped parallelism)
         env:
-          CARGO_BUILD_JOBS: 1
+          CARGO_BUILD_JOBS: 2
         run: cargo test --locked
 
   # Single gate job — mark THIS as the required status check in branch

@@ -72,21 +72,29 @@ jobs:
           ctl.!default { type null }
           EOF
 
-      # Built in two phases, because the peak is CONCURRENCY, not instrumentation.
-      # The crate emits four large link targets — the lib test binary, the
-      # `Melodia` bin, and the two integration tests — and each one links the
-      # ~390k-line generated `app-window.rs` at roughly 5.3 GiB. Cargo happily
-      # runs three of them at once, which measured 16.5 GiB against the runner's
+      # Built in two phases, because `cargo test` (and so `cargo llvm-cov`)
+      # compiles this crate TWICE and runs both at once: once as a plain rlib for
+      # the bin and the integration tests to link, once as a `--test` harness.
+      # The two are independent, so cargo schedules them together, and with the
+      # ~390k-line generated `app-window.rs` in it each rustc reaches ~10 GiB.
+      # Single-command builds measured 16.5 GiB instrumented against the runner's
       # 16 GB: it does not fail, it swaps, and a job that used to take 14 minutes
       # sits there for the better part of an hour looking like a hang.
       #
-      # Phase 1 builds only the lib target, so the ~600 dependencies still
-      # compile at full width. Phase 2 then has just the remaining links left and
-      # runs them one at a time. Measured peak 9.78 GiB, down from 16.51 GiB.
+      # Phase 1 builds the harness compilation alone, which also gets the ~600
+      # dependencies built at full width; it sets this job's ceiling. Phase 2
+      # then builds the rlib with the harness already done, so only one big
+      # rustc runs at a time. Measured peak 9.78 GiB, down from 16.51.
       #
-      # Do NOT collapse these back into one command to save a few seconds — the
-      # margin they buy is the whole point, and the failure mode when it is gone
-      # is a silent 50-minute job rather than an error.
+      # jobs=2 in phase 2 rather than 4: a rustc's LLVM codegen threads draw
+      # jobserver tokens, so the job count scales one process's peak. At 2 the
+      # cost stays under phase 1's peak and is free; at 4 phase 2 becomes the
+      # ceiling and raises the whole job to save under a minute.
+      #
+      # Keeping the two phases APART is the fix — not the target selection, and
+      # not the `DEBUG: "0"` above (worth ~0.5 GiB). Do not collapse these back
+      # into one command to save a few seconds; the failure mode when the margin
+      # is gone is a silent 50-minute job rather than an error.
       - name: Build dependencies and lib target (parallel)
         run: cargo llvm-cov --locked --no-report --lib
 
@@ -94,9 +102,9 @@ jobs:
       # target with `test = true`, not just `tests/`. That is a second or two of
       # test time, and merging duplicate profraw counters cannot skew the result
       # because coverage is region-hit, not hit-count.
-      - name: Build remaining targets and run tests (serialized links)
+      - name: Build remaining targets and run tests (capped parallelism)
         env:
-          CARGO_BUILD_JOBS: 1
+          CARGO_BUILD_JOBS: 2
         run: cargo llvm-cov --locked --no-report
 
       # Report phases don't re-run tests; they merge the profraw from both above.
