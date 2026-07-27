@@ -78,7 +78,7 @@ foundation only — watch, not yet usable.
   release cut from `feature/winit-0.31` that surfaces external drops as file paths on
   `DropArea`. Note this also means `unstable-winit-030` → `unstable-winit-031` and a
   `slint::winit_030` → `winit_031` rename across `winit_filter.rs`, `main.rs`,
-  `ui/albums/grid.rs` — the fork retirement and the winit major bump land together.
+  `src/ui/albums/grid.rs` — the fork retirement and the winit major bump land together.
 - **Migration:** delete `winit/` + the `[patch.crates-io]` block; replace the `winit_filter`
   DnD arms + `drop_coalescer` with a `DropArea` over the content panel feeding
   `queue_import_files`; re-check the queue-sheet drop gating (`is_open` atomic filter).
@@ -94,7 +94,7 @@ foundation only — watch, not yet usable.
 ## 🟡 `SystemTrayIcon` element → retire the dual tray stack
 
 - **Today:** `src/services/tray/` cfg-split (Linux `ksni` with the zbus-feature footgun; Win/mac
-  `tray-icon` with deferred init + pre-exit drop), `ui/tray_bridge.rs`, embedded `tray.png`,
+  `tray-icon` with deferred init + pre-exit drop), `src/ui/tray_bridge.rs`, embedded `tray.png`,
   restart-gated enable toggle, close-to-tray geometry-restore timer dance.
 - **Upstream in 1.17:** declarative `SystemTrayIcon` element. Brand new — already accumulating
   feature requests upstream (icon-by-name, macOS template images), so let it bake a release or
@@ -128,7 +128,7 @@ foundation only — watch, not yet usable.
 ## 🟢 Two-way model row bindings → slim the model-patch walkers
 
 - **Today:** optimistic favorite/rating flips walk the `VecModel` from Rust via
-  `ui/model_patch.rs::patch_track_row_by_id` (+ per-view `apply_*` one-liners, `wire_row_flag!`
+  `src/ui/model_patch.rs::patch_track_row_by_id` (+ per-view `apply_*` one-liners, `wire_row_flag!`
   macro); queue-sheet selection mirrors through `ShadowEntry` snapshots.
 - **Upstream in 1.17:** two-way bindings to model row data — a row's control can write back
   into the model directly.

@@ -44,9 +44,12 @@ jobs:
       # would never skip. `every` requires a file to match ALL patterns, which is
       # what turns `!` into an exclusion.
       #
-      # assets/ is split: screenshots are README-only, but `melodia.ico` is a
-      # build.rs input and `desktop/Melodia.desktop.tmpl` is `include_str!`d by
-      # src/services/desktop_integration.rs, so both must still trigger a build.
+      # assets/ is split: screenshots are README-only, everything else under it
+      # is compiled in. `melodia.ico` is a build.rs input;
+      # `desktop/Melodia.desktop.tmpl` and `icons/logo-with-background.svg` are
+      # `include_*!`d by src/services/desktop_integration.rs, and
+      # `icons/tray.png` by src/services/tray/mod.rs — all four must still
+      # trigger a build.
       - uses: dorny/paths-filter@7b450fff21473bca461d4b92ce414b9d0420d706 # v4.0.2
         id: paths
         if: github.event_name == 'pull_request'
@@ -99,6 +102,20 @@ jobs:
           cache-on-failure: true
       - name: cargo clippy
         run: cargo clippy --all-targets --locked -- -D warnings
+
+      # The root package is the only default member of a non-virtual workspace
+      # root, so the command above never reaches `melodia-ui`. This covers both
+      # of its targets — cargo runs clippy over a workspace member's build
+      # script as well as its lib, and that build script is the only
+      # hand-written Slint build logic in the repo.
+      #
+      # No `--all-targets`: the crate has no test, bench or example targets, so
+      # it would only add a redundant `--test` pass over a lib with no tests.
+      # That is a pointlessness argument, not a cost one — clippy is check-only,
+      # so the codegen behind the CARGO_BUILD_JOBS cap never runs here, and the
+      # extra pass measures free.
+      - name: cargo clippy (melodia-ui)
+        run: cargo clippy -p melodia-ui --locked -- -D warnings
 
   # Tests. Gated behind clippy so a lint failure fast-fails the pipeline without
   # paying for a full build. Runs the FULL suite including the audio-dependent

@@ -155,7 +155,7 @@ are gated internally.
 
 `src/ui/callbacks/mod.rs`
 - Gate `mod updater;` (line 23) and `pub use updater::wire as wire_updater;`
-  (line 47). The `ui/callbacks/updater/` dir (`check.rs`, `install.rs`,
+  (line 47). The `src/ui/callbacks/updater/` dir (`check.rs`, `install.rs`,
   `paint.rs`, `mod.rs`) is referenced **only** via `wire_updater` (verified — no
   other module imports it), so gating the whole dir is clean.
 

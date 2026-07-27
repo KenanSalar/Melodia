@@ -742,7 +742,7 @@ msgstr[0] "{n} favori"
 msgstr[1] "{n} favoris"
 
 # ---- Track row right-click menu (multi-select variants) ---------------------
-# Wired into `ui/components/track-list-row.slint`. The `{}` is the
+# Wired into `ui/components/track-list/track-list-row.slint`. The `{}` is the
 # selection count.
 
 msgid "Play {} Next"
@@ -778,7 +778,7 @@ msgid "Go to Genre"
 msgstr "Aller au genre"
 
 # ---- Add-to-Playlist picker dialog -----------------------------------------
-# Wired into `ui/components/playlist-picker.slint`. The first two badges
+# Wired into `ui/components/dialog/playlist-picker.slint`. The first two badges
 # appear on rows whose playlists already contain some or all of the
 # selected tracks; the third is the empty-state hint.
 

@@ -744,7 +744,7 @@ msgstr[0] "{n} αγαπημένο"
 msgstr[1] "{n} αγαπημένα"
 
 # ---- Track row right-click menu (multi-select variants) ---------------------
-# Wired into `ui/components/track-list-row.slint`. Το `{}` είναι ο
+# Wired into `ui/components/track-list/track-list-row.slint`. Το `{}` είναι ο
 # αριθμός των επιλεγμένων κομματιών.
 
 msgid "Play {} Next"
@@ -780,7 +780,7 @@ msgid "Go to Genre"
 msgstr "Μετάβαση στο είδος"
 
 # ---- Add-to-Playlist picker dialog -----------------------------------------
-# Wired into `ui/components/playlist-picker.slint`. The first two badges
+# Wired into `ui/components/dialog/playlist-picker.slint`. The first two badges
 # appear on rows whose playlists already contain some or all of the
 # selected tracks; the third is the empty-state hint.
 

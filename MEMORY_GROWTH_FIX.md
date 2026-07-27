@@ -76,7 +76,7 @@ and the same raw-constant-with-comment style already used there.
 
 Then give the playback path a trim it currently lacks: call `tasks::heap_trim::trim()` off
 the UI thread after a now-playing artwork decode evicts from its LRU — the call sites in
-`ui/now_playing/up_next.rs:162` and `ui/mini_player.rs:56` are the pattern to copy
+`src/ui/now_playing/up_next.rs:162` and `src/ui/mini_player.rs:56` are the pattern to copy
 (`runtime.spawn_blocking(crate::tasks::heap_trim::trim)`).
 
 While here, correct two comments that are already wrong (they claim periodic trimming from
@@ -93,7 +93,7 @@ the original.
 New module `src/media/artwork_thumb.rs`:
 
 - `const DERIVATIVE_MAX_DIM: u32 = 512` — covers every consumer, the largest being the
-  448 px entity-grid tier (`ui/albums/state.rs:109`).
+  448 px entity-grid tier (`src/ui/albums/state.rs:109`).
 - `derivative_path(artwork_path) -> PathBuf` — `<artwork_dir>/thumbs/<file_stem>.jpg`.
   Keyed on the stem (the hash) so source extension is irrelevant, and a `thumbs/` subdir
   stays trivially disposable.
@@ -144,14 +144,14 @@ and its 600 px canvas is above the derivative size.
 ## Phase 4 — Release the now-playing image slots
 
 `melodia-ui/ui/globals.slint:43-45` states outright that `np-cover-{a,b}` / `blur-img-{a,b}` are never
-cleared, and `write_crossfade_slot` (`ui/now_playing/mod.rs:336-365`) only sets
+cleared, and `write_crossfade_slot` (`src/ui/now_playing/mod.rs:336-365`) only sets
 `has_image = false` on the `None` branch. That pins two covers + two blurs (~1.06 MiB CPU
 plus their FemtoVG textures) after the view closes, surviving `NowPlayingArtwork::clear()`
-(documented at `ui/now_playing/up_next.rs:153-157`).
+(documented at `src/ui/now_playing/up_next.rs:153-157`).
 
 Mirror the existing detail-view pattern: reset all four to `Image::default()` on
 now-playing close, alongside the `clear()` + trim already there in `up_next.rs:159-163`.
-`release_detail_hero_images!` (`ui/callbacks/macros.rs:146-158`) is the model.
+`release_detail_hero_images!` (`src/ui/callbacks/macros.rs:146-158`) is the model.
 
 Fixed-ceiling, not growth — so this is a correctness cleanup unless Phase 1 shows RssFile
 carrying the climb, in which case it moves to the front.

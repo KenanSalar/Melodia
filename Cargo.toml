@@ -28,8 +28,8 @@ exclude = ["winit"]
 # The release version, inherited by both packages. `melodia-ui` is `publish =
 # false` and depended on by path, so its own number buys nothing — inheriting
 # means it can't drift from the app's. The three toolchain-less manifest
-# scrapes (`release.yml`, `build-rpm.sh`, `build-appimage.sh`) read this table
-# by name; keep it above any `[dependencies.*]` table that carries a `version`.
+# scrapes (`release.yml`, `build-rpm.sh`, `build-appimage.sh`) anchor on this
+# table by name, so this stanza can sit anywhere in the file.
 version = "0.9.0"
 edition = "2024"
 # Kept in lockstep with `rust-toolchain.toml` and `clippy.toml`'s `msrv`.
