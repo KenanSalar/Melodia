@@ -11,7 +11,7 @@
 //! Every call POSTs to the 2.0 endpoint as form-urlencoded with `format=json`.
 //! Last.fm reports failures in the response *body* (HTTP stays 200), so the
 //! functions parse the in-body `{"error": <code>}` into a [`LastfmError`] the
-//! submitter can act on. The functions stay unwired until Phase 2.
+//! submitter can act on.
 
 use std::collections::BTreeMap;
 

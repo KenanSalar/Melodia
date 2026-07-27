@@ -28,7 +28,7 @@
 //!   (drag release, persists), like `set-volume` / `commit-volume`.
 //!
 //! The default (`true`) is enforced in two places that already agree:
-//! `PlaybackFlags::default()` (`src/services/settings.rs`) and
+//! `PlaybackFlags::default()` (`src/services/settings/data.rs`) and
 //! `PlayerState::default()` (`src/player/state.rs`). First-launch
 //! installs read no `settings.json`, fall through to defaults, and the
 //! toggle paints ON.

@@ -224,6 +224,48 @@ impl Default for CrossfadeFlags {
     }
 }
 
+/// Audio-visualizer preferences. Like the other audio substructs this is
+/// `#[serde(flatten)]`'d into `SettingsData` and carries a whole-struct
+/// `#[serde(default)]`, so older `settings.json` files deserialize to the
+/// default.
+///
+/// Unlike the other audio features the visualizer ships **on** — it's a
+/// presentation flourish confined to the Now-Playing view, not something that
+/// alters what you hear, so there's nothing to surprise a user with. Note the
+/// combination with `#[serde(default)]`: an upgrading install has no
+/// `viz_enabled` key, so it picks up the new default and the bars appear.
+/// Turning it off writes `false`, which then persists.
+///
+/// `viz_enabled` decides whether the strip *mounts*, and nothing more — the
+/// audio-thread sample tap is armed by the Now-Playing view being on screen (see
+/// `crate::ui::visualizer`), so leaving this on costs nothing while the view is
+/// closed.
+///
+/// `viz_style` is a **key**, not an index into the picker. An index would
+/// silently repoint every existing install's setting the day the style list is
+/// reordered, and this app ships to users. An unrecognized key resolves back to
+/// the default, so a file written by a newer build degrades instead of breaking.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct VisualizerFlags {
+    pub viz_enabled: bool,
+    pub viz_style: String,
+}
+
+/// The style key a fresh install starts on, and the one an unrecognized key
+/// resolves back to. `crate::ui::visualizer`'s style table has to *head with the
+/// same key* — its own fallbacks land on index 0 — which its tests pin.
+pub const DEFAULT_VIZ_STYLE: &str = "bars";
+
+impl Default for VisualizerFlags {
+    fn default() -> Self {
+        Self {
+            viz_enabled: true,
+            viz_style: DEFAULT_VIZ_STYLE.to_owned(),
+        }
+    }
+}
+
 /// Queue-behavior preferences. Split out from `PlaybackFlags` so each
 /// substruct stays under the `clippy::struct_excessive_bools` budget
 /// (≤3 bools). Like the other substructs, this is `#[serde(flatten)]`'d
@@ -493,7 +535,7 @@ fn default_match_unfocused_to_system_bg() -> bool {
 // from `SettingsData::default()` and `default_match_unfocused_to_system_bg`,
 // both inside this file, and (b) the `library/` layer should depend on
 // `services/`, not the other way around. UI code that needs them
-// (`src/ui/appearance.rs`) imports from `services::settings::` directly.
+// (`src/ui/appearance/`) imports from `services::settings::` directly.
 
 /// True iff the active session is KDE Plasma — read from
 /// `$XDG_CURRENT_DESKTOP`. Drives the default seed for
@@ -577,6 +619,8 @@ pub struct SettingsData {
     #[serde(flatten)]
     pub crossfade: CrossfadeFlags,
     #[serde(flatten)]
+    pub visualizer: VisualizerFlags,
+    #[serde(flatten)]
     pub queue: QueueFlags,
     #[serde(flatten)]
     pub window: WindowFlags,
@@ -624,6 +668,7 @@ impl Default for SettingsData {
             equalizer: EqualizerFlags::default(),
             replaygain: ReplayGainFlags::default(),
             crossfade: CrossfadeFlags::default(),
+            visualizer: VisualizerFlags::default(),
             queue: QueueFlags::default(),
             window: WindowFlags::default(),
             tray: TrayFlags::default(),

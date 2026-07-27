@@ -1,6 +1,6 @@
 //! Artist Detail header + Albums sub-section + track list: fetch, artwork
 //! pair decode, re-sort, refresh-preserving, startup seed. Mirrors
-//! `ui/albums/detail.rs`, plus an `albums` slice that drives the
+//! `src/ui/albums/detail.rs`, plus an `albums` slice that drives the
 //! horizontal Albums strip above the all-tracks `TrackList`.
 
 use std::collections::HashMap;
@@ -32,7 +32,7 @@ use crate::{
 
 // `apply_detail_artwork` (cover + hero-blur write) and
 // `replace_tracks_model` (in-place `tracks` `VecModel` swap) — see
-// `ui/detail_view.rs`.
+// `src/ui/detail_view.rs`.
 impl_detail_view_helpers!(artwork ArtistDetail);
 
 /// Fetch an artist's header + albums sub-section + track list, and prewarm

@@ -1,0 +1,165 @@
+import { Theme } from "../../theme.slint";
+import { Player, PopupHighlight, Visualizer } from "../../globals.slint";
+import { AccentDiscButton } from "./accent-disc-button.slint";
+import { MenuSurface } from "./menu-surface.slint";
+import { PopupDismissCatcher } from "./popup-dismiss-catcher.slint";
+import { OverflowRow } from "./overflow-row.slint";
+import { VisualizerFlyout } from "./visualizer-flyout.slint";
+import { FlyoutMetrics, VizStylePresets } from "./flyout-presets.slint";
+
+// `more_vert` IconButton + PopupWindow for the Now-Playing view's own menu,
+// mounted at the top right beside the favourite heart. Same structural shape as
+// the now-playing bar's `overflow-menu.slint` — a fixed-reserve PopupWindow
+// holding a menu column (right, under the trigger) and a flyout column (left),
+// with a transparent click-catcher over the empty regions — mirrored on the
+// vertical axis: this trigger sits at the TOP of the view, so the popup opens
+// DOWNWARD and both columns are top-anchored.
+//
+// The trigger is tinted off `Player.np-accent-bright` like the back button and
+// the heart, so the whole top bar reads as one family against the artwork blur.
+export component NowPlayingViewMenu inherits Rectangle {
+    width: btn.width;
+    height: btn.height;
+
+    // Whether the visualizer flyout is expanded. Reset to collapsed on every
+    // (re)open via the trigger, and by `dismiss()`.
+    property <bool> viz-flyout-open: false;
+
+    // Every close path: drop the popup, collapse the flyout, release the
+    // trigger highlight. A function rather than a callback because that's what
+    // it is — the rows invoke it, nothing subscribes to it.
+    public function dismiss() {
+        pop.close();
+        root.viz-flyout-open = false;
+        PopupHighlight.id = "";
+    }
+
+    // Menu column height: the single row plus the shared chrome allowance. (The
+    // content-driven *width* `menu-w` is declared on the PopupWindow below —
+    // Slint forbids the enclosing component from reading a property *inside* a
+    // PopupWindow, so it can't live up here.)
+    property <length> menu-h: FlyoutMetrics.menu-row-h + FlyoutMetrics.chrome-h;
+
+    // Visualizer flyout geometry. Height derives from the shared style list +
+    // metrics (`flyout-presets.slint`) plus the leading "Off" row, so adding a
+    // style can't clip the popup.
+    property <length> flyout-w: 140px;
+    property <length> flyout-h:
+        FlyoutMetrics.option-row-h * (VizStylePresets.viz-style-names.length + 1)
+        + FlyoutMetrics.chrome-h;
+    // Transparent gap between the flyout (left) and menu (right) columns so
+    // they read as two separate floating chromes.
+    property <length> gap: 8px;
+
+    btn := AccentDiscButton {
+        icon: "more_vert";
+        press-shrink: true;
+        // No `tooltip-text` — the back button and the heart flanking it in the
+        // view's top bar don't have one either.
+        //
+        // Keep the disc highlighted while the popup is open. Cleared by any
+        // close path below, or by the AppWindow scrim catching an outside click.
+        force-bg: PopupHighlight.id == "np-view-menu";
+        clicked => {
+            // Always (re)open collapsed.
+            root.viz-flyout-open = false;
+            PopupHighlight.id = "np-view-menu";
+            pop.show();
+        }
+    }
+
+    pop := PopupWindow {
+        // Content-driven menu-column width. Declared HERE (on the PopupWindow)
+        // so it can read its own descendant `menu-vl`'s `preferred-width` — the
+        // enclosing component is not allowed to. The row's content sets the
+        // floor; +2 px for the PopupSurface border; 180 px minimum preserves the
+        // English look.
+        property <length> menu-w: max(180px, menu-vl.preferred-width + 2px);
+
+        // Fixed-reserve sizing (volume-popup pattern): the PopupWindow is
+        // always wide and tall enough for the menu column AND the flyout, so it
+        // never has to re-layout when the flyout expands. The menu column's
+        // on-screen position is independent of the popup size (popup.x + menu.x
+        // both cancel `self.width`), so it stays pinned under the trigger
+        // whether or not the flyout is open.
+        width: root.flyout-w + root.gap + self.menu-w;
+        height: max(root.menu-h, root.flyout-h);
+        x: btn.width - self.width;
+        // Downward — this trigger lives at the top of the view, unlike the
+        // bar's overflow menu.
+        y: btn.height + 8px;
+        close-policy: close-on-click-outside;
+
+        PopupDismissCatcher {
+            width: parent.width;
+            height: parent.height;
+            clicked => {
+                root.dismiss();
+            }
+        }
+
+        // Visualizer flyout — left column, top-anchored (its top aligns with
+        // the menu column's top, 8 px below the trigger), grows downward.
+        // Mounted only while open so its rows aren't built when collapsed.
+        if root.viz-flyout-open: VisualizerFlyout {
+            x: 0;
+            y: 0;
+            width: root.flyout-w;
+            height: root.flyout-h;
+            viz-enabled: Visualizer.enabled;
+            current-index: Visualizer.style-idx;
+            pick(i) => {
+                if (i < 0) {
+                    // Both halves: the two-way binding lands the value for the
+                    // Settings toggle (and `AppWindow.watched-viz-active`, which
+                    // disarms the tap), the callback persists it.
+                    Visualizer.enabled = false;
+                    Visualizer.set-enabled(false);
+                } else {
+                    if (!Visualizer.enabled) {
+                        Visualizer.enabled = true;
+                        Visualizer.set-enabled(true);
+                    }
+                    Visualizer.set-style(i);
+                }
+                root.dismiss();
+            }
+        }
+
+        // Menu column — right, top-anchored under the trigger.
+        MenuSurface {
+            popup-id: "np-view-menu";
+            x: parent.width - pop.menu-w;
+            y: 0;
+            width: pop.menu-w;
+            height: root.menu-h;
+            close-requested => {
+                root.dismiss();
+            }
+
+            menu-vl := VerticalLayout {
+                padding: Theme.pad-xs;
+                spacing: 0;
+
+                // Opens the option flyout to the left. Does NOT close the
+                // popup; re-asserts the highlight id so the winit Release clear
+                // doesn't unmount the FocusLossWatcher.
+                OverflowRow {
+                    icon: "bar_chart";
+                    label: @tr("Visualizer");
+                    trailing-text: Visualizer.enabled
+                        ? VizStylePresets.viz-style-names[
+                            clamp(Visualizer.style-idx, 0,
+                                  VizStylePresets.viz-style-names.length - 1)]
+                        : @tr("Off");
+                    trailing-icon: "chevron_left";
+                    active: root.viz-flyout-open;
+                    clicked => {
+                        root.viz-flyout-open = !root.viz-flyout-open;
+                        PopupHighlight.id = "np-view-menu";
+                    }
+                }
+            }
+        }
+    }
+}

@@ -4,48 +4,37 @@
 //!
 //! ## Why this module exists
 //!
-//! Five concerns live here:
-//!
 //! 1. **Hydrating `Theme.use-native-titlebar` *before* `app.run()`.** Slint
 //!    reads `Window.no-frame` once when the OS window first shows, so the
-//!    persisted value must reach the global in the gap between
-//!    `AppWindow::new()` (component constructed, OS window not yet shown)
-//!    and `app.run()` (event loop starts → first show happens). [`install`]
-//!    is called from `main.rs` in that exact gap.
-//! 2. **Window control callbacks** ([`controls`]). `minimize` /
-//!    `toggle-maximize` / `close-window` / `toggle-always-on-top` map
-//!    cleanly to winit / D-Bus operations.
-//! 3. **Window dragging at the winit layer (not Slint)** ([`winit_filter`]).
-//!    Calling winit's `drag_window()` from inside a Slint `TouchArea`'s
-//!    `pointer-event` leaks the grab: the OS / compositor takes pointer
-//!    ownership for the move (Wayland `xdg_toplevel.move`, X11 cursor
-//!    un-grab, macOS dropped release), and the matching `Released` event
-//!    never reaches Slint. The `TouchArea` returned `GrabMouse` on
-//!    Pressed and stays "pressed" indefinitely — every subsequent click
-//!    routes back to the orphaned `TouchArea` and triggers another
-//!    drag, killing all interactivity in the rest of the window.
-//!
-//!    Slint's own resize-border handler dodges this by intercepting
-//!    `MouseInput { Pressed, Left }` at the winit layer in
-//!    `i-slint-backend-winit::event_loop` and returning before the
-//!    event is dispatched to any Slint item. We mirror that pattern:
-//!    track hover state of the titlebar drag area via a Slint callback
-//!    into an atomic, then in `on_winit_window_event` intercept Press
-//!    when hover is true and return `EventResult::PreventDefault`.
-//!    Slint never sees the press, so no `TouchArea` grab is engaged.
-//! 4. **OS file-drop coalescing** ([`drop_coalescer`]). Winit fires
-//!    `WindowEvent::DroppedFile` once per file; multi-file drops are
-//!    batched into a single `queue_import_files` call.
-//! 5. **Restart flow** ([`controls::wire`]'s `on_restart_app`).
-//!    `Window.no-frame` is sticky after first show, so toggling the
-//!    native titlebar requires a fresh process. `restart-app` persists
-//!    the new value through `library::window::set_use_native_titlebar`,
-//!    sets [`RESPAWN_AFTER_EXIT`], then calls `slint::quit_event_loop()`
-//!    so `main()` falls through to `save_state_on_exit` and the runtime
-//!    shuts down cleanly before the new process takes over. The
-//!    auto-updater's "Restart Now" reuses the same flag but additionally
-//!    records the binary path via [`set_respawn_exe`] (captured before
-//!    the install swapped the binary on disk).
+//!    persisted value has to land in the gap between `AppWindow::new()` and
+//!    `app.run()`. [`install`] is called from `main.rs` in exactly that gap.
+//! 2. **Window control callbacks** ([`controls`]) — `minimize` /
+//!    `toggle-maximize` / `close-window` / `toggle-always-on-top` map cleanly
+//!    to winit / D-Bus operations.
+//! 3. **Window dragging at the winit layer, not Slint** ([`winit_filter`]).
+//!    Calling `drag_window()` from a `TouchArea`'s `pointer-event` leaks the
+//!    grab: the compositor takes pointer ownership for the move and the
+//!    matching `Released` never reaches Slint, so the `TouchArea` that
+//!    returned `GrabMouse` stays pressed forever and every later click routes
+//!    back to it — killing interactivity across the window. Slint's own
+//!    resize-border handler dodges this by intercepting
+//!    `MouseInput { Pressed, Left }` in `i-slint-backend-winit::event_loop`
+//!    before dispatch, and we mirror it: a Slint callback tracks drag-area
+//!    hover in an atomic, and `on_winit_window_event` answers Press with
+//!    `EventResult::PreventDefault` while it's set.
+//! 4. **OS file-drop coalescing** ([`drop_coalescer`]) — winit fires
+//!    `DroppedFile` once per file; multi-file drops become one
+//!    `queue_import_files` call.
+//! 5. **Window geometry** ([`geometry`]) — save/restore across hide-to-tray
+//!    and the maximize seed.
+//! 6. **Restart flow** ([`controls::wire`]'s `on_restart_app`). `no-frame` is
+//!    sticky after first show, so toggling the native titlebar needs a fresh
+//!    process: persist through `library::window::set_use_native_titlebar`,
+//!    set [`RESPAWN_AFTER_EXIT`], then `slint::quit_event_loop()` so `main()`
+//!    falls through to `save_state_on_exit` and shuts the runtime down before
+//!    the new process takes over. The updater's "Restart Now" reuses the flag
+//!    and additionally records the binary path via [`set_respawn_exe`],
+//!    captured before the install swapped the binary on disk.
 
 mod controls;
 mod drop_coalescer;

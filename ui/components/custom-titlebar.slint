@@ -96,23 +96,14 @@ component TitleBarButton inherits Rectangle {
 // Tauri's `TitleBar.tsx` (logo + title on one side, drag region in the
 // middle, decoration buttons on the opposite side) using Slint primitives.
 //
-// Drag handling is split between Slint and Rust because winit's
-// `drag_window()` transfers the pointer grab to the OS / compositor
-// (Wayland `xdg_toplevel.move`, X11 cursor un-grab, macOS dropped
-// release). If we triggered drag from a `TouchArea`'s `pointer-event`,
-// Slint's TouchArea would grab the mouse on Pressed and never see the
-// matching Released, leaving every subsequent click routed back to
-// that orphaned TouchArea and re-firing drag. So:
+// Drag handling is split: Slint tracks only **hover** over the drag region
+// (plus double-click to toggle maximize), and Rust intercepts the actual
+// press at the winit layer. Dragging from a `TouchArea` would strand its
+// mouse grab — see `src/ui/window_chrome/`'s module docs for why.
 //
-//   * Slint here only tracks **hover** for the drag area and double-
-//     click to toggle maximize.
-//   * Rust (`src/ui/window_chrome.rs`) intercepts the actual press at
-//     the winit layer when hover is true and returns `PreventDefault`,
-//     so Slint never sees the press → no TouchArea grab.
-//
-// Maximize/restore icon swap reads `WindowChrome.is-maximized`, fed
-// from winit `WindowEvent::Resized` so window-tile / Win+↑ shortcuts
-// also update the icon.
+// Maximize/restore icon swap reads `WindowChrome.is-maximized`, fed from
+// winit `WindowEvent::Resized` so window-tile / Win+↑ shortcuts also update
+// the icon.
 //
 // Style + side selection. The settings rows in
 // `ui/views/settings/window-chrome-section.slint` write

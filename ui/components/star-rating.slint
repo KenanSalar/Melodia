@@ -17,6 +17,11 @@ export component StarRating {
     in property <int> rating;              // 0–5 (values outside are clamped by callers)
     in property <bool> enabled: true;
     in property <length> star-size: 18px;
+    // Defaults are the track-list treatment. Overridden by the Now-Playing
+    // view, which tints the whole star / heart group with the per-artwork
+    // accent the spectrum bars use.
+    in property <brush> filled-color: Theme.yellow;
+    in property <brush> empty-color: Theme.subtext0;
 
     callback rated(int /*new_rating*/);
 
@@ -32,7 +37,7 @@ export component StarRating {
             MaterialIcon {
                 name: parent.idx <= root.rating ? "star" : "star_border";
                 icon-size: root.star-size;
-                icon-color: parent.idx <= root.rating ? Theme.yellow : Theme.subtext0;
+                icon-color: parent.idx <= root.rating ? root.filled-color : root.empty-color;
                 filled: parent.idx <= root.rating;
             }
 

@@ -1007,6 +1007,27 @@ msgstr "Note"
 msgid "ReplayGain"
 msgstr "ReplayGain"
 
+msgid "Visualizer"
+msgstr "Visualiseur"
+
+msgid "Show an audio visualizer on the Now Playing screen"
+msgstr "Afficher un visualiseur audio sur l'écran de lecture"
+
+msgid "Visualizer Style"
+msgstr "Style du visualiseur"
+
+msgid "Choose how the visualizer draws the audio"
+msgstr "Choisir comment le visualiseur dessine le son"
+
+msgid "Bars"
+msgstr "Barres"
+
+msgid "Waveform"
+msgstr "Forme d'onde"
+
+msgid "Mirrored"
+msgstr "Miroir"
+
 msgid "Enable ReplayGain"
 msgstr "Activer ReplayGain"
 

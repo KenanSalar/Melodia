@@ -1,0 +1,19 @@
+import { Player } from "../../globals.slint";
+import { IconButton } from "../icon-button.slint";
+
+// A round icon button tinted off the artwork accent — the Now-Playing view's
+// back button and its view-menu trigger.
+//
+// Only the disc is translucent; the glyph stays solid, so the top bar reads as
+// one family with the stars, heart and chips — at the chips' own weight —
+// rather than as the detail views' neutral `Theme.floating-button-bg`.
+// `hover-bg` has to be set as well as `idle-bg`: `IconButton` defaults it to an
+// opaque `Theme.surface0`, which would flash grey over the artwork.
+export component AccentDiscButton inherits IconButton {
+    diameter: 36px;
+    icon-size: 22px;
+    idle-bg: Player.np-accent-pill;
+    hover-bg: Player.np-accent-disc-hover;
+    idle-fg: Player.np-accent-bright;
+    hover-fg: Player.np-accent-bright;
+}

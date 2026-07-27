@@ -359,8 +359,8 @@ pub fn track_tag_edit_columns() -> &'static str {
 }
 
 /// The metadata a scrobble needs, projected straight off `tracks` at track
-/// start (Phase 2 detector). Every field is a native column (artist/album are
-/// denormalized text), so the fetch needs no joins. `title` is the track name;
+/// start. Every field is a native column (artist/album are denormalized
+/// text), so the fetch needs no joins. `title` is the track name;
 /// the two `musicbrainz_*` ids map to a `ScrobbleTrack`'s recording/release
 /// MBIDs. `ScrobbleTrack::from_row` does the conversion.
 #[derive(Clone, Debug, PartialEq, FromRow, Serialize, Deserialize)]

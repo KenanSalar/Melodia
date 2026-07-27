@@ -8,5 +8,13 @@ pub mod handlers;
 pub mod queue;
 pub mod replaygain;
 pub mod rodio_backend;
+pub mod spectrum;
 pub mod state;
 pub mod types;
+pub mod visualizer;
+pub mod waveform;
+
+#[cfg(test)]
+pub(crate) mod tests {
+    pub(crate) mod helpers;
+}

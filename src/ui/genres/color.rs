@@ -1,42 +1,25 @@
 //! Deterministic per-genre tint colours.
 //!
-//! Genres have no intrinsic artwork (see `Genres` global comment in
-//! `ui/globals.slint`), so we paint each card / detail header with a
-//! hash-derived gradient. The Tauri original (`src/utils/genreColor.ts`)
-//! used a single hue + a fixed +30° offset:
+//! Genres have no intrinsic artwork, so each card / detail header gets a
+//! hash-derived gradient. [`hash_string_utf16`] is value-identical to the
+//! Tauri build's hash, so a genre keeps its colour across the port.
 //!
-//! ```ts
-//! function hashString(str: string): number {
-//!   let hash = 0;
-//!   for (let i = 0; i < str.length; i++) {
-//!     hash = ((hash << 5) - hash + str.charCodeAt(i)) | 0;
-//!   }
-//!   return Math.abs(hash);
-//! }
-//! ```
-//!
-//! The hash function is ported byte-identically over UTF-16 code units
-//! here. The *gradient* shape, however, intentionally diverges from
-//! Tauri: a constant +30° offset + constant saturation/value means
-//! similar hues land on near-identical-looking cards — two genres with
-//! hue 120° and 140° both read as "green-ish". To make genres visually
-//! distinguishable at a glance the gradient now varies on **three**
-//! independent name-derived axes:
+//! The *gradient shape* deliberately diverges from that original, which used
+//! one hue plus a fixed +30° offset at constant saturation and value — under
+//! that scheme hue 120° and hue 140° both just read as "green-ish". Three
+//! independent name-derived axes separate them instead:
 //!
 //!   1. **Hue 1** — the primary, 0..360°.
-//!   2. **Hue offset** — 60..120°, so the two stops contrast more
-//!      per-genre (a wide-offset card carries two clearly different
-//!      colours; a narrow-offset card stays analogous and calmer).
-//!   3. **Saturation + value jitter** — small (0..+0.15 above base,
-//!      one-sided positive), enough to lift a few cards toward more
-//!      vivid without breaking the overall family look. The base
-//!      values are the floor; jitter only ever pushes a stop up.
+//!   2. **Hue offset** — 60..120°, so a wide-offset card carries two clearly
+//!      different colours while a narrow-offset one stays analogous.
+//!   3. **Saturation + value jitter** — one-sided positive, so the base
+//!      values act as a floor and jitter only lifts a few cards toward vivid
+//!      without breaking the family look.
 //!
-//! Three rotated views of the same `u32` hash drive the three axes, so
-//! the parameters stay decorrelated even for short genre names where
-//! the raw hash entropy is low. Colours are computed in Rust as
-//! `slint::Color`s and shipped on `GenreRow`; the Slint side just plugs
-//! them into `@linear-gradient(135deg, …)` and stays free of HSV math.
+//! Each axis reads a differently-rotated view of the same `u32` hash, so they
+//! stay decorrelated even for short names where raw hash entropy is low.
+//! Colours resolve to `slint::Color`s on `GenreRow`; the Slint side just
+//! plugs them into `@linear-gradient(135deg, …)` and holds no HSV math.
 
 use slint::Color;
 

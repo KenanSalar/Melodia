@@ -19,27 +19,20 @@ import { MaterialIcon } from "material-icon.slint";
 // `(parent.size - self.size) / 2` x/y bindings, so neighbouring elements
 // in the parent layout don't shift on focus.
 //
-// Reuse pattern (any view):
+// Reuse pattern:
 //
-//     // Simple view (no inner-component blur signalling needed):
-//     search := SearchBar {
-//         text <=> Albums.filter;
-//         placeholder: "Filter albums…";
-//         edited(t) => { Albums.apply-filter(t); }
-//     }
-//     // Backdrop / pill TouchArea handlers can call:
-//     //   search.clear-input-focus();
-//
-//     // View where descendant components (rows, etc.) in *other* files
-//     // need to trigger blur — declare an int property on the view's
-//     // global and bump it from those components. The SearchBar's
-//     // `blur-trigger` reacts to every change:
 //     SearchBar {
 //         text <=> Tracks.filter;
 //         placeholder: "Filter tracks…";
 //         blur-trigger: Tracks.blur-search-tick;
 //         edited(t) => { Tracks.apply-filter(t); }
 //     }
+//
+// A named instance exposes `clear-input-focus()` for a backdrop or pill
+// TouchArea to call directly. `blur-trigger` is for the case that can't
+// reach the instance: descendants in *other* files bump an int on the view's
+// global, and the SearchBar blurs on every change. Omit it when nothing
+// outside the view file needs to trigger a blur.
 export component SearchBar inherits Rectangle {
     in-out property <string> text;
     in property <string> placeholder: @tr("Search…");

@@ -7,53 +7,45 @@
 //! `Player::new` builds each deck's queue with `keep_alive_if_empty`, so an idle
 //! one emits silence and stays attached rather than detaching.
 //!
-//! # What an idle deck actually costs
+//! # What an idle deck costs
 //!
-//! Not nothing, and the difference matters enough to write down. An empty
-//! `keep_alive_if_empty` queue synthesizes its silence in 512-sample chunks, and
-//! each refill (rodio's `queue::SourcesQueueOutput::go_next`) does a
-//! `Box::new(Zero::new_samples(..))` plus a mutex acquisition — **a heap
-//! allocation on the real-time audio callback thread**, on the order of a couple
-//! of hundred per second at 44.1 kHz. The mixer also pulls one extra source per
-//! output sample. Before the second deck existed this never fired during
-//! playback, because the one deck always had a live source; now one deck is idle
-//! essentially always.
+//! An empty `keep_alive_if_empty` queue synthesizes silence in 512-sample
+//! chunks, and each refill boxes a fresh `Zero` source and takes a mutex — a
+//! heap allocation on the real-time audio callback thread, hundreds of times a
+//! second. Before the second deck existed this never fired during playback;
+//! now one deck is idle essentially always. Accepted rather than fixed:
 //!
-//! It is accepted rather than fixed, for three reasons:
+//! - It is the *same* small allocation freed and remade each time, so it stays
+//!   in glibc's lock-free per-thread tcache and never reaches the arena lock
+//!   `mallopt(M_ARENA_MAX, 2)` shares with the UI and tokio threads.
+//! - It can't just be switched off — `set_keep_alive_if_empty(false)`
+//!   *permanently detaches* a drained deck, the property this design rests on.
+//! - Connecting decks on demand would reintroduce the stale-`get_pos()` problem
+//!   [`Decks::cut_to`] documents and break the one-[`FadeShared`]-cell-per-deck
+//!   invariant a gapless successor relies on.
 //!
-//! - It is the *same* small allocation freed and remade every time, so it stays
-//!   in glibc's lock-free per-thread tcache and never reaches the arena lock that
-//!   `mallopt(M_ARENA_MAX, 2)` makes shared with the UI and tokio threads. It does
-//!   not measure.
-//! - It cannot simply be switched off: `set_keep_alive_if_empty(false)` makes the
-//!   mixer *permanently detach* a deck once it drains, which is the exact property
-//!   this design depends on.
-//! - Connecting decks on demand instead would reintroduce the stale-`get_pos()`
-//!   problem [`Decks::cut_to`] documents, and break the "exactly two [`FadeShared`]
-//!   cells exist, one per deck" invariant a gapless successor relies on.
-//!
-//! One related hazard, noted here so it isn't rediscovered from scratch: rodio
-//! drops an exhausted source **on the audio thread** too, and that drop frees the
-//! decoder's 64 KiB `BufReader` — too big for the tcache, so it *does* take the
-//! arena lock — and closes the file. A landing fade-out ends its source
-//! ([`EqSource`] returns `None`), so a crossfade frees the outgoing decoder while
-//! the incoming deck is still filling the same callback. This predates the second
-//! deck (gapless and end-of-stream already did it), which is why it is documented
-//! rather than engineered around: the fix costs a bounded hand-off channel and a
-//! `ManuallyDrop` in the hot source struct, and should only be spent once someone
-//! can actually reproduce a click at a track transition — the way to try is to
-//! play while a full library scan is running.
+//! A related hazard, noted so it isn't rediscovered: rodio also drops exhausted
+//! sources on the audio thread, and that frees the decoder's 64 KiB
+//! `BufReader` — too big for the tcache, so it *does* take the arena lock — and
+//! closes the file. A landing fade-out ends its source ([`EqSource`] returns
+//! `None`), so a crossfade frees the outgoing decoder while the incoming deck
+//! fills the same callback. It predates the second deck (gapless and
+//! end-of-stream already did it), and the fix costs a bounded hand-off channel
+//! plus a `ManuallyDrop` in the hot source struct — only worth spending once
+//! someone can reproduce a click at a transition (try playing during a full
+//! library scan).
 //!
 //! [`EqSource`]: super::equalizer::EqSource
 //!
 //! Nothing lands on a deck except through the three primitives that take a
 //! *builder* rather than a ready-made source — [`Decks::cut_to`],
 //! [`Decks::crossfade_to`] and [`Deck::stage`]. Each hands the closure the very
-//! deck it is about to append to, so the [`FadeShared`] cell a source carries can
-//! only have come from that deck. Reading a deck earlier and appending later
-//! would let a concurrent op flip `active` in between and hand the source the
-//! *other* deck's ramp — which may be armed to fade out and end itself. The
-//! controller reaches all three only through the decks mutex.
+//! deck it is about to append to, so a source's [`FadeShared`] cell — and its
+//! visualizer ring slot — can only have come from that deck; reading a deck
+//! earlier and appending later would let a concurrent op flip `active` in
+//! between and hand the source the *other* deck's ramp, which may be armed to
+//! fade out and end itself. The controller reaches all three only through the
+//! decks mutex.
 
 use std::sync::Arc;
 use std::sync::{Mutex, MutexGuard};
@@ -63,21 +55,28 @@ use rodio::{Player, Source};
 
 use super::crossfade::FadeShared;
 
+/// How many voices the player alternates between. The visualizer keeps one
+/// sample ring per deck, so the two counts have to agree.
+pub const DECK_COUNT: usize = 2;
+
 /// One rodio voice: an independent [`Player`] on the shared device mixer, plus
 /// the crossfade ramp cell every source appended to it reads.
 pub struct Deck {
     pub player: Player,
     pub fade: Arc<FadeShared>,
+    /// Which of the visualizer's rings sources on this deck write into.
+    pub viz_slot: usize,
 }
 
 impl Deck {
     /// A fresh deck, connected to the mixer and paused.
-    fn connect(mixer: &Mixer) -> Self {
+    fn connect(mixer: &Mixer, viz_slot: usize) -> Self {
         let player = Player::connect_new(mixer);
         player.pause();
         Self {
             player,
             fade: FadeShared::idle(),
+            viz_slot,
         }
     }
 
@@ -124,7 +123,7 @@ impl Deck {
 
 /// The two decks and which of them holds the currently-playing track.
 pub struct Decks {
-    decks: [Deck; 2],
+    decks: [Deck; DECK_COUNT],
     active: usize,
 }
 
@@ -132,7 +131,7 @@ impl Decks {
     /// Both decks connected to `mixer`, deck 0 active.
     pub fn connect(mixer: &Mixer) -> Self {
         Self {
-            decks: std::array::from_fn(|_| Deck::connect(mixer)),
+            decks: std::array::from_fn(|slot| Deck::connect(mixer, slot)),
             active: 0,
         }
     }

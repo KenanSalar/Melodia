@@ -235,5 +235,50 @@ foundation only — watch, not yet usable.
 - **Entry/mount animation semantics**: if Slint grows a first-class "animate on mount"
   mechanism, the `ViewTransition` 1ms-Timer pattern (and its 1.17 init-read adaptation) can go.
 
+### Backdrop blur / frosted glass — checked 2026-07-25
+
+- **Wanted for:** frosted-glass fills on the Now-Playing metadata chips (`MetaChip`,
+  `ui/views/now-playing-view.slint`) and the Up Next row hover slab
+  (`ui/components/now-playing/up-next-list.slint`). Both currently fake depth with a flat
+  `Player.np-accent-bright.with-alpha(0.16)` tint over the blurred-artwork backdrop.
+- **Status: absent upstream, and not on the roadmap.** Verified in source, not docs:
+  `i-slint-compiler`'s `typeregister.rs` registers exactly two blur-typed properties in the
+  whole language — `drop-shadow-blur` (:221) and `inner-shadow-blur` (:229) — plus
+  `BoxShadow`'s own `blur` (`builtins.slint:1589`). All three describe a shadow the element
+  *casts*; nothing reads back the pixels underneath, which is the prerequisite. `opacity` is
+  not a substitute — fixed-function blending, not a filter over the backdrop.
+- **Tracking:** slint#2066 *"Add first-class support for blurring what's underneath a
+  Rectangle"* (2023-01, 17 👍, no milestone/assignee/PR) and slint#612 *"Compositing /
+  effects"* (2021-10, 18 👍). General form: slint#10887 *"Custom Shader support"* (2026-02,
+  labelled `a:renderer-femtovg`, quiet since March).
+- **Newest maintainer word — slint#2066, 2026-06-29 (eira-fransham):** "We've been talking
+  about implementing arbitrary shaders for a while, with blur just being a special case, but
+  it's a big topic. I made the suggestion the other day that blur is common enough that it
+  would be worth special-casing … but whether that translates to it coming up soon on the
+  roadmap is a different question." Discussed internally, some agreement to special-case blur
+  ahead of general shaders, explicitly uncommitted.
+- **⚠ Renderer caveat.** The most concrete path a maintainer has named (tronical, 2024-12) is
+  a read-back into an offscreen surface via **Skia**'s `SaveLayerRec`, which "would probably
+  work with Skia out of the box". We render with **FemtoVG**. A release announcing backdrop
+  blur is therefore not automatically a release where *we* get it — check the renderer before
+  planning any work.
+- **Not the same thing: OS window blur.** slint#2339 *"Blurred window"* has recent movement
+  (winit gained blur support 2026-04; KDE 6.7 swapped `org_kde_kwin_blur_manager` for
+  `ext_background_effect_manager_v1`; winit PR #4580 backports it to the 0.30.x branch our
+  vendored fork sits on). That blurs the **desktop behind the window** — our chips sit over
+  the app's own opaque gradient + artwork blur, so it can never reach them. Relevant to the
+  window shell, irrelevant here.
+- **Trigger:** a Slint release whose changelog names a backdrop/background-blur property on
+  `Rectangle` **and** covers FemtoVG (or we've moved renderers by then).
+- **Migration:** swap the two `.with-alpha(0.16)` accent fills for the blur property plus a
+  much lighter tint; re-check legibility of the solid `np-accent-bright` chip label and "Up
+  Next" heading against a blurred rather than tinted ground. Measure — a per-element backdrop
+  read-back every frame is exactly what Memory Discipline exists for.
+- **Meanwhile:** the only in-engine approximation is the pre-blurred-`Image` trick already
+  used for the NP backdrop (`src/ui/now_playing_artwork.rs`), and it degrades badly for these
+  two surfaces — chips reflow across rows on resize, the hover slab moves per row and scrolls,
+  so each would need its own correctly-offset crop recomputed on every layout change. The flat
+  tint is the right stand-in until upstream lands.
+
 *Promoted out of this list on 2026-07-23: external drag-and-drop (winit #4571 merged) and
 Slint-native window drag (`WindowMoveArea` on master) — both now have their own sections.*

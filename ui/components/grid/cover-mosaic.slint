@@ -44,44 +44,27 @@ component MosaicSlot inherits Rectangle {
 // nothing, so the caller can render their own empty state behind /
 // inside the component.
 //
-// Originally extracted from the playlist-mosaic-picker preview so the
-// same layout drives the Favorites hero mosaic (which must update live
-// when the top-4 most-played favorites change). Tile sources are
-// resolved through the `request-cover` callback so each consumer can
-// route the lookup into its own LRU cache tier (e.g. row-tier 72 px
-// shared cache, grid-tier 448 px for sharp downscaled previews).
+// Tile sources resolve through the `request-cover` callback, so each consumer
+// routes the lookup into its own LRU cache tier rather than sharing one.
 //
-// Layout count is `tile-count` when set (`> 0`), otherwise
-// `artwork-paths.length`. Two consumer patterns:
+// Layout count is `tile-count` when set (`> 0`), else `artwork-paths.length`.
+// The distinction is what separates the two consumers:
 //
-// * Picker (default, `tile-count: 0`). The mosaic shape adapts to the
-//   user's running selection — picking the 2nd cover flips from a
-//   single-tile preview to a 2-split, etc. Every slot has a real
-//   artwork because `tile-count == artwork-paths.length`.
+// * Picker (default, `tile-count: 0`) — shape follows the user's running
+//   selection, and every slot has real artwork since the two are equal.
+// * Favorites hero (`tile-count: min(track-count, 4)`) — shape follows the
+//   *favorite count*, so slots past the distinct-artwork count fall back to
+//   `MosaicSlot`'s placeholder. Five favorites over two distinct covers give
+//   a 2×2 of two covers plus two placeholders, not the two duplicated.
 //
-// * Favorites hero (`tile-count: min(track-count, 4)`). The mosaic
-//   shape adapts to the *favorite count* (1 favorite → single tile,
-//   2 → 2-split, 3 → 3-layout, 4+ → 2×2). Slots beyond the distinct-
-//   artwork count paint placeholder tiles via `MosaicSlot`'s fallback
-//   branch. So a library with 5 favorites and 2 distinct covers
-//   renders a 2×2 grid with 2 covers + 2 placeholders, not the same
-//   2 covers duplicated.
+// Layouts mirror the canonical playlist composition: 1 = full bleed,
+// 2 = left/right, 3 = left full-height + right split, 4 = 2×2.
 //
-// Layouts mirror the canonical playlist composition:
-//   count 1  → single tile filling the parent
-//   count 2  → left / right split with a gutter
-//   count 3  → left full-height + right column split top / bottom
-//   count 4  → 2×2 grid
-//
-// `tile-radius` defaults to `Theme.radius-sm` (matching the picker's
-// historical look). Pass `0px` to get a truly flush-fill mosaic where
-// adjacent tiles butt up edge-to-edge without rounded corners — needed
-// when the surrounding chrome's own border-radius + clip is the only
-// curve the user should see (e.g. the Favorites hero tile, which is
-// meant to read as a single composited image like the playlist
-// detail's baked composite). Pair with `gutter-size: 0px` so the
-// outer Rectangle's background doesn't bleed through the layout
-// padding.
+// `tile-radius` defaults to `Theme.radius-sm`. Pass `0px` (with
+// `gutter-size: 0px`, so the outer background can't bleed through the
+// padding) for a flush mosaic that reads as one composited image — right
+// when surrounding chrome already supplies the only curve, as in the
+// Favorites hero.
 export component CoverMosaic inherits Rectangle {
     in property <[string]> artwork-paths;
     in property <length>   gutter-size: 3px;

@@ -1,10 +1,10 @@
 # Cap parallel compilation across all cargo subcommands (build, clippy, check,
-# test, run, bench) to 6. Cargo hands rustc a jobserver, so this bounds combined
+# test, run, bench) to 8. Cargo hands rustc a jobserver, so this bounds combined
 # crate + codegen-unit parallelism, not just the rustc process count.
 [build]
-jobs = 6
+jobs = 8
 
 # build.jobs does not touch the test harness's runtime threads — cap those too.
 # Non-forced: a dev can still override by exporting RUST_TEST_THREADS themselves.
 [env]
-RUST_TEST_THREADS = "6"
+RUST_TEST_THREADS = "8"

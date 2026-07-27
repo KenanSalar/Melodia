@@ -85,9 +85,10 @@ pub(super) const MOSAIC_THUMB_CAP: NonZeroUsize = match NonZeroUsize::new(16) {
     None => panic!("MOSAIC_THUMB_CAP > 0"),
 };
 
-/// Most-Played strip tile size (px). The strip renders 160 px square
-/// cards, so 180 px keeps Skia's `image-fit: cover` mipmaps crisp
-/// without going up to the album grid's 448 px tier.
+/// Most-Played strip tile size (px). The strip renders 160 px square cards,
+/// and `FemtoVG` minifies with plain bilinear (no mipmaps), so staying near
+/// the on-screen size keeps `image-fit: cover` clean without the album
+/// grid's 448 px tier.
 pub(super) const MOST_PLAYED_THUMB_SIZE: u32 = 180;
 
 /// LRU capacity for the Most Played strip — `library::favorites::

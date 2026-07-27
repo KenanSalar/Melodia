@@ -1,3 +1,12 @@
+---
+paths:
+  - src/media/**/*.rs
+  - src/library/tags.rs
+  - src/library/mbid.rs
+  - src/tasks/file_event_processor/**/*.rs
+  - src/ui/callbacks/tags.rs
+---
+
 # Lofty Best Practices
 
 ## Reading Metadata

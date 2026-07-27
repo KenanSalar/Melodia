@@ -1,4 +1,5 @@
 import { Settings } from "../../settings.slint";
+import { Visualizer } from "../../globals.slint";
 import { Theme } from "../../theme.slint";
 import { SectionCard } from "../../components/settings/section-card.slint";
 import { SectionDivider } from "../../components/settings/section-divider.slint";
@@ -6,11 +7,13 @@ import { SettingRow } from "../../components/settings/setting-row.slint";
 import { SettingRowStacked } from "../../components/settings/setting-row-stacked.slint";
 import { ToggleSwitch } from "../../components/settings/toggle-switch.slint";
 import { ChipGroup } from "../../components/settings/chip-group.slint";
+import { VizStylePresets } from "../../components/now-playing/flyout-presets.slint";
 import { SliderTrack } from "../../components/slider-track.slint";
 
 // Playback section: 3 rows mirroring Tauri's `PlaybackSection.tsx`, plus the
 // crossfade cluster (a toggle, a duration slider, and three sub-toggles that
-// only mount while crossfade is on).
+// only mount while crossfade is on) and the visualizer cluster (a toggle plus a
+// style picker that only mounts while the visualizer is on).
 // Search visibility — see header comment in `language-section.slint`.
 export component PlaybackSection inherits Rectangle {
     background: transparent;
@@ -57,11 +60,26 @@ export component PlaybackSection inherits Rectangle {
         @tr("Crossfade"),
         @tr("Overlap the end of one track with the start of the next"));
 
+    // Toggle plus style picker search as one unit, like the crossfade cluster —
+    // matching either label reveals both, which is also what keeps the upstream
+    // dividers' `|| show-visualizer` gates correct without further edits.
+    property <bool> show-visualizer: row-visible(
+        @tr("Visualizer"),
+        @tr("Show an audio visualizer on the Now Playing screen"))
+        || row-visible(
+        @tr("Visualizer Style"),
+        @tr("Choose how the visualizer draws the audio"));
+
+    // The style row only exists while the visualizer is on. `if` (not
+    // `visible`) — a hidden child still claims layout space (slint#7377).
+    property <bool> show-viz-style: root.show-visualizer && Visualizer.enabled;
+
     // The sub-rows only exist while crossfade is on. `if` (not `visible`) —
     // a hidden child still claims layout space in Slint (slint#7377).
     property <bool> show-crossfade-details: root.show-crossfade && Settings.crossfade-enabled;
 
-    out property <bool> has-matches: show-gapless || show-anim || show-resume || show-crossfade;
+    out property <bool> has-matches:
+        show-gapless || show-anim || show-resume || show-crossfade || show-visualizer;
 
     // VerticalLayout wrapper so the Rectangle's preferred-height tracks
     // the SectionCard's natural height (Rectangle sizes from a layout
@@ -83,7 +101,7 @@ export component PlaybackSection inherits Rectangle {
         // Dividers separate consecutive visible rows. Each one is gated on
         // both the previous AND the next row being visible so we don't
         // get stranded dividers above/below a hidden row.
-        if root.show-gapless && (root.show-crossfade || root.show-anim || root.show-resume): SectionDivider {}
+        if root.show-gapless && (root.show-crossfade || root.show-anim || root.show-resume || root.show-visualizer): SectionDivider {}
 
         if root.show-crossfade: SettingRow {
             icon: "swap_horiz";
@@ -156,7 +174,7 @@ export component PlaybackSection inherits Rectangle {
                 toggled(v) => { Settings.crossfade-fade-on-pause-changed(v); }
             }
         }
-        if root.show-crossfade && (root.show-anim || root.show-resume): SectionDivider {}
+        if root.show-crossfade && (root.show-anim || root.show-resume || root.show-visualizer): SectionDivider {}
 
         if root.show-anim: SettingRowStacked {
             icon: "animation";
@@ -171,7 +189,7 @@ export component PlaybackSection inherits Rectangle {
                 selected(i) => { Settings.play-button-animation-changed(i); }
             }
         }
-        if root.show-anim && root.show-resume: SectionDivider {}
+        if root.show-anim && (root.show-resume || root.show-visualizer): SectionDivider {}
 
         if root.show-resume: SettingRow {
             icon: "play_circle";
@@ -180,6 +198,36 @@ export component PlaybackSection inherits Rectangle {
             ToggleSwitch {
                 checked <=> Settings.resume-on-startup;
                 toggled(v) => { Settings.resume-on-startup-changed(v); }
+            }
+        }
+        if root.show-resume && root.show-visualizer: SectionDivider {}
+
+        // Binds the `Visualizer` global directly rather than mirroring the flags
+        // onto `Settings` — the visualizer owns its own state and callbacks
+        // (`src/ui/visualizer/mod.rs`), the same way the EQ dialog binds
+        // `Equalizer.enabled`. Both two-way bindings have already landed the
+        // value by the time the callback fires, so the callbacks only persist.
+        if root.show-visualizer: SettingRow {
+            icon: "bar_chart";
+            label: @tr("Visualizer");
+            description: @tr("Show an audio visualizer on the Now Playing screen");
+            ToggleSwitch {
+                checked <=> Visualizer.enabled;
+                toggled(v) => { Visualizer.set-enabled(v); }
+            }
+        }
+        if root.show-visualizer && root.show-viz-style: SectionDivider {}
+
+        if root.show-viz-style: SettingRowStacked {
+            icon: "show_chart";
+            label: @tr("Visualizer Style");
+            description: @tr("Choose how the visualizer draws the audio");
+            // Same list the Now-Playing view's visualizer flyout renders, so
+            // the two pickers can't drift apart.
+            ChipGroup {
+                options: VizStylePresets.viz-style-names;
+                selected-index <=> Visualizer.style-idx;
+                selected(i) => { Visualizer.set-style(i); }
             }
         }
     }

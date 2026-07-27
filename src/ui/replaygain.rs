@@ -15,32 +15,21 @@ use slint::ComponentHandle;
 
 use crate::library;
 use crate::player::replaygain::{self, RgMode};
-use crate::services::settings;
 use crate::state::AppState;
-use crate::ui::settings_bind::toggle_binding;
+use crate::ui::settings_bind::{read_or_default, toggle_binding};
 use crate::{AppWindow, ReplayGain};
 
 pub fn install_replaygain(ui: &AppWindow, state: &AppState) {
-    // Read persisted ReplayGain config; a missing / unreadable file falls back
-    // to the inert defaults (off, Album, 0 dB, prevent-clipping on).
-    let (enabled, mode, preamp, prevent_clipping) = match settings::read_settings(&state.paths) {
-        Ok(s) => (
-            s.replaygain.rg_enabled,
-            RgMode::from_settings_str(&s.replaygain.rg_mode),
-            replaygain::clamp_rg_preamp(s.replaygain.rg_preamp),
-            s.replaygain.rg_prevent_clipping,
-        ),
-        Err(e) => {
-            log::warn!("read settings for replaygain: {e}");
-            (false, RgMode::Album, 0.0, true)
-        }
-    };
+    // A missing / unreadable file falls back to the inert defaults (off, Album,
+    // 0 dB, prevent-clipping on).
+    let flags = read_or_default(state, "replaygain").replaygain;
+    let mode = RgMode::from_settings_str(&flags.rg_mode);
 
     let rg = ui.global::<ReplayGain>();
-    rg.set_enabled(enabled);
+    rg.set_enabled(flags.rg_enabled);
     rg.set_mode_idx(i32::from(mode.to_u8()));
-    rg.set_preamp(preamp);
-    rg.set_prevent_clipping(prevent_clipping);
+    rg.set_preamp(replaygain::clamp_rg_preamp(flags.rg_preamp));
+    rg.set_prevent_clipping(flags.rg_prevent_clipping);
 
     // Seed the dB ranges from the DSP constants so Rust stays the single source
     // of truth (the preamp slider reads these). Runs at boot, before the dialog

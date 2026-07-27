@@ -4,87 +4,12 @@ import { Player, WindowChrome, Queue, PopupHighlight, Dialog, Equalizer, ReplayG
 import { IconButton } from "../icon-button.slint";
 import { MaterialIcon } from "../material-icon.slint";
 import { StarRating } from "../star-rating.slint";
-import { PopupSurface } from "../popup-surface.slint";
-import { FocusLossWatcher } from "../focus-loss-watcher.slint";
+import { MenuSurface } from "./menu-surface.slint";
+import { PopupDismissCatcher } from "./popup-dismiss-catcher.slint";
+import { OverflowRow } from "./overflow-row.slint";
 import { SpeedFlyout } from "./speed-flyout.slint";
 import { SleepTimerFlyout } from "./sleep-timer-flyout.slint";
 import { FlyoutMetrics, SleepPresets, SpeedPresets } from "./flyout-presets.slint";
-
-// One row inside the overflow popup. Renders the same icon + label pair
-// shown inline in the now-playing bar; active colour mirrors the inline
-// IconButton's `active-fg` (Theme.accent). Optional trailing slots
-// (`trailing-text` + `trailing-icon`) are used by the permanent
-// "Speed" row to show the current rate and a flyout chevron.
-component OverflowRow inherits Rectangle {
-    in property <string> icon;
-    in property <string> label;
-    in property <bool> active;
-    // FILL=1 variant for active glyphs that should read as solid (favorite,
-    // pin). Mirrors `IconButton.filled` for the inline siblings.
-    in property <bool> filled;
-    in property <bool> button-enabled: true;
-    // Optional right-aligned slots (empty ⇒ not rendered). The label VL
-    // stretches, so these dock to the row's right edge.
-    in property <string> trailing-text;
-    in property <string> trailing-icon;
-
-    callback clicked();
-
-    height: 36px;
-    border-radius: Theme.radius-sm;
-    background: touch.has-hover && root.button-enabled ? Theme.surface1 : transparent;
-    animate background { duration: Theme.dur-fast; easing: ease-in-out; }
-    opacity: root.button-enabled ? 1 : 0.5;
-
-    HorizontalLayout {
-        padding-left: Theme.pad-sm;
-        padding-right: Theme.pad-sm;
-        spacing: Theme.pad-sm;
-        alignment: stretch;
-
-        VerticalLayout {
-            alignment: center;
-            MaterialIcon {
-                name: root.icon;
-                icon-size: 20px;
-                icon-color: root.active ? Theme.accent : Theme.text;
-                filled: root.filled;
-            }
-        }
-        VerticalLayout {
-            alignment: center;
-            horizontal-stretch: 1;
-            Text {
-                text: root.label;
-                color: root.active ? Theme.accent : Theme.text;
-                font-size: Theme.font-size-md;
-            }
-        }
-        if root.trailing-text != "": VerticalLayout {
-            alignment: center;
-            Text {
-                text: root.trailing-text;
-                color: root.active ? Theme.accent : Theme.subtext0;
-                font-size: Theme.font-size-md;
-            }
-        }
-        if root.trailing-icon != "": VerticalLayout {
-            alignment: center;
-            MaterialIcon {
-                name: root.trailing-icon;
-                icon-size: 18px;
-                icon-color: root.active ? Theme.accent : Theme.subtext0;
-            }
-        }
-    }
-
-    touch := TouchArea {
-        mouse-cursor: root.button-enabled ? pointer : default;
-        clicked => {
-            if (root.button-enabled) { root.clicked(); }
-        }
-    }
-}
 
 // `more_vert` IconButton + PopupWindow listing the permanent "Speed"
 // row (with its left-opening preset flyout) plus every button the
@@ -105,11 +30,21 @@ export component OverflowMenu inherits Rectangle {
     height: btn.height;
 
     // Whether the preset flyout is expanded. Reset to collapsed on every
-    // (re)open via the trigger, and by every close path below. The speed and
-    // sleep flyouts share the one left column, so they are mutually exclusive —
-    // opening one closes the other.
+    // (re)open via the trigger, and by `dismiss()`. The speed and sleep flyouts
+    // share the one left column, so they are mutually exclusive — opening one
+    // closes the other.
     property <bool> speed-flyout-open: false;
     property <bool> sleep-flyout-open: false;
+
+    // Every close path: drop the popup, collapse both flyouts, release the
+    // trigger highlight. A function rather than a callback because that's what
+    // it is — the rows invoke it, nothing subscribes to it.
+    public function dismiss() {
+        pop.close();
+        root.speed-flyout-open = false;
+        root.sleep-flyout-open = false;
+        PopupHighlight.id = "";
+    }
 
     // Number of currently-overflowed action buttons (the speed row is
     // permanent and counted separately, +1 below). The pin row is gated on
@@ -122,13 +57,13 @@ export component OverflowMenu inherits Rectangle {
         + ((WindowChrome.always-on-top-supported && Settings.overflow-pin) ? 1 : 0)
         + (Settings.overflow-queue ? 1 : 0);
 
-    // Menu column height = 36 px per row (the five permanent rows — Speed,
-    // Sleep timer, Equalizer, ReplayGain, Rating — plus overflowed buttons)
-    // + 8 px inner pad + 2 px border + 2 px slack. (The content-driven *width*
-    // `menu-w` is declared on the PopupWindow below — Slint forbids the
-    // enclosing component from reading a property *inside* a PopupWindow, so it
-    // can't live up here.)
-    property <length> menu-h: 36px * (5 + root.overflow-count) + 12px;
+    // Menu column height: one row each for the five permanent rows — Speed,
+    // Sleep timer, Equalizer, ReplayGain, Rating — plus the overflowed buttons,
+    // plus the shared chrome allowance. (The content-driven *width* `menu-w` is
+    // declared on the PopupWindow below — Slint forbids the enclosing component
+    // from reading a property *inside* a PopupWindow, so it can't live up here.)
+    property <length> menu-h:
+        FlyoutMetrics.menu-row-h * (5 + root.overflow-count) + FlyoutMetrics.chrome-h;
 
     // Speed flyout geometry. Height derives from the shared preset list +
     // metrics (`flyout-presets.slint`), so adding a preset can't clip the
@@ -173,8 +108,7 @@ export component OverflowMenu inherits Rectangle {
         icon-size: clamp(root.bar-w * 0.03, 18px, 20px);
         tooltip-text: @tr("More");
         // Keep the disc highlighted while the popup is open. Cleared by
-        // any row's `pop.close()` callsite below, or by the AppWindow
-        // scrim catching an outside click.
+        // `dismiss()`, or by the AppWindow scrim catching an outside click.
         force-bg: PopupHighlight.id == "overflow";
         clicked => {
             // Always (re)open collapsed.
@@ -204,19 +138,12 @@ export component OverflowMenu inherits Rectangle {
         y: -self.height - 8px;
         close-policy: close-on-click-outside;
 
-        // Transparent catcher over the whole popup. Declared first so the
-        // menu/flyout rows (real TouchAreas, drawn on top) win their own
-        // clicks; clicks on empty regions inside the popup rect fall
-        // through to here and close (close-on-click-outside only fires for
-        // clicks truly outside the rect). Mirrors the volume popup's
-        // left-strip catcher.
-        TouchArea {
+        // Mirrors the volume popup's left-strip catcher.
+        PopupDismissCatcher {
             width: parent.width;
             height: parent.height;
             clicked => {
-                pop.close();
-                root.speed-flyout-open = false; root.sleep-flyout-open = false;
-                PopupHighlight.id = "";
+                root.dismiss();
             }
         }
 
@@ -234,9 +161,7 @@ export component OverflowMenu inherits Rectangle {
             current-speed: Player.vm.playback_speed;
             pick(v) => {
                 Player.set-playback-speed(v);
-                pop.close();
-                root.speed-flyout-open = false; root.sleep-flyout-open = false;
-                PopupHighlight.id = "";
+                root.dismiss();
             }
         }
 
@@ -252,36 +177,23 @@ export component OverflowMenu inherits Rectangle {
             track-end-active: Player.vm.sleep_at_track_end;
             pick(m) => {
                 Player.set-sleep-timer(m);
-                pop.close();
-                root.speed-flyout-open = false; root.sleep-flyout-open = false;
-                PopupHighlight.id = "";
+                root.dismiss();
             }
             start-custom(secs) => {
                 Player.set-sleep-timer-seconds(secs);
-                pop.close();
-                root.speed-flyout-open = false; root.sleep-flyout-open = false;
-                PopupHighlight.id = "";
+                root.dismiss();
             }
         }
 
         // Menu column — right, bottom-anchored under the trigger.
-        menu-surface := PopupSurface {
+        MenuSurface {
+            popup-id: "overflow";
             x: parent.width - pop.menu-w;
             y: parent.height - root.menu-h;
             width: pop.menu-w;
             height: root.menu-h;
-
-            // Live only while this popup is the one currently open — the
-            // trigger sets `PopupHighlight.id = "overflow"` before
-            // `pop.show()`, and the winit Release path (or any row's close
-            // handler below) clears it back to "". One watcher per
-            // focus-loss instead of N per visible popup-host.
-            if PopupHighlight.id == "overflow": FocusLossWatcher {
-                close => {
-                    pop.close();
-                    root.speed-flyout-open = false; root.sleep-flyout-open = false;
-                    PopupHighlight.id = "";
-                }
+            close-requested => {
+                root.dismiss();
             }
 
             menu-vl := VerticalLayout {
@@ -338,9 +250,7 @@ export component OverflowMenu inherits Rectangle {
                     trailing-text: Equalizer.enabled ? @tr("On") : @tr("Off");
                     active: Equalizer.enabled;
                     clicked => {
-                        pop.close();
-                        root.speed-flyout-open = false; root.sleep-flyout-open = false;
-                        PopupHighlight.id = "";
+                        root.dismiss();
                         Dialog.kind = "equalizer";
                         Dialog.title = @tr("Equalizer");
                         Dialog.message = "";
@@ -360,9 +270,7 @@ export component OverflowMenu inherits Rectangle {
                     trailing-text: ReplayGain.enabled ? @tr("On") : @tr("Off");
                     active: ReplayGain.enabled;
                     clicked => {
-                        pop.close();
-                        root.speed-flyout-open = false; root.sleep-flyout-open = false;
-                        PopupHighlight.id = "";
+                        root.dismiss();
                         Dialog.kind = "replaygain";
                         Dialog.title = @tr("ReplayGain");
                         Dialog.message = "";
@@ -379,7 +287,9 @@ export component OverflowMenu inherits Rectangle {
                 // re-asserts the highlight id so the winit Release clear doesn't
                 // unmount the FocusLossWatcher.
                 Rectangle {
-                    height: 36px;
+                    // Not an `OverflowRow`, so it has to take the shared row
+                    // height itself — `menu-h` above reserves one for it.
+                    height: FlyoutMetrics.menu-row-h;
                     opacity: Player.vm.has_track ? 1 : 0.5;
                     HorizontalLayout {
                         padding-left: Theme.pad-sm;
@@ -425,32 +335,32 @@ export component OverflowMenu inherits Rectangle {
                     active: Player.vm.track.is_favorite;
                     filled: Player.vm.track.is_favorite;
                     button-enabled: Player.vm.has_track;
-                    clicked => { Player.toggle-favorite(); pop.close(); root.speed-flyout-open = false; root.sleep-flyout-open = false; PopupHighlight.id = ""; }
+                    clicked => { Player.toggle-favorite(); root.dismiss(); }
                 }
                 if Settings.overflow-repeat: OverflowRow {
                     icon: Player.queue.repeat_mode == "one" ? "repeat_one" : "repeat";
                     label: @tr("Repeat");
                     active: Player.queue.repeat_mode != "off";
-                    clicked => { Player.cycle-repeat(); pop.close(); root.speed-flyout-open = false; root.sleep-flyout-open = false; PopupHighlight.id = ""; }
+                    clicked => { Player.cycle-repeat(); root.dismiss(); }
                 }
                 if Settings.overflow-shuffle: OverflowRow {
                     icon: "shuffle";
                     label: @tr("Shuffle");
                     active: Player.queue.shuffle;
-                    clicked => { Player.toggle-shuffle(); pop.close(); root.speed-flyout-open = false; root.sleep-flyout-open = false; PopupHighlight.id = ""; }
+                    clicked => { Player.toggle-shuffle(); root.dismiss(); }
                 }
                 if WindowChrome.always-on-top-supported && Settings.overflow-pin: OverflowRow {
                     icon: "push_pin";
                     label: WindowChrome.always-on-top-active ? @tr("Unpin from Top") : @tr("Pin on Top");
                     active: WindowChrome.always-on-top-active;
                     filled: WindowChrome.always-on-top-active;
-                    clicked => { WindowChrome.toggle-always-on-top(); pop.close(); root.speed-flyout-open = false; root.sleep-flyout-open = false; PopupHighlight.id = ""; }
+                    clicked => { WindowChrome.toggle-always-on-top(); root.dismiss(); }
                 }
                 if Settings.overflow-queue: OverflowRow {
                     icon: "queue_music";
                     label: @tr("Queue");
                     active: Queue.open;
-                    clicked => { Queue.open = !Queue.open; pop.close(); root.speed-flyout-open = false; root.sleep-flyout-open = false; PopupHighlight.id = ""; }
+                    clicked => { Queue.open = !Queue.open; root.dismiss(); }
                 }
             }
         }

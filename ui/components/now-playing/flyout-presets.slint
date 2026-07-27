@@ -1,8 +1,9 @@
-// Single source of truth for the overflow menu's two left-column flyouts:
-// the preset lists themselves plus the row/chrome metrics the host's
-// fixed-reserve geometry math needs. `overflow-menu.slint` computes each
-// flyout's reserved height from `list.length` here, so adding or removing a
-// preset can no longer clip the popup.
+// Single source of truth for the now-playing popup menus' left-column flyouts:
+// the option lists themselves plus the row/chrome metrics the hosts'
+// fixed-reserve geometry math needs. `overflow-menu.slint` (the bar's speed and
+// sleep-timer flyouts) and `view-menu.slint` (the Now-Playing view's visualizer
+// flyout) each compute their reserved height from a list length here, so adding
+// or removing an option can no longer clip the popup.
 
 // One preset in the speed list. `value` is the multiplier handed to
 // `Player.set-playback-speed`; `label` is the (untranslated, numeric)
@@ -51,11 +52,31 @@ export global SleepPresets {
     ];
 }
 
+export global VizStylePresets {
+    // Mirrors `STYLES` in `src/ui/visualizer/mod.rs` **by position** — a row's loop
+    // index IS the index `Visualizer.set-style` takes, so there is no separate
+    // value to keep in step. Seeded from Rust it would render untranslated
+    // (`@tr()` only translates literals at codegen), so it stays a literal
+    // array; `src/ui/visualizer/tests/visualizer_tests.rs` pins its length
+    // against `STYLES`.
+    //
+    // Read by both the Settings → Playback chips and the Now-Playing view's
+    // visualizer flyout, so the two pickers can't drift apart.
+    out property <[string]> viz-style-names: [
+        @tr("Bars"),
+        @tr("Mirrored"),
+        @tr("Waveform"),
+    ];
+}
+
 export global FlyoutMetrics {
     // Height of one `FlyoutOption` row (and the sleep flyout's stepper /
     // Start-pill rows, which match it for a uniform rhythm).
     out property <length> option-row-h: 32px;
-    // Vertical chrome allowance per flyout: 8 px inner pad + 2 px border
-    // + 2 px slack — the same allowance the menu column uses.
+    // Height of one `OverflowRow` in a menu column. Taller than a flyout row:
+    // the menu is the outer surface and reads as the coarser rhythm.
+    out property <length> menu-row-h: 36px;
+    // Vertical chrome allowance for a flyout *or* a menu column: 8 px inner pad
+    // + 2 px border + 2 px slack.
     out property <length> chrome-h: 12px;
 }

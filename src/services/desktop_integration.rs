@@ -1,41 +1,29 @@
 //! Self-deploy the `.desktop` launcher entry, icon and `AppStream`
 //! metainfo for per-user tarball installs.
 //!
-//! RPM/DEB packages re-deploy `melodia.desktop` + `melodia.svg` on every
-//! upgrade via the package manager's `%files` manifest. `AppImage` is by
-//! design a single-file relocatable bundle, so its `.desktop` + icon
-//! travel inside the `AppImage`. The gap was the **tarball** path:
-//! `install-linux.sh` deploys `.desktop` + icon on initial install, but
-//! the in-app updater's atomic binary swap doesn't refresh them — a
-//! user on the tarball updating v0.1.0 → v0.2.0 would get the new
-//! binary and keep the *old* `.desktop` indefinitely.
+//! RPM/DEB re-deploy their launcher files on every upgrade via the package
+//! manager, and an `AppImage` carries its own inside the bundle. The gap is
+//! the **tarball**: `install-linux.sh` deploys `.desktop` + icon on first
+//! install, but the in-app updater's atomic binary swap never refreshes them,
+//! so an updated tarball install would keep the old entry indefinitely.
 //!
-//! Approach: bundle the canonical `.desktop` template, the `melodia.svg`
-//! icon and the `AppStream` metainfo as compiled-in `include_str!` /
-//! `include_bytes!` payloads. At every boot of a tarball install,
-//! compare the on-disk copies against the compiled-in copies via
-//! BLAKE3; rewrite when different, no-op when current. Cheap
-//! (microseconds for the ~7 KB total), idempotent, doesn't grow the
-//! binary by more than a hair.
+//! So the `.desktop` template, icon and `AppStream` metainfo are compiled in
+//! as `include_str!` / `include_bytes!` payloads, and every boot BLAKE3s the
+//! on-disk copies against them — rewrite on mismatch, no-op when current.
 //!
 //! Skipped on:
 //!
 //! - RPM/DEB installs — the package manager owns those files under
-//!   `/usr/share/applications/`, `/usr/share/metainfo/` and
-//!   `/usr/share/icons/hicolor/`; writing user-scoped copies that
-//!   diverge from the system copies would be confusing (which one wins
-//!   depends on `XDG_DATA_DIRS` order).
-//! - `AppImage` — `$APPIMAGE` set means we're inside an `AppImage`
-//!   runtime; its `.desktop` lives inside the bundle.
-//! - Development builds — `cargo run` runs the binary straight out of
-//!   `target/debug/` (or `target/release/`); writing an `Exec=` pointing
-//!   there would hijack the user's installed launcher entry.
-//! - `macOS` / Windows — this whole module is Linux-only.
+//!   `/usr/share/`, and user-scoped copies that diverge from them would make
+//!   which one wins depend on `XDG_DATA_DIRS` order.
+//! - `AppImage` (`$APPIMAGE` set) — its `.desktop` lives inside the bundle.
+//! - Development builds — an `Exec=` pointing into `target/` would hijack the
+//!   user's installed launcher entry.
+//! - `macOS` / Windows — the module is Linux-only.
 //!
-//! `Exec=` line: the template ships with an `@EXEC@` placeholder that
-//! gets substituted at write time with the absolute path of the
-//! running binary. Absolute beats `Exec=Melodia` because the user's
-//! tarball might not be on `$PATH`.
+//! The template's `@EXEC@` placeholder is substituted with the running
+//! binary's absolute path; a bare `Exec=Melodia` would assume a tarball
+//! install is on `$PATH`.
 
 use std::path::Path;
 

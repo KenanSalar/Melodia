@@ -1,5 +1,5 @@
 //! Artists grid: DB fetch + filter / sort / chunk / prewarm logic, plus
-//! the display-aware cover-cache cap tuner. Mirrors `ui/albums/grid.rs`.
+//! the display-aware cover-cache cap tuner. Mirrors `src/ui/albums/grid.rs`.
 
 use std::num::NonZeroUsize;
 use std::path::PathBuf;

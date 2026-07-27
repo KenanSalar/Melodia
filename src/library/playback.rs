@@ -286,6 +286,11 @@ pub fn player_set_crossfade_fade_on_pause(ctx: &PlaybackContext, on: bool) {
     ctx.rodio.set_crossfade_fade_on_pause(on);
 }
 
+// The visualizer has no setter here on purpose: its tap is armed by the
+// Now-Playing view's visibility rather than by a persisted setting, so
+// `crate::ui::visualizer` calls `VisualizerShared::set_enabled` on the cell it
+// already holds — `RodioPlayer::visualizer()` — for snapshotting.
+
 #[cfg(test)]
 #[path = "tests/playback_tests.rs"]
 mod tests;

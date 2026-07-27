@@ -241,46 +241,30 @@ pub(super) fn resolve_staged_path(target: &Path) -> AppResult<PathBuf> {
 /// `Range:` resume. Written next to the staged file at download start;
 /// validated on every later attempt before deciding `plan_resume`.
 ///
-/// The first three fields together act as a content fingerprint:
-/// * `version` — the `latest.json` manifest version. The most common
-///   drift signal: user bumped `Cargo.toml`, CI re-cut the release, the
-///   stale partial belongs to the previous version.
-/// * `size` — manifest-declared byte count for the asset. Cross-check
-///   against the URL+version pair in case a release was re-cut at the
-///   same version with a different file (e.g. a corrupted build that
-///   was re-uploaded with `--clobber`).
-/// * `asset_url` — the full asset URL. Catches the cross-platform-key
-///   case (e.g. user installed an RPM, then the resolved target key
-///   flipped to tarball — partial RPM bytes don't apply).
+/// The first three fields are the fingerprint [`StagedMeta::matches`] checks:
+/// * `version` — the manifest version, and the usual drift signal: CI re-cut
+///   the release and the partial belongs to the previous one.
+/// * `size` — the manifest-declared byte count, which catches a release
+///   re-cut at the *same* version with a different file (`--clobber`).
+/// * `asset_url` — catches a flipped target key (partial RPM bytes don't
+///   apply once the resolved key is the tarball).
 ///
-/// `etag` is an optimisation, not part of the fingerprint:
-/// * Captured from the GitHub Releases CDN's `ETag` response header on
-///   the original GET. Sent back as `If-Range: <etag>` on a resumed
-///   `Range:` request so the server returns 200 (full body) instead of
-///   206 (append) if the resource changed between attempts — closes
-///   the "release was re-uploaded with `--clobber` mid-download" hole
-///   that would otherwise glue bytes from two different artifacts.
-/// * **Strong `ETags` only.** RFC 9110 §13.1.5 forbids `If-Range` with a
-///   weak entity-tag, and §8.8.3.2 strong comparison means a server
-///   that received one would always evaluate it false — silently
-///   forcing a full re-download on every resume. Weak tags (`W/"..."`)
-///   are filtered out at capture in [`super::download::download_to_file`]
-///   so this field only ever holds strong tags or `None`. GitHub
-///   Releases serves strong tags today (Azure Blob versioned), so the
-///   filter is a futureproof for an origin switch rather than a current
-///   need.
-/// * `None` for sidecars written by pre-etag clients, CDN responses
-///   that omitted the header, or weak `ETags` filtered at capture. The
-///   size-bound check + post-download signature verify catch any
-///   concatenation accident even without `If-Range`; the etag just
-///   trims the wasted-bandwidth window from the entire download to one
-///   zero-byte HTTP roundtrip when strong tags are available.
-/// * `#[serde(default)]` so a sidecar from a pre-etag client still
-///   parses — old-format sidecars are treated as "no cached etag" and
-///   resume goes ahead without `If-Range` (same as today's behaviour).
-/// * Not consulted by [`StagedMeta::matches`] — version/size/url are
-///   what make a fingerprint match; the etag is decoupled freshness
-///   metadata for the resume protocol only.
+/// `etag` is decoupled freshness metadata for the resume protocol, not part
+/// of the fingerprint. Captured from the CDN's `ETag` on the original GET and
+/// replayed as `If-Range`, so a resource that changed between attempts comes
+/// back as a 200 full body rather than a 206 append — closing the hole where
+/// two different artifacts get glued together. **Strong tags only**: RFC 9110
+/// §13.1.5 forbids `If-Range` with a weak entity-tag, and under §8.8.3.2
+/// strong comparison a server receiving one always evaluates it false,
+/// silently forcing a full re-download on every resume. Weak tags are
+/// filtered at capture in [`super::download::download_to_file`], so this is
+/// either a strong tag or `None`.
+///
+/// `None` covers pre-etag sidecars (hence `#[serde(default)]`), responses
+/// without the header, and those filtered weak tags. Correctness doesn't
+/// depend on it — the size bound and the post-download signature verify catch
+/// a concatenation accident regardless; the etag just shrinks the wasted
+/// bandwidth to one zero-byte roundtrip.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct StagedMeta {
     pub(crate) version: String,

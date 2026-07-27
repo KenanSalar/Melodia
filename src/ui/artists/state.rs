@@ -1,5 +1,5 @@
 //! Internal data structures + constants used by the Artists grid and
-//! Artist Detail submodules. Mirrors `ui/albums/state.rs`.
+//! Artist Detail submodules. Mirrors `src/ui/albums/state.rs`.
 
 use std::collections::HashSet;
 use std::num::NonZeroUsize;

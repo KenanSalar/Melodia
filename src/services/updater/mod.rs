@@ -8,7 +8,7 @@
 //!                                    is_upgrade (semver)
 //!                                         │
 //!                                         ▼
-//!                                    notify  (Phase D)
+//!                                       notify
 //!                                         │
 //!                                         ▼
 //!                                  download_and_install
@@ -23,8 +23,11 @@
 //!                                    request_respawn + quit_event_loop
 //! ```
 //!
-//! See the Phase 14 footer in `MIGRATION.md` for the design rationale,
-//! manifest schema, and threat model.
+//! The manifest schema lives in [`manifest`], signature verification in
+//! [`minisign`], and the threat model's trust boundary is the GitHub repo:
+//! `latest.json` and every artifact are minisign-signed with the key embedded
+//! at `assets/updater-pubkey.b64`, and the client fails closed on a missing
+//! or invalid signature.
 
 use std::path::PathBuf;
 

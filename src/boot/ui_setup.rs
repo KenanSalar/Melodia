@@ -232,6 +232,7 @@ pub fn install_library_settings_and_friends(
     ui::playback_settings::install_playback_settings(app, state);
     ui::equalizer::install_equalizer(app, state);
     ui::replaygain::install_replaygain(app, state);
+    ui::visualizer::install_visualizer(app, state);
     ui::sleep_timer::install_sleep_timer(app, state);
     ui::scrobbling_settings::install_scrobbling(app, state);
     ui::discord_settings::install_discord(app, state);
@@ -341,7 +342,7 @@ pub fn hydrate_ui_from_settings(
 
 /// The Slint side already clamps `Nav.sidebar-width` to
 /// `[Theme.sidebar-min-w, Theme.sidebar-max-w]` at the use site
-/// (`ui/layout/sidebar.slint:84`), so no Rust-side clamp is needed.
+/// (`ui/layout/sidebar.slint`), so no Rust-side clamp is needed.
 fn apply_sidebar_width(app: &AppWindow, settings: &services::settings::SettingsData) {
     // Persisted sidebar width is f64 (settings.json) — Slint uses f32. Widths
     // are tens-to-hundreds of pixels, well within f32 precision.

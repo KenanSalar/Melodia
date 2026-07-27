@@ -1,11 +1,52 @@
-//! Tiny primitives shared by the audio-thread state cells (the equalizer,
-//! `ReplayGain` and crossfade paths).
+//! Tiny primitives shared across the player's DSP paths — the equalizer,
+//! `ReplayGain` and crossfade state cells on the audio thread, and the
+//! visualizer's spectrum and waveform analysis on the UI thread.
 
 use std::sync::atomic::{AtomicU64, Ordering};
+
+/// Fraction of its height a visualizer bar or trace keeps per frame while
+/// falling. Shared so the two styles fall by the same law rather than each
+/// carrying its own — a decay is a decay whichever drawing is showing.
+///
+/// Per *frame*, so the wall-clock settle is this against the strip's Timer, and
+/// that interval is per style (`visualizer-strip.slint`): ~0.5 s for the bars at
+/// 16 ms, ~1 s for the trace at 33 ms. Retuning how fast one style dies away
+/// means reaching for one of the two.
+pub(crate) const VISUALIZER_DECAY: f32 = 0.8;
+
+// A bar or trace has to lose height every frame but never invert or vanish
+// outright, or the smoother snaps instead of settling.
+const _: () = assert!(
+    VISUALIZER_DECAY > 0.0 && VISUALIZER_DECAY < 1.0,
+    "the visualizer decay must shrink a level without flipping its sign"
+);
+
+/// Widen a count to `f32`.
+///
+/// Every caller is a window, bin or column index — counts in the low thousands
+/// at most, which `f32` represents exactly.
+#[expect(
+    clippy::cast_precision_loss,
+    reason = "callers pass window, bin and column indices, which are counts in the low thousands"
+)]
+pub(crate) fn index_to_f32(i: usize) -> f32 {
+    i as f32
+}
 
 /// Convert a decibel value to a linear amplitude factor.
 pub(crate) fn db_to_linear(db: f32) -> f32 {
     10.0_f32.powf(db / 20.0)
+}
+
+/// Convert a linear amplitude factor to decibels — the inverse of
+/// [`db_to_linear`].
+///
+/// Silence has no decibel value (`log10(0)` is `-inf`), so callers guard the
+/// domain before calling. Both of them already do it for their own reasons: the
+/// limiter returns unity below its knee, and the spectrum analyzer floors quiet
+/// bins at zero.
+pub(crate) fn linear_to_db(lin: f32) -> f32 {
+    20.0 * lin.log10()
 }
 
 /// A lock-free change counter for state shared with the audio thread.
@@ -40,3 +81,7 @@ impl Generation {
         self.0.load(Ordering::Acquire)
     }
 }
+
+#[cfg(test)]
+#[path = "tests/dsp_tests.rs"]
+mod tests;

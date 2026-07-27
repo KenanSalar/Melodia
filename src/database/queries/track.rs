@@ -157,7 +157,7 @@ pub async fn get_track_meta(
     Ok(row)
 }
 
-/// Single-id fetch of the columns a scrobble needs, for the Phase 2 detector's
+/// Single-id fetch of the columns a scrobble needs, for the detector's
 /// per-track-start enrichment. Sibling of `get_track_summary_by_id` /
 /// `get_track_meta`; returns `None` for a missing id (the detector then skips
 /// the scrobble).

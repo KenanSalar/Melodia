@@ -114,9 +114,9 @@ pub struct AppState {
     pub ui_handles: Arc<crate::ui::nav_history::UiHandles>,
 }
 
-/// Receivers handed back from `AppState::init` for sub-phase I to consume.
-/// Holding them on `AppState` would force a `Mutex<Option<...>>` shape that
-/// Phase 1 doesn't need; returning them keeps the struct stable.
+/// Receivers handed back from `AppState::init` for `boot::tasks` to consume.
+/// Holding them on `AppState` would force a `Mutex<Option<…>>` shape nothing
+/// needs; returning them keeps the struct stable.
 pub struct StartupChannels {
     pub media_control_rx: Option<mpsc::Receiver<MediaControlEvent>>,
     pub file_event_rx: mpsc::Receiver<FileEvent>,
@@ -317,4 +317,9 @@ fn hydrate_audio_dsp(rodio: &RodioPlayer, settings: &settings::SettingsData) {
     rodio.set_crossfade_skip_same_album(settings.crossfade.crossfade_skip_same_album);
     rodio.set_crossfade_fade_on_pause(settings.crossfade.crossfade_fade_on_pause);
     rodio.set_crossfade_enabled(settings.crossfade.crossfade_enabled);
+
+    // The visualizer is deliberately absent: its tap is armed by the
+    // Now-Playing view being on screen, not by a persisted flag, so it must
+    // stay disarmed until `Visualizer.set-active` fires. See
+    // `crate::ui::visualizer`.
 }

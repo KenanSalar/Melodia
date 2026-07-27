@@ -1,8 +1,8 @@
 //! Display + `From<>` coverage for `AppError`.
 //!
 //! The Tauri version's `Serialize` impl + `kind()` / `inner_message()` helpers
-//! were dropped during Phase 0 (no IPC anymore). Tests that exercised those are
-//! intentionally absent.
+//! went away with the IPC layer, so tests exercising those are intentionally
+//! absent.
 
 use super::*;
 

@@ -6,8 +6,7 @@
 //! failures come back as real HTTP statuses. Submissions carry
 //! `submission_client = "Melodia"` + this build's version, and rate limiting is
 //! read from the `X-RateLimit-Reset-In` header (seconds until the window
-//! resets — clock-skew-proof, unlike the epoch `X-RateLimit-Reset`). The
-//! functions stay unwired until Phase 2.
+//! resets — clock-skew-proof, unlike the epoch `X-RateLimit-Reset`).
 
 use std::time::Duration;
 

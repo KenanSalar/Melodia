@@ -1,7 +1,7 @@
 //! Album library API — thin wrappers over the `queries::album` /
 //! `queries::track` layer, mirroring `library/tracks.rs`. Each function
 //! takes `&AppState` and returns `Result<_, AppError>`; the UI bridge
-//! (`src/ui/albums.rs`) does the in-memory sorting / filtering / chunking.
+//! (`src/ui/albums/`) does the in-memory sorting / filtering / chunking.
 
 use crate::database::queries;
 use crate::entities::{album, track};

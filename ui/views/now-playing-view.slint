@@ -1,9 +1,12 @@
 import { Theme } from "../theme.slint";
-import { Player, Nav, NowPlaying } from "../globals.slint";
+import { Player, Nav, NowPlaying, Visualizer } from "../globals.slint";
 import { IconButton } from "../components/icon-button.slint";
+import { AccentDiscButton } from "../components/now-playing/accent-disc-button.slint";
 import { StarRating } from "../components/star-rating.slint";
 import { NowPlayingCover } from "../components/now-playing/now-playing-cover.slint";
 import { UpNextList } from "../components/now-playing/up-next-list.slint";
+import { NowPlayingViewMenu } from "../components/now-playing/view-menu.slint";
+import { VisualizerStrip } from "../components/now-playing/visualizer-strip.slint";
 
 // One technical-metadata chip (codec / bitrate / sample rate / …). The
 // caller only instantiates it when the matching `Player.track-meta` field
@@ -16,10 +19,8 @@ component MetaChip inherits Rectangle {
     // height.
     border-radius: self.height / 2;
     // Soft per-artwork accent tint instead of the opaque `Theme.surface0`
-    // slab — the chip strip now reads as part of the same colour family as
-    // the blurred backdrop. Defaults to `Theme.accent` when no artwork (see
-    // `Player.np-accent` in `globals.slint`).
-    background: Player.np-accent.with-alpha(0.22);
+    // slab, so the strip reads as part of the backdrop's colour family.
+    background: Player.np-accent-pill;
 
     HorizontalLayout {
         padding-left: Theme.pad-md;
@@ -28,7 +29,9 @@ component MetaChip inherits Rectangle {
             alignment: center;
             Text {
                 text: root.text;
-                color: Theme.subtext1;
+                // Solid, unlike the pill behind it — the label is the part
+                // that has to stay readable on a dark cover.
+                color: Player.np-accent-bright;
                 font-size: Theme.font-size-sm;
             }
         }
@@ -48,15 +51,35 @@ component MetaChip inherits Rectangle {
 // `UpNextList` component (`components/now-playing/up-next-list.slint`) so
 // the mini-player's square variant reuses the same behaviour.
 export component NowPlayingView inherits Rectangle {
+    // Edge of the square cover tile.
+    property <length> cover-size: clamp(root.width * 0.22, 200px, 380px);
+
+    // The "Up Next" column, on a readable 280 px floor and a 420 px ceiling
+    // that matches its old fixed value. Named rather than inlined because the
+    // body row's left column — and so the chip strip's wrapping ceiling — is
+    // the panel minus this.
+    property <length> up-next-width: clamp(root.width * 0.35, 280px, 420px);
+
+    // Width the artwork / title / chip column gets inside the body row: the
+    // panel minus its left padding, the inter-column gap and the Up Next
+    // column. This is the width `Player.recompute-chip-rows` chunks the chips
+    // against, and what the visualizer strip below takes its share of.
+    property <length> content-width: root.width - Theme.pad-lg - Theme.pad-md - root.up-next-width;
+
     // --- Background: accent gradient floor + dual-slot blurred cross-fade -
     // The gradient is always painted. For a track WITH artwork the blur
     // slots fade in over it; for an art-less track `blur-has-image` is
     // false and both slots fade to 0, leaving this accent-tinted gradient
     // visible (Tauri parity). Either way there is never an empty frame.
+    //
+    // Both stops come from Rust rather than from `Theme.accent.mix(Theme.base,
+    // …)`, because this is the surface an art-less track's title sits on: a
+    // theme-derived floor is bright on a light theme, and the foreground here
+    // is solved light. The stops keep the theme's hue and drop its polarity.
     Rectangle {
         width: 100%;
         height: 100%;
-        background: @linear-gradient(135deg, Theme.accent.mix(Theme.base, 0.2), Theme.base);
+        background: @linear-gradient(135deg, Player.np-floor-start, Player.np-floor-end);
     }
 
     // Two stacked Image slots. Rust writes the new blurred cover into the
@@ -85,12 +108,21 @@ export component NowPlayingView inherits Rectangle {
         animate opacity { duration: Theme.dur-med; easing: ease-in-out; }
     }
 
-    // Scrim — darkens the backdrop a touch so the foreground text / chips
-    // stay legible regardless of cover (or accent) colour.
+    // Scrim — drives the *composited* backdrop into a known dark band so the
+    // foreground stays legible whatever the cover looks like. Its opacity is
+    // solved per artwork in Rust and baked into the brush, which is why there
+    // is no `with-alpha` here: a fixed alpha of a theme colour can't do this
+    // job (on a light theme `Theme.crust` is near-white, so raising it
+    // *brightens* the backdrop), and a white sleeve needs roughly twice the
+    // opacity a black one does.
+    //
+    // Animated on the same duration as the blur slots above so the two ride
+    // one curve — a scrim that snapped mid-cross-fade would read as a glitch.
     Rectangle {
         width: 100%;
         height: 100%;
-        background: Theme.crust.with-alpha(0.45);
+        background: Player.np-scrim;
+        animate background { duration: Theme.dur-med; easing: ease-in-out; }
     }
 
     // --- Foreground ------------------------------------------------------
@@ -111,14 +143,8 @@ export component NowPlayingView inherits Rectangle {
 
             VerticalLayout {
                 alignment: center;
-                IconButton {
+                AccentDiscButton {
                     icon: "arrow_back";
-                    diameter: 36px;
-                    icon-size: 22px;
-                    // Translucent disc so the back button reads against the
-                    // scrim+blur like the detail-view back buttons do. Shared
-                    // `Theme.floating-button-bg` keeps both surfaces in sync.
-                    idle-bg: Theme.floating-button-bg;
                     clicked => { Nav.now-playing-open = false; }
                 }
             }
@@ -131,6 +157,11 @@ export component NowPlayingView inherits Rectangle {
                 StarRating {
                     rating: Player.vm.track.rating;
                     star-size: 22px;
+                    // Accent-tinted rather than the list views' yellow — see
+                    // the heart below for why this whole group shares the
+                    // spectrum bars' colour.
+                    filled-color: Player.np-accent-bright;
+                    empty-color: Player.np-accent-dim;
                     rated(n) => { Player.set-current-rating(n); }
                 }
             }
@@ -144,32 +175,47 @@ export component NowPlayingView inherits Rectangle {
                     button-enabled: Player.vm.has_track;
                     diameter: 36px;
                     icon-size: 22px;
-                    // Match the back button's translucent chrome. `active-bg`
-                    // mirrors `idle-bg` so favouriting (which flips `active:
-                    // true`) doesn't drop the chrome to transparent — the
-                    // disc stays visible regardless of state, and the icon
-                    // colour alone carries the favourited indication.
-                    idle-bg: Theme.floating-button-bg;
-                    active-bg: Theme.floating-button-bg;
+                    // A bare glyph like the stars beside it — no chrome disc
+                    // in any state, hover included, so `hover-bg` has to be
+                    // overridden too (it defaults to a solid `Theme.surface0`).
+                    // Hover reads through the icon colour instead.
+                    hover-bg: transparent;
+                    // Same accent the spectrum bars paint with, so the whole
+                    // group reads as one family against the artwork blur. The
+                    // outlined-vs-filled glyph carries the favourited state, so
+                    // the unfavourited variant only needs to be quieter.
+                    idle-fg: Player.np-accent-dim;
+                    hover-fg: Player.np-accent-bright;
+                    active-fg: Player.np-accent-bright;
                     clicked => { Player.toggle-favorite(); }
                 }
+            }
+
+            // View-scoped menu (visualizer options). Not gated on
+            // `vm.has_track` — its options are meaningful with an empty queue.
+            VerticalLayout {
+                alignment: center;
+                NowPlayingViewMenu { }
             }
         }
 
         // Body — centred artwork group on the left, fixed-width "Up Next"
         // column on the right. Both float directly on the backdrop (no card
-        // chrome). No right padding: the Up Next column reaches the panel
-        // edge so its scrollbar lands flush there.
+        // chrome). No right or bottom padding: the Up Next column reaches the
+        // panel edge on both axes, so its overlay scrollbar lands flush and
+        // rows scroll off the bottom edge instead of under a strip of
+        // backdrop. The bottom inset the artwork group wants is applied to
+        // that column alone.
         HorizontalLayout {
             vertical-stretch: 1;
             padding-left: Theme.pad-lg;
-            padding-bottom: Theme.pad-lg;
             spacing: Theme.pad-md;
 
             // -- Artwork + title + chips, vertically centred -------------
             VerticalLayout {
                 horizontal-stretch: 1;
                 alignment: center;
+                padding-bottom: Theme.pad-lg;
                 spacing: Theme.pad-md;
 
                 // Large foreground cover. The frame is static — only the
@@ -179,18 +225,23 @@ export component NowPlayingView inherits Rectangle {
                 HorizontalLayout {
                     alignment: center;
                     NowPlayingCover {
-                        tile-size: clamp(root.width * 0.22, 200px, 380px);
+                        tile-size: root.cover-size;
                     }
                 }
 
                 // Title / artist / album, centred under the artwork.
                 VerticalLayout {
                     spacing: 4px;
+                    // Backdrop-solved rather than `Theme.text` / `subtext1` /
+                    // `overlay2`: these sit on the blur, so a fixed theme
+                    // brush lands light-on-light on a light theme. The album
+                    // line takes the muted tier at reduced alpha, keeping the
+                    // three-line hierarchy without a third solved tone.
                     Text {
                         text: Player.vm.has_track
                             ? "‎" + Player.vm.track.title
                             : @tr("No track playing");
-                        color: Theme.text;
+                        color: Player.np-on-backdrop;
                         font-size: Theme.page-title-size;
                         font-weight: 600;
                         horizontal-alignment: center;
@@ -202,14 +253,14 @@ export component NowPlayingView inherits Rectangle {
                                 ? @tr("Unknown artist")
                                 : Player.vm.track.artist)
                             : "—";
-                        color: Theme.subtext1;
+                        color: Player.np-on-backdrop-muted;
                         font-size: Theme.font-size-lg;
                         horizontal-alignment: center;
                         overflow: elide;
                     }
                     Text {
                         text: "‎" + Player.vm.track.album;
-                        color: Theme.overlay2;
+                        color: Player.np-on-backdrop-muted.with-alpha(0.75);
                         font-size: Theme.font-size-md;
                         horizontal-alignment: center;
                         overflow: elide;
@@ -265,28 +316,57 @@ export component NowPlayingView inherits Rectangle {
                         }
                     }
                 }
+
+                // Visualizer strip, as a base under the whole cover → title →
+                // chips group. Wrapped in a centring HorizontalLayout because
+                // a fixed-width child does not centre in a wider
+                // VerticalLayout, the same reason the cover above is wrapped.
+                //
+                // Three quarters of the column the chips wrap against, so the
+                // strip reads as the base of that group rather than of the
+                // cover alone. The `max` is not cosmetic: at the window's
+                // 350 px floor `content-width` goes negative, and flooring at
+                // the cover keeps the strip from ever being narrower than the
+                // artwork above it.
+                if Visualizer.enabled: HorizontalLayout {
+                    alignment: center;
+                    // Sits well below the column's shared spacing so it reads as
+                    // the base of the cover → title → chips group rather than
+                    // one more line of metadata. The column is centred, so this
+                    // splits between the two ends: the strip drops by half of
+                    // it, everything above rises by the other half — budget
+                    // twice the drop you actually want.
+                    padding-top: Theme.pad-lg * 2.5;
+                    VisualizerStrip {
+                        width: max(root.cover-size, root.content-width * 0.75);
+                    }
+                }
             }
 
             // -- "Up Next" list ------------------------------------------
-            // Responsive width so a narrow window doesn't squeeze the chip
-            // strip first — clamps to a readable 280 px floor and a 420 px
-            // ceiling that matches the old fixed value. Mirrors the
-            // artwork tile's `clamp(root.width * 0.22, …)` pattern. Reaches
-            // the panel's right edge — the overlay scrollbar inside
-            // `list-wrap` sits flush with that edge at any width.
+            // Width comes from `up-next-width` (see the root properties) —
+            // responsive, so a narrow window doesn't squeeze the chip strip
+            // first. Reaches the panel's right edge — the overlay scrollbar
+            // inside `list-wrap` sits flush with that edge at any width.
             VerticalLayout {
-                width: clamp(root.width * 0.35, 280px, 420px);
+                width: root.up-next-width;
                 spacing: Theme.pad-sm;
 
                 Text {
                     text: @tr("Up Next");
-                    color: Theme.text;
+                    // Accent-tinted like the divider under it, but solid — a
+                    // heading carries it at full alpha where a hairline can't.
+                    // Row text below keeps the neutral list palette.
+                    color: Player.np-accent-bright;
                     font-size: Theme.font-size-lg;
                     font-weight: 600;
                 }
                 Rectangle {
                     height: 1px;
-                    background: Theme.border;
+                    // Accent-tinted like the stars and heart above. Weaker than
+                    // they are — it's a hairline, not a glyph, so it carries at
+                    // a lower alpha without turning into a stripe.
+                    background: Player.np-accent-bright.with-alpha(0.45);
                 }
 
                 // Shared list body — slide animation, outgoing-row

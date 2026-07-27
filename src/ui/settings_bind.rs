@@ -1,4 +1,5 @@
-//! Shared wiring for the audio-settings toggles.
+//! Shared wiring for the audio settings: the seed each installer reads at boot,
+//! and the change-handler each toggle installs.
 //!
 //! Every audio toggle in Settings and in the Now-Playing dialogs follows the same
 //! two-phase shape: apply the new value to the live Rodio backend *synchronously*
@@ -8,10 +9,28 @@
 //! warn from [`AppState::persist_blocking`] is the only report.
 //!
 //! That shape was open-coded once per toggle across the crossfade, `ReplayGain`
-//! and equalizer installers. This is the single copy.
+//! and equalizer installers, and the disk read each of those opens with was
+//! open-coded once per installer. These are the single copies of both.
 
 use crate::error::AppError;
+use crate::services::settings::{self, SettingsData};
 use crate::state::{AppState, PlaybackContext};
+
+/// Persisted settings for an installer to seed its global from, falling back to
+/// the inert defaults if the file is missing or unreadable.
+///
+/// Every audio installer opened with the same `match` over
+/// [`settings::read_settings`], each spelling out its own defaults in the error
+/// arm — which is both a copy of the `Default` impl and a second place for it to
+/// drift. Deriving from `SettingsData::default()` instead means the seed is
+/// computed one way whether the file loaded or not. `what` names the read in the
+/// log line.
+pub fn read_or_default(state: &AppState, what: &str) -> SettingsData {
+    settings::read_settings(&state.paths).unwrap_or_else(|e| {
+        log::warn!("read settings for {what}: {e}");
+        SettingsData::default()
+    })
+}
 
 /// Build the change-handler for a boolean audio setting: apply to the backend,
 /// then persist.

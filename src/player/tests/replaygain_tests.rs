@@ -1,18 +1,8 @@
 use super::*;
+use crate::player::tests::helpers::assert_approx as approx;
 
-/// Assert two linear gains are equal to within a tight tolerance.
-fn approx(a: f32, b: f32) {
-    assert!((a - b).abs() < 1e-4, "expected {b}, got {a}");
-}
-
-#[test]
-fn db_to_linear_reference_points() {
-    // 0 dB is unity; +6.02 dB ≈ ×2; -6.02 dB ≈ ×0.5; +20 dB = ×10.
-    approx(db_to_linear(0.0), 1.0);
-    approx(db_to_linear(6.020_6), 2.0);
-    approx(db_to_linear(-6.020_6), 0.5);
-    approx(db_to_linear(20.0), 10.0);
-}
+// `db_to_linear` itself is pinned in `dsp_tests` — these exercise what
+// `ReplayGain` builds on top of it.
 
 #[test]
 fn untagged_track_is_unity() {

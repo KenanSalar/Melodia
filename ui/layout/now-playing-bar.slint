@@ -68,8 +68,9 @@ export component NowPlayingBar inherits Rectangle {
         // intrinsic (full string) width and spills past the column. Same
         // pattern as the title cell in `track-list-row.slint`.
         //
-        // The whole cell acts as a button: clicking it opens the
-        // full-screen Now Playing view (`Nav.now-playing-open`). The
+        // The whole cell acts as a button: clicking it toggles the
+        // full-screen Now Playing view (`Nav.now-playing-open`), so a
+        // second click closes it just like the view's back button. The
         // `track-info-touch` TouchArea is declared last so it sits above
         // the artwork + text (neither of which has its own TouchArea). No
         // hover background — the affordance is a Material-3-expressive zoom
@@ -207,7 +208,7 @@ export component NowPlayingBar inherits Rectangle {
             track-info-touch := TouchArea {
                 mouse-cursor: Player.vm.has_track ? pointer : default;
                 enabled: Player.vm.has_track;
-                clicked => { Nav.now-playing-open = true; }
+                clicked => { Nav.now-playing-open = !Nav.now-playing-open; }
             }
         }
 

@@ -28,7 +28,7 @@ import { OverlayScrollbar } from "../components/overlay-scrollbar.slint";
 // Cross-tab nav: clicking an album/artist card stamps
 // `*Detail.origin-nav-index = NAV_SEARCH` synchronously *before*
 // flipping `Nav.selected-index` so the detail-view back arrow
-// returns here. Wiring lives in `src/ui/callbacks/search.rs`.
+// returns here. Wiring lives in `src/ui/callbacks/search/`.
 export component SearchView inherits Rectangle {
     // Debounce — 300 ms (Tauri parity). The SearchBar's `edited` bumps
     // `debounce-tick-pending`; the Timer fires `commit-search` after

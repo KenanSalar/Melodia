@@ -28,6 +28,7 @@ pub mod replaygain;
 pub mod scrobble;
 pub mod updates;
 pub mod view;
+pub mod visualizer;
 
 pub use appearance::{
     set_appearance, set_corner_radius, set_dynamic_color_style, set_match_unfocused_to_system_bg,
@@ -65,6 +66,7 @@ pub use view::{
     set_favorites_most_played_collapsed, set_last_detail_id, set_last_nav_index, set_locale,
     set_overflow_button, set_view_sort, snap_to_preset, update_view_columns,
 };
+pub use visualizer::{set_visualizer_enabled, set_visualizer_style};
 
 use crate::error::AppError;
 use crate::services::{self, settings::SettingsData, view_state::ViewStateData};

@@ -1,0 +1,65 @@
+import { Player, Visualizer } from "../../globals.slint";
+import { SpectrumBars } from "spectrum-bars.slint";
+import { WaveformTrace } from "waveform-trace.slint";
+
+// The Now-Playing visualizer: owns the strip's footprint and the one Timer that
+// drives whichever style is showing.
+//
+// The Timer lives here rather than in each style for a reason. Its `running`
+// expression below is a three-part gate that is easy to get subtly wrong, and
+// duplicating it per style would mean three chances to get it wrong. Styles are
+// pure render; this is the only driver.
+export component VisualizerStrip inherits Rectangle {
+    min-height: 56px;
+    max-height: 56px;
+    // The host column is `alignment: center`, and the strip must not grow into
+    // the space the cover and title need on a short window.
+    vertical-stretch: 0;
+
+    // Matched on the key, not on an index, so reordering the pickers can't
+    // repoint an existing install's saved style. `!=` rather than `== "bars"`
+    // makes bars the catch-all: a key from a newer build, or a hand-edited one,
+    // degrades to the default instead of drawing nothing. "mirrored" is the
+    // same bars under a different anchor, so it rides that branch too.
+    if Visualizer.style == "waveform": WaveformTrace { }
+    if Visualizer.style != "waveform": SpectrumBars {
+        centred: Visualizer.style == "mirrored";
+    }
+
+    // One shared Timer: it runs a full snapshot → analysis → property pass in
+    // Rust and is the only thing that reads the sample ring.
+    //
+    // The interval is per style, not shared. The bars want every frame — their
+    // decay is a smooth animation and 60 Hz is what makes it read as one. A
+    // trace doesn't: it has no animation to be smooth, so a high rate only makes
+    // it look frantic, and `foobar2000`'s oscilloscope ships capped at 20 Hz for
+    // exactly that reason. 30 Hz also thirds the trace's per-frame path string
+    // and the re-parse Slint does of it.
+    //
+    // `dormant` overrides both: nothing is being drawn and nothing is arriving,
+    // so the tick is only still here to watch for frames coming back — which it
+    // can do far more slowly than a visible strip needs. Half a second is the
+    // *worst* case for coming back to life, and only for a window that was
+    // covered rather than minimized: anything the OS reports clears `dormant`
+    // outright on the way in.
+    //
+    // `running` is deliberately not just `is_playing`. Pausing stops the audio
+    // tap but leaves the last window of samples in the ring, so freezing the
+    // Timer would strand the drawing on a stale shape. Instead the tick keeps
+    // firing past a pause — feeding the analyzers silence rather than the ring —
+    // until Rust reports everything has settled, and only then stops. A paused,
+    // decayed visualizer costs nothing. A window the OS told us is off screen
+    // takes the same route out through `window-shown`, so it falls before it
+    // stops rather than freezing mid-shape.
+    Timer {
+        interval: Visualizer.dormant ? 500ms
+            : Visualizer.style == "waveform" ? 33ms
+            : 16ms;
+        running: (Player.vm.is_playing && Visualizer.window-shown) || !Visualizer.idle;
+        triggered() => {
+            // The width goes with it because the trace's column count follows
+            // the strip rather than being a constant; the bars ignore it.
+            Visualizer.tick(Player.vm.is_playing, root.width / 1px);
+        }
+    }
+}

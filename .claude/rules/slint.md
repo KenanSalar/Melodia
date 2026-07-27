@@ -1,3 +1,12 @@
+---
+paths:
+  - ui/**/*.slint
+  - src/ui/**/*.rs
+  - src/boot/**/*.rs
+  - src/themes/**/*.rs
+  - build.rs
+---
+
 # Slint Best Practices
 
 ## Project Layout

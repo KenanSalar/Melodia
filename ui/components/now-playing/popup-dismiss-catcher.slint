@@ -1,0 +1,20 @@
+// Transparent catcher covering a whole PopupWindow.
+//
+// `close-on-click-outside` only fires for clicks truly *outside* the popup
+// rect, so a click on an empty region inside it — the gap between the menu and
+// flyout columns, the reserved space above a collapsed flyout — would otherwise
+// do nothing. This catches those.
+//
+// Declare it **first** inside the PopupWindow so the real rows, drawn on top,
+// win their own clicks. The host sizes it: a component's root binding can't
+// read `parent`.
+//
+//     pop := PopupWindow {
+//         PopupDismissCatcher {
+//             width: parent.width;
+//             height: parent.height;
+//             clicked => { root.dismiss(); }
+//         }
+//         /* columns */
+//     }
+export component PopupDismissCatcher inherits TouchArea { }

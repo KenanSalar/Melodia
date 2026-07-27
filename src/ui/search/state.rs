@@ -58,10 +58,11 @@ impl SearchUiState {
     }
 }
 
-/// Albums-strip tile size (px). The strip renders 160 px square cards,
-/// so 180 px keeps Skia's `image-fit: cover` mipmaps crisp without
-/// going up to the album grid's 448 px tier. Matches the Favorites
-/// Most-Played tier exactly so the two surfaces feel like siblings.
+/// Albums-strip tile size (px). The strip renders 160 px square cards, and
+/// `FemtoVG` minifies with plain bilinear (no mipmaps), so staying near the
+/// on-screen size keeps `image-fit: cover` clean without the album grid's
+/// 448 px tier. Matches the Favorites Most-Played tier so the two surfaces
+/// feel like siblings.
 pub(super) const ALBUM_STRIP_THUMB_SIZE: u32 = 180;
 
 /// Artists-strip tile size (px). Slightly larger than the albums tier

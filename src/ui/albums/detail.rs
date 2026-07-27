@@ -26,7 +26,7 @@ use crate::{AlbumDetail, AppWindow, NavEnterFrom, TrackListRow as UiTrackListRow
 
 // `apply_detail_artwork` (cover + hero-blur write) and
 // `replace_tracks_model` (in-place `tracks` `VecModel` swap) — see
-// `ui/detail_view.rs`.
+// `src/ui/detail_view.rs`.
 impl_detail_view_helpers!(artwork AlbumDetail);
 
 /// Fetch an album's header + track list and prewarm their cover

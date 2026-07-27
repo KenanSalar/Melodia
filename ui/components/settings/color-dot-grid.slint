@@ -61,7 +61,7 @@ component ColorDot inherits Rectangle {
 // as a rounded square instead of a circle). The host wires this from
 // `Settings.material-you-active`; the invariant that Material You is
 // always prepended at index 0 when active lives in
-// `src/ui/appearance.rs::accent_swatches_with_my`.
+// `src/ui/appearance/accent_picker.rs::accent_swatches_with_my`.
 export component ColorDotGrid inherits Rectangle {
     in property <[brush]> colors;
     in property <[string]> labels;

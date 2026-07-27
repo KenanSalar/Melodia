@@ -20,7 +20,6 @@
 use std::num::NonZeroUsize;
 use std::path::{Path, PathBuf};
 
-use image::ImageReader;
 use image::imageops::FilterType;
 use lru::LruCache;
 use material_colors::color::Argb;
@@ -33,6 +32,7 @@ use material_colors::scheme::variant::{
 use material_colors::score::Score;
 use slint::{Rgb8Pixel, SharedPixelBuffer};
 
+use crate::media::image_decode::decode_capped;
 use crate::themes::Palette;
 
 /// One of the seven Material 3 dynamic-colour scheme variants exposed by
@@ -120,37 +120,10 @@ const MATERIAL_YOU_MAX_SOURCE_DIM: u32 = 2048;
 /// `0xAARRGGBB` ARGB integer, or `None` on decode/score miss. **Blocking**
 /// — call from `tokio::task::spawn_blocking` only.
 pub fn extract_source_argb(artwork_path: &Path) -> Option<u32> {
-    let reader = match ImageReader::open(artwork_path) {
-        Ok(r) => r,
-        Err(e) => {
-            log::warn!(
-                "material_you: open artwork {}: {e}",
-                artwork_path.display()
-            );
-            return None;
-        }
-    };
-    let mut reader = match reader.with_guessed_format() {
-        Ok(r) => r,
-        Err(e) => {
-            log::warn!(
-                "material_you: guess format {}: {e}",
-                artwork_path.display()
-            );
-            return None;
-        }
-    };
-    let mut limits = image::Limits::default();
-    limits.max_image_width = Some(MATERIAL_YOU_MAX_SOURCE_DIM);
-    limits.max_image_height = Some(MATERIAL_YOU_MAX_SOURCE_DIM);
-    reader.limits(limits);
-    let decoded = match reader.decode() {
+    let decoded = match decode_capped(artwork_path, MATERIAL_YOU_MAX_SOURCE_DIM) {
         Ok(d) => d,
         Err(e) => {
-            log::warn!(
-                "material_you: decode {}: {e}",
-                artwork_path.display()
-            );
+            log::warn!("material_you: decode {}: {e}", artwork_path.display());
             return None;
         }
     };
@@ -217,6 +190,53 @@ pub fn extract_source_argb_from_rgb8(buf: &SharedPixelBuffer<Rgb8Pixel>) -> Opti
     let scored = Score::score(&result.color_to_count, Some(1), None, None);
     let best = scored.first()?;
     Some(argb_to_u32(*best))
+}
+
+/// Raise `argb` to at least `min_tone` HCT lightness, leaving hue and chroma
+/// alone; returns it unchanged when it is already that light.
+///
+/// This is the M3 way to make an arbitrary extracted colour legible on a known
+/// surface: tone *is* the contrast axis, so flooring it lifts a near-black
+/// artwork accent into view while keeping the colour recognisably the album's.
+/// A naive multiplicative brighten (Slint's `.brighter()`) can't do this — it
+/// scales HSV value, so anything near black stays near black.
+///
+/// Note the round-trip is gamut-mapped: at high tones sRGB can't hold the
+/// original chroma, so a saturated seed comes back a little less saturated.
+/// That's the correct trade — legibility is the point.
+///
+/// A `min_tone` outside the valid 0..=100 HCT range doesn't panic: `set_tone`
+/// forwards to the solver, which answers an out-of-range lightness with a plain
+/// greyscale `Argb::from_lstar`. Callers should still pass a sane tone.
+pub fn lift_to_min_tone(argb: u32, min_tone: f64) -> u32 {
+    let mut hct = Hct::new(Argb::from_u32(argb));
+    if hct.get_tone() >= min_tone {
+        return argb;
+    }
+    hct.set_tone(min_tone);
+    argb_to_u32(Argb::from(hct))
+}
+
+/// Drive `argb` to exactly `tone`, capping chroma at `max_chroma` and keeping
+/// the hue.
+///
+/// The sibling of [`lift_to_min_tone`] for surfaces that want the source
+/// colour's *identity* but not its saturation — Now-Playing body text, which
+/// should read as near-white carrying a whisper of the album's warmth rather
+/// than as coloured type. Tone is set unconditionally (not floored): the
+/// caller has already solved it for a contrast target, so landing above it
+/// would be as wrong as landing below.
+///
+/// Order matters — chroma is capped *before* the tone is set, because the
+/// solver gamut-maps against the chroma it is given and a saturated seed
+/// pushed to a high tone comes back desaturated anyway.
+pub fn to_tone_capped_chroma(argb: u32, tone: f64, max_chroma: f64) -> u32 {
+    let mut hct = Hct::new(Argb::from_u32(argb));
+    if hct.get_chroma() > max_chroma {
+        hct.set_chroma(max_chroma);
+    }
+    hct.set_tone(tone);
+    argb_to_u32(Argb::from(hct))
 }
 
 /// Build a `DynamicScheme` of `style` × `is_dark` (contrast = default)
