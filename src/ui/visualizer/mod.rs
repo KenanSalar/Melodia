@@ -231,18 +231,34 @@ fn publish_style(global: &Visualizer, index: usize) {
 /// destroys the view, so unlike a hide-to-tray there is no decay pass to reach
 /// rest on its own.
 ///
-/// The trace's resting figure goes through its real writer rather than a
-/// literal, so it is exactly what a decay settles to; two columns is the
-/// narrowest input that still describes a span.
+/// Both halves of the drawing are built by the same code the live path uses, so
+/// neither can drift from what a decay actually lands on; the tests pin that.
+/// The property writes themselves are not covered — reaching a `Visualizer`
+/// global means instantiating `AppWindow`, and with `renderer-software` off
+/// that needs a hand-stubbed `Platform`/`WindowAdapter`/`Renderer` for the whole
+/// component tree.
 fn publish_resting(global: &Visualizer, model: &VecModel<f32>) {
+    rest_bars(model);
+    global.set_wave_path(SharedString::from(resting_wave_path().as_str()));
+    global.set_idle(RESTING_IDLE);
+    global.set_dormant(RESTING_DORMANT);
+}
+
+/// Put every band back at the level the model was seeded with. The strip floors
+/// each one at a visible dot, so rest for the bars is the seed, not a height.
+fn rest_bars(model: &VecModel<f32>) {
     for band in 0..model.row_count() {
         model.set_row_data(band, 0.0);
     }
-    let mut resting = String::new();
-    waveform::write_path_commands(&[waveform::Column::default(); 2], &mut resting);
-    global.set_wave_path(SharedString::from(resting.as_str()));
-    global.set_idle(RESTING_IDLE);
-    global.set_dormant(RESTING_DORMANT);
+}
+
+/// The trace's resting figure, through its real writer rather than as a literal
+/// so it is exactly what a decay settles to. Two columns is the narrowest input
+/// that still describes a span.
+fn resting_wave_path() -> String {
+    let mut path = String::new();
+    waveform::write_path_commands(&[waveform::Column::default(); 2], &mut path);
+    path
 }
 
 pub fn install_visualizer(ui: &AppWindow, state: &AppState) {

@@ -14,6 +14,12 @@
 //!
 //! [`FrameWatch`] is here for the opposite reason — it is ordinary logic, but the
 //! only way to reach it in the running app is to stop painting the window.
+//!
+//! The resting drawing is here for a third reason again: it is what a strip
+//! remounting over a paused player comes up on, and that strip never ticks, so
+//! nothing downstream would correct a wrong one. Its two halves are pure and
+//! covered below; the property writes wrapping them are not, since a
+//! `Visualizer` global only exists on an `AppWindow`.
 
 use super::*;
 use crate::services::settings::{DEFAULT_VIZ_STYLE, VisualizerFlags};
@@ -58,6 +64,90 @@ fn the_view_flyout_renders_the_shared_name_list() {
         VIZ_FLYOUT.contains("for name[i] in VizStylePresets.viz-style-names:"),
         "the Now-Playing style flyout no longer renders the shared name list"
     );
+}
+
+/// The y coordinate of every vertex a path visits, in order.
+///
+/// The commands are `M{x} {y}` then ` L{x} {y}` … then a bare `Z` stuck to the
+/// last one, so the y values are exactly the tokens that don't open with a
+/// command letter.
+fn path_y_values(path: &str) -> Vec<&str> {
+    path.split_whitespace()
+        .filter(|token| !token.starts_with(['M', 'L']))
+        .map(|token| token.trim_end_matches('Z'))
+        .collect()
+}
+
+#[test]
+fn the_resting_figure_is_what_a_decayed_trace_settles_to() {
+    // `resting_wave_path` claims to be where a decay lands, and builds itself
+    // through the real writer so it can be. Nothing checked the claim. Drive a
+    // real analyzer from a full-scale trace down to rest and compare.
+    //
+    // Not the strings: the two draw a different number of columns on purpose —
+    // the live trace follows the strip's width, the seed uses the narrowest
+    // input that still describes a span. What has to match is the *figure*, so
+    // the comparison is over the distinct y coordinates the columns land on.
+    const RATE: u32 = 44_100;
+    const COLUMNS: usize = 128;
+
+    let mut analyzer = WaveformAnalyzer::new(RING_CAP, MAX_COLUMNS);
+    for (i, sample) in analyzer.window_mut(RATE).iter_mut().enumerate() {
+        *sample = if i % 2 == 0 { 1.0 } else { -1.0 };
+    }
+    let loud = analyzer.analyze(true, RATE, COLUMNS);
+    let mut live = String::new();
+    waveform::write_path_commands(loud, &mut live);
+
+    let resting = resting_wave_path();
+    let mut settled: Vec<&str> = path_y_values(&live);
+    settled.dedup();
+    assert_ne!(
+        settled,
+        path_y_values(&resting),
+        "a full-scale trace has to start somewhere other than rest, or this proves nothing"
+    );
+
+    // Comfortably past the point 0.8-per-frame takes a full-scale column under
+    // the drawn floor.
+    let mut decayed = String::new();
+    for _ in 0..200 {
+        waveform::write_path_commands(analyzer.analyze(false, RATE, COLUMNS), &mut decayed);
+    }
+
+    let mut settled = path_y_values(&decayed);
+    settled.dedup();
+    let mut seeded = path_y_values(&resting);
+    seeded.dedup();
+    assert_eq!(
+        settled, seeded,
+        "the seeded resting trace is no longer the figure a decay settles to"
+    );
+}
+
+#[test]
+fn resting_bars_put_every_band_back_where_the_model_was_seeded() {
+    // The bars' rest is the seed `install_visualizer` builds the model with —
+    // the strip floors each band at a dot, so there is no drawn height to
+    // restore. Spelled out here as its own literal rather than shared with
+    // `rest_bars`, so the two can actually disagree.
+    const SEEDED_LEVEL: f32 = 0.0;
+
+    let model = VecModel::from(vec![SEEDED_LEVEL; NUM_BANDS]);
+    for band in 0..NUM_BANDS {
+        model.set_row_data(band, 0.9);
+    }
+    rest_bars(&model);
+
+    // Bit patterns rather than `==`: this is an exact-restore claim, and the
+    // crate denies a loose float comparison anyway. Reported as the first band
+    // that strayed — sixty-four levels side by side say nothing on failure.
+    let strayed = model
+        .iter()
+        .enumerate()
+        .find(|(_, level)| level.to_bits() != SEEDED_LEVEL.to_bits());
+    assert!(strayed.is_none(), "band left off the seed: {strayed:?}");
+    assert_eq!(model.row_count(), NUM_BANDS, "resting resized the model");
 }
 
 #[test]
