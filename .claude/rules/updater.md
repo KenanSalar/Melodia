@@ -40,5 +40,5 @@ break it from `main.rs` without ever opening this file.
 
 ## Release matrix
 
-- **Build provenance attestation.** `release.yml` runs `actions/attest-build-provenance@v2` per matrix slot (needs `id-token: write` + `attestations: write`). Verify: `gh attestation verify <file> --repo KenanSalar/Melodia`.
+- **Build provenance attestation.** `release.yml` runs `actions/attest-build-provenance` (v4, SHA-pinned) per matrix slot (needs `id-token: write` + `attestations: write`). Verify: `gh attestation verify <file> --repo KenanSalar/Melodia`. Upstream now calls v4 a thin wrapper over `actions/attest` and points new work at that directly — worth folding in next time this line is touched.
 - **aarch64 builds alongside x86_64** (Linux + Windows). 10 `release.yml` matrix slots: 5 × x86_64 + 5 × aarch64 (`ubuntu-24.04-arm`/`windows-11-arm`). `build-latest-json.py`'s `PLATFORM_PATTERNS` lists **aarch64 first** — cargo-deb `_arm64.deb` has no leading-arch token. Client `target::current_target_key()` `cfg!`-branched per `(target_os, target_arch)`. `build-{appimage,rpm}.sh` read `ARCH` (default `uname -m`) with per-arch pinned `linuxdeploy` SHA256s — bump in lockstep.

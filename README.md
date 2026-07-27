@@ -356,12 +356,13 @@ Contributions are welcome. Before opening a pull request:
 - Run `cargo test` and keep it green.
 - Follow the existing [Conventional Commits](https://www.conventionalcommits.org/)
   style used in the git history.
-- Open pull requests against the `main` branch.
+- Open pull requests against the `dev` branch. (`main` only accepts merges from
+  `dev` or a `hotfix/*` branch.)
 
 Every pull request runs the **PR Validation** workflow — `clippy` (with
-`-D warnings`) and the full test suite under coverage — and the
-`pr-validation` check must pass before merging. Test coverage from the latest
-run is published to GitHub Pages at
+`-D warnings`) and the full test suite — and the `pr-validation` check must pass
+before merging. Documentation-only changes skip both jobs. Coverage is measured
+separately on each merge to `dev` and published to GitHub Pages at
 [kenansalar.github.io/Melodia](https://kenansalar.github.io/Melodia/).
 
 ## License
