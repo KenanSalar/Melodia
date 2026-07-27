@@ -24,7 +24,12 @@ set -euo pipefail
 
 # Repo root, regardless of where the script is invoked from.
 readonly ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-readonly SRC="$ROOT/ui/assets/icons"
+# The two logo variants live apart: the with-background one is packaging
+# artwork (embedded by `desktop_integration.rs`, shipped by the RPM/DEB/
+# AppImage), the without-background one is a UI asset the custom titlebar
+# `@image-url`s, so it belongs to the `melodia-ui` crate.
+readonly BRAND_SRC="$ROOT/assets/icons"
+readonly UI_SRC="$ROOT/melodia-ui/ui/assets/icons"
 readonly OUT="$ROOT/assets/discord"
 
 # Brand tokens (Catppuccin Mocha): base background + the logo's blue->teal
@@ -40,13 +45,13 @@ mkdir -p "$OUT"
 
 # app-icon.png — the branded tile (rounded, transparent corners) flattened onto
 # the base colour so it's a full 1024x1024 square (Discord rounds it on display).
-inkscape "$SRC/logo-with-background.svg" \
+inkscape "$BRAND_SRC/logo-with-background.svg" \
   --export-type=png --export-area-page \
   --export-filename="$TMP/tile.png" -w 1024 -h 1024 >/dev/null 2>&1
 magick -size 1024x1024 "xc:$BG" "$TMP/tile.png" -gravity center -composite "$OUT/app-icon.png"
 
 # cover.png — the backdrop-free logo centred on a 16:9 base-colour canvas.
-inkscape "$SRC/logo-without-background.svg" \
+inkscape "$UI_SRC/logo-without-background.svg" \
   --export-type=png --export-area-page \
   --export-filename="$TMP/logo.png" -w 576 -h 576 >/dev/null 2>&1
 magick -size 1024x576 "xc:$BG" "$TMP/logo.png" -gravity center -composite "$OUT/cover.png"

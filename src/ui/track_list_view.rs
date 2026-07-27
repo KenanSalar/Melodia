@@ -7,7 +7,7 @@
 //! hydrate-on-startup / snapshot-on-shutdown flow generically, so adding a
 //! new view is a matter of:
 //!
-//! 1. Declaring the new global in `ui/globals.slint` mirroring `Tracks`.
+//! 1. Declaring the new global in `melodia-ui/ui/globals.slint` mirroring `Tracks`.
 //! 2. Adding a `view_id::*` constant and one
 //!    [`impl_track_list_column_state!`] invocation below.
 //! 3. Calling the generated `hydrate_*_view` at startup and

@@ -1,6 +1,6 @@
 //! Edit-Track-Information dialog callbacks.
 //!
-//! The `TagEditor` global (`ui/globals.slint`) is Rust-owned: `request-edit`
+//! The `TagEditor` global (`melodia-ui/ui/globals.slint`) is Rust-owned: `request-edit`
 //! fetches the selected rows and fills the fields + cover, `pick-artwork` /
 //! `remove-artwork` drive the cover panel, and `commit` (fired by the
 //! `Dialog.accepted` dispatcher) diffs the form against the populate-time

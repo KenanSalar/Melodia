@@ -74,7 +74,7 @@ impl Default for ViewStateData {
     }
 }
 
-/// Matches the `Nav.selected-index` default in `ui/globals.slint`
+/// Matches the `Nav.selected-index` default in `melodia-ui/ui/globals.slint`
 /// (3 = Tracks). Fresh installs without a `views.json` land on the
 /// Tracks view.
 fn default_last_nav_index() -> i32 {

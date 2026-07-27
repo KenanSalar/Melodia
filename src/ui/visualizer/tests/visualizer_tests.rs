@@ -24,13 +24,16 @@
 use super::*;
 use crate::services::settings::{DEFAULT_VIZ_STYLE, VisualizerFlags};
 
-const PLAYBACK_SECTION: &str = include_str!("../../../../ui/views/settings/playback-section.slint");
+const PLAYBACK_SECTION: &str =
+    include_str!("../../../../melodia-ui/ui/views/settings/playback-section.slint");
 const FLYOUT_PRESETS: &str =
-    include_str!("../../../../ui/components/now-playing/flyout-presets.slint");
-const STRIP: &str = include_str!("../../../../ui/components/now-playing/visualizer-strip.slint");
-const SPECTRUM_BARS: &str = include_str!("../../../../ui/components/now-playing/spectrum-bars.slint");
+    include_str!("../../../../melodia-ui/ui/components/now-playing/flyout-presets.slint");
+const STRIP: &str =
+    include_str!("../../../../melodia-ui/ui/components/now-playing/visualizer-strip.slint");
+const SPECTRUM_BARS: &str =
+    include_str!("../../../../melodia-ui/ui/components/now-playing/spectrum-bars.slint");
 const VIZ_FLYOUT: &str =
-    include_str!("../../../../ui/components/now-playing/visualizer-flyout.slint");
+    include_str!("../../../../melodia-ui/ui/components/now-playing/visualizer-flyout.slint");
 
 #[test]
 fn the_picker_names_one_style_per_key() {

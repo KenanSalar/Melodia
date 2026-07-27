@@ -7,9 +7,9 @@ paths:
   - src/tasks/**/*.rs
   - src/ui/callbacks/playlists/**/*.rs
   - migrations/**/*.sql
-  - ui/components/dialog/smart-playlist-editor-body.slint
-  - ui/components/dialog/tag-editor-body.slint
-  - ui/components/star-rating.slint
+  - melodia-ui/ui/components/dialog/smart-playlist-editor-body.slint
+  - melodia-ui/ui/components/dialog/tag-editor-body.slint
+  - melodia-ui/ui/components/star-rating.slint
 ---
 
 # The library — scan, projections, and the write-through paths
@@ -34,7 +34,7 @@ virtual membership. The per-crate mechanics live elsewhere and load on the same 
 
 ## Ratings
 
-- **Star ratings mirror the favorite path.** Inert `tracks.rating` (0–5) surfaced via a **hover-revealed** `StarRating` (`ui/components/star-rating.slint`) inside the track-row Title cell — no rating column, no in-table sort. Rides on `TrackListRow` + `TrackSummary`. Writes via `library::ratings::{set_rating, set_current_rating}` (clamped 0–5), mirroring `favorites::{set_favorite, toggle_current_favorite}` — including the `sync_current_track_*` helper (over `player::state::sync_current_track_if_in`) that flips the playing track's cached field + emits so the NP star updates from a list-row edit (re-checks the id under the emit lock, safe against a mid-write track change). Rating **never changes list membership**, so every surface is optimistic (`flip_rating`/`apply_row_rating`, detail siblings), wired via `wire_row_flag!` (Search excluded on purpose, stays non-optimistic). NP parity via `wire_now_playing_rating`.
+- **Star ratings mirror the favorite path.** Inert `tracks.rating` (0–5) surfaced via a **hover-revealed** `StarRating` (`melodia-ui/ui/components/star-rating.slint`) inside the track-row Title cell — no rating column, no in-table sort. Rides on `TrackListRow` + `TrackSummary`. Writes via `library::ratings::{set_rating, set_current_rating}` (clamped 0–5), mirroring `favorites::{set_favorite, toggle_current_favorite}` — including the `sync_current_track_*` helper (over `player::state::sync_current_track_if_in`) that flips the playing track's cached field + emits so the NP star updates from a list-row edit (re-checks the id under the emit lock, safe against a mid-write track change). Rating **never changes list membership**, so every surface is optimistic (`flip_rating`/`apply_row_rating`, detail siblings), wired via `wire_row_flag!` (Search excluded on purpose, stays non-optimistic). NP parity via `wire_now_playing_rating`.
 
 ## Write-through to files
 

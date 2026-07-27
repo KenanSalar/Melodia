@@ -5,7 +5,7 @@ paths:
   - src/media/deezer.rs
   - src/media/itunes.rs
   - src/ui/discord_settings.rs
-  - ui/views/settings/discord-section.slint
+  - melodia-ui/ui/views/settings/discord-section.slint
 ---
 
 # Discord Rich Presence

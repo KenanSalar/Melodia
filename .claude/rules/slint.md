@@ -1,6 +1,6 @@
 ---
 paths:
-  - ui/**/*.slint
+  - melodia-ui/ui/**/*.slint
   - src/ui/**/*.rs
   - src/boot/**/*.rs
   - src/themes/**/*.rs
@@ -11,8 +11,8 @@ paths:
 
 ## Project Layout
 
-- Use `.slint` files compiled via `melodia-ui/build.rs` (`slint_build::compile_with_config("../ui/app-window.slint", …)`) — **do not** use the `slint::slint!{}` macro outside of toy demos. Files give you syntax highlighting, partial rebuilds, and proper diagnostics.
-- One root component per app, additional components per file. Group by folder: `ui/layout/`, `ui/views/`, `ui/components/`.
+- Use `.slint` files compiled via `melodia-ui/build.rs` (`slint_build::compile_with_config("ui/app-window.slint", …)`) — **do not** use the `slint::slint!{}` macro outside of toy demos. Files give you syntax highlighting, partial rebuilds, and proper diagnostics. The whole tree lives inside that crate, so those paths are manifest-relative, not repo-relative.
+- One root component per app, additional components per file. Group by folder: `melodia-ui/ui/layout/`, `.../views/`, `.../components/`.
 - A single `theme.slint` global holds design tokens (brushes, sizes, durations) — every other component imports `Theme` and reads from it.
 - Mirror Rust struct definitions used at the boundary in a `models.slint` file (`export struct TrackRow { … }`); both sides must agree exactly on field names and types.
 
@@ -116,7 +116,7 @@ paths:
 - **Images at compile time**: `Image { source: @image-url("assets/icons/play.svg"); }` — bakes the asset into the binary, no I/O at runtime.
 - **Images at runtime**: `slint::Image::load_from_path(path)` (e.g. for album artwork on disk) and assign to an `Image`'s `source` property.
 - Use SVGs for icons — they scale, take less RAM than rasterized variants, and tree-shake naturally per file.
-- **Fonts**: bundle UI font(s) under `ui/assets/fonts/`. Register at app startup with `slint::FontFile::load_from_path("…")` (or `load_from_data` for embedded fonts) so `default-font-family: "Inter";` resolves.
+- **Fonts**: bundle UI font(s) under `melodia-ui/ui/assets/fonts/`. Register at app startup with `slint::FontFile::load_from_path("…")` (or `load_from_data` for embedded fonts) so `default-font-family: "Inter";` resolves.
 
 ## Animations & Performance
 

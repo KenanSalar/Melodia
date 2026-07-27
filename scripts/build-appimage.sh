@@ -25,7 +25,14 @@ cd "$REPO_ROOT"
 BINARY="${BINARY:-$REPO_ROOT/target/release/Melodia}"
 [[ -f "$BINARY" ]] || { echo "ERROR: $BINARY not found. Run 'cargo build --release' first."; exit 1; }
 
-VERSION="$(awk -F\" '/^version = / { print $2; exit }' Cargo.toml)"
+# Both packages inherit the version from `[workspace.package]`, so `[package]`
+# reads `version.workspace = true` and carries no literal. Anchor on the table
+# rather than taking the file's first `version = ` line.
+VERSION="$(awk -F'"' '
+  /^\[/                  { in_ws = ($0 == "[workspace.package]") }
+  in_ws && /^version = / { print $2; exit }
+' Cargo.toml)"
+[[ -n "$VERSION" ]] || { echo "ERROR: no version in Cargo.toml's [workspace.package]"; exit 1; }
 ARCH="${ARCH:-$(uname -m)}"
 case "$ARCH" in
   x86_64|aarch64) ;;
@@ -105,7 +112,7 @@ chmod +x "$APPDIR/usr/bin/Melodia"
 # alt-tab thumbnail icon where there's no app chrome behind the glyph.
 # The without-background variant is reserved for the in-app custom
 # titlebar where the window mantle already provides the disc.
-cp "$REPO_ROOT/ui/assets/icons/logo-with-background.svg" "$APPDIR/melodia.svg"
+cp "$REPO_ROOT/assets/icons/logo-with-background.svg" "$APPDIR/melodia.svg"
 
 # Body kept in lockstep with `scripts/build-rpm.sh` + `Cargo.toml`'s
 # DEB asset `scripts/Melodia.desktop` + `assets/desktop/Melodia.desktop.tmpl`.

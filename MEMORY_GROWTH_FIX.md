@@ -143,7 +143,7 @@ and its 600 px canvas is above the derivative size.
 
 ## Phase 4 — Release the now-playing image slots
 
-`ui/globals.slint:43-45` states outright that `np-cover-{a,b}` / `blur-img-{a,b}` are never
+`melodia-ui/ui/globals.slint:43-45` states outright that `np-cover-{a,b}` / `blur-img-{a,b}` are never
 cleared, and `write_crossfade_slot` (`ui/now_playing/mod.rs:336-365`) only sets
 `has_image = false` on the `None` branch. That pins two covers + two blurs (~1.06 MiB CPU
 plus their FemtoVG textures) after the view closes, surviving `NowPlayingArtwork::clear()`
@@ -183,7 +183,7 @@ Everything below was read directly during investigation, not recalled.
 `src/tasks/rss_sampler.rs` · `src/media/artwork.rs` (whole file) ·
 `src/media/{cover_thumbs,image_decode}.rs` · `src/ui/now_playing_artwork.rs` ·
 `src/ui/detail_artwork.rs` · `src/ui/bridge.rs` · `src/ui/now_playing/{mod,track_change,up_next}.rs` ·
-`ui/globals.slint:43-45` · `src/ui/callbacks/macros.rs:146-158` ·
+`melodia-ui/ui/globals.slint:43-45` · `src/ui/callbacks/macros.rs:146-158` ·
 `src/tasks/material_you.rs` · `src/player/{state,handlers,actions,rodio_backend,decks,equalizer,replaygain,visualizer,spectrum}.rs` ·
 `src/services/scrobble/queue.rs` · `Cargo.toml` · `git` branch topology and merge history.
 

@@ -52,7 +52,7 @@ use crate::AppWindow;
 use crate::services::settings::SettingsData;
 
 /// Lower bound for restored window size, mirroring `min-width` /
-/// `min-height` in `ui/app-window.slint`. Guards against a corrupt
+/// `min-height` in `melodia-ui/ui/app-window.slint`. Guards against a corrupt
 /// `settings.json` producing a 0×0 window.
 const MIN_RESTORE_WIDTH: f64 = 640.0;
 const MIN_RESTORE_HEIGHT: f64 = 420.0;

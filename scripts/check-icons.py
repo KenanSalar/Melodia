@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Drift guard for the subsetted Material Symbols faces.
 
-The bundled icon TTFs under `ui/assets/fonts/` are trimmed to exactly the icons in
+The bundled icon TTFs under `melodia-ui/ui/assets/fonts/` are trimmed to exactly the icons in
 `scripts/icons.txt` (see `subset-icon-fonts.sh`). An icon used in code but absent
 from that list renders as a blank box. This script catches that drift:
 
@@ -28,8 +28,9 @@ from fontTools.ttLib import TTFont
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ICONS_TXT = os.path.join(ROOT, "scripts", "icons.txt")
 SRC = os.path.join(ROOT, "scripts", "fonts-src", "MaterialSymbolsRounded.ttf")
-OUT_OUTLINED = os.path.join(ROOT, "ui", "assets", "fonts", "MaterialSymbolsRounded.ttf")
-OUT_FILLED = os.path.join(ROOT, "ui", "assets", "fonts", "MaterialSymbolsRoundedFilled.ttf")
+UI_DIR = os.path.join(ROOT, "melodia-ui", "ui")
+OUT_OUTLINED = os.path.join(UI_DIR, "assets", "fonts", "MaterialSymbolsRounded.ttf")
+OUT_FILLED = os.path.join(UI_DIR, "assets", "fonts", "MaterialSymbolsRoundedFilled.ttf")
 
 TOKEN = re.compile(r'"([a-z][a-z0-9_]*)"')
 # Sinks that carry an icon ligature name: MaterialIcon `name`, wrapper `icon`/
@@ -80,8 +81,11 @@ def main():
     listed = {l.strip() for l in open(ICONS_TXT) if l.strip()}
 
     # Gather every string literal, split by icon-context vs. anywhere.
+    sources = glob.glob(os.path.join(UI_DIR, "**", "*.slint"), recursive=True)
+    if not sources:
+        sys.exit(f"ERROR: no .slint sources under {UI_DIR} — coverage would pass vacuously")
     in_sink, anywhere = set(), set()
-    for fp in glob.glob(os.path.join(ROOT, "ui", "**", "*.slint"), recursive=True):
+    for fp in sources:
         txt = open(fp).read()
         anywhere.update(TOKEN.findall(txt))
         for m in SINK.finditer(txt):

@@ -39,7 +39,7 @@ use crate::{
 
 const HISTORY_CAP: usize = 24;
 
-// Sidebar indices (kept local — mirrors `ui/layout/sidebar.slint` and the
+// Sidebar indices (kept local — mirrors `melodia-ui/ui/layout/sidebar.slint` and the
 // constants in `callbacks/cross_tab_nav.rs`). Only the four sections that
 // carry a detail view need names.
 const NAV_ALBUMS: i32 = 4;

@@ -1,16 +1,16 @@
 ---
 paths:
   - src/ui/visualizer/**/*.rs
-  - ui/views/now-playing-view.slint
-  - ui/views/settings/playback-section.slint
-  - ui/components/now-playing/visualizer-strip.slint
-  - ui/components/now-playing/visualizer-flyout.slint
-  - ui/components/now-playing/spectrum-bars.slint
-  - ui/components/now-playing/waveform-trace.slint
-  - ui/components/now-playing/view-menu.slint
-  - ui/components/now-playing/overflow-menu.slint
-  - ui/components/now-playing/menu-surface.slint
-  - ui/components/now-playing/flyout-presets.slint
+  - melodia-ui/ui/views/now-playing-view.slint
+  - melodia-ui/ui/views/settings/playback-section.slint
+  - melodia-ui/ui/components/now-playing/visualizer-strip.slint
+  - melodia-ui/ui/components/now-playing/visualizer-flyout.slint
+  - melodia-ui/ui/components/now-playing/spectrum-bars.slint
+  - melodia-ui/ui/components/now-playing/waveform-trace.slint
+  - melodia-ui/ui/components/now-playing/view-menu.slint
+  - melodia-ui/ui/components/now-playing/overflow-menu.slint
+  - melodia-ui/ui/components/now-playing/menu-surface.slint
+  - melodia-ui/ui/components/now-playing/flyout-presets.slint
 ---
 
 # The Now-Playing visualizer — UI half
@@ -21,7 +21,7 @@ themselves in their `//!` docs, and what spans them is `src/player/CLAUDE.md`.
 
 This is a rule rather than a `CLAUDE.md` beside the code because the subject isn't
 a directory: the Rust is `src/ui/visualizer/`, the strip and both pickers are
-`.slint` under `ui/`, and the tap is in `src/player/`. A per-directory file loads
+`.slint` under `melodia-ui/ui/`, and the tap is in `src/player/`. A per-directory file loads
 only for reads under its own directory, so it would reach one of the three and
 silently miss the rest.
 

@@ -4,7 +4,7 @@
 //! mixed-results page composed of:
 //!
 //! * Hero — centered `SearchBar` (autofocus). Each keystroke bumps a
-//!   debounce tick; a 300 ms Timer in `ui/views/search-view.slint` then
+//!   debounce tick; a 300 ms Timer in `melodia-ui/ui/views/search-view.slint` then
 //!   fires `commit-search`, which calls [`fetch::kick_search`] to run
 //!   the FTS5 + LIKE query via `library::search::search_all` on the
 //!   read pool.

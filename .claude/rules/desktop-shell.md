@@ -10,11 +10,11 @@ paths:
   - src/main.rs
   - src/shutdown.rs
   - src/boot/**/*.rs
-  - ui/app-window.slint
-  - ui/components/custom-titlebar.slint
-  - ui/components/macos-titlebar-cluster.slint
-  - ui/components/macos-traffic-light.slint
-  - ui/views/settings/window-chrome-section.slint
+  - melodia-ui/ui/app-window.slint
+  - melodia-ui/ui/components/custom-titlebar.slint
+  - melodia-ui/ui/components/macos-titlebar-cluster.slint
+  - melodia-ui/ui/components/macos-traffic-light.slint
+  - melodia-ui/ui/views/settings/window-chrome-section.slint
 ---
 
 # The desktop shell — window chrome, tray, media keys
@@ -37,7 +37,7 @@ at all on at least one platform.
 ## Tray and media keys
 
 - **OS media controls** — souvlaki 0.8. Bounded `mpsc` (cap 32) decouples callback thread from `PlayerState`; `EventSink` trait decouples from Slint. **Windows SMTC deferred** — souvlaki panics on null `HWND` and no OS window exists at `AppState::init`, so `init_media_controls()` leaves Windows inert. `main()` posts a one-shot `invoke_from_event_loop` post-show that grabs `HWND` + calls `MediaControlsHandle::attach_smtc`; newly-attached returns `true`, triggering a no-op `with_state_emit` to flush playback. Linux MPRIS / macOS MediaPlayer attach eagerly. `event_tx` retained Windows-only for late rewire.
-- **System tray** — `src/services/tray/` cfg-split: Linux `ksni`; Win/mac `tray-icon 0.24`. Façade `mod.rs` (`TrayAction`, `TraySnapshot`, embedded `tray.png`, `init_tray`). `ui/tray_bridge.rs`: bounded `mpsc<TrayAction>` → one task — playback reuses souvlaki `EventSink`; `ShowHideWindow`/`Quit` hop UI via `invoke_from_event_loop`; `sinks.view_model` subscriber pushes tooltip + play/pause label. Linux eager; **Win/mac deferred**, dropped by `tray_bridge::shutdown()` pre-`process::exit` or it ghosts. No SNI host → `init_tray` `None`/`false`; tray-less still usable. **Opt-in** `TrayFlags.enabled` (default off): `main.rs` gates `tray_bridge::install`. Restart-gated via `restart-tray` `Dialog` → `WindowChrome.restart-tray()` → `controls.rs::on_restart_tray` (`library::window::set_tray_enabled` + `RESPAWN_AFTER_EXIT`). **Close-to-tray** `TrayFlags.close_to_tray` (default off): Slint `Window::hide/show` on `should_hide_to_tray()` — gated on setting AND active tray; `SettingRow.disabled` when `Settings.tray-active` false. Hide→show snapshots into `SAVED_WINDOW_GEOM`; re-show re-asserts via self-rescheduling 16 ms timer (`reschedule_geometry_restore`, cap `RESTORE_ATTEMPTS`). Tray labels English-only. `WINDOW_VISIBLE` atomic shadows visibility (`is_visible()` is `None` on Wayland).
+- **System tray** — `src/services/tray/` cfg-split: Linux `ksni`; Win/mac `tray-icon 0.24`. Façade `mod.rs` (`TrayAction`, `TraySnapshot`, embedded `tray.png`, `init_tray`). `src/ui/tray_bridge.rs`: bounded `mpsc<TrayAction>` → one task — playback reuses souvlaki `EventSink`; `ShowHideWindow`/`Quit` hop UI via `invoke_from_event_loop`; `sinks.view_model` subscriber pushes tooltip + play/pause label. Linux eager; **Win/mac deferred**, dropped by `tray_bridge::shutdown()` pre-`process::exit` or it ghosts. No SNI host → `init_tray` `None`/`false`; tray-less still usable. **Opt-in** `TrayFlags.enabled` (default off): `main.rs` gates `tray_bridge::install`. Restart-gated via `restart-tray` `Dialog` → `WindowChrome.restart-tray()` → `controls.rs::on_restart_tray` (`library::window::set_tray_enabled` + `RESPAWN_AFTER_EXIT`). **Close-to-tray** `TrayFlags.close_to_tray` (default off): Slint `Window::hide/show` on `should_hide_to_tray()` — gated on setting AND active tray; `SettingRow.disabled` when `Settings.tray-active` false. Hide→show snapshots into `SAVED_WINDOW_GEOM`; re-show re-asserts via self-rescheduling 16 ms timer (`reschedule_geometry_restore`, cap `RESTORE_ATTEMPTS`). Tray labels English-only. `WINDOW_VISIBLE` atomic shadows visibility (`is_visible()` is `None` on Wayland).
 
 ## Shutdown
 

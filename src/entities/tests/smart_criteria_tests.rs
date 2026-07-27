@@ -170,7 +170,7 @@ fn slint_dropdown_arrays_match_rust_editor_order_lengths() {
     // other compiles and mislabels every dropdown row past the drift point, so
     // pin it here instead of relying on the `.slint`'s count comments.
     const EDITOR: &str =
-        include_str!("../../../ui/components/dialog/smart-playlist-editor-body.slint");
+        include_str!("../../../melodia-ui/ui/components/dialog/smart-playlist-editor-body.slint");
 
     // `@tr(` occurrences inside `property <[string]> <name>: [ … ];`. `None`
     // when the array is renamed or removed, which fails the `assert_eq!` loudly.

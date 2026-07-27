@@ -40,7 +40,7 @@ const DESKTOP_TEMPLATE: &str = include_str!("../../assets/desktop/Melodia.deskto
 /// titlebar uses the without-background variant because the window
 /// mantle already provides the disc). Matches the file shipped by
 /// `scripts/install-linux.sh` and `scripts/build-rpm.sh`.
-const ICON_SVG: &[u8] = include_bytes!("../../ui/assets/icons/logo-with-background.svg");
+const ICON_SVG: &[u8] = include_bytes!("../../assets/icons/logo-with-background.svg");
 
 /// `AppStream` metainfo. Deployed to `~/.local/share/metainfo/` so a
 /// per-user tarball install shows up in software centres (KDE Discover

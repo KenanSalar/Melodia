@@ -39,7 +39,7 @@ use crate::{
 };
 
 // Sidebar indices — kept local so this module doesn't depend on each
-// per-view callbacks file. Values match `ui/layout/sidebar.slint`.
+// per-view callbacks file. Values match `melodia-ui/ui/layout/sidebar.slint`.
 const NAV_ALBUMS: i32 = 4;
 const NAV_ARTISTS: i32 = 5;
 const NAV_GENRES: i32 = 6;

@@ -328,8 +328,9 @@ src/
 ├── state/       AppState, error types
 └── ui/          Slint bridge, callbacks, view handles, models
 
-melodia-ui/      the compiled Slint UI, in its own crate so it builds once
-ui/              the .slint sources it is compiled from
+melodia-ui/      the UI in its own crate, so it builds once
+├── ui/          the .slint sources, plus the fonts and icons they embed
+└── translations/  bundled .po catalogues
 ```
 
 See [`CLAUDE.md`](CLAUDE.md) for a detailed architecture reference.

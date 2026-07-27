@@ -178,7 +178,7 @@ impl FrameWatch {
 ///
 /// Two things mirror this **by position** and neither can be checked by the
 /// compiler: the `viz-style-names` `@tr` array in
-/// `ui/components/now-playing/flyout-presets.slint` — rendered by both the
+/// `melodia-ui/ui/components/now-playing/flyout-presets.slint` — rendered by both the
 /// Settings chips and the Now-Playing view's flyout — and the branch in
 /// `visualizer-strip.slint` that mounts on the key. `tests/visualizer_tests.rs`
 /// pins both against this array.

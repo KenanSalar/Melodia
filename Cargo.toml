@@ -1,6 +1,6 @@
 [package]
 name = "Melodia"
-version = "0.9.0"
+version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 description = "Cross-platform desktop music player (Slint + Rust)"
@@ -25,6 +25,12 @@ members = ["melodia-ui"]
 exclude = ["winit"]
 
 [workspace.package]
+# The release version, inherited by both packages. `melodia-ui` is `publish =
+# false` and depended on by path, so its own number buys nothing — inheriting
+# means it can't drift from the app's. The three toolchain-less manifest
+# scrapes (`release.yml`, `build-rpm.sh`, `build-appimage.sh`) read this table
+# by name; keep it above any `[dependencies.*]` table that carries a `version`.
+version = "0.9.0"
 edition = "2024"
 # Kept in lockstep with `rust-toolchain.toml` and `clippy.toml`'s `msrv`.
 rust-version = "1.97"
@@ -97,7 +103,7 @@ assets = [
     ["target/release/Melodia", "usr/bin/melodia", "755"],
     ["scripts/Melodia.desktop", "usr/share/applications/com.github.kenansalar.melodia.desktop", "644"],
     ["packaging/com.github.kenansalar.melodia.metainfo.xml", "usr/share/metainfo/com.github.kenansalar.melodia.metainfo.xml", "644"],
-    ["ui/assets/icons/logo-with-background.svg", "usr/share/icons/hicolor/scalable/apps/melodia.svg", "644"],
+    ["assets/icons/logo-with-background.svg", "usr/share/icons/hicolor/scalable/apps/melodia.svg", "644"],
     ["LICENSE", "usr/share/doc/melodia/LICENSE", "644"],
     ["packaging/melodia-update-helper", "usr/libexec/melodia-update-helper", "755"],
     ["packaging/com.github.kenansalar.melodia.update.policy", "usr/share/polkit-1/actions/com.github.kenansalar.melodia.update.policy", "644"],

@@ -178,7 +178,7 @@ are gated internally.
 Add a feature flag the UI can read, and **hide the Update section without
 unmounting it.**
 
-`ui/globals.slint` — `MelodiaUpdater` global (block at lines 1234-1305):
+`melodia-ui/ui/globals.slint` — `MelodiaUpdater` global (block at lines 1234-1305):
 ```slint
 in property <bool> feature-enabled: true;   // Rust overrides at startup
 ```
@@ -186,21 +186,21 @@ The `install()` / `restart()` / `check()` callbacks stay defined; with the
 feature off the Rust side simply never wires or invokes them (unwired Slint
 callbacks are no-ops).
 
-`ui/views/settings/update-section.slint` (`UpdateSection`):
+`melodia-ui/ui/views/settings/update-section.slint` (`UpdateSection`):
 - AND every row's visibility with `MelodiaUpdater.feature-enabled`.
 - Force the section's `has-matches` out-property to `false` when
   `!feature-enabled` so the section collapses via the **existing** search-hide
   path (it already collapses when a section has no matches).
 
 > **Slint pitfall — do NOT wrap the mount in `if`.** In
-> `ui/views/settings-view.slint:112` the section is `upd-sec := UpdateSection {}`,
+> `melodia-ui/ui/views/settings-view.slint:112` the section is `upd-sec := UpdateSection {}`,
 > and the no-results placeholder predicate references it by id
 > (`&& !upd-sec.has-matches`, line 127). Wrapping `upd-sec` in
 > `if MelodiaUpdater.feature-enabled :` would put the id inside a conditional and
 > break that sibling reference (and the `vertical-stretch` collapse math). Keep
 > the component mounted; gate its content + `has-matches` internally instead.
 
-`ui/views/settings/about-section.slint` — unchanged (reads `current-version`,
+`melodia-ui/ui/views/settings/about-section.slint` — unchanged (reads `current-version`,
 still seeded by the ungated `install()`).
 
 ## Doc-comment cleanup (avoids `cargo doc --no-default-features` warnings)

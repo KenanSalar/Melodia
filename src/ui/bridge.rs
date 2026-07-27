@@ -116,7 +116,7 @@ pub fn spawn_queue_subscriber(
 /// `Player.vm`: dirtying that struct invalidated every binding that read
 /// any field (title, artist, artwork, …) — at 7 200 ticks/hour that path
 /// produced a monotonic RSS climb. See the comment on `PlayerVm` in
-/// `ui/models.slint` for the full history.
+/// `melodia-ui/ui/models.slint` for the full history.
 pub fn spawn_position_subscriber(
     ui: Weak<AppWindow>,
     position_tx: &watch::Sender<Option<PositionTick>>,
@@ -174,7 +174,7 @@ pub fn to_slint_track(t: &TrackSummary, cover_thumbs: &CoverThumbs) -> TrackSumm
 /// Position-related scalars (`position_ms`, `duration_ms`, `progress`) are
 /// deliberately *not* on `PlayerVm` — they live as standalone properties on
 /// the `Player` global and are written directly by the position-tick
-/// subscriber. See `ui/models.slint` for the rationale.
+/// subscriber. See `melodia-ui/ui/models.slint` for the rationale.
 pub fn to_slint_player_vm(
     vm: &PlayerViewModelLight,
     cover_thumbs: &CoverThumbs,

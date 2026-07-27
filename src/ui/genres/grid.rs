@@ -3,7 +3,7 @@
 //! Mirror of `src/ui/albums/grid.rs` minus everything cover-related: no
 //! prewarm step, no cap-tuning function, no `first_screenful_paths`.
 //! Genres have no artwork (see the `Genres` global comment in
-//! `ui/globals.slint`).
+//! `melodia-ui/ui/globals.slint`).
 
 use std::rc::Rc;
 use std::sync::Arc;

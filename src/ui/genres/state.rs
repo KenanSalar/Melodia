@@ -1,7 +1,7 @@
 //! Internal data structures used by the Genres grid and Genre Detail
 //! submodules. Mirror of `src/ui/albums/state.rs` minus everything related to
 //! cover thumbnails (genres have no artwork — see the `Genres` global
-//! comment in `ui/globals.slint`). No `GRID_COVER_SIZE`,
+//! comment in `melodia-ui/ui/globals.slint`). No `GRID_COVER_SIZE`,
 //! `DEFAULT_GRID_COVER_CAP`, `GRID_PREWARM_AHEAD`, or `DetailPair`: there
 //! is no LRU to size and no `(cover, blur)` pair to pass between threads.
 

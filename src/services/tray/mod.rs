@@ -89,8 +89,8 @@ impl TraySnapshot {
 }
 
 /// The tray icon, baked into the binary. Rasterised from
-/// `ui/assets/icons/logo-without-background.svg` (see the plan / `scripts/`).
-const TRAY_PNG: &[u8] = include_bytes!("../../../ui/assets/icons/tray.png");
+/// `melodia-ui/ui/assets/icons/logo-without-background.svg` (see `scripts/`).
+const TRAY_PNG: &[u8] = include_bytes!("../../../assets/icons/tray.png");
 
 /// Decode the embedded tray PNG into `(width, height, rgba8)`. Returns `None`
 /// if the embedded asset somehow fails to decode — callers then build the

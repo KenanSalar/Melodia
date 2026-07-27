@@ -262,7 +262,7 @@ pub fn seed_initial_view_model(
     // Seed the position scalars from the snapshot so a freshly-restored
     // session shows the saved position immediately, before the first
     // playback-monitor tick lands. Position scalars live outside `vm` —
-    // see `ui/models.slint` for the rationale.
+    // see `melodia-ui/ui/models.slint` for the rationale.
     let pos = i32::try_from(light.position_ms).unwrap_or(i32::MAX);
     let dur = i32::try_from(light.duration_ms).unwrap_or(i32::MAX);
     player.set_position_ms(pos);
@@ -342,7 +342,7 @@ pub fn hydrate_ui_from_settings(
 
 /// The Slint side already clamps `Nav.sidebar-width` to
 /// `[Theme.sidebar-min-w, Theme.sidebar-max-w]` at the use site
-/// (`ui/layout/sidebar.slint`), so no Rust-side clamp is needed.
+/// (`melodia-ui/ui/layout/sidebar.slint`), so no Rust-side clamp is needed.
 fn apply_sidebar_width(app: &AppWindow, settings: &services::settings::SettingsData) {
     // Persisted sidebar width is f64 (settings.json) — Slint uses f32. Widths
     // are tens-to-hundreds of pixels, well within f32 precision.

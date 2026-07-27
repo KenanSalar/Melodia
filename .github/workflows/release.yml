@@ -56,9 +56,17 @@ jobs:
         id: meta
         shell: bash
         run: |
-          VERSION="$(awk -F\" '/^version = / { print $2; exit }' Cargo.toml)"
+          # Both packages inherit the version from `[workspace.package]`, so
+          # `[package]` reads `version.workspace = true` and carries no
+          # literal. This runs on a bare checkout with no toolchain, so it's a
+          # scrape rather than `cargo metadata` — anchor on the table rather
+          # than taking the file's first `version = ` line.
+          VERSION="$(awk -F'"' '
+            /^\[/                  { in_ws = ($0 == "[workspace.package]") }
+            in_ws && /^version = / { print $2; exit }
+          ' Cargo.toml)"
           if [[ -z "$VERSION" ]]; then
-            echo "ERROR: failed to extract version from Cargo.toml" >&2
+            echo "ERROR: no version in Cargo.toml's [workspace.package]" >&2
             exit 1
           fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
@@ -290,7 +298,7 @@ jobs:
           mkdir -p staging/melodia
           cp target/${{ matrix.target }}/release/Melodia staging/melodia/Melodia
           cp LICENSE                                     staging/melodia/
-          cp ui/assets/icons/logo-with-background.svg    staging/melodia/melodia.svg
+          cp assets/icons/logo-with-background.svg       staging/melodia/melodia.svg
           cp scripts/Melodia.desktop                     staging/melodia/com.github.kenansalar.melodia.desktop
           cp scripts/install-linux.sh                    staging/melodia/install-linux.sh
           cp scripts/uninstall-linux.sh                  staging/melodia/uninstall-linux.sh

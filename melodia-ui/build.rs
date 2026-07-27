@@ -16,7 +16,8 @@ fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // --no-default-translation-context` for extraction.
     //
     // Both paths are relative to this crate's manifest dir, which is where
-    // slint-build resolves them from — not the working directory.
+    // slint-build resolves them from — not the working directory. The UI tree
+    // and the catalogs live inside the crate, so neither needs to reach out.
     //
     // Slint's AST compiler walks the UI tree recursively and overflows
     // Windows' 1 MiB default main-thread stack with STATUS_STACK_OVERFLOW.
@@ -27,16 +28,16 @@ fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         .stack_size(16 * 1024 * 1024)
         .spawn(|| -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             let cfg = slint_build::CompilerConfiguration::new()
-                .with_bundled_translations("../translations")
+                .with_bundled_translations("translations")
                 .with_default_translation_context(slint_build::DefaultTranslationContext::None);
-            slint_build::compile_with_config("../ui/app-window.slint", cfg)?;
+            slint_build::compile_with_config("ui/app-window.slint", cfg)?;
             Ok(())
         })?;
     match join.join() {
         Ok(inner) => inner?,
         Err(payload) => std::panic::resume_unwind(payload),
     }
-    println!("cargo:rerun-if-changed=../translations");
+    println!("cargo:rerun-if-changed=translations");
 
     Ok(())
 }
