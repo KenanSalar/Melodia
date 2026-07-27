@@ -33,6 +33,10 @@ use crate::AppWindow;
 static FRAMES: AtomicU64 = AtomicU64::new(0);
 
 /// `true` once the notifier is installed and [`FRAMES`] means something.
+///
+/// Latched for the process, which a tray hide does not invalidate: it suspends
+/// the graphics context but the renderer keeps the notifier across it, so there
+/// is never anything to re-install.
 static COUNTING: AtomicBool = AtomicBool::new(false);
 
 /// `true` once [`install`] has run, successfully or not.
@@ -47,10 +51,13 @@ static INSTALLED: AtomicBool = AtomicBool::new(false);
 /// drawn frame — the whole window's, not the strip's — and a user who never opens
 /// Now Playing shouldn't pay for a signal nothing is reading.
 ///
-/// Deferring costs one thing: `RenderingState::RenderingSetup` has already been
-/// consumed by the first frame, so this callback never sees it. It only wants
-/// `BeforeRendering`, but anything added here that needs the setup phase would
-/// have to move the install back to startup.
+/// Deferring costs one thing: the window's *first*
+/// `RenderingState::RenderingSetup` is long gone by the time this lands. A later
+/// one does arrive — a tray hide suspends the graphics context and the re-show
+/// hands the renderer a fresh canvas, which re-fires it — so the setup phase is
+/// unreliable here rather than absent. This callback only wants
+/// `BeforeRendering`; anything added that needs setup has to move the install
+/// back to startup.
 pub(super) fn install(ui: &AppWindow) {
     if INSTALLED.swap(true, Ordering::Relaxed) {
         return;

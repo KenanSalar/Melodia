@@ -24,8 +24,15 @@
 //! - `window-hidden` — the one case the tick can't cover, because the same
 //!   signal stops the Timer it runs off.
 //!
-//! Between them the tap is armed exactly while something is drawing it. The
-//! style has no say in it: every style reads the same ring.
+//! Between them the tap is armed while something is drawing it, with one benign
+//! exception: a pause landing on an already-settled drawing stops the Timer the
+//! same way a hide does, and nothing disarms the tap. It costs nothing, which is
+//! why it isn't worth a fourth writer — a paused deck pulls no samples, so an
+//! armed tap writes nothing, and what the rings hold is the silence that settled
+//! the drawing in the first place, so the history the resume doesn't drop is
+//! silence too.
+//!
+//! The style has no say in any of it: every style reads the same ring.
 //!
 //! # Off-screen windows
 //!
