@@ -4,7 +4,7 @@ paths:
   - src/ui/**/*.rs
   - src/boot/**/*.rs
   - src/services/toast.rs
-  - build.rs
+  - melodia-ui/build.rs
 ---
 
 # UI patterns — the shared components and what already exists

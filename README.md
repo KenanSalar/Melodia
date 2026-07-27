@@ -327,6 +327,9 @@ src/
 ├── services/    updater, desktop integration, system theme
 ├── state/       AppState, error types
 └── ui/          Slint bridge, callbacks, view handles, models
+
+melodia-ui/      the compiled Slint UI, in its own crate so it builds once
+ui/              the .slint sources it is compiled from
 ```
 
 See [`CLAUDE.md`](CLAUDE.md) for a detailed architecture reference.

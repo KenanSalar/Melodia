@@ -1,9 +1,8 @@
 [package]
 name = "Melodia"
 version = "0.9.0"
-edition = "2024"
-# Kept in lockstep with `rust-toolchain.toml` and `clippy.toml`'s `msrv`.
-rust-version = "1.97"
+edition.workspace = true
+rust-version.workspace = true
 description = "Cross-platform desktop music player (Slint + Rust)"
 license = "AGPL-3.0-or-later"
 repository = "https://github.com/KenanSalar/Melodia"
@@ -11,6 +10,24 @@ homepage = "https://github.com/KenanSalar/Melodia"
 authors = ["Kenan Salar <kenansalar@users.noreply.github.com>"]
 keywords = ["music", "player", "audio", "slint"]
 categories = ["multimedia::audio"]
+
+# `melodia-ui` holds nothing but the Slint compiler's output. It is split off
+# because `cargo test` builds this package twice — once as the rlib the bin and
+# the integration tests link, once as the `--test` harness — and the generated
+# unit dwarfs everything else in the crate. As a dependency it is built once,
+# and only when a `.slint` file or a translation catalog changes.
+#
+# The vendored winit fork carries its own `[workspace]`, so it is already an
+# independent root; excluding it explicitly means a future upstream re-sync that
+# drops that table can't silently pull the fork in as a member.
+[workspace]
+members = ["melodia-ui"]
+exclude = ["winit"]
+
+[workspace.package]
+edition = "2024"
+# Kept in lockstep with `rust-toolchain.toml` and `clippy.toml`'s `msrv`.
+rust-version = "1.97"
 
 # Keep the library crate name lowercase so `use melodia::…` stays idiomatic
 # (matches `non_snake_case`) — the *package* name being capitalised drives
@@ -87,6 +104,10 @@ assets = [
 ]
 
 [dependencies]
+# The Slint compiler's output, re-exported wholesale by `src/lib.rs` so the
+# generated types stay reachable as `crate::AppWindow`, `crate::TrackRow`, ….
+melodia-ui = { path = "melodia-ui" }
+
 # UI. The `raw-window-handle-06` feature makes `slint::Window::window_handle()`
 # return a `WindowHandle` that implements `raw_window_handle::HasWindowHandle`
 # + `HasDisplayHandle` (raw-window-handle 0.6). Used by `wire_library_settings`
@@ -288,9 +309,6 @@ dunce = "1.0.5"
 # pumped from the winit event loop Slint owns. See `src/services/tray/`.
 tray-icon = { version = "0.24.1", default-features = false }
 
-[build-dependencies]
-slint-build = "1.16.1"
-
 # Windows-only: embed an `ICON` resource into the Melodia.exe binary so the
 # OS taskbar, titlebar, Alt-Tab thumbnail, and Explorer entry all render the
 # Melodia logo instead of the generic placeholder. `winresource` is an
@@ -306,7 +324,13 @@ winresource = "0.1.31"
 [dev-dependencies]
 tokio = { version = "1.53.1", features = ["macros", "rt-multi-thread", "test-util"] }
 
-[lints.rust]
+# Defined at workspace level and inherited by both packages, so `melodia-ui`
+# can't quietly sit outside the gate. Its generated module carries its own
+# blanket `#[allow]` block, which already covers `unsafe_code`.
+[lints]
+workspace = true
+
+[workspace.lints.rust]
 unused = { level = "warn", priority = -1 }
 unsafe_code = "deny"
 rust_2024_compatibility = { level = "warn", priority = -1 }
@@ -316,7 +340,7 @@ rust_2024_compatibility = { level = "warn", priority = -1 }
 # as dead and flags the whole library API (670 hits — 0 on `--lib`, 0 on
 # `--bin`, all of them from the test targets).
 
-[lints.clippy]
+[workspace.lints.clippy]
 correctness = { level = "deny", priority = -1 }
 suspicious  = { level = "deny", priority = -1 }
 complexity  = { level = "warn", priority = -1 }

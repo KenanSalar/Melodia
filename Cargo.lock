@@ -22,6 +22,7 @@ dependencies = [
  "lru",
  "material-colors",
  "md5",
+ "melodia-ui",
  "minisign-verify",
  "natord",
  "notify",
@@ -38,7 +39,6 @@ dependencies = [
  "serde",
  "serde_json",
  "slint",
- "slint-build",
  "souvlaki",
  "sqlx",
  "tempfile",
@@ -3673,6 +3673,14 @@ name = "md5"
 version = "0.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7ebb8d8732c6a6df3d8f032a82911cfc747e00efb95cc46e8d0acd5b5b88570c"
+
+[[package]]
+name = "melodia-ui"
+version = "0.1.0"
+dependencies = [
+ "slint",
+ "slint-build",
+]
 
 [[package]]
 name = "memchr"

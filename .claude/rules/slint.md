@@ -4,14 +4,14 @@ paths:
   - src/ui/**/*.rs
   - src/boot/**/*.rs
   - src/themes/**/*.rs
-  - build.rs
+  - melodia-ui/build.rs
 ---
 
 # Slint Best Practices
 
 ## Project Layout
 
-- Use `.slint` files compiled via `build.rs` (`slint_build::compile("ui/app-window.slint")`) — **do not** use the `slint::slint!{}` macro outside of toy demos. Files give you syntax highlighting, partial rebuilds, and proper diagnostics.
+- Use `.slint` files compiled via `melodia-ui/build.rs` (`slint_build::compile_with_config("../ui/app-window.slint", …)`) — **do not** use the `slint::slint!{}` macro outside of toy demos. Files give you syntax highlighting, partial rebuilds, and proper diagnostics.
 - One root component per app, additional components per file. Group by folder: `ui/layout/`, `ui/views/`, `ui/components/`.
 - A single `theme.slint` global holds design tokens (brushes, sizes, durations) — every other component imports `Theme` and reads from it.
 - Mirror Rust struct definitions used at the boundary in a `models.slint` file (`export struct TrackRow { … }`); both sides must agree exactly on field names and types.
@@ -137,5 +137,5 @@ paths:
 - **Calling `ui.set_*` from a background thread** — panics. Use `invoke_from_event_loop` / `upgrade_in_event_loop` / `spawn_local`.
 - **Mismatched struct fields between Rust and `.slint`** — silent: extra fields in Rust are ignored, missing ones default. Keep the `models.slint` file alongside the Rust definitions and review changes together.
 - **Forgetting `ModelRc::from(rc.clone())`** — passing the `Rc` directly doesn't compile; wrap in `ModelRc`.
-- **Using `slint::slint!` for non-trivial code** — gives no incremental rebuild benefit and pollutes diff readability. Stick to `.slint` files + `build.rs`.
+- **Using `slint::slint!` for non-trivial code** — gives no incremental rebuild benefit and pollutes diff readability. Stick to `.slint` files + `melodia-ui/build.rs`.
 - **Blocking the UI thread** with synchronous DB queries or HTTP — drop frames, freeze the app. Always do I/O on the tokio runtime.

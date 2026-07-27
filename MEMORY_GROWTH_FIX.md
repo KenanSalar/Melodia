@@ -39,29 +39,6 @@ startup** (`tasks::heap_trim::spawn`) and on view-close paths — never on any p
 Outcome wanted: flat RSS across a long listening session, and no full-resolution decode on
 the playback path at all.
 
-## Phase 0 — Branch
-
-Repo vocabulary is exactly three prefixes — `feat/`, `fix/`, `ci/` (verified across every
-local, remote and historically-merged branch). No `perf/`, `chore/`, `refactor/` or
-`improvement/` has ever been used, so introducing one here would be the odd one out.
-
-Use **`fix/general-improvements`**. The headline deliverable is a memory-growth bug, and
-there is precedent for a broad mixed branch under this prefix
-(`fix/review-audio-and-error-handling`), just as `feat/replaygain-and-improvements` is the
-precedent on the feature side. Behavioural adjustments riding along don't change that the
-branch exists to fix a bug.
-
-Base it on the **current `feat/visualization` HEAD**, not `dev`: that branch is strictly
-ahead of `dev` (27 commits, zero divergence) and it has been editing
-`ui/now_playing/` and `ui/globals.slint`, which Phase 4 also touches. Branching off it keeps
-the work sequential and conflict-free, and once visualization merges the new branch's diff
-against `dev` is just its own commits. If visualization is *not* going to merge first,
-branch off `dev` instead and accept the merge later.
-
-```bash
-git switch -c fix/general-improvements
-```
-
 ## Phase 1 — Prove the diagnosis before changing anything
 
 No rebuild, no code change. Uses the existing sampler (`tasks/rss_sampler.rs`, gated on

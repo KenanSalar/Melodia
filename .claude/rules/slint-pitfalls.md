@@ -4,7 +4,7 @@ paths:
   - src/ui/**/*.rs
   - src/boot/**/*.rs
   - src/themes/**/*.rs
-  - build.rs
+  - melodia-ui/build.rs
 ---
 
 # Slint Pitfalls (battle-tested)
