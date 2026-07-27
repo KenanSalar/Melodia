@@ -1,3 +1,10 @@
+---
+paths:
+  - src/media/**/*.rs
+  - src/tasks/**/*.rs
+  - src/library/**/*.rs
+---
+
 # Rayon Best Practices
 
 ## When to Use

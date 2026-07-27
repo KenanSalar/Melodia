@@ -1,3 +1,11 @@
+---
+paths:
+  - src/entities/**/*.rs
+  - src/services/**/*.rs
+  - src/library/settings/**/*.rs
+  - src/state/**/*.rs
+---
+
 # Serde Best Practices
 
 ## Derive vs Manual

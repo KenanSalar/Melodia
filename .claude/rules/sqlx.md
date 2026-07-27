@@ -1,3 +1,10 @@
+---
+paths:
+  - src/database/**/*.rs
+  - src/entities/**/*.rs
+  - migrations/**/*.sql
+---
+
 # SQLx (SQLite) Best Practices
 
 ## Connection Pooling

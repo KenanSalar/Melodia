@@ -1,3 +1,11 @@
+---
+paths:
+  - src/media/**/*.rs
+  - src/tasks/**/*.rs
+  - src/library/playlist_files.rs
+  - src/library/playlist_files/**/*.rs
+---
+
 # BLAKE3 Best Practices
 
 ## File Hashing

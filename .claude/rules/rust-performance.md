@@ -1,3 +1,9 @@
+---
+paths:
+  - src/**/*.rs
+  - Cargo.toml
+---
+
 # Rust Performance Best Practices
 
 ## Allocation Reduction

@@ -1,3 +1,9 @@
+---
+paths:
+  - src/media/**/*.rs
+  - src/library/tags.rs
+---
+
 # Lofty Best Practices
 
 ## Reading Metadata
