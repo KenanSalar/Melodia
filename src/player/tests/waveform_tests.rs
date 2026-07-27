@@ -469,3 +469,35 @@ fn a_column_widened_back_into_view_while_paused_has_decayed_with_the_rest() {
     let rest = peak(analyzer.analyze(false, RATE, 400));
     assert!(rest < 0.001, "a column outside the drawn width kept its height: {rest}");
 }
+
+#[test]
+fn the_cached_trace_writes_exactly_what_the_reference_writer_would() {
+    // `trace` reuses one prefix table across frames where `write_path_commands`
+    // builds a throwaway per call. Both go through the same writer, so the only
+    // way they can disagree is a table left at the wrong column count — which
+    // would put every vertex at the *previous* width's x and is invisible in a
+    // single-width test. So: widen, narrow, revisit a width already seen, and
+    // cross the active/decaying split, comparing bytes at every step.
+    let mut analyzer = WaveformAnalyzer::new(WINDOW_CAP, MAX_COLUMNS);
+    fill_sine(analyzer.window_mut(RATE), 16.0);
+
+    let mut cached = String::new();
+    let mut reference = String::new();
+
+    for (active, columns) in [
+        (true, 256_usize),
+        (true, 256),
+        (true, MAX_COLUMNS),
+        (true, 64),
+        (false, 64),
+        (true, 256),
+        (true, 1),
+    ] {
+        let drawn = analyzer.trace(active, RATE, columns, &mut cached).to_vec();
+        write_path_commands(&drawn, &mut reference);
+        assert_eq!(
+            cached, reference,
+            "the cached trace diverged from the reference writer at {columns} columns"
+        );
+    }
+}

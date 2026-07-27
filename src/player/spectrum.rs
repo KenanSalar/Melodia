@@ -335,8 +335,13 @@ struct Transform {
 }
 
 impl Transform {
-    fn new(size: usize) -> Self {
-        let fft = RealFftPlanner::<f32>::new().plan_fft_forward(size);
+    /// Takes the planner rather than building one, so the two transforms share
+    /// its caches — `realfft` keeps a plan cache over a `rustfft` planner that
+    /// itself caches the base butterflies a radix-4 decomposition pulls from, and
+    /// both of our sizes are powers of two. A planner per transform throws all of
+    /// that away and duplicates the plan state.
+    fn new(planner: &mut RealFftPlanner<f32>, size: usize) -> Self {
+        let fft = planner.plan_fft_forward(size);
         let window = hann_window(size);
         Self {
             input: fft.make_input_vec(),
@@ -411,9 +416,10 @@ impl SpectrumAnalyzer {
     /// separate half-length path, but the bin maths here reads the even layout.)
     #[must_use]
     pub fn new(fft_size: usize, bands: usize) -> Self {
+        let mut planner = RealFftPlanner::<f32>::new();
         Self {
-            bass: Transform::new(BASS_FFT_SIZE),
-            main: Transform::new(fft_size),
+            bass: Transform::new(&mut planner, BASS_FFT_SIZE),
+            main: Transform::new(&mut planner, fft_size),
             crossover: 0,
             gains: Box::default(),
             mapped_rate: 0,

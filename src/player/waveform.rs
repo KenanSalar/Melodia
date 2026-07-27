@@ -26,12 +26,15 @@
 //! 1. [`find_trigger`] over the leading part of the snapshot, leaving a full
 //!    span of samples behind it to draw,
 //! 2. [`min_max_columns`] reduces that span to one range per drawn column,
-//! 3. [`write_path_commands`] closes the two edges into the single filled figure
-//!    the Slint `Path` renders.
+//! 3. the two edges are closed into the single filled figure the Slint `Path`
+//!    renders.
 //!
 //! Like [`spectrum`], everything here is a free function over slices;
-//! [`WaveformAnalyzer`] exists only to hold the two buffers that must not be
-//! reallocated every frame.
+//! [`WaveformAnalyzer`] exists only to hold the buffers that must not be
+//! reallocated every frame. [`WaveformAnalyzer::trace`] runs all three steps and
+//! is what production calls; the pieces stay public because the tests drive them
+//! individually and the resting figure is written through
+//! [`write_path_commands`] directly.
 //!
 //! [`spectrum`]: super::spectrum
 
@@ -184,22 +187,106 @@ pub fn min_max_columns(src: &[f32], out: &mut [Column]) {
 ///
 /// Coordinates are normalized — x across `0..1`, y over `-1..1` — so the
 /// `Path`'s viewbox is a constant and no column count has to be kept in step
-/// across the language boundary. `out` is reused between frames; this is the one
-/// place in the visualizer that touches a heap buffer per frame, and clearing
-/// rather than reallocating is what keeps that to the `SharedString` the caller
-/// hands to Slint.
+/// across the language boundary. `out` is cleared rather than reallocated, which
+/// is what keeps the visualizer's per-frame heap traffic to the `SharedString`
+/// the caller hands to Slint.
+///
+/// This builds its [`XPrefixes`] per call, so it is for the callers that draw a
+/// figure once — the resting trace, and the tests. The per-frame path is
+/// [`WaveformAnalyzer::trace`], which keeps the table across ticks; both reach
+/// the same writer, so neither can drift.
 ///
 /// A silent column is drawn [`MIN_HALF_THICKNESS`] tall either side of the axis
 /// rather than flat, so a resting trace is a visible rule — the trace's
 /// equivalent of the bars resting as dots — and, more importantly, so the figure
 /// always encloses real area.
 pub fn write_path_commands(columns: &[Column], out: &mut String) {
+    let mut prefixes = XPrefixes::new();
+    prefixes.fit(columns.len());
+    write_path(columns, &prefixes, out);
+}
+
+/// Bytes one entry of [`XPrefixes`] takes: `" L0.1234 "`.
+const X_PREFIX_BYTES: usize = 9;
+
+/// The `x` half of every vertex the trace emits, held as text.
+///
+/// `x` is the column's position across the strip, so it depends on the column
+/// index and the column count and nothing else — between resizes it is
+/// byte-identical on every frame while the `y` beside it changes. Formatting it
+/// per frame is half of all the float formatting the trace does, and the trace
+/// is by a wide margin the most expensive thing the visualizer does per frame:
+/// at the [`MAX_COLUMNS`] cap it writes 1024 vertices, against a whole spectrum
+/// frame's two FFTs.
+///
+/// One packed string plus each entry's end offset, so a resize rebuilds a single
+/// buffer rather than reallocating a string per column. Entries are built
+/// through the same `write!` the per-frame path used to run, so the bytes are
+/// identical by construction rather than by a second float formatter agreeing
+/// with `core::fmt`'s rounding.
+struct XPrefixes {
+    /// `" L0.1234 "` per column, packed end to end.
+    text: String,
+    /// Where each column's slice ends in [`text`](Self::text).
+    ends: Vec<usize>,
+}
+
+impl XPrefixes {
+    fn new() -> Self {
+        Self {
+            text: String::new(),
+            ends: Vec::new(),
+        }
+    }
+
+    fn with_capacity(columns: usize) -> Self {
+        Self {
+            text: String::with_capacity(columns * X_PREFIX_BYTES),
+            ends: Vec::with_capacity(columns),
+        }
+    }
+
+    /// Rebuild for `columns` columns, unless that is already what is held —
+    /// which is every frame between resizes.
+    fn fit(&mut self, columns: usize) {
+        if self.ends.len() == columns {
+            return;
+        }
+        self.text.clear();
+        self.ends.clear();
+        // A lone column has no span to normalize against; it lands at x = 0.
+        let span = index_to_f32(columns.saturating_sub(1)).max(1.0);
+        for i in 0..columns {
+            let x = index_to_f32(i) / span;
+            // Writing into a String cannot fail. The space before each `L` is
+            // not required by the SVG grammar — a command letter terminates the
+            // number before it — but it costs a byte a vertex and leaves nothing
+            // to the parser's discretion.
+            let _ = write!(self.text, " L{x:.4} ");
+            self.ends.push(self.text.len());
+        }
+    }
+
+    /// Column `i`'s `" L<x> "`, or an empty slice for an index no entry covers.
+    fn get(&self, i: usize) -> &str {
+        let end = self.ends.get(i).copied().unwrap_or_default();
+        let start = i
+            .checked_sub(1)
+            .and_then(|previous| self.ends.get(previous))
+            .copied()
+            .unwrap_or_default();
+        self.text.get(start..end).unwrap_or_default()
+    }
+}
+
+/// The one writer. [`write_path_commands`] builds a throwaway table for the two
+/// callers that don't keep one; [`WaveformAnalyzer::trace`] passes the table it
+/// owns. Neither has its own copy of the geometry.
+fn write_path(columns: &[Column], prefixes: &XPrefixes, out: &mut String) {
     out.clear();
     if columns.is_empty() {
         return;
     }
-    // A lone column has no span to normalize against; it lands at x = 0.
-    let span = index_to_f32(columns.len() - 1).max(1.0);
 
     // Lower edge left to right, then upper edge back. That order rather than the
     // reverse is what gives the closed figure a *positive* signed area, which is
@@ -207,22 +294,22 @@ pub fn write_path_commands(columns: &[Column], out: &mut String) {
     // or a hole — and a lone subpath handed over as a hole is not a thing to
     // rely on the renderer being sensible about.
     for (i, column) in columns.iter().enumerate() {
-        let x = index_to_f32(i) / span;
         let y = edges(*column).1;
-        // Writing into a String cannot fail. The space before each `L` is not
-        // required by the SVG grammar — a command letter terminates the number
-        // before it — but it costs a byte a vertex and leaves nothing to the
-        // parser's discretion.
-        let _ = if i == 0 {
-            write!(out, "M{x:.4} {y:.3}")
+        let x = prefixes.get(i);
+        if i == 0 {
+            // The figure opens on a move rather than a line, and the entry
+            // carries the `L` every other vertex needs — so skip past it.
+            out.push('M');
+            out.push_str(x.get(2..).unwrap_or_default());
         } else {
-            write!(out, " L{x:.4} {y:.3}")
-        };
+            out.push_str(x);
+        }
+        let _ = write!(out, "{y:.3}");
     }
     for (i, column) in columns.iter().enumerate().rev() {
-        let x = index_to_f32(i) / span;
         let y = edges(*column).0;
-        let _ = write!(out, " L{x:.4} {y:.3}");
+        out.push_str(prefixes.get(i));
+        let _ = write!(out, "{y:.3}");
     }
     out.push('Z');
 }
@@ -240,18 +327,19 @@ fn edges(column: Column) -> (f32, f32) {
     (flipped - half, flipped + half)
 }
 
-/// Holds the sample window and the drawn columns, both allocated once at their
-/// widest and used a prefix at a time.
+/// Holds the sample window, the drawn columns and the x half of the path text —
+/// each allocated once at its widest and used a prefix at a time.
 ///
 /// Usage mirrors [`SpectrumAnalyzer`]: fill [`window_mut`](Self::window_mut)
-/// from the ring, then call [`analyze`](Self::analyze). Both take the sample
-/// rate and derive the same window length from it, so there is no order-dependent
-/// state between them.
+/// from the ring, then call [`trace`](Self::trace). Both take the sample rate and
+/// derive the same window length from it, so there is no order-dependent state
+/// between them.
 ///
 /// [`SpectrumAnalyzer`]: super::spectrum::SpectrumAnalyzer
 pub struct WaveformAnalyzer {
     window: Vec<f32>,
     columns: Vec<Column>,
+    prefixes: XPrefixes,
 }
 
 impl WaveformAnalyzer {
@@ -272,6 +360,7 @@ impl WaveformAnalyzer {
         Self {
             window: vec![0.0; window_cap.max(2)],
             columns: vec![Column::default(); column_cap.max(1)],
+            prefixes: XPrefixes::with_capacity(column_cap.max(1)),
         }
     }
 
@@ -283,8 +372,8 @@ impl WaveformAnalyzer {
         samples_for_ms(sample_rate, WAVE_SPAN_MS + TRIGGER_SLACK_MS).clamp(2, self.window.len())
     }
 
-    /// The buffer the next [`analyze`](Self::analyze) call reads. Fill it with
-    /// the most recent samples, oldest first.
+    /// The buffer the next [`trace`](Self::trace) or [`analyze`](Self::analyze)
+    /// call reads. Fill it with the most recent samples, oldest first.
     pub fn window_mut(&mut self, sample_rate: u32) -> &mut [f32] {
         let len = self.window_len(sample_rate);
         &mut self.window[..len]
@@ -299,6 +388,32 @@ impl WaveformAnalyzer {
     /// the better look and what lets the caller's idle check eventually stop the
     /// driving timer.
     pub fn analyze(&mut self, active: bool, sample_rate: u32, columns: usize) -> &[Column] {
+        let width = self.fill_columns(active, sample_rate, columns);
+        &self.columns[..width]
+    }
+
+    /// This frame's columns, written into the path commands Slint renders.
+    ///
+    /// The production path, and why it isn't [`analyze`](Self::analyze) followed
+    /// by [`write_path_commands`]: the borrow `analyze` hands back keeps the
+    /// analyzer mutably borrowed, so the caller couldn't then reach the prefix
+    /// table it owns. Composing them here borrows the two fields disjointly.
+    pub fn trace(
+        &mut self,
+        active: bool,
+        sample_rate: u32,
+        columns: usize,
+        out: &mut String,
+    ) -> &[Column] {
+        let width = self.fill_columns(active, sample_rate, columns);
+        self.prefixes.fit(width);
+        write_path(&self.columns[..width], &self.prefixes, out);
+        &self.columns[..width]
+    }
+
+    /// Resolve this frame's columns into the buffer and return how many are
+    /// drawn. The body both public entry points share.
+    fn fill_columns(&mut self, active: bool, sample_rate: u32, columns: usize) -> usize {
         let width = columns.clamp(1, self.columns.len());
         if active {
             let window = self.window_len(sample_rate);
@@ -315,7 +430,7 @@ impl WaveformAnalyzer {
                 column.max *= VISUALIZER_DECAY;
             }
         }
-        &self.columns[..width]
+        width
     }
 }
 

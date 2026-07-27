@@ -274,8 +274,10 @@ pub fn install_visualizer(ui: &AppWindow, state: &AppState) {
     let model: Rc<VecModel<f32>> = Rc::new(VecModel::from(vec![0.0; NUM_BANDS]));
 
     // The active style, read every tick and written by `set-style`. A shadow
-    // rather than a read back off the global: it keeps a string compare out of
-    // the 16 ms tick, and both ends live on the UI thread.
+    // rather than a read back off the global: that would clone a `SharedString`
+    // out of a Slint property every tick, where this is a `Cell` load. The
+    // compare itself stays — `is_waveform` still matches the index against
+    // `STYLES` — but it is against a `&'static str`, not a refcounted one.
     let style: Rc<Cell<usize>> = Rc::new(Cell::new(selected));
 
     // The session's buffers, shared between the tick that builds and uses them
@@ -373,8 +375,8 @@ pub fn install_visualizer(ui: &AppWindow, state: &AppState) {
     //
     // The session's buffers leave with it. They are the whole of the feature's
     // resident footprint — two FFT plans with their windows, spectra and
-    // scratch, the trace's window and its path string — and a strip nobody is
-    // drawing has no use for any of it.
+    // scratch, the trace's window, its x-coordinate table and its path string —
+    // and a strip nobody is drawing has no use for any of it.
     {
         let viz = state.rodio.visualizer();
         let analyzers = analyzers.clone();
