@@ -649,8 +649,13 @@ impl RodioPlayer {
 
     /// Arm / disarm the visualizer's sample tap. Lock-free, like the EQ and
     /// `ReplayGain` setters — while it is off the tap never touches the ring.
-    /// `crate::ui::visualizer` is the only caller, and drives it off the
-    /// Now-Playing view's visibility rather than off a persisted setting.
+    ///
+    /// This is the backend's spelling of [`VisualizerShared::set_enabled`], and
+    /// it is what the crossfade integration test arms the tap with. The UI does
+    /// not come through here: `crate::ui::visualizer` already holds the cell
+    /// (via [`Self::visualizer`], which it needs for snapshotting) and calls
+    /// `set_enabled` on it, from the three places that decide the arm state off
+    /// the Now-Playing view's visibility rather than off a persisted setting.
     pub fn set_visualizer_enabled(&self, on: bool) {
         self.viz.set_enabled(on);
     }

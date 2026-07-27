@@ -270,7 +270,8 @@ async fn the_visualizer_tap_reads_the_mix_not_the_two_decks_interleaved() -> std
 
     let fx = fixture()?;
     let (rodio, mut mix) = player();
-    // Arm the tap the way the Now-Playing view does.
+    // Arm the tap. The Now-Playing view reaches the same cell through
+    // `visualizer()`, one line down; this is the backend's own spelling of it.
     rodio.set_visualizer_enabled(true);
     let viz = rodio.visualizer();
     let mut window = vec![0.0; WINDOW];

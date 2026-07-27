@@ -23,6 +23,8 @@ const FLYOUT_PRESETS: &str =
     include_str!("../../../../ui/components/now-playing/flyout-presets.slint");
 const STRIP: &str = include_str!("../../../../ui/components/now-playing/visualizer-strip.slint");
 const SPECTRUM_BARS: &str = include_str!("../../../../ui/components/now-playing/spectrum-bars.slint");
+const VIZ_FLYOUT: &str =
+    include_str!("../../../../ui/components/now-playing/visualizer-flyout.slint");
 
 #[test]
 fn the_picker_names_one_style_per_key() {
@@ -44,6 +46,17 @@ fn the_settings_picker_renders_the_shared_name_list() {
     assert!(
         PLAYBACK_SECTION.contains("options: VizStylePresets.viz-style-names;"),
         "the Settings style picker no longer binds the shared name list"
+    );
+}
+
+#[test]
+fn the_view_flyout_renders_the_shared_name_list() {
+    // The other picker, pinned the same way. It also takes each row's index
+    // straight off the loop, which is what keeps its leading "Off" row from
+    // shifting the style rows out of step with `STYLES`.
+    assert!(
+        VIZ_FLYOUT.contains("for name[i] in VizStylePresets.viz-style-names:"),
+        "the Now-Playing style flyout no longer renders the shared name list"
     );
 }
 

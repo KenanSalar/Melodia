@@ -363,6 +363,22 @@ fn the_window_never_outruns_its_buffer() {
 }
 
 #[test]
+fn a_zero_sized_analyzer_still_has_something_to_clamp_into() {
+    // Nothing in the app asks for one — production passes RING_CAP and
+    // MAX_COLUMNS — but the constructor is public, and both caps reach a
+    // `clamp` whose `min` is a constant. At zero those become `clamp(2, 0)` and
+    // `clamp(1, 0)`, which panic rather than narrow, so the floors in `new` are
+    // what stands between a caller's zero and an abort. Pinned here because
+    // deleting them breaks nothing else.
+    let mut analyzer = WaveformAnalyzer::new(0, 0);
+
+    assert!(analyzer.window_mut(RATE).len() >= 2);
+    // And a column count of zero on top of it — `min_max_columns` divides by the
+    // bucket count, so the floor has to survive the caller asking for none.
+    assert_eq!(analyzer.analyze(true, RATE, 0).len(), 1);
+}
+
+#[test]
 fn the_analyzer_traces_the_window_it_was_given() {
     let mut analyzer = WaveformAnalyzer::new(WINDOW_CAP, MAX_COLUMNS);
     fill_sine(analyzer.window_mut(RATE), 16.0);

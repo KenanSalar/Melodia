@@ -259,11 +259,19 @@ impl WaveformAnalyzer {
     /// up to `column_cap` columns. In production `window_cap` is
     /// [`RING_CAP`](super::visualizer::RING_CAP) — a window wider than the ring
     /// would only be padded with silence.
+    ///
+    /// Both are floored, at two samples and one column, because everything
+    /// downstream clamps *into* these lengths and a zero-length buffer doesn't
+    /// narrow those clamps — it makes them panic. `window_len`'s
+    /// `clamp(2, self.window.len())` and `analyze`'s
+    /// `clamp(1, self.columns.len())` would both hand `usize::clamp` a `min`
+    /// above its `max`, and `min_max_columns` would divide by a bucket count of
+    /// zero. Cheaper to floor once here than to guard each of them.
     #[must_use]
     pub fn new(window_cap: usize, column_cap: usize) -> Self {
         Self {
-            window: vec![0.0; window_cap],
-            columns: vec![Column::default(); column_cap],
+            window: vec![0.0; window_cap.max(2)],
+            columns: vec![Column::default(); column_cap.max(1)],
         }
     }
 

@@ -58,7 +58,7 @@ mod pulse;
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
-use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
+use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel};
 
 use crate::library;
 use crate::player::spectrum::{FFT_SIZE, NUM_BANDS, SpectrumAnalyzer};
@@ -86,6 +86,21 @@ const STYLE_MIRRORED: &str = "mirrored";
 /// standing down late costs nothing — where a false trip re-arms the tap, which
 /// drops the rings' history and leaves the drawing ramping back in from silence.
 const FRAME_STALL_TICKS: u32 = 60;
+
+/// The two flags a strip at rest carries, shared by the pair that has to agree
+/// on them: [`publish_resting`] writes them to the global, and [`Analyzers::new`]
+/// seeds its shadows to the same values so a fresh session doesn't re-publish
+/// what is already there.
+///
+/// Shared rather than spelled out twice and pinned by a test — the way
+/// [`DEFAULT_VIZ_STYLE`](crate::services::settings::DEFAULT_VIZ_STYLE) and
+/// [`STYLES`] are — because one of the two sites is a write into a Slint global,
+/// which no test here can reach. Drift is silent and one-directional: if the
+/// global is left holding one value while the shadows say the other, the tick's
+/// `idle != session.was_idle` gate skips the publish and the global keeps the
+/// stale flag for the whole session.
+const RESTING_IDLE: bool = true;
+const RESTING_DORMANT: bool = false;
 
 /// One drawing session: the buffers the per-frame analysis must not rebuild, and
 /// the shadows tracking what it last published.
@@ -116,8 +131,8 @@ impl Analyzers {
             // the ring's capacity is the analyzer's too.
             wave: WaveformAnalyzer::new(RING_CAP, MAX_COLUMNS),
             path: String::with_capacity(MAX_COLUMNS * 2 * 20),
-            was_idle: true,
-            was_dormant: false,
+            was_idle: RESTING_IDLE,
+            was_dormant: RESTING_DORMANT,
             frames: FrameWatch::new(),
         }
     }
@@ -204,6 +219,32 @@ fn publish_style(global: &Visualizer, index: usize) {
     global.set_style_idx(i32::try_from(index).unwrap_or_default());
 }
 
+/// Publish the drawing a strip nobody is watching mounts on: every band at rest
+/// and the flat figure a decayed trace settles to, with the two flags that say
+/// so.
+///
+/// Called at boot and again whenever a session ends, and the second call is the
+/// load-bearing one. The strip's Timer runs on
+/// `(playing && window-shown) || !idle`, so a strip remounting over a *paused*
+/// player never fires a tick — and whatever the last session left in these two
+/// properties would sit there until playback resumed. Closing Now Playing
+/// destroys the view, so unlike a hide-to-tray there is no decay pass to reach
+/// rest on its own.
+///
+/// The trace's resting figure goes through its real writer rather than a
+/// literal, so it is exactly what a decay settles to; two columns is the
+/// narrowest input that still describes a span.
+fn publish_resting(global: &Visualizer, model: &VecModel<f32>) {
+    for band in 0..model.row_count() {
+        model.set_row_data(band, 0.0);
+    }
+    let mut resting = String::new();
+    waveform::write_path_commands(&[waveform::Column::default(); 2], &mut resting);
+    global.set_wave_path(SharedString::from(resting.as_str()));
+    global.set_idle(RESTING_IDLE);
+    global.set_dormant(RESTING_DORMANT);
+}
+
 pub fn install_visualizer(ui: &AppWindow, state: &AppState) {
     // `enabled` only decides whether the strip mounts — the backend tap stays
     // disarmed until `set-active` says a mounted strip is on screen, so an
@@ -230,19 +271,13 @@ pub fn install_visualizer(ui: &AppWindow, state: &AppState) {
     viz_global.set_enabled(flags.viz_enabled);
     publish_style(&viz_global, selected);
     viz_global.set_bars(ModelRc::from(model.clone()));
-    viz_global.set_idle(true);
 
-    // The bars come up at rest for free: their model is seeded with a level per
-    // band and each one floors at a dot. The trace has no model to fall back on,
-    // and the Timer that would write its path doesn't run until something plays
-    // — nothing is playing and `idle` is true — so a Now-Playing view opened on
-    // a freshly started app would show an empty strip. Seed the resting figure
-    // through the real writer, so it is exactly what a decayed trace settles to.
-    {
-        let mut resting = String::new();
-        waveform::write_path_commands(&[waveform::Column::default(); 2], &mut resting);
-        viz_global.set_wave_path(SharedString::from(resting.as_str()));
-    }
+    // The bars would come up at rest on their own — the model is seeded with a
+    // level per band and each floors at a dot — but the trace has nothing to
+    // fall back on, and its Timer doesn't run until something plays, so a
+    // Now-Playing view opened on a freshly started app would show an empty
+    // strip. The same call is what a session ends on; see `publish_resting`.
+    publish_resting(&viz_global, &model);
 
     // tick — dispatch one frame. The session's analyzers (the FFT plans and
     // their buffers, the Hann tables, the bin→band map, the smoothing state, the
@@ -327,6 +362,7 @@ pub fn install_visualizer(ui: &AppWindow, state: &AppState) {
     {
         let viz = state.rodio.visualizer();
         let analyzers = analyzers.clone();
+        let model = model.clone();
         let weak = ui.as_weak();
         viz_global.on_set_active(move |active| {
             viz.set_enabled(active && tray_bridge::is_window_visible());
@@ -339,14 +375,13 @@ pub fn install_visualizer(ui: &AppWindow, state: &AppState) {
                 return;
             }
             *analyzers.borrow_mut() = None;
-            // The strip mounts on whatever these last held, so a session that
-            // ended dormant would leave the next one waiting half a second for
-            // its first frame. Hand back the resting values a fresh `Analyzers`
-            // is shadowing.
+            // The strip mounts on whatever the last session left in these, and
+            // nothing here will overwrite them: a strip remounting over a paused
+            // player never ticks. So hand back the same rest a fresh `Analyzers`
+            // is shadowing — the drawing as well as the two flags, or the next
+            // open comes up on the frame this one ended on.
             if let Some(ui) = weak.upgrade() {
-                let global = ui.global::<Visualizer>();
-                global.set_idle(true);
-                global.set_dormant(false);
+                publish_resting(&ui.global::<Visualizer>(), &model);
             }
         });
     }

@@ -12,11 +12,13 @@ image cache is a 5 MiB LRU and Melodia's covers bypass it entirely (`SharedPixel
 It is ours, and it has two halves:
 
 **Half 1 — we allocate far more per track than we need.** Every cover is decoded at full
-source resolution before being downscaled (`cover_thumbs.rs:330`, `now_playing_artwork.rs:145`,
-`detail_artwork.rs:176` — all `reader.decode()` guarded only by `MAX_SOURCE_DIM = 8192`).
-Each track change does this **twice**: once on the Slint UI thread for the 72 px row thumb
-(`bridge.rs:158`), once on a blocking worker for the 384 px now-playing pair
-(`track_change.rs:137-140`). Sampling this library's own artwork cache (218 files, 207 JPEG):
+source resolution before being downscaled: `cover_thumbs`, `now_playing_artwork` and
+`detail_artwork` all reach `media::image_decode::decode_capped`, whose only bound is
+`MAX_SOURCE_DIM = 8192` — a ceiling against a forged header, not against a real 1280×720
+sleeve. Each track change does this **twice**: once on the Slint UI thread for the 72 px row
+thumb (`bridge`'s `get_or_load_opt`), once on a blocking worker for the 384 px now-playing
+pair (`now_playing/track_change`'s `get_or_decode`). Sampling this library's own artwork
+cache (218 files, 207 JPEG):
 
 ```
 59 × 480x360    46 × 1280x720    33 × 500x500    21 × 300x300    1 × 6016x3384
@@ -25,14 +27,14 @@ Each track change does this **twice**: once on the Slint UI thread for the 72 px
 A 1280×720 cover decodes to ~3.7 MB; two of those per distinct track ≈ **7.4 MB/track**,
 which matches the observed rate. The single 6016×3384 file decodes to ~81 MB.
 
-**Half 2 — glibc never gives it back.** `main.rs:102` pins `M_ARENA_MAX=2` but leaves
+**Half 2 — glibc never gives it back.** `main.rs`'s `mallopt` pins `M_ARENA_MAX=2` but leaves
 `M_MMAP_THRESHOLD` unset, so glibc's *dynamic* mmap threshold is live: each time an mmap'd
 block is freed the threshold is raised to that block's size (ceiling 32 MiB), and the trim
 threshold to twice that. After the first few covers the threshold sits above every
 subsequent decode, so those allocations come from the arena free list instead of mmap and
 freeing them returns nothing to the OS. The 6016×3384 outlier pins the threshold at its
 32 MiB ceiling for the rest of the process. `malloc_trim(0)` runs **once, 5 s after
-startup** (`heap_trim.rs:37-48`) and on view-close paths — never on any playback path.
+startup** (`tasks::heap_trim::spawn`) and on view-close paths — never on any playback path.
 
 Outcome wanted: flat RSS across a long listening session, and no full-resolution decode on
 the playback path at all.
@@ -139,13 +141,25 @@ it self-heals for the already-scanned library with no migration. The one trade-o
 
 Call sites to route through the resolver:
 
-- `src/media/cover_thumbs.rs:313-336` (`decode_thumb_buffer`)
-- `src/ui/now_playing_artwork.rs:135-177` (`decode_artwork`)
-- `src/ui/detail_artwork.rs` (its `decode_*` sibling, ~`:176`)
+- `src/media/cover_thumbs.rs` (`decode_thumb_buffer`)
+- `src/ui/now_playing_artwork.rs` (`decode_artwork`)
+- `src/ui/detail_artwork.rs` (its `decode_artwork` sibling)
 
-Also lower `MAX_SOURCE_DIM` from `8192` to `4096` at all three sites
-(`cover_thumbs.rs:64`, `now_playing_artwork.rs:48`, `detail_artwork.rs`) — 8192 permits a
-single 268 MB decode, and nothing above 4096 is useful for a ≤512 px derivative.
+Also lower the bound from `8192` to `4096` on those three: 8192 permits a single 268 MB
+decode, and nothing above 4096 is useful for a ≤512 px derivative. **Pass `4096` at the three
+call sites rather than editing `MAX_SOURCE_DIM` itself** — the constant has three other
+readers the derivative work has no business tightening:
+
+- `src/ui/mosaic_blur.rs` (`decode_tile`) and `src/ui/callbacks/tags.rs`
+  (`decode_cover_preview`) — both `.ok()?`, so a tightened bound degrades silently.
+- `src/media/tag_writer.rs` (`cover_picture_from_path`, via `capped_limits`) — and this one
+  is **user-facing**: it maps a decode failure to `AppError::metadata`, so at 4096 a user
+  picking a 5000 px cover in the tag editor gets a hard "Failed to decode cover" instead of
+  an embed. A hand-picked cover is the one artwork the user chose deliberately; it should not
+  inherit a cap that exists to keep the *playback* path cheap.
+
+Material You already passes its own `2048` (`services/material_you.rs`) and is unaffected
+either way.
 
 Leave `compose_artwork` reading originals: it is a scan/playlist-edit path, not playback,
 and its 600 px canvas is above the derivative size.
@@ -190,9 +204,9 @@ Everything below was read directly during investigation, not recalled.
 
 `src/main.rs:85-103` (the lone `mallopt`) · `src/tasks/heap_trim.rs` (whole file) ·
 `src/tasks/rss_sampler.rs` · `src/media/artwork.rs` (whole file) ·
-`src/media/cover_thumbs.rs:313-336` · `src/ui/now_playing_artwork.rs:125-177` ·
+`src/media/{cover_thumbs,image_decode}.rs` · `src/ui/now_playing_artwork.rs` ·
 `src/ui/detail_artwork.rs` · `src/ui/bridge.rs` · `src/ui/now_playing/{mod,track_change,up_next}.rs` ·
-`src/ui/globals.slint:43-45` · `src/ui/callbacks/macros.rs:146-158` ·
+`ui/globals.slint:43-45` · `src/ui/callbacks/macros.rs:146-158` ·
 `src/tasks/material_you.rs` · `src/player/{state,handlers,actions,rodio_backend,decks,equalizer,replaygain,visualizer,spectrum}.rs` ·
 `src/services/scrobble/queue.rs` · `Cargo.toml` · `git` branch topology and merge history.
 

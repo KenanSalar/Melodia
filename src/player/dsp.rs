@@ -5,8 +5,13 @@
 use std::sync::atomic::{AtomicU64, Ordering};
 
 /// Fraction of its height a visualizer bar or trace keeps per frame while
-/// falling. Shared so the spectrum and the waveform settle at the same rate —
-/// switching style mid-decay shouldn't change how fast the drawing dies away.
+/// falling. Shared so the two styles fall by the same law rather than each
+/// carrying its own — a decay is a decay whichever drawing is showing.
+///
+/// Per *frame*, so the wall-clock settle is this against the strip's Timer, and
+/// that interval is per style (`visualizer-strip.slint`): ~0.5 s for the bars at
+/// 16 ms, ~1 s for the trace at 33 ms. Retuning how fast one style dies away
+/// means reaching for one of the two.
 pub(crate) const VISUALIZER_DECAY: f32 = 0.8;
 
 // A bar or trace has to lose height every frame but never invert or vanish
