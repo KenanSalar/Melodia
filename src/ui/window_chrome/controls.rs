@@ -42,8 +42,10 @@ pub(super) fn wire(app: &AppWindow, state: &AppState, drag_hover: Arc<AtomicBool
             // "Show / Hide" toggle reads it; without this drop, the next
             // tray click sees the window as still-visible and unmaps the
             // (already-minimized) surface — the user then has to click the
-            // tray a second time to actually restore the window.
-            crate::ui::tray_bridge::set_window_visible(false);
+            // tray a second time to actually restore the window. The
+            // visualizer's Timer gates on it too, so this is also what
+            // stops it drawing for a window nobody can see.
+            crate::ui::tray_bridge::set_window_visible(&ui, false);
         });
     }
 
@@ -89,7 +91,7 @@ pub(super) fn wire(app: &AppWindow, state: &AppState, drag_hover: Arc<AtomicBool
                 let weak = weak.clone();
                 if let Err(e) = slint::invoke_from_event_loop(move || {
                     if let Some(ui) = weak.upgrade() {
-                        crate::ui::tray_bridge::hide_window(ui.window());
+                        crate::ui::tray_bridge::hide_window(&ui);
                     }
                 }) {
                     log::warn!("close-to-tray: schedule hide: {e}");

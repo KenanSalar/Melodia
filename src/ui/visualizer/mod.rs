@@ -24,10 +24,25 @@
 //!
 //! Between them the tap is armed exactly while something is drawing it. The
 //! style has no say in it: every style reads the same ring.
+//!
+//! # Off-screen windows
+//!
+//! Nor can the mount tree gate a window that is still *open* but not being
+//! shown: Slint `Timer`s fire off the event loop, not the render loop, and the
+//! loop deliberately stays alive through a close-to-tray hide. Two signals cover
+//! that, and the tick keeps them apart because they carry different weight:
+//!
+//! - [`tray_bridge::is_window_visible`] — the OS said so, and something will say
+//!   so again when the window comes back. Safe to stop the Timer on, which the
+//!   `window-shown` half of its `running` gate does.
+//! - [`pulse::frames`] — nobody said anything, but the window has stopped being
+//!   painted. Inferred, so it silences the expensive half and slows the Timer
+//!   down (`dormant`) rather than stopping it.
 
 mod frame;
+mod pulse;
 
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
 use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
@@ -44,6 +59,79 @@ use crate::{AppWindow, Visualizer};
 const STYLE_BARS: &str = "bars";
 const STYLE_WAVEFORM: &str = "waveform";
 const STYLE_MIRRORED: &str = "mirrored";
+
+/// Ticks without a painted frame before the tick concludes nobody is looking.
+///
+/// Counted in ticks rather than measured against a clock, and that is the whole
+/// point: the Timer stops once a paused player's drawing has settled, so a clock
+/// would come back from any long pause reading "no frames in minutes" — when all
+/// that happened is that nobody was looking. A tick that didn't happen accrues
+/// nothing.
+///
+/// Sixty is ~1 s of bars or ~2 s of trace, both deliberately generous. A stall
+/// that long on a window that really is on screen is already a severe hitch, and
+/// standing down late costs nothing — where a false trip re-arms the tap, which
+/// drops the rings' history and leaves the drawing ramping back in from silence.
+const FRAME_STALL_TICKS: u32 = 60;
+
+/// One drawing session: the buffers the per-frame analysis must not rebuild, and
+/// the shadows tracking what it last published.
+///
+/// Built on the first tick after the strip mounts and dropped when it leaves, so
+/// a user who never opens Now Playing never pays for the FFT plans — and so each
+/// session's shadows start at the resting values `set-active` publishes on the
+/// way out, without anyone having to reset them one by one.
+struct Analyzers {
+    spectrum: SpectrumAnalyzer,
+    wave: WaveformAnalyzer,
+    /// The trace's path commands. Sized once for the widest trace — two vertices
+    /// a column, ~17 bytes a vertex — so the per-frame rebuild only ever writes
+    /// into capacity it already has.
+    path: String,
+    /// Shadows `Visualizer.idle` / `Visualizer.dormant`, so an unchanged value
+    /// doesn't dirty the property sixty times a second.
+    was_idle: bool,
+    was_dormant: bool,
+    /// Painted-frame count as of the last tick, and how many ticks it has sat
+    /// unchanged.
+    last_frames: u64,
+    stalled_ticks: u32,
+}
+
+impl Analyzers {
+    fn new() -> Self {
+        Self {
+            spectrum: SpectrumAnalyzer::new(FFT_SIZE, NUM_BANDS),
+            // A window wider than the ring would only be padded with silence, so
+            // the ring's capacity is the analyzer's too.
+            wave: WaveformAnalyzer::new(RING_CAP, MAX_COLUMNS),
+            path: String::with_capacity(MAX_COLUMNS * 2 * 20),
+            was_idle: true,
+            was_dormant: false,
+            last_frames: pulse::frames().unwrap_or_default(),
+            stalled_ticks: 0,
+        }
+    }
+
+    /// Whether the window has painted recently enough to be worth drawing for.
+    ///
+    /// Every tick dirties a property, so a window being shown paints on every
+    /// one of them and a window that isn't leaves the count where it was.
+    fn painting(&mut self) -> bool {
+        let Some(frames) = pulse::frames() else {
+            // Nothing is counting, so there is no evidence either way — and an
+            // inference with none behind it must not be what blanks the strip.
+            return true;
+        };
+        if frames == self.last_frames {
+            self.stalled_ticks = self.stalled_ticks.saturating_add(1);
+        } else {
+            self.last_frames = frames;
+            self.stalled_ticks = 0;
+        }
+        self.stalled_ticks < FRAME_STALL_TICKS
+    }
+}
 
 /// Style keys in picker order.
 ///
@@ -107,6 +195,13 @@ pub fn install_visualizer(ui: &AppWindow, state: &AppState) {
     // the 16 ms tick, and both ends live on the UI thread.
     let style: Rc<Cell<usize>> = Rc::new(Cell::new(selected));
 
+    // The session's buffers, shared between the tick that builds and uses them
+    // and the `set-active` that drops them. Both run on the UI thread, and the
+    // tick's borrow never outlives one frame.
+    let analyzers: Rc<RefCell<Option<Analyzers>>> = Rc::new(RefCell::new(None));
+
+    pulse::install(ui);
+
     let viz_global = ui.global::<Visualizer>();
     viz_global.set_enabled(flags.viz_enabled);
     publish_style(&viz_global, selected);
@@ -125,38 +220,33 @@ pub fn install_visualizer(ui: &AppWindow, state: &AppState) {
         viz_global.set_wave_path(SharedString::from(resting.as_str()));
     }
 
-    // tick — dispatch one frame. Slint callbacks are `FnMut`, so both analyzers
-    // (the FFT plans and their buffers, the Hann tables, the bin→band map, the
-    // smoothing state, the sample window and the trace) are simply owned by the
-    // closure and reused across ticks; nothing here allocates except the one
-    // `SharedString` the waveform path has to be handed to Slint as.
+    // tick — dispatch one frame. The session's analyzers (the FFT plans and
+    // their buffers, the Hann tables, the bin→band map, the smoothing state, the
+    // sample window and the trace) are built on the first frame and reused
+    // across ticks; nothing here allocates except the one `SharedString` the
+    // waveform path has to be handed to Slint as.
     {
         let viz = state.rodio.visualizer();
         let model = model.clone();
         let style = style.clone();
+        let analyzers = analyzers.clone();
         let weak = ui.as_weak();
-        let mut spectrum = SpectrumAnalyzer::new(FFT_SIZE, NUM_BANDS);
-        // A window wider than the ring would only be padded with silence, so the
-        // ring's capacity is the analyzer's too.
-        let mut wave = WaveformAnalyzer::new(RING_CAP, MAX_COLUMNS);
-        // Sized once for the widest trace — two vertices a column, ~17 bytes a
-        // vertex — so the per-frame rebuild only ever writes into capacity it
-        // already has.
-        let mut path = String::with_capacity(MAX_COLUMNS * 2 * 20);
-        // Shadows `Visualizer.idle`, so an unchanged value doesn't dirty the
-        // property sixty times a second. Seeded to match the value published
-        // above.
-        let was_idle = Cell::new(true);
 
         viz_global.on_tick(move |playing, strip_width| {
+            let mut slot = analyzers.borrow_mut();
+            // The one construction site, so no mount ordering can leave the tick
+            // without buffers however `set-active` and the strip interleave.
+            let session = slot.get_or_insert_with(Analyzers::new);
+
             // A pause leaves the last window of audio sitting in the ring, so
             // re-analysing it would freeze the drawing on a stale shape instead
-            // of letting it fall. A hidden window has nothing to draw for at
-            // all — the strip's Timer fires off the event loop, not the render
-            // loop, and the loop stays alive through a close-to-tray hide.
-            // Computed rather than returned early on: the decay path below still
-            // has to run, so `idle` stays truthful and the Timer can still stop.
-            let analyzing = playing && tray_bridge::is_window_visible();
+            // of letting it fall. A window that isn't on screen has nothing to
+            // draw for at all — see the module docs for why that takes two
+            // signals rather than one. Computed rather than returned early on:
+            // the decay path below still has to run, so `idle` stays truthful
+            // and the Timer can still stop.
+            let painting = session.painting();
+            let analyzing = playing && painting && tray_bridge::is_window_visible();
 
             // The steady-state writer of the tap's arm state, so pause, minimise
             // and hide-to-tray all silence the producer as well as the analysis.
@@ -172,26 +262,31 @@ pub fn install_visualizer(ui: &AppWindow, state: &AppState) {
 
             let waveform = is_waveform(style.get());
             let idle = if waveform {
-                frame::waveform(&viz, &mut wave, &mut path, rate, strip_width)
+                frame::waveform(&viz, &mut session.wave, &mut session.path, rate, strip_width)
             } else {
-                frame::bars(&viz, &mut spectrum, &model, rate)
+                frame::bars(&viz, &mut session.spectrum, &model, rate)
             };
+            // Settled, and nothing arriving to unsettle it: the tick is only
+            // still here to watch for frames, which it can do far more slowly.
+            let dormant = idle && !painting;
 
             // The bars' levels ride their own model, which the loop above has
-            // already written; only the trace and the idle flag come through
-            // here. `idle` gates the strip's Timer, so it can't be skipped —
-            // but it changes twice a track, not sixty times a second.
-            if waveform || idle != was_idle.get() {
+            // already written; only the trace and the two flags come through
+            // here. Both flags drive the strip's Timer, so they can't be
+            // skipped — but they change twice a track, not sixty times a second.
+            if waveform || idle != session.was_idle || dormant != session.was_dormant {
                 if let Some(ui) = weak.upgrade() {
                     let global = ui.global::<Visualizer>();
                     // Only the mounted style's property is written — the other
                     // one's consumer isn't in the tree to read it.
                     if waveform {
-                        global.set_wave_path(SharedString::from(path.as_str()));
+                        global.set_wave_path(SharedString::from(session.path.as_str()));
                     }
                     global.set_idle(idle);
+                    global.set_dormant(dormant);
                 }
-                was_idle.set(idle);
+                session.was_idle = idle;
+                session.was_dormant = dormant;
             }
         });
     }
@@ -200,10 +295,30 @@ pub fn install_visualizer(ui: &AppWindow, state: &AppState) {
     // the setting off with it open) unmounts the strip, which stops `tick`, so
     // something outside the strip has to disarm the tap on the way out. On the
     // way in it arms optimistically and the next tick refines it.
+    //
+    // The session's buffers leave with it. They are the whole of the feature's
+    // resident footprint — two FFT plans with their windows, spectra and
+    // scratch, the trace's window and its path string — and a strip nobody is
+    // drawing has no use for any of it.
     {
         let viz = state.rodio.visualizer();
+        let analyzers = analyzers.clone();
+        let weak = ui.as_weak();
         viz_global.on_set_active(move |active| {
             viz.set_enabled(active && tray_bridge::is_window_visible());
+            if active {
+                return;
+            }
+            *analyzers.borrow_mut() = None;
+            // The strip mounts on whatever these last held, so a session that
+            // ended dormant would leave the next one waiting half a second for
+            // its first frame. Hand back the resting values a fresh `Analyzers`
+            // is shadowing.
+            if let Some(ui) = weak.upgrade() {
+                let global = ui.global::<Visualizer>();
+                global.set_idle(true);
+                global.set_dormant(false);
+            }
         });
     }
 

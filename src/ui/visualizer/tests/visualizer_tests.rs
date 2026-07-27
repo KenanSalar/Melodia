@@ -1,10 +1,16 @@
-//! Tests for the visualizer's style table.
+//! Tests for the parts of the visualizer no compiler checks: the style table's
+//! mirrors, and the strip Timer's gate.
 //!
 //! `STYLES` is mirrored by two things the compiler can't see: the translated
 //! name array both pickers render, and the key `VisualizerStrip` branches on.
 //! Both drift silently — a reordered picker would repoint every install's saved
 //! style, and a renamed key would leave the strip blank — so they are pinned
 //! here against the `.slint` sources.
+//!
+//! The Timer's `running` and `interval` are pinned for the same reason and are
+//! worse when they drift: Rust would still publish every property, the strip
+//! would still look right on screen, and the only symptom would be a tick
+//! running at 60 Hz for a window nobody is looking at.
 
 use super::*;
 use crate::services::settings::{DEFAULT_VIZ_STYLE, VisualizerFlags};
@@ -63,6 +69,29 @@ fn the_strip_branches_on_a_key_the_table_knows() {
     assert!(
         SPECTRUM_BARS.contains("in property <bool> centred;"),
         "SpectrumBars no longer takes the anchor flag the strip sets"
+    );
+}
+
+#[test]
+fn the_strip_stops_ticking_for_a_window_the_os_calls_hidden() {
+    // The certain half of the gate. `idle` has to stay in it or a pause would
+    // freeze the drawing mid-shape instead of letting it fall.
+    assert!(
+        STRIP.contains(
+            "running: (Player.vm.is_playing && Visualizer.window-shown) || !Visualizer.idle;"
+        ),
+        "the strip's Timer no longer gates on Visualizer.window-shown"
+    );
+}
+
+#[test]
+fn a_dormant_strip_polls_rather_than_running_at_frame_rate() {
+    // The inferred half. Nothing can wake this one, so it slows the Timer down
+    // instead of stopping it — drop the arm and the Timer is back at 60 Hz for
+    // a window Wayland never admitted was minimized.
+    assert!(
+        STRIP.contains("Visualizer.dormant ? 500ms"),
+        "the strip's Timer lost its dormant polling interval"
     );
 }
 

@@ -15,7 +15,10 @@
 //!    icon stays in sync with Win+↑ / window-tile shortcuts that
 //!    bypass our buttons.
 //! 4. **`Focused(bool)`**: mirror the OS focus state into
-//!    `Theme.window-focused` — always, unconditionally. Two consumers
+//!    `Theme.window-focused` — always, unconditionally — and use the
+//!    transition as the cue to reconcile the tray-bridge's visibility
+//!    shadow, raising it on focus and asking the OS about a minimize on
+//!    focus loss (see [`schedule_minimize_probe`]). Two consumers
 //!    today: the KDE "Match Unfocused Window Background" tint (sidebar
 //!    and now-playing bar bindings gate themselves on
 //!    `Settings.match-unfocused-bg && Theme.use-native-titlebar
@@ -33,15 +36,51 @@
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::Duration;
 
 use slint::ComponentHandle;
 use slint::winit_030::WinitWindowAccessor;
 use slint::winit_030::winit::event::{ElementState, MouseButton, MouseScrollDelta, WindowEvent};
+use slint::winit_030::winit::window::Window as WinitWindow;
 
 use crate::state::AppState;
 use crate::{AppWindow, CompositeScroll, PlaylistDetail, PopupHighlight, Queue, Theme};
 
 use super::{drop_coalescer, geometry};
+
+/// How long to wait after a focus loss before asking whether it was a minimize.
+///
+/// The window manager sets the minimized state and drops focus at about the same
+/// time, and not reliably in that order — X11 publishes `_NET_WM_STATE_HIDDEN`
+/// on its own event stream, Win32 sends `WM_ACTIVATE` and `WM_SIZE`
+/// independently. Asking a moment later sidesteps the ordering question
+/// entirely, for the cost of one deferred timer per focus loss.
+const MINIMIZE_PROBE_DELAY: Duration = Duration::from_millis(250);
+
+/// Ask the OS whether a focus loss was really a minimize, and drop the
+/// visibility shadow if it was.
+///
+/// This is what brings a minimize we didn't drive — the native titlebar's
+/// button, a taskbar click, "show desktop" — to the same gates our own minimize
+/// button reaches: the visualizer stops drawing for a window nobody can see, and
+/// the tray "Show / Hide" toggle restores rather than re-hiding an already
+/// hidden window.
+///
+/// `winit::Window::is_minimized` answers `None` on Wayland — the protocol never
+/// tells a client it was minimized — so that case is left exactly as it was, and
+/// `ui::visualizer::pulse` is what covers it.
+fn schedule_minimize_probe(weak: slint::Weak<AppWindow>) {
+    slint::Timer::single_shot(MINIMIZE_PROBE_DELAY, move || {
+        let Some(ui) = weak.upgrade() else { return };
+        let minimized = ui
+            .window()
+            .with_winit_window(WinitWindow::is_minimized)
+            .flatten();
+        if minimized == Some(true) {
+            crate::ui::tray_bridge::set_window_visible(&ui, false);
+        }
+    });
+}
 
 pub(super) fn install(app: &AppWindow, state: &AppState, drag_hover: Arc<AtomicBool>) {
     let weak = app.as_weak();
@@ -156,19 +195,23 @@ pub(super) fn install(app: &AppWindow, state: &AppState, drag_hover: Arc<AtomicB
             }
             WindowEvent::Focused(focused) => {
                 let focused = *focused;
-                // Focus implies the surface is visible and the user is
-                // interacting with it — covers the taskbar-restore path
-                // where KWin un-minimizes the window without going through
-                // any of our callbacks, so the tray-bridge shadow would
-                // otherwise stay stuck at the post-minimize `false`.
-                // `Focused(false)` is ambiguous (another window got focus,
-                // not necessarily that we're hidden), so the shadow is only
-                // ratcheted up here, never down.
-                if focused {
-                    crate::ui::tray_bridge::set_window_visible(true);
+                // `Focused(false)` on its own is ambiguous — another window
+                // got focus, not necessarily that we're hidden — so ask the
+                // OS which it was. See `schedule_minimize_probe` for why the
+                // question is deferred rather than asked here.
+                if !focused {
+                    schedule_minimize_probe(weak.clone());
                 }
                 let _ = weak.upgrade_in_event_loop(move |ui| {
                     ui.global::<Theme>().set_window_focused(focused);
+                    // Focus implies the surface is visible and the user is
+                    // interacting with it — covers the taskbar-restore path
+                    // where the WM un-minimizes the window without going
+                    // through any of our callbacks, so the tray-bridge shadow
+                    // would otherwise stay stuck at the post-minimize `false`.
+                    if focused {
+                        crate::ui::tray_bridge::set_window_visible(&ui, true);
+                    }
                 });
                 slint::winit_030::EventResult::Propagate
             }
@@ -230,7 +273,7 @@ pub(super) fn install(app: &AppWindow, state: &AppState, drag_hover: Arc<AtomicB
             WindowEvent::CloseRequested => {
                 if crate::ui::tray_bridge::should_hide_to_tray() {
                     if let Err(e) = weak.upgrade_in_event_loop(|ui| {
-                        crate::ui::tray_bridge::hide_window(ui.window());
+                        crate::ui::tray_bridge::hide_window(&ui);
                     }) {
                         log::warn!("close-to-tray: schedule hide: {e}");
                     }

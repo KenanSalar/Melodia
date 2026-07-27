@@ -346,6 +346,15 @@ export global ReplayGain {
 // pausing halts the audio tap but leaves stale samples in the ring, so
 // re-analysing them would freeze the drawing mid-shape instead of letting it
 // fall.
+//
+// `window-shown` and `dormant` are the other two halves of that Timer's gate, and
+// they carry different amounts of certainty on purpose. `window-shown` is the OS
+// telling us the window is off screen — a tray hide, a minimize we handled or one
+// we asked about — and every one of those has a matching event that puts it back,
+// so it is safe to stop the Timer on. `dormant` says the drawing has settled *and*
+// no frames are being painted, which is inferred rather than reported (see
+// `src/ui/visualizer/pulse.rs`) and has no wake-up event, so it slows the Timer
+// down instead of stopping it — leaving it able to notice frames coming back.
 export global Visualizer {
     in-out property <bool> enabled: true;
     in-out property <string> style: "bars";
@@ -353,6 +362,8 @@ export global Visualizer {
     in property <[float]> bars;
     in property <string> wave-path;
     in property <bool> idle: true;
+    in property <bool> window-shown: true;
+    in property <bool> dormant;
 
     callback set-enabled(bool);
     callback set-style(int);

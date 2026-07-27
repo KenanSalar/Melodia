@@ -36,15 +36,26 @@ export component VisualizerStrip inherits Rectangle {
     // exactly that reason. 30 Hz also thirds the trace's per-frame path string
     // and the re-parse Slint does of it.
     //
+    // `dormant` overrides both: nothing is being drawn and nothing is arriving,
+    // so the tick is only still here to watch for frames coming back — which it
+    // can do far more slowly than a visible strip needs. Half a second is the
+    // *worst* case for coming back to life, and only for a window that was
+    // covered rather than minimized: anything the OS reports clears `dormant`
+    // outright on the way in.
+    //
     // `running` is deliberately not just `is_playing`. Pausing stops the audio
     // tap but leaves the last window of samples in the ring, so freezing the
     // Timer would strand the drawing on a stale shape. Instead the tick keeps
     // firing past a pause — feeding the analyzers silence rather than the ring —
     // until Rust reports everything has settled, and only then stops. A paused,
-    // decayed visualizer costs nothing.
+    // decayed visualizer costs nothing. A window the OS told us is off screen
+    // takes the same route out through `window-shown`, so it falls before it
+    // stops rather than freezing mid-shape.
     Timer {
-        interval: Visualizer.style == "waveform" ? 33ms : 16ms;
-        running: Player.vm.is_playing || !Visualizer.idle;
+        interval: Visualizer.dormant ? 500ms
+            : Visualizer.style == "waveform" ? 33ms
+            : 16ms;
+        running: (Player.vm.is_playing && Visualizer.window-shown) || !Visualizer.idle;
         triggered() => {
             // The width goes with it because the trace's column count follows
             // the strip rather than being a constant; the bars ignore it.
