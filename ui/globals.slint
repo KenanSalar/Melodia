@@ -509,11 +509,12 @@ export global TagEditor {
 export global Nav {
     in-out property <int> selected-index: 3;
     // True while the full-screen Now Playing view replaces the main content
-    // area. Opened by clicking the track-info card in the now-playing bar;
-    // closed by the view's back button or by any sidebar item click (the
-    // sidebar resets it alongside `selected-index`). The content panel in
-    // `app-window.slint` renders `NowPlayingView` when this is true and
-    // gates the regular view branches on `!now-playing-open`.
+    // area. Toggled by clicking the track-info card in the now-playing bar
+    // (the bar stays mounted while the view is open, so the same card also
+    // closes it); additionally closed by the view's back button or by any
+    // sidebar item click (the sidebar resets it alongside `selected-index`).
+    // The content panel in `app-window.slint` renders `NowPlayingView` when
+    // this is true and gates the regular view branches on `!now-playing-open`.
     in-out property <bool> now-playing-open: false;
     // Mirror of `now-playing-open` into Rust (`src/ui/now_playing/`).
     // The Up Next subscriber skips its ~20-row rebuild while the view is
