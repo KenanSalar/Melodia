@@ -10,7 +10,7 @@ use crate::library;
 use crate::state::AppState;
 use crate::ui::albums::AlbumsUi;
 use crate::ui::artists::{self as artists_ui_mod, ArtistsUi};
-use crate::ui::callbacks::collect_track_ids;
+use crate::ui::callbacks::{collect_track_ids, play_row_start};
 use crate::ui::callbacks::macros::{
     release_detail_hero_images, spawn_logged, spawn_logged_sync, wire_row_flag,
 };
@@ -148,15 +148,20 @@ pub(super) fn wire(
         });
     }
 
-    // play-row: double-click appends only that track to the queue
-    // (skipping duplicates). Use `play-artist` for "load every track".
+    // play-row: double-click loads the artist's tracks into the queue and
+    // starts on the clicked one. `play-artist` is the same call at index 0.
     {
         let s = state.clone();
-        detail.on_play_row(move |track_id, _idx| {
+        let au = artists_ui.clone();
+        detail.on_play_row(move |track_id, idx| {
+            let ids = au.detail_track_ids();
+            if ids.is_empty() {
+                return;
+            }
+            let start = play_row_start(&ids, i64::from(track_id), idx);
             let s = s.clone();
-            let id = i64::from(track_id);
             spawn_logged!(s, "artists::play_row",
-                library::queue::queue_append_unique(&s, id));
+                library::playback::player_play_tracks(&s.playback_ctx(), ids, start));
         });
     }
 

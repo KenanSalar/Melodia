@@ -8,7 +8,7 @@ use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel};
 
 use crate::library;
 use crate::state::AppState;
-use crate::ui::callbacks::collect_track_ids;
+use crate::ui::callbacks::{collect_track_ids, play_row_start};
 use crate::ui::callbacks::macros::{release_detail_hero_images, spawn_logged, wire_row_flag};
 use crate::ui::playlists::{self as playlists_ui_mod, PlaylistsUi};
 use crate::ui::track_list_view::{TrackListColumnState, view_id};
@@ -94,13 +94,20 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
         });
     }
 
+    // play-row: double-click loads the playlist into the queue and starts on
+    // the clicked track. `play-all` is the same call pinned to index 0.
     {
         let s = state.clone();
-        detail.on_play_row(move |track_id, _idx| {
+        let pu = playlists_ui.clone();
+        detail.on_play_row(move |track_id, idx| {
+            let ids = pu.detail_track_ids();
+            if ids.is_empty() {
+                return;
+            }
+            let start = play_row_start(&ids, i64::from(track_id), idx);
             let s = s.clone();
-            let id = i64::from(track_id);
             spawn_logged!(s, "playlists::play_row",
-                library::queue::queue_append_unique(&s, id));
+                library::playback::player_play_tracks(&s.playback_ctx(), ids, start));
         });
     }
 

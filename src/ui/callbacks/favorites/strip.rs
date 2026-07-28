@@ -25,18 +25,23 @@ pub(super) fn wire(
     let g = ui.global::<Favorites>();
     let weak = ui.as_weak();
 
-    // play-track: clicking a Most Played card mirrors the tracklist
-    // double-click behavior — `queue_append_unique` skip-to's the
-    // track if already queued, else appends to the tail and skip-to's
-    // the new slot. Preserves the queue (no wipe) and avoids the
-    // direct-play branch that bypasses the queue entirely.
+    // play-track: clicking a Most Played card loads the strip into the queue
+    // and starts on that card — the strip is the context, not the All Songs
+    // list below it. The Slint callback carries no row index (these are cards,
+    // not list rows), so the start slot comes from the id.
     {
         let s = state.clone();
+        let fu = fav_ui.clone();
         g.on_play_track(move |id| {
-            let s = s.clone();
             let id = i64::from(id);
+            let ids = fu.most_played_track_ids();
+            let start = ids.iter().position(|&i| i == id);
+            if ids.is_empty() {
+                return;
+            }
+            let s = s.clone();
             spawn_logged!(s, "favorites::play_track",
-                library::queue::queue_append_unique(&s, id));
+                library::playback::player_play_tracks(&s.playback_ctx(), ids, start));
         });
     }
     {

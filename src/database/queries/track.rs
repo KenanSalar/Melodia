@@ -122,24 +122,6 @@ pub async fn get_tracks_by_ids(db: &DbPool, ids: &[i64]) -> Result<Vec<track::Tr
     Ok(ids.iter().filter_map(|id| track_map.remove(id)).collect())
 }
 
-/// Single-row form of `get_track_summaries_by_ids`. Returns `None` for a
-/// missing id (the call sites that need this — `player_play_track`,
-/// `queue_play_next`, `queue_direct_play` — error out on `None` via `?`,
-/// but `fetch_optional` keeps the contract symmetric with the batch form
-/// and avoids the `RowNotFound` exception path).
-pub async fn get_track_summary_by_id(
-    db: &DbPool,
-    id: i64,
-) -> Result<Option<track::TrackSummary>, AppError> {
-    let cols = track::track_summary_columns();
-    let sql = format!("SELECT {cols} FROM tracks WHERE id = ? LIMIT 1");
-    let row: Option<track::TrackSummary> = sqlx::query_as::<_, track::TrackSummary>(AssertSqlSafe(sql))
-        .bind(id)
-        .fetch_optional(db.read())
-        .await?;
-    Ok(row)
-}
-
 /// Technical-metadata projection for the full-screen Now Playing view's
 /// chip row — reads only the 8 columns `TrackMetaRow` consumes (vs
 /// `get_track_by_id`'s full 41-column `SELECT *`). Returns `None` for a
@@ -158,9 +140,8 @@ pub async fn get_track_meta(
 }
 
 /// Single-id fetch of the columns a scrobble needs, for the detector's
-/// per-track-start enrichment. Sibling of `get_track_summary_by_id` /
-/// `get_track_meta`; returns `None` for a missing id (the detector then skips
-/// the scrobble).
+/// per-track-start enrichment. Sibling of `get_track_meta`; returns `None` for
+/// a missing id (the detector then skips the scrobble).
 pub async fn get_scrobble_row(db: &DbPool, id: i64) -> Result<Option<track::ScrobbleRow>, AppError> {
     let cols = track::scrobble_row_columns();
     let sql = format!("SELECT {cols} FROM tracks WHERE id = ? LIMIT 1");

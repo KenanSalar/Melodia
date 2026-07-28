@@ -150,9 +150,16 @@ impl RecentlyPlayedUi {
             .get_or_load_opt(Some(artwork_path).filter(|s| !s.is_empty()))
     }
 
+    /// Track ids of the Most Played strip, in card order. `play-track` hands
+    /// these to `player_play_tracks` so clicking a card loads the strip rather
+    /// than the recency list below it.
+    pub fn most_played_track_ids(&self) -> Vec<i64> {
+        self.inner.most_played.lock().iter().map(|t| t.id).collect()
+    }
+
     /// Track ids of the post-filter list in **display order** (filter + active
-    /// column sort applied), so `play-all` / `shuffle-all` enqueue what the
-    /// user sees. Recency sort keeps the cached fetch order.
+    /// column sort applied), so `play-all` / `shuffle-all` / `play-row`
+    /// enqueue what the user sees. Recency sort keeps the cached fetch order.
     pub fn filtered_track_ids(&self) -> Vec<i64> {
         let needle = self.inner.filter.lock().to_lowercase();
         let sort = self.inner.sort.lock().clone();

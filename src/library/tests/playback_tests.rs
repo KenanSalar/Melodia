@@ -37,25 +37,6 @@ fn state_with_queue(count: i64) -> PlayerState {
     state
 }
 
-// --- play_track (direct play) ---
-
-#[test]
-fn play_track_sets_direct_play_and_actions() {
-    let mut state = state_with_queue(3);
-    let track = make_summary(99, 200_000);
-
-    state.queue.set_direct_play(track.clone());
-    let actions = play_track_inner(&mut state, track, None);
-
-    assert_eq!(state.status, PlaybackStatus::Playing);
-    assert_eq!(state.current_track.as_ref().map(|t| t.id), Some(99));
-    assert!(
-        actions
-            .iter()
-            .any(|a| matches!(a, PlayerAction::PlayMedia { .. }))
-    );
-}
-
 // --- play_tracks (queue replace + play) ---
 
 #[test]
@@ -66,12 +47,16 @@ fn play_tracks_clears_queue_and_starts_at_index() {
     state.queue.clear();
     state.queue.add_tracks(summaries);
     state.queue.current_index = Some(2);
-    state.queue.clear_direct_play();
 
     if let Some(track) = state.queue.get_current().cloned() {
         let actions = play_track_inner(&mut state, track, None);
+        assert_eq!(state.status, PlaybackStatus::Playing);
         assert_eq!(state.current_track.as_ref().map(|t| t.id), Some(3));
-        assert!(!actions.is_empty());
+        assert!(
+            actions
+                .iter()
+                .any(|a| matches!(a, PlayerAction::PlayMedia { .. }))
+        );
     }
 }
 
@@ -81,6 +66,35 @@ fn play_tracks_start_index_clamps_to_len() {
     let start = 100_usize;
     let clamped = start.min(summaries.len() - 1);
     assert_eq!(clamped, 2);
+}
+
+/// Mirrors `player_play_tracks`' seeding when shuffle is already on: the
+/// clicked track ends up playing and every other track is still queued
+/// exactly once behind it.
+#[test]
+fn play_tracks_with_shuffle_on_anchors_the_clicked_track() {
+    let mut state = PlayerState::default();
+    let summaries: Vec<_> = (1..=8).map(|i| make_summary(i, 180_000)).collect();
+
+    state.queue.shuffle_enabled = true;
+    state.queue.clear();
+    state.queue.add_tracks(summaries);
+    state.queue.current_index = Some(5);
+    state
+        .queue
+        .shuffle_play_order_in_place(&mut rand::rng(), /* anchor_to_current */ true);
+
+    assert_eq!(state.queue.current_index, Some(0));
+    assert_eq!(state.queue.get_current().map(|t| t.id), Some(6));
+
+    let mut queued: Vec<i64> = state
+        .queue
+        .tracks_in_play_order()
+        .iter()
+        .map(|t| t.id)
+        .collect();
+    queued.sort_unstable();
+    assert_eq!(queued, (1..=8).collect::<Vec<_>>());
 }
 
 // --- play (resume) ---

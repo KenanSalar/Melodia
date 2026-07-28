@@ -70,18 +70,12 @@ async fn reconcile_once(
     sinks: &PlayerSinks,
     rodio: &Arc<RodioPlayer>,
 ) -> AppResult<()> {
-    // Step 1: snapshot every track id currently referenced by the queue,
-    // including the (optional) direct-play track. Brief read-only lock —
-    // no with_state_emit because we're not mutating; observers should not
-    // see a spurious ViewModel re-emit.
+    // Step 1: snapshot every track id currently referenced by the queue.
+    // Brief read-only lock — no with_state_emit because we're not mutating;
+    // observers should not see a spurious ViewModel re-emit.
     let queued_ids: Vec<i64> = {
         let s = lock_state(player_state);
-        let mut ids: Vec<i64> = Vec::with_capacity(s.queue.tracks.len() + 1);
-        ids.extend(s.queue.tracks.iter().map(|t| t.id));
-        if let Some(t) = &s.queue.direct_play_track {
-            ids.push(t.id);
-        }
-        ids
+        s.queue.tracks.iter().map(|t| t.id).collect()
     };
 
     if queued_ids.is_empty() {

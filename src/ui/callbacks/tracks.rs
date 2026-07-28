@@ -85,17 +85,24 @@ pub fn wire_tracks(ui: &AppWindow, state: &AppState, tracks_ui: &Arc<TracksUi>) 
         });
     }
 
-    // play-row: double-click on a row appends just that track to the queue
-    // (skipping if already present). Auto-starts when the player was idle.
-    // The "Play All" button is the explicit affordance for loading the full
-    // filtered list — see `on_play_all` below.
+    // play-row: double-click loads the current view into the queue and starts
+    // on the clicked track — the standard music-player contract. "Play All"
+    // below is the same call pinned to index 0.
     {
         let s = state.clone();
-        tracks.on_play_row(move |track_id, _idx| {
+        let tu = tracks_ui.clone();
+        let weak = weak.clone();
+        tracks.on_play_row(move |track_id, idx| {
+            let Some(ui) = weak.upgrade() else { return };
+            let filter = ui.global::<Tracks>().get_filter().to_string();
+            let ids = tu.current_ids_filtered(&filter);
+            if ids.is_empty() {
+                return;
+            }
+            let start = super::play_row_start(&ids, i64::from(track_id), idx);
             let s = s.clone();
-            let id = i64::from(track_id);
             spawn_logged!(s, "tracks::play_row",
-                library::queue::queue_append_unique(&s, id));
+                library::playback::player_play_tracks(&s.playback_ctx(), ids, start));
         });
     }
 

@@ -67,6 +67,33 @@ pub(super) fn collect_nonzero_track_ids(ids: &ModelRc<i32>) -> Vec<i64> {
     ids.iter().filter(|&id| id != 0).map(i64::from).collect()
 }
 
+/// Resolve the queue slot a `play-row` activation should start on.
+///
+/// The row index a view hands over indexes its *displayed* rows, which is the
+/// same space as `ids` everywhere except Browse — that list also shows
+/// disk-only files, which `current_in_library_ids` drops. Fall back to a lookup
+/// by id there, and to the head of the queue when the track isn't in the list
+/// at all (`player_play_tracks` reads `None` as index 0).
+pub(super) fn play_row_start(ids: &[i64], track_id: i64, idx: i32) -> Option<usize> {
+    if let Ok(i) = usize::try_from(idx)
+        && ids.get(i) == Some(&track_id)
+    {
+        return Some(i);
+    }
+    ids.iter().position(|&id| id == track_id)
+}
+
+/// Track ids of a live `VecModel<TrackListRow>`, in display order.
+///
+/// Only Search needs this. Every other view caches its displayed rows on a
+/// `*Ui` handle, but Search's visible set is a sorted, `COMPACT_TRACK_LIMIT`-
+/// truncated projection of `last_results` that is assembled at render time —
+/// so the model is the only place the displayed order actually exists. Result
+/// sets are LIMIT-bounded, so walking it on the UI thread is cheap.
+pub(super) fn model_track_ids(rows: &ModelRc<crate::TrackListRow>) -> Vec<i64> {
+    rows.iter().map(|r| i64::from(r.id)).collect()
+}
+
 /// Spawn a fire-and-forget task that persists `view_id`'s sort field +
 /// direction into `views.json`'s `view_sort`. A write failure is logged, not
 /// surfaced — the in-memory re-sort already applied, so the only loss is
@@ -203,3 +230,7 @@ pub fn wire_all(ui: &AppWindow, state: &AppState) {
         });
     }
 }
+
+#[cfg(test)]
+#[path = "tests/play_row_tests.rs"]
+mod tests;

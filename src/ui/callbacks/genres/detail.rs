@@ -9,7 +9,7 @@ use slint::{ComponentHandle, Model, SharedString};
 
 use crate::library;
 use crate::state::AppState;
-use crate::ui::callbacks::collect_track_ids;
+use crate::ui::callbacks::{collect_track_ids, play_row_start};
 use crate::ui::callbacks::macros::{spawn_logged, spawn_logged_sync, wire_row_flag};
 use crate::ui::callbacks::persist_view_sort;
 use crate::ui::genres::{self as genres_ui_mod, GenresUi};
@@ -120,17 +120,22 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, genres_ui: &Arc<GenresUi>) 
         });
     }
 
-    // play-row: double-click appends only that track to the queue
-    // (skipping duplicates). Use `play-genre` to load every *visible*
-    // track — when a search filter is active that is the filtered subset,
-    // not the whole genre.
+    // play-row: double-click loads every *visible* track into the queue and
+    // starts on the clicked one — when a search filter is active that is the
+    // filtered subset, not the whole genre. `play-genre` is the same call at
+    // index 0.
     {
         let s = state.clone();
-        detail.on_play_row(move |track_id, _idx| {
+        let gu = genres_ui.clone();
+        detail.on_play_row(move |track_id, idx| {
+            let ids = gu.detail_track_ids();
+            if ids.is_empty() {
+                return;
+            }
+            let start = play_row_start(&ids, i64::from(track_id), idx);
             let s = s.clone();
-            let id = i64::from(track_id);
             spawn_logged!(s, "genres::play_row",
-                library::queue::queue_append_unique(&s, id));
+                library::playback::player_play_tracks(&s.playback_ctx(), ids, start));
         });
     }
 

@@ -14,7 +14,7 @@ use super::VIEW_ID;
 use crate::library;
 use crate::services::settings::{SortDir, ViewSort};
 use crate::state::AppState;
-use crate::ui::callbacks::collect_track_ids;
+use crate::ui::callbacks::{collect_track_ids, play_row_start};
 use crate::ui::callbacks::macros::{spawn_logged, wire_row_flag};
 use crate::ui::recently_played::{self as recently_played_ui_mod, RecentlyPlayedUi};
 use crate::ui::track_list_view::TrackListColumnState;
@@ -26,13 +26,20 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, rp_ui: &Arc<RecentlyPlayedU
     let weak = ui.as_weak();
 
     // --- Row actions ----------------------------------------------
+    // play-row loads the filtered list into the queue and starts on the
+    // clicked track; the header's Play All is the same call at index 0.
     {
         let s = state.clone();
-        g.on_play_row(move |track_id, _idx| {
+        let ru = rp_ui.clone();
+        g.on_play_row(move |track_id, idx| {
+            let ids = ru.filtered_track_ids();
+            if ids.is_empty() {
+                return;
+            }
+            let start = play_row_start(&ids, i64::from(track_id), idx);
             let s = s.clone();
-            let id = i64::from(track_id);
             spawn_logged!(s, "recently_played::play_row",
-                library::queue::queue_append_unique(&s, id));
+                library::playback::player_play_tracks(&s.playback_ctx(), ids, start));
         });
     }
     {

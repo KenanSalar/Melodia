@@ -227,6 +227,13 @@ impl FavoritesUi {
             .collect()
     }
 
+    /// Track ids of the Most Played strip, in card order. `play-track`
+    /// hands these to `player_play_tracks` so clicking a card loads the
+    /// strip rather than the All Songs list below it.
+    pub fn most_played_track_ids(&self) -> Vec<i64> {
+        self.inner.most_played.lock().iter().map(|t| t.id).collect()
+    }
+
     /// Whether a given artist appears in the cached Favorite Artists
     /// strip.
     pub fn fav_artist_known(&self, id: i64) -> bool {

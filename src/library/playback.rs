@@ -7,19 +7,16 @@ use crate::player::state::{lock_state, play_track_inner, with_state_emit};
 use crate::player::types::PlaybackStatus;
 use crate::state::PlaybackContext;
 
-pub async fn player_play_track(ctx: &PlaybackContext, track_id: i64) -> Result<(), AppError> {
-    let summary = queries::track::get_track_summary_by_id(&ctx.db, track_id)
-        .await?
-        .ok_or_else(|| AppError::NotFound(format!("track {track_id}")))?;
-    let summary = Arc::new(summary);
-
-    ctx.emit_and_execute(|s| {
-        s.queue.set_direct_play(Arc::clone(&summary));
-        play_track_inner(s, summary, None)
-    });
-    Ok(())
-}
-
+/// Replace the queue with `track_ids` and start at `start_index` (`None` =
+/// head). Every way of starting playback from a browsing surface routes here —
+/// a header Play-All pill pins index 0, activating a row passes the clicked
+/// slot — so the queue always ends up being the list the user was looking at.
+///
+/// With shuffle already on, the rest of the list is shuffled behind the chosen
+/// track rather than played in display order: a freshly seeded `play_order` is
+/// the identity permutation, so without this the pill would stay lit while
+/// playback walked the album straight through. `original_order` is left as
+/// seeded, so turning shuffle back off restores display order.
 pub async fn player_play_tracks(
     ctx: &PlaybackContext,
     track_ids: Vec<i64>,
@@ -41,7 +38,10 @@ pub async fn player_play_tracks(
         s.queue.clear();
         s.queue.add_tracks(summaries);
         s.queue.current_index = Some(start);
-        s.queue.clear_direct_play();
+        if s.queue.shuffle_enabled {
+            s.queue
+                .shuffle_play_order_in_place(&mut rand::rng(), /* anchor_to_current */ true);
+        }
 
         if let Some(track) = s.queue.get_current().cloned() {
             play_track_inner(s, track, None)

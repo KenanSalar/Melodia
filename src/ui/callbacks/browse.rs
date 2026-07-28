@@ -6,7 +6,7 @@ use std::sync::Arc;
 use async_compat::Compat;
 use slint::{ComponentHandle, Model, SharedString};
 
-use super::collect_nonzero_track_ids;
+use super::{collect_nonzero_track_ids, play_row_start};
 use super::macros::{spawn_logged, spawn_logged_sync, wire_row_flag};
 use crate::library;
 use crate::state::AppState;
@@ -147,20 +147,27 @@ pub fn wire_browse(ui: &AppWindow, state: &AppState, browse_ui: &Arc<BrowseUi>) 
         });
     }
 
-    // play-row: double-click on a library track appends just that track
-    // to the queue (skipping duplicates). Disk-only rows (`id == 0`)
-    // aren't in the library and are ignored. Use `play-all` for "load
-    // every in-library file in this folder".
+    // play-row: double-click loads every in-library file in this folder into
+    // the queue and starts on the clicked one. Disk-only rows (`id == 0`)
+    // aren't in the library and are ignored — they also *displace* the row
+    // index, since `current_in_library_ids` drops them, which is the case
+    // `play_row_start`'s lookup-by-id fallback exists for.
     {
         let s = state.clone();
-        g.on_play_row(move |track_id, _idx| {
+        let bu = browse_ui.clone();
+        g.on_play_row(move |track_id, idx| {
             let id = i64::from(track_id);
             if id == 0 {
                 return;
             }
+            let ids = bu.current_in_library_ids();
+            if ids.is_empty() {
+                return;
+            }
+            let start = play_row_start(&ids, id, idx);
             let s = s.clone();
             spawn_logged!(s, "browse::play_row",
-                library::queue::queue_append_unique(&s, id));
+                library::playback::player_play_tracks(&s.playback_ctx(), ids, start));
         });
     }
 

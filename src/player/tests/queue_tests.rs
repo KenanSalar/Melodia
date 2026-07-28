@@ -224,15 +224,12 @@ fn move_current_track() {
 fn clear_resets_all() {
     let mut q = make_queue(3);
     q.current_index = Some(1);
-    q.set_direct_play(make_summary(99, "Direct", 100));
     q.clear();
 
     assert!(q.tracks.is_empty());
     assert!(q.play_order.is_empty());
     assert!(q.original_order.is_empty());
     assert_eq!(q.current_index, None);
-    assert!(!q.direct_play_active);
-    assert!(q.direct_play_track.is_none());
 }
 
 // ── skip_to_index ───────────────────────────────────────────────────
@@ -249,15 +246,6 @@ fn skip_to_index_valid() {
 fn skip_to_index_out_of_bounds() {
     let mut q = make_queue(3);
     assert!(q.skip_to_index(10).is_none());
-}
-
-#[test]
-fn skip_to_index_clears_direct_play() {
-    let mut q = make_queue(3);
-    q.set_direct_play(make_summary(99, "Direct", 100));
-    q.skip_to_index(1);
-    assert!(!q.direct_play_active);
-    assert!(q.direct_play_track.is_none());
 }
 
 // ── advance ─────────────────────────────────────────────────────────
@@ -288,17 +276,6 @@ fn advance_one_repeats_current() {
     let track = q.advance();
     assert!(track.is_some());
     assert_eq!(q.current_index, Some(1));
-}
-
-#[test]
-fn advance_from_direct_play() {
-    let mut q = make_queue(3);
-    q.current_index = Some(1);
-    q.set_direct_play(make_summary(99, "Direct", 100));
-    q.repeat_mode = RepeatMode::Off;
-
-    assert!(q.advance().is_some());
-    assert!(!q.direct_play_active);
 }
 
 #[test]
@@ -388,15 +365,6 @@ fn previous_off_stays_at_zero() {
     assert_eq!(q.current_index, Some(0));
 }
 
-#[test]
-fn previous_clears_direct_play() {
-    let mut q = make_queue(3);
-    q.current_index = Some(1);
-    q.set_direct_play(make_summary(99, "Direct", 100));
-    q.previous();
-    assert!(!q.direct_play_active);
-}
-
 // ── peek_next ───────────────────────────────────────────────────────
 
 #[test]
@@ -438,36 +406,6 @@ fn peek_next_one_returns_current() -> Result<(), AppError> {
         .peek_next()
         .ok_or_else(|| AppError::Validation("peek_next None".into()))?;
     assert_eq!(track.id, 2); // tracks[play_order[1]] = tracks[1], id=2
-    Ok(())
-}
-
-// ── direct play ─────────────────────────────────────────────────────
-
-#[test]
-fn direct_play_overrides_get_current() -> Result<(), AppError> {
-    let mut q = make_queue(3);
-    q.current_index = Some(0);
-    let direct = make_summary(99, "Direct", 100);
-    q.set_direct_play(direct);
-
-    let current = q
-        .get_current()
-        .ok_or_else(|| AppError::Validation("get_current None".into()))?;
-    assert_eq!(current.id, 99);
-    Ok(())
-}
-
-#[test]
-fn clear_direct_play_restores_queue() -> Result<(), AppError> {
-    let mut q = make_queue(3);
-    q.current_index = Some(1);
-    q.set_direct_play(make_summary(99, "Direct", 100));
-    q.clear_direct_play();
-
-    let current = q
-        .get_current()
-        .ok_or_else(|| AppError::Validation("get_current None".into()))?;
-    assert_eq!(current.id, 2); // back to queue track
     Ok(())
 }
 
@@ -681,22 +619,6 @@ fn prune_missing_everything_empties_queue() {
     assert!(q.play_order.is_empty());
     assert!(q.original_order.is_empty());
     assert_eq!(q.current_index, None);
-}
-
-#[test]
-fn prune_missing_clears_direct_play() {
-    let mut q = make_queue(2);
-    q.set_direct_play(make_summary(99, "Direct", 1000));
-
-    let outcome = q.prune_missing(&HashSet::from([99]));
-
-    assert_eq!(outcome.removed, 0); // direct_play track isn't counted in `tracks`
-    // current_was_removed is still true because the active direct-play track was pruned.
-    assert!(outcome.current_was_removed);
-    assert!(q.direct_play_track.is_none());
-    assert!(!q.direct_play_active);
-    // Regular queue is untouched.
-    assert_eq!(q.tracks.len(), 2);
 }
 
 #[test]

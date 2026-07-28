@@ -13,7 +13,7 @@ use crate::services::settings::{SortDir, ViewSort};
 use crate::state::AppState;
 use crate::ui::albums::AlbumsUi;
 use crate::ui::artists::ArtistsUi;
-use crate::ui::callbacks::collect_track_ids;
+use crate::ui::callbacks::{collect_track_ids, model_track_ids, play_row_start};
 use crate::ui::callbacks::cross_tab_nav;
 use crate::ui::callbacks::macros::spawn_logged;
 use crate::ui::search::{self as search_ui_mod, SearchUi, fetch};
@@ -89,13 +89,23 @@ pub(super) fn wire(
     }
 
     // --- Songs row actions -----------------------------------------
+    // play-row loads the visible results into the queue and starts on the
+    // clicked track. Search has no Play All pill and no Rust-side cache of
+    // what's on screen (the sort and the `show-all-tracks` cap are applied at
+    // render), so the ids come off the live model.
     {
         let s = state.clone();
-        g.on_play_row(move |track_id, _idx| {
+        let weak = weak.clone();
+        g.on_play_row(move |track_id, idx| {
+            let Some(ui) = weak.upgrade() else { return };
+            let ids = model_track_ids(&ui.global::<Search>().get_tracks());
+            if ids.is_empty() {
+                return;
+            }
+            let start = play_row_start(&ids, i64::from(track_id), idx);
             let s = s.clone();
-            let id = i64::from(track_id);
             spawn_logged!(s, "search::play_row",
-                library::queue::queue_append_unique(&s, id));
+                library::playback::player_play_tracks(&s.playback_ctx(), ids, start));
         });
     }
     {

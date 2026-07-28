@@ -38,7 +38,7 @@ pub fn wire_recently_played(ui: &AppWindow, state: &AppState, rp_ui: &Arc<Recent
     hydrate_sort_from_settings(state, rp_ui, &ui.global::<RecentlyPlayed>());
 
     covers::wire(ui, rp_ui);
-    strip::wire(ui, state);
+    strip::wire(ui, state, rp_ui);
     tracklist::wire(ui, state, rp_ui);
     lifecycle::wire(ui, state, rp_ui);
 }
