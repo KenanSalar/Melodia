@@ -228,7 +228,7 @@ impl Dispatch<WlDataDevice, DataDeviceData, WinitState> for DataDeviceState {
                     state
                         .events_sink
                         .push_window_event(WindowEvent::HoveredFileCancelled, hovered_window);
-                    data_device_state.finish_offer();
+                    data_device_state.release_offer();
                 }
             },
             WlDataDeviceEvent::DataOffer { id: _ } => {
@@ -349,10 +349,30 @@ impl DataDeviceState {
         callback(paths);
     }
 
+    /// Tear down after a *completed* drop: tell the source the drag finished,
+    /// then release.
+    ///
+    /// `wl_data_offer.finish` is only valid once `wl_data_device.drop` has been
+    /// received — sending it on any other path is an `invalid_finish` protocol
+    /// error. It also only exists from version 3, and [`DataDeviceManager::new`]
+    /// binds `1..=3`, so an older compositor really can hand back an offer that
+    /// has no such request. Either mistake is grounds for the compositor to drop
+    /// the connection, so both are guarded here. Cancellation goes through
+    /// [`Self::release_offer`] instead.
     fn finish_offer(&mut self) {
+        if let Some(offer) = self.offer.as_ref() {
+            if offer.version() >= 3 {
+                offer.finish();
+            }
+        }
+        self.release_offer();
+    }
+
+    /// Release the current offer without claiming the drag completed — the
+    /// cancel path, and the only correct teardown when no drop was received.
+    fn release_offer(&mut self) {
         self.hovered_window = None;
         if let Some(offer) = self.offer.take() {
-            offer.finish();
             offer.destroy();
         }
         if let Some(token) = self.read_token.take() {
