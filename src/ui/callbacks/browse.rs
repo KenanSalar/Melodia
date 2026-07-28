@@ -346,11 +346,10 @@ pub fn wire_browse(ui: &AppWindow, state: &AppState, browse_ui: &Arc<BrowseUi>) 
             rx.mark_unchanged();
             while rx.changed().await.is_ok() {
                 // Skip the directory re-fetch (read_dir + a full-index LIKE
-                // scan) while the section is hidden — play-count flushes
-                // bump this channel after every track completion, so an
-                // ungated re-fetch would run O(library) work per song
-                // during plain listening. Mark dirty so the next
-                // section-enter re-fetches once instead.
+                // scan) while the section is hidden — a scan or a busy
+                // watcher can bump this channel repeatedly, and re-fetching
+                // a view nobody is looking at is O(library) per bump. Mark
+                // dirty so the next section-enter re-fetches once instead.
                 if !bu.section_active() {
                     bu.mark_dirty();
                     continue;

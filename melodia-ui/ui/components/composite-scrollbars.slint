@@ -70,6 +70,22 @@ export component CompositeScrollbars inherits Rectangle {
     property <length> v-outer-max: max(0px, root.outer-viewport-height - root.outer-visible-height);
     property <length> v-inner-max: max(0px, root.inner-viewport-height - root.inner-visible-height);
 
+    // Pull the outer offset back in range when the content shrinks under it.
+    // A Flickable normally self-corrects, but i-slint-core skips that for a
+    // `viewport-y` that carries a binding (`if *y_out_of_bounds &&
+    // !y.has_binding()`), and the mount contract above binds it two-way — so
+    // these four views are the only scrollers in the tree without the
+    // built-in guard. Left uncorrected the viewport stays parked past the end
+    // and the region paints blank: Browse navigating from a deep folder to
+    // the much shorter library-root list, or any of these views filtering a
+    // long list down to a few rows. Writing the two-way-bound property is
+    // safe — `<=>` survives a self-write where a one-way binding would not.
+    changed v-outer-max => {
+        if (-root.outer-viewport-y > root.v-outer-max) {
+            root.outer-viewport-y = -root.v-outer-max;
+        }
+    }
+
     // Globals can't be watched directly, so mirror the tick locally.
     property <int> cs-wheel-watch: CompositeScroll.wheel-tick;
     changed cs-wheel-watch => {
