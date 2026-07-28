@@ -3,27 +3,21 @@ name = "melodia-ui"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
-license = "AGPL-3.0-or-later"
+license.workspace = true
 description = "Compiled Slint UI for Melodia"
 publish = false
 
+[lib]
+# Same reason the root package sets it: nothing here is a doc example, and this
+# lib is `slint::include_modules!()` over a ~390k-line generated file. Without
+# it, the first `cargo test --workspace` sends rustdoc walking all of it.
+doctest = false
+
 [dependencies]
-# Must stay identical to the root manifest's `slint` line — the rationale for
-# each feature lives there. Cargo unifies features across the two packages
-# regardless; spelling them out is what keeps `cargo build -p melodia-ui`
-# correct on its own.
-slint = { version = "1.16.1", default-features = false, features = [
-    "std",
-    "backend-default",
-    "accessibility",
-    "compat-1-2",
-    "raw-window-handle-06",
-    "unstable-winit-030",
-    "renderer-femtovg",
-] }
+slint.workspace = true
 
 [build-dependencies]
-slint-build = "1.16.1"
+slint-build.workspace = true
 
 [lints]
 workspace = true

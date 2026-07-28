@@ -1,6 +1,6 @@
 msgid ""
 msgstr ""
-"Project-Id-Version: Melodia 0.1.0\n"
+"Project-Id-Version: melodia-ui\n"
 "Report-Msgid-Bugs-To: \n"
 "Language: es\n"
 "MIME-Version: 1.0\n"

@@ -273,9 +273,10 @@ jobs:
         if: runner.os == 'Linux'
         run: cargo build --release --target ${{ matrix.target }} --locked
 
-      # build.rs spawns the slint compile on a 16 MiB thread, so the
-      # 1 MiB Windows main-thread stack no longer overflows during the
-      # build-script run. No RUSTFLAGS/CARGO_HOST_RUSTFLAGS workaround.
+      # `melodia-ui/build.rs` spawns the slint compile on a 16 MiB thread, so
+      # the 1 MiB Windows main-thread stack no longer overflows during the
+      # build-script run. No RUSTFLAGS/CARGO_HOST_RUSTFLAGS workaround. (The
+      # root build.rs does no Slint work — don't go looking for it there.)
       - name: cargo build --release (Windows)
         if: runner.os == 'Windows'
         run: cargo build --release --target ${{ matrix.target }} --locked

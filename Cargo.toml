@@ -4,12 +4,16 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 description = "Cross-platform desktop music player (Slint + Rust)"
-license = "AGPL-3.0-or-later"
+license.workspace = true
 repository = "https://github.com/KenanSalar/Melodia"
 homepage = "https://github.com/KenanSalar/Melodia"
 authors = ["Kenan Salar <kenansalar@users.noreply.github.com>"]
 keywords = ["music", "player", "audio", "slint"]
 categories = ["multimedia::audio"]
+# Not publishable regardless — `melodia-ui` is `publish = false` and depended on
+# by path with no version — so say so rather than letting `cargo publish` find
+# out late. The metadata above is still worth keeping for the repo's own sake.
+publish = false
 
 # `melodia-ui` holds nothing but the Slint compiler's output. It is split off
 # because `cargo test` builds this package twice — once as the rlib the bin and
@@ -32,8 +36,52 @@ exclude = ["winit"]
 # table by name, so this stanza can sit anywhere in the file.
 version = "0.9.0"
 edition = "2024"
+license = "AGPL-3.0-or-later"
 # Kept in lockstep with `rust-toolchain.toml` and `clippy.toml`'s `msrv`.
 rust-version = "1.97"
+
+# Declared once here rather than spelled out in both manifests. Cargo unifies
+# features across the two packages, so a drifted *version* is the real hazard:
+# two `slint` crates resolve, the types `melodia-ui` generates then implement a
+# different `slint::ComponentHandle` than the one every file in `src/ui/` names,
+# and the build dies in a wall of `expected slint::Weak, found slint::Weak`.
+#
+# The `raw-window-handle-06` feature makes `slint::Window::window_handle()`
+# return a `WindowHandle` that implements `raw_window_handle::HasWindowHandle`
+# + `HasDisplayHandle` (raw-window-handle 0.6). Used by `wire_library_settings`
+# to parent the rfd folder picker to the main window so the OS file dialog
+# z-orders correctly on Windows + macOS (Linux XDG portal handles parenting
+# OS-side regardless).
+#
+# `unstable-winit-030` exposes `slint::winit_030::WinitWindowAccessor` so the
+# custom titlebar can call winit's `drag_window()` for native OS-level window
+# moves (snap, multi-desktop, Wayland-correct) and subscribe to
+# `WindowEvent::Resized` to keep the maximize/restore icon in sync with
+# Win+↑ / window-tile shortcuts. Slint has no built-in `start_system_move`
+# in 1.16 (slint-ui#2521); manual `set_position` math is broken on Wayland
+# (slint-ui#6273) and `no-frame` windows (slint-ui#4817), so winit is the
+# only sane path. The feature is gated as "unstable" upstream and may be
+# renamed in 1.17+ — expected to be a one-line bump when that lands.
+#
+# Renderer: FemtoVG. Rounded `border-radius` clipping works end-to-end
+# (artwork tiles, custom titlebar, content panel) and idle/playback RSS
+# is flat with the `M_ARENA_MAX=2` cap in `main()`. The software
+# renderer was dropped — it can't clip to `border-radius` (slint#4176)
+# and its only draw, a lower idle RSS, no longer mattered once the
+# arena cap landed.
+[workspace.dependencies]
+slint = { version = "1.16.1", default-features = false, features = [
+    "std",
+    "backend-default",
+    "accessibility",
+    "compat-1-2",
+    "raw-window-handle-06",
+    "unstable-winit-030",
+    "renderer-femtovg",
+] }
+# Only `melodia-ui` builds with this, but it has to match the `slint` version
+# above — declaring the pair adjacently is the whole point of it being here.
+slint-build = "1.16.1"
 
 # Keep the library crate name lowercase so `use melodia::…` stays idiomatic
 # (matches `non_snake_case`) — the *package* name being capitalised drives
@@ -114,38 +162,10 @@ assets = [
 # generated types stay reachable as `crate::AppWindow`, `crate::TrackRow`, ….
 melodia-ui = { path = "melodia-ui" }
 
-# UI. The `raw-window-handle-06` feature makes `slint::Window::window_handle()`
-# return a `WindowHandle` that implements `raw_window_handle::HasWindowHandle`
-# + `HasDisplayHandle` (raw-window-handle 0.6). Used by `wire_library_settings`
-# to parent the rfd folder picker to the main window so the OS file dialog
-# z-orders correctly on Windows + macOS (Linux XDG portal handles parenting
-# OS-side regardless).
-#
-# `unstable-winit-030` exposes `slint::winit_030::WinitWindowAccessor` so the
-# custom titlebar can call winit's `drag_window()` for native OS-level window
-# moves (snap, multi-desktop, Wayland-correct) and subscribe to
-# `WindowEvent::Resized` to keep the maximize/restore icon in sync with
-# Win+↑ / window-tile shortcuts. Slint has no built-in `start_system_move`
-# in 1.16 (slint-ui#2521); manual `set_position` math is broken on Wayland
-# (slint-ui#6273) and `no-frame` windows (slint-ui#4817), so winit is the
-# only sane path. The feature is gated as "unstable" upstream and may be
-# renamed in 1.17+ — expected to be a one-line bump when that lands.
-#
-# Renderer: FemtoVG. Rounded `border-radius` clipping works end-to-end
-# (artwork tiles, custom titlebar, content panel) and idle/playback RSS
-# is flat with the `M_ARENA_MAX=2` cap in `main()`. The software
-# renderer was dropped — it can't clip to `border-radius` (slint#4176)
-# and its only draw, a lower idle RSS, no longer mattered once the
-# arena cap landed.
-slint = { version = "1.16.1", default-features = false, features = [
-    "std",
-    "backend-default",
-    "accessibility",
-    "compat-1-2",
-    "raw-window-handle-06",
-    "unstable-winit-030",
-    "renderer-femtovg",
-] }
+# UI. Version and features live in `[workspace.dependencies]`, along with the
+# rationale for each feature — `melodia-ui` takes the same line, and the two
+# must not drift.
+slint.workspace = true
 
 # Async runtime / utilities
 tokio = { version = "1.53.1", features = ["rt-multi-thread", "macros", "sync", "time", "fs", "process"] }
@@ -392,6 +412,14 @@ panic = "abort"
 # avoid `-Cstrip=symbols`.
 strip = "debuginfo"
 
+# Dependencies only. The `"*"` glob is documented as "all dependencies (but not
+# any workspace member)", so this does NOT reach `melodia-ui` — it never did,
+# back when the generated unit was part of this package either. Raising it for
+# that crate specifically is now possible (`[profile.dev.package.melodia-ui]`)
+# and is the one place where it would be nearly free, since the crate rebuilds
+# only when a `.slint` file or a catalog changes. Deliberately not done: that
+# crate is also the build-memory peak the CI `CARGO_BUILD_JOBS` cap exists to
+# hold down, so the trade needs measuring before anyone makes it.
 [profile.dev.package."*"]
 opt-level = 3
 

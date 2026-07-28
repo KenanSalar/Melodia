@@ -100,22 +100,21 @@ jobs:
         with:
           shared-key: ci-clippy
           cache-on-failure: true
+      # One invocation covers both packages. Package *selection* stops at the
+      # root (it is the only default member of a non-virtual workspace root),
+      # but that is not what decides clippy's reach: cargo sets
+      # RUSTC_WORKSPACE_WRAPPER=clippy-driver for every workspace member it
+      # compiles, and clippy-driver skips non-primary packages only under
+      # `--no-deps`. So `melodia-ui` is linted as a path dependency, lib and
+      # build script both, with `-D warnings` applied. Verified by planting a
+      # `clippy::needless_return` in each of `melodia-ui/src/lib.rs` and
+      # `melodia-ui/build.rs` and watching this command fail on them.
+      #
+      # A second `-p melodia-ui` step used to sit here on the assumption that
+      # selection governed reach. It was redundant; don't reintroduce it
+      # without re-running that probe.
       - name: cargo clippy
         run: cargo clippy --all-targets --locked -- -D warnings
-
-      # The root package is the only default member of a non-virtual workspace
-      # root, so the command above never reaches `melodia-ui`. This covers both
-      # of its targets — cargo runs clippy over a workspace member's build
-      # script as well as its lib, and that build script is the only
-      # hand-written Slint build logic in the repo.
-      #
-      # No `--all-targets`: the crate has no test, bench or example targets, so
-      # it would only add a redundant `--test` pass over a lib with no tests.
-      # That is a pointlessness argument, not a cost one — clippy is check-only,
-      # so the codegen behind the CARGO_BUILD_JOBS cap never runs here, and the
-      # extra pass measures free.
-      - name: cargo clippy (melodia-ui)
-        run: cargo clippy -p melodia-ui --locked -- -D warnings
 
   # Tests. Gated behind clippy so a lint failure fast-fails the pipeline without
   # paying for a full build. Runs the FULL suite including the audio-dependent

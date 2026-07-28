@@ -79,11 +79,26 @@ jobs:
 
       # One instrumented test run feeds both the HTML report and the text
       # summary (the report phases don't re-run tests).
+      #
+      # The regex drops `melodia-ui`'s generated `app-window.rs` from the report.
+      # cargo-llvm-cov's built-in excludes cover the rustc sysroot and
+      # ~/.cargo/registry, not a workspace member's OUT_DIR — and that file is
+      # ~390k lines, enough to swamp the denominator and make the headline
+      # percentage meaningless. Scoped to that crate rather than every
+      # `build/*/out/`, so a build script that one day generates code the tests
+      # actually exercise doesn't vanish from the report without anyone noticing.
+      #
+      # `pipefail` because the default `run:` shell is `bash -e` without it, so a
+      # failing `report` would be swallowed by `tee` and publish an empty summary.
       - name: Run tests with coverage
+        env:
+          IGNORE_GENERATED: '.*/build/melodia-ui-[^/]*/out/.*'
         run: |
+          set -o pipefail
           cargo llvm-cov --locked --no-report
-          cargo llvm-cov report --html
-          cargo llvm-cov report --summary-only | tee coverage-summary.txt
+          cargo llvm-cov report --html --ignore-filename-regex "$IGNORE_GENERATED"
+          cargo llvm-cov report --summary-only --ignore-filename-regex "$IGNORE_GENERATED" \
+            | tee coverage-summary.txt
 
       - name: Coverage summary to job log
         if: ${{ !cancelled() }}
