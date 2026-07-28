@@ -121,9 +121,9 @@ export component TracksView inherits Rectangle {
                     blur-trigger: Tracks.blur-search-tick;
                     // Don't call apply-filter directly — bump the pending
                     // tick so the Timer above coalesces fast typing into
-                    // one refilter per 130 ms. `play-row` (Enter) reads
-                    // the live filter via `current_ids_filtered`, so
-                    // play-on-Enter still uses the latest needle.
+                    // one refilter per 130 ms. `play-row` resolves its id
+                    // list from the live filter via `current_ids_filtered`,
+                    // not from the throttled model.
                     edited(t) => { root.filter-tick-pending += 1; }
                 }
             }

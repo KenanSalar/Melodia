@@ -24,6 +24,7 @@ use slint::{ComponentHandle, Model, VecModel, Weak};
 use super::{FavoritesUi, to_slint_fav_artist_row, to_slint_most_played_row};
 use crate::library;
 use crate::state::AppState;
+use crate::ui::detail_filter::{field_contains, most_played_matches};
 use crate::{AppWindow, EntityStripRow as UiEntityStripRow, Favorites};
 
 /// Intermediate carrier for a filtered Favorite-Artist row crossing the
@@ -119,20 +120,7 @@ pub fn apply_filtered_strips(fav_ui: &Arc<FavoritesUi>, weak: &Weak<AppWindow>) 
         let cache = fav_ui.state().most_played.lock();
         cache
             .iter()
-            .filter(|t| {
-                if needle.is_empty() {
-                    return true;
-                }
-                if t.title.to_lowercase().contains(&needle) {
-                    return true;
-                }
-                if let Some(a) = t.artist.as_deref()
-                    && a.to_lowercase().contains(&needle)
-                {
-                    return true;
-                }
-                false
-            })
+            .filter(|t| most_played_matches(t, &needle))
             .map(to_slint_most_played_row)
             .collect()
     };
@@ -146,7 +134,7 @@ pub fn apply_filtered_strips(fav_ui: &Arc<FavoritesUi>, weak: &Weak<AppWindow>) 
         let cache = fav_ui.state().fav_artists.lock();
         cache
             .iter()
-            .filter(|a| needle.is_empty() || a.name.to_lowercase().contains(&needle))
+            .filter(|a| field_contains(&a.name, &needle))
             .map(|a| FilteredArtistRow { artist: a.clone() })
             .collect()
     };

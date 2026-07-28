@@ -7,6 +7,24 @@ use crate::player::state::{lock_state, play_track_inner, with_state_emit};
 use crate::player::types::PlaybackStatus;
 use crate::state::PlaybackContext;
 
+/// Which slot of `summaries` playback should start on.
+///
+/// `start_index` names a row in `track_ids` — the list the caller was looking
+/// at — but `get_track_summaries_by_ids` drops ids that no longer exist, so the
+/// two index spaces diverge the moment one row is gone and every slot past the
+/// gap shifts. Resolving through the id keeps the picked track picked. `None`
+/// means there is no slot to start on — either the caller picked no row at all,
+/// or the one it picked didn't survive — and the caller falls back to the head,
+/// warning only in the second case.
+fn resolve_start_slot(
+    track_ids: &[i64],
+    summaries: &[Arc<TrackSummary>],
+    start_index: Option<usize>,
+) -> Option<usize> {
+    let wanted = start_index.and_then(|i| track_ids.get(i).copied())?;
+    summaries.iter().position(|t| t.id == wanted)
+}
+
 /// Replace the queue with `track_ids` and start at `start_index` (`None` =
 /// head). Every way of starting playback from a browsing surface routes here —
 /// a header Play-All pill pins index 0, activating a row passes the clicked
@@ -33,7 +51,12 @@ pub async fn player_play_tracks(
         return Err(AppError::Queue("No valid tracks provided".to_owned()));
     }
 
-    let start = start_index.unwrap_or(0).min(summaries.len() - 1);
+    let start = resolve_start_slot(&track_ids, &summaries, start_index).unwrap_or_else(|| {
+        if start_index.is_some() {
+            log::warn!("play_tracks: the picked track didn't survive the fetch; starting at the head");
+        }
+        0
+    });
     ctx.emit_and_execute(|s| {
         s.queue.clear();
         s.queue.add_tracks(summaries);

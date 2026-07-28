@@ -1,7 +1,9 @@
-//! Tests for the shared detail-view track matcher `track_matches` — the
+//! Tests for the two shared row matchers. `track_matches` is the
 //! case-insensitive substring match over title + artist + album that
-//! every detail search bar walks per keystroke. The needle is always
-//! pre-lowercased by the caller, so these tests pass lowercased needles.
+//! every detail search bar walks per keystroke; `most_played_matches` is
+//! the title + artist sibling the Most Played strips use. The needle is
+//! always pre-lowercased by the caller, so these tests pass lowercased
+//! needles.
 
 use super::*;
 
@@ -88,4 +90,53 @@ fn ascii_needle_against_non_ascii_haystack_matches() {
     // route through the Unicode path and match the ASCII substring.
     let row = mk("Café del Mar", None, None);
     assert!(track_matches(&row, "del mar"));
+}
+
+// --- most_played_matches ---
+//
+// The strip predicate is load-bearing twice over: `apply_filtered_strips`
+// builds the card model with it and `most_played_track_ids` resolves the
+// ids `play-track` enqueues with it, so a drift between the two would
+// hand `player_play_tracks` a list the strip isn't showing.
+
+/// Build a minimal `MostPlayedFavorite` with only the two matched fields set.
+fn mk_most_played(title: &str, artist: Option<&str>) -> MostPlayedFavorite {
+    MostPlayedFavorite {
+        id: 1,
+        title: title.to_owned(),
+        artist: artist.map(str::to_owned),
+        artwork_path: None,
+        play_count: 0,
+        duration_ms: 0,
+    }
+}
+
+#[test]
+fn strip_matches_title_case_insensitively() {
+    let card = mk_most_played("Under Pressure", None);
+    assert!(most_played_matches(&card, "pressure"));
+    assert!(most_played_matches(&card, "under"));
+}
+
+#[test]
+fn strip_matches_artist_substring() {
+    let card = mk_most_played("Track", Some("David Bowie"));
+    assert!(most_played_matches(&card, "bowie"));
+}
+
+#[test]
+fn strip_absent_artist_never_matches() {
+    // The card renders no album, so an album-shaped needle must miss even
+    // though `track_matches` would have a third field to try.
+    let card = mk_most_played("Track", None);
+    assert!(!most_played_matches(&card, "bowie"));
+    assert!(most_played_matches(&card, "track"));
+}
+
+#[test]
+fn strip_empty_needle_matches_any_card() {
+    // An unfiltered strip enqueues every card — both callers rely on this
+    // rather than short-circuiting the empty needle themselves.
+    let card = mk_most_played("Track", None);
+    assert!(most_played_matches(&card, ""));
 }

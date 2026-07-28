@@ -19,7 +19,7 @@ use crate::error::AppResult;
 use crate::library;
 use crate::state::AppState;
 use crate::ui::detail_artwork::decode_detail_pair;
-use crate::ui::detail_filter::{restamp_selection, track_matches};
+use crate::ui::detail_filter::{field_contains, restamp_selection, track_matches};
 use crate::ui::detail_view::{impl_detail_view_helpers, resolve_view_sort};
 use crate::ui::model_patch;
 use crate::ui::track_list_view::view_id;
@@ -338,7 +338,7 @@ pub fn apply_filtered_detail(weak: &Weak<AppWindow>, artists_ui: &Arc<ArtistsUi>
         } else {
             cache
                 .iter()
-                .filter(|a| a.name.to_lowercase().contains(&needle))
+                .filter(|a| field_contains(&a.name, &needle))
                 .cloned()
                 .collect()
         }

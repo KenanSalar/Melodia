@@ -1692,8 +1692,8 @@ export global NowPlaying {
     // the just-promoted track (slides off the top with the list); on a
     // backward step it is the track that fell off the visible bottom
     // (slides off the bottom). Rust sets `outgoing-visible: true` only
-    // when there is something to render — skip-to / direct play / queue
-    // rebuild leave it false. The wrapping Rectangle around the list
+    // when there is something to render — skip-to and queue rebuild
+    // leave it false. The wrapping Rectangle around the list
     // is `clip: true`, so off-edge positions are hidden automatically.
     in-out property <QueueRow> outgoing-row;
     in-out property <bool> outgoing-visible: false;

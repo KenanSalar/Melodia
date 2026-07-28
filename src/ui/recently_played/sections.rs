@@ -10,6 +10,7 @@ use slint::{ComponentHandle, Model, VecModel, Weak};
 use super::{RecentlyPlayedUi, to_slint_most_played_row};
 use crate::library;
 use crate::state::AppState;
+use crate::ui::detail_filter::most_played_matches;
 use crate::{AppWindow, EntityStripRow as UiEntityStripRow, RecentlyPlayed};
 
 /// Cap for the Most Played strip. Matches the Favorites default — enough to
@@ -59,17 +60,7 @@ pub fn apply_filtered_strips(rp_ui: &Arc<RecentlyPlayedUi>, weak: &Weak<AppWindo
         let cache = rp_ui.state().most_played.lock();
         cache
             .iter()
-            .filter(|t| {
-                if needle.is_empty() {
-                    return true;
-                }
-                if t.title.to_lowercase().contains(&needle) {
-                    return true;
-                }
-                t.artist
-                    .as_deref()
-                    .is_some_and(|a| a.to_lowercase().contains(&needle))
-            })
+            .filter(|t| most_played_matches(t, &needle))
             .map(to_slint_most_played_row)
             .collect()
     };

@@ -73,13 +73,14 @@ export component CompositeScrollbars inherits Rectangle {
     // Pull the outer offset back in range when the content shrinks under it.
     // A Flickable normally self-corrects, but i-slint-core skips that for a
     // `viewport-y` that carries a binding (`if *y_out_of_bounds &&
-    // !y.has_binding()`), and the mount contract above binds it two-way — so
-    // these four views are the only scrollers in the tree without the
-    // built-in guard. Left uncorrected the viewport stays parked past the end
-    // and the region paints blank: Browse navigating from a deep folder to
-    // the much shorter library-root list, or any of these views filtering a
-    // long list down to a few rows. Writing the two-way-bound property is
-    // safe — `<=>` survives a self-write where a one-way binding would not.
+    // !y.has_binding()`), and the mount contract above binds it two-way. The
+    // scrollers that write `viewport-y` imperatively orphan their binding on
+    // the first write and get the guard back; `<=>` survives a self-write, so
+    // these four views are the only ones permanently without it. Left
+    // uncorrected the viewport stays parked past the end and the region paints
+    // blank: Browse navigating from a deep folder to the much shorter
+    // library-root list, or any of these views filtering a long list down to a
+    // few rows. That same survival is what makes writing the property here safe.
     changed v-outer-max => {
         if (-root.outer-viewport-y > root.v-outer-max) {
             root.outer-viewport-y = -root.v-outer-max;

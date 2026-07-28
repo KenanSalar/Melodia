@@ -1,4 +1,5 @@
-//! Shared detail-view track filtering.
+//! Shared in-memory row filtering — detail track lists and the Most
+//! Played strips.
 //!
 //! The Album / Genre / Playlist / Artist detail views each carry a hero
 //! `SearchBar` that filters the track list in memory. The filter walk,
@@ -13,13 +14,20 @@
 //! and call [`apply_filtered_detail`] directly. Artist Detail does its
 //! own worker-thread row prep (it also rebuilds an Albums strip), so it
 //! reuses only [`track_matches`] and [`restamp_selection`].
+//!
+//! The predicates alone are reused further out: the Favorites and
+//! Recently-Played Most Played strips match on [`most_played_matches`],
+//! and the single-name strips (Favorite Artists, Artist Detail's Albums)
+//! on [`field_contains`]. Each strip runs the predicate twice — once to
+//! build the card model, once to resolve the ids `play-track` enqueues —
+//! so sharing it is what keeps a strip and its queue agreeing.
 
 use std::collections::HashSet;
 
 use parking_lot::Mutex;
 use slint::{Model, ModelRc, VecModel};
 
-use crate::entities::track::TrackListRow as RsTrackListRow;
+use crate::entities::track::{MostPlayedFavorite, TrackListRow as RsTrackListRow};
 use crate::ui::detail_selection::DetailSelectionView;
 use crate::TrackListRow as UiTrackListRow;
 
@@ -32,6 +40,17 @@ pub fn track_matches(r: &RsTrackListRow, needle: &str) -> bool {
         || r.album.as_deref().is_some_and(|a| field_contains(a, needle))
 }
 
+/// Lowered-needle match for a Most Played strip card — title + artist, the
+/// same two fields the card renders. Favorites and Recently Played share
+/// both the row type and this predicate, and each uses it twice: once to
+/// build the strip model, once to resolve the ids `play-track` hands to
+/// `player_play_tracks`. Keeping those two on one predicate is what stops
+/// the strip and its queue from disagreeing about what's on screen.
+pub fn most_played_matches(t: &MostPlayedFavorite, needle: &str) -> bool {
+    field_contains(&t.title, needle)
+        || t.artist.as_deref().is_some_and(|a| field_contains(a, needle))
+}
+
 /// Case-insensitive substring check without the per-call `to_lowercase`
 /// heap allocation on the (overwhelmingly common) all-ASCII path. The
 /// filter walk runs per throttled keystroke over every row of the open
@@ -39,7 +58,11 @@ pub fn track_matches(r: &RsTrackListRow, needle: &str) -> bool {
 /// old three-allocations-per-row walk dominated its keystroke cost.
 /// Non-ASCII text falls back to the allocating Unicode-correct path.
 /// `needle` must already be lowercased.
-fn field_contains(haystack: &str, needle: &str) -> bool {
+///
+/// Public because the single-field strips match on one name rather than a
+/// row — Favorite Artists and the Artist-Detail Albums strip call it
+/// directly instead of carrying their own `to_lowercase().contains(…)`.
+pub fn field_contains(haystack: &str, needle: &str) -> bool {
     if needle.is_empty() {
         return true;
     }

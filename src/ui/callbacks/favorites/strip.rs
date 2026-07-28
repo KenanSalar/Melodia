@@ -35,10 +35,10 @@ pub(super) fn wire(
         g.on_play_track(move |id| {
             let id = i64::from(id);
             let ids = fu.most_played_track_ids();
-            let start = ids.iter().position(|&i| i == id);
             if ids.is_empty() {
                 return;
             }
+            let start = ids.iter().position(|&i| i == id);
             let s = s.clone();
             spawn_logged!(s, "favorites::play_track",
                 library::playback::player_play_tracks(&s.playback_ctx(), ids, start));

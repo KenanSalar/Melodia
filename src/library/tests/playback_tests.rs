@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use super::resolve_start_slot;
 use crate::entities::track::TrackSummary;
 use crate::player::state::{
     MAX_VOLUME, PlayerAction, PlayerState, RESTART_THRESHOLD_MS, play_track_inner,
@@ -60,12 +61,53 @@ fn play_tracks_clears_queue_and_starts_at_index() {
     }
 }
 
+// --- resolve_start_slot ---
+
 #[test]
-fn play_tracks_start_index_clamps_to_len() {
+fn start_slot_follows_the_picked_track() {
+    let ids = vec![1, 2, 3];
     let summaries: Vec<_> = (1..=3).map(|i| make_summary(i, 180_000)).collect();
-    let start = 100_usize;
-    let clamped = start.min(summaries.len() - 1);
-    assert_eq!(clamped, 2);
+    assert_eq!(resolve_start_slot(&ids, &summaries, Some(2)), Some(2));
+}
+
+/// The regression this exists for: a row deleted between the view's fetch and
+/// the click drops out of `summaries`, shifting every slot behind it. Resolving
+/// by index would start on the neighbour.
+#[test]
+fn start_slot_survives_a_track_missing_from_the_fetch() {
+    let ids = vec![1, 2, 3, 4, 5];
+    let summaries: Vec<_> = [1, 3, 4, 5]
+        .into_iter()
+        .map(|i| make_summary(i, 180_000))
+        .collect();
+
+    // The user clicked track 4, which the displayed list holds at index 3.
+    // Track 2 vanished before the fetch, so slot 3 is now track 5 — taking
+    // the index at face value would start playback one track late.
+    let start = resolve_start_slot(&ids, &summaries, Some(3));
+    assert_eq!(start, Some(2));
+    assert_eq!(start.and_then(|i| summaries.get(i)).map(|t| t.id), Some(4));
+}
+
+#[test]
+fn start_slot_is_none_when_the_picked_track_is_gone() {
+    let ids = vec![1, 2, 3];
+    let summaries: Vec<_> = [1, 3].into_iter().map(|i| make_summary(i, 180_000)).collect();
+    assert_eq!(resolve_start_slot(&ids, &summaries, Some(1)), None);
+}
+
+#[test]
+fn start_slot_is_none_for_an_out_of_range_index() {
+    let ids = vec![1, 2, 3];
+    let summaries: Vec<_> = (1..=3).map(|i| make_summary(i, 180_000)).collect();
+    assert_eq!(resolve_start_slot(&ids, &summaries, Some(100)), None);
+}
+
+#[test]
+fn start_slot_is_none_without_an_index() {
+    let ids = vec![1, 2, 3];
+    let summaries: Vec<_> = (1..=3).map(|i| make_summary(i, 180_000)).collect();
+    assert_eq!(resolve_start_slot(&ids, &summaries, None), None);
 }
 
 /// Mirrors `player_play_tracks`' seeding when shuffle is already on: the

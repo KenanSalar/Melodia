@@ -22,10 +22,10 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, rp_ui: &Arc<RecentlyPlayedU
     g.on_play_track(move |id| {
         let id = i64::from(id);
         let ids = ru.most_played_track_ids();
-        let start = ids.iter().position(|&i| i == id);
         if ids.is_empty() {
             return;
         }
+        let start = ids.iter().position(|&i| i == id);
         let s = s.clone();
         spawn_logged!(s, "recently_played::play_track",
             library::playback::player_play_tracks(&s.playback_ctx(), ids, start));

@@ -346,8 +346,8 @@ impl QueueState {
     /// double `Vec<usize>` allocation that the shell-driven path required
     /// (one for the indices in the caller, one for the remapped play
     /// order here). If `anchor_to_current` is true and the queue has a
-    /// current track, the post-shuffle play order is rotated so the
-    /// current track stays at position 0.
+    /// current track, that track is swapped to the front of the shuffled
+    /// order so playback carries on from it.
     pub fn shuffle_play_order_in_place<R: rand::Rng + ?Sized>(
         &mut self,
         rng: &mut R,

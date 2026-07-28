@@ -202,8 +202,8 @@ enum SlideKind {
     /// Backward step (incl. wrap from first → last under repeat-all/one).
     /// The row that fell off the visible bottom slides off the bottom.
     Backward,
-    /// Anything else (skip-to / direct play / queue rebuild). Animates
-    /// forward by default; no outgoing overlay row.
+    /// Anything else (skip-to / queue rebuild). Animates forward by
+    /// default; no outgoing overlay row.
     Other,
 }
 

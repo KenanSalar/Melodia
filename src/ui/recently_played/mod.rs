@@ -153,8 +153,19 @@ impl RecentlyPlayedUi {
     /// Track ids of the Most Played strip, in card order. `play-track` hands
     /// these to `player_play_tracks` so clicking a card loads the strip rather
     /// than the recency list below it.
+    ///
+    /// Filtered through the same predicate `apply_filtered_strips` builds the
+    /// model with — the strip narrows with the search bar, so the raw cache
+    /// would enqueue cards that aren't on screen.
     pub fn most_played_track_ids(&self) -> Vec<i64> {
-        self.inner.most_played.lock().iter().map(|t| t.id).collect()
+        let needle = self.inner.filter.lock().to_lowercase();
+        self.inner
+            .most_played
+            .lock()
+            .iter()
+            .filter(|t| crate::ui::detail_filter::most_played_matches(t, &needle))
+            .map(|t| t.id)
+            .collect()
     }
 
     /// Track ids of the post-filter list in **display order** (filter + active

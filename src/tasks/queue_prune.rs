@@ -92,9 +92,9 @@ async fn reconcile_once(
     .await?;
     let surviving: HashSet<i64> = surviving_rows.into_iter().map(|r| r.id).collect();
 
-    // Step 3: compute the casualties. Snapshot ids can show duplicates (a
-    // direct-play track that's also in the queue, repeated tracks…) — the
-    // set is the right shape for the prune call regardless.
+    // Step 3: compute the casualties. The snapshot can hold the same id
+    // more than once (a track queued twice) — the set is the right shape
+    // for the prune call regardless.
     let to_remove: HashSet<i64> = queued_ids
         .iter()
         .copied()
