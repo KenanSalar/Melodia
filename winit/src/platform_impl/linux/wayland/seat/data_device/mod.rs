@@ -101,8 +101,12 @@ impl Dispatch<WlDataDevice, DataDeviceData, WinitState> for DataDeviceState {
                     return;
                 };
 
+                // Every bail-out below owns destroying the offer. `finish_offer`
+                // only ever sees an offer that reached `data_device_state.offer`,
+                // so an early return here would drop the proxy and leak it.
                 let Some(data_offer) = wl_data_offer.data::<DataOfferData>() else {
                     warn!("Received data device enter event without data offer");
+                    wl_data_offer.destroy();
                     return;
                 };
 
@@ -116,6 +120,7 @@ impl Dispatch<WlDataDevice, DataDeviceData, WinitState> for DataDeviceState {
                     },
                 }) else {
                     warn!("Data deviced entered with no valid MIME type");
+                    wl_data_offer.destroy();
                     return;
                 };
 
@@ -127,6 +132,7 @@ impl Dispatch<WlDataDevice, DataDeviceData, WinitState> for DataDeviceState {
                     Ok((read_fd, write_fd)) => (read_fd, write_fd),
                     Err(e) => {
                         warn!("Failed to create pipe to read data offer from: {e}");
+                        wl_data_offer.destroy();
                         return;
                     },
                 };
@@ -225,8 +231,26 @@ impl Dispatch<WlDataDevice, DataDeviceData, WinitState> for DataDeviceState {
                     data_device_state.finish_offer();
                 }
             },
-            WlDataDeviceEvent::DataOffer { id: _ } => {},
-            WlDataDeviceEvent::Selection { id: _ } => {},
+            WlDataDeviceEvent::DataOffer { id: _ } => {
+                // Nothing to do: `event_created_child!` above has already built
+                // the proxy, and the follow-up event hands it to whichever arm
+                // owns it — `Enter` for a drag, `Selection` for the clipboard.
+                // Both destroy it.
+            },
+            WlDataDeviceEvent::Selection { id } => {
+                // This data device exists for drag-and-drop; winit exposes no
+                // clipboard API of its own (that is copypasta's separate data
+                // device). A selection offer is therefore dead on arrival here.
+                //
+                // It still has to be destroyed. The compositor mints a *new*
+                // `wl_data_offer` on every selection change and the client owns
+                // its lifetime, so dropping the proxy silently leaks one object
+                // — plus its accumulated MIME-type strings — per clipboard
+                // change, for the life of the process.
+                if let Some(offer) = id {
+                    offer.destroy();
+                }
+            },
             _ => unreachable!(),
         }
     }

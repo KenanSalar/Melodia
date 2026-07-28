@@ -29,12 +29,18 @@ export component VisualizerStrip inherits Rectangle {
     // One shared Timer: it runs a full snapshot → analysis → property pass in
     // Rust and is the only thing that reads the sample ring.
     //
-    // The interval is per style, not shared. The bars want every frame — their
-    // decay is a smooth animation and 60 Hz is what makes it read as one. A
-    // trace doesn't: it has no animation to be smooth, so a high rate only makes
-    // it look frantic, and `foobar2000`'s oscilloscope ships capped at 20 Hz for
-    // exactly that reason. 30 Hz also thirds the trace's per-frame path string
-    // and the re-parse Slint does of it.
+    // 30 Hz, every style. The bars used to tick at 60 Hz on the theory that
+    // their decay needs every frame to read as smooth. What that actually bought
+    // was a full-window repaint every 16 ms, and each repaint re-tessellates
+    // every rounded rectangle in the view into a freshly heap-allocated vertex
+    // buffer (FemtoVG `fill_path` → `PathCache::expand_fill`). With the strip on
+    // screen that path dominates the process's allocation calls — churn, not
+    // retention, and enough of it to walk RSS upward for as long as Now Playing
+    // stayed open. Halving the rate halves the repaints.
+    // A trace never wanted 60 Hz either: it has no animation to be smooth, so a
+    // high rate only makes it look frantic, and `foobar2000`'s oscilloscope
+    // ships capped at 20 Hz for exactly that reason. 30 Hz also thirds the
+    // trace's per-frame path string and the re-parse Slint does of it.
     //
     // `dormant` overrides both: nothing is being drawn and nothing is arriving,
     // so the tick is only still here to watch for frames coming back — which it
@@ -52,9 +58,7 @@ export component VisualizerStrip inherits Rectangle {
     // takes the same route out through `window-shown`, so it falls before it
     // stops rather than freezing mid-shape.
     Timer {
-        interval: Visualizer.dormant ? 500ms
-            : Visualizer.style == "waveform" ? 33ms
-            : 16ms;
+        interval: Visualizer.dormant ? 500ms : 33ms;
         running: (Player.vm.is_playing && Visualizer.window-shown) || !Visualizer.idle;
         triggered() => {
             // The width goes with it because the trace's column count follows

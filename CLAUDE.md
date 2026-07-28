@@ -192,7 +192,7 @@ See `.claude/rules/tokio.md`. Project-specific:
 
 Project exists *because* of memory regressions in the Tauri version.
 
-- Run `/usr/bin/time -v target/release/melodia` after notable changes; track peak RSS.
+- Run `/usr/bin/time -v target/release/Melodia` after notable changes; track peak RSS.
 - Feature adding > 20 MB idle RSS → profile with `heaptrack` before merging.
 - Size-bound caches (LRU); construct heavy clients lazily. `Vec::with_capacity` whenever capacity known.
 - **`RUST_LOG=info MELODIA_RSS_SAMPLE=1` for live memory diagnostics.** Opt-in `src/tasks/rss_sampler.rs` (UI thread, `rss_sampler::install(weak)`) logs `[MEM view=… VmRSS=… RssAnon=… RssFile=… …]` every 500 ms at INFO. `view=` tag captures Nav section + open detail id + `+NP`/`+QS` overlay flags. Env-gated diagnostic exception to `tasks/`-no-`ui::*`. `RssFile` growth is Mesa GPU pool, not Rust heap.

@@ -296,14 +296,17 @@ zbus = "5.18.0"
 # `cfg(any(windows, macos))` block below and `src/services/tray/`.
 ksni = { version = "0.3.6", default-features = false, features = ["blocking", "async-io"] }
 
-# `libc::malloc_trim` (glibc-only extension) is called periodically by the
-# playback monitor to release free chunks the allocator is holding above its
-# internal threshold. The Slint 1.16 render path allocates short-lived
-# buffers per repaint while a track plays; glibc's arena retains those pages
-# even after the data is freed, producing a slow RSS climb that plateaus on
-# pause. Calling `malloc_trim(0)` once a minute lets the arena release them.
-# cfg-gated to glibc-only at the call site — musl's allocator doesn't expose
-# this. See `src/player/handlers.rs` for usage.
+# Two glibc-only malloc knobs, both cfg-gated at their call sites — musl's
+# allocator exposes neither.
+#
+#   * `mallopt` in `src/main.rs` caps the per-thread arenas and pins the mmap
+#     and trim thresholds. Long-lived threads otherwise get an arena each, and
+#     the committed slack across them is pure free-list overhead for a
+#     mostly-idle desktop player; the thresholds otherwise ratchet upward on
+#     every large free until nothing is returned to the kernel at all.
+#   * `malloc_trim` in `src/tasks/heap_trim.rs` hands retained free-list
+#     pages back to the kernel: once after the startup churn settles, then
+#     ad-hoc after a bulk free (a view-close cache release).
 libc = "0.2.189"
 
 [target.'cfg(target_os = "windows")'.dependencies]
