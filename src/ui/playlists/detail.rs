@@ -240,6 +240,13 @@ pub async fn refresh_detail(
                 .map(crate::ui::tracks::to_slint_track_list_row)
                 .collect();
             replace_tracks_model(&g, ui_tracks);
+            // Abort any in-flight drag-reorder: the row indices it was
+            // computed against no longer describe the playlist, and the
+            // model swap destroys the row instance holding the pointer
+            // grab, so it can never clear this state itself. Left set,
+            // the source row stays ghosted and the drop line stranded.
+            g.set_drag_source(-1);
+            g.set_drop_slot(-1);
             playlists_ui.detail.applied_selection.lock().clear();
             // No filter on this path — displayed cache equals canonical.
             playlists_ui.detail.all_tracks.lock().clone_from(&tracks);

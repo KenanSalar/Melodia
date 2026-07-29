@@ -299,6 +299,13 @@ export component PlaylistDetailView inherits Rectangle {
                     reorder-enabled: PlaylistDetail.sort-field == "position"
                         && PlaylistDetail.filter == ""
                         && !PlaylistDetail.playlist.is_smart;
+                    // Surfaced on the global so Rust can abort an in-flight
+                    // drag: refreshing `tracks` replaces the model, which
+                    // destroys the row instance holding the pointer grab, and
+                    // a destroyed row never delivers its pointer-up to clear
+                    // these itself.
+                    drag-source <=> PlaylistDetail.drag-source;
+                    drop-slot <=> PlaylistDetail.drop-slot;
 
                     w-number <=> PlaylistDetail.w-number;
                     w-title <=> PlaylistDetail.w-title;

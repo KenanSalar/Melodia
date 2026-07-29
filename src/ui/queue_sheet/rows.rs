@@ -80,11 +80,23 @@ pub(super) fn rebuild_rows(
     // Snapshot the old selection bits into a map so the per-row lookup
     // below is O(1) — a linear `.find()` per row made this O(n²) overall,
     // re-run on every queue mutation (including each frame of a drag).
-    let old_sel: std::collections::HashMap<i64, bool> = shadow
-        .lock()
-        .iter()
-        .map(|e| (e.id, e.selected))
-        .collect();
+    //
+    // `rows_reordered` rides along on the same lock: the shadow's ids
+    // mirror the model's, so comparing them against the incoming order is
+    // what tells us whether `apply_rows_keyed` is about to replace the
+    // model rather than patch it in place. `skip_to_index` bumps the queue
+    // version without touching the row set, so a plain track advance takes
+    // the patch path and must *not* count.
+    let (rows_reordered, old_sel) = {
+        let guard = shadow.lock();
+        let reordered = guard
+            .iter()
+            .map(|e| e.id)
+            .ne(qvm.queue_tracks.iter().map(|t| t.id));
+        let sel: std::collections::HashMap<i64, bool> =
+            guard.iter().map(|e| (e.id, e.selected)).collect();
+        (reordered, sel)
+    };
     let mut new_shadow: Vec<ShadowEntry> = Vec::with_capacity(qvm.queue_tracks.len());
     let mut new_rows: Vec<QueueRow> = Vec::with_capacity(qvm.queue_tracks.len());
     for t in &qvm.queue_tracks {
@@ -104,6 +116,15 @@ pub(super) fn rebuild_rows(
     let queue = ui.global::<Queue>();
     queue.set_current_index(qvm.queue_index);
     queue.set_selected_count(selected_count);
+    if rows_reordered {
+        // Abort any in-flight drag-reorder: the row indices it was
+        // computed against no longer describe the queue, and the model
+        // reset destroys the row instance holding the pointer grab, so it
+        // can never clear this state itself. Left set, the source row
+        // stays ghosted and the drop line stranded.
+        queue.set_drag_source(-1);
+        queue.set_drop_slot(-1);
+    }
 }
 
 /// Build a `QueueRow` from a `TrackSummary` plus an already-resolved

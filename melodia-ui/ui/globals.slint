@@ -910,14 +910,16 @@ export global WindowChrome {
 // the same `sinks.queue` watch as `Player.queue` and writes both row
 // data and `current-index` on every queue mutation.
 //
-// Drag-and-drop note: Slint 1.16 has no native DnD API (verified
-// against v1.16.1 Cargo features). The plumbing here is bespoke —
-// `drag-source` is the play-order index currently being dragged (-1
-// when idle), `drop-index` is the candidate insertion slot (-1 when
-// idle). The sheet flips these from row-level `TouchArea.pointer-event`
-// handlers and only fires `reorder(from, to)` on pointer-up commit.
-// Visual feedback (insertion line, dimmed source row) reads from
-// these props directly, so no Rust round-trip happens during the drag.
+// Drag-and-drop note: the plumbing here is bespoke rather than built on
+// Slint's `DragArea` / `DropArea` — see `queue-row-item.slint` for why
+// those don't fit a reorder. `drag-source` is the play-order index
+// currently being dragged (-1 when idle), `drop-slot` is the candidate
+// insertion slot (-1 when idle). The sheet flips these from row-level
+// `TouchArea.pointer-event` handlers and only fires `reorder(from, to)`
+// on pointer-up commit. Visual feedback (insertion line, dimmed source
+// row) reads from these props directly, so no Rust round-trip happens
+// during the drag — Rust only clears them when it rebuilds `rows` out
+// from under an in-flight drag (`ui::queue_sheet::rows`).
 //
 // File-drop: `open` is mirrored to a Rust `Arc<AtomicBool>` via the
 // `open-changed` callback. The winit `WindowEvent::DroppedFile` filter
@@ -1162,10 +1164,12 @@ export global Playlists {
 // key `"playlist_detail"`. Default sort is `"position"` (the persisted
 // insertion order); drag-to-reorder is gated to that sort field.
 //
-// `drag-source` / `drop-slot` mirror the `Queue` global's reorder state
-// — the shared `TrackList` component reads these when `enable-drag` is
-// true (only inside Playlist Detail today) to paint the drop indicator
-// and dim the source row. `reorder(from, to)` fires on pointer-up.
+// `drag-source` / `drop-slot` mirror the `Queue` global's reorder state.
+// The state itself lives on `DraggableTrackList`, which this view `<=>`s
+// into these two — Rust never writes them during a drag (the indicator
+// and the source-row dim are pure Slint feedback), only clears them when
+// it rebuilds `tracks` out from under an in-flight drag.
+// `reorder(from, to)` fires on pointer-up.
 //
 // `is-drop-hovered` mirrors `Queue.is-drop-hovered` — set by the winit
 // HoveredFile filter when the Playlist Detail is the active drop target
@@ -1218,10 +1222,10 @@ export global PlaylistDetail {
     in-out property <bool>  blur-use-a;
     in-out property <bool>  has-blur;
 
-    // Drag-reorder state — read by the shared `TrackList` component
-    // when `enable-drag: true` is set on it (only by this view).
-    // Semantics mirror `Queue.drag-source` / `Queue.drop-slot`: -1 when
-    // idle; otherwise a 0-based track index / 0..=length insertion slot.
+    // Drag-reorder state, two-way bound to the view's
+    // `DraggableTrackList` so Rust can reach it. Semantics mirror
+    // `Queue.drag-source` / `Queue.drop-slot`: -1 when idle; otherwise a
+    // 0-based track index / 0..=length insertion slot.
     in-out property <int> drag-source: -1;
     in-out property <int> drop-slot: -1;
 

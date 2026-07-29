@@ -19,9 +19,10 @@ import { FocusLossWatcher } from "../focus-loss-watcher.slint";
 //
 // Layout split:
 //   * outer Rectangle  → fixed total slot height (row-h + row-gap), no chrome
-//   * inner Rectangle  → the visual pill: 46 px tall, rounded, hover/selected
-//                        backgrounds, owns the TouchArea, HorizontalLayout
-//                        of cells, and the right-click context popup
+//   * inner Rectangle  → the visual pill: `row-h` tall, rounded,
+//                        hover/selected backgrounds, owns the TouchArea,
+//                        HorizontalLayout of cells, and the right-click
+//                        context popup
 //
 // Globals-free: column widths, visibility, and the currently-playing track
 // id arrive as in properties; user actions emit callbacks the host wires up.
@@ -222,9 +223,9 @@ export component TrackListRowItem inherits Rectangle {
     // to its `inner-list.viewport-y`.
     callback request-scroll-by(length /*delta-y*/);
 
-    // Outer slot: 46 px chrome + 4 px gap. `width: root.total-w` makes the
-    // row exactly as wide as the header so cell boundaries align, and so the
-    // wrapping horizontal ScrollView in the parent view sees a content size
+    // Outer slot: chrome plus the gap under it. `width: root.total-w` makes
+    // the row exactly as wide as the header so cell boundaries align, and so
+    // the wrapping horizontal ScrollView in the parent view sees a content size
     // > its outer width when the user grows columns past the visible area
     // (which is what triggers the scrollbar).
     //
@@ -233,11 +234,12 @@ export component TrackListRowItem inherits Rectangle {
     // explicit `width` binding gives the row preferred-width = total-w so the
     // ListView's flickable picks up that size.
     //
-    // `min-height: Theme.row-h + Theme.row-gap` lets the ListView virtualizer
-    // measure rows; `vertical-stretch: 0` stops rows from sharing leftover
-    // vertical space. When `show-artwork` is false the 36 px tile unmounts,
-    // so the row collapses to `Theme.row-h-compact` (34 px) — without this
-    // the empty rows kept the full 46 px chrome and read as low-density.
+    // Pinning min- and max-height to the same value lets the ListView
+    // virtualizer measure rows; `vertical-stretch: 0` stops rows from sharing
+    // leftover vertical space. When `show-artwork` is false the 36 px tile
+    // unmounts, so the row collapses to `Theme.row-h-compact` — without this
+    // the empty rows kept the full `Theme.row-h` chrome and read as
+    // low-density.
     min-height: (root.show-artwork ? Theme.row-h : Theme.row-h-compact) + Theme.row-gap;
     max-height: (root.show-artwork ? Theme.row-h : Theme.row-h-compact) + Theme.row-gap;
     width: root.total-w;
