@@ -158,7 +158,7 @@ export component EntityCard inherits Rectangle {
             icon: "delete";
             icon-size: 18px;
             diameter: 30px;
-            idle-bg: Theme.floating-button-bg;
+            idle-bg: Theme.floating-chrome-bg;
             hover-fg: Theme.danger;
             clicked => { root.delete-clicked(); }
         }
@@ -169,7 +169,7 @@ export component EntityCard inherits Rectangle {
             icon: "image";
             icon-size: 18px;
             diameter: 30px;
-            idle-bg: Theme.floating-button-bg;
+            idle-bg: Theme.floating-chrome-bg;
             clicked => { root.edit-artwork-clicked(); }
         }
 
@@ -179,7 +179,7 @@ export component EntityCard inherits Rectangle {
             icon: "edit";
             icon-size: 18px;
             diameter: 30px;
-            idle-bg: Theme.floating-button-bg;
+            idle-bg: Theme.floating-chrome-bg;
             clicked => { root.edit-name-clicked(); }
         }
     }
@@ -194,7 +194,7 @@ export component EntityCard inherits Rectangle {
         width: 28px;
         height: 28px;
         border-radius: self.height / 2;
-        background: Theme.floating-button-bg;
+        background: Theme.floating-chrome-bg;
         MaterialIcon {
             x: (parent.width - self.width) / 2;
             y: (parent.height - self.height) / 2;

@@ -41,9 +41,11 @@ export component Tooltip inherits Rectangle {
         ? (root.host-height + root.gap)
         : (-self.height - root.gap);
 
-    // Match the ActionPill chrome (Theme.surface0 fill + Theme.surface2 border)
-    // so a tooltip reads as part of the same control family as the pill it
-    // annotates.
+    // Border, radius and surface rung follow the ActionPill chrome so a tooltip
+    // reads as part of the same control family as the pill it annotates. The
+    // fill is the one place they diverge: the pill takes `floating-chrome-bg`,
+    // but a tooltip is transient and its whole job is to be read, so it stays
+    // fully opaque wherever it lands — a hero blur, a cover, a list row.
     background: Theme.surface0;
     border-color: Theme.surface2;
     border-width: 1px;

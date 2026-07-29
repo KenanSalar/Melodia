@@ -55,17 +55,18 @@ export global Theme {
     out property <brush> danger-hover: root.peach;
     out property <brush> danger-text: root.accent-text;
 
-    // Disc for IconButtons that float over busy visual content — a detail
-    // hero's blur, a playlist card's cover. Nearly opaque on purpose: at a
-    // softer alpha the artwork reads straight through the chrome and the
-    // button looks like a watermark rather than a control. The remaining
-    // translucency is what keeps `IconButton`'s hover swap to solid
-    // `Theme.surface0` visible as a transition. Holding the disc close to
-    // opaque also makes it its own surface, so the glyph contrasts against
-    // `surface0` rather than against whatever the hero happens to be.
-    // Read by the detail-view back button (`detail-header.slint`) and the
-    // playlist card's hover trio + smart badge (`grid/entity-card.slint`).
-    out property <brush> floating-button-bg: root.surface0.with-alpha(0.85);
+    // Fill for chrome that floats over busy visual content — a detail hero's
+    // blur, a playlist card's cover. Nearly opaque on purpose: at a softer
+    // alpha the artwork reads straight through and the control looks like a
+    // watermark. Holding it close to opaque makes it its own surface, so its
+    // glyphs and labels contrast against `surface0` rather than against
+    // whatever the hero happens to be, and the residual translucency is what
+    // keeps `IconButton`'s hover swap to solid `Theme.surface0` visible as a
+    // transition. Read by the detail-view back button (`detail-header.slint`),
+    // the playlist card's hover trio + smart badge (`grid/entity-card.slint`),
+    // and the two chip surfaces that sit alongside them on a hero —
+    // `ActionPill` and `SearchBar`.
+    out property <brush> floating-chrome-bg: root.surface0.with-alpha(0.75);
 
     // Layout — match Tauri --sidebar-width-* / --now-playing-height
     out property <length> sidebar-collapsed-w: 46px;

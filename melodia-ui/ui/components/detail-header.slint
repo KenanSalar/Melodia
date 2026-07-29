@@ -119,7 +119,7 @@ export component DetailHeader inherits Rectangle {
     // Floating back button — absolutely positioned at the header's
     // top-left, mirrors Tauri's `floatingBackButton`. Lives outside the
     // HL so it doesn't take a row of its own. Idle chrome is the shared
-    // `Theme.floating-button-bg` — a near-opaque surface0 disc, so the
+    // `Theme.floating-chrome-bg` — a near-opaque surface0 disc, so the
     // glyph contrasts against `surface0` rather than against whatever
     // the hero happens to be; `IconButton`'s hover state paints solid
     // `Theme.surface0`, which the residual translucency keeps visible
@@ -130,7 +130,7 @@ export component DetailHeader inherits Rectangle {
         icon: "arrow_back";
         icon-size: 20px;
         diameter: 32px;
-        idle-bg: Theme.floating-button-bg;
+        idle-bg: Theme.floating-chrome-bg;
         clicked => { root.back-clicked(); }
     }
 }

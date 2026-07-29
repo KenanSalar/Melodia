@@ -7,12 +7,14 @@ import { MaterialIcon } from "material-icon.slint";
 //   * Pill shape, 1 px `Theme.surface2` outline at rest (matches
 //     `ActionPill`'s chip outline so search bars + pills sit together as
 //     one family of controls).
-//   * Resting background stays `Theme.surface0` regardless of hover — no
-//     hover-driven lift, because the chrome's TouchArea covers icon /
-//     padding / border-edge and a single-region hover read poorly there.
+//   * The fill solidifies as soon as the bar is engaged: `Theme.floating-
+//     chrome-bg` (`surface0` @ 75 %) at rest, opaque `surface0` on hover or
+//     focus. The bar sits over a detail hero in half its mounts, so at rest
+//     it lets a little blur through like the pill and back button beside it,
+//     and closes up the moment the pointer arrives.
 //   * On focus: faint accent ring (`accent` @ 18 %), soft drop-shadow glow,
 //     search icon tints to accent, the chrome scales by 1.5 % from its
-//     centre. All transitions run for `Theme.dur-med` (250 ms) ease-in-out.
+//     centre. All transitions run for `Theme.dur-fast` (200 ms) ease-in-out.
 //
 // Layout: the outer slot is fixed-size (`input-width × 32 px`). The visible
 // chrome lives in an inner Rectangle that scales from its centre via
@@ -94,11 +96,15 @@ export component SearchBar inherits Rectangle {
         x: (parent.width - self.width) / 2;
         y: (parent.height - self.height) / 2;
 
-        background: Theme.surface0;
-        // Pill chrome: 1 px `Theme.surface2` outline at rest (matches the
-        // `ActionPill` chip's outline so adjacent search bars + pills read
-        // as the same family of controls). Focus lifts it with a soft glow
-        // and swaps the ring to a faint accent tint.
+        // Rest matches the `ActionPill` chip's shared fill, so adjacent search
+        // bars + pills read as one family of controls; any engagement closes
+        // it up to opaque, the same way a hovered `PillButton` does.
+        background: (chrome-touch.has-hover || input.has-focus)
+            ? Theme.surface0
+            : Theme.floating-chrome-bg;
+        // Pill chrome: 1 px `Theme.surface2` outline at rest, again matching
+        // the `ActionPill` chip. Focus lifts it with a soft glow and swaps the
+        // ring to a faint accent tint.
         border-radius: self.height / 2;
         border-width: 1px;
         border-color: input.has-focus
@@ -113,19 +119,27 @@ export component SearchBar inherits Rectangle {
         // animate bindings derived from another animating property",
         // animate only the source dimensions and let the centring tracks
         // per-frame.
-        animate width, height, border-color, drop-shadow-color,
+        animate width, height, background, border-color, drop-shadow-color,
                 drop-shadow-blur, drop-shadow-offset-y {
             duration: Theme.dur-fast;
             easing: ease-in-out;
         }
 
-        TouchArea {
+        // Wraps the content rather than sitting beside it. As a *sibling* its
+        // `has-hover` only reported the padding and border edge: `TextInput`
+        // consumes the hit test, so the pointer vanished the moment it crossed
+        // into the text and the hover step of the fill above dropped back to
+        // rest. An ancestor TouchArea gets `has-hover` on the top-down filter
+        // pass and still forwards the event, so the deepest TouchArea (the
+        // clear button) and the `TextInput` keep their clicks, drags and
+        // caret placement. Same wrapping fix, same reason, as `touch` in
+        // `track-list/track-list-row.slint`.
+        chrome-touch := TouchArea {
+            width: 100%;
+            height: 100%;
             // Forwards focus to the input on click so the whole pill is the
-            // target, not just the inner TextInput. No hover styling — the
-            // pill stays a single resting colour regardless of pointer
-            // position; the only visual lift happens on focus.
+            // target, not just the inner TextInput.
             clicked => { input.focus(); }
-        }
 
         HorizontalLayout {
             padding-left: Theme.pad-sm;
@@ -213,6 +227,7 @@ export component SearchBar inherits Rectangle {
                     }
                 }
             }
+        }
         }
     }
 }

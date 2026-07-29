@@ -2,7 +2,7 @@ import { Theme } from "../theme.slint";
 import { MaterialIcon } from "material-icon.slint";
 import { Tooltip } from "tooltip.slint";
 
-// Rounded Theme.surface0 chip that hosts a horizontal row of pill segments.
+// Rounded near-opaque chip that hosts a horizontal row of pill segments.
 // Mirrors Tauri's `ActionPill` (`src/components/common/ActionPill.tsx`):
 // callers compose `PillLabel` / `PillDivider` / `PillButton` children to
 // express the desired pill contents.
@@ -16,12 +16,16 @@ import { Tooltip } from "tooltip.slint";
 export component ActionPill inherits Rectangle {
     height: 32px;
     border-radius: self.height / 2;
-    background: Theme.surface0;
+    // Shared `Theme.floating-chrome-bg` — `surface0` at 0.75, the same fill
+    // the hero's back button takes, so the two read as one family where they
+    // sit side by side over a blur. See the note on the token in `theme.slint`.
+    background: Theme.floating-chrome-bg;
     // 1 px `Theme.surface2` outline — same chrome convention as
     // `popup-surface.slint`. Keeps the pill legible when it sits over a
-    // hero blur whose dominant colour happens to match `Theme.surface0`
-    // (Album Detail header). The Rectangle border paints inside the
-    // layout box, so this doesn't shift any child PillButton.
+    // hero blur whose dominant colour happens to match the fill (Album
+    // Detail header), which the fill's translucency only sharpens. The
+    // Rectangle border paints inside the layout box, so this doesn't shift
+    // any child PillButton.
     border-width: 1px;
     border-color: Theme.surface2;
     width: layout.preferred-width;
@@ -38,8 +42,10 @@ export component ActionPill inherits Rectangle {
 // Reusable pill-styled button — handles text-only, icon-only, or
 // icon + text. The default home for any interactive segment inside an
 // `ActionPill`, plus any standalone "secondary action" button across
-// the app that wants the same chip chrome (`Theme.surface0` outer,
-// `Theme.surface1` hover fill, 28 px rounded shape on a 32 px row).
+// the app that wants the same chip chrome (`Theme.floating-chrome-bg`
+// outer, `Theme.surface1` hover fill, 28 px rounded shape on a 32 px
+// row). The hover fill stays fully opaque on purpose — lifting out of a
+// translucent pill is what makes the hover read.
 //
 // `danger: true` keeps the *same* chrome as a non-danger pill (no
 // permanent red fill — Tauri's filled-red treatment read as
