@@ -27,6 +27,17 @@ export component PlaylistDetailView inherits Rectangle {
         @tr("{n} track" | "{n} tracks" % PlaylistDetail.playlist.track_count)
         + " · " + Theme.format-duration(PlaylistDetail.playlist.total_duration_ms);
 
+    // A fresh mount can't have a drag in flight, but the two `<=>`s below
+    // adopt whatever the globals held: Slint's two-way link keeps the
+    // right-hand side's value, and the globals outlive this view (nav-away
+    // destroys it — see the `if` in `app-window.slint`). Without the reset,
+    // a drag interrupted by nav-away comes back as a ghosted row under a
+    // stranded drop line. Safe here because `init` runs after the links.
+    init => {
+        PlaylistDetail.drag-source = -1;
+        PlaylistDetail.drop-slot = -1;
+    }
+
     // Filter throttle: each keystroke bumps `filter-tick-pending`; the
     // shared `FilterThrottle` fires the filter callback at most once per
     // ~130 ms while pending is ahead of the last-applied tick.

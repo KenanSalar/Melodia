@@ -81,21 +81,22 @@ pub(super) fn rebuild_rows(
     // below is O(1) — a linear `.find()` per row made this O(n²) overall,
     // re-run on every queue mutation (including each frame of a drag).
     //
-    // `rows_reordered` rides along on the same lock: the shadow's ids
-    // mirror the model's, so comparing them against the incoming order is
-    // what tells us whether `apply_rows_keyed` is about to replace the
-    // model rather than patch it in place. `skip_to_index` bumps the queue
-    // version without touching the row set, so a plain track advance takes
-    // the patch path and must *not* count.
-    let (rows_reordered, old_sel) = {
+    // `row_set_changed` rides along on the same lock: the shadow's ids
+    // mirror the model's while the sheet is open, so comparing them
+    // against the incoming order says whether the rows moved, arrived or
+    // left — which is exactly when `apply_rows_keyed` resets the model
+    // instead of patching it. `skip_to_index` bumps the queue version
+    // without touching the row set, so a plain track advance takes the
+    // patch path and must *not* count.
+    let (row_set_changed, old_sel) = {
         let guard = shadow.lock();
-        let reordered = guard
+        let changed = guard
             .iter()
             .map(|e| e.id)
             .ne(qvm.queue_tracks.iter().map(|t| t.id));
         let sel: std::collections::HashMap<i64, bool> =
             guard.iter().map(|e| (e.id, e.selected)).collect();
-        (reordered, sel)
+        (changed, sel)
     };
     let mut new_shadow: Vec<ShadowEntry> = Vec::with_capacity(qvm.queue_tracks.len());
     let mut new_rows: Vec<QueueRow> = Vec::with_capacity(qvm.queue_tracks.len());
@@ -116,7 +117,7 @@ pub(super) fn rebuild_rows(
     let queue = ui.global::<Queue>();
     queue.set_current_index(qvm.queue_index);
     queue.set_selected_count(selected_count);
-    if rows_reordered {
+    if row_set_changed {
         // Abort any in-flight drag-reorder: the row indices it was
         // computed against no longer describe the queue, and the model
         // reset destroys the row instance holding the pointer grab, so it

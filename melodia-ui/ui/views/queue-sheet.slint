@@ -40,7 +40,16 @@ export component QueueSheet inherits Rectangle {
     // own `changed` handlers on their own properties — see CLAUDE.md
     // "changed doesn't accept path expressions on globals").
     private property <bool> watched-open: Queue.open;
-    changed watched-open => { Queue.open-changed(self.watched-open); }
+    changed watched-open => {
+        Queue.open-changed(self.watched-open);
+        // Neither an opening nor a closing sheet can have a drag in
+        // flight. Worth spelling out on close: the sheet stays mounted,
+        // so the pressed row outlives it — until the teardown drops the
+        // rows a beat later, and a destroyed row never delivers the
+        // pointer-up that would have cleared these itself.
+        Queue.drag-source = -1;
+        Queue.drop-slot = -1;
+    }
 
     private property <bool> has-rows: Queue.rows.length > 0;
     private property <bool> has-selection: Queue.selected-count > 0;

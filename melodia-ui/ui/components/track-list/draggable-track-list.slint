@@ -24,11 +24,13 @@ import { TrackListRowItem } from "track-list-row.slint";
 // pairs.
 //
 // All drag state lives at the list level (`drag-source` / `drop-slot`)
-// and every row two-way binds into it via `<=>` — Rust does NOT need
-// to mirror this state because it's purely UI feedback (only the
-// final `reorder(from, to)` callback crosses the boundary). Drag is
-// gated on `reorder-enabled` (Playlist Detail wires
-// `sort-field == "position"` — drag is ambiguous in any other sort).
+// and every row two-way binds into it via `<=>`. Rust never drives the
+// drag — the ghost and the drop line are pure Slint feedback, and only
+// the final `reorder(from, to)` callback crosses the boundary — but it
+// does have to *abort* one, so Playlist Detail two-way binds both onto
+// the `PlaylistDetail` global. See that view for why. Drag is gated on
+// `reorder-enabled` (Playlist Detail wires `sort-field == "position"` —
+// drag is ambiguous in any other sort).
 export component DraggableTrackList inherits Rectangle {
     in property <[TrackListRow]> rows;
 

@@ -27,8 +27,11 @@ import { Checkbox } from "../components/checkbox.slint";
 // `DropArea`, which do exist but negotiate a drop onto a whole element:
 // there's no insertion-slot granularity (the line has to land in the gap
 // between two rows, picked from which half of a row the pointer is in) and
-// no edge auto-scroll. What they add over a TouchArea is cross-application
-// transfer, which a reorder doesn't want.
+// no edge auto-scroll. What they add over a TouchArea is a mime-typed
+// payload handed to a `can-drop` / `dropped` pair — in-process only on
+// this stack, and a reorder has no payload to carry anyway. 1.16's
+// `DragArea` doesn't even expose `dragging`, so it couldn't drive the
+// source-row ghost below.
 //
 // The `moved` callback keeps firing even after the pointer leaves the
 // TouchArea's bounds (implicit pointer capture, proven by
