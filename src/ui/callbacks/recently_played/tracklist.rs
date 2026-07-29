@@ -1,6 +1,6 @@
 //! `RecentlyPlayed.*` list callbacks: row actions (play, queue, favorite
 //! toggle), the filter pass, in-memory sort, column visibility, modifier-aware
-//! selection, and the header Play All / Shuffle pills.
+//! selection, and the header Shuffle pill.
 //!
 //! Sorting differs from Favorites: the recency set has fixed membership, so a
 //! column sort re-walks the cached rows in memory (`apply_filtered_tracks`)
@@ -27,7 +27,8 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, rp_ui: &Arc<RecentlyPlayedU
 
     // --- Row actions ----------------------------------------------
     // play-row loads the filtered list into the queue and starts on the
-    // clicked track; the header's Play All is the same call at index 0.
+    // clicked track; the header's Shuffle is the same call at index 0, plus
+    // a shuffle flip.
     {
         let s = state.clone();
         let ru = rp_ui.clone();
@@ -191,21 +192,8 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, rp_ui: &Arc<RecentlyPlayedU
         });
     }
 
-    // --- Header pills: Play All / Shuffle -------------------------
-    // Enqueue the filtered set in display order starting at index 0.
-    {
-        let s = state.clone();
-        let ru = rp_ui.clone();
-        g.on_play_all(move || {
-            let ids = ru.filtered_track_ids();
-            if ids.is_empty() {
-                return;
-            }
-            let s = s.clone();
-            spawn_logged!(s, "recently_played::play_all",
-                library::playback::player_play_tracks(&s.playback_ctx(), ids, Some(0)));
-        });
-    }
+    // --- Header pill: Shuffle -------------------------------------
+    // Enqueue the filtered set in display order, then flip shuffle on.
     {
         let s = state.clone();
         let ru = rp_ui.clone();

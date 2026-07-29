@@ -17,8 +17,8 @@ import { MaterialIcon } from "../components/material-icon.slint";
 // shared `TrackList`. The shared component is kept drag-free for the
 // other consumers (Tracks / Browse / Album-Artist-Genre Detail).
 //
-// Header actions: Play All, Shuffle, Edit Artwork, Rename, Delete +
-// column toggle. The selection chip (when rows are selected) carries a
+// Header actions: Shuffle, Edit Artwork, Rename, Delete + column
+// toggle. The selection chip (when rows are selected) carries a
 // "Remove from playlist" action.
 export component PlaylistDetailView inherits Rectangle {
     // Meta line: "N tracks · 45:32"; description is shown as the
@@ -132,13 +132,6 @@ export component PlaylistDetailView inherits Rectangle {
 
                 ActionPill {
                     PillButton {
-                        icon: "play_arrow";
-                        icon-filled: true;
-                        text: @tr("Play All");
-                        clicked => { PlaylistDetail.play-all(); }
-                    }
-                    PillDivider { }
-                    PillButton {
                         icon: "shuffle";
                         text: @tr("Shuffle");
                         clicked => { PlaylistDetail.shuffle-all(); }
@@ -223,7 +216,6 @@ export component PlaylistDetailView inherits Rectangle {
                         show-album   <=> PlaylistDetail.show-album;
                         show-genre   <=> PlaylistDetail.show-genre;
                         show-year    <=> PlaylistDetail.show-year;
-                        // `tooltip-text` defaults to @tr("Columns").
                         toggled(id) => { PlaylistDetail.toggle-column(id); }
                     }
                     // Selection slots — appended (with leading divider) when

@@ -90,9 +90,9 @@ pub(super) fn wire(
 
     // --- Songs row actions -----------------------------------------
     // play-row loads the visible results into the queue and starts on the
-    // clicked track. Search has no Play All pill and no Rust-side cache of
-    // what's on screen (the sort and the `show-all-tracks` cap are applied at
-    // render), so the ids come off the live model.
+    // clicked track. Search keeps no Rust-side cache of what's on screen (the
+    // sort and the `show-all-tracks` cap are applied at render), so the ids
+    // come off the live model.
     {
         let s = state.clone();
         let weak = weak.clone();

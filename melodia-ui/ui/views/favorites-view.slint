@@ -16,8 +16,8 @@ import { HeroBlurBackdrop } from "../components/hero-blur-backdrop.slint";
 
 // The Favorites view (Nav sidebar index 2). Vertical regions:
 //   * Hero — compact (~160 px). Left-side live cover mosaic + right-
-//     side title + "{n} favorites · {duration}" + Play All / Shuffle
-//     pills. Full-bleed hero blur backdrop fades through
+//     side title + "{n} favorites · {duration}" + the Shuffle /
+//     Columns pill. Full-bleed hero blur backdrop fades through
 //     `Favorites.blur-img-{a,b}` whenever the top-4 most-played
 //     favorites change.
 //   * Most Played — horizontal scrolling card carousel of the
@@ -244,26 +244,19 @@ export component FavoritesView inherits Rectangle {
 
                     Rectangle { vertical-stretch: 1; }
 
-                    // Play All / Shuffle / Columns pill — only mounted
-                    // when there's anything to play. The column toggle
-                    // lives in the same pill chrome as the playback
-                    // actions, matching Artist Detail / Album Detail's
-                    // action-row shape. The selection chip appears in
-                    // the trailing slot when rows are selected — the
-                    // All Songs list no longer has its own pill.
+                    // Shuffle / Columns pill — only mounted when there's
+                    // anything to play. The column toggle lives in the
+                    // same pill chrome as the playback action, matching
+                    // Artist Detail / Album Detail's action-row shape.
+                    // The selection chip appears in the trailing slot
+                    // when rows are selected — the All Songs list no
+                    // longer has its own pill.
                     if Favorites.track-count > 0: HorizontalLayout {
                         vertical-stretch: 0;
                         spacing: Theme.pad-md;
                         alignment: start;
 
                         ActionPill {
-                            PillButton {
-                                icon: "play_arrow";
-                                icon-filled: true;
-                                text: @tr("Play All");
-                                clicked => { Favorites.play-all(); }
-                            }
-                            PillDivider { }
                             PillButton {
                                 icon: "shuffle";
                                 text: @tr("Shuffle");

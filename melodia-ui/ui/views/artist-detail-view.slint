@@ -121,16 +121,9 @@ export component ArtistDetailView inherits Rectangle {
                 spacing: Theme.pad-md;
                 alignment: start;
 
-                // Single pill: Play All → Shuffle → toggle → selection
-                // chip (trailing, when active).
+                // Single pill: Shuffle → toggle → selection chip
+                // (trailing, when active).
                 ActionPill {
-                    PillButton {
-                        icon: "play_arrow";
-                        icon-filled: true;
-                        text: @tr("Play All");
-                        clicked => { ArtistDetail.play-artist(); }
-                    }
-                    PillDivider { }
                     PillButton {
                         icon: "shuffle";
                         text: @tr("Shuffle");
@@ -147,7 +140,6 @@ export component ArtistDetailView inherits Rectangle {
                         // Artist column is meaningless in this view —
                         // every row belongs to the same artist.
                         hide-artist: true;
-                        // `tooltip-text` defaults to @tr("Columns").
                         toggled(id) => { ArtistDetail.toggle-column(id); }
                     }
                     if ArtistDetail.selected-ids.length > 0: PillDivider { }

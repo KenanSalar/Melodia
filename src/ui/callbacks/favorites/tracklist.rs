@@ -22,7 +22,8 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, fav_ui: &Arc<FavoritesUi>) 
 
     // --- All Songs row actions ------------------------------------
     // play-row loads the filtered list into the queue and starts on the
-    // clicked track; the hero's Play All is the same call at index 0.
+    // clicked track; the hero's Shuffle is the same call at index 0, plus
+    // a shuffle flip.
     {
         let s = state.clone();
         let fu = fav_ui.clone();

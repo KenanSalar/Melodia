@@ -75,9 +75,8 @@ export component TracksView inherits Rectangle {
             Rectangle { horizontal-stretch: 1; }
 
             // Single right-aligned action pill. Order: selection chip
-            // (when active) → Play All → column toggle. Selection slots
-            // sit at the leading edge of the pill so they appear "left"
-            // of Play All rather than wedged between Play All and the
+            // (when active) → column toggle. Selection slots sit at the
+            // leading edge of the pill so they appear "left" of the
             // column toggle.
             VerticalLayout {
                 alignment: center;
@@ -93,15 +92,7 @@ export component TracksView inherits Rectangle {
                         }
                     }
                     if Tracks.selected-ids.length > 0: PillDivider { }
-                    if Tracks.rows.length > 0: PillButton {
-                        icon: "play_arrow";
-                        icon-filled: true;
-                        text: @tr("Play All");
-                        clicked => { Tracks.play-all(); }
-                    }
-                    if Tracks.rows.length > 0: PillDivider { }
                     ColumnTogglePopup {
-                        tooltip-text: "";
                         show-number <=> Tracks.show-number;
                         show-artwork <=> Tracks.show-artwork;
                         show-artist <=> Tracks.show-artist;

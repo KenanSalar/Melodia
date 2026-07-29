@@ -531,12 +531,6 @@ msgstr "Melodia {} è la versione più recente."
 
 # ---- Browse view -------------------------------------------------------------
 
-msgid "Play All"
-msgstr "Riproduci tutto"
-
-msgid "Shuffle All"
-msgstr "Riproduci tutto in ordine casuale"
-
 msgid "Back"
 msgstr "Indietro"
 

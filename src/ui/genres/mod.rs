@@ -14,7 +14,7 @@
 //! * `GenreDetail` — the full genre detail view. `open_genre` fetches
 //!   the header + track list; the cached `Vec<TrackListRow>` in
 //!   `GenresUi::detail.tracks` lets `play-row` / `select-row` /
-//!   `play-genre` recover ids and re-sort in memory without
+//!   `shuffle-genre` recover ids and re-sort in memory without
 //!   round-tripping the Slint model (mirrors `AlbumsUi::detail.tracks`).
 //!
 //! Unlike Albums / Artists, **no cover or hero-blur caches** live here:
@@ -184,7 +184,7 @@ impl GenresUi {
 
     /// Track ids of the **displayed** detail list, in display order — the
     /// filter-applied subset when a search is active, otherwise the full
-    /// genre. `play-genre` / shuffle / add-to-queue pass these straight to
+    /// genre. `play-row` / shuffle / add-to-queue pass these straight to
     /// `player_play_tracks`, so those actions operate on the visible rows.
     pub fn detail_track_ids(&self) -> Vec<i64> {
         self.detail.tracks.lock().iter().map(|r| r.id).collect()

@@ -60,20 +60,6 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
     {
         let s = state.clone();
         let pu = playlists_ui.clone();
-        detail.on_play_all(move || {
-            let ids = pu.detail_track_ids();
-            if ids.is_empty() {
-                return;
-            }
-            let s = s.clone();
-            spawn_logged!(s, "playlists::play_all",
-                library::playback::player_play_tracks(&s.playback_ctx(), ids, Some(0)));
-        });
-    }
-
-    {
-        let s = state.clone();
-        let pu = playlists_ui.clone();
         detail.on_shuffle_all(move || {
             let ids = pu.detail_track_ids();
             if ids.is_empty() {
@@ -95,7 +81,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
     }
 
     // play-row: double-click loads the playlist into the queue and starts on
-    // the clicked track. `play-all` is the same call pinned to index 0.
+    // the clicked track.
     {
         let s = state.clone();
         let pu = playlists_ui.clone();

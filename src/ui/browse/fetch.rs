@@ -76,7 +76,6 @@ pub async fn fetch_and_apply(
             reset_selection(&g);
             g.set_current_path(SharedString::from(""));
             g.set_has_library_folders(has_library_folders);
-            g.set_has_playable_files(false);
             g.set_can_go_back(false);
             g.set_error_message(SharedString::from(""));
             g.set_loading(false);
@@ -155,7 +154,6 @@ pub async fn fetch_and_apply(
                 })
                 .collect();
             let breadcrumbs = build_breadcrumbs(&res.path, &library_folders);
-            let has_playable = files.iter().any(|f| f.in_library);
             let can_go_back = !browse_ui.history.lock().is_empty();
             let current_path = res.path.clone();
             let browse_ui = browse_ui.clone();
@@ -177,7 +175,6 @@ pub async fn fetch_and_apply(
                 reset_selection(&g);
                 g.set_current_path(SharedString::from(current_path.as_str()));
                 g.set_has_library_folders(true);
-                g.set_has_playable_files(has_playable);
                 g.set_can_go_back(can_go_back);
                 g.set_error_message(SharedString::from(""));
                 g.set_loading(false);
@@ -203,7 +200,6 @@ pub async fn fetch_and_apply(
                 reset_selection(&g);
                 g.set_current_path(SharedString::from(path_for_ui.as_str()));
                 g.set_has_library_folders(true);
-                g.set_has_playable_files(false);
                 g.set_can_go_back(can_go_back);
                 g.set_error_message(SharedString::from(msg));
                 g.set_loading(false);

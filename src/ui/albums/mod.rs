@@ -15,8 +15,8 @@
 //! * `AlbumDetail` — the full album detail view. `open_album` fetches the
 //!   header + track list; the cached `Vec<TrackListRow>` in
 //!   `AlbumsUi::detail.tracks` lets `play-row` / `select-row` /
-//!   `play-album` recover ids and re-sort in memory without round-tripping
-//!   the Slint model (mirrors `BrowseUi::last_files`).
+//!   `shuffle-album` recover ids and re-sort in memory without
+//!   round-tripping the Slint model (mirrors `BrowseUi::last_files`).
 //!
 //! Cross-thread layout mirrors `tracks.rs` / `browse.rs`: `AlbumsUi` is
 //! `Send + Sync`, cloned into callbacks / tokio tasks; Slint properties and
@@ -232,7 +232,7 @@ impl AlbumsUi {
 
     /// Track ids of the **displayed** detail list, in display order — the
     /// filter-applied subset when a search is active, otherwise the full
-    /// album. `play-album` / shuffle / add-to-queue pass these straight to
+    /// album. `play-row` / shuffle / add-to-queue pass these straight to
     /// `player_play_tracks`, so those actions operate on the visible rows.
     pub fn detail_track_ids(&self) -> Vec<i64> {
         self.detail.tracks.lock().iter().map(|r| r.id).collect()

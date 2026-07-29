@@ -60,10 +60,10 @@ component ColumnToggleRow inherits Rectangle {
     }
 }
 
-// Column-toggle popup: a `tune` IconButton that opens a PopupWindow listing
-// every column with a checkbox-style toggle. Mirrors the volume-popup
-// pattern: right-aligned PopupWindow, `close-on-click-outside`, opacity
-// fade-in entry animation.
+// Column-toggle popup: a labelled `tune` pill that opens a PopupWindow
+// listing every column with a checkbox-style toggle. Mirrors the
+// volume-popup pattern: right-aligned PopupWindow, `close-on-click-outside`,
+// opacity fade-in entry animation.
 //
 // Globals-free: takes the six `show-*` flags as in-out properties (so the
 // host's bound state flips synchronously for instant UI feedback) and emits
@@ -89,10 +89,6 @@ export component ColumnTogglePopup inherits Rectangle {
     // (Genre Detail: every row is the same genre).
     in property <bool> hide-genre: false;
 
-    // Hover tooltip on the trigger button. Defaults to "Columns"; a host
-    // can pass `""` to suppress it.
-    in property <string> tooltip-text: @tr("Columns");
-
     callback toggled(string /*column_id*/);
 
     // Outer width tracks the PillButton's content width; height is
@@ -103,13 +99,11 @@ export component ColumnTogglePopup inherits Rectangle {
 
     // Same chrome as the queue-sheet pill buttons — `PillButton` handles
     // the 32 px outer, 28 px visible chrome, hover fill (Theme.surface1),
-    // and the renderer-aware glyph baseline correction. `icon-size: 18`
-    // grows the tune glyph for the primary tracks-header action (the
-    // default 14 px reads too thin at this prominence).
+    // and the renderer-aware glyph baseline correction. The label carries
+    // the meaning, so there's no tooltip to repeat it.
     btn := PillButton {
         icon: "tune";
-        icon-size: 18px;
-        tooltip-text: root.tooltip-text;
+        text: @tr("Columns");
         // Keep the chrome highlighted while the popup is open. Cleared by
         // the AppWindow scrim catching an outside click — rows inside the
         // popup don't auto-close (the popup stays open across toggles by

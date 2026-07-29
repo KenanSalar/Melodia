@@ -13,7 +13,7 @@ import { FilterThrottle } from "../components/filter-throttle.slint";
 import { HeroBlurBackdrop } from "../components/hero-blur-backdrop.slint";
 
 // The Recently-Played view. Mirrors the Favorites layout — same hero (live 2×2
-// cover mosaic + count + duration + Play All / Shuffle) and the same unified
+// cover mosaic + count + duration + Shuffle / Columns) and the same unified
 // below-hero scroll — but trimmed: no Favorite Artists strip, and the "Most
 // Played" strip is non-collapsible. The hero mosaic shows the up-to-4
 // most-recently-played distinct covers; the `TrackList` holds the 200 most-
@@ -170,22 +170,15 @@ export component RecentlyPlayedView inherits Rectangle {
 
                     Rectangle { vertical-stretch: 1; }
 
-                    // Play All / Shuffle / Columns pill — only mounted when
-                    // there's something to play. The selection chip appears in
-                    // the trailing slot when rows are selected.
+                    // Shuffle / Columns pill — only mounted when there's
+                    // something to play. The selection chip appears in the
+                    // trailing slot when rows are selected.
                     if RecentlyPlayed.track-count > 0: HorizontalLayout {
                         vertical-stretch: 0;
                         spacing: Theme.pad-md;
                         alignment: start;
 
                         ActionPill {
-                            PillButton {
-                                icon: "play_arrow";
-                                icon-filled: true;
-                                text: @tr("Play All");
-                                clicked => { RecentlyPlayed.play-all(); }
-                            }
-                            PillDivider { }
                             PillButton {
                                 icon: "shuffle";
                                 text: @tr("Shuffle");

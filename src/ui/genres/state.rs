@@ -82,7 +82,7 @@ pub(super) struct GenreDetailState {
     /// Cached detail track rows — the **displayed** (filter-applied)
     /// subset, kept in lockstep with the Slint `tracks` model so the
     /// generic selection/sort logic stays valid. `play-row` /
-    /// `select-row` / `play-genre` / the in-memory re-sort read this
+    /// `select-row` / `shuffle-genre` / the in-memory re-sort read this
     /// without round-tripping the Slint model — mirrors
     /// `AlbumDetailState::tracks`.
     pub tracks: Mutex<Vec<RsTrackListRow>>,

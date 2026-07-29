@@ -131,16 +131,9 @@ export component GenreDetailView inherits Rectangle {
                 spacing: Theme.pad-md;
                 alignment: start;
 
-                // Single pill: Play All → Shuffle → toggle → selection
-                // chip (trailing, when active).
+                // Single pill: Shuffle → toggle → selection chip
+                // (trailing, when active).
                 ActionPill {
-                    PillButton {
-                        icon: "play_arrow";
-                        icon-filled: true;
-                        text: @tr("Play All");
-                        clicked => { GenreDetail.play-genre(); }
-                    }
-                    PillDivider { }
                     PillButton {
                         icon: "shuffle";
                         text: @tr("Shuffle");
@@ -157,7 +150,6 @@ export component GenreDetailView inherits Rectangle {
                         // Genre column is meaningless in this view —
                         // every row belongs to the same genre.
                         hide-genre: true;
-                        // `tooltip-text` defaults to @tr("Columns").
                         toggled(id) => { GenreDetail.toggle-column(id); }
                     }
                     if GenreDetail.selected-ids.length > 0: PillDivider { }

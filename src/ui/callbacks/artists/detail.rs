@@ -108,23 +108,8 @@ pub(super) fn wire(
         });
     }
 
-    // play-artist / shuffle-artist: replace the queue with the artist's
-    // tracks in display order; shuffle additionally flips the shuffle
-    // mode on.
-    {
-        let s = state.clone();
-        let au = artists_ui.clone();
-        detail.on_play_artist(move || {
-            let ids = au.detail_track_ids();
-            if ids.is_empty() {
-                return;
-            }
-            let s = s.clone();
-            spawn_logged!(s, "artists::play_artist",
-                library::playback::player_play_tracks(&s.playback_ctx(), ids, Some(0)));
-        });
-    }
-
+    // shuffle-artist: replace the queue with the artist's tracks in display
+    // order, then flip the shuffle mode on.
     {
         let s = state.clone();
         let au = artists_ui.clone();
@@ -149,7 +134,7 @@ pub(super) fn wire(
     }
 
     // play-row: double-click loads the artist's tracks into the queue and
-    // starts on the clicked one. `play-artist` is the same call at index 0.
+    // starts on the clicked one.
     {
         let s = state.clone();
         let au = artists_ui.clone();

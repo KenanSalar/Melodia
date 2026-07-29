@@ -114,7 +114,7 @@ component BreadcrumbSegment inherits Rectangle {
 }
 
 // The Browse page. Header strip (back + home + breadcrumb + a single
-// action pill: Play All + selection chip + column-toggle) over a body
+// action pill: selection chip + column-toggle) over a body
 // that stacks a folder section above the reusable `TrackList`, with one
 // of three empty-state replacements depending on `current-path` /
 // `has-library-folders` / `error-message`.
@@ -227,9 +227,8 @@ export component BrowseView inherits Rectangle {
             }
 
             // Single trailing action pill. Order: selection chip (when
-            // active) → Play All → column toggle. Selection slots sit at
-            // the leading edge so the "N selected | X" group reads to
-            // the left of Play All, not wedged between Play All and the
+            // active) → column toggle. Selection slots sit at the leading
+            // edge so the "N selected | X" group reads to the left of the
             // column toggle.
             VerticalLayout {
                 alignment: center;
@@ -243,15 +242,7 @@ export component BrowseView inherits Rectangle {
                         clicked => { Browse.clear-selection(); }
                     }
                     if Browse.selected-ids.length > 0: PillDivider { }
-                    if Browse.has-playable-files: PillButton {
-                        icon: "play_arrow";
-                        icon-filled: true;
-                        text: @tr("Play All");
-                        clicked => { Browse.play-all(); }
-                    }
-                    if Browse.has-playable-files: PillDivider { }
                     ColumnTogglePopup {
-                        tooltip-text: "";
                         show-number <=> Browse.show-number;
                         show-artwork <=> Browse.show-artwork;
                         show-artist <=> Browse.show-artist;

@@ -3,8 +3,8 @@
 //! Drives the `RecentlyPlayed` Slint global — a trimmed cousin of the
 //! Favorites page composed of:
 //!
-//! * A lightweight header — track count + total duration + Play All /
-//!   Shuffle pills (no hero mosaic).
+//! * A lightweight header — track count + total duration + the Shuffle /
+//!   Columns pill (no hero mosaic).
 //! * A **Most Played** `HorizontalCardStrip` — the library-wide top tracks by
 //!   `play_count` (non-collapsible; a small fixed strip).
 //! * A filterable `TrackList` bound to the post-filter `RecentlyPlayed.tracks`
@@ -174,8 +174,8 @@ impl RecentlyPlayedUi {
     }
 
     /// Track ids of the post-filter list in **display order** (filter + active
-    /// column sort applied), so `play-all` / `shuffle-all` / `play-row`
-    /// enqueue what the user sees. Recency sort keeps the cached fetch order.
+    /// column sort applied), so `shuffle-all` / `play-row` enqueue what the
+    /// user sees. Recency sort keeps the cached fetch order.
     pub fn filtered_track_ids(&self) -> Vec<i64> {
         let needle = self.inner.filter.lock().to_lowercase();
         let sort = self.inner.sort.lock().clone();

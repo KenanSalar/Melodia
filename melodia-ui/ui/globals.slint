@@ -731,7 +731,6 @@ export global Tracks {
     callback request-sort(string /*field*/);
     callback apply-filter(string);
     callback play-row(int /*track_id*/, int /*index_in_filtered*/);
-    callback play-all();
     callback play-next([int] /*track_ids*/);
     callback add-to-queue([int]);
     callback toggle-row-favorite([int] /*track_ids*/, bool /*new*/);
@@ -791,11 +790,6 @@ export global Browse {
     in-out property <bool> can-go-back;
     in-out property <string> error-message;            // "" = no error
     in-out property <bool> has-library-folders;        // false → root empty-state CTA
-    // True when at least one row in `rows` is in the library — gates the
-    // Play All / Shuffle All chips so they don't appear in folders that
-    // contain only disk-only audio files (which can't be queued). Rust
-    // writes it after every fetch.
-    in-out property <bool> has-playable-files;
 
     // Per-column state — separate from the `Tracks` global so Browse keeps
     // its own column layout (mirrors old Tauri's `viewId="browse"`).
@@ -839,7 +833,6 @@ export global Browse {
     callback clear-selection();
     callback request-sort(string /*field*/);
     callback toggle-column(string /*column_id*/);
-    callback play-all();
     callback refresh();
     // Mirrors "the Browse section is on screen" — see `watched-browse-active`
     // in app-window.slint. Rust uses it to skip `library_changed` re-fetches
@@ -1240,7 +1233,6 @@ export global PlaylistDetail {
     in property <bool> is-drop-hovered: false;
 
     callback close-detail();
-    callback play-all();
     callback shuffle-all();
     callback play-row(int /*track_id*/, int /*index*/);
     callback play-next([int] /*track_ids*/);
@@ -1886,7 +1878,6 @@ export global AlbumDetail {
     in-out property <bool>  has-blur;
 
     callback close-detail();
-    callback play-album();
     callback shuffle-album();
     callback play-row(int /*track_id*/, int /*index*/);
     callback play-next([int] /*track_ids*/);
@@ -2001,7 +1992,6 @@ export global Favorites {
     pure callback request-artist-cover(string)      -> image;
 
     // Hero actions
-    callback play-all();
     callback shuffle-all();
 
     // Card clicks. `play-*` ⇒ start playback in that scope; `open-*`
@@ -2057,7 +2047,7 @@ export global Favorites {
 
 // RecentlyPlayed: drives the Recently-Played view (a trimmed Favorites).
 // Owned by `src/ui/recently_played`. No hero mosaic / artist strip — just a
-// header (count + duration + Play All / Shuffle), a non-collapsible "Most
+// header (count + duration + Shuffle / Columns), a non-collapsible "Most
 // Played" strip, and a filterable `TrackList` of the 200 most-recently-played
 // tracks. Membership is fixed to that set; filter + column sort re-walk the
 // cache in memory (no re-query).
@@ -2121,7 +2111,6 @@ export global RecentlyPlayed {
     pure callback request-most-played-cover(string) -> image;
 
     // Header actions.
-    callback play-all();
     callback shuffle-all();
 
     // Most Played card click ⇒ start playback in that scope.
@@ -2244,7 +2233,6 @@ export global ArtistDetail {
     in-out property <int> origin-nav-index: -1;
 
     callback close-detail();
-    callback play-artist();
     callback shuffle-artist();
     callback play-row(int /*track_id*/, int /*index*/);
     callback play-next([int] /*track_ids*/);
@@ -2370,7 +2358,6 @@ export global GenreDetail {
     in-out property <int> selection-anchor: -1;
 
     callback close-detail();
-    callback play-genre();
     callback shuffle-genre();
     callback play-row(int /*track_id*/, int /*index*/);
     callback play-next([int] /*track_ids*/);

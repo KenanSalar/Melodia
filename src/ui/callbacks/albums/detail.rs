@@ -100,22 +100,8 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, albums_ui: &Arc<AlbumsUi>) 
         });
     }
 
-    // play-album / shuffle-album: play every track in display order from
-    // the top. Shuffle plays the album then turns the shuffle mode on.
-    {
-        let s = state.clone();
-        let au = albums_ui.clone();
-        detail.on_play_album(move || {
-            let ids = au.detail_track_ids();
-            if ids.is_empty() {
-                return;
-            }
-            let s = s.clone();
-            spawn_logged!(s, "albums::play_album",
-                library::playback::player_play_tracks(&s.playback_ctx(), ids, Some(0)));
-        });
-    }
-
+    // shuffle-album: play every track in display order from the top, then
+    // turn the shuffle mode on.
     {
         let s = state.clone();
         let au = albums_ui.clone();
@@ -140,7 +126,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, albums_ui: &Arc<AlbumsUi>) 
     }
 
     // play-row: double-click loads the album into the queue and starts on the
-    // clicked track. `play-album` is the same call pinned to index 0.
+    // clicked track.
     {
         let s = state.clone();
         let au = albums_ui.clone();

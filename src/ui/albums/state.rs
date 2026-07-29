@@ -78,9 +78,9 @@ pub(super) struct AlbumDetailState {
     /// Cached detail track rows — the **displayed** (filter-applied)
     /// subset, kept in lockstep with the Slint `tracks` model so the
     /// generic selection/sort logic (which maps id ↔ row-index through
-    /// this cache) stays valid. `play-row` / `select-row` / `play-album`
-    /// / the in-memory re-sort read this without round-tripping the
-    /// Slint model — mirrors `BrowseUi::last_files`.
+    /// this cache) stays valid. `play-row` / `select-row` /
+    /// `shuffle-album` / the in-memory re-sort read this without
+    /// round-tripping the Slint model — mirrors `BrowseUi::last_files`.
     pub tracks: Mutex<Vec<RsTrackListRow>>,
     /// Canonical full track set for this album, in display-sort order.
     /// `tracks` holds only the displayed subset; `apply_filtered_detail`

@@ -203,7 +203,7 @@ impl PlaylistsUi {
 
     /// Track ids of the **displayed** detail list, in display order — the
     /// filter-applied subset when a search is active, otherwise the full
-    /// playlist. `play-all` / shuffle / add-to-queue pass these to
+    /// playlist. `play-row` / shuffle / add-to-queue pass these to
     /// `player_play_tracks`, so those actions operate on the visible rows.
     pub fn detail_track_ids(&self) -> Vec<i64> {
         self.detail.tracks.lock().iter().map(|r| r.id).collect()

@@ -1,7 +1,7 @@
 //! `Favorites.*` callbacks, split by concern:
 //!
 //! * [`covers`] — the lazy cover-lookup callbacks for the four card tiers.
-//! * [`hero`] — the play-all / shuffle-all hero pills.
+//! * [`hero`] — the shuffle-all hero pill.
 //! * [`strip`] — Most Played + Favorite Artists strip-card actions, the
 //!   cross-tab open-artist hand-off, and the two collapse toggles.
 //! * [`tracklist`] — the All Songs list: row actions, filter, sort,

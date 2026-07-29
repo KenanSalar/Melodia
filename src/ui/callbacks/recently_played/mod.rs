@@ -3,8 +3,8 @@
 //! * [`covers`] — the lazy Most Played cover-lookup callback.
 //! * [`strip`] — the Most Played strip-card play action.
 //! * [`tracklist`] — the recency list: row actions, filter, in-memory sort,
-//!   column visibility, modifier-aware selection, and the header Play All /
-//!   Shuffle pills.
+//!   column visibility, modifier-aware selection, and the header Shuffle
+//!   pill.
 //! * [`lifecycle`] — section enter/leave cache management + the joined
 //!   `library_changed` + `stats_changed` re-fetch subscriber.
 

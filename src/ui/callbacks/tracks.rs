@@ -86,8 +86,7 @@ pub fn wire_tracks(ui: &AppWindow, state: &AppState, tracks_ui: &Arc<TracksUi>) 
     }
 
     // play-row: double-click loads the current view into the queue and starts
-    // on the clicked track — the standard music-player contract. "Play All"
-    // below is the same call pinned to index 0.
+    // on the clicked track — the standard music-player contract.
     {
         let s = state.clone();
         let tu = tracks_ui.clone();
@@ -103,26 +102,6 @@ pub fn wire_tracks(ui: &AppWindow, state: &AppState, tracks_ui: &Arc<TracksUi>) 
             let s = s.clone();
             spawn_logged!(s, "tracks::play_row",
                 library::playback::player_play_tracks(&s.playback_ctx(), ids, start));
-        });
-    }
-
-    // play-all: load every track in the current filter into the queue and
-    // start at index 0. Matches the explicit "replace queue + play"
-    // semantics of Album/Artist/Genre/Browse Play-All buttons.
-    {
-        let s = state.clone();
-        let tu = tracks_ui.clone();
-        let weak = weak.clone();
-        tracks.on_play_all(move || {
-            let Some(ui) = weak.upgrade() else { return };
-            let filter = ui.global::<Tracks>().get_filter().to_string();
-            let ids = tu.current_ids_filtered(&filter);
-            if ids.is_empty() {
-                return;
-            }
-            let s = s.clone();
-            spawn_logged!(s, "tracks::play_all",
-                library::playback::player_play_tracks(&s.playback_ctx(), ids, Some(0)));
         });
     }
 

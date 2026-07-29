@@ -297,21 +297,6 @@ pub fn wire_browse(ui: &AppWindow, state: &AppState, browse_ui: &Arc<BrowseUi>) 
         });
     }
 
-    // play-all: all in-library ids in display order, start at 0.
-    {
-        let s = state.clone();
-        let bu = browse_ui.clone();
-        g.on_play_all(move || {
-            let ids = bu.current_in_library_ids();
-            if ids.is_empty() {
-                return;
-            }
-            let s = s.clone();
-            spawn_logged!(s, "browse::play_all",
-                library::playback::player_play_tracks(&s.playback_ctx(), ids, Some(0)));
-        });
-    }
-
     // refresh: re-fetch the current path, no history change, no persist.
     // Fired by the BrowseView when nav lands on it (so a fresh activation
     // surfaces watcher-driven additions even when nothing else triggers a

@@ -86,22 +86,8 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, genres_ui: &Arc<GenresUi>) 
         });
     }
 
-    // play-genre / shuffle-genre: play every track in display order
-    // from the top. Shuffle plays the genre then turns shuffle on.
-    {
-        let s = state.clone();
-        let gu = genres_ui.clone();
-        detail.on_play_genre(move || {
-            let ids = gu.detail_track_ids();
-            if ids.is_empty() {
-                return;
-            }
-            let s = s.clone();
-            spawn_logged!(s, "genres::play_genre",
-                library::playback::player_play_tracks(&s.playback_ctx(), ids, Some(0)));
-        });
-    }
-
+    // shuffle-genre: play every track in display order from the top, then
+    // turn shuffle on.
     {
         let s = state.clone();
         let gu = genres_ui.clone();
@@ -127,8 +113,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, genres_ui: &Arc<GenresUi>) 
 
     // play-row: double-click loads every *visible* track into the queue and
     // starts on the clicked one — when a search filter is active that is the
-    // filtered subset, not the whole genre. `play-genre` is the same call at
-    // index 0.
+    // filtered subset, not the whole genre.
     {
         let s = state.clone();
         let gu = genres_ui.clone();

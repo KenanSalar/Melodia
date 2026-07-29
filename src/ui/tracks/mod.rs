@@ -155,9 +155,9 @@ impl TracksUi {
         self.section.take_dirty()
     }
 
-    /// IDs of the rows that pass `filter`, in the current sort order. Both
-    /// `play-row` and `play-all` hand these to `player_play_tracks`, so the
-    /// queue becomes exactly the view the user was looking at.
+    /// IDs of the rows that pass `filter`, in the current sort order.
+    /// `play-row` hands these to `player_play_tracks`, so the queue becomes
+    /// exactly the view the user was looking at.
     pub fn current_ids_filtered(&self, filter: &str) -> Vec<i64> {
         // Hold each guard only long enough to bump the Arc refcount, then drop
         // immediately so concurrent UI callers don't queue behind us.

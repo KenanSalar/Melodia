@@ -16,10 +16,10 @@ import { FilterThrottle } from "../components/filter-throttle.slint";
 // to the per-view `AlbumDetail` global.
 //
 // Layout mirrors Tauri's `pages/AlbumDetail.tsx`: the column-toggle is
-// merged into the primary `[Play All | Shuffle | ⋮ | Columns]` pill so
-// the action row collapses into a single line beside the artwork; the
-// selection chip (when rows are selected) lives as a separate
-// `ActionPill` next to the primary one.
+// merged into the primary `[Shuffle | Columns]` pill so the action row
+// collapses into a single line beside the artwork; the selection chip
+// (when rows are selected) lives as a separate `ActionPill` next to the
+// primary one.
 export component AlbumDetailView inherits Rectangle {
     // Meta line: "2020 · 12 tracks · 45:32". The separators are
     // punctuation; the plural track count is translated; the duration
@@ -136,18 +136,11 @@ export component AlbumDetailView inherits Rectangle {
                 spacing: Theme.pad-md;
                 alignment: start;
 
-                // Single pill: Play All → Shuffle → toggle → selection
-                // chip (trailing, when active). Selection slots sit at
-                // the trailing edge so they read to the right of the
+                // Single pill: Shuffle → toggle → selection chip
+                // (trailing, when active). Selection slots sit at the
+                // trailing edge so they read to the right of the
                 // primary actions.
                 ActionPill {
-                    PillButton {
-                        icon: "play_arrow";
-                        icon-filled: true;
-                        text: @tr("Play All");
-                        clicked => { AlbumDetail.play-album(); }
-                    }
-                    PillDivider { }
                     PillButton {
                         icon: "shuffle";
                         text: @tr("Shuffle");
@@ -164,9 +157,6 @@ export component AlbumDetailView inherits Rectangle {
                         // Album column is meaningless in this view —
                         // every row belongs to the same album.
                         hide-album: true;
-                        // `tooltip-text` defaults to @tr("Columns"); we
-                        // leave it on the default so the icon-only pill
-                        // surfaces its purpose on hover.
                         toggled(id) => { AlbumDetail.toggle-column(id); }
                     }
                     if AlbumDetail.selected-ids.length > 0: PillDivider { }

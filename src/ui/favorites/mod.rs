@@ -3,8 +3,8 @@
 //! Drives the `Favorites` Slint global (sidebar index 2) — a single
 //! scrollable page composed of:
 //!
-//! * Hero — live 2×2 cover mosaic + count + total duration + Play All /
-//!   Shuffle pills. The mosaic refreshes whenever
+//! * Hero — live 2×2 cover mosaic + count + total duration + the
+//!   Shuffle / Columns pill. The mosaic refreshes whenever
 //!   `library_changed_tx` ticks (favourite toggled, play count bumped,
 //!   library scanned) so it always reflects the top-4 most-played
 //!   favourites. The blur backdrop fades through the shared
@@ -217,8 +217,8 @@ impl FavoritesUi {
     }
 
     /// Track ids of the post-filter All Songs list, in display order.
-    /// `play-all` / `shuffle-all` / `play-row` use this to recover ids
-    /// without round-tripping the Slint model.
+    /// `shuffle-all` / `play-row` use this to recover ids without
+    /// round-tripping the Slint model.
     pub fn filtered_track_ids(&self) -> Vec<i64> {
         // The post-filter list is the one currently bound to the Slint
         // model; the unfiltered cache is in `tracks_all`. We re-walk

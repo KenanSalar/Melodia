@@ -533,12 +533,6 @@ msgstr "Η Melodia {} είναι η τελευταία έκδοση."
 
 # ---- Browse view -------------------------------------------------------------
 
-msgid "Play All"
-msgstr "Αναπαραγωγή όλων"
-
-msgid "Shuffle All"
-msgstr "Τυχαία αναπαραγωγή όλων"
-
 msgid "Back"
 msgstr "Πίσω"
 

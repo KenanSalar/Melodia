@@ -533,12 +533,6 @@ msgstr "Melodia {} en son sürümdür."
 
 # ---- Browse view -------------------------------------------------------------
 
-msgid "Play All"
-msgstr "Tümünü Oynat"
-
-msgid "Shuffle All"
-msgstr "Tümünü Karıştır"
-
 msgid "Back"
 msgstr "Geri"
 
