@@ -45,6 +45,17 @@ export component QueueSheet inherits Rectangle {
     private property <bool> has-rows: Queue.rows.length > 0;
     private property <bool> has-selection: Queue.selected-count > 0;
 
+    // Row pitch, owned here and handed down to every `QueueRowItem`. The
+    // drop indicator and the rows' slot math both derive from it, so one
+    // value is what keeps the painted line and the committed insert on the
+    // same row.
+    private property <length> row-height: 50px;
+    // Where the dragged row's top currently sits inside the visible list.
+    // Only meaningful while `Queue.drag-source >= 0`; read by the
+    // auto-scroll gate below.
+    private property <length> drag-src-screen-y:
+        Queue.drag-source * root.row-height + inner-list.viewport-y;
+
     // Backdrop — derivation of `t`, no inner animate block.
     Rectangle {
         width: 100%;
@@ -273,6 +284,8 @@ export component QueueSheet inherits Rectangle {
                             row-index: idx;
                             list-y0: inner-list.absolute-position.y;
                             list-height: inner-list.height;
+                            list-viewport-y: inner-list.viewport-y;
+                            row-height: root.row-height;
                             // Neighbour-selection lookup — drives the per-
                             // corner radius gating in QueueRowItem so
                             // contiguous selected rows merge into one
@@ -280,11 +293,32 @@ export component QueueSheet inherits Rectangle {
                             prev-selected: idx > 0 && Queue.rows[idx - 1].selected;
                             next-selected: idx < Queue.rows.length - 1 && Queue.rows[idx + 1].selected;
                             request-scroll-by(dy) => {
-                                inner-list.viewport-y = clamp(
-                                    inner-list.viewport-y - dy,
-                                    inner-list.visible-height - inner-list.viewport-height,
-                                    0px,
-                                );
+                                // Skipped outright when the nudge would carry
+                                // the dragged row out of the visible range:
+                                // Slint's ListView destroys the row instances
+                                // that leave it, and a destroyed row can no
+                                // longer deliver its pointer-up, so the drag
+                                // would neither commit nor clean up after
+                                // itself. Auto-scroll therefore stops once the
+                                // source reaches the far edge.
+                                if (Queue.drag-source >= 0
+                                    && (root.drag-src-screen-y - dy) > -root.row-height
+                                    && (root.drag-src-screen-y - dy) < inner-list.visible-height) {
+                                    // Not `clamp()`: a queue shorter than the
+                                    // list body puts its lower bound *above*
+                                    // its upper one, and `clamp(v, lo, hi)`
+                                    // expands to `max(lo, min(v, hi))`, which
+                                    // then hands back the positive lower bound
+                                    // and shoves every row down the screen.
+                                    // Capping both arguments at 0 resolves that
+                                    // case to 0px instead. Same shape as
+                                    // `draggable-track-list.slint` — keep the
+                                    // two in step.
+                                    inner-list.viewport-y = max(
+                                        min(0px, inner-list.visible-height - inner-list.viewport-height),
+                                        min(0px, inner-list.viewport-y - dy),
+                                    );
+                                }
                             }
                         }
                     }
@@ -306,7 +340,7 @@ export component QueueSheet inherits Rectangle {
                         && Queue.drop-slot != Queue.drag-source
                         && Queue.drop-slot != Queue.drag-source + 1: Rectangle {
                         x: 0;
-                        y: Queue.drop-slot * 50px + inner-list.viewport-y;
+                        y: Queue.drop-slot * root.row-height + inner-list.viewport-y;
                         width: inner-list.width;
                         height: 2px;
                         background: Theme.accent;

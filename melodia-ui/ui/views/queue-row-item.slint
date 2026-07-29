@@ -33,7 +33,10 @@ export component QueueRowItem inherits Rectangle {
     in property <int> row-index;
     in property <length> list-y0;
     in property <length> list-height;
-    in property <length> row-height: 50px;
+    in property <length> list-viewport-y;
+    // Row pitch. Owned by the host so the slot math below and the host's
+    // drop indicator can't disagree about how tall a row is.
+    in property <length> row-height;
     // Neighbour-selection flags — drive the per-corner radius gating below
     // so contiguous selected queue rows merge into one continuous pill
     // (Material 3 "expressive" selection). Host (QueueSheet) computes both
@@ -68,9 +71,15 @@ export component QueueRowItem inherits Rectangle {
     // Drives the reactive slot computation below so the moved handler
     // stays one line.
     private property <length> cur-abs-y: 0px;
-    // List-relative pointer Y derived from `cur-abs-y` and the host's
-    // `list-y0`. Used twice (slot + half-of-row), so factor it out.
-    private property <length> cur-list-y: root.cur-abs-y - root.list-y0;
+    // Pointer Y in the list's *content* space, derived from `cur-abs-y` and
+    // the host's geometry. A row sits at `list-y0 + viewport-y + idx *
+    // row-height` on screen, so recovering the index means taking the scroll
+    // offset back out — without it the slot walks off as soon as the queue is
+    // scrolled, while the host's drop indicator (which does account for it)
+    // keeps pointing somewhere else. Used twice (slot + half-of-row), so
+    // factor it out.
+    private property <length> cur-list-y:
+        root.cur-abs-y - root.list-y0 - root.list-viewport-y;
     // Row the pointer is currently over, clamped to the model bounds.
     private property <int> cur-row: clamp(
         Math.floor(root.cur-list-y / root.row-height),

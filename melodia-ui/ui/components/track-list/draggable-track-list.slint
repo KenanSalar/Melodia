@@ -66,15 +66,23 @@ export component DraggableTrackList inherits Rectangle {
         + (root.show-year ? root.w-year + 8px : 0px)
         + root.w-length;
 
-    // Row height mirrors `TrackListRowItem`'s internal derivation,
-    // used only by the drop-indicator overlay below.
-    property <length> row-height: root.show-artwork ? Theme.row-h : Theme.row-h-compact;
+    // Row pitch — mirrors `TrackListRowItem`'s `drag-row-h`, chrome plus
+    // the gap under it. Used by the drop-indicator overlay below and by
+    // the auto-scroll gate in `request-scroll-by`.
+    property <length> row-height:
+        (root.show-artwork ? Theme.row-h : Theme.row-h-compact) + Theme.row-gap;
 
     // List-level drag state — each row two-way binds into these via
     // `<=>` so all rows share one source of truth (the dragged row's
     // index + the live drop slot).
     in-out property <int> drag-source: -1;
     in-out property <int> drop-slot: -1;
+
+    // Where the dragged row's top currently sits inside the visible list.
+    // Only meaningful while `drag-source >= 0`; read by the auto-scroll
+    // gate in `request-scroll-by`.
+    property <length> drag-src-screen-y:
+        root.drag-source * root.row-height + inner-list.viewport-y;
 
     callback request-sort(string /*field*/);
     callback play-row(int /*track_id*/, int /*index*/);
@@ -204,13 +212,30 @@ export component DraggableTrackList inherits Rectangle {
                     go-to-artist(aid) => { root.go-to-artist(aid); }
                     go-to-genre(gid) => { root.go-to-genre(gid); }
                     request-scroll-by(dy) => {
-                        // Re-clamp the requested delta against the
-                        // ListView's scroll bounds — keeps top/bottom
-                        // from over-scrolling past content.
-                        inner-list.viewport-y = max(
-                            min(0px, inner-list.visible-height - inner-list.viewport-height),
-                            min(0px, inner-list.viewport-y + dy),
-                        );
+                        // `dy` is a content-space delta (negative = show
+                        // earlier rows), so it *subtracts* from viewport-y,
+                        // which runs 0 at the top and negative downwards.
+                        // Same shape as `queue-sheet.slint` — keep the two
+                        // in step.
+                        //
+                        // The nudge is skipped outright when it would carry
+                        // the dragged row out of the visible range: Slint's
+                        // ListView destroys the row instances that leave it,
+                        // and a destroyed row can no longer deliver its
+                        // pointer-up, so the drag would neither commit nor
+                        // clean up after itself. Auto-scroll therefore stops
+                        // once the source reaches the far edge.
+                        if (root.drag-source >= 0
+                            && (root.drag-src-screen-y - dy) > -root.row-height
+                            && (root.drag-src-screen-y - dy) < inner-list.visible-height) {
+                            // Both arguments are capped at 0 so a list
+                            // shorter than its viewport resolves to 0px
+                            // rather than a positive (over-scrolled) offset.
+                            inner-list.viewport-y = max(
+                                min(0px, inner-list.visible-height - inner-list.viewport-height),
+                                min(0px, inner-list.viewport-y - dy),
+                            );
+                        }
                     }
                 }
             }

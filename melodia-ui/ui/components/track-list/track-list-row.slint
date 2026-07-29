@@ -12,10 +12,10 @@ import { PopupSurface } from "../popup-surface.slint";
 import { FocusLossWatcher } from "../focus-loss-watcher.slint";
 
 // One body row in a track table. Visual chrome (the rounded "pill" with
-// hover/selected backgrounds) is `row-h` tall (Theme.row-h, 46 px) with a
-// `row-gap` (6 px) of transparent space below — together they form the
-// virtualizer slot the ListView measures, so each row leaves a gap under
-// itself without painting over the next row.
+// hover/selected backgrounds) is `Theme.row-h` tall with `Theme.row-gap` of
+// transparent space below — together they form the virtualizer slot the
+// ListView measures, so each row leaves a gap under itself without painting
+// over the next row. Anything deriving a row *pitch* has to sum both.
 //
 // Layout split:
 //   * outer Rectangle  → fixed total slot height (row-h + row-gap), no chrome
@@ -160,7 +160,12 @@ export component TrackListRowItem inherits Rectangle {
     property <length> drag-cur-abs-y: 0px;
     // Slot math — list-relative pointer Y → row index → upper/lower
     // half → 0..=row-count slot index.
-    property <length> drag-row-h: root.show-artwork ? Theme.row-h : Theme.row-h-compact;
+    //
+    // The pitch is the whole virtualizer slot, pill plus the gap under it
+    // (see this file's header) — leave the gap out and the slot lands a
+    // little further off with every row down the list.
+    property <length> drag-row-h:
+        (root.show-artwork ? Theme.row-h : Theme.row-h-compact) + Theme.row-gap;
     property <length> drag-cur-list-y:
         root.drag-cur-abs-y - root.list-y0 - root.list-viewport-y;
     property <int> drag-cur-row: clamp(
