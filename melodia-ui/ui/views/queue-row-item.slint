@@ -66,16 +66,22 @@ export component QueueRowItem inherits Rectangle {
     // a double-click — don't strobe the row to 0.4 opacity and back.
     // Started on pointer-down, cancelled on pointer-up / cancel, and
     // pre-empted on real drag-start (threshold crossed) which sets
-    // `Queue.drag-source` directly. Also gated on the sheet still being
-    // open: a press that closes it (the `Q` shortcut, Escape) leaves the
-    // row alive and armed long enough to publish a ghost *after* the
-    // sheet's teardown reset, which nothing would then clear.
+    // `Queue.drag-source` directly.
     private property <bool> arming-ghost: false;
     ghost-arm-timer := Timer {
         interval: Theme.dur-med;
-        running: root.arming-ghost && Queue.open;
+        running: root.arming-ghost;
         triggered => {
-            Queue.drag-source = root.row-index;
+            // Skip the ghost when the press itself closed the sheet (the
+            // `Q` shortcut, Escape): the row outlives the close by the
+            // teardown delay, so publishing here would land *after* the
+            // close transition's reset with nothing left to clear it.
+            // Gating the publish rather than `running` is what keeps
+            // `arming-ghost` from latching — a paused timer restarts from
+            // zero on reopen and fires with no drag in progress.
+            if (Queue.open) {
+                Queue.drag-source = root.row-index;
+            }
             root.arming-ghost = false;
         }
     }
@@ -186,7 +192,15 @@ export component QueueRowItem inherits Rectangle {
                     // Drop is a no-op when slot == source or slot == source+1
                     // — both map to `to == source` after adjustment. We
                     // skip those.
+                    //
+                    // `drag-source == row-index` ties the commit to state
+                    // nobody has reset behind our back. `drag-started` is
+                    // per-row and survives a close→reopen mid-press, after
+                    // which `moved` refills `drop-slot` while `drag-source`
+                    // stays cleared — no indicator paints, so committing
+                    // there would reorder the queue invisibly.
                     if (root.drag-started
+                        && Queue.drag-source == root.row-index
                         && Queue.drop-slot >= 0
                         && Queue.drop-slot != root.row-index
                         && Queue.drop-slot != root.row-index + 1) {

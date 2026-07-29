@@ -921,7 +921,7 @@ export global WindowChrome {
 // during the drag. Two things clear them out from under a drag the
 // pressed row can no longer finish itself: Rust when it rebuilds `rows`
 // (`ui::queue_sheet::rows`), and the sheet on either `open` transition
-// (`queue-sheet.slint`, mount included).
+// and at mount (`queue-sheet.slint`).
 //
 // File-drop: `open` is mirrored to a Rust `Arc<AtomicBool>` via the
 // `open-changed` callback. The winit `WindowEvent::DroppedFile` filter
