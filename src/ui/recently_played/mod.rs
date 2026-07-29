@@ -177,7 +177,7 @@ impl RecentlyPlayedUi {
         let all = self.inner.tracks_all.lock();
         let mut rows: Vec<&crate::entities::track::TrackListRow> = all
             .iter()
-            .filter(|r| needle.is_empty() || crate::ui::detail_filter::track_matches(r, &needle))
+            .filter(|r| crate::ui::detail_filter::track_matches(r, &needle))
             .collect();
         if sort.field != RECENCY_SORT {
             let dir = match sort.dir {

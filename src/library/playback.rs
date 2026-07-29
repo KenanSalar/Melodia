@@ -13,9 +13,10 @@ use crate::state::PlaybackContext;
 /// at — but `get_track_summaries_by_ids` drops ids that no longer exist, so the
 /// two index spaces diverge the moment one row is gone and every slot past the
 /// gap shifts. Resolving through the id keeps the picked track picked. `None`
-/// means there is no slot to start on — either the caller picked no row at all,
-/// or the one it picked didn't survive — and the caller falls back to the head,
-/// warning only in the second case.
+/// means there is no slot to start on: the caller picked no row at all, the
+/// index it passed is past the end of its own list, or the row it picked didn't
+/// survive. The caller falls back to the head and warns on the last two — they
+/// are different faults, and the messages say which.
 fn resolve_start_slot(
     track_ids: &[i64],
     summaries: &[Arc<TrackSummary>],
@@ -52,8 +53,15 @@ pub async fn player_play_tracks(
     }
 
     let start = resolve_start_slot(&track_ids, &summaries, start_index).unwrap_or_else(|| {
-        if start_index.is_some() {
-            log::warn!("play_tracks: the picked track didn't survive the fetch; starting at the head");
+        match start_index {
+            None => {}
+            Some(i) if i >= track_ids.len() => log::warn!(
+                "play_tracks: start_index {i} is past the {} ids handed in; starting at the head",
+                track_ids.len()
+            ),
+            Some(_) => log::warn!(
+                "play_tracks: the picked track didn't survive the fetch; starting at the head"
+            ),
         }
         0
     });

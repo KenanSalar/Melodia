@@ -18,9 +18,11 @@
 //! The predicates alone are reused further out: the Favorites and
 //! Recently-Played Most Played strips match on [`most_played_matches`],
 //! and the single-name strips (Favorite Artists, Artist Detail's Albums)
-//! on [`field_contains`]. Each strip runs the predicate twice — once to
-//! build the card model, once to resolve the ids `play-track` enqueues —
-//! so sharing it is what keeps a strip and its queue agreeing.
+//! on [`field_contains`]. The two Most Played strips run their predicate
+//! twice — once to build the card model, once to resolve the ids
+//! `play-track` enqueues — so sharing it is what keeps a strip and its
+//! queue agreeing. The single-name strips only build a model; their card
+//! actions fetch by entity id (Favorite Artists) or navigate (Albums).
 
 use std::collections::HashSet;
 
@@ -126,7 +128,7 @@ pub fn apply_filtered_detail<V: DetailSelectionView>(view: &V, refs: &FilterRefs
     let displayed: Vec<RsTrackListRow> = {
         let all = refs.all_tracks.lock();
         all.iter()
-            .filter(|r| needle.is_empty() || track_matches(r, &needle))
+            .filter(|r| track_matches(r, &needle))
             .cloned()
             .collect()
     };
