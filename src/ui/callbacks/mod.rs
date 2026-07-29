@@ -24,6 +24,7 @@ mod tags;
 mod tracks;
 mod updater;
 
+use rand::RngExt;
 use slint::{ComponentHandle, Model, ModelRc};
 
 use crate::library;
@@ -94,22 +95,30 @@ pub(super) fn model_track_ids(rows: &ModelRc<crate::TrackListRow>) -> Vec<i64> {
     rows.iter().map(|r| i64::from(r.id)).collect()
 }
 
-/// Replace the queue with `ids` in display order, then turn shuffle on —
-/// the header Shuffle pill on every list view. `tag` names the call site in
-/// the two failure logs.
+/// Replace the queue with `ids`, open on a random one, then turn shuffle on —
+/// the header Shuffle pill on the six views that carry one. `tag` names the
+/// call site in the two failure logs.
 ///
 /// The two halves have to be sequenced (shuffle re-anchors around whatever is
 /// playing), so this is a spawned task rather than one `library::*` call. Use
 /// `queue_set_shuffle` and not a read-then-toggle pair: the pill means "on",
 /// and a toggle racing the transport's shuffle button would turn it off.
+///
+/// The start slot is random, and has to be: the shuffle anchors the current
+/// track at the front, so starting at the head would open every press on the
+/// same song — a shuffle whose first track you can predict.
 pub(super) fn spawn_play_then_shuffle(state: &AppState, tag: &'static str, ids: Vec<i64>) {
+    // Not just an early exit — `random_range` panics on an empty range, and a
+    // filter that matches nothing leaves a live pill over an empty list (the
+    // header gates on the view's *unfiltered* count).
     if ids.is_empty() {
         return;
     }
+    let start = rand::rng().random_range(..ids.len());
     let state = state.clone();
     state.runtime.clone().spawn(async move {
         if let Err(e) =
-            library::playback::player_play_tracks(&state.playback_ctx(), ids, Some(0)).await
+            library::playback::player_play_tracks(&state.playback_ctx(), ids, Some(start)).await
         {
             log::warn!("{tag} play: {e}");
             return;

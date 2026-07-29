@@ -28,14 +28,16 @@ fn resolve_start_slot(
 
 /// Replace the queue with `track_ids` and start at `start_index` (`None` =
 /// head). Every way of starting playback from a browsing surface routes here —
-/// a header Play-All pill pins index 0, activating a row passes the clicked
-/// slot — so the queue always ends up being the list the user was looking at.
+/// activating a row passes the clicked slot, the header Shuffle pill passes a
+/// random one — so the queue always ends up being the list the user was
+/// looking at.
 ///
 /// With shuffle already on, the rest of the list is shuffled behind the chosen
 /// track rather than played in display order: a freshly seeded `play_order` is
-/// the identity permutation, so without this the pill would stay lit while
-/// playback walked the album straight through. `original_order` is left as
-/// seeded, so turning shuffle back off restores display order.
+/// the identity permutation, so without this the transport's shuffle button
+/// would stay lit while playback walked the album straight through.
+/// `original_order` is left as seeded, so turning shuffle back off restores
+/// display order.
 pub async fn player_play_tracks(
     ctx: &PlaybackContext,
     track_ids: Vec<i64>,

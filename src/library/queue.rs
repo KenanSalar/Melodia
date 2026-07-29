@@ -123,7 +123,13 @@ pub fn queue_skip_to_index(state: &AppState, index: usize) -> Result<(), AppErro
     Ok(())
 }
 
-/// FIX: Eliminates TOCTOU race — comparison + toggle under a single lock.
+/// Drive shuffle to `enabled`, doing nothing when it is already there.
+///
+/// The comparison and the flip sit inside one `with_state_emit` closure, so a
+/// caller that means "on" cannot be raced into "off" by the transport button
+/// landing between a read and a write. That is the whole reason to reach for
+/// this over a read-then-`queue_toggle_shuffle` pair — the toggle is the
+/// transport's own path, where flipping whatever is current *is* the intent.
 pub fn queue_set_shuffle(state: &AppState, enabled: bool) -> Result<(), AppError> {
     let new_shuffle = with_state_emit(&state.player_state, &state.sinks, |s| {
         if s.queue.shuffle_enabled == enabled {
