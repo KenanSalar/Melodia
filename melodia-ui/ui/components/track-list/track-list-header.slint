@@ -95,7 +95,12 @@ component HeaderCell inherits Rectangle {
             alignment: center;
             Text {
                 text: root.label;
-                color: root.active-field == root.field ? Theme.accent : Theme.subtext0;
+                // Same rung as the rows beneath it. The header still reads as
+                // a header on size and weight (12 px / 600 against the rows'
+                // 13 px / 400), so it doesn't need to give up contrast to
+                // separate itself — and on `subtext0` it was the dimmest text
+                // on the app's densest screen.
+                color: root.active-field == root.field ? Theme.accent : Theme.text;
                 font-size: Theme.font-size-sm;
                 font-weight: 600;
                 overflow: elide;

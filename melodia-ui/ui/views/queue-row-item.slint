@@ -238,7 +238,12 @@ export component QueueRowItem inherits Rectangle {
                             alignment: center;
                             Text {
                                 text: root.row-index + 1;
-                                color: root.playing ? Theme.accent : Theme.subtext0;
+                                // `Theme.text` throughout, matching
+                                // `track-list-row.slint` — these rows are the
+                                // same body copy on the same background, and
+                                // reading dimmer than the lists behind the
+                                // sheet is the one thing they shouldn't do.
+                                color: root.playing ? Theme.accent : Theme.text;
                                 font-size: Theme.font-size-row;
                                 horizontal-alignment: center;
                             }
@@ -311,7 +316,7 @@ export component QueueRowItem inherits Rectangle {
                         // every script — same pattern as
                         // `track-list-row.slint:252`.
                         text: "‎" + root.row-data.title;
-                        color: root.playing ? Theme.accent : Theme.subtext0;
+                        color: root.playing ? Theme.accent : Theme.text;
                         font-size: Theme.font-size-row;
                         horizontal-alignment: left;
                         overflow: elide;
@@ -335,7 +340,7 @@ export component QueueRowItem inherits Rectangle {
                             alignment: center;
                             Text {
                                 text: root.row-data.display_duration;
-                                color: Theme.subtext0;
+                                color: Theme.text;
                                 font-size: Theme.font-size-sm;
                                 horizontal-alignment: right;
                             }

@@ -36,7 +36,12 @@ export component DataCell inherits Rectangle {
         alignment: center;
         Text {
             text: "‎" + root.text-content;
-            color: root.playing ? Theme.accent : Theme.subtext0;
+            // `text`, not `subtext0`: rows are body copy. On `subtext0` this
+            // cell fell under the 4.5:1 body-text bar on macOS Light and sat
+            // on it under Latte / GNOME Light. The whole list — header
+            // included — is on this one rung; hierarchy comes from size and
+            // weight instead, so nothing has to trade away contrast for it.
+            color: root.playing ? Theme.accent : Theme.text;
             font-size: Theme.font-size-row;
             overflow: elide;
         }

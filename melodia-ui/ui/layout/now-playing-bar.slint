@@ -195,13 +195,19 @@ export component NowPlayingBar inherits Rectangle {
                                         ? @tr("Unknown artist")
                                         : Player.vm.track.artist)
                                     : "—";
-                                color: Theme.subtext0;
+                                color: Theme.text;
                                 font-size: 11px;
                                 overflow: elide;
                             }
                             Text {
                                 text: "‎" + Player.vm.track.album;
-                                color: Theme.overlay1;
+                                // All three lines of the cell are `Theme.text`;
+                                // the 12 px / 500 title over these two at 11 px
+                                // is what separates them. Artist and album were
+                                // `subtext0` and `overlay1` — the latter isn't
+                                // even a text rung — which put the album two
+                                // steps under the title in a 72 px-tall bar.
+                                color: Theme.text;
                                 font-size: 11px;
                                 overflow: elide;
                                 visible: Player.vm.has_track && Player.vm.track.album != "";
@@ -296,7 +302,11 @@ export component NowPlayingBar inherits Rectangle {
                         : (Player.seek_pending_ms >= 0
                             ? Player.seek_pending_ms
                             : Player.position-ms));
-                    color: Theme.subtext0;
+                    // Both ends of the scrubber are `Theme.text`: unlike the
+                    // track/artist block they're a live readout the user
+                    // tracks continuously, so they carry the same weight as
+                    // body copy rather than sitting a rung under it.
+                    color: Theme.text;
                     font-size: 11px;
                     min-width: 40px;
                     horizontal-alignment: right;
@@ -312,10 +322,9 @@ export component NowPlayingBar inherits Rectangle {
                         : 0;
                     is-disabled: !Player.vm.has_track || Player.duration-ms <= 0;
                     // Seam mask must match the bar's parent background so it
-                    // disappears against it. Mirror the bar's own focus-aware
-                    // background expression above.
-                    seam-mask-color: (Settings.match-unfocused-bg && Theme.use-native-titlebar && !Theme.window-focused)
-                        ? Theme.mantle-unfocused : Theme.mantle;
+                    // disappears against it — so it reads the bar's own fill
+                    // rather than restating the focus-aware ternary.
+                    seam-mask-color: root.surface-bg;
 
                     committed(v) => {
                         if (Player.duration-ms > 0) {
@@ -326,7 +335,7 @@ export component NowPlayingBar inherits Rectangle {
 
                 Text {
                     text: Theme.format-duration(Player.duration-ms);
-                    color: Theme.subtext0;
+                    color: Theme.text;
                     font-size: 11px;
                     min-width: 40px;
                     horizontal-alignment: left;

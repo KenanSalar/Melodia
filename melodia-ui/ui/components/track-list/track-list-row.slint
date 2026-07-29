@@ -439,7 +439,12 @@ export component TrackListRowItem inherits Rectangle {
                             : ((root.sort-field == "track_number" && root.sort-dir == "desc")
                                 ? root.row-count - root.row-index
                                 : root.row-index + 1);
-                        color: root.playing ? Theme.accent : Theme.subtext0;
+                        // Every cell in the row is `Theme.text`, as is the
+                        // header — rows are body copy, and hierarchy comes
+                        // from size and weight rather than from contrast.
+                        // Same call as `DataCell`; the note there says what
+                        // `subtext0` cost.
+                        color: root.playing ? Theme.accent : Theme.text;
                         font-size: Theme.font-size-row;
                         horizontal-alignment: left;
                     }
@@ -523,7 +528,7 @@ export component TrackListRowItem inherits Rectangle {
                             // anchors at the cell's right edge for every row,
                             // regardless of script.
                             text: "‎" + root.row-data.title;
-                            color: root.playing ? Theme.accent : Theme.subtext0;
+                            color: root.playing ? Theme.accent : Theme.text;
                             font-size: Theme.font-size-row;
                             overflow: elide;
                         }
@@ -583,7 +588,7 @@ export component TrackListRowItem inherits Rectangle {
                     alignment: center;
                     Text {
                         text: root.row-data.year > 0 ? root.row-data.year : "";
-                        color: root.playing ? Theme.accent : Theme.subtext0;
+                        color: root.playing ? Theme.accent : Theme.text;
                         font-size: Theme.font-size-row;
                     }
                 }
@@ -608,7 +613,7 @@ export component TrackListRowItem inherits Rectangle {
                             // so this binding doesn't re-run a Slint pure function on
                             // every property invalidation — see `models.slint`.
                             text: root.row-data.display_duration;
-                            color: root.playing ? Theme.accent : Theme.subtext0;
+                            color: root.playing ? Theme.accent : Theme.text;
                             font-size: Theme.font-size-row;
                             horizontal-alignment: left;
                         }

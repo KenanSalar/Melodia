@@ -77,7 +77,13 @@ component UpNextRow inherits Rectangle {
                     }
                     Text {
                         text: "‎" + root.data.artist;
-                        color: compact ? Theme.subtext0 : Player.np-on-backdrop-muted;
+                        // Compact (mini player) sits on `Theme.base` and is
+                        // body copy, so it takes `Theme.text` like every
+                        // other row list. The full view keeps its solved
+                        // muted tier — that one floats on the blurred cover,
+                        // where the two-tier split is what holds the
+                        // hierarchy against the artwork.
+                        color: compact ? Theme.text : Player.np-on-backdrop-muted;
                         font-size: Theme.font-size-sm;
                         overflow: elide;
                         visible: root.data.artist != "";
@@ -89,7 +95,7 @@ component UpNextRow inherits Rectangle {
                 alignment: center;
                 Text {
                     text: root.data.display_duration;
-                    color: compact ? Theme.subtext0 : Player.np-on-backdrop-muted;
+                    color: compact ? Theme.text : Player.np-on-backdrop-muted;
                     font-size: Theme.font-size-sm;
                 }
             }
