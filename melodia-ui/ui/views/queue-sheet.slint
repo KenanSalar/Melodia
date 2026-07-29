@@ -56,6 +56,24 @@ export component QueueSheet inherits Rectangle {
     private property <length> drag-src-screen-y:
         Queue.drag-source * root.row-height + inner-list.viewport-y;
 
+    // Drop-indicator geometry, in the list body's own coordinates. The line
+    // is centred on the slot boundary, then pinned inside the band: the
+    // after-the-last-row slot sits exactly on the content's bottom edge,
+    // which the body's `clip` cuts away once the queue is scrolled to the
+    // end, so an unpinned line for that slot is simply never drawn. The top
+    // end is pinned for the mirror case, and both ends catch a pointer
+    // dragged clean out of the list. Same shape as
+    // `draggable-track-list.slint` — keep the two in step.
+    private property <length> drop-line-h: 2px;
+    private property <length> drop-line-y: max(
+        0px,
+        min(
+            inner-list.visible-height - root.drop-line-h,
+            Queue.drop-slot * root.row-height + inner-list.viewport-y
+                - root.drop-line-h / 2,
+        ),
+    );
+
     // Backdrop — derivation of `t`, no inner animate block.
     Rectangle {
         width: 100%;
@@ -340,9 +358,9 @@ export component QueueSheet inherits Rectangle {
                         && Queue.drop-slot != Queue.drag-source
                         && Queue.drop-slot != Queue.drag-source + 1: Rectangle {
                         x: 0;
-                        y: Queue.drop-slot * root.row-height + inner-list.viewport-y;
+                        y: root.drop-line-y;
                         width: inner-list.width;
-                        height: 2px;
+                        height: root.drop-line-h;
                         background: Theme.accent;
                     }
 

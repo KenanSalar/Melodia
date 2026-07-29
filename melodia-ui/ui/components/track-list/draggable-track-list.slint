@@ -84,6 +84,23 @@ export component DraggableTrackList inherits Rectangle {
     property <length> drag-src-screen-y:
         root.drag-source * root.row-height + inner-list.viewport-y;
 
+    // Drop-indicator geometry, in the visible list's own coordinates. The
+    // line is centred on the slot boundary, then pinned inside the band:
+    // the after-the-last-row slot sits exactly on the content's bottom
+    // edge, which is off the list entirely once it's scrolled to the end,
+    // so an unpinned line for that slot is simply never drawn. The top end
+    // is pinned for the mirror case, and both ends catch a pointer dragged
+    // clean out of the list.
+    property <length> drop-line-h: 2px;
+    property <length> drop-line-y: max(
+        0px,
+        min(
+            inner-list.visible-height - root.drop-line-h,
+            root.drop-slot * root.row-height + inner-list.viewport-y
+                - root.drop-line-h / 2,
+        ),
+    );
+
     callback request-sort(string /*field*/);
     callback play-row(int /*track_id*/, int /*index*/);
     // Batch-shaped — see TrackList for the contract.
@@ -242,10 +259,10 @@ export component DraggableTrackList inherits Rectangle {
         }
     }
 
-    // Drop indicator — a 2 px accent line painted across the visible
-    // list at the chosen slot's Y. Coordinates are list-relative,
-    // accounting for `viewport-y`. Hidden when no drag is active OR
-    // the slot would no-op (drop right above or right below source).
+    // Drop indicator — an accent line painted across the visible list at
+    // the chosen slot's Y (see `drop-line-y` for the geometry). Hidden
+    // when no drag is active OR the slot would no-op (drop right above or
+    // right below source).
     if root.reorder-enabled
         && root.drag-source >= 0
         && root.drop-slot >= 0
@@ -253,9 +270,9 @@ export component DraggableTrackList inherits Rectangle {
         && root.drop-slot != root.drag-source + 1: Rectangle {
         x: inner-list.absolute-position.x - root.absolute-position.x;
         y: inner-list.absolute-position.y - root.absolute-position.y
-            + (root.drop-slot * root.row-height) + inner-list.viewport-y - 1px;
+            + root.drop-line-y;
         width: root.total-w;
-        height: 2px;
+        height: root.drop-line-h;
         background: Theme.accent;
     }
 }
