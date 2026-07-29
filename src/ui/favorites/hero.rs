@@ -24,11 +24,8 @@ use crate::{AppWindow, Favorites};
 
 /// Fetch fresh stats, push the count + duration text + mosaic paths
 /// into `Favorites`, then kick a blocking composition+blur task whose
-/// result lands on the UI thread via `upgrade_in_event_loop`. The
-/// blur step is gated by `animate` — `true` for live refreshes (the
-/// user is looking at the page), `false` for the seed-on-section-enter
-/// case where we want the new state already in place when the view
-/// becomes visible.
+/// result lands on the UI thread via `upgrade_in_event_loop`.
+/// `animate` fades the cross-fade between the old mosaic and the new.
 pub async fn refresh_hero(
     state: &AppState,
     fav_ui: &Arc<FavoritesUi>,
@@ -43,7 +40,7 @@ pub async fn refresh_hero(
     if paths.is_empty() {
         // Reset the guard so the next non-empty refresh (even with covers
         // identical to a pre-empty state) recomposes.
-        fav_ui.state().last_mosaic_paths.lock().clear();
+        fav_ui.forget_mosaic();
         clear_hero_blur(fav_ui, weak);
         return Ok(());
     }
@@ -130,8 +127,8 @@ fn clear_hero_blur(fav_ui: &Arc<FavoritesUi>, weak: &Weak<AppWindow>) {
 /// Publish the composed mosaic. Skipped outright once the section is no longer
 /// active: `HeroBackdrop` is shared by all six heroes, so a compose that
 /// finishes after the user has navigated away would paint this view's solve
-/// under whichever hero mounted next. `release_section_state` clears
-/// `last_mosaic_paths` on leave, so a genuine re-enter recomposes.
+/// under whichever hero mounted next. The leave handler calls
+/// `forget_mosaic`, so a genuine re-enter recomposes.
 fn apply_hero_blur(
     fav_ui: &Arc<FavoritesUi>,
     weak: &Weak<AppWindow>,

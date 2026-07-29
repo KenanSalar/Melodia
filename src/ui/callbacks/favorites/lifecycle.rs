@@ -50,6 +50,11 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, fav_ui: &Arc<FavoritesUi>) 
                 g.set_blur_img_a(Image::default());
                 g.set_blur_img_b(Image::default());
                 g.set_has_blur(false);
+                // Same tick as the wipe above, and unconditional for the same
+                // reason: `release_section_state` bails out when the user has
+                // already come back, so leaving the guard to it can strand the
+                // hero on the bare gradient floor until the next channel tick.
+                fu.forget_mosaic();
                 // Six heroes share one colour set, so hand it back to the
                 // floor rather than leaving this mosaic's solve for the
                 // next hero to paint under.

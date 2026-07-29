@@ -79,13 +79,12 @@ export component RecentlyPlayedView inherits Rectangle {
                     Rectangle {
                         width: root.hero-artwork;
                         height: root.hero-artwork;
-                        // Empty-state tint comes off the solved
-                        // `HeroBackdrop.chrome`, not `Theme.accent` — see
+                        // Both fills are hero tokens, not theme brushes — see
                         // `favorites-view.slint` for why a theme brush is
-                        // wrong on this surface.
+                        // wrong on this surface either side of the ternary.
                         background: RecentlyPlayed.track-count == 0
                             ? HeroBackdrop.chrome.with-alpha(0.15)
-                            : Theme.surface1;
+                            : HeroBackdrop.floor-start;
                         border-radius: Theme.radius-lg;
                         border-width: 1px;
                         border-color: Theme.border;

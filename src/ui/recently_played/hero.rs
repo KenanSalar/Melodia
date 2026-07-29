@@ -117,8 +117,8 @@ pub fn clear_hero_blur(rp_ui: &Arc<RecentlyPlayedUi>, weak: &Weak<AppWindow>) {
 /// Publish the composed mosaic. Skipped outright once the section is no longer
 /// active: `HeroBackdrop` is shared by all six heroes, so a compose that
 /// finishes after the user has navigated away would paint this view's solve
-/// under whichever hero mounted next. `release_section_state` clears
-/// `last_mosaic_paths` on leave, so a genuine re-enter recomposes.
+/// under whichever hero mounted next. The leave handler calls
+/// `forget_mosaic`, so a genuine re-enter recomposes.
 fn apply_hero_blur(
     rp_ui: &Arc<RecentlyPlayedUi>,
     weak: &Weak<AppWindow>,

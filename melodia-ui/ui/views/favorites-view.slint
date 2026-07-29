@@ -111,12 +111,16 @@ export component FavoritesView inherits Rectangle {
                         // `HeroBackdrop.chrome`, not `Theme.accent`: this
                         // tile sits *on* the hero, and with no mosaic the
                         // hero is the dark gradient floor, where a light
-                        // theme's accent lands dark-on-dark. Populated
-                        // state keeps the surface1 fill (invisible behind
-                        // the flush CoverMosaic, kept for semantic parity).
+                        // theme's accent lands dark-on-dark. The populated
+                        // fill is a hero token too, and has to be: the
+                        // mosaic's placeholder slots are translucent, so
+                        // whatever fills this rectangle is most of what
+                        // their chrome composites against. `Theme.surface1`
+                        // is near-white on a light theme, which would put a
+                        // light chrome glyph on a light tile.
                         background: Favorites.track-count == 0
                             ? HeroBackdrop.chrome.with-alpha(0.15)
-                            : Theme.surface1;
+                            : HeroBackdrop.floor-start;
                         border-radius: Theme.radius-lg;
                         border-width: 1px;
                         border-color: Theme.border;
@@ -152,9 +156,8 @@ export component FavoritesView inherits Rectangle {
                         //   3 favs → 3 layout
                         //   4+ favs → 2×2 grid
                         // Distinct artwork paths fill leading slots,
-                        // remaining slots paint accent-tinted placeholder
-                        // tiles via ArtworkImage (parity with the empty
-                        // artwork cell in the tracks list).
+                        // remaining slots paint chrome-tinted placeholder
+                        // tiles via ArtworkImage.
                         if Favorites.track-count > 0: CoverMosaic {
                             width: 100%;
                             height: 100%;

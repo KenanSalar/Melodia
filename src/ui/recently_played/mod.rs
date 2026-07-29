@@ -112,6 +112,14 @@ impl RecentlyPlayedUi {
         self.data_dirty.swap(false, Ordering::AcqRel)
     }
 
+    /// Forget the last-composed mosaic covers, so the next refresh recomposes
+    /// the hero blur. Paired with the leave handler's `blur-img-*` wipe rather
+    /// than with [`Self::release_section_state`] — see
+    /// [`crate::ui::favorites::FavoritesUi::forget_mosaic`].
+    pub fn forget_mosaic(&self) {
+        self.inner.last_mosaic_paths.lock().clear();
+    }
+
     /// Drop every section-local resident buffer so the hidden view's
     /// footprint drops to ~0. Called (off the UI thread) on section leave;
     /// `mark_dirty()` was set synchronously on the same leave so the
@@ -126,9 +134,6 @@ impl RecentlyPlayedUi {
         self.inner.tracks_all.lock().clear();
         self.inner.most_played.lock().clear();
         self.inner.applied_selection.lock().clear();
-        // Forget the last-composed mosaic covers so a re-enter recomposes the
-        // hero blur (the LRU tiles were just dropped above).
-        self.inner.last_mosaic_paths.lock().clear();
         crate::tasks::heap_trim::trim();
     }
 

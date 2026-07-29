@@ -129,6 +129,17 @@ impl FavoritesUi {
         self.data_dirty.swap(false, Ordering::AcqRel)
     }
 
+    /// Forget the last-composed mosaic covers, so the next refresh recomposes
+    /// the hero blur instead of skipping on an unchanged cover set.
+    ///
+    /// The section-leave caller sits beside the `blur-img-*` wipe rather than in
+    /// [`Self::release_section_state`]: that one bails out when the user has
+    /// already come back, but the wipe is unconditional — leaving the guard set
+    /// against a hero that no longer has a blur to guard.
+    pub fn forget_mosaic(&self) {
+        self.inner.last_mosaic_paths.lock().clear();
+    }
+
     /// Drop every section-local resident buffer + clear the Slint
     /// models so the hidden view's footprint drops to ~0. Called
     /// (off the UI thread) on section leave. `mark_dirty()` was set
@@ -158,9 +169,6 @@ impl FavoritesUi {
         self.inner.most_played.lock().clear();
         self.inner.fav_artists.lock().clear();
         self.inner.applied_selection.lock().clear();
-        // Forget the last-composed mosaic covers so a re-enter recomposes the
-        // hero blur (the LRU tiles were just dropped above).
-        self.inner.last_mosaic_paths.lock().clear();
         crate::tasks::heap_trim::trim();
     }
 
