@@ -121,10 +121,10 @@ optional.
 
 | Item | Gate | Why |
 |---|---|---|
-| `install_target()` (mod.rs:82) | **ungated** | std-only (`current_exe`/`$APPIMAGE`); used by `system_install.rs:55` + `linux_pkg.rs:40` |
-| `install_target_old()` (mod.rs:71) | **gated** | calls `install::old_path()` — depends on the gated `install` submodule |
+| `install_target()` (mod.rs:85) | **ungated** | std-only (`current_exe`/`$APPIMAGE`); used by `system_install.rs:55` + `linux_pkg.rs:40` |
+| `install_target_old()` (mod.rs:74) | **gated** | calls `install::old_path()` — depends on the gated `install` submodule |
 
-`mod.rs` re-exports (lines 49-53):
+`mod.rs` re-exports (lines 52-56):
 - **Ungated:** `pub use system_install::is_system_install;`
 - **Gated** (`#[cfg(feature = "self-update")]`): `check::{CheckOutcome, check_for_update}`,
   `event::{FailureKind, UpdaterEvent}`, `install::{download_and_install, prune_stale_staging}`,
@@ -143,19 +143,19 @@ are gated internally.
   `#[cfg(all(target_os = "linux", feature = "self-update"))]`. (A feature-off
   build never produces a `.old`, so reaping it is moot anyway.)
 - **Gate** (`#[cfg(feature = "self-update")]`) the updater block at
-  ~`src/main.rs:370-419`:
+  ~`src/main.rs:394-437`:
   - `updater_event_tx/rx` channel
   - `ui::updater_settings::install_event_subscriber(...)`
   - `ui::callbacks::wire_updater(...)`
   - the `updater_daily::spawn(...)` gate (incl. the `else` log branch)
-  - the `prune_stale_staging()` boot task at ~`:416-419`
+  - the `prune_stale_staging()` boot task at ~`:434-437`
 
 `src/tasks/mod.rs`
-- Gate `pub mod updater_daily;` (`src/tasks/mod.rs:19`).
+- Gate `pub mod updater_daily;` (`src/tasks/mod.rs:22`).
 
 `src/ui/callbacks/mod.rs`
-- Gate `mod updater;` (line 23) and `pub use updater::wire as wire_updater;`
-  (line 47). The `src/ui/callbacks/updater/` dir (`check.rs`, `install.rs`,
+- Gate `mod updater;` (line 25) and `pub use updater::wire as wire_updater;`
+  (line 52). The `src/ui/callbacks/updater/` dir (`check.rs`, `install.rs`,
   `paint.rs`, `mod.rs`) is referenced **only** via `wire_updater` (verified — no
   other module imports it), so gating the whole dir is clean.
 
@@ -193,9 +193,9 @@ callbacks are no-ops).
   path (it already collapses when a section has no matches).
 
 > **Slint pitfall — do NOT wrap the mount in `if`.** In
-> `melodia-ui/ui/views/settings-view.slint:112` the section is `upd-sec := UpdateSection {}`,
+> `melodia-ui/ui/views/settings-view.slint:116` the section is `upd-sec := UpdateSection {}`,
 > and the no-results placeholder predicate references it by id
-> (`&& !upd-sec.has-matches`, line 127). Wrapping `upd-sec` in
+> (`&& !upd-sec.has-matches`, line 133). Wrapping `upd-sec` in
 > `if MelodiaUpdater.feature-enabled :` would put the id inside a conditional and
 > break that sibling reference (and the `vertical-stretch` collapse math). Keep
 > the component mounted; gate its content + `has-matches` internally instead.

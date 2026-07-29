@@ -31,7 +31,8 @@ highest-value action available: every 🟢 item below queues behind it.
 Run this when a release lands that clears both blockers. (The 1.17.0-attempt plan file this
 used to point at is gone — the checklist lives here now.)
 
-- [ ] Bump `slint` (`Cargo.toml:110`) + `slint-build` (`Cargo.toml:283`) + `Cargo.lock`. No
+- [ ] Bump `slint` (`Cargo.toml:73`) + `slint-build` (`Cargo.toml:84`) + `Cargo.lock`. Both
+      live in `[workspace.dependencies]` since the `melodia-ui` split, not `[dependencies]`. No
       feature renames touch our set — `unstable-winit-030` and `slint::winit_030` are
       unchanged in 1.17.x, and `i-slint-backend-winit` still wants `winit = "0.30.2"`, so the
       vendored fork's `[patch.crates-io]` keeps applying. MSRV 1.92 vs our 1.97.0 pin: fine.
@@ -43,7 +44,7 @@ used to point at is gone — the checklist lives here now.)
       instantiation touches ~134 `if`-gated mounts.
 - [ ] **Locale decimal separator** — 1.17 routes float→string through the locale's separator
       (exposed as `Platform.decimal-separator`). Exactly one site yields a fractional value:
-      `melodia-ui/ui/views/settings/playback-section.slint:120`, which renders `2,5 s` instead of `2.5 s`
+      `melodia-ui/ui/views/settings/playback-section.slint:138`, which renders `2,5 s` instead of `2.5 s`
       in de/fr/es/tr/el/it. Arguably the correct localization; check the `.po` strings still
       read naturally. Everything else is integer-valued (the `round(…)` dB/volume readouts) or
       a string literal (`current-speed-label()`), so unaffected.

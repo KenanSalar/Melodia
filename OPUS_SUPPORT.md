@@ -79,7 +79,7 @@ unchanged signatures:
 
 | Site | Symbols |
 |---|---|
-| `src/state/mod.rs:130` | `DeviceSinkBuilder::from_default_device`, `with_error_callback`, `open_stream`, `MixerDeviceSink`, `log_on_drop` |
+| `src/state/mod.rs:135` | `DeviceSinkBuilder::from_default_device`, `with_error_callback`, `open_stream`, `MixerDeviceSink`, `log_on_drop` |
 | `src/player/rodio_backend.rs` | `Decoder`, `Decoder::builder`, `Player`, `mixer::Mixer` |
 | `src/player/decks.rs` | `Player::{connect_new, append, clear, play, pause, set_volume, set_speed, try_seek, get_pos, len, empty, is_paused}`, `Source` |
 | `src/player/equalizer.rs` | `Source`, `SeekError`, `ChannelCount`, `Sample`, `SampleRate` |
@@ -144,7 +144,7 @@ reading for the record.
       comment covering: what it pulls (`symphonia-adapter-libopus` → `opusic-sys` →
       vendored libopus, built by CMake), and why the adapter rather than native
       Symphonia.
-- [ ] Add `"opus"` to `AUDIO_EXTENSIONS` (`src/media/mod.rs:10`). That single const is
+- [ ] Add `"opus"` to `AUDIO_EXTENSIONS` (`src/media/mod.rs:12`). That single const is
       the whole gate — library walk, watcher, DnD import and Browse all route through
       `is_audio_extension`.
 - [ ] Consider `"oga"` and `"spx"` in the same edit. Symphonia's Ogg demuxer already

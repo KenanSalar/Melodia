@@ -50,9 +50,8 @@ export component MultilineInput inherits Rectangle {
             page-height: sv.visible-height;
             edited => { root.edited(); }
             // Keep the caret on screen. Under word-wrap the x-axis is inert, so
-            // only the y-branch of the upstream recipe is kept. One line height
-            // is estimated from the font size rather than upstream's hardcoded
-            // `20px` FIXME.
+            // only the y-branch of the upstream recipe is kept. Upstream hardcodes
+            // one line height at 20px; we derive it from the font size instead.
             cursor-position-changed(cpos) => {
                 if (cpos.y + sv.viewport-y < 12px) {
                     sv.viewport-y = min(0px, max(sv.visible-height - self.height, -cpos.y + 12px));
