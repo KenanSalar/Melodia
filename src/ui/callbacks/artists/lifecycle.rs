@@ -64,7 +64,7 @@ pub(super) fn wire(
                 }
 
                 let d = ui.global::<ArtistDetail>();
-                release_detail_hero_images!(d);
+                release_detail_hero_images!(ui, d);
                 let tm = d.get_tracks();
                 if let Some(vm) = tm.as_any().downcast_ref::<VecModel<UiTrackListRow>>() {
                     vm.set_vec(Vec::new());
@@ -112,7 +112,7 @@ pub(super) fn wire(
                             let _ = weak.upgrade_in_event_loop(|ui| {
                                 let g = ui.global::<ArtistDetail>();
                                 g.set_artist_id(-1);
-                                release_detail_hero_images!(g);
+                                release_detail_hero_images!(ui, g);
                             });
                         }
                     } else {

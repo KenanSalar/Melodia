@@ -1,5 +1,5 @@
 import { Theme } from "../theme.slint";
-import { AlbumDetail, Player } from "../globals.slint";
+import { AlbumDetail, Player, HeroBackdrop } from "../globals.slint";
 import { DetailHeader } from "../components/detail-header.slint";
 import { ActionPill, PillLabel, PillButton, PillDivider } from "../components/action-pill.slint";
 import { ColumnTogglePopup } from "../components/track-list/column-toggle-popup.slint";
@@ -84,7 +84,7 @@ export component AlbumDetailView inherits Rectangle {
                     // correctly inside an LTR shell.
                     Text {
                         text: "‎" + AlbumDetail.album.name;
-                        color: Theme.text;
+                        color: HeroBackdrop.on-backdrop;
                         font-size: 24px;
                         font-weight: Theme.page-title-weight;
                         horizontal-alignment: left;
@@ -109,7 +109,7 @@ export component AlbumDetailView inherits Rectangle {
             if AlbumDetail.album.artist_name != "": Text {
                 vertical-stretch: 0;
                 text: "‎" + AlbumDetail.album.artist_name;
-                color: Theme.subtext1;
+                color: HeroBackdrop.on-backdrop;
                 font-size: Theme.font-size-lg;
                 horizontal-alignment: left;
                 overflow: elide;
@@ -118,7 +118,7 @@ export component AlbumDetailView inherits Rectangle {
             Text {
                 vertical-stretch: 0;
                 text: root.meta-line;
-                color: Theme.subtext0;
+                color: HeroBackdrop.on-backdrop-muted;
                 font-size: Theme.font-size-md;
                 horizontal-alignment: left;
             }

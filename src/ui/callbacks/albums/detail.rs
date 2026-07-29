@@ -62,7 +62,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, albums_ui: &Arc<AlbumsUi>) 
             g.set_album_id(-1);
             // Drop the hero Image properties so their `SharedPixelBuffer`s
             // release the Arc the LRU is about to clear too.
-            release_detail_hero_images!(g);
+            release_detail_hero_images!(ui, g);
             albums_ui_mod::clear_detail(&au);
 
             let au_swap = au.clone();

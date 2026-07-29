@@ -24,8 +24,14 @@ export component NowPlayingBar inherits Rectangle {
     // titlebar colour in lock step when the window loses focus (only when
     // the user has the KDE-only feature enabled AND we're in native-titlebar
     // mode — see sidebar.slint for why all three conditions are needed).
-    background: (Settings.match-unfocused-bg && Theme.use-native-titlebar && !Theme.window-focused)
-        ? Theme.mantle-unfocused : Theme.mantle;
+    //
+    // Named rather than inlined because the play button punches its glyph out
+    // in this exact colour; spelling the ternary twice would let the two drift
+    // apart in the unfocused case.
+    out property <brush> surface-bg:
+        (Settings.match-unfocused-bg && Theme.use-native-titlebar && !Theme.window-focused)
+            ? Theme.mantle-unfocused : Theme.mantle;
+    background: root.surface-bg;
 
     // Cached bar width for fluid sizing. Updated imperatively via the
     // `changed width` callback so child intrinsic sizes (artwork tile,
@@ -242,13 +248,15 @@ export component NowPlayingBar inherits Rectangle {
                 // and the optional Equalizer overlay driven by
                 // `Settings.play-button-animation-idx` all live inside
                 // PlayButton (`ui/components/now-playing/play-button.slint`). The bar
-                // just feeds it the live playing state, animation mode,
-                // and a wrapper diameter that clamps to the bar width.
+                // just feeds it the live playing state, animation mode, a
+                // wrapper diameter that clamps to the bar width, and the
+                // bar's own fill for the glyph to be punched out in.
                 VerticalLayout {
                     alignment: center;
                     PlayButton {
                         wrapper-d: clamp(root.bar-w * 0.055, 30px, 38px);
                         icon-size: clamp(root.bar-w * 0.025, 14px, 20px);
+                        icon-color: root.surface-bg;
                         is-playing: Player.vm.is_playing;
                         animation-mode: Settings.play-button-animation-idx;
                         clicked => { Player.play-pause(); }

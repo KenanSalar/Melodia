@@ -21,6 +21,12 @@ export component PlayButton inherits Rectangle {
     in property <int>    animation-mode;        // 0 None | 1 Equalizer
     in property <length> wrapper-d: 38px;
     in property <length> icon-size: wrapper-d * 0.5;
+    // Colour of the glyph (and of the Equalizer bars that stand in for it),
+    // punched out of the accent disc. Defaults to the surface the button
+    // sits on so it reads as a hole in the disc rather than as a second
+    // colour; the now-playing bar overrides it with its own background
+    // expression so the KDE unfocused tint tracks too.
+    in property <brush>  icon-color: Theme.mantle;
     callback clicked();
 
     width: wrapper-d;
@@ -92,7 +98,7 @@ export component PlayButton inherits Rectangle {
                     name: root.is-playing ? "pause" : "play_arrow";
                     filled: true;
                     icon-size: root.icon-size;
-                    icon-color: Theme.accent-text;
+                    icon-color: root.icon-color;
                 }
             }
         }
@@ -121,7 +127,7 @@ export component PlayButton inherits Rectangle {
                 width: 2px;
                 height: parent.bar-area-h * (0.2 + 0.8 * wave);
                 y: parent.bar-area-h - self.height;
-                background: Theme.accent-text;
+                background: root.icon-color;
                 border-radius: 1px;
             }
             Rectangle {
@@ -131,7 +137,7 @@ export component PlayButton inherits Rectangle {
                 width: 2px;
                 height: parent.bar-area-h * (0.2 + 0.8 * wave);
                 y: parent.bar-area-h - self.height;
-                background: Theme.accent-text;
+                background: root.icon-color;
                 border-radius: 1px;
             }
             Rectangle {
@@ -141,7 +147,7 @@ export component PlayButton inherits Rectangle {
                 width: 2px;
                 height: parent.bar-area-h * (0.2 + 0.8 * wave);
                 y: parent.bar-area-h - self.height;
-                background: Theme.accent-text;
+                background: root.icon-color;
                 border-radius: 1px;
             }
             Rectangle {
@@ -151,7 +157,7 @@ export component PlayButton inherits Rectangle {
                 width: 2px;
                 height: parent.bar-area-h * (0.2 + 0.8 * wave);
                 y: parent.bar-area-h - self.height;
-                background: Theme.accent-text;
+                background: root.icon-color;
                 border-radius: 1px;
             }
         }

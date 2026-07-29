@@ -19,7 +19,6 @@
 //!    and resets `NowPlaying.slide-phase` to 0 only when the current
 //!    track actually changed.
 
-pub(crate) mod backdrop;
 mod metadata;
 mod track_change;
 mod up_next;

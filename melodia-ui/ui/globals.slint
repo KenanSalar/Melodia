@@ -204,6 +204,58 @@ export global Player {
     in-out property <int> volume-hud-tick: 0;
 }
 
+// The hero band's solved colour set — the same `src/ui/backdrop.rs` solve the
+// `np-*` tier above runs, applied to the detail / Favorites / Recently-Played
+// heroes. Written by `src/ui/hero_backdrop.rs`.
+//
+// One global for six views rather than six copies of these properties, because
+// only one hero can exist at a time: every hero-bearing view is mounted under a
+// mutually exclusive `if` in `app-window.slint`, and `ViewTransition` is
+// enter-only (Slint's `if` destroys the outgoing view instantly), so two heroes
+// are never on screen together. Whoever opens last owns the set.
+//
+// Everything the `np-*` block says about hue-not-polarity applies verbatim
+// here, including why the `in-out` defaults are literals rather than `Theme.*`
+// bindings: they are what paints in the frame or two before the first solve
+// lands, and a theme binding would make exactly that frame the broken case on a
+// light theme.
+//
+// Where this set *diverges* from `np-*` is the two text tiers, which are fixed
+// rather than solved — see the note on them below.
+export global HeroBackdrop {
+    // Scrim over the blur slots, alpha baked in — see `np-scrim`.
+    in-out property <brush> scrim: #0a0a0e73;
+
+    // Gradient-floor stops under the blur slots: what shows for an entity with
+    // no artwork, and the whole backdrop for Genre Detail (which has none by
+    // nature and paints its name-hashed stops here instead).
+    in-out property <color> floor-start: #2b2135;
+    in-out property <color> floor-end: #14101a;
+
+    // Hue-carrying tier: the artwork tile's fallback chrome and the
+    // smart-playlist badge. 3:1 against the composited backdrop.
+    in-out property <brush> chrome: #cba6f7;
+
+    // The two text tiers — the hero title plus the secondary line under it
+    // (album artist, playlist description), and the meta / stats line
+    // ("25 tracks · 1:32:22").
+    //
+    // `out`, not `in-out`: these are fixed, and deliberately so. The solve
+    // above pins the *backdrop* into a known dark band whatever the cover,
+    // and once it is pinned one light foreground is correct on all of them —
+    // so there is nothing left for a per-artwork text tone to fix, only an
+    // album-hue tint to add and a lightness to drift between covers. Fixed
+    // reads as one typographic voice across the app instead. Both clear
+    // their WCAG targets against the pinned band with margin (~7.4:1 and
+    // ~5.1:1 at the target tone, versus the 4.5:1 and 3:1 they owe), which
+    // is exactly what pinning the backdrop first buys.
+    //
+    // Being `out` is the enforcement: Slint emits no setter, so Rust cannot
+    // quietly start writing these again.
+    out property <brush> on-backdrop: #f0eef5;
+    out property <brush> on-backdrop-muted: #c9c5d3;
+}
+
 // Equalizer: drives the graphic-EQ dialog (`Dialog.kind == "equalizer"`).
 // State is owned by Rust (`src/ui/equalizer.rs`): `enabled` + the `band-gains`
 // model are seeded from `settings.json` at boot and updated on every user

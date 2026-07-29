@@ -46,6 +46,10 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, rp_ui: &Arc<RecentlyPlayedU
                 g.set_blur_img_a(Image::default());
                 g.set_blur_img_b(Image::default());
                 g.set_has_blur(false);
+                // Six heroes share one colour set, so hand it back to the
+                // floor rather than leaving this mosaic's solve for the
+                // next hero to paint under.
+                crate::ui::hero_backdrop::reset(&ui);
                 clear_vec_model::<UiTrackListRow>(&g.get_tracks(), "recently_played: clear tracks");
                 clear_vec_model::<UiEntityStripRow>(
                     &g.get_most_played_rows(),

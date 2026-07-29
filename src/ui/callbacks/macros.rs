@@ -145,15 +145,23 @@ macro_rules! wire_row_flag {
 /// Reset a detail global's hero-Image properties (`cover` plus the
 /// dual-slot `blur-img-a` / `blur-img-b`) to `Image::default()` and clear
 /// `has-blur`, so the backing `SharedPixelBuffer` Arcs release and `FemtoVG`
-/// can reclaim the GPU textures on the next render. `$g` is a Slint
-/// detail-global handle (`AlbumDetail`, `ArtistDetail`, `PlaylistDetail`).
+/// can reclaim the GPU textures on the next render. `$ui` is the `AppWindow`,
+/// `$g` a Slint detail-global handle (`AlbumDetail`, `ArtistDetail`,
+/// `PlaylistDetail`).
+///
+/// Also re-solves the shared `HeroBackdrop` set back to the gradient floor.
+/// Clearing `has-blur` makes that floor the whole backdrop, and the six heroes
+/// share one global — so without this, backing out of (say) a Genre detail
+/// leaves its hash-derived stops painted under the *next* hero for the frames
+/// before that one's own decode lands.
 macro_rules! release_detail_hero_images {
-    ($g:expr) => {{
+    ($ui:expr, $g:expr) => {{
         let detail = &$g;
         detail.set_cover(::slint::Image::default());
         detail.set_blur_img_a(::slint::Image::default());
         detail.set_blur_img_b(::slint::Image::default());
         detail.set_has_blur(false);
+        $crate::ui::hero_backdrop::reset(&$ui);
     }};
 }
 

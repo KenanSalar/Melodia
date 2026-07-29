@@ -31,7 +31,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
             // Set before the `playlist-id` write that flips the `if` branch.
             crate::ui::nav_transition::mark_drill_back(&ui);
             g.set_playlist_id(-1);
-            release_detail_hero_images!(g);
+            release_detail_hero_images!(ui, g);
             playlists_ui_mod::clear_detail(&pu);
 
             let pu_swap = pu.clone();

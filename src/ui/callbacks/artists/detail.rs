@@ -65,7 +65,7 @@ pub(super) fn wire(
             // release the Arc the LRU is about to clear too. Without this,
             // ~650 KiB of CPU buffer + ~1.5 MiB of mapped GPU texture stay
             // pinned on the global until another detail page overwrites it.
-            release_detail_hero_images!(g);
+            release_detail_hero_images!(ui, g);
             // Clear the SearchBar so the next open lands on the full
             // tracks + albums set, not a stale needle from the last
             // detail. `clear_detail` drops the Rust-side mirror too.

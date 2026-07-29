@@ -122,7 +122,7 @@ pub async fn open_playlist(
             .collect();
         let header = to_slint_playlist_row(&detail);
         g.set_playlist(header);
-        apply_detail_artwork(&g, pair, /* animate */ true);
+        apply_detail_artwork(&ui, &g, pair, /* animate */ true);
         replace_tracks_model(&g, ui_tracks);
         reset_detail_selection(&g, &playlists_ui);
         // Fresh open clears the filter so the user lands on the full
@@ -184,7 +184,7 @@ pub async fn refresh_detail(
         sort_playlist_tracks(&mut tracks, &position_order_snapshot, &field, &dir);
 
         g.set_playlist(to_slint_playlist_row(&detail));
-        apply_detail_artwork(&g, pair, /* animate */ false);
+        apply_detail_artwork(&ui, &g, pair, /* animate */ false);
 
         // With an active filter the displayed model is a subset, so the
         // id-slice fast path below (which assumes an unfiltered model)

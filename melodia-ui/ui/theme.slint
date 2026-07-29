@@ -55,14 +55,17 @@ export global Theme {
     out property <brush> danger-hover: root.peach;
     out property <brush> danger-text: root.accent-text;
 
-    // Translucent disc for IconButtons that float over busy visual content
-    // (hero blur backdrops, the Now Playing scrim). Idle chrome is visible
-    // but soft so the button reads as a real affordance without competing
-    // with the artwork; `IconButton`'s hover state still paints the fully
-    // opaque `Theme.surface0`, so the transition animates from soft → solid.
-    // Reused by the detail-view back buttons (`detail-header.slint`) and the
-    // Now Playing view's top-bar buttons.
-    out property <brush> floating-button-bg: root.surface0.with-alpha(0.55);
+    // Disc for IconButtons that float over busy visual content — a detail
+    // hero's blur, a playlist card's cover. Nearly opaque on purpose: at a
+    // softer alpha the artwork reads straight through the chrome and the
+    // button looks like a watermark rather than a control. The remaining
+    // translucency is what keeps `IconButton`'s hover swap to solid
+    // `Theme.surface0` visible as a transition. Holding the disc close to
+    // opaque also makes it its own surface, so the glyph contrasts against
+    // `surface0` rather than against whatever the hero happens to be.
+    // Read by the detail-view back button (`detail-header.slint`) and the
+    // playlist card's hover trio + smart badge (`grid/entity-card.slint`).
+    out property <brush> floating-button-bg: root.surface0.with-alpha(0.85);
 
     // Layout — match Tauri --sidebar-width-* / --now-playing-height
     out property <length> sidebar-collapsed-w: 46px;

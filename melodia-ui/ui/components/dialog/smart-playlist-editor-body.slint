@@ -34,7 +34,8 @@ component RuleValueInput inherits Rectangle {
             horizontal-stretch: 1;
             if ti.text == "": Text {
                 text: root.placeholder;
-                color: Theme.overlay0;
+                // Same rung as every other placeholder — see `search-bar.slint`.
+                color: Theme.overlay2;
                 font-size: Theme.font-size-md;
                 vertical-alignment: center;
                 x: 0;

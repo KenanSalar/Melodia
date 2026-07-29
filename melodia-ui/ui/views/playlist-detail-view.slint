@@ -1,5 +1,5 @@
 import { Theme } from "../theme.slint";
-import { PlaylistDetail, Player, Dialog, SmartEditor } from "../globals.slint";
+import { PlaylistDetail, Player, Dialog, SmartEditor, HeroBackdrop } from "../globals.slint";
 import { DetailHeader } from "../components/detail-header.slint";
 import { ActionPill, PillLabel, PillButton, PillDivider } from "../components/action-pill.slint";
 import { ColumnTogglePopup } from "../components/track-list/column-toggle-popup.slint";
@@ -78,13 +78,13 @@ export component PlaylistDetailView inherits Rectangle {
                             MaterialIcon {
                                 name: "auto_awesome";
                                 icon-size: 22px;
-                                icon-color: Theme.accent;
+                                icon-color: HeroBackdrop.chrome;
                                 filled: true;
                             }
                         }
                         Text {
                             text: "‎" + PlaylistDetail.playlist.name;
-                            color: Theme.text;
+                            color: HeroBackdrop.on-backdrop;
                             font-size: 24px;
                             font-weight: Theme.page-title-weight;
                             horizontal-alignment: left;
@@ -110,7 +110,7 @@ export component PlaylistDetailView inherits Rectangle {
             if PlaylistDetail.playlist.description != "": Text {
                 vertical-stretch: 0;
                 text: "‎" + PlaylistDetail.playlist.description;
-                color: Theme.subtext1;
+                color: HeroBackdrop.on-backdrop;
                 font-size: Theme.font-size-lg;
                 horizontal-alignment: left;
                 overflow: elide;
@@ -118,7 +118,7 @@ export component PlaylistDetailView inherits Rectangle {
             Text {
                 vertical-stretch: 0;
                 text: root.meta-line;
-                color: Theme.subtext0;
+                color: HeroBackdrop.on-backdrop-muted;
                 font-size: Theme.font-size-md;
                 horizontal-alignment: left;
             }

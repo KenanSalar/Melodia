@@ -1,7 +1,9 @@
 //! Genre Detail header + track list: fetch, re-sort, refresh-preserving,
 //! startup seed. Mirror of `src/ui/albums/detail.rs` minus everything related
 //! to artwork (`decode_detail_pair`, `apply_detail_artwork`,
-//! `write_crossfade_slot`): genres have no intrinsic image.
+//! `write_crossfade_slot`): genres have no intrinsic image. In its place
+//! [`apply_genre_hero`] publishes the name-hashed gradient as the hero's
+//! backdrop and solves the rest of the band against it.
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -16,6 +18,7 @@ use crate::entities::track::TrackListRow as RsTrackListRow;
 use crate::error::AppResult;
 use crate::library;
 use crate::state::AppState;
+use crate::themes::color_to_rgb;
 use crate::ui::detail_filter::FilterRefs;
 use crate::ui::detail_view::{impl_detail_view_helpers, resolve_view_sort};
 use crate::ui::model_patch;
@@ -23,7 +26,26 @@ use crate::ui::track_list_view::view_id;
 use crate::ui::track_sort::sort_track_list_rows;
 use crate::ui::tracks::PreparedTrackRow;
 use crate::ui::util::clamp_i64_to_i32;
-use crate::{AppWindow, GenreDetail, NavEnterFrom, TrackListRow as UiTrackListRow};
+use crate::{
+    AppWindow, GenreDetail, GenreRow as UiGenreRow, NavEnterFrom,
+    TrackListRow as UiTrackListRow,
+};
+
+/// Publish the genre's hero band: its two hash-derived stops become the
+/// gradient floor verbatim, and the scrim + foreground tiers are solved
+/// against how bright that gradient measures.
+///
+/// The stops are already theme-independent (`super::color::genre_accent`
+/// picks them off a name hash and deliberately dims the hero pair), so
+/// unlike every other hero this one keeps its own floor rather than taking
+/// the solved one — only the layers above it are computed.
+fn apply_genre_hero(ui: &AppWindow, header: &UiGenreRow) {
+    crate::ui::hero_backdrop::apply_gradient(
+        ui,
+        color_to_rgb(header.hero_color_1),
+        color_to_rgb(header.hero_color_2),
+    );
+}
 
 /// Fetch a genre's header + track list and prewarm their cover
 /// thumbnails. Shared by [`open_genre`] (fresh user open) and
@@ -93,6 +115,7 @@ pub async fn open_genre(
             .map(crate::ui::tracks::finish_track_list_row)
             .collect();
         let header = to_slint_genre_row(&detail);
+        apply_genre_hero(&ui, &header);
         g.set_genre(header);
         replace_tracks_model(&g, ui_tracks);
         reset_detail_selection(&g, &genres_ui);
@@ -145,8 +168,12 @@ pub async fn refresh_detail(
         sort_track_list_rows(&mut tracks, &field, &dir);
 
         // Header is one row — always refresh it (counts / duration may
-        // have changed).
-        g.set_genre(to_slint_genre_row(&detail));
+        // have changed). Re-solving the hero alongside it keeps this path
+        // identical to the open path; the stops are name-derived, so in
+        // practice this only matters if the name itself moved.
+        let header = to_slint_genre_row(&detail);
+        apply_genre_hero(&ui, &header);
+        g.set_genre(header);
 
         // With an active filter the displayed model is a subset, so the
         // id-slice fast path below (which assumes an unfiltered model)

@@ -213,7 +213,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
             if was_open && let Some(ui) = weak.upgrade() {
                 let d = ui.global::<PlaylistDetail>();
                 d.set_playlist_id(-1);
-                release_detail_hero_images!(d);
+                release_detail_hero_images!(ui, d);
                 playlists_ui_mod::clear_detail(&pu);
             }
             let s = s.clone();

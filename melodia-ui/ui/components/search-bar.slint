@@ -160,7 +160,16 @@ export component SearchBar inherits Rectangle {
                         Text {
                             visible: root.text == "";
                             text: root.placeholder;
-                            color: Theme.overlay0;
+                            // `overlay2`, not `overlay0`: outside Catppuccin
+                            // the palettes use `overlay0` as a low-elevation
+                            // *surface* rung, so it lands within a shade or
+                            // two of this bar's own `surface0` fill on every
+                            // light theme (macOS Light is 1.05:1) and the
+                            // placeholder all but vanishes. `overlay2` is the
+                            // strongest decoration rung in all twelve
+                            // palettes while still reading weaker than the
+                            // typed `Theme.text` below.
+                            color: Theme.overlay2;
                             font-size: Theme.font-size-md;
                             vertical-alignment: center;
                             x: 0;

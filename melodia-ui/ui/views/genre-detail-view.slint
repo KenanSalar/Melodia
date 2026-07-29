@@ -1,5 +1,5 @@
 import { Theme } from "../theme.slint";
-import { GenreDetail, Player } from "../globals.slint";
+import { GenreDetail, Player, HeroBackdrop } from "../globals.slint";
 import { DetailHeader } from "../components/detail-header.slint";
 import { ActionPill, PillLabel, PillButton, PillDivider } from "../components/action-pill.slint";
 import { ColumnTogglePopup } from "../components/track-list/column-toggle-popup.slint";
@@ -59,10 +59,14 @@ export component GenreDetailView inherits Rectangle {
             // recognition is consistent across grid ↔ detail. See
             // `src/ui/genres/color.rs::genre_accent` for how the four
             // stops are derived on three name-hash axes.
+            //
+            // The hero pair isn't passed here — `open_genre` writes it
+            // into `HeroBackdrop.floor-{start,end}` on the Rust side,
+            // measures it, and solves the scrim + foreground against it,
+            // exactly as an artwork-bearing detail view does with its
+            // decoded blur.
             artwork-size: clamp(root.width * 0.16, 160px, 240px);
             fallback-icon: "theater_comedy";
-            hero-tint-start: GenreDetail.genre.hero_color_1;
-            hero-tint-end:   GenreDetail.genre.hero_color_2;
             tile-bg: @linear-gradient(135deg,
                 GenreDetail.genre.tile_color_1,
                 GenreDetail.genre.tile_color_2);
@@ -86,7 +90,7 @@ export component GenreDetailView inherits Rectangle {
                     // laid out correctly inside an LTR shell.
                     Text {
                         text: "‎" + GenreDetail.genre.name;
-                        color: Theme.text;
+                        color: HeroBackdrop.on-backdrop;
                         font-size: 24px;
                         font-weight: Theme.page-title-weight;
                         horizontal-alignment: left;
@@ -111,7 +115,7 @@ export component GenreDetailView inherits Rectangle {
             Text {
                 vertical-stretch: 0;
                 text: root.meta-line;
-                color: Theme.subtext0;
+                color: HeroBackdrop.on-backdrop-muted;
                 font-size: Theme.font-size-md;
                 horizontal-alignment: left;
             }

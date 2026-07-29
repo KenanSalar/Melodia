@@ -1,8 +1,10 @@
-//! How bright the Now-Playing backdrop is, and which colours survive on it.
+//! How bright a blurred-artwork backdrop is, and which colours survive on it.
 //!
-//! The view floats its chrome directly on a blurred album cover, so nothing
-//! about its legibility is knowable until the cover is. This module is the
-//! whole of that reasoning, in two halves:
+//! Two surfaces float their chrome directly on a blurred cover — the Now
+//! Playing view over a full-screen blur, and the detail / Favorites /
+//! Recently-Played heroes over a banner-height one — so nothing about their
+//! legibility is knowable until the cover is. This module is the whole of that
+//! reasoning, in two halves:
 //!
 //! 1. **Measure** the blurred backdrop ([`luma_p90`]) and solve the scrim
 //!    opacity that drives the *composited* result into a known dark band
@@ -28,9 +30,15 @@
 //! rendered frame.** The chrome tints itself off the same accent that feeds
 //! the backdrop, so sampling the composite would close a feedback loop.
 //!
-//! The view therefore takes its *hue* from the artwork (falling back to
+//! A consumer therefore takes its *hue* from the artwork (falling back to
 //! `Theme.accent`) but owns every *lightness* decision itself — which is why
-//! it looks the same under Mocha, Latte, macOS Light and Material You.
+//! these surfaces look the same under Mocha, Latte, macOS Light and Material
+//! You.
+//!
+//! The solve is deliberately consumer-agnostic: it takes one seed colour and
+//! one brightness measurement and hands back a whole colour set, so the two
+//! call sites ([`crate::ui::now_playing`] and [`crate::ui::hero_backdrop`])
+//! share one set of tuning constants rather than drifting apart.
 
 use material_colors::color::{linearized, lstar_from_y, y_from_lstar};
 use material_colors::contrast;
@@ -69,11 +77,12 @@ const SCRIM_ALPHA_STEP: f32 = 0.01;
 /// unaffected by which hue it is.
 const SCRIM_TONE: f64 = 8.0;
 
-/// Gradient-floor stops, in HCT tone. This is what shows when a track has no
+/// Gradient-floor stops, in HCT tone. This is what shows when an entry has no
 /// artwork (or its cover failed to decode) and the two blur slots are faded
-/// out. It used to be `Theme.accent.mix(Theme.base, 0.2)` → `Theme.base`,
-/// which on a light theme is bright — unreadable under the light foreground
-/// this module solves for. Owning both stops keeps the view's polarity ours.
+/// out. Both consumers arrived here from the same starting point —
+/// `Theme.accent.mix(Theme.base, 0.2)` → `Theme.base` — which on a light theme
+/// is bright, and so unreadable under the light foreground this module solves
+/// for. Owning both stops keeps the polarity ours.
 const FLOOR_TONE_START: f64 = 18.0;
 const FLOOR_TONE_END: f64 = 8.0;
 
@@ -230,15 +239,42 @@ pub(crate) fn luma_p90(buf: &SharedPixelBuffer<Rgb8Pixel>) -> Option<f64> {
     Some(bin_centre(0))
 }
 
-/// Lightness the gradient floor presents when a track has no artwork.
+/// Lightness the gradient floor presents when an entry has no artwork.
 ///
 /// Both stops are ours ([`FLOOR_TONE_START`] / [`FLOOR_TONE_END`]), so this is
 /// a known quantity rather than a measurement — which is what lets the
 /// artwork-less path run through the *same* solve as every other cover instead
 /// of being special-cased.
 pub(crate) fn floor_luma() -> f64 {
-    let mid = f64::midpoint(y_from_lstar(FLOOR_TONE_START), y_from_lstar(FLOOR_TONE_END));
-    lstar_from_y(mid)
+    gradient_luma_lstar(FLOOR_TONE_START, FLOOR_TONE_END)
+}
+
+/// Lightness of a two-stop gradient whose stops are given as sRGB.
+///
+/// The Genre hero has no artwork to measure and no floor of ours either — it
+/// paints a name-hashed gradient (`ui::genres::color`) that is already
+/// theme-independent and deliberately dim. Measuring those stops lets it run
+/// through the same solve as every cover rather than being special-cased into
+/// a fixed scrim.
+pub(crate) fn gradient_luma(start_rgb: u32, end_rgb: u32) -> f64 {
+    gradient_luma_lstar(rgb_lstar(start_rgb), rgb_lstar(end_rgb))
+}
+
+/// Midpoint lightness of two stops, averaged in **linear** Y rather than in
+/// L\*. Averaging perceptual lightness would understate a gradient running
+/// between a very dark and a very bright stop, which is the case the scrim
+/// most needs to get right.
+fn gradient_luma_lstar(start_lstar: f64, end_lstar: f64) -> f64 {
+    lstar_from_y(f64::midpoint(y_from_lstar(start_lstar), y_from_lstar(end_lstar)))
+}
+
+/// Perceptual lightness of a packed `0x00RR_GGBB` colour.
+fn rgb_lstar(rgb: u32) -> f64 {
+    #[expect(
+        clippy::cast_possible_truncation,
+        reason = "each shift-and-mask isolates one byte"
+    )]
+    pixel_lstar((rgb >> 16) as u8, (rgb >> 8) as u8, rgb as u8)
 }
 
 /// Scrim opacity that lands `backdrop_luma` on [`TARGET_BACKDROP_TONE`].

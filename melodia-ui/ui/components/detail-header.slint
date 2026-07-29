@@ -1,19 +1,25 @@
 import { Theme } from "../theme.slint";
+import { HeroBackdrop } from "../globals.slint";
 import { ArtworkImage } from "artwork-image.slint";
 import { HeroBlurBackdrop } from "hero-blur-backdrop.slint";
 import { IconButton } from "icon-button.slint";
 
-// Reusable large-artwork detail header — Album Detail today; Artist /
-// Playlist detail as they land. The component owns the chrome only:
+// Reusable large-artwork detail header, shared by all four detail views
+// (Album, Artist, Genre, Playlist). The component owns the chrome only:
 //
 //   * Full-bleed hero blur backdrop (two-slot cross-fade, mirroring
 //     `now-playing-view.slint`'s `Player.blur-img-{a,b}` pattern — the
 //     outgoing slot stays painted for the whole fade so album switches
 //     never flash).
-//   * Accent-tinted gradient floor underneath the blurs; soft scrim on top
-//     to keep foreground text legible.
+//   * Gradient floor underneath the blurs and a scrim on top, both solved
+//     per artwork into the `HeroBackdrop` global.
 //   * Floating back button at the top-left.
 //   * The left-side artwork tile.
+//
+// Text injected into the right column paints straight onto that backdrop,
+// so it must use `HeroBackdrop.on-backdrop` / `-muted` rather than
+// `Theme.text` / `subtext0` — the hero is dark under every theme, and the
+// theme brushes are light-on-light there on a light variant.
 //
 // Everything inside the right column is `@children` — the caller composes
 // title / subtitle / meta / actions and pins them top/bottom via
@@ -36,26 +42,15 @@ export component DetailHeader inherits Rectangle {
     // passes `"person"`; every other entity detail takes the default.
     in property <string> fallback-icon: "music-note";
 
-    // The two colours making up the full-bleed hero gradient floor.
-    // Albums / Artists keep the default `Theme.accent.mix(Theme.base,
-    // 0.2)` → `Theme.base` look; Genre Detail passes the pre-computed
-    // `hero_color_1` / `hero_color_2` stops from `GenreRow` (hashed
-    // name → four-stop accent in `src/ui/genres/color.rs`) so each
-    // genre's hero matches the gradient on its grid card. Kept as two
-    // explicit colours rather than a `brush` so the caller can supply
-    // any color expression (theme mix, raw `color`, `hsv(...)`, …) and
-    // the gradient is composed here in one place.
-    in property <color> hero-tint-start: Theme.accent.mix(Theme.base, 0.2);
-    in property <color> hero-tint-end:   Theme.base;
-
     // Forwarded to the inner `ArtworkImage.tile-bg` / `tile-icon-color`
     // for the left-side artwork tile when no `cover` is supplied. Same
     // story as `EntityCard`: callers that paint a custom fallback chrome
     // (Genre Detail's hash-derived gradient + white glyph) override
-    // these; defaults fall through to `ArtworkImage`'s `Theme.accent`-
-    // tinted defaults.
-    in property <brush> tile-bg: Theme.accent.with-alpha(0.15);
-    in property <brush> tile-icon-color: Theme.accent;
+    // these. The defaults take the solved `HeroBackdrop.chrome` rather
+    // than `Theme.accent` because this tile sits *on* the hero, and a
+    // light theme's accent is dark — it would land dark-on-dark there.
+    in property <brush> tile-bg: HeroBackdrop.chrome.with-alpha(0.15);
+    in property <brush> tile-icon-color: HeroBackdrop.chrome;
 
     callback back-clicked();
 
@@ -63,10 +58,10 @@ export component DetailHeader inherits Rectangle {
     clip: true;
 
     // --- Hero blur backdrop (full-bleed, behind everything) ----------
-    // Shared component: tint gradient floor (always painted; shows
-    // through when `has-hero-blur` is false) + the dual-slot crossfade
-    // + crust scrim. Caller-overridable via `hero-tint-start` /
-    // `hero-tint-end`.
+    // Shared component: gradient floor (always painted; shows through
+    // when `has-hero-blur` is false) + the dual-slot crossfade + scrim.
+    // Every colour it paints comes from the `HeroBackdrop` global, so
+    // there is nothing to forward here.
     HeroBlurBackdrop {
         x: 0;
         y: 0;
@@ -76,8 +71,6 @@ export component DetailHeader inherits Rectangle {
         blur-b: root.hero-blur-b;
         use-a: root.hero-blur-use-a;
         has-blur: root.has-hero-blur;
-        tint-start: root.hero-tint-start;
-        tint-end: root.hero-tint-end;
     }
 
     // --- Content -----------------------------------------------------

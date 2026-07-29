@@ -91,6 +91,10 @@ pub fn clear_hero_blur(weak: &Weak<AppWindow>) {
     let _ = slint::invoke_from_event_loop(move || {
         let Some(ui) = weak.upgrade() else { return };
         let g = ui.global::<RecentlyPlayed>();
+        // With no mosaic left, the gradient floor is the whole backdrop —
+        // re-solve against it so the scrim and foreground match what is
+        // actually about to be on screen.
+        crate::ui::hero_backdrop::reset(&ui);
         write_crossfade_slot(
             None,
             true,
@@ -108,6 +112,8 @@ fn apply_hero_blur(weak: &Weak<AppWindow>, buf: Option<SharedPixelBuffer<Rgb8Pix
     let _ = slint::invoke_from_event_loop(move || {
         let Some(ui) = weak.upgrade() else { return };
         let g = ui.global::<RecentlyPlayed>();
+        // Measure before the buffer is consumed by the `Image` wrap.
+        crate::ui::hero_backdrop::apply(&ui, buf.as_ref());
         let img = buf.map(Image::from_rgb8);
         write_crossfade_slot(
             img,

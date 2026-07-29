@@ -1,15 +1,25 @@
 import { Theme } from "../theme.slint";
+import { HeroBackdrop } from "../globals.slint";
 
-// Full-bleed hero blur backdrop: an accent-tinted gradient floor, two
-// stacked cross-fade `Image` slots, and a crust scrim. One Slint-side
-// source of truth for the dual-slot crossfade contract that Rust's
-// `write_crossfade_slot` drives — the outgoing slot is never cleared, so
-// a blur refresh fades A↔B without flashing, and when `has-blur` is
-// false both slots fade to 0 and the gradient floor shows through.
+// Full-bleed hero blur backdrop: a gradient floor, two stacked cross-fade
+// `Image` slots, and a scrim. One Slint-side source of truth for the
+// dual-slot crossfade contract that Rust's `write_crossfade_slot` drives —
+// the outgoing slot is never cleared, so a blur refresh fades A↔B without
+// flashing, and when `has-blur` is false both slots fade to 0 and the
+// gradient floor shows through.
 //
 // Consumed by `DetailHeader` (fills its whole hero) and the Favorites /
 // Recently-Played heroes (top `hero-height` band). The caller sizes the
 // component (`x/y/width/height`); children fill it.
+//
+// Every colour here comes from `HeroBackdrop`, solved per artwork in
+// `src/ui/hero_backdrop.rs`, and none of it is a `Theme.*` brush. That is
+// the point: the floor used to be `Theme.accent.mix(Theme.base, 0.2)` →
+// `Theme.base` and the scrim `Theme.crust.with-alpha(0.45)`, both of which
+// flip polarity with the theme — so the same cover painted a dark banner
+// under Mocha and a near-white one under Latte, and the foreground text
+// solved for one was wrong on the other. Don't reintroduce a theme brush
+// on this surface; pass a solved value through the global instead.
 //
 // `width/height: 100%` on the children is mandatory — `Image` does NOT
 // auto-fill its parent in Slint; without these the blur renders at its
@@ -20,16 +30,7 @@ export component HeroBlurBackdrop inherits Rectangle {
     in property <bool> use-a;
     in property <bool> has-blur;
 
-    // Gradient floor stops. Kept as two explicit colours rather than a
-    // `brush` so the caller can supply any color expression (theme mix,
-    // raw `color`, `hsv(...)`, …) and the gradient is composed here in
-    // one place. Defaults paint the accent-mix-to-base diagonal that
-    // Albums / Artists use; Genre Detail passes its hash-derived stops,
-    // the Favorites / Recently-Played heroes a slightly stronger mix.
-    in property <color> tint-start: Theme.accent.mix(Theme.base, 0.2);
-    in property <color> tint-end: Theme.base;
-
-    background: @linear-gradient(135deg, root.tint-start, root.tint-end);
+    background: @linear-gradient(135deg, HeroBackdrop.floor-start, HeroBackdrop.floor-end);
 
     Image {
         x: 0;
@@ -51,11 +52,17 @@ export component HeroBlurBackdrop inherits Rectangle {
         opacity: (root.has-blur && !root.use-a) ? 1.0 : 0.0;
         animate opacity { duration: Theme.dur-med; easing: ease-in-out; }
     }
+    // Scrim. Its opacity is solved per artwork and baked into the brush, so
+    // there is no `with-alpha` here — a white sleeve needs roughly twice the
+    // opacity a black one does, which a fixed alpha can't express. Animated
+    // on the same duration as the slots above so a blur swap and its scrim
+    // land together instead of the scrim snapping ahead.
     Rectangle {
         x: 0;
         y: 0;
         width: 100%;
         height: 100%;
-        background: Theme.crust.with-alpha(0.45);
+        background: HeroBackdrop.scrim;
+        animate background { duration: Theme.dur-med; easing: ease-in-out; }
     }
 }

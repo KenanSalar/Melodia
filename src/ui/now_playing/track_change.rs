@@ -8,7 +8,6 @@ use std::sync::Arc;
 use async_compat::Compat;
 use slint::{ComponentHandle, Image, Weak};
 
-use super::backdrop;
 use super::metadata::to_slint_track_meta;
 use super::write_crossfade_slot;
 use super::NowPlayingState;
@@ -16,6 +15,7 @@ use crate::entities::track::TrackSummary;
 use crate::library;
 use crate::state::AppState;
 use crate::themes::{brush, brush_to_rgb, brush_with_alpha, color};
+use crate::ui::backdrop;
 use crate::ui::now_playing_artwork::NowPlayingArtwork;
 use crate::{AppWindow, Player, Theme as ThemeGlobal, TrackMetaRow};
 

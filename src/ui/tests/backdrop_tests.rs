@@ -1,7 +1,7 @@
 use material_colors::contrast::ratio_of_tones;
 use slint::{Rgb8Pixel, SharedPixelBuffer};
 
-use crate::ui::now_playing::backdrop::{
+use crate::ui::backdrop::{
     BackdropColors, chrome_tone, composited_tone, floor_luma, luma_p90, muted_tone, scrim_alpha,
     solve, text_tone,
 };

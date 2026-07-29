@@ -142,7 +142,7 @@ where
         // Hero blur cross-fades from the previous album; the cover slot
         // is written directly (no fade — the artwork tile itself is
         // covered by the next album's tile in one frame).
-        apply_detail_artwork(&g, pair, /* animate */ true);
+        apply_detail_artwork(&ui, &g, pair, /* animate */ true);
         replace_tracks_model(&g, ui_tracks);
         reset_detail_selection(&g, &albums_ui);
         // Fresh open clears the filter so the user lands on the full
@@ -226,7 +226,7 @@ pub async fn refresh_detail(
         // No fade on the refresh path — this is the same album, the
         // user did not navigate. Either it's a cache hit (no change) or
         // the cover/blur is being replaced in place.
-        apply_detail_artwork(&g, pair, /* animate */ false);
+        apply_detail_artwork(&ui, &g, pair, /* animate */ false);
 
         // With an active filter the displayed model is a subset, so the
         // id-slice fast path below (which assumes an unfiltered model)

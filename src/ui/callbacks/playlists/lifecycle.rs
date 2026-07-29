@@ -43,7 +43,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
                 }
 
                 let d = ui.global::<PlaylistDetail>();
-                release_detail_hero_images!(d);
+                release_detail_hero_images!(ui, d);
                 let tm = d.get_tracks();
                 if let Some(vm) = tm.as_any().downcast_ref::<VecModel<UiTrackListRow>>() {
                     vm.set_vec(Vec::new());
@@ -84,7 +84,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
                             let _ = weak.upgrade_in_event_loop(|ui| {
                                 let g = ui.global::<PlaylistDetail>();
                                 g.set_playlist_id(-1);
-                                release_detail_hero_images!(g);
+                                release_detail_hero_images!(ui, g);
                             });
                         }
                     } else {

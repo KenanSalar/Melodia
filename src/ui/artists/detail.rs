@@ -156,7 +156,7 @@ where
             .collect();
         write_albums_model(&g, album_rows);
 
-        apply_detail_artwork(&g, pair, /* animate */ true);
+        apply_detail_artwork(&ui, &g, pair, /* animate */ true);
         replace_tracks_model(&g, ui_tracks);
         reset_detail_selection(&g, &artists_ui);
         // Fresh open clears the filter so the user lands on the full
@@ -222,7 +222,7 @@ pub async fn refresh_detail(
         sort_track_list_rows(&mut tracks, &field, &dir);
 
         g.set_artist(to_slint_artist_row(&detail));
-        apply_detail_artwork(&g, pair, /* animate */ false);
+        apply_detail_artwork(&ui, &g, pair, /* animate */ false);
 
         // Refresh the canonical Rust caches (all_tracks + albums) with
         // the freshly-fetched data. The displayed `tracks` cache + the

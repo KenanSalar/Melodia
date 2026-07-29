@@ -1,6 +1,6 @@
 import { ScrollView } from "std-widgets.slint";
 import { Theme } from "../theme.slint";
-import { Favorites, Player, CompositeScroll } from "../globals.slint";
+import { Favorites, Player, CompositeScroll, HeroBackdrop } from "../globals.slint";
 import { CoverMosaic } from "../components/grid/cover-mosaic.slint";
 import { HorizontalCardStrip } from "../components/grid/horizontal-card-strip.slint";
 import { EntityCard } from "../components/grid/entity-card.slint";
@@ -69,7 +69,6 @@ export component FavoritesView inherits Rectangle {
         blur-b: Favorites.blur-img-b;
         use-a: Favorites.blur-use-a;
         has-blur: Favorites.has-blur;
-        tint-start: Theme.accent.mix(Theme.base, 0.25);
     }
 
     private property <length> hero-height: 180px;
@@ -197,7 +196,7 @@ export component FavoritesView inherits Rectangle {
                             alignment: center;
                             Text {
                                 text: "\u{200e}" + @tr("Favorites");
-                                color: Theme.text;
+                                color: HeroBackdrop.on-backdrop;
                                 font-size: 28px;
                                 font-weight: Theme.page-title-weight;
                                 horizontal-alignment: left;
@@ -225,7 +224,7 @@ export component FavoritesView inherits Rectangle {
                     Text {
                         vertical-stretch: 0;
                         text: root.stats-text;
-                        color: Theme.subtext0;
+                        color: HeroBackdrop.on-backdrop-muted;
                         font-size: Theme.font-size-md;
                         horizontal-alignment: left;
                     }

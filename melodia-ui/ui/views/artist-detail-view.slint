@@ -1,6 +1,6 @@
 import { ScrollView } from "std-widgets.slint";
 import { Theme } from "../theme.slint";
-import { ArtistDetail, Player, CompositeScroll } from "../globals.slint";
+import { ArtistDetail, Player, CompositeScroll, HeroBackdrop } from "../globals.slint";
 import { DetailHeader } from "../components/detail-header.slint";
 import { ActionPill, PillLabel, PillButton, PillDivider } from "../components/action-pill.slint";
 import { ColumnTogglePopup } from "../components/track-list/column-toggle-popup.slint";
@@ -85,7 +85,7 @@ export component ArtistDetailView inherits Rectangle {
                     alignment: center;
                     Text {
                         text: "\u{200e}" + ArtistDetail.artist.name;
-                        color: Theme.text;
+                        color: HeroBackdrop.on-backdrop;
                         font-size: 24px;
                         font-weight: Theme.page-title-weight;
                         horizontal-alignment: left;
@@ -109,7 +109,7 @@ export component ArtistDetailView inherits Rectangle {
             Text {
                 vertical-stretch: 0;
                 text: root.stats-line;
-                color: Theme.subtext0;
+                color: HeroBackdrop.on-backdrop-muted;
                 font-size: Theme.font-size-md;
                 horizontal-alignment: left;
             }

@@ -26,7 +26,13 @@ macro_rules! impl_detail_view_helpers {
         /// entities fades the previous blur to the new one without
         /// flashing. `animate: true` is the fresh-open path (a user
         /// click); `false` is the watcher-driven refresh.
+        ///
+        /// The hero's colour set is solved from the same buffer before it
+        /// is wrapped into an `Image` — measuring it here rather than at
+        /// each call site is what keeps the scrim in step with the blur
+        /// it is darkening.
         fn apply_detail_artwork(
+            ui: &$crate::AppWindow,
             g: &$Global,
             pair: $crate::ui::detail_artwork::DetailPair,
             animate: bool,
@@ -35,6 +41,7 @@ macro_rules! impl_detail_view_helpers {
             g.set_cover(
                 cover_buf.map(slint::Image::from_rgb8).unwrap_or_default(),
             );
+            $crate::ui::hero_backdrop::apply(ui, blur_buf.as_ref());
             $crate::ui::now_playing::write_crossfade_slot(
                 blur_buf.map(slint::Image::from_rgb8),
                 animate,

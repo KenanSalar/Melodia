@@ -237,7 +237,13 @@ pub(crate) fn brush_with_alpha(rgb: u32, alpha: u8) -> Brush {
 /// needs the theme accent's *hue* as an artwork-less fallback. A gradient
 /// brush answers with its first stop, which is the right approximation here.
 pub(crate) fn brush_to_rgb(brush: &Brush) -> u32 {
-    let c = brush.color();
+    color_to_rgb(brush.color())
+}
+
+/// Inverse of [`color`]. The Genre hero reads the hash-derived gradient stops
+/// off `GenreRow` — they arrive as `Color`, never as a `Brush` — and has to
+/// measure their lightness before it can solve a scrim against them.
+pub(crate) fn color_to_rgb(c: Color) -> u32 {
     (u32::from(c.red()) << 16) | (u32::from(c.green()) << 8) | u32::from(c.blue())
 }
 
