@@ -257,8 +257,19 @@ export global HeroBackdrop {
     //
     // Being `out` is the enforcement: Slint emits no setter, so Rust cannot
     // quietly start writing these again.
+    //
+    // `on-backdrop` has one non-text reader: the hairline below, which is why
+    // it is the tone the edge is derived from rather than a tier of its own.
     out property <brush> on-backdrop: #f0eef5;
     out property <brush> on-backdrop-muted: #c9c5d3;
+
+    // The 1 px edge on the two mosaic heroes' artwork square — the only
+    // bordered hero surfaces, since `DetailHeader`'s artwork tile is
+    // borderless. A `Theme.border` hairline was a wash against the old
+    // `surface1` fill under either theme, but against a fill pinned dark it
+    // vanishes under Mocha and turns a hard bright ring under every light
+    // theme, so the edge is a hero token for the same reason the fill is.
+    out property <brush> tile-edge: root.on-backdrop.with-alpha(0.12);
 }
 
 // Equalizer: drives the graphic-EQ dialog (`Dialog.kind == "equalizer"`).

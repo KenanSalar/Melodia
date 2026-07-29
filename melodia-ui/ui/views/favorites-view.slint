@@ -123,12 +123,7 @@ export component FavoritesView inherits Rectangle {
                             : HeroBackdrop.floor-start;
                         border-radius: Theme.radius-lg;
                         border-width: 1px;
-                        // The edge is a hero token for the same reason the
-                        // fill is. `Theme.border` against a fill that no
-                        // longer moves with the theme reads as nothing under
-                        // Mocha and as a hard bright ring under Latte; a fixed
-                        // faint light hairline is the same edge either way.
-                        border-color: HeroBackdrop.on-backdrop.with-alpha(0.12);
+                        border-color: HeroBackdrop.tile-edge;
                         clip: true;
 
                         // Empty-state — zero favorites in the library.
