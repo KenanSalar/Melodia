@@ -218,9 +218,6 @@ impl FavoritesUi {
         // global (callers may be off the UI thread).
         let needle = self.inner.filter.lock().to_lowercase();
         let all = self.inner.tracks_all.lock();
-        if needle.is_empty() {
-            return all.iter().map(|r| r.id).collect();
-        }
         all.iter()
             .filter(|r| crate::ui::detail_filter::track_matches(r, &needle))
             .map(|r| r.id)

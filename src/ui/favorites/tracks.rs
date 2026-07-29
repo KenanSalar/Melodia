@@ -104,9 +104,7 @@ pub fn apply_filtered_tracks(fav_ui: &Arc<FavoritesUi>, weak: &Weak<AppWindow>) 
     let prepared: Vec<PreparedTrackRow> = {
         let all = fav_ui.state().tracks_all.lock();
         all.iter()
-            .filter(|r| {
-                needle.is_empty() || crate::ui::detail_filter::track_matches(r, &needle)
-            })
+            .filter(|r| crate::ui::detail_filter::track_matches(r, &needle))
             .map(crate::ui::tracks::prepare_track_list_row)
             .collect()
     };

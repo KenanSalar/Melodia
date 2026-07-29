@@ -112,7 +112,7 @@ pub fn apply_filtered_tracks(rp_ui: &Arc<RecentlyPlayedUi>, weak: &Weak<AppWindo
         let all = rp_ui.state().tracks_all.lock();
         let mut filtered: Vec<&RsTrackListRow> = all
             .iter()
-            .filter(|r| needle.is_empty() || crate::ui::detail_filter::track_matches(r, &needle))
+            .filter(|r| crate::ui::detail_filter::track_matches(r, &needle))
             .collect();
         if sort.field != RECENCY_SORT {
             let dir = match sort.dir {

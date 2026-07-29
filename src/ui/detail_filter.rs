@@ -35,7 +35,8 @@ use crate::TrackListRow as UiTrackListRow;
 
 /// Lowered-needle case-insensitive substring match across a track row's
 /// title + artist + album. `needle` must already be lowercased (the
-/// caller stores it that way in `*DetailState::filter`).
+/// caller stores it that way in `*DetailState::filter`); an empty one
+/// matches every row, so an unfiltered list needs no branch here.
 pub fn track_matches(r: &RsTrackListRow, needle: &str) -> bool {
     field_contains(&r.title, needle)
         || r.artist.as_deref().is_some_and(|a| field_contains(a, needle))
@@ -59,7 +60,9 @@ pub fn most_played_matches(t: &MostPlayedFavorite, needle: &str) -> bool {
 /// detail — a "Rock" genre detail can hold thousands of rows, and the
 /// old three-allocations-per-row walk dominated its keystroke cost.
 /// Non-ASCII text falls back to the allocating Unicode-correct path.
-/// `needle` must already be lowercased.
+/// `needle` must already be lowercased. An empty needle matches anything
+/// — that's what lets every filter walk run unconditionally rather than
+/// keep its own empty-search-bar fast path.
 ///
 /// Public because the single-field strips match on one name rather than a
 /// row — Favorite Artists and the Artist-Detail Albums strip call it

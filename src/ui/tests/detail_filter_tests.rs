@@ -67,9 +67,8 @@ fn absent_artist_and_album_never_match() {
 
 #[test]
 fn empty_needle_matches_any_row() {
-    // An empty string is a substring of every string. Callers
-    // short-circuit empty needles before calling, but the matcher's own
-    // contract still holds.
+    // An unfiltered list shows every row — every caller relies on this
+    // rather than short-circuiting the empty needle itself.
     let row = mk("Track", None, None);
     assert!(track_matches(&row, ""));
 }

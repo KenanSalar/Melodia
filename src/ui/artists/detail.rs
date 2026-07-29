@@ -321,27 +321,12 @@ pub fn apply_filtered_detail(weak: &Weak<AppWindow>, artists_ui: &Arc<ArtistsUi>
 
     let displayed_tracks: Vec<RsTrackListRow> = {
         let all = artists_ui.detail.all_tracks.lock();
-        if needle.is_empty() {
-            all.clone()
-        } else {
-            all.iter()
-                .filter(|r| track_matches(r, &needle))
-                .cloned()
-                .collect()
-        }
+        all.iter().filter(|r| track_matches(r, &needle)).cloned().collect()
     };
 
     let filtered_albums: Vec<AlbumStats> = {
         let cache = artists_ui.detail.albums.lock();
-        if needle.is_empty() {
-            cache.clone()
-        } else {
-            cache
-                .iter()
-                .filter(|a| field_contains(&a.name, &needle))
-                .cloned()
-                .collect()
-        }
+        cache.iter().filter(|a| field_contains(&a.name, &needle)).cloned().collect()
     };
 
     let prepared: Vec<PreparedTrackRow> = displayed_tracks
