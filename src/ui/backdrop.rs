@@ -42,9 +42,10 @@
 
 use material_colors::color::{linearized, lstar_from_y, y_from_lstar};
 use material_colors::contrast;
-use slint::{Rgb8Pixel, SharedPixelBuffer};
+use slint::{Brush, Rgb8Pixel, SharedPixelBuffer};
 
 use crate::services::material_you::{lift_to_min_tone, to_tone_capped_chroma};
+use crate::themes::brush_with_alpha;
 
 /// HCT tone the composited backdrop is driven down to. Below this a light,
 /// hue-carrying chrome tone clears WCAG's 3:1 non-text bar with margin, and
@@ -382,6 +383,22 @@ pub(crate) fn solve(seed_argb: u32, backdrop_luma: f64) -> BackdropColors {
         text: to_tone_capped_chroma(seed_argb, text_tone(tone), TEXT_MAX_CHROMA),
         muted: to_tone_capped_chroma(seed_argb, muted_tone(tone), MUTED_MAX_CHROMA),
     }
+}
+
+/// The scrim as a Slint brush, opacity baked into the alpha channel.
+///
+/// Lives here rather than at each publisher because this is the one place a
+/// solved `f32` has to survive a lossy cast, and the bound that makes the cast
+/// safe is [`scrim_alpha`]'s clamp a few lines up — not something either call
+/// site can see.
+pub(crate) fn scrim_brush(colors: &BackdropColors) -> Brush {
+    #[expect(
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        reason = "solved alpha is clamped to 0..=1 by `scrim_alpha`"
+    )]
+    let alpha = (colors.scrim_alpha * 255.0).round() as u8;
+    brush_with_alpha(colors.scrim, alpha)
 }
 
 #[cfg(test)]

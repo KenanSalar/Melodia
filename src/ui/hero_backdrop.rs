@@ -18,7 +18,7 @@
 
 use slint::{ComponentHandle, Rgb8Pixel, SharedPixelBuffer};
 
-use crate::themes::{brush, brush_to_rgb, brush_with_alpha, color};
+use crate::themes::{brush, brush_to_rgb, color};
 use crate::ui::backdrop::{self, BackdropColors};
 use crate::{AppWindow, HeroBackdrop, Theme as ThemeGlobal};
 
@@ -69,11 +69,5 @@ fn write(ui: &AppWindow, colors: &BackdropColors, floor_override: Option<(u32, u
     g.set_floor_start(color(floor_start));
     g.set_floor_end(color(floor_end));
     g.set_chrome(brush(colors.chrome));
-    #[expect(
-        clippy::cast_possible_truncation,
-        clippy::cast_sign_loss,
-        reason = "solved alpha is clamped to 0..=1 by `backdrop::scrim_alpha`"
-    )]
-    let scrim_alpha = (colors.scrim_alpha * 255.0).round() as u8;
-    g.set_scrim(brush_with_alpha(colors.scrim, scrim_alpha));
+    g.set_scrim(backdrop::scrim_brush(colors));
 }

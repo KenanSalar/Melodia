@@ -44,7 +44,7 @@ pub async fn refresh_hero(
         // Reset the guard so the next non-empty refresh (even with covers
         // identical to a pre-empty state) recomposes.
         fav_ui.state().last_mosaic_paths.lock().clear();
-        clear_hero_blur(weak);
+        clear_hero_blur(fav_ui, weak);
         return Ok(());
     }
 
@@ -71,7 +71,7 @@ pub async fn refresh_hero(
         .ok()
         .flatten();
 
-    apply_hero_blur(weak, blur_buf, animate);
+    apply_hero_blur(fav_ui, weak, blur_buf, animate);
     Ok(())
 }
 
@@ -99,10 +99,14 @@ fn push_stats_to_slint(stats: &FavoriteStats, weak: &Weak<AppWindow>) {
     });
 }
 
-fn clear_hero_blur(weak: &Weak<AppWindow>) {
+fn clear_hero_blur(fav_ui: &Arc<FavoritesUi>, weak: &Weak<AppWindow>) {
+    let fav_ui = fav_ui.clone();
     let weak = weak.clone();
     let _ = slint::invoke_from_event_loop(move || {
         let Some(ui) = weak.upgrade() else { return };
+        if !fav_ui.section_active() {
+            return;
+        }
         let g = ui.global::<Favorites>();
         // With no mosaic left, the gradient floor is the whole backdrop —
         // re-solve against it so the scrim and foreground match what is
@@ -123,14 +127,24 @@ fn clear_hero_blur(weak: &Weak<AppWindow>) {
     });
 }
 
+/// Publish the composed mosaic. Skipped outright once the section is no longer
+/// active: `HeroBackdrop` is shared by all six heroes, so a compose that
+/// finishes after the user has navigated away would paint this view's solve
+/// under whichever hero mounted next. `release_section_state` clears
+/// `last_mosaic_paths` on leave, so a genuine re-enter recomposes.
 fn apply_hero_blur(
+    fav_ui: &Arc<FavoritesUi>,
     weak: &Weak<AppWindow>,
     buf: Option<SharedPixelBuffer<Rgb8Pixel>>,
     animate: bool,
 ) {
+    let fav_ui = fav_ui.clone();
     let weak = weak.clone();
     let _ = slint::invoke_from_event_loop(move || {
         let Some(ui) = weak.upgrade() else { return };
+        if !fav_ui.section_active() {
+            return;
+        }
         let g = ui.global::<Favorites>();
         // Measure before the buffer is consumed by the `Image` wrap.
         crate::ui::hero_backdrop::apply(&ui, buf.as_ref());

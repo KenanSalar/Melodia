@@ -4,7 +4,8 @@
 //!
 //! Unlike `albums/lifecycle.rs` there are no cover caches to release or
 //! prewarm on enter/leave — genres are procedural-gradient tiles — so the
-//! leave path only wipes the Slint models + Rust-side detail state.
+//! leave path wipes the Slint models + Rust-side detail state and hands the
+//! shared hero colour set back to its floor.
 
 use std::sync::Arc;
 
@@ -30,8 +31,8 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, genres_ui: &Arc<GenresUi>) 
     // `GenreDetail.{tracks,selected-ids}` on the UI thread so the
     // `SharedString` allocations drop, then off-thread call
     // `release_section_state` (Rust-side grid data + detail tracks +
-    // `malloc_trim`). No image properties here — genres are
-    // procedural-gradient tiles, no `(cover, blur)` pair.
+    // `malloc_trim`), plus the `HeroBackdrop` reset. No image properties here
+    // — genres are procedural-gradient tiles, no `(cover, blur)` pair.
     //
     // On return: full `fetch_grid` if data was wiped, else no-op
     // (initial enter after boot's pre-fetch — no covers to prewarm).
@@ -66,6 +67,10 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, genres_ui: &Arc<GenresUi>) 
                     vm.set_vec(Vec::new());
                 }
                 d.set_selection_anchor(-1);
+                // Six heroes share one colour set, and this one has no images
+                // to release — so the reset that rides in
+                // `release_detail_hero_images!` elsewhere has to be explicit.
+                crate::ui::hero_backdrop::reset(&ui);
             }
             let gu = gu.clone();
             let s = s.clone();
@@ -95,10 +100,12 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, genres_ui: &Arc<GenresUi>) 
                             // hidden); drop back to the grid. Mirrors
                             // `wire_albums` / `wire_artists`. No Image
                             // properties to clear — genres are
-                            // procedural-gradient tiles.
+                            // procedural-gradient tiles — but the hero colour
+                            // set is shared, so it still has to be handed back.
                             genres_ui_mod::clear_detail(&gu);
                             let _ = weak.upgrade_in_event_loop(|ui| {
                                 ui.global::<GenreDetail>().set_genre_id(-1);
+                                crate::ui::hero_backdrop::reset(&ui);
                             });
                         }
                     }

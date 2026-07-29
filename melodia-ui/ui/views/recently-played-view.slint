@@ -79,17 +79,21 @@ export component RecentlyPlayedView inherits Rectangle {
                     Rectangle {
                         width: root.hero-artwork;
                         height: root.hero-artwork;
+                        // Empty-state tint comes off the solved
+                        // `HeroBackdrop.chrome`, not `Theme.accent` — see
+                        // `favorites-view.slint` for why a theme brush is
+                        // wrong on this surface.
                         background: RecentlyPlayed.track-count == 0
-                            ? Theme.accent.with-alpha(0.15)
+                            ? HeroBackdrop.chrome.with-alpha(0.15)
                             : Theme.surface1;
                         border-radius: Theme.radius-lg;
                         border-width: 1px;
                         border-color: Theme.border;
                         clip: true;
 
-                        // Empty state — nothing has been played yet. Uses the
-                        // `history` glyph at full accent, matching the sidebar
-                        // entry.
+                        // Empty state — nothing has been played yet. The
+                        // `history` glyph matches the sidebar entry, at full
+                        // strength on the solved chrome tier.
                         if RecentlyPlayed.track-count == 0: VerticalLayout {
                             alignment: center;
                             HorizontalLayout {
@@ -97,7 +101,7 @@ export component RecentlyPlayedView inherits Rectangle {
                                 MaterialIcon {
                                     name: "history";
                                     icon-size: 56px;
-                                    icon-color: Theme.accent;
+                                    icon-color: HeroBackdrop.chrome;
                                 }
                             }
                         }
@@ -112,6 +116,8 @@ export component RecentlyPlayedView inherits Rectangle {
                             placeholder-icon: "music-note";
                             gutter-size: 0px;
                             tile-radius: 0px;
+                            tile-bg: HeroBackdrop.chrome.with-alpha(0.15);
+                            tile-icon-color: HeroBackdrop.chrome;
                             request-cover(p) => {
                                 return RecentlyPlayed.request-mosaic-cover(p);
                             }

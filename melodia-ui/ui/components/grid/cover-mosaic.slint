@@ -2,17 +2,18 @@ import { Theme } from "../../theme.slint";
 import { ArtworkImage } from "../artwork-image.slint";
 
 // One tile of the cover mosaic — delegates to `ArtworkImage` so the
-// missing-cover branch shares the accent-tinted chrome (`Theme.accent.
-// with-alpha(0.15)` background + `Theme.accent` glyph) every other
-// placeholder tile in the app uses. The slot-index lookup is guarded
-// so the same component handles both the "real artwork in this slot"
-// and "placeholder in this slot" cases without separate call sites
+// missing-cover branch shares the placeholder chrome every other empty
+// tile in the app uses. The slot-index lookup is guarded so the same
+// component handles both the "real artwork in this slot" and
+// "placeholder in this slot" cases without separate call sites
 // per layout.
 component MosaicSlot inherits Rectangle {
     in property <int>      idx;
     in property <[string]> artwork-paths;
     in property <length>   tile-radius;
     in property <string>   fallback-icon;
+    in property <brush>    tile-bg;
+    in property <brush>    tile-icon-color;
     pure callback request-cover(string) -> image;
 
     clip: true;
@@ -25,16 +26,19 @@ component MosaicSlot inherits Rectangle {
         artwork-path: root.artwork-paths[root.idx];
         cover: root.request-cover(root.artwork-paths[root.idx]);
         fallback-icon: root.fallback-icon;
+        tile-bg: root.tile-bg;
+        tile-icon-color: root.tile-icon-color;
     }
     if root.artwork-paths.length <= root.idx: ArtworkImage {
         width: parent.width;
         height: parent.height;
         tile-radius: root.tile-radius;
-        // No cover, no path — ArtworkImage's `cover.width == 0` branch
-        // paints `Theme.accent.with-alpha(0.15)` + the fallback glyph
-        // colourised to `Theme.accent`. Same as every empty cell in
-        // the tracks list / album grid.
+        // No cover, no path — `ArtworkImage`'s `cover.width == 0` branch
+        // paints `tile-bg` plus the fallback glyph colourised to
+        // `tile-icon-color`.
         fallback-icon: root.fallback-icon;
+        tile-bg: root.tile-bg;
+        tile-icon-color: root.tile-icon-color;
     }
 }
 
@@ -75,6 +79,13 @@ export component CoverMosaic inherits Rectangle {
     // `"playlist"` / `"theater_comedy"` for context-appropriate
     // chrome. Same names `EntityCard` / `DetailHeader` use.
     in property <string>   placeholder-icon: "music-note";
+    // Chrome for the empty slots, forwarded to each `ArtworkImage`.
+    // Defaults are `ArtworkImage`'s own accent tint, which is right on a
+    // dialog surface (the mosaic picker). The two hero mosaics override
+    // both with `HeroBackdrop.chrome` — they paint on the solved hero
+    // band, where a light theme's accent lands dark-on-dark.
+    in property <brush>    tile-bg: Theme.accent.with-alpha(0.15);
+    in property <brush>    tile-icon-color: Theme.accent;
     // Forces the layout to render N tiles regardless of how many
     // artworks are supplied (slots beyond `artwork-paths.length`
     // become placeholders). `0` keeps the picker behaviour — layout
@@ -91,6 +102,8 @@ export component CoverMosaic inherits Rectangle {
         artwork-paths: root.artwork-paths;
         tile-radius: root.tile-radius;
         fallback-icon: root.placeholder-icon;
+        tile-bg: root.tile-bg;
+        tile-icon-color: root.tile-icon-color;
         request-cover(p) => { return root.request-cover(p); }
     }
 
@@ -103,6 +116,8 @@ export component CoverMosaic inherits Rectangle {
             artwork-paths: root.artwork-paths;
             tile-radius: root.tile-radius;
             fallback-icon: root.placeholder-icon;
+            tile-bg: root.tile-bg;
+            tile-icon-color: root.tile-icon-color;
             request-cover(p) => { return root.request-cover(p); }
         }
         MosaicSlot {
@@ -110,6 +125,8 @@ export component CoverMosaic inherits Rectangle {
             artwork-paths: root.artwork-paths;
             tile-radius: root.tile-radius;
             fallback-icon: root.placeholder-icon;
+            tile-bg: root.tile-bg;
+            tile-icon-color: root.tile-icon-color;
             request-cover(p) => { return root.request-cover(p); }
         }
     }
@@ -124,6 +141,8 @@ export component CoverMosaic inherits Rectangle {
             artwork-paths: root.artwork-paths;
             tile-radius: root.tile-radius;
             fallback-icon: root.placeholder-icon;
+            tile-bg: root.tile-bg;
+            tile-icon-color: root.tile-icon-color;
             request-cover(p) => { return root.request-cover(p); }
         }
         VerticalLayout {
@@ -134,6 +153,8 @@ export component CoverMosaic inherits Rectangle {
                 artwork-paths: root.artwork-paths;
                 tile-radius: root.tile-radius;
                 fallback-icon: root.placeholder-icon;
+                tile-bg: root.tile-bg;
+                tile-icon-color: root.tile-icon-color;
                 request-cover(p) => { return root.request-cover(p); }
             }
             MosaicSlot {
@@ -141,6 +162,8 @@ export component CoverMosaic inherits Rectangle {
                 artwork-paths: root.artwork-paths;
                 tile-radius: root.tile-radius;
                 fallback-icon: root.placeholder-icon;
+                tile-bg: root.tile-bg;
+                tile-icon-color: root.tile-icon-color;
                 request-cover(p) => { return root.request-cover(p); }
             }
         }
@@ -157,6 +180,8 @@ export component CoverMosaic inherits Rectangle {
                 artwork-paths: root.artwork-paths;
                 tile-radius: root.tile-radius;
                 fallback-icon: root.placeholder-icon;
+                tile-bg: root.tile-bg;
+                tile-icon-color: root.tile-icon-color;
                 request-cover(p) => { return root.request-cover(p); }
             }
             MosaicSlot {
@@ -164,6 +189,8 @@ export component CoverMosaic inherits Rectangle {
                 artwork-paths: root.artwork-paths;
                 tile-radius: root.tile-radius;
                 fallback-icon: root.placeholder-icon;
+                tile-bg: root.tile-bg;
+                tile-icon-color: root.tile-icon-color;
                 request-cover(p) => { return root.request-cover(p); }
             }
         }
@@ -174,6 +201,8 @@ export component CoverMosaic inherits Rectangle {
                 artwork-paths: root.artwork-paths;
                 tile-radius: root.tile-radius;
                 fallback-icon: root.placeholder-icon;
+                tile-bg: root.tile-bg;
+                tile-icon-color: root.tile-icon-color;
                 request-cover(p) => { return root.request-cover(p); }
             }
             MosaicSlot {
@@ -181,6 +210,8 @@ export component CoverMosaic inherits Rectangle {
                 artwork-paths: root.artwork-paths;
                 tile-radius: root.tile-radius;
                 fallback-icon: root.placeholder-icon;
+                tile-bg: root.tile-bg;
+                tile-icon-color: root.tile-icon-color;
                 request-cover(p) => { return root.request-cover(p); }
             }
         }

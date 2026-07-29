@@ -14,7 +14,7 @@ use super::NowPlayingState;
 use crate::entities::track::TrackSummary;
 use crate::library;
 use crate::state::AppState;
-use crate::themes::{brush, brush_to_rgb, brush_with_alpha, color};
+use crate::themes::{brush, brush_to_rgb, color};
 use crate::ui::backdrop;
 use crate::ui::now_playing_artwork::NowPlayingArtwork;
 use crate::{AppWindow, Player, Theme as ThemeGlobal, TrackMetaRow};
@@ -205,13 +205,7 @@ pub(super) async fn apply_track_change(
     player.set_np_on_backdrop_muted(brush(colors.muted));
     player.set_np_floor_start(color(colors.floor_start));
     player.set_np_floor_end(color(colors.floor_end));
-    #[expect(
-        clippy::cast_possible_truncation,
-        clippy::cast_sign_loss,
-        reason = "solved alpha is clamped to 0..=1 by `backdrop::scrim_alpha`"
-    )]
-    let scrim_alpha = (colors.scrim_alpha * 255.0).round() as u8;
-    player.set_np_scrim(brush_with_alpha(colors.scrim, scrim_alpha));
+    player.set_np_scrim(backdrop::scrim_brush(&colors));
 
     write_crossfade_slot(
         blurred,

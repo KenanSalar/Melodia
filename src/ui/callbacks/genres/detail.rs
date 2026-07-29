@@ -1,7 +1,7 @@
 //! `GenreDetail.*` callbacks: close, play / shuffle / play-row, queue
 //! actions, favorite toggle, row selection, in-memory sort, column toggle,
-//! filter. Genres have no artwork, so close-detail releases only the cached
-//! track list + selection (no `(cover, blur)` pair to clear).
+//! filter. Genres have no artwork, so close-detail releases the cached track
+//! list + selection and the hero colour set — but no `(cover, blur)` pair.
 
 use std::sync::Arc;
 
@@ -59,6 +59,11 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, genres_ui: &Arc<GenresUi>) 
             }
 
             g.set_genre_id(-1);
+            // Genres have no hero images, so this teardown never reaches
+            // `release_detail_hero_images!` — hand the shared colour set back
+            // to the floor here instead, else the next hero paints this
+            // genre's hash-derived stops until its own decode lands.
+            crate::ui::hero_backdrop::reset(&ui);
             genres_ui_mod::clear_detail(&gu);
 
             let gu_trim = gu.clone();

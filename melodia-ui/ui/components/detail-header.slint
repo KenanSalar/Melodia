@@ -119,10 +119,11 @@ export component DetailHeader inherits Rectangle {
     // Floating back button — absolutely positioned at the header's
     // top-left, mirrors Tauri's `floatingBackButton`. Lives outside the
     // HL so it doesn't take a row of its own. Idle chrome is the shared
-    // `Theme.floating-button-bg` (translucent surface0 disc) so the
-    // button reads as a real affordance against the hero blur;
-    // `IconButton`'s hover state paints solid `Theme.surface0`, so the
-    // transition still animates from soft → solid.
+    // `Theme.floating-button-bg` — a near-opaque surface0 disc, so the
+    // glyph contrasts against `surface0` rather than against whatever
+    // the hero happens to be; `IconButton`'s hover state paints solid
+    // `Theme.surface0`, which the residual translucency keeps visible
+    // as a transition. See the note on the token in `theme.slint`.
     IconButton {
         x: Theme.pad-md;
         y: Theme.pad-md;

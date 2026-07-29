@@ -104,14 +104,18 @@ export component FavoritesView inherits Rectangle {
                     Rectangle {
                         width: root.hero-artwork;
                         height: root.hero-artwork;
-                        // Empty state shares the tracklist placeholder's
-                        // 15 %-accent tint so an empty favorites hero
+                        // Empty state mirrors the tracklist placeholder's
+                        // 15 %-tinted fill so an empty favorites hero
                         // reads as a giant placeholder tile, not a
-                        // generic surface. Populated state keeps the
-                        // surface1 fill (invisible behind the flush
-                        // CoverMosaic, kept for semantic parity).
+                        // generic surface — but tinted off the solved
+                        // `HeroBackdrop.chrome`, not `Theme.accent`: this
+                        // tile sits *on* the hero, and with no mosaic the
+                        // hero is the dark gradient floor, where a light
+                        // theme's accent lands dark-on-dark. Populated
+                        // state keeps the surface1 fill (invisible behind
+                        // the flush CoverMosaic, kept for semantic parity).
                         background: Favorites.track-count == 0
-                            ? Theme.accent.with-alpha(0.15)
+                            ? HeroBackdrop.chrome.with-alpha(0.15)
                             : Theme.surface1;
                         border-radius: Theme.radius-lg;
                         border-width: 1px;
@@ -124,10 +128,10 @@ export component FavoritesView inherits Rectangle {
                         // by `CoverMosaic`), so this branch fires only on
                         // an empty favorites set, not on "favorites with
                         // no artwork". Uses the filled-heart Material
-                        // Symbols glyph at `Theme.accent` (full strength,
-                        // no alpha) so the empty hero reads identically
-                        // to the tracklist's empty-artwork placeholder
-                        // (15 %-accent bg + accent icon).
+                        // Symbols glyph at full-strength `HeroBackdrop.chrome`
+                        // (no alpha) so the empty hero reads like the
+                        // tracklist's empty-artwork placeholder while
+                        // staying legible on the hero band.
                         if Favorites.track-count == 0: VerticalLayout {
                             alignment: center;
                             HorizontalLayout {
@@ -136,7 +140,7 @@ export component FavoritesView inherits Rectangle {
                                     name: "favorite";
                                     filled: true;
                                     icon-size: 56px;
-                                    icon-color: Theme.accent;
+                                    icon-color: HeroBackdrop.chrome;
                                 }
                             }
                         }
@@ -169,6 +173,12 @@ export component FavoritesView inherits Rectangle {
                             // border between cells.
                             gutter-size: 0px;
                             tile-radius: 0px;
+                            // Slots past the distinct-artwork count paint
+                            // placeholders straight onto the hero, so they
+                            // take the solved chrome for the same reason
+                            // the empty state above does.
+                            tile-bg: HeroBackdrop.chrome.with-alpha(0.15);
+                            tile-icon-color: HeroBackdrop.chrome;
                             request-cover(p) => {
                                 return Favorites.request-mosaic-cover(p);
                             }

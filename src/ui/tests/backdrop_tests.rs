@@ -1,9 +1,10 @@
+use material_colors::color::y_from_lstar;
 use material_colors::contrast::ratio_of_tones;
 use slint::{Rgb8Pixel, SharedPixelBuffer};
 
 use crate::ui::backdrop::{
-    BackdropColors, chrome_tone, composited_tone, floor_luma, luma_p90, muted_tone, scrim_alpha,
-    solve, text_tone,
+    BackdropColors, chrome_tone, composited_tone, floor_luma, gradient_luma, luma_p90, muted_tone,
+    rgb_lstar, scrim_alpha, solve, text_tone,
 };
 
 /// A Catppuccin-Mocha-ish mauve, the default accent — a realistic seed for the
@@ -47,6 +48,24 @@ fn relative_luminance(r: u8, g: u8, b: u8) -> f64 {
         }
     };
     0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b)
+}
+
+/// WCAG 1.4.3 contrast between a packed `0x00RR_GGBB` foreground and a
+/// backdrop given as an HCT tone — the shape every "does this tier survive"
+/// assertion below needs.
+fn ratio_against_tone(rgb: u32, backdrop_tone: f64) -> f64 {
+    let (r, g, b) = unpack(rgb);
+    let fg = relative_luminance(r, g, b);
+    let bg = y_from_lstar(backdrop_tone) / 100.0;
+    (fg.max(bg) + 0.05) / (fg.min(bg) + 0.05)
+}
+
+fn unpack(rgb: u32) -> (u8, u8, u8) {
+    (
+        ((rgb >> 16) & 0xff) as u8,
+        ((rgb >> 8) & 0xff) as u8,
+        (rgb & 0xff) as u8,
+    )
 }
 
 // --- luma_p90 ---------------------------------------------------------------
@@ -256,11 +275,7 @@ fn solve_keeps_the_scrim_and_floor_dark_whatever_the_seed() {
             ("floor_start", floor_start),
             ("floor_end", floor_end),
         ] {
-            let (r, g, b) = (
-                ((rgb >> 16) & 0xff) as u8,
-                ((rgb >> 8) & 0xff) as u8,
-                (rgb & 0xff) as u8,
-            );
+            let (r, g, b) = unpack(rgb);
             let y = relative_luminance(r, g, b);
             assert!(
                 y < 0.06,
@@ -323,4 +338,106 @@ fn a_white_cover_now_clears_the_non_text_bar() {
         "a white sleeve still fails the 3:1 bar (backdrop L*{tone})"
     );
     assert!(ratio_of_tones(text_tone(tone), tone) >= 4.5);
+}
+
+// --- gradient_luma ----------------------------------------------------------
+
+#[test]
+fn gradient_luma_of_one_repeated_stop_is_that_stop() {
+    for rgb in [0x0000_0000, 0x0080_8080, 0x00ff_ffff, 0x00cb_a6f7, 0x0000_66ff] {
+        let stop = rgb_lstar(rgb);
+        let gradient = gradient_luma(rgb, rgb);
+        assert!(
+            (gradient - stop).abs() < 1e-9,
+            "a gradient between {rgb:#08x} and itself should measure L*{stop}, got L*{gradient}"
+        );
+    }
+}
+
+/// Averaging in linear Y rather than in L\* is the whole point of
+/// `gradient_luma_lstar` — this is the case that distinguishes them. A plain
+/// L\* midpoint understates a dark-to-bright gradient, which is exactly the
+/// one the scrim has to get right.
+#[test]
+fn gradient_luma_outranks_the_plain_lstar_midpoint() {
+    let (dark, bright) = (0x0011_1111, 0x00ee_eeee);
+    let midpoint = f64::midpoint(rgb_lstar(dark), rgb_lstar(bright));
+    let gradient = gradient_luma(dark, bright);
+    assert!(
+        gradient > midpoint,
+        "linear-Y average L*{gradient} should sit above the L* midpoint L*{midpoint}"
+    );
+}
+
+/// Round-trip: [`floor_luma`] is a *constant* standing in for a measurement,
+/// so it has to describe the gradient the solve actually paints. If the floor
+/// tones and the constant ever drift, the artwork-less path solves its scrim
+/// against a backdrop that isn't on screen.
+#[test]
+fn floor_luma_matches_the_gradient_the_solve_paints() {
+    for seed in [SEED, 0x00ff_ffff, 0x0000_0000, 0x0000_66ff] {
+        let colors = solve(seed, 100.0);
+        let painted = gradient_luma(colors.floor_start, colors.floor_end);
+        let claimed = floor_luma();
+        assert!(
+            (painted - claimed).abs() < 2.0,
+            "seed {seed:#08x}: floor paints L*{painted} but floor_luma() claims L*{claimed}"
+        );
+    }
+}
+
+// --- the hero's two fixed text tiers ----------------------------------------
+
+/// The hero diverges from the `np-*` tier by pinning its two text colours
+/// instead of solving them, and that is only defensible because the *backdrop*
+/// is pinned first. This is the assertion the prose beside them in
+/// `globals.slint` makes, and nothing else pins it.
+const HERO_ON_BACKDROP: u32 = 0x00f0_eef5;
+const HERO_ON_BACKDROP_MUTED: u32 = 0x00c9_c5d3;
+
+/// Brightest tone the composite can present, swept across every backdrop the
+/// solve can be handed. Dark covers land *below* the target (more headroom),
+/// so the maximum is the only case worth asserting against.
+fn worst_composited_tone() -> f64 {
+    (0..=100)
+        .map(f64::from)
+        .map(|luma| composited_tone(luma, scrim_alpha(luma)))
+        .fold(f64::NEG_INFINITY, f64::max)
+}
+
+#[test]
+fn the_fixed_hero_text_tiers_clear_their_targets_on_the_worst_backdrop() {
+    let tone = worst_composited_tone();
+    let title = ratio_against_tone(HERO_ON_BACKDROP, tone);
+    let muted = ratio_against_tone(HERO_ON_BACKDROP_MUTED, tone);
+    assert!(
+        title >= 4.5,
+        "hero title is {title}:1 on the worst backdrop (L*{tone}), owes 4.5:1"
+    );
+    assert!(
+        muted >= 3.0,
+        "hero meta line is {muted}:1 on the worst backdrop (L*{tone}), owes 3:1"
+    );
+    assert!(
+        title > muted,
+        "the title must outrank the meta line, got {title}:1 vs {muted}:1"
+    );
+}
+
+/// The constants above are copies — assert they still match the `out`
+/// properties they mirror, so editing one side can't silently invalidate the
+/// contrast test.
+#[test]
+fn the_fixed_hero_tiers_match_globals_slint() {
+    let globals = include_str!("../../../melodia-ui/ui/globals.slint");
+    for (name, literal) in [
+        ("on-backdrop", "#f0eef5"),
+        ("on-backdrop-muted", "#c9c5d3"),
+    ] {
+        let declaration = format!("out property <brush> {name}: {literal};");
+        assert!(
+            globals.contains(&declaration),
+            "globals.slint no longer declares `{declaration}` — update the constant here too"
+        );
+    }
 }

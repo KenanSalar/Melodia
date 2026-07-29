@@ -9,11 +9,13 @@
 //! identically.
 
 use std::collections::HashSet;
+use std::sync::Arc;
 
 use slint::{
     ComponentHandle, Image, Model, Rgb8Pixel, SharedPixelBuffer, SharedString, VecModel, Weak,
 };
 
+use super::RecentlyPlayedUi;
 use crate::entities::track::TrackListRow as RsTrackListRow;
 use crate::state::AppState;
 use crate::ui::mosaic_blur::compose_mosaic_blur;
@@ -67,12 +69,13 @@ pub fn push_hero_stats(count: i32, total_ms: i64, mosaic_paths: &[String], weak:
 /// thread. `animate` fades the cross-fade (true for live refreshes).
 pub async fn refresh_blur(
     state: &AppState,
+    rp_ui: &Arc<RecentlyPlayedUi>,
     mosaic_paths: Vec<String>,
     weak: &Weak<AppWindow>,
     animate: bool,
 ) {
     if mosaic_paths.is_empty() {
-        clear_hero_blur(weak);
+        clear_hero_blur(rp_ui, weak);
         return;
     }
     let blur_buf = state
@@ -81,15 +84,19 @@ pub async fn refresh_blur(
         .await
         .ok()
         .flatten();
-    apply_hero_blur(weak, blur_buf, animate);
+    apply_hero_blur(rp_ui, weak, blur_buf, animate);
 }
 
 /// Clear the hero blur (e.g. no covers) without wiping the previous slot, so an
 /// in-flight fade completes before the gradient floor takes over.
-pub fn clear_hero_blur(weak: &Weak<AppWindow>) {
+pub fn clear_hero_blur(rp_ui: &Arc<RecentlyPlayedUi>, weak: &Weak<AppWindow>) {
+    let rp_ui = rp_ui.clone();
     let weak = weak.clone();
     let _ = slint::invoke_from_event_loop(move || {
         let Some(ui) = weak.upgrade() else { return };
+        if !rp_ui.section_active() {
+            return;
+        }
         let g = ui.global::<RecentlyPlayed>();
         // With no mosaic left, the gradient floor is the whole backdrop —
         // re-solve against it so the scrim and foreground match what is
@@ -107,10 +114,24 @@ pub fn clear_hero_blur(weak: &Weak<AppWindow>) {
     });
 }
 
-fn apply_hero_blur(weak: &Weak<AppWindow>, buf: Option<SharedPixelBuffer<Rgb8Pixel>>, animate: bool) {
+/// Publish the composed mosaic. Skipped outright once the section is no longer
+/// active: `HeroBackdrop` is shared by all six heroes, so a compose that
+/// finishes after the user has navigated away would paint this view's solve
+/// under whichever hero mounted next. `release_section_state` clears
+/// `last_mosaic_paths` on leave, so a genuine re-enter recomposes.
+fn apply_hero_blur(
+    rp_ui: &Arc<RecentlyPlayedUi>,
+    weak: &Weak<AppWindow>,
+    buf: Option<SharedPixelBuffer<Rgb8Pixel>>,
+    animate: bool,
+) {
+    let rp_ui = rp_ui.clone();
     let weak = weak.clone();
     let _ = slint::invoke_from_event_loop(move || {
         let Some(ui) = weak.upgrade() else { return };
+        if !rp_ui.section_active() {
+            return;
+        }
         let g = ui.global::<RecentlyPlayed>();
         // Measure before the buffer is consumed by the `Image` wrap.
         crate::ui::hero_backdrop::apply(&ui, buf.as_ref());

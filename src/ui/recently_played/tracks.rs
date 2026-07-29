@@ -88,9 +88,10 @@ pub async fn refresh_tracks(
     };
     if blur_changed {
         let st = state.clone();
+        let ru = rp_ui.clone();
         let weak = weak.clone();
         state.runtime.spawn(async move {
-            super::hero::refresh_blur(&st, mosaic_paths, &weak, /* animate */ true).await;
+            super::hero::refresh_blur(&st, &ru, mosaic_paths, &weak, /* animate */ true).await;
         });
     }
 
