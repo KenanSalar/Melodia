@@ -128,13 +128,6 @@ pub(super) fn rebuild_rows(
     }
 }
 
-/// Build a `QueueRow` from a `TrackSummary` plus an already-resolved
-/// cover image. `pub(crate)` because the full-screen Now Playing view's
-/// "Up Next" list (`ui::now_playing`) reuses the exact same row shape —
-/// it always passes `selected: false`. Callers compute `cover_img`
-/// themselves so the queue sheet's two-phase render (cache-only
-/// skeleton, then warmed rebuild) can swap the lookup policy without
-/// duplicating the row-shape mapping.
 /// Surgically flip `is_favorite` on every visible queue row whose `id`
 /// matches. Mirrors `crate::ui::tracks::fetch::apply_row_favorite`. We
 /// do this rather than emitting via `sinks.queue` because
@@ -157,6 +150,13 @@ pub(crate) fn apply_row_favorite(weak: &Weak<AppWindow>, id: i64, fav: bool) {
     });
 }
 
+/// Build a `QueueRow` from a `TrackSummary` plus an already-resolved
+/// cover image. `pub(crate)` because the full-screen Now Playing view's
+/// "Up Next" list (`ui::now_playing`) reuses the exact same row shape —
+/// it always passes `selected: false`. Callers compute `cover_img`
+/// themselves so the queue sheet's two-phase render (cache-only
+/// skeleton, then warmed rebuild) can swap the lookup policy without
+/// duplicating the row-shape mapping.
 pub(crate) fn to_slint_queue_row(t: &TrackSummary, cover_img: Image, selected: bool) -> QueueRow {
     let display_duration = format_duration_ms(t.duration_ms.max(0));
     QueueRow {

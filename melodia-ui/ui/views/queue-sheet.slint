@@ -31,6 +31,16 @@ export component QueueSheet inherits Rectangle {
     width: 100%;
     height: 100%;
 
+    // The sheet is normally permanent, but the miniplayer swap unmounts
+    // the whole full-UI branch (see the `if !mini-render-active` in
+    // `app-window.slint`) without touching `Queue.open` — so a remount
+    // seeds `watched-open` at the current value and the reset below never
+    // fires. Same shape as `playlist-detail-view.slint`.
+    init => {
+        Queue.drag-source = -1;
+        Queue.drop-slot = -1;
+    }
+
     // 0 = fully closed; 1 = fully open.
     private property <float> t: Queue.open ? 1.0 : 0.0;
     animate t { duration: Theme.dur-med; easing: ease-out; }

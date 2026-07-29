@@ -66,11 +66,14 @@ export component QueueRowItem inherits Rectangle {
     // a double-click — don't strobe the row to 0.4 opacity and back.
     // Started on pointer-down, cancelled on pointer-up / cancel, and
     // pre-empted on real drag-start (threshold crossed) which sets
-    // `Queue.drag-source` directly.
+    // `Queue.drag-source` directly. Also gated on the sheet still being
+    // open: a press that closes it (the `Q` shortcut, Escape) leaves the
+    // row alive and armed long enough to publish a ghost *after* the
+    // sheet's teardown reset, which nothing would then clear.
     private property <bool> arming-ghost: false;
     ghost-arm-timer := Timer {
         interval: Theme.dur-med;
-        running: root.arming-ghost;
+        running: root.arming-ghost && Queue.open;
         triggered => {
             Queue.drag-source = root.row-index;
             root.arming-ghost = false;

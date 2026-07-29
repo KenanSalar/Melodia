@@ -918,8 +918,10 @@ export global WindowChrome {
 // `TouchArea.pointer-event` handlers and only fires `reorder(from, to)`
 // on pointer-up commit. Visual feedback (insertion line, dimmed source
 // row) reads from these props directly, so no Rust round-trip happens
-// during the drag — Rust only clears them when it rebuilds `rows` out
-// from under an in-flight drag (`ui::queue_sheet::rows`).
+// during the drag. Two things clear them out from under a drag the
+// pressed row can no longer finish itself: Rust when it rebuilds `rows`
+// (`ui::queue_sheet::rows`), and the sheet on either `open` transition
+// (`queue-sheet.slint`, mount included).
 //
 // File-drop: `open` is mirrored to a Rust `Arc<AtomicBool>` via the
 // `open-changed` callback. The winit `WindowEvent::DroppedFile` filter
@@ -1168,8 +1170,9 @@ export global Playlists {
 // The state itself lives on `DraggableTrackList`, which this view `<=>`s
 // into these two — Rust never writes them during a drag (the indicator
 // and the source-row dim are pure Slint feedback), only clears them when
-// it rebuilds `tracks` out from under an in-flight drag.
-// `reorder(from, to)` fires on pointer-up.
+// it rebuilds `tracks` out from under an in-flight drag. The view clears
+// them on its own `init` too, since these outlive it and a nav-away
+// mid-drag leaves them set. `reorder(from, to)` fires on pointer-up.
 //
 // `is-drop-hovered` mirrors `Queue.is-drop-hovered` — set by the winit
 // HoveredFile filter when the Playlist Detail is the active drop target
