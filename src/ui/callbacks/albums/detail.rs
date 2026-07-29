@@ -8,7 +8,7 @@ use slint::{ComponentHandle, Model, SharedString};
 use crate::library;
 use crate::state::AppState;
 use crate::ui::albums::{self as albums_ui_mod, AlbumsUi};
-use crate::ui::callbacks::{collect_track_ids, play_row_start};
+use crate::ui::callbacks::{collect_track_ids, play_row_start, spawn_play_then_shuffle};
 use crate::ui::callbacks::macros::{
     release_detail_hero_images, spawn_logged, spawn_logged_sync, wire_row_flag,
 };
@@ -100,28 +100,11 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, albums_ui: &Arc<AlbumsUi>) 
         });
     }
 
-    // shuffle-album: play every track in display order from the top, then
-    // turn the shuffle mode on.
     {
         let s = state.clone();
         let au = albums_ui.clone();
         detail.on_shuffle_album(move || {
-            let ids = au.detail_track_ids();
-            if ids.is_empty() {
-                return;
-            }
-            let s = s.clone();
-            s.runtime.clone().spawn(async move {
-                if let Err(e) =
-                    library::playback::player_play_tracks(&s.playback_ctx(), ids, Some(0)).await
-                {
-                    log::warn!("albums::shuffle_album play: {e}");
-                    return;
-                }
-                if let Err(e) = library::queue::queue_set_shuffle(&s, true) {
-                    log::warn!("albums::shuffle_album set_shuffle: {e}");
-                }
-            });
+            spawn_play_then_shuffle(&s, "albums::shuffle_album", au.detail_track_ids());
         });
     }
 

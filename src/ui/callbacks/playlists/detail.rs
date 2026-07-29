@@ -8,7 +8,7 @@ use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel};
 
 use crate::library;
 use crate::state::AppState;
-use crate::ui::callbacks::{collect_track_ids, play_row_start};
+use crate::ui::callbacks::{collect_track_ids, play_row_start, spawn_play_then_shuffle};
 use crate::ui::callbacks::macros::{release_detail_hero_images, spawn_logged, wire_row_flag};
 use crate::ui::playlists::{self as playlists_ui_mod, PlaylistsUi};
 use crate::ui::track_list_view::{TrackListColumnState, view_id};
@@ -61,22 +61,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
         let s = state.clone();
         let pu = playlists_ui.clone();
         detail.on_shuffle_all(move || {
-            let ids = pu.detail_track_ids();
-            if ids.is_empty() {
-                return;
-            }
-            let s = s.clone();
-            s.runtime.clone().spawn(async move {
-                if let Err(e) =
-                    library::playback::player_play_tracks(&s.playback_ctx(), ids, Some(0)).await
-                {
-                    log::warn!("playlists::shuffle_all play: {e}");
-                    return;
-                }
-                if let Err(e) = library::queue::queue_set_shuffle(&s, true) {
-                    log::warn!("playlists::shuffle_all set_shuffle: {e}");
-                }
-            });
+            spawn_play_then_shuffle(&s, "playlists::shuffle_all", pu.detail_track_ids());
         });
     }
 

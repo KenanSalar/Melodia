@@ -10,7 +10,7 @@ use crate::library;
 use crate::state::AppState;
 use crate::ui::albums::AlbumsUi;
 use crate::ui::artists::{self as artists_ui_mod, ArtistsUi};
-use crate::ui::callbacks::{collect_track_ids, play_row_start};
+use crate::ui::callbacks::{collect_track_ids, play_row_start, spawn_play_then_shuffle};
 use crate::ui::callbacks::macros::{
     release_detail_hero_images, spawn_logged, spawn_logged_sync, wire_row_flag,
 };
@@ -108,28 +108,11 @@ pub(super) fn wire(
         });
     }
 
-    // shuffle-artist: replace the queue with the artist's tracks in display
-    // order, then flip the shuffle mode on.
     {
         let s = state.clone();
         let au = artists_ui.clone();
         detail.on_shuffle_artist(move || {
-            let ids = au.detail_track_ids();
-            if ids.is_empty() {
-                return;
-            }
-            let s = s.clone();
-            s.runtime.clone().spawn(async move {
-                if let Err(e) =
-                    library::playback::player_play_tracks(&s.playback_ctx(), ids, Some(0)).await
-                {
-                    log::warn!("artists::shuffle_artist play: {e}");
-                    return;
-                }
-                if let Err(e) = library::queue::queue_set_shuffle(&s, true) {
-                    log::warn!("artists::shuffle_artist set_shuffle: {e}");
-                }
-            });
+            spawn_play_then_shuffle(&s, "artists::shuffle_artist", au.detail_track_ids());
         });
     }
 

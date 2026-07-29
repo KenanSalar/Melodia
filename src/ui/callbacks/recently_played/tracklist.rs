@@ -14,7 +14,7 @@ use super::VIEW_ID;
 use crate::library;
 use crate::services::settings::{SortDir, ViewSort};
 use crate::state::AppState;
-use crate::ui::callbacks::{collect_track_ids, play_row_start};
+use crate::ui::callbacks::{collect_track_ids, play_row_start, spawn_play_then_shuffle};
 use crate::ui::callbacks::macros::{spawn_logged, wire_row_flag};
 use crate::ui::recently_played::{self as recently_played_ui_mod, RecentlyPlayedUi};
 use crate::ui::track_list_view::TrackListColumnState;
@@ -193,33 +193,11 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, rp_ui: &Arc<RecentlyPlayedU
     }
 
     // --- Header pill: Shuffle -------------------------------------
-    // Enqueue the filtered set in display order, then flip shuffle on.
     {
         let s = state.clone();
         let ru = rp_ui.clone();
         g.on_shuffle_all(move || {
-            let ids = ru.filtered_track_ids();
-            if ids.is_empty() {
-                return;
-            }
-            let s = s.clone();
-            s.runtime.clone().spawn(async move {
-                if let Err(e) =
-                    library::playback::player_play_tracks(&s.playback_ctx(), ids, Some(0)).await
-                {
-                    log::warn!("recently_played::shuffle_all play: {e}");
-                    return;
-                }
-                let shuffle_on = {
-                    let g = crate::player::state::lock_state(&s.player_state);
-                    g.queue.shuffle_enabled
-                };
-                if !shuffle_on
-                    && let Err(e) = library::queue::queue_toggle_shuffle(&s)
-                {
-                    log::warn!("recently_played::shuffle_all toggle: {e}");
-                }
-            });
+            spawn_play_then_shuffle(&s, "recently_played::shuffle_all", ru.filtered_track_ids());
         });
     }
 }

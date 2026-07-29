@@ -9,7 +9,7 @@ use slint::{ComponentHandle, Model, SharedString};
 
 use crate::library;
 use crate::state::AppState;
-use crate::ui::callbacks::{collect_track_ids, play_row_start};
+use crate::ui::callbacks::{collect_track_ids, play_row_start, spawn_play_then_shuffle};
 use crate::ui::callbacks::macros::{spawn_logged, spawn_logged_sync, wire_row_flag};
 use crate::ui::callbacks::persist_view_sort;
 use crate::ui::genres::{self as genres_ui_mod, GenresUi};
@@ -86,28 +86,11 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, genres_ui: &Arc<GenresUi>) 
         });
     }
 
-    // shuffle-genre: play every track in display order from the top, then
-    // turn shuffle on.
     {
         let s = state.clone();
         let gu = genres_ui.clone();
         detail.on_shuffle_genre(move || {
-            let ids = gu.detail_track_ids();
-            if ids.is_empty() {
-                return;
-            }
-            let s = s.clone();
-            s.runtime.clone().spawn(async move {
-                if let Err(e) =
-                    library::playback::player_play_tracks(&s.playback_ctx(), ids, Some(0)).await
-                {
-                    log::warn!("genres::shuffle_genre play: {e}");
-                    return;
-                }
-                if let Err(e) = library::queue::queue_set_shuffle(&s, true) {
-                    log::warn!("genres::shuffle_genre set_shuffle: {e}");
-                }
-            });
+            spawn_play_then_shuffle(&s, "genres::shuffle_genre", gu.detail_track_ids());
         });
     }
 

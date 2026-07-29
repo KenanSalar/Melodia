@@ -94,6 +94,32 @@ pub(super) fn model_track_ids(rows: &ModelRc<crate::TrackListRow>) -> Vec<i64> {
     rows.iter().map(|r| i64::from(r.id)).collect()
 }
 
+/// Replace the queue with `ids` in display order, then turn shuffle on —
+/// the header Shuffle pill on every list view. `tag` names the call site in
+/// the two failure logs.
+///
+/// The two halves have to be sequenced (shuffle re-anchors around whatever is
+/// playing), so this is a spawned task rather than one `library::*` call. Use
+/// `queue_set_shuffle` and not a read-then-toggle pair: the pill means "on",
+/// and a toggle racing the transport's shuffle button would turn it off.
+pub(super) fn spawn_play_then_shuffle(state: &AppState, tag: &'static str, ids: Vec<i64>) {
+    if ids.is_empty() {
+        return;
+    }
+    let state = state.clone();
+    state.runtime.clone().spawn(async move {
+        if let Err(e) =
+            library::playback::player_play_tracks(&state.playback_ctx(), ids, Some(0)).await
+        {
+            log::warn!("{tag} play: {e}");
+            return;
+        }
+        if let Err(e) = library::queue::queue_set_shuffle(&state, true) {
+            log::warn!("{tag} shuffle: {e}");
+        }
+    });
+}
+
 /// Spawn a fire-and-forget task that persists `view_id`'s sort field +
 /// direction into `views.json`'s `view_sort`. A write failure is logged, not
 /// surfaced — the in-memory re-sort already applied, so the only loss is
