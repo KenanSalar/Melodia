@@ -228,12 +228,17 @@ export global HeroBackdrop {
 
     // Gradient-floor stops under the blur slots: what shows for an entity with
     // no artwork, and the whole backdrop for Genre Detail (which has none by
-    // nature and paints its name-hashed stops here instead).
+    // nature and paints its name-hashed stops here instead). `floor-start`
+    // has a third reader — the two mosaic heroes fill their artwork square
+    // with it *even when the mosaic is populated*, because the placeholder
+    // slots over it are translucent and need a known-dark base.
     in-out property <color> floor-start: #2b2135;
     in-out property <color> floor-end: #14101a;
 
-    // Hue-carrying tier: the artwork tile's fallback chrome and the
-    // smart-playlist badge. 3:1 against the composited backdrop.
+    // Hue-carrying tier, 3:1 against the composited backdrop. Read by the
+    // `DetailHeader` artwork-tile fallback, the smart-playlist badge, and both
+    // mosaic heroes — their empty state and their `CoverMosaic` placeholder
+    // slots.
     in-out property <brush> chrome: #cba6f7;
 
     // The two text tiers — the hero title plus the secondary line under it
