@@ -35,6 +35,20 @@ export global Theme {
     in-out property <brush> accent: #cba6f7;
     in-out property <brush> accent-text: #1e1e2e;
 
+    // Ink for a glyph or label painted directly on `fill`. sRGB relative
+    // luminance on the gamma-encoded channels — same weights, threshold and
+    // return pair as `themes::apply::on_accent_hex`, which is what produces
+    // `accent-text` above. Reach for this wherever the surface underneath
+    // isn't the accent: `accent-text` answers a question about the *accent*,
+    // so on a light theme with a light accent it puts near-black on a dark
+    // red. The two colours stay literals rather than palette slots on
+    // purpose — they're absolute ink for a fill of known luminance.
+    public pure function ink-on(fill: brush) -> brush {
+        return (0.2126 * fill.red + 0.7152 * fill.green + 0.0722 * fill.blue) / 255 > 0.5
+            ? #1e1e2e
+            : #ffffff;
+    }
+
     // Semantic colours (Mocha palette). Three, and every theme defines all
     // three — see `src/themes/palette.rs` for why there's no fallback.
     // `green` and `yellow` are signals: the macOS-style traffic lights, the
@@ -43,14 +57,15 @@ export global Theme {
     in-out property <brush> green: #a6e3a1;
     in-out property <brush> yellow: #f9e2af;
 
-    // Semantic role tokens for destructive actions, so a theme can pick its
-    // own danger colour without touching the raw `red` slot above.
-    // `danger-text` uses the on-accent colour — Catppuccin's #1e1e2e contrasts
-    // well against #f38ba8. Hover is *not* a token: destructive controls
-    // lighten their own fill with `Theme.danger.brighter(10%)`, which reads as
-    // the same colour intensifying rather than as a second hue.
+    // Semantic role aliases for destructive actions: call sites read
+    // `danger` instead of reaching for `red`, and the mapping changes here
+    // rather than at every one of them. `out`, so Rust writes neither — both
+    // follow whatever `apply()` puts in `red`. Hover is *not* a token: the
+    // destructive `SectionButton` lightens its own fill with
+    // `Theme.danger.brighter(10%)`, which reads as the same colour
+    // intensifying rather than as a second hue.
     out property <brush> danger: root.red;
-    out property <brush> danger-text: root.accent-text;
+    out property <brush> danger-text: root.ink-on(root.danger);
 
     // Fill for chrome that floats over busy visual content — a detail hero's
     // blur, a playlist card's cover. Nearly opaque on purpose: at a softer

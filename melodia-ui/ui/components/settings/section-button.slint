@@ -14,8 +14,9 @@ export component SectionButton inherits Rectangle {
     // Only meaningful with `primary: true`. Switches the filled fill from
     // accent → danger and the on-button text/icon colour from accent-text
     // → danger-text. Used by the confirmation dialog's Confirm button.
-    // Hover brightens the same red (mirrors `PillButton` in action-pill.slint)
-    // rather than swapping to a second hue, which reads as a colour jump.
+    // Hover brightens the same red rather than swapping to a second hue,
+    // which reads as a colour jump. (`PillButton`'s `danger` treatment is a
+    // different one — it keeps the neutral hover fill and tints the label.)
     in property <bool>   destructive;
 
     callback clicked();

@@ -126,6 +126,11 @@ fn parse_hex_color(s: &str) -> Option<u32> {
 /// (`get_kde_colors()` already synthesizes the entries we need); the three
 /// semantic slots come from its dedicated `red` / `green` / `yellow` fields,
 /// which carry Plasma's own `[Colors:View]` status foregrounds.
+///
+/// The Breeze hexes below are a second line, not the policy —
+/// `kde_palette_from_sections` already substitutes the same defaults for a
+/// scheme that omits a status foreground, and always hands back a parseable
+/// `#rrggbb`. They only fire if that ever stops being true.
 #[cfg(target_os = "linux")]
 fn palette_from_kde(kde: &crate::services::system_theme::KdeColorPalette) -> Palette {
     let g = |key: &str| -> u32 {
@@ -246,6 +251,10 @@ pub(crate) fn color_to_rgb(c: Color) -> u32 {
 /// standard sRGB relative-luminance threshold of 0.5 — fast enough that we
 /// don't bother caching per accent. f64 keeps clippy happy on the
 /// u8 → float lift (channel values are 0..=255, well inside f64's range).
+///
+/// `theme.slint`'s `Theme.ink-on(brush)` is the Slint-side twin, for the
+/// surfaces whose fill isn't the accent (`danger`, the traffic-light hues).
+/// Same weights, same threshold, same pair — keep them in step.
 pub(super) fn on_accent_hex(accent_hex: u32) -> u32 {
     let r = f64::from((accent_hex >> 16) & 0xff) / 255.0;
     let g = f64::from((accent_hex >> 8) & 0xff) / 255.0;
@@ -253,3 +262,7 @@ pub(super) fn on_accent_hex(accent_hex: u32) -> u32 {
     let lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
     if lum > 0.5 { 0x001e_1e2e } else { 0x00ff_ffff }
 }
+
+#[cfg(all(test, target_os = "linux"))]
+#[path = "tests/apply_tests.rs"]
+mod tests;

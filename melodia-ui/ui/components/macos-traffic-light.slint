@@ -45,19 +45,11 @@ export component MacOsTrafficLight inherits Rectangle {
     // The glyph has to contrast against whatever `fill` resolved to, which is
     // why this is derived here and not passed in: the fill can be any of three
     // semantic hues in any of ~20 palettes, plus the unfocused grey, and no
-    // single Theme token is right for all of them. `Theme.accent-text` used to
+    // single Theme brush is right for all of them. `Theme.accent-text` used to
     // be handed down for the job, but that token answers a question about the
     // *accent* — pick Latte + the Yellow accent and it puts a near-black glyph
     // on the dark red close circle.
-    //
-    // sRGB relative luminance on the gamma-encoded channels, same weights and
-    // 0.5 threshold as `themes::apply::on_accent_hex`; the ink pair matches its
-    // two return values. These stay literals rather than Theme brushes on
-    // purpose — they're absolute ink for a fill of known luminance, so a
-    // palette has no say in them.
-    property <float> fill-luma:
-        (0.2126 * root.fill.red + 0.7152 * root.fill.green + 0.0722 * root.fill.blue) / 255;
-    property <brush> glyph-color: root.fill-luma > 0.5 ? #1e1e2e : #ffffff;
+    property <brush> glyph-color: Theme.ink-on(root.fill);
 
     callback clicked();
 

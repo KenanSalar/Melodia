@@ -2,9 +2,11 @@
 //! signals — those live in `apply.rs` and `system_color_state.rs`
 //! respectively.
 
-/// Every brush slot the Slint `Theme` global exposes that depends on the
-/// active theme. Stored as packed `0x00RRGGBB` so the data tables stay
-/// readable next to the Tauri-source hex strings.
+/// The theme-dependent brush slots that come from a palette table. Stored as
+/// packed `0x00RRGGBB` so the data tables stay readable next to the
+/// Tauri-source hex strings. `apply()` writes three more that don't:
+/// `mantle_unfocused` (an OS signal), and `accent` / `accent_text` (picked
+/// independently of the variant).
 #[derive(Clone, Copy, Debug)]
 pub struct Palette {
     // 13 base / structure
