@@ -1,5 +1,6 @@
 import { Theme } from "../../theme.slint";
 import { Settings } from "../../settings.slint";
+import { SettingsPage } from "../../globals/settings-page.slint";
 import { SectionCard } from "../../components/settings/section-card.slint";
 import { SettingRowStacked } from "../../components/settings/setting-row-stacked.slint";
 import { Checkbox } from "../../components/checkbox.slint";
@@ -72,12 +73,9 @@ export component OverflowMenuSection inherits Rectangle {
     horizontal-stretch: 1;
     vertical-stretch: 0;
 
-    in property <string> query: Settings.search-query;
-
     pure function row-visible(label: string, desc: string) -> bool {
-        return root.query == ""
-            || Settings.matches(@tr("Player Bar"), root.query)
-            || Settings.matches(label + " " + desc, root.query);
+        return SettingsPage.row-visible(@tr("Player Bar"), label + " " + desc,
+                                        SettingsPage.search-query);
     }
 
     property <bool> show-overflow: row-visible(@tr("Overflow Menu Buttons"),

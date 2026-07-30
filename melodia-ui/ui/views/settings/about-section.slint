@@ -1,4 +1,5 @@
 import { Settings } from "../../settings.slint";
+import { SettingsPage } from "../../globals/settings-page.slint";
 import { MelodiaUpdater } from "../../globals/updater.slint";
 import { SectionCard } from "../../components/settings/section-card.slint";
 import { SectionDivider } from "../../components/settings/section-divider.slint";
@@ -26,12 +27,9 @@ export component AboutSection inherits Rectangle {
     horizontal-stretch: 1;
     vertical-stretch: 0;
 
-    in property <string> query: Settings.search-query;
-
     pure function row-visible(label: string, desc: string) -> bool {
-        return root.query == ""
-            || Settings.matches(@tr("About"), root.query)
-            || Settings.matches(label + " " + desc, root.query);
+        return SettingsPage.row-visible(@tr("About"), label + " " + desc,
+                                        SettingsPage.search-query);
     }
 
     // "Melodia" (brand), the SPDX license id, and "GitHub" (proper noun)

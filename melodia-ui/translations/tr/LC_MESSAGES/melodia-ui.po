@@ -254,6 +254,20 @@ msgstr "Ayarlarda ara…"
 msgid "No matching settings"
 msgstr "Eşleşen ayar yok"
 
+# ---- Settings page tabs ------------------------------------------------------
+#
+# Tab bar under the page title. "Playback" and "About" reuse the section-title
+# msgids further down, so only these three are new.
+
+msgid "Library"
+msgstr "Kitaplık"
+
+msgid "Interface"
+msgstr "Arayüz"
+
+msgid "Services"
+msgstr "Hizmetler"
+
 # ---- Library Folders section ------------------------------------------------
 
 msgid "Library Folders"

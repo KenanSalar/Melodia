@@ -1,5 +1,5 @@
 import { Theme } from "../../theme.slint";
-import { Settings } from "../../settings.slint";
+import { SettingsPage } from "../../globals/settings-page.slint";
 import { Dialog } from "../../globals/dialog.slint";
 import { LibrarySettings } from "../../globals/library-settings.slint";
 import { SectionCard } from "../../components/settings/section-card.slint";
@@ -26,12 +26,10 @@ export component LibrarySection inherits Rectangle {
     horizontal-stretch: 1;
     vertical-stretch: 0;
 
-    in property <string> query: Settings.search-query;
-
     out property <bool> has-matches:
-        root.query == ""
-        || Settings.matches(@tr("Library Folders"), root.query)
-        || Settings.matches(@tr("Manage Folders") + " " + @tr("Add Folder"), root.query);
+        SettingsPage.row-visible(@tr("Library Folders"),
+                                 @tr("Manage Folders") + " " + @tr("Add Folder"),
+                                 SettingsPage.search-query);
 
     // VerticalLayout wrapper so the Rectangle's preferred-height tracks
     // the SectionCard's natural height. See `language-section.slint`.

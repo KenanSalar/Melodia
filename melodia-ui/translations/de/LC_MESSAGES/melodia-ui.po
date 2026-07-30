@@ -252,6 +252,20 @@ msgstr "Einstellungen durchsuchen…"
 msgid "No matching settings"
 msgstr "Keine passenden Einstellungen"
 
+# ---- Settings page tabs ------------------------------------------------------
+#
+# Tab bar under the page title. "Playback" and "About" reuse the section-title
+# msgids further down, so only these three are new.
+
+msgid "Library"
+msgstr "Bibliothek"
+
+msgid "Interface"
+msgstr "Oberfläche"
+
+msgid "Services"
+msgstr "Dienste"
+
 # ---- Library Folders section ------------------------------------------------
 
 msgid "Library Folders"

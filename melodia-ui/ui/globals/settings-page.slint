@@ -1,0 +1,57 @@
+// SettingsPage: chrome state for the Settings page itself — the search
+// filter and the rule every section applies to it.
+//
+// Split out of `Settings`, which holds the values the user is configuring
+// plus a bank of `@tr(...)` string callbacks. How the page is filtered is a
+// different axis of change from what the page configures, and `Settings` is
+// long enough already.
+export global SettingsPage {
+    // Tab order. Named so the router in `views/settings/settings-tabs.slint`
+    // and the label/icon arrays in `views/settings-view.slint` key off
+    // something readable instead of a bare 0..4, and so adding a tab is a
+    // rename-safe edit.
+    out property <int> tab-library: 0;
+    out property <int> tab-playback: 1;
+    out property <int> tab-interface: 2;
+    out property <int> tab-services: 3;
+    out property <int> tab-about: 4;
+
+    // Sole definition of how many tabs exist. Rust reads it through
+    // `get_tab_count()` to clamp the persisted index rather than carrying its
+    // own copy, so the two can't drift.
+    out property <int> tab-count: 5;
+
+    // Which tab is showing. Seeded from `views.json` at boot and persisted on
+    // every change, so re-entering the page lands where you left it.
+    in-out property <int> tab-idx: 0;
+    callback tab-changed(int);
+
+    // Live filter for the page. Empty string ⇒ everything visible. Bound
+    // two-way to the SearchBar in `ui/views/settings-view.slint`; cleared on
+    // nav-away from the page (handler in `ui/app-window.slint`).
+    in-out property <string> search-query;
+
+    // Counter the host bumps to release keyboard focus from the SearchBar's
+    // TextInput — same pattern as `Tracks.blur-search-tick`. Used when
+    // navigating away so the next keystroke doesn't land in a hidden field.
+    in-out property <int> blur-search-tick: 0;
+
+    // Pure case-insensitive substring test. Slint 1.16 has no `.contains()`
+    // on string, so the check is wired in Rust (`src/ui/settings_page.rs`).
+    pure callback matches(string /*haystack*/, string /*needle*/) -> bool;
+
+    // Whether a settings row survives the filter: an empty query shows
+    // everything, otherwise either the section's own title or the row's text
+    // has to match. Every section used to carry a byte-identical copy of this
+    // — ten of them — so changing the rule meant editing ten files.
+    //
+    // Sections pass their title and wrap this in a two-argument local
+    // function, which keeps the rule shared and the per-row call sites short.
+    // Reading `search-query` at the call site is what makes the result
+    // reactive: Slint tracks the property read, `matches` is opaque to it.
+    public pure function row-visible(section: string, haystack: string, query: string) -> bool {
+        return query == ""
+            || root.matches(section, query)
+            || root.matches(haystack, query);
+    }
+}

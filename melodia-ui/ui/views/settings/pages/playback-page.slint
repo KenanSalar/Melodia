@@ -1,0 +1,20 @@
+import { Theme } from "../../../theme.slint";
+import { PlaybackSection } from "../playback-section.slint";
+
+// Playback tab. One card today — gapless, crossfade and its four
+// sub-settings, resume-on-startup, the play-button animation and the
+// visualizer. It keeps its own file anyway so the router treats all five
+// tabs identically and a second card is a one-line addition here.
+export component PlaybackPage inherits Rectangle {
+    background: transparent;
+    horizontal-stretch: 1;
+    vertical-stretch: 0;
+
+    out property <bool> has-matches: pb.has-matches;
+
+    VerticalLayout {
+        spacing: Theme.pad-lg;
+
+        pb := PlaybackSection {}
+    }
+}

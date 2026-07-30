@@ -1,0 +1,21 @@
+import { Theme } from "../../../theme.slint";
+import { ScrobblingSection } from "../scrobbling-section.slint";
+import { DiscordSection } from "../discord-section.slint";
+
+// Services tab: the outside accounts Melodia talks to — Last.fm and
+// ListenBrainz scrobbling (plus MusicBrainz ID tagging, which rides on the
+// ListenBrainz connection) and Discord Rich Presence.
+export component ServicesPage inherits Rectangle {
+    background: transparent;
+    horizontal-stretch: 1;
+    vertical-stretch: 0;
+
+    out property <bool> has-matches: scrobbling.has-matches || discord.has-matches;
+
+    VerticalLayout {
+        spacing: Theme.pad-lg;
+
+        scrobbling := ScrobblingSection {}
+        discord := DiscordSection {}
+    }
+}

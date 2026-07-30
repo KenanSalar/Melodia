@@ -152,6 +152,16 @@ pub fn set_favorites_most_played_collapsed(
     })
 }
 
+/// Persist the Settings page's active tab so re-entering the page lands
+/// where the user left it. Same no-kick shape as the collapse flags above:
+/// `SettingsPage.tab-idx` is two-way bound to the tab bar, so the Slint side
+/// is already correct by the time this write runs.
+pub fn set_settings_tab(state: &AppState, tab: i32) -> Result<(), AppError> {
+    services::view_state::mutate_view_state(&state.paths, move |s| {
+        s.settings_tab = tab;
+    })
+}
+
 /// Persist the visible-column list for `view_id` (e.g. "tracks") into
 /// `views.json`'s `view_columns`. Full file rewrite, matching how the Tauri
 /// app handled this. `columns` is the list of CURRENTLY VISIBLE column

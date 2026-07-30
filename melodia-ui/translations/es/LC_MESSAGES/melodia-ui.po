@@ -252,6 +252,20 @@ msgstr "Buscar en los ajustes…"
 msgid "No matching settings"
 msgstr "No hay ajustes coincidentes"
 
+# ---- Settings page tabs ------------------------------------------------------
+#
+# Tab bar under the page title. "Playback" and "About" reuse the section-title
+# msgids further down, so only these three are new.
+
+msgid "Library"
+msgstr "Biblioteca"
+
+msgid "Interface"
+msgstr "Interfaz"
+
+msgid "Services"
+msgstr "Servicios"
+
 # ---- Library Folders section ------------------------------------------------
 
 msgid "Library Folders"

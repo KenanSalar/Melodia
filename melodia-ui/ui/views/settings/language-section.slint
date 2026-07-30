@@ -1,4 +1,5 @@
 import { Settings } from "../../settings.slint";
+import { SettingsPage } from "../../globals/settings-page.slint";
 import { SectionCard } from "../../components/settings/section-card.slint";
 import { SettingRow } from "../../components/settings/setting-row.slint";
 import { Dropdown } from "../../components/settings/dropdown.slint";
@@ -19,19 +20,19 @@ import { Dropdown } from "../../components/settings/dropdown.slint";
 // `visible: false` would keep the title/card slot in the VerticalLayout
 // (CLAUDE.md "visible: false does not remove an element from layout"), so
 // we use the conditional element form. `has-matches` is exposed as an
-// `out property` so `ui/views/settings-view.slint` can detect the
+// `out property` so the page that mounts this section can detect the
 // "all sections hidden" state and render the no-results placeholder.
+//
+// The rule itself lives on `SettingsPage`; the local wrapper binds this
+// section's title once so the per-row call sites stay two arguments.
 export component LanguageSection inherits Rectangle {
     background: transparent;
     horizontal-stretch: 1;
     vertical-stretch: 0;
 
-    in property <string> query: Settings.search-query;
-
     pure function row-visible(label: string, desc: string) -> bool {
-        return root.query == ""
-            || Settings.matches(@tr("Language"), root.query)
-            || Settings.matches(label + " " + desc, root.query);
+        return SettingsPage.row-visible(@tr("Language"), label + " " + desc,
+                                        SettingsPage.search-query);
     }
 
     out property <bool> has-matches:

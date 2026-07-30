@@ -252,6 +252,20 @@ msgstr "Rechercher dans les paramètres…"
 msgid "No matching settings"
 msgstr "Aucun paramètre correspondant"
 
+# ---- Settings page tabs ------------------------------------------------------
+#
+# Tab bar under the page title. "Playback" and "About" reuse the section-title
+# msgids further down, so only these three are new.
+
+msgid "Library"
+msgstr "Bibliothèque"
+
+msgid "Interface"
+msgstr "Interface"
+
+msgid "Services"
+msgstr "Services"
+
 # ---- Library Folders section ------------------------------------------------
 
 msgid "Library Folders"

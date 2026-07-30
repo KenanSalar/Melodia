@@ -1,0 +1,70 @@
+import { Theme } from "../../theme.slint";
+import { SettingsPage } from "../../globals/settings-page.slint";
+import { LibraryPage } from "pages/library-page.slint";
+import { PlaybackPage } from "pages/playback-page.slint";
+import { InterfacePage } from "pages/interface-page.slint";
+import { ServicesPage } from "pages/services-page.slint";
+import { AboutPage } from "pages/about-page.slint";
+
+// The Settings page's router: mounts either one tab or, while a search is
+// running, all five at once.
+//
+// Search deliberately escapes the tabs. Filtering only the selected tab
+// would answer "no matching settings" for a query whose row sits one tab
+// over — the failure mode that makes tabbed settings worse than a single
+// scroll. Mounting every page instead gives back the flat cross-category
+// list macOS System Settings and Windows 11 both fall back to, and it needs
+// no filtering logic of its own: each card already hides itself.
+//
+// Both modes mount the same five pages, so which card lives on which tab is
+// stated exactly once — in the page files. Search-mode ordering then falls
+// out of tab order for free, which means a result's position tells you where
+// the setting lives.
+//
+// `settings-view.slint` owns the page chrome around this: the header, the
+// tab bar, the scroll body and its overlay scrollbars.
+export component SettingsTabs inherits Rectangle {
+    in property <int> tab-index;
+    in property <bool> searching;
+
+    background: transparent;
+    horizontal-stretch: 1;
+    vertical-stretch: 0;
+
+    VerticalLayout {
+        spacing: Theme.pad-lg;
+
+        if root.searching: VerticalLayout {
+            spacing: Theme.pad-lg;
+
+            lib := LibraryPage {}
+            pb := PlaybackPage {}
+            ifc := InterfacePage {}
+            svc := ServicesPage {}
+            abt := AboutPage {}
+
+            // Only reachable here: outside search every card is visible, so
+            // there is nothing to report. Five terms rather than one per
+            // card, because each page folds its own.
+            if !lib.has-matches && !pb.has-matches && !ifc.has-matches
+                    && !svc.has-matches && !abt.has-matches: Rectangle {
+                height: 200px;
+                VerticalLayout {
+                    alignment: center;
+                    Text {
+                        text: @tr("No matching settings");
+                        horizontal-alignment: center;
+                        color: Theme.subtext0;
+                        font-size: Theme.font-size-md;
+                    }
+                }
+            }
+        }
+
+        if !root.searching && root.tab-index == SettingsPage.tab-library: LibraryPage {}
+        if !root.searching && root.tab-index == SettingsPage.tab-playback: PlaybackPage {}
+        if !root.searching && root.tab-index == SettingsPage.tab-interface: InterfacePage {}
+        if !root.searching && root.tab-index == SettingsPage.tab-services: ServicesPage {}
+        if !root.searching && root.tab-index == SettingsPage.tab-about: AboutPage {}
+    }
+}

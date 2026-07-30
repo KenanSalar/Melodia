@@ -56,6 +56,13 @@ pub struct ViewStateData {
     pub favorites_artists_collapsed: bool,
     /// Favorites view "Most Played" sub-section header toggle.
     pub favorites_most_played_collapsed: bool,
+    /// Settings page tab showing at last shutdown. Hydrated into
+    /// `SettingsPage.tab-idx` at startup, clamped against that global's
+    /// `tab-count` so a value written by a build with more tabs can't land
+    /// on a blank page. An `i32` rather than a fourth bool — the three
+    /// collapse flags above already sit at clippy's `struct_excessive_bools`
+    /// cap.
+    pub settings_tab: i32,
 }
 
 impl Default for ViewStateData {
@@ -70,6 +77,7 @@ impl Default for ViewStateData {
             artist_albums_collapsed: false,
             favorites_artists_collapsed: false,
             favorites_most_played_collapsed: false,
+            settings_tab: 0,
         }
     }
 }

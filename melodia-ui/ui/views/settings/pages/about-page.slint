@@ -1,0 +1,21 @@
+import { Theme } from "../../../theme.slint";
+import { UpdateSection } from "../update-section.slint";
+import { AboutSection } from "../about-section.slint";
+
+// About tab: which version is installed and how it gets to the next one.
+// Updates leads because it's the one a user comes here to act on; the
+// version/author/licence card is reference material below it.
+export component AboutPage inherits Rectangle {
+    background: transparent;
+    horizontal-stretch: 1;
+    vertical-stretch: 0;
+
+    out property <bool> has-matches: updates.has-matches || about.has-matches;
+
+    VerticalLayout {
+        spacing: Theme.pad-lg;
+
+        updates := UpdateSection {}
+        about := AboutSection {}
+    }
+}

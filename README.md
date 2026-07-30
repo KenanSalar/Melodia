@@ -129,7 +129,7 @@ MP3, FLAC, M4A/AAC, OGG/Vorbis, WAV, ALAC, AIFF
 ### System Integration
 - Scrobbling to **Last.fm** and **ListenBrainz** — connect either or both, report each qualifying play plus a live "now playing" status, and mirror your favorites to their loved/feedback tracks with a **per-service toggle** (each independent). Turning a service's loved-tracks sync on — or connecting it later while sync is on — **syncs your existing favorites automatically**, no need to re-toggle each heart. Plays and loves are held in a durable offline queue and submitted on reconnect
 - Optional **MusicBrainz auto-tagging** (opt-in, ListenBrainz-driven) — resolves each track's MusicBrainz Recording ID and writes it into your files, so "loved" favorites work on ListenBrainz even for an untagged library; runs automatically on new imports and on demand from Settings
-- **Discord Rich Presence** (opt-in, off by default) — shows **Listening to \<song\>** on your Discord profile with artist, album cover, a live progress bar, and a link button; updates on track change, pause, resume, seek and stop, and clears when playback stops or you quit. A **Hide while paused** option and an album-cover toggle live in Settings → Discord
+- **Discord Rich Presence** (opt-in, off by default) — shows **Listening to \<song\>** on your Discord profile with artist, album cover, a live progress bar, and a link button; updates on track change, pause, resume, seek and stop, and clears when playback stops or you quit. A **Hide while paused** option and an album-cover toggle live in Settings → Services → Discord
 - OS media controls (Linux: MPRIS2, Windows: SMTC)
 - Always-on-top support (Linux: KDE via KWin D-Bus, GNOME via shell extension)
 - Window state persistence (size, position, maximized)
@@ -269,7 +269,7 @@ cargo test                                      # run tests
 > `MELODIA_DISCORD_APP_ID` compile-time override.
 
 > **Tip — cleaning up a loosely-tagged library.**
-> The optional MusicBrainz auto-tagging (Settings → Scrobbling → *Add MusicBrainz
+> The optional MusicBrainz auto-tagging (Settings → Services → Scrobbling → *Add MusicBrainz
 > IDs to your music*) resolves each track's MusicBrainz Recording ID by looking up
 > its **artist + title** on ListenBrainz, so it only works when your files already
 > carry reasonably correct tags. For music ripped from YouTube or otherwise loosely

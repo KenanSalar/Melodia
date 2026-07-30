@@ -40,6 +40,7 @@ pub mod scrobbling_settings;
 pub mod search;
 pub mod section_state;
 pub mod settings_bind;
+pub mod settings_page;
 pub mod sleep_timer;
 pub mod track_list_view;
 pub mod track_sort;

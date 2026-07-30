@@ -64,7 +64,7 @@ pub use updates::{
 pub use view::{
     get_view_sort, set_artist_albums_collapsed, set_browse_path, set_favorites_artists_collapsed,
     set_favorites_most_played_collapsed, set_last_detail_id, set_last_nav_index, set_locale,
-    set_overflow_button, set_view_sort, snap_to_preset, update_view_columns,
+    set_overflow_button, set_settings_tab, set_view_sort, snap_to_preset, update_view_columns,
 };
 pub use visualizer::{set_visualizer_enabled, set_visualizer_style};
 

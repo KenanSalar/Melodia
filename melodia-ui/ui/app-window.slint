@@ -33,6 +33,7 @@ import { Player } from "globals/player.slint";
 import { Playlists, PlaylistDetail } from "globals/playlists.slint";
 import { Queue, NowPlaying } from "globals/queue.slint";
 import { Search } from "globals/search.slint";
+import { SettingsPage } from "globals/settings-page.slint";
 import { WindowChrome, MiniPlayer, CompositeScroll, PopupHighlight } from "globals/shell.slint";
 import { Tracks, Browse, RowCovers } from "globals/tracks.slint";
 import { MelodiaUpdater, Notifications } from "globals/updater.slint";
@@ -72,7 +73,7 @@ import { ViewTransition } from "components/view-transition.slint";
 
 // Re-export so Rust can mention these from `slint::include_modules!`.
 export {
-    Theme, Settings, Player, HeroBackdrop, Equalizer, ReplayGain, Visualizer, ScrobbleUi, SmartEditor, TagEditor, Nav, CompositeScroll, MiniPlayer, Tracks, Browse, LibrarySettings, Dialog, WindowChrome, Queue, Notifications, NowPlaying, Favorites, RecentlyPlayed, Albums, AlbumDetail, Artists, ArtistDetail, Genres, GenreDetail, Playlists, PlaylistDetail, PopupHighlight, Search, MelodiaUpdater, RowCovers,
+    Theme, Settings, SettingsPage, Player, HeroBackdrop, Equalizer, ReplayGain, Visualizer, ScrobbleUi, SmartEditor, TagEditor, Nav, CompositeScroll, MiniPlayer, Tracks, Browse, LibrarySettings, Dialog, WindowChrome, Queue, Notifications, NowPlaying, Favorites, RecentlyPlayed, Albums, AlbumDetail, Artists, ArtistDetail, Genres, GenreDetail, Playlists, PlaylistDetail, PopupHighlight, Search, MelodiaUpdater, RowCovers,
     TrackSummaryRow, TrackListRow, PlayerVm, QueueVm, QueueRow, FolderListRow,
     BrowseFolderRow, BreadcrumbRow, NotificationRow, TrackMetaRow,
     AlbumRow, AlbumGridRow, ArtistRow, ArtistGridRow,
@@ -179,8 +180,8 @@ export component AppWindow inherits Window {
         // outgoing composite view left behind (see `CompositeScroll.reset`).
         CompositeScroll.reset();
         if (self.watched-nav-idx != 9) {
-            Settings.search-query = "";
-            Settings.blur-search-tick += 1;
+            SettingsPage.search-query = "";
+            SettingsPage.blur-search-tick += 1;
         }
         // Re-grab global keyboard focus on every section change. The
         // outgoing view may hold focus in a TextInput about to be

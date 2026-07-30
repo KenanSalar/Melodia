@@ -240,6 +240,7 @@ pub fn install_library_settings_and_friends(
     ui::file_watching::install(app, state, &notifications);
     ui::updater_settings::install(app, state);
     ui::about::install(app, state);
+    ui::settings_page::install(app, state);
     Ok(notifications)
 }
 
@@ -338,6 +339,7 @@ pub fn hydrate_ui_from_settings(
     let fav = app.global::<Favorites>();
     fav.set_artists_collapsed(vs.favorites_artists_collapsed);
     fav.set_most_played_collapsed(vs.favorites_most_played_collapsed);
+    ui::settings_page::seed_tab(app, vs.settings_tab);
 }
 
 /// The Slint side already clamps `Nav.sidebar-width` to

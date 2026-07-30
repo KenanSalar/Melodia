@@ -305,25 +305,8 @@ export global Settings {
     in-out property <int>  language-idx;
     callback language-changed(int);
 
-    // Live filter for the Settings page. Empty string ⇒ everything visible.
-    // Bound two-way to the SearchBar in `ui/views/settings-view.slint`;
-    // each section reads it via the inherited `query` prop and hides
-    // SettingRows whose label/description don't match. Cleared on
-    // nav-away from the Settings page (handler in `ui/app-window.slint`).
-    in-out property <string> search-query;
-
-    // Counter the host bumps to release keyboard focus from the SearchBar's
-    // TextInput — same pattern as `Tracks.blur-search-tick`. Used when
-    // navigating away from the page so the next keystroke doesn't land in
-    // a hidden field.
-    in-out property <int> blur-search-tick: 0;
-
-    // Pure case-insensitive substring test. Slint 1.16 has no `.contains()`
-    // on string, so the substring check is wired in Rust
-    // (`src/ui/appearance/install.rs`). Used inside `visible:` /
-    // `if`-block expressions in the section files; Slint's reactive
-    // dependency tracking handles re-evaluation on `search-query` changes.
-    pure callback matches(string /*haystack*/, string /*needle*/) -> bool;
+    // The page's search filter and its row-visibility rule live on
+    // `SettingsPage` (`globals/settings-page.slint`), not here.
 
     // About section — opens the project's source repository
     // (`CARGO_PKG_REPOSITORY`) in the system browser. Action callback

@@ -1,5 +1,6 @@
 import { Theme } from "../../theme.slint";
 import { Settings } from "../../settings.slint";
+import { SettingsPage } from "../../globals/settings-page.slint";
 import { Dialog } from "../../globals/dialog.slint";
 import { SectionCard } from "../../components/settings/section-card.slint";
 import { SectionDivider } from "../../components/settings/section-divider.slint";
@@ -31,14 +32,11 @@ export component WindowChromeSection inherits Rectangle {
     horizontal-stretch: 1;
     vertical-stretch: 0;
 
-    in property <string> query: Settings.search-query;
-
     out property <bool> native-titlebar: Theme.use-native-titlebar;
 
     pure function row-visible(label: string, desc: string) -> bool {
-        return root.query == ""
-            || Settings.matches(@tr("Window"), root.query)
-            || Settings.matches(label + " " + desc, root.query);
+        return SettingsPage.row-visible(@tr("Window"), label + " " + desc,
+                                        SettingsPage.search-query);
     }
 
     property <bool> show-native-titlebar: row-visible(@tr("Native Title Bar"),

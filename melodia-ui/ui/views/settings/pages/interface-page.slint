@@ -1,0 +1,30 @@
+import { Theme } from "../../../theme.slint";
+import { AppearanceSection } from "../appearance-section.slint";
+import { WindowChromeSection } from "../window-chrome-section.slint";
+import { OverflowMenuSection } from "../overflow-menu-section.slint";
+import { LanguageSection } from "../language-section.slint";
+
+// Interface tab: everything about how the app presents itself — palette,
+// window chrome and tray, which transport buttons the player bar hides, and
+// the UI language.
+//
+// Named "Interface" rather than "Appearance" so the tab and the Appearance
+// card inside it don't share a label; no card had to be renamed for it.
+export component InterfacePage inherits Rectangle {
+    background: transparent;
+    horizontal-stretch: 1;
+    vertical-stretch: 0;
+
+    out property <bool> has-matches:
+        appearance.has-matches || window.has-matches
+        || overflow.has-matches || language.has-matches;
+
+    VerticalLayout {
+        spacing: Theme.pad-lg;
+
+        appearance := AppearanceSection {}
+        window := WindowChromeSection {}
+        overflow := OverflowMenuSection {}
+        language := LanguageSection {}
+    }
+}

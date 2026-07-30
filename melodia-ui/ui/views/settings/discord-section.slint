@@ -1,4 +1,5 @@
 import { Settings } from "../../settings.slint";
+import { SettingsPage } from "../../globals/settings-page.slint";
 import { SectionCard } from "../../components/settings/section-card.slint";
 import { SectionDivider } from "../../components/settings/section-divider.slint";
 import { SettingRow } from "../../components/settings/setting-row.slint";
@@ -18,12 +19,9 @@ export component DiscordSection inherits Rectangle {
     horizontal-stretch: 1;
     vertical-stretch: 0;
 
-    in property <string> query: Settings.search-query;
-
     pure function row-visible(label: string, desc: string) -> bool {
-        return root.query == ""
-            || Settings.matches("Discord", root.query)
-            || Settings.matches(label + " " + desc, root.query);
+        return SettingsPage.row-visible("Discord", label + " " + desc,
+                                        SettingsPage.search-query);
     }
 
     // The sub-option labels are folded into the search text so matching

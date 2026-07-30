@@ -1,0 +1,127 @@
+import { Theme } from "../../theme.slint";
+import { MaterialIcon } from "../material-icon.slint";
+import { Tooltip } from "../tooltip.slint";
+
+// One tab in a SettingsTabBar. Lives in this file (not exported) because
+// it's only useful as a child of the bar.
+//
+// The selected treatment deliberately mirrors a selected sidebar row —
+// `surface1` fill, accent icon at FILL=1, weight-600 label — rather than the
+// accent-filled `Chip` used by the ChipGroups *inside* the settings rows. The
+// bar navigates; the chips configure. Reading as two different things is the
+// point.
+component SettingsTab inherits Rectangle {
+    in property <string> label;
+    in property <string> icon;
+    in property <bool>   selected;
+    // Icon-only mode. The label is dropped rather than elided so five tabs
+    // still fit once the content panel drops below the page's width clamp.
+    in property <bool>   compact;
+
+    callback clicked();
+
+    height: 36px;
+    horizontal-stretch: 0;
+
+    property <length> glyph-size: 22px;
+    // Compact tabs are squares: pad the glyph out to the tab's own height and
+    // the width follows from the content, with nothing to pin.
+    property <length> compact-pad: (root.height - root.glyph-size) / 2;
+
+    border-radius: Theme.radius-md;
+    background: root.selected
+        ? Theme.surface1
+        // A dimmer rung of the selected fill, not `surface2`: surface2 is
+        // *brighter* than surface1, so using it here would make a hovered
+        // tab louder than the selected one.
+        : (touch.has-hover ? Theme.surface1.with-alpha(0.45) : transparent);
+    animate background { duration: Theme.dur-fast; easing: ease-in-out; }
+
+    HorizontalLayout {
+        padding-left: root.compact ? root.compact-pad : Theme.pad-md;
+        padding-right: root.compact ? root.compact-pad : Theme.pad-md;
+        spacing: Theme.pad-sm;
+        alignment: center;
+
+        VerticalLayout {
+            alignment: center;
+            MaterialIcon {
+                name: root.icon;
+                icon-size: root.glyph-size;
+                icon-color: root.selected ? Theme.accent : Theme.text;
+                filled: root.selected;
+            }
+        }
+
+        if !root.compact: VerticalLayout {
+            alignment: center;
+            Text {
+                text: root.label;
+                color: root.selected ? Theme.text : Theme.subtext0;
+                font-size: Theme.font-size-md;
+                font-weight: root.selected ? 600 : 500;
+                vertical-alignment: center;
+            }
+        }
+    }
+
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+
+    // Only in compact mode is the icon on its own; with a label there's
+    // nothing left to explain. Anchored below because the bar sits near the
+    // top of the window, where an above-tooltip would cover the page title.
+    if root.compact: Tooltip {
+        text: root.label;
+        hovered: touch.has-hover;
+        host-width: root.width;
+        host-height: root.height;
+        below: true;
+    }
+}
+
+// Segmented tab bar for the Settings page. Data-agnostic — it takes parallel
+// label/icon arrays and reports the picked index, in the same shape as
+// ChipGroup / Dropdown / ColorDotGrid, and knows nothing about which tabs
+// exist.
+//
+// `labels` must arrive as an inline `[@tr("…"), …]` literal at the call site:
+// `@tr` registers msgids at codegen, so an array populated from Rust would
+// render untranslated.
+export component SettingsTabBar inherits Rectangle {
+    in property <[string]> labels;
+    in property <[string]> icons;
+    in property <bool> compact;
+    // Two-way, per the "components that write their own in-out property
+    // orphan a one-way binding" pitfall.
+    in-out property <int> selected-index;
+
+    callback selected(int);
+
+    // Track. No `clip` — a rounded clip over text renders the subtree to an
+    // offscreen layer and upscales it on HiDPI. The tabs are inset by the
+    // padding and carry their own smaller radius, so nothing needs clipping.
+    height: 44px;
+    horizontal-stretch: 0;
+    background: Theme.surface0;
+    border-radius: Theme.radius-lg;
+
+    HorizontalLayout {
+        padding: Theme.pad-xs;
+        spacing: Theme.pad-xs;
+        alignment: start;
+
+        for tab-label[i] in root.labels: SettingsTab {
+            label: tab-label;
+            icon: root.icons[i];
+            selected: i == root.selected-index;
+            compact: root.compact;
+            clicked => {
+                root.selected-index = i;
+                root.selected(i);
+            }
+        }
+    }
+}

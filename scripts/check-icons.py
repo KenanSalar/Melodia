@@ -34,10 +34,11 @@ OUT_FILLED = os.path.join(UI_DIR, "assets", "fonts", "MaterialSymbolsRoundedFill
 
 TOKEN = re.compile(r'"([a-z][a-z0-9_]*)"')
 # Sinks that carry an icon ligature name: MaterialIcon `name`, wrapper `icon`/
-# `glyph`/`*-icon` props, raw `text:` on a Material-Symbols Text, and `return "x"`
+# `glyph`/`*-icon` props, the plural `icons:` array a repeater feeds from
+# (SettingsTabBar), raw `text:` on a Material-Symbols Text, and `return "x"`
 # inside icon-name helper functions (e.g. volume-icon-name()).
 SINK = re.compile(
-    r'(?:\b(?:name|icon|glyph|text|leading-icon|trailing-icon|icon-name)\s*:'
+    r'(?:\b(?:name|icons|icon|glyph|text|leading-icon|trailing-icon|icon-name)\s*:'
     r'|\breturn)(.*?);',
     re.S,
 )

@@ -1,22 +1,17 @@
 import { ScrollView } from "std-widgets.slint";
 import { Theme } from "../theme.slint";
-import { Settings } from "../settings.slint";
+import { SettingsPage } from "../globals/settings-page.slint";
 import { OverlayScrollbar } from "../components/overlay-scrollbar.slint";
 import { SearchBar } from "../components/search-bar.slint";
-import { LibrarySection } from "settings/library-section.slint";
-import { AppearanceSection } from "settings/appearance-section.slint";
-import { WindowChromeSection } from "settings/window-chrome-section.slint";
-import { OverflowMenuSection } from "settings/overflow-menu-section.slint";
-import { LanguageSection } from "settings/language-section.slint";
-import { PlaybackSection } from "settings/playback-section.slint";
-import { ScrobblingSection } from "settings/scrobbling-section.slint";
-import { DiscordSection } from "settings/discord-section.slint";
-import { FileWatchingSection } from "settings/file-watching-section.slint";
-import { UpdateSection } from "settings/update-section.slint";
-import { AboutSection } from "settings/about-section.slint";
+import { SettingsTabBar } from "../components/settings/settings-tab-bar.slint";
+import { SettingsTabs } from "settings/settings-tabs.slint";
 
-// Settings host page. Mirrors Tauri's `pages/Settings.tsx` shape: a
-// vertically scrolling, width-clamped column of section cards.
+// Settings host page: a pinned header over a vertically scrolling,
+// width-clamped body.
+//
+// This file owns only the page chrome — title, search bar, tab bar, the
+// scroll body and its overlay scrollbars. Which cards live on which tab is
+// `settings/settings-tabs.slint`'s job.
 //
 // Scrollbar layout matches the Tracks view: the inner `ScrollView`'s
 // built-in bars are hidden (`always-off` on both axes) and a custom
@@ -38,8 +33,44 @@ export component SettingsView inherits Rectangle {
     // TouchArea, button, chip, or input in front of it gets first crack at
     // the click.
     TouchArea {
-        clicked => { Settings.blur-search-tick += 1; }
+        clicked => { SettingsPage.blur-search-tick += 1; }
     }
+
+    property <bool> searching: SettingsPage.search-query != "";
+
+    // Panel width, mirrored imperatively rather than read live. A binding
+    // that reads `root.width` and feeds a child's size is evaluated inside
+    // the shell's own layout pass and re-enters it — which surfaces as a
+    // `RefCell already borrowed` panic in parley's text measurement, blamed
+    // on whichever sibling happens to own text. Same fix as
+    // `layout/now-playing-bar.slint`'s `bar-w`.
+    property <length> page-w: 900px;
+    changed width => { self.page-w = self.width; }
+
+    // Below this the tab bar drops its labels. Sized off the *longest*
+    // catalogue rather than English: five tabs cost 54 px of chrome each plus
+    // their text, which is ~570 px in English but ~670 px in Italian
+    // ("Riproduzione" / "Interfaccia" / "Informazioni"). Page padding takes
+    // 32 px, so 780 px leaves ~75 px of headroom over the worst case. There is
+    // no elide fallback — a Text sized by its own content never elides — so
+    // this threshold is the only thing standing between a long locale and a
+    // clipped last tab. Re-check it when adding a locale.
+    //
+    // Erring toward icon-only is the safe direction: the tabs keep their
+    // tooltips, and the miniplayer takes over at a 550 px window anyway, so
+    // the band this covers is narrow.
+    property <bool> compact-tabs: root.page-w < 780px;
+
+    // A fresh tab, or entering/leaving search, starts at the top. Without
+    // this, switching from a tall tab to a short one leaves the viewport
+    // parked past the new content. Mirrored into locals because Slint's
+    // `changed` rejects path expressions on globals. The write is
+    // imperative on purpose — a `<=>` on `viewport-y` would disable
+    // Slint's own out-of-bounds correction.
+    property <int> watched-tab: SettingsPage.tab-idx;
+    changed watched-tab => { sv.viewport-y = 0px; }
+    property <bool> watched-searching: root.searching;
+    changed watched-searching => { sv.viewport-y = 0px; }
 
     VerticalLayout {
         padding-top: Theme.pad-lg;
@@ -48,12 +79,13 @@ export component SettingsView inherits Rectangle {
         padding-right: Theme.pad-lg;
         spacing: Theme.pad-md;
 
-        // Page header — title on the left, search bar flush right. Lives
-        // outside the inner ScrollView so it stays pinned while sections
-        // scroll. The SearchBar is the same reusable component the Tracks
-        // view mounts; visibility filtering for each section is driven
-        // reactively from `Settings.search-query` (no `edited` callback
-        // needed, unlike Tracks which throttles model rebuilds).
+        // Page header — title on the left, search bar flush right, tab bar
+        // on the row below. All of it lives outside the inner ScrollView so
+        // it stays pinned while the body scrolls. The SearchBar is the same
+        // reusable component the Tracks view mounts; visibility filtering
+        // for each section is driven reactively from
+        // `SettingsPage.search-query` (no `edited` callback needed, unlike
+        // Tracks which throttles model rebuilds).
         HorizontalLayout {
             spacing: Theme.pad-md;
             Text {
@@ -67,9 +99,31 @@ export component SettingsView inherits Rectangle {
             VerticalLayout {
                 alignment: center;
                 SearchBar {
-                    text <=> Settings.search-query;
+                    text <=> SettingsPage.search-query;
                     placeholder: @tr("Search settings…");
-                    blur-trigger: Settings.blur-search-tick;
+                    blur-trigger: SettingsPage.blur-search-tick;
+                }
+            }
+        }
+
+        // Tab bar. Stays mounted while a search is running — hiding it would
+        // shift the body on the first keystroke, and leaving it live gives
+        // the user an obvious way out of search: picking a tab clears the
+        // query. The label array must stay an inline literal so `@tr`
+        // registers the msgids at codegen, and its order has to match the
+        // `tab-*` indices on `SettingsPage`.
+        HorizontalLayout {
+            alignment: start;
+            SettingsTabBar {
+                labels: [@tr("Library"), @tr("Playback"), @tr("Interface"),
+                         @tr("Services"), @tr("About")];
+                icons: ["library_music", "play_circle", "palette", "link", "info"];
+                compact: root.compact-tabs;
+                selected-index <=> SettingsPage.tab-idx;
+                selected(i) => {
+                    SettingsPage.search-query = "";
+                    SettingsPage.blur-search-tick += 1;
+                    SettingsPage.tab-changed(i);
                 }
             }
         }
@@ -96,67 +150,23 @@ export component SettingsView inherits Rectangle {
 
                     VerticalLayout {
                         spacing: Theme.pad-lg;
-                        // Tauri order: Library, then Appearance (palette
-                        // — theme/variant/accent/style), Window
-                        // (titlebar/match-unfocused/corner-radius) and
-                        // Player Bar (overflow menu) sit between
-                        // Appearance and Language. Each section gets an
-                        // id so the no-results placeholder below can
-                        // read its `has-matches` to decide whether
-                        // every section is hidden.
-                        lib-sec  := LibrarySection {}
-                        app-sec  := AppearanceSection {}
-                        wc-sec   := WindowChromeSection {}
-                        ovf-sec  := OverflowMenuSection {}
-                        lang-sec := LanguageSection {}
-                        pb-sec   := PlaybackSection {}
-                        scrob-sec := ScrobblingSection {}
-                        disc-sec := DiscordSection {}
-                        fw-sec   := FileWatchingSection {}
-                        upd-sec  := UpdateSection {}
-                        about-sec := AboutSection {}
 
-                        // No-results placeholder — only mounted when a
-                        // search query is non-empty AND no section claims
-                        // a match. The SearchBar above stays visible
-                        // regardless so the user can edit/clear the query.
-                        if Settings.search-query != ""
-                                && !lib-sec.has-matches
-                                && !app-sec.has-matches
-                                && !wc-sec.has-matches
-                                && !ovf-sec.has-matches
-                                && !lang-sec.has-matches
-                                && !pb-sec.has-matches
-                                && !scrob-sec.has-matches
-                                && !disc-sec.has-matches
-                                && !fw-sec.has-matches
-                                && !upd-sec.has-matches
-                                && !about-sec.has-matches: Rectangle {
-                            background: transparent;
-                            height: 200px;
-                            VerticalLayout {
-                                alignment: center;
-                                Text {
-                                    text: @tr("No matching settings");
-                                    horizontal-alignment: center;
-                                    color: Theme.subtext0;
-                                    font-size: Theme.font-size-md;
-                                }
-                            }
+                        SettingsTabs {
+                            tab-index: SettingsPage.tab-idx;
+                            searching: root.searching;
                         }
 
                         // Trailing spacer — absorbs any surplus vertical
-                        // space when filtering hides most sections. Without
-                        // it, the column's surplus gets distributed across
-                        // remaining children (including the visible
-                        // SectionCard), stretching individual rows by their
-                        // share of the surplus. Pinning a `vertical-stretch:
-                        // 1` Rectangle at the bottom forces the surplus to
-                        // collect there instead, so visible sections render
-                        // at their natural height regardless of how many are
-                        // hidden. Outside search mode (all sections visible
-                        // and tall enough to need scrolling) the spacer
-                        // collapses to 0 — nothing changes.
+                        // space when the mounted tab is shorter than the
+                        // viewport. Without it, the column's surplus gets
+                        // distributed across remaining children (including
+                        // the visible SectionCard), stretching individual
+                        // rows by their share of the surplus. Pinning a
+                        // `vertical-stretch: 1` Rectangle at the bottom
+                        // forces the surplus to collect there instead. It
+                        // earns its keep more now than it did on the flat
+                        // page: a one-card tab like Library rarely fills
+                        // the viewport, where the full eleven always did.
                         Rectangle {
                             vertical-stretch: 1;
                         }
