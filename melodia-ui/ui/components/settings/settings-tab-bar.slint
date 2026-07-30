@@ -5,11 +5,11 @@ import { Tooltip } from "../tooltip.slint";
 // One tab in a SettingsTabBar. Lives in this file (not exported) because
 // it's only useful as a child of the bar.
 //
-// The selected treatment deliberately mirrors a selected sidebar row —
-// `surface1` fill, accent icon at FILL=1, weight-600 label — rather than the
-// accent-filled `Chip` used by the ChipGroups *inside* the settings rows. The
-// bar navigates; the chips configure. Reading as two different things is the
-// point.
+// The selected treatment deliberately mirrors a selected sidebar row — a
+// raised fill with an accent icon at FILL=1 and a weight-600 label — rather
+// than the accent-filled `Chip` used by the ChipGroups *inside* the settings
+// rows. The bar navigates; the chips configure. Reading as two different
+// things is the point.
 component SettingsTab inherits Rectangle {
     in property <string> label;
     in property <string> icon;
@@ -29,12 +29,13 @@ component SettingsTab inherits Rectangle {
     property <length> compact-pad: (root.height - root.glyph-size) / 2;
 
     border-radius: Theme.radius-md;
+    // One rung per state up the standard surface ladder, no derived alphas:
+    // the `surface0` track shows through at rest, hover lifts to `surface1`
+    // and the selected tab sits a rung above that at `surface2`. Same
+    // resting→hover step a `Chip` takes, so the two read as one family.
     background: root.selected
-        ? Theme.surface1
-        // A dimmer rung of the selected fill, not `surface2`: surface2 is
-        // *brighter* than surface1, so using it here would make a hovered
-        // tab louder than the selected one.
-        : (touch.has-hover ? Theme.surface1.with-alpha(0.45) : transparent);
+        ? Theme.surface2
+        : (touch.has-hover ? Theme.surface1 : transparent);
     animate background { duration: Theme.dur-fast; easing: ease-in-out; }
 
     HorizontalLayout {
@@ -57,7 +58,11 @@ component SettingsTab inherits Rectangle {
             alignment: center;
             Text {
                 text: root.label;
-                color: root.selected ? Theme.text : Theme.subtext0;
+                // Full-strength on every tab, unlike a sidebar row's
+                // `subtext0` resting label: these five are the page's primary
+                // navigation and all of them stay legible. Weight, fill and
+                // the accent icon carry the selected state on their own.
+                color: Theme.text;
                 font-size: Theme.font-size-md;
                 font-weight: root.selected ? 600 : 500;
                 vertical-alignment: center;

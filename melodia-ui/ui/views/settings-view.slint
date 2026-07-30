@@ -112,8 +112,12 @@ export component SettingsView inherits Rectangle {
         // query. The label array must stay an inline literal so `@tr`
         // registers the msgids at codegen, and its order has to match the
         // `tab-*` indices on `SettingsPage`.
+        // Centred rather than flush-left with the page title: the body below
+        // is a centred 640–1100 px column, so a centred bar shares its axis
+        // and the two read as one stack. (The title and search bar stay full
+        // width — they're page chrome, not part of the column.)
         HorizontalLayout {
-            alignment: start;
+            alignment: center;
             SettingsTabBar {
                 labels: [@tr("Library"), @tr("Playback"), @tr("Interface"),
                          @tr("Services"), @tr("About")];
