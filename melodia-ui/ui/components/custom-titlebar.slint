@@ -6,10 +6,11 @@ import { MacOsTitleBarCluster } from "macos-titlebar-cluster.slint";
 
 // Per-button cell. 40 px wide, full titlebar height. Hover paints a
 // rounded background; the close button overrides `hover-bg` /
-// `hover-fg` to flash Catppuccin red. Bespoke rather than reusing
-// `IconButton` because the titlebar buttons are rectangular (not
-// circular) and need a `hover-bg` knob that `IconButton` doesn't
-// expose. Kept private to this file — no reuse outside the titlebar.
+// `hover-fg` to flash the active theme's danger red. Bespoke rather
+// than reusing `IconButton` because the titlebar buttons are
+// rectangular (not circular) and need a `hover-bg` knob that
+// `IconButton` doesn't expose. Kept private to this file — no reuse
+// outside the titlebar.
 component TitleBarButton inherits Rectangle {
     in property <string> icon;
     in property <string> tooltip-text;
@@ -152,10 +153,11 @@ export component CustomTitleBar inherits Rectangle {
             icon: "close";
             tooltip-text: @tr("Close");
             hover-bg: Theme.danger;
-            // On hover, the close button uses the Catppuccin mantle as
-            // its glyph colour for maximum contrast against the red
-            // fill — matches Tauri's `.closeButton:hover` rule.
-            hover-fg: Theme.mantle;
+            // Derived from the fill it lands on, not from a chrome token:
+            // `Theme.mantle` used to stand in here and it tracks the theme's
+            // background rather than the red, so GNOME Dark (dark red on a
+            // dark mantle) dropped the glyph to ~2:1.
+            hover-fg: Theme.ink-on(Theme.danger);
             clicked => { WindowChrome.close-window(); }
         }
         if Theme.titlebar-button-side == 1 && Theme.titlebar-button-style == 0: TitleBarButton {
@@ -252,7 +254,7 @@ export component CustomTitleBar inherits Rectangle {
             icon: "close";
             tooltip-text: @tr("Close");
             hover-bg: Theme.danger;
-            hover-fg: Theme.mantle;
+            hover-fg: Theme.ink-on(Theme.danger);
             clicked => { WindowChrome.close-window(); }
         }
     }

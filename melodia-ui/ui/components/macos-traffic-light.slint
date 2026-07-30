@@ -42,13 +42,10 @@ export component MacOsTrafficLight inherits Rectangle {
     // palette rather than hardcoding macOS's #D5D5D5.
     property <brush> fill: Theme.window-focused ? root.circle-color : Theme.overlay0;
 
-    // The glyph has to contrast against whatever `fill` resolved to, which is
-    // why this is derived here and not passed in: the fill can be any of three
-    // semantic hues in any of ~20 palettes, plus the unfocused grey, and no
-    // single Theme brush is right for all of them. `Theme.accent-text` used to
-    // be handed down for the job, but that token answers a question about the
-    // *accent* — pick Latte + the Yellow accent and it puts a near-black glyph
-    // on the dark red close circle.
+    // Derived here rather than handed down: the fill can be any of three
+    // semantic hues in any of ~20 palettes, plus the unfocused grey, so no
+    // single Theme brush is right for all of them. `ink-on` answers per fill —
+    // its declaration in `theme.slint` carries the rest of the reasoning.
     property <brush> glyph-color: Theme.ink-on(root.fill);
 
     callback clicked();

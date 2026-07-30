@@ -128,6 +128,25 @@ fn on_accent_picks_dark_text_for_light_accent() {
     assert_eq!(on_accent_hex(0x00000000), 0x00ffffff);
 }
 
+/// `theme.slint`'s `Theme.ink-on` is a hand-copy of `on_accent_hex`, for the
+/// surfaces whose fill isn't the accent. Nothing links the two, so pin the copy
+/// — a silent divergence here is exactly the bug that put `accent-text` on the
+/// destructive confirm button.
+#[test]
+fn theme_slint_ink_on_matches_on_accent_hex() {
+    const THEME_SLINT: &str = include_str!("../../../melodia-ui/ui/theme.slint");
+
+    // Normalized so re-wrapping the Slint expression doesn't fail the test.
+    let declaration = THEME_SLINT.split_whitespace().collect::<Vec<_>>().join(" ");
+    assert!(
+        declaration.contains(
+            "return (0.2126 * fill.red + 0.7152 * fill.green + 0.0722 * fill.blue) \
+             / 255 > 0.5 ? #1e1e2e : #ffffff;"
+        ),
+        "theme.slint's `ink-on` drifted from `on_accent_hex` — update both or neither"
+    );
+}
+
 #[test]
 fn resolve_system_variant_picks_dark_or_light_pair() {
     // Catppuccin maps System → Mocha (dark) / Latte (light).
