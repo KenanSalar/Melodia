@@ -277,6 +277,18 @@ export component AppWindow inherits Window {
         shortcut-scope.grab-focus();
     }
 
+    // The queue sheet is the odd one out: it mounts no view — it's permanent, and
+    // only animates in — but its Esc / Ctrl+A live in the scope (see
+    // `layout/shortcut-scope.slint`), and nothing moves focus when it opens. The
+    // bar button and the overflow entry are both TouchArea clicks, so a filter
+    // SearchBar keeps the keyboard behind the sheet's backdrop and swallows the
+    // `a`. Same reasoning as `watched-dialog-kind` above; the sheet has nothing
+    // focusable of its own, and the close leg wants focus back here anyway.
+    property <bool> watched-queue-open: Queue.open;
+    changed watched-queue-open => {
+        shortcut-scope.grab-focus();
+    }
+
     // The responsive full-UI ↔ miniplayer swap. Owns the size thresholds, the
     // two-phase fade, and the writes into the `MiniPlayer` global — see
     // `components/mini-player-switch.slint`. Fed the live window size, since a
@@ -397,10 +409,10 @@ export component AppWindow inherits Window {
         clip: true;
 
         // Global keyboard shortcuts. Wraps the entire main layout (titlebar +
-        // sidebar + content + now-playing-bar) so unhandled keys from child
-        // scopes — notably the QueueSheet's own FocusScope — bubble up and land
-        // here. The bindings, the volume-commit debounce and the focus contract
-        // all live in `layout/shortcut-scope.slint`.
+        // sidebar + content + now-playing-bar), and is the only FocusScope in
+        // the tree — every key that a focused TextInput doesn't consume itself
+        // lands here directly. The bindings, the volume-commit debounce and the
+        // focus contract all live in `layout/shortcut-scope.slint`.
         shortcut-scope := ShortcutScope {
             width: 100%;
             height: 100%;

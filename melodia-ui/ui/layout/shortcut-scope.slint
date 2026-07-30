@@ -2,7 +2,7 @@ import { Dialog } from "../globals/dialog.slint";
 import { Nav } from "../globals/nav.slint";
 import { Player } from "../globals/player.slint";
 import { Queue } from "../globals/queue.slint";
-import { WindowChrome } from "../globals/shell.slint";
+import { MiniPlayer, WindowChrome } from "../globals/shell.slint";
 
 // The app's global keyboard shortcuts, and the focus scope that catches them.
 //
@@ -99,6 +99,15 @@ export component ShortcutScope inherits FocusScope {
         }
     }
 
+    // `Queue.open` on its own doesn't mean the sheet is on screen: the
+    // miniplayer swap unmounts the whole full-UI branch — sheet
+    // included — without touching the flag (see
+    // `views/queue-sheet.slint`), so both queue bindings below take the
+    // mini state too. `MiniPlayer.active` leads the mount's own
+    // `mini-switch.render-active` by a beat, so the two keys go dead
+    // slightly early during the fade — the harmless direction.
+    property <bool> queue-sheet-up: Queue.open && !MiniPlayer.active;
+
     key-pressed(ev) => {
         // Escape priority chain: Dialog cancel > Queue sheet >
         // Now Playing close > drop. The queue sheet used to own
@@ -117,7 +126,7 @@ export component ShortcutScope inherits FocusScope {
                 Dialog.open = false;
                 return accept;
             }
-            if (Queue.open) {
+            if (root.queue-sheet-up) {
                 // Clear a selection first, close only on the
                 // second press (Tauri behaviour).
                 if (Queue.selected-count > 0) {
@@ -201,7 +210,7 @@ export component ShortcutScope inherits FocusScope {
             // sheet is up; the `Dialog.open` guard above keeps
             // it from firing behind a modal, which the sheet's
             // old nested scope got wrong.
-            if (ev.text == "a" && Queue.open) {
+            if (ev.text == "a" && root.queue-sheet-up) {
                 Queue.select-all();
                 return accept;
             }
@@ -245,7 +254,12 @@ export component ShortcutScope inherits FocusScope {
         if (ev.text == "s") { Player.toggle-shuffle();  return accept; }
         if (ev.text == "r") { Player.cycle-repeat();    return accept; }
 
-        if (ev.text == "q") {
+        // Also mini-gated, and for a sharper reason than the two
+        // bindings above: arming `Queue.open` while the sheet is
+        // unmounted leaves nothing to fire `open-changed`, so the
+        // remount seeds `watched-open` already-true and Rust never
+        // builds the rows — the sheet would slide up empty.
+        if (ev.text == "q" && !MiniPlayer.active) {
             Queue.open = !Queue.open;
             return accept;
         }
