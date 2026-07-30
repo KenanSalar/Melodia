@@ -93,7 +93,7 @@ component TitleBarButton inherits Rectangle {
     }
 }
 
-// Custom titlebar — 32 px tall, Catppuccin mantle background. Mirrors
+// Custom titlebar — 32 px tall, `Theme.mantle` background. Mirrors
 // Tauri's `TitleBar.tsx` (logo + title on one side, drag region in the
 // middle, decoration buttons on the opposite side) using Slint primitives.
 //
@@ -153,11 +153,11 @@ export component CustomTitleBar inherits Rectangle {
             icon: "close";
             tooltip-text: @tr("Close");
             hover-bg: Theme.danger;
-            // Derived from the fill it lands on, not from a chrome token:
-            // `Theme.mantle` used to stand in here and it tracks the theme's
-            // background rather than the red, so GNOME Dark (dark red on a
-            // dark mantle) dropped the glyph to ~2:1.
-            hover-fg: Theme.ink-on(Theme.danger);
+            // The on-danger ink, not a chrome token: `Theme.mantle` used to
+            // stand in here and it tracks the theme's background rather than
+            // the red, so GNOME Dark (dark red on a dark mantle) dropped the
+            // glyph to ~2:1.
+            hover-fg: Theme.danger-text;
             clicked => { WindowChrome.close-window(); }
         }
         if Theme.titlebar-button-side == 1 && Theme.titlebar-button-style == 0: TitleBarButton {
@@ -254,7 +254,7 @@ export component CustomTitleBar inherits Rectangle {
             icon: "close";
             tooltip-text: @tr("Close");
             hover-bg: Theme.danger;
-            hover-fg: Theme.ink-on(Theme.danger);
+            hover-fg: Theme.danger-text;
             clicked => { WindowChrome.close-window(); }
         }
     }

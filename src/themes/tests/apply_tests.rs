@@ -1,7 +1,7 @@
 //! Tests for the `kdeglobals` → `Palette` hop. The rest of `apply.rs` is either
-//! Slint-facing (`apply` and `accent_brushes` want a live `AppWindow`) or a thin
-//! `u32` ↔ `Color` conversion; `on_accent_hex` is covered by
-//! `tests/registry_tests.rs`, which walks the static tables.
+//! Slint-facing (`apply` and `write_palette` want a live `AppWindow`) or a thin
+//! `u32` ↔ `Color` conversion; `accent_brushes` and `on_accent_hex` are covered
+//! by `tests/registry_tests.rs`, which walks the static tables.
 
 use std::collections::HashMap;
 

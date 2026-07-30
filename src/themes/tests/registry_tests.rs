@@ -3,7 +3,7 @@
 #![allow(clippy::unreadable_literal)]
 
 use super::*;
-use crate::themes::apply::on_accent_hex;
+use crate::themes::apply::{LUMA_B, LUMA_G, LUMA_R, LUMA_THRESHOLD, on_accent_hex};
 
 #[test]
 fn registry_lists_six_themes_in_display_order() {
@@ -136,13 +136,20 @@ fn on_accent_picks_dark_text_for_light_accent() {
 fn theme_slint_ink_on_matches_on_accent_hex() {
     const THEME_SLINT: &str = include_str!("../../../melodia-ui/ui/theme.slint");
 
+    // Every number comes off the Rust side — the weights and threshold as
+    // consts, the two inks by asking the function itself — so the pin holds in
+    // both directions rather than only catching an edit to the Slint copy.
+    let dark_ink = on_accent_hex(0x00ffffff);
+    let light_ink = on_accent_hex(0x00000000);
+    let expected = format!(
+        "return ({LUMA_R} * fill.red + {LUMA_G} * fill.green + {LUMA_B} * fill.blue) \
+         / 255 > {LUMA_THRESHOLD} ? #{dark_ink:06x} : #{light_ink:06x};"
+    );
+
     // Normalized so re-wrapping the Slint expression doesn't fail the test.
     let declaration = THEME_SLINT.split_whitespace().collect::<Vec<_>>().join(" ");
     assert!(
-        declaration.contains(
-            "return (0.2126 * fill.red + 0.7152 * fill.green + 0.0722 * fill.blue) \
-             / 255 > 0.5 ? #1e1e2e : #ffffff;"
-        ),
+        declaration.contains(&expected),
         "theme.slint's `ink-on` drifted from `on_accent_hex` — update both or neither"
     );
 }

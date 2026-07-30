@@ -246,10 +246,20 @@ pub(crate) fn color_to_rgb(c: Color) -> u32 {
     (u32::from(c.red()) << 16) | (u32::from(c.green()) << 8) | u32::from(c.blue())
 }
 
+/// sRGB luma weights, applied to the gamma-encoded channels rather than to
+/// linearized ones — cheap, and the threshold below is tuned for it. Named
+/// because `theme.slint`'s `ink-on` spells the same four numbers out and
+/// `themes::tests::theme_slint_ink_on_matches_on_accent_hex` builds its
+/// expected Slint expression from these, so a drift on either side fails.
+pub(super) const LUMA_R: f64 = 0.2126;
+pub(super) const LUMA_G: f64 = 0.7152;
+pub(super) const LUMA_B: f64 = 0.0722;
+/// Above this, `fill` is light enough to take dark ink.
+pub(super) const LUMA_THRESHOLD: f64 = 0.5;
+
 /// Pick a contrast colour for text/icons rendered on top of `accent_hex`:
-/// dark `#1e1e2e` for light accents, white for dark accents. Uses the
-/// standard sRGB relative-luminance threshold of 0.5 — fast enough that we
-/// don't bother caching per accent. f64 keeps clippy happy on the
+/// dark `#1e1e2e` for light accents, white for dark accents. Fast enough that
+/// we don't bother caching per accent. f64 keeps clippy happy on the
 /// u8 → float lift (channel values are 0..=255, well inside f64's range).
 ///
 /// `theme.slint`'s `Theme.ink-on(brush)` is the Slint-side twin, for the
@@ -259,8 +269,8 @@ pub(super) fn on_accent_hex(accent_hex: u32) -> u32 {
     let r = f64::from((accent_hex >> 16) & 0xff) / 255.0;
     let g = f64::from((accent_hex >> 8) & 0xff) / 255.0;
     let b = f64::from(accent_hex & 0xff) / 255.0;
-    let lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-    if lum > 0.5 { 0x001e_1e2e } else { 0x00ff_ffff }
+    let lum = LUMA_R * r + LUMA_G * g + LUMA_B * b;
+    if lum > LUMA_THRESHOLD { 0x001e_1e2e } else { 0x00ff_ffff }
 }
 
 #[cfg(all(test, target_os = "linux"))]
