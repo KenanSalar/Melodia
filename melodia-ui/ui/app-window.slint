@@ -259,6 +259,19 @@ export component AppWindow inherits Window {
         shortcut-scope.grab-focus();
     }
 
+    // The dialog overlay has its own `if` chain — every body mounts under
+    // `if Dialog.kind == "…"` and `closed-teardown()` clears `kind`, so a focused
+    // LabeledInput dies with the body exactly as a filter does above. Ungated on
+    // purpose: the bodies never autofocus (see `components/dialog/dialog.slint`),
+    // so regrabbing on *open* is free, and it takes the keyboard off whatever
+    // view SearchBar still held it — which would otherwise keep swallowing
+    // keystrokes behind the modal backdrop instead of hitting the scope's
+    // `Dialog.open` guard.
+    property <string> watched-dialog-kind: Dialog.kind;
+    changed watched-dialog-kind => {
+        shortcut-scope.grab-focus();
+    }
+
     // The responsive full-UI ↔ miniplayer swap. Owns the size thresholds, the
     // two-phase fade, and the writes into the `MiniPlayer` global — see
     // `components/mini-player-switch.slint`. Fed the live window size, since a
