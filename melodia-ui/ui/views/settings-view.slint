@@ -48,23 +48,6 @@ export component SettingsView inherits Rectangle {
     property <length> page-w: 900px;
     changed width => { self.page-w = self.width; }
 
-    // Below this the tab bar drops its labels. Sized off the *longest*
-    // catalogue rather than English: five tabs cost 54 px of chrome each plus
-    // their text, which is ~570 px in English but ~670 px in Italian
-    // ("Riproduzione" / "Interfaccia" / "Informazioni"). Page padding takes
-    // 32 px, so 780 px leaves ~75 px of headroom over the worst case. There is
-    // no elide fallback — a Text sized by its own content never elides — so
-    // this threshold is the only thing standing between a long locale and a
-    // clipped last tab. Re-check it when adding a locale.
-    //
-    // Erring toward icon-only is the safe direction — the tabs keep their
-    // tooltips. Note the threshold is on the *content panel*, not the window:
-    // the panel is the window less the sidebar and the shell's own chrome, so
-    // compact runs from the 550 px miniplayer floor up to roughly a 970 px
-    // window. That is an ordinary laptop and split-screen size, which is why
-    // the tooltip below has to actually be legible rather than a formality.
-    property <bool> compact-tabs: root.page-w < 780px;
-
     // A fresh tab, or entering/leaving search, starts at the top. Without
     // this, switching from a tall tab to a short one leaves the viewport
     // parked past the new content. Mirrored into locals because Slint's
@@ -120,13 +103,19 @@ export component SettingsView inherits Rectangle {
         // is a centred 640–1100 px column, so a centred bar shares its axis
         // and the two read as one stack. (The title and search bar stay full
         // width — they're page chrome, not part of the column.)
+        //
+        // The bar decides for itself when to go icon-only, by measuring the
+        // labels it was handed; all it wants from here is how much room it
+        // has. That's the page less its own padding — and it's the *content
+        // panel*, not the window, since the panel is the window less the
+        // sidebar and the shell's chrome.
         HorizontalLayout {
             alignment: center;
             bar := SettingsTabBar {
                 labels: [@tr("Library"), @tr("Playback"), @tr("Interface"),
                          @tr("Services"), @tr("About")];
                 icons: ["library_music", "play_circle", "palette", "link", "info"];
-                compact: root.compact-tabs;
+                avail-width: root.page-w - 2 * Theme.pad-lg;
                 selected-index <=> SettingsPage.tab-idx;
                 selected(i) => {
                     SettingsPage.search-query = "";
@@ -232,16 +221,20 @@ export component SettingsView inherits Rectangle {
     // same frame-tracks-the-host idiom, as `playlists-view.slint`'s
     // `header-tip`. A plain Rectangle captures no input, so the tab underneath
     // keeps its hover — no flicker.
+    //
+    // The hovered cell's rect is derived from its index rather than snapshotted
+    // out of the bar, which the equal-width cells are what make possible: a tab
+    // that moves under a parked pointer (Ctrl+B, F11) keeps its tooltip
+    // anchored to it.
     tab-tip := Rectangle {
-        x: bar.tip-x - root.absolute-position.x;
-        y: bar.tip-y - root.absolute-position.y;
-        width: bar.tip-w;
-        height: bar.tip-h;
+        x: bar.absolute-position.x - root.absolute-position.x
+            + bar.tab-w * bar.hovered-idx;
+        y: bar.absolute-position.y - root.absolute-position.y;
+        width: bar.tab-w;
+        height: bar.height;
         Tooltip {
-            text: bar.tip-text;
-            // Gated here rather than in the bar so dragging the window back
-            // over the threshold while a tab is hovered can't strand one.
-            hovered: bar.tip-shown && root.compact-tabs;
+            text: bar.hovered-label;
+            hovered: bar.hovered-idx >= 0 && bar.compact;
             host-width: tab-tip.width;
             host-height: tab-tip.height;
             below: true;

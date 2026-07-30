@@ -4,46 +4,41 @@ import { MaterialIcon } from "../material-icon.slint";
 // One tab in a SettingsTabBar. Lives in this file (not exported) because
 // it's only useful as a child of the bar.
 //
-// The selected treatment deliberately mirrors a selected sidebar row — a
-// raised fill with an accent icon at FILL=1 and a weight-600 label — rather
-// than the accent-filled `Chip` used by the ChipGroups *inside* the settings
-// rows. The bar navigates; the chips configure. Reading as two different
-// things is the point.
+// Material 3 tab: no fill marks the selected tab. The accent label, the
+// FILL=1 icon and the bar's sliding underline carry it three ways over, and
+// hover keeps a state layer so the cell still reads as a target. That is a
+// deliberate break from the ChipGroups *inside* the settings rows, which do
+// fill — the bar navigates, the chips configure, and one page showing both
+// needs them to read as different things.
 component SettingsTab inherits Rectangle {
     in property <string> label;
     in property <string> icon;
     in property <bool>   selected;
     // Icon-only mode. The label is dropped rather than elided so five tabs
-    // still fit once the content panel drops below the page's width clamp.
+    // still fit once the bar runs out of room.
     in property <bool>   compact;
 
     callback clicked();
-    // Hover in/out, so the bar can hand the host what it needs to draw the
-    // compact-mode tooltip on a layer of its own. Mirrored into a local
-    // property because `changed` won't take `touch.has-hover` directly.
+    // Hover in/out, so the bar can track which tab a compact-mode tooltip
+    // belongs to. Mirrored into a local property because `changed` won't take
+    // `touch.has-hover` directly.
     callback hover-changed(bool);
 
-    height: 36px;
     horizontal-stretch: 0;
 
-    property <length> glyph-size: 22px;
-    // Compact tabs are squares: pad the glyph out to the tab's own height and
-    // the width follows from the content, with nothing to pin.
-    property <length> compact-pad: (root.height - root.glyph-size) / 2;
-
+    // The track is gone, so the state layer steps off `Theme.base` a rung
+    // rather than off `surface0`. Rounded rather than the square full-bleed
+    // rectangle M3 specifies — the same `radius-md` the settings rows below
+    // use, so a hovered tab reads as part of this page rather than as a
+    // borrowed spec. It fills the whole cell; the clearance from the divider
+    // is the bar's to give, and it gives it as padding on the row.
+    background: touch.has-hover ? Theme.surface0 : transparent;
     border-radius: Theme.radius-md;
-    // One rung per state up the standard surface ladder, no derived alphas:
-    // the `surface0` track shows through at rest, hover lifts to `surface1`
-    // and the selected tab sits a rung above that at `surface2`. Same
-    // resting→hover step a `Chip` takes, so the two read as one family.
-    background: root.selected
-        ? Theme.surface2
-        : (touch.has-hover ? Theme.surface1 : transparent);
     animate background { duration: Theme.dur-fast; easing: ease-in-out; }
 
     HorizontalLayout {
-        padding-left: root.compact ? root.compact-pad : Theme.pad-md;
-        padding-right: root.compact ? root.compact-pad : Theme.pad-md;
+        padding-left: root.compact ? 0px : Theme.pad-md;
+        padding-right: root.compact ? 0px : Theme.pad-md;
         spacing: Theme.pad-sm;
         alignment: center;
 
@@ -51,9 +46,10 @@ component SettingsTab inherits Rectangle {
             alignment: center;
             MaterialIcon {
                 name: root.icon;
-                icon-size: root.glyph-size;
+                icon-size: 22px;
                 icon-color: root.selected ? Theme.accent : Theme.text;
                 filled: root.selected;
+                animate icon-color { duration: Theme.dur-fast; easing: ease-in-out; }
             }
         }
 
@@ -61,13 +57,14 @@ component SettingsTab inherits Rectangle {
             alignment: center;
             Text {
                 text: root.label;
-                // Full-strength on every tab, unlike a sidebar row's
-                // `subtext0` resting label: these five are the page's primary
-                // navigation and all of them stay legible. Weight, fill and
-                // the accent icon carry the selected state on their own.
-                color: Theme.text;
+                color: root.selected ? Theme.accent : Theme.text;
                 font-size: Theme.font-size-md;
-                font-weight: root.selected ? 600 : 500;
+                // One weight for both states. The bar sizes its cells off a
+                // *measured* maximum, so a heavier selected label could
+                // overflow the cell it was measured for — and switching tabs
+                // would reflow the whole row. Colour carries it instead,
+                // which is what M3 does anyway.
+                font-weight: 500;
                 vertical-alignment: center;
             }
         }
@@ -82,7 +79,7 @@ component SettingsTab inherits Rectangle {
     changed is-hovered => { root.hover-changed(root.is-hovered); }
 }
 
-// Segmented tab bar for the Settings page. Data-agnostic — it takes parallel
+// Material 3 tab bar for the Settings page. Data-agnostic — it takes parallel
 // label/icon arrays and reports the picked index, in the same shape as
 // ChipGroup / Dropdown / ColorDotGrid, and knows nothing about which tabs
 // exist.
@@ -90,52 +87,93 @@ component SettingsTab inherits Rectangle {
 // `labels` must arrive as an inline `[@tr("…"), …]` literal at the call site:
 // `@tr` registers msgids at codegen, so an array populated from Rust would
 // render untranslated.
+//
+// The cells are equal width, sized to the widest tab. That is what M3's fixed
+// tabs do, and it is what makes the underline pure arithmetic — a `for` loop
+// exposes no per-tab element to read a position off, so a content-sized row
+// would have to snapshot each tab's geometry on selection and would go stale
+// the moment anything resized it.
 export component SettingsTabBar inherits Rectangle {
     in property <[string]> labels;
     in property <[string]> icons;
-    in property <bool> compact;
+    // How much room the host has for the bar. Feed it a *mirrored* width, not
+    // a live `parent.width` read — see the host's `page-w`.
+    in property <length> avail-width;
     // Two-way, per the "components that write their own in-out property
     // orphan a one-way binding" pitfall.
     in-out property <int> selected-index;
 
     callback selected(int);
 
-    // The hovered tab's window rect and label, republished for the host to
-    // hang a tooltip off. The tooltip itself can't live on the tab: it anchors
-    // *below* the bar, the bar sits in the page header, and Slint paints in
-    // declaration order — so anything the header owns is covered by the scroll
-    // body underneath it. `playlists-view.slint`'s `header-tip` is the same
-    // arrangement for the same reason.
-    //
-    // Unlike that one, the rect is a **snapshot** taken on hover-enter rather
-    // than a live binding — a `for` loop gives the host no per-tab element to
-    // read a position off. So a tab that moves under a parked pointer (Ctrl+B,
-    // F11) keeps its old anchor until the pointer leaves and returns.
-    out property <bool> tip-shown;
-    out property <length> tip-x;
-    out property <length> tip-y;
-    out property <length> tip-w;
-    out property <length> tip-h;
-    out property <string> tip-text;
-    // Which tab the live tip belongs to. Its *index*, not its label: the bar
-    // is data-agnostic, so nothing stops a caller passing two tabs the same
-    // text.
-    property <int> tip-idx: -1;
+    // Which tab the pointer is over, -1 for none, plus its label — enough for
+    // the host to draw the compact-mode tooltip on a layer of its own. The
+    // tooltip can't live on the tab: it anchors *below* the bar, the bar sits
+    // in the page header, and Slint paints in declaration order, so anything
+    // the header owns is covered by the scroll body underneath it.
+    // `playlists-view.slint`'s `header-tip` is the same arrangement for the
+    // same reason. Equal-width cells are what let the host derive the rect
+    // from the index instead of taking a snapshot that goes stale.
+    out property <int> hovered-idx: -1;
+    out property <string> hovered-label:
+        root.hovered-idx >= 0 ? root.labels[root.hovered-idx] : "";
 
-    // Track. No `clip` — a rounded clip over text renders the subtree to an
-    // offscreen layer and upscales it on HiDPI. The tabs are inset by the
-    // padding and carry their own smaller radius, so nothing needs clipping.
-    height: 44px;
+    // Icon-only once five expanded cells no longer fit. Measured rather than
+    // thresholded against a literal: the labels are translated, so the width
+    // that matters is the running locale's, not the one someone sized a
+    // constant against. No flapping at the boundary either — `natural-tab-w`
+    // comes off an always-expanded column, so it doesn't move when `compact`
+    // flips.
+    property <length> natural-tab-w: measure.preferred-width;
+    out property <bool> compact:
+        root.avail-width < root.labels.length * root.natural-tab-w;
+    out property <length> tab-w: root.compact ? 48px : root.natural-tab-w;
+
+    // Where the pill sits, and the one thing that eases.
+    //
+    // Animate the index, not the geometry. `ind-x` and the pill's width both
+    // derive from `tab-w`, so easing them directly conflates two very different
+    // events: picking a tab, and the cells resizing under a compact flip. The
+    // second then reads as the pill flying in from the right on the way down
+    // and from the left on the way back up, because its left edge and right
+    // edge travel different distances. Easing the source leaves a resize
+    // instant — the pill lands under its tab in the same frame the cells do —
+    // and still slides on a pick, which is the only motion that means
+    // anything.
+    property <float> anim-index: root.selected-index;
+    animate anim-index { duration: Theme.dur-med; easing: ease-in-out; }
+    property <length> ind-x: root.tab-w * root.anim-index;
+
+    // No `clip` — a rounded clip over text renders the subtree to an offscreen
+    // layer and upscales it on HiDPI. The pill is the only rounded thing here
+    // and it is childless, so it costs no layer and nothing needs clipping.
+    height: 48px;
     horizontal-stretch: 0;
-    background: Theme.surface0;
-    border-radius: Theme.radius-lg;
+    width: root.labels.length * root.tab-w;
+
+    // The ruler. Real `SettingsTab`s rather than a stripped-down copy, so the
+    // shape being measured and the shape being drawn cannot drift — they are
+    // the same component. `visible: false` lowers to a 0×0 clip wrapping the
+    // column: nothing paints, the hidden TouchAreas are unreachable, and the
+    // layout info the whole thing exists for is still computed.
+    measure := VerticalLayout {
+        visible: false;
+        for tab-label[i] in root.labels: SettingsTab {
+            label: tab-label;
+            icon: root.icons[i];
+            compact: false;
+        }
+    }
 
     HorizontalLayout {
-        padding: Theme.pad-xs;
-        spacing: Theme.pad-xs;
         alignment: start;
+        // Reserve the bottom band for the divider and the pill. The cells stop
+        // short of it, so a hovered tab's rounded fill floats above the line
+        // instead of resting on it — and the content, centred in what's left,
+        // gains the same clearance without the bar getting taller.
+        padding-bottom: Theme.pad-sm;
 
         for tab-label[i] in root.labels: SettingsTab {
+            width: root.tab-w;
             label: tab-label;
             icon: root.icons[i];
             selected: i == root.selected-index;
@@ -146,20 +184,53 @@ export component SettingsTabBar inherits Rectangle {
             }
             hover-changed(hovered) => {
                 if (hovered) {
-                    root.tip-x = self.absolute-position.x;
-                    root.tip-y = self.absolute-position.y;
-                    root.tip-w = self.width;
-                    root.tip-h = self.height;
-                    root.tip-text = tab-label;
-                    root.tip-idx = i;
-                    root.tip-shown = true;
-                } else if (root.tip-idx == i) {
-                    // Only the tab that owns the tooltip may retract it — a
+                    root.hovered-idx = i;
+                } else if (root.hovered-idx == i) {
+                    // Only the tab that owns the hover may retract it — a
                     // leave arriving after the neighbour's enter would
-                    // otherwise blank a live one.
-                    root.tip-shown = false;
+                    // otherwise blank a live tooltip.
+                    root.hovered-idx = -1;
                 }
             }
         }
+    }
+
+    // Divider, in two segments so the line stops either side of the pill
+    // rather than running underneath it.
+    //
+    // `surface1` rather than `Theme.border`: it has to stay legible *over* the
+    // hover rung, and only the surface ladder guarantees that in every theme.
+    // `border` is its own brush, and all four Catppuccin flavours — the default
+    // among them — set it to exactly `surface0`, so the line would vanish under
+    // whichever cell the pointer is on. Both segments track `ind-x` directly,
+    // the same source the pill reads, so they cut with it rather than lagging
+    // a frame behind.
+    Rectangle {
+        x: 0;
+        y: parent.height - 1px;
+        width: root.ind-x;
+        height: 1px;
+        background: Theme.surface1;
+    }
+
+    Rectangle {
+        x: root.ind-x + root.tab-w;
+        y: parent.height - 1px;
+        width: root.width - self.x;
+        height: 1px;
+        background: Theme.surface1;
+    }
+
+    // The underline, last so it paints over the divider. A pill rather than a
+    // bar with square ends — `self.height / 2` is safe unclamped here because
+    // a cell is always far wider than 3 px, so the x-radius never reaches the
+    // half-width that would pinch it into a lens.
+    Rectangle {
+        x: root.ind-x;
+        y: parent.height - 3px;
+        width: root.tab-w;
+        height: 3px;
+        background: Theme.accent;
+        border-radius: self.height / 2;
     }
 }
