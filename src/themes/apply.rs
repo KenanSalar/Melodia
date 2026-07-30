@@ -27,7 +27,7 @@ pub fn accent_brushes(theme: &ThemeDef, variant_id: &str) -> Vec<Brush> {
 /// When `variant_id == SYSTEM_VARIANT_ID` and the theme opts in via
 /// `supports_system_mode`, the synthetic id is mapped to one of the
 /// theme's real variants based on `system.theme`. KDE Breeze additionally
-/// bypasses its static Light/Dark palette and re-sources the 22 brushes
+/// bypasses its static Light/Dark palette and re-sources every slot
 /// from the cached `kdeglobals` palette so the player matches Plasma's
 /// active colour scheme exactly. All other themes use their declared
 /// system pair palette unchanged — the OS only picks dark vs. light there.
@@ -123,12 +123,9 @@ fn parse_hex_color(s: &str) -> Option<u32> {
 
 /// Build a `Palette` from a parsed `kdeglobals` colour scheme. The 13 base /
 /// structure slots come directly from the `KdeColorPalette::colors` map
-/// (`get_kde_colors()` already synthesizes the entries we need). `red`
-/// comes from the dedicated `red` field. The six unused semantic slots
-/// (green / yellow / peach / mauve / pink / lavender) collapse to
-/// `overlay1` via `Palette::fallback_semantics` — same approach as every
-/// non-Catppuccin theme — so any component reading `Theme.green` etc.
-/// stays muted-but-on-palette instead of fluorescent.
+/// (`get_kde_colors()` already synthesizes the entries we need); the three
+/// semantic slots come from its dedicated `red` / `green` / `yellow` fields,
+/// which carry Plasma's own `[Colors:View]` status foregrounds.
 #[cfg(target_os = "linux")]
 fn palette_from_kde(kde: &crate::services::system_theme::KdeColorPalette) -> Palette {
     let g = |key: &str| -> u32 {
@@ -153,7 +150,8 @@ fn palette_from_kde(kde: &crate::services::system_theme::KdeColorPalette) -> Pal
         subtext1: g("subtext1"),
         border: g("border"),
         red: parse_hex_color(&kde.red).unwrap_or(0x00da_4453),
-        ..Palette::fallback_semantics(overlay1)
+        green: parse_hex_color(&kde.green).unwrap_or(0x0027_ae60),
+        yellow: parse_hex_color(&kde.yellow).unwrap_or(0x00f6_7400),
     }
 }
 
@@ -182,18 +180,14 @@ fn write_palette(ui: &AppWindow, p: &Palette, accent_hex: u32, mantle_unfocused_
     g.set_red(brush(p.red));
     g.set_green(brush(p.green));
     g.set_yellow(brush(p.yellow));
-    g.set_peach(brush(p.peach));
-    g.set_mauve(brush(p.mauve));
-    g.set_pink(brush(p.pink));
-    g.set_lavender(brush(p.lavender));
 
     // Accent + on-accent text
     g.set_accent(brush(accent_hex));
     g.set_accent_text(brush(on_accent_hex(accent_hex)));
 
-    // `danger`, `danger-hover`, `danger-text` stay bound to red / peach /
-    // accent-text via the Slint declarative defaults — re-evaluated whenever
-    // the source brushes update, so we don't write them here.
+    // `danger` / `danger-text` stay bound to red / accent-text via the Slint
+    // declarative defaults — re-evaluated whenever the source brushes update,
+    // so we don't write them here.
 
     // Windows: paint the OS-drawn caption with the same mantle colour so
     // it blends into the chrome below, and flip the dark/light variant to

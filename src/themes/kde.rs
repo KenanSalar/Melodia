@@ -26,7 +26,6 @@ const DARK: Palette = Palette {
     // mantle than Breeze's bland `BrightSun` yellow.)
     yellow:   0xf67400,
     green:    0x27ae60,
-    ..Palette::fallback_semantics(0x7f8c8d)
 };
 
 const LIGHT: Palette = Palette {
@@ -46,7 +45,6 @@ const LIGHT: Palette = Palette {
     red:      0xda4453,
     yellow:   0xf67400,
     green:    0x27ae60,
-    ..Palette::fallback_semantics(0x939ba3)
 };
 
 const VARIANTS: &[Variant] = &[

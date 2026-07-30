@@ -3,7 +3,7 @@ import { MaterialIcon } from "material-icon.slint";
 import { Tooltip } from "tooltip.slint";
 
 // One of the three macOS "traffic-light" decoration buttons. Paints a
-// 12 px circle in `circle-color` (or a neutral grey when the window is
+// 14 px circle in `circle-color` (or a neutral grey when the window is
 // unfocused), with a hover-reveal glyph centred inside. The reveal is
 // gated on `cluster-hovered`, not the button's own hover — moving the
 // cursor across the three buttons should reveal all three symbols at
@@ -17,16 +17,9 @@ import { Tooltip } from "tooltip.slint";
 export component MacOsTrafficLight inherits Rectangle {
     // The "live" circle fill (semantic Theme colour — red / yellow /
     // green — so the lights pick up the active palette rather than
-    // hardcoded macOS hex codes). Painted only when the window is
-    // focused; otherwise we drop to a uniform grey, matching macOS's
-    // behaviour for unfocused windows. `brush` (not `color`) so a future
+    // hardcoded macOS hex codes). `brush` (not `color`) so a future
     // gradient theme can plug in.
     in property <brush> circle-color;
-    // Glyph hue used when the symbol is visible (hover-revealed). Bound
-    // to `Theme.accent-text` at the call site — that token is designed
-    // for "text on a colored surface" and shifts correctly between
-    // dark and light themes.
-    in property <brush> glyph-color;
     // Material Symbols ligature: `"close"`, `"minimize"`, or `"add"`.
     in property <string> glyph-icon;
     in property <string> tooltip-text;
@@ -41,6 +34,30 @@ export component MacOsTrafficLight inherits Rectangle {
     // first-class "child has-hover" upward channel, so each traffic light
     // exposes its TouchArea's `has-hover` as an out-property.
     out property <bool> hovered: touch.has-hover;
+
+    // What actually gets painted. The "grey when unfocused" mirror reads
+    // `Theme.window-focused`, written from winit's `Focused(bool)` event in
+    // `src/ui/window_chrome/winit_filter.rs`. The unfocused fill is
+    // `Theme.overlay0` — a theme-aware neutral grey that tracks the active
+    // palette rather than hardcoding macOS's #D5D5D5.
+    property <brush> fill: Theme.window-focused ? root.circle-color : Theme.overlay0;
+
+    // The glyph has to contrast against whatever `fill` resolved to, which is
+    // why this is derived here and not passed in: the fill can be any of three
+    // semantic hues in any of ~20 palettes, plus the unfocused grey, and no
+    // single Theme token is right for all of them. `Theme.accent-text` used to
+    // be handed down for the job, but that token answers a question about the
+    // *accent* — pick Latte + the Yellow accent and it puts a near-black glyph
+    // on the dark red close circle.
+    //
+    // sRGB relative luminance on the gamma-encoded channels, same weights and
+    // 0.5 threshold as `themes::apply::on_accent_hex`; the ink pair matches its
+    // two return values. These stay literals rather than Theme brushes on
+    // purpose — they're absolute ink for a fill of known luminance, so a
+    // palette has no say in them.
+    property <float> fill-luma:
+        (0.2126 * root.fill.red + 0.7152 * root.fill.green + 0.0722 * root.fill.blue) / 255;
+    property <brush> glyph-color: root.fill-luma > 0.5 ? #1e1e2e : #ffffff;
 
     callback clicked();
 
@@ -80,13 +97,7 @@ export component MacOsTrafficLight inherits Rectangle {
         height: 14px;
         x: (parent.width - self.width) / 2;
         y: (parent.height - self.height) / 2;
-        // The "grey when unfocused" mirror reads `Theme.window-focused`
-        // which is written from winit's `Focused(bool)` event in
-        // `src/ui/window_chrome/winit_filter.rs`. The unfocused fill is
-        // `Theme.overlay0` — a theme-aware neutral grey that tracks the
-        // active palette (Catppuccin Mocha: #6c7086; Latte: lighter)
-        // rather than hardcoding macOS's #D5D5D5.
-        background: Theme.window-focused ? root.circle-color : Theme.overlay0;
+        background: root.fill;
         border-radius: self.width / 2;
 
         // The hover-reveal glyph. `add` substitutes for macOS's two

@@ -52,16 +52,14 @@ export component MacOsTitleBarCluster inherits Rectangle {
         // Macroized order: `col` flips so that whichever side the
         // cluster lives on, the close button is the outermost circle.
         // The middle column (min-yellow) is always col=1.
-        // Theme-driven circle hues — `Theme.red/yellow/green` are
-        // Catppuccin's semantic colour slots and re-resolve on every
-        // theme / variant change. Glyph contrast colour follows
-        // `Theme.accent-text`, the token designed for text painted on
-        // a coloured surface.
+        // Theme-driven circle hues — `Theme.red/yellow/green` are the
+        // semantic colour slots and re-resolve on every theme / variant
+        // change. Each light derives its own glyph contrast from the fill
+        // it ends up painting; see `macos-traffic-light.slint`.
         close-light := MacOsTrafficLight {
             col: Theme.titlebar-button-side == 0 ? 2 : 0;
             row: 0;
             circle-color: Theme.red;
-            glyph-color: Theme.accent-text;
             glyph-icon: "close";
             tooltip-text: @tr("Close");
             cluster-hovered: root.cluster-hovered;
@@ -72,7 +70,6 @@ export component MacOsTitleBarCluster inherits Rectangle {
             col: 1;
             row: 0;
             circle-color: Theme.yellow;
-            glyph-color: Theme.accent-text;
             glyph-icon: "minimize";
             tooltip-text: @tr("Minimize");
             cluster-hovered: root.cluster-hovered;
@@ -83,10 +80,9 @@ export component MacOsTitleBarCluster inherits Rectangle {
             col: Theme.titlebar-button-side == 0 ? 0 : 2;
             row: 0;
             circle-color: Theme.green;
-            glyph-color: Theme.accent-text;
             // No native "zoom" glyph in Material Symbols Rounded; `add`
             // is the closest universally-recognised "expand / grow"
-            // analogue and reads cleanly inside the 12 px circle.
+            // analogue and reads cleanly inside the 14 px circle.
             glyph-icon: "add";
             tooltip-text: WindowChrome.is-maximized ? @tr("Restore") : @tr("Maximize");
             cluster-hovered: root.cluster-hovered;

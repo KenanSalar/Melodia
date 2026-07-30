@@ -37,25 +37,47 @@ fn unknown_accent_or_variant_returns_none_or_first_variant() {
 }
 
 #[test]
-fn non_catppuccin_themes_collapse_unspecified_semantics_to_overlay1() {
-    // GNOME Dark's overlay1 is 0x808088. The Catppuccin-only semantic
-    // slots GNOME doesn't define (peach / mauve / pink / lavender)
-    // mirror it via `Palette::fallback_semantics`.
+fn gnome_dark_semantics_match_adwaita_tokens() {
+    // Adwaita's error / warning / success tokens.
     let gnome = get("gnome-adwaita");
     let dark = gnome.variant("dark");
     assert!(dark.is_some(), "gnome dark variant must exist");
     let Some(dark) = dark else { return };
     let p = &dark.palette;
-    assert_eq!(p.overlay1, 0x808088);
-    assert_eq!(p.peach, 0x808088);
-    assert_eq!(p.mauve, 0x808088);
-    assert_eq!(p.pink, 0x808088);
-    assert_eq!(p.lavender, 0x808088);
-    // `red`, `green` and `yellow` are theme-defined (Adwaita's error /
-    // success / warning tokens) and must NOT collapse to the fallback.
     assert_eq!(p.red, 0xc01c28);
     assert_eq!(p.green, 0x57e389);
     assert_eq!(p.yellow, 0xf6d32d);
+}
+
+#[test]
+fn every_variant_defines_three_distinct_semantic_colours() {
+    // The regression guard for the grey traffic lights: `red` / `green` /
+    // `yellow` drive the macOS-style titlebar cluster, the success / warning
+    // toasts and the star rating, so a palette that leaves one sitting on a
+    // neutral from the surface ramp turns those signals grey. There is no
+    // struct-update fallback left to make that happen silently, but a
+    // hand-written table can still paste the wrong hex in.
+    for theme in registry() {
+        for variant in theme.variants {
+            let p = &variant.palette;
+            let where_ = format!("{}/{}", theme.id, variant.id);
+            for (name, semantic) in [("red", p.red), ("green", p.green), ("yellow", p.yellow)] {
+                for (neutral_name, neutral) in [
+                    ("overlay0", p.overlay0),
+                    ("overlay1", p.overlay1),
+                    ("overlay2", p.overlay2),
+                ] {
+                    assert_ne!(
+                        semantic, neutral,
+                        "{where_}: {name} must not be the {neutral_name} neutral",
+                    );
+                }
+            }
+            assert_ne!(p.red, p.green, "{where_}: red and green must differ");
+            assert_ne!(p.red, p.yellow, "{where_}: red and yellow must differ");
+            assert_ne!(p.green, p.yellow, "{where_}: green and yellow must differ");
+        }
+    }
 }
 
 #[test]

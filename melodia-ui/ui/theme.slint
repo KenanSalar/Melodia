@@ -1,4 +1,4 @@
-// Catppuccin Mocha tokens. The 22 theme-dependent brushes are `in-out` so
+// Catppuccin Mocha tokens. The 19 theme-dependent brushes are `in-out` so
 // `src/themes/mod.rs::apply()` can swap palettes at runtime; the values
 // here are the initial defaults that paint correctly before any settings
 // load. Layout, typography and motion tokens stay `out` (driven by the
@@ -35,24 +35,21 @@ export global Theme {
     in-out property <brush> accent: #cba6f7;
     in-out property <brush> accent-text: #1e1e2e;
 
-    // Semantic colours (Mocha palette)
+    // Semantic colours (Mocha palette). Three, and every theme defines all
+    // three — see `src/themes/palette.rs` for why there's no fallback.
+    // `green` and `yellow` are signals: the macOS-style traffic lights, the
+    // success / warning toasts, the star rating.
     in-out property <brush> red: #f38ba8;
     in-out property <brush> green: #a6e3a1;
     in-out property <brush> yellow: #f9e2af;
-    in-out property <brush> peach: #fab387;
-    in-out property <brush> mauve: #cba6f7;
-    in-out property <brush> pink: #f5c2e7;
-    in-out property <brush> lavender: #b4befe;
 
-    // Semantic role tokens for destructive actions. Themes can override these
-    // without touching the raw palette entries above, so a future Windows /
-    // KDE / macOS theme can pick its own danger colour while leaving `red`
-    // free for other roles. Defaults: `danger` = red, `danger-hover` mirrors
-    // the accent → lavender hover relationship by lightening to `peach`,
-    // and `danger-text` uses the same on-accent colour (Catppuccin's #1e1e2e
-    // contrasts well against #f38ba8).
+    // Semantic role tokens for destructive actions, so a theme can pick its
+    // own danger colour without touching the raw `red` slot above.
+    // `danger-text` uses the on-accent colour — Catppuccin's #1e1e2e contrasts
+    // well against #f38ba8. Hover is *not* a token: destructive controls
+    // lighten their own fill with `Theme.danger.brighter(10%)`, which reads as
+    // the same colour intensifying rather than as a second hue.
     out property <brush> danger: root.red;
-    out property <brush> danger-hover: root.peach;
     out property <brush> danger-text: root.accent-text;
 
     // Fill for chrome that floats over busy visual content — a detail hero's

@@ -28,8 +28,8 @@ export global Settings {
 
     // True when the active theme is KDE Breeze, the chosen variant is
     // "System", and a parsed `kdeglobals` palette is available — i.e. the
-    // 22 brushes are sourced from Plasma's live colour scheme rather than
-    // the static Light/Dark palette. The Accent Color row reads this to
+    // palette is sourced from Plasma's live colour scheme rather than
+    // the static Light/Dark tables. The Accent Color row reads this to
     // hide the dot grid (the OS already picked the accent). Rust writes
     // it on every appearance change.
     in property <bool> kde-system-active;

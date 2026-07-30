@@ -183,7 +183,12 @@ fn owned_value_to_u32(value: &zbus::zvariant::OwnedValue) -> u32 {
 pub struct KdeColorPalette {
     pub colors: HashMap<String, String>,
     pub accent: String,
+    /// The three `[Colors:View]` status foregrounds — `ForegroundNegative`,
+    /// `ForegroundPositive`, `ForegroundNeutral`. Kept out of `colors` because
+    /// they're semantic roles, not part of the surface ramp that map keys.
     pub red: String,
+    pub green: String,
+    pub yellow: String,
 }
 
 fn kdeglobals_path() -> PathBuf {
@@ -345,8 +350,16 @@ pub(crate) fn kde_palette_from_sections(
     let accent = get_color(sections, "Colors:Selection", "BackgroundNormal")
         .or_else(|| get_color(sections, "Colors:View", "DecorationFocus"))
         .unwrap_or((61, 174, 233));
+    // Plasma's three status foregrounds map 1:1 onto our semantic slots.
+    // Fallbacks are Breeze's own defaults, matching the static `themes::kde`
+    // palette so a scheme that omits them lands where the Dark/Light variants
+    // already sit rather than on a grey.
     let red = get_color(sections, "Colors:View", "ForegroundNegative")
         .unwrap_or((218, 68, 83));
+    let green = get_color(sections, "Colors:View", "ForegroundPositive")
+        .unwrap_or((39, 174, 96));
+    let yellow = get_color(sections, "Colors:View", "ForegroundNeutral")
+        .unwrap_or((246, 116, 0));
 
     // Surface ramp from `button_bg` (= surface0 in Catppuccin) toward
     // `text` at the ratios that match Catppuccin Mocha exactly when
@@ -392,6 +405,8 @@ pub(crate) fn kde_palette_from_sections(
         colors,
         accent: rgb_to_hex(accent.0, accent.1, accent.2),
         red: rgb_to_hex(red.0, red.1, red.2),
+        green: rgb_to_hex(green.0, green.1, green.2),
+        yellow: rgb_to_hex(yellow.0, yellow.1, yellow.2),
     })
 }
 

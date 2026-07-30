@@ -17,6 +17,12 @@ fn relative_luminance(rgb: u32) -> f64 {
     0.2126 * r + 0.7152 * g + 0.0722 * b
 }
 
+/// Unpack a `0x00RRGGBB` value so an assertion can talk about channel
+/// dominance without borrowing the HCT machinery it's checking.
+fn channels(rgb: u32) -> (u32, u32, u32) {
+    ((rgb >> 16) & 0xFF, (rgb >> 8) & 0xFF, rgb & 0xFF)
+}
+
 #[test]
 fn scheme_style_id_round_trips() {
     for &s in SchemeStyle::all() {
@@ -64,6 +70,99 @@ fn generate_palette_light_and_dark_differ() {
     let (light, _) = generate_palette(0x0042_85F4, false, SchemeStyle::TonalSpot);
     assert_ne!(dark.base, light.base);
     assert_ne!(dark.text, light.text);
+}
+
+/// Seeds spanning the hue circle plus the two achromatic ends — a dynamic
+/// scheme's neutrals move a long way between these, so they're what a
+/// semantic slot has to stay clear of.
+const SEMANTIC_TEST_SEEDS: [u32; 6] = [
+    0x0042_85f4, // blue
+    0x00c6_2828, // red
+    0x006a_1b9a, // purple
+    0x00af_b42b, // lime
+    0x0010_1010, // near-black
+    0x00f5_f5f5, // near-white
+];
+
+#[test]
+fn generate_palette_green_and_yellow_never_land_on_a_neutral() {
+    // The regression guard for the grey traffic lights. These two slots used to
+    // fall through to the scheme's `outline`, so the maximize light, the
+    // success / warning toasts and the star rating all painted the same grey
+    // the moment a dynamic palette took over.
+    for seed in SEMANTIC_TEST_SEEDS {
+        for &style in SchemeStyle::all() {
+            for is_dark in [true, false] {
+                let (p, _) = generate_palette(seed, is_dark, style);
+                let at = format!("seed=0x{seed:06X} style={style:?} dark={is_dark}");
+                for (name, semantic) in [("green", p.green), ("yellow", p.yellow)] {
+                    for (neutral_name, neutral) in [
+                        ("overlay0", p.overlay0),
+                        ("overlay1", p.overlay1),
+                        ("overlay2", p.overlay2),
+                        ("subtext1", p.subtext1),
+                    ] {
+                        assert_ne!(semantic, neutral, "{at}: {name} landed on {neutral_name}");
+                    }
+                }
+                assert_ne!(p.green, p.yellow, "{at}: green and yellow must differ");
+                assert_ne!(p.green, p.red, "{at}: green and red must differ");
+            }
+        }
+    }
+}
+
+#[test]
+fn generate_palette_green_and_yellow_stay_recognisable() {
+    // Channel dominance rather than HCT, so this can't pass by agreeing with a
+    // bug in the colour machinery: a green reads green only while its green
+    // channel leads, and a yellow only while red and green both clear blue.
+    for seed in SEMANTIC_TEST_SEEDS {
+        for &style in SchemeStyle::all() {
+            for is_dark in [true, false] {
+                let (p, _) = generate_palette(seed, is_dark, style);
+                let at = format!("seed=0x{seed:06X} style={style:?} dark={is_dark}");
+
+                let (gr, gg, gb) = channels(p.green);
+                assert!(gg > gr && gg > gb, "{at}: green 0x{:06X} isn't green", p.green);
+
+                let (yr, yg, yb) = channels(p.yellow);
+                assert!(
+                    yr > yb && yg > yb,
+                    "{at}: yellow 0x{:06X} isn't yellow",
+                    p.yellow
+                );
+                assert!(
+                    channel_spread(p.yellow) > 32,
+                    "{at}: yellow 0x{:06X} is too washed to signal",
+                    p.yellow
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn generate_palette_semantics_do_not_follow_the_album() {
+    // Deliberate: green and yellow are signals, so they hold still while the
+    // surfaces around them re-tint per album. Letting them track the seed put a
+    // moving colour on the star rating, which changed gold-ness per track.
+    for is_dark in [true, false] {
+        let (first, _) = generate_palette(SEMANTIC_TEST_SEEDS[0], is_dark, SchemeStyle::TonalSpot);
+        for seed in SEMANTIC_TEST_SEEDS {
+            for &style in SchemeStyle::all() {
+                let (p, _) = generate_palette(seed, is_dark, style);
+                let at = format!("seed=0x{seed:06X} style={style:?} dark={is_dark}");
+                assert_eq!(p.green, first.green, "{at}: green drifted");
+                assert_eq!(p.yellow, first.yellow, "{at}: yellow drifted");
+            }
+        }
+        // ...but they still answer to the polarity the scheme was built for.
+        let (opposite, _) =
+            generate_palette(SEMANTIC_TEST_SEEDS[0], !is_dark, SchemeStyle::TonalSpot);
+        assert_ne!(first.green, opposite.green, "dark={is_dark}: green ignored polarity");
+        assert_ne!(first.yellow, opposite.yellow, "dark={is_dark}: yellow ignored polarity");
+    }
 }
 
 #[allow(

@@ -33,7 +33,7 @@ use material_colors::score::Score;
 use slint::{Rgb8Pixel, SharedPixelBuffer};
 
 use crate::media::image_decode::decode_capped;
-use crate::themes::Palette;
+use crate::themes::{Palette, material3};
 
 /// One of the seven Material 3 dynamic-colour scheme variants exposed by
 /// the [`material-colors`](https://docs.rs/material-colors) crate, plus a
@@ -285,6 +285,17 @@ pub fn generate_palette(source_argb: u32, is_dark: bool, style: SchemeStyle) -> 
     let surface2 = mix_rgb_u32(surface_container_highest, outline);
     let subtext0 = mix_rgb_u32(on_surface_variant, on_surface);
 
+    // Green and yellow come from the static M3 theme rather than the scheme.
+    // A dynamic scheme has no green or yellow role to map, and the three
+    // surfaces reading them — the maximize traffic light, the success/warning
+    // toasts, the star rating — are semantic signals that have to stay
+    // recognisable, so they get the same pair Color Style = None paints.
+    let (green, yellow) = if is_dark {
+        (material3::DARK_GREEN, material3::DARK_YELLOW)
+    } else {
+        (material3::LIGHT_GREEN, material3::LIGHT_YELLOW)
+    };
+
     let palette = Palette {
         base: surface,
         mantle: surface_container_low,
@@ -301,7 +312,8 @@ pub fn generate_palette(source_argb: u32, is_dark: bool, style: SchemeStyle) -> 
         // Match the static M3 palette: `border == surface_container_highest`.
         border: surface_container_highest,
         red: error,
-        ..Palette::fallback_semantics(outline)
+        green,
+        yellow,
     };
 
     (palette, primary)

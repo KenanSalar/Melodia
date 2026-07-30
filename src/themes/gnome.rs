@@ -24,7 +24,6 @@ const DARK: Palette = Palette {
     // macOS-style titlebar traffic lights in palette on GNOME themes.
     yellow:   0xf6d32d,
     green:    0x57e389,
-    ..Palette::fallback_semantics(0x808088)
 };
 
 const LIGHT: Palette = Palette {
@@ -44,7 +43,6 @@ const LIGHT: Palette = Palette {
     red:      0xe01b24,
     yellow:   0xe5a50a,
     green:    0x33d17a,
-    ..Palette::fallback_semantics(0x929296)
 };
 
 const VARIANTS: &[Variant] = &[

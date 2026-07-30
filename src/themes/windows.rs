@@ -25,7 +25,6 @@ const DARK: Palette = Palette {
     // read correctly on a Windows theme.
     yellow:   0xffd700,
     green:    0x6ccb5f,
-    ..Palette::fallback_semantics(0x767676)
 };
 
 const LIGHT: Palette = Palette {
@@ -45,7 +44,6 @@ const LIGHT: Palette = Palette {
     red:      0xc42b1c,
     yellow:   0xeab308,
     green:    0x107c10,
-    ..Palette::fallback_semantics(0x9e9e9e)
 };
 
 const VARIANTS: &[Variant] = &[

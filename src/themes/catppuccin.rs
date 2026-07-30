@@ -27,10 +27,6 @@ const LATTE: Palette = Palette {
     red:      0xd20f39,
     green:    0x40a02b,
     yellow:   0xdf8e1d,
-    peach:    0xfe640b,
-    mauve:    0x8839ef,
-    pink:     0xea76cb,
-    lavender: 0x7287fd,
 };
 
 const FRAPPE: Palette = Palette {
@@ -50,10 +46,6 @@ const FRAPPE: Palette = Palette {
     red:      0xe78284,
     green:    0xa6d189,
     yellow:   0xe5c890,
-    peach:    0xef9f76,
-    mauve:    0xca9ee6,
-    pink:     0xf4b8e4,
-    lavender: 0xbabbf1,
 };
 
 const MACCHIATO: Palette = Palette {
@@ -73,10 +65,6 @@ const MACCHIATO: Palette = Palette {
     red:      0xed8796,
     green:    0xa6da95,
     yellow:   0xeed49f,
-    peach:    0xf5a97f,
-    mauve:    0xc6a0f6,
-    pink:     0xf5bde6,
-    lavender: 0xb7bdf8,
 };
 
 const MOCHA: Palette = Palette {
@@ -96,10 +84,6 @@ const MOCHA: Palette = Palette {
     red:      0xf38ba8,
     green:    0xa6e3a1,
     yellow:   0xf9e2af,
-    peach:    0xfab387,
-    mauve:    0xcba6f7,
-    pink:     0xf5c2e7,
-    lavender: 0xb4befe,
 };
 
 const VARIANTS: &[Variant] = &[
