@@ -228,14 +228,35 @@ export component AppWindow inherits Window {
     property <int> watched-artist-detail-id: ArtistDetail.artist-id;
     changed watched-artist-detail-id => {
         CompositeScroll.reset();
+        shortcut-scope.grab-focus();
+    }
+
+    // The other three details unmount their grid the same way, and every grid
+    // carries a filter TextInput that still holds focus when a card is clicked —
+    // the orphaning `watched-nav-idx` describes. None of them is a composite
+    // view, so focus is all they owe.
+    property <int> watched-album-detail-id: AlbumDetail.album-id;
+    changed watched-album-detail-id => {
+        shortcut-scope.grab-focus();
+    }
+
+    property <int> watched-genre-detail-id: GenreDetail.genre-id;
+    changed watched-genre-detail-id => {
+        shortcut-scope.grab-focus();
+    }
+
+    property <int> watched-playlist-detail-id: PlaylistDetail.playlist-id;
+    changed watched-playlist-detail-id => {
+        shortcut-scope.grab-focus();
     }
 
     // The miniplayer swap unmounts the whole full-UI branch — and with it any
-    // composite view — without a nav-index change, so the resets above would
-    // miss it too.
+    // composite view, and any focused filter — without a nav-index change, so
+    // the resets above would miss it too.
     property <bool> watched-mini-render: mini-switch.render-active;
     changed watched-mini-render => {
         CompositeScroll.reset();
+        shortcut-scope.grab-focus();
     }
 
     // The responsive full-UI ↔ miniplayer swap. Owns the size thresholds, the
