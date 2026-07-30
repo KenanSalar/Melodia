@@ -1,0 +1,129 @@
+import { ArtistRow, ArtistGridRow, AlbumRow, TrackListRow } from "../models.slint";
+
+// Artists: drives the Artist grid view. Same ownership + filter / sort /
+// chunk contract as `Albums` (Rust owns the flat list; `apply-filter` and
+// `request-sort` re-derive `grid-rows` without a DB hit), just one row of
+// state per artist instead of per album. Sort fields are `"name"`,
+// `"track_count"`, and `"album_count"`.
+export global Artists {
+    in-out property <[ArtistGridRow]> grid-rows;
+    in-out property <int> total-count;
+    in-out property <int> columns: 4;
+    in-out property <string> filter;
+    in-out property <string> sort-field: "name";   // "name" | "track_count" | "album_count"
+    in-out property <string> sort-dir: "asc";
+    in-out property <int> blur-search-tick: 0;
+
+    callback columns-changed(int);
+    callback apply-filter(string);
+    callback request-sort(string /*field*/);
+    callback open-artist(int /*artist_id*/);
+    pure callback request-cover(string /*image_path*/) -> image;
+    callback section-active-changed(bool);
+}
+
+// ArtistDetail: drives the full Artist Detail view. `artist-id == -1` ⇒
+// the grid is shown; `>= 0` ⇒ `ArtistDetailView` replaces it. Mirrors the
+// `AlbumDetail` shape, plus an `albums` list that drives the small
+// horizontal sub-section above the all-tracks list (Tauri parity) and an
+// `open-album` callback that performs cross-tab nav to the Albums tab.
+//
+// Track-list defaults: `show-album: true` (tracks span albums), and
+// `show-artist: false` (every row is the same artist). Default sort is
+// `album` ascending so tracks group naturally by album.
+export global ArtistDetail {
+    in-out property <int> artist-id: -1;
+    in-out property <ArtistRow> artist;
+    in-out property <[AlbumRow]> albums;
+    in-out property <[TrackListRow]> tracks;
+
+    // Per-column widths, edited by the resize handles.
+    in-out property <length> w-number: 56px;
+    in-out property <length> w-title: 320px;
+    in-out property <length> w-artist: 200px;
+    in-out property <length> w-album: 220px;
+    in-out property <length> w-genre: 140px;
+    in-out property <length> w-year: 72px;
+    in-out property <length> w-length: 88px;
+
+    // Per-column visibility. Hydrated from `settings.view_columns["artist_detail"]`.
+    in-out property <bool> show-number: false;
+    in-out property <bool> show-artist: false;
+    in-out property <bool> show-album: true;
+    in-out property <bool> show-genre: true;
+    in-out property <bool> show-year: true;
+    in-out property <bool> show-artwork: true;
+
+    // Sort state. Artist detail sorts in-memory in Rust.
+    in-out property <string> sort-field: "album";
+    in-out property <string> sort-dir: "asc";
+
+    in-out property <[int]> selected-ids;
+    in-out property <int> selection-anchor: -1;
+
+    // Header cover + hero-blur cross-fade slots. Same dual-slot contract
+    // as `AlbumDetail` so switching artists never flashes — the outgoing
+    // slot stays painted through the fade.
+    in-out property <image> cover;
+    in-out property <image> blur-img-a;
+    in-out property <image> blur-img-b;
+    in-out property <bool>  blur-use-a;
+    in-out property <bool>  has-blur;
+
+    // Albums sub-section collapse state. Persisted under
+    // `settings.artist_albums_collapsed`; hydrated by
+    // `boot/ui_setup.rs` and toggled via the Albums header in
+    // `artist-detail-view.slint`.
+    in-out property <bool> albums-collapsed: false;
+
+    // Filter needle for the SearchBar in the hero. Filters both
+    // the All Songs `TrackList` (title + artist + album substring)
+    // and the Albums sub-section (album name substring). Cleared on
+    // fresh-open (`open_artist`); preserved across library-changed
+    // refreshes so a user-typed needle survives a scan finishing.
+    // `blur-search-tick` is bumped by row TouchAreas / the click
+    // backdrop to force the SearchBar to release focus — same
+    // pattern Tracks / Favorites use.
+    in-out property <string> filter;
+    in-out property <int>    blur-search-tick: 0;
+
+    // Sidebar index the user was on when this detail was opened, or `-1`
+    // for a same-tab open from the Artists grid. Mirrors
+    // `AlbumDetail.origin-nav-index` so cross-tab back-nav (Favorites
+    // tab → click favorite artist → Artist Detail → back arrow returns to
+    // Favorites) routes through the same atomic flip-Nav-then-clear-id
+    // pattern.
+    in-out property <int> origin-nav-index: -1;
+
+    callback close-detail();
+    callback shuffle-artist();
+    callback play-row(int /*track_id*/, int /*index*/);
+    callback play-next([int] /*track_ids*/);
+    callback add-to-queue([int]);
+    callback toggle-row-favorite([int] /*track_ids*/, bool /*new*/);
+    callback set-row-rating([int] /*track_ids*/, int /*rating*/);
+    callback select-row(int /*idx*/, int /*id*/, bool /*shift*/, bool /*ctrl*/);
+    callback clear-selection();
+    callback request-sort(string /*field*/);
+    callback toggle-column(string /*column_id*/);
+    // Cross-tab navigation from a row's right-click "Go to …" entry.
+    callback go-to-album(int /*album_id*/);
+    callback go-to-artist(int /*artist_id*/);
+    callback go-to-genre(int /*genre_id*/);
+
+    // Albums sub-section: card click hands off to the Albums tab and opens
+    // that album's detail. Rust both flips `Nav.selected-index` to the
+    // Albums tab and calls `AlbumsUi::open_album(id)`.
+    callback open-album(int /*album_id*/);
+    // Lazy cover lookup for album cards in the sub-section — backed by
+    // `AlbumsUi`'s grid-tier cover cache (no separate cache).
+    pure callback request-album-cover(string /*artwork_path*/) -> image;
+    // Flip `albums-collapsed`. Rust handles the negate + persist so the
+    // Slint side only needs to fire the event.
+    callback toggle-albums-collapsed();
+
+    // Filter keystroke — Rust re-walks the cached tracks + albums
+    // through the new needle and pushes filtered Slint models for
+    // both surfaces. Mirrors `Favorites.filter-changed`.
+    callback filter-changed(string);
+}

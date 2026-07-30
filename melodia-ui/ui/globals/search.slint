@@ -1,0 +1,122 @@
+import { TrackListRow, EntityStripRow } from "../models.slint";
+
+// Search: drives the Search view (sidebar index 0). Mixed-results page —
+// Top Result featured card + Songs list (compact 4-row default, "Show
+// all" toggle) + Albums strip + Artists strip + Recent searches chip
+// list when input is empty. Backed by FTS5 for tracks and `LIKE` for
+// album/artist names via `library::search::search_all`.
+//
+// Query is the driver — Rust never auto-refreshes on `library_changed_tx`
+// (a scan completing mid-query MUST NOT swap results out from under the
+// user). Tab-leave releases the strip cover LRUs but keeps `query` +
+// `recent-rows` so a brief flip to Now Playing returns to the same query.
+export global Search {
+    // --- Live query + debounce -------------------------------------
+    // `query` is the live text bound to the SearchBar. Each keystroke
+    // bumps `debounce-tick-pending`; a 300 ms Timer in the view fires
+    // `commit-search` (which kicks the actual FTS fetch) once
+    // `pending != applied`. Mirrors the throttle shape used by Tracks /
+    // Favorites filters.
+    in-out property <string> query;
+    in-out property <int>    blur-search-tick: 0;
+    in-out property <int>    debounce-tick-pending: 0;
+    in-out property <int>    debounce-tick-applied: 0;
+    in-out property <bool>   loading: false;
+
+    // --- Results models --------------------------------------------
+    // `tracks` is the *visible* slice (first 4 rows by default, full 50
+    // when `show-all-tracks` is on). Rust holds the full result set in
+    // its own `last_results` cache so the toggle swaps without a DB hit.
+    // `tracks-total` is the pre-truncate count, for the "Show all N"
+    // button copy.
+    in-out property <[TrackListRow]>   tracks;
+    in-out property <int>              tracks-total;
+    in-out property <bool>             show-all-tracks: false;
+    in-out property <[EntityStripRow]> album-rows;
+    in-out property <[EntityStripRow]> artist-rows;
+
+    // --- Top Result -------------------------------------------------
+    // Discriminator + scalar payload, rather than a unified row struct,
+    // because: (a) the badge text needs to be localized inline in
+    // `.slint` (Rust-pushed strings can't `@tr()`); (b) baking a `kind`
+    // field into `EntityStripRow` would warp every other consumer
+    // (Favorites' Most Played + Favorite Artists strips). `top-kind ==
+    // ""` ⇒ no Top Result section.
+    in-out property <string> top-kind;            // "album" | "artist" | ""
+    in-out property <int>    top-id;
+    in-out property <string> top-title;
+    in-out property <string> top-subtitle;
+    in-out property <string> top-artwork-path;
+
+    // --- Recent searches (cap 10, JSON-persisted via SearchHistoryState)
+    // Shown only when `query == ""`. Click a chip → fill query + commit.
+    // Click chip-X → optimistic remove + persist via `recent-remove`.
+    in-out property <[string]> recent-rows;
+
+    // --- TrackList column state (Favorites parity, view-id "search") --
+    in-out property <length> w-number: 56px;
+    in-out property <length> w-title: 320px;
+    in-out property <length> w-artist: 200px;
+    in-out property <length> w-album: 220px;
+    in-out property <length> w-genre: 140px;
+    in-out property <length> w-year: 72px;
+    in-out property <length> w-length: 88px;
+
+    in-out property <bool> show-number: true;
+    in-out property <bool> show-artwork: true;
+    in-out property <bool> show-artist: true;
+    in-out property <bool> show-album: true;
+    in-out property <bool> show-genre: false;   // Tauri parity: genre + year hidden
+    in-out property <bool> show-year: false;
+
+    in-out property <string> sort-field: "rank"; // default: FTS5 rank order
+    in-out property <string> sort-dir: "asc";
+
+    in-out property <[int]> selected-ids;
+    in-out property <int>   selection-anchor: -1;
+
+    // --- Lazy cover lookups (strip tiers + per-kind routing for top;
+    // result rows go through the shared `RowCovers` global) ---
+    pure callback request-album-strip-cover(string)  -> image;
+    pure callback request-artist-strip-cover(string) -> image;
+    pure callback request-top-result-cover(string)   -> image;
+
+    // --- Query / debounce ------------------------------------------
+    callback query-changed(string);     // every keystroke; Rust mirrors + clears on empty
+    callback commit-search(string);     // 300 ms Timer fires this
+    callback toggle-show-all-tracks();
+
+    // --- Recent searches -------------------------------------------
+    callback recent-pick(string);
+    callback recent-remove(string);
+    callback recent-clear();
+
+    // --- Cross-tab nav (Search → AlbumDetail / ArtistDetail) -------
+    // Each stamps `*Detail.origin-nav-index = NAV_SEARCH (0)` *before*
+    // flipping `Nav.selected-index` so the detail-view back arrow
+    // returns here. Wired in `src/ui/callbacks/search/`.
+    callback open-album(int /*album_id*/);
+    callback open-artist(int /*artist_id*/);
+    callback open-top-result();         // resolves top-kind/top-id
+
+    // --- TrackList row actions (Favorites parity) ------------------
+    callback play-row(int /*track_id*/, int /*index*/);
+    callback play-next([int] /*track_ids*/);
+    callback add-to-queue([int]);
+    callback toggle-row-favorite([int] /*track_ids*/, bool /*new*/);
+    callback set-row-rating([int] /*track_ids*/, int /*rating*/);
+    callback select-row(int /*idx*/, int /*id*/, bool /*shift*/, bool /*ctrl*/);
+    callback clear-selection();
+    callback request-sort(string /*field*/);
+    callback toggle-column(string /*column_id*/);
+    // Cross-tab navigation from a row's right-click "Go to Genre" entry.
+    // (The view re-uses `open-album` / `open-artist` above for the row's
+    // Go-to-Album / Go-to-Artist entries — same cross-tab semantics.)
+    callback go-to-genre(int /*genre_id*/);
+
+    // Section-visible signal — fires when the Search tab enters or
+    // leaves (sidebar nav, or Now Playing opened over it). Driven by
+    // `watched-search-active` in `app-window.slint`; mirrored into
+    // `SearchUi.section_active` + triggers strip-cache release.
+    callback section-active-changed(bool);
+}

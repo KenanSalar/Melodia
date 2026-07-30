@@ -1,0 +1,238 @@
+import { Dialog } from "../globals/dialog.slint";
+import { Nav } from "../globals/nav.slint";
+import { Player } from "../globals/player.slint";
+import { Queue } from "../globals/queue.slint";
+import { WindowChrome } from "../globals/shell.slint";
+
+// The app's global keyboard shortcuts, and the focus scope that catches them.
+//
+// Inherits `FocusScope` and takes the whole main layout as its children, so it
+// sits between the QueueSheet's own FocusScope (which handles Esc / Ctrl+A while
+// the sheet is open) and the Window's key dispatch — unhandled keys bubble up
+// from child scopes via `return reject` and land here. Text inputs (SearchBar,
+// LabeledInput in dialogs, the Settings filter) consume their typed keys
+// naturally, because Slint routes key events to the focused element first, so
+// alphabetic shortcuts never fire while the user is typing.
+//
+// The handler runs even when `Dialog.open` so Escape can route through to
+// `Dialog.cancelled()` (the dialog has no Esc binding of its own). Every
+// non-Escape shortcut early-outs under `Dialog.open`, so confirm-only kinds —
+// which have no text input to swallow Space — don't leak playback toggles
+// through the backdrop.
+export component ShortcutScope inherits FocusScope {
+    // Re-grab focus after the host destroys whatever held it. Slint does not
+    // return focus to an ancestor FocusScope when the focused item is
+    // destroyed, so a view unmounting with focus inside it (Search's autofocused
+    // bar, a manually-focused filter) leaves shortcuts dead until the next
+    // click. The host calls this on every content-view switch.
+    public function grab-focus() {
+        self.focus();
+    }
+
+    // First grab, at first show.
+    init => { root.grab-focus(); }
+
+    // Debounce counter for the persistence side of keyboard
+    // volume changes. `bump-volume` always pushes the new value
+    // to the audio backend (`set-volume`, in-memory + cheap) and
+    // resets this counter to 3; the 100 ms `commit-debounce-timer`
+    // below drains it back to 0 and calls `Player.commit-volume()`
+    // exactly once on the trailing edge — so a held arrow key
+    // writes `settings.json` once at release instead of ~20×/s.
+    // The slider drag has the same one-commit-per-gesture
+    // contract via its own `dragged-since-press` gate.
+    property <int> commit-debounce-ticks: 0;
+
+    commit-debounce-timer := Timer {
+        interval: 100ms;
+        running: root.commit-debounce-ticks > 0;
+        triggered => {
+            root.commit-debounce-ticks =
+                max(0, root.commit-debounce-ticks - 1);
+            // Fire commit on the trailing edge — i.e. when the
+            // user stops bumping for ~300 ms. Each fresh
+            // keystroke reuses the same timer by re-setting the
+            // counter back to 3 inside `bump-volume`.
+            if (root.commit-debounce-ticks == 0) {
+                Player.commit-volume();
+            }
+        }
+    }
+
+    // Volume step: 0..100 clamp matches the slider's actual emit
+    // range (`volume-popup.slint`'s `clamp(…, 0, 1) * 100`).
+    // Pushes `set-volume` immediately so audio adjusts on
+    // the keystroke, but defers `commit-volume` (settings.json
+    // persistence) to the trailing-edge debounce above — held
+    // arrow keys would otherwise commit ~20×/s. Bumps
+    // `volume-hud-tick` so `VolumePopup` force-shows its existing
+    // hover tooltip with the new percentage; mouse-driven slider
+    // drags don't bump it because they already raise the
+    // VolumePopup chrome.
+    function bump-volume(delta: int) {
+        Player.set-volume(clamp(Player.vm.volume + delta, 0, 100));
+        Player.volume-hud-tick += 1;
+        // 3 × 100 ms = ~300 ms after the last keystroke. Each
+        // fresh keystroke resets the counter so the commit only
+        // fires once the user stops holding / tapping.
+        root.commit-debounce-ticks = 3;
+    }
+
+    // Relative seek. Guards on `duration-ms > 0` so a press with
+    // no track loaded is a no-op rather than seeking the
+    // unloaded backend.
+    function bump-seek(delta-ms: int) {
+        if (Player.duration-ms > 0) {
+            Player.seek(clamp(Player.position-ms + delta-ms,
+                              0,
+                              Player.duration-ms));
+        }
+    }
+
+    // 0..9 → 0 %, 10 %, …, 90 % of current track (VLC / YouTube
+    // convention). `pct` is the integer percent so the math
+    // stays in ints; rounding bias is negligible at ms scale.
+    function seek-to-percent(pct: int) {
+        if (Player.duration-ms > 0) {
+            Player.seek(round(Player.duration-ms * pct / 100));
+        }
+    }
+
+    key-pressed(ev) => {
+        // Escape priority chain: Dialog cancel > Now Playing
+        // close > drop. Queue-sheet's own FocusScope catches
+        // Escape *before* this handler when the sheet is open
+        // (its `enabled: Queue.open` gate plus the natural
+        // focus chain ordering), so queue Esc never reaches
+        // here.
+        if (ev.text == Key.Escape) {
+            if (Dialog.open) {
+                Dialog.cancelled();
+                Dialog.open = false;
+                return accept;
+            }
+            if (Nav.now-playing-open) {
+                Nav.now-playing-open = false;
+                return accept;
+            }
+            return reject;
+        }
+
+        // All non-Escape shortcuts are gated on no dialog. Text
+        // inputs in form-style dialogs consume their typed keys
+        // naturally; confirm-only kinds (clear-queue,
+        // remove-folder, …) have no input, so without this
+        // guard Space would still pause playback through the
+        // dialog backdrop.
+        if (Dialog.open) {
+            return reject;
+        }
+
+        // Arrows: bare = seek ±5 s / volume ±5; Shift = seek
+        // ±30 s; Ctrl = previous/next track or fine volume ±1.
+        // Matches Spotify (Ctrl+arrow = track skip) + VLC
+        // (bare arrow = scrub) + Apple Music (Ctrl/Cmd = big
+        // step). Slint maps `ev.modifiers.control` to Cmd on
+        // macOS automatically.
+        if (ev.text == Key.LeftArrow) {
+            if (ev.modifiers.control) {
+                Player.previous();
+            } else {
+                bump-seek(ev.modifiers.shift ? -30000 : -5000);
+            }
+            return accept;
+        }
+        if (ev.text == Key.RightArrow) {
+            if (ev.modifiers.control) {
+                Player.next();
+            } else {
+                bump-seek(ev.modifiers.shift ? 30000 : 5000);
+            }
+            return accept;
+        }
+        if (ev.text == Key.UpArrow) {
+            bump-volume(ev.modifiers.control ? 1 : 5);
+            return accept;
+        }
+        if (ev.text == Key.DownArrow) {
+            bump-volume(ev.modifiers.control ? -1 : -5);
+            return accept;
+        }
+
+        // Number row: VLC / YouTube percentage seek.
+        if (ev.text == "0") { seek-to-percent(0);  return accept; }
+        if (ev.text == "1") { seek-to-percent(10); return accept; }
+        if (ev.text == "2") { seek-to-percent(20); return accept; }
+        if (ev.text == "3") { seek-to-percent(30); return accept; }
+        if (ev.text == "4") { seek-to-percent(40); return accept; }
+        if (ev.text == "5") { seek-to-percent(50); return accept; }
+        if (ev.text == "6") { seek-to-percent(60); return accept; }
+        if (ev.text == "7") { seek-to-percent(70); return accept; }
+        if (ev.text == "8") { seek-to-percent(80); return accept; }
+        if (ev.text == "9") { seek-to-percent(90); return accept; }
+
+        // Space → play/pause (universal).
+        if (ev.text == " ") {
+            Player.play-pause();
+            return accept;
+        }
+
+        // Ctrl combos — handled before bare letters so Ctrl+N
+        // (new playlist) wins over N (next track), etc.
+        if (ev.modifiers.control) {
+            if (ev.text == "b") {
+                Nav.sidebar-collapsed = !Nav.sidebar-collapsed;
+                return accept;
+            }
+            if (ev.text == ",") {
+                // 9 = Settings tab; see Nav comment.
+                Nav.selected-index = 9;
+                Nav.persist-selected-index(9);
+                return accept;
+            }
+            if (ev.text == "n") {
+                // Reset the dialog state the same way the
+                // existing New-Playlist menu entry does, then
+                // open. The default `accepted` handler on
+                // `Dialog` routes `kind == "create-playlist"`
+                // to `Playlists.create-playlist(...)`.
+                Dialog.kind = "create-playlist";
+                Dialog.input-text = "";
+                Dialog.input-text-2 = "";
+                Dialog.pending-track-ids = [];
+                Dialog.target-id = -1;
+                Dialog.title = @tr("Create Playlist");
+                Dialog.message = "";
+                Dialog.confirm-label = @tr("Create");
+                Dialog.cancel-label = @tr("Cancel");
+                Dialog.destructive = false;
+                Dialog.open = true;
+                return accept;
+            }
+            return reject;
+        }
+
+        // Bare letters — Spotify / Apple Music / VLC parity.
+        if (ev.text == "m") { Player.toggle-mute();     return accept; }
+        if (ev.text == "l") { Player.toggle-favorite(); return accept; }
+        if (ev.text == "n") { Player.next();            return accept; }
+        if (ev.text == "p") { Player.previous();        return accept; }
+        if (ev.text == "s") { Player.toggle-shuffle();  return accept; }
+        if (ev.text == "r") { Player.cycle-repeat();    return accept; }
+
+        if (ev.text == "q") {
+            Queue.open = !Queue.open;
+            return accept;
+        }
+        if (ev.text == "f") {
+            Nav.now-playing-open = !Nav.now-playing-open;
+            return accept;
+        }
+        if (ev.text == Key.F11) {
+            WindowChrome.toggle-maximize();
+            return accept;
+        }
+
+        return reject;
+    }
+}

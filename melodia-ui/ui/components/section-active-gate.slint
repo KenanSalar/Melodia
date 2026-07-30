@@ -1,0 +1,34 @@
+import { Nav } from "../globals/nav.slint";
+
+// "Is this sidebar section the one on screen?" — as a reusable gate.
+//
+// Nine sections need the same answer, and each uses it to drive a Rust hook that
+// releases the section's cover caches on the way out and re-warms (or un-dirties)
+// them on the way back in. The predicate is the interesting part and it is
+// identical every time: the section's own nav index is selected, and neither of
+// the two things that mount *over* a section — the full-screen Now Playing view
+// and the miniplayer — is showing.
+//
+// Why the host mounts this instead of writing a `changed` handler inside each
+// view: the leaving transition is exactly the edge that matters, and a view
+// cannot observe its own. Slint destroys the outgoing view instantly and offers
+// no unmount callback, so a handler placed inside `AlbumView` would never see
+// `false`. Mounting here keeps the watcher on the always-alive `AppWindow` root.
+//
+// `Timer` is not involved, so like `FilterThrottle` this occupies no layout
+// space — mount it anywhere in the host's element tree.
+export component SectionActiveGate {
+    // The section's `Nav.selected-index` value.
+    in property <int> index;
+    // The host's live miniplayer state. Passed in rather than read off the
+    // `MiniPlayer` global because the host derives it from the window size a
+    // beat earlier than the global is written, and the gate must not lag it.
+    in property <bool> mini-active;
+
+    // Fires on every transition, with the new value.
+    callback active-changed(bool);
+
+    private property <bool> watched:
+        Nav.selected-index == root.index && !Nav.now-playing-open && !root.mini-active;
+    changed watched => { root.active-changed(root.watched); }
+}

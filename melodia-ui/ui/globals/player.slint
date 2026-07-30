@@ -1,0 +1,191 @@
+import { PlayerVm, QueueVm, TrackMetaRow } from "../models.slint";
+
+// Player: bound to the Rust backend via watch channels (push) + library::*
+// (pull). Rust wires every callback in `src/ui/callbacks/`.
+export global Player {
+    in-out property <PlayerVm> vm;
+    in-out property <QueueVm> queue;
+
+    // Position-tick scalars — kept as standalone properties (not fields of
+    // `vm`) so the 500 ms playback-monitor publish only invalidates the
+    // three bindings that actually read them. See the long comment on
+    // `PlayerVm` in models.slint for the leak history that motivated this.
+    in-out property <int> position-ms;
+    in-out property <int> duration-ms;
+    in-out property <float> progress;
+
+    // Seek-target hold: set by the seek callback to the requested position
+    // (ms), cleared by the bridge once the backend's reported position lands
+    // within ±2s or the current track changes. While ≥0 the progress slider
+    // and time label prefer this value over `position-ms`, so the thumb
+    // doesn't briefly snap to the old position before the next view-model
+    // push.
+    in-out property <int> seek_pending_ms: -1;
+
+    // Full-screen Now Playing: pre-blurred background, dual-slot cross-fade.
+    // Two stacked Image slots in `NowPlayingView`. On a track change Rust
+    // writes the freshly blurred cover into the *inactive* slot, then flips
+    // `blur-use-a`; Slint animates the two slots' opacity so the old and new
+    // backgrounds cross-fade. NEITHER slot is ever cleared — the outgoing
+    // layer keeps its image and stays painted for the whole fade, and a
+    // gradient floor sits underneath, so there is never an empty frame (the
+    // Tauri version flashed empty mid-fade — this is the fix). Written only
+    // on track change, so unlike the position scalars these don't
+    // re-invalidate on the 500 ms tick.
+    in-out property <image> blur-img-a;
+    in-out property <image> blur-img-b;
+    in-out property <bool> blur-use-a: true;
+    // False when the current track has no artwork (or its cover failed to
+    // decode) — both blur slots then fade to opacity 0, revealing the
+    // accent-tinted gradient floor underneath (Tauri parity: the old app
+    // used an accent `linear-gradient` fallback for art-less tracks).
+    in-out property <bool> blur-has-image: false;
+
+    // Full-screen Now Playing: the large *foreground* cover tile. Same
+    // dual-slot cross-fade contract as the blurred backdrop above, just for
+    // the sharp high-resolution artwork (decoded by `ui::now_playing_artwork`,
+    // not the 72 px row thumbnail in `vm.track.cover_img`). On a track change
+    // Rust writes the new cover into the inactive slot then flips
+    // `np-cover-use-a`; both slots' opacity animate. A slot is never cleared.
+    // `np-cover-has-image` is false for art-less / failed-decode tracks — both
+    // slots then fade to 0 and the `music_note` placeholder fades in.
+    in-out property <image> np-cover-a;
+    in-out property <image> np-cover-b;
+    in-out property <bool> np-cover-use-a: true;
+    in-out property <bool> np-cover-has-image: false;
+
+    // Async-fetched technical metadata for the current track, shown as chips
+    // in `NowPlayingView`. Replaced wholesale by the metadata subscriber;
+    // `track_id` lets the view drop a stale push that lands after a rapid
+    // track change. Written only on track change.
+    in-out property <TrackMetaRow> track-meta;
+
+    // 2D chip strip — outer Vec is rows, inner Vec is chips in that row.
+    // Populated by `src/ui/now_playing/metadata.rs` from `track-meta` + the
+    // current chip-area width reported by the view (see
+    // `recompute-chip-rows`). Empty rows / a 0-length outer Vec mean "no
+    // chips" (no track, stale fetch, or all fields empty).
+    in-out property <[[string]]> chip-rows;
+
+    // View → Rust: chip-area's current available width. Wired in
+    // `now-playing-view.slint` via a 1 ms mount Timer + `changed` handler —
+    // mirrors `GridColumnsSync`. Rust re-chunks `chip-rows` on every fire,
+    // and the track-change subscriber also re-chunks after replacing
+    // `track-meta` using the last-reported width cached on the Rust side.
+    callback recompute-chip-rows(length);
+
+    // --- Now Playing backdrop colour set ---------------------------------
+    // Six properties, all written together by the `track_change` subscriber
+    // from `ui::now_playing::backdrop::solve` — read that module for the
+    // reasoning; this is the contract.
+    //
+    // The view floats its chrome on a blurred cover, so none of these can be
+    // theme constants: a white sleeve and a black one need opposite treatment.
+    // They take their *hue* from the accent quantized out of the cover (or
+    // `Theme.accent` for an art-less track) and their *tone* from a solve
+    // against how bright the backdrop measured. That split is why the view
+    // looks the same under Mocha, Latte, macOS Light and Material You — the
+    // theme lends its colour, never its light/dark polarity.
+    //
+    // Don't reach for `Theme.text` / `subtext0` / `crust` / `base` anywhere
+    // that paints on the blur. They're fixed, so on a light theme they land
+    // light-on-light here.
+    //
+    // The defaults below are literals rather than `Theme.*` bindings for the
+    // same reason: they're what the view paints in the frame or two before the
+    // first solve lands, and a theme binding would make *that* frame the one
+    // broken case on a light theme. They're the default accent solved against
+    // the floor, so the set is self-consistent from the very first paint.
+
+    // Scrim over the blur slots, alpha baked in. Solved so the *composited*
+    // backdrop lands in a known dark band whatever the cover — which is what
+    // lets one light foreground be correct on all of them. Heavier on a bright
+    // sleeve, lighter than the fixed 45% it replaces on a dark one.
+    in-out property <brush> np-scrim: #0a0a0e73;
+
+    // Gradient-floor stops, under the blur slots — so what shows for an
+    // art-less or failed-decode track. Two `color`s, not one `brush`: gradient
+    // stops and `.mix()` need `color` operands.
+    in-out property <color> np-floor-start: #2b2135;
+    in-out property <color> np-floor-end: #14101a;
+
+    // The hue-carrying tier: visualizer bars and trace, stars, heart, back
+    // button, view-menu trigger, chips, Up-Next heading / divider / hover /
+    // scrollbar. Solved for WCAG's 3:1 non-text bar against the composited
+    // backdrop, then floored — a cover whose accent is already brighter keeps
+    // its own tone, and so its own saturation.
+    //
+    // One brush serves solid and translucent surfaces alike; callers vary alpha
+    // off it rather than picking another hue, so the view reads as one colour
+    // family. Never `.brighter()` — that scales HSV value and can't lift a
+    // near-black accent at all.
+    in-out property <brush> np-accent-bright: #cba6f7;
+
+    // The translucent tiers off that one brush, derived here rather than at each
+    // call site so surfaces meant to match can't drift apart. `np-accent-pill`
+    // is the resting weight for every tinted surface in the view — metadata
+    // chips and the two disc buttons alike. One-offs (the Up-Next divider, its
+    // scrollbar's hover) stay inline; naming them would move the number without
+    // sharing it.
+    out property <brush> np-accent-pill: root.np-accent-bright.with-alpha(0.16);
+    out property <brush> np-accent-disc-hover: root.np-accent-bright.with-alpha(0.3);
+    out property <brush> np-accent-dim: root.np-accent-bright.with-alpha(0.6);
+
+    // Body text on the backdrop. Solved for 4.5:1 and chroma-capped, so it
+    // reads as near-white carrying a whisper of the album's warmth rather than
+    // as coloured type — the tier above is where the hue gets to be loud.
+    in-out property <brush> np-on-backdrop: #c4c0cc;
+
+    // Secondary text on the backdrop (artist, album, Up-Next artist /
+    // duration). 3:1 in its own dimmer band, so the hierarchy under the cover
+    // survives on every backdrop.
+    in-out property <brush> np-on-backdrop-muted: #ada9b5;
+
+    callback play-pause();
+    callback next();
+    callback previous();
+    callback seek(int);          // position in ms
+    callback set-volume(int);    // 0..100, fires continuously during drag
+    callback commit-volume();    // fires on slider release; persists to settings.json
+    // Playback-rate multiplier (e.g. 0.5, 1.0, 1.5). Fired by the speed
+    // flyout in the now-playing bar's overflow menu. Applies to the live
+    // player immediately AND persists to settings.json (speed survives
+    // restarts). The active value is read back via `vm.playback_speed`.
+    callback set-playback-speed(float);
+    callback toggle-mute();
+    callback toggle-shuffle();
+    callback cycle-repeat();
+    callback toggle-favorite();
+    // Set the star rating (0–5) on the currently playing track. Mirrors
+    // `toggle-favorite`: applies to `current_track` + fans out to the row
+    // surfaces. The active value is read back via `vm.track.rating`.
+    callback set-current-rating(int /*rating*/);
+
+    // Session-only sleep timer, fired by the overflow menu's sleep flyout.
+    // `minutes`: 0 = off, > 0 = duration timer, -1 = "End of current track".
+    // Applies live only (never persisted — resets each launch). See
+    // `src/ui/sleep_timer.rs`.
+    callback set-sleep-timer(int /*minutes*/);
+    // Custom duration from the flyout's ±stepper Start pill (seconds). Rust
+    // clamps to [30 s, 2 h] and arms a duration timer.
+    callback set-sleep-timer-seconds(int /*seconds*/);
+    // Active armed *duration* in seconds (0 = no duration timer). Drives the
+    // flyout preset rows' active highlight (a preset matches when
+    // `value*60 == this`) and the collapsed row. End-of-track mode is separate —
+    // it rides on `vm.sleep_at_track_end`.
+    in-out property <int> sleep-timer-total-seconds: 0;
+    // Live "M:SS" / "H:MM:SS" remaining string, written by the countdown task each second.
+    // Standalone (NOT a `vm` field) so the per-second update only invalidates
+    // the row that reads it — same rationale as `position-ms` / `duration-ms`.
+    in-out property <string> sleep-timer-remaining: "";
+
+    // Bumped each time the user changes volume via the keyboard handler
+    // in `ui/app-window.slint` (↑ / ↓ / Ctrl+↑ / Ctrl+↓). `VolumePopup`
+    // observes this via a `changed` handler, sets a tick-down counter,
+    // and force-shows its existing hover tooltip (`force-tooltip` →
+    // `Tooltip.force-shown`) with the current `vm.volume` %; the
+    // tooltip fades back out 1.5 s after the last keystroke. Slider
+    // drags **don't** bump this — they already raise the VolumePopup
+    // chrome.
+    in-out property <int> volume-hud-tick: 0;
+}

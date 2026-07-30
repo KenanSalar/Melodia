@@ -185,7 +185,7 @@ pub(super) async fn apply_track_change(
 
     // Every colour the view paints on the backdrop, solved together from one
     // hue and one brightness measurement — see `backdrop` for the reasoning
-    // and `globals.slint` for what each brush drives.
+    // and `globals/player.slint` for what each brush drives.
     //
     // The hue falls back to the live `Theme.accent` so a missing-artwork or
     // failed-decode track doesn't strand the slots on the previous track's

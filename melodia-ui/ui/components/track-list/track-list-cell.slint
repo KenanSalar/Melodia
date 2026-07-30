@@ -11,7 +11,7 @@ import { Theme } from "../../theme.slint";
 // Visibility is gated at the CALL SITE with `if Tracks.show-*: DataCell { … }`
 // (matches the header). An internal `show` toggle does not work: a
 // `DataCell { show: false }` is still a child of the row's HorizontalLayout
-// and reserves an 8 px `spacing` slot that `total-w` in globals.slint does
+// and reserves an 8 px `spacing` slot that `total-w` in globals/tracks.slint does
 // not account for, drifting cells away from the header. Inheriting from
 // `Rectangle` and binding `width: cell-width` at the wrapper level is also
 // load-bearing — without it the parent HorizontalLayout doesn't pin this

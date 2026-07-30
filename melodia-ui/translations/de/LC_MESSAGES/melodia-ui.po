@@ -788,7 +788,7 @@ msgstr "{} von {} bereits hinzugefügt"
 # hint) and `ui/settings.slint` (notification pure-callbacks dispatched from
 # `src/ui/callbacks/updater.rs`). The action-button labels ("Install" /
 # "Restart") map onto `Notifications.action` `kind` values "install-update" /
-# "update-restart" in `ui/globals.slint`.
+# "update-restart" in `ui/globals/updater.slint`.
 
 msgid "Skip this version"
 msgstr "Diese Version überspringen"

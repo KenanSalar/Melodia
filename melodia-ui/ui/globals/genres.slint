@@ -1,0 +1,114 @@
+import { GenreRow, GenreGridRow, TrackListRow } from "../models.slint";
+
+// Genres: drives the Genre grid view. Same ownership + filter / sort /
+// chunk contract as `Albums` / `Artists` (Rust owns the flat list;
+// `apply-filter` and `request-sort` re-derive `grid-rows` without a DB
+// hit), just one row of state per genre. Sort fields are `"name"`,
+// `"track_count"`, and `"duration"`.
+//
+// Unlike `Albums` / `Artists`, there is **no `request-cover` callback**:
+// genres have no intrinsic artwork. Each tile renders the `EntityCard`
+// fallback icon (`theater_comedy`) and the detail header paints only the
+// accent gradient floor + scrim. That keeps the entire Genre tab free of
+// cover-cache plumbing and means `section-active-changed` is a no-op
+// today (kept for symmetry with the other entity tabs).
+export global Genres {
+    in-out property <[GenreGridRow]> grid-rows;
+    in-out property <int> total-count;
+    in-out property <int> columns: 4;
+    in-out property <string> filter;
+    in-out property <string> sort-field: "name";   // "name" | "track_count" | "duration"
+    in-out property <string> sort-dir: "asc";
+    in-out property <int> blur-search-tick: 0;
+
+    callback columns-changed(int);
+    callback apply-filter(string);
+    callback request-sort(string /*field*/);
+    callback open-genre(int /*genre_id*/);
+    callback section-active-changed(bool);
+}
+
+// GenreDetail: drives the full Genre Detail view. `genre-id == -1` ⇒ the
+// grid is shown; `>= 0` ⇒ `GenreDetailView` replaces it (mirrors the
+// `Nav.now-playing-open` swap in `app-window.slint`). `tracks` is owned
+// by Rust (`Rc<VecModel<TrackListRow>>` in `src/ui/genres/`); `genre`
+// carries the header data.
+//
+// The track table is the shared `TrackList` component, so the
+// column-width / visibility / sort / selection shape mirrors the
+// `Tracks` / `Browse` / `AlbumDetail` / `ArtistDetail` globals — with
+// its own persistence key `"genre_detail"`. `show-genre` defaults
+// false: the genre column is redundant inside a single genre.
+//
+// No `cover` / `blur-img-{a,b}` / `blur-use-a` / `has-blur` slots:
+// genres have no artwork (see the `Genres` global comment), so the
+// detail header doesn't take any image inputs and renders only the
+// accent gradient floor + scrim.
+export global GenreDetail {
+    in-out property <int> genre-id: -1;
+    in-out property <GenreRow> genre;
+    in-out property <[TrackListRow]> tracks;
+
+    // Filter needle for the hero SearchBar. Filters the `tracks`
+    // `TrackList` (title + artist + album substring). Cleared on
+    // fresh-open (`open_genre`); preserved across library-changed
+    // refreshes so a user-typed needle survives a scan finishing.
+    in-out property <string> filter;
+    in-out property <int>    blur-search-tick: 0;
+
+    // Sidebar index the user was on when this detail was opened, or
+    // `-1` for a same-tab open from the Genres grid. Mirrors
+    // `AlbumDetail.origin-nav-index`: the cross-tab back-nav path
+    // (any non-Genres tab → row's "Go to Genre" entry → Genre Detail →
+    // back arrow returns to that tab) routes through the same
+    // atomic flip-Nav-then-clear-id pattern.
+    in-out property <int> origin-nav-index: -1;
+
+    // Per-column widths, edited by the resize handles.
+    in-out property <length> w-number: 56px;
+    in-out property <length> w-title: 320px;
+    in-out property <length> w-artist: 200px;
+    in-out property <length> w-album: 220px;
+    in-out property <length> w-genre: 140px;
+    in-out property <length> w-year: 72px;
+    in-out property <length> w-length: 88px;
+
+    // Per-column visibility. Hydrated from `settings.view_columns["genre_detail"]`.
+    // `show-number` defaults false: track ordering inside a genre is
+    // incidental (tracks span many albums), not a tracklist position.
+    in-out property <bool> show-number: false;
+    in-out property <bool> show-artist: true;
+    in-out property <bool> show-album: true;
+    in-out property <bool> show-genre: false;
+    in-out property <bool> show-year: true;
+    in-out property <bool> show-artwork: true;
+
+    // Sort state. Genre detail sorts in-memory in Rust (the DB query is
+    // fixed natural-title order), like the Browse / Album / Artist detail
+    // views. Default `album` so rows group naturally by album.
+    in-out property <string> sort-field: "album";
+    in-out property <string> sort-dir: "asc";
+
+    in-out property <[int]> selected-ids;
+    in-out property <int> selection-anchor: -1;
+
+    callback close-detail();
+    callback shuffle-genre();
+    callback play-row(int /*track_id*/, int /*index*/);
+    callback play-next([int] /*track_ids*/);
+    callback add-to-queue([int]);
+    callback toggle-row-favorite([int] /*track_ids*/, bool /*new*/);
+    callback set-row-rating([int] /*track_ids*/, int /*rating*/);
+    callback select-row(int /*idx*/, int /*id*/, bool /*shift*/, bool /*ctrl*/);
+    callback clear-selection();
+    callback request-sort(string /*field*/);
+    callback toggle-column(string /*column_id*/);
+    // Cross-tab navigation from a row's right-click "Go to …" entry.
+    callback go-to-album(int /*album_id*/);
+    callback go-to-artist(int /*artist_id*/);
+    callback go-to-genre(int /*genre_id*/);
+    // Filter keystroke — Rust re-walks the cached tracks through the
+    // new needle and pushes a filtered Slint model. In-memory walk,
+    // no DB round-trip. Mirrors `ArtistDetail.filter-changed`.
+    callback filter-changed(string);
+}

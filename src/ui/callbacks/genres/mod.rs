@@ -7,7 +7,7 @@
 //!
 //! Mirror of `callbacks/albums` minus everything cover-related: genres have
 //! no intrinsic artwork (see the `Genres` global comment in
-//! `melodia-ui/ui/globals.slint`), so there's no `request-cover` handler, no grid-cover
+//! `melodia-ui/ui/globals/genres.slint`), so there's no `request-cover` handler, no grid-cover
 //! release / prewarm, no `(cover, blur)` pair to clear on detail close.
 
 mod detail;

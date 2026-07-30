@@ -1,0 +1,172 @@
+import { TrackListRow, BrowseFolderRow, BreadcrumbRow } from "../models.slint";
+
+// The two flat track-list views, plus the shared row-cover lookup that every
+// `TrackListRow` consumer in the tree resolves its thumbnail through.
+
+// Tracks: drives the Tracks view. The `rows` model is owned by Rust
+// (`Rc<VecModel<TrackListRow>>` in `src/ui/tracks/`) and pushed in via
+// `set_rows(ModelRc::from(...))`. The full unfiltered Vec lives on the Rust
+// side too; `apply-filter` re-derives `rows` without hitting the DB,
+// `request-sort` does hit the DB.
+export global Tracks {
+    in-out property <[TrackListRow]> rows;
+    in-out property <int> total-count;       // pre-filter count
+    in-out property <string> filter;
+    in-out property <string> sort-field: "title";
+    in-out property <string> sort-dir: "asc";
+    in-out property <[int]> selected-ids;
+    in-out property <int> selection-anchor: -1;
+
+    // Per-column visible widths, edited by the resize handles. ALL columns
+    // are fixed-width — the table is the GTK-TreeView "FIXED" model: each
+    // column is independently resizable, and when the cumulative width
+    // exceeds the container a horizontal scrollbar appears (matches
+    // Audacious / foobar2000 / file-manager conventions). The user
+    // specifically asked for this over the Tauri flex-with-cap model.
+    in-out property <length> w-number: 56px;
+    in-out property <length> w-title: 320px;
+    in-out property <length> w-artist: 200px;
+    in-out property <length> w-album: 220px;
+    in-out property <length> w-genre: 140px;
+    in-out property <length> w-year: 72px;
+    in-out property <length> w-length: 88px;
+
+    // Per-column visibility (Tauri parity). `title` and `length` are not
+    // toggleable. `show-artwork` is a pseudo-toggle that controls only the
+    // small thumbnail inside the title cell, not the cell itself. Hydrated
+    // from `settings.view_columns["tracks"]` at startup; mutated by the
+    // column-toggle popup which then persists via `Tracks.toggle-column`.
+    in-out property <bool> show-number: true;
+    in-out property <bool> show-artist: true;
+    in-out property <bool> show-album: true;
+    in-out property <bool> show-genre: true;
+    in-out property <bool> show-year: true;
+    in-out property <bool> show-artwork: true;
+
+    callback request-sort(string /*field*/);
+    callback apply-filter(string);
+    callback play-row(int /*track_id*/, int /*index_in_filtered*/);
+    callback play-next([int] /*track_ids*/);
+    callback add-to-queue([int]);
+    callback toggle-row-favorite([int] /*track_ids*/, bool /*new*/);
+    callback set-row-rating([int] /*track_ids*/, int /*rating*/);
+    callback request-refresh();
+    // Mirrors "the Tracks section is on screen" — see `watched-tracks-active`
+    // in app-window.slint. Rust uses it to skip `library_changed` refreshes
+    // while the view is hidden and run one deferred re-fetch on re-enter.
+    callback section-active-changed(bool);
+    // Cross-tab navigation from a row's right-click "Go to …" entry.
+    callback go-to-album(int /*album_id*/);
+    callback go-to-artist(int /*artist_id*/);
+    callback go-to-genre(int /*genre_id*/);
+
+    // 3.G — selection. Modifier keys are read from the row's pointer-event
+    // and forwarded as bools (Slint can't easily iterate models inside
+    // expressions, so the heavy lifting happens in Rust which then walks
+    // the VecModel to flip per-row `selected` flags).
+    callback select-row(int /*idx*/, int /*id*/, bool /*shift*/, bool /*ctrl*/);
+    callback clear-selection();
+
+    // Column-visibility toggle: Slint flips the matching `show-*` property
+    // synchronously, then Rust persists the new visible-column list to
+    // `settings.view_columns["tracks"]` so it survives restarts.
+    callback toggle-column(string /*column_id*/);
+
+    // Bumped by anything in the tracks view that should make the filter
+    // input give up keyboard focus — row clicks, action-pill clicks, body
+    // backdrop. Slint globals can't bind callbacks inline, so the SearchBar
+    // observes a counter via a `changed` handler instead.
+    in-out property <int> blur-search-tick: 0;
+}
+
+// Browse: drives the Browse view. The three list models are owned by Rust
+// (`src/ui/browse/`, which documents the ownership and fetch rules); this
+// global is just their Slint-side surface.
+//
+// `rows` renders through the shared `TrackList`, so the column / sort /
+// selection shape mirrors the `Tracks` global. Disk-only files (on disk
+// inside a library folder but not in the DB) arrive with `id == 0` and
+// `enabled == false`, rendering dimmed and non-interactive.
+//
+// `current-path == ""` is the root state — Rust lists the library folders
+// as drillable rows, and `has-library-folders` flips false when there are
+// none so the view paints its CTA instead.
+//
+// `loading` gates the "Empty folder" empty-state so a stale "Empty" can't
+// flash during a drill-down. `error-message` is non-empty only when the
+// fetch failed (folder deleted, permission denied), and replaces the rows.
+// `can-go-back` mirrors the Rust-side back-stack length.
+export global Browse {
+    in-out property <string> current-path;             // "" = root (library list)
+    in-out property <[BrowseFolderRow]> folders;
+    in-out property <[TrackListRow]> rows;
+    in-out property <[BreadcrumbRow]> breadcrumbs;
+    in-out property <bool> loading;
+    in-out property <bool> can-go-back;
+    in-out property <string> error-message;            // "" = no error
+    in-out property <bool> has-library-folders;        // false → root empty-state CTA
+
+    // Per-column state — separate from the `Tracks` global so Browse keeps
+    // its own column layout (mirrors old Tauri's `viewId="browse"`).
+    // Hydrated from `settings.view_column_widths["browse"]` /
+    // `view_columns["browse"]` at startup, snapshotted back on shutdown.
+    in-out property <length> w-number: 56px;
+    in-out property <length> w-title: 320px;
+    in-out property <length> w-artist: 200px;
+    in-out property <length> w-album: 220px;
+    in-out property <length> w-genre: 140px;
+    in-out property <length> w-year: 72px;
+    in-out property <length> w-length: 88px;
+
+    in-out property <bool> show-number: true;
+    in-out property <bool> show-artist: true;
+    in-out property <bool> show-album: true;
+    in-out property <bool> show-genre: true;
+    in-out property <bool> show-year: true;
+    in-out property <bool> show-artwork: true;
+
+    // Sort state. Browse sorts in-memory in Rust (it mixes disk-only +
+    // DB files, so it can't re-query the DB like the Tracks view does).
+    in-out property <string> sort-field: "title";
+    in-out property <string> sort-dir: "asc";
+
+    // Selection — same shape as the `Tracks` global. Disk-only rows
+    // (`id == 0`) are never selectable; the Rust `select-row` handler
+    // ignores them.
+    in-out property <[int]> selected-ids;
+    in-out property <int> selection-anchor: -1;
+
+    callback open-folder(string /*path*/);
+    callback go-back();
+    callback navigate-to(string /*absolute-path*/);    // breadcrumb segment click
+    callback play-row(int /*track_id*/, int /*index*/);
+    callback play-next([int] /*track_ids*/);
+    callback add-to-queue([int] /*track_ids*/);
+    callback toggle-row-favorite([int] /*track_ids*/, bool /*new_state*/);
+    callback set-row-rating([int] /*track_ids*/, int /*rating*/);
+    callback select-row(int /*idx*/, int /*id*/, bool /*shift*/, bool /*ctrl*/);
+    callback clear-selection();
+    callback request-sort(string /*field*/);
+    callback toggle-column(string /*column_id*/);
+    callback refresh();
+    // Mirrors "the Browse section is on screen" — see `watched-browse-active`
+    // in app-window.slint. Rust uses it to skip `library_changed` re-fetches
+    // while the view is hidden and run one deferred re-fetch on re-enter.
+    callback section-active-changed(bool);
+    // Cross-tab navigation from a row's right-click "Go to …" entry.
+    callback go-to-album(int /*album_id*/);
+    callback go-to-artist(int /*artist_id*/);
+    callback go-to-genre(int /*genre_id*/);
+}
+
+// Shared lazy cover lookup for every `TrackListRowItem` thumbnail (Tracks,
+// Browse, Favorites, Search, Album/Artist/Genre/Playlist detail, and the
+// draggable playlist variant — they all render the same row component).
+// One global instead of per-view forwarding: Rust wires it once to the
+// shared row-tier (72 px) `CoverThumbs` LRU. Rows carry only
+// `artwork_path`; the decode (or LRU hit) happens here, per *instantiated*
+// row — virtualized lists pay for ~visible rows only, and model rows no
+// longer pin pixel buffers the LRU already evicted.
+export global RowCovers {
+    pure callback request(string /*artwork_path*/) -> image;
+}

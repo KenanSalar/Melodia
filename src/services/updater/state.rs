@@ -1,5 +1,5 @@
 //! Public state enum the Updater global mirrors. Owned by Rust; pushed
-//! into Slint via the `Updater.*` properties in `melodia-ui/ui/globals.slint`.
+//! into Slint via the `Updater.*` properties in `melodia-ui/ui/globals/updater.slint`.
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub enum UpdaterState {

@@ -1,0 +1,62 @@
+// Direction the next `ViewTransition` mount slides in from. Set on the UI
+// thread immediately before the property write (`Nav.selected-index` or
+// `*Detail.*-id`) that flips an `if` branch — see `Nav.pending-enter-from`
+// below. Lateral sidebar nav uses `below` (fade up); drilling into a
+// detail uses `right`; the detail back button uses `left`.
+export enum NavEnterFrom { below, right, left }
+
+// Nav: which content view the shell shows. Rust persists the index into
+// `views.json` and drives cross-tab navigation off it.
+//   0=search, 1=browse, 2=favorites, 3=tracks, 4=albums, 5=artists,
+//   6=genres, 7=playlists, 8=recently-played, 9=settings
+// Sidebar order is source order, not index order — Recently Played renders
+// under Favorites while keeping index 8.
+export global Nav {
+    in-out property <int> selected-index: 3;
+    // True while the full-screen Now Playing view replaces the main content
+    // area. Toggled by clicking the track-info card in the now-playing bar
+    // (the bar stays mounted while the view is open, so the same card also
+    // closes it); additionally closed by the view's back button or by any
+    // sidebar item click (the sidebar resets it alongside `selected-index`).
+    // The content panel in `app-window.slint` renders `NowPlayingView` when
+    // this is true and gates the regular view branches on `!now-playing-open`.
+    in-out property <bool> now-playing-open: false;
+    // Mirror of `now-playing-open` into Rust (`src/ui/now_playing/`).
+    // The Up Next subscriber skips its ~20-row rebuild while the view is
+    // closed (the rows aren't on screen) and rebuilds once on open. Slint
+    // globals can't have `changed` handlers on their own properties
+    // (CLAUDE.md "changed doesn't accept path expressions on globals"), so
+    // `AppWindow` mirrors `now-playing-open` into a local property and
+    // watches that — the changed handler invokes this synchronously.
+    callback now-playing-open-changed(bool);
+    // Fire after the user clicks a sidebar item (the SidebarItem TouchArea
+    // invokes this right after assigning `selected-index`). Rust persists
+    // the new index into `settings.last_nav_index` so the next launch
+    // reopens on the same section. Wired in `src/ui/callbacks/`.
+    callback persist-selected-index(int);
+    // Right-click "Open Containing Folder" on any track row. Carries the
+    // track id; Rust (`callbacks::wire_all`) resolves the file path from
+    // the DB and hands the parent directory to the OS file manager via
+    // the `open` crate. View-independent — every track-list context menu
+    // calls this single global directly, with no per-view plumbing (vs
+    // the `go-to-*` cross-tab callbacks, which need per-view origin
+    // context and are therefore duplicated across the view globals).
+    callback reveal-in-folder(int /*track_id*/);
+    // Direction for the next ViewTransition mount. Sidebar lateral nav
+    // resets to `below`; opening a detail sets `right`; the detail back
+    // button sets `left`. Written synchronously on the UI thread immediately
+    // before the property flip (`selected-index` or `*Detail.*-id`) that
+    // triggers the new mount. Typed (not string) so Rust typos are
+    // caught at compile time — see `NavEnterFrom` at the top of this file
+    // and the `mark_*` helpers in `src/ui/nav_transition.rs`.
+    in-out property <NavEnterFrom> pending-enter-from: NavEnterFrom.below;
+    in-out property <bool> sidebar-collapsed: false;
+    in-out property <length> sidebar-width: 180px;
+    // Set by the Sidebar's resize handle while the user is dragging the
+    // right edge. Read by `SidebarItem` and the Collapse-toggle row to
+    // disable the `padding-left` animation during a drag — without this
+    // every mouse move kicks off a fresh `Theme.dur-med` ease, making the
+    // icons visibly lag the sidebar's edge. Same pattern the Sidebar
+    // already uses to gate its own `width` animation.
+    in-out property <bool> sidebar-dragging: false;
+}

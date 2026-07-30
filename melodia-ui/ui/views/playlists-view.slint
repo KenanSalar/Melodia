@@ -1,5 +1,7 @@
 import { Theme } from "../theme.slint";
-import { Playlists, Dialog, SmartEditor } from "../globals.slint";
+import { SmartEditor } from "../globals/dialog-forms.slint";
+import { Dialog } from "../globals/dialog.slint";
+import { Playlists } from "../globals/playlists.slint";
 import { SearchBar } from "../components/search-bar.slint";
 import { ActionPill, PillButton, PillDivider } from "../components/action-pill.slint";
 import { PlaylistGrid } from "../components/grid/playlist-grid.slint";
@@ -78,7 +80,7 @@ export component PlaylistsView inherits Rectangle {
             // hopping through a Rust callback — Slint's property graph
             // doesn't tolerate synchronous Rust→`set_open(true)` writes
             // mid-click-handler ("Recursion detected" in
-            // `i_slint_core::properties`). The dispatcher in `globals.slint`
+            // `i_slint_core::properties`). The dispatcher in `globals/dialog.slint`
             // routes the Accept to `Playlists.create-playlist(name, [])`.
             VerticalLayout {
                 alignment: center;

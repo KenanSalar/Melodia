@@ -79,7 +79,7 @@ pub struct ColumnWidths {
 
 impl Default for ColumnWidths {
     fn default() -> Self {
-        // Match the Slint side initial values in `melodia-ui/ui/globals.slint` —
+        // Match the Slint side initial values in `melodia-ui/ui/globals/tracks.slint` —
         // the GTK-FIXED column model needs `title` to have a real width
         // (Tauri's flex-cap model didn't).
         Self {

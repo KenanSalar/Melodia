@@ -1,0 +1,147 @@
+// Window-shell plumbing: the chrome the OS frame doesn't draw, the responsive
+// miniplayer swap, and the two globals that exist only to keep pointer state
+// coherent when a view switch unmounts whatever was under the cursor.
+
+// WindowChrome: actions and state for the custom titlebar. Owned by Rust
+// (`src/ui/window_chrome/`); Slint is the dumb renderer. `is-maximized`
+// is fed from a winit `WindowEvent::Resized` subscription so the
+// maximize/restore icon stays correct under Win+↑ / window-tile shortcuts
+// that bypass our buttons.
+//
+// Window dragging is **not** handled inside Slint — a `TouchArea` that calls
+// `drag_window()` leaks its mouse grab and wedges the whole window. Rust
+// intercepts the press at the winit layer instead, and the Slint side only
+// reports hover through `drag-region-hover-changed`. Full rationale lives in
+// `src/ui/window_chrome/`'s module docs.
+//
+// `restart-app` is invoked by the `Dialog` router when the user confirms the
+// native-titlebar toggle: persist via `library::window::set_use_native_titlebar`
+// (keyed on the `target-id` left in `Dialog`), then respawn, since Slint reads
+// `no-frame` only at first window show. `restart-tray` mirrors it for the
+// System Tray toggle so `main.rs`'s startup gate re-evaluates.
+export global WindowChrome {
+    in property <bool> is-maximized;
+
+    // Always-on-top. `supported` is hydrated once at install from the
+    // cached `AlwaysOnTopCapability`; the pin button is gated on it so
+    // bare-Wayland / GNOME-without-window-calls users don't see a
+    // non-functional control. `active` mirrors the persisted state and
+    // is also written optimistically on click so the icon and tooltip
+    // flip instantly — Rust reverts it via `upgrade_in_event_loop` if
+    // the backend call fails.
+    in property <bool> always-on-top-supported;
+    in-out property <bool> always-on-top-active;
+
+    callback minimize();
+    callback toggle-maximize();
+    callback close-window();
+    callback toggle-always-on-top();
+    // Slint-side hover notification for the titlebar drag area. Rust
+    // mirrors this into an atomic that the winit `MouseInput` filter
+    // checks before deciding to start an OS-level window move.
+    callback drag-region-hover-changed(bool);
+    callback restart-app();
+    callback restart-tray();
+}
+
+// MiniPlayer: drives the compact miniplayer that replaces the full UI when
+// the OS window is shrunk past a threshold. Tauri parity: enter when
+// `width < 550px || height < 250px`, pick the `square` variant when
+// `height >= width * 0.8`. Source of truth is the live window size — both
+// `active` and `square` are written from `AppWindow`'s derived
+// `mini-active`/`mini-square` root properties via mirror+changed handlers.
+//
+// Entry AND exit are resize-only — there are no in-UI buttons. Rust hooks
+// `active-changed(bool)` to flip the Up Next subscriber gate and manage
+// the high-res cover cache; `square-changed(bool)` fires when the
+// variant flips between rectangle and square while already in
+// mini-active, so Rust can seed (or release) the high-res cover cache
+// that only the square variant uses.
+export global MiniPlayer {
+    in-out property <bool> active: false;
+    in-out property <bool> square: false;
+    callback active-changed(bool);
+    callback square-changed(bool);
+}
+
+// CompositeScroll: bridges the winit `MouseWheel` filter
+// (`src/ui/window_chrome/winit_filter.rs`) to whichever *composite* view is
+// currently mounted — Favorites, Recently Played, Artist Detail, Browse. Those
+// views wrap a strip section + a height-capped (virtualized) `TrackList` in a
+// single outer `below-sv := ScrollView`. Slint's inner `ListView` swallows the
+// vertical wheel at its scroll edge instead of bubbling to `below-sv` (verified
+// in `i-slint-core` `flickable.rs::process_wheel_event`), so the strips/hero
+// can't be wheeled back once scrolled away. Fixing this in pure Slint is
+// impossible without breaking row clicks (a wrapping TouchArea forwards the
+// wheel to the ListView first; an overlay one grabs presses), so the winit
+// layer intercepts vertical-dominant wheel over the region and drives the
+// existing composite scroll math here. The height cap — and thus
+// virtualization — is left completely untouched.
+export global CompositeScroll {
+    // Set true by the mounted composite view's hover sentinel while the cursor
+    // is over its below-hero scroll region. Cleared by `reset()` on any
+    // content-view switch so a view unmounting mid-hover can't leave the flag
+    // stuck. The winit filter reads it to decide whether to take over the wheel
+    // or let Slint scroll natively (sidebar, other views).
+    in-out property <bool> hovered: false;
+    // Accumulated wheel delta in Slint logical px, +y = scroll up (matches
+    // `flickable.rs`'s sign: `viewport-y += delta`). Rust *adds* the event delta
+    // then bumps `wheel-tick`; the mounted view's `CompositeScrollbars` instance
+    // (`ui/components/composite-scrollbars.slint` — the shared vbar/hbar +
+    // wheel-routing component every composite view mounts) mirrors the tick,
+    // applies one composite scroll step, and zeroes `wheel-dy`. Accumulating
+    // (rather than overwriting) survives Slint coalescing several wheel events
+    // into one `changed wheel-tick` firing — no delta is dropped on fast flicks.
+    in-out property <length> wheel-dy: 0px;
+    in-out property <int> wheel-tick: 0;
+
+    // Forget which view was under the cursor, and drop any wheel delta that
+    // view never got to apply. Every content-view switch owes this call — a nav
+    // index change, Now Playing opening or closing, an artist detail opening,
+    // the miniplayer swapping in — because Slint destroys the outgoing view
+    // instantly and gives no unmount hook, so nothing else can clear the flag
+    // its hover sentinel left set. Miss one and the winit filter keeps eating
+    // vertical wheel on the *new* view until the next mouse move.
+    //
+    // A `public function` rather than a callback: a callback has one handler
+    // slot, and the same reasoning that makes `Dialog.closed-teardown()` a
+    // function applies — nothing should be able to displace this by registering
+    // over it. (Same precedent, and it keeps the two spelled alike.)
+    public function reset() {
+        root.hovered = false;
+        root.wheel-dy = 0px;
+    }
+}
+
+// PopupHighlight: lets a popup-trigger button keep its hover background
+// painted while its `PopupWindow` is open. Slint 1.16's `PopupWindow` has no
+// `closed` callback, so a trigger can't observe its own popup's transitions —
+// `touch.has-hover` flips false the moment the popup steals input. Slint also
+// stops dispatching mouse events to main-window items while a popup is open
+// (`i-slint-core`'s `window.rs`), so an AppWindow-level scrim `TouchArea`
+// can't catch the dismissing click either.
+//
+// Contract:
+//   - A trigger writes its own discriminator to `id` right before
+//     `pop.show()`, and binds `force-bg: PopupHighlight.id == "<my-id>"`.
+//     A string rather than a bool so distinct triggers don't cross-talk.
+//   - `id` is cleared at the winit layer on every mouse Release (see
+//     `src/ui/window_chrome/winit_filter.rs`); by then the press has already
+//     driven Slint's `close-on-click-outside`, so both resolve in one input
+//     round. An ESC close leaves the highlight until the next click.
+//   - Popup-internal areas that DON'T close the popup (volume slider,
+//     column toggles) re-set `id` from `pointer-event(up)` so the
+//     release-side clear can't drop the highlight while it stays open.
+//   - Areas that DO close it clear `id` alongside `pop.close()` —
+//     belt-and-braces with the winit Release path.
+//
+// `row-ctx-id` is the track id of the row whose right-click menu is open
+// (`-1` for none). It gates the `FocusLossWatcher` inside `TrackListRowItem`
+// so only the open row carries a live watcher, keeping focus-loss dispatch
+// O(1) in visible rows; the winit Release path clears it alongside `id` so a
+// click-outside can't strand the gate on a stale id and block re-opening the
+// same row.
+export global PopupHighlight {
+    in-out property <string> id: "";
+    in-out property <int> row-ctx-id: -1;
+}

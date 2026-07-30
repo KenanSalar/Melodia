@@ -391,7 +391,7 @@ fn floor_luma_matches_the_gradient_the_solve_paints() {
 /// The hero diverges from the `np-*` tier by pinning its two text colours
 /// instead of solving them, and that is only defensible because the *backdrop*
 /// is pinned first. This is the assertion the prose beside them in
-/// `globals.slint` makes, and nothing else pins it.
+/// `globals/hero-backdrop.slint` makes, and nothing else pins it.
 const HERO_ON_BACKDROP: u32 = 0x00f0_eef5;
 const HERO_ON_BACKDROP_MUTED: u32 = 0x00c9_c5d3;
 
@@ -428,16 +428,16 @@ fn the_fixed_hero_text_tiers_clear_their_targets_on_the_worst_backdrop() {
 /// properties they mirror, so editing one side can't silently invalidate the
 /// contrast test.
 #[test]
-fn the_fixed_hero_tiers_match_globals_slint() {
-    let globals = include_str!("../../../melodia-ui/ui/globals.slint");
+fn the_fixed_hero_tiers_match_hero_backdrop_slint() {
+    let declarations = include_str!("../../../melodia-ui/ui/globals/hero-backdrop.slint");
     for (name, literal) in [
         ("on-backdrop", "#f0eef5"),
         ("on-backdrop-muted", "#c9c5d3"),
     ] {
         let declaration = format!("out property <brush> {name}: {literal};");
         assert!(
-            globals.contains(&declaration),
-            "globals.slint no longer declares `{declaration}` — update the constant here too"
+            declarations.contains(&declaration),
+            "hero-backdrop.slint no longer declares `{declaration}` — update the constant here too"
         );
     }
 }

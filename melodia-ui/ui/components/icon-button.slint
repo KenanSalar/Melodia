@@ -16,7 +16,7 @@ export component IconButton inherits Rectangle {
     in property <bool> button-enabled: true;
     // Force the hover background to paint regardless of pointer position.
     // Used by popup triggers (overflow / volume) to keep the highlight
-    // while their popup is open — see `PopupHighlight` in `globals.slint`.
+    // while their popup is open — see `PopupHighlight` in `globals/shell.slint`.
     in property <bool> force-bg: false;
     in property <brush> idle-bg: transparent;
     // Hover-state background fill. Defaults to `Theme.surface0` so existing

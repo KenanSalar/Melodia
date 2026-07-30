@@ -92,7 +92,7 @@ export component PillButton inherits Rectangle {
     out property <bool> hovered: touch.has-hover;
     // Force the hover background to paint regardless of pointer position.
     // Used by popup triggers (column-toggle) to keep the highlight while
-    // their popup is open — see `PopupHighlight` in `globals.slint`.
+    // their popup is open — see `PopupHighlight` in `globals/shell.slint`.
     in property <bool> force-bg: false;
     callback clicked();
 

@@ -1,5 +1,6 @@
 import { Theme } from "../../theme.slint";
-import { Dialog as DialogGlobal, SmartEditor, TagEditor, ScrobbleUi } from "../../globals.slint";
+import { SmartEditor, TagEditor, ScrobbleUi } from "../../globals/dialog-forms.slint";
+import { Dialog as DialogGlobal } from "../../globals/dialog.slint";
 import { SectionButton } from "../settings/section-button.slint";
 import { PlaylistMosaicPicker } from "playlist-mosaic-picker.slint";
 import { PlaylistPicker } from "playlist-picker.slint";
@@ -206,7 +207,7 @@ export component DialogOverlay inherits Rectangle {
             // Form body for `"create-playlist"` and `"rename-playlist"`
             // kinds — Name + optional Description, mirroring the Tauri
             // dialogs. Both fields use the shared `LabeledInput`
-            // component; the dispatcher in `globals.slint` reads
+            // component; the dispatcher in `globals/dialog.slint` reads
             // `input-text` (name) and `input-text-2` (description) on
             // Accept. Enter inside either field commits the dialog so
             // the keyboard-only flow works (Tauri parity); we gate the
@@ -321,7 +322,7 @@ export component DialogOverlay inherits Rectangle {
                     destructive: DialogGlobal.destructive;
                     // Playlist Create / Rename kinds disable Save until
                     // the Name field is non-empty. The dispatcher
-                    // (`globals.slint`) already gates the actual commit
+                    // (`globals/dialog.slint`) already gates the actual commit
                     // on the same condition, but a disabled button
                     // surfaces the requirement visually instead of
                     // silently no-op'ing on click. All other kinds

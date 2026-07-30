@@ -126,6 +126,17 @@ export global Theme {
     // restart to pick up an environment switch.
     in-out property <length> native-content-radius: 6px;
     out property <length> native-content-radius-inner: max(0px, native-content-radius - 1px);
+
+    // Resize-affordance geometry, read by BOTH the `Window`'s
+    // `resize-border-width` and the `ResizeRing` overlays that set the cursor
+    // over it. Two readers of one number is the whole point: winit decides
+    // where a press resizes from `resize-border-width`, while the ring only
+    // paints the cursor hint, so a drift between them means a band that
+    // resizes without showing a resize cursor (or the reverse). Corners are
+    // deliberately larger than the edge for a more forgiving diagonal grab.
+    out property <length> resize-border: 4px;
+    out property <length> resize-corner: 8px;
+
     out property <length> pad-xs: 4px;
     out property <length> pad-sm: 8px;
     out property <length> pad-md: 12px;

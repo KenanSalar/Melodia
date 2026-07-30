@@ -178,7 +178,7 @@ are gated internally.
 Add a feature flag the UI can read, and **hide the Update section without
 unmounting it.**
 
-`melodia-ui/ui/globals.slint` — `MelodiaUpdater` global (block at lines 1234-1305):
+`melodia-ui/ui/globals/updater.slint` — the `MelodiaUpdater` global:
 ```slint
 in property <bool> feature-enabled: true;   // Rust overrides at startup
 ```

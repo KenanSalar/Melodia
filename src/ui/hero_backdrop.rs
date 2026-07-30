@@ -2,7 +2,7 @@
 //!
 //! The thin half of [`crate::ui::backdrop`]: that module argues the colours and
 //! does the maths, this one measures whatever the caller has in hand and writes
-//! the answer. Six views share one global — see `globals.slint` for why one is
+//! the answer. Six views share one global — see `globals/hero-backdrop.slint` for why one is
 //! enough — so every hero opens by calling exactly one of these.
 //!
 //! The seed is the live `Theme.accent`, so the hero carries the theme's *hue*;
@@ -64,7 +64,7 @@ fn write(ui: &AppWindow, colors: &BackdropColors, floor_override: Option<(u32, u
 
     // No text tiers here: `HeroBackdrop.on-backdrop` / `-muted` are fixed `out`
     // properties. Pinning the backdrop is what makes one light foreground
-    // correct on every cover — see the note beside them in `globals.slint`.
+    // correct on every cover — see the note beside them in `globals/hero-backdrop.slint`.
     let g = ui.global::<HeroBackdrop>();
     g.set_floor_start(color(floor_start));
     g.set_floor_end(color(floor_end));

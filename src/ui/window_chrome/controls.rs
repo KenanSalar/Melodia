@@ -165,7 +165,7 @@ pub(super) fn wire(app: &AppWindow, state: &AppState, drag_hover: Arc<AtomicBool
             // `Dialog.target-id` carries the requested new value (1 =
             // native titlebar, 0 = custom). Read it before the
             // dispatcher wipes the routing payload (see the default
-            // `accepted` handler in `globals.slint`).
+            // `accepted` handler in `globals/dialog.slint`).
             let target = ui.global::<crate::Dialog>().get_target_id();
             let on = target == 1;
 

@@ -1,0 +1,105 @@
+import { Nav } from "../globals/nav.slint";
+import { MiniPlayer } from "../globals/shell.slint";
+
+// The responsive full-UI ↔ miniplayer swap, as a non-visual state machine.
+//
+// Tauri parity: enter the compact view when the window is either narrow OR
+// short, and pick the `square` variant (the one that can show an Up Next list)
+// when the aspect ratio is roughly square or taller.
+//
+// The host passes its own width/height in rather than the component reading
+// them off `parent`, which a component's root binding cannot reach. winit
+// `Resized` events drive the host's `width`/`height` directly, so nothing else
+// needs plumbing for the window changing size.
+//
+// The swap is two-phase on purpose: `render-active` lags `active` by the fade
+// duration so only ONE branch is ever mounted. Overlapping them would hold the
+// sidebar's grid covers and the mini's up-next subscriber alive at the same
+// time, which is a memory-discipline regression.
+//
+// Both `Timer`s are non-visual pseudo-elements, so this occupies no layout
+// space — mount it anywhere in the host's element tree.
+export component MiniPlayerSwitch {
+    // The host window's live size.
+    in property <length> host-width;
+    in property <length> host-height;
+
+    // Should the miniplayer be showing? Flips the instant the threshold is
+    // crossed — `render-active` is what the host should actually branch on.
+    out property <bool> active: root.host-width < 550px || root.host-height < 250px;
+
+    // Which branch is mounted right now: `active`, delayed by one fade so the
+    // outgoing layout can reach opacity 0 before it is destroyed.
+    out property <bool> render-active: false;
+
+    // Drives the host's `opacity` on whichever branch is mounted. Named
+    // `fade-opacity` rather than `opacity` to stay clear of the builtin
+    // property of that name.
+    out property <float> fade-opacity: 1.0;
+    animate fade-opacity { duration: 100ms; easing: ease-in-out; }
+
+    // Internal: nothing outside needs the variant, it only feeds the global.
+    private property <bool> square: root.host-height >= root.host-width * 0.8;
+
+    // Watched mirror so `changed` fires reliably — a `changed` handler can't
+    // watch a path expression on a global, and mirroring into a local property
+    // is the established pattern (see `AppWindow`'s `watched-nav-idx`).
+    //
+    // Publishes to the global so child components see the new value, schedules
+    // fade-out → swap → fade-in, closes any open Now Playing view so its
+    // artwork release path runs, and notifies the Rust subscriber via
+    // `active-changed` for the up-next gate and the square-variant artwork
+    // cache lifecycle. `MiniPlayer.square` is owned by `watched-square` below
+    // (and seeded once at mount) — Rust re-reads it from the global on entry,
+    // so no redundant write belongs here.
+    private property <bool> watched-active: root.active;
+    changed watched-active => {
+        MiniPlayer.active = root.watched-active;
+        if (root.watched-active && Nav.now-playing-open) {
+            Nav.now-playing-open = false;
+        }
+        root.fade-opacity = 0.0;
+        swap-timer.running = true;
+        MiniPlayer.active-changed(root.watched-active);
+    }
+
+    // A variant change while already inside mini (the aspect crossing 0.8
+    // either way) deliberately doesn't fade — it's an in-place re-layout of the
+    // same component, and a flash on every aspect wobble during a window drag
+    // would be jarring. `square-changed` drives the Rust-side high-res cover
+    // cache lifecycle: seed on rectangle→square, release on square→rectangle.
+    // See `src/ui/mini_player.rs`.
+    private property <bool> watched-square: root.square;
+    changed watched-square => {
+        MiniPlayer.square = root.watched-square;
+        MiniPlayer.square-changed(root.watched-square);
+    }
+
+    // 1 ms mount seed: `changed` doesn't fire when the first binding settle
+    // lands directly on the final value (`grid-columns-sync.slint` precedent),
+    // so without this an app launched straight into a mini-sized window would
+    // paint the full UI for one frame before switching.
+    seed-timer := Timer {
+        interval: 1ms;
+        triggered => {
+            MiniPlayer.active = root.active;
+            MiniPlayer.square = root.square;
+            root.render-active = root.active;
+            MiniPlayer.active-changed(root.active);
+            self.running = false;
+        }
+    }
+
+    // Fade-out completion: flip the render shadow, ease opacity back to 1.
+    // Self-stops, and is re-armed on each `watched-active` flip — single-shot,
+    // so a fast wiggle just keeps restarting the same timer cleanly.
+    swap-timer := Timer {
+        interval: 100ms;
+        running: false;
+        triggered => {
+            root.render-active = root.active;
+            root.fade-opacity = 1.0;
+            self.running = false;
+        }
+    }
+}

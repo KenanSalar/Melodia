@@ -4,7 +4,7 @@
 //! and makes the contract easy to grep for.
 //!
 //! Caller contract (also documented at `Nav.pending-enter-from` in
-//! `melodia-ui/ui/globals.slint`): every helper must be invoked synchronously on
+//! `melodia-ui/ui/globals/nav.slint`): every helper must be invoked synchronously on
 //! the UI thread, **before** the property write that flips an `if`
 //! branch in `melodia-ui/ui/app-window.slint` (`Nav.selected-index` or
 //! `*Detail.*-id`). Setting it after the flip is too late — the new

@@ -1,0 +1,164 @@
+import { SmartRuleRow } from "../models.slint";
+
+// The form-shaped dialogs' state. Each is populated by its own entry-point
+// callback and read back by the `Dialog.accepted` dispatcher — which is why
+// they sit apart from `Dialog`: the dispatcher imports them, never the reverse.
+
+// SmartEditor: drives the Smart-Playlist rule-builder dialog
+// (`Dialog.kind == "smart-playlist-editor"`). State is Rust-owned
+// (`src/ui/callbacks/playlists/smart.rs`): the `rules` model is a
+// `VecModel<SmartRuleRow>`, and the scalar properties are read back on `commit`.
+// Entry points (`request-new` / `request-edit`) populate everything and open the
+// dialog on a fresh event-loop tick (Rust hop — avoids the recursion guard that
+// a synchronous `Dialog.open = true` from a click would trip). `commit` is fired
+// by the `Dialog.accepted` dispatcher and reconstructs a `SmartCriteria` from
+// the model + scalars, then creates (target-id < 0) or updates the playlist.
+export global SmartEditor {
+    in-out property <[SmartRuleRow]> rules;
+    // 0 = match all (AND), 1 = match any (OR).
+    in-out property <int> match-mode-index;
+    in-out property <string> name;
+    in-out property <string> description;
+    // Optional result cap.
+    in-out property <bool> limit-enabled;
+    in-out property <string> limit-count-text: "25";
+    in-out property <int> limit-order-index;
+    // -1 = create a new smart playlist; otherwise the playlist id being edited.
+    in-out property <int> target-id: -1;
+
+    // Entry points — reset/populate state and open the dialog (Rust-driven).
+    callback request-new();
+    callback request-edit(int /*playlist_id*/);
+
+    // Rule-row mutations (Rust rewrites the model row, recomputing
+    // field-kind / input-kind).
+    callback add-rule();
+    callback remove-rule(int /*row*/);
+    callback set-rule-field(int /*row*/, int /*field index*/);
+    callback set-rule-op(int /*row*/, int /*op index*/);
+    callback set-rule-value(int /*row*/, string);
+
+    // Fired by the `Dialog.accepted` dispatcher — reconstruct + persist.
+    callback commit();
+}
+
+// TagEditor: drives the Edit-Track-Information dialog
+// (`Dialog.kind == "edit-tags"`), opened from a track row's context menu for
+// one *or many* selected rows. State is Rust-owned
+// (`src/ui/callbacks/tags.rs`): `request-edit` fetches the rows, populates the
+// fields, and opens the dialog on a fresh event-loop tick (the `SmartEditor`
+// hop — a synchronous `Dialog.open = true` from a click trips the recursion
+// guard). Numbers cross as strings so Rust owns parse + validation. On
+// `commit` (fired by the `Dialog.accepted` dispatcher) Rust diffs each field
+// against the populate-time snapshot to derive a Keep / Clear / Set tri-state,
+// so only touched fields are written to the file.
+//
+// Batch editing is the point: a field that disagrees across the selection
+// starts empty and shows the ‹multiple values› sentinel via its `*-placeholder`
+// (Rust-set). The Lyrics and Summary tabs are single-selection only — driven by
+// `track-count` in `tag-editor-body.slint` (the tab is not mounted in multi
+// mode, never merely disabled).
+export global TagEditor {
+    // 13 editable fields — numbers cross the boundary as strings; Rust parses
+    // and validates them into the typed `TagEdit` on commit.
+    in-out property <string> title;
+    in-out property <string> artist;
+    in-out property <string> album-artist;
+    in-out property <string> album;
+    in-out property <string> genre;
+    in-out property <string> year;
+    in-out property <string> original-year;
+    in-out property <string> track-number;
+    in-out property <string> disc-number;
+    in-out property <string> composer;
+    in-out property <string> comment;
+    in-out property <string> bpm;
+    in-out property <string> lyrics;
+
+    // Per-field placeholder — the ‹multiple values› sentinel when the
+    // selection disagrees (multi mode), else the normal hint. Rust-set.
+    in property <string> title-placeholder;
+    in property <string> artist-placeholder;
+    in property <string> album-artist-placeholder;
+    in property <string> album-placeholder;
+    in property <string> genre-placeholder;
+    in property <string> year-placeholder;
+    in property <string> original-year-placeholder;
+    in property <string> track-number-placeholder;
+    in property <string> disc-number-placeholder;
+    in property <string> composer-placeholder;
+    in property <string> comment-placeholder;
+    in property <string> bpm-placeholder;
+    in property <string> lyrics-placeholder;
+
+    // 1 = single selection (Lyrics + Summary tabs available), >1 = batch.
+    in property <int> track-count;
+    // Active tab index; Rust resets it to 0 (Tags) on every populate.
+    in-out property <int> active-tab;
+    // Decoded preview of the current / picked cover; `has-cover` gates the
+    // Remove button.
+    in-out property <image> cover;
+    in property <bool> has-cover;
+    in property <bool> lyrics-enabled;
+
+    // Read-only Summary strings (single selection only), preformatted by Rust.
+    in property <string> summary-path;
+    in property <string> summary-codec;
+    in property <string> summary-bitrate;
+    in property <string> summary-sample-rate;
+    in property <string> summary-bit-depth;
+    in property <string> summary-channels;
+    in property <string> summary-size;
+    in property <string> summary-duration;
+    in property <string> summary-modified;
+    in property <string> summary-hash;
+
+    // Entry point — fetch + populate + open the dialog (Rust-driven).
+    callback request-edit([int] /*track ids*/);
+    // Artwork picker (rfd on the UI thread) / clear the embedded cover.
+    callback pick-artwork();
+    callback remove-artwork();
+    // Fired by the `Dialog.accepted` dispatcher — diff, build `TagEdit`, write.
+    callback commit();
+}
+
+// ScrobbleUi: drives the two scrobble login dialogs
+// (`Dialog.kind == "scrobble-lastfm-login"` / `"scrobble-listenbrainz-login"`).
+// State is owned by Rust (`src/ui/scrobbling_settings.rs`); the section resets it
+// to defaults just before opening a dialog. Last.fm is a two-step browser auth:
+// `lastfm-step` 0 → `lastfm-open-auth()` fetches an unauthorized token, opens the
+// approval page, stashes the token in `lastfm-token` and advances to step 1; step
+// 1 → `lastfm-finish(token)` exchanges it for a session. ListenBrainz is one step:
+// `listenbrainz-verify(token)` validates the pasted token. `busy` gates the
+// buttons while a request is in flight; `error` carries a localized failure line
+// shown inline (Rust sets it via the `err-*` `@tr` callbacks — Slint 1.16 has no
+// Rust-callable `tr()`).
+export global ScrobbleUi {
+    in-out property <int> lastfm-step;      // 0 = open browser, 1 = finish
+    in-out property <string> lastfm-token;  // unauthorized token between steps
+    in-out property <string> lb-token;      // ListenBrainz token input
+    in-out property <bool> busy;
+    in-out property <string> error;
+
+    callback lastfm-open-auth();
+    callback lastfm-finish(string /*token*/);
+    callback listenbrainz-verify(string /*token*/);
+
+    // Localized inline-error strings, resolved in the active locale at call time.
+    pure callback err-invalid-token() -> string;
+    err-invalid-token => {
+        return @tr("That token wasn't accepted. Check it and try again.");
+    }
+    pure callback err-network() -> string;
+    err-network => {
+        return @tr("Couldn't reach the service. Check your connection and try again.");
+    }
+    pure callback err-not-authorized() -> string;
+    err-not-authorized => {
+        return @tr("Not approved yet. Approve Melodia in your browser, then click Finish.");
+    }
+    pure callback err-save-failed() -> string;
+    err-save-failed => {
+        return @tr("Couldn't save your credentials.");
+    }
+}
