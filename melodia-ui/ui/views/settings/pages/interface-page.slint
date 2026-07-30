@@ -22,9 +22,9 @@ export component InterfacePage inherits Rectangle {
     VerticalLayout {
         spacing: Theme.pad-lg;
 
-        appearance := AppearanceSection {}
-        window := WindowChromeSection {}
-        overflow := OverflowMenuSection {}
-        language := LanguageSection {}
+        appearance := AppearanceSection { tab-name: @tr("Interface"); }
+        window := WindowChromeSection { tab-name: @tr("Interface"); }
+        overflow := OverflowMenuSection { tab-name: @tr("Interface"); }
+        language := LanguageSection { tab-name: @tr("Interface"); }
     }
 }

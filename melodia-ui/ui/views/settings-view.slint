@@ -3,6 +3,7 @@ import { Theme } from "../theme.slint";
 import { SettingsPage } from "../globals/settings-page.slint";
 import { OverlayScrollbar } from "../components/overlay-scrollbar.slint";
 import { SearchBar } from "../components/search-bar.slint";
+import { Tooltip } from "../components/tooltip.slint";
 import { SettingsTabBar } from "../components/settings/settings-tab-bar.slint";
 import { SettingsTabs } from "settings/settings-tabs.slint";
 
@@ -56,9 +57,12 @@ export component SettingsView inherits Rectangle {
     // this threshold is the only thing standing between a long locale and a
     // clipped last tab. Re-check it when adding a locale.
     //
-    // Erring toward icon-only is the safe direction: the tabs keep their
-    // tooltips, and the miniplayer takes over at a 550 px window anyway, so
-    // the band this covers is narrow.
+    // Erring toward icon-only is the safe direction — the tabs keep their
+    // tooltips. Note the threshold is on the *content panel*, not the window:
+    // the panel is the window less the sidebar and the shell's own chrome, so
+    // compact runs from the 550 px miniplayer floor up to roughly a 970 px
+    // window. That is an ordinary laptop and split-screen size, which is why
+    // the tooltip below has to actually be legible rather than a formality.
     property <bool> compact-tabs: root.page-w < 780px;
 
     // A fresh tab, or entering/leaving search, starts at the top. Without
@@ -118,7 +122,7 @@ export component SettingsView inherits Rectangle {
         // width — they're page chrome, not part of the column.)
         HorizontalLayout {
             alignment: center;
-            SettingsTabBar {
+            bar := SettingsTabBar {
                 labels: [@tr("Library"), @tr("Playback"), @tr("Interface"),
                          @tr("Services"), @tr("About")];
                 icons: ["library_music", "play_circle", "palette", "link", "info"];
@@ -219,5 +223,28 @@ export component SettingsView inherits Rectangle {
         content-size: sv.viewport-width;
         offset: -sv.viewport-x;
         scroll-to(o) => { sv.viewport-x = -o; }
+    }
+
+    // Top-layer tooltip for the compact tab bar. Declared last so it paints
+    // above the scroll body (Slint has no z-index — paint order is declaration
+    // order); left on the tab it belongs to, a below-anchored tooltip lands in
+    // the body's band and the first section card covers it. Same fix, and the
+    // same frame-tracks-the-host idiom, as `playlists-view.slint`'s
+    // `header-tip`. A plain Rectangle captures no input, so the tab underneath
+    // keeps its hover — no flicker.
+    tab-tip := Rectangle {
+        x: bar.tip-x - root.absolute-position.x;
+        y: bar.tip-y - root.absolute-position.y;
+        width: bar.tip-w;
+        height: bar.tip-h;
+        Tooltip {
+            text: bar.tip-text;
+            // Gated here rather than in the bar so dragging the window back
+            // over the threshold while a tab is hovered can't strand one.
+            hovered: bar.tip-shown && root.compact-tabs;
+            host-width: tab-tip.width;
+            host-height: tab-tip.height;
+            below: true;
+        }
     }
 }

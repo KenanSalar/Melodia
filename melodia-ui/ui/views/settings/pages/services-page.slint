@@ -15,7 +15,7 @@ export component ServicesPage inherits Rectangle {
     VerticalLayout {
         spacing: Theme.pad-lg;
 
-        scrobbling := ScrobblingSection {}
-        discord := DiscordSection {}
+        scrobbling := ScrobblingSection { tab-name: @tr("Services"); }
+        discord := DiscordSection { tab-name: @tr("Services"); }
     }
 }

@@ -19,7 +19,7 @@ export component LibraryPage inherits Rectangle {
     VerticalLayout {
         spacing: Theme.pad-lg;
 
-        lib := LibrarySection {}
-        fw := FileWatchingSection {}
+        lib := LibrarySection { tab-name: @tr("Library"); }
+        fw := FileWatchingSection { tab-name: @tr("Library"); }
     }
 }

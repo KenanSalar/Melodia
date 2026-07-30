@@ -15,7 +15,7 @@ export component AboutPage inherits Rectangle {
     VerticalLayout {
         spacing: Theme.pad-lg;
 
-        updates := UpdateSection {}
-        about := AboutSection {}
+        updates := UpdateSection { tab-name: @tr("About"); }
+        about := AboutSection { tab-name: @tr("About"); }
     }
 }

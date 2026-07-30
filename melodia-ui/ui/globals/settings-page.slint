@@ -49,6 +49,13 @@ export global SettingsPage {
     // function, which keeps the rule shared and the per-row call sites short.
     // Reading `search-query` at the call site is what makes the result
     // reactive: Slint tracks the property read, `matches` is opaque to it.
+    //
+    // `section` is the card's title prefixed with the name of the tab it sits
+    // on, fed in as `tab-name` from the page file that mounts it — search
+    // escapes the tabs, so a tab name is exactly the query a user types, and
+    // without this "Interface" and "Services" appear nowhere in any haystack
+    // and answer "No matching settings" while sitting in plain view on the
+    // bar. The page owns it so the card-to-tab mapping is still stated once.
     public pure function row-visible(section: string, haystack: string, query: string) -> bool {
         return query == ""
             || root.matches(section, query)

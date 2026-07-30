@@ -1,6 +1,5 @@
 import { Theme } from "../../theme.slint";
 import { MaterialIcon } from "../material-icon.slint";
-import { Tooltip } from "../tooltip.slint";
 
 // One tab in a SettingsTabBar. Lives in this file (not exported) because
 // it's only useful as a child of the bar.
@@ -19,6 +18,10 @@ component SettingsTab inherits Rectangle {
     in property <bool>   compact;
 
     callback clicked();
+    // Hover in/out, so the bar can hand the host what it needs to draw the
+    // compact-mode tooltip on a layer of its own. Mirrored into a local
+    // property because `changed` won't take `touch.has-hover` directly.
+    callback hover-changed(bool);
 
     height: 36px;
     horizontal-stretch: 0;
@@ -75,16 +78,8 @@ component SettingsTab inherits Rectangle {
         clicked => { root.clicked(); }
     }
 
-    // Only in compact mode is the icon on its own; with a label there's
-    // nothing left to explain. Anchored below because the bar sits near the
-    // top of the window, where an above-tooltip would cover the page title.
-    if root.compact: Tooltip {
-        text: root.label;
-        hovered: touch.has-hover;
-        host-width: root.width;
-        host-height: root.height;
-        below: true;
-    }
+    property <bool> is-hovered: touch.has-hover;
+    changed is-hovered => { root.hover-changed(root.is-hovered); }
 }
 
 // Segmented tab bar for the Settings page. Data-agnostic — it takes parallel
@@ -104,6 +99,19 @@ export component SettingsTabBar inherits Rectangle {
     in-out property <int> selected-index;
 
     callback selected(int);
+
+    // The hovered tab's window rect and label, republished for the host to
+    // hang a tooltip off. The tooltip itself can't live on the tab: it anchors
+    // *below* the bar, the bar sits in the page header, and Slint paints in
+    // declaration order — so anything the header owns is covered by the scroll
+    // body underneath it. `playlists-view.slint`'s `header-tip` is the same
+    // arrangement for the same reason.
+    out property <bool> tip-shown;
+    out property <length> tip-x;
+    out property <length> tip-y;
+    out property <length> tip-w;
+    out property <length> tip-h;
+    out property <string> tip-text;
 
     // Track. No `clip` — a rounded clip over text renders the subtree to an
     // offscreen layer and upscales it on HiDPI. The tabs are inset by the
@@ -126,6 +134,21 @@ export component SettingsTabBar inherits Rectangle {
             clicked => {
                 root.selected-index = i;
                 root.selected(i);
+            }
+            hover-changed(hovered) => {
+                if (hovered) {
+                    root.tip-x = self.absolute-position.x;
+                    root.tip-y = self.absolute-position.y;
+                    root.tip-w = self.width;
+                    root.tip-h = self.height;
+                    root.tip-text = tab-label;
+                    root.tip-shown = true;
+                } else if (root.tip-text == tab-label) {
+                    // Only the tab that owns the tooltip may retract it — a
+                    // leave arriving after the neighbour's enter would
+                    // otherwise blank a live one.
+                    root.tip-shown = false;
+                }
             }
         }
     }

@@ -26,8 +26,10 @@ export component LibrarySection inherits Rectangle {
     horizontal-stretch: 1;
     vertical-stretch: 0;
 
+    in property <string> tab-name;
+
     out property <bool> has-matches:
-        SettingsPage.row-visible(@tr("Library Folders"),
+        SettingsPage.row-visible(root.tab-name + " " + @tr("Library Folders"),
                                  @tr("Manage Folders") + " " + @tr("Add Folder"),
                                  SettingsPage.search-query);
 
