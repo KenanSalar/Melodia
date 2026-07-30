@@ -104,7 +104,8 @@ async fn run(weak: Weak<AppWindow>) {
 /// Format the current view as a compact tag. Reads the `Nav` selected
 /// index + per-section detail-id globals + overlay flags. Index mapping
 /// matches `melodia-ui/ui/globals/nav.slint::Nav` (`0=search 1=browse 2=favorites
-/// 3=tracks 4=albums 5=artists 6=genres 7=playlists 8=settings`).
+/// 3=tracks 4=albums 5=artists 6=genres 7=playlists 8=recently-played
+/// 9=settings`).
 #[cfg(target_os = "linux")]
 fn format_view(ui: &AppWindow) -> String {
     let nav = ui.global::<Nav>();
