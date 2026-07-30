@@ -30,7 +30,7 @@ export component AboutSection inherits Rectangle {
     in property <string> tab-name;
 
     pure function row-visible(label: string, desc: string) -> bool {
-        return SettingsPage.row-visible(root.tab-name + " " + @tr("About"),
+        return SettingsPage.row-visible(root.tab-name, @tr("About"),
                                         label + " " + desc,
                                         SettingsPage.search-query);
     }

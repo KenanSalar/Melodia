@@ -106,12 +106,21 @@ export component SettingsTabBar inherits Rectangle {
     // declaration order — so anything the header owns is covered by the scroll
     // body underneath it. `playlists-view.slint`'s `header-tip` is the same
     // arrangement for the same reason.
+    //
+    // Unlike that one, the rect is a **snapshot** taken on hover-enter rather
+    // than a live binding — a `for` loop gives the host no per-tab element to
+    // read a position off. So a tab that moves under a parked pointer (Ctrl+B,
+    // F11) keeps its old anchor until the pointer leaves and returns.
     out property <bool> tip-shown;
     out property <length> tip-x;
     out property <length> tip-y;
     out property <length> tip-w;
     out property <length> tip-h;
     out property <string> tip-text;
+    // Which tab the live tip belongs to. Its *index*, not its label: the bar
+    // is data-agnostic, so nothing stops a caller passing two tabs the same
+    // text.
+    property <int> tip-idx: -1;
 
     // Track. No `clip` — a rounded clip over text renders the subtree to an
     // offscreen layer and upscales it on HiDPI. The tabs are inset by the
@@ -142,8 +151,9 @@ export component SettingsTabBar inherits Rectangle {
                     root.tip-w = self.width;
                     root.tip-h = self.height;
                     root.tip-text = tab-label;
+                    root.tip-idx = i;
                     root.tip-shown = true;
-                } else if (root.tip-text == tab-label) {
+                } else if (root.tip-idx == i) {
                     // Only the tab that owns the tooltip may retract it — a
                     // leave arriving after the neighbour's enter would
                     // otherwise blank a live one.

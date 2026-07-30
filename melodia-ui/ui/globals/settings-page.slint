@@ -41,23 +41,28 @@ export global SettingsPage {
     pure callback matches(string /*haystack*/, string /*needle*/) -> bool;
 
     // Whether a settings row survives the filter: an empty query shows
-    // everything, otherwise either the section's own title or the row's text
-    // has to match. Every section used to carry a byte-identical copy of this
-    // — ten of them — so changing the rule meant editing ten files.
+    // everything, otherwise the tab's name, the section's own title or the
+    // row's text has to match. Every section used to carry a byte-identical
+    // copy of this — ten of them — so changing the rule meant editing ten
+    // files.
     //
     // Sections pass their title and wrap this in a two-argument local
     // function, which keeps the rule shared and the per-row call sites short.
     // Reading `search-query` at the call site is what makes the result
     // reactive: Slint tracks the property read, `matches` is opaque to it.
     //
-    // `section` is the card's title prefixed with the name of the tab it sits
-    // on, fed in as `tab-name` from the page file that mounts it — search
-    // escapes the tabs, so a tab name is exactly the query a user types, and
-    // without this "Interface" and "Services" appear nowhere in any haystack
-    // and answer "No matching settings" while sitting in plain view on the
-    // bar. The page owns it so the card-to-tab mapping is still stated once.
-    public pure function row-visible(section: string, haystack: string, query: string) -> bool {
+    // `tab` is a term of its own rather than a prefix the sections splice onto
+    // their title, so the join lives here instead of in eleven files — and no
+    // section ends up matching a substring that spans the seam. It arrives as
+    // `tab-name` from the page file that mounts the card: search escapes the
+    // tabs, so a tab name is exactly the query a user types, and without it
+    // "Interface" and "Services" appear nowhere in any haystack and answer
+    // "No matching settings" while sitting in plain view on the bar. The page
+    // owns it so the card-to-tab mapping is still stated once.
+    public pure function row-visible(tab: string, section: string, haystack: string,
+                                     query: string) -> bool {
         return query == ""
+            || root.matches(tab, query)
             || root.matches(section, query)
             || root.matches(haystack, query);
     }

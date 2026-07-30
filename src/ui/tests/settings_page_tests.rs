@@ -32,6 +32,24 @@ const GLOBAL: &str = include_str!("../../../melodia-ui/ui/globals/settings-page.
 const ROUTER: &str = include_str!("../../../melodia-ui/ui/views/settings/settings-tabs.slint");
 const VIEW: &str = include_str!("../../../melodia-ui/ui/views/settings-view.slint");
 
+/// One tab page per tab, by name so a failure says which file.
+const PAGES: [(&str, &str); 5] = [
+    ("library-page", include_str!("../../../melodia-ui/ui/views/settings/pages/library-page.slint")),
+    (
+        "playback-page",
+        include_str!("../../../melodia-ui/ui/views/settings/pages/playback-page.slint"),
+    ),
+    (
+        "interface-page",
+        include_str!("../../../melodia-ui/ui/views/settings/pages/interface-page.slint"),
+    ),
+    (
+        "services-page",
+        include_str!("../../../melodia-ui/ui/views/settings/pages/services-page.slint"),
+    ),
+    ("about-page", include_str!("../../../melodia-ui/ui/views/settings/pages/about-page.slint")),
+];
+
 /// The `N` in `SettingsPage`'s `tab-count: N;`.
 fn declared_tab_count() -> Option<usize> {
     GLOBAL
@@ -112,4 +130,32 @@ fn tab_count_matches_the_tabs_slint_declares() {
         count,
         "the tab bar's `icons` array is the wrong length"
     );
+}
+
+/// The tab's own name is part of every card's search term, and the page that
+/// mounts the card is what supplies it. Omit `tab-name:` on a mount and the
+/// section falls back to an empty string: it still matches its own title, so
+/// the page looks fine, but the card drops out of a search for the tab it
+/// lives on — the exact query "Interface" and "Services" exist to answer.
+/// Nothing in the build notices, which is why it's pinned here.
+#[test]
+fn every_mounted_section_carries_its_tab_name() {
+    assert_eq!(
+        Some(PAGES.len()),
+        declared_tab_count(),
+        "there must be one tab page file per tab declared in settings-page.slint"
+    );
+
+    for (page, src) in PAGES {
+        let mounts: Vec<&str> =
+            src.lines().map(str::trim).filter(|line| line.contains("Section {")).collect();
+        assert!(!mounts.is_empty(), "{page}.slint mounts no section — the scan matched nothing");
+        for mount in mounts {
+            assert!(
+                mount.contains("tab-name:"),
+                "{page}.slint mounts a section without `tab-name:`, so it can't be found by \
+                 searching for its tab: {mount}"
+            );
+        }
+    }
 }
