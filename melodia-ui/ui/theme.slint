@@ -35,14 +35,16 @@ export global Theme {
     in-out property <brush> accent: #cba6f7;
     in-out property <brush> accent-text: #1e1e2e;
 
-    // Ink for a glyph or label painted directly on `fill`. sRGB relative
-    // luminance on the gamma-encoded channels — same weights, threshold and
-    // return pair as `themes::apply::on_accent_hex`, which is what produces
-    // `accent-text` above. Reach for this wherever the surface underneath
-    // isn't the accent: `accent-text` answers a question about the *accent*,
-    // so on a light theme with a light accent it puts near-black on a dark
-    // red. The two colours stay literals rather than palette slots on
-    // purpose — they're absolute ink for a fill of known luminance.
+    // Ink for a glyph or label painted directly on `fill`. sRGB luma — the
+    // weights over the gamma-encoded channels, not over linearized ones, so
+    // this is not the relative luminance `src/ui/backdrop.rs` solves scrims
+    // against. Same weights, threshold and return pair as
+    // `themes::apply::on_accent_hex`, which is what produces `accent-text`
+    // above. Reach for this wherever the surface underneath isn't the accent:
+    // `accent-text` answers a question about the *accent*, so on a light theme
+    // with a light accent it puts near-black on a dark red. The two colours
+    // stay literals rather than palette slots on purpose — they're absolute ink
+    // for a fill of known lightness.
     public pure function ink-on(fill: brush) -> brush {
         return (0.2126 * fill.red + 0.7152 * fill.green + 0.0722 * fill.blue) / 255 > 0.5
             ? #1e1e2e

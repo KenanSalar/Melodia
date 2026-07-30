@@ -247,10 +247,16 @@ pub(crate) fn color_to_rgb(c: Color) -> u32 {
 }
 
 /// sRGB luma weights, applied to the gamma-encoded channels rather than to
-/// linearized ones — cheap, and the threshold below is tuned for it. Named
-/// because `theme.slint`'s `ink-on` spells the same four numbers out and
-/// `themes::tests::theme_slint_ink_on_matches_on_accent_hex` builds its
+/// linearized ones — cheap, and the threshold below is tuned for it. Not the
+/// relative luminance `ui::backdrop` solves scrims against; that one linearizes
+/// first. Named because `theme.slint`'s `ink-on` spells the same four numbers
+/// out and `themes::tests::theme_slint_ink_on_matches_on_accent_hex` builds its
 /// expected Slint expression from these, so a drift on either side fails.
+///
+/// A third copy lives in `services::dwm_titlebar::is_dark_from_rgb`, duplicated
+/// on purpose to keep that windows-only module off the cross-platform palette
+/// code. Nothing pins it and nothing can — it's `cfg(windows)`, so a test for it
+/// would never run in CI. Edit a weight here and edit that one by hand.
 pub(super) const LUMA_R: f64 = 0.2126;
 pub(super) const LUMA_G: f64 = 0.7152;
 pub(super) const LUMA_B: f64 = 0.0722;
