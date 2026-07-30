@@ -142,281 +142,263 @@ export component QueueSheet inherits Rectangle {
             clicked => { }
         }
 
-        // FocusScope: Escape closes the sheet (or clears selection
-        // first when present, matching Tauri behaviour); Ctrl+A
-        // selects all.
-        focus-scope := FocusScope {
-            width: 100%;
-            height: 100%;
-            enabled: Queue.open;
-            key-pressed(ev) => {
-                if (ev.text == Key.Escape) {
-                    if (Queue.selected-count > 0) {
-                        Queue.clear-selection();
-                    } else {
-                        Queue.close();
-                        Queue.open = false;
+        // Esc (close, or clear the selection first) and Ctrl+A (select all)
+        // are owned by the root `ShortcutScope` and gated on `Queue.open`.
+        // They used to live in a nested FocusScope here, which only ever took
+        // focus when the user clicked the sheet's blank area — Slint focuses a
+        // FocusScope on mouse press, not on mount — so both keys were dead on
+        // a sheet opened with `Q`, and dead again after any confirm dialog
+        // raised from the sheet handed focus back to the root.
+        VerticalLayout {
+            spacing: 0px;
+
+            // Header — title + track count + (Clear ↔ Remove
+            // selected) action button + close. Tauri's morphing
+            // pill becomes a plain swap here: when `selected-count
+            // > 0` we show "Remove (N)"; otherwise "Clear queue".
+            Rectangle {
+                height: 56px;
+                background: transparent;
+                HorizontalLayout {
+                    padding-left: 20px;
+                    padding-right: 8px;
+                    spacing: 12px;
+                    alignment: stretch;
+
+                    // Stacked title + count, Spotify / Apple-Music
+                    // style — mirrors the tracks-view page header so
+                    // the two surfaces feel uniform. Queue keeps its
+                    // own font sizes (`font-size-lg` for the title,
+                    // `font-size-row` for the count) — the tracks-view
+                    // sizes are tuned for a full page, the sheet's
+                    // header sits in a 56 px row.
+                    VerticalLayout {
+                        alignment: center;
+                        spacing: 0;
+                        Text {
+                            text: @tr("Queue");
+                            color: Theme.text;
+                            font-size: Theme.font-size-lg;
+                            font-weight: 600;
+                        }
+                        Text {
+                            // Empty branch uses a distinct msgid because
+                            // some locales translate "no items" with a
+                            // different construction than the count form.
+                            text: Queue.rows.length == 0
+                                ? @tr("No tracks")
+                                : @tr(
+                                    "{n} track" | "{n} tracks" % Queue.rows.length
+                                );
+                            color: Theme.subtext0;
+                            font-size: Theme.font-size-row;
+                        }
                     }
-                    return accept;
+                    Rectangle { horizontal-stretch: 1; }
+
+                    // Tauri-parity ActionPill that morphs between two
+                    // states: "Clear queue" text-button when the queue
+                    // has tracks and no selection, and "N selected |
+                    // Deselect | Remove" when one or more rows are
+                    // selected. Same chrome (Theme.surface0, 32 px
+                    // rounded chip) as the tracks-view header pill, so
+                    // the two views feel unified. `if` (not `visible:`)
+                    // so the absent branch leaves no phantom layout slot.
+                    if root.has-selection: VerticalLayout {
+                        alignment: center;
+                        ActionPill {
+                            PillLabel {
+                                text: @tr("{} selected", Queue.selected-count);
+                            }
+                            PillButton {
+                                icon: "close";
+                                tooltip-text: @tr("Clear selection");
+                                clicked => { Queue.clear-selection(); }
+                            }
+                            PillDivider { }
+                            PillButton {
+                                text: @tr("Remove");
+                                danger: true;
+                                tooltip-text: @tr("Remove selected");
+                                clicked => {
+                                    Dialog.title = @tr("Remove from queue?");
+                                    // Plural form: ICU `singular|plural`
+                                    // syntax with `% n` selects branch by
+                                    // count. Slint forwards this to gettext
+                                    // `msgid`/`msgid_plural`.
+                                    Dialog.message = @tr(
+                                        "Remove {n} track from the queue?" | "Remove {n} tracks from the queue?" % Queue.selected-count
+                                    );
+                                    Dialog.confirm-label = @tr("Remove");
+                                    Dialog.cancel-label = @tr("Cancel");
+                                    Dialog.destructive = true;
+                                    Dialog.kind = "remove-queue-selected";
+                                    Dialog.target-id = -1;
+                                    Dialog.open = true;
+                                }
+                            }
+                        }
+                    }
+                    if !root.has-selection && root.has-rows: VerticalLayout {
+                        alignment: center;
+                        ActionPill {
+                            PillButton {
+                                text: @tr("Clear queue");
+                                clicked => {
+                                    Dialog.title = @tr("Clear queue?");
+                                    Dialog.message = @tr("Remove all tracks from the queue? Playback will stop.");
+                                    Dialog.confirm-label = @tr("Clear");
+                                    Dialog.cancel-label = @tr("Cancel");
+                                    Dialog.destructive = true;
+                                    Dialog.kind = "clear-queue";
+                                    Dialog.target-id = -1;
+                                    Dialog.open = true;
+                                }
+                            }
+                        }
+                    }
+                    VerticalLayout {
+                        alignment: center;
+                        IconButton {
+                            icon: "close";
+                            diameter: 32px;
+                            icon-size: 18px;
+                            clicked => {
+                                Queue.close();
+                                Queue.open = false;
+                                Queue.clear-selection();
+                            }
+                        }
+                    }
                 }
-                if (ev.text == "a" && ev.modifiers.control) {
-                    Queue.select-all();
-                    return accept;
-                }
-                return reject;
             }
 
-            VerticalLayout {
-                spacing: 0px;
+            // Header separator (Tauri: `border-bottom: 1px solid
+            // var(--ctp-border)`).
+            Rectangle {
+                height: 1px;
+                background: Theme.border;
+            }
 
-                // Header — title + track count + (Clear ↔ Remove
-                // selected) action button + close. Tauri's morphing
-                // pill becomes a plain swap here: when `selected-count
-                // > 0` we show "Remove (N)"; otherwise "Clear queue".
-                Rectangle {
-                    height: 56px;
-                    background: transparent;
+            // List body.
+            Rectangle {
+                vertical-stretch: 1;
+                clip: true;
+
+                inner-list := ListView {
+                    // Suppress the std-widgets bar — the reusable
+                    // `OverlayScrollbar` below is the only scrollbar.
+                    vertical-scrollbar-policy: always-off;
+                    horizontal-scrollbar-policy: always-off;
+                    x: 0;
+                    y: 0;
+                    // Reserve a 14 px rail on the right for the
+                    // overlay scrollbar (10 px bar + 2 px card inset
+                    // + 2 px visible gap to row content). Without
+                    // this, the row hover pill's right edge sits
+                    // 4 px past the scrollbar's left edge and paints
+                    // under it with zero breathing room.
+                    width: parent.width - 14px;
+                    height: 100%;
+                    for row[idx] in Queue.rows: QueueRowItem {
+                        row-data: row;
+                        row-index: idx;
+                        list-y0: inner-list.absolute-position.y;
+                        list-height: inner-list.height;
+                        list-viewport-y: inner-list.viewport-y;
+                        row-height: root.row-height;
+                        // Neighbour-selection lookup — drives the per-
+                        // corner radius gating in QueueRowItem so
+                        // contiguous selected rows merge into one
+                        // continuous pill.
+                        prev-selected: idx > 0 && Queue.rows[idx - 1].selected;
+                        next-selected: idx < Queue.rows.length - 1 && Queue.rows[idx + 1].selected;
+                        request-scroll-by(dy) => {
+                            // Skipped outright when the nudge would carry
+                            // the dragged row out of the visible range:
+                            // Slint's ListView destroys the row instances
+                            // that leave it, and a destroyed row can no
+                            // longer deliver its pointer-up, so the drag
+                            // would neither commit nor clean up after
+                            // itself. Auto-scroll therefore stops once the
+                            // source reaches the far edge.
+                            if (Queue.drag-source >= 0
+                                && (root.drag-src-screen-y - dy) > -root.row-height
+                                && (root.drag-src-screen-y - dy) < inner-list.visible-height) {
+                                // Not `clamp()`: a queue shorter than the
+                                // list body puts its lower bound *above*
+                                // its upper one, and `clamp(v, lo, hi)`
+                                // expands to `max(lo, min(v, hi))`, which
+                                // then hands back the positive lower bound
+                                // and shoves every row down the screen.
+                                // Capping both arguments at 0 resolves that
+                                // case to 0px instead. Same shape as
+                                // `draggable-track-list.slint` — keep the
+                                // two in step.
+                                inner-list.viewport-y = max(
+                                    min(0px, inner-list.visible-height - inner-list.viewport-height),
+                                    min(0px, inner-list.viewport-y - dy),
+                                );
+                            }
+                        }
+                    }
+                }
+
+                // Insertion line during drag. Painted in the gap
+                // *between* rows (slot-based) rather than at a row's
+                // top edge, so the user sees a clear drop target
+                // independent of the still-painted source ghost.
+                // Hidden when the slot is a no-op:
+                //   * slot == drag-source       → drop right before source
+                //   * slot == drag-source + 1   → drop right after source
+                // both of which mean "song stays put" after the
+                // slot→index adjustment, so showing a line would
+                // mislead the user. Matches Tauri's `.dragAbove` /
+                // `.dragBelow` indicators only firing on
+                // adjacent-OK targets.
+                if Queue.drag-source >= 0
+                    && Queue.drop-slot >= 0
+                    && Queue.drop-slot != Queue.drag-source
+                    && Queue.drop-slot != Queue.drag-source + 1: Rectangle {
+                    x: 0;
+                    y: root.drop-line-y;
+                    width: inner-list.width;
+                    height: root.drop-line-h;
+                    background: Theme.accent;
+                }
+
+                // Overlay scrollbar — sibling, flush with card edge.
+                OverlayScrollbar {
+                    x: parent.width - self.width - 2px;
+                    y: 0;
+                    width: 10px;
+                    height: parent.height;
+                    visible-size: inner-list.visible-height;
+                    content-size: inner-list.viewport-height;
+                    offset: -inner-list.viewport-y;
+                    scroll-to(o) => { inner-list.viewport-y = -o; }
+                }
+
+                // Empty state.
+                if Queue.rows.length == 0: VerticalLayout {
+                    alignment: center;
                     HorizontalLayout {
-                        padding-left: 20px;
-                        padding-right: 8px;
-                        spacing: 12px;
-                        alignment: stretch;
-
-                        // Stacked title + count, Spotify / Apple-Music
-                        // style — mirrors the tracks-view page header so
-                        // the two surfaces feel uniform. Queue keeps its
-                        // own font sizes (`font-size-lg` for the title,
-                        // `font-size-row` for the count) — the tracks-view
-                        // sizes are tuned for a full page, the sheet's
-                        // header sits in a 56 px row.
-                        VerticalLayout {
-                            alignment: center;
-                            spacing: 0;
-                            Text {
-                                text: @tr("Queue");
-                                color: Theme.text;
-                                font-size: Theme.font-size-lg;
-                                font-weight: 600;
-                            }
-                            Text {
-                                // Empty branch uses a distinct msgid because
-                                // some locales translate "no items" with a
-                                // different construction than the count form.
-                                text: Queue.rows.length == 0
-                                    ? @tr("No tracks")
-                                    : @tr(
-                                        "{n} track" | "{n} tracks" % Queue.rows.length
-                                    );
-                                color: Theme.subtext0;
-                                font-size: Theme.font-size-row;
-                            }
-                        }
-                        Rectangle { horizontal-stretch: 1; }
-
-                        // Tauri-parity ActionPill that morphs between two
-                        // states: "Clear queue" text-button when the queue
-                        // has tracks and no selection, and "N selected |
-                        // Deselect | Remove" when one or more rows are
-                        // selected. Same chrome (Theme.surface0, 32 px
-                        // rounded chip) as the tracks-view header pill, so
-                        // the two views feel unified. `if` (not `visible:`)
-                        // so the absent branch leaves no phantom layout slot.
-                        if root.has-selection: VerticalLayout {
-                            alignment: center;
-                            ActionPill {
-                                PillLabel {
-                                    text: @tr("{} selected", Queue.selected-count);
-                                }
-                                PillButton {
-                                    icon: "close";
-                                    tooltip-text: @tr("Clear selection");
-                                    clicked => { Queue.clear-selection(); }
-                                }
-                                PillDivider { }
-                                PillButton {
-                                    text: @tr("Remove");
-                                    danger: true;
-                                    tooltip-text: @tr("Remove selected");
-                                    clicked => {
-                                        Dialog.title = @tr("Remove from queue?");
-                                        // Plural form: ICU `singular|plural`
-                                        // syntax with `% n` selects branch by
-                                        // count. Slint forwards this to gettext
-                                        // `msgid`/`msgid_plural`.
-                                        Dialog.message = @tr(
-                                            "Remove {n} track from the queue?" | "Remove {n} tracks from the queue?" % Queue.selected-count
-                                        );
-                                        Dialog.confirm-label = @tr("Remove");
-                                        Dialog.cancel-label = @tr("Cancel");
-                                        Dialog.destructive = true;
-                                        Dialog.kind = "remove-queue-selected";
-                                        Dialog.target-id = -1;
-                                        Dialog.open = true;
-                                    }
-                                }
-                            }
-                        }
-                        if !root.has-selection && root.has-rows: VerticalLayout {
-                            alignment: center;
-                            ActionPill {
-                                PillButton {
-                                    text: @tr("Clear queue");
-                                    clicked => {
-                                        Dialog.title = @tr("Clear queue?");
-                                        Dialog.message = @tr("Remove all tracks from the queue? Playback will stop.");
-                                        Dialog.confirm-label = @tr("Clear");
-                                        Dialog.cancel-label = @tr("Cancel");
-                                        Dialog.destructive = true;
-                                        Dialog.kind = "clear-queue";
-                                        Dialog.target-id = -1;
-                                        Dialog.open = true;
-                                    }
-                                }
-                            }
-                        }
-                        VerticalLayout {
-                            alignment: center;
-                            IconButton {
-                                icon: "close";
-                                diameter: 32px;
-                                icon-size: 18px;
-                                clicked => {
-                                    Queue.close();
-                                    Queue.open = false;
-                                    Queue.clear-selection();
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // Header separator (Tauri: `border-bottom: 1px solid
-                // var(--ctp-border)`).
-                Rectangle {
-                    height: 1px;
-                    background: Theme.border;
-                }
-
-                // List body.
-                Rectangle {
-                    vertical-stretch: 1;
-                    clip: true;
-
-                    inner-list := ListView {
-                        // Suppress the std-widgets bar — the reusable
-                        // `OverlayScrollbar` below is the only scrollbar.
-                        vertical-scrollbar-policy: always-off;
-                        horizontal-scrollbar-policy: always-off;
-                        x: 0;
-                        y: 0;
-                        // Reserve a 14 px rail on the right for the
-                        // overlay scrollbar (10 px bar + 2 px card inset
-                        // + 2 px visible gap to row content). Without
-                        // this, the row hover pill's right edge sits
-                        // 4 px past the scrollbar's left edge and paints
-                        // under it with zero breathing room.
-                        width: parent.width - 14px;
-                        height: 100%;
-                        for row[idx] in Queue.rows: QueueRowItem {
-                            row-data: row;
-                            row-index: idx;
-                            list-y0: inner-list.absolute-position.y;
-                            list-height: inner-list.height;
-                            list-viewport-y: inner-list.viewport-y;
-                            row-height: root.row-height;
-                            // Neighbour-selection lookup — drives the per-
-                            // corner radius gating in QueueRowItem so
-                            // contiguous selected rows merge into one
-                            // continuous pill.
-                            prev-selected: idx > 0 && Queue.rows[idx - 1].selected;
-                            next-selected: idx < Queue.rows.length - 1 && Queue.rows[idx + 1].selected;
-                            request-scroll-by(dy) => {
-                                // Skipped outright when the nudge would carry
-                                // the dragged row out of the visible range:
-                                // Slint's ListView destroys the row instances
-                                // that leave it, and a destroyed row can no
-                                // longer deliver its pointer-up, so the drag
-                                // would neither commit nor clean up after
-                                // itself. Auto-scroll therefore stops once the
-                                // source reaches the far edge.
-                                if (Queue.drag-source >= 0
-                                    && (root.drag-src-screen-y - dy) > -root.row-height
-                                    && (root.drag-src-screen-y - dy) < inner-list.visible-height) {
-                                    // Not `clamp()`: a queue shorter than the
-                                    // list body puts its lower bound *above*
-                                    // its upper one, and `clamp(v, lo, hi)`
-                                    // expands to `max(lo, min(v, hi))`, which
-                                    // then hands back the positive lower bound
-                                    // and shoves every row down the screen.
-                                    // Capping both arguments at 0 resolves that
-                                    // case to 0px instead. Same shape as
-                                    // `draggable-track-list.slint` — keep the
-                                    // two in step.
-                                    inner-list.viewport-y = max(
-                                        min(0px, inner-list.visible-height - inner-list.viewport-height),
-                                        min(0px, inner-list.viewport-y - dy),
-                                    );
-                                }
-                            }
-                        }
-                    }
-
-                    // Insertion line during drag. Painted in the gap
-                    // *between* rows (slot-based) rather than at a row's
-                    // top edge, so the user sees a clear drop target
-                    // independent of the still-painted source ghost.
-                    // Hidden when the slot is a no-op:
-                    //   * slot == drag-source       → drop right before source
-                    //   * slot == drag-source + 1   → drop right after source
-                    // both of which mean "song stays put" after the
-                    // slot→index adjustment, so showing a line would
-                    // mislead the user. Matches Tauri's `.dragAbove` /
-                    // `.dragBelow` indicators only firing on
-                    // adjacent-OK targets.
-                    if Queue.drag-source >= 0
-                        && Queue.drop-slot >= 0
-                        && Queue.drop-slot != Queue.drag-source
-                        && Queue.drop-slot != Queue.drag-source + 1: Rectangle {
-                        x: 0;
-                        y: root.drop-line-y;
-                        width: inner-list.width;
-                        height: root.drop-line-h;
-                        background: Theme.accent;
-                    }
-
-                    // Overlay scrollbar — sibling, flush with card edge.
-                    OverlayScrollbar {
-                        x: parent.width - self.width - 2px;
-                        y: 0;
-                        width: 10px;
-                        height: parent.height;
-                        visible-size: inner-list.visible-height;
-                        content-size: inner-list.viewport-height;
-                        offset: -inner-list.viewport-y;
-                        scroll-to(o) => { inner-list.viewport-y = -o; }
-                    }
-
-                    // Empty state.
-                    if Queue.rows.length == 0: VerticalLayout {
                         alignment: center;
-                        HorizontalLayout {
-                            alignment: center;
-                            VerticalLayout {
-                                spacing: Theme.pad-sm;
-                                HorizontalLayout {
-                                    alignment: center;
-                                    MaterialIcon {
-                                        name: "queue_music";
-                                        icon-size: 40px;
-                                        icon-color: Theme.surface2;
-                                    }
+                        VerticalLayout {
+                            spacing: Theme.pad-sm;
+                            HorizontalLayout {
+                                alignment: center;
+                                MaterialIcon {
+                                    name: "queue_music";
+                                    icon-size: 40px;
+                                    icon-color: Theme.surface2;
                                 }
-                                Text {
-                                    text: @tr("Queue is empty");
-                                    color: Theme.subtext0;
-                                    font-size: Theme.font-size-md;
-                                    horizontal-alignment: center;
-                                }
+                            }
+                            Text {
+                                text: @tr("Queue is empty");
+                                color: Theme.subtext0;
+                                font-size: Theme.font-size-md;
+                                horizontal-alignment: center;
                             }
                         }
                     }

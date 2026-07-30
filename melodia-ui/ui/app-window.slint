@@ -266,7 +266,12 @@ export component AppWindow inherits Window {
     // so regrabbing on *open* is free, and it takes the keyboard off whatever
     // view SearchBar still held it — which would otherwise keep swallowing
     // keystrokes behind the modal backdrop instead of hitting the scope's
-    // `Dialog.open` guard.
+    // `Dialog.open` guard. That file's neighbouring warning is about `focus()`
+    // from `init`, which runs *inside* the property evaluator and trips its
+    // recursion guard; a `changed` handler runs outside it, from the event
+    // loop's `run_change_handlers` pass, so this call is safe. Fires for every
+    // kind-bearing dialog — `library_settings::show_error` is the one opener
+    // that sets no `kind`, and its body has nothing focusable to orphan.
     property <string> watched-dialog-kind: Dialog.kind;
     changed watched-dialog-kind => {
         shortcut-scope.grab-focus();

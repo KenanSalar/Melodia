@@ -7,9 +7,10 @@ import { WindowChrome } from "../globals/shell.slint";
 // The app's global keyboard shortcuts, and the focus scope that catches them.
 //
 // Inherits `FocusScope` and takes the whole main layout as its children, so it
-// sits between the QueueSheet's own FocusScope (which handles Esc / Ctrl+A while
-// the sheet is open) and the Window's key dispatch — unhandled keys bubble up
-// from child scopes via `return reject` and land here. Text inputs (SearchBar,
+// sits between any nested scope and the Window's key dispatch — unhandled keys
+// bubble up from child scopes via `return reject` and land here. It is the only
+// scope in the tree today: the queue sheet's used to catch Esc / Ctrl+A before
+// this one, and those two bindings now live below. Text inputs (SearchBar,
 // LabeledInput in dialogs, the Settings filter) consume their typed keys
 // naturally, because Slint routes key events to the focused element first, so
 // alphabetic shortcuts never fire while the user is typing.
@@ -99,16 +100,32 @@ export component ShortcutScope inherits FocusScope {
     }
 
     key-pressed(ev) => {
-        // Escape priority chain: Dialog cancel > Now Playing
-        // close > drop. Queue-sheet's own FocusScope catches
-        // Escape *before* this handler when the sheet is open
-        // (its `enabled: Queue.open` gate plus the natural
-        // focus chain ordering), so queue Esc never reaches
-        // here.
+        // Escape priority chain: Dialog cancel > Queue sheet >
+        // Now Playing close > drop. The queue sheet used to own
+        // its Esc / Ctrl+A in a nested FocusScope of its own,
+        // but that scope only ever took focus when the user
+        // clicked its blank area (Slint focuses a FocusScope on
+        // mouse press, not on mount), so Esc silently did
+        // nothing on a sheet opened with `Q` — and once the
+        // dialog chain started re-grabbing focus up here, any
+        // confirm dialog raised *from* the sheet left it dead
+        // for good. Owning both keys at the root makes the
+        // priority explicit and takes the click out of it.
         if (ev.text == Key.Escape) {
             if (Dialog.open) {
                 Dialog.cancelled();
                 Dialog.open = false;
+                return accept;
+            }
+            if (Queue.open) {
+                // Clear a selection first, close only on the
+                // second press (Tauri behaviour).
+                if (Queue.selected-count > 0) {
+                    Queue.clear-selection();
+                } else {
+                    Queue.close();
+                    Queue.open = false;
+                }
                 return accept;
             }
             if (Nav.now-playing-open) {
@@ -180,6 +197,14 @@ export component ShortcutScope inherits FocusScope {
         // Ctrl combos — handled before bare letters so Ctrl+N
         // (new playlist) wins over N (next track), etc.
         if (ev.modifiers.control) {
+            // Select-all only means anything while the queue
+            // sheet is up; the `Dialog.open` guard above keeps
+            // it from firing behind a modal, which the sheet's
+            // old nested scope got wrong.
+            if (ev.text == "a" && Queue.open) {
+                Queue.select-all();
+                return accept;
+            }
             if (ev.text == "b") {
                 Nav.sidebar-collapsed = !Nav.sidebar-collapsed;
                 return accept;
