@@ -168,6 +168,28 @@ fn the_compact_morph_is_written_not_bound() {
     );
 }
 
+/// The header row is drawn from `page-w` for one frame before the first layout
+/// reports the truth, and that seed has to be the row's own floor rather than a
+/// plausible page width. Seeded wide, the bar believes it can afford five
+/// full-width tabs, draws them into a panel that can't seat them, and they spill
+/// under the search bar — which is what a miniplayer → full swap reliably
+/// produced. Seeded at the floor it draws icons and widens once. A literal reads
+/// as harmless to anyone who hasn't seen it fail, so pin that it's derived.
+#[test]
+fn the_page_width_seed_is_the_rows_floor() {
+    let seed = VIEW
+        .split_once("property <length> page-w:")
+        .and_then(|(_, rest)| rest.split_once(';'))
+        .map(|(value, _)| value)
+        .unwrap_or_default();
+
+    assert!(
+        seed.contains("compact-w"),
+        "settings-view.slint must seed `page-w` from the tab bar's own `compact-w` floor, not \
+         from a guessed page width: {seed:?}"
+    );
+}
+
 /// The tab's own name is part of every card's search term, and the page that
 /// mounts the card is what supplies it. Omit `tab-name:` on a mount and the
 /// section falls back to an empty string: it still matches its own title, so

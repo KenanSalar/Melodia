@@ -45,7 +45,22 @@ export component SettingsView inherits Rectangle {
     // `RefCell already borrowed` panic in parley's text measurement, blamed
     // on whichever sibling happens to own text. Same fix as
     // `layout/now-playing-bar.slint`'s `bar-w`.
-    property <length> page-w: 900px;
+    //
+    // The mirror costs a frame, so the value below is what the header row is
+    // drawn from until the first layout reports the truth — and it is seeded at
+    // the row's own **floor** rather than at a plausible page width. The
+    // failure is asymmetric: seeded wide, the bar believes it can afford five
+    // full-width tabs, draws them into a panel that can't seat them, and they
+    // spill out from under `alignment: start` and under the search bar. Seeded
+    // narrow it draws the icons it would have drawn anyway and widens once.
+    // A miniplayer → full swap remounts this page at a panel far narrower than
+    // any plausible guess, which is the reliable way to see the wide one.
+    //
+    // This particular floor is the narrowest page that still seats the tab bar
+    // at its `compact-w` *and* the input at `search-w-max`, so at the widths
+    // Settings is normally opened at neither of them has to pop a frame later.
+    property <length> page-w:
+        2 * Theme.pad-lg + bar.compact-w + 2 * Theme.pad-md + root.search-w-max;
     changed width => { self.page-w = self.width; }
 
     // What the header row has to divide up: the page less its own padding.

@@ -222,10 +222,8 @@ export component SettingsTabBar inherits Rectangle {
     // that binding outright, so afterwards nothing but an actual flip can touch
     // it. Keeping the binding as the seed is what leaves the mount alone: it is
     // still live for the first evaluation, which lands in `NotAnimating` and
-    // takes the value straight through, so entering Settings already narrow
-    // draws compact rather than morphing into it. A constant plus a mount timer
-    // would animate there. `mini-player-switch.slint`'s `fade-opacity` is the
-    // same seed-then-own shape with a constant seed.
+    // takes the value straight through. `mini-player-switch.slint`'s
+    // `fade-opacity` is the same seed-then-own shape with a constant seed.
     //
     // The latch above earns its keep twice over now — each `changed compact` is
     // a real restart, so a threshold that flapped would be visible.
@@ -236,7 +234,32 @@ export component SettingsTabBar inherits Rectangle {
     // window rather than as a gesture. Both y control points sit inside [0, 1],
     // so `compact-t` can't overshoot and no width derived from it can go
     // negative; a back-out curve here would need clamping.
-    animate compact-t { duration: 350ms; easing: cubic-bezier(0.2, 0, 0, 1); }
+    //
+    // Gated on `eased` because the first resolution is not a change — it is the
+    // bar learning how much room it has. The host seeds `avail-width` at the
+    // header row's own floor (see its `page-w`), so a mount always settles
+    // compact and a roomy panel then corrects to expanded one frame later;
+    // easing *that* would play an unasked-for morph on every entry into
+    // Settings. `set_animated_value` builds its animation inline at the write,
+    // so the duration is read at the moment of that correction.
+    animate compact-t {
+        duration: root.eased ? 350ms : 0ms;
+        easing: cubic-bezier(0.2, 0, 0, 1);
+    }
+
+    // Armed a beat after mount, and 100ms rather than the 1 ms mount seed the
+    // rest of the tree uses: this has to *outlast* the host's first
+    // `changed width`, not race it, and no hand crosses the threshold within a
+    // tenth of a second of opening the page. Resets itself for free — the page
+    // is destroyed and rebuilt on every entry, so each mount re-arms.
+    property <bool> eased: false;
+    Timer {
+        interval: 100ms;
+        triggered => {
+            root.eased = true;
+            self.running = false;
+        }
+    }
 
     out property <length> tab-w:
         root.natural-tab-w + (root.compact-tab-w - root.natural-tab-w) * root.compact-t;
