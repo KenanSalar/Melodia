@@ -42,61 +42,106 @@ component SettingsTab inherits Rectangle {
 
     horizontal-stretch: 0;
 
+    // Press-shrink factor — the same 0.97 and the same back-out curve as
+    // `SidebarItem`, which is what makes it a wobble rather than a dip. Only
+    // the *factor* is animated, never the width and height derived from it:
+    // those also move every frame of a compact morph, and easing them directly
+    // would set all five tabs wobbling through a window resize.
+    property <float> press-scale: touch.pressed ? 0.97 : 1.0;
+    animate press-scale {
+        duration: touch.pressed ? 100ms : Theme.dur-med;
+        easing: cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+
+    // What the bar's ruler measures, spelled out rather than left to the root's
+    // own child-merge. Slint merges a `Rectangle` root's constraints with its
+    // children's, but **drops any child carrying explicit geometry** — and
+    // `cell` binds its width, so with the content row moved inside it the root
+    // would report the bare `Rectangle` default and `natural-tab-w` would
+    // measure zero, which reads as the bar never going compact. `SidebarItem`
+    // has exactly this shape and does report nothing horizontally; it gets away
+    // with it because its rows stretch to the sidebar. Reading a descendant's
+    // `preferred-width` is the same derivation `label-w` below and
+    // `tooltip.slint` use — it never reads back the width it is handed, so it
+    // is not a cycle.
+    preferred-width: content.preferred-width;
+
+    // Inner visual cell. The root keeps the whole layout slot, so a press
+    // never reflows the row and never moves the underline out from under its
+    // tab; `cell` is the only thing that scales.
+    //
     // The track is gone, so the state layer steps off `Theme.base` a rung
     // rather than off `surface0`. Rounded rather than the square full-bleed
     // rectangle M3 specifies — the same `radius-md` the settings rows below
     // use, so a hovered tab reads as part of this page rather than as a
     // borrowed spec. It fills the whole cell; the clearance from the divider
     // is the bar's to give, and it gives it as padding on the row.
-    background: touch.has-hover ? Theme.surface0 : transparent;
-    border-radius: Theme.radius-md;
-    animate background { duration: Theme.dur-fast; easing: ease-in-out; }
+    cell := Rectangle {
+        width: parent.width * root.press-scale;
+        height: parent.height * root.press-scale;
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
 
-    // Padding and spacing close along with the label rather than switching, so
-    // the centred row collapses to just the icon — and the icon glides to the
-    // middle of the cell without any positioning arithmetic of its own.
-    HorizontalLayout {
-        padding-left: Theme.pad-md * root.open;
-        padding-right: Theme.pad-md * root.open;
-        spacing: Theme.pad-sm * root.open;
-        alignment: center;
+        background: touch.has-hover ? Theme.surface0 : transparent;
+        border-radius: Theme.radius-md;
+        animate background { duration: Theme.dur-fast; easing: ease-in-out; }
 
-        VerticalLayout {
+        // Padding and spacing close along with the label rather than switching,
+        // so the centred row collapses to just the icon — and the icon glides
+        // to the middle of the cell without any positioning arithmetic of its
+        // own.
+        content := HorizontalLayout {
+            padding-left: Theme.pad-md * root.open;
+            padding-right: Theme.pad-md * root.open;
+            spacing: Theme.pad-sm * root.open;
             alignment: center;
-            MaterialIcon {
-                name: root.icon;
-                icon-size: 22px;
-                icon-color: root.selected ? Theme.accent : Theme.text;
-                filled: root.selected;
-                animate icon-color { duration: Theme.dur-fast; easing: ease-in-out; }
+
+            VerticalLayout {
+                alignment: center;
+                MaterialIcon {
+                    name: root.icon;
+                    // Scaled with the press factor for the reason `SidebarItem`
+                    // scales its own: a container shrinking by 3% moves the
+                    // glyph a pixel and nothing else, so in compact mode —
+                    // where the icon *is* the tab — the press would read as
+                    // inert without this.
+                    icon-size: 22px * root.press-scale;
+                    icon-color: root.selected ? Theme.accent : Theme.text;
+                    filled: root.selected;
+                    animate icon-color { duration: Theme.dur-fast; easing: ease-in-out; }
+                }
             }
-        }
 
-        // Label slot. Always mounted — an `if` here is what made the compact
-        // flip a pop — and closed by shrinking its width to nothing. The clip
-        // is rectangular and borderless on purpose: that lowers to a scissor,
-        // where a rounded one would render the text to an offscreen layer and
-        // upscale it on HiDPI. Left-aligned inside, so the clip takes the
-        // label's tail first and it reads as the word sliding into the icon.
-        Rectangle {
-            clip: true;
-            horizontal-stretch: 0;
-            width: root.label-w * root.open;
+            // Label slot. Always mounted — an `if` here is what made the compact
+            // flip a pop — and closed by shrinking its width to nothing. The clip
+            // is rectangular and borderless on purpose: that lowers to a scissor,
+            // where a rounded one would render the text to an offscreen layer and
+            // upscale it on HiDPI. Left-aligned inside, so the clip takes the
+            // label's tail first and it reads as the word sliding into the icon.
+            Rectangle {
+                clip: true;
+                horizontal-stretch: 0;
+                width: root.label-w * root.open;
 
-            lbl := Text {
-                text: root.label;
-                // Alpha on the brush rather than `opacity` on the element:
-                // `opacity` costs a layer, and there are five of these.
-                color: root.label-color.with-alpha(root.label-alpha);
-                font-size: Theme.font-size-md;
-                // One weight for both states. The bar sizes its cells off a
-                // *measured* maximum, so a heavier selected label could
-                // overflow the cell it was measured for — and switching tabs
-                // would reflow the whole row. Colour carries it instead,
-                // which is what M3 does anyway.
-                font-weight: 500;
-                horizontal-alignment: left;
-                vertical-alignment: center;
+                lbl := Text {
+                    text: root.label;
+                    // Alpha on the brush rather than `opacity` on the element:
+                    // `opacity` costs a layer, and there are five of these.
+                    color: root.label-color.with-alpha(root.label-alpha);
+                    // Text doesn't scale with a container, so the press factor
+                    // has to reach it directly. `label-w` tracks it for free —
+                    // it is this Text's own `preferred-width` — so the slot
+                    // closes with the word instead of leaving it adrift.
+                    font-size: Theme.font-size-md * root.press-scale;
+                    // One weight for both states. The bar sizes its cells off a
+                    // *measured* maximum, so a heavier selected label could
+                    // overflow the cell it was measured for — and switching tabs
+                    // would reflow the whole row. Colour carries it instead,
+                    // which is what M3 does anyway.
+                    font-weight: 500;
+                    horizontal-alignment: left;
+                    vertical-alignment: center;
+                }
             }
         }
     }
