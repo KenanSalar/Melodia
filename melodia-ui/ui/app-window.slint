@@ -258,6 +258,11 @@ export component AppWindow inherits Window {
     property <bool> watched-mini-render: mini-switch.render-active;
     changed watched-mini-render => {
         CompositeScroll.reset();
+        // Same class of stale sentinel, one global over: the rail dies with the
+        // branch and its rows get no leave event, so the index they last
+        // published outlives them and the tooltip frame reads it as a live
+        // hover on the way back in.
+        Nav.sidebar-tip-idx = -1;
         shortcut-scope.grab-focus();
     }
 
@@ -727,6 +732,19 @@ export component AppWindow inherits Window {
                 // frame's rect are left alone on retract, so the held pill
                 // stays where it was and swaps to the next row's name the
                 // moment that row takes the hover.
+                //
+                // `held` only ever *extends* a live tooltip — the arming is
+                // `row-hovered` itself, below. It has to be, because `held` is
+                // set from a `changed` handler and `changed` doesn't fire on a
+                // first evaluation, so a rail that remounts with `row-hovered`
+                // already true would sit dead until the pointer left it once.
+                // The miniplayer swap is that remount, and the reason it can
+                // arrive already true is the stale index it left on `Nav` — so
+                // the real guard is the `sidebar-tip-idx = -1` in
+                // `changed watched-mini-render` above, without which arming on
+                // `row-hovered` reveals a pill for a row nothing is hovering.
+                // Reading both here keeps this frame honest against any future
+                // unmount path that forgets the reset.
                 property <bool> row-hovered: Nav.sidebar-tip-idx != -1;
                 property <bool> held;
                 changed row-hovered => {
@@ -743,7 +761,8 @@ export component AppWindow inherits Window {
 
                 Tooltip {
                     text: Nav.sidebar-tip-label;
-                    hovered: sidebar-tip.held && Nav.sidebar-collapsed;
+                    hovered: (sidebar-tip.row-hovered || sidebar-tip.held)
+                        && Nav.sidebar-collapsed;
                     host-width: sidebar-tip.width;
                     host-height: sidebar-tip.height;
                     side: TooltipSide.right;

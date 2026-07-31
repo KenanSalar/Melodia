@@ -278,8 +278,14 @@ export component DialogOverlay inherits Rectangle {
 
             // Edit-Track-Information body — cover panel + Tags/Lyrics/Summary
             // tabs, driven by the `TagEditor` global; Accept routes to
-            // `TagEditor.commit()`.
-            if DialogGlobal.kind == "edit-tags": TagEditorBody { }
+            // `TagEditor.commit()`. Its tab strip wraps, so it needs the width
+            // it is actually drawn at: the card less this layout's padding,
+            // both of which are this file's to know. Reading `card.width` from
+            // in here closes no cycle — it depends on the dialog root's width
+            // and never on its children.
+            if DialogGlobal.kind == "edit-tags": TagEditorBody {
+                host-w: card.width - 2 * Theme.pad-lg;
+            }
 
             // Scrobble login bodies — driven by the `ScrobbleUi` global. The
             // primary button (labelled below) drives the flow; the dialog stays

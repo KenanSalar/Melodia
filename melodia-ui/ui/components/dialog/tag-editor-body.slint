@@ -41,8 +41,31 @@ component SummaryRow inherits HorizontalLayout {
 export component TagEditorBody inherits HorizontalLayout {
     spacing: Theme.pad-lg;
 
+    // What the card leaves this row, handed over rather than measured: a
+    // component root can't reach `parent`, and this one is a layout root
+    // besides, so reading its own `width` to size a child would re-enter
+    // layout. `dialog.slint` owns the card's ceiling and its padding, so it
+    // owns the subtraction too.
+    in property <length> host-w;
+
     // Fixed body height so switching tabs doesn't resize + recenter the card.
     private property <length> body-h: 360px;
+    private property <length> cover-w: 160px;
+
+    // What the right column is drawn at, which the wrapping `ChipGroup` below
+    // needs and cannot work out for itself. It has to be stated, not left to
+    // default: `ChipGroup` falls back to `SettingsPage.row-content-w`, so
+    // without this the *dialog's* tab strip wraps on whatever width the
+    // **Settings page** was last drawn at — a long locale on a cold start
+    // already wraps it to two rows.
+    //
+    // Derived from the host rather than from the 720 px the card is capped at.
+    // The card only reaches that cap on a window wide enough to afford it, and
+    // below it three chips in a long locale (Turkish "Şarkı Sözleri") no longer
+    // fit the line this would have claimed for them — nothing here clips, so
+    // they would paint past the card's edge.
+    private property <length> tabs-w:
+        max(0px, root.host-w - Theme.pad-lg - root.cover-w);
 
     // --- Left column: cover + artwork actions ---
     VerticalLayout {
@@ -51,7 +74,7 @@ export component TagEditorBody inherits HorizontalLayout {
 
         ArtworkImage {
             cover: TagEditor.cover;
-            tile-size: 160px;
+            tile-size: root.cover-w;
             tile-radius: Theme.radius-md;
             fallback-icon: "album";
         }
@@ -84,6 +107,7 @@ export component TagEditorBody inherits HorizontalLayout {
                 ? [@tr("Tags"), @tr("Lyrics"), @tr("Summary")]
                 : [@tr("Tags")];
             selected-index <=> TagEditor.active-tab;
+            avail-width: root.tabs-w;
         }
 
         // Fixed-height body region. Children fill it via width/height 100%

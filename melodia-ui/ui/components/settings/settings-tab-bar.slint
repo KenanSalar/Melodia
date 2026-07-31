@@ -310,11 +310,20 @@ export component SettingsTabBar inherits Rectangle {
         root.natural-tab-w + (root.compact-tab-w - root.natural-tab-w) * root.compact-t;
     property <length> ind-x: root.tab-w * root.anim-index;
 
-    // No `clip` at this level — a rounded clip over text renders the subtree to
-    // an offscreen layer and upscales it on HiDPI. The pill is the only rounded
-    // thing here and it is childless, so it costs no layer and nothing at this
-    // level needs clipping. The cells do clip their label slots, but
-    // rectangularly, which is a scissor rather than a layer.
+    // Rectangular, and only rectangular — this root carries no border and no
+    // radius, so it lowers to a scissor rather than to the offscreen layer a
+    // *rounded* clip over text would cost (which is why the cells clip their
+    // label slots the same way, and why the pill stays childless).
+    //
+    // What it contains is the shrink leg of the morph. `compact` flips the
+    // instant `avail-width` crosses the threshold, but `tab-w` takes 350 ms to
+    // follow it down, so for that window `preferred-width` is still five
+    // natural cells while the header row can no longer afford them — the
+    // layout squeezes the bar toward its `min-width` floor and the cells,
+    // whose bound widths make them incompressible, draw past the right edge
+    // and under the search input. Same spill the host's `page-w` seed exists
+    // to prevent, arriving from the other direction.
+    clip: true;
     height: 48px;
     horizontal-stretch: 0;
 

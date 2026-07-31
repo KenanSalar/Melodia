@@ -165,7 +165,7 @@ fn generate_palette_semantics_do_not_follow_the_album() {
     }
 }
 
-#[allow(
+#[expect(
     clippy::expect_used,
     reason = "test setup failures should abort the test; not production code"
 )]
@@ -189,7 +189,7 @@ fn extract_source_argb_rejects_oversized_source() {
     );
 }
 
-#[allow(
+#[expect(
     clippy::expect_used,
     reason = "test setup failures should abort the test; not production code"
 )]
@@ -218,7 +218,7 @@ fn extract_source_argb_from_rgb8_rejects_empty_buffer() {
     assert_eq!(extract_source_argb_from_rgb8(&buf), None);
 }
 
-#[allow(
+#[expect(
     clippy::expect_used,
     reason = "test setup failures should abort the test; not production code"
 )]

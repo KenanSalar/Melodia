@@ -190,6 +190,32 @@ fn the_compact_morph_is_written_not_bound() {
     );
 }
 
+/// Splitting the bar's `width` into `min`/`preferred`/`max` is what keeps the
+/// morph off the window's own minimum, and it buys that by letting the layout
+/// draw the bar narrower than it asked for. On the shrink leg `compact` flips
+/// the instant the threshold is crossed while `tab-w` takes 350 ms to follow, so
+/// `preferred-width` is still five natural cells against a row that can no
+/// longer seat them — and the cells bind their widths, so they can't compress.
+/// Without the clip they paint under the search input. Rectangular and
+/// borderless is the point: that lowers to a scissor rather than the offscreen
+/// layer a rounded clip over text would cost.
+#[test]
+fn the_bar_clips_what_the_width_split_lets_it_overdraw() {
+    // Anchored past `SettingsTab`, which is declared above the bar in the same
+    // file and clips its own label slot — an unanchored search would pass on
+    // that one and never notice the root's going missing.
+    let bar = TAB_BAR
+        .split_once("export component SettingsTabBar")
+        .map(|(_, body)| body)
+        .unwrap_or_default();
+
+    assert!(
+        bar.contains("clip: true"),
+        "settings-tab-bar.slint's root must clip — the min/preferred/max split lets the layout \
+         draw it narrower than its cells, and their bound widths spill under the search bar"
+    );
+}
+
 /// The header row is drawn from `page-w` for one frame before the first layout
 /// reports the truth, and that seed has to be the row's own floor rather than a
 /// plausible page width. Seeded wide, the bar believes it can afford five

@@ -163,7 +163,7 @@ fn build_sections(rows: &[(&str, &str, &str)]) -> HashMap<String, HashMap<String
 /// hex values byte-for-byte. Each blended slot below was hand-computed
 /// from the inputs and lands exactly on the Catppuccin target with no
 /// rounding drift.
-#[allow(clippy::expect_used, reason = "test fixture is fully populated; Some is invariant")]
+#[expect(clippy::expect_used, reason = "test fixture is fully populated; Some is invariant")]
 #[test]
 fn kde_palette_matches_catppuccin_mocha_sapphire() {
     let sections = build_sections(&[
@@ -228,7 +228,7 @@ fn kde_palette_matches_catppuccin_mocha_sapphire() {
 /// A scheme that omits the status foregrounds has to land on Breeze's own
 /// defaults, not on a neutral — the macOS-style traffic lights, the success /
 /// warning toasts and the star rating all read `green` / `yellow`.
-#[allow(clippy::expect_used, reason = "test fixture is fully populated; Some is invariant")]
+#[expect(clippy::expect_used, reason = "test fixture is fully populated; Some is invariant")]
 #[test]
 fn kde_palette_semantics_fall_back_to_breeze_defaults() {
     let sections = build_sections(&[
@@ -244,7 +244,7 @@ fn kde_palette_semantics_fall_back_to_breeze_defaults() {
     assert_eq!(p.yellow, "#f67400", "yellow ← Breeze ForegroundNeutral default");
 }
 
-#[allow(clippy::expect_used, reason = "test fixture is fully populated; Some is invariant")]
+#[expect(clippy::expect_used, reason = "test fixture is fully populated; Some is invariant")]
 #[test]
 fn kde_palette_falls_back_when_button_section_missing() {
     // Same scheme minus [Colors:Button] — surface0 should fall back

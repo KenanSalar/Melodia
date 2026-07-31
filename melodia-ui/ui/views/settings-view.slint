@@ -94,6 +94,15 @@ export component SettingsView inherits Rectangle {
     // The page less its own padding — what the header row divides up, and what
     // the body below has to fill. One property because it is one number; two
     // would be two places for the padding to drift.
+    //
+    // `SettingsPage.body-avail` computes the same subtraction and is **not**
+    // the same number, so don't collapse this onto it. It reads the *global*
+    // `page-w`, this reads the local mirror, and the two differ for exactly one
+    // frame — the global seeds at the narrowest panel Settings can be drawn in,
+    // the local at this header row's own floor, which is the seed the tab bar
+    // needs and the one `the_page_width_seed_is_the_rows_floor` pins. Point
+    // this at the global and the local mirror is written by two handlers and
+    // read by nobody, so the floor seed silently stops meaning anything.
     property <length> content-w: root.page-w - 2 * Theme.pad-lg;
 
     // --- Column count ------------------------------------------------------
