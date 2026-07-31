@@ -34,6 +34,8 @@ const SPECTRUM_BARS: &str =
     include_str!("../../../../melodia-ui/ui/components/now-playing/spectrum-bars.slint");
 const VIZ_FLYOUT: &str =
     include_str!("../../../../melodia-ui/ui/components/now-playing/visualizer-flyout.slint");
+const NOW_PLAYING_VIEW: &str =
+    include_str!("../../../../melodia-ui/ui/views/now-playing-view.slint");
 
 #[test]
 fn the_picker_names_one_style_per_key() {
@@ -178,6 +180,24 @@ fn the_strip_branches_on_a_key_the_table_knows() {
     assert!(
         SPECTRUM_BARS.contains("in property <bool> centred;"),
         "SpectrumBars no longer takes the anchor flag the strip sets"
+    );
+}
+
+#[test]
+fn the_strips_height_comes_from_the_panel_rather_than_a_literal() {
+    // Both ends, because either alone still builds and still draws: a strip
+    // that re-pins its own height ignores whatever the view passes, and a view
+    // that stops passing one leaves the strip on its fallback. Neither is
+    // visible on a small window — the fallback *is* the small-window height —
+    // so the symptom is a maximized window drawing the same sliver it used to.
+    assert!(
+        STRIP.contains("min-height: root.strip-height;")
+            && STRIP.contains("max-height: root.strip-height;"),
+        "the strip no longer takes its height from the host"
+    );
+    assert!(
+        NOW_PLAYING_VIEW.contains("strip-height: root.strip-h;"),
+        "the Now Playing view no longer sizes the strip against the panel"
     );
 }
 

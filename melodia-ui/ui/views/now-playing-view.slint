@@ -53,8 +53,21 @@ component MetaChip inherits Rectangle {
 // `UpNextList` component (`components/now-playing/up-next-list.slint`) so
 // the mini-player's square variant reuses the same behaviour.
 export component NowPlayingView inherits Rectangle {
-    // Edge of the square cover tile.
+    // Ceiling on the square cover tile's edge. The tile takes this much when
+    // the column has the height for it and less when it doesn't — see the
+    // cover slot below, which is what makes the artwork the one thing in the
+    // column that gives ground.
     property <length> cover-size: clamp(root.width * 0.22, 200px, 380px);
+
+    // Visualizer strip height. 56 px was the strip's fixed height and stays
+    // the floor, so no window draws a smaller one than it used to; the ceiling
+    // keeps a tall screen from turning the base of the group into the group.
+    property <length> strip-h: clamp(root.height * 0.12, 56px, 128px);
+
+    // The strip's drop below the chips. Padding is not something the layout
+    // can shrink on our behalf, so it comes off the panel height directly —
+    // making it the first thing the column gives up on a short window.
+    property <length> strip-drop: clamp(root.height * 0.06, Theme.pad-sm, Theme.pad-lg * 2.5);
 
     // The "Up Next" column, on a readable 280 px floor and a 420 px ceiling
     // that matches its old fixed value. Named rather than inlined because the
@@ -67,6 +80,22 @@ export component NowPlayingView inherits Rectangle {
     // column. This is the width `Player.recompute-chip-rows` chunks the chips
     // against, and what the visualizer strip below takes its share of.
     property <length> content-width: root.width - Theme.pad-lg - Theme.pad-md - root.up-next-width;
+
+    // Ceiling on the strip's width: a band no wider than a quarter of the strip
+    // is tall. The DSP always draws the same number of them, so a strip that
+    // widens without getting taller divides them into ever-fatter columns — and
+    // since a resting band is drawn as a dot of its own column's width, the row
+    // of beads becomes a row of slabs. Reading the model's own length beats
+    // restating `spectrum::NUM_BANDS` here; the `max` covers the frame before
+    // Rust seeds the model.
+    property <length> strip-w-max: root.strip-h / 4 * max(1, Visualizer.bars.length);
+
+    // Three quarters of that column, so the strip reads as the base of the
+    // cover → title → chips group rather than of the cover alone. The floor is
+    // not cosmetic: at the window's 350 px floor `content-width` goes negative,
+    // and flooring at the cover keeps the strip from ever being narrower than
+    // the artwork above it.
+    property <length> strip-w: max(root.cover-size, min(root.content-width * 0.75, root.strip-w-max));
 
     // --- Background: accent gradient floor + dual-slot blurred cross-fade -
     // The gradient is always painted. For a track WITH artwork the blur
@@ -220,14 +249,37 @@ export component NowPlayingView inherits Rectangle {
                 padding-bottom: Theme.pad-lg;
                 spacing: Theme.pad-md;
 
-                // Large foreground cover. The frame is static — only the
-                // cover content cross-fades on a track change (dual-slot
-                // pattern, driven by `ui::now_playing_artwork`). High-res
-                // source, so it stays crisp at this size.
-                HorizontalLayout {
-                    alignment: center;
+                // Large foreground cover. Only the cover content cross-fades on
+                // a track change (dual-slot pattern, driven by
+                // `ui::now_playing_artwork`); high-res source, so it stays
+                // crisp at this size.
+                //
+                // The slot is a plain Rectangle rather than a centring
+                // HorizontalLayout, and the tile inside it spells out `x` and
+                // `y`, because that combination is what makes the artwork the
+                // only child of this column with any slack. A non-layout
+                // element folds its children's constraints into its own —
+                // except for children carrying an `x` or `y` binding — so the
+                // slot reports a min of 0 against a preferred and max of
+                // `cover-size`. Every other child here has min == preferred
+                // (the text lines, the chip strip's reserved row, the strip
+                // itself), and Slint's shrink pass can only take height off a
+                // cell with room between the two. Without this the column had
+                // none, so a short — or merely wide, since the tile grows with
+                // the width — window pushed the last child, the visualizer,
+                // straight out of the panel.
+                cover-slot := Rectangle {
+                    preferred-height: root.cover-size;
+                    max-height: root.cover-size;
+
                     NowPlayingCover {
-                        tile-size: root.cover-size;
+                        // Square at whichever axis runs out first. The width
+                        // term matters on a narrow window, where the Up Next
+                        // column holds a 280 px floor and this column can end
+                        // up narrower than the tile wants to be.
+                        tile-size: min(parent.height, parent.width);
+                        x: (parent.width - self.width) / 2;
+                        y: 0px;
                     }
                 }
 
@@ -260,13 +312,15 @@ export component NowPlayingView inherits Rectangle {
                         horizontal-alignment: center;
                         overflow: elide;
                     }
-                    Text {
+                    // An `if` rather than `visible:` — a hidden child still
+                    // claims its cell, so an album-less track was reserving a
+                    // full text line for nothing.
+                    if Player.vm.has_track && Player.vm.track.album != "": Text {
                         text: "‎" + Player.vm.track.album;
                         color: Player.np-on-backdrop-muted.with-alpha(0.75);
                         font-size: Theme.font-size-md;
                         horizontal-alignment: center;
                         overflow: elide;
-                        visible: Player.vm.has_track && Player.vm.track.album != "";
                     }
                 }
 
@@ -322,14 +376,10 @@ export component NowPlayingView inherits Rectangle {
                 // Visualizer strip, as a base under the whole cover → title →
                 // chips group. Wrapped in a centring HorizontalLayout because
                 // a fixed-width child does not centre in a wider
-                // VerticalLayout, the same reason the cover above is wrapped.
+                // VerticalLayout.
                 //
-                // Three quarters of the column the chips wrap against, so the
-                // strip reads as the base of that group rather than of the
-                // cover alone. The `max` is not cosmetic: at the window's
-                // 350 px floor `content-width` goes negative, and flooring at
-                // the cover keeps the strip from ever being narrower than the
-                // artwork above it.
+                // Both dimensions come off the view root — see `strip-h` /
+                // `strip-w` there for what each is derived from.
                 if Visualizer.enabled: HorizontalLayout {
                     alignment: center;
                     // Sits well below the column's shared spacing so it reads as
@@ -338,9 +388,10 @@ export component NowPlayingView inherits Rectangle {
                     // splits between the two ends: the strip drops by half of
                     // it, everything above rises by the other half — budget
                     // twice the drop you actually want.
-                    padding-top: Theme.pad-lg * 2.5;
+                    padding-top: root.strip-drop;
                     VisualizerStrip {
-                        width: max(root.cover-size, root.content-width * 0.75);
+                        width: root.strip-w;
+                        strip-height: root.strip-h;
                     }
                 }
             }

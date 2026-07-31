@@ -47,7 +47,11 @@ export component WaveformTrace inherits Rectangle {
         // that lies exactly on top of itself renders as a dashed line.
         fill: Player.np-accent-bright.transparentize(0.55);
         stroke: Player.np-accent-bright;
-        stroke-width: 1.25px;
+        // Scaled off the strip, which is no longer a fixed height: the divisor
+        // lands on the old 1.25 px at the strip's floor, and without it the
+        // outline thins into a hairline as the strip grows. Capped before the
+        // stroke starts eating the wash it encloses.
+        stroke-width: clamp(root.height / 45, 1.25px, 2px);
         stroke-line-join: round;
     }
 }

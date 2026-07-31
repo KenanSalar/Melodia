@@ -59,7 +59,7 @@ pub const TRIGGER_SLACK_MS: u32 = 20;
 /// Logical pixels per drawn column.
 ///
 /// `DeaDBeeF` uses one column per pixel. One per two is visually
-/// indistinguishable under the envelope's own 1.25 px stroke and halves
+/// indistinguishable under the envelope's own stroke and halves
 /// everything downstream — the path string, its re-parse, and the tessellation
 /// of the filled figure — which matters here in a way it doesn't for a scope
 /// drawing straight to a canvas.
@@ -68,8 +68,15 @@ const LOGICAL_PX_PER_COLUMN: f32 = 2.0;
 /// Column bounds. The floor keeps a sub-100 px strip from degenerating into a
 /// handful of very wide columns; the ceiling bounds the per-frame path string,
 /// and is what the analyzer's buffer is sized to.
+///
+/// The ceiling is the widest strip the view can ask for, resolved at
+/// [`LOGICAL_PX_PER_COLUMN`]: the strip's width is capped against its own
+/// height there, and its height is capped outright, so nothing past this is
+/// reachable. Set below it, the trace would keep drawing the same columns
+/// stretched wider as the window grows — which is what it did while the strip
+/// was a fixed 56 px tall.
 const MIN_COLUMNS: usize = 64;
-pub const MAX_COLUMNS: usize = 512;
+pub const MAX_COLUMNS: usize = 1024;
 
 /// How far below zero the signal must dip before a crossing back up counts.
 /// Without it the trigger latches onto noise around the axis and the trace
@@ -85,10 +92,12 @@ const TRIGGER_HYSTERESIS: f32 = 0.02;
 /// the figure a real shape at every amplitude.
 ///
 /// Its size is chosen against the stroke rather than for its own sake. The
-/// viewbox is two units tall across the strip's fixed 56 px, so this is half a
-/// pixel either side of the centre — close enough that the two edges' 1.25 px
+/// viewbox is two units tall across the strip, so this is half a pixel either
+/// side of the centre at the strip's floor — close enough that the two edges'
 /// strokes still overlap and a resting trace reads as one line rather than as a
-/// pair of rails, far enough that they are nowhere near coincident.
+/// pair of rails, far enough that they are nowhere near coincident. Being in
+/// viewbox units it grows with the strip, and so does the stroke it is measured
+/// against, so the pair keeps its relationship at every height.
 const MIN_HALF_THICKNESS: f32 = 0.018;
 
 /// Samples spanning `ms` at `sample_rate`. Saturates rather than wrapping; the
@@ -231,7 +240,7 @@ const LINE_TO: &str = " L";
 /// byte-identical on every frame while the `y` beside it changes. Formatting it
 /// per frame is half of all the float formatting the trace does, and the trace
 /// is by a wide margin the most expensive thing the visualizer does per frame:
-/// at the [`MAX_COLUMNS`] cap it writes 1024 vertices, against a whole spectrum
+/// at the [`MAX_COLUMNS`] cap it writes 2048 vertices, against a whole spectrum
 /// frame's two FFTs.
 ///
 /// One packed string plus each entry's end offset, so a resize rebuilds a single

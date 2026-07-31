@@ -11,10 +11,17 @@ import { WaveformTrace } from "waveform-trace.slint";
 // duplicating it per style would mean three chances to get it wrong. Styles are
 // pure render; this is the only driver.
 export component VisualizerStrip inherits Rectangle {
-    min-height: 56px;
-    max-height: 56px;
-    // The host column is `alignment: center`, and the strip must not grow into
-    // the space the cover and title need on a short window.
+    // The height is the host's to decide — it follows the panel, and a
+    // component root cannot reach `parent`. The default is what the strip was
+    // pinned to before it became responsive, so a call site that forgets still
+    // gets a strip rather than a hairline.
+    in property <length> strip-height: 56px;
+
+    min-height: root.strip-height;
+    max-height: root.strip-height;
+    // The host column is `alignment: center`, and the strip takes a fixed slot
+    // in it: what absorbs a short window is the cover slot above, which is the
+    // one child there with room to shrink.
     vertical-stretch: 0;
 
     // Matched on the key, not on an index, so reordering the pickers can't
