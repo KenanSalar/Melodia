@@ -63,6 +63,25 @@ export component SettingsView inherits Rectangle {
         2 * Theme.pad-lg + bar.compact-w + 2 * Theme.pad-md + root.search-w-max;
     changed width => { self.page-w = self.width; }
 
+    // …and a mount seed, because `changed` doesn't fire when the first layout
+    // settles directly on the final value. Opening the app straight into
+    // Settings is exactly that case — the panel is never *resized*, it is born
+    // at its size — so without this the seed above is never corrected and a
+    // window with room to spare still draws icon-only tabs until something
+    // moves the window. It only looked fixed from the miniplayer, where the
+    // seed's answer happens to be the right one.
+    //
+    // 1 ms single-shot, the same idiom as `grid-columns-sync.slint` and
+    // `mini-player-switch.slint`. It lands well inside the tab bar's 100 ms
+    // ease arming, so the correction still snaps instead of morphing.
+    Timer {
+        interval: 1ms;
+        triggered => {
+            root.page-w = root.width;
+            self.running = false;
+        }
+    }
+
     // What the header row has to divide up: the page less its own padding.
     property <length> header-w: root.page-w - 2 * Theme.pad-lg;
 

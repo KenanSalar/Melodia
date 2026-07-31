@@ -43,6 +43,22 @@ export component NowPlayingBar inherits Rectangle {
     property <length> bar-w: 1100px;
     changed width => { self.bar-w = self.width; }
 
+    // Mount seed — `changed` doesn't fire when the first layout settles
+    // directly on the final value, so a window opened at its final size never
+    // corrects the 1100 px above. Every consumer below is a `clamp` that
+    // saturates well before that, which is why this went unnoticed: at any
+    // ordinary width the stale seed and the real width give the same answer.
+    // Below roughly 800 px they diverge, and the bar keeps wide-window padding
+    // and spacing until something resizes the window. Same 1 ms single-shot as
+    // `settings-view.slint`'s `page-w`.
+    Timer {
+        interval: 1ms;
+        triggered => {
+            root.bar-w = root.width;
+            self.running = false;
+        }
+    }
+
     // Shared sizing for the standard transport / favorite / repeat / shuffle
     // / pin / queue / volume / more_vert buttons. The same `clamp(...)` lived
     // inline at 10+ call sites before — caching at the root makes design
