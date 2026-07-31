@@ -1,14 +1,21 @@
-//! Small shared helper for the entity grids' cover-prewarm paths.
+//! Small shared helpers for the entity grids' cover caches.
 //!
-//! Every entity grid (`albums`, `artists`, `playlists`) and the genre detail
-//! view turns an iterator of optional artwork-path strings into a
+//! Two things every grid needs and none of them should own. Every entity grid
+//! (`albums`, `artists`, `playlists`, both Favorites tabs) and the genre
+//! detail view turns an iterator of optional artwork-path strings into a
 //! deduplicated, display-ordered `Vec<PathBuf>` to hand to
-//! `CoverThumbs::prewarm`. The per-entity `first_screenful_paths` wrappers
-//! still own the entity-specific projection (which field, how many ahead);
-//! only this dedup core is shared.
+//! `CoverThumbs::prewarm`; and every one with a cover cache sizes that cache
+//! against the display it will actually be drawn on. The per-entity
+//! `first_screenful_paths` wrappers still own the entity-specific projection
+//! (which field, how many ahead); only these cores are shared.
 
 use std::collections::HashSet;
+use std::num::NonZeroUsize;
 use std::path::PathBuf;
+
+use slint::ComponentHandle;
+
+use crate::AppWindow;
 
 /// Deduplicated, non-empty artwork paths from an iterator of optional path
 /// strings, preserving first-seen order and stopping at `cap` — fed to
@@ -42,6 +49,82 @@ pub fn unique_artwork_paths<'a>(
         }
     }
     out
+}
+
+/// How many grid covers to keep resident on a display of this logical size.
+///
+/// The flex-filled grid cards are *large* (the user runs them well past
+/// 200 px), so this uses a generous footprint (~260 px wide incl. gap,
+/// ~320 px tall incl. text + gap) — a smaller footprint over-counts what's
+/// really on screen. `rows` adds one partial row as the only scroll-back
+/// headroom: no extra multiplier, because even fullscreen at 1440p only
+/// ~50 cards are visible at once, so a 1.5× cushion was just dead weight.
+/// Clamped to `[32, 96]` — at 448 px / ~600 KB per entry that's a ~19–58 MB
+/// band, and every one of these caches is released entirely when the user
+/// leaves its section anyway. The footprint constants and clamps are the
+/// tunable knobs. Lands ≈ 1080p → 35, 1440p → 54, 4K → 96.
+///
+/// One function rather than one per grid: it was copied verbatim into
+/// `albums`, `artists` and `playlists`, so the numbers above had three places
+/// to drift and the Favorites tabs would have made a fourth. Every grid draws
+/// the same card at the same size — there is nothing per-entity to tune.
+pub fn cover_cap(logical_w: u32, logical_h: u32, fallback: NonZeroUsize) -> NonZeroUsize {
+    const CARD_FOOTPRINT_W: u32 = 260;
+    const ROW_FOOTPRINT_H: u32 = 320;
+    const MIN_CAP: usize = 32;
+    const MAX_CAP: usize = 96;
+
+    let cols = (logical_w / CARD_FOOTPRINT_W).max(1);
+    // `+ 1` for the partially-visible row — the only scroll headroom.
+    let rows = logical_h.div_ceil(ROW_FOOTPRINT_H) + 1;
+    let visible = usize::try_from(cols.saturating_mul(rows)).unwrap_or(MAX_CAP);
+    let cap = visible.clamp(MIN_CAP, MAX_CAP);
+    NonZeroUsize::new(cap).unwrap_or(fallback)
+}
+
+/// Convert a physical pixel extent + DPI scale into a logical extent.
+/// Saturating boundary for the `f64 → u32` step — mirrors
+/// `media::artwork::f64_to_pixel`; monitor extents stay far below
+/// `u32::MAX` in practice.
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    reason = "logical screen extent stays well below u32::MAX; this is the saturating boundary"
+)]
+fn logical_dim(physical: u32, scale: f64) -> u32 {
+    let scale = if scale > 0.0 { scale } else { 1.0 };
+    let v = (f64::from(physical) / scale).round();
+    if v.is_nan() || v <= 0.0 {
+        physical
+    } else if v >= f64::from(u32::MAX) {
+        u32::MAX
+    } else {
+        v as u32
+    }
+}
+
+/// Query the window's current monitor and derive a grid-cover cap from its
+/// logical resolution. Falls back to `fallback` when the monitor can't be read
+/// (e.g. some Wayland setups report `None`).
+///
+/// Call once at startup, after the winit window is live — each cache is
+/// constructed with its own default and resized from here.
+pub fn cover_cap_for_window(app: &AppWindow, fallback: NonZeroUsize) -> NonZeroUsize {
+    use slint::winit_030::WinitWindowAccessor;
+
+    app.window()
+        .with_winit_window(|w| {
+            let monitor = w.current_monitor()?;
+            let physical = monitor.size();
+            let scale = w.scale_factor();
+            Some(cover_cap(
+                logical_dim(physical.width, scale),
+                logical_dim(physical.height, scale),
+                fallback,
+            ))
+        })
+        .flatten()
+        .unwrap_or(fallback)
 }
 
 #[cfg(test)]

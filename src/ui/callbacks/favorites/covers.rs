@@ -1,5 +1,5 @@
 //! `Favorites.*` lazy cover-lookup callbacks — one per card tier
-//! (mosaic, most-played, artist). (All Songs rows resolve through the
+//! (mosaic, most-played, artist). (Songs-tab rows resolve through the
 //! shared `RowCovers` global like every other `TrackListRowItem`.)
 //! See [`super::wire_favorites`].
 

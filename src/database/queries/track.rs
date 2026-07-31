@@ -666,21 +666,41 @@ pub async fn get_favorite_stats(db: &DbPool) -> Result<track::FavoriteStats, App
     })
 }
 
-/// Top N favorite tracks by play count (only those with `play_count` > 0).
+/// Favorite tracks by play count, most played first (only those with
+/// `play_count` > 0).
+///
+/// `limit` is optional because the two callers want different things: the
+/// Favorites page's Most Played tab is a virtualized grid over the whole set,
+/// while a capped carousel asks for its top N. `None` drops the `LIMIT`
+/// clause outright rather than binding a sentinel, so the planner sees the
+/// query it can actually satisfy from the index.
 pub async fn get_most_played_favorites(
     db: &DbPool,
-    limit: i64,
+    limit: Option<i64>,
 ) -> Result<Vec<track::MostPlayedFavorite>, AppError> {
-    let rows = sqlx::query_as::<_, track::MostPlayedFavorite>(
-        "SELECT id, title, artist, artwork_path, play_count, duration_ms \
+    const ALL: &str = "SELECT id, title, artist, artwork_path, play_count, duration_ms \
+         FROM tracks \
+         WHERE is_favorite = TRUE AND play_count > 0 \
+         ORDER BY play_count DESC";
+    const TOP_N: &str = "SELECT id, title, artist, artwork_path, play_count, duration_ms \
          FROM tracks \
          WHERE is_favorite = TRUE AND play_count > 0 \
          ORDER BY play_count DESC \
-         LIMIT ?",
-    )
-    .bind(limit)
-    .fetch_all(db.read())
-    .await?;
+         LIMIT ?";
+
+    let rows = match limit {
+        Some(limit) => {
+            sqlx::query_as::<_, track::MostPlayedFavorite>(TOP_N)
+                .bind(limit)
+                .fetch_all(db.read())
+                .await?
+        }
+        None => {
+            sqlx::query_as::<_, track::MostPlayedFavorite>(ALL)
+                .fetch_all(db.read())
+                .await?
+        }
+    };
     Ok(rows)
 }
 

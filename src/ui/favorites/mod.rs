@@ -1,30 +1,29 @@
 //! Favorites-view glue between Rust and Slint.
 //!
-//! Drives the `Favorites` Slint global (sidebar index 2) — a single
-//! scrollable page composed of:
+//! Drives the `Favorites` Slint global (sidebar index 2) — a pinned hero
+//! over three mutually exclusive sub-views:
 //!
-//! * Hero — live 2×2 cover mosaic + count + total duration + the
-//!   Shuffle / Columns pill. The mosaic refreshes whenever
-//!   `library_changed_tx` ticks (favourite toggled, play count bumped,
-//!   library scanned) so it always reflects the top-4 most-played
-//!   favourites. The blur backdrop fades through the shared
-//!   `Favorites.blur-img-{a,b}` dual-slot pattern.
-//! * Two horizontal carousels — Most Played and Favorite Artists —
-//!   composing `HorizontalCardStrip` with the per-strip data fetched
-//!   from `library::favorites::*`. (No Favorite Albums carousel; the
-//!   Albums tab covers that.)
-//! * All Songs — a full `TrackList` bound to the post-filter
+//! * Hero — live 2×2 cover mosaic + count + total duration + the per-tab
+//!   action pill, under a header row carrying the tab bar and the filter.
+//!   The mosaic refreshes whenever `library_changed_tx` ticks (favourite
+//!   toggled, play count bumped, library scanned) so it always reflects the
+//!   top-4 most-played favourites. The blur backdrop fades through the
+//!   shared `Favorites.blur-img-{a,b}` dual-slot pattern.
+//! * Songs — a full `TrackList` bound to the post-filter
 //!   `Favorites.tracks` model. Search is in-memory (the SQL fetch
 //!   returns the entire sorted set once per `library_changed_tx` tick,
 //!   then keystrokes re-walk the cached `tracks_all` without hitting
 //!   `SQLite`).
+//! * Most Played and Favorite Artists — virtualized `EntityCardGrid`s over
+//!   uncapped fetches from `library::favorites::*`. (No Favorite Albums
+//!   tab; the Albums tab covers that.)
 //!
-//! Cache discipline mirrors `src/ui/albums`: per-tier `CoverThumbs`
-//! LRUs (the shared row tier plus dedicated tiers for the mosaic /
-//! Most Played / Artists), released on Favorites-section leave — and,
-//! for the two collapsible strips, on collapse — so the hidden view's
-//! resident footprint drops to ~0. Re-enter
-//! re-fetches via `library_changed_tx`-driven `mark_dirty` /
+//! Cache discipline mirrors `src/ui/albums`: per-tier `CoverThumbs` LRUs
+//! (the shared row tier plus dedicated grid-sized tiers for the mosaic /
+//! Most Played / Artists), released on Favorites-section leave — and, for
+//! the two grids, on tab-leave, which is the event the collapse toggles
+//! used to be — so the hidden view's resident footprint drops to ~0.
+//! Re-enter re-fetches via `library_changed_tx`-driven `mark_dirty` /
 //! `take_dirty` round-trip.
 
 mod hero;
@@ -33,9 +32,10 @@ mod selection;
 mod state;
 mod tracks;
 
+use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 
 use slint::{ComponentHandle, Image, ModelRc, SharedString, VecModel};
 
@@ -44,16 +44,63 @@ use crate::entities::track::{FavoriteStats, MostPlayedFavorite};
 use crate::media::cover_thumbs::CoverThumbs;
 use crate::ui::util::clamp_i64_to_i32;
 use crate::{
-    AppWindow, EntityStripRow as UiEntityStripRow, Favorites, TrackListRow as UiTrackListRow,
+    AppWindow, EntityGridRow as UiEntityGridRow, EntityStripRow as UiEntityStripRow, Favorites,
+    TrackListRow as UiTrackListRow,
 };
 
 use state::{
-    ARTIST_THUMB_CAP, ARTIST_THUMB_SIZE, FavoritesUiState, MOSAIC_THUMB_CAP, MOSAIC_THUMB_SIZE,
-    MOST_PLAYED_THUMB_CAP, MOST_PLAYED_THUMB_SIZE,
+    ARTIST_THUMB_SIZE, FavoritesUiState, GRID_PREWARM_AHEAD, GRID_THUMB_CAP, MOSAIC_THUMB_CAP,
+    MOSAIC_THUMB_SIZE, MOST_PLAYED_THUMB_SIZE,
 };
 
+/// Which Favorites sub-view is mounted.
+///
+/// The indices themselves are declared once, in `curated.slint`'s `tab-*`
+/// constants; [`tab_from_index`] resolves one to this on the UI thread, so no
+/// Rust file restates them. Off-thread callers (the fetchers) read the shadow
+/// rather than the global, which they can't touch anyway.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum FavoritesTab {
+    Songs,
+    MostPlayed,
+    Artists,
+}
+
+impl FavoritesTab {
+    /// Storage code for the atomic shadow. Deliberately *not* the Slint index
+    /// — that lives in the Slint, and these two numbering schemes agreeing
+    /// today is a coincidence worth not depending on.
+    fn as_code(self) -> u8 {
+        match self {
+            Self::Songs => 0,
+            Self::MostPlayed => 1,
+            Self::Artists => 2,
+        }
+    }
+
+    fn from_code(code: u8) -> Self {
+        match code {
+            1 => Self::MostPlayed,
+            2 => Self::Artists,
+            _ => Self::Songs,
+        }
+    }
+}
+
+/// Resolve a `Favorites.tab-idx` value against the global's own `tab-*`
+/// constants. UI thread only — that's where the global is reachable.
+pub fn tab_from_index(g: &Favorites<'_>, idx: i32) -> FavoritesTab {
+    if idx == g.get_tab_most_played() {
+        FavoritesTab::MostPlayed
+    } else if idx == g.get_tab_artists() {
+        FavoritesTab::Artists
+    } else {
+        FavoritesTab::Songs
+    }
+}
+
 pub use hero::refresh_hero;
-pub use sections::{apply_filtered_strips, refresh_strips};
+pub use sections::{apply_filtered_grids, refresh_grids};
 pub use selection::{clear_selection, handle_select_row};
 pub use tracks::{
     apply_filtered_tracks, apply_row_rating, current_filter, current_sort, refresh_tracks,
@@ -65,16 +112,16 @@ pub use tracks::{
 /// `Arc<FavoritesUi>` — `Send + Sync`.
 pub struct FavoritesUi {
     inner: FavoritesUiState,
-    /// Shared row-tier (72 px) cache — used for the All Songs `TrackList`
-    /// row column. Same instance every view consumes.
+    /// Shared row-tier (72 px) cache — used for the Songs tab's
+    /// `TrackList` row column. Same instance every view consumes.
     pub(super) cover_thumbs: Arc<CoverThumbs>,
     /// Mosaic-tile cache (128 px). Released on section leave; warm
     /// across mosaic refreshes inside one section visit.
     pub(super) mosaic_thumbs: Arc<CoverThumbs>,
-    /// Most Played strip cache (180 px). Released on section leave.
+    /// Most Played grid cache. Released on section leave and on tab-leave.
     pub(super) most_played_thumbs: Arc<CoverThumbs>,
-    /// Favorite Artists strip cache (200 px, circular cards). Released
-    /// on section leave.
+    /// Favorite Artists grid cache (circular cards). Released on section
+    /// leave and on tab-leave.
     pub(super) artist_thumbs: Arc<CoverThumbs>,
     /// Section-visible shadow — mirrors
     /// `Nav.selected-index == NAV_FAVORITES && !Nav.now-playing-open`.
@@ -85,6 +132,11 @@ pub struct FavoritesUi {
     /// every `library_changed_tx` tick that fires while the view is
     /// hidden, plus on section leave; cleared by `take_dirty`.
     data_dirty: AtomicBool,
+    /// Synchronous shadow of `Favorites.tab-idx`, as a [`FavoritesTab`].
+    /// The off-thread fetchers decide which cover tier to warm from this —
+    /// only one grid is ever mounted, so warming both is half the decodes
+    /// and twice the resident buffers for nothing.
+    active_tab: AtomicU8,
 }
 
 impl FavoritesUi {
@@ -98,14 +150,15 @@ impl FavoritesUi {
             )),
             most_played_thumbs: Arc::new(CoverThumbs::with_config(
                 MOST_PLAYED_THUMB_SIZE,
-                MOST_PLAYED_THUMB_CAP,
+                GRID_THUMB_CAP,
             )),
             artist_thumbs: Arc::new(CoverThumbs::with_config(
                 ARTIST_THUMB_SIZE,
-                ARTIST_THUMB_CAP,
+                GRID_THUMB_CAP,
             )),
             section_active: AtomicBool::new(false),
             data_dirty: AtomicBool::new(false),
+            active_tab: AtomicU8::new(FavoritesTab::Songs.as_code()),
         }
     }
 
@@ -117,12 +170,60 @@ impl FavoritesUi {
         self.section_active.load(Ordering::Relaxed)
     }
 
+    /// Mirror the mounted sub-view. Written on the UI thread from the tab
+    /// bar's pick and from the section-lifecycle seed.
+    pub fn set_active_tab(&self, tab: FavoritesTab) {
+        self.active_tab.store(tab.as_code(), Ordering::Relaxed);
+    }
+
+    /// Which sub-view is mounted right now.
+    pub fn active_tab(&self) -> FavoritesTab {
+        FavoritesTab::from_code(self.active_tab.load(Ordering::Relaxed))
+    }
+
+    /// First-screenful cover paths for a grid tab, in display order.
+    ///
+    /// Deduped and capped by the shared [`crate::ui::grid_prewarm`] helper —
+    /// the cap bounds *kept paths*, not input items, so an uncapped grid over
+    /// a large library doesn't allocate a `PathBuf` per unique cover just to
+    /// keep the first two rows.
+    pub fn first_screenful_paths(&self, tab: FavoritesTab) -> Vec<PathBuf> {
+        match tab {
+            FavoritesTab::MostPlayed => crate::ui::grid_prewarm::unique_artwork_paths(
+                self.inner.most_played.lock().iter().map(|t| t.artwork_path.as_deref()),
+                GRID_PREWARM_AHEAD,
+            ),
+            FavoritesTab::Artists => crate::ui::grid_prewarm::unique_artwork_paths(
+                self.inner.fav_artists.lock().iter().map(|a| a.image_path.as_deref()),
+                GRID_PREWARM_AHEAD,
+            ),
+            FavoritesTab::Songs => Vec::new(),
+        }
+    }
+
+    /// Decode a grid tab's first screenful into its tier. Blocking — call it
+    /// from `spawn_blocking`, never on the UI thread.
+    ///
+    /// The Songs tab is a no-op: its row covers come from the shared 72 px
+    /// row tier, which `refresh_tracks` already warms.
+    pub fn prewarm_tab_covers(&self, tab: FavoritesTab) {
+        let paths = self.first_screenful_paths(tab);
+        if paths.is_empty() {
+            return;
+        }
+        match tab {
+            FavoritesTab::MostPlayed => self.most_played_thumbs.prewarm(&paths),
+            FavoritesTab::Artists => self.artist_thumbs.prewarm(&paths),
+            FavoritesTab::Songs => {}
+        }
+    }
+
     pub fn mark_dirty(&self) {
         self.data_dirty.store(true, Ordering::Release);
     }
 
     /// Atomically read-and-clear the dirty flag. The section-enter
-    /// handler uses this to decide whether to re-fetch hero + strips +
+    /// handler uses this to decide whether to re-fetch hero + grids +
     /// tracks; the live-refresh subscriber sets it whenever a
     /// `library_changed_tx` tick arrives while the view is hidden.
     pub fn take_dirty(&self) -> bool {
@@ -172,21 +273,21 @@ impl FavoritesUi {
         crate::tasks::heap_trim::trim();
     }
 
-    /// Drop just the Most Played strip cover cache. Called (off the UI
-    /// thread) when that sub-section is collapsed: the strip's
-    /// `HorizontalCardStrip` is unmounted from the layout tree by the
-    /// `if !most-played-collapsed` gate, so its 180 px covers are no
-    /// longer visible or queried via `request-most-played-cover`.
-    /// Re-expanding re-decodes them lazily on card mount. Mirrors
-    /// [`crate::ui::albums::AlbumsUi::release_grid_covers`].
+    /// Drop just the Most Played grid's cover cache. Called (off the UI
+    /// thread) when another tab is picked: the `if tab-idx == …` gate has
+    /// unmounted the grid, so its covers are no longer visible or queried
+    /// via `request-most-played-cover`. Coming back re-decodes them lazily
+    /// on card mount. Mirrors
+    /// [`crate::ui::albums::AlbumsUi::release_grid_covers`], which does the
+    /// same on drill-in.
     pub fn release_most_played_covers(&self) {
         self.most_played_thumbs.clear();
         crate::tasks::heap_trim::trim();
     }
 
-    /// Drop just the Favorite Artists strip cover cache — the collapse
-    /// counterpart for the `if !artists-collapsed` scroller. See
-    /// [`Self::release_most_played_covers`].
+    /// Drop just the Favorite Artists grid's cover cache — the tab-leave
+    /// counterpart of [`Self::release_most_played_covers`], and also called
+    /// when a card drills into Artist Detail.
     pub fn release_artist_covers(&self) {
         self.artist_thumbs.clear();
         crate::tasks::heap_trim::trim();
@@ -203,7 +304,7 @@ impl FavoritesUi {
             .get_or_load_opt(Some(artwork_path).filter(|s| !s.is_empty()))
     }
 
-    /// Lazy cover lookup for the Most Played strip cards. Routed via
+    /// Lazy cover lookup for the Most Played grid cards. Routed via
     /// `Favorites.request-most-played-cover`.
     pub fn most_played_cover(&self, artwork_path: &str) -> Image {
         self.most_played_thumbs
@@ -216,7 +317,7 @@ impl FavoritesUi {
             .get_or_load_opt(Some(artwork_path).filter(|s| !s.is_empty()))
     }
 
-    /// Track ids of the post-filter All Songs list, in display order.
+    /// Track ids of the post-filter Songs tab, in display order.
     /// `shuffle-all` / `play-row` use this to recover ids without
     /// round-tripping the Slint model.
     pub fn filtered_track_ids(&self) -> Vec<i64> {
@@ -232,12 +333,12 @@ impl FavoritesUi {
             .collect()
     }
 
-    /// Track ids of the Most Played strip, in card order. `play-track`
-    /// hands these to `player_play_tracks` so clicking a card loads the
-    /// strip rather than the All Songs list below it.
+    /// Track ids of the Most Played grid, in card order. `play-track` and
+    /// `shuffle-most-played` hand these to `player_play_tracks` so a card
+    /// loads that grid rather than the Songs tab's list.
     ///
-    /// Filtered through the same predicate `apply_filtered_strips` builds
-    /// the model with — the strip narrows with the hero search bar, so the
+    /// Filtered through the same predicate `apply_filtered_grids` builds
+    /// the model with — the grid narrows with the hero search bar, so the
     /// raw cache would enqueue cards that aren't on screen.
     pub fn most_played_track_ids(&self) -> Vec<i64> {
         let needle = self.inner.filter.lock().to_lowercase();
@@ -251,12 +352,12 @@ impl FavoritesUi {
     }
 
     /// Whether a given artist appears in the cached Favorite Artists
-    /// strip.
+    /// grid.
     pub fn fav_artist_known(&self, id: i64) -> bool {
         self.inner.fav_artists.lock().iter().any(|a| a.id == id)
     }
 
-    /// Surgically flip `is_favorite` on a cached All Songs row so a
+    /// Surgically flip `is_favorite` on a cached Songs-tab row so a
     /// single-row toggle reflects in the model without a full re-fetch.
     /// When `fav == false`, the row is removed entirely (parity with
     /// `library::favorites::get_favorite_tracks` which only returns
@@ -280,17 +381,46 @@ impl FavoritesUi {
     }
 }
 
-/// Bind empty Slint `VecModel`s for the Most Played carousel, the
-/// Favorite Artists scroller, the All Songs list, the selection set,
-/// and the mosaic-path string list. Subsequent updates locate them by
-/// downcasting back to `VecModel<T>` from the UI thread.
+/// Seed the active tab from `views.json`, clamped against the Slint-declared
+/// `tab-count` (see [`crate::ui::tab_bar::clamp_tab`]).
+///
+/// Seeds **both** the Slint property and the [`FavoritesUi`] shadow, which is
+/// why it takes the handle and why it is called from `install_views` rather
+/// than alongside its siblings in `hydrate_ui_from_settings` — that runs after
+/// the handle has gone out of scope, and a shadow left at its `Songs` default
+/// would have the first fetch warm the wrong tier for a session that resumes
+/// on a grid tab.
+pub fn seed_tab(ui: &AppWindow, fav_ui: &FavoritesUi, persisted_tab: i32) {
+    let g = ui.global::<Favorites>();
+    let clamped = crate::ui::tab_bar::clamp_tab(persisted_tab, g.get_tab_count());
+    g.set_tab_idx(clamped);
+    fav_ui.set_active_tab(tab_from_index(&g, clamped));
+}
+
+/// Retune both grid-tier cover caches to the real display resolution. Called
+/// once at startup after the winit window is live, alongside the entity
+/// grids' own tuning — the tabs draw the same card at the same size, so they
+/// take the same band.
+///
+/// Both, even though only one is ever warm: which tab the user resumes on
+/// isn't known until `seed_tab`, and resizing an empty LRU costs nothing.
+pub fn tune_cache_for_display(app: &AppWindow, fav_ui: &FavoritesUi) {
+    let cap = crate::ui::grid_prewarm::cover_cap_for_window(app, GRID_THUMB_CAP);
+    fav_ui.most_played_thumbs.resize(cap);
+    fav_ui.artist_thumbs.resize(cap);
+    log::debug!("ui::favorites grid-cover cache caps tuned to {cap}");
+}
+
+/// Bind empty Slint `VecModel`s for the two grid tabs, the Songs list, the
+/// selection set, and the mosaic-path string list. Subsequent updates locate
+/// them by downcasting back to `VecModel<T>` from the UI thread.
 pub fn install_favorites_models(ui: &AppWindow) {
     let g = ui.global::<Favorites>();
 
-    let most_played: Rc<VecModel<UiEntityStripRow>> = Rc::new(VecModel::default());
+    let most_played: Rc<VecModel<UiEntityGridRow>> = Rc::new(VecModel::default());
     g.set_most_played_rows(ModelRc::from(most_played));
 
-    let artists: Rc<VecModel<UiEntityStripRow>> = Rc::new(VecModel::default());
+    let artists: Rc<VecModel<UiEntityGridRow>> = Rc::new(VecModel::default());
     g.set_artist_rows(ModelRc::from(artists));
 
     let tracks: Rc<VecModel<UiTrackListRow>> = Rc::new(VecModel::default());
@@ -303,9 +433,9 @@ pub fn install_favorites_models(ui: &AppWindow) {
     g.set_selected_ids(ModelRc::from(sel));
 }
 
-/// Map a `MostPlayedFavorite` to its Slint strip row. Subtitle is the
-/// artist name (mirrors the Tauri card). `play_count` rides in the
-/// `play_count` slot so the strip's `show-play-count: true` reveals it.
+/// Map a `MostPlayedFavorite` to its Slint card row. Subtitle is the
+/// artist name. `play_count` rides in the `play_count` slot so the grid's
+/// `show-play-count: true` reveals the badge.
 pub fn to_slint_most_played_row(t: &MostPlayedFavorite) -> UiEntityStripRow {
     UiEntityStripRow {
         id: clamp_i64_to_i32(t.id),
@@ -316,7 +446,7 @@ pub fn to_slint_most_played_row(t: &MostPlayedFavorite) -> UiEntityStripRow {
     }
 }
 
-/// Map a `FavoriteArtist` + caller-supplied subtitle to its Slint strip
+/// Map a `FavoriteArtist` + caller-supplied subtitle to its Slint card
 /// row. The subtitle is the translated "{n} favorite[s]" count line and
 /// must be resolved on the UI thread via `Favorites.artist-favorite-subtitle(count)`
 /// (Slint 1.16 doesn't expose `translate_from_bundle` to Rust). `play_count`
@@ -338,3 +468,7 @@ const _: fn() = || {
     fn check<T: Send + Sync>() {}
     check::<FavoritesUi>();
 };
+
+#[cfg(test)]
+#[path = "tests/favorites_tests.rs"]
+mod tests;

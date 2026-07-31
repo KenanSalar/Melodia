@@ -127,38 +127,22 @@ pub fn set_artist_albums_collapsed(
     })
 }
 
-/// Persist the Favorites view "Favorite Artists" sub-section collapsed
-/// flag. Mirrors `set_artist_albums_collapsed` — the Slint property
-/// (`Favorites.artists-collapsed`) is updated synchronously by the
-/// toggle callback before this write runs, so no runtime kick is
-/// needed.
-pub fn set_favorites_artists_collapsed(
-    state: &AppState,
-    collapsed: bool,
-) -> Result<(), AppError> {
-    services::view_state::mutate_view_state(&state.paths, move |s| {
-        s.favorites_artists_collapsed = collapsed;
-    })
-}
-
-/// Persist the Favorites view "Most Played" sub-section collapsed
-/// flag. Same shape as `set_favorites_artists_collapsed`.
-pub fn set_favorites_most_played_collapsed(
-    state: &AppState,
-    collapsed: bool,
-) -> Result<(), AppError> {
-    services::view_state::mutate_view_state(&state.paths, move |s| {
-        s.favorites_most_played_collapsed = collapsed;
-    })
-}
-
 /// Persist the Settings page's active tab so re-entering the page lands
-/// where the user left it. Same no-kick shape as the collapse flags above:
+/// where the user left it. Same no-kick shape as the collapse flag above:
 /// `SettingsPage.tab-idx` is two-way bound to the tab bar, so the Slint side
 /// is already correct by the time this write runs.
 pub fn set_settings_tab(state: &AppState, tab: i32) -> Result<(), AppError> {
     services::view_state::mutate_view_state(&state.paths, move |s| {
         s.settings_tab = tab;
+    })
+}
+
+/// Persist the Favorites page's active tab. Same contract as
+/// [`set_settings_tab`] — `Favorites.tab-idx` is two-way bound to its tab
+/// bar, so this write is pure catch-up.
+pub fn set_favorites_tab(state: &AppState, tab: i32) -> Result<(), AppError> {
+    services::view_state::mutate_view_state(&state.paths, move |s| {
+        s.favorites_tab = tab;
     })
 }
 

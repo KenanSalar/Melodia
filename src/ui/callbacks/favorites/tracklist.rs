@@ -1,6 +1,6 @@
-//! `Favorites.*` All Songs list callbacks: row actions (play, queue,
-//! favorite toggle), the filter pass, sort, column visibility, and
-//! modifier-aware row selection. See [`super::wire_favorites`].
+//! `Favorites.*` Songs-tab callbacks: row actions (play, queue, favorite
+//! toggle), the filter pass, sort, column visibility, and modifier-aware
+//! row selection. See [`super::wire_favorites`].
 
 use std::sync::Arc;
 
@@ -15,12 +15,12 @@ use crate::ui::favorites::{self as favorites_ui_mod, FavoritesUi};
 use crate::ui::track_list_view::TrackListColumnState;
 use crate::{AppWindow, Favorites};
 
-/// Wire the All Songs row / filter / sort / selection callbacks.
+/// Wire the Songs tab's row / filter / sort / selection callbacks.
 pub(super) fn wire(ui: &AppWindow, state: &AppState, fav_ui: &Arc<FavoritesUi>) {
     let g = ui.global::<Favorites>();
     let weak = ui.as_weak();
 
-    // --- All Songs row actions ------------------------------------
+    // --- Songs-tab row actions ------------------------------------
     // play-row loads the filtered list into the queue and starts on the
     // clicked track; the hero's Shuffle is the same call at index 0, plus
     // a shuffle flip.
@@ -95,18 +95,18 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, fav_ui: &Arc<FavoritesUi>) 
     }
 
     // --- Filter / sort --------------------------------------------
-    // Filter pass walks all three surfaces: All Songs tracklist
-    // (title+artist+album), Most Played (title+artist) and Favorite
-    // Artists (name). Each surface re-renders from its cached Rust
-    // Vec, so the keystroke cost is `O(rows)` in-memory work — no
-    // DB round-trip.
+    // The filter is shared across the tabs, so a keystroke re-walks the
+    // Songs cache (title+artist+album) and whichever grid is mounted —
+    // Most Played (title+artist) or Favorite Artists (name). Each
+    // re-renders from its cached Rust Vec, so the keystroke cost is
+    // `O(rows)` in-memory work — no DB round-trip.
     {
         let fu = fav_ui.clone();
         let weak = weak.clone();
         g.on_filter_changed(move |text| {
             favorites_ui_mod::set_filter(&fu, text.to_string());
             favorites_ui_mod::apply_filtered_tracks(&fu, &weak);
-            favorites_ui_mod::apply_filtered_strips(&fu, &weak);
+            favorites_ui_mod::apply_filtered_grids(&fu, &weak);
         });
     }
     {

@@ -340,14 +340,15 @@ export struct BrowseFolderRow {
     name: string,
 }
 
-// One card in a `HorizontalCardStrip` (Favorites view's Most Played /
-// Favorite Albums / Favorite Artists carousels). Unified shape across
-// all three strip flavours so the same component renders any of them:
-//   * Most Played Favorites → id = track id, play-count > 0 reveals badge
-//   * Favorite Albums       → id = album id, subtitle = artist name
-//   * Favorite Artists      → id = artist id, subtitle = "{n} favorites"
-// `play-count` defaults to 0 and is only consulted when the host strip
-// has `show-play-count: true`, so a 0 silently suppresses the badge
+// One card in a `HorizontalCardStrip` or an `EntityCardGrid` — the
+// Recently Played view's Most Played carousel, and both of the Favorites
+// page's grid tabs. Unified shape across every flavour so one card
+// component renders any of them:
+//   * Most Played      → id = track id, play-count > 0 reveals badge
+//   * Favorite Albums  → id = album id, subtitle = artist name
+//   * Favorite Artists → id = artist id, subtitle = "{n} favorites"
+// `play-count` defaults to 0 and is only consulted when the host has
+// `show-play-count: true`, so a 0 silently suppresses the badge
 // everywhere else.
 export struct EntityStripRow {
     id: int,
@@ -355,6 +356,14 @@ export struct EntityStripRow {
     subtitle: string,
     artwork_path: string,
     play_count: int,
+}
+
+// One virtualized row of an `EntityCardGrid`: up to `columns` cards.
+// Same shape and motivation as `AlbumGridRow` / `ArtistGridRow` — Rust
+// re-chunks the flat list whenever the column count, filter or data
+// changes, so the inner `ListView` virtualizes by row.
+export struct EntityGridRow {
+    entities: [EntityStripRow],
 }
 
 // One segment in the Browse view's breadcrumb bar. `label` is the

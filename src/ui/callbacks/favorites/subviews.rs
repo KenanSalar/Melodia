@@ -1,0 +1,134 @@
+//! `Favorites.*` card actions and sub-view routing: Most Played
+//! play-track, the cross-tab open-artist hand-off, the tab switch, and the
+//! grid's column-count push. See [`super::wire_favorites`].
+
+use std::sync::Arc;
+
+use slint::ComponentHandle;
+
+use super::NAV_FAVORITES;
+use crate::library;
+use crate::state::AppState;
+use crate::ui::artists::ArtistsUi;
+use crate::ui::callbacks::cross_tab_nav;
+use crate::ui::callbacks::macros::spawn_logged;
+use crate::ui::favorites::{self as favorites_ui_mod, FavoritesUi};
+use crate::{AppWindow, Favorites};
+
+/// Wire the card-action and sub-view-routing callbacks.
+pub(super) fn wire(
+    ui: &AppWindow,
+    state: &AppState,
+    fav_ui: &Arc<FavoritesUi>,
+    artists_ui: &Arc<ArtistsUi>,
+) {
+    let g = ui.global::<Favorites>();
+    let weak = ui.as_weak();
+
+    // play-track: clicking a Most Played card loads that grid into the queue
+    // and starts on that card — the grid is the context, not the Songs list
+    // on the other tab. The Slint callback carries no row index (these are
+    // cards, not list rows), so the start slot comes from the id.
+    {
+        let s = state.clone();
+        let fu = fav_ui.clone();
+        g.on_play_track(move |id| {
+            let id = i64::from(id);
+            let ids = fu.most_played_track_ids();
+            if ids.is_empty() {
+                return;
+            }
+            let start = ids.iter().position(|&i| i == id);
+            let s = s.clone();
+            spawn_logged!(s, "favorites::play_track",
+                library::playback::player_play_tracks(&s.playback_ctx(), ids, start));
+        });
+    }
+
+    // --- Cross-tab open-artist ------------------------------------
+    // Clicking a favorite artist card drills into the Artists tab's
+    // Artist Detail; the shared hand-off stamps the origin so the back
+    // arrow returns to Favorites. The grid is unmounted the moment Nav
+    // flips, so its cover tier goes with it — the same release
+    // `on_open_album` does for the Albums grid.
+    {
+        let s = state.clone();
+        let aru = artists_ui.clone();
+        let fu = fav_ui.clone();
+        let weak = weak.clone();
+        g.on_open_artist(move |artist_id| {
+            let fu_release = fu.clone();
+            s.runtime.spawn_blocking(move || fu_release.release_artist_covers());
+            cross_tab_nav::open_artist_cross_tab(
+                &s,
+                &aru,
+                &weak,
+                i64::from(artist_id),
+                NAV_FAVORITES,
+                "favorites::open_artist",
+            );
+        });
+    }
+
+    // --- Tab switch -----------------------------------------------
+    // The bar has already moved `tab-idx` and cleared the Slint-side
+    // filter by the time this runs, so this is the catch-up: drop the Rust
+    // filter shadow to match, build the entering tab's model
+    // (`apply_filtered_grids` only fills the mounted one), then off-thread
+    // swap the cover tiers over and persist the pick.
+    {
+        let s = state.clone();
+        let fu = fav_ui.clone();
+        let weak = weak.clone();
+        g.on_tab_changed(move |tab| {
+            let Some(ui) = weak.upgrade() else { return };
+            let g = ui.global::<Favorites>();
+            let entering = favorites_ui_mod::tab_from_index(&g, tab);
+
+            // Shadow first: `apply_filtered_grids` below and every later
+            // fetch decide which model to fill and which tier to warm from
+            // it, and both can run off the UI thread where the global isn't
+            // reachable.
+            fu.set_active_tab(entering);
+            favorites_ui_mod::set_filter(&fu, String::new());
+
+            // Fill the entering tab's model on this tick — it mounts on the
+            // next frame, and a grid that paints before its rows land shows
+            // its empty state for a beat.
+            favorites_ui_mod::apply_filtered_grids(&fu, &weak);
+            favorites_ui_mod::apply_filtered_tracks(&fu, &weak);
+
+            // Then, off-thread and in that order: drop the tier the departed
+            // grid was holding, and warm the entering one's first screenful.
+            // Releasing first is what keeps the peak at one tier rather than
+            // two — Songs holds neither, so entering it releases both and
+            // warms nothing.
+            let fu_covers = fu.clone();
+            let s_disk = s.clone();
+            s.runtime.spawn_blocking(move || {
+                if entering != favorites_ui_mod::FavoritesTab::MostPlayed {
+                    fu_covers.release_most_played_covers();
+                }
+                if entering != favorites_ui_mod::FavoritesTab::Artists {
+                    fu_covers.release_artist_covers();
+                }
+                fu_covers.prewarm_tab_covers(entering);
+
+                if let Err(e) = library::settings::set_favorites_tab(&s_disk, tab) {
+                    log::warn!("favorites::set_favorites_tab: {e}");
+                }
+            });
+        });
+    }
+
+    // --- Grid column count ----------------------------------------
+    // A resize only changes how the cached cards are chunked, so this
+    // re-walks the in-memory caches rather than touching the DB.
+    {
+        let fu = fav_ui.clone();
+        let weak = weak.clone();
+        g.on_columns_changed(move |_cols| {
+            favorites_ui_mod::apply_filtered_grids(&fu, &weak);
+        });
+    }
+}

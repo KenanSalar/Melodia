@@ -12,18 +12,8 @@ use slint::{ComponentHandle, ModelRc, VecModel};
 
 use crate::library;
 use crate::state::AppState;
+use crate::ui::tab_bar::clamp_tab;
 use crate::{AppWindow, SettingsPage};
-
-/// Clamp a persisted tab index into range. `tab_count` comes from the
-/// `SettingsPage` global rather than a const here, so the number of tabs has
-/// exactly one definition — in the Slint that declares them.
-///
-/// The guard matters on read, not write: the tab bar can only ever produce a
-/// valid index, but a `views.json` left by a build with more tabs would
-/// otherwise select a branch that mounts nothing and show a blank page.
-fn clamp_tab(tab: i32, tab_count: i32) -> i32 {
-    tab.clamp(0, (tab_count - 1).max(0))
-}
 
 /// Split `0..count` into rows of at most `per_row`.
 ///

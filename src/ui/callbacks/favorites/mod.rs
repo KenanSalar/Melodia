@@ -1,11 +1,11 @@
 //! `Favorites.*` callbacks, split by concern:
 //!
-//! * [`covers`] — the lazy cover-lookup callbacks for the four card tiers.
-//! * [`hero`] — the shuffle-all hero pill.
-//! * [`strip`] — Most Played + Favorite Artists strip-card actions, the
-//!   cross-tab open-artist hand-off, and the two collapse toggles.
-//! * [`tracklist`] — the All Songs list: row actions, filter, sort,
-//!   column visibility, and modifier-aware selection.
+//! * [`covers`] — the lazy cover-lookup callbacks for the three card tiers.
+//! * [`hero`] — the per-tab shuffle pills.
+//! * [`subviews`] — the grid cards' actions, the cross-tab open-artist
+//!   hand-off, the tab switch, and the grid column-count push.
+//! * [`tracklist`] — the Songs tab: row actions, filter, sort, column
+//!   visibility, and modifier-aware selection.
 //! * [`lifecycle`] — section enter/leave cache management + the
 //!   `library_changed` re-fetch subscriber.
 //!
@@ -19,7 +19,7 @@
 mod covers;
 mod hero;
 mod lifecycle;
-mod strip;
+mod subviews;
 mod tracklist;
 
 use std::sync::Arc;
@@ -43,7 +43,7 @@ pub(super) const NAV_FAVORITES: i32 = 2;
 
 /// Wire every `Favorites.*` callback. Call once after
 /// `favorites::install_favorites_models` and after the Artists UI handle
-/// exists (the strip module borrows it for the cross-tab open-artist
+/// exists (the sub-view module borrows it for the cross-tab open-artist
 /// hand-off).
 pub fn wire_favorites(
     ui: &AppWindow,
@@ -55,7 +55,7 @@ pub fn wire_favorites(
 
     covers::wire(ui, fav_ui);
     hero::wire(ui, state, fav_ui);
-    strip::wire(ui, state, fav_ui, artists_ui);
+    subviews::wire(ui, state, fav_ui, artists_ui);
     tracklist::wire(ui, state, fav_ui);
     lifecycle::wire(ui, state, fav_ui);
 }

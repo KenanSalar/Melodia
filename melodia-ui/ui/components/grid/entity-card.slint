@@ -55,6 +55,13 @@ export component EntityCard inherits Rectangle {
     // playlists; off everywhere else.
     in property <string> badge-icon: "";
 
+    // Opt-in persistent corner badge carrying a number — the play count on
+    // the Most Played surfaces. Empty ⇒ no badge. Shares the top-left artwork
+    // corner with `badge-icon`; no caller sets both. It lives here rather
+    // than on the host so the horizontal strip and the vertical grid render
+    // the same badge instead of one growing a second copy.
+    in property <string> badge-text: "";
+
     callback clicked();
     callback delete-clicked();
     callback edit-artwork-clicked();
@@ -202,6 +209,52 @@ export component EntityCard inherits Rectangle {
             icon-size: 18px;
             icon-color: Theme.accent;
             filled: true;
+        }
+    }
+
+    // Play-count badge — same corner as `badge`, sized to its own content.
+    // Reading the row's `preferred-width` is a derivation, not a cycle: a
+    // layout reports its children's intrinsic widths and never reads back the
+    // width it is handed.
+    //
+    // The play glyph is a `MaterialIcon` rather than a "▶" in the label. A
+    // character Vazirmatn doesn't carry pulls a fallback font, whose taller
+    // metrics define the line box and drop the digits off the patched
+    // centring — the number and the glyph then sit at different heights.
+    Rectangle {
+        visible: root.badge-text != "";
+        x: 2 * Theme.pad-sm;
+        y: 2 * Theme.pad-sm;
+        height: 22px;
+        width: badge-row.preferred-width + 16px;
+        border-radius: self.height / 2;
+        background: Theme.crust.with-alpha(0.85);
+        border-width: 1px;
+        border-color: Theme.surface2;
+
+        badge-row := HorizontalLayout {
+            alignment: center;
+            spacing: 2px;
+
+            VerticalLayout {
+                alignment: center;
+                Text {
+                    text: root.badge-text;
+                    color: Theme.text;
+                    font-size: Theme.font-size-sm;
+                    font-weight: 600;
+                }
+            }
+
+            VerticalLayout {
+                alignment: center;
+                MaterialIcon {
+                    name: "play_arrow";
+                    icon-size: 14px;
+                    icon-color: Theme.text;
+                    filled: true;
+                }
+            }
         }
     }
 }

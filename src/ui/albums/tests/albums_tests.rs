@@ -82,21 +82,3 @@ fn grid_index_cache_matches_only_identical_filter_and_sort() {
     assert!(!c.matches("x", "year", "asc"));
     assert!(!c.matches("x", "name", "desc"));
 }
-
-#[test]
-fn compute_album_cover_cap_clamps_and_scales_with_resolution() {
-    // A tiny display can't fill many cards — clamps to the floor (32).
-    assert_eq!(compute_album_cover_cap(640, 480).get(), 32);
-    // A 4K panel shows far more than the ceiling — clamps to the cap (96).
-    assert_eq!(compute_album_cover_cap(3840, 2160).get(), 96);
-    // A mid-range display lands strictly between the clamps...
-    let mid = compute_album_cover_cap(1920, 1080).get();
-    assert!(
-        mid > 32 && mid < 96,
-        "1080p cap {mid} should sit between the clamps"
-    );
-    // ...and the cap is monotonic in display area.
-    let small = compute_album_cover_cap(1280, 720).get();
-    let large = compute_album_cover_cap(2560, 1440).get();
-    assert!(small <= mid && mid <= large);
-}

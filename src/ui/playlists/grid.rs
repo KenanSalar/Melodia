@@ -1,7 +1,6 @@
 //! Playlists grid: DB fetch + filter / sort / chunk / prewarm logic, plus
 //! the display-aware cover-cache cap tuner. Mirrors `albums::grid`.
 
-use std::num::NonZeroUsize;
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::Arc;
@@ -277,55 +276,14 @@ pub(super) fn first_screenful_paths(data: &GridData) -> Vec<PathBuf> {
 
 // --- Cap tuning -----------------------------------------------------------
 
-pub(super) fn compute_playlist_cover_cap(logical_w: u32, logical_h: u32) -> NonZeroUsize {
-    const CARD_FOOTPRINT_W: u32 = 260;
-    const ROW_FOOTPRINT_H: u32 = 320;
-    const MIN_CAP: usize = 32;
-    const MAX_CAP: usize = 96;
-
-    let cols = (logical_w / CARD_FOOTPRINT_W).max(1);
-    let rows = logical_h.div_ceil(ROW_FOOTPRINT_H) + 1;
-    let visible = usize::try_from(cols.saturating_mul(rows)).unwrap_or(MAX_CAP);
-    let cap = visible.clamp(MIN_CAP, MAX_CAP);
-    NonZeroUsize::new(cap).unwrap_or(DEFAULT_GRID_COVER_CAP)
-}
-
-#[allow(
-    clippy::cast_possible_truncation,
-    clippy::cast_sign_loss,
-    reason = "logical screen extent stays well below u32::MAX; this is the saturating boundary"
-)]
-fn logical_dim(physical: u32, scale: f64) -> u32 {
-    let scale = if scale > 0.0 { scale } else { 1.0 };
-    let v = (f64::from(physical) / scale).round();
-    if v.is_nan() || v <= 0.0 {
-        physical
-    } else if v >= f64::from(u32::MAX) {
-        u32::MAX
-    } else {
-        v as u32
-    }
-}
-
-fn playlist_cover_cap_for_window(app: &AppWindow) -> NonZeroUsize {
-    use slint::winit_030::WinitWindowAccessor;
-
-    app.window()
-        .with_winit_window(|w| {
-            let monitor = w.current_monitor()?;
-            let physical = monitor.size();
-            let scale = w.scale_factor();
-            Some(compute_playlist_cover_cap(
-                logical_dim(physical.width, scale),
-                logical_dim(physical.height, scale),
-            ))
-        })
-        .flatten()
-        .unwrap_or(DEFAULT_GRID_COVER_CAP)
-}
-
+/// Retune the grid-tier cover cache to the real display resolution. Called
+/// once at startup after the winit window is live (`main.rs`); the cache is
+/// constructed with `DEFAULT_GRID_COVER_CAP` and resized here. The
+/// detail-tier `(cover, blur)` pair cache keeps its small fixed cap (see
+/// [`crate::ui::detail_artwork`]).
 pub fn tune_cache_for_display(app: &AppWindow, playlists_ui: &PlaylistsUi) {
-    let cap = playlist_cover_cap_for_window(app);
+    let cap = crate::ui::grid_prewarm::cover_cap_for_window(app, DEFAULT_GRID_COVER_CAP);
     playlists_ui.grid_covers.resize(cap);
     log::debug!("ui::playlists playlist-cover cache cap tuned to {cap}");
 }
+

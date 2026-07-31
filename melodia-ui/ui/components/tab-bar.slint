@@ -1,8 +1,8 @@
-import { Theme } from "../../theme.slint";
-import { MaterialIcon } from "../material-icon.slint";
+import { Theme } from "../theme.slint";
+import { MaterialIcon } from "material-icon.slint";
 
-// One tab in a SettingsTabBar. Lives in this file (not exported) because
-// it's only useful as a child of the bar.
+// One tab in a TabBar. Lives in this file (not exported) because it's only
+// useful as a child of the bar.
 //
 // Material 3 tab: no fill marks the selected tab. The accent label, the
 // FILL=1 icon and the bar's sliding underline carry it three ways over, and
@@ -10,10 +10,15 @@ import { MaterialIcon } from "../material-icon.slint";
 // deliberate break from the ChipGroups *inside* the settings rows, which do
 // fill — the bar navigates, the chips configure, and one page showing both
 // needs them to read as different things.
-component SettingsTab inherits Rectangle {
+component TabBarCell inherits Rectangle {
     in property <string> label;
     in property <string> icon;
     in property <bool>   selected;
+    // Palette, handed down by the bar. Defaulted there rather than here so
+    // the two can't disagree about what "unset" means.
+    in property <brush>  label-color-idle;
+    in property <brush>  active-color;
+    in property <brush>  hover-fill;
     // How far into icon-only mode this cell is — 0 expanded, 1 compact. A
     // scalar rather than a bool so the label can close onto its icon instead
     // of vanishing between two frames; the bar eases it and everything below
@@ -38,7 +43,7 @@ component SettingsTab inherits Rectangle {
     // half-eaten word. Biased off the same source rather than given an
     // `animate` of its own, which would phase-lag it.
     property <float> label-alpha: clamp(1.0 - root.compact-t * 2.0, 0.0, 1.0);
-    property <brush> label-color: root.selected ? Theme.accent : Theme.text;
+    property <brush> label-color: root.selected ? root.active-color : root.label-color-idle;
 
     horizontal-stretch: 0;
 
@@ -46,7 +51,7 @@ component SettingsTab inherits Rectangle {
     // `SidebarItem`, which is what makes it a wobble rather than a dip. Only
     // the *factor* is animated, never the width and height derived from it:
     // those also move every frame of a compact morph, and easing them directly
-    // would set all five tabs wobbling through a window resize.
+    // would set every tab in the row wobbling through a window resize.
     property <float> press-scale: touch.pressed ? 0.97 : 1.0;
     animate press-scale {
         duration: touch.pressed ? 100ms : Theme.dur-med;
@@ -70,19 +75,20 @@ component SettingsTab inherits Rectangle {
     // never reflows the row and never moves the underline out from under its
     // tab; `cell` is the only thing that scales.
     //
-    // The track is gone, so the state layer steps off `Theme.base` a rung
-    // rather than off `surface0`. Rounded rather than the square full-bleed
-    // rectangle M3 specifies — the same `radius-md` the settings rows below
-    // use, so a hovered tab reads as part of this page rather than as a
-    // borrowed spec. It fills the whole cell; the clearance from the divider
-    // is the bar's to give, and it gives it as padding on the row.
+    // The track is gone, so the state layer steps off the page background a
+    // rung rather than off `surface0`. Rounded rather than the square
+    // full-bleed rectangle M3 specifies — `radius-md`, the same corner the
+    // rest of the tree rounds on, so a hovered tab reads as part of its page
+    // rather than as a borrowed spec. It fills the whole cell; the clearance
+    // from the divider is the bar's to give, and it gives it as padding on
+    // the row.
     cell := Rectangle {
         width: parent.width * root.press-scale;
         height: parent.height * root.press-scale;
         x: (parent.width - self.width) / 2;
         y: (parent.height - self.height) / 2;
 
-        background: touch.has-hover ? Theme.surface0 : transparent;
+        background: touch.has-hover ? root.hover-fill : transparent;
         border-radius: Theme.radius-md;
         animate background { duration: Theme.dur-fast; easing: ease-in-out; }
 
@@ -106,7 +112,7 @@ component SettingsTab inherits Rectangle {
                     // where the icon *is* the tab — the press would read as
                     // inert without this.
                     icon-size: 22px * root.press-scale;
-                    icon-color: root.selected ? Theme.accent : Theme.text;
+                    icon-color: root.selected ? root.active-color : root.label-color-idle;
                     filled: root.selected;
                     animate icon-color { duration: Theme.dur-fast; easing: ease-in-out; }
                 }
@@ -126,7 +132,7 @@ component SettingsTab inherits Rectangle {
                 lbl := Text {
                     text: root.label;
                     // Alpha on the brush rather than `opacity` on the element:
-                    // `opacity` costs a layer, and there are five of these.
+                    // `opacity` costs a layer, and there is one per tab.
                     color: root.label-color.with-alpha(root.label-alpha);
                     // Text doesn't scale with a container, so the press factor
                     // has to reach it directly. `label-w` tracks it for free —
@@ -155,10 +161,10 @@ component SettingsTab inherits Rectangle {
     changed is-hovered => { root.hover-changed(root.is-hovered); }
 }
 
-// Material 3 tab bar for the Settings page. Data-agnostic — it takes parallel
-// label/icon arrays and reports the picked index, in the same shape as
-// ChipGroup / Dropdown / ColorDotGrid, and knows nothing about which tabs
-// exist.
+// Material 3 tab bar. Data-agnostic — it takes parallel label/icon arrays and
+// reports the picked index, in the same shape as ChipGroup / Dropdown /
+// ColorDotGrid, and knows nothing about which tabs exist. Two hosts: the
+// Settings page header and the Favorites hero.
 //
 // `labels` must arrive as an inline `[@tr("…"), …]` literal at the call site:
 // `@tr` registers msgids at codegen, so an array populated from Rust would
@@ -169,9 +175,25 @@ component SettingsTab inherits Rectangle {
 // exposes no per-tab element to read a position off, so a content-sized row
 // would have to snapshot each tab's geometry on selection and would go stale
 // the moment anything resized it.
-export component SettingsTabBar inherits Rectangle {
+export component TabBar inherits Rectangle {
     in property <[string]> labels;
     in property <[string]> icons;
+
+    // Palette. The defaults are the Settings page's, which is the plain case:
+    // a bar on `Theme.base`. A bar mounted on a hero blur has to hand over
+    // `HeroBackdrop` tiers instead — a `Theme.*` brush answers a question
+    // about the *page* background, and under the hero there isn't one.
+    // `active-color` drives the selected label, its FILL=1 icon and the
+    // underline together, because M3 gives all three one colour.
+    in property <brush> label-color: Theme.text;
+    in property <brush> active-color: Theme.accent;
+    in property <brush> hover-fill: Theme.surface0;
+    // `surface1` rather than `Theme.border`: the line has to stay legible
+    // *over* the hover rung, and only the surface ladder guarantees that in
+    // every theme. `border` is its own brush, and all four Catppuccin
+    // flavours — the default among them — set it to exactly `surface0`, so
+    // the line would vanish under whichever cell the pointer is on.
+    in property <brush> divider-color: Theme.surface1;
     // How much room the host has for the bar. Feed it a *mirrored* width, not
     // a live `parent.width` read — see the host's `page-w`.
     in property <length> avail-width;
@@ -193,7 +215,7 @@ export component SettingsTabBar inherits Rectangle {
     out property <string> hovered-label:
         root.hovered-idx >= 0 ? root.labels[root.hovered-idx] : "";
 
-    // Icon-only once five expanded cells no longer fit. Measured rather than
+    // Icon-only once the expanded cells no longer fit. Measured rather than
     // thresholded against a literal: the labels are translated, so the width
     // that matters is the running locale's, not the one someone sized a
     // constant against. The threshold can't chase the flip either: `natural-tab-w`
@@ -284,9 +306,9 @@ export component SettingsTabBar inherits Rectangle {
     // bar learning how much room it has. The host seeds `avail-width` at the
     // header row's own floor (see its `page-w`), so a mount always settles
     // compact and a roomy panel then corrects to expanded one frame later;
-    // easing *that* would play an unasked-for morph on every entry into
-    // Settings. `set_animated_value` builds its animation inline at the write,
-    // so the duration is read at the moment of that correction.
+    // easing *that* would play an unasked-for morph on every entry into the
+    // page. `set_animated_value` builds its animation inline at the write, so
+    // the duration is read at the moment of that correction.
     animate compact-t {
         duration: root.eased ? 350ms : 0ms;
         easing: cubic-bezier(0.2, 0, 0, 1);
@@ -317,7 +339,7 @@ export component SettingsTabBar inherits Rectangle {
     //
     // What it contains is the shrink leg of the morph. `compact` flips the
     // instant `avail-width` crosses the threshold, but `tab-w` takes 350 ms to
-    // follow it down, so for that window `preferred-width` is still five
+    // follow it down, so for that window `preferred-width` is still a row of
     // natural cells while the header row can no longer afford them — the
     // layout squeezes the bar toward its `min-width` floor and the cells,
     // whose bound widths make them incompressible, draw past the right edge
@@ -346,14 +368,17 @@ export component SettingsTabBar inherits Rectangle {
     preferred-width: root.labels.length * root.tab-w;
     max-width: root.labels.length * root.tab-w;
 
-    // The ruler. Real `SettingsTab`s rather than a stripped-down copy, so the
+    // The ruler. Real `TabBarCell`s rather than a stripped-down copy, so the
     // shape being measured and the shape being drawn cannot drift — they are
     // the same component. `visible: false` lowers to a 0×0 clip wrapping the
     // column: nothing paints, the hidden TouchAreas are unreachable, and the
     // layout info the whole thing exists for is still computed.
+    //
+    // The palette is left at the cell's defaults here — the ruler measures
+    // width, and no brush moves one.
     measure := VerticalLayout {
         visible: false;
-        for tab-label[i] in root.labels: SettingsTab {
+        for tab-label[i] in root.labels: TabBarCell {
             label: tab-label;
             icon: root.icons[i];
             compact-t: 0.0;
@@ -368,12 +393,15 @@ export component SettingsTabBar inherits Rectangle {
         // gains the same clearance without the bar getting taller.
         padding-bottom: Theme.pad-sm;
 
-        for tab-label[i] in root.labels: SettingsTab {
+        for tab-label[i] in root.labels: TabBarCell {
             width: root.tab-w;
             label: tab-label;
             icon: root.icons[i];
             selected: i == root.selected-index;
             compact-t: root.compact-t;
+            label-color-idle: root.label-color;
+            active-color: root.active-color;
+            hover-fill: root.hover-fill;
             clicked => {
                 root.selected-index = i;
                 root.selected(i);
@@ -392,21 +420,15 @@ export component SettingsTabBar inherits Rectangle {
     }
 
     // Divider, in two segments so the line stops either side of the pill
-    // rather than running underneath it.
-    //
-    // `surface1` rather than `Theme.border`: it has to stay legible *over* the
-    // hover rung, and only the surface ladder guarantees that in every theme.
-    // `border` is its own brush, and all four Catppuccin flavours — the default
-    // among them — set it to exactly `surface0`, so the line would vanish under
-    // whichever cell the pointer is on. Both segments track `ind-x` directly,
-    // the same source the pill reads, so they cut with it rather than lagging
-    // a frame behind.
+    // rather than running underneath it. Both track `ind-x` directly, the same
+    // source the pill reads, so they cut with it rather than lagging a frame
+    // behind. See `divider-color` above for why it isn't `Theme.border`.
     Rectangle {
         x: 0;
         y: parent.height - 1px;
         width: root.ind-x;
         height: 1px;
-        background: Theme.surface1;
+        background: root.divider-color;
     }
 
     Rectangle {
@@ -414,7 +436,7 @@ export component SettingsTabBar inherits Rectangle {
         y: parent.height - 1px;
         width: root.width - self.x;
         height: 1px;
-        background: Theme.surface1;
+        background: root.divider-color;
     }
 
     // The underline, last so it paints over the divider. A pill rather than a
@@ -426,7 +448,7 @@ export component SettingsTabBar inherits Rectangle {
         y: parent.height - 3px;
         width: root.tab-w;
         height: 3px;
-        background: Theme.accent;
+        background: root.active-color;
         border-radius: self.height / 2;
     }
 }

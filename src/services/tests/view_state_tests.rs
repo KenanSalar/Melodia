@@ -19,9 +19,8 @@ fn test_view_state_default() {
     assert!(vs.browse_path.is_none());
     assert!(vs.last_detail_ids.is_empty());
     assert!(!vs.artist_albums_collapsed);
-    assert!(!vs.favorites_artists_collapsed);
-    assert!(!vs.favorites_most_played_collapsed);
     assert_eq!(vs.settings_tab, 0);
+    assert_eq!(vs.favorites_tab, 0);
 }
 
 #[test]
@@ -31,9 +30,27 @@ fn test_view_state_missing_fields_default() -> Result<(), AppError> {
     let vs: ViewStateData = serde_json::from_str("{}").map_err(|e| json_err(&e))?;
     assert_eq!(vs.last_nav_index, 3);
     assert!(vs.view_sort.is_empty());
-    // Written before the Settings page had tabs — must read back as the
-    // first tab, not fail the whole file.
+    // Written before either page had tabs — must read back as the first tab,
+    // not fail the whole file.
     assert_eq!(vs.settings_tab, 0);
+    assert_eq!(vs.favorites_tab, 0);
+    Ok(())
+}
+
+/// A `views.json` from before the Favorites page was tabbed still carries the
+/// two collapse flags the strips used. Serde ignores unknown keys by default,
+/// so an installed client must upgrade in place and land on the first tab
+/// rather than refusing to load its whole view state.
+#[test]
+fn test_view_state_ignores_the_retired_collapse_flags() -> Result<(), AppError> {
+    let legacy = r#"{
+        "last_nav_index": 2,
+        "favorites_artists_collapsed": true,
+        "favorites_most_played_collapsed": true
+    }"#;
+    let vs: ViewStateData = serde_json::from_str(legacy).map_err(|e| json_err(&e))?;
+    assert_eq!(vs.last_nav_index, 2);
+    assert_eq!(vs.favorites_tab, 0);
     Ok(())
 }
 

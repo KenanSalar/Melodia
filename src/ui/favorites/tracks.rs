@@ -1,4 +1,4 @@
-//! All Songs list: fetch, sort persistence, in-memory filter, model
+//! Songs tab: fetch, sort persistence, in-memory filter, model
 //! apply. Mirrors the Tracks view's fetch shape — the SQL fetch returns
 //! the entire sorted set once per `library_changed_tx` tick, and the
 //! per-keystroke filter walk is in memory (matches title + artist +
@@ -133,7 +133,7 @@ pub fn apply_filtered_tracks(fav_ui: &Arc<FavoritesUi>, weak: &Weak<AppWindow>) 
     });
 }
 
-/// Set `rating` on a single All Songs row in the Slint `VecModel`. Rating is
+/// Set `rating` on a single Songs-tab row in the Slint `VecModel`. Rating is
 /// independent of favorite membership (and there is no in-table rating sort),
 /// so the row stays put — patch it in place rather than rebuilding the whole
 /// filtered list. Mirrors [`crate::ui::tracks::apply_row_rating`].

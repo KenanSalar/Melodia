@@ -12,8 +12,7 @@ use crate::state::AppState;
 use crate::ui::favorites::{self as favorites_ui_mod, FavoritesUi};
 use crate::ui::model_diff::clear_vec_model;
 use crate::{
-    AppWindow, EntityStripRow as UiEntityStripRow, Favorites, Nav,
-    TrackListRow as UiTrackListRow,
+    AppWindow, EntityGridRow as UiEntityGridRow, Favorites, Nav, TrackListRow as UiTrackListRow,
 };
 
 /// Wire the Favorites section-lifecycle callbacks.
@@ -24,6 +23,9 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, fav_ui: &Arc<FavoritesUi>) 
     // --- Section-active mirror + cache release / re-enter --------
     // Seed the synchronous shadow from the current nav state — `changed`
     // in `AppWindow` won't fire for a session that starts on Favorites.
+    // (The sibling `active_tab` shadow is seeded by `favorites::seed_tab`,
+    // which runs after this and is the only thing that knows the persisted
+    // value.)
     fav_ui.set_section_active(ui.global::<Nav>().get_selected_index() == NAV_FAVORITES);
     {
         let fu = fav_ui.clone();
@@ -44,7 +46,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, fav_ui: &Arc<FavoritesUi>) 
                 // the `SharedPixelBuffer` Arcs the LRU is about to
                 // clear release immediately (the dual-slot blur slots
                 // hold their own refs even after the LRU drops). Empty
-                // the strip + tracks models so their `SharedString`s
+                // the grid + tracks models so their `SharedString`s
                 // also drop on the same tick.
                 let g = ui.global::<Favorites>();
                 g.set_blur_img_a(Image::default());
@@ -60,11 +62,11 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, fav_ui: &Arc<FavoritesUi>) 
                 // next hero to paint under.
                 crate::ui::hero_backdrop::reset(&ui);
                 clear_vec_model::<UiTrackListRow>(&g.get_tracks(), "favorites: clear tracks");
-                clear_vec_model::<UiEntityStripRow>(
+                clear_vec_model::<UiEntityGridRow>(
                     &g.get_most_played_rows(),
                     "favorites: clear most-played",
                 );
-                clear_vec_model::<UiEntityStripRow>(&g.get_artist_rows(), "favorites: clear artist");
+                clear_vec_model::<UiEntityGridRow>(&g.get_artist_rows(), "favorites: clear artist");
                 clear_vec_model::<i32>(&g.get_selected_ids(), "favorites: clear selected-ids");
                 clear_vec_model::<SharedString>(
                     &g.get_mosaic_paths(),
@@ -96,9 +98,9 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, fav_ui: &Arc<FavoritesUi>) 
     // `library_changed` is bumped after every `set_favorite` /
     // `toggle_current_favorite` + every scan / file-event commit;
     // `stats_changed` after every play-count flush. Favorites is
-    // the only surface that ranks by `play_count` (hero mosaic + Most
-    // Played strip), so it alone listens to both channels. While the
-    // Favorites tab is visible we refetch hero + strips + tracks
+    // the only surface that ranks by `play_count` (hero mosaic + the Most
+    // Played tab), so it alone listens to both channels. While the
+    // Favorites section is visible we refetch hero + grids + tracks
     // in-place; while hidden we just mark dirty so the next enter
     // triggers `kick_full_refresh`.
     {
@@ -155,20 +157,20 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, fav_ui: &Arc<FavoritesUi>) 
     }
 }
 
-/// Fetch hero stats + the strips + the All Songs list and apply each
+/// Fetch hero stats + the two grid tabs + the Songs list and apply each
 /// as it lands. Concurrent — `tokio::join!` runs all three in
-/// parallel. `refresh_strips` already logs its own per-section
-/// errors (because Most Played + Artists are applied independently),
-/// so it returns `()`; the other two return `AppResult<()>` and have
-/// their errors logged here.
+/// parallel. `refresh_grids` already logs its own per-tab errors
+/// (because Most Played + Artists are applied independently), so it
+/// returns `()`; the other two return `AppResult<()>` and have their
+/// errors logged here.
 async fn kick_full_refresh(
     state: &AppState,
     fav_ui: &Arc<FavoritesUi>,
     weak: &slint::Weak<AppWindow>,
 ) {
-    let (h, _strips, t) = tokio::join!(
+    let (h, _grids, t) = tokio::join!(
         favorites_ui_mod::refresh_hero(state, fav_ui, weak, /* animate */ true),
-        favorites_ui_mod::refresh_strips(state, fav_ui, weak),
+        favorites_ui_mod::refresh_grids(state, fav_ui, weak),
         favorites_ui_mod::refresh_tracks(state, fav_ui, weak),
     );
     if let Err(e) = h {

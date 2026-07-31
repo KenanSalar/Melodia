@@ -1,0 +1,34 @@
+// Responsive card-grid geometry, derived once instead of once per view.
+//
+// Every grid page answers the same three questions from its body width — how
+// many columns fit, how wide each card ends up, how tall a row slot is — and
+// the arithmetic was copied verbatim into each of them. This component owns
+// it; `GridColumnsSync` beside it owns *when* the resulting column count gets
+// pushed into Rust, so the two split cleanly along what-versus-when.
+//
+// Non-visual: no children, no size, nothing painted. It costs a property
+// evaluation, not a layout pass — the `FilterThrottle` / `GridColumnsSync`
+// shape.
+//
+// `avail-width` must come from the element the grid actually fills (the body
+// `Rectangle`), whose width the layout fixes independently of the grid's
+// children — so a card sizing itself from it is a derivation, not a cycle.
+export component GridGeometry {
+    in property <length> avail-width;
+    // The narrowest a card may be drawn. Columns are packed until one more
+    // would take every card below this.
+    in property <length> min-card-w: 180px;
+    // Gutter, applied between cards *and* at both outer edges — hence the
+    // `cols + 1` in `card-w`.
+    in property <length> gap: 20px;
+    // Height the title + subtitle block adds under the square artwork tile.
+    in property <length> card-text-h: 46px;
+
+    out property <int> cols:
+        max(1, Math.floor((root.avail-width - root.gap) / (root.min-card-w + root.gap)));
+    out property <length> card-w:
+        max(0px, (root.avail-width - (root.cols + 1) * root.gap) / root.cols);
+    // Artwork is square, so the tile's height is the card's width.
+    out property <length> card-h: root.card-w + root.card-text-h;
+    out property <length> row-h: root.card-h + root.gap;
+}

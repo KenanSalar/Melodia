@@ -4,7 +4,7 @@ import { SettingsPage } from "../globals/settings-page.slint";
 import { OverlayScrollbar } from "../components/overlay-scrollbar.slint";
 import { SearchBar } from "../components/search-bar.slint";
 import { Tooltip, TooltipSide } from "../components/tooltip.slint";
-import { SettingsTabBar } from "../components/settings/settings-tab-bar.slint";
+import { TabBar } from "../components/tab-bar.slint";
 import { SettingsTabs } from "settings/settings-tabs.slint";
 
 // Settings host page: a pinned header over a vertically scrolling,
@@ -125,7 +125,7 @@ export component SettingsView inherits Rectangle {
     // against `SettingsPage.body-w`, which is itself a function of the verdict
     // and would close a cycle straight back through this decision.
     //
-    // Latched, for the reason `settings-tab-bar.slint` latches `compact`: a
+    // Latched, for the reason `tab-bar.slint` latches `compact`: a
     // slow resize drag delivers a stream of one-pixel widths and a hand
     // jitters over the last of them. There the symptom was a hunting ease;
     // here a whole column would blink in and out.
@@ -229,7 +229,7 @@ export component SettingsView inherits Rectangle {
         HorizontalLayout {
             spacing: Theme.pad-md;
 
-            bar := SettingsTabBar {
+            bar := TabBar {
                 labels: [@tr("Library"), @tr("Playback"), @tr("Interface"),
                          @tr("Services"), @tr("About")];
                 icons: ["library_music", "play_circle", "palette", "link", "info"];

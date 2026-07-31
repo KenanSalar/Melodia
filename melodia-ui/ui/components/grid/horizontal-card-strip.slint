@@ -99,6 +99,11 @@ export component HorizontalCardStrip inherits Rectangle {
                             card-height: root.card-height;
                             circular: root.circular;
                             fallback-icon: root.fallback-icon;
+                            // The card owns the badge, so the strip and the
+                            // vertical `EntityCardGrid` render the same one.
+                            badge-text: root.show-play-count && row.play_count > 0
+                                ? row.play_count
+                                : "";
                             clicked => { root.row-clicked(row.id); }
                         }
 
@@ -135,29 +140,6 @@ export component HorizontalCardStrip inherits Rectangle {
                             play-touch := TouchArea {
                                 mouse-cursor: pointer;
                                 clicked => { root.play-clicked(row.id); }
-                            }
-                        }
-
-                        // Play-count badge — top-left of the artwork
-                        // tile when `show-play-count` and `play_count > 0`.
-                        // Tauri parity for the Most Played Favorites
-                        // strip; suppressed elsewhere.
-                        if root.show-play-count && row.play_count > 0: Rectangle {
-                            x: Theme.pad-md;
-                            y: Theme.pad-md;
-                            height: 22px;
-                            width: count-text.preferred-width + 16px;
-                            border-radius: 11px;
-                            background: Theme.crust.with-alpha(0.85);
-                            border-width: 1px;
-                            border-color: Theme.surface2;
-                            count-text := Text {
-                                text: row.play_count + " ▶";
-                                color: Theme.text;
-                                font-size: Theme.font-size-sm;
-                                font-weight: 600;
-                                horizontal-alignment: center;
-                                vertical-alignment: center;
                             }
                         }
 

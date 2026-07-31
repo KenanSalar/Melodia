@@ -63,7 +63,7 @@ export component ChipGroup inherits Rectangle {
     // How much room the group has to fill. Defaults to the settings body's
     // own answer, so every call site inside a settings row says nothing;
     // override it anywhere the group doesn't span a full card row. Same shape
-    // as `SettingsTabBar`'s `avail-width` — the host owns the width, the
+    // as `TabBar`'s `avail-width` — the host owns the width, the
     // component owns the verdict.
     in property <length> avail-width: SettingsPage.row-content-w;
 
@@ -74,7 +74,7 @@ export component ChipGroup inherits Rectangle {
     // shape can't drift, and a `VerticalLayout` reports the *max* of its
     // children's widths, which is exactly what "widest" means. Same idiom, and
     // the same `visible: false` (which lowers to a 0×0 clip and still computes
-    // layout info), as `settings-tab-bar.slint`'s ruler.
+    // layout info), as `tab-bar.slint`'s ruler.
     //
     // Sizing every row off the widest chip is deliberately conservative — the
     // chips themselves keep their natural widths, so a row is never full, but

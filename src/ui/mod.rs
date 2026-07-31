@@ -42,6 +42,7 @@ pub mod section_state;
 pub mod settings_bind;
 pub mod settings_page;
 pub mod sleep_timer;
+pub mod tab_bar;
 pub mod track_list_view;
 pub mod track_sort;
 pub mod tracks;

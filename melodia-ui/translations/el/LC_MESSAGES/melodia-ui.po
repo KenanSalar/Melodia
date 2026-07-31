@@ -186,6 +186,12 @@ msgid_plural "{n} tracks"
 msgstr[0] "{n} κομμάτι"
 msgstr[1] "{n} κομμάτια"
 
+# Plural: artist count for the Artists grid header and the Favorites hero.
+msgid "{n} artist"
+msgid_plural "{n} artists"
+msgstr[0] "{n} καλλιτέχνης"
+msgstr[1] "{n} καλλιτέχνες"
+
 # Plural: track count for the tracks-view header subtitle ("12 songs").
 msgid "{n} song"
 msgid_plural "{n} songs"
@@ -739,6 +745,24 @@ msgstr "Αφαίρεση από τα πρόσφατα"
 
 msgid "Filter favorites…"
 msgstr "Φιλτράρισμα αγαπημένων…"
+
+msgid "Filter most played…"
+msgstr "Φιλτράρισμα δημοφιλών…"
+
+msgid "Filter artists…"
+msgstr "Φιλτράρισμα καλλιτεχνών…"
+
+msgid "Nothing played yet"
+msgstr "Δεν έχει παίξει τίποτα ακόμη"
+
+msgid "Play one of your favorites and it will show up here."
+msgstr "Παίξε ένα από τα αγαπημένα σου και θα εμφανιστεί εδώ."
+
+msgid "No favorite artists yet"
+msgstr "Δεν υπάρχουν αγαπημένοι καλλιτέχνες ακόμη"
+
+msgid "Favorite a song and its artist appears here."
+msgstr "Πρόσθεσε ένα τραγούδι στα αγαπημένα και θα εμφανιστεί ο καλλιτέχνης του εδώ."
 
 msgid "Most Played"
 msgstr "Πιο δημοφιλή"

@@ -30,7 +30,7 @@ Melodia is a Slint rewrite of a former Tauri + SolidJS application — moving of
 
 <table>
   <tr>
-    <td width="50%"><img src="assets/screenshots/favorites.png" alt="Favorites view"><br><sub><b>Favorites</b> — an artwork mosaic hero, a most-played strip, and favorite artists.</sub></td>
+    <td width="50%"><img src="assets/screenshots/favorites.png" alt="Favorites view"><br><sub><b>Favorites</b> — an artwork mosaic hero over tabs for songs, most played, and favorite artists.</sub></td>
     <td width="50%"><img src="assets/screenshots/recently_played.png" alt="Recently Played view"><br><sub><b>Recently Played</b> — newest first, updating live as you listen.</sub></td>
   </tr>
   <tr>
@@ -74,7 +74,7 @@ Shrink the window past a threshold and the full UI collapses into a compact mini
 - Browse by albums, artists, genres, or the file system
 - Dedicated detail pages for albums, artists, genres, and playlists
 - Deezer-backed artist image fetching with local caching
-- Favorites view with a hero header, artwork mosaic, most-played section, and a filterable track list
+- Favorites view built around a hero banner — artwork mosaic, live counts, and a tab bar sharing that row with the filter — over three sub-views: every favorite as a sortable track list, your most-played favorites as a browsable card grid, and your favorite artists as another. The filter narrows whichever tab you're on, and the page reopens on the tab you left it on
 - Recently-Played view listing the tracks you last listened to (newest first), with a most-played strip and a filterable track list that updates live as you play
 - Play-count and skip-count tracking per track
 - Per-track star ratings (0–5), set inline via a hover-revealed star control in any track list and from the Now Playing view

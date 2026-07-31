@@ -184,6 +184,12 @@ msgid_plural "{n} tracks"
 msgstr[0] "{n} pista"
 msgstr[1] "{n} pistas"
 
+# Plural: artist count for the Artists grid header and the Favorites hero.
+msgid "{n} artist"
+msgid_plural "{n} artists"
+msgstr[0] "{n} artista"
+msgstr[1] "{n} artistas"
+
 # Plural: track count for the tracks-view header subtitle ("12 songs").
 msgid "{n} song"
 msgid_plural "{n} songs"
@@ -737,6 +743,24 @@ msgstr "Quitar de recientes"
 
 msgid "Filter favorites…"
 msgstr "Filtrar favoritos…"
+
+msgid "Filter most played…"
+msgstr "Filtrar más reproducidas…"
+
+msgid "Filter artists…"
+msgstr "Filtrar artistas…"
+
+msgid "Nothing played yet"
+msgstr "Aún no has reproducido nada"
+
+msgid "Play one of your favorites and it will show up here."
+msgstr "Reproduce uno de tus favoritos y aparecerá aquí."
+
+msgid "No favorite artists yet"
+msgstr "Aún no hay artistas favoritos"
+
+msgid "Favorite a song and its artist appears here."
+msgstr "Marca una canción como favorita y su artista aparecerá aquí."
 
 msgid "Most Played"
 msgstr "Más reproducidas"

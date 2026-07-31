@@ -34,9 +34,10 @@ pub(crate) struct FavoritesUiState {
     /// be reverted on section re-enter without a DB round trip in the
     /// common case.
     pub stats: Mutex<FavoriteStats>,
-    /// Strip rows in Rust shape — kept so click handlers can resolve
-    /// `(id) -> entity` without re-fetching. Three independent caches,
-    /// one per strip, each refreshed in lockstep on `refresh_strips`.
+    /// Grid-tab rows in Rust shape — kept so click handlers can resolve
+    /// `(id) -> entity` without re-fetching, and so a filter keystroke or
+    /// a column-count change re-chunks in memory. Two independent caches,
+    /// one per grid, refreshed in lockstep on `refresh_grids`.
     pub most_played: Mutex<Vec<MostPlayedFavorite>>,
     pub fav_artists: Mutex<Vec<FavoriteArtist>>,
     /// Set of `TrackListRow.id`s currently `selected: true` on the
@@ -85,31 +86,46 @@ pub(super) const MOSAIC_THUMB_CAP: NonZeroUsize = match NonZeroUsize::new(16) {
     None => panic!("MOSAIC_THUMB_CAP > 0"),
 };
 
-/// Most-Played strip tile size (px). The strip renders 160 px square cards,
-/// and `FemtoVG` minifies with plain bilinear (no mipmaps), so staying near
-/// the on-screen size keeps `image-fit: cover` clean without the album
-/// grid's 448 px tier.
-pub(super) const MOST_PLAYED_THUMB_SIZE: u32 = 180;
+/// Grid-card tile size (px), shared by both grid tabs. These used to be
+/// 180 / 200 px tiers sized for 160 px strip cards; the tabs draw the same
+/// flex-filled cards the Albums and Artists grids do, which run well past
+/// 260 px, and `FemtoVG` minifies with plain bilinear (no mipmaps) — so an
+/// undersized tier is a visibly soft tile rather than a saving. Matches
+/// `ui::albums::state::GRID_COVER_SIZE`.
+pub(super) const GRID_THUMB_SIZE: u32 = 448;
 
-/// LRU capacity for the Most Played strip — `library::favorites::
-/// get_most_played_favorites` is clamped to 10 results, so a cap of 16
-/// covers post-refresh cycling without thrashing.
-pub(super) const MOST_PLAYED_THUMB_CAP: NonZeroUsize = match NonZeroUsize::new(16) {
+/// LRU capacity per grid tier. Sized like the album grid's default: enough
+/// for a screenful or two of cards, so scrolling re-decodes rather than the
+/// cache growing with the library.
+///
+/// The two tiers are never both warm — the tabs are mutually exclusive and
+/// `tab-changed` releases the one being left — so this bounds one tier's
+/// worth of resident buffers at a time, not two.
+///
+/// A construction default only: `ui::favorites::tune_cache_for_display`
+/// resizes both tiers against the real display once the window is live, the
+/// same as the entity grids.
+pub(super) const GRID_THUMB_CAP: NonZeroUsize = match NonZeroUsize::new(48) {
     Some(n) => n,
-    None => panic!("MOST_PLAYED_THUMB_CAP > 0"),
+    None => panic!("GRID_THUMB_CAP > 0"),
 };
 
-/// Favorite Artists strip tile size (px). Larger than the Most-Played
-/// tier because the circular avatar reads softer when downscaled less
-/// aggressively. 200 px is the Tauri parity size for circular artist
-/// chrome.
-pub(super) const ARTIST_THUMB_SIZE: u32 = 200;
+/// Most-Played grid tile size (px).
+pub(super) const MOST_PLAYED_THUMB_SIZE: u32 = GRID_THUMB_SIZE;
 
-/// LRU capacity for the artist circular tiles — the strip's natural
-/// length grows with library size (one per artist with ≥1 favourite),
-/// so 32 covers a typical user's working set without unbounded growth.
-pub(super) const ARTIST_THUMB_CAP: NonZeroUsize = match NonZeroUsize::new(32) {
-    Some(n) => n,
-    None => panic!("ARTIST_THUMB_CAP > 0"),
-};
+/// Favorite Artists grid tile size (px). Same tier as Most Played — the
+/// circular mask is applied at draw time, so the source needs no extra
+/// resolution.
+pub(super) const ARTIST_THUMB_SIZE: u32 = GRID_THUMB_SIZE;
+
+/// How many covers to decode up front when a grid tab becomes visible.
+///
+/// A screenful or two, matching `ui::albums::state::GRID_PREWARM_AHEAD` — not
+/// the tier's capacity. The grids are uncapped now, so prewarming everything
+/// would decode a large library's whole favourite set at 448 px on every
+/// `library_changed` tick, and all but the last `GRID_THUMB_CAP_N` of them
+/// would be evicted by the prewarm itself before a single card asked for one.
+/// The rest decode lazily as rows scroll in, which is what the `ListView`
+/// virtualization is for.
+pub(super) const GRID_PREWARM_AHEAD: usize = 24;
 

@@ -1,50 +1,57 @@
-import { ScrollView } from "std-widgets.slint";
 import { Theme } from "../theme.slint";
 import { Favorites } from "../globals/curated.slint";
 import { HeroBackdrop } from "../globals/hero-backdrop.slint";
 import { Player } from "../globals/player.slint";
-import { CompositeScroll } from "../globals/shell.slint";
 import { CoverMosaic } from "../components/grid/cover-mosaic.slint";
-import { HorizontalCardStrip } from "../components/grid/horizontal-card-strip.slint";
-import { EntityCard } from "../components/grid/entity-card.slint";
+import { EntityCardGrid } from "../components/grid/entity-card-grid.slint";
+import { GridEmptyState } from "../components/grid/grid-empty-state.slint";
+import { GridColumnsSync } from "../components/grid-columns-sync.slint";
+import { GridGeometry } from "../components/grid-geometry.slint";
 import { MaterialIcon } from "../components/material-icon.slint";
 import { SearchBar } from "../components/search-bar.slint";
+import { TabBar } from "../components/tab-bar.slint";
+import { Tooltip, TooltipSide } from "../components/tooltip.slint";
+import { ViewTransition } from "../components/view-transition.slint";
+import { NavEnterFrom } from "../globals/nav.slint";
 import { ActionPill, PillLabel, PillButton, PillDivider } from "../components/action-pill.slint";
 import { ColumnTogglePopup } from "../components/track-list/column-toggle-popup.slint";
 import { TrackList } from "../components/track-list/track-list.slint";
-import { CompositeScrollbars } from "../components/composite-scrollbars.slint";
+import { OverlayScrollbar } from "../components/overlay-scrollbar.slint";
 import { FilterThrottle } from "../components/filter-throttle.slint";
-import { CollapsibleSectionHeader } from "../components/collapsible-section-header.slint";
 import { HeroBlurBackdrop } from "../components/hero-blur-backdrop.slint";
 
-// The Favorites view (Nav sidebar index 2). Vertical regions:
-//   * Hero — compact (~160 px). Left-side live cover mosaic + right-
-//     side title + "{n} favorites · {duration}" + the Shuffle /
-//     Columns pill. Full-bleed hero blur backdrop fades through
-//     `Favorites.blur-img-{a,b}` whenever the top-4 most-played
-//     favorites change.
-//   * Most Played — horizontal scrolling card carousel of the
-//     most-played favorite tracks. Hidden when empty (every favorite
-//     has play_count == 0).
-//   * Favorite Artists — collapsible sub-section mirroring Artist
-//     Detail's "Albums" sub-section: clickable pill header + chevron
-//     + horizontal scroller of circular artist cards. Persists
-//     collapse state via `settings.favorites_artists_collapsed`.
-//     Click an artist card → cross-tab nav to ArtistDetail; back
-//     arrow there returns here.
-//   * All Songs — heading + filter SearchBar + `TrackList` bound to
-//     `Favorites.tracks`. TrackList virtualizes internally and overlay
-//     scrollbars are mounted at the view root for flush-edge chrome.
+// The Favorites view (Nav sidebar index 2). A hero banner over three
+// mutually-exclusive sub-views:
 //
-// Albums are intentionally not surfaced here — they're reachable via
-// the Albums tab. No Favorite Albums carousel.
+//   * Hero — its top row carries the `TabBar` and the filter `SearchBar`,
+//     over the live cover mosaic, the title and a per-tab stats line and
+//     action pill. Full-bleed hero blur fades through
+//     `Favorites.blur-img-{a,b}` whenever the top-4 most-played favorites
+//     change. Pinned: the tabs have to stay reachable, so only the body
+//     below scrolls.
+//   * Songs — the sortable / filterable `TrackList` over every favorite.
+//   * Most Played — a virtualized card grid of the played favorites,
+//     ranked by play count.
+//   * Favorite Artists — the same grid with circular cards; a click is a
+//     cross-tab nav to Artist Detail, and the back arrow there returns here.
 //
-// Stays globals-free apart from the `Favorites` + `Player` reads — every
-// data fetch and cover lookup is routed through callbacks on `Favorites`
-// that Rust's `wire_favorites` wires to `library::favorites::*`.
+// Albums are intentionally not surfaced — they're reachable via the Albums
+// tab. No Favorite Albums tab.
+//
+// Each tab owns exactly one scroller, which is why this view mounts plain
+// `OverlayScrollbar`s rather than `CompositeScrollbars`: the strips used to
+// sit in an outer `ScrollView` above a height-capped `TrackList`, and a
+// nested `ListView` swallows the wheel at its own edge instead of bubbling.
+// One scroller per tab retires that whole problem — and with it the
+// `CompositeScroll` hover sentinel and the two-way `viewport-y` binding that
+// opted out of Slint's own out-of-bounds correction.
+//
+// Stays globals-free apart from the `Favorites` + `Player` + `HeroBackdrop`
+// reads — every data fetch and cover lookup is routed through callbacks on
+// `Favorites` that Rust's `wire_favorites` wires to `library::favorites::*`.
 export component FavoritesView inherits Rectangle {
-    // Filter throttle: each keystroke bumps `pending`; the Timer fires
-    // the refilter callback at most once per `interval` while `pending !=
+    // Filter throttle: each keystroke bumps `pending`; the Timer fires the
+    // refilter callback at most once per `interval` while `pending !=
     // applied`. Same shape as `tracks-view.slint`'s throttle.
     property <int> filter-tick-pending: 0;
 
@@ -53,18 +60,126 @@ export component FavoritesView inherits Rectangle {
         fire() => { Favorites.filter-changed(Favorites.filter); }
     }
 
-    // Backdrop catches any click that no inner TouchArea consumes and
-    // bumps the blur tick — the SearchBar observes the counter and
-    // clears focus on change. Same pattern as tracks-view.
+    // Backdrop catches any click that no inner TouchArea consumes and bumps
+    // the blur tick — the SearchBar observes the counter and clears focus on
+    // change. Same pattern as tracks-view.
     TouchArea {
         clicked => { Favorites.blur-search-tick += 1; }
     }
 
-    // --- Full-bleed hero blur backdrop ----------------------------------
+    // --- Header width budget ----------------------------------------------
+    //
+    // The same arrangement `settings-view.slint` uses, for the same reasons —
+    // that file carries the long-form rationale. In brief:
+    //
+    // `page-w` is a *mirror*, written imperatively, because a live
+    // `root.width` read feeding a child's size re-enters layout. It is seeded
+    // at this header row's own floor rather than a plausible page width:
+    // seeded wide the bar believes it can afford full-width tabs and draws
+    // them into a panel that can't seat them, which is exactly what a
+    // miniplayer → full swap produces. The 1 ms mount Timer beside it is
+    // mandatory — `changed` doesn't fire when the first layout settles
+    // directly on the final value, which is every window opened at its size.
+    property <length> search-w-max: 220px;
+    property <length> search-w-min: 140px;
+
+    property <length> page-w:
+        2 * Theme.pad-lg + bar.compact-w + 2 * Theme.pad-md + root.search-w-max;
+    changed width => { self.page-w = self.width; }
+
+    Timer {
+        interval: 1ms;
+        triggered => {
+            root.page-w = root.width;
+            self.running = false;
+        }
+    }
+
+    property <length> content-w: root.page-w - 2 * Theme.pad-lg;
+
+    // The filter yields room before the tabs do: the tabs navigate, the
+    // search only refines what a tab already shows. Reserved against the
+    // bar's published `compact-w` — its own floor — so the two can't drift.
+    property <length> search-w: clamp(
+        root.content-w - bar.compact-w - 2 * Theme.pad-md,
+        root.search-w-min, root.search-w-max);
+
+    // --- Hero geometry -----------------------------------------------------
+    property <length> hero-artwork: 140px;
+    // The bar's own height, restated so the hero can reserve its row.
+    property <length> tab-row-h: 48px;
+    // Derived rather than a literal, so growing the artwork or the bar can't
+    // leave the banner cropping its own contents.
+    property <length> hero-height:
+        2 * Theme.pad-lg + root.tab-row-h + Theme.pad-md + root.hero-artwork;
+
+    // --- Grid geometry -----------------------------------------------------
+    //
+    // Shared by both grid tabs — they're mutually exclusive and use the same
+    // card shape, so one derivation and one `columns` push covers both.
+    // Measured off the body, whose width the layout fixes independently of
+    // the cards inside it.
+    //
+    // The gutter is the host's choice, so it lives here and is handed both to
+    // the geometry and to the grids — an `in` property isn't readable back
+    // from outside the component that declares it.
+    property <length> grid-gap: 20px;
+
+    geom := GridGeometry {
+        avail-width: body.width;
+        gap: root.grid-gap;
+    }
+
+    GridColumnsSync {
+        computed-cols: geom.cols;
+        seed(c) => {
+            Favorites.columns = c;
+            Favorites.columns-changed(c);
+        }
+    }
+
+    // --- Hero copy ---------------------------------------------------------
+    //
+    // The stats line follows the tab: what the hero counts is whatever the
+    // body below is showing.
+    property <string> stats-text:
+        Favorites.tab-idx == Favorites.tab-most-played
+            ? @tr("{n} track" | "{n} tracks" % Favorites.most-played-count)
+            : Favorites.tab-idx == Favorites.tab-artists
+                ? @tr("{n} artist" | "{n} artists" % Favorites.artist-count)
+                : Favorites.track-count > 0
+                    ? @tr("{n} favorite" | "{n} favorites" % Favorites.track-count)
+                        + " · " + Favorites.duration-text
+                    : @tr("No favorites yet");
+
+    // --- Sub-view transition -----------------------------------------------
+    //
+    // The tab bodies enter sideways, in the direction the pick moved: forward
+    // along the bar slides in from the right, back from the left. The page's
+    // own entrance stays the sidebar's fade-up, and these two must not
+    // compound — a horizontal slide over a vertical one reads as a diagonal —
+    // so the inner transition stays *disabled* until the first real switch.
+    // The page is rebuilt on every entry, so this re-disarms for free.
+    property <bool> tab-anim-armed: false;
+    property <NavEnterFrom> tab-enter-from: NavEnterFrom.right;
+    // Seeded from the global and then written by the pick handler, which
+    // orphans the binding — the seed-then-own shape. Seeding matters because
+    // the page can be re-entered on any tab: a constant 0 here would make the
+    // first switch after coming back on the Artists tab slide the wrong way.
+    property <int> prev-tab: Favorites.tab-idx;
+
+    property <string> filter-placeholder:
+        Favorites.tab-idx == Favorites.tab-most-played
+            ? @tr("Filter most played…")
+            : Favorites.tab-idx == Favorites.tab-artists
+                ? @tr("Filter artists…")
+                : @tr("Filter favorites…");
+
+    // --- Full-bleed hero blur backdrop -------------------------------------
     // Behind everything else; the shared component owns the dual-slot
-    // crossfade contract (outgoing slot never cleared so mosaic refresh
-    // never flashes). Gradient floor shows through when there is no blur
-    // image (zero favorites / decode failure).
+    // crossfade contract (outgoing slot never cleared so mosaic refresh never
+    // flashes). Gradient floor shows through when there is no blur image
+    // (zero favorites / decode failure).
     HeroBlurBackdrop {
         x: 0; y: 0;
         width: 100%; height: root.hero-height;
@@ -74,217 +189,240 @@ export component FavoritesView inherits Rectangle {
         has-blur: Favorites.has-blur;
     }
 
-    private property <length> hero-height: 180px;
-    private property <length> hero-artwork: 140px;
-    private property <length> meta-line: 0px;  // placeholder for layout maths
-
-    // Stats line: "{n} tracks · {duration}". Hidden when count == 0 so
-    // the empty state copy stands alone.
-    private property <string> stats-text:
-        Favorites.track-count > 0
-            ? @tr("{n} favorite" | "{n} favorites" % Favorites.track-count)
-                + " · " + Favorites.duration-text
-            : @tr("No favorites yet");
-
     VerticalLayout {
-        // --- Hero -------------------------------------------------------
+        // --- Hero -----------------------------------------------------------
         Rectangle {
             vertical-stretch: 0;
             height: root.hero-height;
 
-            HorizontalLayout {
+            VerticalLayout {
                 padding: Theme.pad-lg;
-                spacing: Theme.pad-lg;
-                alignment: stretch;
+                spacing: Theme.pad-md;
 
-                // Mosaic tile. The outer Rectangle owns the chrome
-                // (background, border, radius, clip); CoverMosaic just
-                // paints the 1..=4 tile layout inside.
-                VerticalLayout {
-                    alignment: start;
-                    horizontal-stretch: 0;
+                // Tab bar left, filter right — the Settings header row, on a
+                // banner. Both paint on the blur, so the bar takes
+                // `HeroBackdrop` tiers instead of its `Theme.*` defaults;
+                // `SearchBar` is the documented exception and keeps its own
+                // `floating-chrome-bg` chrome.
+                HorizontalLayout {
+                    vertical-stretch: 0;
+                    spacing: Theme.pad-md;
 
-                    Rectangle {
-                        width: root.hero-artwork;
-                        height: root.hero-artwork;
-                        // Empty state mirrors the tracklist placeholder's
-                        // 15 %-tinted fill so an empty favorites hero
-                        // reads as a giant placeholder tile, not a
-                        // generic surface — but tinted off the solved
-                        // `HeroBackdrop.chrome`, not `Theme.accent`: this
-                        // tile sits *on* the hero, and with no mosaic the
-                        // hero is the dark gradient floor, where a light
-                        // theme's accent lands dark-on-dark. The populated
-                        // fill is a hero token too, and has to be: the
-                        // mosaic's placeholder slots are translucent, so
-                        // whatever fills this rectangle is most of what
-                        // their chrome composites against. `Theme.surface1`
-                        // is near-white on a light theme, which would put a
-                        // light chrome glyph on a light tile.
-                        background: Favorites.track-count == 0
-                            ? HeroBackdrop.chrome.with-alpha(0.15)
-                            : HeroBackdrop.floor-start;
-                        border-radius: Theme.radius-lg;
-                        border-width: 1px;
-                        border-color: HeroBackdrop.tile-edge;
-                        clip: true;
-
-                        // Empty-state — zero favorites in the library.
-                        // A favorite that lacks artwork still contributes
-                        // a *tile* to the mosaic (rendered as a placeholder
-                        // by `CoverMosaic`), so this branch fires only on
-                        // an empty favorites set, not on "favorites with
-                        // no artwork". Uses the filled-heart Material
-                        // Symbols glyph at full-strength `HeroBackdrop.chrome`
-                        // (no alpha) so the empty hero reads like the
-                        // tracklist's empty-artwork placeholder while
-                        // staying legible on the hero band.
-                        if Favorites.track-count == 0: VerticalLayout {
-                            alignment: center;
-                            HorizontalLayout {
-                                alignment: center;
-                                MaterialIcon {
-                                    name: "favorite";
-                                    filled: true;
-                                    icon-size: 56px;
-                                    icon-color: HeroBackdrop.chrome;
-                                }
-                            }
+                    bar := TabBar {
+                        labels: [@tr("Songs"), @tr("Most Played"), @tr("Favorite Artists")];
+                        icons: ["music_note", "bar_chart", "person"];
+                        avail-width: root.content-w - root.search-w - 2 * Theme.pad-md;
+                        selected-index <=> Favorites.tab-idx;
+                        label-color: HeroBackdrop.on-backdrop;
+                        hover-fill: HeroBackdrop.on-backdrop.with-alpha(0.12);
+                        divider-color: HeroBackdrop.tile-edge;
+                        selected(i) => {
+                            // Direction first, and in the same handler that
+                            // moved the index: the bar has already written
+                            // `tab-idx`, but Slint re-evaluates the `if`
+                            // branches at the next frame, so this still lands
+                            // before the new body mounts. Same ordering rule
+                            // `src/ui/nav_transition.rs` follows for the
+                            // page-level transition.
+                            root.tab-enter-from = i > root.prev-tab
+                                ? NavEnterFrom.right
+                                : NavEnterFrom.left;
+                            root.prev-tab = i;
+                            root.tab-anim-armed = true;
+                            // A Songs filter carried into the Artists grid
+                            // would silently hide cards, so the pick clears
+                            // it. Rust drops its own filter shadow in
+                            // `tab-changed` — this only moves the Slint side.
+                            Favorites.filter = "";
+                            Favorites.blur-search-tick += 1;
+                            Favorites.tab-changed(i);
                         }
+                    }
 
-                        // Layout adapts to favorite count (capped at 4),
-                        // each slot independently artwork-or-placeholder:
-                        //   1 fav  → 1 tile
-                        //   2 favs → 2 split
-                        //   3 favs → 3 layout
-                        //   4+ favs → 2×2 grid
-                        // Distinct artwork paths fill leading slots,
-                        // remaining slots paint chrome-tinted placeholder
-                        // tiles via ArtworkImage.
-                        if Favorites.track-count > 0: CoverMosaic {
-                            width: 100%;
-                            height: 100%;
-                            artwork-paths: Favorites.mosaic-paths;
-                            tile-count: Favorites.track-count > 4 ? 4 : Favorites.track-count;
-                            placeholder-icon: "music-note";
-                            // Flush-fill: tiles butt up edge-to-edge and
-                            // hit the outer rectangle's clip border, so
-                            // the hero reads as a single composited
-                            // image (parity with the playlist detail's
-                            // baked composite). Without these overrides
-                            // the outer rectangle's fill would show
-                            // through the 3 px padding/spacing and the
-                            // rounded inner-tile corners, which the user
-                            // (correctly) called out as looking like a
-                            // border between cells.
-                            gutter-size: 0px;
-                            tile-radius: 0px;
-                            // Slots past the distinct-artwork count paint
-                            // placeholders straight onto the hero, so they
-                            // take the solved chrome for the same reason
-                            // the empty state above does.
-                            tile-bg: HeroBackdrop.chrome.with-alpha(0.15);
-                            tile-icon-color: HeroBackdrop.chrome;
-                            request-cover(p) => {
-                                return Favorites.request-mosaic-cover(p);
-                            }
+                    Rectangle { horizontal-stretch: 1; }
+
+                    // Padded to the same band the bar keeps clear for its
+                    // divider and underline, so the input centres on the tab
+                    // labels' line rather than on the row's.
+                    VerticalLayout {
+                        alignment: center;
+                        padding-bottom: Theme.pad-sm;
+                        SearchBar {
+                            input-width: root.search-w;
+                            text <=> Favorites.filter;
+                            placeholder: root.filter-placeholder;
+                            blur-trigger: Favorites.blur-search-tick;
+                            edited(t) => { root.filter-tick-pending += 1; }
                         }
                     }
                 }
 
-                // Right column — title row (title + SearchBar) +
-                // stats + action pill. Mirrors the Album/Artist Detail
-                // headers' "title block on top, action row on bottom"
-                // shape, with the SearchBar slotted on the top right
-                // so the All Songs list below has nothing competing
-                // for its vertical space.
-                VerticalLayout {
-                    horizontal-stretch: 1;
-                    alignment: stretch;
-                    spacing: Theme.pad-xs;
+                // Mosaic tile + title block.
+                HorizontalLayout {
+                    vertical-stretch: 1;
+                    spacing: Theme.pad-lg;
 
-                    HorizontalLayout {
-                        vertical-stretch: 0;
-                        spacing: Theme.pad-md;
-                        alignment: stretch;
-
-                        VerticalLayout {
-                            alignment: center;
-                            Text {
-                                text: "\u{200e}" + @tr("Favorites");
-                                color: HeroBackdrop.on-backdrop;
-                                font-size: 28px;
-                                font-weight: Theme.page-title-weight;
-                                horizontal-alignment: left;
-                            }
-                        }
-
-                        Rectangle { horizontal-stretch: 1; }
-
-                        // Filter input — moved here from the All Songs
-                        // section so the list below has more vertical
-                        // space + the placeholder ("Filter favorites…")
-                        // reliably renders inside the SearchBar's 220 px
-                        // outer slot.
-                        VerticalLayout {
-                            alignment: center;
-                            SearchBar {
-                                text <=> Favorites.filter;
-                                placeholder: @tr("Filter favorites…");
-                                blur-trigger: Favorites.blur-search-tick;
-                                edited(t) => { root.filter-tick-pending += 1; }
-                            }
-                        }
-                    }
-
-                    Text {
-                        vertical-stretch: 0;
-                        text: root.stats-text;
-                        color: HeroBackdrop.on-backdrop-muted;
-                        font-size: Theme.font-size-md;
-                        horizontal-alignment: left;
-                    }
-
-                    Rectangle { vertical-stretch: 1; }
-
-                    // Shuffle / Columns pill — only mounted when there's
-                    // anything to play. The column toggle lives in the
-                    // same pill chrome as the playback action, matching
-                    // Artist Detail / Album Detail's action-row shape.
-                    // The selection chip appears in the trailing slot
-                    // when rows are selected — the All Songs list no
-                    // longer has its own pill.
-                    if Favorites.track-count > 0: HorizontalLayout {
-                        vertical-stretch: 0;
-                        spacing: Theme.pad-md;
+                    // Mosaic tile. The outer Rectangle owns the chrome
+                    // (background, border, radius, clip); CoverMosaic just
+                    // paints the 1..=4 tile layout inside.
+                    VerticalLayout {
                         alignment: start;
+                        horizontal-stretch: 0;
 
-                        ActionPill {
-                            PillButton {
-                                icon: "shuffle";
-                                text: @tr("Shuffle");
-                                clicked => { Favorites.shuffle-all(); }
+                        Rectangle {
+                            width: root.hero-artwork;
+                            height: root.hero-artwork;
+                            // Empty state mirrors the tracklist placeholder's
+                            // 15 %-tinted fill so an empty favorites hero
+                            // reads as a giant placeholder tile, not a
+                            // generic surface — but tinted off the solved
+                            // `HeroBackdrop.chrome`, not `Theme.accent`: this
+                            // tile sits *on* the hero, and with no mosaic the
+                            // hero is the dark gradient floor, where a light
+                            // theme's accent lands dark-on-dark. The
+                            // populated fill is a hero token too, and has to
+                            // be: the mosaic's placeholder slots are
+                            // translucent, so whatever fills this rectangle
+                            // is most of what their chrome composites
+                            // against. `Theme.surface1` is near-white on a
+                            // light theme, which would put a light chrome
+                            // glyph on a light tile.
+                            background: Favorites.track-count == 0
+                                ? HeroBackdrop.chrome.with-alpha(0.15)
+                                : HeroBackdrop.floor-start;
+                            border-radius: Theme.radius-lg;
+                            border-width: 1px;
+                            border-color: HeroBackdrop.tile-edge;
+                            clip: true;
+
+                            // Empty-state — zero favorites in the library.
+                            // A favorite that lacks artwork still contributes
+                            // a *tile* to the mosaic (rendered as a
+                            // placeholder by `CoverMosaic`), so this branch
+                            // fires only on an empty favorites set, not on
+                            // "favorites with no artwork".
+                            if Favorites.track-count == 0: VerticalLayout {
+                                alignment: center;
+                                HorizontalLayout {
+                                    alignment: center;
+                                    MaterialIcon {
+                                        name: "favorite";
+                                        filled: true;
+                                        icon-size: 56px;
+                                        icon-color: HeroBackdrop.chrome;
+                                    }
+                                }
                             }
-                            PillDivider { }
-                            ColumnTogglePopup {
-                                show-number  <=> Favorites.show-number;
-                                show-artwork <=> Favorites.show-artwork;
-                                show-artist  <=> Favorites.show-artist;
-                                show-album   <=> Favorites.show-album;
-                                show-genre   <=> Favorites.show-genre;
-                                show-year    <=> Favorites.show-year;
-                                toggled(id) => { Favorites.toggle-column(id); }
+
+                            // Layout adapts to favorite count (capped at 4),
+                            // each slot independently artwork-or-placeholder.
+                            // Distinct artwork paths fill leading slots;
+                            // remaining slots paint chrome-tinted placeholder
+                            // tiles via ArtworkImage.
+                            if Favorites.track-count > 0: CoverMosaic {
+                                width: 100%;
+                                height: 100%;
+                                artwork-paths: Favorites.mosaic-paths;
+                                tile-count: Favorites.track-count > 4 ? 4 : Favorites.track-count;
+                                placeholder-icon: "music-note";
+                                // Flush-fill: tiles butt up edge-to-edge and
+                                // hit the outer rectangle's clip border, so
+                                // the hero reads as a single composited image
+                                // (parity with the playlist detail's baked
+                                // composite) rather than as a grid with
+                                // borders between its cells.
+                                gutter-size: 0px;
+                                tile-radius: 0px;
+                                // Slots past the distinct-artwork count paint
+                                // placeholders straight onto the hero, so they
+                                // take the solved chrome for the same reason
+                                // the empty state above does.
+                                tile-bg: HeroBackdrop.chrome.with-alpha(0.15);
+                                tile-icon-color: HeroBackdrop.chrome;
+                                request-cover(p) => {
+                                    return Favorites.request-mosaic-cover(p);
+                                }
                             }
-                            if Favorites.selected-ids.length > 0: PillDivider { }
-                            if Favorites.selected-ids.length > 0: PillLabel {
-                                text: @tr("{} selected", Favorites.selected-ids.length);
+                        }
+                    }
+
+                    // Title, stats, and the per-tab action pill.
+                    VerticalLayout {
+                        horizontal-stretch: 1;
+                        alignment: stretch;
+                        spacing: Theme.pad-xs;
+
+                        Text {
+                            vertical-stretch: 0;
+                            text: "\u{200e}" + @tr("Favorites");
+                            color: HeroBackdrop.on-backdrop;
+                            font-size: 28px;
+                            font-weight: Theme.page-title-weight;
+                            horizontal-alignment: left;
+                        }
+
+                        Text {
+                            vertical-stretch: 0;
+                            text: root.stats-text;
+                            color: HeroBackdrop.on-backdrop-muted;
+                            font-size: Theme.font-size-md;
+                            horizontal-alignment: left;
+                        }
+
+                        Rectangle { vertical-stretch: 1; }
+
+                        // Per-tab action row. Songs gets the full pill —
+                        // Shuffle, the column toggle and the selection chip;
+                        // Most Played gets a Shuffle scoped to what its grid
+                        // shows; Favorite Artists gets none, since neither
+                        // action means anything over a list of artists.
+                        if Favorites.tab-idx == Favorites.tab-songs
+                            && Favorites.track-count > 0: HorizontalLayout {
+                            vertical-stretch: 0;
+                            spacing: Theme.pad-md;
+                            alignment: start;
+
+                            ActionPill {
+                                PillButton {
+                                    icon: "shuffle";
+                                    text: @tr("Shuffle");
+                                    clicked => { Favorites.shuffle-all(); }
+                                }
+                                PillDivider { }
+                                ColumnTogglePopup {
+                                    show-number  <=> Favorites.show-number;
+                                    show-artwork <=> Favorites.show-artwork;
+                                    show-artist  <=> Favorites.show-artist;
+                                    show-album   <=> Favorites.show-album;
+                                    show-genre   <=> Favorites.show-genre;
+                                    show-year    <=> Favorites.show-year;
+                                    toggled(id) => { Favorites.toggle-column(id); }
+                                }
+                                if Favorites.selected-ids.length > 0: PillDivider { }
+                                if Favorites.selected-ids.length > 0: PillLabel {
+                                    text: @tr("{} selected", Favorites.selected-ids.length);
+                                }
+                                if Favorites.selected-ids.length > 0: PillButton {
+                                    icon: "close";
+                                    tooltip-text: @tr("Clear selection");
+                                    clicked => {
+                                        Favorites.clear-selection();
+                                        Favorites.blur-search-tick += 1;
+                                    }
+                                }
                             }
-                            if Favorites.selected-ids.length > 0: PillButton {
-                                icon: "close";
-                                tooltip-text: @tr("Clear selection");
-                                clicked => {
-                                    Favorites.clear-selection();
-                                    Favorites.blur-search-tick += 1;
+                        }
+
+                        if Favorites.tab-idx == Favorites.tab-most-played
+                            && Favorites.most-played-count > 0: HorizontalLayout {
+                            vertical-stretch: 0;
+                            alignment: start;
+
+                            ActionPill {
+                                PillButton {
+                                    icon: "shuffle";
+                                    text: @tr("Shuffle");
+                                    clicked => { Favorites.shuffle-most-played(); }
                                 }
                             }
                         }
@@ -293,278 +431,203 @@ export component FavoritesView inherits Rectangle {
             }
         }
 
-        // --- Below-hero scroll container --------------------------------
-        // Wraps the Most Played + Favorite Artists sub-sections AND the
-        // All Songs TrackList in a single outer vertical `ScrollView`
-        // so one scrollbar (mounted at the view root) covers all three
-        // surfaces. The TrackList is capped at the outer viewport height
-        // (`min` in its `height` binding), so its inner ListView
-        // virtualizes to ~visible rows — the outer ScrollView's own
-        // travel covers just the strips region, and the unified
-        // scrollbar composes both travels. The mouse WHEEL does NOT hand
-        // off between the two nested scrollers natively — Slint's inner
-        // ListView swallows the wheel at its top edge instead of bubbling
-        // to `below-sv` (see CompositeScroll). So `hover-catch` reports
-        // region hover to the winit MouseWheel filter, which routes
-        // vertical wheel through the mounted `CompositeScrollbars`'
-        // composite split; the scrollbar-drag path already composes both
-        // travels directly.
-        below-hero := Rectangle {
+        // --- Sub-view body ---------------------------------------------------
+        //
+        // One tab mounted at a time, each owning its own scroller and its own
+        // overlay scrollbars. The bars live inside their branch because Slint
+        // can't read an id declared inside an `if` from outside it — which is
+        // also why each branch wraps in its own `ViewTransition` rather than
+        // the body wrapping one: the slide has to carry the scrollbars with
+        // the content, and the whole thing is destroyed and rebuilt anyway.
+        // `clip` here is what contains the 32 px overshoot.
+        body := Rectangle {
             vertical-stretch: 1;
             clip: true;
 
-            // Ancestor hover sentinel (see CompositeScroll). Forwards every
-            // event to the ScrollView child — row clicks, drags and native
-            // horizontal scroll are unaffected; only its `has-hover` is
-            // observed. Empty-space clicks fall through to here (rows grab
-            // their own), reproducing the root backdrop's blur-on-empty-click.
-            hover-catch := TouchArea {
-                width: 100%;
-                height: 100%;
-                changed has-hover => { CompositeScroll.hovered = self.has-hover; }
-                clicked => { Favorites.blur-search-tick += 1; }
-
-            below-sv := ScrollView {
-                width: 100%;
-                height: 100%;
-                horizontal-scrollbar-policy: always-off;
-                vertical-scrollbar-policy:   always-off;
-                viewport-width: self.width;
-
-                VerticalLayout {
-                    spacing: 0;
-
-        // --- Most Played sub-section ------------------------------------
-        // Collapsible carousel above the artists section. Same pill-
-        // header + chevron + hairline shape as the Favorite Artists
-        // section below, persisted via `settings.favorites_most_played_collapsed`.
-        // `HorizontalCardStrip` is reused with `heading: ""` to
-        // suppress its built-in heading — the outer pill is the only
-        // section title.
-        if Favorites.most-played-rows.length > 0: VerticalLayout {
-            vertical-stretch: 0;
-            padding-left: Theme.pad-lg;
-            padding-right: Theme.pad-lg;
-            padding-top: Theme.pad-md;
-            padding-bottom: Theme.pad-lg;
-            spacing: Theme.pad-sm;
-
-            HorizontalLayout {
-                alignment: start;
-
-                CollapsibleSectionHeader {
-                    label: @tr("Most Played");
-                    collapsed: Favorites.most-played-collapsed;
-                    toggled => { Favorites.toggle-most-played-collapsed(); }
-                }
-            }
-
-            if !Favorites.most-played-collapsed: HorizontalCardStrip {
-                heading: "";
-                rows: Favorites.most-played-rows;
-                card-width: 160px;
-                card-height: 206px;
-                show-play-count: true;
-                show-play-overlay: false;
-                fallback-icon: "music-note";
-                request-cover(p) => {
-                    return Favorites.request-most-played-cover(p);
-                }
-                row-clicked(id) => { Favorites.play-track(id); }
-                play-clicked(id) => { Favorites.play-track(id); }
-            }
-
-            Rectangle {
-                height: 1px;
-                background: Theme.surface2;
-            }
-        }
-
-        // --- Favorite Artists sub-section -------------------------------
-        // Collapsible scroller above the All Songs list. Header pill
-        // toggles `Favorites.artists-collapsed` (persisted to
-        // `settings.favorites_artists_collapsed`), letting the user
-        // hand the artist scroller's vertical space to the track list
-        // below. Mirrors `artist-detail-view`'s Albums sub-section
-        // exactly — same pill chrome, chevron rotation convention,
-        // hairline, and inner ScrollView shape.
-        if Favorites.artist-rows.length > 0: VerticalLayout {
-            vertical-stretch: 0;
-            padding-left: Theme.pad-lg;
-            padding-right: Theme.pad-lg;
-            padding-top: Theme.pad-md;
-            // Bottom padding sits between the divider and the
-            // track-list header below. The outer column has no
-            // `spacing`, so without this pad the divider would butt
-            // straight against the header chips.
-            padding-bottom: Theme.pad-lg;
-            spacing: Theme.pad-sm;
-
-            HorizontalLayout {
-                alignment: start;
-
-                CollapsibleSectionHeader {
-                    label: @tr("Favorite Artists");
-                    collapsed: Favorites.artists-collapsed;
-                    toggled => { Favorites.toggle-artists-collapsed(); }
-                }
-            }
-
-            // Horizontal scroller of circular artist cards. The body
-            // is fully unmounted when collapsed — `if` removes it from
-            // layout instead of `visible: false` (which would still
-            // claim space).
-            if !Favorites.artists-collapsed: ScrollView {
-                height: 206px + 2 * Theme.pad-xs;
-                vertical-scrollbar-policy: always-off;
-                horizontal-scrollbar-policy: as-needed;
-
+            // --- Songs ------------------------------------------------------
+            if Favorites.tab-idx == Favorites.tab-songs: ViewTransition {
+                width: parent.width;
+                height: parent.height;
+                enter-from: root.tab-enter-from;
+                enabled: root.tab-anim-armed;
                 HorizontalLayout {
-                    spacing: Theme.pad-md;
-                    padding-top: Theme.pad-xs;
-                    padding-bottom: Theme.pad-xs;
-                    alignment: start;
+                    padding-left: Theme.pad-lg;
+                    padding-right: Theme.pad-lg;
+                    padding-top: Theme.pad-md;
 
-                    for artist in Favorites.artist-rows: EntityCard {
-                        card-width: 160px;
-                        card-height: 206px;
-                        artwork-path: artist.artwork_path;
-                        cover: Favorites.request-artist-cover(artist.artwork_path);
-                        circular: true;
-                        fallback-icon: "person";
-                        title: artist.title;
-                        subtitle: artist.subtitle;
-                        clicked => { Favorites.open-artist(artist.id); }
+                    tl := TrackList {
+                        horizontal-stretch: 1;
+                        vertical-stretch: 1;
+
+                        rows: Favorites.tracks;
+
+                        w-number <=> Favorites.w-number;
+                        w-title <=> Favorites.w-title;
+                        w-artist <=> Favorites.w-artist;
+                        w-album <=> Favorites.w-album;
+                        w-genre <=> Favorites.w-genre;
+                        w-year <=> Favorites.w-year;
+                        w-length <=> Favorites.w-length;
+
+                        show-number <=> Favorites.show-number;
+                        show-artwork <=> Favorites.show-artwork;
+                        show-artist <=> Favorites.show-artist;
+                        show-album <=> Favorites.show-album;
+                        show-genre <=> Favorites.show-genre;
+                        show-year <=> Favorites.show-year;
+                        number-mode: "index";
+
+                        sort-field: Favorites.sort-field;
+                        sort-dir: Favorites.sort-dir;
+                        playing-track-id: Player.vm.track.id;
+                        view-context: "favorites";
+                        view-selected-ids: Favorites.selected-ids;
+
+                        request-sort(f) => { Favorites.request-sort(f); }
+                        play-row(id, idx) => { Favorites.play-row(id, idx); }
+                        play-next(ids) => { Favorites.play-next(ids); }
+                        add-to-queue(ids) => { Favorites.add-to-queue(ids); }
+                        toggle-row-favorite(ids, on) => { Favorites.toggle-row-favorite(ids, on); }
+                        set-row-rating(ids, n) => { Favorites.set-row-rating(ids, n); }
+                        select-row(idx, id, sh, ct) => { Favorites.select-row(idx, id, sh, ct); }
+                        request-blur-search => { Favorites.blur-search-tick += 1; }
+                        go-to-album(aid) => { Favorites.go-to-album(aid); }
+                        go-to-artist(aid) => { Favorites.go-to-artist(aid); }
+                        go-to-genre(gid) => { Favorites.go-to-genre(gid); }
                     }
                 }
-            }
 
-            // Hairline between the Artists sub-section and the
-            // track-list header below. Lives outside the collapse
-            // `if` so it stays visible even when the scroller is
-            // hidden — giving the collapsed sub-section a clear
-            // lower edge against the track list. Same recipe as
-            // Artist Detail's Albums hairline.
-            Rectangle {
-                height: 1px;
-                background: Theme.surface2;
-            }
-        }
+                OverlayScrollbar {
+                    horizontal: false;
+                    x: parent.width - self.width;
+                    // Align with the ListView body inside TrackList so the bar
+                    // stays out of the column-header band.
+                    y: tl.y + tl.body-y;
+                    width: 10px;
+                    height: tl.body-height;
+                    visible-size: tl.v-visible-height;
+                    content-size: tl.v-viewport-height;
+                    offset: tl.v-offset;
+                    scroll-to(o) => { tl.set-v-offset(o); }
+                }
 
-        // --- All Songs --------------------------------------------------
-        // No section heading / no filter pill / no column pill — those
-        // moved into the hero's action pill above. The TrackList sits
-        // flush below the Favorite Artists hairline with just the
-        // `Theme.pad-lg` left/right inset (matches Artist Detail's
-        // track-list inset; the hairline's `padding-bottom: Theme.pad-lg`
-        // on the artists section provides the vertical gap).
-        //
-        // Explicit `height` sizes TrackList to its full row count so
-        // every row renders inside the outer ScrollView's flow — the
-        // unified scrollbar can scroll past strips into the table
-        // contents without the inner ListView clipping to its own
-        // viewport. See the "Below-hero scroll container" comment
-        // above for the virtualization tradeoff.
-        HorizontalLayout {
-            horizontal-stretch: 1;
-            vertical-stretch: 0;
-            padding-left: Theme.pad-lg;
-            padding-right: Theme.pad-lg;
-            // Vertical gap above the TrackList header. Either of the
-            // collapsible sub-sections (Most Played, Favorite Artists)
-            // already adds `padding-bottom: Theme.pad-lg` when mounted
-            // — its hairline supplies the gap. When BOTH are absent
-            // (filter excluded every entry, or zero data) we
-            // contribute pad-lg here so the table doesn't butt against
-            // the hero edge.
-            padding-top: (Favorites.most-played-rows.length > 0
-                       || Favorites.artist-rows.length > 0)
-                ? 0px
-                : Theme.pad-lg;
-
-            tl := TrackList {
-                horizontal-stretch: 1;
-                vertical-stretch: 0;
-                // Row count × per-row stride (artwork vs. compact mode)
-                // + header strip + the VL's `pad-xs` gap between
-                // header and list. `max(1, ...)` keeps an empty list
-                // still rendering the column header instead of
-                // collapsing to 0 px. Capped at the outer viewport:
-                // small lists keep the content-tall layout, large lists
-                // pin to the visible region so the inner ListView
-                // virtualizes instead of instantiating every row.
-                height: min(
-                    max(1, Favorites.tracks.length)
-                        * (Favorites.show-artwork
-                            ? Theme.row-h
-                            : Theme.row-h-compact)
-                        + 32px + Theme.pad-xs,
-                    below-sv.visible-height);
-
-                rows: Favorites.tracks;
-
-                w-number <=> Favorites.w-number;
-                w-title <=> Favorites.w-title;
-                w-artist <=> Favorites.w-artist;
-                w-album <=> Favorites.w-album;
-                w-genre <=> Favorites.w-genre;
-                w-year <=> Favorites.w-year;
-                w-length <=> Favorites.w-length;
-
-                show-number <=> Favorites.show-number;
-                show-artwork <=> Favorites.show-artwork;
-                show-artist <=> Favorites.show-artist;
-                show-album <=> Favorites.show-album;
-                show-genre <=> Favorites.show-genre;
-                show-year <=> Favorites.show-year;
-                number-mode: "index";
-
-                sort-field: Favorites.sort-field;
-                sort-dir: Favorites.sort-dir;
-                playing-track-id: Player.vm.track.id;
-                view-context: "favorites";
-                view-selected-ids: Favorites.selected-ids;
-
-                request-sort(f) => { Favorites.request-sort(f); }
-                play-row(id, idx) => { Favorites.play-row(id, idx); }
-                play-next(ids) => { Favorites.play-next(ids); }
-                add-to-queue(ids) => { Favorites.add-to-queue(ids); }
-                toggle-row-favorite(ids, on) => { Favorites.toggle-row-favorite(ids, on); }
-                set-row-rating(ids, n) => { Favorites.set-row-rating(ids, n); }
-                select-row(idx, id, sh, ct) => { Favorites.select-row(idx, id, sh, ct); }
-                request-blur-search => { Favorites.blur-search-tick += 1; }
-                go-to-album(aid) => { Favorites.go-to-album(aid); }
-                go-to-artist(aid) => { Favorites.go-to-artist(aid); }
-                go-to-genre(gid) => { Favorites.go-to-genre(gid); }
-            }
-        }
+                OverlayScrollbar {
+                    horizontal: true;
+                    x: tl.x;
+                    y: parent.height - self.height;
+                    width: tl.width - 10px;
+                    height: 10px;
+                    visible-size: tl.h-visible-width;
+                    content-size: tl.h-viewport-width;
+                    offset: tl.h-offset;
+                    scroll-to(o) => { tl.set-h-offset(o); }
                 }
             }
+
+            // --- Most Played ------------------------------------------------
+            if Favorites.tab-idx == Favorites.tab-most-played: ViewTransition {
+                width: parent.width;
+                height: parent.height;
+                enter-from: root.tab-enter-from;
+                enabled: root.tab-anim-armed;
+
+                mp := EntityCardGrid {
+                    // Positioned rather than wrapped in a layout, so the
+                    // scrollbar below can reuse the same two numbers instead
+                    // of chasing a layout's padding.
+                    y: Theme.pad-md;
+                    width: 100%;
+                    height: parent.height - Theme.pad-md;
+                    rows: Favorites.most-played-rows;
+                    card-width: geom.card-w;
+                    card-height: geom.card-h;
+                    row-height: geom.row-h;
+                    gap: root.grid-gap;
+                    show-play-count: true;
+                    request-cover(p) => { Favorites.request-most-played-cover(p) }
+                    row-clicked(id) => { Favorites.play-track(id); }
+                }
+
+                if Favorites.most-played-count == 0: GridEmptyState {
+                    icon: "bar_chart";
+                    title: @tr("Nothing played yet");
+                    body: @tr("Play one of your favorites and it will show up here.");
+                }
+
+                OverlayScrollbar {
+                    horizontal: false;
+                    x: parent.width - self.width;
+                    y: Theme.pad-md;
+                    width: 10px;
+                    height: parent.height - Theme.pad-md;
+                    visible-size: mp.v-visible-height;
+                    content-size: mp.v-viewport-height;
+                    offset: mp.v-offset;
+                    scroll-to(o) => { mp.set-v-offset(o); }
+                }
+            }
+
+            // --- Favorite Artists -------------------------------------------
+            if Favorites.tab-idx == Favorites.tab-artists: ViewTransition {
+                width: parent.width;
+                height: parent.height;
+                enter-from: root.tab-enter-from;
+                enabled: root.tab-anim-armed;
+
+                ar := EntityCardGrid {
+                    y: Theme.pad-md;
+                    width: 100%;
+                    height: parent.height - Theme.pad-md;
+                    rows: Favorites.artist-rows;
+                    card-width: geom.card-w;
+                    card-height: geom.card-h;
+                    row-height: geom.row-h;
+                    gap: root.grid-gap;
+                    circular: true;
+                    fallback-icon: "person";
+                    request-cover(p) => { Favorites.request-artist-cover(p) }
+                    row-clicked(id) => { Favorites.open-artist(id); }
+                }
+
+                if Favorites.artist-count == 0: GridEmptyState {
+                    icon: "person";
+                    title: @tr("No favorite artists yet");
+                    body: @tr("Favorite a song and its artist appears here.");
+                }
+
+                OverlayScrollbar {
+                    horizontal: false;
+                    x: parent.width - self.width;
+                    y: Theme.pad-md;
+                    width: 10px;
+                    height: parent.height - Theme.pad-md;
+                    visible-size: ar.v-visible-height;
+                    content-size: ar.v-viewport-height;
+                    offset: ar.v-offset;
+                    scroll-to(o) => { ar.set-v-offset(o); }
+                }
             }
         }
     }
 
-    // Composite scroll: unified vbar over strips + tracklist, hbar for the
-    // TrackList's column pan, and the CompositeScroll wheel routing — all
-    // owned by the shared component; this view only mirrors its named
-    // elements (`below-sv`, `tl`, `below-hero`) into plain props.
-    CompositeScrollbars {
-        x: 0; y: 0;
-        width: 100%; height: 100%;
-        outer-viewport-y <=> below-sv.viewport-y;
-        outer-viewport-height: below-sv.viewport-height;
-        outer-visible-height: below-sv.visible-height;
-        inner-offset: tl.v-offset;
-        inner-viewport-height: tl.v-viewport-height;
-        inner-visible-height: tl.v-visible-height;
-        set-inner-offset(o) => { tl.set-v-offset(o); }
-        h-offset: tl.h-offset;
-        h-viewport-width: tl.h-viewport-width;
-        h-visible-width: tl.h-visible-width;
-        set-h-offset(o) => { tl.set-h-offset(o); }
-        v-region-y: below-hero.absolute-position.y - root.absolute-position.y;
-        v-region-height: below-hero.height;
-        h-region-x: tl.absolute-position.x - root.absolute-position.x;
-        h-region-width: tl.width;
+    // Compact-mode tab tooltip, on a layer of its own. It can't hang off the
+    // tab: the bar sits in the hero, and Slint paints in declaration order,
+    // so anything the hero owns is covered by the body underneath it. Equal
+    // width cells let the rect come from the index, so a tab that moves under
+    // a parked pointer keeps its tooltip anchored — and since `tab-w` eases,
+    // the frame morphs with the cell for free.
+    tab-tip := Rectangle {
+        x: bar.absolute-position.x - root.absolute-position.x
+            + bar.tab-w * bar.hovered-idx;
+        y: bar.absolute-position.y - root.absolute-position.y;
+        width: bar.tab-w;
+        height: bar.height;
+        Tooltip {
+            text: bar.hovered-label;
+            hovered: bar.hovered-idx >= 0 && bar.compact;
+            host-width: tab-tip.width;
+            host-height: tab-tip.height;
+            side: TooltipSide.below;
+        }
     }
 }

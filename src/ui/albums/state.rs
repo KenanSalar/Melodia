@@ -120,7 +120,7 @@ pub(super) const DEFAULT_GRID_COVER_CAP: NonZeroUsize = match NonZeroUsize::new(
 /// How many leading (name-sorted) albums' covers `fetch_grid` prewarms
 /// before the grid first paints. Covers roughly the first screenful at any
 /// reasonable column count; everything past it decodes lazily on
-/// scroll-in via `request-cover`. Kept ≤ the `compute_album_cover_cap`
+/// scroll-in via `request-cover`. Kept ≤ the `ui::grid_prewarm::cover_cap`
 /// floor (32) so the prewarm can't thrash the grid-tier LRU it fills —
 /// each 448 px buffer is ~600 KB, so this stays deliberately small.
 pub(super) const GRID_PREWARM_AHEAD: usize = 24;

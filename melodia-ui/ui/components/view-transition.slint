@@ -21,7 +21,21 @@ import { NavEnterFrom } from "../globals/nav.slint";
 // sync.slint:30-37`.
 export component ViewTransition inherits Rectangle {
     in property <NavEnterFrom> enter-from: NavEnterFrom.below;
+    // Whether to play at all. Off, the view is simply *there* — no fade, no
+    // slide, no animation to interrupt.
+    //
+    // It exists for the nested case. Favorites wraps each of its tab bodies
+    // in one of these, inside the page's own enter transition: on the frame
+    // the page mounts, both would play, and a horizontal tab slide composed
+    // with the page's fade-up reads as a diagonal instead of the sidebar nav
+    // it is. The host arms this on the first real tab switch, so the page's
+    // own entrance is the only thing moving when the page arrives.
+    in property <bool> enabled: true;
     private property <bool> shown: false;
+    // Disabled, this is `true` from the first evaluation, so the three
+    // bindings below never transition and the `animate` blocks never engage
+    // — the Timer's flip is then a write nothing reads.
+    private property <bool> settled: !root.enabled || root.shown;
 
     Timer {
         interval: 1ms;
@@ -32,10 +46,10 @@ export component ViewTransition inherits Rectangle {
         }
     }
 
-    opacity: shown ? 1.0 : 0.0;
-    x: shown ? 0px : (enter-from == NavEnterFrom.right ? 32px
-                    : enter-from == NavEnterFrom.left  ? -32px : 0px);
-    y: shown ? 0px : (enter-from == NavEnterFrom.below ? 32px : 0px);
+    opacity: settled ? 1.0 : 0.0;
+    x: settled ? 0px : (enter-from == NavEnterFrom.right ? 32px
+                      : enter-from == NavEnterFrom.left  ? -32px : 0px);
+    y: settled ? 0px : (enter-from == NavEnterFrom.below ? 32px : 0px);
 
     animate opacity { duration: Theme.dur-spatial; easing: cubic-bezier(0.2, 0, 0, 1); }
     animate x       { duration: Theme.dur-spatial; easing: cubic-bezier(0.2, 0, 0, 1); }

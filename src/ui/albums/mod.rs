@@ -50,7 +50,7 @@ use state::{
 };
 
 #[cfg(test)]
-use grid::{compute_album_cover_cap, compute_indices};
+use grid::compute_indices;
 #[cfg(test)]
 use state::GridIndexCache;
 

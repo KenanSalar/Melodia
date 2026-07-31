@@ -186,6 +186,13 @@ msgid_plural "{n} tracks"
 msgstr[0] "{n} parça"
 msgstr[1] "{n} parça"
 
+# Plural: artist count for the Artists grid header and the Favorites hero.
+# Turkish keeps the gettext layout but doesn't pluralize after a numeral.
+msgid "{n} artist"
+msgid_plural "{n} artists"
+msgstr[0] "{n} sanatçı"
+msgstr[1] "{n} sanatçı"
+
 # Plural: track count for the tracks-view header subtitle ("12 songs").
 msgid "{n} song"
 msgid_plural "{n} songs"
@@ -739,6 +746,24 @@ msgstr "Son aramalardan kaldır"
 
 msgid "Filter favorites…"
 msgstr "Favorileri filtrele…"
+
+msgid "Filter most played…"
+msgstr "En çok çalınanları filtrele…"
+
+msgid "Filter artists…"
+msgstr "Sanatçıları filtrele…"
+
+msgid "Nothing played yet"
+msgstr "Henüz hiçbir şey çalınmadı"
+
+msgid "Play one of your favorites and it will show up here."
+msgstr "Favorilerinden birini çal, burada görünsün."
+
+msgid "No favorite artists yet"
+msgstr "Henüz favori sanatçı yok"
+
+msgid "Favorite a song and its artist appears here."
+msgstr "Bir şarkıyı favorilere ekle, sanatçısı burada görünsün."
 
 msgid "Most Played"
 msgstr "En çok çalınanlar"

@@ -3,7 +3,7 @@
 
 use std::sync::Arc;
 
-use melodia::{AppWindow, ArtistDetail, Favorites, Nav, Player, media, services, state::AppState, ui};
+use melodia::{AppWindow, ArtistDetail, Nav, Player, media, services, state::AppState, ui};
 use slint::ComponentHandle;
 
 /// Hydrate Slint's bundled-translation runtime from the persisted
@@ -174,6 +174,13 @@ pub fn install_views(
         if (0..=9).contains(&idx) {
             app.global::<Nav>().set_selected_index(idx);
         }
+        // The Favorites tab seeds here rather than in
+        // `hydrate_ui_from_settings` with its siblings, because it seeds two
+        // things: the Slint property *and* `FavoritesUi`'s synchronous
+        // shadow, which the off-thread fetchers read to decide which cover
+        // tier to warm. That handle is in scope here and deliberately dropped
+        // by the time hydration runs.
+        ui::favorites::seed_tab(app, &favorites_ui, vs.favorites_tab);
     }
     ui::albums::seed_detail_from_settings(app, state, &albums_ui);
     ui::artists::seed_detail_from_settings(app, state, &artists_ui);
@@ -198,11 +205,14 @@ pub fn install_views(
     ui::callbacks::wire_now_playing_rating(
         app, state, &tracks_ui, &browse_ui, &albums_ui, &artists_ui, &genres_ui,
     );
-    // Retune the album-tier + artist-tier + playlist-tier cover LRUs
-    // to the real display. Genres has no cover cache, so no tuning step.
+    // Retune every grid-tier cover LRU to the real display — same band for
+    // all of them, since they all draw the same card at the same size (see
+    // `ui::grid_prewarm::cover_cap`). Genres has no cover cache, so no
+    // tuning step.
     ui::albums::tune_cache_for_display(app, &albums_ui);
     ui::artists::tune_cache_for_display(app, &artists_ui);
     ui::playlists::tune_cache_for_display(app, &playlists_ui);
+    ui::favorites::tune_cache_for_display(app, &favorites_ui);
 
     // `browse_ui` / `favorites_ui` / `search_ui` are deliberately dropped here:
     // their `wire_*` closures each hold a strong `Arc` clone, so the objects
@@ -336,9 +346,6 @@ pub fn hydrate_ui_from_settings(
     ui::track_list_view::hydrate_search_view(app, vs);
     app.global::<ArtistDetail>()
         .set_albums_collapsed(vs.artist_albums_collapsed);
-    let fav = app.global::<Favorites>();
-    fav.set_artists_collapsed(vs.favorites_artists_collapsed);
-    fav.set_most_played_collapsed(vs.favorites_most_played_collapsed);
     ui::settings_page::seed_tab(app, vs.settings_tab);
 }
 

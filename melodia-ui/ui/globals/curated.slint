@@ -1,17 +1,15 @@
-import { TrackListRow, EntityStripRow } from "../models.slint";
+import { TrackListRow, EntityStripRow, EntityGridRow } from "../models.slint";
 
-// The two hero-mosaic pages. Near-mirrors of each other — Recently Played is
-// Favorites minus the Favorite-Artists strip — so a change to one is usually a
-// change to both.
+// The two hero-mosaic pages. Recently Played is still the single-scroll shape
+// Favorites used to have — hero, one Most Played strip, one `TrackList` — so
+// the two have diverged for now; the intent is to bring it onto the tabbed
+// shape below.
 
-// Favorites: drives the Favorites view (sidebar index 2). Single page
-// composed of a hero (2x2 live cover mosaic + count + duration + Play
-// All / Shuffle pills), a Most Played horizontal carousel, a
-// collapsible Favorite Artists section (mirroring Artist Detail's
-// Albums sub-section style: pill header with chevron + horizontal
-// scroller, persisted collapse state), and a full sortable /
-// filterable All Songs `TrackList`. No Favorite Albums section by
-// design — albums are reachable via the Albums tab.
+// Favorites: drives the Favorites view (sidebar index 2). A hero whose top
+// row carries a `TabBar` and the filter `SearchBar`, over three mutually
+// exclusive sub-views: Songs (a sortable / filterable `TrackList`), Most
+// Played and Favorite Artists (both virtualized `EntityCardGrid`s). No
+// Favorite Albums tab by design — albums are reachable via the Albums tab.
 //
 // The mosaic refreshes live when `library_changed_tx` ticks (favorite
 // toggled, play count bumped, library scanned) so the top-4 most-played
@@ -20,6 +18,26 @@ import { TrackListRow, EntityStripRow } from "../models.slint";
 // `AlbumDetail.blur-img-*` — outgoing slot never cleared so the fade
 // never flashes.
 export global Favorites {
+    // Which sub-view is showing. `tab-count` is the sole definition of how
+    // many there are — Rust clamps the persisted `views.json` index against
+    // it rather than carrying its own const, so a build with fewer tabs can't
+    // restore onto a branch that mounts nothing.
+    out property <int> tab-songs: 0;
+    out property <int> tab-most-played: 1;
+    out property <int> tab-artists: 2;
+    out property <int> tab-count: 3;
+
+    in-out property <int> tab-idx: 0;
+    // Fires after the bar has already moved `tab-idx` — Rust persists the
+    // pick, releases the departed grid's cover tier and builds the entering
+    // one's model.
+    callback tab-changed(int);
+
+    // Column count for whichever grid tab is mounted; one property, because
+    // the two are mutually exclusive and share their card geometry. Pushed
+    // down from the view's `GridGeometry` via `GridColumnsSync`.
+    in-out property <int> columns: 4;
+    callback columns-changed(int);
     // Hero — mosaic data + stats. `mosaic-paths` is the top-4 cover
     // paths by play_count (DESC); an empty list renders the empty
     // state. `track-count == 0` ⇒ hero shows "No favorites yet" copy
@@ -37,24 +55,18 @@ export global Favorites {
     in-out property <bool>  blur-use-a;
     in-out property <bool>  has-blur;
 
-    // Carousels — per-strip flat lists. `EntityStripRow`'s unified
-    // shape (id / title / subtitle / artwork_path / play_count) drives
-    // both surfaces.
-    in-out property <[EntityStripRow]> most-played-rows;
-    in-out property <[EntityStripRow]> artist-rows;
+    // Grid tabs — chunked card rows, one per grid. `EntityStripRow`'s
+    // unified shape (id / title / subtitle / artwork_path / play_count)
+    // drives both surfaces; Rust only fills the model of the tab that is
+    // actually mounted, so the hidden one costs nothing.
+    in-out property <[EntityGridRow]> most-played-rows;
+    in-out property <[EntityGridRow]> artist-rows;
+    // Pre-chunk counts, for the hero's stats line and the empty-state gate —
+    // `rows.length` is a row count, not a card count.
+    in-out property <int> most-played-count;
+    in-out property <int> artist-count;
 
-    // Favorite Artists sub-section collapse state. Persisted under
-    // `settings.favorites_artists_collapsed`; hydrated by
-    // `boot/ui_setup.rs` and toggled via the section header chevron
-    // in `ui/views/favorites-view.slint`. Mirrors
-    // `ArtistDetail.albums-collapsed`.
-    in-out property <bool> artists-collapsed: false;
-    // Most Played sub-section collapse state. Persisted under
-    // `settings.favorites_most_played_collapsed`; same shape as
-    // `artists-collapsed`.
-    in-out property <bool> most-played-collapsed: false;
-
-    // All Songs — `TrackList` data + filter + sort. `tracks` is the
+    // Songs tab — `TrackList` data + filter + sort. `tracks` is the
     // post-filter view that the list actually renders (Rust applies
     // the in-memory filter against an internal `tracks-all` cache and
     // writes the result here, mirroring how the Tracks view handles
@@ -67,7 +79,7 @@ export global Favorites {
     in-out property <string>         sort-dir: "asc";
 
 
-    // Per-column widths / visibility for the All Songs `TrackList` —
+    // Per-column widths / visibility for the Songs tab's `TrackList` —
     // mirrors the same shape `Tracks` / `AlbumDetail` / `ArtistDetail`
     // use. Hydrated from `settings.view_columns["favorites"]` +
     // `settings.view_column_widths["favorites"]`.
@@ -90,33 +102,26 @@ export global Favorites {
     in-out property <int>   selection-anchor: -1;
 
     // Lazy cover callbacks — one per cache tier so Rust can route each
-    // surface into the right LRU (row-tier 72 px for the mosaic;
-    // dedicated thumbs for most-played + circular artist). All Songs
-    // rows resolve through the shared `RowCovers` global.
+    // surface into the right LRU (mosaic tiles; grid-sized thumbs for
+    // most-played + circular artist). Songs-tab rows resolve through the
+    // shared `RowCovers` global.
     pure callback request-mosaic-cover(string)      -> image;
     pure callback request-most-played-cover(string) -> image;
     pure callback request-artist-cover(string)      -> image;
 
-    // Hero actions
+    // Hero actions. The pill is per-tab: Songs shuffles the filtered track
+    // list, Most Played shuffles what its grid is showing.
     callback shuffle-all();
+    callback shuffle-most-played();
 
-    // Card clicks. `play-*` ⇒ start playback in that scope; `open-*`
-    // ⇒ cross-tab nav to the entity's detail view (sets
-    // `*Detail.origin-nav-index = NAV_FAVORITES` synchronously before
+    // Card clicks. `play-track` ⇒ start playback in that scope;
+    // `open-artist` ⇒ cross-tab nav to the artist's detail view (sets
+    // `ArtistDetail.origin-nav-index = NAV_FAVORITES` synchronously before
     // flipping `Nav.selected-index` so the back button returns here).
     callback play-track(int /*track_id*/);
-    callback play-artist(int /*artist_id*/);
     callback open-artist(int /*artist_id*/);
 
-    // Collapse toggle for the Favorite Artists sub-section. Rust
-    // handles the negate + persist so the Slint side only fires the
-    // event — mirrors `ArtistDetail.toggle-albums-collapsed`.
-    callback toggle-artists-collapsed();
-    // Collapse toggle for the Most Played sub-section. Same shape as
-    // `toggle-artists-collapsed`.
-    callback toggle-most-played-collapsed();
-
-    // All Songs row interactions — same shape as Tracks / AlbumDetail.
+    // Songs-tab row interactions — same shape as Tracks / AlbumDetail.
     callback play-row(int /*track_id*/, int /*index*/);
     callback play-next([int] /*track_ids*/);
     callback add-to-queue([int]);
@@ -151,12 +156,13 @@ export global Favorites {
     }
 }
 
-// RecentlyPlayed: drives the Recently-Played view (a trimmed Favorites).
-// Owned by `src/ui/recently_played`. No hero mosaic / artist strip — just a
-// header (count + duration + Shuffle / Columns), a non-collapsible "Most
-// Played" strip, and a filterable `TrackList` of the 200 most-recently-played
-// tracks. Membership is fixed to that set; filter + column sort re-walk the
-// cache in memory (no re-query).
+// RecentlyPlayed: drives the Recently-Played view. Owned by
+// `src/ui/recently_played`. Still the single-scroll shape Favorites used to
+// have — a hero (mosaic + count + duration + Shuffle / Columns), a
+// non-collapsible "Most Played" strip, and a filterable `TrackList` of the 200
+// most-recently-played tracks — so it keeps the `CompositeScrollbars` wheel
+// routing that Favorites has since shed. Membership is fixed to that set;
+// filter + column sort re-walk the cache in memory (no re-query).
 export global RecentlyPlayed {
     // Hero — 2×2 cover mosaic of the up-to-4 most-recently-played distinct
     // covers. Empty list renders the empty-state tile.
