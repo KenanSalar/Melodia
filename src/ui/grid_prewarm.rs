@@ -23,8 +23,16 @@ pub fn unique_artwork_paths<'a>(
     paths: impl Iterator<Item = Option<&'a str>>,
     cap: usize,
 ) -> Vec<PathBuf> {
-    let mut seen: HashSet<&str> = HashSet::with_capacity(cap.min(1024));
-    let mut out: Vec<PathBuf> = Vec::with_capacity(cap.min(1024));
+    // Reserve against the input, not the cap — the full-list callers pass a
+    // whole cache capacity, and a twelve-track album detail shouldn't lay out
+    // hundreds of buckets to fill twelve. An upper hint bounds the items, so
+    // it bounds the kept paths too; it's the exact count for the plain `map`
+    // callers and merely an over-estimate through a `filter_map`. Either way
+    // `.min(cap)` keeps it no worse than the cap it replaced, which is what
+    // an iterator with no upper hint falls back to.
+    let prealloc = paths.size_hint().1.unwrap_or(cap).min(cap);
+    let mut seen: HashSet<&str> = HashSet::with_capacity(prealloc);
+    let mut out: Vec<PathBuf> = Vec::with_capacity(prealloc);
     for p in paths.flatten() {
         if out.len() >= cap {
             break;

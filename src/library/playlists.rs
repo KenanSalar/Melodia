@@ -109,7 +109,7 @@ pub async fn reorder_playlist(
 /// into a 160 px window and thrash the cover LRU. The user picks at most
 /// four, and the window shows about a dozen at a time, so this is far
 /// more scrolling than the choice needs.
-pub const MOSAIC_CANDIDATE_LIMIT: i64 = 60;
+const MOSAIC_CANDIDATE_LIMIT: i64 = 60;
 
 pub async fn get_playlist_artwork_paths(
     state: &AppState,

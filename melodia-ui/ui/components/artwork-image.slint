@@ -2,8 +2,12 @@ import { Theme } from "../theme.slint";
 
 // Square artwork tile. When `cover` carries a decoded image (width > 0) it
 // renders that, otherwise the `music-note` fallback icon paints over the
-// `tile-bg` square. Rust populates `cover` via `slint::Image::load_from_path`;
-// see `to_slint_track_list_row` for the wiring path.
+// `tile-bg` square. Where that image comes from is the host's business, and
+// the two kinds of host differ: a repeated tile binds `cover` to a lazy
+// per-path lookup (`RowCovers.request`, `Queue`/`NowPlaying.request-cover`,
+// the per-view `request-cover`s) so only a mounted tile costs a cache hit,
+// while the singletons — the now-playing bar, the mini player, the detail
+// heroes, the tag editor — are handed one image Rust decoded eagerly.
 export component ArtworkImage inherits Rectangle {
     in property <string> artwork-path;
     in property <image> cover;

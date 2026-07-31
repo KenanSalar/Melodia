@@ -78,14 +78,18 @@ export global Queue {
     // Lazy row cover — the `RowCovers` contract, against the sheet's own
     // cover tier so closing it still releases every decoded buffer.
     //
-    // `generation` is not part of the lookup. It's read so the binding
-    // depends on `covers-generation` below, because a `pure` callback's
-    // result is cached until one of its dependencies is dirtied. The other
-    // lazy-cover surfaces prewarm and await *before* they set their rows,
-    // so their first evaluation is already a cache hit; the sheet can't —
-    // its rows have to land synchronously for the slide-up to have text on
-    // frame one — so it warms the first screenful afterwards and bumps the
-    // generation to bring those covers in.
+    // `generation` does two jobs. Reading it is what makes the binding
+    // depend on `covers-generation` below, since a `pure` callback's result
+    // is cached until one of its dependencies is dirtied; and its *value*
+    // tells Rust whether this tier is warm yet. The other lazy-cover
+    // surfaces prewarm and await *before* they set their rows, so their
+    // first evaluation is already a cache hit. The sheet can't — its rows
+    // have to land synchronously for the slide-up to have text on frame one
+    // — so at generation 0 the lookup is cache-only and every row paints its
+    // placeholder rather than pulling a decode onto the UI thread mid-
+    // animation. The sheet then warms the first screenful off-thread and
+    // bumps, which both brings those covers in and switches later rows to
+    // decode-on-demand. Closing rewinds it to 0 alongside the cache clear.
     pure callback request-cover(/* artwork-path */ string, /* generation */ int) -> image;
     in property <int> covers-generation: 0;
 

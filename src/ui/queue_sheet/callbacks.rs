@@ -249,13 +249,17 @@ pub(super) fn wire_callbacks(
                 //    this is pure data and lands in the model before the
                 //    callback returns — the slide-up animation has title /
                 //    artist / duration / current-row accent from frame one.
+                //    `covers-generation` is still 0 here, which is what
+                //    holds `Queue.request-cover` to a cache-only lookup, so
+                //    the rows the `ListView` instantiates on that first
+                //    frame can't drag a decode onto the UI thread.
                 //
                 // 2. **Warm the first screenful (off-thread), then bump
                 //    `covers-generation`:** each row pulls its own cover
                 //    through `Queue.request-cover`, and a `pure` callback's
                 //    result is cached until a dependency is dirtied — the
-                //    bump is what re-runs the lookup now that the decode
-                //    has landed. Only the first screenful is warmed; rows
+                //    bump both re-runs the lookup and switches it to the
+                //    decoding one. Only the first screenful is warmed; rows
                 //    scrolled to later decode on demand like every other
                 //    list in the app.
                 let Some(ui) = weak.upgrade() else { return };
@@ -270,9 +274,14 @@ pub(super) fn wire_callbacks(
                     QUEUE_PREWARM_AHEAD,
                 );
                 drop(qvm);
-                if paths.is_empty() {
-                    return;
-                }
+                // No early return on an empty `paths`, even though there is
+                // then nothing to decode: the bump is also what takes the
+                // lookup off `get_cached_opt`, so skipping it would park a
+                // queue whose tracks all lack artwork at generation 0 for the
+                // whole open session — and rows added afterwards (a drop onto
+                // the open sheet, say) would remount their bindings against a
+                // cache-only lookup and show a placeholder that never
+                // resolves. `prewarm(&[])` is already a no-op.
                 let weak = weak.clone();
                 let queue_covers = queue_covers.clone();
                 let is_open = is_open.clone();
@@ -284,8 +293,10 @@ pub(super) fn wire_callbacks(
                         if !is_open.load(Ordering::Relaxed) {
                             return; // closed during warmup
                         }
-                        let g = ui.global::<Queue>();
-                        g.set_covers_generation(g.get_covers_generation().wrapping_add(1));
+                        let queue = ui.global::<Queue>();
+                        queue.set_covers_generation(
+                            queue.get_covers_generation().wrapping_add(1),
+                        );
                     });
                 });
             } else {
@@ -316,8 +327,8 @@ pub(super) fn wire_callbacks(
                         // Drop the rows. They hold no images any more, but
                         // they do hold four `SharedString`s each, and the
                         // queue is as long as whatever was played into it.
-                        if let Some(vm) = ui
-                            .global::<Queue>()
+                        let queue = ui.global::<Queue>();
+                        if let Some(vm) = queue
                             .get_rows()
                             .as_any()
                             .downcast_ref::<VecModel<QueueRow>>()
@@ -326,7 +337,12 @@ pub(super) fn wire_callbacks(
                         }
                         // Drop the cache's buffer refs too — only with
                         // both gone is the underlying memory actually
-                        // freed.
+                        // freed. Rewinding the generation alongside it is
+                        // what keeps 0 meaning "this tier is cold" rather
+                        // than "first open of the session": the next open
+                        // faces the same empty cache, so it owes the same
+                        // cache-only first frame.
+                        queue.set_covers_generation(0);
                         queue_covers.clear();
                         runtime.spawn_blocking(crate::tasks::heap_trim::trim);
                     });

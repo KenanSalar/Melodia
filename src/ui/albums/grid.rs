@@ -184,9 +184,11 @@ fn sort_album_indices(indices: &mut [usize], data: &GridData, field: &str, dir: 
     }
 }
 
-/// The deduplicated artwork paths of the first `GRID_PREWARM_AHEAD`
-/// (name-sorted) albums — the covers first on screen. Shared by
-/// `fetch_grid` and `AlbumsUi::prewarm_visible_covers`.
+/// The first `GRID_PREWARM_AHEAD` distinct artwork paths in display
+/// (name-sorted) order — the covers first on screen. Shared by
+/// `fetch_grid` and `AlbumsUi::prewarm_visible_covers`. The cap counts
+/// kept *paths*, so a run of covertless albums is walked past rather than
+/// spending the budget on them.
 pub(super) fn first_screenful_paths(data: &GridData) -> Vec<PathBuf> {
     crate::ui::grid_prewarm::unique_artwork_paths(
         data.albums.iter().map(|a| a.artwork_path.as_deref()),

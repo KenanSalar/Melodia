@@ -146,8 +146,11 @@ fn sort_artist_indices(indices: &mut [usize], data: &GridData, field: &str, dir:
     }
 }
 
-/// The deduplicated artwork paths of the first `GRID_PREWARM_AHEAD`
-/// (name-sorted) artists' covers — the ones first on screen.
+/// The first `GRID_PREWARM_AHEAD` distinct artist images in display
+/// (name-sorted) order. The cap counts kept *paths*, which matters more
+/// here than on the album grid: most artists have no image, so this walks
+/// well past the first screenful to find that many rather than prewarming
+/// the two or three the opening rows happen to carry.
 pub(super) fn first_screenful_paths(data: &GridData) -> Vec<PathBuf> {
     crate::ui::grid_prewarm::unique_artwork_paths(
         data.artists.iter().map(|a| a.image_path.as_deref()),
