@@ -16,6 +16,23 @@ component SidebarItem inherits Rectangle {
 
     private property <bool> selected: Nav.selected-index == root.index;
 
+    // Collapsed-rail tooltip feed. The rail hides the label, so the row hands
+    // `Nav` its identity and window rect and `app-window.slint` paints the
+    // tooltip beside the rail — see `Nav.sidebar-tip-idx` for why it can't be
+    // mounted here. Published in both states so the tooltip is already armed
+    // when Ctrl+B collapses the rail under a parked pointer.
+    private property <bool> hover-mirror: touch.has-hover;
+    changed hover-mirror => {
+        if (self.hover-mirror) {
+            Nav.sidebar-tip-idx = root.index;
+            Nav.sidebar-tip-label = root.label;
+            Nav.sidebar-tip-y = root.absolute-position.y;
+            Nav.sidebar-tip-h = root.height;
+        } else if (Nav.sidebar-tip-idx == root.index) {
+            Nav.sidebar-tip-idx = -1;
+        }
+    }
+
     // Press-shrink factor — 0.97 while held, 1.0 otherwise. A small
     // fraction of the now-playing-bar buttons' shrink (0.9) since a
     // full-width row's wobble reads much stronger than a compact
@@ -156,6 +173,22 @@ export component Sidebar inherits Rectangle {
         Rectangle {
             height: 36px;
             background: transparent;
+
+            // Same tooltip feed as `SidebarItem`. The label is the action the
+            // click performs, and the tooltip only ever shows on a collapsed
+            // rail, so it reads "Expand" rather than mirroring the row's own
+            // "Collapse" text.
+            property <bool> hover-mirror: collapse-touch.has-hover;
+            changed hover-mirror => {
+                if (self.hover-mirror) {
+                    Nav.sidebar-tip-idx = Nav.sidebar-collapse-tip-idx;
+                    Nav.sidebar-tip-label = @tr("Expand");
+                    Nav.sidebar-tip-y = self.absolute-position.y;
+                    Nav.sidebar-tip-h = self.height;
+                } else if (Nav.sidebar-tip-idx == Nav.sidebar-collapse-tip-idx) {
+                    Nav.sidebar-tip-idx = -1;
+                }
+            }
 
             // Press-shrink factor — animated alone so the wobble only
             // fires on press, not while the sidebar width animates.

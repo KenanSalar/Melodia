@@ -3,7 +3,7 @@ import { Theme } from "../theme.slint";
 import { SettingsPage } from "../globals/settings-page.slint";
 import { OverlayScrollbar } from "../components/overlay-scrollbar.slint";
 import { SearchBar } from "../components/search-bar.slint";
-import { Tooltip } from "../components/tooltip.slint";
+import { Tooltip, TooltipSide } from "../components/tooltip.slint";
 import { SettingsTabBar } from "../components/settings/settings-tab-bar.slint";
 import { SettingsTabs } from "settings/settings-tabs.slint";
 
@@ -318,7 +318,7 @@ export component SettingsView inherits Rectangle {
             hovered: bar.hovered-idx >= 0 && bar.compact;
             host-width: tab-tip.width;
             host-height: tab-tip.height;
-            below: true;
+            side: TooltipSide.below;
         }
     }
 }

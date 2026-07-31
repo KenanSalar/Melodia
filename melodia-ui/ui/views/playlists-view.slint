@@ -8,7 +8,7 @@ import { PlaylistGrid } from "../components/grid/playlist-grid.slint";
 import { GridColumnsSync } from "../components/grid-columns-sync.slint";
 import { MaterialIcon } from "../components/material-icon.slint";
 import { OverlayScrollbar } from "../components/overlay-scrollbar.slint";
-import { Tooltip } from "../components/tooltip.slint";
+import { Tooltip, TooltipSide } from "../components/tooltip.slint";
 import { FilterThrottle } from "../components/filter-throttle.slint";
 
 // The Playlists grid page. Mirrors `AlbumView` structure: header chrome
@@ -327,7 +327,7 @@ export component PlaylistsView inherits Rectangle {
         Tooltip {
             text: header-tip.ptext;
             hovered: header-tip.any-hover;
-            below: true;
+            side: TooltipSide.below;
             host-width: header-tip.width;
             host-height: header-tip.height;
         }

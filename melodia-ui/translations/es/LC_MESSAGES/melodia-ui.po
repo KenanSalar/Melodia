@@ -45,6 +45,11 @@ msgstr "Ajustes"
 msgid "Collapse"
 msgstr "Colapsar"
 
+# Tooltip on the Collapse toggle while the sidebar is a collapsed rail — the
+# label names the action the click performs, not the row's own text.
+msgid "Expand"
+msgstr "Expandir"
+
 # ---- Title-bar window controls ----------------------------------------------
 
 msgid "Minimize"

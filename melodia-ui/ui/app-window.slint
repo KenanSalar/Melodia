@@ -69,6 +69,7 @@ import { CustomTitleBar } from "components/custom-titlebar.slint";
 import { NotificationStack } from "components/dialog/notification-stack.slint";
 import { MiniPlayerSwitch } from "components/mini-player-switch.slint";
 import { SectionActiveGate } from "components/section-active-gate.slint";
+import { Tooltip, TooltipSide } from "components/tooltip.slint";
 import { ViewTransition } from "components/view-transition.slint";
 
 // Re-export so Rust can mention these from `slint::include_modules!`.
@@ -451,7 +452,7 @@ export component AppWindow inherits Window {
                 vertical-stretch: 1;
                 padding-right: Theme.use-native-titlebar ? 0px : 4px;
 
-                Sidebar {}
+                sidebar := Sidebar {}
 
                 // Rounded content panel. Single Rectangle with
                 // `border-color` + `border-width` — same pattern as
@@ -691,6 +692,65 @@ export component AppWindow inherits Window {
             }
 
             NowPlayingBar {}
+            }
+
+            // Top-layer tooltip for the collapsed sidebar rail, which hides
+            // every row label. Declared after the layout so it paints above
+            // the content panel (Slint has no z-index — paint order is
+            // declaration order): the Sidebar is the content row's first
+            // child, so anything it drew past its own right edge would land
+            // under the panel, and `nav-scroll` clips it besides. Same
+            // frame-tracks-the-host idiom as `settings-view.slint`'s
+            // `tab-tip`, one axis over.
+            //
+            // The hovered row publishes its rect on `Nav`; the x comes off the
+            // live rail instead, so the frame rides the collapse animation.
+            // The tooltip's own 500 ms reveal delay outlasts that animation,
+            // so it can't surface while the labels are still readable. A plain
+            // Rectangle captures no input, so the row underneath keeps its
+            // hover.
+            sidebar-tip := Rectangle {
+                x: sidebar.absolute-position.x - parent.absolute-position.x;
+                y: Nav.sidebar-tip-y - parent.absolute-position.y;
+                width: sidebar.width;
+                height: Nav.sidebar-tip-h;
+
+                // Rail rows sit 4 px apart and some pairs have a Divider
+                // between them, so a pointer travelling down the rail is over
+                // nothing for a frame or two. Retracting on that restarts the
+                // pill's 500 ms reveal on every row change — the tooltip
+                // flashes the new label, fades out and comes back — where the
+                // Settings tab bar reads as one tooltip following the pointer
+                // because its cells are edge-to-edge and hover never drops.
+                // Hold the last row's tooltip across the gap and retract only
+                // once the pointer has really left the rail. The label and the
+                // frame's rect are left alone on retract, so the held pill
+                // stays where it was and swaps to the next row's name the
+                // moment that row takes the hover.
+                property <bool> row-hovered: Nav.sidebar-tip-idx != -1;
+                property <bool> held;
+                changed row-hovered => {
+                    if (self.row-hovered) { self.held = true; }
+                }
+                // Long enough to cross the widest gap (a Divider between two
+                // sections) at a deliberate pace, short enough that leaving the
+                // rail still reads as an immediate dismissal.
+                Timer {
+                    interval: 150ms;
+                    running: !sidebar-tip.row-hovered && sidebar-tip.held;
+                    triggered => { sidebar-tip.held = false; }
+                }
+
+                Tooltip {
+                    text: Nav.sidebar-tip-label;
+                    hovered: sidebar-tip.held && Nav.sidebar-collapsed;
+                    host-width: sidebar-tip.width;
+                    host-height: sidebar-tip.height;
+                    side: TooltipSide.right;
+                    // Clears the rail rather than hugging it, so the pill
+                    // reads as part of the content panel it floats over.
+                    gap: Theme.pad-md;
+                }
             }
         }
 
