@@ -89,6 +89,8 @@ export component SearchBar inherits Rectangle {
     // no scale transform, so we grow width/height and recompute x/y.
     chrome := Rectangle {
         property <float> focus-scale: input.has-focus ? 1.015 : 1.0;
+        animate focus-scale { duration: Theme.dur-fast; easing: ease-in-out; }
+
         width: root.width * focus-scale;
         height: root.height * focus-scale;
         // (parent.size - self.size) / 2 keeps the chrome centred against
@@ -115,11 +117,19 @@ export component SearchBar inherits Rectangle {
             : Theme.crust.with-alpha(0.15);
         drop-shadow-blur: input.has-focus ? 16px : 2px;
         drop-shadow-offset-y: input.has-focus ? 4px : 1px;
-        // `x`/`y` are derived from `width`/`height`; per CLAUDE.md's "don't
-        // animate bindings derived from another animating property",
-        // animate only the source dimensions and let the centring tracks
-        // per-frame.
-        animate width, height, background, border-color, drop-shadow-color,
+        // Per CLAUDE.md's "don't animate bindings derived from another
+        // animating property": `width`/`height` derive from `focus-scale` and
+        // `x`/`y` from those, so the ease belongs on the scale — the one thing
+        // focus actually changes — and the other three track it per frame.
+        //
+        // It has to be the scale rather than the dimensions for a second reason.
+        // `width` also multiplies `root.width`, which the Settings header drives
+        // off the live window width, and Slint restarts an animated binding on
+        // dependency *dirtiness* rather than on a value change — so an eased
+        // `width` there restarted its curve on every event of a resize drag and
+        // the chrome lagged inside its own slot. `focus-scale` reads nothing but
+        // `has-focus`, so it only ever sees the toggle.
+        animate background, border-color, drop-shadow-color,
                 drop-shadow-blur, drop-shadow-offset-y {
             duration: Theme.dur-fast;
             easing: ease-in-out;

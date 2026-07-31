@@ -177,7 +177,10 @@ export component SettingsTabBar inherits Rectangle {
     property <bool> latched: false;
     out property <bool> compact:
         root.avail-width < root.expand-w + (root.latched ? root.hysteresis : 0px);
-    changed compact => { root.latched = root.compact; }
+    changed compact => {
+        root.latched = root.compact;
+        root.compact-t = root.compact ? 1.0 : 0.0;
+    }
 
     // The two sources — the only easing here beyond a cell's own hover fill and
     // icon colour.
@@ -200,9 +203,32 @@ export component SettingsTabBar inherits Rectangle {
     animate anim-index { duration: Theme.dur-med; easing: ease-in-out; }
 
     // `compact` stays an instant bool — it is the decision, and this is that
-    // decision rendered over time. That split is also what makes easing it
-    // safe while `avail-width` changes continuously under a resize drag: the
-    // source only ever sees a toggle, never the drag's micro-updates.
+    // decision rendered over time.
+    //
+    // The binding below is a *seed*; `changed compact` above owns the property
+    // from the first flip onward, and that split is the whole reason the morph
+    // plays at the same speed however slowly the window is dragged. Slint
+    // restarts an animated binding whenever a dependency is marked **dirty** —
+    // `AnimatedBindingCallable::mark_dirty` resets the start time and the next
+    // evaluation re-bases the from-value on the current frame, with no check
+    // that the value changed. `compact` reads `avail-width`, which a resize
+    // drag rewrites on every pointer motion, so left bound this curve was torn
+    // down and restarted every few milliseconds: the bar crawled toward its
+    // target at whatever rate the drag delivered events and stalled outright
+    // the moment the hand paused. Throwing the window in one fast motion hid it
+    // completely, which is what made it look like an easing problem.
+    //
+    // Writing the property routes through `set_animated_value`, which replaces
+    // that binding outright, so afterwards nothing but an actual flip can touch
+    // it. Keeping the binding as the seed is what leaves the mount alone: it is
+    // still live for the first evaluation, which lands in `NotAnimating` and
+    // takes the value straight through, so entering Settings already narrow
+    // draws compact rather than morphing into it. A constant plus a mount timer
+    // would animate there. `mini-player-switch.slint`'s `fade-opacity` is the
+    // same seed-then-own shape with a constant seed.
+    //
+    // The latch above earns its keep twice over now — each `changed compact` is
+    // a real restart, so a threshold that flapped would be visible.
     property <float> compact-t: root.compact ? 1.0 : 0.0;
     // M3's emphasized-decelerate. Inlined at 350ms rather than taking
     // `Theme.dur-spatial`: this one fires *under the user's hand* on a resize
