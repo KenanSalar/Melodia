@@ -336,7 +336,7 @@ dunce = "1.0.5"
 # paths (libappindicator / X11 `xdotool`), and Linux uses `ksni` instead.
 # The tray icon is created on the UI/main thread and its menu events are
 # pumped from the winit event loop Slint owns. See `src/services/tray/`.
-tray-icon = { version = "0.24.1", default-features = false }
+tray-icon = { version = "0.24.2", default-features = false }
 
 # Windows-only: embed an `ICON` resource into the Melodia.exe binary so the
 # OS taskbar, titlebar, Alt-Tab thumbnail, and Explorer entry all render the

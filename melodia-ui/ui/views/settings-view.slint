@@ -48,6 +48,34 @@ export component SettingsView inherits Rectangle {
     property <length> page-w: 900px;
     changed width => { self.page-w = self.width; }
 
+    // What the header row has to divide up: the page less its own padding.
+    property <length> header-w: root.page-w - 2 * Theme.pad-lg;
+
+    // `SearchBar`'s own resting width, restated because this page drives the
+    // property rather than taking its default.
+    property <length> search-w-max: 220px;
+    // The floor, and it is a budget rather than a taste call. Settings only
+    // exists above the 550 px miniplayer cutover, so the narrowest panel it can
+    // be asked to draw in is that minus the sidebar at its own 105 px floor and
+    // the shell's 4 px right margin — call it 440 px, less this page's 2×16 px
+    // padding. The header has to seat `compact-w` (240) + two 12 px gaps inside
+    // what's left, which leaves the input about 145 px. Anything under that
+    // still merely eats into the page padding before the panel clips it, but
+    // the point is not to get there.
+    property <length> search-w-min: 140px;
+
+    // The filter yields room before the tabs do. They share a row now, and the
+    // tabs are navigation where the search only refines what a tab already
+    // shows — so a short row narrows the input and leaves all five targets
+    // standing. Reserved against `bar.compact-w`, the bar's own floor, so the
+    // two can't drift: whatever this leaves behind is exactly what the bar will
+    // shrink to, and the row's minimum is the sum rather than a guess. (A
+    // forward reference to an element declared below is fine — ids scope to the
+    // whole component, the same way the bar's own ruler is read.)
+    property <length> search-w: clamp(
+        root.header-w - bar.compact-w - 2 * Theme.pad-md,
+        root.search-w-min, root.search-w-max);
+
     // A fresh tab, or entering/leaving search, starts at the top. Without
     // this, switching from a tall tab to a short one leaves the viewport
     // parked past the new content. Mirrored into locals because Slint's
@@ -64,63 +92,71 @@ export component SettingsView inherits Rectangle {
         padding-bottom: Theme.pad-lg;
         padding-left: Theme.pad-lg;
         padding-right: Theme.pad-lg;
-        spacing: Theme.pad-md;
+        // Only two children — the header row and the scroll body — so this is
+        // the header's clearance, not a generic gutter. Well clear of the gaps
+        // *inside* the header row, so the tab bar reads as the page's lid
+        // rather than as the first card's top edge — flush under the divider
+        // the two looked joined.
+        spacing: 2 * Theme.pad-lg;
 
-        // Page header — title on the left, search bar flush right, tab bar
-        // on the row below. All of it lives outside the inner ScrollView so
-        // it stays pinned while the body scrolls. The SearchBar is the same
-        // reusable component the Tracks view mounts; visibility filtering
-        // for each section is driven reactively from
+        // Page header — the tab bar on the left, where the page title used to
+        // sit, and the search bar flush right. Both live outside the inner
+        // ScrollView so they stay pinned while the body scrolls. The SearchBar
+        // is the same reusable component the Tracks view mounts; visibility
+        // filtering for each section is driven reactively from
         // `SettingsPage.search-query` (no `edited` callback needed, unlike
         // Tracks which throttles model rebuilds).
+        //
+        // The title is gone rather than moved. Every other page keeps one, but
+        // no other page's heading sat directly above five tabs reading Library
+        // / Playback / Interface / Services / About — those name the page
+        // better than the word over them did, and the sidebar item and window
+        // title still carry it. Reclaiming the row is what lets the bar sit at
+        // the top of the page instead of pushing the body down.
+        //
+        // Flush left, not centred: it shares this row now, so there is no axis
+        // left to share with the body's centred 640–1100 px card column.
+        //
+        // The bar decides for itself when to go icon-only by measuring the
+        // labels it was handed; all it wants from here is how much room it has.
+        // Sharing the row is what makes that interesting — it is no longer the
+        // whole page, but the page less its padding, the two gaps, and whatever
+        // the input is taking. The label array must stay an inline literal so
+        // `@tr` registers the msgids at codegen, and its order has to match the
+        // `tab-*` indices on `SettingsPage`. It stays mounted while a search is
+        // running — hiding it would shift the body on the first keystroke, and
+        // leaving it live gives the user an obvious way out of search: picking
+        // a tab clears the query.
         HorizontalLayout {
             spacing: Theme.pad-md;
-            Text {
-                text: @tr("Settings");
-                color: Theme.page-title-color;
-                font-size: Theme.page-title-size;
-                font-weight: Theme.page-title-weight;
-                horizontal-stretch: 1;
-                vertical-alignment: center;
-            }
-            VerticalLayout {
-                alignment: center;
-                SearchBar {
-                    text <=> SettingsPage.search-query;
-                    placeholder: @tr("Search settings…");
-                    blur-trigger: SettingsPage.blur-search-tick;
-                }
-            }
-        }
 
-        // Tab bar. Stays mounted while a search is running — hiding it would
-        // shift the body on the first keystroke, and leaving it live gives
-        // the user an obvious way out of search: picking a tab clears the
-        // query. The label array must stay an inline literal so `@tr`
-        // registers the msgids at codegen, and its order has to match the
-        // `tab-*` indices on `SettingsPage`.
-        // Centred rather than flush-left with the page title: the body below
-        // is a centred 640–1100 px column, so a centred bar shares its axis
-        // and the two read as one stack. (The title and search bar stay full
-        // width — they're page chrome, not part of the column.)
-        //
-        // The bar decides for itself when to go icon-only, by measuring the
-        // labels it was handed; all it wants from here is how much room it
-        // has. That's the page less its own padding — and it's the *content
-        // panel*, not the window, since the panel is the window less the
-        // sidebar and the shell's chrome.
-        HorizontalLayout {
-            alignment: center;
             bar := SettingsTabBar {
                 labels: [@tr("Library"), @tr("Playback"), @tr("Interface"),
                          @tr("Services"), @tr("About")];
                 icons: ["library_music", "play_circle", "palette", "link", "info"];
-                avail-width: root.page-w - 2 * Theme.pad-lg;
+                avail-width: root.header-w - root.search-w - 2 * Theme.pad-md;
                 selected-index <=> SettingsPage.tab-idx;
                 selected(i) => {
                     SettingsPage.search-query = "";
                     SettingsPage.blur-search-tick += 1;
                     SettingsPage.tab-changed(i);
+                }
+            }
+
+            Rectangle { horizontal-stretch: 1; }
+
+            // Padded to the same band the bar keeps clear for its divider and
+            // underline, so the input centres on the tab labels' line rather
+            // than on the row's — the bar is 48 px tall but its content sits in
+            // the top 40.
+            VerticalLayout {
+                alignment: center;
+                padding-bottom: Theme.pad-sm;
+                SearchBar {
+                    input-width: root.search-w;
+                    text <=> SettingsPage.search-query;
+                    placeholder: @tr("Search settings…");
+                    blur-trigger: SettingsPage.blur-search-tick;
                 }
             }
         }

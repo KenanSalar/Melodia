@@ -14,15 +14,31 @@ component SettingsTab inherits Rectangle {
     in property <string> label;
     in property <string> icon;
     in property <bool>   selected;
-    // Icon-only mode. The label is dropped rather than elided so five tabs
-    // still fit once the bar runs out of room.
-    in property <bool>   compact;
+    // How far into icon-only mode this cell is — 0 expanded, 1 compact. A
+    // scalar rather than a bool so the label can close onto its icon instead
+    // of vanishing between two frames; the bar eases it and everything below
+    // derives from it.
+    in property <float>  compact-t;
 
     callback clicked();
     // Hover in/out, so the bar can track which tab a compact-mode tooltip
     // belongs to. Mirrored into a local property because `changed` won't take
     // `touch.has-hover` directly.
     callback hover-changed(bool);
+
+    // The inverse, named once because four bindings below want it.
+    property <float> open: 1.0 - root.compact-t;
+    // The label at full size, measured off the Text the cell actually draws,
+    // so the shape measured and the shape drawn can't drift. `preferred-width`
+    // on a no-wrap Text is intrinsic to the string and the font — it doesn't
+    // read back the width it's handed — so the slot sizing itself from it is a
+    // derivation, not a cycle. `tooltip.slint` sizes its pill the same way.
+    property <length> label-w: lbl.preferred-width;
+    // Faded out by the time the slot is half closed, so the clip never shows a
+    // half-eaten word. Biased off the same source rather than given an
+    // `animate` of its own, which would phase-lag it.
+    property <float> label-alpha: clamp(1.0 - root.compact-t * 2.0, 0.0, 1.0);
+    property <brush> label-color: root.selected ? Theme.accent : Theme.text;
 
     horizontal-stretch: 0;
 
@@ -36,10 +52,13 @@ component SettingsTab inherits Rectangle {
     border-radius: Theme.radius-md;
     animate background { duration: Theme.dur-fast; easing: ease-in-out; }
 
+    // Padding and spacing close along with the label rather than switching, so
+    // the centred row collapses to just the icon — and the icon glides to the
+    // middle of the cell without any positioning arithmetic of its own.
     HorizontalLayout {
-        padding-left: root.compact ? 0px : Theme.pad-md;
-        padding-right: root.compact ? 0px : Theme.pad-md;
-        spacing: Theme.pad-sm;
+        padding-left: Theme.pad-md * root.open;
+        padding-right: Theme.pad-md * root.open;
+        spacing: Theme.pad-sm * root.open;
         alignment: center;
 
         VerticalLayout {
@@ -53,11 +72,22 @@ component SettingsTab inherits Rectangle {
             }
         }
 
-        if !root.compact: VerticalLayout {
-            alignment: center;
-            Text {
+        // Label slot. Always mounted — an `if` here is what made the compact
+        // flip a pop — and closed by shrinking its width to nothing. The clip
+        // is rectangular and borderless on purpose: that lowers to a scissor,
+        // where a rounded one would render the text to an offscreen layer and
+        // upscale it on HiDPI. Left-aligned inside, so the clip takes the
+        // label's tail first and it reads as the word sliding into the icon.
+        Rectangle {
+            clip: true;
+            horizontal-stretch: 0;
+            width: root.label-w * root.open;
+
+            lbl := Text {
                 text: root.label;
-                color: root.selected ? Theme.accent : Theme.text;
+                // Alpha on the brush rather than `opacity` on the element:
+                // `opacity` costs a layer, and there are five of these.
+                color: root.label-color.with-alpha(root.label-alpha);
                 font-size: Theme.font-size-md;
                 // One weight for both states. The bar sizes its cells off a
                 // *measured* maximum, so a heavier selected label could
@@ -65,6 +95,7 @@ component SettingsTab inherits Rectangle {
                 // would reflow the whole row. Colour carries it instead,
                 // which is what M3 does anyway.
                 font-weight: 500;
+                horizontal-alignment: left;
                 vertical-alignment: center;
             }
         }
@@ -120,35 +151,97 @@ export component SettingsTabBar inherits Rectangle {
     // Icon-only once five expanded cells no longer fit. Measured rather than
     // thresholded against a literal: the labels are translated, so the width
     // that matters is the running locale's, not the one someone sized a
-    // constant against. No flapping at the boundary either — `natural-tab-w`
+    // constant against. The threshold can't chase the flip either: `natural-tab-w`
     // comes off an always-expanded column, so it doesn't move when `compact`
-    // flips.
+    // flips, nor while the flip is playing out. Holding still under a jittering
+    // drag is a separate job, and it belongs to the latch below.
     property <length> natural-tab-w: measure.preferred-width;
-    out property <bool> compact:
-        root.avail-width < root.labels.length * root.natural-tab-w;
-    out property <length> tab-w: root.compact ? 48px : root.natural-tab-w;
+    // What's left of a cell once its label has closed: the 22 px glyph centred
+    // in the minimum touch target.
+    property <length> compact-tab-w: 48px;
+    // The narrowest the bar will ever draw. Published because a host sharing a
+    // row with it has to reserve this much before working out what's left for
+    // itself — and reserving against the bar's own number is what stops the two
+    // from drifting apart.
+    out property <length> compact-w: root.labels.length * root.compact-tab-w;
+    // The width below which the labels no longer fit.
+    property <length> expand-w: root.labels.length * root.natural-tab-w;
 
-    // Where the pill sits, and the one thing that eases.
+    // Going compact and coming back out are separated by a band. A slow resize
+    // drag delivers a stream of one-pixel widths and a hand jitters over the
+    // last of them, so a bare `avail-width < expand-w` flips on every one that
+    // straddles the line. That was invisible while the flip was instant; eased,
+    // the bar hunts. Only the *latch* is stateful — the threshold itself is
+    // re-derived from `expand-w` each time, so a locale switch still moves it.
+    property <length> hysteresis: 24px;
+    property <bool> latched: false;
+    out property <bool> compact:
+        root.avail-width < root.expand-w + (root.latched ? root.hysteresis : 0px);
+    changed compact => { root.latched = root.compact; }
+
+    // The two sources — the only easing here beyond a cell's own hover fill and
+    // icon colour.
     //
-    // Animate the index, not the geometry. `ind-x` and the pill's width both
-    // derive from `tab-w`, so easing them directly conflates two very different
-    // events: picking a tab, and the cells resizing under a compact flip. The
-    // second then reads as the pill flying in from the right on the way down
-    // and from the left on the way back up, because its left edge and right
-    // edge travel different distances. Easing the source leaves a resize
-    // instant — the pill lands under its tab in the same frame the cells do —
-    // and still slides on a pick, which is the only motion that means
-    // anything.
+    // Everything here that has a position or a size derives from them
+    // unanimated: the cells, the bar's own width, the pill, both divider
+    // segments, and the tooltip rect the host builds out of `tab-w`. Easing a
+    // *derived* geometry instead would phase-lag it, and easing `ind-x` or the
+    // pill's width in particular used to be wrong for a second reason — both
+    // read `tab-w`, so one `animate` on them conflated picking a tab with the
+    // cells resizing under a compact flip, and the pill flew in from one side
+    // because its two edges travel different distances.
+    //
+    // Splitting the two events into sources of their own is what settles that.
+    // Cell `i`'s left edge is `i * tab-w` and the pill's is
+    // `anim-index * tab-w`, so both read the same easing `tab-w` and the pill
+    // sits under its tab in every frame of the morph instead of chasing a
+    // resize that already happened.
     property <float> anim-index: root.selected-index;
     animate anim-index { duration: Theme.dur-med; easing: ease-in-out; }
+
+    // `compact` stays an instant bool — it is the decision, and this is that
+    // decision rendered over time. That split is also what makes easing it
+    // safe while `avail-width` changes continuously under a resize drag: the
+    // source only ever sees a toggle, never the drag's micro-updates.
+    property <float> compact-t: root.compact ? 1.0 : 0.0;
+    // M3's emphasized-decelerate. Inlined at 350ms rather than taking
+    // `Theme.dur-spatial`: this one fires *under the user's hand* on a resize
+    // drag, where the spatial token's 400ms tail reads as the bar lagging the
+    // window rather than as a gesture. Both y control points sit inside [0, 1],
+    // so `compact-t` can't overshoot and no width derived from it can go
+    // negative; a back-out curve here would need clamping.
+    animate compact-t { duration: 350ms; easing: cubic-bezier(0.2, 0, 0, 1); }
+
+    out property <length> tab-w:
+        root.natural-tab-w + (root.compact-tab-w - root.natural-tab-w) * root.compact-t;
     property <length> ind-x: root.tab-w * root.anim-index;
 
-    // No `clip` — a rounded clip over text renders the subtree to an offscreen
-    // layer and upscales it on HiDPI. The pill is the only rounded thing here
-    // and it is childless, so it costs no layer and nothing needs clipping.
+    // No `clip` at this level — a rounded clip over text renders the subtree to
+    // an offscreen layer and upscales it on HiDPI. The pill is the only rounded
+    // thing here and it is childless, so it costs no layer and nothing at this
+    // level needs clipping. The cells do clip their label slots, but
+    // rectangularly, which is a scissor rather than a layer.
     height: 48px;
     horizontal-stretch: 0;
-    width: root.labels.length * root.tab-w;
+
+    // Three constraints rather than one bound `width`, because the floor has to
+    // stay at the *compact* width even while the bar is drawn expanded. Slint
+    // reports a component root's bound `width` as both `min` and `max` (and
+    // rejects a `min-width` beside it outright), so a bound `width` here puts
+    // the bar's minimum on `tab-w` — and that minimum climbs the header row
+    // into the page and out to the window itself, so the whole window's minimum
+    // width would ease along with the morph. Dragging the edge inward then
+    // chases a wall that is still moving, which stutters. Worse, the bar was
+    // routinely the constraint stopping the window from reaching the very width
+    // its own threshold was waiting for, so whether the flip tripped at all came
+    // down to whether the title and search row happened to be wider.
+    //
+    // `preferred` still tracks the animated cells, so a centring host draws the
+    // bar exactly as a bound `width` did, and `max` keeps the upper half of what
+    // that meant — the bar still can't stretch.
+    min-width: root.compact-w;
+    preferred-width: root.labels.length * root.tab-w;
+    max-width: root.labels.length * root.tab-w;
 
     // The ruler. Real `SettingsTab`s rather than a stripped-down copy, so the
     // shape being measured and the shape being drawn cannot drift — they are
@@ -160,7 +253,7 @@ export component SettingsTabBar inherits Rectangle {
         for tab-label[i] in root.labels: SettingsTab {
             label: tab-label;
             icon: root.icons[i];
-            compact: false;
+            compact-t: 0.0;
         }
     }
 
@@ -177,7 +270,7 @@ export component SettingsTabBar inherits Rectangle {
             label: tab-label;
             icon: root.icons[i];
             selected: i == root.selected-index;
-            compact: root.compact;
+            compact-t: root.compact-t;
             clicked => {
                 root.selected-index = i;
                 root.selected(i);
