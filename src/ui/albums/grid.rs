@@ -189,10 +189,8 @@ fn sort_album_indices(indices: &mut [usize], data: &GridData, field: &str, dir: 
 /// `fetch_grid` and `AlbumsUi::prewarm_visible_covers`.
 pub(super) fn first_screenful_paths(data: &GridData) -> Vec<PathBuf> {
     crate::ui::grid_prewarm::unique_artwork_paths(
-        data.albums
-            .iter()
-            .take(GRID_PREWARM_AHEAD)
-            .map(|a| a.artwork_path.as_deref()),
+        data.albums.iter().map(|a| a.artwork_path.as_deref()),
+        GRID_PREWARM_AHEAD,
     )
 }
 

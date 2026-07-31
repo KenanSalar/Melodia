@@ -55,7 +55,7 @@ component UpNextRow inherits Rectangle {
                 alignment: center;
                 ArtworkImage {
                     artwork-path: root.data.artwork_path;
-                    cover: root.data.cover_img;
+                    cover: NowPlaying.request-cover(root.data.artwork_path);
                     tile-size: compact ? 34px : 38px;
                     tile-radius: Theme.radius-md;
                 }

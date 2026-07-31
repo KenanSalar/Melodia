@@ -331,7 +331,8 @@ export component QueueRowItem inherits Rectangle {
                     alignment: center;
                     ArtworkImage {
                         artwork-path: root.row-data.artwork_path;
-                        cover: root.row-data.cover_img;
+                        cover: Queue.request-cover(root.row-data.artwork_path,
+                                                   Queue.covers-generation);
                         tile-size: 36px;
                         tile-radius: Theme.radius-sm;
                     }

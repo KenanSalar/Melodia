@@ -291,7 +291,11 @@ export struct QueueRow {
     title: string,
     artist: string,
     artwork_path: string,
-    cover_img: image,
+    // No decoded `cover_img` field: the cover is pulled lazily per visible
+    // row via `Queue.request-cover`, the `RowCovers` contract the track
+    // lists and entity grids already use. It matters more here than
+    // anywhere else — activating a row queues the whole view, so an eager
+    // cover meant one cache lookup per library track on every queue emit.
     // Pre-formatted "mm:ss" / "h:mm:ss" string — same format as
     // `TrackListRow.display_duration` for consistency. Computed on the
     // Rust side via `crate::ui::tracks::format_duration_ms`.

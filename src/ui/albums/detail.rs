@@ -46,6 +46,7 @@ async fn fetch_album_detail(
     // `refresh_detail`) decodes that pair into the `detail_artwork` LRU.
     let track_covers: Vec<PathBuf> = crate::ui::grid_prewarm::unique_artwork_paths(
         tracks.iter().map(|t| t.artwork_path.as_deref()),
+        albums_ui.cover_thumbs.capacity(),
     );
     if !track_covers.is_empty() {
         let row_thumbs = albums_ui.cover_thumbs.clone();

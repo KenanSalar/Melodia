@@ -7,11 +7,10 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use async_compat::Compat;
 use parking_lot::Mutex;
-use slint::{ComponentHandle, Image, Model, VecModel, Weak};
+use slint::{ComponentHandle, Model, VecModel, Weak};
 
 use super::ShadowEntry;
 use crate::entities::track::TrackSummary;
-use crate::media::cover_thumbs::CoverThumbs;
 use crate::player::state::QueueViewModel;
 use crate::state::AppState;
 use crate::ui::tracks::format_duration_ms;
@@ -23,7 +22,6 @@ use crate::{AppWindow, Queue, QueueRow};
 pub(super) fn spawn_queue_rows_subscriber(
     ui: &AppWindow,
     state: &AppState,
-    queue_covers: Arc<CoverThumbs>,
     queue_model: Rc<VecModel<QueueRow>>,
     shadow: Arc<Mutex<Vec<ShadowEntry>>>,
     is_open: Arc<AtomicBool>,
@@ -38,17 +36,15 @@ pub(super) fn spawn_queue_rows_subscriber(
             let snapshot = rx.borrow_and_update().clone();
             // Gated on the sheet being on screen: while it's closed,
             // nobody sees the rows and the model + cover cache have been
-            // released — rebuilding would just re-decode covers for an
-            // off-screen overlay. The next `on_open_changed(true)` does a
-            // fresh rebuild from `PlayerState`.
+            // released, so rebuilding would churn a model nothing reads.
+            // The next `on_open_changed(true)` does a fresh rebuild from
+            // `PlayerState`.
             if !is_open.load(Ordering::Relaxed) {
                 continue;
             }
             let Some(ui) = weak.upgrade() else { break };
             let Some(qvm) = snapshot else { continue };
-            rebuild_rows(&ui, &queue_model, &shadow, &qvm, |p| {
-                queue_covers.get_or_load_opt(p)
-            });
+            rebuild_rows(&ui, &queue_model, &shadow, &qvm);
         }
         log::debug!("ui::queue_sheet rows subscriber stopped");
     }))?;
@@ -66,16 +62,14 @@ pub(super) fn spawn_queue_rows_subscriber(
 /// `downcast_ref` rather than carrying an `Rc` across the await) can
 /// share this entry point with the watch subscriber.
 ///
-/// `img_for` decides where each row's cover comes from — the open
-/// path's *skeleton* pass passes a cache-only lookup so rows render
-/// synchronously without blocking the slide-up animation on decode;
-/// every other caller passes `get_or_load_opt` which decodes on miss.
+/// Covers aren't touched here — each row resolves its own through
+/// `Queue.request-cover` when it's actually on screen, which is what
+/// keeps this cheap on a queue the size of the library.
 pub(super) fn rebuild_rows(
     ui: &AppWindow,
     queue_model: &VecModel<QueueRow>,
     shadow: &Arc<Mutex<Vec<ShadowEntry>>>,
     qvm: &QueueViewModel,
-    img_for: impl Fn(Option<&str>) -> Image,
 ) {
     // Snapshot the old selection bits into a map so the per-row lookup
     // below is O(1) — a linear `.find()` per row made this O(n²) overall,
@@ -106,8 +100,7 @@ pub(super) fn rebuild_rows(
             id: t.id,
             selected,
         });
-        let cover_img = img_for(t.artwork_path.as_deref());
-        new_rows.push(to_slint_queue_row(t.as_ref(), cover_img, selected));
+        new_rows.push(to_slint_queue_row(t.as_ref(), selected));
     }
 
     crate::ui::model_diff::apply_rows_keyed(queue_model, new_rows, |r| r.id);
@@ -150,21 +143,19 @@ pub(crate) fn apply_row_favorite(weak: &Weak<AppWindow>, id: i64, fav: bool) {
     });
 }
 
-/// Build a `QueueRow` from a `TrackSummary` plus an already-resolved
-/// cover image. `pub(crate)` because the full-screen Now Playing view's
-/// "Up Next" list (`ui::now_playing`) reuses the exact same row shape —
-/// it always passes `selected: false`. Callers compute `cover_img`
-/// themselves so the queue sheet's two-phase render (cache-only
-/// skeleton, then warmed rebuild) can swap the lookup policy without
-/// duplicating the row-shape mapping.
-pub(crate) fn to_slint_queue_row(t: &TrackSummary, cover_img: Image, selected: bool) -> QueueRow {
+/// Build a `QueueRow` from a `TrackSummary`. `pub(crate)` because the
+/// full-screen Now Playing view's "Up Next" list (`ui::now_playing`)
+/// reuses the exact same row shape — it always passes `selected: false`.
+/// The row carries no cover; each surface resolves its own through its
+/// `request-cover` callback, which is what lets the two share this
+/// mapping while reading different `CoverThumbs` tiers.
+pub(crate) fn to_slint_queue_row(t: &TrackSummary, selected: bool) -> QueueRow {
     let display_duration = format_duration_ms(t.duration_ms.max(0));
     QueueRow {
         id: i32::try_from(t.id).unwrap_or(i32::MAX),
         title: t.title.as_str().into(),
         artist: t.artist.as_deref().unwrap_or("").into(),
         artwork_path: t.artwork_path.as_deref().unwrap_or("").into(),
-        cover_img,
         display_duration: display_duration.into(),
         selected,
         is_favorite: t.is_favorite,

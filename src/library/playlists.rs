@@ -101,11 +101,22 @@ pub async fn reorder_playlist(
     queries::playlist::reorder_playlist_track(&state.db, playlist_id, from, to).await
 }
 
+/// How many distinct covers the Edit-Artwork mosaic picker offers.
+///
+/// The picker's grid is a plain repeater, not a virtualized list, so each
+/// candidate is a live tile with its own decoded cover — a playlist
+/// spanning hundreds of albums would otherwise mount hundreds of them
+/// into a 160 px window and thrash the cover LRU. The user picks at most
+/// four, and the window shows about a dozen at a time, so this is far
+/// more scrolling than the choice needs.
+pub const MOSAIC_CANDIDATE_LIMIT: i64 = 60;
+
 pub async fn get_playlist_artwork_paths(
     state: &AppState,
     playlist_id: i64,
 ) -> Result<Vec<String>, AppError> {
-    queries::playlist::get_playlist_artwork_paths(&state.db, playlist_id).await
+    queries::playlist::get_playlist_artwork_paths(&state.db, playlist_id, MOSAIC_CANDIDATE_LIMIT)
+        .await
 }
 
 pub fn cache_external_images(

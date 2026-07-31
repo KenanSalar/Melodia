@@ -75,6 +75,20 @@ export global Queue {
     // `[patch.crates-io]` block.)
     in property <bool> is-drop-hovered: false;
 
+    // Lazy row cover — the `RowCovers` contract, against the sheet's own
+    // cover tier so closing it still releases every decoded buffer.
+    //
+    // `generation` is not part of the lookup. It's read so the binding
+    // depends on `covers-generation` below, because a `pure` callback's
+    // result is cached until one of its dependencies is dirtied. The other
+    // lazy-cover surfaces prewarm and await *before* they set their rows,
+    // so their first evaluation is already a cache hit; the sheet can't —
+    // its rows have to land synchronously for the slide-up to have text on
+    // frame one — so it warms the first screenful afterwards and bumps the
+    // generation to bring those covers in.
+    pure callback request-cover(/* artwork-path */ string, /* generation */ int) -> image;
+    in property <int> covers-generation: 0;
+
     // Reorder commit. Fires on pointer-up only if the drag passed the
     // 4 px click threshold. Rust dispatches to
     // `library::queue::queue_move(from, to)`.
@@ -120,6 +134,13 @@ export global NowPlaying {
     // track itself is excluded). Wrap-around slicing is done in Rust, not
     // in a Slint filtered `for`.
     in-out property <[QueueRow]> up-next-rows;
+
+    // Lazy row cover, the `RowCovers` contract again — `QueueRow` carries
+    // no decoded image, and this list is virtualized, so only the rows on
+    // screen decode. It needs no generation counter (unlike `Queue`'s):
+    // nothing warms this tier behind the list's back, so the first
+    // evaluation is also the only one that has to be right.
+    pure callback request-cover(/* artwork-path */ string) -> image;
 
     // Play-order index of `up-next-rows[0]` — i.e. current queue index + 1.
     in property <int> base-index: 0;

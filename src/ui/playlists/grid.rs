@@ -270,10 +270,8 @@ fn sort_playlist_indices(indices: &mut [usize], data: &GridData, field: &str, di
 
 pub(super) fn first_screenful_paths(data: &GridData) -> Vec<PathBuf> {
     crate::ui::grid_prewarm::unique_artwork_paths(
-        data.playlists
-            .iter()
-            .take(GRID_PREWARM_AHEAD)
-            .map(|p| p.thumbnail_path.as_deref()),
+        data.playlists.iter().map(|p| p.thumbnail_path.as_deref()),
+        GRID_PREWARM_AHEAD,
     )
 }
 

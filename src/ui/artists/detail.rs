@@ -49,6 +49,7 @@ async fn fetch_artist_detail(
 
     let track_covers: Vec<PathBuf> = crate::ui::grid_prewarm::unique_artwork_paths(
         tracks.iter().map(|t| t.artwork_path.as_deref()),
+        artists_ui.cover_thumbs.capacity(),
     );
     // The Albums strip resolves its cards through the borrowed Albums
     // grid tier (`request-album-cover` → `AlbumsUi::grid_cover`,
@@ -57,6 +58,7 @@ async fn fetch_artist_detail(
     // the UI for one full-res decode per album card at first paint.
     let strip_covers: Vec<PathBuf> = crate::ui::grid_prewarm::unique_artwork_paths(
         albums.iter().map(|a| a.artwork_path.as_deref()),
+        artists_ui.albums_grid_covers.capacity(),
     );
     if !track_covers.is_empty() || !strip_covers.is_empty() {
         let row_thumbs = artists_ui.cover_thumbs.clone();

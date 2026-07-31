@@ -484,10 +484,30 @@ export component SearchView inherits Rectangle {
                                 vertical-stretch: 0;
                                 // Size to row count so the outer
                                 // ScrollView drives both strips +
-                                // tracklist together (same trade-off
-                                // as favorites-view). `max(1, …)`
-                                // keeps the column header rendering
-                                // when zero rows are visible.
+                                // tracklist together. `max(1, …)` keeps
+                                // the column header rendering when zero
+                                // rows are visible.
+                                //
+                                // Uncapped, unlike the four composite
+                                // views (Favorites, Recently Played,
+                                // Artist Detail, Browse), which pin this
+                                // to `below-sv.visible-height` so their
+                                // inner ListView keeps virtualizing.
+                                // Here the *backend* is the cap — search
+                                // returns at most 50 rows (`LIMIT 50` in
+                                // `queries::search`), sliced to
+                                // `COMPACT_TRACK_LIMIT` until the user
+                                // expands — so instantiating them all is
+                                // affordable, and it buys back native
+                                // wheel scrolling: a capped list gains
+                                // inner travel, and a nested ListView
+                                // swallows the wheel at its scroll edge
+                                // rather than bubbling, which is why
+                                // those four need `CompositeScrollbars`
+                                // plus a `CompositeScroll.reset()`
+                                // mirror and this view needs neither.
+                                // Raising that SQL limit is what would
+                                // make the trade wrong.
                                 height: max(1, Search.tracks.length)
                                     * (Search.show-artwork
                                         ? Theme.row-h

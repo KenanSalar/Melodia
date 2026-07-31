@@ -9,7 +9,6 @@ use slint::{ComponentHandle, VecModel};
 
 use super::track_change::apply_track_change;
 use super::{NowPlayingState, UP_NEXT_N, current_track_id};
-use crate::media::cover_thumbs::CoverThumbs;
 use crate::player::state::QueueViewModel;
 use crate::state::AppState;
 use crate::ui::now_playing_artwork::NowPlayingArtwork;
@@ -25,7 +24,6 @@ use crate::{AppWindow, Nav, NowPlaying, QueueRow};
 pub(super) fn spawn_up_next_subscriber(
     ui: &AppWindow,
     state: &AppState,
-    cover_thumbs: Arc<CoverThumbs>,
     up_next_model: Rc<VecModel<QueueRow>>,
     np_state: Rc<NowPlayingState>,
 ) -> Result<(), slint::EventLoopError> {
@@ -67,7 +65,7 @@ pub(super) fn spawn_up_next_subscriber(
                 Vec::new()
             };
             if ids_changed || track_changed {
-                let ids = rebuild_up_next(&ui, &cover_thumbs, &up_next_model, &qvm);
+                let ids = rebuild_up_next(&ui, &up_next_model, &qvm);
                 *np_state.rendered_ids.borrow_mut() = ids;
             }
             if track_changed {
@@ -82,8 +80,7 @@ pub(super) fn spawn_up_next_subscriber(
                     .last()
                     .copied()
                     .filter(|id| !np_state.rendered_ids.borrow().contains(id));
-                let outgoing_row =
-                    outgoing_row(kind, &qvm, current_id, dropped_tail_id, &cover_thumbs);
+                let outgoing_row = outgoing_row(kind, &qvm, current_id, dropped_tail_id);
 
                 np_state.last_current_id.set(current_id);
                 np_state.last_queue_index.set(qvm.queue_index);
@@ -122,13 +119,12 @@ pub(super) fn spawn_up_next_subscriber(
 /// a phantom animation for changes that happened while closed.
 pub(super) fn seed_from_stash(
     ui: &AppWindow,
-    cover_thumbs: &CoverThumbs,
     up_next_model: &Rc<VecModel<QueueRow>>,
     np_state: &NowPlayingState,
 ) {
     let latest_qvm = np_state.latest_qvm.borrow().clone();
     let Some(qvm) = latest_qvm else { return };
-    let ids = rebuild_up_next(ui, cover_thumbs, up_next_model, &qvm);
+    let ids = rebuild_up_next(ui, up_next_model, &qvm);
     *np_state.rendered_ids.borrow_mut() = ids;
     np_state.last_current_id.set(current_track_id(&qvm));
     np_state.last_queue_index.set(qvm.queue_index);
@@ -140,7 +136,6 @@ pub(super) fn seed_from_stash(
 pub(super) fn wire_now_playing_open(
     ui: &AppWindow,
     state: &AppState,
-    cover_thumbs: Arc<CoverThumbs>,
     np_artwork: Arc<NowPlayingArtwork>,
     up_next_model: Rc<VecModel<QueueRow>>,
     np_state: Rc<NowPlayingState>,
@@ -166,7 +161,7 @@ pub(super) fn wire_now_playing_open(
         let Some(ui) = weak.upgrade() else { return };
 
         // Up Next: rebuild from the latest snapshot stashed while closed.
-        seed_from_stash(&ui, &cover_thumbs, &up_next_model, &np_state);
+        seed_from_stash(&ui, &up_next_model, &np_state);
 
         // Artwork + chips: seed for the current track, but only if it
         // differs from whatever is already written into the `Player`
@@ -245,7 +240,6 @@ fn outgoing_row(
     qvm: &QueueViewModel,
     current_id: Option<i64>,
     dropped_tail_id: Option<i64>,
-    cover_thumbs: &CoverThumbs,
 ) -> Option<QueueRow> {
     let id = match kind {
         SlideKind::Forward => current_id?,
@@ -253,8 +247,7 @@ fn outgoing_row(
         SlideKind::Other => return None,
     };
     let track = qvm.queue_tracks.iter().find(|t| t.id == id)?;
-    let cover = cover_thumbs.get_or_load_opt(track.artwork_path.as_deref());
-    Some(to_slint_queue_row(track.as_ref(), cover, false))
+    Some(to_slint_queue_row(track.as_ref(), false))
 }
 
 /// Play-order indices of the next `UP_NEXT_N` tracks after the current
@@ -292,7 +285,6 @@ fn upcoming_id_slice(qvm: &QueueViewModel) -> Vec<i64> {
 /// `NowPlayingState::rendered_ids` shadow.
 pub(super) fn rebuild_up_next(
     ui: &AppWindow,
-    cover_thumbs: &CoverThumbs,
     up_next_model: &Rc<VecModel<QueueRow>>,
     qvm: &QueueViewModel,
 ) -> Vec<i64> {
@@ -302,8 +294,7 @@ pub(super) fn rebuild_up_next(
     for &i in &indices {
         let t = qvm.queue_tracks[i].as_ref();
         ids.push(t.id);
-        let cover_img = cover_thumbs.get_or_load_opt(t.artwork_path.as_deref());
-        upcoming.push(to_slint_queue_row(t, cover_img, false));
+        upcoming.push(to_slint_queue_row(t, false));
     }
 
     crate::ui::model_diff::apply_rows_keyed(up_next_model, upcoming, |r| r.id);

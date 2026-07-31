@@ -59,6 +59,17 @@ pub fn install(
     // Tracks / Browse views and the now-playing bar still need).
     let queue_covers = Arc::new(CoverThumbs::new());
 
+    // Lazy row covers, wired once — the `boot::ui_setup` `RowCovers` shape,
+    // against this sheet's private tier. The `generation` argument only
+    // exists to give the row binding something to re-run on; see the
+    // callback's declaration in `globals/queue.slint`.
+    {
+        let covers = queue_covers.clone();
+        ui.global::<Queue>().on_request_cover(move |path, _generation| {
+            covers.get_or_load_opt(Some(path.as_str()).filter(|s| !s.is_empty()))
+        });
+    }
+
     callbacks::wire_callbacks(
         ui,
         state,
@@ -68,14 +79,7 @@ pub fn install(
         &anchor,
         &is_open,
     );
-    rows::spawn_queue_rows_subscriber(
-        ui,
-        state,
-        queue_covers,
-        queue_model,
-        shadow,
-        is_open.clone(),
-    )?;
+    rows::spawn_queue_rows_subscriber(ui, state, queue_model, shadow, is_open.clone())?;
 
     // No install-time seed: the sheet is closed at startup, so the
     // subscriber is gated and the model stays empty (no covers decoded
