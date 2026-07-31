@@ -1,11 +1,14 @@
 //! Chrome wiring for the Settings page — the search predicate its sections
-//! filter through, and the persistence for which tab is showing.
+//! filter through, the row split its wrapping strips lay themselves out on,
+//! and the persistence for which tab is showing.
 //!
 //! Distinct from the per-concern installers (`playback_settings`,
 //! `scrobbling_settings`, …), which wire the values the page *configures*.
 //! This module owns the page itself.
 
-use slint::ComponentHandle;
+use std::rc::Rc;
+
+use slint::{ComponentHandle, ModelRc, VecModel};
 
 use crate::library;
 use crate::state::AppState;
@@ -20,6 +23,31 @@ use crate::{AppWindow, SettingsPage};
 /// otherwise select a branch that mounts nothing and show a blank page.
 fn clamp_tab(tab: i32, tab_count: i32) -> i32 {
     tab.clamp(0, (tab_count - 1).max(0))
+}
+
+/// Split `0..count` into rows of at most `per_row`.
+///
+/// The wrapping chip and swatch strips need their items grouped into rows, and
+/// Slint can't build a nested array — so the split comes from here and the
+/// strip iterates the groups. Indices rather than the items themselves, so a
+/// chip still knows which option it is and can compare against the selection.
+///
+/// `per_row` is floored at 1: it is derived from a measured width, which is
+/// zero for the frame before the first layout reports one.
+fn chunk_indices(count: i32, per_row: i32) -> Vec<Vec<i32>> {
+    let count = count.max(0);
+    let per_row = per_row.max(1);
+
+    let row_count =
+        usize::try_from(count).unwrap_or(0).div_ceil(usize::try_from(per_row).unwrap_or(1));
+    let mut rows = Vec::with_capacity(row_count);
+    let mut start = 0;
+    while start < count {
+        let end = start.saturating_add(per_row).min(count);
+        rows.push((start..end).collect());
+        start = end;
+    }
+    rows
 }
 
 /// Seed the active tab from `views.json`. Call from
@@ -38,6 +66,15 @@ pub fn install(ui: &AppWindow, state: &AppState) {
     // Slint 1.16 has no `.contains()` on string, so every section's
     // row-visibility expression routes its substring test through here.
     page.on_matches(|haystack, needle| haystack.to_lowercase().contains(&needle.to_lowercase()));
+
+    // Row split for the wrapping chip / swatch strips — see `chunk_indices`.
+    page.on_chunk_indices(|count, per_row| {
+        let rows: Vec<ModelRc<i32>> = chunk_indices(count, per_row)
+            .into_iter()
+            .map(|row| ModelRc::from(Rc::new(VecModel::from(row))))
+            .collect();
+        ModelRc::from(Rc::new(VecModel::from(rows)))
+    });
 
     // The tab bar two-way binds `tab-idx`, so the UI is already showing the
     // new tab by the time this runs — the disk write is pure catch-up and a

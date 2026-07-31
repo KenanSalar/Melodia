@@ -1,4 +1,4 @@
-use super::clamp_tab;
+use super::{chunk_indices, clamp_tab};
 
 /// The tab count Slint declares today. Kept local so a change to
 /// `SettingsPage.tab-count` doesn't silently rewrite what these assert.
@@ -26,6 +26,28 @@ fn clamp_tab_pulls_out_of_range_back_in() {
 fn clamp_tab_survives_a_zero_tab_count() {
     assert_eq!(clamp_tab(0, 0), 0);
     assert_eq!(clamp_tab(7, 0), 0);
+}
+
+#[test]
+fn chunk_indices_fills_rows_left_to_right() {
+    assert_eq!(chunk_indices(7, 3), vec![vec![0, 1, 2], vec![3, 4, 5], vec![6]]);
+    assert_eq!(chunk_indices(6, 3), vec![vec![0, 1, 2], vec![3, 4, 5]]);
+    assert_eq!(chunk_indices(2, 5), vec![vec![0, 1]]);
+}
+
+#[test]
+fn chunk_indices_has_no_rows_for_nothing_to_place() {
+    assert!(chunk_indices(0, 4).is_empty());
+    assert!(chunk_indices(-3, 4).is_empty());
+}
+
+/// `per_row` comes from a measured width, which is zero for the frame before
+/// the first layout reports one — so it has to floor at one item per row
+/// rather than loop forever or divide by zero.
+#[test]
+fn chunk_indices_floors_a_degenerate_row_width_at_one() {
+    assert_eq!(chunk_indices(3, 0), vec![vec![0], vec![1], vec![2]]);
+    assert_eq!(chunk_indices(3, -1), vec![vec![0], vec![1], vec![2]]);
 }
 
 const GLOBAL: &str = include_str!("../../../melodia-ui/ui/globals/settings-page.slint");
@@ -190,6 +212,29 @@ fn the_page_width_seed_is_the_rows_floor() {
     );
 }
 
+/// A card grows with the panel until it reaches `SettingsPage.card-cap`, and
+/// only once *two* capped cards fit does a second column appear — so a card's
+/// width is monotonic and the flip resizes nothing. That holds only while the
+/// threshold is reserved against the cap itself. Spell it as its own literal
+/// and it can sit below the cap, at which point the column divides before ever
+/// reaching it: the cap is still in the source, still reads as the card's
+/// maximum, and is simply unreachable. What you see is a card that grows
+/// without limit and then halves, which looks like the cap was never applied.
+#[test]
+fn the_two_column_flip_reserves_two_full_cards() {
+    let threshold = VIEW
+        .split_once("property <bool> two-col:")
+        .and_then(|(_, rest)| rest.split_once(';'))
+        .map(|(value, _)| value)
+        .unwrap_or_default();
+
+    assert!(
+        threshold.contains("2 * SettingsPage.card-cap"),
+        "settings-view.slint must reserve the two-column flip against two full \
+         `SettingsPage.card-cap` columns, not against a literal of its own: {threshold:?}"
+    );
+}
+
 /// The tab's own name is part of every card's search term, and the page that
 /// mounts the card is what supplies it. Omit `tab-name:` on a mount and the
 /// section falls back to an empty string: it still matches its own title, so
@@ -213,6 +258,38 @@ fn every_mounted_section_carries_its_tab_name() {
                 mount.contains("tab-name:"),
                 "{page}.slint mounts a section without `tab-name:`, so it can't be found by \
                  searching for its tab: {mount}"
+            );
+        }
+    }
+}
+
+/// Every `SettingsPage.<name>(N)` index in `src`, in source order.
+fn grid_indices(src: &str, name: &str) -> Vec<usize> {
+    let marker = format!("SettingsPage.{name}(");
+    src.match_indices(&marker)
+        .filter_map(|(at, _)| src[at + marker.len()..].split_once(')'))
+        .filter_map(|(digits, _)| digits.trim().parse().ok())
+        .collect()
+}
+
+/// A card places itself in the body grid by its position in the page file, and
+/// the position is a hand-written literal. Repeat one and two cards land in the
+/// same cell — Slint stacks them, so the page loses a card with nothing in the
+/// build to say so, and only in the two-column layout. Skip one and the grid
+/// grows a hole. Pinned here because both failures are invisible at the width
+/// most of the development happens at.
+#[test]
+fn every_card_takes_its_own_cell() {
+    for (page, src) in PAGES {
+        let cards = src.lines().filter(|line| line.contains("Section {")).count();
+        let expected: Vec<usize> = (0..cards).collect();
+
+        for name in ["grid-row", "grid-col"] {
+            assert_eq!(
+                grid_indices(src, name),
+                expected,
+                "{page}.slint must pass `{name}(0)`..`{name}({})` once each, in mount order",
+                cards.saturating_sub(1)
             );
         }
     }

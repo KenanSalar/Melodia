@@ -1,4 +1,5 @@
 import { Theme } from "../../../theme.slint";
+import { SettingsPage } from "../../../globals/settings-page.slint";
 import { LibrarySection } from "../library-section.slint";
 import { FileWatchingSection } from "../file-watching-section.slint";
 
@@ -9,6 +10,12 @@ import { FileWatchingSection } from "../file-watching-section.slint";
 // `has-matches` is the OR of the cards' own verdicts; the router reads it to
 // decide whether the whole page filtered itself away. Every tab page carries
 // this so the router never special-cases one.
+//
+// The cards sit in a `GridLayout` and place themselves through
+// `SettingsPage.grid-row`/`grid-col`, which collapse to a single column when
+// the body is narrow. Each card is mounted exactly once — see the note on
+// those functions for why the two arrangements can't be separate branches.
+// The index passed is the card's position in this file and must stay unique.
 export component LibraryPage inherits Rectangle {
     background: transparent;
     horizontal-stretch: 1;
@@ -16,10 +23,12 @@ export component LibraryPage inherits Rectangle {
 
     out property <bool> has-matches: lib.has-matches || fw.has-matches;
 
-    VerticalLayout {
+    GridLayout {
         spacing: Theme.pad-lg;
 
-        lib := LibrarySection { tab-name: @tr("Library"); }
-        fw := FileWatchingSection { tab-name: @tr("Library"); }
+        lib := LibrarySection { tab-name: @tr("Library");
+            row: SettingsPage.grid-row(0); col: SettingsPage.grid-col(0); }
+        fw := FileWatchingSection { tab-name: @tr("Library");
+            row: SettingsPage.grid-row(1); col: SettingsPage.grid-col(1); }
     }
 }

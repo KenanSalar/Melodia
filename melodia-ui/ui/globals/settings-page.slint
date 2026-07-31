@@ -1,5 +1,8 @@
+import { Theme } from "../theme.slint";
+
 // SettingsPage: chrome state for the Settings page itself — the search
-// filter and the rule every section applies to it.
+// filter, the rule every section applies to it, and the body's responsive
+// geometry.
 //
 // Split out of `Settings`, which holds the values the user is configuring
 // plus a bank of `@tr(...)` string callbacks. How the page is filtered is a
@@ -35,6 +38,90 @@ export global SettingsPage {
     // TextInput — same pattern as `Tracks.blur-search-tick`. Used when
     // navigating away so the next keystroke doesn't land in a hidden field.
     in-out property <int> blur-search-tick: 0;
+
+    // --- Responsive body -------------------------------------------------
+    //
+    // These two are written imperatively by `views/settings-view.slint`: a
+    // global can't be bound from a view, and the page can't read its own live
+    // width into a binding that feeds a child's size without re-entering
+    // layout. Everything below them is derived, so the body's geometry is
+    // stated once instead of once per consumer.
+    //
+    // The seed is a plausible narrow page rather than nothing — the view
+    // corrects it on its mount `Timer`, and a frame drawn slightly too narrow
+    // only costs an extra chip row, where a frame drawn at zero collapses the
+    // strips outright.
+    in-out property <length> page-w: 440px;
+    // 1 or 2. Also what `grid-row`/`grid-col` below key off.
+    in-out property <int> body-cols: 1;
+
+    // How wide one card column may grow — **one** number, and both layouts
+    // obey it. That is the whole rule: a card grows with the panel until it
+    // reaches the cap, then stops and the page gives it margins instead, and a
+    // second column appears only once two capped cards fit beside each other.
+    // So a card's width only ever grows across the full range of window sizes;
+    // at the flip it doesn't move at all, the second column simply arrives.
+    //
+    // A cap the *flip* undercuts is the failure to avoid: the single column
+    // then divides before it ever reaches the cap, which reads as the card
+    // growing without limit until it splits in half.
+    // The value is a reading measure, and it is also what decides which
+    // displays ever see two columns: two capped cards plus the gap plus the
+    // sidebar and the page's padding comes to roughly an 1830 px window, so a
+    // maximized 1920 reaches it with room to spare. A wider cap makes a longer
+    // line inside every card *and* pushes the second column out of reach of
+    // the most common large desktop.
+    out property <length> card-cap: 800px;
+
+    // What the centred body may grow to: one card, or two plus the gap
+    // between them. A function of the layout, not of the panel — the layout
+    // that surrounds it clamps to what's actually available.
+    out property <length> body-w: root.body-cols == 2
+        ? 2 * root.card-cap + Theme.pad-lg
+        : root.card-cap;
+
+    // What one column is actually drawn at, which below the cap is just the
+    // panel. The `min` only does anything in a single column; two columns are
+    // reached exactly when both fit at the cap.
+    out property <length> body-avail: max(0px, root.page-w - 2 * Theme.pad-lg);
+    out property <length> card-w: min(
+        root.body-cols == 2
+            ? max(0px, (root.body-avail - Theme.pad-lg) / 2)
+            : root.body-avail,
+        root.card-cap);
+
+    // The glyph column both settings rows lead with. Here rather than in the
+    // rows because `row-content-w` below has to subtract it, and two copies of
+    // the number could drift without anything failing — the strips would just
+    // wrap a little early or a little late.
+    out property <length> row-icon-w: 22px;
+
+    // What a `SettingRowStacked` leaves for its content column: the row's own
+    // left and right padding, the gap after the icon, and the icon. Derived
+    // rather than measured because every section card spans a full column, so
+    // the chip and swatch strips can size their wrap off this and need no
+    // width mirror of their own.
+    out property <length> row-content-w:
+        max(0px, root.card-w - (3 * Theme.pad-lg + root.row-icon-w));
+
+    // Where a card sits in the body grid, by its position in the page file.
+    // The pages mount their sections exactly once and place them through
+    // these, so the one-column and two-column arrangements are the same tree
+    // — which they have to be, since a page reads `has-matches` back off its
+    // section instances and an element inside an `if` branch can't be read
+    // from outside it.
+    public pure function grid-row(i: int) -> int {
+        return root.body-cols == 2 ? Math.floor(i / 2) : i;
+    }
+    public pure function grid-col(i: int) -> int {
+        return root.body-cols == 2 ? Math.mod(i, 2) : 0;
+    }
+
+    // Row split for the wrapping chip / swatch strips: `count` items at most
+    // `per-row` to a row, as index groups. In Rust because Slint can't build
+    // a nested array, and indices rather than the items themselves so a chip
+    // still knows which option it is.
+    pure callback chunk-indices(int /*count*/, int /*per-row*/) -> [[int]];
 
     // Pure case-insensitive substring test. Slint 1.16 has no `.contains()`
     // on string, so the check is wired in Rust (`src/ui/settings_page.rs`).

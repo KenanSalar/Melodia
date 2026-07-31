@@ -57,6 +57,9 @@ export component LibrarySection inherits Rectangle {
                         color: Theme.text;
                         font-size: Theme.font-size-md;
                         font-weight: 600;
+                        // Same reason the row labels wrap — see
+                        // `components/settings/setting-row.slint`.
+                        wrap: word-wrap;
                     }
                 }
 

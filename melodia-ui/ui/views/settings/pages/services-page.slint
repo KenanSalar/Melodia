@@ -1,4 +1,5 @@
 import { Theme } from "../../../theme.slint";
+import { SettingsPage } from "../../../globals/settings-page.slint";
 import { ScrobblingSection } from "../scrobbling-section.slint";
 import { DiscordSection } from "../discord-section.slint";
 
@@ -12,10 +13,14 @@ export component ServicesPage inherits Rectangle {
 
     out property <bool> has-matches: scrobbling.has-matches || discord.has-matches;
 
-    VerticalLayout {
+    // See `library-page.slint` for why the cards sit in a grid and place
+    // themselves by index.
+    GridLayout {
         spacing: Theme.pad-lg;
 
-        scrobbling := ScrobblingSection { tab-name: @tr("Services"); }
-        discord := DiscordSection { tab-name: @tr("Services"); }
+        scrobbling := ScrobblingSection { tab-name: @tr("Services");
+            row: SettingsPage.grid-row(0); col: SettingsPage.grid-col(0); }
+        discord := DiscordSection { tab-name: @tr("Services");
+            row: SettingsPage.grid-row(1); col: SettingsPage.grid-col(1); }
     }
 }

@@ -1,4 +1,5 @@
 import { Theme } from "../../../theme.slint";
+import { SettingsPage } from "../../../globals/settings-page.slint";
 import { UpdateSection } from "../update-section.slint";
 import { AboutSection } from "../about-section.slint";
 
@@ -12,10 +13,14 @@ export component AboutPage inherits Rectangle {
 
     out property <bool> has-matches: updates.has-matches || about.has-matches;
 
-    VerticalLayout {
+    // See `library-page.slint` for why the cards sit in a grid and place
+    // themselves by index.
+    GridLayout {
         spacing: Theme.pad-lg;
 
-        updates := UpdateSection { tab-name: @tr("About"); }
-        about := AboutSection { tab-name: @tr("About"); }
+        updates := UpdateSection { tab-name: @tr("About");
+            row: SettingsPage.grid-row(0); col: SettingsPage.grid-col(0); }
+        about := AboutSection { tab-name: @tr("About");
+            row: SettingsPage.grid-row(1); col: SettingsPage.grid-col(1); }
     }
 }

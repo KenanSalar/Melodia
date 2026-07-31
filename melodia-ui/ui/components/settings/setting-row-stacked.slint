@@ -1,4 +1,5 @@
 import { Theme } from "../../theme.slint";
+import { SettingsPage } from "../../globals/settings-page.slint";
 import { MaterialIcon } from "../material-icon.slint";
 
 // Stacked-content settings row: icon + (label + description + below content
@@ -31,9 +32,12 @@ export component SettingRowStacked inherits Rectangle {
             // Push the icon down so it lines up with the label baseline,
             // not the row's top padding boundary.
             padding-top: 2px;
+            // `SettingsPage.row-content-w` subtracts this to tell the chip
+            // and swatch strips below how much room they have, so the number
+            // lives there rather than in each row.
             MaterialIcon {
                 name: root.icon;
-                icon-size: 22px;
+                icon-size: SettingsPage.row-icon-w;
                 icon-color: Theme.text;
             }
         }
@@ -43,10 +47,14 @@ export component SettingRowStacked inherits Rectangle {
             spacing: Theme.pad-xs;
             horizontal-stretch: 1;
 
+            // Wrapped for the reason spelled out in `setting-row.slint`: a
+            // no-wrap `Text`'s minimum is its full width, which no narrowing
+            // can negotiate.
             Text {
                 text: root.label;
                 color: Theme.text;
                 font-size: Theme.font-size-md;
+                wrap: word-wrap;
             }
             if root.description != "": Text {
                 text: root.description;

@@ -1,4 +1,5 @@
 import { Theme } from "../../../theme.slint";
+import { SettingsPage } from "../../../globals/settings-page.slint";
 import { PlaybackSection } from "../playback-section.slint";
 
 // Playback tab. One card today — gapless, crossfade and its four
@@ -12,9 +13,14 @@ export component PlaybackPage inherits Rectangle {
 
     out property <bool> has-matches: pb.has-matches;
 
-    VerticalLayout {
+    // See `library-page.slint` for why the cards sit in a grid and place
+    // themselves by index. One card means one cell either way, but the shape
+    // stays the same across all five pages so a second one is still the
+    // one-line addition promised above.
+    GridLayout {
         spacing: Theme.pad-lg;
 
-        pb := PlaybackSection { tab-name: @tr("Playback"); }
+        pb := PlaybackSection { tab-name: @tr("Playback");
+            row: SettingsPage.grid-row(0); col: SettingsPage.grid-col(0); }
     }
 }

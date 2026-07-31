@@ -1,4 +1,5 @@
 import { Theme } from "../../theme.slint";
+import { SettingsPage } from "../../globals/settings-page.slint";
 
 // Card chrome that wraps every settings section. Renders the uppercase
 // section heading above a `surface0` rounded card; the host puts rows (and
@@ -6,41 +7,74 @@ import { Theme } from "../../theme.slint";
 // `.section > h2` + `.card` pair on the settings page.
 export component SectionCard inherits Rectangle {
     in property <string> title;
+    // The width the body means this card to take. Defaults to the settings
+    // body's own answer; override it anywhere a card isn't a body column.
+    in property <length> card-width: SettingsPage.card-w;
 
     background: transparent;
     vertical-stretch: 0;
 
-    VerticalLayout {
-        spacing: Theme.pad-sm;
+    // `preferred-width`, not `width` — and pinning it is what keeps the two
+    // columns the same width. Slint's grid seeds every column at its cells'
+    // *preferred* width and then hands out the surplus by stretch, so cards
+    // with different natural widths give columns with different widths, which
+    // side by side reads as a misalignment rather than as a layout. One number
+    // for every card makes them equal by construction. `min-width` is left
+    // alone, so the card still compresses when the body is narrow, and a bound
+    // `width` is avoided because Slint reports one as the element's minimum
+    // *and* maximum, which would climb out to the window's own floor.
+    preferred-width: root.card-width;
 
-        // Uppercase section heading. 13 px is one-off enough to stay
-        // inline; if a second site shows up later, hoist to Theme.
-        // Wrapped in a HorizontalLayout so the heading optically aligns
-        // with the row icons inside the card (16 px left inset).
-        HorizontalLayout {
-            padding-left: Theme.pad-lg;
-            Text {
-                text: root.title;
-                color: Theme.subtext0;
-                font-size: 13px;
-                font-weight: 600;
-                // Material-3 sectionheader cadence: a touch of letter
-                // spacing reinforces the uppercase rhythm.
-                letter-spacing: 0.5px;
+    // Two nested columns rather than one, and the outer one's only job is
+    // the stretchy tail. In the body's two-column grid a row is as tall as
+    // its taller card, and the surplus has to land somewhere: without a
+    // stretch-1 sibling it is split evenly between the heading and the card
+    // (every child being `vertical-stretch: 0`), which grows the rows inside
+    // the card. Collected here it reads as transparent space under the
+    // shorter card, which is what a grid of uneven cards should look like.
+    // The outer column takes the default zero spacing, so a single-column
+    // body — where the tail is 0 px — is pixel-identical to before.
+    VerticalLayout {
+        VerticalLayout {
+            spacing: Theme.pad-sm;
+
+            // Uppercase section heading. 13 px is one-off enough to stay
+            // inline; if a second site shows up later, hoist to Theme.
+            // Wrapped in a HorizontalLayout so the heading optically aligns
+            // with the row icons inside the card (16 px left inset).
+            HorizontalLayout {
+                padding-left: Theme.pad-lg;
+                Text {
+                    text: root.title;
+                    color: Theme.subtext0;
+                    font-size: 13px;
+                    font-weight: 600;
+                    // Material-3 sectionheader cadence: a touch of letter
+                    // spacing reinforces the uppercase rhythm.
+                    letter-spacing: 0.5px;
+                    // Wrapped, so a long title in a long locale can't hold
+                    // the card open — a no-wrap Text reports its full width
+                    // as its *minimum*, which no narrowing can negotiate.
+                    wrap: word-wrap;
+                }
+            }
+
+            // The actual rounded card. Children supplied by the host fill the
+            // card vertically; a SectionDivider between rows draws the inset
+            // 1 px line.
+            Rectangle {
+                background: Theme.surface0;
+                border-radius: Theme.radius-lg;
+                clip: true;
+
+                VerticalLayout {
+                    @children
+                }
             }
         }
 
-        // The actual rounded card. Children supplied by the host fill the
-        // card vertically; a SectionDivider between rows draws the inset
-        // 1 px line.
         Rectangle {
-            background: Theme.surface0;
-            border-radius: Theme.radius-lg;
-            clip: true;
-
-            VerticalLayout {
-                @children
-            }
+            vertical-stretch: 1;
         }
     }
 }

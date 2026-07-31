@@ -1,4 +1,5 @@
 import { Theme } from "../../theme.slint";
+import { SettingsPage } from "../../globals/settings-page.slint";
 import { MaterialIcon } from "../material-icon.slint";
 
 // Generic "icon · label/description · control" row used inside SectionCards.
@@ -37,7 +38,7 @@ export component SettingRow inherits Rectangle {
             alignment: center;
             MaterialIcon {
                 name: root.icon;
-                icon-size: 22px;
+                icon-size: SettingsPage.row-icon-w;
                 icon-color: Theme.text;
             }
         }
@@ -48,10 +49,18 @@ export component SettingRow inherits Rectangle {
             spacing: Theme.pad-xs;
             horizontal-stretch: 1;
 
+            // Wrapped, and that is what makes the whole card compressible.
+            // A no-wrap `Text` reports its full rendered width as its layout
+            // *minimum*, so every label was an incompressible term in the
+            // row's width and no amount of narrowing could move it — the
+            // control ended up pushed past the panel edge. Wrapped, the
+            // minimum is the longest single word and the control stays put
+            // on the right.
             Text {
                 text: root.label;
                 color: Theme.text;
                 font-size: Theme.font-size-md;
+                wrap: word-wrap;
             }
             if root.description != "": Text {
                 text: root.description;

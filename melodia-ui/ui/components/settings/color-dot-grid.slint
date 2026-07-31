@@ -1,5 +1,6 @@
 import { Theme } from "../../theme.slint";
-import { Tooltip } from "../tooltip.slint";
+import { SettingsPage } from "../../globals/settings-page.slint";
+import { Tooltip, TooltipSide } from "../tooltip.slint";
 
 // One color swatch in a ColorDotGrid. 32 px button; the active swatch
 // gets a 2 px ring in `text` colour so it stays legible regardless of
@@ -15,6 +16,10 @@ component ColorDot inherits Rectangle {
     in property <bool>  selected;
     in property <bool>  is-dynamic;
     in property <string> label;
+    // Which edge the tooltip clears. Rows after the first point downward —
+    // anchored above, a second-row swatch's pill lands on the row of dots
+    // over it.
+    in property <TooltipSide> tip-side: TooltipSide.above;
 
     callback clicked();
 
@@ -44,6 +49,7 @@ component ColorDot inherits Rectangle {
         text: root.label;
         hovered: touch.has-hover;
         host-width: parent.width;
+        side: root.tip-side;
     }
 
     touch := TouchArea {
@@ -52,10 +58,17 @@ component ColorDot inherits Rectangle {
     }
 }
 
-// Row of color swatches. Each entry in `colors` becomes a 32 px dot;
+// Grid of color swatches. Each entry in `colors` becomes a 32 px dot;
 // clicking one writes `selected-index` and emits `selected(idx)`.
 // `labels` is read by index alongside `colors` so each dot can show a
 // tooltip naming the accent ("Material You", "Mauve", "Blue", …).
+//
+// It wraps, and it has to: Catppuccin ships fourteen accents, fifteen with
+// Material You prepended, so a single row was 592 px of incompressible width
+// and the widest thing on the settings page by some margin. The dots are a
+// fixed size, so unlike `ChipGroup` this needs no ruler — how many fit is
+// straight arithmetic, and `SettingsPage.chunk-indices` splits the swatches
+// into rows of that many.
 //
 // `first-is-dynamic: true` marks index 0 as a dynamic swatch (rendered
 // as a rounded square instead of a circle). The host wires this from
@@ -67,30 +80,46 @@ export component ColorDotGrid inherits Rectangle {
     in property <[string]> labels;
     in property <bool> first-is-dynamic;
     in-out property <int> selected-index;
+    // See `ChipGroup.avail-width` — same contract, same default.
+    in property <length> avail-width: SettingsPage.row-content-w;
 
     callback selected(int);
 
-    height: 36px;
+    // 36 px is the dot's cell, 4 px taller than the dot so the selection ring
+    // isn't clipped against the row edge.
+    property <length> cell-h: 36px;
+    property <int> per-row: max(1, Math.floor(
+        (root.avail-width + Theme.pad-sm) / (32px + Theme.pad-sm)));
+    property <int> row-count: Math.ceil(root.colors.length / root.per-row);
+
     horizontal-stretch: 0;
+    height: max(0px,
+        root.row-count * root.cell-h + (root.row-count - 1) * Theme.pad-sm);
 
-    HorizontalLayout {
+    VerticalLayout {
         spacing: Theme.pad-sm;
-        // Match Tauri's `.accentGrid` (flex row, default start-edge
-        // alignment).
-        alignment: start;
 
-        for swatch[i] in root.colors: VerticalLayout {
-            alignment: center;
-            ColorDot {
-                swatch: swatch;
-                selected: i == root.selected-index;
-                is-dynamic: root.first-is-dynamic && i == 0;
-                label: i < root.labels.length ? root.labels[i] : "";
-                clicked => {
-                    root.selected-index = i;
-                    root.selected(i);
+        for row[r] in SettingsPage.chunk-indices(root.colors.length, root.per-row):
+            HorizontalLayout {
+                spacing: Theme.pad-sm;
+                // Match Tauri's `.accentGrid` (flex row, default start-edge
+                // alignment).
+                alignment: start;
+
+                for i in row: VerticalLayout {
+                    alignment: center;
+                    ColorDot {
+                        swatch: root.colors[i];
+                        selected: i == root.selected-index;
+                        is-dynamic: root.first-is-dynamic && i == 0;
+                        label: i < root.labels.length ? root.labels[i] : "";
+                        tip-side: r == 0 ? TooltipSide.above : TooltipSide.below;
+                        clicked => {
+                            root.selected-index = i;
+                            root.selected(i);
+                        }
+                    }
                 }
             }
-        }
     }
 }

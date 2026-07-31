@@ -1,4 +1,5 @@
 import { Theme } from "../../../theme.slint";
+import { SettingsPage } from "../../../globals/settings-page.slint";
 import { LanguageSection } from "../language-section.slint";
 import { AppearanceSection } from "../appearance-section.slint";
 import { WindowChromeSection } from "../window-chrome-section.slint";
@@ -19,12 +20,20 @@ export component InterfacePage inherits Rectangle {
         language.has-matches || appearance.has-matches
         || window.has-matches || overflow.has-matches;
 
-    VerticalLayout {
+    // See `library-page.slint` for why the cards sit in a grid and place
+    // themselves by index. This is the page that shows what it buys: four
+    // cards read as two rows of two on a wide window instead of one long
+    // scroll.
+    GridLayout {
         spacing: Theme.pad-lg;
 
-        language := LanguageSection { tab-name: @tr("Interface"); }
-        appearance := AppearanceSection { tab-name: @tr("Interface"); }
-        window := WindowChromeSection { tab-name: @tr("Interface"); }
-        overflow := OverflowMenuSection { tab-name: @tr("Interface"); }
+        language := LanguageSection { tab-name: @tr("Interface");
+            row: SettingsPage.grid-row(0); col: SettingsPage.grid-col(0); }
+        appearance := AppearanceSection { tab-name: @tr("Interface");
+            row: SettingsPage.grid-row(1); col: SettingsPage.grid-col(1); }
+        window := WindowChromeSection { tab-name: @tr("Interface");
+            row: SettingsPage.grid-row(2); col: SettingsPage.grid-col(2); }
+        overflow := OverflowMenuSection { tab-name: @tr("Interface");
+            row: SettingsPage.grid-row(3); col: SettingsPage.grid-col(3); }
     }
 }

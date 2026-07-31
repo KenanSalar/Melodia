@@ -1,4 +1,5 @@
 import { Theme } from "../../theme.slint";
+import { SettingsPage } from "../../globals/settings-page.slint";
 
 // One pill-shaped chip in a ChipGroup. Lives in this file (not exported)
 // because it's only useful as a child of ChipGroup.
@@ -34,12 +35,17 @@ component Chip inherits Rectangle {
 }
 
 // Pill-chip selector. Clicking a chip writes `selected-index` and emits
-// `selected(idx)` — the host can react to the change for any side
-// effects. Slint 1.16's `HorizontalLayout` doesn't wrap, so rows wider
-// than the settings page width clamp opt in to wrapping via `wrap-at`:
-// chips beyond the wrap point flow to a second row in an internal
-// VerticalLayout. Default (`wrap-at: 0`) keeps the original single-row
-// layout for 4 – 8-chip rows that fit on one line.
+// `selected(idx)` — the host can react to the change for any side effects.
+//
+// Slint 1.16's `HorizontalLayout` doesn't wrap and there is no `Flow`, so the
+// group lays itself out as a column of rows: it decides how many chips fit on
+// a line, `SettingsPage.chunk-indices` splits the options into index groups of
+// that size, and each group becomes one `HorizontalLayout`. Iterating real
+// arrays both times is what keeps this simple — the predecessor was a
+// hand-unrolled 4+4 split capped at eight chips, written that way because
+// Slint rejects an inline `for … : if …` and a `Rectangle` wrapper around a
+// filtered-out chip still claims its parent layout's spacing. Neither trap is
+// reachable from here.
 export component ChipGroup inherits Rectangle {
     in property <[string]> options;
     in-out property <int> selected-index;
@@ -54,83 +60,65 @@ export component ChipGroup inherits Rectangle {
     // orphan the one-way binding (CLAUDE.md "Components that write to
     // their own `in-out property` orphan a one-way binding" pitfall).
     in property <bool> manual: false;
-    // Number of chips per row before wrapping. 0 (default) = no wrap,
-    // single HorizontalLayout. >0 = two rows: chips [0, wrap-at) on row 1,
-    // chips [wrap-at, 2*wrap-at) on row 2. Used by Color Style (8 chips,
-    // wrap-at: 4) to keep the Appearance card from growing beyond the
-    // page's width clamp.
-    in property <int> wrap-at: 0;
+    // How much room the group has to fill. Defaults to the settings body's
+    // own answer, so every call site inside a settings row says nothing;
+    // override it anywhere the group doesn't span a full card row. Same shape
+    // as `SettingsTabBar`'s `avail-width` — the host owns the width, the
+    // component owns the verdict.
+    in property <length> avail-width: SettingsPage.row-content-w;
 
     callback selected(int);
 
-    property <bool> wraps: root.wrap-at > 0 && root.options.length > root.wrap-at;
-    height: root.wraps ? (32px * 2 + Theme.pad-sm) : 32px;
-    horizontal-stretch: 0;
-
-    if !root.wraps: HorizontalLayout {
-        spacing: Theme.pad-sm;
-        alignment: start;
-
-        for option[i] in root.options: Chip {
+    // The widest chip, measured rather than estimated: a hidden ruler mounts
+    // one **real** `Chip` per option, so the measured shape and the drawn
+    // shape can't drift, and a `VerticalLayout` reports the *max* of its
+    // children's widths, which is exactly what "widest" means. Same idiom, and
+    // the same `visible: false` (which lowers to a 0×0 clip and still computes
+    // layout info), as `settings-tab-bar.slint`'s ruler.
+    //
+    // Sizing every row off the widest chip is deliberately conservative — the
+    // chips themselves keep their natural widths, so a row is never full, but
+    // it also can never overflow, and no per-chip measurement has to leave the
+    // repeater. The labels are translated, so this follows the running locale
+    // for free.
+    measure := VerticalLayout {
+        visible: false;
+        for option in root.options: Chip {
             label: option;
-            selected: i == root.selected-index;
-            clicked => {
-                if (!root.manual) {
-                    root.selected-index = i;
-                }
-                root.selected(i);
-            }
         }
     }
+    property <length> chip-w: measure.preferred-width;
+    property <int> per-row: max(1, Math.floor(
+        (root.avail-width + Theme.pad-sm) / (root.chip-w + Theme.pad-sm)));
+    property <int> row-count: Math.ceil(root.options.length / root.per-row);
 
-    // Wrap mode: hardcoded for up to 8 chips split 4/4. Slint 1.16 doesn't
-    // accept inline `for ... : if cond : Element`, and a Rectangle wrapper
-    // around each for-iteration would still claim parent-layout spacing
-    // between filtered-out chips. Top-level `if cond: Chip` is the only
-    // form that properly removes the chip from layout (no spacing claim),
-    // so we unroll the indexed access. Only the Color Style row uses this
-    // path; bumping the cap means adding more `if` lines here.
-    if root.wraps: VerticalLayout {
+    // `min-width` is pinned rather than derived, and it is what makes the
+    // wrap worth anything: left to the children it merges in the hidden
+    // ruler's width, so the widest chip becomes a floor the card can't shrink
+    // past — the exact incompressibility this lays itself out to avoid.
+    min-width: 0px;
+    horizontal-stretch: 0;
+    height: max(0px,
+        root.row-count * 32px + (root.row-count - 1) * Theme.pad-sm);
+
+    VerticalLayout {
         spacing: Theme.pad-sm;
-        HorizontalLayout {
-            spacing: Theme.pad-sm;
-            alignment: start;
-            if root.options.length > 0: Chip {
-                label: root.options[0]; selected: 0 == root.selected-index;
-                clicked => { if (!root.manual) { root.selected-index = 0; } root.selected(0); }
+
+        for row in SettingsPage.chunk-indices(root.options.length, root.per-row):
+            HorizontalLayout {
+                spacing: Theme.pad-sm;
+                alignment: start;
+
+                for idx in row: Chip {
+                    label: root.options[idx];
+                    selected: idx == root.selected-index;
+                    clicked => {
+                        if (!root.manual) {
+                            root.selected-index = idx;
+                        }
+                        root.selected(idx);
+                    }
+                }
             }
-            if root.options.length > 1: Chip {
-                label: root.options[1]; selected: 1 == root.selected-index;
-                clicked => { if (!root.manual) { root.selected-index = 1; } root.selected(1); }
-            }
-            if root.options.length > 2: Chip {
-                label: root.options[2]; selected: 2 == root.selected-index;
-                clicked => { if (!root.manual) { root.selected-index = 2; } root.selected(2); }
-            }
-            if root.options.length > 3: Chip {
-                label: root.options[3]; selected: 3 == root.selected-index;
-                clicked => { if (!root.manual) { root.selected-index = 3; } root.selected(3); }
-            }
-        }
-        HorizontalLayout {
-            spacing: Theme.pad-sm;
-            alignment: start;
-            if root.options.length > 4: Chip {
-                label: root.options[4]; selected: 4 == root.selected-index;
-                clicked => { if (!root.manual) { root.selected-index = 4; } root.selected(4); }
-            }
-            if root.options.length > 5: Chip {
-                label: root.options[5]; selected: 5 == root.selected-index;
-                clicked => { if (!root.manual) { root.selected-index = 5; } root.selected(5); }
-            }
-            if root.options.length > 6: Chip {
-                label: root.options[6]; selected: 6 == root.selected-index;
-                clicked => { if (!root.manual) { root.selected-index = 6; } root.selected(6); }
-            }
-            if root.options.length > 7: Chip {
-                label: root.options[7]; selected: 7 == root.selected-index;
-                clicked => { if (!root.manual) { root.selected-index = 7; } root.selected(7); }
-            }
-        }
     }
 }

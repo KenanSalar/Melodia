@@ -61,7 +61,10 @@ export component SettingsView inherits Rectangle {
     // Settings is normally opened at neither of them has to pop a frame later.
     property <length> page-w:
         2 * Theme.pad-lg + bar.compact-w + 2 * Theme.pad-md + root.search-w-max;
-    changed width => { self.page-w = self.width; }
+    changed width => {
+        self.page-w = self.width;
+        SettingsPage.page-w = self.width;
+    }
 
     // …and a mount seed, because `changed` doesn't fire when the first layout
     // settles directly on the final value. Opening the app straight into
@@ -74,16 +77,62 @@ export component SettingsView inherits Rectangle {
     // 1 ms single-shot, the same idiom as `grid-columns-sync.slint` and
     // `mini-player-switch.slint`. It lands well inside the tab bar's 100 ms
     // ease arming, so the correction still snaps instead of morphing.
+    // It also publishes the column count, which `changed watched-two-col`
+    // below can't: `SettingsPage` outlives this page, so a wide visit leaves
+    // `body-cols` at 2 and re-entering at a narrow width would draw a frame
+    // two-up before anything transitioned.
     Timer {
         interval: 1ms;
         triggered => {
             root.page-w = root.width;
+            SettingsPage.page-w = root.width;
+            SettingsPage.body-cols = root.two-col ? 2 : 1;
             self.running = false;
         }
     }
 
-    // What the header row has to divide up: the page less its own padding.
-    property <length> header-w: root.page-w - 2 * Theme.pad-lg;
+    // The page less its own padding — what the header row divides up, and what
+    // the body below has to fill. One property because it is one number; two
+    // would be two places for the padding to drift.
+    property <length> content-w: root.page-w - 2 * Theme.pad-lg;
+
+    // --- Column count ------------------------------------------------------
+    //
+    // A second column appears exactly when two cards at `card-cap` fit beside
+    // each other — not one pixel sooner. Reserving against the cap is what
+    // makes the card's width monotonic: it grows with the panel, stops at the
+    // cap, and the page hands it margins from there, so the flip adds a column
+    // without resizing anything. A threshold below the cap would divide the
+    // card before it ever got there, which is the single column appearing to
+    // grow without limit and then halve.
+    //
+    // Search is single-column regardless. It mounts all five tab pages and
+    // hides the cards that don't match, and a hidden card still claims its
+    // grid cell, so a filtered two-column body reads as holes. One column also
+    // keeps the flat cross-tab result order unambiguous, which is the whole
+    // point of letting search escape the tabs.
+    //
+    // Measured against the raw `content-w` above and deliberately *not*
+    // against `SettingsPage.body-w`, which is itself a function of the verdict
+    // and would close a cycle straight back through this decision.
+    //
+    // Latched, for the reason `settings-tab-bar.slint` latches `compact`: a
+    // slow resize drag delivers a stream of one-pixel widths and a hand
+    // jitters over the last of them. There the symptom was a hunting ease;
+    // here a whole column would blink in and out.
+    property <bool> two-col-latched: false;
+    property <bool> two-col: !root.searching
+        && root.content-w >= 2 * SettingsPage.card-cap + Theme.pad-lg
+            - (root.two-col-latched ? 24px : 0px);
+
+    property <bool> watched-two-col: root.two-col;
+    changed watched-two-col => {
+        root.two-col-latched = root.two-col;
+        SettingsPage.body-cols = root.two-col ? 2 : 1;
+        // Halving the body's height under a parked offset otherwise paints
+        // blank — same reason the two mirrors below reset it.
+        sv.viewport-y = 0px;
+    }
 
     // `SearchBar`'s own resting width, restated because this page drives the
     // property rather than taking its default.
@@ -107,7 +156,7 @@ export component SettingsView inherits Rectangle {
     // forward reference to an element declared below is fine — ids scope to the
     // whole component, the same way the bar's own ruler is read.)
     property <length> search-w: clamp(
-        root.header-w - bar.compact-w - 2 * Theme.pad-md,
+        root.content-w - bar.compact-w - 2 * Theme.pad-md,
         root.search-w-min, root.search-w-max);
 
     // A fresh tab, or entering/leaving search, starts at the top. Without
@@ -156,7 +205,7 @@ export component SettingsView inherits Rectangle {
         // the top of the page instead of pushing the body down.
         //
         // Flush left, not centred: it shares this row now, so there is no axis
-        // left to share with the body's centred 640–1100 px card column.
+        // left to share with the body's centred card column.
         //
         // The bar decides for itself when to go icon-only by measuring the
         // labels it was handed; all it wants from here is how much room it has.
@@ -175,7 +224,7 @@ export component SettingsView inherits Rectangle {
                 labels: [@tr("Library"), @tr("Playback"), @tr("Interface"),
                          @tr("Services"), @tr("About")];
                 icons: ["library_music", "play_circle", "palette", "link", "info"];
-                avail-width: root.header-w - root.search-w - 2 * Theme.pad-md;
+                avail-width: root.content-w - root.search-w - 2 * Theme.pad-md;
                 selected-index <=> SettingsPage.tab-idx;
                 selected(i) => {
                     SettingsPage.search-query = "";
@@ -202,12 +251,22 @@ export component SettingsView inherits Rectangle {
             }
         }
 
-        // Width clamp + vertical scroll. Tauri uses
-        // `clamp(640px, 100%, 1100px)` centred; ScrollView's viewport
-        // width tracks `self.width`, so we wrap the column in centred
-        // spacers and pin the column min/max width. Both built-in
-        // scrollbars are hidden — the host-mounted `OverlayScrollbar`
-        // below drives the vertical axis through `viewport-y`.
+        // Width cap + vertical scroll. The body is centred between elastic
+        // spacers and capped at one card column, or two plus their gap — the
+        // one place the layout's total width is spelled, and it comes off
+        // `SettingsPage` so the cap the columns are sized to and the cap the
+        // body is drawn at can't be two numbers.
+        //
+        // It has **no floor**: below the cap it shrinks with the panel, all
+        // the way down to whatever its cards report, which is what lets the
+        // page fit the narrowest panel Settings can be drawn in and is why
+        // there is no horizontal scrollbar any more. It used to be pinned at
+        // `min-width: 640px`, so any narrower panel stopped shrinking and the
+        // ScrollView panned through it instead.
+        //
+        // Both built-in scrollbars are hidden — the host-mounted
+        // `OverlayScrollbar` below drives the vertical axis through
+        // `viewport-y`.
         sv := ScrollView {
             horizontal-stretch: 1;
             vertical-stretch: 1;
@@ -218,8 +277,7 @@ export component SettingsView inherits Rectangle {
                 alignment: center;
 
                 Rectangle {
-                    min-width: 640px;
-                    max-width: 1100px;
+                    max-width: SettingsPage.body-w;
                     horizontal-stretch: 1;
 
                     VerticalLayout {
@@ -254,18 +312,19 @@ export component SettingsView inherits Rectangle {
         }
     }
 
-    // Overlay scrollbars — siblings of the padded VerticalLayout above,
-    // pinned to the SettingsView's edges so they line up with the content
+    // Overlay scrollbar — a sibling of the padded VerticalLayout above,
+    // pinned to the SettingsView's right edge so it lines up with the content
     // panel border (matches the Tracks view). `sv.absolute-position`
     // resolves the ScrollView's window-relative coords; subtracting
-    // `root.absolute-position` puts each bar in the SettingsView's local
+    // `root.absolute-position` puts the bar in the SettingsView's local
     // frame so y/height values stay correct regardless of how the
     // VerticalLayout's padding/header row size changes.
     //
-    // Horizontal axis: shows up only when the window is narrower than the
-    // content card's `min-width: 640px` floor — the inner Rectangle sticks
-    // at 640 px and the ScrollView pans through it. The OverlayScrollbar
-    // hides itself automatically when `content-size <= visible-size`.
+    // Vertical only. The horizontal bar this file used to mount existed
+    // solely to pan the content column's 640 px floor; the column has no
+    // floor now, so nothing overflows sideways and there is nothing for it
+    // to drive. Don't reintroduce it — a settings page that needs one is a
+    // page with a row that has stopped being able to wrap.
     OverlayScrollbar {
         horizontal: false;
         x: parent.width - self.width;
@@ -276,23 +335,6 @@ export component SettingsView inherits Rectangle {
         content-size: sv.viewport-height;
         offset: -sv.viewport-y;
         scroll-to(o) => { sv.viewport-y = -o; }
-    }
-
-    OverlayScrollbar {
-        horizontal: true;
-        x: sv.absolute-position.x - root.absolute-position.x;
-        // Bottom edge of the SettingsView root (matches the Tracks view's
-        // horizontal bar), not the bottom of the scroll body — so the bar
-        // sits flush with the content panel's lower edge.
-        y: parent.height - self.height;
-        // Stop 10 px before the right edge so the corner doesn't overlap
-        // the vertical bar above (same convention as the Tracks view).
-        width: sv.width - 10px;
-        height: 10px;
-        visible-size: sv.visible-width;
-        content-size: sv.viewport-width;
-        offset: -sv.viewport-x;
-        scroll-to(o) => { sv.viewport-x = -o; }
     }
 
     // Top-layer tooltip for the compact tab bar. Declared last so it paints

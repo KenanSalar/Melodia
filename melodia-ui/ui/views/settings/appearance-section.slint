@@ -139,9 +139,8 @@ export component AppearanceSection inherits Rectangle {
             }
         }
 
-        // Row 4 — Color Style (Material 3 only). 8 chips wrapping after 4
-        // via ChipGroup's `wrap-at` so the Appearance card doesn't grow
-        // past the page's width clamp. Two-way `<=>` to
+        // Row 4 — Color Style (Material 3 only). 8 chips; ChipGroup wraps
+        // them to whatever the card's width affords. Two-way `<=>` to
         // `Settings.color-style-idx` is mandatory because ChipGroup writes
         // its own `selected-index` on click (per CLAUDE.md's "components
         // that write to their own in-out property orphan a one-way
@@ -172,7 +171,6 @@ export component AppearanceSection inherits Rectangle {
                     @tr("Monochrome"),
                 ];
                 selected-index <=> Settings.color-style-idx;
-                wrap-at: 4;
                 selected(i) => { Settings.color-style-changed(i); }
             }
         }
