@@ -43,7 +43,15 @@ export component TracksView inherits Rectangle {
     }
 
     VerticalLayout {
-        padding: Theme.pad-lg;
+        // Three sides, not `padding: Theme.pad-lg`. The uniform form also pads
+        // the *bottom*, which sits outside the track list's viewport and reads
+        // as a dead strip of page background above the panel border — with the
+        // last row clipped against the viewport edge rather than scrolling
+        // clear of it. Album / Genre / Playlist Detail inset left/right/top
+        // only, which is why their tables run flush to the border.
+        padding-left: Theme.pad-lg;
+        padding-right: Theme.pad-lg;
+        padding-top: Theme.pad-lg;
         spacing: Theme.pad-md;
 
         HorizontalLayout {

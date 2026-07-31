@@ -104,9 +104,16 @@ export component SettingsView inherits Rectangle {
 
     VerticalLayout {
         padding-top: Theme.pad-lg;
-        padding-bottom: Theme.pad-lg;
         padding-left: Theme.pad-lg;
         padding-right: Theme.pad-lg;
+        // No `padding-bottom` — it belongs to the scrolling column below, not
+        // to this one. Reserved out here it is *outside* the viewport, so it
+        // reads as a dead strip of page background between the last card and
+        // the panel's bottom border, with the card clipped mid-glyph against
+        // the viewport edge above it. Inside, the same gap scrolls in with the
+        // content and only appears once you have reached the end. The detail
+        // views inset left/right/top and leave the bottom alone for the same
+        // reason, which is why the track list runs flush to the border there.
         // Only two children — the header row and the scroll body — so this is
         // the header's clearance, not a generic gutter. Well clear of the gaps
         // *inside* the header row, so the tab bar reads as the page's lid
@@ -198,6 +205,10 @@ export component SettingsView inherits Rectangle {
 
                     VerticalLayout {
                         spacing: Theme.pad-lg;
+                        // The page's bottom breathing room, moved in here so it
+                        // scrolls with the cards instead of being reserved
+                        // outside the viewport — see the root layout above.
+                        padding-bottom: Theme.pad-lg;
 
                         SettingsTabs {
                             tab-index: SettingsPage.tab-idx;

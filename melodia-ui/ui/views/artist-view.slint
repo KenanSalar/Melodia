@@ -44,7 +44,11 @@ export component ArtistView inherits Rectangle {
     }
 
     VerticalLayout {
-        padding: Theme.pad-lg;
+        // Three sides — see `tracks-view.slint` for why the uniform form's
+        // bottom pad reads as a dead strip under the grid.
+        padding-left: Theme.pad-lg;
+        padding-right: Theme.pad-lg;
+        padding-top: Theme.pad-lg;
         spacing: Theme.pad-md;
 
         HorizontalLayout {

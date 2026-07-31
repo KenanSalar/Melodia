@@ -158,7 +158,11 @@ export component BrowseView inherits Rectangle {
     }
 
     vl := VerticalLayout {
-        padding: Theme.pad-lg;
+        // Three sides — see `tracks-view.slint` for why the uniform form's
+        // bottom pad reads as a dead strip under the list.
+        padding-left: Theme.pad-lg;
+        padding-right: Theme.pad-lg;
+        padding-top: Theme.pad-lg;
         spacing: Theme.pad-md;
 
         // Header strip.
