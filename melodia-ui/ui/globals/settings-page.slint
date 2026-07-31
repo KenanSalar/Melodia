@@ -104,7 +104,18 @@ export global SettingsPage {
     out property <length> row-content-w:
         max(0px, root.card-w - (3 * Theme.pad-lg + root.row-icon-w));
 
-    // Where a card sits in the body grid, by its position in the page file.
+    // Where a page's **column** sits in the body grid — not a card. A page
+    // hands the grid one cell per column and each cell is a `VerticalLayout`
+    // of cards, so the two sides flow independently and a short card is
+    // followed straight away by the next one. Cards placed as cells directly
+    // would be row-aligned instead: a grid row is as tall as its taller cell,
+    // so a short card left a hole down to the next row.
+    //
+    // Side by side at two columns, stacked at one — which is why a page's
+    // columns are contiguous halves of its card list rather than alternating:
+    // stacked, column A then column B is the page file's own order, so nothing
+    // reorders when the window narrows.
+    //
     // The pages mount their sections exactly once and place them through
     // these, so the one-column and two-column arrangements are the same tree
     // — which they have to be, since a page reads `has-matches` back off its

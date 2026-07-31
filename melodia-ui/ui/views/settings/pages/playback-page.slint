@@ -13,14 +13,20 @@ export component PlaybackPage inherits Rectangle {
 
     out property <bool> has-matches: pb.has-matches;
 
-    // See `library-page.slint` for why the cards sit in a grid and place
-    // themselves by index. One card means one cell either way, but the shape
-    // stays the same across all five pages so a second one is still the
-    // one-line addition promised above.
+    // See `library-page.slint` for why the cards live in columns and the
+    // columns place themselves. One card is one column here, so a wide body
+    // leaves the second column's width empty rather than splitting the card —
+    // the shape still matches the other four pages, so a second card is the
+    // one-line addition promised above, and adding a second *column* is four.
     GridLayout {
         spacing: Theme.pad-lg;
 
-        pb := PlaybackSection { tab-name: @tr("Playback");
-            row: SettingsPage.grid-row(0); col: SettingsPage.grid-col(0); }
+        VerticalLayout {
+            row: SettingsPage.grid-row(0); col: SettingsPage.grid-col(0);
+            alignment: start;
+            spacing: Theme.pad-lg;
+
+            pb := PlaybackSection { tab-name: @tr("Playback"); }
+        }
     }
 }

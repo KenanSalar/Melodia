@@ -13,14 +13,25 @@ export component AboutPage inherits Rectangle {
 
     out property <bool> has-matches: updates.has-matches || about.has-matches;
 
-    // See `library-page.slint` for why the cards sit in a grid and place
-    // themselves by index.
+    // See `library-page.slint` for why the cards live in columns and the
+    // columns place themselves.
     GridLayout {
         spacing: Theme.pad-lg;
 
-        updates := UpdateSection { tab-name: @tr("About");
-            row: SettingsPage.grid-row(0); col: SettingsPage.grid-col(0); }
-        about := AboutSection { tab-name: @tr("About");
-            row: SettingsPage.grid-row(1); col: SettingsPage.grid-col(1); }
+        VerticalLayout {
+            row: SettingsPage.grid-row(0); col: SettingsPage.grid-col(0);
+            alignment: start;
+            spacing: Theme.pad-lg;
+
+            updates := UpdateSection { tab-name: @tr("About"); }
+        }
+
+        VerticalLayout {
+            row: SettingsPage.grid-row(1); col: SettingsPage.grid-col(1);
+            alignment: start;
+            spacing: Theme.pad-lg;
+
+            about := AboutSection { tab-name: @tr("About"); }
+        }
     }
 }

@@ -272,24 +272,35 @@ fn grid_indices(src: &str, name: &str) -> Vec<usize> {
         .collect()
 }
 
-/// A card places itself in the body grid by its position in the page file, and
-/// the position is a hand-written literal. Repeat one and two cards land in the
-/// same cell — Slint stacks them, so the page loses a card with nothing in the
-/// build to say so, and only in the two-column layout. Skip one and the grid
-/// grows a hole. Pinned here because both failures are invisible at the width
-/// most of the development happens at.
+/// A page's columns place themselves in the body grid by a hand-written index.
+/// Repeat one and two columns land in the same cell — Slint stacks them, so the
+/// page loses a whole column with nothing in the build to say so, and only in
+/// the two-column layout. Skip one and the grid grows a hole.
+///
+/// The **cap of two** is the subtler half. `body-cols` is only ever 1 or 2, so
+/// a third column would fold back onto the first: `grid-col(2)` is `2 % 2`, and
+/// its `grid-row(2)` of 1 is where column 1 already sits when stacked. Nothing
+/// errors — one column simply paints on top of another, at one width and not
+/// the other.
 #[test]
-fn every_card_takes_its_own_cell() {
+fn every_column_takes_its_own_cell() {
     for (page, src) in PAGES {
-        let cards = src.lines().filter(|line| line.contains("Section {")).count();
-        let expected: Vec<usize> = (0..cards).collect();
+        let columns = grid_indices(src, "grid-row");
+        assert!(!columns.is_empty(), "{page}.slint places no column — the scan matched nothing");
+        assert!(
+            columns.len() <= 2,
+            "{page}.slint declares {} columns; the body is never wider than two, so the third \
+             onwards would share a cell with an earlier one",
+            columns.len()
+        );
 
+        let expected: Vec<usize> = (0..columns.len()).collect();
         for name in ["grid-row", "grid-col"] {
             assert_eq!(
                 grid_indices(src, name),
                 expected,
-                "{page}.slint must pass `{name}(0)`..`{name}({})` once each, in mount order",
-                cards.saturating_sub(1)
+                "{page}.slint must pass `{name}(0)`..`{name}({})` once each, in source order",
+                columns.len().saturating_sub(1)
             );
         }
     }

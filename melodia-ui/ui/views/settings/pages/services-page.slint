@@ -13,14 +13,25 @@ export component ServicesPage inherits Rectangle {
 
     out property <bool> has-matches: scrobbling.has-matches || discord.has-matches;
 
-    // See `library-page.slint` for why the cards sit in a grid and place
-    // themselves by index.
+    // See `library-page.slint` for why the cards live in columns and the
+    // columns place themselves.
     GridLayout {
         spacing: Theme.pad-lg;
 
-        scrobbling := ScrobblingSection { tab-name: @tr("Services");
-            row: SettingsPage.grid-row(0); col: SettingsPage.grid-col(0); }
-        discord := DiscordSection { tab-name: @tr("Services");
-            row: SettingsPage.grid-row(1); col: SettingsPage.grid-col(1); }
+        VerticalLayout {
+            row: SettingsPage.grid-row(0); col: SettingsPage.grid-col(0);
+            alignment: start;
+            spacing: Theme.pad-lg;
+
+            scrobbling := ScrobblingSection { tab-name: @tr("Services"); }
+        }
+
+        VerticalLayout {
+            row: SettingsPage.grid-row(1); col: SettingsPage.grid-col(1);
+            alignment: start;
+            spacing: Theme.pad-lg;
+
+            discord := DiscordSection { tab-name: @tr("Services"); }
+        }
     }
 }

@@ -11,11 +11,18 @@ import { FileWatchingSection } from "../file-watching-section.slint";
 // decide whether the whole page filtered itself away. Every tab page carries
 // this so the router never special-cases one.
 //
-// The cards sit in a `GridLayout` and place themselves through
-// `SettingsPage.grid-row`/`grid-col`, which collapse to a single column when
-// the body is narrow. Each card is mounted exactly once — see the note on
-// those functions for why the two arrangements can't be separate branches.
-// The index passed is the card's position in this file and must stay unique.
+// The page hands a `GridLayout` one cell per **column**, each cell a
+// `VerticalLayout` of cards, and the columns place themselves through
+// `SettingsPage.grid-row`/`grid-col` — side by side when the body is wide,
+// stacked when it isn't. Cards as cells would be row-aligned instead, so a
+// short card would leave a hole down to the next row rather than being
+// followed by the next card.
+//
+// Columns are contiguous halves of the page's card list, so stacked they read
+// in source order and nothing moves when the window narrows. Each card is
+// mounted exactly once — see the note on those functions for why the two
+// arrangements can't be separate branches. The index passed is the column's
+// position in this file: unique, and no page has more than two.
 export component LibraryPage inherits Rectangle {
     background: transparent;
     horizontal-stretch: 1;
@@ -26,9 +33,20 @@ export component LibraryPage inherits Rectangle {
     GridLayout {
         spacing: Theme.pad-lg;
 
-        lib := LibrarySection { tab-name: @tr("Library");
-            row: SettingsPage.grid-row(0); col: SettingsPage.grid-col(0); }
-        fw := FileWatchingSection { tab-name: @tr("Library");
-            row: SettingsPage.grid-row(1); col: SettingsPage.grid-col(1); }
+        VerticalLayout {
+            row: SettingsPage.grid-row(0); col: SettingsPage.grid-col(0);
+            alignment: start;
+            spacing: Theme.pad-lg;
+
+            lib := LibrarySection { tab-name: @tr("Library"); }
+        }
+
+        VerticalLayout {
+            row: SettingsPage.grid-row(1); col: SettingsPage.grid-col(1);
+            alignment: start;
+            spacing: Theme.pad-lg;
+
+            fw := FileWatchingSection { tab-name: @tr("Library"); }
+        }
     }
 }
