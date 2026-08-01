@@ -200,6 +200,14 @@ export component TabBar inherits Rectangle {
     // Two-way, per the "components that write their own in-out property
     // orphan a one-way binding" pitfall.
     in-out property <int> selected-index;
+    // The tab that was active when the current pick was made. A cell writes
+    // `selected-index` before it emits `selected` — it has to, since the `<=>`
+    // above is what carries the pick out — so by the time a host's handler
+    // runs, anything it derives from `selected-index` (or from the global on
+    // the other end of that binding) already reads the *new* tab. Publishing
+    // the old one here is what lets a host tell a forward pick from a back one
+    // without keeping a mirror of its own and seeding it at mount.
+    out property <int> previous-index;
 
     callback selected(int);
 
@@ -403,6 +411,9 @@ export component TabBar inherits Rectangle {
             active-color: root.active-color;
             hover-fill: root.hover-fill;
             clicked => {
+                // Before the write, not after — `selected-index` is the only
+                // record of where the pick came from.
+                root.previous-index = root.selected-index;
                 root.selected-index = i;
                 root.selected(i);
             }

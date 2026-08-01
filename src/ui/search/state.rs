@@ -62,9 +62,9 @@ impl SearchUiState {
 /// `FemtoVG` minifies with plain bilinear (no mipmaps), so staying near the
 /// on-screen size keeps `image-fit: cover` clean without the album grid's
 /// 448 px tier. Sized against these cards rather than against another view's
-/// tier: the grids draw flex-filled cards that run well past 260 px and take
-/// the 448 px tier for it, and a strip that followed them would decode four
-/// times the pixels it can show.
+/// tier: the grids draw flex-filled cards that keep growing with the window
+/// and take that tier for it, so a strip following them would decode a tile
+/// several times larger than any card it can draw.
 pub(super) const ALBUM_STRIP_THUMB_SIZE: u32 = 180;
 
 /// Artists-strip tile size (px). Slightly larger than the albums tier

@@ -209,8 +209,8 @@ pub fn install_search_models(ui: &AppWindow) {
 }
 
 /// Map an `AlbumStats` to its Slint strip row. Subtitle is the artist
-/// name (parity with Favorites' Most-Played strip). `play_count` is
-/// unused (the cards don't surface it).
+/// name (parity with the Most Played cards). `play_count` is unused
+/// (the cards don't surface it).
 pub fn to_slint_album_strip_row(a: &AlbumStats) -> UiEntityStripRow {
     UiEntityStripRow {
         id: clamp_i64_to_i32(a.id),

@@ -549,10 +549,12 @@ export component AppWindow inherits Window {
                         // Index 2 (Favorites) — a pinned hero mosaic whose
                         // top row carries the tab bar and the filter, over
                         // three sub-views (Songs / Most Played / Favorite
-                        // Artists). Cross-tab nav: clicking a favorite
-                        // artist card sets `*Detail.origin-nav-index = 2`
-                        // so the back arrow returns here, mirroring the
-                        // Artist Detail → Album Detail → back behaviour.
+                        // Artists). Cross-tab nav: a favorite artist card,
+                        // and the Songs rows' go-to-{album,artist,genre}
+                        // context actions, all stamp
+                        // `*Detail.origin-nav-index = 2` so the back arrow
+                        // returns here, mirroring the Artist Detail → Album
+                        // Detail → back behaviour.
                         if !Nav.now-playing-open && Nav.selected-index == 2: ViewTransition {
                             width: parent.width;
                             height: parent.height;

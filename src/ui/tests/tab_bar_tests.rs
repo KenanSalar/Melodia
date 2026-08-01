@@ -116,3 +116,40 @@ fn every_painted_brush_is_an_input() {
         "the underline must paint `active-color`, not `Theme.accent` directly"
     );
 }
+
+/// A cell writes `selected-index` before it emits `selected`, and it has to —
+/// the `<=>` on that property is what carries the pick out to the host. So by
+/// the time a host's handler runs, `selected-index` and anything two-way bound
+/// to it already read the tab just picked, and a host wanting the *previous*
+/// one has nowhere to get it. `previous-index` is that place, which makes the
+/// capture's position the whole contract: written after the line below it still
+/// compiles, still publishes a plausible index, and hands back the new tab —
+/// so the Favorites slide would compare `i` against `i` and enter from the left
+/// whichever way the pick went. Hence offsets rather than containment.
+#[test]
+fn the_cell_captures_the_previous_index_before_it_moves() {
+    assert!(
+        TAB_BAR.contains("out property <int> previous-index;"),
+        "tab-bar.slint must publish `previous-index` — a host can't recover the outgoing tab from \
+         `selected-index`, which the cell has already overwritten"
+    );
+
+    // Anchored past `TabBarCell`, whose own TouchArea forwards a `clicked` of
+    // the same name — unanchored, the split lands on that one and every `find`
+    // below comes back `None`.
+    let handler = TAB_BAR
+        .split_once("export component TabBar")
+        .and_then(|(_, bar)| bar.split_once("clicked => {"))
+        .and_then(|(_, rest)| rest.split_once('}'))
+        .map(|(body, _)| body)
+        .unwrap_or_default();
+
+    let capture = handler.find("root.previous-index = root.selected-index;");
+    let write = handler.find("root.selected-index = i;");
+    let emit = handler.find("root.selected(i);");
+    assert!(
+        matches!((capture, write, emit), (Some(c), Some(w), Some(e)) if c < w && w < e),
+        "the cell's `clicked` must capture `previous-index` from `selected-index`, then write it, \
+         then emit — captured after the write it hands back the tab just picked"
+    );
+}

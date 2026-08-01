@@ -395,7 +395,7 @@ fn artist_to_top(a: &ArtistStats) -> TopResult {
 /// `@tr("{n} album"|"{n} albums" % count)` plural in `.slint`. Until
 /// the apply step can reach the locale machinery from a background
 /// thread, the strip card subtitle is built in English here. That
-/// matches the Favorites Artists strip's behaviour (see comment on
+/// matches the Favorite Artists grid's behaviour (see comment on
 /// `to_slint_fav_artist_row`).
 fn artist_subtitle(a: &ArtistStats) -> String {
     format!("{} albums", a.album_count)

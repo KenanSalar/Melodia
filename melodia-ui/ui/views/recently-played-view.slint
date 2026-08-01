@@ -15,13 +15,17 @@ import { CompositeScrollbars } from "../components/composite-scrollbars.slint";
 import { FilterThrottle } from "../components/filter-throttle.slint";
 import { HeroBlurBackdrop } from "../components/hero-blur-backdrop.slint";
 
-// The Recently-Played view. Mirrors the Favorites layout — same hero (live 2×2
-// cover mosaic + count + duration + Shuffle / Columns) and the same unified
-// below-hero scroll — but trimmed: no Favorite Artists strip, and the "Most
-// Played" strip is non-collapsible. The hero mosaic shows the up-to-4
-// most-recently-played distinct covers; the `TrackList` holds the 200 most-
+// The Recently-Played view: a hero (live 2×2 cover mosaic + count + duration +
+// Shuffle / Columns) over one unified below-hero scroll — a non-collapsible
+// "Most Played" strip, then the `TrackList`. The hero mosaic shows the up-to-4
+// most-recently-played distinct covers; the list holds the 200 most-
 // recently-played tracks (filter + column sort applied in memory over that
 // fixed set). Data flows through the `RecentlyPlayed` global.
+//
+// This is the shape Favorites had before it was tabbed, and it is the page
+// that shape now belongs to alone — Favorites pins its hero and mounts one
+// scroller per tab. Converting this one is the intended next step, which is
+// what would retire its `CompositeScrollbars` mount.
 export component RecentlyPlayedView inherits Rectangle {
     // Filter throttle: each keystroke bumps `pending`; the Timer fires the
     // refilter callback at most once per `interval`. Same shape as Favorites.
