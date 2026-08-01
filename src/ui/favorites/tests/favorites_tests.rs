@@ -1,6 +1,21 @@
 use std::num::NonZeroUsize;
+use std::path::PathBuf;
+use std::sync::Arc;
 
+use super::{FavoritesTab, FavoritesUi};
+use crate::entities::artist::FavoriteArtist;
 use crate::media::cover_thumbs::CoverThumbs;
+
+type TestResult = Result<(), Box<dyn std::error::Error>>;
+
+/// A solid-colour square PNG in a fresh temp dir; the dir is returned so the
+/// caller can keep it alive.
+fn write_test_png() -> Result<(tempfile::TempDir, PathBuf), Box<dyn std::error::Error>> {
+    let tmp = tempfile::tempdir()?;
+    let path = tmp.path().join("cover.png");
+    image::RgbImage::from_pixel(512, 512, image::Rgb([120, 60, 200])).save(&path)?;
+    Ok((tmp, path))
+}
 
 const GLOBAL: &str = include_str!("../../../../melodia-ui/ui/globals/curated.slint");
 const VIEW: &str = include_str!("../../../../melodia-ui/ui/views/favorites-view.slint");
@@ -232,12 +247,10 @@ fn every_grid_mount_forwards_the_covers_generation() {
 /// "return nothing": an entry that survives still comes back, which is what
 /// makes a re-entered warm tab paint instantly.
 #[test]
-fn a_cold_generation_serves_the_cache_without_decoding() -> Result<(), Box<dyn std::error::Error>> {
+fn a_cold_generation_serves_the_cache_without_decoding() -> TestResult {
     let cap = NonZeroUsize::new(4).ok_or("cap must be > 0")?;
     let thumbs = CoverThumbs::with_config(64, cap);
-    let tmp = tempfile::tempdir()?;
-    let path = tmp.path().join("cover.png");
-    image::RgbImage::from_pixel(96, 96, image::Rgb([120, 60, 200])).save(&path)?;
+    let (_tmp, path) = write_test_png()?;
     let path = path.to_str().ok_or("temp path is not UTF-8")?;
 
     assert_eq!(
@@ -254,6 +267,44 @@ fn a_cold_generation_serves_the_cache_without_decoding() -> Result<(), Box<dyn s
         super::grid_cover(&thumbs, path, 0).size().width,
         64,
         "generation 0 gates the *decode*, not the lookup — a cached cover still resolves"
+    );
+    Ok(())
+}
+
+/// The decode outlives a fast section leave, and `release_section_state` is
+/// spawned on that leave — it can easily finish first, so a prewarm that
+/// ignored it would refill the tier that release just emptied and hold a
+/// screenful of 448 px buffers behind a view nobody can see, until the next
+/// leave. The check has to sit after the decode: before it, the leave hasn't
+/// happened yet, which is the whole problem.
+#[test]
+fn a_prewarm_outliving_the_leave_keeps_nothing() -> TestResult {
+    let (_tmp, path) = write_test_png()?;
+    let path = path.to_str().ok_or("temp path is not UTF-8")?;
+
+    let fav_ui = FavoritesUi::new(Arc::new(CoverThumbs::new()));
+    fav_ui.set_active_tab(FavoritesTab::Artists);
+    *fav_ui.state().fav_artists.lock() = vec![FavoriteArtist {
+        id: 1,
+        name: "Artist".to_owned(),
+        image_path: Some(path.to_owned()),
+        favorite_count: 2,
+    }];
+
+    fav_ui.set_section_active(true);
+    fav_ui.prewarm_tab_covers(FavoritesTab::Artists);
+    assert!(
+        fav_ui.artist_cover(path, 0).size().width > 0,
+        "a prewarm for a section still on screen must leave its covers in the tier"
+    );
+
+    fav_ui.artist_thumbs.clear();
+    fav_ui.set_section_active(false);
+    fav_ui.prewarm_tab_covers(FavoritesTab::Artists);
+    assert_eq!(
+        fav_ui.artist_cover(path, 0).size().width,
+        0,
+        "a prewarm that landed after the section leave must hand its buffers back"
     );
     Ok(())
 }

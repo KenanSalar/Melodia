@@ -504,7 +504,11 @@ pub struct FavoriteStats {
 }
 
 /// Lightweight struct for "Most Played Favorites" cards.
-#[derive(Clone, Debug, PartialEq, FromRow, Serialize, Deserialize)]
+///
+/// `Hash` is what the Favorites grid compares against its last applied set —
+/// derived rather than hand-listed so a new field can't silently drop out of
+/// the comparison and leave a card stale.
+#[derive(Clone, Debug, PartialEq, Hash, FromRow, Serialize, Deserialize)]
 pub struct MostPlayedFavorite {
     pub id: i64,
     pub title: String,

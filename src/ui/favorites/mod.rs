@@ -59,7 +59,7 @@ use state::{
 /// constants; [`tab_from_index`] resolves one to this on the UI thread, so no
 /// Rust file restates them. Off-thread callers (the fetchers) read the shadow
 /// rather than the global, which they can't touch anyway.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum FavoritesTab {
     Songs,
     MostPlayed,
@@ -201,20 +201,36 @@ impl FavoritesUi {
         }
     }
 
+    /// The cover tier a grid tab draws from. `None` for Songs, whose row
+    /// covers come from the shared 72 px tier instead.
+    fn grid_tier(&self, tab: FavoritesTab) -> Option<&CoverThumbs> {
+        match tab {
+            FavoritesTab::MostPlayed => Some(&self.most_played_thumbs),
+            FavoritesTab::Artists => Some(&self.artist_thumbs),
+            FavoritesTab::Songs => None,
+        }
+    }
+
     /// Decode a grid tab's first screenful into its tier. Blocking — call it
     /// from `spawn_blocking`, never on the UI thread.
     ///
-    /// The Songs tab is a no-op: its row covers come from the shared 72 px
-    /// row tier, which `refresh_tracks` already warms.
+    /// Hands the buffers straight back when the section was left while the
+    /// decode ran. [`Self::release_section_state`] is spawned on that leave and
+    /// may well have finished first, so without this the tier it emptied comes
+    /// back populated behind a view nobody can see and stays that way until the
+    /// next leave. The check has to sit *after* the decode — before it, the
+    /// leave hasn't happened yet, which is the whole problem.
     pub fn prewarm_tab_covers(&self, tab: FavoritesTab) {
+        let Some(thumbs) = self.grid_tier(tab) else {
+            return;
+        };
         let paths = self.first_screenful_paths(tab);
         if paths.is_empty() {
             return;
         }
-        match tab {
-            FavoritesTab::MostPlayed => self.most_played_thumbs.prewarm(&paths),
-            FavoritesTab::Artists => self.artist_thumbs.prewarm(&paths),
-            FavoritesTab::Songs => {}
+        thumbs.prewarm(&paths);
+        if !self.section_active() {
+            thumbs.clear();
         }
     }
 
@@ -239,6 +255,17 @@ impl FavoritesUi {
     /// against a hero that no longer has a blur to guard.
     pub fn forget_mosaic(&self) {
         self.inner.last_mosaic_paths.lock().clear();
+    }
+
+    /// Forget what the grids last painted, so the next apply rebuilds instead
+    /// of recognising its own output and skipping.
+    ///
+    /// Sits beside [`Self::forget_mosaic`] at the section-leave call site, and
+    /// is unconditional for the same reason: the models are emptied there, so a
+    /// signature that survived would match the identical data on re-enter and
+    /// leave the grid blank.
+    pub fn forget_grid_signature(&self) {
+        self.inner.last_grid_signature.lock().take();
     }
 
     /// Drop every section-local resident buffer + clear the Slint

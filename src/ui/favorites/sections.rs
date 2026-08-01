@@ -26,6 +26,7 @@
 //! Only the *mounted* tab's model is built. The tabs are mutually
 //! exclusive, and a hidden grid's rows are `SharedString`s nobody can see.
 
+use std::hash::{DefaultHasher, Hash, Hasher};
 use std::rc::Rc;
 use std::sync::Arc;
 
@@ -59,18 +60,28 @@ pub async fn refresh_grids(state: &AppState, fav_ui: &Arc<FavoritesUi>, weak: &W
         library::favorites::get_favorite_artists(state),
     );
 
-    match most_played_res {
-        Ok(most_played) => {
-            *fav_ui.state().most_played.lock() = most_played;
-        }
-        Err(e) => log::warn!("favorites::refresh_grids most_played: {e}"),
+    // Logged before the guard below, not at the store — a query that failed is
+    // worth a line whether or not anyone is still looking at the view.
+    let most_played = most_played_res
+        .inspect_err(|e| log::warn!("favorites::refresh_grids most_played: {e}"))
+        .ok();
+    let fav_artists = fav_artists_res
+        .inspect_err(|e| log::warn!("favorites::refresh_grids fav_artists: {e}"))
+        .ok();
+
+    // A leave that landed while the two queries were in flight has already
+    // cleared these caches (and emptied both models), so storing now would undo
+    // the teardown behind a view nobody can see. Nothing is lost by dropping the
+    // result: every leave sets `mark_dirty`, so the next enter re-fetches.
+    if !fav_ui.section_active() {
+        return;
     }
 
-    match fav_artists_res {
-        Ok(fav_artists) => {
-            *fav_ui.state().fav_artists.lock() = fav_artists;
-        }
-        Err(e) => log::warn!("favorites::refresh_grids fav_artists: {e}"),
+    if let Some(rows) = most_played {
+        *fav_ui.state().most_played.lock() = rows;
+    }
+    if let Some(rows) = fav_artists {
+        *fav_ui.state().fav_artists.lock() = rows;
     }
 
     // Prewarm the mounted tab's tier off-thread before its rows land in the
@@ -101,21 +112,32 @@ pub async fn refresh_grids(state: &AppState, fav_ui: &Arc<FavoritesUi>, weak: &W
 struct PreparedGrids {
     most_played: Vec<UiEntityStripRow>,
     artists: Vec<FilteredArtistRow>,
+    /// Per-tab hash of everything that reaches a card, taken from the **source**
+    /// entities rather than the built rows: `#[derive(Hash)]` keeps it complete
+    /// when a field is added, where a hand-listed set would quietly go stale.
+    /// One per tab, not one for both — a play-count flush changes Most Played's
+    /// and must not force the Artists grid, which nothing about it affects, to
+    /// rebuild too.
+    most_played_content: u64,
+    artists_content: u64,
 }
 
 /// Re-walk the cached `most_played` + `fav_artists` Rust Vecs through the
-/// current `Favorites.filter`. Empty filter ⇒ all rows; non-empty ⇒
-/// case-insensitive substring match on title+artist (Most Played) / name
-/// (Artists). Runs entirely in memory and touches no Slint state, so either
-/// thread can call it.
+/// current `Favorites.filter`, hashing the survivors as they go. Empty filter ⇒
+/// all rows; non-empty ⇒ case-insensitive substring match on title+artist (Most
+/// Played) / name (Artists). Runs entirely in memory and touches no Slint state,
+/// so either thread can call it.
 fn build_filtered_grids(fav_ui: &FavoritesUi) -> PreparedGrids {
     let needle = fav_ui.state().filter.lock().to_lowercase();
+    let mut most_played_hasher = DefaultHasher::new();
+    let mut artists_hasher = DefaultHasher::new();
 
     let most_played: Vec<UiEntityStripRow> = {
         let cache = fav_ui.state().most_played.lock();
         cache
             .iter()
             .filter(|t| most_played_matches(t, &needle))
+            .inspect(|t| t.hash(&mut most_played_hasher))
             .map(to_slint_most_played_row)
             .collect()
     };
@@ -129,11 +151,17 @@ fn build_filtered_grids(fav_ui: &FavoritesUi) -> PreparedGrids {
         cache
             .iter()
             .filter(|a| field_contains(&a.name, &needle))
+            .inspect(|a| a.hash(&mut artists_hasher))
             .map(|a| FilteredArtistRow { artist: a.clone() })
             .collect()
     };
 
-    PreparedGrids { most_played, artists }
+    PreparedGrids {
+        most_played,
+        artists,
+        most_played_content: most_played_hasher.finish(),
+        artists_content: artists_hasher.finish(),
+    }
 }
 
 /// Chunk the prepared rows into cards and push them into the mounted tab's
@@ -141,16 +169,40 @@ fn build_filtered_grids(fav_ui: &FavoritesUi) -> PreparedGrids {
 ///
 /// The counts are published unchunked beside the models, for *both* tabs:
 /// `rows.length` is a row count where the hero's stats line and the
-/// empty-state gate want cards, and the hidden tab's count still has to be
-/// right the moment it is picked.
-fn write_filtered_grids(ui: &AppWindow, prepared: &PreparedGrids) {
+/// empty-state gate want cards. They ride along with the models rather than
+/// being written unconditionally, which is safe only because every reader of a
+/// count is inside that tab's own branch or gated on `tab-idx` — so a count
+/// left stale under the skip below is one nothing can render, and picking the
+/// tab is itself a signature change that refreshes it.
+///
+/// Two things short-circuit it. A hidden section is never written to — the
+/// leave teardown emptied these models deliberately, and refilling them behind
+/// it holds a card row per entity for a view nobody can see. And an apply that
+/// would repaint what is already on screen is dropped: [`write_grid`] is a
+/// `set_vec` reset, so it tears down and rebuilds every mounted card, and a
+/// `stats_changed` tick reaches both tabs while only Most Played is ranked by
+/// play count.
+///
+/// Returns whether it rewrote the models, which is the same question the caller
+/// would otherwise re-ask to decide if announcing a warm cover tier means
+/// anything: a hidden section has no cards to announce to, and an unchanged one
+/// has none that need re-evaluating.
+fn write_filtered_grids(ui: &AppWindow, fav_ui: &FavoritesUi, prepared: &PreparedGrids) -> bool {
+    if !fav_ui.section_active() {
+        return false;
+    }
+
     let g = ui.global::<Favorites>();
+    let columns = g.get_columns();
+    let tab = tab_from_index(&g, g.get_tab_idx());
+
+    let signature = grid_signature(tab, columns, mounted_content(tab, prepared));
+    if fav_ui.state().last_grid_signature.lock().replace(signature) == Some(signature) {
+        return false;
+    }
 
     g.set_most_played_count(len_as_i32(prepared.most_played.len()));
     g.set_artist_count(len_as_i32(prepared.artists.len()));
-
-    let columns = g.get_columns();
-    let tab = tab_from_index(&g, g.get_tab_idx());
 
     // Only the mounted tab's model is built, and the other is emptied
     // rather than left holding its last rows: building it would allocate
@@ -183,6 +235,35 @@ fn write_filtered_grids(ui: &AppWindow, prepared: &PreparedGrids) {
         Vec::new()
     };
     write_grid(&g.get_artist_rows(), chunk_entity_rows(&artist_rows, columns), "artist");
+    true
+}
+
+/// The content hash of the tab that is actually on screen.
+///
+/// Only that one can be what changed visibly — the hidden grid's model is empty
+/// either way. Folding both in would undo the whole point of hashing them apart:
+/// every play-count flush moves Most Played's hash, and the Artists grid, which
+/// shows nothing derived from a play count, would rebuild along with it.
+fn mounted_content(tab: FavoritesTab, prepared: &PreparedGrids) -> u64 {
+    match tab {
+        FavoritesTab::MostPlayed => prepared.most_played_content,
+        FavoritesTab::Artists => prepared.artists_content,
+        FavoritesTab::Songs => 0,
+    }
+}
+
+/// Fold the mounted tab and the column count into the content hash.
+///
+/// Both shape what is on screen independently of the data: a tab switch has to
+/// fill one model and empty the other, and a column change re-chunks the same
+/// cards into different rows. Leave either out and the apply that needs to run
+/// most is the one that gets skipped.
+fn grid_signature(tab: FavoritesTab, columns: i32, content: u64) -> u64 {
+    let mut hasher = DefaultHasher::new();
+    tab.hash(&mut hasher);
+    columns.hash(&mut hasher);
+    content.hash(&mut hasher);
+    hasher.finish()
 }
 
 /// Apply from a worker thread, hopping to the event loop to write.
@@ -194,11 +275,11 @@ fn write_filtered_grids(ui: &AppWindow, prepared: &PreparedGrids) {
 /// section while its two queries are still in flight.
 fn apply_filtered_grids(fav_ui: &Arc<FavoritesUi>, weak: &Weak<AppWindow>, covers_warm: bool) {
     let prepared = build_filtered_grids(fav_ui);
+    let fav_ui = fav_ui.clone();
     let weak = weak.clone();
     let _ = slint::invoke_from_event_loop(move || {
         let Some(ui) = weak.upgrade() else { return };
-        write_filtered_grids(&ui, &prepared);
-        if covers_warm {
+        if write_filtered_grids(&ui, &fav_ui, &prepared) && covers_warm {
             mark_covers_warm(&ui);
         }
     });
@@ -212,7 +293,7 @@ fn apply_filtered_grids(fav_ui: &Arc<FavoritesUi>, weak: &Weak<AppWindow>, cover
 /// `GridEmptyState` is suppressed by a count that is already non-zero. Mirrors
 /// `ui::albums::grid::rebuild_grid`, which is a plain call for the same reason.
 pub fn apply_filtered_grids_now(ui: &AppWindow, fav_ui: &FavoritesUi) {
-    write_filtered_grids(ui, &build_filtered_grids(fav_ui));
+    let _ = write_filtered_grids(ui, fav_ui, &build_filtered_grids(fav_ui));
 }
 
 /// Let the mounted grid's card bindings start decoding on a miss again — see
@@ -250,3 +331,7 @@ fn write_grid(model: &slint::ModelRc<UiEntityGridRow>, rows: Vec<UiEntityGridRow
     };
     vec.set_vec(rows);
 }
+
+#[cfg(test)]
+#[path = "tests/sections_tests.rs"]
+mod tests;

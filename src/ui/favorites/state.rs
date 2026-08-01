@@ -49,6 +49,14 @@ pub(crate) struct FavoritesUiState {
     /// covers — the common case for a played-track / in-view-toggle refresh.
     /// Reset on section-leave so a genuine re-enter recomposes.
     pub last_mosaic_paths: Mutex<Vec<String>>,
+    /// Hash of the mounted grid's last applied contents, plus the tab and the
+    /// column count that shaped them. The same guard `last_mosaic_paths` is,
+    /// one surface down: a grid write is a `set_vec` reset that tears down and
+    /// rebuilds every mounted card, and a `stats_changed` tick lands on both
+    /// tabs while only Most Played is ranked by play count. Reset on
+    /// section-leave for the same reason the mosaic's is — the models are
+    /// cleared there, so a matching hash would otherwise skip the refill.
+    pub last_grid_signature: Mutex<Option<u64>>,
 }
 
 impl FavoritesUiState {
@@ -69,6 +77,7 @@ impl FavoritesUiState {
             fav_artists: Mutex::new(Vec::new()),
             applied_selection: Mutex::new(HashSet::new()),
             last_mosaic_paths: Mutex::new(Vec::new()),
+            last_grid_signature: Mutex::new(None),
         }
     }
 }

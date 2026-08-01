@@ -57,6 +57,10 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, fav_ui: &Arc<FavoritesUi>) 
                 // already come back, so leaving the guard to it can strand the
                 // hero on the bare gradient floor until the next channel tick.
                 fu.forget_mosaic();
+                // Same tick, same reason: the models are emptied below, so a
+                // surviving signature would match the identical data on
+                // re-enter and skip the refill that fills them back in.
+                fu.forget_grid_signature();
                 // Six heroes share one colour set, so hand it back to the
                 // floor rather than leaving this mosaic's solve for the
                 // next hero to paint under.
