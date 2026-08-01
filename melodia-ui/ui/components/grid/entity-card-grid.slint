@@ -15,9 +15,10 @@ import { EntityCard } from "entity-card.slint";
 // uncapped, so they take this shape instead.
 //
 // Covers are pulled lazily: each on-screen card's `cover` binding invokes
-// `request-cover(artwork_path)`, which the host forwards to its global. Only
-// mounted cards evaluate it, so the grid never decodes a cover the user
-// hasn't scrolled to, and the model stays pure data.
+// `request-cover(artwork_path, covers-generation)`, which the host forwards to
+// its global. Only mounted cards evaluate it, so the grid never decodes a cover
+// the user hasn't scrolled to, and the model stays pure data. The second
+// argument is what makes a cold tier safe — see `covers-generation` below.
 //
 // Mirrors `AlbumGrid`'s host-mounted-scrollbar contract: viewport metrics are
 // exposed via the `v-*` out properties + `set-v-offset`, so the host view can

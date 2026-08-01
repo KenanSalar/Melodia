@@ -286,4 +286,3 @@ pub fn tune_cache_for_display(app: &AppWindow, playlists_ui: &PlaylistsUi) {
     playlists_ui.grid_covers.resize(cap);
     log::debug!("ui::playlists playlist-cover cache cap tuned to {cap}");
 }
-

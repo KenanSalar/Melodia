@@ -86,7 +86,7 @@ pub fn cover_cap(logical_w: u32, logical_h: u32, fallback: NonZeroUsize) -> NonZ
 /// Saturating boundary for the `f64 → u32` step — mirrors
 /// `media::artwork::f64_to_pixel`; monitor extents stay far below
 /// `u32::MAX` in practice.
-#[allow(
+#[expect(
     clippy::cast_possible_truncation,
     clippy::cast_sign_loss,
     reason = "logical screen extent stays well below u32::MAX; this is the saturating boundary"

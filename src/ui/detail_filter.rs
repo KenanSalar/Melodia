@@ -15,14 +15,16 @@
 //! own worker-thread row prep (it also rebuilds an Albums strip), so it
 //! reuses only [`track_matches`] and [`restamp_selection`].
 //!
-//! The predicates alone are reused further out: the Favorites and
-//! Recently-Played Most Played strips match on [`most_played_matches`],
-//! and the single-name strips (Favorite Artists, Artist Detail's Albums)
-//! on [`field_contains`]. The two Most Played strips run their predicate
-//! twice — once to build the card model, once to resolve the ids
-//! `play-track` enqueues — so sharing it is what keeps a strip and its
-//! queue agreeing. The single-name strips only build a model; their card
-//! actions fetch by entity id (Favorite Artists) or navigate (Albums).
+//! The predicates alone are reused further out, by card surfaces of both
+//! shapes — Favorites' Most Played is a virtualized grid tab, Recently
+//! Played's is still a strip, and the predicate doesn't care. Both match on
+//! [`most_played_matches`]; the single-name surfaces (Favorites' Favorite
+//! Artists grid, Artist Detail's Albums strip) on [`field_contains`]. Both
+//! Most Played surfaces run their predicate twice — once to build the card
+//! model, once to resolve the ids `play-track` enqueues — so sharing it is
+//! what keeps a surface and its queue agreeing. The single-name ones only
+//! build a model; their card actions fetch by entity id (Favorite Artists)
+//! or navigate (Albums).
 
 use std::collections::HashSet;
 
@@ -43,12 +45,12 @@ pub fn track_matches(r: &RsTrackListRow, needle: &str) -> bool {
         || r.album.as_deref().is_some_and(|a| field_contains(a, needle))
 }
 
-/// Lowered-needle match for a Most Played strip card — title + artist, the
-/// same two fields the card renders. Favorites and Recently Played share
-/// both the row type and this predicate, and each uses it twice: once to
-/// build the strip model, once to resolve the ids `play-track` hands to
-/// `player_play_tracks`. Keeping those two on one predicate is what stops
-/// the strip and its queue from disagreeing about what's on screen.
+/// Lowered-needle match for a Most Played card — title + artist, the same
+/// two fields the card renders. Favorites and Recently Played share both the
+/// row type and this predicate, and each uses it twice: once to build the
+/// card model, once to resolve the ids `play-track` hands to
+/// `player_play_tracks`. Keeping those two on one predicate is what stops a
+/// surface and its queue from disagreeing about what's on screen.
 pub fn most_played_matches(t: &MostPlayedFavorite, needle: &str) -> bool {
     field_contains(&t.title, needle)
         || t.artist.as_deref().is_some_and(|a| field_contains(a, needle))
@@ -64,9 +66,9 @@ pub fn most_played_matches(t: &MostPlayedFavorite, needle: &str) -> bool {
 /// — that's what lets every filter walk run unconditionally rather than
 /// keep its own empty-search-bar fast path.
 ///
-/// Public because the single-field strips match on one name rather than a
-/// row — Favorite Artists and the Artist-Detail Albums strip call it
-/// directly instead of carrying their own `to_lowercase().contains(…)`.
+/// Public because the single-field card surfaces match on one name rather
+/// than a row — the Favorite Artists grid and the Artist-Detail Albums strip
+/// call it directly instead of carrying their own `to_lowercase().contains(…)`.
 pub fn field_contains(haystack: &str, needle: &str) -> bool {
     if needle.is_empty() {
         return true;

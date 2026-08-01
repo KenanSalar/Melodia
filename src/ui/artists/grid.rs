@@ -169,4 +169,3 @@ pub fn tune_cache_for_display(app: &AppWindow, artists_ui: &ArtistsUi) {
     artists_ui.grid_covers.resize(cap);
     log::debug!("ui::artists artist-cover cache cap tuned to {cap}");
 }
-

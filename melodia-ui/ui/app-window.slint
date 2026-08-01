@@ -331,11 +331,11 @@ export component AppWindow inherits Window {
         active-changed(active) => { Browse.section-active-changed(active); }
     }
 
-    // Favorites. The single `FavoritesView` covers both the hero+strips and the
-    // All Songs list, so there's no detail flip inside this branch. Rust
-    // releases the mosaic / Most Played / Artists cover caches AND the borrowed
-    // Albums grid cover cache on `false`, then re-fetches hero + strips +
-    // tracks via the library-changed dirty flag on `true`.
+    // Favorites. The single `FavoritesView` covers the hero and all three tab
+    // bodies, so there's no detail flip inside this branch. Rust releases the
+    // mosaic / Most Played / Artists cover caches AND the borrowed Albums grid
+    // cover cache on `false`, then re-fetches hero + grids + tracks via the
+    // library-changed dirty flag on `true`.
     SectionActiveGate {
         index: 2;
         mini-active: mini-switch.active;
@@ -546,12 +546,12 @@ export component AppWindow inherits Window {
                             enter-from: Nav.pending-enter-from;
                             BrowseView { width: 100%; height: 100%; }
                         }
-                        // Index 2 (Favorites) — single scrollable page
-                        // (hero mosaic + Most Played / Favorite Albums /
-                        // Favorite Artists strips + All Songs list).
-                        // Cross-tab nav: clicking a favorite album/artist
-                        // card sets `*Detail.origin-nav-index = 2` so
-                        // the back arrow returns here, mirroring the
+                        // Index 2 (Favorites) — a pinned hero mosaic whose
+                        // top row carries the tab bar and the filter, over
+                        // three sub-views (Songs / Most Played / Favorite
+                        // Artists). Cross-tab nav: clicking a favorite
+                        // artist card sets `*Detail.origin-nav-index = 2`
+                        // so the back arrow returns here, mirroring the
                         // Artist Detail → Album Detail → back behaviour.
                         if !Nav.now-playing-open && Nav.selected-index == 2: ViewTransition {
                             width: parent.width;

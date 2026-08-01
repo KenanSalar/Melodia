@@ -61,13 +61,15 @@ impl SearchUiState {
 /// Albums-strip tile size (px). The strip renders 160 px square cards, and
 /// `FemtoVG` minifies with plain bilinear (no mipmaps), so staying near the
 /// on-screen size keeps `image-fit: cover` clean without the album grid's
-/// 448 px tier. Matches the Favorites Most-Played tier so the two surfaces
-/// feel like siblings.
+/// 448 px tier. Sized against these cards rather than against another view's
+/// tier: the grids draw flex-filled cards that run well past 260 px and take
+/// the 448 px tier for it, and a strip that followed them would decode four
+/// times the pixels it can show.
 pub(super) const ALBUM_STRIP_THUMB_SIZE: u32 = 180;
 
 /// Artists-strip tile size (px). Slightly larger than the albums tier
 /// because the circular avatar reads softer when downscaled less
-/// aggressively. 200 px matches Favorites' Favorite Artists strip.
+/// aggressively.
 pub(super) const ARTIST_STRIP_THUMB_SIZE: u32 = 200;
 
 /// LRU capacity per strip — `search_all` clamps album + artist results

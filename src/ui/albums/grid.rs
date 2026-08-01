@@ -207,4 +207,3 @@ pub fn tune_cache_for_display(app: &AppWindow, albums_ui: &AlbumsUi) {
     albums_ui.grid_covers.resize(cap);
     log::debug!("ui::albums album-cover cache cap tuned to {cap}");
 }
-

@@ -13,8 +13,11 @@ use crate::state::AppState;
 use crate::ui::detail_filter::most_played_matches;
 use crate::{AppWindow, EntityStripRow as UiEntityStripRow, RecentlyPlayed};
 
-/// Cap for the Most Played strip. Matches the Favorites default — enough to
-/// fill a horizontal scroll comfortably.
+/// Cap for the Most Played strip — enough to fill a horizontal scroll
+/// comfortably without inflating the SQL projection. A strip walks its rows
+/// in a plain `for`, so the cap is what keeps it affordable; the Favorites
+/// tab that used to share this number is a virtualized grid now and fetches
+/// uncapped.
 const MOST_PLAYED_LIMIT: i64 = 10;
 
 /// Fetch the Most Played strip and apply it (filtered). Returns `()` — the

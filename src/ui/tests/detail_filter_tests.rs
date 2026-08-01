@@ -93,10 +93,12 @@ fn ascii_needle_against_non_ascii_haystack_matches() {
 
 // --- most_played_matches ---
 //
-// The strip predicate is load-bearing twice over: `apply_filtered_strips`
-// builds the card model with it and `most_played_track_ids` resolves the
-// ids `play-track` enqueues with it, so a drift between the two would
-// hand `player_play_tracks` a list the strip isn't showing.
+// The card predicate is load-bearing twice over on both surfaces that use it:
+// the model build (`favorites::sections::build_filtered_grids`,
+// `recently_played::sections::apply_filtered_strips`) and the
+// `most_played_track_ids` walk that resolves the ids `play-track` enqueues. A
+// drift between the two hands `player_play_tracks` a list the cards aren't
+// showing.
 
 /// Build a minimal `MostPlayedFavorite` with only the two matched fields set.
 fn mk_most_played(title: &str, artist: Option<&str>) -> MostPlayedFavorite {

@@ -41,6 +41,14 @@ fn array_body(marker: &str) -> Option<&'static str> {
         .map(|(body, _)| body)
 }
 
+/// The `triggered` body of the view's single mount `Timer`. Two things are
+/// seeded from it and neither has another way in, so both tests below read it.
+fn mount_timer_body() -> &'static str {
+    VIEW.split_once("Timer {")
+        .and_then(|(_, rest)| rest.split_once("\n    }"))
+        .map_or("", |(body, _)| body)
+}
+
 /// `Favorites.tab-count` is the sole definition of how many sub-views exist —
 /// `seed_tab` clamps the persisted `views.json` index against it instead of
 /// carrying its own const. Nothing else in the build notices when it drifts
@@ -179,14 +187,27 @@ fn the_page_width_mirror_has_a_mount_seed() {
          feeding a child's size re-enters layout"
     );
 
-    let timer = VIEW
-        .split_once("Timer {")
-        .and_then(|(_, rest)| rest.split_once("\n    }"))
-        .map_or("", |(body, _)| body);
     assert!(
-        timer.contains("root.page-w = root.width"),
+        mount_timer_body().contains("root.page-w = root.width"),
         "favorites-view.slint's mount Timer must re-run the `page-w` mirror — `changed` never \
          fires for a window born at its final size"
+    );
+}
+
+/// `prev-tab` is what tells a forward pick from a back one, and its seed has to
+/// be *taken* rather than left bound. `TabBar` writes `selected-index` before it
+/// emits `selected`, and that property is two-way bound to `Favorites.tab-idx` —
+/// so a live seed is already dirty when the handler reads it and evaluates to
+/// the tab just picked. `i > prev-tab` is then `i > i`, and every first switch
+/// after an entry slides in from the left whichever way it went. The handler's
+/// own `prev-tab = i` orphans the binding, so the second pick onward was always
+/// right, which is what made it read as a one-off glitch rather than a seed bug.
+#[test]
+fn the_slide_direction_snapshots_the_tab_at_mount() {
+    assert!(
+        mount_timer_body().contains("root.prev-tab = Favorites.tab-idx"),
+        "favorites-view.slint's mount Timer must snapshot `prev-tab` — left bound, it reads back \
+         the tab that was just picked and every first switch enters from the left"
     );
 }
 

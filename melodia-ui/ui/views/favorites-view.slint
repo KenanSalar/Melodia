@@ -91,6 +91,10 @@ export component FavoritesView inherits Rectangle {
         interval: 1ms;
         triggered => {
             root.page-w = root.width;
+            // Take the `prev-tab` snapshot here, not at its declaration —
+            // see the property for why a live seed can't answer the
+            // question the pick handler asks it.
+            root.prev-tab = Favorites.tab-idx;
             self.running = false;
         }
     }
@@ -162,10 +166,17 @@ export component FavoritesView inherits Rectangle {
     // The page is rebuilt on every entry, so this re-disarms for free.
     property <bool> tab-anim-armed: false;
     property <NavEnterFrom> tab-enter-from: NavEnterFrom.right;
-    // Seeded from the global and then written by the pick handler, which
-    // orphans the binding — the seed-then-own shape. Seeding matters because
-    // the page can be re-entered on any tab: a constant 0 here would make the
-    // first switch after coming back on the Artists tab slide the wrong way.
+    // Which tab we came from, so the pick handler can tell forward from back.
+    // The page can be re-entered on any tab, so a constant 0 would send the
+    // first switch back the wrong way — but the seed below has to be *taken*
+    // at mount rather than left bound, which is what the `page-w` Timer above
+    // does. `TabBar` writes `selected-index` before it emits `selected`, and
+    // that property is two-way bound to `Favorites.tab-idx`; left bound, this
+    // one is dirty by the time the handler reads it and evaluates to the tab
+    // just picked, so `i > prev-tab` is `i > i` and every first switch after
+    // an entry enters from the left. The write orphans the binding, so from
+    // the second pick onward it was always right — which is exactly what made
+    // it read as a one-off glitch.
     property <int> prev-tab: Favorites.tab-idx;
 
     property <string> filter-placeholder:

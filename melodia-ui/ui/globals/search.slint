@@ -40,8 +40,9 @@ export global Search {
     // because: (a) the badge text needs to be localized inline in
     // `.slint` (Rust-pushed strings can't `@tr()`); (b) baking a `kind`
     // field into `EntityStripRow` would warp every other consumer
-    // (Favorites' Most Played + Favorite Artists strips). `top-kind ==
-    // ""` ⇒ no Top Result section.
+    // (Favorites' Most Played + Favorite Artists grid tabs, Recently
+    // Played's Most Played strip). `top-kind == ""` ⇒ no Top Result
+    // section.
     in-out property <string> top-kind;            // "album" | "artist" | ""
     in-out property <int>    top-id;
     in-out property <string> top-title;
