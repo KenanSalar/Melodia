@@ -73,9 +73,8 @@ pub(super) fn wire(
     // --- Tab switch -----------------------------------------------
     // The bar has already moved `tab-idx` and cleared the Slint-side
     // filter by the time this runs, so this is the catch-up: drop the Rust
-    // filter shadow to match, build the entering tab's model
-    // (`apply_filtered_grids` only fills the mounted one), then off-thread
-    // swap the cover tiers over and persist the pick.
+    // filter shadow to match, build the entering tab's model, then off-thread
+    // persist the pick and swap the cover tiers over.
     {
         let s = state.clone();
         let fu = fav_ui.clone();
@@ -85,38 +84,48 @@ pub(super) fn wire(
             let g = ui.global::<Favorites>();
             let entering = favorites_ui_mod::tab_from_index(&g, tab);
 
-            // Shadow first: `apply_filtered_grids` below and every later
-            // fetch decide which model to fill and which tier to warm from
-            // it, and both can run off the UI thread where the global isn't
-            // reachable.
+            // Shadow first: the model build below and every later fetch decide
+            // which model to fill and which tier to warm from it, and both can
+            // run off the UI thread where the global isn't reachable.
             fu.set_active_tab(entering);
             favorites_ui_mod::set_filter(&fu, String::new());
 
-            // Fill the entering tab's model on this tick — it mounts on the
-            // next frame, and a grid that paints before its rows land shows
-            // its empty state for a beat.
-            favorites_ui_mod::apply_filtered_grids(&fu, &weak);
-            favorites_ui_mod::apply_filtered_tracks(&fu, &weak);
+            // The entering tier was cleared when its tab was last left, so the
+            // cards mount cold: hold the lookups at cache-only until the
+            // prewarm below reports back, or each visible card drags a 448 px
+            // decode onto this thread in the frame that paints the grid.
+            g.set_covers_generation(0);
 
-            // Then, off-thread and in that order: drop the tier the departed
-            // grid was holding, and warm the entering one's first screenful.
-            // Releasing first is what keeps the peak at one tier rather than
-            // two — Songs holds neither, so entering it releases both and
-            // warms nothing.
+            // Fill the entering tab's model on this tick — it mounts on the
+            // next frame, and the `_now` variant is what makes "this tick"
+            // true: the hidden tab's model is empty, and the count that gates
+            // its empty state is not, so a grid that paints before its rows
+            // land shows a bare panel rather than a placeholder.
+            favorites_ui_mod::apply_filtered_grids_now(&ui, &fu);
+            // Only when Songs is the tab being entered: rebuilding a list
+            // nobody can see costs one prepared row per favourite on this
+            // thread, and every entry into Songs comes back through here.
+            if entering == favorites_ui_mod::FavoritesTab::Songs {
+                favorites_ui_mod::apply_filtered_tracks(&fu, &weak);
+            }
+
             let fu_covers = fu.clone();
             let s_disk = s.clone();
+            let weak_warm = weak.clone();
             s.runtime.spawn_blocking(move || {
-                if entering != favorites_ui_mod::FavoritesTab::MostPlayed {
-                    fu_covers.release_most_played_covers();
-                }
-                if entering != favorites_ui_mod::FavoritesTab::Artists {
-                    fu_covers.release_artist_covers();
-                }
-                fu_covers.prewarm_tab_covers(entering);
-
                 if let Err(e) = library::settings::set_favorites_tab(&s_disk, tab) {
                     log::warn!("favorites::set_favorites_tab: {e}");
                 }
+                fu_covers.swap_tab_covers(entering);
+                // Re-check on the UI thread, where the shadow is written: a
+                // pick made while the decodes ran has already rewound the
+                // counter, and announcing a tier this task no longer owns puts
+                // the next tab's cards straight back on the decoding path.
+                let _ = weak_warm.upgrade_in_event_loop(move |ui| {
+                    if fu_covers.active_tab() == entering {
+                        favorites_ui_mod::mark_covers_warm(&ui);
+                    }
+                });
             });
         });
     }
@@ -128,7 +137,8 @@ pub(super) fn wire(
         let fu = fav_ui.clone();
         let weak = weak.clone();
         g.on_columns_changed(move |_cols| {
-            favorites_ui_mod::apply_filtered_grids(&fu, &weak);
+            let Some(ui) = weak.upgrade() else { return };
+            favorites_ui_mod::apply_filtered_grids_now(&ui, &fu);
         });
     }
 }

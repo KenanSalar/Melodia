@@ -1,5 +1,11 @@
+use std::num::NonZeroUsize;
+
+use crate::media::cover_thumbs::CoverThumbs;
+
 const GLOBAL: &str = include_str!("../../../../melodia-ui/ui/globals/curated.slint");
 const VIEW: &str = include_str!("../../../../melodia-ui/ui/views/favorites-view.slint");
+const GRID: &str =
+    include_str!("../../../../melodia-ui/ui/components/grid/entity-card-grid.slint");
 
 /// The tab count Slint declares today. Kept local so a change to
 /// `Favorites.tab-count` doesn't silently rewrite what this asserts.
@@ -167,4 +173,87 @@ fn the_page_width_mirror_has_a_mount_seed() {
         "favorites-view.slint's mount Timer must re-run the `page-w` mirror — `changed` never \
          fires for a window born at its final size"
     );
+}
+
+/// A `pure` callback's result is cached until a dependency is dirtied, so the
+/// card's `cover` binding has to *read* `covers-generation` for the prewarm's
+/// bump to re-run it. Drop the read and everything still builds and still looks
+/// right on a warm tier — a freshly-entered tab just never shows a cover.
+#[test]
+fn the_grid_card_reads_the_covers_generation() {
+    let binding = GRID
+        .lines()
+        .map(str::trim)
+        .find(|line| line.starts_with("cover:"))
+        .unwrap_or_default();
+
+    assert!(
+        binding.contains("root.covers-generation"),
+        "entity-card-grid.slint's `cover` binding must read `covers-generation` — otherwise the \
+         host's bump can't invalidate a `pure` callback's cached result"
+    );
+}
+
+/// Both halves have to be wired at every grid mount: the property, so the bump
+/// reaches the cards, and the second callback argument, so Rust knows whether
+/// the tier is warm enough to decode on. A mount that forgets either one pins
+/// its grid at generation 0 — permanently coverless.
+///
+/// Counted by arity rather than by name, because the hero's `CoverMosaic` wires
+/// a `request-cover` too and deliberately keeps the one-argument form: its tier
+/// is warmed by `refresh_hero`, not by a tab.
+#[test]
+fn every_grid_mount_forwards_the_covers_generation() {
+    let mounts = VIEW.matches("EntityCardGrid {").count();
+    assert!(mounts > 0, "favorites-view.slint must still mount at least one `EntityCardGrid`");
+
+    assert_eq!(
+        VIEW.matches("covers-generation: Favorites.covers-generation;").count(),
+        mounts,
+        "every `EntityCardGrid` mount must forward `Favorites.covers-generation`"
+    );
+
+    let forwards = VIEW
+        .lines()
+        .map(str::trim)
+        .filter(|line| line.starts_with("request-cover("))
+        .filter(|line| line.split_once("=>").is_some_and(|(params, _)| params.contains(',')))
+        .count();
+    assert_eq!(
+        forwards, mounts,
+        "every `EntityCardGrid` mount must wire a `request-cover` that takes the generation \
+         alongside the path and passes it on"
+    );
+}
+
+/// Generation 0 means "this tier was cleared when its tab was left", and the
+/// lookup must answer from the cache alone — a decode here lands on the UI
+/// thread, in the frame that mounts the grid, once per visible card. It is not
+/// "return nothing": an entry that survives still comes back, which is what
+/// makes a re-entered warm tab paint instantly.
+#[test]
+fn a_cold_generation_serves_the_cache_without_decoding() -> Result<(), Box<dyn std::error::Error>> {
+    let cap = NonZeroUsize::new(4).ok_or("cap must be > 0")?;
+    let thumbs = CoverThumbs::with_config(64, cap);
+    let tmp = tempfile::tempdir()?;
+    let path = tmp.path().join("cover.png");
+    image::RgbImage::from_pixel(96, 96, image::Rgb([120, 60, 200])).save(&path)?;
+    let path = path.to_str().ok_or("temp path is not UTF-8")?;
+
+    assert_eq!(
+        super::grid_cover(&thumbs, path, 0).size().width,
+        0,
+        "a cold tier must hand back a placeholder rather than decode on the UI thread"
+    );
+    assert_eq!(
+        super::grid_cover(&thumbs, path, 1).size().width,
+        64,
+        "a warmed tier must decode on miss, so rows scrolled to later still get covers"
+    );
+    assert_eq!(
+        super::grid_cover(&thumbs, path, 0).size().width,
+        64,
+        "generation 0 gates the *decode*, not the lookup — a cached cover still resolves"
+    );
+    Ok(())
 }

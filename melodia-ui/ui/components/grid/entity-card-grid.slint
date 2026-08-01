@@ -41,10 +41,17 @@ export component EntityCardGrid inherits Rectangle {
     // with `play_count == 0` stay bare either way.
     in property <bool> show-play-count: false;
 
+    // Bumped by the host once the tier behind `request-cover` has been warmed
+    // off-thread. A card's `cover` binding reads it, which is the only reason
+    // the bump re-runs a `pure` callback whose result is otherwise cached
+    // until a dependency is dirtied; the host also forwards the value, so its
+    // Rust side can answer cache-only while the tier is still cold.
+    in property <int> covers-generation: 0;
+
     callback row-clicked(int /*entity_id*/);
     // Lazy per-card cover lookup — the host forwards this to its global's
     // `request-cover` callback. `pure` so it can be used inside a binding.
-    pure callback request-cover(string /*artwork_path*/) -> image;
+    pure callback request-cover(string /*artwork_path*/, int /*generation*/) -> image;
 
     // Viewport metrics for a host-mounted `OverlayScrollbar`. Sign convention
     // matches `TrackList` and `AlbumGrid`: positive `v-offset` = scrolled by
@@ -77,7 +84,7 @@ export component EntityCardGrid inherits Rectangle {
                     card-height: root.card-height;
                     artwork-path: entity.artwork_path;
                     // Lazy cover — only this on-screen card evaluates it.
-                    cover: root.request-cover(entity.artwork_path);
+                    cover: root.request-cover(entity.artwork_path, root.covers-generation);
                     circular: root.circular;
                     fallback-icon: root.fallback-icon;
                     // Pronounced 1.15 zoom in placeholder mode (matches the

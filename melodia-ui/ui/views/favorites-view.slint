@@ -544,7 +544,8 @@ export component FavoritesView inherits Rectangle {
                     row-height: geom.row-h;
                     gap: root.grid-gap;
                     show-play-count: true;
-                    request-cover(p) => { Favorites.request-most-played-cover(p) }
+                    covers-generation: Favorites.covers-generation;
+                    request-cover(p, gen) => { Favorites.request-most-played-cover(p, gen) }
                     row-clicked(id) => { Favorites.play-track(id); }
                 }
 
@@ -585,7 +586,8 @@ export component FavoritesView inherits Rectangle {
                     gap: root.grid-gap;
                     circular: true;
                     fallback-icon: "person";
-                    request-cover(p) => { Favorites.request-artist-cover(p) }
+                    covers-generation: Favorites.covers-generation;
+                    request-cover(p, gen) => { Favorites.request-artist-cover(p, gen) }
                     row-clicked(id) => { Favorites.open-artist(id); }
                 }
 

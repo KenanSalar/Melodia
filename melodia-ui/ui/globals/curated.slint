@@ -105,9 +105,18 @@ export global Favorites {
     // surface into the right LRU (mosaic tiles; grid-sized thumbs for
     // most-played + circular artist). Songs-tab rows resolve through the
     // shared `RowCovers` global.
-    pure callback request-mosaic-cover(string)      -> image;
-    pure callback request-most-played-cover(string) -> image;
-    pure callback request-artist-cover(string)      -> image;
+    //
+    // The two grid lookups take `covers-generation` as a second argument,
+    // doing both halves of the queue sheet's trick: reading it is what makes
+    // a `pure` binding re-evaluate when the tier is warmed behind an
+    // already-mounted grid, and its value is the "is it warm" flag Rust
+    // branches on. 0 ⇒ answer from the cache and let the card paint its
+    // placeholder; a tab switch clears the entering tier, so decoding on that
+    // first frame is one 448 px decode per visible card, on the UI thread.
+    in-out property <int> covers-generation: 0;
+    pure callback request-mosaic-cover(string)           -> image;
+    pure callback request-most-played-cover(string, int) -> image;
+    pure callback request-artist-cover(string, int)      -> image;
 
     // Hero actions. The pill is per-tab: Songs shuffles the filtered track
     // list, Most Played shuffles what its grid is showing.

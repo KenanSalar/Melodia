@@ -100,7 +100,7 @@ pub fn tab_from_index(g: &Favorites<'_>, idx: i32) -> FavoritesTab {
 }
 
 pub use hero::refresh_hero;
-pub use sections::{apply_filtered_grids, refresh_grids};
+pub use sections::{apply_filtered_grids_now, mark_covers_warm, refresh_grids};
 pub use selection::{clear_selection, handle_select_row};
 pub use tracks::{
     apply_filtered_tracks, apply_row_rating, current_filter, current_sort, refresh_tracks,
@@ -273,21 +273,39 @@ impl FavoritesUi {
         crate::tasks::heap_trim::trim();
     }
 
-    /// Drop just the Most Played grid's cover cache. Called (off the UI
-    /// thread) when another tab is picked: the `if tab-idx == …` gate has
-    /// unmounted the grid, so its covers are no longer visible or queried
-    /// via `request-most-played-cover`. Coming back re-decodes them lazily
-    /// on card mount. Mirrors
-    /// [`crate::ui::albums::AlbumsUi::release_grid_covers`], which does the
-    /// same on drill-in.
-    pub fn release_most_played_covers(&self) {
-        self.most_played_thumbs.clear();
+    /// Hand the grid tiers over to `entering`: drop whatever the tab being
+    /// left was holding, then decode the new tab's first screenful. Blocking —
+    /// call it from `spawn_blocking`, never on the UI thread.
+    ///
+    /// Releasing first is what keeps the peak at one tier rather than two; the
+    /// single `heap_trim` comes last, after the prewarm has taken the pages it
+    /// needs, so we don't hand them back only to ask for them again. Songs
+    /// holds neither tier, so entering it releases both and warms nothing.
+    ///
+    /// Bails when a later pick has already overtaken this one, the way
+    /// [`Self::release_section_state`] bails on a re-enter: two of these racing
+    /// on the blocking pool would otherwise let the loser clear the tier the
+    /// winner just warmed.
+    pub fn swap_tab_covers(&self, entering: FavoritesTab) {
+        if self.active_tab() != entering {
+            return;
+        }
+        if entering != FavoritesTab::MostPlayed {
+            self.most_played_thumbs.clear();
+        }
+        if entering != FavoritesTab::Artists {
+            self.artist_thumbs.clear();
+        }
+        self.prewarm_tab_covers(entering);
         crate::tasks::heap_trim::trim();
     }
 
-    /// Drop just the Favorite Artists grid's cover cache — the tab-leave
-    /// counterpart of [`Self::release_most_played_covers`], and also called
-    /// when a card drills into Artist Detail.
+    /// Drop just the Favorite Artists grid's cover cache. Called (off the UI
+    /// thread) when a card drills into Artist Detail: `Nav` flips, the grid is
+    /// unmounted, and its covers are no longer visible or queried via
+    /// `request-artist-cover`. Mirrors
+    /// [`crate::ui::albums::AlbumsUi::release_grid_covers`], which does the
+    /// same on drill-in.
     pub fn release_artist_covers(&self) {
         self.artist_thumbs.clear();
         crate::tasks::heap_trim::trim();
@@ -306,15 +324,13 @@ impl FavoritesUi {
 
     /// Lazy cover lookup for the Most Played grid cards. Routed via
     /// `Favorites.request-most-played-cover`.
-    pub fn most_played_cover(&self, artwork_path: &str) -> Image {
-        self.most_played_thumbs
-            .get_or_load_opt(Some(artwork_path).filter(|s| !s.is_empty()))
+    pub fn most_played_cover(&self, artwork_path: &str, generation: i32) -> Image {
+        grid_cover(&self.most_played_thumbs, artwork_path, generation)
     }
 
     /// Lazy cover lookup for the Favorite Artists circular cards.
-    pub fn artist_cover(&self, artwork_path: &str) -> Image {
-        self.artist_thumbs
-            .get_or_load_opt(Some(artwork_path).filter(|s| !s.is_empty()))
+    pub fn artist_cover(&self, artwork_path: &str, generation: i32) -> Image {
+        grid_cover(&self.artist_thumbs, artwork_path, generation)
     }
 
     /// Track ids of the post-filter Songs tab, in display order.
@@ -337,9 +353,9 @@ impl FavoritesUi {
     /// `shuffle-most-played` hand these to `player_play_tracks` so a card
     /// loads that grid rather than the Songs tab's list.
     ///
-    /// Filtered through the same predicate `apply_filtered_grids` builds
-    /// the model with — the grid narrows with the hero search bar, so the
-    /// raw cache would enqueue cards that aren't on screen.
+    /// Filtered through the same predicate `sections::build_filtered_grids`
+    /// builds the model with — the grid narrows with the hero search bar, so
+    /// the raw cache would enqueue cards that aren't on screen.
     pub fn most_played_track_ids(&self) -> Vec<i64> {
         let needle = self.inner.filter.lock().to_lowercase();
         self.inner
@@ -378,6 +394,25 @@ impl FavoritesUi {
         if let Some(r) = self.inner.tracks_all.lock().iter_mut().find(|r| r.id == id) {
             r.rating = rating;
         }
+    }
+}
+
+/// Resolve one grid card's cover, decoding only once the tier is known warm.
+///
+/// `generation` is `Favorites.covers-generation`: 0 means the tab was just
+/// entered and its tier was cleared on the previous tab-leave, so answer from
+/// the cache alone and let the card paint its placeholder. Decoding here
+/// instead puts one 448 px decode per visible card on the UI thread, in the
+/// frame that mounts the grid — the off-thread prewarm bumps the counter when
+/// it lands, which re-runs these bindings and lets rows scrolled to later load
+/// on demand. Same contract as `Queue.request-cover`; see the "Covers" section
+/// of `.claude/rules/ui-patterns.md`.
+fn grid_cover(thumbs: &CoverThumbs, artwork_path: &str, generation: i32) -> Image {
+    let path = Some(artwork_path).filter(|s| !s.is_empty());
+    if generation == 0 {
+        thumbs.get_cached_opt(path)
+    } else {
+        thumbs.get_or_load_opt(path)
     }
 }
 

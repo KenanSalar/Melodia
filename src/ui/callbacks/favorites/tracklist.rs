@@ -104,9 +104,10 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, fav_ui: &Arc<FavoritesUi>) 
         let fu = fav_ui.clone();
         let weak = weak.clone();
         g.on_filter_changed(move |text| {
+            let Some(ui) = weak.upgrade() else { return };
             favorites_ui_mod::set_filter(&fu, text.to_string());
             favorites_ui_mod::apply_filtered_tracks(&fu, &weak);
-            favorites_ui_mod::apply_filtered_grids(&fu, &weak);
+            favorites_ui_mod::apply_filtered_grids_now(&ui, &fu);
         });
     }
     {

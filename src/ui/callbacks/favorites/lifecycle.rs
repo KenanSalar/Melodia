@@ -61,6 +61,10 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, fav_ui: &Arc<FavoritesUi>) 
                 // floor rather than leaving this mosaic's solve for the
                 // next hero to paint under.
                 crate::ui::hero_backdrop::reset(&ui);
+                // Both grid tiers go with `release_section_state` below, so
+                // rewind the counter that means "cold" — else the next enter
+                // reads a leftover bump as a warm tier and decodes on mount.
+                g.set_covers_generation(0);
                 clear_vec_model::<UiTrackListRow>(&g.get_tracks(), "favorites: clear tracks");
                 clear_vec_model::<UiEntityGridRow>(
                     &g.get_most_played_rows(),
