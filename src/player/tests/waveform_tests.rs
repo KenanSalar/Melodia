@@ -215,6 +215,53 @@ fn a_nonsense_width_still_yields_drawable_columns() {
     assert_eq!(columns_for_width(f32::INFINITY), MIN_COLUMNS);
 }
 
+// --- push_fixed --------------------------------------------------------------
+
+#[test]
+fn push_fixed_rounds_to_the_requested_place() {
+    // Swept rather than spot-checked: this is the only writer for every
+    // coordinate the trace emits, and the exact-byte pins below only exercise the
+    // handful of values those figures happen to produce. 1009 is prime, so the
+    // step lands on no round decimal and the sweep covers both signs densely.
+    for k in -1009i16..=1009 {
+        let value = f32::from(k) / 1009.0;
+        for (decimals, scale) in [(3u32, 1000.0_f32), (4, 10_000.0)] {
+            let mut out = String::new();
+            push_fixed(&mut out, value, decimals);
+
+            let back: f32 = out.parse().unwrap_or(f32::NAN);
+            // Half a unit in the last place, plus slack for the parse's own
+            // rounding — which is orders of magnitude smaller.
+            assert!(
+                (back - value).abs() <= 0.5 / scale + 1e-6,
+                "`{out}` is not `{value}` rounded to {decimals} places",
+            );
+        }
+    }
+}
+
+#[test]
+fn push_fixed_diverges_from_core_fmt_only_on_zero_sign_and_ties() {
+    // Both differences are documented on `push_fixed` and neither reaches the
+    // rendered figure; pinning them is what stops a future edit "fixing" one and
+    // silently changing every coordinate the trace writes.
+    let mut out = String::new();
+
+    // Negative zero loses its sign. Same point, and the SVG grammar reads the two
+    // spellings identically.
+    push_fixed(&mut out, -0.0, 3);
+    assert_eq!(out, "0.000");
+    assert_eq!(format!("{:.3}", -0.0_f32), "-0.000");
+
+    // An exact tie rounds away from zero where `core::fmt` rounds to even. 0.0625
+    // is a dyadic rational, so the scale-up to 62.5 is exact and the tie is real
+    // rather than an artifact of float error.
+    out.clear();
+    push_fixed(&mut out, 0.0625, 3);
+    assert_eq!(out, "0.063");
+    assert_eq!(format!("{:.3}", 0.0625_f32), "0.062");
+}
+
 // --- write_path_commands -----------------------------------------------------
 
 #[test]

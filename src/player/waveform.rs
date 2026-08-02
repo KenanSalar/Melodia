@@ -223,9 +223,48 @@ pub fn write_path_commands(columns: &[Column], out: &mut String) {
 /// Bytes one entry of [`XPrefixes`] takes: `"0.1234 "`.
 const X_PREFIX_BYTES: usize = 7;
 
+/// Widest fraction [`push_fixed`] renders — `x` takes four places, `y` three, and
+/// the scale it derives is a `u16`. Clamped rather than asserted so a wider
+/// request loses precision instead of wrapping the scale.
+const MAX_FIXED_DECIMALS: u32 = 4;
+
+/// Append `value` to `out` with exactly `decimals` fractional digits.
+///
+/// Every coordinate the trace emits is normalized to a unit range and quantized
+/// to a few places, so the whole format is a sign, one digit and a zero-padded
+/// remainder. Going through `{value:.decimals$}` instead asks `core::fmt` for the
+/// shortest round-tripping decimal — a much harder question, answered by Grisu
+/// with a bignum fallback, and at the [`MAX_COLUMNS`] cap this runs twice per
+/// column per frame. Scaling to an integer and printing the two halves is the
+/// same bytes for a fraction of the work.
+///
+/// Two deliberate differences from `core::fmt`, neither reaching the figure:
+/// negative zero prints as `0`, and an exact tie rounds away from zero rather
+/// than to even. Both move a coordinate one unit in the last place, across a
+/// viewbox two units tall drawn into a strip a few tens of pixels high.
+fn push_fixed(out: &mut String, value: f32, decimals: u32) {
+    let decimals = decimals.min(MAX_FIXED_DECIMALS);
+    let scale = 10u16.pow(decimals);
+
+    #[expect(
+        clippy::cast_possible_truncation,
+        reason = "coordinates are normalized to a unit range, so the scaled value is at most ±10_000; a float→int `as` saturates besides, so even a forged input clamps rather than wrapping"
+    )]
+    let units = (value * f32::from(scale)).round() as i32;
+
+    if units < 0 {
+        out.push('-');
+    }
+    let magnitude = units.unsigned_abs();
+    let scale = u32::from(scale);
+    let width = decimals as usize;
+    // Writing into a String cannot fail.
+    let _ = write!(out, "{}.{:0width$}", magnitude / scale, magnitude % scale);
+}
+
 /// What every vertex but the first opens with. Not part of the cached entry: a
-/// two-byte `push_str` costs nothing next to the float format it sits beside,
-/// and keeping it here is what lets the opening `M` vertex reuse the same entry
+/// two-byte `push_str` costs nothing next to the coordinate it sits beside, and
+/// keeping it here is what lets the opening `M` vertex reuse the same entry
 /// rather than slice a lead off it.
 ///
 /// The space before the `L` is not required by the SVG grammar — a command
@@ -238,16 +277,17 @@ const LINE_TO: &str = " L";
 /// `x` is the column's position across the strip, so it depends on the column
 /// index and the column count and nothing else — between resizes it is
 /// byte-identical on every frame while the `y` beside it changes. Formatting it
-/// per frame is half of all the float formatting the trace does, and the trace
-/// is by a wide margin the most expensive thing the visualizer does per frame:
-/// at the [`MAX_COLUMNS`] cap it writes 2048 vertices, against a whole spectrum
-/// frame's two FFTs.
+/// per frame is half of all the coordinate writing the trace does, and the trace
+/// is the most expensive thing the visualizer draws: at the [`MAX_COLUMNS`] cap
+/// it writes two vertices a column, and Slint re-parses and re-tessellates the
+/// whole figure behind it. This cache and [`push_fixed`] took the two halves of
+/// the *writing* side down between them; the parse and the fill are the floor.
 ///
 /// One packed string plus each entry's end offset, so a resize rebuilds a single
-/// buffer rather than reallocating a string per column. Entries are written with
-/// the same `{x:.4}` the per-frame path used to run, so the bytes are identical
-/// by construction rather than by a second float formatter agreeing with
-/// `core::fmt`'s rounding at every tie.
+/// buffer rather than reallocating a string per column. Entries go through
+/// [`push_fixed`], the same writer the per-frame `y` takes, so the two halves of
+/// a vertex are rounded by one rule rather than by two formatters that have to
+/// agree at every tie.
 struct XPrefixes {
     /// `"0.1234 "` per column, packed end to end.
     text: String,
@@ -281,9 +321,8 @@ impl XPrefixes {
         // A lone column has no span to normalize against; it lands at x = 0.
         let span = index_to_f32(columns.saturating_sub(1)).max(1.0);
         for i in 0..columns {
-            let x = index_to_f32(i) / span;
-            // Writing into a String cannot fail.
-            let _ = write!(self.text, "{x:.4} ");
+            push_fixed(&mut self.text, index_to_f32(i) / span, 4);
+            self.text.push(' ');
             self.ends.push(self.text.len());
         }
     }
@@ -323,13 +362,13 @@ fn write_path(columns: &[Column], prefixes: &XPrefixes, out: &mut String) {
         // is a line to.
         out.push_str(if i == 0 { "M" } else { LINE_TO });
         out.push_str(prefixes.get(i));
-        let _ = write!(out, "{y:.3}");
+        push_fixed(out, y, 3);
     }
     for (i, column) in columns.iter().enumerate().rev() {
         let y = edges(*column).0;
         out.push_str(LINE_TO);
         out.push_str(prefixes.get(i));
-        let _ = write!(out, "{y:.3}");
+        push_fixed(out, y, 3);
     }
     out.push('Z');
 }

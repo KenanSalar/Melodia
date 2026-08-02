@@ -1,4 +1,7 @@
-#![allow(unsafe_code)] // env::set_var/remove_var are unsafe in Rust 2024; tests serialize via LOCALE_ENV_LOCK.
+#![allow(
+    unsafe_code,
+    reason = "env::set_var/remove_var are unsafe in Rust 2024; every mutation goes through `with_env_vars`, which holds ENV_LOCK and restores under catch_unwind."
+)]
 
 use crate::error::AppError;
 
@@ -274,29 +277,32 @@ fn test_parse_language_code_invalid() {
     assert_eq!(parse_language_code("123"), None);
 }
 
-/// Mutex that serializes all tests which mutate locale env vars, so they are safe
-/// even when `cargo test` runs tests in parallel (the default).
-static LOCALE_ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+/// Mutex that serializes every test in this file that mutates the environment,
+/// so they are safe even when `cargo test` runs tests in parallel (the default).
+///
+/// One lock for *all* env mutation here, not one per variable: the environment is
+/// process-global, so two tests touching different names still race each other's
+/// reads. `SettingsData::default()` reads `XDG_CURRENT_DESKTOP` through
+/// `is_kde_desktop()`, which is exactly such a reader.
+static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
-/// Acquires `LOCALE_ENV_LOCK`, saves all locale-related env vars, clears them,
-/// runs `body`, then restores originals.
+/// Acquires [`ENV_LOCK`], saves `vars`, clears them, runs `body`, then restores
+/// the originals — including when `body` panics, so a failing assertion can't
+/// leak its variable into the rest of the process.
 ///
 /// SAFETY: `std::env::set_var` / `remove_var` are unsafe in Rust 2024 because
-/// they mutate shared process state. The `LOCALE_ENV_LOCK` mutex ensures only one
-/// test touches env vars at a time; no other code in this binary reads these vars
-/// concurrently.
-unsafe fn with_locale_env<F: FnOnce() -> R, R>(body: F) -> R {
-    const VARS: &[&str] = &["LANGUAGE", "LC_ALL", "LC_MESSAGES", "LANG"];
-
-    let _guard = LOCALE_ENV_LOCK
+/// they mutate shared process state. [`ENV_LOCK`] ensures only one test in this
+/// binary touches the environment at a time.
+unsafe fn with_env_vars<F: FnOnce() -> R, R>(vars: &[&str], body: F) -> R {
+    let _guard = ENV_LOCK
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
     let saved: Vec<(&str, Option<String>)> =
-        VARS.iter().map(|&v| (v, std::env::var(v).ok())).collect();
-    for &v in VARS {
+        vars.iter().map(|&v| (v, std::env::var(v).ok())).collect();
+    for &v in vars {
         unsafe { std::env::remove_var(v) };
     }
-    let result = body();
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(body));
     for (var, val) in saved {
         unsafe {
             match val {
@@ -305,7 +311,15 @@ unsafe fn with_locale_env<F: FnOnce() -> R, R>(body: F) -> R {
             }
         }
     }
-    result
+    match result {
+        Ok(value) => value,
+        Err(payload) => std::panic::resume_unwind(payload),
+    }
+}
+
+/// The four variables `detect_os_locale` consults, in the order it consults them.
+unsafe fn with_locale_env<F: FnOnce() -> R, R>(body: F) -> R {
+    unsafe { with_env_vars(&["LANGUAGE", "LC_ALL", "LC_MESSAGES", "LANG"], body) }
 }
 
 #[test]
@@ -393,28 +407,36 @@ fn test_locale_roundtrip() -> Result<(), AppError> {
     Ok(())
 }
 
-// Environment variable tests are consolidated into a single test to avoid
-// parallel execution races on the shared XDG_CURRENT_DESKTOP variable.
+// The desktop cases share one test because they share one variable, and they go
+// through `with_env_vars` for the same reason every locale case does: a sibling
+// reading `XDG_CURRENT_DESKTOP` — `SettingsData::default()` does, via
+// `is_kde_desktop()` — would otherwise see whatever this test last set.
 // Lives in services/tests/ rather than library/tests/ because
 // `get_os_corner_radius` now lives in services::settings (it's used by
 // `SettingsData::default()` for the corner_radius serde default).
 #[test]
 #[cfg(target_os = "linux")]
 fn corner_radius_by_desktop_environment() {
-    unsafe { std::env::set_var("XDG_CURRENT_DESKTOP", "GNOME") };
-    assert_eq!(get_os_corner_radius(), 15, "GNOME should return 15");
+    // SAFETY: `with_env_vars` holds `ENV_LOCK` across the whole body and restores
+    // the variable afterwards, panicking assertion or not.
+    unsafe {
+        with_env_vars(&["XDG_CURRENT_DESKTOP"], || {
+            std::env::set_var("XDG_CURRENT_DESKTOP", "GNOME");
+            assert_eq!(get_os_corner_radius(), 15, "GNOME should return 15");
 
-    unsafe { std::env::set_var("XDG_CURRENT_DESKTOP", "ubuntu:GNOME") };
-    assert_eq!(get_os_corner_radius(), 15, "ubuntu:GNOME should return 15");
+            std::env::set_var("XDG_CURRENT_DESKTOP", "ubuntu:GNOME");
+            assert_eq!(get_os_corner_radius(), 15, "ubuntu:GNOME should return 15");
 
-    unsafe { std::env::set_var("XDG_CURRENT_DESKTOP", "KDE") };
-    assert_eq!(get_os_corner_radius(), 6, "KDE should return 6");
+            std::env::set_var("XDG_CURRENT_DESKTOP", "KDE");
+            assert_eq!(get_os_corner_radius(), 6, "KDE should return 6");
 
-    unsafe { std::env::set_var("XDG_CURRENT_DESKTOP", "i3") };
-    assert_eq!(get_os_corner_radius(), 6, "unknown DE should return 6");
+            std::env::set_var("XDG_CURRENT_DESKTOP", "i3");
+            assert_eq!(get_os_corner_radius(), 6, "unknown DE should return 6");
 
-    unsafe { std::env::remove_var("XDG_CURRENT_DESKTOP") };
-    assert_eq!(get_os_corner_radius(), 6, "missing env should return 6");
+            std::env::remove_var("XDG_CURRENT_DESKTOP");
+            assert_eq!(get_os_corner_radius(), 6, "missing env should return 6");
+        });
+    }
 }
 
 #[test]

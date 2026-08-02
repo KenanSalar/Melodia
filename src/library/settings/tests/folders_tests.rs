@@ -1,5 +1,3 @@
-#![allow(unsafe_code)] // env::set_var/remove_var are unsafe in Rust 2024; tests serialize via a mutex.
-
 #[cfg(unix)]
 use std::os::unix::fs::symlink;
 use std::path::Path;

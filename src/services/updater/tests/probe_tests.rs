@@ -1,8 +1,3 @@
-#![allow(
-    unsafe_code,
-    reason = "geteuid() is async-signal-safe and only used to skip a root-uid CI case."
-)]
-
 use crate::services::updater::probe::dir_is_writable;
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
@@ -34,10 +29,12 @@ fn detects_readonly_dir() -> TestResult {
     let ro = tmp.path().join("ro");
     std::fs::create_dir(&ro)?;
     std::fs::set_permissions(&ro, std::fs::Permissions::from_mode(0o555))?;
-    // Skip the assertion if running as root (CI containers occasionally
-    // do): mode 0555 is no barrier to uid 0, and the probe would (correctly)
-    // succeed.
-    if nix_geteuid_is_zero() {
+    // Skip the assertion where the mode isn't a barrier — running as root (CI
+    // containers occasionally do), or a filesystem that ignores permissions. Ask
+    // the question directly rather than through `geteuid`: uid 0 is only one of
+    // the reasons a write can land, and the probe would (correctly) succeed for
+    // any of them.
+    if std::fs::File::create(ro.join("melodia-mode-check")).is_ok() {
         return Ok(());
     }
     assert!(
@@ -71,10 +68,4 @@ fn unique_probe_names_under_repeated_calls() -> TestResult {
         "leaked probe files: {leaked:?}"
     );
     Ok(())
-}
-
-#[cfg(unix)]
-fn nix_geteuid_is_zero() -> bool {
-    // SAFETY: `geteuid` is async-signal-safe and has no preconditions.
-    unsafe { libc::geteuid() == 0 }
 }

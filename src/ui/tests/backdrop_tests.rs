@@ -1,4 +1,4 @@
-use material_colors::color::y_from_lstar;
+use material_colors::color::{linearized, lstar_from_y, y_from_lstar};
 use material_colors::contrast::ratio_of_tones;
 use slint::{Rgb8Pixel, SharedPixelBuffer};
 
@@ -66,6 +66,29 @@ fn unpack(rgb: u32) -> (u8, u8, u8) {
         ((rgb >> 8) & 0xff) as u8,
         (rgb & 0xff) as u8,
     )
+}
+
+// --- the linearisation table --------------------------------------------------
+
+#[test]
+fn the_linearisation_table_answers_for_every_channel_value() {
+    // `pixel_lstar` reads a 256-entry table rather than calling `linearized`
+    // three times per pixel. The failure a table invites is one entry short at
+    // the top, which leaves pure white — what a bright sleeve is full of, and
+    // the case the percentile is built to catch — reading as black.
+    //
+    // The luma weights sum to 1, so a grey pixel's `y` is exactly its own
+    // linearised channel, and the whole curve is reachable through `rgb_lstar`
+    // without exposing the table.
+    for byte in 0u8..=u8::MAX {
+        let grey = u32::from_be_bytes([0, byte, byte, byte]);
+        let expected = lstar_from_y(linearized(byte));
+        let actual = rgb_lstar(grey);
+        assert!(
+            (actual - expected).abs() < 1e-9,
+            "channel {byte}: table gave {actual}, `linearized` gives {expected}",
+        );
+    }
 }
 
 // --- luma_p90 ---------------------------------------------------------------

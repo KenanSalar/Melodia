@@ -110,9 +110,9 @@ fn blit(dst: &mut image::RgbImage, src: &image::RgbImage, dx: u32, dy: u32, dw: 
         return;
     }
     for y in 0..dh {
+        let sy = y * sh / dh;
         for x in 0..dw {
             let sx = x * sw / dw;
-            let sy = y * sh / dh;
             let px = *src.get_pixel(sx, sy);
             dst.put_pixel(dx + x, dy + y, px);
         }

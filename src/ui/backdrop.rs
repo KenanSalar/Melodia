@@ -42,6 +42,8 @@
 //! measurements come off one buffer in one place — [`BackdropSample::measure`]
 //! — so a producer can't quantize one blur and measure another.
 
+use std::sync::LazyLock;
+
 use material_colors::color::{linearized, lstar_from_y, y_from_lstar};
 use material_colors::contrast;
 use slint::{Brush, Rgb8Pixel, SharedPixelBuffer};
@@ -137,11 +139,29 @@ const HISTOGRAM_BINS: usize = 64;
 /// Fraction of the brightest pixels the percentile deliberately steps over.
 const PERCENTILE_TAIL: f64 = 0.10;
 
+/// [`linearized`] over its whole domain — the sRGB transfer curve takes a `u8`,
+/// so there are only 256 answers and each is a `powf(2.4)`.
+///
+/// [`luma_p90`] calls it three times per pixel across a buffer of tens of
+/// thousands, which is most of what that pass spends. 2 KiB, built once. The
+/// `lab_f` inside [`lstar_from_y`] is left alone deliberately: it's one call
+/// rather than three, its input is a continuous mix of these three so it can't
+/// be tabulated the same way, and the obvious alternative — binary-searching
+/// precomputed bin edges — trades a cube root for six unpredictable branches.
+static LINEARIZED: LazyLock<[f64; 256]> = LazyLock::new(|| {
+    let mut table = [0.0_f64; 256];
+    for (slot, byte) in table.iter_mut().zip(0u8..=u8::MAX) {
+        *slot = linearized(byte);
+    }
+    table
+});
+
 /// Perceptual lightness (L*) of one sRGB pixel.
 fn pixel_lstar(r: u8, g: u8, b: u8) -> f64 {
+    let linear = |channel: u8| LINEARIZED[usize::from(channel)];
     let y = 0.0722f64.mul_add(
-        linearized(b),
-        0.2126f64.mul_add(linearized(r), 0.7152 * linearized(g)),
+        linear(b),
+        0.2126f64.mul_add(linear(r), 0.7152 * linear(g)),
     );
     lstar_from_y(y)
 }
