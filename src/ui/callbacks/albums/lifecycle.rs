@@ -22,8 +22,12 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, albums_ui: &Arc<AlbumsUi>) 
 
     // section-active-changed: the Albums section entered / left the screen
     // (sidebar nav, or Now Playing opened over it). Seed the synchronous
-    // shadow from the current nav state — `changed` in `AppWindow` won't
-    // fire for a session that *starts* on Albums.
+    // shadow from the current nav state: the gate's `ChangeTracker` baselines
+    // inside `AppWindow::new()` and fires only on a later difference, so a
+    // section the boot doesn't land on gets no edge at all, and the one it
+    // does land on gets its edge a frame late — after boot has already read
+    // this shadow. See the `SectionActiveGate` bullet in
+    // `.claude/rules/ui-patterns.md`.
     //
     // On leave: synchronously wipe the Slint `grid-rows` model (UI thread,
     // so its `AlbumGridRow` `SharedString`s drop), then off-thread call

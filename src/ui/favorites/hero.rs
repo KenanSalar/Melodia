@@ -152,8 +152,10 @@ fn apply_hero_blur(
         // covers, since none of them had recorded yet; the losers have nothing
         // to add but a redundant cross-fade of the same buffer. Rare on this
         // side — `refresh_hero` awaits its own `spawn_blocking`, and the
-        // channel subscriber awaits `refresh_hero`, so only the boot fetch can
-        // race a tick.
+        // channel subscriber awaits `refresh_hero`, so ticks can't overlap
+        // each other. What can race one is the section-enter fetch, which is
+        // spawned detached: the first-enter kick at wire time, and every
+        // re-enter after that.
         {
             let mut last = fav_ui.state().last_mosaic_paths.lock();
             if *last == paths {

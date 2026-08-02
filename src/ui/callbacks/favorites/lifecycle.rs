@@ -22,11 +22,14 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, fav_ui: &Arc<FavoritesUi>) 
 
     // --- Section-active mirror + cache release / re-enter --------
     // Seed the synchronous shadow from the current nav state. This has to be
-    // right on its own: `SectionActiveGate`'s `changed` fires only on a real
-    // transition, and its tracker is evaluated inside `AppWindow::new()`,
-    // before this handler exists — so a session that starts on Favorites may
-    // get no enter edge at all. `boot::ui_setup::install_views` hydrates the
-    // persisted nav index before any `wire_*` runs so the read below sees it.
+    // right on its own: the gate's `ChangeTracker` baselines inside
+    // `AppWindow::new()` and fires only on a later difference, so a section
+    // the boot doesn't land on gets no edge at all, and the one it does land
+    // on gets its edge a frame late — after boot has already read this
+    // shadow. See the `SectionActiveGate` bullet in
+    // `.claude/rules/ui-patterns.md`. `boot::ui_setup::install_views`
+    // hydrates the persisted nav index before any `wire_*` runs, so the read
+    // below sees it.
     // (The sibling `active_tab` shadow is seeded by `favorites::seed_tab`,
     // which runs after this and is the only thing that knows the persisted
     // value.)

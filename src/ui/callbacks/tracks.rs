@@ -31,8 +31,12 @@ pub fn wire_tracks(ui: &AppWindow, state: &AppState, tracks_ui: &Arc<TracksUi>) 
     // and, on re-enter, run the deferred refresh if a `library_changed` bump
     // arrived while the section was hidden (the refresher marks dirty
     // instead of re-fetching a view the user can't see). Seed the shadow
-    // from the current nav state — `changed` in `AppWindow` won't fire for
-    // a session that *starts* on Tracks (sidebar index 3).
+    // from the current nav state (sidebar index 3): the gate's
+    // `ChangeTracker` baselines inside `AppWindow::new()` and fires only on
+    // a later difference, so a section the boot doesn't land on gets no edge
+    // at all, and the one it does land on gets its edge a frame late — after
+    // boot has already read this shadow. See the `SectionActiveGate` bullet
+    // in `.claude/rules/ui-patterns.md`.
     tracks_ui.set_section_active(ui.global::<crate::Nav>().get_selected_index() == 3);
     {
         let tu = tracks_ui.clone();

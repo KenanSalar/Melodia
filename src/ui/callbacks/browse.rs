@@ -34,9 +34,12 @@ pub fn wire_browse(ui: &AppWindow, state: &AppState, browse_ui: &Arc<BrowseUi>) 
     // and, on re-enter, re-fetch the current directory once if a
     // `library_changed` bump arrived while the section was hidden (the
     // subscriber below marks dirty instead of re-fetching a view the user
-    // can't see). Seed the shadow from the current nav state — `changed`
-    // in `AppWindow` won't fire for a session that *starts* on Browse
-    // (sidebar index 1).
+    // can't see). Seed the shadow from the current nav state (sidebar index
+    // 1): the gate's `ChangeTracker` baselines inside `AppWindow::new()` and
+    // fires only on a later difference, so a section the boot doesn't land on
+    // gets no edge at all, and the one it does land on gets its edge a frame
+    // late — after boot has already read this shadow. See the
+    // `SectionActiveGate` bullet in `.claude/rules/ui-patterns.md`.
     browse_ui.set_section_active(ui.global::<crate::Nav>().get_selected_index() == 1);
     {
         let s = state.clone();

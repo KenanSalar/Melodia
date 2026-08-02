@@ -113,7 +113,7 @@ pub fn install_views(
     ui::callbacks::wire_browse(app, state, &browse_ui);
     ui::browse::seed_from_settings(app, state, &browse_ui);
 
-    // 5c2. Albums view.
+    // 5c2a. Albums view.
     ui::albums::install_albums_models(app);
     let albums_ui = Arc::new(ui::albums::AlbumsUi::new(cover_thumbs.clone()));
     ui::callbacks::wire_albums(app, state, &albums_ui);
@@ -212,9 +212,9 @@ pub fn install_views(
     // first sidebar nav records only the destination and `back()` returns
     // `None`. Reads `Nav.selected-index` (hydrated in 5a, at the top of this
     // function) and the section detail global (still `-1` — the async
-    // `seed_detail_from_settings`
-    // futures haven't run yet); the async future's own `record_current`
-    // appends a `{section, Some(id)}` entry on top once it lands.
+    // `seed_detail_from_settings` futures haven't run yet); the async
+    // future's own `record_current` appends a `{section, Some(id)}` entry on
+    // top once it lands.
     ui::nav_history::record_current(state, app);
 
     // 5c3. Now-Playing favourite heart + star rating fan into every per-row cache.
