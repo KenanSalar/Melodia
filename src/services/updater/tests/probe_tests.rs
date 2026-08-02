@@ -34,7 +34,16 @@ fn detects_readonly_dir() -> TestResult {
     // the question directly rather than through `geteuid`: uid 0 is only one of
     // the reasons a write can land, and the probe would (correctly) succeed for
     // any of them.
-    if std::fs::File::create(ro.join("melodia-mode-check")).is_ok() {
+    //
+    // The sentinel is the same primitive `dir_is_writable` uses, so this reads as
+    // a precondition on the environment rather than as an oracle for the
+    // function — it establishes that 0555 means something here, and the assertion
+    // below is what tests the probe. Removed either way so the skip path leaves
+    // the directory as it found it.
+    let sentinel = ro.join("melodia-mode-check");
+    let mode_is_enforced = std::fs::File::create(&sentinel).is_err();
+    let _ = std::fs::remove_file(&sentinel);
+    if !mode_is_enforced {
         return Ok(());
     }
     assert!(

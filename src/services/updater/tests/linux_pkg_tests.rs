@@ -3,15 +3,11 @@
 // shim that only make sense on Unix. The env-resetting helpers are unused on
 // Windows, so file-scope the whole module.
 #![cfg(unix)]
-#![allow(
-    unsafe_code,
-    reason = "env::set_var is unsafe in Rust 2024; the one call sits inside `with_env_vars`, which holds the crate-wide env lock and restores under catch_unwind."
-)]
 
 use crate::services::updater::linux_pkg::{
     LinuxPackageFormat, detect, resolve_install_program,
 };
-use crate::test_support::{with_appimage_env, with_env_vars};
+use crate::test_support::{with_appimage_env, with_env_var};
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 
@@ -19,14 +15,7 @@ type TestResult = Result<(), Box<dyn std::error::Error>>;
 /// file that needs PATH isolation; `with_appimage_env` is shared, since
 /// `target_tests.rs` overrides the same variable.
 fn with_path_env<F: FnOnce()>(value: &str, body: F) {
-    // SAFETY: `with_env_vars` holds the crate-wide env lock across the whole
-    // body and puts `$PATH` back afterwards, panicking assertion or not.
-    unsafe {
-        with_env_vars(&["PATH"], || {
-            std::env::set_var("PATH", value);
-            body();
-        });
-    }
+    with_env_var("PATH", Some(value), body);
 }
 
 /// Creates an executable shim file at `path` with `0o755` permissions.

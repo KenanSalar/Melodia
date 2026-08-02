@@ -37,7 +37,11 @@ Three things make a soundness bug cost more here than in an average crate:
 ## The one sanctioned category: platform FFI
 
 Every `unsafe` in production is a call into an OS the type system can't reach. There is
-no other kind, and the list is short enough to keep here:
+no other kind, and the list is short enough to keep here. **Ten calls, in eight `unsafe`
+blocks, across five files, under seven `#[allow(unsafe_code)]` attributes.** Say which of
+the four you mean when you quote a number, and re-derive it the same way — they differ,
+and none of them is the count of rows below. (The attributes fall one short of the blocks
+because `dwm_titlebar.rs`'s first `#[allow]` sits on a function holding two of them.)
 
 | site | what |
 |---|---|
@@ -85,40 +89,57 @@ is safe, and so is every `*mut c_void` that is only *stored* — `media_controls
 `std::env::set_var` / `remove_var` are unsafe in Rust 2024 because they mutate shared
 process state, and `cargo test` runs in parallel by default. There is one shape:
 
-**lock → snapshot → clear → `catch_unwind(body)` → restore → `resume_unwind`**
+**lock → snapshot → clear → set → `catch_unwind(body)` → restore → `resume_unwind`**
 
-and it is written once, in **`test_support::with_env_vars`** (`src/test_support.rs`).
-Call it. Don't re-roll it — each of those six steps has been missing from a hand-rolled
+and it is written once, in **`test_support::with_env_set`** (`src/test_support.rs`).
+Call it. Don't re-roll it — each of those seven steps has been missing from a hand-rolled
 copy at some point, and the restore is the one that goes first.
 
-- **One lock per test *binary*, and the mutex behind the helper is private.** The
+- **The helpers are safe to call, and no test file in the crate contains `unsafe` any
+  more.** That is encapsulation, not a hole: `with_env_set` is the only place in the test
+  binary that mutates the environment, so "every mutation is under `ENV_LOCK`" is a
+  property of that one module rather than something each caller re-argues in a `// SAFETY:`
+  comment it can't actually check. The three per-variable wrappers —
+  `with_env_var`, `with_appimage_env`, `settings_tests::with_locale_env` — take the
+  *overrides* rather than a bare closure precisely so the mutation stays inside; a wrapper
+  that hands its body a chance to `set_var` pushes the `unsafe` back out to every call site.
+- **One lock per test *binary*, and the mutex behind the helpers is private.** The
   environment is process-global, so two tests holding *different* locks are still racing
   however careful each is on its own — glibc's `setenv` can realloc `environ` out from
   under another thread's `getenv`. The variables aren't independent either: the readers
   overlap through code neither caller owns, `SettingsData::default()` reaching
-  `XDG_CURRENT_DESKTOP` via `is_kde_desktop()` and `install_target()` reaching
-  `$APPIMAGE` via `target::current_target_key()`. Three separate mutexes sat here
-  (`ENV_LOCK`, `APPIMAGE_ENV_LOCK`, `PATH_ENV_LOCK`), each correct in isolation and
-  collectively guaranteeing nothing. Consolidating assertions into one *test* doesn't
-  help either; it only stops that test racing itself. Keeping the lock private is what
-  stops the next copy: there is nothing to take but the helper.
+  `XDG_CURRENT_DESKTOP` via `is_kde_desktop()` *and* all four locale variables via
+  `default_locale()`, and `install_target()` reaching `$APPIMAGE` via
+  `target::current_target_key()`. Three separate mutexes sat here (`ENV_LOCK`,
+  `APPIMAGE_ENV_LOCK`, `PATH_ENV_LOCK`), each correct in isolation and collectively
+  guaranteeing nothing. Consolidating assertions into one *test* doesn't help either; it
+  only stops that test racing itself. Keeping the lock private is what stops the next
+  copy: there is nothing to take but the helpers.
+- **A reader races a writer just as a second writer does, and that half is opt-in.** std
+  spells the contract "no other threads concurrently writing or *reading*(!) the
+  environment" — the `(!)` is theirs. Serialising the mutators buys nothing against a
+  sibling test that merely *reads*, and consolidating the three locks did not close that:
+  four tests in `settings_tests.rs` built a `SettingsData::default()` — which reaches
+  `XDG_CURRENT_DESKTOP` and all four locale variables through its serde defaults — beside
+  the tests mutating both. **`test_support::reading_env(body)`** takes the same lock
+  without touching a variable and is how such a test opts in. Nothing enforces it, so a
+  reader you find unwrapped is a live race, not a style nit.
 - **It is not reentrant, and that is the cost of one lock.** A helper called from inside
-  another helper's body deadlocks the test binary with no message and no failing
-  assertion. A per-variable wrapper therefore **delegates** rather than locking and then
-  calling — `with_locale_env`, `with_appimage_env` and `linux_pkg_tests::with_path_env`
-  are the three worked examples, each a few lines over `with_env_vars`. A wrapper that
-  needs its own lock is a wrapper in the wrong place.
-- **The body may mutate freely.** `with_env_vars` clears `vars` before `body` and
-  restores after, so a wrapper that wants a *value* rather than an absence just sets it
-  inside the closure — it runs with the lock held, which is what makes its own `set_var`
-  sound.
+  another helper's body would deadlock the test binary — which is why a thread-local flag
+  now turns that into a named panic instead of a silent hang with no failing assertion. A
+  per-variable wrapper still **delegates** rather than locking and then calling;
+  `with_env_var`, `with_appimage_env`, `with_locale_env` and
+  `linux_pkg_tests::with_path_env` are the four worked examples, each one line over
+  `with_env_set`. A wrapper that needs its own lock is a wrapper in the wrong place.
 
-A file-level `#![allow(unsafe_code, reason = "…")]` is fine here — the whole file is
-test scaffolding. **Delete it when the last `unsafe` goes**; a stale allow silently
-pre-authorises the next one, and one sat in `library/settings/tests/folders_tests.rs`
-over a file with no `unsafe` in it at all. Routing a file through the shared helper is
-exactly the edit that strands one, and it has already retired two
-(`target_tests.rs`, `system_install_tests.rs`).
+A file-level `#![allow(unsafe_code, reason = "…")]` used to be the norm here and there
+are none left in the unit tests, because the mutation moved behind the safe helpers.
+**Delete the allow when the last `unsafe` goes**; a stale one silently pre-authorises the
+next, and one sat in `library/settings/tests/folders_tests.rs` over a file with no
+`unsafe` in it at all. Routing a file through the shared helper is exactly the edit that
+strands one, and it has now retired four (`target_tests.rs`, `system_install_tests.rs`,
+`linux_pkg_tests.rs`, `settings_tests.rs`). The one that remains is on
+`with_env_set` itself — on the function, not the file, per the narrowest-item rule above.
 
 `tests/headless.rs` is the one env mutation that takes no lock, and that is correct
 rather than an oversight: an integration test is its own binary with its own
@@ -150,7 +171,9 @@ bounds-check problem. Read these before proposing anything:
   and asking `core::fmt` for an exactly-rounded decimal at a fixed precision is a far
   harder question than the coordinates need — Grisu's `format_exact` with a bignum
   fallback, to print a sign, one digit and a zero-padded remainder. The fix was
-  `waveform::push_fixed` — integer scale, integer print — in safe code.
+  `waveform::push_fixed::<N>` — integer scale, integer print — in safe code, with the
+  width a const parameter so an unrepresentable scale is a build failure rather than a
+  runtime clamp.
 - **The backdrop solve's cost was a transcendental with a 256-value domain.** `linearized`
   takes a `u8`; three calls per pixel became three loads from a `LazyLock<[f64; 256]>`
   in `ui/backdrop.rs`.

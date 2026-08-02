@@ -1,10 +1,5 @@
-#![allow(
-    unsafe_code,
-    reason = "env::set_var/remove_var are unsafe in Rust 2024; every mutation goes through the shared `with_env_vars`, which holds the crate-wide env lock and restores under catch_unwind."
-)]
-
 use crate::error::AppError;
-use crate::test_support::with_env_vars;
+use crate::test_support::{reading_env, with_env_set, with_env_var};
 
 use super::*;
 
@@ -69,7 +64,9 @@ fn test_settings_roundtrip_volume_mute() -> Result<(), AppError> {
             is_muted: true,
             ..PlaybackFlags::default()
         },
-        ..SettingsData::default()
+        // `SettingsData::default()` reads the environment through its serde
+        // defaults, so it takes the same lock the mutating tests below do.
+        ..reading_env(SettingsData::default)
     };
     let json = serde_json::to_string(&settings).map_err(|e| json_err(&e))?;
     let deserialized: SettingsData = serde_json::from_str(&json).map_err(|e| json_err(&e))?;
@@ -85,7 +82,7 @@ fn test_settings_roundtrip_playback_speed() -> Result<(), AppError> {
             playback_speed: 1.5,
             ..PlaybackFlags::default()
         },
-        ..SettingsData::default()
+        ..reading_env(SettingsData::default)
     };
     let json = serde_json::to_string(&settings).map_err(|e| json_err(&e))?;
     let deserialized: SettingsData = serde_json::from_str(&json).map_err(|e| json_err(&e))?;
@@ -278,68 +275,51 @@ fn test_parse_language_code_invalid() {
     assert_eq!(parse_language_code("123"), None);
 }
 
-/// The four variables `detect_os_locale` consults, in the order it consults them.
-unsafe fn with_locale_env<F: FnOnce() -> R, R>(body: F) -> R {
-    unsafe { with_env_vars(&["LANGUAGE", "LC_ALL", "LC_MESSAGES", "LANG"], body) }
+/// Runs `body` with only `set` present among the four variables
+/// `detect_os_locale` consults, listed here in the order it consults them.
+///
+/// Takes the overrides rather than a bare closure so it owns the mutation, like
+/// its `with_env_var` siblings — which is what leaves no `unsafe` in this file.
+fn with_locale_env<F: FnOnce() -> R, R>(set: &[(&str, &str)], body: F) -> R {
+    with_env_set(&["LANGUAGE", "LC_ALL", "LC_MESSAGES", "LANG"], set, body)
 }
 
 #[test]
 fn test_detect_os_locale_supported_locale() {
-    // SAFETY: test runs single-threaded (--test-threads=1)
-    unsafe {
-        with_locale_env(|| {
-            std::env::set_var("LC_ALL", "de_DE.UTF-8");
-            assert_eq!(detect_os_locale(), Some("de".to_owned()));
-        });
-    }
+    with_locale_env(&[("LC_ALL", "de_DE.UTF-8")], || {
+        assert_eq!(detect_os_locale(), Some("de".to_owned()));
+    });
 }
 
 #[test]
 fn test_detect_os_locale_unsupported_locale_returns_none() {
     // "ja" is a valid ISO code but not in SUPPORTED_LOCALES.
-    // SAFETY: test runs single-threaded (--test-threads=1)
-    unsafe {
-        with_locale_env(|| {
-            std::env::set_var("LC_ALL", "ja_JP.UTF-8");
-            assert_eq!(detect_os_locale(), None);
-        });
-    }
+    with_locale_env(&[("LC_ALL", "ja_JP.UTF-8")], || {
+        assert_eq!(detect_os_locale(), None);
+    });
 }
 
 #[test]
 fn test_detect_system_locale_raw_language_var() {
     // GNU LANGUAGE takes precedence over LC_* vars
-    // SAFETY: test runs single-threaded (--test-threads=1)
-    unsafe {
-        with_locale_env(|| {
-            std::env::set_var("LANGUAGE", "de:en");
-            std::env::set_var("LC_ALL", "en_US.UTF-8");
-            assert_eq!(detect_system_locale_raw(), Some("de".to_owned()));
-        });
-    }
+    with_locale_env(&[("LANGUAGE", "de:en"), ("LC_ALL", "en_US.UTF-8")], || {
+        assert_eq!(detect_system_locale_raw(), Some("de".to_owned()));
+    });
 }
 
 #[test]
 fn test_detect_system_locale_raw_language_skips_empty_and_c() {
-    // SAFETY: test runs single-threaded (--test-threads=1)
-    unsafe {
-        with_locale_env(|| {
-            std::env::set_var("LANGUAGE", "C::POSIX:de:en");
-            assert_eq!(detect_system_locale_raw(), Some("de".to_owned()));
-        });
-    }
+    with_locale_env(&[("LANGUAGE", "C::POSIX:de:en")], || {
+        assert_eq!(detect_system_locale_raw(), Some("de".to_owned()));
+    });
 }
 
 #[test]
 fn test_detect_system_locale_raw_falls_through_to_lc_all() {
-    // SAFETY: test runs single-threaded (--test-threads=1)
-    unsafe {
-        with_locale_env(|| {
-            // No LANGUAGE set, should fall through to LC_ALL
-            std::env::set_var("LC_ALL", "en_US.UTF-8");
-            assert_eq!(detect_system_locale_raw(), Some("en_US.UTF-8".to_owned()));
-        });
-    }
+    // No LANGUAGE set, should fall through to LC_ALL
+    with_locale_env(&[("LC_ALL", "en_US.UTF-8")], || {
+        assert_eq!(detect_system_locale_raw(), Some("en_US.UTF-8".to_owned()));
+    });
 }
 
 #[test]
@@ -347,20 +327,18 @@ fn test_detect_os_locale_language_picks_first_supported() {
     // LANGUAGE=fr:de:en — "fr" is unsupported, so detect_os_locale tries only the
     // first raw entry ("fr") and returns None. The LANGUAGE priority list only affects
     // which raw string detect_system_locale_raw returns.
-    // SAFETY: test runs single-threaded (--test-threads=1)
-    unsafe {
-        with_locale_env(|| {
-            std::env::set_var("LANGUAGE", "de:en");
-            assert_eq!(detect_os_locale(), Some("de".to_owned()));
-        });
-    }
+    with_locale_env(&[("LANGUAGE", "de:en")], || {
+        assert_eq!(detect_os_locale(), Some("de".to_owned()));
+    });
 }
 
 #[test]
 fn test_locale_roundtrip() -> Result<(), AppError> {
     let settings = SettingsData {
         locale: "fr".to_owned(),
-        ..SettingsData::default()
+        // The locale tests above clear and set exactly the four variables
+        // `default_locale()` consults, so this read has to be under the lock too.
+        ..reading_env(SettingsData::default)
     };
     let json = serde_json::to_string(&settings).map_err(|e| json_err(&e))?;
     let deserialized: SettingsData = serde_json::from_str(&json).map_err(|e| json_err(&e))?;
@@ -368,9 +346,9 @@ fn test_locale_roundtrip() -> Result<(), AppError> {
     Ok(())
 }
 
-// The desktop cases share one test because they share one variable, and they go
-// through `with_env_vars` for the same reason every locale case does: a sibling
-// reading `XDG_CURRENT_DESKTOP` — `SettingsData::default()` does, via
+// The desktop cases share one test because they share one variable, and each
+// goes through `with_env_var` for the same reason every locale case does: a
+// sibling reading `XDG_CURRENT_DESKTOP` — `SettingsData::default()` does, via
 // `is_kde_desktop()` — would otherwise see whatever this test last set.
 // Lives in services/tests/ rather than library/tests/ because
 // `get_os_corner_radius` now lives in services::settings (it's used by
@@ -378,26 +356,17 @@ fn test_locale_roundtrip() -> Result<(), AppError> {
 #[test]
 #[cfg(target_os = "linux")]
 fn corner_radius_by_desktop_environment() {
-    // SAFETY: `with_env_vars` holds `ENV_LOCK` across the whole body and restores
-    // the variable afterwards, panicking assertion or not.
-    unsafe {
-        with_env_vars(&["XDG_CURRENT_DESKTOP"], || {
-            std::env::set_var("XDG_CURRENT_DESKTOP", "GNOME");
-            assert_eq!(get_os_corner_radius(), 15, "GNOME should return 15");
+    let radius_under = |desktop| with_env_var("XDG_CURRENT_DESKTOP", desktop, get_os_corner_radius);
 
-            std::env::set_var("XDG_CURRENT_DESKTOP", "ubuntu:GNOME");
-            assert_eq!(get_os_corner_radius(), 15, "ubuntu:GNOME should return 15");
-
-            std::env::set_var("XDG_CURRENT_DESKTOP", "KDE");
-            assert_eq!(get_os_corner_radius(), 6, "KDE should return 6");
-
-            std::env::set_var("XDG_CURRENT_DESKTOP", "i3");
-            assert_eq!(get_os_corner_radius(), 6, "unknown DE should return 6");
-
-            std::env::remove_var("XDG_CURRENT_DESKTOP");
-            assert_eq!(get_os_corner_radius(), 6, "missing env should return 6");
-        });
-    }
+    assert_eq!(radius_under(Some("GNOME")), 15, "GNOME should return 15");
+    assert_eq!(
+        radius_under(Some("ubuntu:GNOME")),
+        15,
+        "ubuntu:GNOME should return 15"
+    );
+    assert_eq!(radius_under(Some("KDE")), 6, "KDE should return 6");
+    assert_eq!(radius_under(Some("i3")), 6, "unknown DE should return 6");
+    assert_eq!(radius_under(None), 6, "missing env should return 6");
 }
 
 #[test]
@@ -422,7 +391,7 @@ fn test_replaygain_roundtrip() -> Result<(), AppError> {
             rg_preamp: -3.0,
             rg_prevent_clipping: false,
         },
-        ..SettingsData::default()
+        ..reading_env(SettingsData::default)
     };
     let json = serde_json::to_string(&settings).map_err(|e| json_err(&e))?;
     let deserialized: SettingsData = serde_json::from_str(&json).map_err(|e| json_err(&e))?;

@@ -104,6 +104,14 @@ fn decode_tile(path: &Path) -> Option<image::RgbImage> {
 /// (`decode_tile`'s output), so the per-tile blit is a sub-block of
 /// the larger atlas; sampling is nearest-neighbour because the blur
 /// pass that immediately follows obliterates any aliasing.
+///
+/// The per-pixel `get_pixel`/`put_pixel` is deliberate, not an oversight:
+/// the whole rectangle is at most `BLUR_TARGET²` pixels and runs once per
+/// artwork change, so trading the bounds-checked accessors for hand-rolled
+/// row offsets would buy a fraction of a cold path and cost the reader the
+/// coordinates. Reach for a row-wise rewrite only with a profile saying this
+/// is what a mosaic recompose spends its time on — it is the `fast_blur`
+/// below and the quantize behind it.
 fn blit(dst: &mut image::RgbImage, src: &image::RgbImage, dx: u32, dy: u32, dw: u32, dh: u32) {
     let (sw, sh) = src.dimensions();
     if sw == 0 || sh == 0 {

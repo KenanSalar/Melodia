@@ -249,8 +249,10 @@ its parent module automatically — no separate gating step:
   `install/mod.rs:182` via `#[path = "../tests/install_tests.rs"]`).
 - Ungated detection tests stay compiled: `version_tests`, `linux_pkg_tests`,
   `probe_tests`, `target_tests`, `system_install_tests` (declared from their
-  ungated source files). These rely on `test_support` — hence test_support must
-  remain `#[cfg(test)]`-only (see split table).
+  ungated source files). Three of them take the shared env helpers, which now
+  live in `crate::test_support` at the crate root — outside the `self-update`
+  gate by construction, so nothing here has to keep them out of it (see the note
+  where the split table's `test_support` row used to be).
 - `check`/`github`/`event`/`state`/`asset_cache` declare no test module today.
 
 Run matrix:

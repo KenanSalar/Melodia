@@ -223,28 +223,32 @@ pub fn write_path_commands(columns: &[Column], out: &mut String) {
 /// Bytes one entry of [`XPrefixes`] takes: `"0.1234 "`.
 const X_PREFIX_BYTES: usize = 7;
 
-/// Widest fraction [`push_fixed`] renders — `x` takes four places, `y` three, and
-/// the scale it derives is a `u16`. Clamped rather than asserted so a wider
-/// request loses precision instead of wrapping the scale.
-const MAX_FIXED_DECIMALS: u32 = 4;
-
-/// Append `value` to `out` with exactly `decimals` fractional digits.
+/// Append `value` to `out` with exactly `DECIMALS` fractional digits.
 ///
 /// Every coordinate the trace emits is normalized to a unit range and quantized
 /// to a few places, so the whole format is a sign, one digit and a zero-padded
-/// remainder. Going through `{value:.decimals$}` instead asks `core::fmt` for the
-/// exactly-rounded decimal at that precision — a much harder question, answered
-/// by Grisu's `format_exact` with a bignum fallback, and at the [`MAX_COLUMNS`]
-/// cap this runs twice per column per frame. Scaling to an integer and printing
-/// the two halves is the same bytes for a fraction of the work.
+/// remainder. Going through `{value:.DECIMALS$}` instead asks `core::fmt` for
+/// the exactly-rounded decimal at that precision — a much harder question,
+/// answered by Grisu's `format_exact` with a bignum fallback, and at the
+/// [`MAX_COLUMNS`] cap this runs twice per column per frame. Scaling to an
+/// integer and printing the two halves is the same bytes for a fraction of the
+/// work.
+///
+/// `DECIMALS` is a const parameter rather than an argument so the scale is a
+/// compile-time constant: a request wider than a `u16` scale holds — five places
+/// or more — overflows the `const` block instead of needing a runtime clamp.
+/// That diagnostic arrives at **codegen**, though, since a `const` block reading
+/// a generic parameter is only evaluated once monomorphized: `cargo build` and
+/// `cargo test` reject `push_fixed::<5>` with `E0080`, and `cargo clippy` — which
+/// stops before codegen — passes it. Worth knowing, since clippy is this repo's
+/// usual gate.
 ///
 /// Two deliberate differences from `core::fmt`, neither reaching the figure:
 /// negative zero prints as `0`, and an exact tie rounds away from zero rather
 /// than to even. Both move a coordinate one unit in the last place, across a
 /// viewbox two units tall drawn into a strip a few tens of pixels high.
-fn push_fixed(out: &mut String, value: f32, decimals: u32) {
-    let decimals = decimals.min(MAX_FIXED_DECIMALS);
-    let scale = 10u16.pow(decimals);
+fn push_fixed<const DECIMALS: u32>(out: &mut String, value: f32) {
+    let scale = const { 10u16.pow(DECIMALS) };
 
     #[expect(
         clippy::cast_possible_truncation,
@@ -257,7 +261,7 @@ fn push_fixed(out: &mut String, value: f32, decimals: u32) {
     }
     let magnitude = units.unsigned_abs();
     let scale = u32::from(scale);
-    let width = decimals as usize;
+    let width = DECIMALS as usize;
     // Writing into a String cannot fail.
     let _ = write!(out, "{}.{:0width$}", magnitude / scale, magnitude % scale);
 }
@@ -321,7 +325,7 @@ impl XPrefixes {
         // A lone column has no span to normalize against; it lands at x = 0.
         let span = index_to_f32(columns.saturating_sub(1)).max(1.0);
         for i in 0..columns {
-            push_fixed(&mut self.text, index_to_f32(i) / span, 4);
+            push_fixed::<4>(&mut self.text, index_to_f32(i) / span);
             self.text.push(' ');
             self.ends.push(self.text.len());
         }
@@ -362,13 +366,13 @@ fn write_path(columns: &[Column], prefixes: &XPrefixes, out: &mut String) {
         // is a line to.
         out.push_str(if i == 0 { "M" } else { LINE_TO });
         out.push_str(prefixes.get(i));
-        push_fixed(out, y, 3);
+        push_fixed::<3>(out, y);
     }
     for (i, column) in columns.iter().enumerate().rev() {
         let y = edges(*column).0;
         out.push_str(LINE_TO);
         out.push_str(prefixes.get(i));
-        push_fixed(out, y, 3);
+        push_fixed::<3>(out, y);
     }
     out.push('Z');
 }

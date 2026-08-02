@@ -3,15 +3,11 @@
 //! Gated on `cfg(test)` at the `mod` declaration in `lib.rs` — never compiled
 //! into production binaries.
 
-#![allow(
-    unsafe_code,
-    reason = "env::set_var/remove_var are unsafe in Rust 2024; every mutation here happens under ENV_LOCK and is restored under catch_unwind."
-)]
+use std::cell::Cell;
+use std::sync::{Mutex, MutexGuard, PoisonError};
 
-use std::sync::Mutex;
-
-/// Serialises **every** test in this binary that mutates or reads the process
-/// environment.
+/// Serialises every test in this binary that mutates the process environment,
+/// and every test that opts into reading it through [`reading_env`].
 ///
 /// One lock for the whole binary, not one per file or per variable: `cargo
 /// test` runs `#[test]` bodies in parallel threads of a single process, the
@@ -21,75 +17,167 @@ use std::sync::Mutex;
 /// is exactly the race Rust 2024 made `set_var`/`remove_var` unsafe for. It
 /// lives at the crate root rather than beside any one caller because the set of
 /// callers spans unrelated modules and the variables they touch overlap through
-/// readers neither of them owns: `SettingsData::default()` reads
-/// `XDG_CURRENT_DESKTOP` via `is_kde_desktop()`, and `install_target()` reaches
-/// `$APPIMAGE` through `target::current_target_key()`.
+/// readers neither of them owns: `SettingsData::default()` reaches
+/// `XDG_CURRENT_DESKTOP` via `is_kde_desktop()` *and* all four locale variables
+/// via `default_locale()`, and `install_target()` reaches `$APPIMAGE` through
+/// `target::current_target_key()`.
 ///
-/// **Private on purpose** — [`with_env_vars`] is the only way to take it. A
+/// **The read side is opt-in, and that is the limit of what this enforces.**
+/// `set_var`'s contract is symmetric — std spells it "no other threads
+/// concurrently writing or *reading*(!) the environment" — so a test that only
+/// reads is as much a party to the race as a second writer. Nothing makes such a
+/// test take a lock; [`reading_env`] is how one opts in, and a reader that
+/// hasn't is still racing. Wrap one as soon as you find it rather than assuming
+/// this lock already covers it.
+///
+/// **Private on purpose** — the helpers below are the only way to take it. A
 /// `pub(crate)` lock invites a caller to hand-roll the snapshot/restore around
 /// it, and three of those had already diverged before they were consolidated
 /// here; the restore is the half that goes missing.
 static ENV_LOCK: Mutex<()> = Mutex::new(());
 
-/// Acquires [`ENV_LOCK`], saves `vars`, clears them, runs `body`, then restores
-/// the originals — including when `body` panics, so a failing assertion can't
-/// leak its variable into the rest of the process.
+thread_local! {
+    /// Set while this thread holds [`ENV_LOCK`]. The mutex is not reentrant, so
+    /// a nested call would hang the binary with no message and no failing
+    /// assertion — the worst failure mode to leave undetected. This turns it
+    /// into a named panic instead.
+    static ENV_LOCK_HELD: Cell<bool> = const { Cell::new(false) };
+}
+
+/// [`ENV_LOCK`] and the reentrancy flag held together, so both are released on
+/// the way out of a panicking body as well as a returning one.
+struct EnvGuard {
+    _lock: MutexGuard<'static, ()>,
+}
+
+impl EnvGuard {
+    /// # Panics
+    ///
+    /// If this thread already holds the lock. Panicking is the point: the
+    /// alternative is a silent deadlock.
+    fn acquire() -> Self {
+        assert!(
+            !ENV_LOCK_HELD.get(),
+            "the env helpers are not reentrant: this thread already holds the \
+             environment lock, so taking it again would deadlock with no message \
+             and no failing assertion. A per-variable wrapper must *delegate* to \
+             `with_env_set` rather than lock and then call it."
+        );
+        // A poisoned guard is accepted: the previous holder restored the
+        // environment before it resumed unwinding, so the state is consistent.
+        let lock = ENV_LOCK.lock().unwrap_or_else(PoisonError::into_inner);
+        ENV_LOCK_HELD.set(true);
+        Self { _lock: lock }
+    }
+}
+
+impl Drop for EnvGuard {
+    fn drop(&mut self) {
+        ENV_LOCK_HELD.set(false);
+    }
+}
+
+/// Runs `body` with `clear` removed from the environment and `set` applied on
+/// top, then restores the originals — including when `body` panics, so a failing
+/// assertion can't leak a variable into the rest of the process.
 ///
-/// The whole shape in one place: **lock → snapshot → clear → `catch_unwind` →
-/// restore → `resume_unwind`.** `body` may set any of `vars` itself; it runs
-/// with the lock held, so its own `set_var` is sound for the same reason this
-/// function's is.
+/// The whole shape in one place: **lock → snapshot → clear → set →
+/// `catch_unwind` → restore → `resume_unwind`.** Every variable in `set` must
+/// also appear in `clear`, or there is nothing snapshotted to put it back from.
 ///
-/// # Safety
-///
-/// `std::env::set_var` / `remove_var` mutate shared process state. Holding
-/// [`ENV_LOCK`] across the entire sequence is what makes that sound, and it only
-/// works while *every* env-mutating test in the binary goes through here — so
-/// don't reach past this function for a second lock.
+/// Safe to call, and that is encapsulation rather than a gap: this is the only
+/// place in the binary that mutates the environment, so "every mutation happens
+/// under `ENV_LOCK`" is a property of this module instead of something each
+/// caller re-argues.
 ///
 /// # Panics
 ///
 /// Re-raises whatever `body` panicked with, after the environment is restored.
-pub(crate) unsafe fn with_env_vars<F: FnOnce() -> R, R>(vars: &[&str], body: F) -> R {
-    let _guard = ENV_LOCK
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner);
+/// Panics up front on a nested call — see [`ENV_LOCK_HELD`].
+#[allow(
+    unsafe_code,
+    reason = "env::set_var/remove_var are unsafe in Rust 2024; every mutation in the test binary happens in this function, under ENV_LOCK, restored under catch_unwind."
+)]
+pub(crate) fn with_env_set<F: FnOnce() -> R, R>(
+    clear: &[&str],
+    set: &[(&str, &str)],
+    body: F,
+) -> R {
+    debug_assert!(
+        set.iter().all(|(var, _)| clear.contains(var)),
+        "a variable in `set` that isn't in `clear` is never restored",
+    );
+
+    let _guard = EnvGuard::acquire();
     let saved: Vec<(&str, Option<String>)> =
-        vars.iter().map(|&v| (v, std::env::var(v).ok())).collect();
-    for &v in vars {
-        unsafe { std::env::remove_var(v) };
+        clear.iter().map(|&v| (v, std::env::var(v).ok())).collect();
+
+    // SAFETY: `ENV_LOCK` is held across every mutation below *and* across
+    // `body`, and the restore runs whether `body` returns or unwinds — so with
+    // every other mutation in the binary coming through here too, no writer can
+    // overlap another. That discharges the writer half of `set_var`'s contract;
+    // the reader half is `reading_env`'s job and is opt-in, which the `ENV_LOCK`
+    // doc says plainly rather than letting this comment imply otherwise.
+    unsafe {
+        for &v in clear {
+            std::env::remove_var(v);
+        }
+        for (var, value) in set {
+            std::env::set_var(var, value);
+        }
     }
+
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(body));
-    for (var, val) in saved {
-        unsafe {
-            match val {
+
+    // SAFETY: as above — still the same guard, still the same lock.
+    unsafe {
+        for (var, value) in saved {
+            match value {
                 Some(v) => std::env::set_var(var, v),
                 None => std::env::remove_var(var),
             }
         }
     }
+
     match result {
         Ok(value) => value,
         Err(payload) => std::panic::resume_unwind(payload),
     }
 }
 
-/// Runs `body` with `$APPIMAGE` set to `value`, or cleared when it is `None`.
-///
-/// Lives here rather than beside either caller because two unrelated test
-/// modules override it — `updater::target::tests` and
-/// `updater::linux_pkg::tests` — and it reaches production code neither of them
-/// owns (`install_target()` → `target::current_target_key()`).
-pub(crate) fn with_appimage_env<F: FnOnce()>(value: Option<&str>, body: F) {
-    // SAFETY: `with_env_vars` holds `ENV_LOCK` across the whole body and puts
-    // `$APPIMAGE` back afterwards, panicking assertion or not. It has already
-    // cleared the variable by the time `body` runs, so `None` needs no write.
-    unsafe {
-        with_env_vars(&["APPIMAGE"], || {
-            if let Some(path) = value {
-                std::env::set_var("APPIMAGE", path);
-            }
-            body();
-        });
+/// Runs `body` with `var` set to `value`, or merely cleared when it is `None`.
+pub(crate) fn with_env_var<F: FnOnce() -> R, R>(var: &str, value: Option<&str>, body: F) -> R {
+    match value {
+        Some(v) => with_env_set(&[var], &[(var, v)], body),
+        None => with_env_set(&[var], &[], body),
     }
 }
+
+/// Runs `body` with `$APPIMAGE` set to `value`, or cleared when it is `None`.
+///
+/// Named rather than spelled out at each call site because three unrelated test
+/// modules override it — `updater::{target,linux_pkg,system_install}::tests` —
+/// and it reaches production code none of them owns (`install_target()` →
+/// `target::current_target_key()`).
+pub(crate) fn with_appimage_env<F: FnOnce() -> R, R>(value: Option<&str>, body: F) -> R {
+    with_env_var("APPIMAGE", value, body)
+}
+
+/// Runs `body` under the same lock the mutating helpers take, without touching a
+/// variable.
+///
+/// For a test that only *reads* the environment, directly or through production
+/// code that does. `set_var`'s contract is symmetric, so such a test races a
+/// sibling's mutation exactly as a second mutator would; this is how it opts out
+/// of that race. `SettingsData::default()` is the reader in this tree — it
+/// reaches `XDG_CURRENT_DESKTOP` and all four locale variables through its serde
+/// defaults, and the tests that build one sit in the same file as the tests that
+/// mutate both.
+pub(crate) fn reading_env<F: FnOnce() -> R, R>(body: F) -> R {
+    let _guard = EnvGuard::acquire();
+    body()
+}
+
+#[cfg(test)]
+#[path = "tests/test_support_tests.rs"]
+mod tests;

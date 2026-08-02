@@ -217,6 +217,16 @@ fn a_nonsense_width_still_yields_drawable_columns() {
 
 // --- push_fixed --------------------------------------------------------------
 
+/// `rendered` parses back to within half a unit in the last place of `value`.
+/// The slack absorbs the parse's own rounding, orders of magnitude smaller.
+fn assert_rounded(rendered: &str, value: f32, scale: f32) {
+    let back: f32 = rendered.parse().unwrap_or(f32::NAN);
+    assert!(
+        (back - value).abs() <= 0.5 / scale + 1e-6,
+        "`{rendered}` is not `{value}` rounded to 1/{scale}",
+    );
+}
+
 #[test]
 fn push_fixed_rounds_to_the_requested_place() {
     // Swept rather than spot-checked: this is the only writer for every
@@ -225,18 +235,14 @@ fn push_fixed_rounds_to_the_requested_place() {
     // step lands on no round decimal and the sweep covers both signs densely.
     for k in -1009i16..=1009 {
         let value = f32::from(k) / 1009.0;
-        for (decimals, scale) in [(3u32, 1000.0_f32), (4, 10_000.0)] {
-            let mut out = String::new();
-            push_fixed(&mut out, value, decimals);
 
-            let back: f32 = out.parse().unwrap_or(f32::NAN);
-            // Half a unit in the last place, plus slack for the parse's own
-            // rounding — which is orders of magnitude smaller.
-            assert!(
-                (back - value).abs() <= 0.5 / scale + 1e-6,
-                "`{out}` is not `{value}` rounded to {decimals} places",
-            );
-        }
+        let mut out = String::new();
+        push_fixed::<3>(&mut out, value);
+        assert_rounded(&out, value, 1000.0);
+
+        out.clear();
+        push_fixed::<4>(&mut out, value);
+        assert_rounded(&out, value, 10_000.0);
     }
 }
 
@@ -249,7 +255,7 @@ fn push_fixed_diverges_from_core_fmt_only_on_zero_sign_and_ties() {
 
     // Negative zero loses its sign. Same point, and the SVG grammar reads the two
     // spellings identically.
-    push_fixed(&mut out, -0.0, 3);
+    push_fixed::<3>(&mut out, -0.0);
     assert_eq!(out, "0.000");
     assert_eq!(format!("{:.3}", -0.0_f32), "-0.000");
 
@@ -257,9 +263,29 @@ fn push_fixed_diverges_from_core_fmt_only_on_zero_sign_and_ties() {
     // is a dyadic rational, so the scale-up to 62.5 is exact and the tie is real
     // rather than an artifact of float error.
     out.clear();
-    push_fixed(&mut out, 0.0625, 3);
+    push_fixed::<3>(&mut out, 0.0625);
     assert_eq!(out, "0.063");
     assert_eq!(format!("{:.3}", 0.0625_f32), "0.062");
+}
+
+#[test]
+fn a_tie_in_the_x_prefixes_rounds_the_way_push_fixed_does() {
+    // The tie rule isn't academic at the seam that matters: 65 columns puts the
+    // span at 64, so column 2 lands on 2/64 — dyadic, so the scale-up to 312.5 is
+    // exact and the tie is real. That is a reachable width (`columns_for_width`
+    // yields anything in MIN_COLUMNS..=MAX_COLUMNS), and it is where the trace's
+    // bytes genuinely differ from the `{:.4}` formatter the cache used to run.
+    // Invisible on screen, which is exactly why it is pinned rather than left to
+    // the exact-string tests below, none of which mounts a power-of-two span.
+    let columns = vec![Column::default(); 65];
+    let mut out = String::new();
+    write_path_commands(&columns, &mut out);
+
+    assert!(
+        out.contains("0.0313 "),
+        "column 2's x should round away from zero: {out}"
+    );
+    assert_eq!(format!("{:.4}", 2.0_f32 / 64.0), "0.0312");
 }
 
 // --- write_path_commands -----------------------------------------------------
