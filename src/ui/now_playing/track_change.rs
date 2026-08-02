@@ -184,21 +184,10 @@ pub(super) async fn apply_track_change(
 
     // Every colour the view paints on the backdrop, solved together from one
     // hue and one brightness measurement — see `backdrop` for the reasoning
-    // and `globals/player.slint` for what each brush drives.
-    //
-    // The hue falls back to the live `Theme.accent` so a missing-artwork or
-    // failed-decode track doesn't strand the slots on the previous track's
-    // colour, and a theme change propagates on the next track change. Only the
-    // hue is borrowed: `backdrop::solve` owns every tone, so the view looks the
-    // same whether the theme underneath it is light or dark.
-    let seed = sample
-        .accent_argb
-        .unwrap_or_else(|| brush_to_rgb(&ui.global::<ThemeGlobal>().get_accent()));
-    // No blur to measure means the gradient floor is what shows, and both of
-    // its stops are ours — so this is a known value, not a guess, and the
-    // artwork-less path runs through the same solve as every other cover.
-    let luma = sample.luma.unwrap_or_else(backdrop::floor_luma);
-    let colors = backdrop::solve(seed, luma);
+    // and `globals/player.slint` for what each brush drives. Both fallbacks (a
+    // missing hue, a missing measurement) live on `BackdropSample::solve`, so
+    // this tier and the hero's resolve them identically.
+    let colors = sample.solve(brush_to_rgb(&ui.global::<ThemeGlobal>().get_accent()));
 
     player.set_np_accent_bright(brush(colors.chrome));
     player.set_np_on_backdrop(brush(colors.text));

@@ -270,11 +270,35 @@ impl BackdropSample {
     /// downscaled, blurred buffer is plenty of pixels for `QuantizerCelebi` and
     /// re-quantizing the full-size cover costs several times more for no
     /// perceptual gain.
+    ///
+    /// An empty `accent_argb` means there was no buffer at all. A cover with no
+    /// colour above the scorer's chroma cutoff — a greyscale sleeve — answers
+    /// the quantizer's *own* fallback hue instead, so the `Theme.accent` path in
+    /// [`Self::solve`] is for a missing cover, never a monochrome one.
     pub(crate) fn measure(blur: &SharedPixelBuffer<Rgb8Pixel>) -> Self {
         Self {
             accent_argb: extract_source_argb_from_rgb8(blur),
             luma: luma_p90(blur),
         }
+    }
+
+    /// Solve the whole colour set from this measurement.
+    ///
+    /// `theme_accent` supplies the hue when there was no artwork to take one
+    /// from, so a missing-artwork or failed-decode entry doesn't strand the
+    /// surface on the previous one's colour and a theme change propagates on the
+    /// next open. Only the hue is borrowed — [`solve`] owns every tone, so the
+    /// result looks the same whether the theme underneath is light or dark.
+    ///
+    /// No blur to measure means the gradient floor is what shows, and both of
+    /// its stops are ours — so [`floor_luma`] is a known value rather than a
+    /// guess, and the artwork-less path runs through the same solve as every
+    /// cover.
+    pub(crate) fn solve(self, theme_accent: u32) -> BackdropColors {
+        solve(
+            self.accent_argb.unwrap_or(theme_accent),
+            self.luma.unwrap_or_else(floor_luma),
+        )
     }
 }
 
@@ -404,8 +428,12 @@ pub(crate) struct BackdropColors {
 /// `seed_argb` is the accent quantized out of the artwork, or the live
 /// `Theme.accent` when there is none — a consumer borrows the theme's hue but
 /// never its lightness. `backdrop_luma` is [`luma_p90`] of the blur, or
-/// [`floor_luma`] when there is no blur to measure. Both come off a
-/// [`BackdropSample`] on every path but Genre Detail's procedural gradient.
+/// [`floor_luma`] when there is no blur to measure.
+///
+/// Reach for [`BackdropSample::solve`] instead of calling this directly: it
+/// resolves both fallbacks in one place, which is what keeps the two consumers
+/// from drifting. Genre Detail's procedural gradient is the sole caller here,
+/// having no artwork to have measured.
 pub(crate) fn solve(seed_argb: u32, backdrop_luma: f64) -> BackdropColors {
     let alpha = scrim_alpha(backdrop_luma);
     let tone = composited_tone(backdrop_luma, alpha);

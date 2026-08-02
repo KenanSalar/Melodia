@@ -213,6 +213,20 @@ export component FavoritesView inherits Rectangle {
                         avail-width: root.content-w - root.search-w - 2 * Theme.pad-md;
                         selected-index <=> Favorites.tab-idx;
                         label-color: HeroBackdrop.on-backdrop;
+                        // `active-color` is one input for the selected label,
+                        // its FILL=1 icon and the underline, so it has to be a
+                        // hero token like the other three: the band takes its
+                        // hue from the mosaic now, and `Theme.accent` is a
+                        // theme value that no longer has anything to do with
+                        // it. It also had no contrast floor here — Latte's
+                        // mauve lands near 1.7:1 on the pinned band, where
+                        // `chrome` is solved to clear 3:1 against it whatever
+                        // the cover. The cost is that the selected label sits
+                        // on the 3:1 tier while the idle ones sit on
+                        // `on-backdrop`'s 4.5:1; splitting label from
+                        // indicator would mean a second input on `TabBar`,
+                        // which Settings would inherit too.
+                        active-color: HeroBackdrop.chrome;
                         hover-fill: HeroBackdrop.on-backdrop.with-alpha(0.12);
                         divider-color: HeroBackdrop.tile-edge;
                         selected(i) => {

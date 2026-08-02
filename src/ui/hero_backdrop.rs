@@ -28,13 +28,10 @@ use crate::ui::backdrop::{self, BackdropColors, BackdropSample};
 use crate::{AppWindow, HeroBackdrop, Theme as ThemeGlobal};
 
 /// Solve and publish from a blur's measurement. An empty sample — no artwork,
-/// or a decode that failed — runs the same solve against the gradient floor
-/// rather than taking a separate path, since both of the floor's stops are ours
-/// and its brightness is therefore known rather than guessed.
+/// or a decode that failed — takes the same path as every cover; what it falls
+/// back to, and why that isn't a guess, is on [`BackdropSample::solve`].
 pub(crate) fn apply(ui: &AppWindow, sample: BackdropSample) {
-    let seed = sample.accent_argb.unwrap_or_else(|| theme_accent(ui));
-    let luma = sample.luma.unwrap_or_else(backdrop::floor_luma);
-    write(ui, &backdrop::solve(seed, luma), None);
+    write(ui, &sample.solve(theme_accent(ui)), None);
 }
 
 /// Solve and publish for a hero whose backdrop *is* a gradient — Genre Detail,

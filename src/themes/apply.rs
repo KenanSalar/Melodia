@@ -223,18 +223,19 @@ pub(crate) fn color(rgb: u32) -> Color {
 }
 
 /// Pack a `0x00RRGGBB` value plus a separate `alpha` into a translucent solid
-/// `Brush`. The Now Playing scrim is the caller: its opacity is solved per
-/// artwork, and baking it into the brush keeps the Slint side a single
-/// `background: Player.np-scrim` instead of a colour plus a float the view
-/// would have to recombine.
+/// `Brush`. The two solved scrims are the callers — Now Playing's and the
+/// hero's — and their opacity is solved per artwork, so baking it into the
+/// brush keeps the Slint side a single `background: Player.np-scrim` instead of
+/// a colour plus a float the view would have to recombine.
 pub(crate) fn brush_with_alpha(rgb: u32, alpha: u8) -> Brush {
     Brush::SolidColor(color(rgb).with_alpha(f32::from(alpha) / 255.0))
 }
 
 /// Unpack a solid `Brush` back to `0x00RRGGBB`, dropping alpha. Used to read a
-/// live `Theme` brush back out of the Slint global when the Now Playing view
-/// needs the theme accent's *hue* as an artwork-less fallback. A gradient
-/// brush answers with its first stop, which is the right approximation here.
+/// live `Theme` brush back out of the Slint global when a solved surface — Now
+/// Playing or a hero — needs the theme accent's *hue* as an artwork-less
+/// fallback. A gradient brush answers with its first stop, which is the right
+/// approximation here.
 pub(crate) fn brush_to_rgb(brush: &Brush) -> u32 {
     color_to_rgb(brush.color())
 }

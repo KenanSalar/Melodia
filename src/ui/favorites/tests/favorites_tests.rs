@@ -195,6 +195,42 @@ fn the_page_width_mirror_has_a_mount_seed() {
     );
 }
 
+/// `TabBar`'s four brushes all default to `Theme.*` tokens, which is right for
+/// Settings and wrong on a banner — and a mount that omits one still builds and
+/// still looks correct in Settings, so nothing else catches it.
+///
+/// `active-color` is the one this exists for. It was left at the default long
+/// after the other three moved, and it drives the selected label, its FILL=1
+/// icon *and* the underline from one input, so the omission is three surfaces
+/// at once. Two things make it wrong rather than merely inconsistent: the band
+/// takes its hue from the mosaic now, and a theme accent has no contrast floor
+/// against it — Latte's mauve lands near 1.7:1 on the pinned band, under even
+/// the 3:1 non-text bar, where `HeroBackdrop.chrome` is solved to clear it.
+///
+/// Asserted as "reads *some* `HeroBackdrop` tier" rather than pinning which
+/// one: the tier a brush should take is a design call that may move, but
+/// reaching for `Theme.*` here is a bug at any tier.
+#[test]
+fn the_hero_tab_bar_takes_every_brush_from_the_backdrop() {
+    let mount = VIEW
+        .split_once("bar := TabBar {")
+        .and_then(|(_, rest)| rest.split_once("selected(i) =>"))
+        .map_or("", |(body, _)| body);
+    assert!(
+        !mount.is_empty(),
+        "favorites-view.slint no longer mounts `bar := TabBar` ahead of its `selected` handler"
+    );
+
+    for prop in ["label-color", "active-color", "hover-fill", "divider-color"] {
+        assert!(
+            mount.contains(&format!("{prop}: HeroBackdrop.")),
+            "the Favorites hero's TabBar must pass `{prop}` a `HeroBackdrop` tier — omitting it \
+             falls back to the component's `Theme.*` default, which is a theme value on a band \
+             that is no longer theme-seeded"
+        );
+    }
+}
+
 /// Every field a sort pill can ask for has to be one the comparator handles.
 ///
 /// The token is a bare string on both sides — `request-artist-sort("name")` in

@@ -17,7 +17,6 @@ use crate::entities::track::FavoriteStats;
 use crate::error::AppResult;
 use crate::library;
 use crate::state::AppState;
-use crate::ui::backdrop::BackdropSample;
 use crate::ui::mosaic_blur::{MosaicBlur, compose_mosaic_blur};
 use crate::ui::now_playing::write_crossfade_slot;
 use crate::{AppWindow, Favorites};
@@ -146,11 +145,9 @@ fn apply_hero_blur(
         let g = ui.global::<Favorites>();
         // The hue and brightness were measured off this very buffer on the
         // blocking pool, so the scrim lands in step with the blur under it.
-        let (img, sample) = match composed {
-            Some(m) => (Some(Image::from_rgb8(m.blur)), m.sample),
-            None => (None, BackdropSample::default()),
-        };
+        let sample = composed.as_ref().map(|m| m.sample).unwrap_or_default();
         crate::ui::hero_backdrop::apply(&ui, sample);
+        let img = composed.map(|m| Image::from_rgb8(m.blur));
         write_crossfade_slot(
             img,
             animate,
