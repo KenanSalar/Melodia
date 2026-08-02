@@ -26,6 +26,8 @@ pub(super) fn wire(ui: &AppWindow, search_ui: &Arc<SearchUi>) {
     // Top Result cover routes per kind — album → album-strip tier,
     // artist → artist-strip tier. Cache parity with the strip below
     // means clicking a strip card after the top card hits a warm LRU.
+    // A genre top result never arrives here: it has no artwork, so the
+    // card's `Image` is unmounted and its glyph branch paints instead.
     {
         let su = search_ui.clone();
         let weak = weak.clone();

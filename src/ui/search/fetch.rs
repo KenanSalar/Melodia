@@ -17,11 +17,13 @@ use super::{
 use crate::database::queries::SearchResults;
 use crate::entities::album::AlbumStats;
 use crate::entities::artist::ArtistStats;
+use crate::entities::genre::GenreStats;
 use crate::entities::track::TrackListRow as RsTrackListRow;
 use crate::error::AppResult;
 use crate::library;
 use crate::services::settings::SortDir;
 use crate::state::AppState;
+use crate::ui::genres::genre_accent;
 use crate::ui::tracks::{PreparedTrackRow, finish_track_list_row};
 use crate::ui::track_sort::sort_track_rows_by;
 use crate::{
@@ -29,11 +31,29 @@ use crate::{
 };
 
 /// Top Result discriminator. Matches the `top-kind` string slot in the
-/// Slint `Search` global ("album" / "artist" / "").
+/// Slint `Search` global ("album" / "artist" / "genre" / ""). A genre
+/// takes this card rather than a strip of its own — it is a route to a
+/// page, not a row of things to browse.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TopKind {
     Album,
     Artist,
+    Genre,
+}
+
+/// What the card's second line says, as a discriminator rather than a
+/// formatted string: two of the three are translated plurals, and `@tr`
+/// only reaches literals inside `.slint`, so the text has to be resolved
+/// on the UI thread. Keeping the *choice* here leaves `compute_top_result`
+/// pure and its tests free of locale strings.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TopSubtitle {
+    /// Album → its artist's name. A proper noun; nothing to translate.
+    Text(String),
+    /// Artist → `{n} albums`.
+    AlbumCount(i32),
+    /// Genre → `{n} tracks`.
+    TrackCount(i32),
 }
 
 /// Top Result payload — the scalar fields the Slint `Search` global
@@ -44,7 +64,7 @@ pub struct TopResult {
     pub kind: TopKind,
     pub id: i64,
     pub title: String,
-    pub subtitle: String,
+    pub subtitle: TopSubtitle,
     pub artwork_path: Option<String>,
 }
 
@@ -141,7 +161,7 @@ pub async fn kick_search(
     Ok(())
 }
 
-/// Push the freshly-fetched `results` into all three Slint models,
+/// Push the freshly-fetched `results` into all four Slint models,
 /// compute + apply the Top Result, set `tracks-total`, and honour the
 /// `show-all-tracks` toggle (the apply path always re-derives the
 /// visible Songs slice — that way callers don't have to remember to
@@ -191,11 +211,11 @@ pub fn apply_results_to_slint(
         .iter()
         .map(to_slint_album_strip_row)
         .collect();
-    let artist_rows: Vec<UiEntityStripRow> = results
-        .artists
-        .iter()
-        .map(|a| to_slint_artist_strip_row(a, &artist_subtitle(a)))
-        .collect();
+    // Artist rows can't be finished here — their subtitle is a translated
+    // plural that only `Search.album-count-label` resolves, and that is a
+    // UI-thread callback. Carry the entities across and build the rows
+    // inside the closure below.
+    let artists: Vec<ArtistStats> = results.artists.clone();
 
     let weak = weak.clone();
     let _ = slint::invoke_from_event_loop(move || {
@@ -220,6 +240,10 @@ pub fn apply_results_to_slint(
 
         // Strips.
         write_strip(&g.get_album_rows(), album_rows, "album");
+        let artist_rows: Vec<UiEntityStripRow> = artists
+            .iter()
+            .map(|a| to_slint_artist_strip_row(a, &g.invoke_album_count_label(a.album_count)))
+            .collect();
         write_strip(&g.get_artist_rows(), artist_rows, "artist");
 
         // Top Result.
@@ -227,13 +251,28 @@ pub fn apply_results_to_slint(
             g.set_top_kind(SharedString::from(match t.kind {
                 TopKind::Album => "album",
                 TopKind::Artist => "artist",
+                TopKind::Genre => "genre",
             }));
             g.set_top_id(crate::ui::util::clamp_i64_to_i32(t.id));
             g.set_top_title(SharedString::from(t.title.as_str()));
-            g.set_top_subtitle(SharedString::from(t.subtitle.as_str()));
+            g.set_top_subtitle(match &t.subtitle {
+                TopSubtitle::Text(s) => SharedString::from(s.as_str()),
+                TopSubtitle::AlbumCount(n) => g.invoke_album_count_label(*n),
+                TopSubtitle::TrackCount(n) => g.invoke_track_count_label(*n),
+            });
             g.set_top_artwork_path(SharedString::from(
                 t.artwork_path.as_deref().unwrap_or(""),
             ));
+            // Derived from the title rather than carried on `TopResult`:
+            // `genre_accent` is a pure function of the name, so deriving
+            // here is what guarantees this card and the genre's grid card
+            // tint identically. The view reads these only under
+            // `top-kind == "genre"`, so the other kinds need no write.
+            if t.kind == TopKind::Genre {
+                let accent = genre_accent(&t.title);
+                g.set_top_tile_color_1(accent.tile_color_1);
+                g.set_top_tile_color_2(accent.tile_color_2);
+            }
         } else {
             g.set_top_kind(SharedString::from(""));
             g.set_top_id(-1);
@@ -306,65 +345,64 @@ pub fn push_recent_rows_to_slint(weak: &Weak<AppWindow>, rows: Vec<String>) {
 }
 
 /// Compute the Top Result for a query against a `SearchResults`,
-/// using a 6-step ranking. Pure function — exhaustively unit-tested.
+/// using a 9-step ranking. Pure function — exhaustively unit-tested.
 ///
 /// Ranking (first match wins):
 /// 1. Exact album name (case-insensitive)
 /// 2. Exact artist name (case-insensitive)
-/// 3. Album name starts-with (case-insensitive)
-/// 4. Artist name starts-with (case-insensitive)
-/// 5. First album in results
-/// 6. First artist in results
+/// 3. Exact genre name (case-insensitive)
+/// 4. Album name starts-with (case-insensitive)
+/// 5. Artist name starts-with (case-insensitive)
+/// 6. Genre name starts-with (case-insensitive)
+/// 7. First album in results
+/// 8. First artist in results
+/// 9. First genre in results
 ///
-/// Returns `None` only when both `results.albums` and `results.artists`
-/// are empty.
+/// Genre slots in *below* album and artist within each band rather than
+/// getting a band of its own: that leaves every album-vs-artist outcome
+/// exactly as it was, and only lets a genre win where the card would
+/// otherwise show a weaker match — an exact "Rock" beats an album merely
+/// *starting* with it, which is the same exactness-first rule the two
+/// original bands already encode.
+///
+/// Returns `None` only when all three result lists are empty.
 pub fn compute_top_result(results: &SearchResults, query: &str) -> Option<TopResult> {
     let needle = query.trim().to_lowercase();
     if needle.is_empty() {
         return None;
     }
 
-    // 1. Exact album name
-    if let Some(a) = results
-        .albums
-        .iter()
-        .find(|a| a.name.to_lowercase() == needle)
-    {
+    let exact = |name: &str| name.to_lowercase() == needle;
+    let prefix = |name: &str| name.to_lowercase().starts_with(&needle);
+
+    // 1-3. Exact name, album → artist → genre.
+    if let Some(a) = results.albums.iter().find(|a| exact(&a.name)) {
         return Some(album_to_top(a));
     }
-    // 2. Exact artist name
-    if let Some(a) = results
-        .artists
-        .iter()
-        .find(|a| a.name.to_lowercase() == needle)
-    {
+    if let Some(a) = results.artists.iter().find(|a| exact(&a.name)) {
         return Some(artist_to_top(a));
     }
-    // 3. Album name starts-with
-    if let Some(a) = results
-        .albums
-        .iter()
-        .find(|a| a.name.to_lowercase().starts_with(&needle))
-    {
+    if let Some(g) = results.genres.iter().find(|g| exact(&g.name)) {
+        return Some(genre_to_top(g));
+    }
+    // 4-6. Starts-with, same order.
+    if let Some(a) = results.albums.iter().find(|a| prefix(&a.name)) {
         return Some(album_to_top(a));
     }
-    // 4. Artist name starts-with
-    if let Some(a) = results
-        .artists
-        .iter()
-        .find(|a| a.name.to_lowercase().starts_with(&needle))
-    {
+    if let Some(a) = results.artists.iter().find(|a| prefix(&a.name)) {
         return Some(artist_to_top(a));
     }
-    // 5. First album
+    if let Some(g) = results.genres.iter().find(|g| prefix(&g.name)) {
+        return Some(genre_to_top(g));
+    }
+    // 7-9. Whatever came back first, same order.
     if let Some(a) = results.albums.first() {
         return Some(album_to_top(a));
     }
-    // 6. First artist
     if let Some(a) = results.artists.first() {
         return Some(artist_to_top(a));
     }
-    None
+    results.genres.first().map(genre_to_top)
 }
 
 fn album_to_top(a: &AlbumStats) -> TopResult {
@@ -372,7 +410,7 @@ fn album_to_top(a: &AlbumStats) -> TopResult {
         kind: TopKind::Album,
         id: a.id,
         title: a.name.clone(),
-        subtitle: a.artist_name.clone(),
+        subtitle: TopSubtitle::Text(a.artist_name.clone()),
         artwork_path: a.artwork_path.clone(),
     }
 }
@@ -382,23 +420,22 @@ fn artist_to_top(a: &ArtistStats) -> TopResult {
         kind: TopKind::Artist,
         id: a.id,
         title: a.name.clone(),
-        // Subtitle is the album count by Tauri parity. The localised
-        // pluralisation is the caller's responsibility; we hand back
-        // the raw count as a plain string so test fixtures stay stable.
-        subtitle: format!("{} albums", a.album_count),
+        // Album count by Tauri parity. Handed over as a count, not a
+        // sentence — see `TopSubtitle`.
+        subtitle: TopSubtitle::AlbumCount(a.album_count),
         artwork_path: a.image_path.clone(),
     }
 }
 
-/// Subtitle for an Artist strip card. The English fallback follows the
-/// Tauri "{n} albums" shape; locale translation rides on the
-/// `@tr("{n} album"|"{n} albums" % count)` plural in `.slint`. Until
-/// the apply step can reach the locale machinery from a background
-/// thread, the strip card subtitle is built in English here. That
-/// matches the Favorite Artists grid's behaviour (see comment on
-/// `to_slint_fav_artist_row`).
-fn artist_subtitle(a: &ArtistStats) -> String {
-    format!("{} albums", a.album_count)
+fn genre_to_top(g: &GenreStats) -> TopResult {
+    TopResult {
+        kind: TopKind::Genre,
+        id: g.id,
+        title: g.name.clone(),
+        subtitle: TopSubtitle::TrackCount(g.track_count),
+        // Genres have no artwork; the card paints its fallback glyph.
+        artwork_path: None,
+    }
 }
 
 /// Empty-query fast path: clear every results model + Top Result +

@@ -6,6 +6,7 @@ import { SearchBar } from "../components/search-bar.slint";
 import { HorizontalCardStrip } from "../components/grid/horizontal-card-strip.slint";
 import { ActionPill, PillLabel, PillButton, PillDivider } from "../components/action-pill.slint";
 import { ColumnTogglePopup } from "../components/track-list/column-toggle-popup.slint";
+import { ArtworkImage } from "../components/artwork-image.slint";
 import { MaterialIcon } from "../components/material-icon.slint";
 import { TrackList } from "../components/track-list/track-list.slint";
 import { OverlayScrollbar } from "../components/overlay-scrollbar.slint";
@@ -25,6 +26,16 @@ import { OverlayScrollbar } from "../components/overlay-scrollbar.slint";
 //           least one tracks or a top-result
 //       (e) Albums strip
 //       (f) Artists strip
+//
+// Both strips match through their own tracks as well as by name, so a
+// query that only reaches track metadata — a song title, a year, a
+// composer, a genre — still fills them, and the Top Result (which ranks
+// over those two lists plus genres) still has something to show.
+//
+// There is no Genres strip: a genre is a *route*, not a thing to browse
+// a row of, so a genre match surfaces as the Top Result card instead and
+// clicking it routes through the shared `Search.go-to-genre` — the same
+// callback a track row's "Go to Genre" entry uses.
 //
 // Cross-tab nav: clicking an album/artist card stamps
 // `*Detail.origin-nav-index = NAV_SEARCH` synchronously *before*
@@ -353,34 +364,46 @@ export component SearchView inherits Rectangle {
                                     padding: Theme.pad-md;
                                     spacing: Theme.pad-sm;
 
-                                    // Artwork tile (square + rounded).
-                                    // `circular: true` when the top
-                                    // result is an artist — matches
-                                    // the Artists strip's circular
-                                    // cards convention.
-                                    Rectangle {
-                                        width: 216px;
-                                        height: 216px;
-                                        border-radius: Search.top-kind == "artist"
-                                            ? self.height / 2
+                                    // Artwork tile. The shared
+                                    // `ArtworkImage`, not a hand-rolled
+                                    // square: a coverless result here has
+                                    // to look like the same entity does
+                                    // in the strip below it and in every
+                                    // track row, and this card spent a
+                                    // while painting its own grey
+                                    // placeholder that matched neither.
+                                    // Round for everything but an artist,
+                                    // whose circular tile matches the
+                                    // Artists strip's convention.
+                                    ArtworkImage {
+                                        tile-size: 216px;
+                                        tile-radius: Search.top-kind == "artist"
+                                            ? self.tile-size / 2
                                             : Theme.radius-md;
-                                        background: Theme.surface1;
-                                        clip: true;
-
-                                        if Search.top-artwork-path != "": Image {
-                                            width: 100%;
-                                            height: 100%;
-                                            source: Search.request-top-result-cover(Search.top-artwork-path);
-                                            image-fit: ImageFit.cover;
-                                        }
-                                        if Search.top-artwork-path == "": Text {
-                                            text: Search.top-kind == "artist" ? "person" : "album";
-                                            color: Theme.subtext0;
-                                            font-family: "Material Symbols Rounded";
-                                            font-size: 96px;
-                                            horizontal-alignment: center;
-                                            vertical-alignment: center;
-                                        }
+                                        cover: Search.request-top-result-cover(Search.top-artwork-path);
+                                        fallback-icon: Search.top-kind == "artist"
+                                            ? "person"
+                                            : Search.top-kind == "genre"
+                                                ? "theater_comedy"
+                                                : "album";
+                                        // A genre is the one kind with no
+                                        // cover to ever replace the fill,
+                                        // so it takes the name-hashed
+                                        // gradient `GenreGrid` paints and
+                                        // the two surfaces read as one
+                                        // genre. Every other kind restates
+                                        // `ArtworkImage`'s own placeholder,
+                                        // because a ternary has no way to
+                                        // fall through to the default it
+                                        // would otherwise inherit.
+                                        tile-bg: Search.top-kind == "genre"
+                                            ? @linear-gradient(135deg,
+                                                Search.top-tile-color-1,
+                                                Search.top-tile-color-2)
+                                            : Theme.accent.with-alpha(0.15);
+                                        tile-icon-color: Search.top-kind == "genre"
+                                            ? #ffffff.with-alpha(0.3)
+                                            : Theme.accent;
                                     }
 
                                     // Badge — localised inline so the
@@ -390,7 +413,9 @@ export component SearchView inherits Rectangle {
                                     Text {
                                         text: Search.top-kind == "album"
                                             ? @tr("Album")
-                                            : @tr("Artist");
+                                            : Search.top-kind == "artist"
+                                                ? @tr("Artist")
+                                                : @tr("Genre");
                                         color: Theme.accent;
                                         font-size: Theme.font-size-sm;
                                         font-weight: 600;

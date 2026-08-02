@@ -8,16 +8,20 @@
 //!   fires `commit-search`, which calls [`fetch::kick_search`] to run
 //!   the FTS5 + LIKE query via `library::search::search_all` on the
 //!   read pool.
-//! * Top Result — single featured card (album OR artist) computed via
-//!   [`fetch::compute_top_result`]'s 6-step ranking (exact album →
-//!   exact artist → starts-with album → starts-with artist → first
-//!   album → first artist).
+//! * Top Result — single featured card (album, artist OR genre) computed
+//!   via [`fetch::compute_top_result`]'s 9-step ranking: all three exact
+//!   matches, then all three starts-with, then first-of-each. A genre
+//!   gets the card rather than a strip of its own — it is a route to a
+//!   page, not a row of things to browse.
 //! * Songs — shared `TrackList` bound to `Search.tracks`. Compact by
-//!   default (first 4 rows; cap [`state::COMPACT_TRACK_LIMIT`]); the
-//!   "Show all N" toggle swaps to the full 50-row backend result from
-//!   the cached `last_results` without a DB round-trip.
+//!   default ([`state::COMPACT_TRACK_LIMIT`] rows); the "Show all N"
+//!   toggle swaps to the full 50-row backend result from the cached
+//!   `last_results` without a DB round-trip.
 //! * Albums + Artists strips — `EntityCard` in a horizontal scroller
-//!   (max 20 each, the backend's `LIKE` cap).
+//!   (max 20 each, the backend's cap). Both match through their own
+//!   tracks as well as by name, so a query that only reaches track
+//!   metadata — a song title, a year, a composer, a genre — fills them
+//!   rather than leaving the page a lone Songs list with no Top Result.
 //! * Recent searches — shown only when the `SearchBar` is empty;
 //!   chip-style buttons backed by [`crate::services::search_history::
 //!   SearchHistoryState`] (cap 10, JSON-persisted under

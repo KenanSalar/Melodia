@@ -59,6 +59,10 @@ use grid::compute_indices;
 #[cfg(test)]
 use state::GridIndexCache;
 
+// Re-exported for the Search view's Top Result card: a genre shown there
+// has to carry the same tint as its card in this grid, and the only way
+// to guarantee that is to derive both from the one function.
+pub use color::{GenreAccent, genre_accent};
 pub use detail::{
     apply_detail_row_favorite, apply_detail_row_rating, apply_filtered_detail, clear_detail,
     open_genre, refresh_detail,

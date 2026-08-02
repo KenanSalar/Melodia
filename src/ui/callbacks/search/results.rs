@@ -69,9 +69,10 @@ pub(super) fn wire(
     }
 
     // --- Top Result click ------------------------------------------
-    // Resolves to one of the two cross-tab handlers above based on
-    // `top-kind`. Invoking the global callback directly keeps the
-    // origin-stamp + nav-flip + persist all in one place.
+    // Resolves to one of three cross-tab handlers based on `top-kind` —
+    // the two above plus `go-to-genre`, wired in `cross_tab_nav`.
+    // Invoking the global callback directly keeps the origin-stamp +
+    // nav-flip + persist all in one place.
     {
         let weak = weak.clone();
         g.on_open_top_result(move || {
@@ -85,6 +86,7 @@ pub(super) fn wire(
             match kind.as_str() {
                 "album" => g.invoke_open_album(id),
                 "artist" => g.invoke_open_artist(id),
+                "genre" => g.invoke_go_to_genre(id),
                 _ => {}
             }
         });

@@ -1,10 +1,17 @@
 import { TrackListRow, EntityStripRow } from "../models.slint";
 
 // Search: drives the Search view (sidebar index 0). Mixed-results page —
-// Top Result featured card + Songs list (compact 4-row default, "Show
-// all" toggle) + Albums strip + Artists strip + Recent searches chip
-// list when input is empty. Backed by FTS5 for tracks and `LIKE` for
-// album/artist names via `library::search::search_all`.
+// Top Result featured card + Songs list (compact by default, "Show all"
+// toggle) + Albums strip + Artists strip + Recent searches chip list
+// when input is empty. Backed by FTS5 for tracks and `LIKE` for
+// album/artist/genre names via `library::search::search_all`. The
+// compact row count is Rust's `state::COMPACT_TRACK_LIMIT` — don't
+// restate it here, it has gone stale once already.
+//
+// Both strips match through their own tracks as well as by name, so a
+// query that only reaches track metadata still fills them — and with it
+// the Top Result, which ranks over those two lists plus genres. Genres
+// have no strip of their own; they surface as the Top Result only.
 //
 // Query is the driver — Rust never auto-refreshes on `library_changed_tx`
 // (a scan completing mid-query MUST NOT swap results out from under the
@@ -24,11 +31,11 @@ export global Search {
     in-out property <bool>   loading: false;
 
     // --- Results models --------------------------------------------
-    // `tracks` is the *visible* slice (first 4 rows by default, full 50
-    // when `show-all-tracks` is on). Rust holds the full result set in
-    // its own `last_results` cache so the toggle swaps without a DB hit.
-    // `tracks-total` is the pre-truncate count, for the "Show all N"
-    // button copy.
+    // `tracks` is the *visible* slice (`COMPACT_TRACK_LIMIT` rows by
+    // default, full 50 when `show-all-tracks` is on). Rust holds the full
+    // result set in its own `last_results` cache so the toggle swaps
+    // without a DB hit. `tracks-total` is the pre-truncate count, for the
+    // "Show all N" button copy.
     in-out property <[TrackListRow]>   tracks;
     in-out property <int>              tracks-total;
     in-out property <bool>             show-all-tracks: false;
@@ -43,11 +50,19 @@ export global Search {
     // (Favorites' Most Played + Favorite Artists grid tabs, Recently
     // Played's Most Played strip). `top-kind == ""` ⇒ no Top Result
     // section.
-    in-out property <string> top-kind;            // "album" | "artist" | ""
+    in-out property <string> top-kind;            // "album" | "artist" | "genre" | ""
     in-out property <int>    top-id;
     in-out property <string> top-title;
     in-out property <string> top-subtitle;
     in-out property <string> top-artwork-path;
+    // Gradient stops for a `top-kind == "genre"` card, and read only
+    // then — a genre has no artwork, so its tile paints the same
+    // name-hashed gradient `GenreGrid` gives that genre's card and the
+    // two surfaces read as one genre. Two `color`s rather than a brush
+    // because Slint owns the `@linear-gradient`, matching how `GenreRow`
+    // carries its own pair. Both come from `ui::genres::genre_accent`.
+    in-out property <color> top-tile-color-1;
+    in-out property <color> top-tile-color-2;
 
     // --- Recent searches (cap 10, JSON-persisted via SearchHistoryState)
     // Shown only when `query == ""`. Click a chip → fill query + commit.
@@ -120,4 +135,19 @@ export global Search {
     // `watched-search-active` in `app-window.slint`; mirrored into
     // `SearchUi.section_active` + triggers strip-cache release.
     callback section-active-changed(bool);
+
+    // Top Result subtitle, resolved per kind. Rust decides *which* line
+    // the card gets (`TopSubtitle`) and calls the matching one of these
+    // from the UI thread — a string Rust formatted itself would render
+    // untranslated, since `@tr` only reaches literals here. Both reuse a
+    // msgid the detail headers already carry, so no locale gains a
+    // string. Same pattern as `Favorites.artist-favorite-subtitle`.
+    pure callback album-count-label(int /*count*/) -> string;
+    album-count-label(count) => {
+        return @tr("{n} album" | "{n} albums" % count);
+    }
+    pure callback track-count-label(int /*count*/) -> string;
+    track-count-label(count) => {
+        return @tr("{n} track" | "{n} tracks" % count);
+    }
 }

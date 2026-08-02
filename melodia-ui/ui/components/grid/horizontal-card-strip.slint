@@ -5,10 +5,12 @@ import { EntityCard } from "entity-card.slint";
 import { OverlayScrollbar } from "../overlay-scrollbar.slint";
 
 // Reusable horizontally-scrolling row of `EntityCard`s with a section
-// heading. Used three times in the Favorites view (Most Played, Favorite
-// Albums, Favorite Artists). The Tauri analogue was three separate JSX
-// blocks per card flavour; here the shape is unified through
-// `EntityStripRow` + a per-flavour boolean (`circular`, `show-play-count`).
+// heading. Mounted by the Recently Played view (Most Played) and by the
+// Search view's Albums / Artists result strips; Favorites drove the
+// original three and now uses the vertical `EntityCardGrid` instead.
+// The Tauri analogue was a separate JSX block per card flavour; here the
+// shape is unified through `EntityStripRow` + a per-flavour boolean
+// (`circular`, `show-play-count`).
 //
 // Scrolling follows the same pattern as `tracks-view`: stock ScrollView
 // scrollbars are turned off, and a sibling `OverlayScrollbar` along the

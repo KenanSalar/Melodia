@@ -340,13 +340,14 @@ export struct BrowseFolderRow {
     name: string,
 }
 
-// One card in a `HorizontalCardStrip` or an `EntityCardGrid` — the
-// Recently Played view's Most Played carousel, and both of the Favorites
-// page's grid tabs. Unified shape across every flavour so one card
-// component renders any of them:
-//   * Most Played      → id = track id, play-count > 0 reveals badge
-//   * Favorite Albums  → id = album id, subtitle = artist name
+// One card in a `HorizontalCardStrip` or an `EntityCardGrid` — both of the
+// Favorites page's grid tabs, the Recently Played view's Most Played
+// carousel, and the Search view's two result strips. Unified shape across
+// every flavour so one card component renders any of them:
+//   * Most Played      → id = track id,  play-count > 0 reveals badge
 //   * Favorite Artists → id = artist id, subtitle = "{n} favorites"
+//   * Search albums    → id = album id,  subtitle = artist name
+//   * Search artists   → id = artist id, subtitle = "{n} albums"
 // `play-count` defaults to 0 and is only consulted when the host has
 // `show-play-count: true`, so a 0 silently suppresses the badge
 // everywhere else.

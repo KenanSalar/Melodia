@@ -1,14 +1,41 @@
-//! Unit tests for the 6-step Top Result ranking. The fixtures keep the
-//! album/artist sets small and deliberately ambiguous so each ranking
-//! tier is exercised independently — a single regression in the
+//! Unit tests for the 9-step Top Result ranking. The fixtures keep the
+//! album/artist/genre sets small and deliberately ambiguous so each
+//! ranking tier is exercised independently — a single regression in the
 //! function body would flip the corresponding tier's expected winner.
 
 #![allow(clippy::expect_used, clippy::unwrap_used)]
 
-use super::{TopKind, compute_top_result};
+use super::{TopKind, TopSubtitle, compute_top_result};
 use crate::database::queries::SearchResults;
 use crate::entities::album::AlbumStats;
 use crate::entities::artist::ArtistStats;
+use crate::entities::genre::GenreStats;
+
+const VIEW: &str = include_str!("../../../../melodia-ui/ui/views/search-view.slint");
+const ROUTER: &str = include_str!("../../callbacks/search/results.rs");
+const ARTWORK_IMAGE: &str =
+    include_str!("../../../../melodia-ui/ui/components/artwork-image.slint");
+const GENRE_GRID: &str =
+    include_str!("../../../../melodia-ui/ui/components/grid/genre-grid.slint");
+
+/// Collapse every run of whitespace so a `.slint` binding can be matched
+/// as one string regardless of how it happens to be wrapped.
+fn squeeze(source: &str) -> String {
+    source.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+/// The value a `key: … ;` binding carries, taken from already-squeezed
+/// source. Used to read a default out of the component that declares it
+/// rather than restating the default in this test too.
+fn value_after(squeezed: &str, key: &str) -> String {
+    squeezed
+        .split(key)
+        .nth(1)
+        .and_then(|rest| rest.split(';').next())
+        .map(str::trim)
+        .map(str::to_owned)
+        .expect("binding present in source")
+}
 
 fn album(id: i64, name: &str) -> AlbumStats {
     AlbumStats {
@@ -40,11 +67,31 @@ fn artist(id: i64, name: &str) -> ArtistStats {
     }
 }
 
+fn genre(id: i64, name: &str) -> GenreStats {
+    GenreStats {
+        id,
+        name: name.to_owned(),
+        track_count: 1,
+        total_duration_ms: 0,
+    }
+}
+
+/// Most tiers only need two of the three lists, so this leaves genres
+/// empty and [`results_with_genres`] is the opt-in for the rest.
 fn results(albums: Vec<AlbumStats>, artists: Vec<ArtistStats>) -> SearchResults {
+    results_with_genres(albums, artists, Vec::new())
+}
+
+fn results_with_genres(
+    albums: Vec<AlbumStats>,
+    artists: Vec<ArtistStats>,
+    genres: Vec<GenreStats>,
+) -> SearchResults {
     SearchResults {
         tracks: Vec::new(),
         albums,
         artists,
+        genres,
     }
 }
 
@@ -85,8 +132,46 @@ fn tier_2_exact_artist_wins_when_no_exact_album() {
     assert_eq!(top.id, 20);
 }
 
+/// An exact genre outranks an album that merely *starts with* the query:
+/// exactness wins the band, which is the same rule tiers 1-2 encode.
 #[test]
-fn tier_3_album_starts_with_wins_when_no_exact() {
+fn tier_3_exact_genre_beats_a_starts_with_album() {
+    let r = results_with_genres(
+        vec![album(10, "Metal Album")],
+        vec![artist(20, "Metallica")],
+        vec![genre(30, "Metal")],
+    );
+    let top = compute_top_result(&r, "metal").expect("top result");
+    assert_eq!(top.kind, TopKind::Genre);
+    assert_eq!(top.id, 30);
+}
+
+/// ...but never an exact album or artist. Genre is last in its band.
+#[test]
+fn tier_3_exact_genre_loses_to_an_exact_album_or_artist() {
+    let with_album = results_with_genres(
+        vec![album(10, "Metal")],
+        Vec::new(),
+        vec![genre(30, "Metal")],
+    );
+    assert_eq!(
+        compute_top_result(&with_album, "metal").expect("top result").kind,
+        TopKind::Album
+    );
+
+    let with_artist = results_with_genres(
+        Vec::new(),
+        vec![artist(20, "Metal")],
+        vec![genre(30, "Metal")],
+    );
+    assert_eq!(
+        compute_top_result(&with_artist, "metal").expect("top result").kind,
+        TopKind::Artist
+    );
+}
+
+#[test]
+fn tier_4_album_starts_with_wins_when_no_exact() {
     let r = results(
         vec![album(10, "Metal Album")],
         vec![artist(20, "Metallica")],
@@ -97,7 +182,7 @@ fn tier_3_album_starts_with_wins_when_no_exact() {
 }
 
 #[test]
-fn tier_4_artist_starts_with_when_no_starts_with_album() {
+fn tier_5_artist_starts_with_when_no_starts_with_album() {
     let r = results(
         // Album exists but doesn't start with the query.
         vec![album(10, "Heavy Metal")],
@@ -109,7 +194,19 @@ fn tier_4_artist_starts_with_when_no_starts_with_album() {
 }
 
 #[test]
-fn tier_5_first_album_when_no_exact_or_starts_with() {
+fn tier_6_genre_starts_with_when_neither_name_does() {
+    let r = results_with_genres(
+        vec![album(10, "Heavy Metal")],
+        vec![artist(20, "Iron Maiden")],
+        vec![genre(30, "Metalcore")],
+    );
+    let top = compute_top_result(&r, "metal").expect("top result");
+    assert_eq!(top.kind, TopKind::Genre);
+    assert_eq!(top.id, 30);
+}
+
+#[test]
+fn tier_7_first_album_when_no_exact_or_starts_with() {
     let r = results(
         vec![album(10, "Heavy Metal"), album(11, "Death Metal")],
         vec![artist(20, "Iron Maiden")],
@@ -120,7 +217,7 @@ fn tier_5_first_album_when_no_exact_or_starts_with() {
 }
 
 #[test]
-fn tier_6_first_artist_when_no_albums() {
+fn tier_8_first_artist_when_no_albums() {
     let r = results(
         Vec::new(),
         vec![artist(20, "Iron Maiden"), artist(21, "Megadeth")],
@@ -128,6 +225,20 @@ fn tier_6_first_artist_when_no_albums() {
     let top = compute_top_result(&r, "metal").expect("top result");
     assert_eq!(top.kind, TopKind::Artist);
     assert_eq!(top.id, 20);
+}
+
+/// The card used to be hidden outright when a query matched no album and
+/// no artist — which is exactly what a genre-only search is.
+#[test]
+fn tier_9_first_genre_when_nothing_else_matched() {
+    let r = results_with_genres(
+        Vec::new(),
+        Vec::new(),
+        vec![genre(30, "Nu Metal"), genre(31, "Doom Metal")],
+    );
+    let top = compute_top_result(&r, "metal").expect("top result");
+    assert_eq!(top.kind, TopKind::Genre);
+    assert_eq!(top.id, 30);
 }
 
 #[test]
@@ -144,13 +255,25 @@ fn whitespace_trimmed_from_query() {
     assert_eq!(top.kind, TopKind::Album);
 }
 
+/// The counts stay counts all the way to the UI thread — a sentence built
+/// here would reach the card untranslated, since `@tr` only sees literals
+/// inside `.slint`.
 #[test]
 fn subtitle_for_artist_top_uses_album_count() {
     let mut a = artist(20, "Metallica");
     a.album_count = 11;
     let r = results(vec![], vec![a]);
     let top = compute_top_result(&r, "metallica").expect("top result");
-    assert_eq!(top.subtitle, "11 albums");
+    assert_eq!(top.subtitle, TopSubtitle::AlbumCount(11));
+}
+
+#[test]
+fn subtitle_for_genre_top_uses_track_count() {
+    let mut g = genre(30, "Metal");
+    g.track_count = 42;
+    let r = results_with_genres(vec![], vec![], vec![g]);
+    let top = compute_top_result(&r, "metal").expect("top result");
+    assert_eq!(top.subtitle, TopSubtitle::TrackCount(42));
 }
 
 #[test]
@@ -159,5 +282,65 @@ fn subtitle_for_album_top_uses_artist_name() {
     a.artist_name = "Metallica".to_owned();
     let r = results(vec![a], vec![]);
     let top = compute_top_result(&r, "master of puppets").expect("top result");
-    assert_eq!(top.subtitle, "Metallica");
+    assert_eq!(top.subtitle, TopSubtitle::Text("Metallica".to_owned()));
+}
+
+/// `top-kind` is a bare string crossing three files — Rust writes the
+/// token, the view branches on it for the badge, the fallback glyph and
+/// the genre gradient, and `results.rs` routes the click. A typo in any
+/// one of them still builds and silently drops that kind back to a
+/// default: the wrong badge, the wrong glyph, a dead card, or the grey
+/// tile the genre gradient exists to replace. Nothing about that looks
+/// wrong in either source.
+#[test]
+fn every_top_kind_token_reaches_the_view_and_the_router() {
+    for token in ["album", "artist", "genre"] {
+        assert!(
+            VIEW.contains(&format!("Search.top-kind == \"{token}\"")),
+            "search-view.slint branches on no `{token}` top result"
+        );
+        assert!(
+            ROUTER.contains(&format!("\"{token}\" =>")),
+            "results.rs routes no click for a `{token}` top result"
+        );
+    }
+}
+
+/// Both of the tile's fills are ternaries, so neither arm can *fall
+/// through* to the default it would otherwise inherit — all four values
+/// are spelled out in the view, and all four can drift in silence.
+///
+/// The genre arm drifting stops the card matching that genre's grid card.
+/// The other arm drifting stops it matching every track row and entity
+/// card in the app — which is exactly how this tile came to be a lone
+/// grey square while everything around it wore the accent placeholder.
+/// So each arm is pinned against the file that owns it, and the two
+/// bindings are matched whole: `top-kind == "genre"` appears three times
+/// in the view, and a looser check would keep passing with a fill gone.
+#[test]
+fn the_top_tile_matches_artwork_image_and_the_genre_grid() {
+    let view = squeeze(VIEW);
+    let component = squeeze(ARTWORK_IMAGE);
+    let grid = squeeze(GENRE_GRID);
+
+    let placeholder_bg = value_after(&component, "in property <brush> tile-bg:");
+    let placeholder_icon = value_after(&component, "in property <brush> tile-icon-color:");
+    let genre_icon = value_after(&grid, "tile-icon-color:");
+
+    assert!(
+        view.contains(&format!(
+            "tile-bg: Search.top-kind == \"genre\" ? @linear-gradient(135deg, \
+             Search.top-tile-color-1, Search.top-tile-color-2) : {placeholder_bg};"
+        )),
+        "the tile's fill no longer pairs the hashed gradient with \
+         ArtworkImage's placeholder (`{placeholder_bg}`)"
+    );
+    assert!(
+        view.contains(&format!(
+            "tile-icon-color: Search.top-kind == \"genre\" ? {genre_icon} \
+             : {placeholder_icon};"
+        )),
+        "the tile's glyph colour no longer pairs GenreGrid's \
+         (`{genre_icon}`) with ArtworkImage's (`{placeholder_icon}`)"
+    );
 }
