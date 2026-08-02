@@ -21,7 +21,8 @@ pub async fn get_recently_played(state: &AppState) -> Result<Vec<track::TrackLis
 }
 
 /// Top-N most-played tracks across the whole library (for the "Most Played"
-/// strip). Clamps `limit` to a sane band like `favorites::get_most_played_favorites`.
+/// strip). Clamps `limit` to a sane band — the strip is a capped carousel, not
+/// a virtualized grid like the Favorites tab, so the cap is the whole point.
 pub async fn get_most_played(
     state: &AppState,
     limit: i64,

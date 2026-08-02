@@ -501,6 +501,15 @@ async fn get_favorite_stats_empty_when_favorites_have_no_artwork() -> Result<(),
     // Seed leaves artwork_path as NULL — favorites exist but none have
     // covers. The mosaic should render no tiles so the FavoritesView's
     // outer `favorite_border` placeholder is what the user sees.
+    //
+    // One of them carries `''` instead: the scan path treats an empty
+    // artwork_path as "no cover" in the same breath as NULL
+    // (`scan::mutations::update_track_artwork_if_missing`), so it is a value
+    // that reaches this table — and it must not take a slot it can't paint.
+    sqlx::query("UPDATE tracks SET artwork_path = '' WHERE title = 'Alpha'")
+        .execute(db.write())
+        .await?;
+
     let stats = queries::track::get_favorite_stats(&db).await?;
     assert_eq!(stats.count, 3);
     assert!(
@@ -524,25 +533,30 @@ async fn the_hero_mosaic_leads_with_the_covers_the_most_played_tab_shows()
     let ids: Vec<i64> = all.iter().map(|t| t.id).collect();
     queries::track::set_favorite(&db, &ids, true).await?;
 
-    // Alpha and Beta are level on plays and Alpha was played more recently, so
-    // Alpha leads. Gamma is a favorite nobody has played, carrying a cover of
+    // Alpha and Beta are level on plays and Beta was played more recently, so
+    // Beta leads. Gamma is a favorite nobody has played, carrying a cover of
     // its own — it's what pads the mosaic once the played covers run out. Every
     // cover here is distinct, so "first four" and "first four distinct" coincide
     // and the assertions below can stay about ordering.
     //
-    // Recency deliberately *opposes* insertion order: the mosaic's own
-    // tiebreaker used to be `MAX(date_added) DESC`, which tracks the latter, so
-    // a fixture where the two agree would pass against either query and pin
-    // nothing.
+    // Which of the pair is the recent one is the whole fixture, because both
+    // orders this has to reject put *Alpha* first. Drop the tiebreakers and
+    // `SQLite` sorts the tied pair into a temp B-tree in rowid order, i.e. the
+    // order `seed_db` inserted them. Restore the mosaic's old `MAX(date_added)
+    // DESC` and it follows insertion too — so `date_added` is written here
+    // against recency rather than left to the seed, and a fixture with Alpha as
+    // the recent one would pass against all three queries and pin nothing.
     sqlx::query(
         "UPDATE tracks SET artwork_path = '/art/alpha.jpg', play_count = 4, \
-         last_played = '2026-06-01T00:00:00+00:00' WHERE title = 'Alpha'",
+         last_played = '2026-01-01T00:00:00+00:00', date_added = '2026-05-01T00:00:00+00:00' \
+         WHERE title = 'Alpha'",
     )
     .execute(db.write())
     .await?;
     sqlx::query(
         "UPDATE tracks SET artwork_path = '/art/beta.jpg', play_count = 4, \
-         last_played = '2026-01-01T00:00:00+00:00' WHERE title = 'Beta'",
+         last_played = '2026-06-01T00:00:00+00:00', date_added = '2026-01-01T00:00:00+00:00' \
+         WHERE title = 'Beta'",
     )
     .execute(db.write())
     .await?;
@@ -550,11 +564,11 @@ async fn the_hero_mosaic_leads_with_the_covers_the_most_played_tab_shows()
         .execute(db.write())
         .await?;
 
-    let grid = queries::track::get_most_played_favorites(&db, None).await?;
+    let grid = queries::track::get_most_played_favorites(&db).await?;
     let titles: Vec<&str> = grid.iter().map(|t| t.title.as_str()).collect();
     assert_eq!(
         titles,
-        ["Alpha", "Beta"],
+        ["Beta", "Alpha"],
         "a tie on play_count breaks toward the track played most recently"
     );
 
@@ -614,11 +628,31 @@ async fn get_recently_played_respects_limit() -> Result<(), AppError> {
 #[tokio::test]
 async fn get_most_played_orders_by_count_and_excludes_zero() -> Result<(), AppError> {
     let db = seed_db().await?;
+    insert_test_track(&db, "/music/delta.mp3", "Delta", "Zeta Artist", "B Album", "Pop").await?;
 
-    // Beta highest, Alpha lower, Gamma left at play_count 0 (must be excluded).
-    sqlx::query("UPDATE tracks SET play_count = 3 WHERE title = 'Alpha'")
-        .execute(db.write())
-        .await?;
+    // Beta highest; Alpha and Delta tie on count and are separated by recency
+    // alone; Gamma left at play_count 0 (must be excluded). The tie is the part
+    // worth having — `play_count DESC` on its own leaves it to the planner, and
+    // this strip re-fetches on every `stats_changed` tick, so the cards could
+    // reshuffle with nothing about the library having moved.
+    //
+    // Alpha is the recent one on purpose. Without the tiebreakers this query
+    // walks the partial `idx_tracks_play_count` backwards, which hands back a
+    // tied group newest-rowid-first — so Delta, inserted last, is what the
+    // un-tiebroken order puts ahead, and only a fixture pointing the other way
+    // can tell the two apart.
+    sqlx::query(
+        "UPDATE tracks SET play_count = 3, last_played = '2026-06-01T00:00:00+00:00' \
+         WHERE title = 'Alpha'",
+    )
+    .execute(db.write())
+    .await?;
+    sqlx::query(
+        "UPDATE tracks SET play_count = 3, last_played = '2026-01-01T00:00:00+00:00' \
+         WHERE title = 'Delta'",
+    )
+    .execute(db.write())
+    .await?;
     sqlx::query("UPDATE tracks SET play_count = 9 WHERE title = 'Beta'")
         .execute(db.write())
         .await?;
@@ -627,8 +661,9 @@ async fn get_most_played_orders_by_count_and_excludes_zero() -> Result<(), AppEr
     let titles: Vec<&str> = rows.iter().map(|r| r.title.as_str()).collect();
     assert_eq!(
         titles,
-        vec!["Beta", "Alpha"],
-        "play_count DESC; the play_count == 0 track is excluded (no favorite filter)"
+        ["Beta", "Alpha", "Delta"],
+        "play_count DESC, then most-recently-played first; the play_count == 0 track is \
+         excluded (no favorite filter)"
     );
     Ok(())
 }

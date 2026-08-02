@@ -104,7 +104,7 @@ pub fn set_artist_sort(fav_ui: &FavoritesUi, field: String, dir: SortDir) {
 /// with section context.
 pub async fn refresh_grids(state: &AppState, fav_ui: &Arc<FavoritesUi>, weak: &Weak<AppWindow>) {
     let (most_played_res, fav_artists_res) = tokio::join!(
-        library::favorites::get_most_played_favorites(state, None),
+        library::favorites::get_most_played_favorites(state),
         library::favorites::get_favorite_artists(state),
     );
 

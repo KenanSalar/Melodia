@@ -694,39 +694,23 @@ pub async fn get_favorite_stats(db: &DbPool) -> Result<track::FavoriteStats, App
 /// ranks with too — the two surfaces are the same list, so they resolve a tie
 /// the same way or they visibly disagree.
 ///
-/// `limit` is optional because the two callers want different things: the
-/// Favorites page's Most Played tab is a virtualized grid over the whole set,
-/// while a capped carousel asks for its top N. `None` drops the `LIMIT`
-/// clause outright rather than binding a sentinel, so the planner sees the
-/// query it can actually satisfy from the index.
+/// Returns the whole set rather than a top N — the Most Played tab is a
+/// virtualized grid, so it has nothing to gain by truncating. The partial
+/// `idx_tracks_play_count` still drives the scan and supplies the leading
+/// term; the three tiebreakers cost a sort within each tied group.
 pub async fn get_most_played_favorites(
     db: &DbPool,
-    limit: Option<i64>,
 ) -> Result<Vec<track::MostPlayedFavorite>, AppError> {
     // The order's trailing keys are read, not selected — `MostPlayedFavorite`
     // is the card projection and has no slot for a timestamp.
-    let ranked = format!(
+    let rows = sqlx::query_as::<_, track::MostPlayedFavorite>(AssertSqlSafe(format!(
         "SELECT id, title, artist, artwork_path, play_count, duration_ms \
            FROM tracks \
           WHERE is_favorite = TRUE AND play_count > 0 \
           ORDER BY {MOST_PLAYED_ORDER}"
-    );
-
-    let rows = match limit {
-        Some(limit) => {
-            sqlx::query_as::<_, track::MostPlayedFavorite>(AssertSqlSafe(format!(
-                "{ranked} LIMIT ?"
-            )))
-            .bind(limit)
-            .fetch_all(db.read())
-            .await?
-        }
-        None => {
-            sqlx::query_as::<_, track::MostPlayedFavorite>(AssertSqlSafe(ranked))
-                .fetch_all(db.read())
-                .await?
-        }
-    };
+    )))
+    .fetch_all(db.read())
+    .await?;
     Ok(rows)
 }
 
@@ -734,8 +718,9 @@ pub async fn get_most_played_favorites(
 /// `play_count` > 0). Sibling of [`get_most_played_favorites`] without the
 /// `is_favorite` filter — drives the Recently-Played view's "Most Played"
 /// strip. Reuses the generic `MostPlayedFavorite` card projection, and the same
-/// [`MOST_PLAYED_ORDER`], so a capped strip can't rank a tie differently from
-/// the uncapped grid it mirrors.
+/// [`MOST_PLAYED_ORDER`] — the strip re-fetches on every `stats_changed` tick,
+/// so an order that left ties to the planner could reshuffle the cards under
+/// the user with nothing about the library having moved.
 pub async fn get_most_played(
     db: &DbPool,
     limit: i64,

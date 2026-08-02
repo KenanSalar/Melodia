@@ -156,13 +156,10 @@ pub async fn get_favorite_artists(
     queries::artist::get_favorite_artists(&state.db).await
 }
 
-/// Favorite tracks ranked by play count. `None` returns the whole set — the
-/// Most Played tab is a virtualized grid, so it has no reason to truncate.
-/// A `Some` limit is clamped to a sane band.
+/// Favorite tracks ranked by play count — the whole set, since the Most Played
+/// tab is a virtualized grid and has no reason to truncate.
 pub async fn get_most_played_favorites(
     state: &AppState,
-    limit: Option<i64>,
 ) -> Result<Vec<track::MostPlayedFavorite>, AppError> {
-    let limit = limit.map(|n| n.clamp(1, 100));
-    queries::track::get_most_played_favorites(&state.db, limit).await
+    queries::track::get_most_played_favorites(&state.db).await
 }
