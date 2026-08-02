@@ -147,16 +147,18 @@ pub async fn refresh_grids(state: &AppState, fav_ui: &Arc<FavoritesUi>, weak: &W
     // `library_changed` tick that arrives while Favorites is hidden has
     // already been turned into a `mark_dirty` by the caller, so there is
     // nothing on screen to warm for. The other tab warms in `tab-changed`.
-    let warmed = fav_ui.section_active();
-    if warmed {
+    let warmed_tab = if fav_ui.section_active() {
         let fu = fav_ui.clone();
         let tab = fav_ui.active_tab();
         let _ = tokio::task::spawn_blocking(move || fu.prewarm_tab_covers(tab)).await;
-    }
+        Some(tab)
+    } else {
+        None
+    };
 
     // Both fetches resolved (or logged); push the filtered model so the
     // visible tab reflects fresh data AND the live filter in one pass.
-    apply_filtered_grids(fav_ui, weak, warmed);
+    apply_filtered_grids(fav_ui, weak, warmed_tab);
 }
 
 /// Both grids' filtered rows, prepared away from the UI thread by
@@ -234,14 +236,9 @@ fn build_filtered_grids(fav_ui: &FavoritesUi) -> PreparedGrids {
 /// `set_vec` reset, so it tears down and rebuilds every mounted card, and a
 /// `stats_changed` tick reaches both tabs while only Most Played is ranked by
 /// play count.
-///
-/// Returns whether it rewrote the models, which is the same question the caller
-/// would otherwise re-ask to decide if announcing a warm cover tier means
-/// anything: a hidden section has no cards to announce to, and an unchanged one
-/// has none that need re-evaluating.
-fn write_filtered_grids(ui: &AppWindow, fav_ui: &FavoritesUi, prepared: &PreparedGrids) -> bool {
+fn write_filtered_grids(ui: &AppWindow, fav_ui: &FavoritesUi, prepared: &PreparedGrids) {
     if !fav_ui.section_active() {
-        return false;
+        return;
     }
 
     let g = ui.global::<Favorites>();
@@ -250,7 +247,7 @@ fn write_filtered_grids(ui: &AppWindow, fav_ui: &FavoritesUi, prepared: &Prepare
 
     let signature = grid_signature(tab, columns, mounted_content(tab, prepared));
     if fav_ui.state().last_grid_signature.lock().replace(signature) == Some(signature) {
-        return false;
+        return;
     }
 
     g.set_most_played_count(len_as_i32(prepared.most_played.len()));
@@ -287,7 +284,6 @@ fn write_filtered_grids(ui: &AppWindow, fav_ui: &FavoritesUi, prepared: &Prepare
         Vec::new()
     };
     write_grid(&g.get_artist_rows(), chunk_entity_rows(&artist_rows, columns), "artist");
-    true
 }
 
 /// The content hash of the tab that is actually on screen.
@@ -318,20 +314,48 @@ fn grid_signature(tab: FavoritesTab, columns: i32, content: u64) -> u64 {
     hasher.finish()
 }
 
+/// Whether a landed prewarm may announce its tier to the cards.
+///
+/// `warmed` is the tab [`refresh_grids`] actually decoded for, `None` when it
+/// skipped the prewarm because the section was already hidden. The other two
+/// are read on the UI thread, where both shadows are written, so this is the
+/// same re-check `on_tab_changed` makes after *its* `swap_tab_covers`: a leave
+/// has rewound the counter and dropped the buffers, and a tab pick that
+/// overtook the decodes owns a different tier entirely — announcing either
+/// would put the next surface's cards straight back on the decoding path.
+///
+/// Deliberately *not* a function of whether the rows changed. Those are
+/// independent facts, and conflating them is what left the Most Played grid on
+/// placeholders after a section re-enter: the mount-time `columns-changed`
+/// apply had already written the final rows by the time the prewarm returned,
+/// so the write that carried the announcement was skipped as a no-op repaint
+/// and the counter stayed at its cold 0 until the next tab pick.
+fn should_announce_warm(
+    warmed: Option<FavoritesTab>,
+    section_active: bool,
+    current_tab: FavoritesTab,
+) -> bool {
+    section_active && warmed == Some(current_tab)
+}
+
 /// Apply from a worker thread, hopping to the event loop to write.
 ///
-/// `covers_warm` says the mounted tab's tier has already been decoded, which is
-/// what lets the cards' bindings load on a miss again. It rides in the same
-/// closure as the rows so a grid can never mount against a bumped counter and a
-/// tier nobody warmed — the case [`refresh_grids`] hits when the user leaves the
-/// section while its two queries are still in flight.
-fn apply_filtered_grids(fav_ui: &Arc<FavoritesUi>, weak: &Weak<AppWindow>, covers_warm: bool) {
+/// `warmed_tab` is the tab whose tier [`refresh_grids`] decoded, and it rides in
+/// the same closure as the rows so a grid can never mount against a bumped
+/// counter and a tier nobody warmed — the case [`refresh_grids`] hits when the
+/// user leaves the section while its two queries are still in flight.
+fn apply_filtered_grids(
+    fav_ui: &Arc<FavoritesUi>,
+    weak: &Weak<AppWindow>,
+    warmed_tab: Option<FavoritesTab>,
+) {
     let prepared = build_filtered_grids(fav_ui);
     let fav_ui = fav_ui.clone();
     let weak = weak.clone();
     let _ = slint::invoke_from_event_loop(move || {
         let Some(ui) = weak.upgrade() else { return };
-        if write_filtered_grids(&ui, &fav_ui, &prepared) && covers_warm {
+        write_filtered_grids(&ui, &fav_ui, &prepared);
+        if should_announce_warm(warmed_tab, fav_ui.section_active(), fav_ui.active_tab()) {
             mark_covers_warm(&ui);
         }
     });
@@ -345,7 +369,7 @@ fn apply_filtered_grids(fav_ui: &Arc<FavoritesUi>, weak: &Weak<AppWindow>, cover
 /// `GridEmptyState` is suppressed by a count that is already non-zero. Mirrors
 /// `ui::albums::grid::rebuild_grid`, which is a plain call for the same reason.
 pub fn apply_filtered_grids_now(ui: &AppWindow, fav_ui: &FavoritesUi) {
-    let _ = write_filtered_grids(ui, fav_ui, &build_filtered_grids(fav_ui));
+    write_filtered_grids(ui, fav_ui, &build_filtered_grids(fav_ui));
 }
 
 /// Let the mounted grid's card bindings start decoding on a miss again — see

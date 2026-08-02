@@ -1,6 +1,6 @@
 use super::{
     FavoritesTab, FavoritesUi, build_filtered_grids, grid_signature, mounted_content, set_artist_sort,
-    sort_artists,
+    should_announce_warm, sort_artists,
 };
 use crate::entities::artist::FavoriteArtist;
 use crate::entities::track::MostPlayedFavorite;
@@ -174,6 +174,47 @@ fn a_re_sort_moves_the_artists_hash() {
         by_count, by_name,
         "a sort change must move the content hash — the same cards in a new order is still a repaint"
     );
+}
+
+/// The re-enter case, and the one that was broken: the grid's rows can land
+/// before the prewarm returns (the view's mount-time `columns-changed` writes
+/// them), so by the time the decodes are done there is nothing left to repaint —
+/// and the tier is warm regardless. Gating the announcement on the write left
+/// `covers-generation` at its cold 0 and every card on a placeholder until the
+/// next tab pick.
+#[test]
+fn a_landed_prewarm_announces_even_when_the_rows_did_not_move() {
+    assert!(should_announce_warm(
+        Some(FavoritesTab::MostPlayed),
+        /* section_active */ true,
+        FavoritesTab::MostPlayed,
+    ));
+}
+
+/// A leave that landed mid-refresh has already rewound the counter and dropped
+/// the buffers, so there is no tier to announce and nothing on screen to hear it.
+#[test]
+fn a_section_left_mid_refresh_announces_nothing() {
+    assert!(!should_announce_warm(
+        Some(FavoritesTab::MostPlayed),
+        /* section_active */ false,
+        FavoritesTab::MostPlayed,
+    ));
+    // `None` is the same refresh finding the section already hidden before it
+    // ever spawned the prewarm — no decode ran, so nothing is warm.
+    assert!(!should_announce_warm(None, true, FavoritesTab::MostPlayed));
+}
+
+/// A tab pick that overtook the decodes owns a different tier — `swap_tab_covers`
+/// cleared the one this task warmed. Announcing it would put the entering tab's
+/// cards straight back on the UI-thread decoding path.
+#[test]
+fn a_tab_pick_that_overtook_the_prewarm_announces_nothing() {
+    assert!(!should_announce_warm(
+        Some(FavoritesTab::MostPlayed),
+        true,
+        FavoritesTab::Artists,
+    ));
 }
 
 /// The prewarm reads the cache, not the filtered copy, so the setter has to

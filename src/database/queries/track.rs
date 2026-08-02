@@ -6,6 +6,21 @@ use crate::database::{chunked_in_query, DbPool};
 use crate::entities::track;
 use crate::error::AppError;
 
+/// The `ORDER BY` body every "most played" surface ranks with — the Favorites
+/// grid tab and the hero mosaic that has to agree with it.
+///
+/// `play_count DESC` is the ranking; the three keys after it are what make it
+/// *total*. Without them `SQLite` may hand back tied rows in any order, so the
+/// grid could re-order between refreshes and the mosaic — a second query over
+/// the same rows — had no reason to pick the same four covers. `last_played
+/// DESC` breaks a tie toward the one played most recently (the column is
+/// RFC-3339 text whose lexical order is chronological, per
+/// [`get_recently_played`]; NULLs sort last under `DESC`, so a row whose count
+/// predates the timestamp falls to the back of its group). `date_added DESC` is
+/// only reachable among never-played favourites, where it keeps the mosaic's
+/// fill newest-first. `id ASC` closes the last gap.
+const MOST_PLAYED_ORDER: &str = "play_count DESC, last_played DESC, date_added DESC, id ASC";
+
 /// Build the body of an `ORDER BY` clause for the Tracks list (used by
 /// `get_all_tracks`, `get_all_tracks_for_list`, and
 /// `get_favorite_tracks_for_list`). Returns the clause without the
@@ -639,23 +654,31 @@ pub async fn get_favorite_stats(db: &DbPool) -> Result<track::FavoriteStats, App
     .fetch_one(db.read())
     .await?;
 
-    // Up to 4 *distinct* artworks for the live-updating Favorites hero
-    // mosaic, ranked by the highest play_count any track sharing that
-    // artwork has reached. Duplicates are deliberately not synthesised
-    // to pad to 4 — the consuming `CoverMosaic` component renders an
-    // empty placeholder for the remaining slots when `pad-to-four`
-    // is set, so a one-album-heavy library shows 1 real cover + 3
-    // placeholder tiles rather than the same artwork four times.
-    let artwork_paths: Vec<String> = sqlx::query_scalar(
+    // Up to 4 *distinct* artworks for the live-updating Favorites hero mosaic:
+    // walk the favourites in `MOST_PLAYED_ORDER` and keep each cover's best
+    // slot, which makes the mosaic literally the head of the Most Played tab
+    // rather than a second ranking that has to be kept in step with it. A
+    // hand-matched `ORDER BY` over `MAX(play_count)` was that second ranking,
+    // and it disagreed with the grid on every tie.
+    //
+    // The rank spans *all* favourites, not just `play_count > 0` as the grid
+    // does, so once the played covers run out the remainder pads the mosaic to
+    // 4 — the same fill the previous query gave, since unplayed rows sort last
+    // under `play_count DESC`. Duplicates are deliberately not synthesised: the
+    // consuming `CoverMosaic` renders an empty placeholder for the slots beyond
+    // what this returns when `pad-to-four` is set, so a one-album-heavy library
+    // shows 1 real cover + 3 placeholders rather than the same artwork 4 times.
+    let artwork_paths: Vec<String> = sqlx::query_scalar(AssertSqlSafe(format!(
         "SELECT artwork_path FROM ( \
-            SELECT artwork_path, MAX(play_count) AS p, MAX(date_added) AS d \
+            SELECT artwork_path, \
+                   ROW_NUMBER() OVER (ORDER BY {MOST_PLAYED_ORDER}) AS pos \
               FROM tracks \
-             WHERE is_favorite = TRUE AND artwork_path IS NOT NULL \
-             GROUP BY artwork_path \
+             WHERE is_favorite = TRUE AND artwork_path IS NOT NULL AND artwork_path <> '' \
          ) \
-         ORDER BY p DESC, d DESC \
-         LIMIT 4",
-    )
+         GROUP BY artwork_path \
+         ORDER BY MIN(pos) \
+         LIMIT 4"
+    )))
     .fetch_all(db.read())
     .await?;
 
@@ -667,7 +690,9 @@ pub async fn get_favorite_stats(db: &DbPool) -> Result<track::FavoriteStats, App
 }
 
 /// Favorite tracks by play count, most played first (only those with
-/// `play_count` > 0).
+/// `play_count` > 0). Ordered by [`MOST_PLAYED_ORDER`], which the hero mosaic
+/// ranks with too — the two surfaces are the same list, so they resolve a tie
+/// the same way or they visibly disagree.
 ///
 /// `limit` is optional because the two callers want different things: the
 /// Favorites page's Most Played tab is a virtualized grid over the whole set,
@@ -678,25 +703,26 @@ pub async fn get_most_played_favorites(
     db: &DbPool,
     limit: Option<i64>,
 ) -> Result<Vec<track::MostPlayedFavorite>, AppError> {
-    const ALL: &str = "SELECT id, title, artist, artwork_path, play_count, duration_ms \
-         FROM tracks \
-         WHERE is_favorite = TRUE AND play_count > 0 \
-         ORDER BY play_count DESC";
-    const TOP_N: &str = "SELECT id, title, artist, artwork_path, play_count, duration_ms \
-         FROM tracks \
-         WHERE is_favorite = TRUE AND play_count > 0 \
-         ORDER BY play_count DESC \
-         LIMIT ?";
+    // The order's trailing keys are read, not selected — `MostPlayedFavorite`
+    // is the card projection and has no slot for a timestamp.
+    let ranked = format!(
+        "SELECT id, title, artist, artwork_path, play_count, duration_ms \
+           FROM tracks \
+          WHERE is_favorite = TRUE AND play_count > 0 \
+          ORDER BY {MOST_PLAYED_ORDER}"
+    );
 
     let rows = match limit {
         Some(limit) => {
-            sqlx::query_as::<_, track::MostPlayedFavorite>(TOP_N)
-                .bind(limit)
-                .fetch_all(db.read())
-                .await?
+            sqlx::query_as::<_, track::MostPlayedFavorite>(AssertSqlSafe(format!(
+                "{ranked} LIMIT ?"
+            )))
+            .bind(limit)
+            .fetch_all(db.read())
+            .await?
         }
         None => {
-            sqlx::query_as::<_, track::MostPlayedFavorite>(ALL)
+            sqlx::query_as::<_, track::MostPlayedFavorite>(AssertSqlSafe(ranked))
                 .fetch_all(db.read())
                 .await?
         }
@@ -707,18 +733,20 @@ pub async fn get_most_played_favorites(
 /// Top N tracks by play count across the whole library (only those with
 /// `play_count` > 0). Sibling of [`get_most_played_favorites`] without the
 /// `is_favorite` filter — drives the Recently-Played view's "Most Played"
-/// strip. Reuses the generic `MostPlayedFavorite` card projection.
+/// strip. Reuses the generic `MostPlayedFavorite` card projection, and the same
+/// [`MOST_PLAYED_ORDER`], so a capped strip can't rank a tie differently from
+/// the uncapped grid it mirrors.
 pub async fn get_most_played(
     db: &DbPool,
     limit: i64,
 ) -> Result<Vec<track::MostPlayedFavorite>, AppError> {
-    let rows = sqlx::query_as::<_, track::MostPlayedFavorite>(
+    let rows = sqlx::query_as::<_, track::MostPlayedFavorite>(AssertSqlSafe(format!(
         "SELECT id, title, artist, artwork_path, play_count, duration_ms \
-         FROM tracks \
-         WHERE play_count > 0 \
-         ORDER BY play_count DESC \
-         LIMIT ?",
-    )
+           FROM tracks \
+          WHERE play_count > 0 \
+          ORDER BY {MOST_PLAYED_ORDER} \
+          LIMIT ?"
+    )))
     .bind(limit)
     .fetch_all(db.read())
     .await?;

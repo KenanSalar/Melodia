@@ -6,9 +6,13 @@
 //! * Hero — live 2×2 cover mosaic + count + total duration + the per-tab
 //!   action pill, under a header row carrying the tab bar and the filter.
 //!   The mosaic refreshes whenever `library_changed_tx` ticks (favourite
-//!   toggled, play count bumped, library scanned) so it always reflects the
-//!   top-4 most-played favourites. The blur backdrop fades through the
-//!   shared `Favorites.blur-img-{a,b}` dual-slot pattern.
+//!   toggled, play count bumped, library scanned). Its tiles are the first 4
+//!   *distinct* covers of the Most Played tab's own walk — the two rank with
+//!   one shared clause (`queries::track::MOST_PLAYED_ORDER`) rather than two
+//!   hand-matched ones, so they can't disagree about a tie — topped up from the
+//!   favourites that tab excludes once the played covers run out. The blur
+//!   backdrop fades through the shared `Favorites.blur-img-{a,b}` dual-slot
+//!   pattern.
 //! * Songs — a full `TrackList` bound to the post-filter
 //!   `Favorites.tracks` model. Search is in-memory (the SQL fetch
 //!   returns the entire sorted set once per `library_changed_tx` tick,

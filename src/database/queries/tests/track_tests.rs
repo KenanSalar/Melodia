@@ -511,6 +511,67 @@ async fn get_favorite_stats_empty_when_favorites_have_no_artwork() -> Result<(),
     Ok(())
 }
 
+/// The hero mosaic and the Most Played tab are the same list seen two ways, so
+/// they have to resolve a tie the same way. The mosaic used to rank distinct
+/// covers by `MAX(play_count)` under a tiebreaker of its own, and the grid broke
+/// ties not at all — so on a tie they picked different winners, and the grid's
+/// own order could move between refreshes. Both now read `MOST_PLAYED_ORDER`.
+#[tokio::test]
+async fn the_hero_mosaic_leads_with_the_covers_the_most_played_tab_shows()
+-> Result<(), AppError> {
+    let db = seed_db().await?;
+    let all = queries::track::get_all_tracks(&db, None, None).await?;
+    let ids: Vec<i64> = all.iter().map(|t| t.id).collect();
+    queries::track::set_favorite(&db, &ids, true).await?;
+
+    // Alpha and Beta are level on plays and Alpha was played more recently, so
+    // Alpha leads. Gamma is a favorite nobody has played, carrying a cover of
+    // its own — it's what pads the mosaic once the played covers run out. Every
+    // cover here is distinct, so "first four" and "first four distinct" coincide
+    // and the assertions below can stay about ordering.
+    //
+    // Recency deliberately *opposes* insertion order: the mosaic's own
+    // tiebreaker used to be `MAX(date_added) DESC`, which tracks the latter, so
+    // a fixture where the two agree would pass against either query and pin
+    // nothing.
+    sqlx::query(
+        "UPDATE tracks SET artwork_path = '/art/alpha.jpg', play_count = 4, \
+         last_played = '2026-06-01T00:00:00+00:00' WHERE title = 'Alpha'",
+    )
+    .execute(db.write())
+    .await?;
+    sqlx::query(
+        "UPDATE tracks SET artwork_path = '/art/beta.jpg', play_count = 4, \
+         last_played = '2026-01-01T00:00:00+00:00' WHERE title = 'Beta'",
+    )
+    .execute(db.write())
+    .await?;
+    sqlx::query("UPDATE tracks SET artwork_path = '/art/gamma.jpg' WHERE title = 'Gamma'")
+        .execute(db.write())
+        .await?;
+
+    let grid = queries::track::get_most_played_favorites(&db, None).await?;
+    let titles: Vec<&str> = grid.iter().map(|t| t.title.as_str()).collect();
+    assert_eq!(
+        titles,
+        ["Alpha", "Beta"],
+        "a tie on play_count breaks toward the track played most recently"
+    );
+
+    // Derived from the grid rather than restated, so the day the two clauses
+    // drift apart again this fails here instead of only on screen.
+    let mut expected: Vec<String> = grid.iter().filter_map(|t| t.artwork_path.clone()).collect();
+    expected.push("/art/gamma.jpg".to_owned());
+
+    let stats = queries::track::get_favorite_stats(&db).await?;
+    assert_eq!(
+        stats.artwork_paths, expected,
+        "the mosaic must lead with the Most Played tab's covers in its order, then pad from the \
+         favorites that tab excludes"
+    );
+    Ok(())
+}
+
 #[tokio::test]
 async fn get_recently_played_orders_newest_first_and_excludes_null() -> Result<(), AppError> {
     let db = seed_db().await?;
