@@ -26,9 +26,15 @@ pub(crate) struct FavoritesUiState {
     /// (after a `library_changed_tx` tick) re-applies it without
     /// re-reading the Slint property from a tokio thread.
     pub filter: Mutex<String>,
-    /// Active sort — written on `set-sort-*` callbacks, read on every
-    /// re-fetch. Default mirrors the Slint global's defaults.
+    /// Active Songs-tab sort — written on `set-sort-*` callbacks, read on
+    /// every re-fetch. Default mirrors the Slint global's defaults.
     pub sort: Mutex<ViewSort>,
+    /// Active Favorite Artists sort. A second shadow rather than a shared
+    /// one: the two tabs sort different entities over disjoint field sets,
+    /// and Songs resolves its order in SQL where this one is applied in
+    /// memory. Read off the UI thread by `sections::sort_cached_artists`,
+    /// which is why it can't just live on the Slint global.
+    pub artist_sort: Mutex<ViewSort>,
     /// Hero stats — most recent successful `get_favorite_stats` result.
     /// Held so an empty Slint `mosaic-paths` write on section leave can
     /// be reverted on section re-enter without a DB round trip in the
@@ -67,6 +73,10 @@ impl FavoritesUiState {
             sort: Mutex::new(ViewSort {
                 field: "title".to_owned(),
                 dir: SortDir::Asc,
+            }),
+            artist_sort: Mutex::new(ViewSort {
+                field: "favorite_count".to_owned(),
+                dir: SortDir::Desc,
             }),
             stats: Mutex::new(FavoriteStats {
                 count: 0,

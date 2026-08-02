@@ -7,12 +7,11 @@ use std::sync::Arc;
 use slint::{ComponentHandle, Model, SharedString};
 
 use crate::library;
-use crate::services::settings::{SortDir, ViewSort};
 use crate::state::AppState;
-use crate::ui::callbacks::{collect_track_ids, play_row_start};
+use crate::ui::callbacks::{collect_track_ids, next_sort, persist_view_sort, play_row_start};
 use crate::ui::callbacks::macros::{spawn_logged, wire_row_flag};
 use crate::ui::favorites::{self as favorites_ui_mod, FavoritesUi};
-use crate::ui::track_list_view::TrackListColumnState;
+use crate::ui::track_list_view::{TrackListColumnState, view_id};
 use crate::{AppWindow, Favorites};
 
 /// Wire the Songs tab's row / filter / sort / selection callbacks.
@@ -117,35 +116,12 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, fav_ui: &Arc<FavoritesUi>) 
         g.on_request_sort(move |field| {
             let Some(ui) = weak.upgrade() else { return };
             let g = ui.global::<Favorites>();
-            let cur_field = g.get_sort_field();
-            let cur_dir = g.get_sort_dir();
-            let (new_field, new_dir_s) = if cur_field.as_str() == field.as_str() {
-                let nd = if cur_dir.as_str() == "asc" { "desc" } else { "asc" };
-                (field.to_string(), nd.to_string())
-            } else {
-                (field.to_string(), "asc".to_string())
-            };
+            let (new_field, new_dir) =
+                next_sort(g.get_sort_field().as_str(), g.get_sort_dir().as_str(), &field);
             g.set_sort_field(SharedString::from(new_field.as_str()));
-            g.set_sort_dir(SharedString::from(new_dir_s.as_str()));
-            let new_dir = if new_dir_s == "desc" {
-                SortDir::Desc
-            } else {
-                SortDir::Asc
-            };
-            favorites_ui_mod::set_sort(&fu, new_field.clone(), new_dir.clone());
-
-            let s_disk = s.clone();
-            let sort = ViewSort {
-                field: new_field,
-                dir: new_dir,
-            };
-            s.runtime.spawn_blocking(move || {
-                if let Err(e) =
-                    library::settings::set_view_sort(&s_disk, "favorites".to_owned(), sort)
-                {
-                    log::warn!("favorites::set_view_sort: {e}");
-                }
-            });
+            g.set_sort_dir(SharedString::from(new_dir.as_str()));
+            favorites_ui_mod::set_sort(&fu, new_field.clone(), new_dir);
+            persist_view_sort(&s, view_id::FAVORITES, new_field, new_dir);
 
             let s_fetch = s.clone();
             let fu = fu.clone();

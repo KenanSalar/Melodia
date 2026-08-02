@@ -372,8 +372,12 @@ export component FavoritesView inherits Rectangle {
                         // Per-tab action row. Songs gets the full pill —
                         // Shuffle, the column toggle and the selection chip;
                         // Most Played gets a Shuffle scoped to what its grid
-                        // shows; Favorite Artists gets none, since neither
-                        // action means anything over a list of artists.
+                        // shows. Favorite Artists gets neither — over a list
+                        // of artists, shuffling and track columns both mean
+                        // nothing — and carries a sort row instead, the shape
+                        // the Albums / Artists / Genres grids use. Most Played
+                        // has no sort row on purpose: its title names its own
+                        // ordering.
                         if Favorites.tab-idx == Favorites.tab-songs
                             && Favorites.track-count > 0: HorizontalLayout {
                             vertical-stretch: 0;
@@ -421,6 +425,38 @@ export component FavoritesView inherits Rectangle {
                                     icon: "shuffle";
                                     text: @tr("Shuffle");
                                     clicked => { Favorites.shuffle-most-played(); }
+                                }
+                            }
+                        }
+
+                        // Sort row. The two fields are what a card shows —
+                        // its title and its "{n} favorites" subtitle — so an
+                        // ordering is always visibly justified. Clicking the
+                        // active field flips the direction, a new field resets
+                        // to ascending; both handled Rust-side in
+                        // `wire_favorites`, as on every other sort row.
+                        if Favorites.tab-idx == Favorites.tab-artists
+                            && Favorites.artist-count > 0: HorizontalLayout {
+                            vertical-stretch: 0;
+                            alignment: start;
+
+                            ActionPill {
+                                PillButton {
+                                    text: @tr("Name");
+                                    reserve-sort-slot: true;
+                                    sort-direction: Favorites.artist-sort-field == "name"
+                                        ? Favorites.artist-sort-dir : "";
+                                    active: Favorites.artist-sort-field == "name";
+                                    clicked => { Favorites.request-artist-sort("name"); }
+                                }
+                                PillDivider { }
+                                PillButton {
+                                    text: @tr("Favorites");
+                                    reserve-sort-slot: true;
+                                    sort-direction: Favorites.artist-sort-field == "favorite_count"
+                                        ? Favorites.artist-sort-dir : "";
+                                    active: Favorites.artist-sort-field == "favorite_count";
+                                    clicked => { Favorites.request-artist-sort("favorite_count"); }
                                 }
                             }
                         }

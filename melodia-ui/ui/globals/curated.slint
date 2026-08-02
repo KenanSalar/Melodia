@@ -11,6 +11,10 @@ import { TrackListRow, EntityStripRow, EntityGridRow } from "../models.slint";
 // Played and Favorite Artists (both virtualized `EntityCardGrid`s). No
 // Favorite Albums tab by design — albums are reachable via the Albums tab.
 //
+// The filter is shared across all three; sort is per-tab, and only two of
+// them have one — Songs through its list's column headers, Favorite Artists
+// through a pill row. Most Played is ranked by play count by definition.
+//
 // The mosaic refreshes live when `library_changed_tx` ticks (favorite
 // toggled, play count bumped, library scanned) so the top-4 most-played
 // favorites stay current. `blur-img-{a,b}` + `blur-use-a` follow the
@@ -65,6 +69,16 @@ export global Favorites {
     // `rows.length` is a row count, not a card count.
     in-out property <int> most-played-count;
     in-out property <int> artist-count;
+
+    // Favorite Artists tab sort. Its own pair rather than the Songs tab's
+    // `sort-field` / `sort-dir` below, which belong to that tab's `TrackList`
+    // and carry track columns this grid has no notion of. The defaults are
+    // what the query used to hardcode, so a fresh install opens on the order
+    // it always had. Applied to the Rust-side cache, not to the filtered copy
+    // — see `ui::favorites::sections::sort_artists`.
+    in-out property <string> artist-sort-field: "favorite_count";  // name | favorite_count
+    in-out property <string> artist-sort-dir: "desc";
+    callback request-artist-sort(string /*field*/);
 
     // Songs tab — `TrackList` data + filter + sort. `tracks` is the
     // post-filter view that the list actually renders (Rust applies

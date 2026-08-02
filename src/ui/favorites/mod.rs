@@ -100,7 +100,7 @@ pub fn tab_from_index(g: &Favorites<'_>, idx: i32) -> FavoritesTab {
 }
 
 pub use hero::refresh_hero;
-pub use sections::{apply_filtered_grids_now, mark_covers_warm, refresh_grids};
+pub use sections::{apply_filtered_grids_now, mark_covers_warm, refresh_grids, set_artist_sort};
 pub use selection::{clear_selection, handle_select_row};
 pub use tracks::{
     apply_filtered_tracks, apply_row_rating, current_filter, current_sort, refresh_tracks,

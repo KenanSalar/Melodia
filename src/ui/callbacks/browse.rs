@@ -6,7 +6,7 @@ use std::sync::Arc;
 use async_compat::Compat;
 use slint::{ComponentHandle, Model, SharedString};
 
-use super::{collect_nonzero_track_ids, play_row_start};
+use super::{collect_nonzero_track_ids, next_sort, play_row_start};
 use super::macros::{spawn_logged, spawn_logged_sync, wire_row_flag};
 use crate::library;
 use crate::state::AppState;
@@ -244,18 +244,12 @@ pub fn wire_browse(ui: &AppWindow, state: &AppState, browse_ui: &Arc<BrowseUi>) 
         g.on_request_sort(move |field| {
             let Some(ui) = weak.upgrade() else { return };
             let g = ui.global::<Browse>();
-            let cur_field = g.get_sort_field();
-            let cur_dir = g.get_sort_dir();
-            let (new_field, new_dir) = if cur_field.as_str() == field.as_str() {
-                let nd = if cur_dir.as_str() == "asc" { "desc" } else { "asc" };
-                (field.to_string(), nd.to_string())
-            } else {
-                (field.to_string(), "asc".to_string())
-            };
+            let (new_field, new_dir) =
+                next_sort(g.get_sort_field().as_str(), g.get_sort_dir().as_str(), &field);
             g.set_sort_field(SharedString::from(new_field.as_str()));
             g.set_sort_dir(SharedString::from(new_dir.as_str()));
-            super::persist_view_sort(&s, view_id::BROWSE, new_field.clone(), &new_dir);
-            bu.set_sort(new_field, new_dir);
+            bu.set_sort(new_field.clone(), new_dir.as_str().to_owned());
+            super::persist_view_sort(&s, view_id::BROWSE, new_field, new_dir);
             browse_ui_mod::resort_and_apply(&ui, &bu);
         });
     }

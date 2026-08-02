@@ -23,6 +23,10 @@
 //! cached Rust Vecs through the current `Favorites.filter` needle (title+artist
 //! for Most Played, name for Favorite Artists) before writing the Slint models.
 //!
+//! Favorite Artists also sorts, and it does so on the **cache** rather than on
+//! that filtered walk — see [`sort_artists`]. Most Played doesn't sort at all:
+//! its SQL rank is the tab's whole meaning.
+//!
 //! Only the *mounted* tab's model is built. The tabs are mutually
 //! exclusive, and a hidden grid's rows are `SharedString`s nobody can see.
 
@@ -34,7 +38,9 @@ use slint::{ComponentHandle, Model, ModelRc, VecModel, Weak};
 
 use super::{FavoritesTab, FavoritesUi, tab_from_index, to_slint_fav_artist_row,
     to_slint_most_played_row};
+use crate::entities::artist::FavoriteArtist;
 use crate::library;
+use crate::services::settings::{SortDir, ViewSort};
 use crate::state::AppState;
 use crate::ui::detail_filter::{field_contains, most_played_matches};
 use crate::{
@@ -47,7 +53,49 @@ use crate::{
 /// only runs on the UI thread, so the grid-applier builds these tuples
 /// on the worker and finalises them inside `invoke_from_event_loop`.
 struct FilteredArtistRow {
-    artist: crate::entities::artist::FavoriteArtist,
+    artist: FavoriteArtist,
+}
+
+/// Order the Favorite Artists cache in place.
+///
+/// The **cache**, not the filtered copy [`build_filtered_grids`] builds, because
+/// [`FavoritesUi::first_screenful_paths`] reads the cache directly to decide
+/// which covers to prewarm — sorting downstream would warm whichever artists SQL
+/// happened to return first while the grid painted a different prefix. Filtering
+/// preserves order, so one sort here serves both.
+///
+/// `favorite_count` breaks ties by name. The SQL it replaces broke them not at
+/// all, so artists on the same count could swap places between refreshes.
+///
+/// Mirrors `ui::artists::grid::sort_artist_indices`, down to reversing rather
+/// than branching the comparator.
+pub(super) fn sort_artists(artists: &mut [FavoriteArtist], field: &str, dir: SortDir) {
+    match field {
+        "name" => artists.sort_by_cached_key(|a| a.name.to_lowercase()),
+        _ => artists.sort_by_cached_key(|a| (a.favorite_count, a.name.to_lowercase())),
+    }
+    if matches!(dir, SortDir::Desc) {
+        artists.reverse();
+    }
+}
+
+/// Re-order the cached Favorite Artists to the active sort. Cheap, in-memory,
+/// callable from either thread.
+fn sort_cached_artists(fav_ui: &FavoritesUi) {
+    // Clone the sort out in its own statement — taking the second lock while
+    // the first guard is still live would nest them for no reason.
+    let ViewSort { field, dir } = fav_ui.state().artist_sort.lock().clone();
+    sort_artists(&mut fav_ui.state().fav_artists.lock(), &field, dir);
+}
+
+/// Set the Favorite Artists sort and re-order the cache to match.
+///
+/// One call rather than two so no path can move the shadow without moving the
+/// rows the prewarm reads — which would be invisible until the covers came up
+/// against the wrong cards.
+pub fn set_artist_sort(fav_ui: &FavoritesUi, field: String, dir: SortDir) {
+    *fav_ui.state().artist_sort.lock() = ViewSort { field, dir };
+    sort_cached_artists(fav_ui);
 }
 
 /// Fetch Most Played + Favorite Artists in parallel and apply each
@@ -82,6 +130,9 @@ pub async fn refresh_grids(state: &AppState, fav_ui: &Arc<FavoritesUi>, weak: &W
     }
     if let Some(rows) = fav_artists {
         *fav_ui.state().fav_artists.lock() = rows;
+        // Before the prewarm below, which reads this cache for its paths — the
+        // query returns one fixed order and the tab may be showing another.
+        sort_cached_artists(fav_ui);
     }
 
     // Prewarm the mounted tab's tier off-thread before its rows land in the

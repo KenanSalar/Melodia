@@ -154,12 +154,11 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
         detail.on_request_sort(move |field| {
             let Some(ui) = weak.upgrade() else { return };
             let g = ui.global::<PlaylistDetail>();
-            let (new_field, new_dir) = if g.get_sort_field().as_str() == field.as_str() {
-                let nd = if g.get_sort_dir().as_str() == "asc" { "desc" } else { "asc" };
-                (field.to_string(), nd.to_string())
-            } else {
-                (field.to_string(), "asc".to_string())
-            };
+            let (new_field, new_dir) = crate::ui::callbacks::next_sort(
+                g.get_sort_field().as_str(),
+                g.get_sort_dir().as_str(),
+                &field,
+            );
             g.set_sort_field(SharedString::from(new_field.as_str()));
             g.set_sort_dir(SharedString::from(new_dir.as_str()));
             playlists_ui_mod::resort_detail(&ui, &pu);
@@ -167,7 +166,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
                 &s,
                 view_id::PLAYLIST_DETAIL,
                 new_field,
-                &new_dir,
+                new_dir,
             );
         });
     }

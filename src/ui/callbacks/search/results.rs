@@ -9,15 +9,17 @@ use slint::{ComponentHandle, Model, SharedString};
 
 use super::NAV_SEARCH;
 use crate::library;
-use crate::services::settings::{SortDir, ViewSort};
+use crate::services::settings::ViewSort;
 use crate::state::AppState;
 use crate::ui::albums::AlbumsUi;
 use crate::ui::artists::ArtistsUi;
-use crate::ui::callbacks::{collect_track_ids, model_track_ids, play_row_start};
 use crate::ui::callbacks::cross_tab_nav;
 use crate::ui::callbacks::macros::spawn_logged;
+use crate::ui::callbacks::{
+    collect_track_ids, model_track_ids, next_sort, persist_view_sort, play_row_start,
+};
 use crate::ui::search::{self as search_ui_mod, SearchUi, fetch};
-use crate::ui::track_list_view::TrackListColumnState;
+use crate::ui::track_list_view::{TrackListColumnState, view_id};
 use crate::{AppWindow, Search};
 
 /// Wire the cross-tab open / Top Result / row-action / sort / selection
@@ -173,38 +175,15 @@ pub(super) fn wire(
         g.on_request_sort(move |field| {
             let Some(ui) = weak.upgrade() else { return };
             let g = ui.global::<Search>();
-            let cur_field = g.get_sort_field();
-            let cur_dir = g.get_sort_dir();
-            let (new_field, new_dir_s) = if cur_field.as_str() == field.as_str() {
-                let nd = if cur_dir.as_str() == "asc" { "desc" } else { "asc" };
-                (field.to_string(), nd.to_string())
-            } else {
-                (field.to_string(), "asc".to_string())
-            };
+            let (new_field, new_dir) =
+                next_sort(g.get_sort_field().as_str(), g.get_sort_dir().as_str(), &field);
             g.set_sort_field(SharedString::from(new_field.as_str()));
-            g.set_sort_dir(SharedString::from(new_dir_s.as_str()));
-            let new_dir = if new_dir_s == "desc" {
-                SortDir::Desc
-            } else {
-                SortDir::Asc
-            };
+            g.set_sort_dir(SharedString::from(new_dir.as_str()));
             *su.state().sort.lock() = ViewSort {
                 field: new_field.clone(),
-                dir: new_dir.clone(),
-            };
-
-            let s_disk = s.clone();
-            let sort = ViewSort {
-                field: new_field,
                 dir: new_dir,
             };
-            s.runtime.spawn_blocking(move || {
-                if let Err(e) =
-                    library::settings::set_view_sort(&s_disk, "search".to_owned(), sort)
-                {
-                    log::warn!("search::set_view_sort: {e}");
-                }
-            });
+            persist_view_sort(&s, view_id::SEARCH, new_field, new_dir);
 
             // Re-derive the visible Songs slice from the cached
             // results — no DB hit. If there are no cached results

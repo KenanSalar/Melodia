@@ -195,6 +195,56 @@ fn the_page_width_mirror_has_a_mount_seed() {
     );
 }
 
+/// Every field a sort pill can ask for has to be one the comparator handles.
+///
+/// The token is a bare string on both sides — `request-artist-sort("name")` in
+/// the Slint, a `match` arm in `sections::sort_artists` — so a typo or a rename
+/// on either side compiles, and the pill just quietly sorts by the default arm
+/// while painting its arrow as though it had worked. Nothing pins this for the
+/// Albums / Artists / Genres rows, which is exactly why it's worth pinning here.
+///
+/// Also asserts the pills carry `reserve-sort-slot`, without which there is no
+/// arrow slot and the active field is indicated by colour alone.
+#[test]
+fn every_sort_pill_asks_for_a_field_the_comparator_knows() {
+    // The arms of `sections::sort_artists`, restated. A field dropped there and
+    // left here fails the round-trip below; one added here and not there falls
+    // through to the default and this test keeps passing — which is fine, since
+    // the default is a defined order, not a no-op.
+    const FIELDS: [&str; 2] = ["name", "favorite_count"];
+
+    let asked: Vec<&str> = VIEW
+        .match_indices("Favorites.request-artist-sort(\"")
+        .filter_map(|(i, m)| VIEW[i + m.len()..].split_once('"').map(|(field, _)| field))
+        .collect();
+
+    assert_eq!(
+        asked.len(),
+        FIELDS.len(),
+        "favorites-view.slint must mount one sort pill per field the Artists tab sorts on"
+    );
+    for field in asked {
+        assert!(
+            FIELDS.contains(&field),
+            "`request-artist-sort(\"{field}\")` names a field `sort_artists` has no arm for"
+        );
+    }
+
+    // Counted against the pills rather than asserted once: a row where only the
+    // first pill reserves the slot has its labels jump sideways as the active
+    // field moves.
+    assert_eq!(
+        VIEW.matches("sort-direction: Favorites.artist-sort-field ==").count(),
+        FIELDS.len(),
+        "every Artists-tab sort pill must bind `sort-direction` to the active field"
+    );
+    assert_eq!(
+        VIEW.matches("reserve-sort-slot: true;").count(),
+        FIELDS.len(),
+        "every Artists-tab sort pill must reserve the arrow slot"
+    );
+}
+
 /// A `pure` callback's result is cached until a dependency is dirtied, so the
 /// card's `cover` binding has to *read* `covers-generation` for the prewarm's
 /// bump to re-run it. Drop the read and everything still builds and still looks

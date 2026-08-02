@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use slint::{ComponentHandle, Model, SharedString};
 
-use super::collect_track_ids;
+use super::{collect_track_ids, next_sort};
 use super::macros::{spawn_logged, spawn_logged_sync, wire_row_flag};
 use crate::library;
 use crate::state::AppState;
@@ -59,20 +59,14 @@ pub fn wire_tracks(ui: &AppWindow, state: &AppState, tracks_ui: &Arc<TracksUi>) 
         tracks.on_request_sort(move |field| {
             let Some(ui) = weak.upgrade() else { return };
             let g = ui.global::<Tracks>();
-            let cur_field = g.get_sort_field();
-            let cur_dir = g.get_sort_dir();
-            let (new_field, new_dir) = if cur_field.as_str() == field.as_str() {
-                let nd = if cur_dir.as_str() == "asc" { "desc" } else { "asc" };
-                (field.to_string(), nd.to_string())
-            } else {
-                (field.to_string(), "asc".to_string())
-            };
+            let (new_field, new_dir) =
+                next_sort(g.get_sort_field().as_str(), g.get_sort_dir().as_str(), &field);
             g.set_sort_field(SharedString::from(new_field.as_str()));
             g.set_sort_dir(SharedString::from(new_dir.as_str()));
             let filter = g.get_filter().to_string();
 
-            tracks_ui_mod::resort_and_apply(&weak, &tu, &new_field, &new_dir, filter);
-            super::persist_view_sort(&s, view_id::TRACKS, new_field, &new_dir);
+            tracks_ui_mod::resort_and_apply(&weak, &tu, &new_field, new_dir.as_str(), filter);
+            super::persist_view_sort(&s, view_id::TRACKS, new_field, new_dir);
         });
     }
 

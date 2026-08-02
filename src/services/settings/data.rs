@@ -30,7 +30,7 @@ pub struct ThemePreference {
     pub last_static_accent: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum SortDir {
     #[default]

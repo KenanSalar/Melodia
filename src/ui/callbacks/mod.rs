@@ -28,6 +28,7 @@ use rand::RngExt;
 use slint::{ComponentHandle, Model, ModelRc};
 
 use crate::library;
+use crate::services::settings::{SortDir, ViewSort};
 use crate::state::AppState;
 use crate::{AppWindow, Nav, Player};
 
@@ -129,17 +130,36 @@ pub(super) fn spawn_play_then_shuffle(state: &AppState, tag: &'static str, ids: 
     });
 }
 
+/// Resolve a sort-pill (or column-header) click against the sort in force.
+///
+/// Clicking the field already sorted on flips the direction; clicking a
+/// different one starts it ascending. Every sortable view spelled this out
+/// identically, so a change of mind about the reset direction meant finding
+/// eleven copies.
+///
+/// `cur_dir` is read the way [`SortDir::from_token`] reads it — only `"desc"`
+/// is descending — rather than testing for `"asc"` and treating everything else
+/// as descending. The two only differ on a token neither side can currently
+/// produce, but disagreeing about it would leave that pill unable to reach
+/// descending at all.
+pub(super) fn next_sort(cur_field: &str, cur_dir: &str, clicked: &str) -> (String, SortDir) {
+    let flip = cur_field == clicked && cur_dir != "desc";
+    let dir = if flip { SortDir::Desc } else { SortDir::Asc };
+    (clicked.to_owned(), dir)
+}
+
 /// Spawn a fire-and-forget task that persists `view_id`'s sort field +
 /// direction into `views.json`'s `view_sort`. A write failure is logged, not
 /// surfaced — the in-memory re-sort already applied, so the only loss is
 /// across a restart. Shared by every sortable view's `on_request_sort`.
-pub(super) fn persist_view_sort(state: &AppState, view_id: &'static str, field: String, dir: &str) {
-    use crate::services::settings::{SortDir, ViewSort};
+pub(super) fn persist_view_sort(
+    state: &AppState,
+    view_id: &'static str,
+    field: String,
+    dir: SortDir,
+) {
     let s = state.clone();
-    let sort = ViewSort {
-        field,
-        dir: SortDir::from_token(dir),
-    };
+    let sort = ViewSort { field, dir };
     state.runtime.spawn_blocking(move || {
         if let Err(e) = library::settings::set_view_sort(&s, view_id.to_owned(), sort) {
             log::warn!("{view_id}::set_view_sort: {e}");

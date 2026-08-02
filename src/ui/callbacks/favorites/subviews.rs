@@ -4,15 +4,16 @@
 
 use std::sync::Arc;
 
-use slint::ComponentHandle;
+use slint::{ComponentHandle, SharedString};
 
 use super::NAV_FAVORITES;
 use crate::library;
 use crate::state::AppState;
 use crate::ui::artists::ArtistsUi;
-use crate::ui::callbacks::cross_tab_nav;
 use crate::ui::callbacks::macros::spawn_logged;
+use crate::ui::callbacks::{cross_tab_nav, next_sort, persist_view_sort};
 use crate::ui::favorites::{self as favorites_ui_mod, FavoritesUi};
+use crate::ui::track_list_view::view_id;
 use crate::{AppWindow, Favorites};
 
 /// Wire the card-action and sub-view-routing callbacks.
@@ -127,6 +128,31 @@ pub(super) fn wire(
                     }
                 });
             });
+        });
+    }
+
+    // --- Favorite Artists sort ------------------------------------
+    // Re-orders the cached Vec and re-applies, no DB round-trip — the same
+    // in-memory path the filter and the column count take. `set_artist_sort`
+    // moves the cache with the shadow, which is what keeps the cover prewarm
+    // reading the order the cards are actually in.
+    {
+        let s = state.clone();
+        let fu = fav_ui.clone();
+        let weak = weak.clone();
+        g.on_request_artist_sort(move |field| {
+            let Some(ui) = weak.upgrade() else { return };
+            let g = ui.global::<Favorites>();
+            let (new_field, new_dir) = next_sort(
+                g.get_artist_sort_field().as_str(),
+                g.get_artist_sort_dir().as_str(),
+                &field,
+            );
+            g.set_artist_sort_field(SharedString::from(new_field.as_str()));
+            g.set_artist_sort_dir(SharedString::from(new_dir.as_str()));
+            favorites_ui_mod::set_artist_sort(&fu, new_field.clone(), new_dir);
+            favorites_ui_mod::apply_filtered_grids_now(&ui, &fu);
+            persist_view_sort(&s, view_id::FAVORITE_ARTISTS, new_field, new_dir);
         });
     }
 

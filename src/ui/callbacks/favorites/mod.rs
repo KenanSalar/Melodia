@@ -26,11 +26,12 @@ use std::sync::Arc;
 
 use slint::{ComponentHandle, SharedString};
 
-use crate::library;
 use crate::services::settings::SortDir;
 use crate::state::AppState;
 use crate::ui::artists::ArtistsUi;
+use crate::ui::callbacks::persisted_sort;
 use crate::ui::favorites::{self as favorites_ui_mod, FavoritesUi};
+use crate::ui::track_list_view::view_id;
 use crate::{AppWindow, Favorites};
 
 /// Nav-sidebar index of the Favorites tab. Used by the cross-tab
@@ -60,24 +61,25 @@ pub fn wire_favorites(
     lifecycle::wire(ui, state, fav_ui);
 }
 
-/// Read the persisted sort from settings and seed both the Rust cache
+/// Read the two persisted sorts from settings and seed both the Rust cache
 /// and the Slint properties. `None` (never persisted) leaves the
 /// defaults in place.
+///
+/// Two, because the page has two independently sortable sub-views: the Songs
+/// tab's `TrackList` and the Favorite Artists grid. They share the `view_sort`
+/// map under separate keys.
 fn hydrate_sort_from_settings(state: &AppState, fav_ui: &FavoritesUi, g: &Favorites<'_>) {
-    let Some(sort) = library::settings::get_view_sort(state, "favorites") else {
-        return;
-    };
-    g.set_sort_field(SharedString::from(sort.field.as_str()));
-    g.set_sort_dir(SharedString::from(match sort.dir {
-        SortDir::Asc => "asc",
-        SortDir::Desc => "desc",
-    }));
-    favorites_ui_mod::set_sort(
-        fav_ui,
-        sort.field,
-        match sort.dir {
-            SortDir::Asc => SortDir::Asc,
-            SortDir::Desc => SortDir::Desc,
-        },
-    );
+    if let Some((field, dir)) = persisted_sort(state, view_id::FAVORITES) {
+        g.set_sort_field(SharedString::from(field.as_str()));
+        g.set_sort_dir(SharedString::from(dir));
+        favorites_ui_mod::set_sort(fav_ui, field, SortDir::from_token(dir));
+    }
+
+    // Sorts an empty cache — the fetch hasn't run yet — but going through the
+    // one setter is what keeps "shadow and rows move together" unconditional.
+    if let Some((field, dir)) = persisted_sort(state, view_id::FAVORITE_ARTISTS) {
+        g.set_artist_sort_field(SharedString::from(field.as_str()));
+        g.set_artist_sort_dir(SharedString::from(dir));
+        favorites_ui_mod::set_artist_sort(fav_ui, field, SortDir::from_token(dir));
+    }
 }
