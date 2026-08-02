@@ -70,7 +70,7 @@ Shrink the window past a threshold and the full UI collapses into a compact mini
 - First-launch auto-detection of the OS Music directory
 - Real-time folder watching with debounced re-scanning and incremental updates
 - Content-hash-based moved-file detection (BLAKE3) that preserves play counts, favorites, and queue state when files are renamed or relocated
-- Full-text search across tracks, albums, artists, and genres (SQLite FTS5) with a top-result card, entity rows, and persistent recent search history. Tracks match on title, artist, album artist, album, genre, composer, year, and file name — so a genre or a year finds everything tagged with it, and a partial year ("199") finds the decade. The album and artist rows match through their tracks too, so searching a song title, a year or a genre surfaces the albums and artists behind it — and a genre can itself be the top result
+- Search across tracks, albums, artists, and genres, with a top-result card, entity rows, and persistent recent search history. Tracks are full-text indexed (SQLite FTS5) on title, artist, album artist, album, genre, composer, year, and file name, so a genre or a year finds everything tagged with it and a partial year ("199") finds the decade. The album and artist rows match by name *and* through their own tracks, so searching a song title, a year or a genre surfaces the albums and artists behind it — and a genre can itself be the top result
 - Browse by albums, artists, genres, or the file system
 - Dedicated detail pages for albums, artists, genres, and playlists
 - Deezer-backed artist image fetching with local caching

@@ -82,6 +82,7 @@ pub(super) const STRIP_THUMB_CAP: NonZeroUsize = match NonZeroUsize::new(24) {
 };
 
 /// Number of Songs rows shown when `show-all-tracks` is off. The
-/// toggle expands to the full 50-row result; clicking "Show less" or
-/// starting a new query collapses back to this cap.
+/// toggle expands to whatever `search_all` returned — its own `LIMIT`
+/// is the only cap, so don't restate that number here; clicking "Show
+/// less" or starting a new query collapses back to this one.
 pub(super) const COMPACT_TRACK_LIMIT: usize = 5;

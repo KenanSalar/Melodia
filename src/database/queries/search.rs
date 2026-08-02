@@ -107,6 +107,11 @@ pub async fn search_all(db: &DbPool, query: &str) -> Result<SearchResults, AppEr
     // out of its own search. Tiers 1-6 of the Top Result scan the whole
     // list for a name match, so only the fall-through tiers and the
     // strips' display order depend on this.
+    //
+    // Both `IS NOT NULL` guards are insurance, not corrections: under
+    // `OR … IN` a NULL from the subquery yields NULL, which drops the row
+    // exactly as FALSE does. They earn their place the moment either arm
+    // is spelled `NOT IN`, where one NULL swallows every row instead.
     let albums_fut = sqlx::query_as::<_, album::AlbumStats>(
         "SELECT * FROM album_stats
          WHERE name LIKE ? ESCAPE '\\' OR artist_name LIKE ? ESCAPE '\\'
@@ -129,7 +134,7 @@ pub async fn search_all(db: &DbPool, query: &str) -> Result<SearchResults, AppEr
          WHERE name LIKE ? ESCAPE '\\'
             OR id IN (SELECT t.artist_id FROM tracks t
                       JOIN tracks_fts f ON f.rowid = t.id
-                      WHERE tracks_fts MATCH ?)
+                      WHERE tracks_fts MATCH ? AND t.artist_id IS NOT NULL)
          ORDER BY (name LIKE ? ESCAPE '\\') DESC, name ASC
          LIMIT 20"
     )

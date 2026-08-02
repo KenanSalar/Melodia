@@ -176,6 +176,30 @@ async fn a_name_match_outranks_one_found_through_its_tracks() -> Result<(), AppE
     Ok(())
 }
 
+/// The artist arm carries its own copy of that `ORDER BY`, so the album
+/// test above can't fail for it — drop the `DESC` on this one and every
+/// other test still passes. "Zebra Quartet" is the only artist named for
+/// the query; "Kite" and "Wren" are reachable through their tracks alone
+/// and sort after it alphabetically.
+#[tokio::test]
+async fn an_artist_named_for_the_query_outranks_ones_found_through_tracks()
+-> Result<(), AppError> {
+    let db = DbPool::test_pool().await;
+    queries::folder::insert_folder(&db, "/music", true).await?;
+    insert_test_track(&db, "/music/a.mp3", "Zebra Dance", "Kite", "Alpha Records", "Rock")
+        .await?;
+    insert_test_track(&db, "/music/b.mp3", "Quiet Hours", "Wren", "Zebra Sessions", "Rock")
+        .await?;
+    insert_test_track(&db, "/music/c.mp3", "Hush", "Zebra Quartet", "Quiet Records", "Rock")
+        .await?;
+
+    let results = queries::search::search_all(&db, "Zebra").await?;
+
+    let artists: Vec<&str> = results.artists.iter().map(|a| a.name.as_str()).collect();
+    assert_eq!(artists, ["Zebra Quartet", "Kite", "Wren"]);
+    Ok(())
+}
+
 /// The FTS update trigger only fires for the columns named in its
 /// `AFTER UPDATE OF` list, so an edit touching one of the newly-indexed
 /// columns and nothing else has to reindex on its own. Five assertions,

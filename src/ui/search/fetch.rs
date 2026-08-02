@@ -365,7 +365,8 @@ pub fn push_recent_rows_to_slint(weak: &Weak<AppWindow>, rows: Vec<String>) {
 /// *starting* with it, which is the same exactness-first rule the two
 /// original bands already encode.
 ///
-/// Returns `None` only when all three result lists are empty.
+/// Returns `None` for a blank query, or when all three result lists are
+/// empty.
 pub fn compute_top_result(results: &SearchResults, query: &str) -> Option<TopResult> {
     let needle = query.trim().to_lowercase();
     if needle.is_empty() {

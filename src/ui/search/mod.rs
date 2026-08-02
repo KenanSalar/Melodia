@@ -15,8 +15,8 @@
 //!   page, not a row of things to browse.
 //! * Songs — shared `TrackList` bound to `Search.tracks`. Compact by
 //!   default ([`state::COMPACT_TRACK_LIMIT`] rows); the "Show all N"
-//!   toggle swaps to the full 50-row backend result from the cached
-//!   `last_results` without a DB round-trip.
+//!   toggle swaps to the whole backend result — capped by `search_all`'s
+//!   own `LIMIT` — from the cached `last_results`, no DB round-trip.
 //! * Albums + Artists strips — `EntityCard` in a horizontal scroller
 //!   (max 20 each, the backend's cap). Both match through their own
 //!   tracks as well as by name, so a query that only reaches track

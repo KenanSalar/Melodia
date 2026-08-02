@@ -32,10 +32,12 @@ export global Search {
 
     // --- Results models --------------------------------------------
     // `tracks` is the *visible* slice (`COMPACT_TRACK_LIMIT` rows by
-    // default, full 50 when `show-all-tracks` is on). Rust holds the full
-    // result set in its own `last_results` cache so the toggle swaps
-    // without a DB hit. `tracks-total` is the pre-truncate count, for the
-    // "Show all N" button copy.
+    // default, the whole backend result when `show-all-tracks` is on —
+    // that cap is `search_all`'s own `LIMIT`, and belongs there rather
+    // than in a third copy here). Rust holds the full result set in its
+    // own `last_results` cache so the toggle swaps without a DB hit.
+    // `tracks-total` is the pre-truncate count, for the "Show all N"
+    // button copy.
     in-out property <[TrackListRow]>   tracks;
     in-out property <int>              tracks-total;
     in-out property <bool>             show-all-tracks: false;
