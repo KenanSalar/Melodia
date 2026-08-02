@@ -250,13 +250,15 @@ impl FavoritesUi {
         self.data_dirty.swap(false, Ordering::AcqRel)
     }
 
-    /// Forget the last-composed mosaic covers, so the next refresh recomposes
-    /// the hero blur instead of skipping on an unchanged cover set.
+    /// Forget the mosaic recorded as being on screen, so the next refresh
+    /// recomposes the hero blur instead of skipping on an unchanged cover set.
     ///
-    /// The section-leave caller sits beside the `blur-img-*` wipe rather than in
-    /// [`Self::release_section_state`]: that one bails out when the user has
-    /// already come back, but the wipe is unconditional — leaving the guard set
-    /// against a hero that no longer has a blur to guard.
+    /// The section leave is the only caller, and it sits beside the
+    /// `blur-img-*` wipe rather than in [`Self::release_section_state`]: that
+    /// one bails out when the user has already come back, but the wipe is
+    /// unconditional — leaving the guard set against a hero that no longer has
+    /// a blur to guard. Every *other* move of the guard is made where the paint
+    /// is, inside `hero::{apply_hero_blur, clear_hero_blur}`.
     pub fn forget_mosaic(&self) {
         self.inner.last_mosaic_paths.lock().clear();
     }

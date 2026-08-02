@@ -77,13 +77,14 @@ pub async fn refresh_blur(
         clear_hero_blur(rp_ui, weak);
         return;
     }
+    let compose_paths = mosaic_paths.clone();
     let composed = state
         .runtime
-        .spawn_blocking(move || compose_mosaic_blur(&mosaic_paths))
+        .spawn_blocking(move || compose_mosaic_blur(&compose_paths))
         .await
         .ok()
         .flatten();
-    apply_hero_blur(rp_ui, weak, composed, animate);
+    apply_hero_blur(rp_ui, weak, composed, animate, mosaic_paths);
 }
 
 /// Clear the hero blur (e.g. no covers) without wiping the previous slot, so an
@@ -97,6 +98,13 @@ pub fn clear_hero_blur(rp_ui: &Arc<RecentlyPlayedUi>, weak: &Weak<AppWindow>) {
             return;
         }
         let g = ui.global::<RecentlyPlayed>();
+        // Same rule as `apply_hero_blur`: the guard records what is painted, so
+        // it moves only past the check that decides whether anything is. A
+        // clear dropped by that check leaves the previous covers recorded, and
+        // the next refresh tries again — which matters more here than on
+        // Favorites, because `refresh_tracks` only calls in when the paths
+        // differ from what the guard holds.
+        rp_ui.state().last_mosaic_paths.lock().clear();
         // With no mosaic left, the gradient floor is the whole backdrop —
         // re-solve against it so the scrim and foreground match what is
         // actually about to be on screen.
@@ -113,16 +121,20 @@ pub fn clear_hero_blur(rp_ui: &Arc<RecentlyPlayedUi>, weak: &Weak<AppWindow>) {
     });
 }
 
-/// Publish the composed mosaic. Skipped outright once the section is no longer
-/// active: `HeroBackdrop` is shared by all six heroes, so a compose that
-/// finishes after the user has navigated away would paint this view's solve
-/// under whichever hero mounted next. The leave handler calls
-/// `forget_mosaic`, so a genuine re-enter recomposes.
+/// Publish the composed mosaic, and record it as the one on screen. Skipped
+/// outright once the section is no longer active: `HeroBackdrop` is shared by
+/// all six heroes, so a compose that finishes after the user has navigated away
+/// would paint this view's solve under whichever hero mounted next. Because the
+/// `last_mosaic_paths` record lives past that check rather than before the
+/// compose, a skip here leaves the next refresh free to try the same covers
+/// again — the leave handler's `forget_mosaic` is a convenience, not the only
+/// thing keeping the guard honest.
 fn apply_hero_blur(
     rp_ui: &Arc<RecentlyPlayedUi>,
     weak: &Weak<AppWindow>,
     composed: Option<MosaicBlur>,
     animate: bool,
+    paths: Vec<String>,
 ) {
     let rp_ui = rp_ui.clone();
     let weak = weak.clone();
@@ -130,6 +142,16 @@ fn apply_hero_blur(
         let Some(ui) = weak.upgrade() else { return };
         if !rp_ui.section_active() {
             return;
+        }
+        // Two refreshes racing at boot both compose, since neither had recorded
+        // yet; the loser has nothing to add but a redundant cross-fade of the
+        // same buffer.
+        {
+            let mut last = rp_ui.state().last_mosaic_paths.lock();
+            if *last == paths {
+                return;
+            }
+            *last = paths;
         }
         let g = ui.global::<RecentlyPlayed>();
         // The hue and brightness were measured off this very buffer on the

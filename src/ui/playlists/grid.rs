@@ -267,6 +267,11 @@ fn sort_playlist_indices(indices: &mut [usize], data: &GridData, field: &str, di
     }
 }
 
+/// The first `GRID_PREWARM_AHEAD` distinct thumbnail paths in display order —
+/// the covers first on screen. Shared by `fetch_grid` and
+/// `PlaylistsUi::prewarm_visible_covers`. The cap counts kept *paths*, so a run
+/// of thumbnail-less playlists is walked past rather than spending the budget
+/// on them.
 pub(super) fn first_screenful_paths(data: &GridData) -> Vec<PathBuf> {
     crate::ui::grid_prewarm::unique_artwork_paths(
         data.playlists.iter().map(|p| p.thumbnail_path.as_deref()),

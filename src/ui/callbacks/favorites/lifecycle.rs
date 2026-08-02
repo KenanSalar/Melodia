@@ -21,8 +21,12 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, fav_ui: &Arc<FavoritesUi>) 
     let weak = ui.as_weak();
 
     // --- Section-active mirror + cache release / re-enter --------
-    // Seed the synchronous shadow from the current nav state — `changed`
-    // in `AppWindow` won't fire for a session that starts on Favorites.
+    // Seed the synchronous shadow from the current nav state. This has to be
+    // right on its own: `SectionActiveGate`'s `changed` fires only on a real
+    // transition, and its tracker is evaluated inside `AppWindow::new()`,
+    // before this handler exists — so a session that starts on Favorites may
+    // get no enter edge at all. `boot::ui_setup::install_views` hydrates the
+    // persisted nav index before any `wire_*` runs so the read below sees it.
     // (The sibling `active_tab` shadow is seeded by `favorites::seed_tab`,
     // which runs after this and is the only thing that knows the persisted
     // value.)

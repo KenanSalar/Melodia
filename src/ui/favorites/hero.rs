@@ -37,23 +37,19 @@ pub async fn refresh_hero(
 
     let paths = stats.artwork_paths.clone();
     if paths.is_empty() {
-        // Reset the guard so the next non-empty refresh (even with covers
-        // identical to a pre-empty state) recomposes.
-        fav_ui.forget_mosaic();
         clear_hero_blur(fav_ui, weak);
         return Ok(());
     }
 
-    // Skip the decode+blur when the mosaic covers are unchanged from the last
-    // composed set — the blur already on screen is still correct, so a
-    // library/stats tick with the same top-4 covers costs nothing. Reset on
-    // section-leave so a genuine re-enter recomposes.
-    {
-        let mut last = fav_ui.state().last_mosaic_paths.lock();
-        if *last == paths {
-            return Ok(());
-        }
-        last.clone_from(&paths);
+    // Skip the decode+blur when the mosaic covers are already the ones on
+    // screen — the blur is still correct, so a library/stats tick with the same
+    // top-4 costs nothing. Reset on section-leave so a genuine re-enter
+    // recomposes. The matching *record* is in `apply_hero_blur`, not here: the
+    // guard means "this mosaic is what's painted", and recording a compose
+    // whose apply is then dropped would wedge the hero on the gradient floor
+    // for every later refresh of the same covers.
+    if *fav_ui.state().last_mosaic_paths.lock() == paths {
+        return Ok(());
     }
 
     // Composition, blur and the colour measurement are all CPU-bound — they
@@ -61,14 +57,15 @@ pub async fn refresh_hero(
     // is a raw `SharedPixelBuffer` and its measurement, so it can cross the
     // `upgrade_in_event_loop` boundary (`slint::Image` is `!Send`, so the wrap
     // happens on the UI thread).
+    let compose_paths = paths.clone();
     let composed = state
         .runtime
-        .spawn_blocking(move || compose_mosaic_blur(&paths))
+        .spawn_blocking(move || compose_mosaic_blur(&compose_paths))
         .await
         .ok()
         .flatten();
 
-    apply_hero_blur(fav_ui, weak, composed, animate);
+    apply_hero_blur(fav_ui, weak, composed, animate, paths);
     Ok(())
 }
 
@@ -105,6 +102,11 @@ fn clear_hero_blur(fav_ui: &Arc<FavoritesUi>, weak: &Weak<AppWindow>) {
             return;
         }
         let g = ui.global::<Favorites>();
+        // Same rule as `apply_hero_blur`: the guard records what is painted, so
+        // it moves only past the check that decides whether anything is. A
+        // clear dropped by that check leaves the previous covers recorded, and
+        // the next refresh tries again.
+        fav_ui.state().last_mosaic_paths.lock().clear();
         // With no mosaic left, the gradient floor is the whole backdrop —
         // re-solve against it so the scrim and foreground match what is
         // actually about to be on screen.
@@ -124,16 +126,20 @@ fn clear_hero_blur(fav_ui: &Arc<FavoritesUi>, weak: &Weak<AppWindow>) {
     });
 }
 
-/// Publish the composed mosaic. Skipped outright once the section is no longer
-/// active: `HeroBackdrop` is shared by all six heroes, so a compose that
-/// finishes after the user has navigated away would paint this view's solve
-/// under whichever hero mounted next. The leave handler calls
-/// `forget_mosaic`, so a genuine re-enter recomposes.
+/// Publish the composed mosaic, and record it as the one on screen. Skipped
+/// outright once the section is no longer active: `HeroBackdrop` is shared by
+/// all six heroes, so a compose that finishes after the user has navigated away
+/// would paint this view's solve under whichever hero mounted next. Because the
+/// `last_mosaic_paths` record lives past that check rather than before the
+/// compose, a skip here leaves the next refresh free to try the same covers
+/// again — the leave handler's `forget_mosaic` is a convenience, not the only
+/// thing keeping the guard honest.
 fn apply_hero_blur(
     fav_ui: &Arc<FavoritesUi>,
     weak: &Weak<AppWindow>,
     composed: Option<MosaicBlur>,
     animate: bool,
+    paths: Vec<String>,
 ) {
     let fav_ui = fav_ui.clone();
     let weak = weak.clone();
@@ -141,6 +147,16 @@ fn apply_hero_blur(
         let Some(ui) = weak.upgrade() else { return };
         if !fav_ui.section_active() {
             return;
+        }
+        // Two refreshes racing at boot both compose, since neither had recorded
+        // yet; the loser has nothing to add but a redundant cross-fade of the
+        // same buffer.
+        {
+            let mut last = fav_ui.state().last_mosaic_paths.lock();
+            if *last == paths {
+                return;
+            }
+            *last = paths;
         }
         let g = ui.global::<Favorites>();
         // The hue and brightness were measured off this very buffer on the

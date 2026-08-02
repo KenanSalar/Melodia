@@ -108,10 +108,11 @@ impl RecentlyPlayedUi {
         self.data_dirty.swap(false, Ordering::AcqRel)
     }
 
-    /// Forget the last-composed mosaic covers, so the next refresh recomposes
-    /// the hero blur. Paired with the leave handler's `blur-img-*` wipe rather
-    /// than with [`Self::release_section_state`] — see
-    /// [`crate::ui::favorites::FavoritesUi::forget_mosaic`].
+    /// Forget the mosaic recorded as being on screen, so the next refresh
+    /// recomposes the hero blur. Paired with the leave handler's `blur-img-*`
+    /// wipe rather than with [`Self::release_section_state`] — see
+    /// [`crate::ui::favorites::FavoritesUi::forget_mosaic`], including for why
+    /// this is the guard's only mover outside `hero.rs`.
     pub fn forget_mosaic(&self) {
         self.inner.last_mosaic_paths.lock().clear();
     }

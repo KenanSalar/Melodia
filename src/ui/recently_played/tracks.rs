@@ -61,19 +61,16 @@ pub async fn refresh_tracks(
     let total_ms: i64 = rows.iter().map(|r| r.duration_ms).sum();
     let mosaic_paths = super::hero::mosaic_paths_from(&rows, 4);
     super::hero::push_hero_stats(count, total_ms, &mosaic_paths, weak);
-    // Only recompose the hero blur when the mosaic covers actually changed. A
-    // played-track refresh (or an in-view favorite/rating toggle, which also
-    // bumps a subscribed channel) usually yields the same top-4 covers, and
-    // re-decoding + re-blurring them is wasted blocking-pool work. Reset on
-    // section-leave so a genuine re-enter recomposes.
-    let blur_changed = {
-        let mut last = rp_ui.state().last_mosaic_paths.lock();
-        let changed = *last != mosaic_paths;
-        if changed {
-            last.clone_from(&mosaic_paths);
-        }
-        changed
-    };
+    // Only recompose the hero blur when the mosaic covers differ from the ones
+    // on screen. A played-track refresh (or an in-view favorite/rating toggle,
+    // which also bumps a subscribed channel) usually yields the same top-4
+    // covers, and re-decoding + re-blurring them is wasted blocking-pool work.
+    // Reset on section-leave so a genuine re-enter recomposes. The record is
+    // `hero::apply_hero_blur`'s to make, once the buffer is actually published
+    // — recorded here it would also cover a compose whose apply is dropped, and
+    // that would wedge the hero on the gradient floor for the rest of the
+    // session.
+    let blur_changed = *rp_ui.state().last_mosaic_paths.lock() != mosaic_paths;
     if blur_changed {
         let st = state.clone();
         let ru = rp_ui.clone();

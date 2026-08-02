@@ -63,6 +63,25 @@ pub fn install_views(
     state: &AppState,
     startup_view_state: Option<&services::view_state::ViewStateData>,
 ) -> UiHandles {
+    // 5a. The persisted nav index, *before* any `wire_*` runs. Each of the nine
+    // section handles seeds its synchronous `section_active` shadow by reading
+    // `Nav.selected-index` at wire time, so hydrating afterwards left every one
+    // of them holding the answer for the global's declared default (3, Tracks)
+    // rather than the section actually being restored. They then depended on
+    // `SectionActiveGate`'s `changed` firing to correct themselves — and that
+    // tracker is evaluated eagerly inside `AppWindow::new()`, before any Rust
+    // handler exists, so whether a given gate ever fired came down to what the
+    // miniplayer switch happened to evaluate to on that first pass.
+    //
+    // The Favorites *tab* still seeds down at `seed_tab` beside the detail
+    // views: it needs the `favorites_ui` handle, which doesn't exist yet here.
+    if let Some(vs) = startup_view_state {
+        let idx = vs.last_nav_index;
+        if (0..=9).contains(&idx) {
+            app.global::<Nav>().set_selected_index(idx);
+        }
+    }
+
     ui::callbacks::wire_all(app, state);
 
     // 5b. Tracks view.
@@ -168,18 +187,14 @@ pub fn install_views(
     *state.ui_handles.genres.lock() = Some(genres_ui.clone());
     *state.ui_handles.playlists.lock() = Some(playlists_ui.clone());
 
-    // 5c2a. Hydrate persisted nav state.
+    // 5c2a. The Favorites tab seeds here rather than in
+    // `hydrate_ui_from_settings` with its siblings, because it seeds two
+    // things: the Slint property *and* `FavoritesUi`'s synchronous shadow,
+    // which the off-thread fetchers read to decide which cover tier to warm.
+    // That handle is in scope here and deliberately dropped by the time
+    // hydration runs. (The nav index itself is hydrated at the top of this
+    // function — see the note there.)
     if let Some(vs) = startup_view_state {
-        let idx = vs.last_nav_index;
-        if (0..=9).contains(&idx) {
-            app.global::<Nav>().set_selected_index(idx);
-        }
-        // The Favorites tab seeds here rather than in
-        // `hydrate_ui_from_settings` with its siblings, because it seeds two
-        // things: the Slint property *and* `FavoritesUi`'s synchronous
-        // shadow, which the off-thread fetchers read to decide which cover
-        // tier to warm. That handle is in scope here and deliberately dropped
-        // by the time hydration runs.
         ui::favorites::seed_tab(app, &favorites_ui, vs.favorites_tab);
     }
     ui::albums::seed_detail_from_settings(app, state, &albums_ui);
@@ -599,3 +614,7 @@ pub fn install_toast_bridge(
     .map(|_| ())
     .map_err(|e| melodia::error::AppError::Window(format!("toast bridge: {e}")))
 }
+
+#[cfg(test)]
+#[path = "tests/ui_setup_tests.rs"]
+mod tests;
