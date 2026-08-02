@@ -3,8 +3,9 @@
 //! Drives the `RecentlyPlayed` Slint global — a trimmed cousin of the
 //! Favorites page composed of:
 //!
-//! * A lightweight header — track count + total duration + the Shuffle /
-//!   Columns pill (no hero mosaic).
+//! * A hero — a live 2×2 mosaic of the up-to-4 most-recently-played distinct
+//!   covers behind the track count, total duration and the Shuffle / Columns
+//!   pill.
 //! * A **Most Played** `HorizontalCardStrip` — the library-wide top tracks by
 //!   `play_count` (non-collapsible; a small fixed strip).
 //! * A filterable `TrackList` bound to the post-filter `RecentlyPlayed.tracks`

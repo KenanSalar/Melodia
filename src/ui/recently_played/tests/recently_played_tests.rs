@@ -1,20 +1,31 @@
 const VIEW: &str = include_str!("../../../../melodia-ui/ui/views/recently-played-view.slint");
 const GLOBAL: &str = include_str!("../../../../melodia-ui/ui/globals/curated.slint");
+const LIST: &str = include_str!("../../../../melodia-ui/ui/components/track-list/track-list.slint");
 const HEADER: &str =
     include_str!("../../../../melodia-ui/ui/components/track-list/track-list-header.slint");
 
+/// The text between `open` and the next `close`. Bounding at a real closing
+/// brace is what keeps these pins honest — an unbounded split runs to EOF, so
+/// whatever is declared *after* the block gets scanned as if it were inside it.
+fn block_body(src: &'static str, open: &str, close: &str) -> Option<&'static str> {
+    src.split_once(open)
+        .and_then(|(_, rest)| rest.split_once(close))
+        .map(|(body, _)| body)
+}
+
 /// The `TrackList { … }` property block in `recently-played-view.slint`.
 fn track_list_mount() -> Option<&'static str> {
-    VIEW.split_once("tl := TrackList {")
-        .and_then(|(_, rest)| rest.split_once("\n                        }"))
-        .map(|(body, _)| body)
+    block_body(VIEW, "tl := TrackList {", "\n                        }")
+}
+
+/// The `TrackListHeader { … }` property block inside `TrackList`.
+fn header_mount() -> Option<&'static str> {
+    block_body(LIST, "TrackListHeader {", "\n            }")
 }
 
 /// The `RecentlyPlayed` global's body.
 fn recently_played_global() -> Option<&'static str> {
-    GLOBAL
-        .split_once("export global RecentlyPlayed {")
-        .map(|(_, rest)| rest)
+    block_body(GLOBAL, "export global RecentlyPlayed {", "\n}")
 }
 
 /// Recency is the whole point of this page, and the shared `TrackList` is
@@ -59,15 +70,28 @@ fn the_recently_played_list_is_not_sortable() {
     }
 }
 
-/// `sortable` reaches the cells one mount at a time, and there are seven of
-/// them. Miss one and that column alone stays clickable — six dead headers
-/// and a live one reads as a rendering glitch, not as a missing line.
+/// The flag crosses two component boundaries to get from the mount to the
+/// `TouchArea` that acts on it, and every link is one line nothing else would
+/// miss. Drop the `TrackList` → `TrackListHeader` forward and the page is
+/// sortable again with the mount still reading `sortable: false`; drop one of
+/// the seven cell forwards and that column alone stays clickable, which reads
+/// as a rendering glitch rather than as a missing line.
 ///
 /// Lives here rather than beside `track_list_view.rs` because Recently Played
 /// is the only consumer of `sortable: false`; move it if a second view wants
 /// the flag.
 #[test]
-fn every_header_cell_takes_the_sortable_flag() {
+fn the_sortable_flag_reaches_every_header_cell() {
+    let mount = header_mount();
+    assert!(
+        mount.is_some(),
+        "track-list.slint must mount `TrackListHeader {{ … }}`"
+    );
+    assert!(
+        mount.unwrap_or_default().contains("sortable: root.sortable;"),
+        "TrackList must forward `sortable` to its TrackListHeader mount"
+    );
+
     let cells = HEADER.matches("HeaderCell {").count();
     let forwards = HEADER.matches("sortable: root.sortable;").count();
     assert_eq!(

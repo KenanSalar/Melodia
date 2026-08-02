@@ -19,8 +19,9 @@ import { HeroBlurBackdrop } from "../components/hero-blur-backdrop.slint";
 // Shuffle / Columns) over one unified below-hero scroll — a non-collapsible
 // "Most Played" strip, then the `TrackList`. The hero mosaic shows the up-to-4
 // most-recently-played distinct covers; the list holds the 200 most-
-// recently-played tracks (filter + column sort applied in memory over that
-// fixed set). Data flows through the `RecentlyPlayed` global.
+// recently-played tracks, mounted `sortable: false` so recency stays its only
+// order — the filter re-walks that fixed set in memory without re-ordering it.
+// Data flows through the `RecentlyPlayed` global.
 //
 // This is the shape Favorites had before it was tabbed, and it is the page
 // that shape now belongs to alone — Favorites pins its hero and mounts one
@@ -337,9 +338,6 @@ export component RecentlyPlayedView inherits Rectangle {
                             show-year <=> RecentlyPlayed.show-year;
                             number-mode: "index";
 
-                            // Recency is the only order this page has — a
-                            // column sort would fight the point of it. The
-                            // headers still resize and still toggle.
                             // Recency is the only order this page has — a
                             // column sort would fight the point of it. The
                             // headers still resize and still toggle.
