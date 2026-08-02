@@ -37,14 +37,17 @@ pub async fn refresh_strips(
 
     // Prewarm the strip tier off-thread before the rows land in the model —
     // the cards' `request-most-played-cover` lookups decode on miss on the UI
-    // thread. `prewarm` dedupes its input.
-    let covers: Vec<PathBuf> = rp_ui
-        .state()
-        .most_played
-        .lock()
-        .iter()
-        .filter_map(|t| t.artwork_path.as_deref().map(PathBuf::from))
-        .collect();
+    // thread. `capacity()` locks the tier, so read it before taking the
+    // cache's lock rather than inside — nothing today can deadlock the pair,
+    // but there's no reason to hold both.
+    let cap = rp_ui.most_played_thumbs.capacity();
+    let covers: Vec<PathBuf> = {
+        let most_played = rp_ui.state().most_played.lock();
+        crate::ui::grid_prewarm::unique_artwork_paths(
+            most_played.iter().map(|t| t.artwork_path.as_deref()),
+            cap,
+        )
+    };
     if !covers.is_empty() {
         let thumbs = rp_ui.most_played_thumbs.clone();
         let _ = tokio::task::spawn_blocking(move || thumbs.prewarm(&covers)).await;

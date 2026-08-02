@@ -41,11 +41,13 @@ pub async fn refresh_tracks(
     // Prewarm the row covers off-thread before the first model apply — the
     // `!Send` cover lookup in `finish_track_list_row` runs on the UI thread,
     // so a cold cache would otherwise pay one synchronous decode per unique
-    // cover at paint time. `prewarm` dedupes its input.
-    let cover_paths: Vec<PathBuf> = rows
-        .iter()
-        .filter_map(|r| r.artwork_path.as_deref().map(PathBuf::from))
-        .collect();
+    // cover at paint time. The rows are already in recency order, which is
+    // the order they paint in, so the prefix surviving the cap is the right
+    // one.
+    let cover_paths: Vec<PathBuf> = crate::ui::grid_prewarm::unique_artwork_paths(
+        rows.iter().map(|r| r.artwork_path.as_deref()),
+        rp_ui.cover_thumbs.capacity(),
+    );
     if !cover_paths.is_empty() {
         let thumbs = rp_ui.cover_thumbs.clone();
         let _ = tokio::task::spawn_blocking(move || thumbs.prewarm(&cover_paths)).await;

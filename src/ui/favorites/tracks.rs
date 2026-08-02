@@ -69,12 +69,15 @@ pub async fn refresh_tracks(
     // the `!Send` cover lookup in `finish_track_list_row` runs on the UI
     // thread, so a cold cache (first section enter) would otherwise pay
     // one synchronous decode per unique favourite cover at paint time.
-    // `prewarm` dedupes its input. Keystroke re-filters skip this — they
-    // only narrow an already-painted (warm) set.
-    let cover_paths: Vec<PathBuf> = rows
-        .iter()
-        .filter_map(|r| r.artwork_path.as_deref().map(PathBuf::from))
-        .collect();
+    // The rows arrive in the sort's display order, so the prefix surviving
+    // the cap is the one that paints first — pre-filter, which only diverges
+    // on a library refresh taken with a filter already narrowing the set past
+    // the cap. Keystroke re-filters skip this entirely: they only narrow an
+    // already-painted (warm) set.
+    let cover_paths: Vec<PathBuf> = crate::ui::grid_prewarm::unique_artwork_paths(
+        rows.iter().map(|r| r.artwork_path.as_deref()),
+        fav_ui.cover_thumbs.capacity(),
+    );
     if !cover_paths.is_empty() {
         let thumbs = fav_ui.cover_thumbs.clone();
         let _ = tokio::task::spawn_blocking(move || thumbs.prewarm(&cover_paths)).await;

@@ -17,8 +17,8 @@ use crate::error::AppError;
 /// RFC-3339 text whose lexical order is chronological, per
 /// [`get_recently_played`]; NULLs sort last under `DESC`, so a row whose count
 /// predates the timestamp falls to the back of its group). `date_added DESC` is
-/// only reachable among never-played favourites, where it keeps the mosaic's
-/// fill newest-first. `id ASC` closes the last gap.
+/// reachable wherever `last_played` ties — in practice the never-played tail,
+/// where it keeps the mosaic's fill newest-first. `id ASC` closes the last gap.
 const MOST_PLAYED_ORDER: &str = "play_count DESC, last_played DESC, date_added DESC, id ASC";
 
 /// Build the body of an `ORDER BY` clause for the Tracks list (used by
@@ -695,9 +695,11 @@ pub async fn get_favorite_stats(db: &DbPool) -> Result<track::FavoriteStats, App
 /// the same way or they visibly disagree.
 ///
 /// Returns the whole set rather than a top N — the Most Played tab is a
-/// virtualized grid, so it has nothing to gain by truncating. The partial
-/// `idx_tracks_play_count` still drives the scan and supplies the leading
-/// term; the three tiebreakers cost a sort within each tied group.
+/// virtualized grid, so it has nothing to gain by truncating. Once `ANALYZE`
+/// has run (shutdown's `PRAGMA optimize`) the partial `idx_tracks_play_count`
+/// drives the scan and supplies the leading term, leaving the three
+/// tiebreakers to a sort inside each tied group; with no stats yet the planner
+/// prefers the `is_favorite` equality index and sorts the lot.
 pub async fn get_most_played_favorites(
     db: &DbPool,
 ) -> Result<Vec<track::MostPlayedFavorite>, AppError> {

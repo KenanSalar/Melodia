@@ -108,23 +108,21 @@ pub async fn kick_search(
     // the Album / Artist strip cards resolve via lazy `request-*-cover`
     // lookups that decode on miss *on the UI thread* — without this, a
     // cold cache pays one synchronous decode per card at paint time.
-    // Result sets are LIMIT-bounded so the prewarm set is small;
-    // `prewarm` dedupes its input.
-    let track_covers: Vec<PathBuf> = results
-        .tracks
-        .iter()
-        .filter_map(|t| t.artwork_path.as_deref().map(PathBuf::from))
-        .collect();
-    let album_covers: Vec<PathBuf> = results
-        .albums
-        .iter()
-        .filter_map(|a| a.artwork_path.as_deref().map(PathBuf::from))
-        .collect();
-    let artist_covers: Vec<PathBuf> = results
-        .artists
-        .iter()
-        .filter_map(|a| a.image_path.as_deref().map(PathBuf::from))
-        .collect();
+    // Result sets are LIMIT-bounded, so no cap binds today — each list is
+    // capped against its own tier anyway, since the three land in three
+    // different caches.
+    let track_covers: Vec<PathBuf> = crate::ui::grid_prewarm::unique_artwork_paths(
+        results.tracks.iter().map(|t| t.artwork_path.as_deref()),
+        search_ui.cover_thumbs.capacity(),
+    );
+    let album_covers: Vec<PathBuf> = crate::ui::grid_prewarm::unique_artwork_paths(
+        results.albums.iter().map(|a| a.artwork_path.as_deref()),
+        search_ui.album_strip_thumbs.capacity(),
+    );
+    let artist_covers: Vec<PathBuf> = crate::ui::grid_prewarm::unique_artwork_paths(
+        results.artists.iter().map(|a| a.image_path.as_deref()),
+        search_ui.artist_strip_thumbs.capacity(),
+    );
     if !(track_covers.is_empty() && album_covers.is_empty() && artist_covers.is_empty()) {
         let row_thumbs = search_ui.cover_thumbs.clone();
         let album_thumbs = search_ui.album_strip_thumbs.clone();

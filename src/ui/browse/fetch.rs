@@ -1,7 +1,6 @@
 //! Folder fetch + sort + favourite-row update. Bumps `fetch_token` to
 //! drop stale UI writes when a faster navigation overtakes us.
 
-use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
@@ -106,23 +105,16 @@ pub async fn fetch_and_apply(
 
     match result {
         Ok(res) => {
-            // Prewarm cover thumbnails. Most files in a single folder
-            // share an album cover, so unique paths are typically a small
-            // fraction of total rows — pre-size the dedupe accordingly.
-            let unique_paths: Vec<PathBuf> = {
-                let cap = (res.files.len() / 4).max(8);
-                let mut seen: HashSet<&str> = HashSet::with_capacity(cap);
-                let mut out: Vec<PathBuf> = Vec::with_capacity(cap);
-                for f in &res.files {
-                    if let Some(p) = f.row.artwork_path.as_deref()
-                        && !p.is_empty()
-                        && seen.insert(p)
-                    {
-                        out.push(PathBuf::from(p));
-                    }
-                }
-                out
-            };
+            // Prewarm cover thumbnails. Walked in *fetch* order — the sort
+            // below hasn't run yet — so on a folder holding more unique
+            // covers than the tier, the surviving prefix isn't the one that
+            // paints first. Moving the prewarm past the sort would put it
+            // after the staleness check it currently precedes, and a folder
+            // that deep is well outside what Browse is for.
+            let unique_paths: Vec<PathBuf> = crate::ui::grid_prewarm::unique_artwork_paths(
+                res.files.iter().map(|f| f.row.artwork_path.as_deref()),
+                browse_ui.cover_thumbs.capacity(),
+            );
             if !unique_paths.is_empty() {
                 let thumbs = browse_ui.cover_thumbs.clone();
                 let _ = tokio::task::spawn_blocking(move || {
