@@ -20,8 +20,8 @@ use crate::ui::now_playing_artwork::NowPlayingArtwork;
 use crate::{AppWindow, Player, Theme as ThemeGlobal, TrackMetaRow};
 
 /// What one artwork decode hands back to the UI thread: the sharp cover, the
-/// blurred backdrop, the hue quantized out of it, and how bright it measured.
-type DecodedArtwork = (Option<Image>, Option<Image>, Option<u32>, Option<f64>);
+/// blurred backdrop, and the hue + brightness measured off that blur.
+type DecodedArtwork = (Option<Image>, Option<Image>, backdrop::BackdropSample);
 
 /// Subscribe to `sinks.view_model`, react only to actual track changes.
 /// Always stashes the current track into `NowPlayingState::current_track`;
@@ -131,7 +131,7 @@ pub(super) async fn apply_track_change(
         .and_then(|t| t.artwork_path.clone())
         .filter(|p| !p.is_empty());
 
-    let (cover, blurred, accent_argb, backdrop_luma): DecodedArtwork = match artwork {
+    let (cover, blurred, sample): DecodedArtwork = match artwork {
         Some(path) => {
             let np = np_artwork.clone();
             match state
@@ -142,17 +142,16 @@ pub(super) async fn apply_track_change(
                 Ok(Some(pair)) => (
                     Some(Image::from_rgb8(pair.cover)),
                     Some(Image::from_rgb8(pair.blur)),
-                    pair.accent_argb,
-                    pair.backdrop_luma,
+                    pair.sample,
                 ),
-                Ok(None) => (None, None, None, None),
+                Ok(None) => (None, None, backdrop::BackdropSample::default()),
                 Err(e) => {
                     log::warn!("ui::now_playing artwork task join: {e}");
-                    (None, None, None, None)
+                    (None, None, backdrop::BackdropSample::default())
                 }
             }
         }
-        None => (None, None, None, None),
+        None => (None, None, backdrop::BackdropSample::default()),
     };
 
     // --- Write to Slint (UI thread) ---
@@ -192,12 +191,13 @@ pub(super) async fn apply_track_change(
     // colour, and a theme change propagates on the next track change. Only the
     // hue is borrowed: `backdrop::solve` owns every tone, so the view looks the
     // same whether the theme underneath it is light or dark.
-    let seed = accent_argb
+    let seed = sample
+        .accent_argb
         .unwrap_or_else(|| brush_to_rgb(&ui.global::<ThemeGlobal>().get_accent()));
     // No blur to measure means the gradient floor is what shows, and both of
     // its stops are ours — so this is a known value, not a guess, and the
     // artwork-less path runs through the same solve as every other cover.
-    let luma = backdrop_luma.unwrap_or_else(backdrop::floor_luma);
+    let luma = sample.luma.unwrap_or_else(backdrop::floor_luma);
     let colors = backdrop::solve(seed, luma);
 
     player.set_np_accent_bright(brush(colors.chrome));

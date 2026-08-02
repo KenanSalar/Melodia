@@ -66,9 +66,13 @@ fn compose_produces_target_sized_buffer_from_a_real_image() -> Result<(), AppErr
         .save(&path)
         .map_err(|e| AppError::Validation(format!("write png: {e}")))?;
 
-    let buf = compose_mosaic_blur(&[path.to_string_lossy().into_owned()])
+    let composed = compose_mosaic_blur(&[path.to_string_lossy().into_owned()])
         .ok_or_else(|| AppError::Validation("one good tile must compose".into()))?;
-    assert_eq!(buf.width(), 192);
-    assert_eq!(buf.height(), 192);
+    assert_eq!(composed.blur.width(), 192);
+    assert_eq!(composed.blur.height(), 192);
+    // A composed mosaic must hand the hero a hue to seed from, or the banner
+    // silently falls back to `Theme.accent` and tracks the theme again.
+    assert!(composed.sample.accent_argb.is_some());
+    assert!(composed.sample.luma.is_some());
     Ok(())
 }

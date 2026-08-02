@@ -38,13 +38,17 @@
 //! The solve is deliberately consumer-agnostic: it takes one seed colour and
 //! one brightness measurement and hands back a whole colour set, so the two
 //! call sites ([`crate::ui::now_playing`] and [`crate::ui::hero_backdrop`])
-//! share one set of tuning constants rather than drifting apart.
+//! share one set of tuning constants rather than drifting apart. Both
+//! measurements come off one buffer in one place — [`BackdropSample::measure`]
+//! — so a producer can't quantize one blur and measure another.
 
 use material_colors::color::{linearized, lstar_from_y, y_from_lstar};
 use material_colors::contrast;
 use slint::{Brush, Rgb8Pixel, SharedPixelBuffer};
 
-use crate::services::material_you::{lift_to_min_tone, to_tone_capped_chroma};
+use crate::services::material_you::{
+    extract_source_argb_from_rgb8, lift_to_min_tone, to_tone_capped_chroma,
+};
 use crate::themes::brush_with_alpha;
 
 /// HCT tone the composited backdrop is driven down to. Below this a light,
@@ -240,6 +244,40 @@ pub(crate) fn luma_p90(buf: &SharedPixelBuffer<Rgb8Pixel>) -> Option<f64> {
     Some(bin_centre(0))
 }
 
+/// Everything a solve needs measured off a decoded blur: the hue to seed from
+/// and how bright the blur is.
+///
+/// Both fields are `None` when there is no blur to measure — a track or entity
+/// with no artwork, or a decode that failed — and the publisher then falls back
+/// to the live `Theme.accent` and [`floor_luma`].
+#[derive(Clone, Copy, Default)]
+pub(crate) struct BackdropSample {
+    /// Dominant colour quantized out of the blur. Supplies the *hue* for every
+    /// colour [`solve`] returns.
+    pub(crate) accent_argb: Option<u32>,
+    /// [`luma_p90`] of the same buffer.
+    pub(crate) luma: Option<f64>,
+}
+
+impl BackdropSample {
+    /// Measure a decoded blur.
+    ///
+    /// CPU-bound — the quantize dominates, and the percentile pass beside it is
+    /// linear over a buffer that small — so this belongs in the `spawn_blocking`
+    /// task that produced the blur, never on the UI thread.
+    ///
+    /// Quantizing the *blur* rather than the sharp source is deliberate: a
+    /// downscaled, blurred buffer is plenty of pixels for `QuantizerCelebi` and
+    /// re-quantizing the full-size cover costs several times more for no
+    /// perceptual gain.
+    pub(crate) fn measure(blur: &SharedPixelBuffer<Rgb8Pixel>) -> Self {
+        Self {
+            accent_argb: extract_source_argb_from_rgb8(blur),
+            luma: luma_p90(blur),
+        }
+    }
+}
+
 /// Lightness the gradient floor presents when an entry has no artwork.
 ///
 /// Both stops are ours ([`FLOOR_TONE_START`] / [`FLOOR_TONE_END`]), so this is
@@ -363,10 +401,11 @@ pub(crate) struct BackdropColors {
 
 /// Solve the whole set from one seed hue and one backdrop measurement.
 ///
-/// `seed_argb` is the accent quantized out of the cover, or the live
-/// `Theme.accent` when the track has no artwork — the view borrows the theme's
-/// hue but never its lightness. `backdrop_luma` is [`luma_p90`] of the blur, or
-/// [`floor_luma`] when there is no blur to measure.
+/// `seed_argb` is the accent quantized out of the artwork, or the live
+/// `Theme.accent` when there is none — a consumer borrows the theme's hue but
+/// never its lightness. `backdrop_luma` is [`luma_p90`] of the blur, or
+/// [`floor_luma`] when there is no blur to measure. Both come off a
+/// [`BackdropSample`] on every path but Genre Detail's procedural gradient.
 pub(crate) fn solve(seed_argb: u32, backdrop_luma: f64) -> BackdropColors {
     let alpha = scrim_alpha(backdrop_luma);
     let tone = composited_tone(backdrop_luma, alpha);

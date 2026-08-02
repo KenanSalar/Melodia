@@ -10,15 +10,15 @@
 
 use std::sync::Arc;
 
-use slint::{ComponentHandle, Image, Model, Rgb8Pixel, SharedPixelBuffer, SharedString, VecModel,
-    Weak};
+use slint::{ComponentHandle, Image, Model, SharedString, VecModel, Weak};
 
 use super::FavoritesUi;
 use crate::entities::track::FavoriteStats;
 use crate::error::AppResult;
 use crate::library;
 use crate::state::AppState;
-use crate::ui::mosaic_blur::compose_mosaic_blur;
+use crate::ui::backdrop::BackdropSample;
+use crate::ui::mosaic_blur::{MosaicBlur, compose_mosaic_blur};
 use crate::ui::now_playing::write_crossfade_slot;
 use crate::{AppWindow, Favorites};
 
@@ -57,18 +57,19 @@ pub async fn refresh_hero(
         last.clone_from(&paths);
     }
 
-    // Composition + blur is CPU-bound — runs on the blocking pool to
-    // keep the tokio worker free. Returns the raw `SharedPixelBuffer`
-    // so it can cross the `upgrade_in_event_loop` boundary (`slint::
-    // Image` is `!Send` so the wrap happens on the UI thread).
-    let blur_buf = state
+    // Composition, blur and the colour measurement are all CPU-bound — they
+    // run on the blocking pool to keep the tokio worker free. What comes back
+    // is a raw `SharedPixelBuffer` and its measurement, so it can cross the
+    // `upgrade_in_event_loop` boundary (`slint::Image` is `!Send`, so the wrap
+    // happens on the UI thread).
+    let composed = state
         .runtime
         .spawn_blocking(move || compose_mosaic_blur(&paths))
         .await
         .ok()
         .flatten();
 
-    apply_hero_blur(fav_ui, weak, blur_buf, animate);
+    apply_hero_blur(fav_ui, weak, composed, animate);
     Ok(())
 }
 
@@ -132,7 +133,7 @@ fn clear_hero_blur(fav_ui: &Arc<FavoritesUi>, weak: &Weak<AppWindow>) {
 fn apply_hero_blur(
     fav_ui: &Arc<FavoritesUi>,
     weak: &Weak<AppWindow>,
-    buf: Option<SharedPixelBuffer<Rgb8Pixel>>,
+    composed: Option<MosaicBlur>,
     animate: bool,
 ) {
     let fav_ui = fav_ui.clone();
@@ -143,9 +144,13 @@ fn apply_hero_blur(
             return;
         }
         let g = ui.global::<Favorites>();
-        // Measure before the buffer is consumed by the `Image` wrap.
-        crate::ui::hero_backdrop::apply(&ui, buf.as_ref());
-        let img = buf.map(Image::from_rgb8);
+        // The hue and brightness were measured off this very buffer on the
+        // blocking pool, so the scrim lands in step with the blur under it.
+        let (img, sample) = match composed {
+            Some(m) => (Some(Image::from_rgb8(m.blur)), m.sample),
+            None => (None, BackdropSample::default()),
+        };
+        crate::ui::hero_backdrop::apply(&ui, sample);
         write_crossfade_slot(
             img,
             animate,

@@ -4,9 +4,10 @@
 //! built from up to 4 cover paths: tile the sources into a 2×2 atlas,
 //! downscale to the now-playing-tier `BLUR_TARGET`, and run
 //! `image::imageops::fast_blur` (parity with
-//! `now_playing_artwork::decode_artwork`). The per-view `hero.rs` files own
-//! the data source and the `write_crossfade_slot` application; this module
-//! owns the CPU-bound image work.
+//! `now_playing_artwork::decode_artwork`), then measure the result for the
+//! hero's colour solve. The per-view `hero.rs` files own the data source and
+//! the `write_crossfade_slot` application; this module owns the CPU-bound
+//! image work, and the quantize behind that measurement is the heaviest of it.
 
 use std::path::Path;
 
@@ -14,20 +15,29 @@ use image::imageops::fast_blur;
 use slint::{Rgb8Pixel, SharedPixelBuffer};
 
 use crate::media::image_decode::{MAX_SOURCE_DIM, decode_capped};
+use crate::ui::backdrop::BackdropSample;
 use crate::ui::util::{BLUR_SIGMA, BLUR_TARGET, buffer_from_rgb};
 
 /// Side length of one tile in the 2×2 atlas.
 const PER_TILE: u32 = BLUR_TARGET / 2;
 
+/// A composed mosaic backdrop and what the hero's colour solve needs to know
+/// about it. Both halves are produced by the same blocking call, so the scrim
+/// can't fall out of step with the blur it is darkening.
+pub(crate) struct MosaicBlur {
+    pub(crate) blur: SharedPixelBuffer<Rgb8Pixel>,
+    pub(crate) sample: BackdropSample,
+}
+
 /// Compose up to 4 source images into a `BLUR_TARGET × BLUR_TARGET`
-/// 2×2 atlas, then blur. Mirrors the picker's mosaic layout for the
-/// 4-tile case; the 1 / 2 / 3 / 0 cases fall back to "fill the whole
-/// atlas with the available tiles" so a partially-populated mosaic
-/// still produces a usable hero backdrop. Runs on the blocking pool.
+/// 2×2 atlas, blur it, and measure the result. Mirrors the picker's mosaic
+/// layout for the 4-tile case; the 1 / 2 / 3 / 0 cases fall back to "fill the
+/// whole atlas with the available tiles" so a partially-populated mosaic still
+/// produces a usable hero backdrop. Runs on the blocking pool.
 ///
 /// Returns `None` when every source decode failed — the caller clears
-/// `has-blur` so the accent gradient floor shows through.
-pub fn compose_mosaic_blur(paths: &[String]) -> Option<SharedPixelBuffer<Rgb8Pixel>> {
+/// `has-blur` so the gradient floor shows through.
+pub(crate) fn compose_mosaic_blur(paths: &[String]) -> Option<MosaicBlur> {
     use image::{ImageBuffer, RgbImage};
 
     if paths.is_empty() {
@@ -77,8 +87,9 @@ pub fn compose_mosaic_blur(paths: &[String]) -> Option<SharedPixelBuffer<Rgb8Pix
         }
     }
 
-    let blurred = fast_blur(&atlas, BLUR_SIGMA);
-    Some(buffer_from_rgb(&blurred))
+    let blur = buffer_from_rgb(&fast_blur(&atlas, BLUR_SIGMA));
+    let sample = BackdropSample::measure(&blur);
+    Some(MosaicBlur { blur, sample })
 }
 
 /// Decode one cover at its tile size. Bounded so a forged header can't

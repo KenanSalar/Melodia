@@ -25,6 +25,7 @@ use parking_lot::Mutex;
 use slint::{Rgb8Pixel, SharedPixelBuffer};
 
 use crate::media::image_decode::{MAX_SOURCE_DIM, decode_capped};
+use crate::ui::backdrop::BackdropSample;
 use crate::ui::util::{BLUR_SIGMA, BLUR_TARGET, COVER_SIZE, buffer_from_rgb};
 
 /// LRU capacity. "Up Next" surfaces ~20 tracks and the user skips through
@@ -44,17 +45,9 @@ pub struct ArtworkPair {
     pub cover: SharedPixelBuffer<Rgb8Pixel>,
     /// Heavily-blurred `BLUR_TARGET`-square backdrop.
     pub blur: SharedPixelBuffer<Rgb8Pixel>,
-    /// Dominant accent extracted via `material_you::extract_source_argb_from_rgb8`
-    /// from the blur buffer (192² is plenty of pixels for `QuantizerCelebi`
-    /// and re-quantizing the sharp tile would burn ~4× more CPU for no
-    /// perceptual gain). Supplies the *hue* for every colour the Now Playing
-    /// view solves in [`crate::ui::backdrop`].
-    pub accent_argb: Option<u32>,
-    /// 90th-percentile lightness (L*) of `blur` — how bright the backdrop
-    /// actually is, and the input the scrim opacity is solved from. See
-    /// [`crate::ui::backdrop::luma_p90`] for why it's a percentile and not a
-    /// mean. `None` only for an empty buffer.
-    pub backdrop_luma: Option<f64>,
+    /// The hue and brightness of `blur` — everything
+    /// [`crate::ui::backdrop::solve`] needs to colour the view.
+    pub(crate) sample: BackdropSample,
 }
 
 /// `None` records a previously-attempted decode that failed — cached so a
@@ -131,17 +124,15 @@ fn decode_artwork(path: &Path) -> CachedArtwork {
     let small = decoded.thumbnail_exact(BLUR_TARGET, BLUR_TARGET).to_rgb8();
     let blur = buffer_from_rgb(&fast_blur(&small, BLUR_SIGMA));
 
-    // Both statistics come off the same buffer in one place: the quantize the
-    // hue is scored from, and the percentile the scrim is sized from. The
-    // percentile pass is linear over ~110 KiB — noise beside the quantize.
-    let accent_argb = crate::services::material_you::extract_source_argb_from_rgb8(&blur);
-    let backdrop_luma = crate::ui::backdrop::luma_p90(&blur);
+    // Measured here rather than at the publisher: this runs on the blocking
+    // pool and the result is cached, so the quantize is paid once per cover
+    // instead of once per open.
+    let sample = BackdropSample::measure(&blur);
 
     Some(ArtworkPair {
         cover,
         blur,
-        accent_argb,
-        backdrop_luma,
+        sample,
     })
 }
 

@@ -11,14 +11,13 @@
 use std::collections::HashSet;
 use std::sync::Arc;
 
-use slint::{
-    ComponentHandle, Image, Model, Rgb8Pixel, SharedPixelBuffer, SharedString, VecModel, Weak,
-};
+use slint::{ComponentHandle, Image, Model, SharedString, VecModel, Weak};
 
 use super::RecentlyPlayedUi;
 use crate::entities::track::TrackListRow as RsTrackListRow;
 use crate::state::AppState;
-use crate::ui::mosaic_blur::compose_mosaic_blur;
+use crate::ui::backdrop::BackdropSample;
+use crate::ui::mosaic_blur::{MosaicBlur, compose_mosaic_blur};
 use crate::ui::now_playing::write_crossfade_slot;
 use crate::ui::tracks::format_duration_ms;
 use crate::{AppWindow, RecentlyPlayed};
@@ -65,8 +64,9 @@ pub fn push_hero_stats(count: i32, total_ms: i64, mosaic_paths: &[String], weak:
 }
 
 /// Compose + apply the hero blur from `mosaic_paths` (or clear it when empty).
-/// CPU-bound composition runs on the blocking pool; the result lands on the UI
-/// thread. `animate` fades the cross-fade (true for live refreshes).
+/// The CPU-bound composition and colour measurement run on the blocking pool;
+/// the result lands on the UI thread. `animate` fades the cross-fade (true for
+/// live refreshes).
 pub async fn refresh_blur(
     state: &AppState,
     rp_ui: &Arc<RecentlyPlayedUi>,
@@ -78,13 +78,13 @@ pub async fn refresh_blur(
         clear_hero_blur(rp_ui, weak);
         return;
     }
-    let blur_buf = state
+    let composed = state
         .runtime
         .spawn_blocking(move || compose_mosaic_blur(&mosaic_paths))
         .await
         .ok()
         .flatten();
-    apply_hero_blur(rp_ui, weak, blur_buf, animate);
+    apply_hero_blur(rp_ui, weak, composed, animate);
 }
 
 /// Clear the hero blur (e.g. no covers) without wiping the previous slot, so an
@@ -122,7 +122,7 @@ pub fn clear_hero_blur(rp_ui: &Arc<RecentlyPlayedUi>, weak: &Weak<AppWindow>) {
 fn apply_hero_blur(
     rp_ui: &Arc<RecentlyPlayedUi>,
     weak: &Weak<AppWindow>,
-    buf: Option<SharedPixelBuffer<Rgb8Pixel>>,
+    composed: Option<MosaicBlur>,
     animate: bool,
 ) {
     let rp_ui = rp_ui.clone();
@@ -133,9 +133,13 @@ fn apply_hero_blur(
             return;
         }
         let g = ui.global::<RecentlyPlayed>();
-        // Measure before the buffer is consumed by the `Image` wrap.
-        crate::ui::hero_backdrop::apply(&ui, buf.as_ref());
-        let img = buf.map(Image::from_rgb8);
+        // The hue and brightness were measured off this very buffer on the
+        // blocking pool, so the scrim lands in step with the blur under it.
+        let (img, sample) = match composed {
+            Some(m) => (Some(Image::from_rgb8(m.blur)), m.sample),
+            None => (None, BackdropSample::default()),
+        };
+        crate::ui::hero_backdrop::apply(&ui, sample);
         write_crossfade_slot(
             img,
             animate,

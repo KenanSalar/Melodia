@@ -3,8 +3,8 @@ use material_colors::contrast::ratio_of_tones;
 use slint::{Rgb8Pixel, SharedPixelBuffer};
 
 use crate::ui::backdrop::{
-    BackdropColors, chrome_tone, composited_tone, floor_luma, gradient_luma, luma_p90, muted_tone,
-    rgb_lstar, scrim_alpha, solve, text_tone,
+    BackdropColors, BackdropSample, chrome_tone, composited_tone, floor_luma, gradient_luma,
+    luma_p90, muted_tone, rgb_lstar, scrim_alpha, solve, text_tone,
 };
 
 /// A Catppuccin-Mocha-ish mauve, the default accent — a realistic seed for the
@@ -123,6 +123,49 @@ fn luma_p90_steps_over_a_tail_smaller_than_the_percentile() {
     assert!(
         luma < 10.0,
         "a 1% speck must not drive the scrim, got L*{luma}"
+    );
+}
+
+// --- BackdropSample ---------------------------------------------------------
+
+#[test]
+fn measure_takes_the_hue_and_the_percentile_off_one_buffer() {
+    let buf = buffer_from(32, |_, _| [220, 30, 30]);
+    let sample = BackdropSample::measure(&buf);
+
+    assert_eq!(sample.luma, luma_p90(&buf));
+    let (r, g, b) = unpack(sample.accent_argb.unwrap_or(0));
+    assert!(
+        r > g && r > b,
+        "a red buffer quantized to rgb({r}, {g}, {b})"
+    );
+}
+
+/// An empty buffer must leave both halves empty so the publisher falls back to
+/// the theme accent and the gradient floor, rather than seeding the whole band
+/// off whatever a degenerate quantize happened to return.
+#[test]
+fn measure_of_an_empty_buffer_leaves_both_halves_empty() {
+    let sample = BackdropSample::measure(&SharedPixelBuffer::<Rgb8Pixel>::new(0, 0));
+    assert_eq!(sample.accent_argb, None);
+    assert_eq!(sample.luma, None);
+}
+
+/// The seed is what decides the hue of both layers sandwiching the blur, so a
+/// measured cover and the theme accent must not collapse onto one answer. The
+/// regression this guards is the hero going back to seeding from `Theme.accent`
+/// and painting every album's banner the same colour.
+#[test]
+fn a_measured_cover_hue_outranks_the_theme_accent() {
+    let sample = BackdropSample::measure(&buffer_from(32, |_, _| [220, 30, 30]));
+    // `None` collapses onto the accent too, which is the same failure — so
+    // falling back to `SEED` here makes the assertion below cover both.
+    let seed = sample.accent_argb.unwrap_or(SEED);
+    let luma = sample.luma.unwrap_or(f64::NAN);
+    assert_ne!(
+        solve(seed, luma).chrome,
+        solve(SEED, luma).chrome,
+        "a red cover must not solve to the mauve accent's colour set"
     );
 }
 

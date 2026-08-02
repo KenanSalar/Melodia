@@ -26,6 +26,7 @@ use slint::{Rgb8Pixel, SharedPixelBuffer};
 
 use crate::media::image_decode::{MAX_SOURCE_DIM, decode_capped};
 use crate::state::AppState;
+use crate::ui::backdrop::BackdropSample;
 use crate::ui::util::{BLUR_TARGET, COVER_SIZE, buffer_from_rgb};
 
 /// Height the cover is downscaled to before blurring, against the shared
@@ -36,8 +37,8 @@ use crate::ui::util::{BLUR_TARGET, COVER_SIZE, buffer_from_rgb};
 const BLUR_HEIGHT: u32 = 128;
 
 /// `fast_blur` sigma. Deliberately lighter than the shared
-/// [`crate::ui::util::BLUR_SIGMA`]: the hero's gradient floor and crust scrim
-/// sit on top of this blur, so it needs less of its own.
+/// [`crate::ui::util::BLUR_SIGMA`]: the hero's gradient floor sits under this
+/// blur and its solved scrim over it, so it needs less of its own.
 const BLUR_SIGMA: f32 = 20.0;
 
 /// LRU capacity. The working set for the Album Detail view is the
@@ -58,6 +59,9 @@ pub struct ArtworkPair {
     pub cover: SharedPixelBuffer<Rgb8Pixel>,
     /// Heavily-blurred `BLUR_TARGET × BLUR_HEIGHT` landscape backdrop.
     pub blur: SharedPixelBuffer<Rgb8Pixel>,
+    /// The hue and brightness of `blur` — everything
+    /// [`crate::ui::backdrop::solve`] needs to colour the hero band.
+    pub(crate) sample: BackdropSample,
 }
 
 /// `None` records a previously-attempted decode that failed — cached so a
@@ -109,42 +113,50 @@ impl DetailArtwork {
     }
 }
 
-/// A decoded `(cover, blur)` pair as raw RGB8 buffers, both `Send` so
-/// they cross the `upgrade_in_event_loop` boundary. The detail views
-/// carry this from the worker to the UI thread, which wraps each half
-/// in a `slint::Image` via `Image::from_rgb8` (`Image` itself is
-/// `!Send`, hence the raw-buffer form). `None` on either half means
-/// missing / failed-decode artwork.
-pub(crate) type DetailPair = (
-    Option<SharedPixelBuffer<Rgb8Pixel>>,
-    Option<SharedPixelBuffer<Rgb8Pixel>>,
-);
+/// A decoded cover + blur pair as raw RGB8 buffers, both `Send` so they
+/// cross the `upgrade_in_event_loop` boundary. The detail views carry this
+/// from the worker to the UI thread, which wraps each half in a
+/// `slint::Image` via `Image::from_rgb8` (`Image` itself is `!Send`, hence
+/// the raw-buffer form). `None` on either buffer means missing /
+/// failed-decode artwork, and `sample` is then empty too — the publisher
+/// falls back to the theme accent and the gradient floor's own luma.
+#[derive(Default)]
+pub(crate) struct DetailPair {
+    pub(crate) cover: Option<SharedPixelBuffer<Rgb8Pixel>>,
+    pub(crate) blur: Option<SharedPixelBuffer<Rgb8Pixel>>,
+    pub(crate) sample: BackdropSample,
+}
 
 /// Decode an entity's artwork into a [`DetailPair`] for a detail-view
 /// header — the sharp header tile **and** the heavily-blurred hero
 /// backdrop, both derived from one source decode. Off-loaded to the
-/// `spawn_blocking` pool (image decode + box blur are CPU-bound).
-/// Returns `(None, None)` for a missing / empty / failed-decode path;
-/// the caller clears `has-blur` so the gradient floor shows through.
-/// Shared by every detail view (Album / Artist / Playlist).
+/// `spawn_blocking` pool (image decode, box blur and the backdrop
+/// measurement are all CPU-bound). Returns an empty pair for a missing /
+/// empty / failed-decode path; the caller clears `has-blur` so the gradient
+/// floor shows through. Shared by every detail view (Album / Artist /
+/// Playlist).
 pub(crate) async fn decode_detail_pair(
     state: &AppState,
     artwork: Arc<DetailArtwork>,
     path: Option<String>,
 ) -> DetailPair {
     let Some(path) = path.filter(|p| !p.is_empty()) else {
-        return (None, None);
+        return DetailPair::default();
     };
     match state
         .runtime
         .spawn_blocking(move || artwork.get_or_decode(Path::new(&path)))
         .await
     {
-        Ok(Some(pair)) => (Some(pair.cover), Some(pair.blur)),
-        Ok(None) => (None, None),
+        Ok(Some(pair)) => DetailPair {
+            cover: Some(pair.cover),
+            blur: Some(pair.blur),
+            sample: pair.sample,
+        },
+        Ok(None) => DetailPair::default(),
         Err(e) => {
             log::warn!("detail artwork decode: {e}");
-            (None, None)
+            DetailPair::default()
         }
     }
 }
@@ -157,5 +169,14 @@ fn decode_artwork(path: &Path) -> CachedArtwork {
     let small = decoded.thumbnail_exact(BLUR_TARGET, BLUR_HEIGHT).to_rgb8();
     let blur = buffer_from_rgb(&fast_blur(&small, BLUR_SIGMA));
 
-    Some(ArtworkPair { cover, blur })
+    // Measured here rather than at the publisher: this runs on the blocking
+    // pool and the result is cached, so the quantize is paid once per cover
+    // instead of once per open.
+    let sample = BackdropSample::measure(&blur);
+
+    Some(ArtworkPair {
+        cover,
+        blur,
+        sample,
+    })
 }
