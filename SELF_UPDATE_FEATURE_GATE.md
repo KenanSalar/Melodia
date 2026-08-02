@@ -115,7 +115,13 @@ optional.
 | `system_install`, `linux_pkg`, `probe`, `target`, `version` | **ungated** | pure detection/metadata; called by `main.rs` + `updater_settings::install` |
 | `event`, `state` | **gated** | update-only data types; gating keeps them out of the feature-off binary and avoids a broken doc link (event→install) |
 | `check`, `github`, `manifest`, `minisign`, `install`, `asset_cache` | **gated** | network / crypto / swap (these pull `reqwest` stream + `minisign-verify`) |
-| `test_support` | **keep `#[cfg(test)]` only — NOT feature-gated** | **[fix]** used by *ungated* detection tests (`linux_pkg_tests`, `system_install_tests`, `target_tests` import `test_support::APPIMAGE_ENV_LOCK`); gating it would break `--no-default-features` tests |
+
+*(A `test_support` submodule used to sit in this table. It held the env-var mutex the
+ungated detection tests take, and the row said to keep it `#[cfg(test)]`-only rather than
+feature-gate it. It has since moved to `src/test_support.rs` at the crate root — the lock
+had to cover `settings_tests` too — so the question no longer arises here: a crate-root
+`#[cfg(test)]` module is outside the `self-update` gate by construction. Nothing to do,
+but don't re-add the submodule when working through this plan.)*
 
 `mod.rs` free functions **[fix]** (the first draft conflated these two):
 

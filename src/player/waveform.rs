@@ -233,10 +233,10 @@ const MAX_FIXED_DECIMALS: u32 = 4;
 /// Every coordinate the trace emits is normalized to a unit range and quantized
 /// to a few places, so the whole format is a sign, one digit and a zero-padded
 /// remainder. Going through `{value:.decimals$}` instead asks `core::fmt` for the
-/// shortest round-tripping decimal — a much harder question, answered by Grisu
-/// with a bignum fallback, and at the [`MAX_COLUMNS`] cap this runs twice per
-/// column per frame. Scaling to an integer and printing the two halves is the
-/// same bytes for a fraction of the work.
+/// exactly-rounded decimal at that precision — a much harder question, answered
+/// by Grisu's `format_exact` with a bignum fallback, and at the [`MAX_COLUMNS`]
+/// cap this runs twice per column per frame. Scaling to an integer and printing
+/// the two halves is the same bytes for a fraction of the work.
 ///
 /// Two deliberate differences from `core::fmt`, neither reaching the figure:
 /// negative zero prints as `0`, and an exact tie rounds away from zero rather

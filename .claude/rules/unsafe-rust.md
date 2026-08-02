@@ -83,37 +83,58 @@ is safe, and so is every `*mut c_void` that is only *stored* — `media_controls
 ## Test env-var mutation
 
 `std::env::set_var` / `remove_var` are unsafe in Rust 2024 because they mutate shared
-process state, and `cargo test` runs in parallel by default. One shape, every time:
+process state, and `cargo test` runs in parallel by default. There is one shape:
 
-**lock → snapshot → mutate → `catch_unwind(body)` → restore → `resume_unwind`.**
+**lock → snapshot → clear → `catch_unwind(body)` → restore → `resume_unwind`**
 
-`services/tests/settings_tests.rs::with_env_vars` and
-`updater/tests/system_install_tests.rs` are the two worked examples. Three parts are
-each load-bearing and each has been missing at some point:
+and it is written once, in **`test_support::with_env_vars`** (`src/test_support.rs`).
+Call it. Don't re-roll it — each of those six steps has been missing from a hand-rolled
+copy at some point, and the restore is the one that goes first.
 
-- **One lock per *file*, not per variable.** The environment is process-global, so two
-  tests touching different names still race each other's reads —
-  `SettingsData::default()` reads `XDG_CURRENT_DESKTOP` through `is_kde_desktop()` and
-  is exactly such a reader. Consolidating assertions into one test doesn't help; it only
-  stops that test racing itself.
-- **`catch_unwind` around the body.** Without it a failing assertion skips the restore
-  and leaks its variable into every test that runs after.
-- **`resume_unwind` on the way out**, or the failure is swallowed and the test passes.
+- **One lock per test *binary*, and the mutex behind the helper is private.** The
+  environment is process-global, so two tests holding *different* locks are still racing
+  however careful each is on its own — glibc's `setenv` can realloc `environ` out from
+  under another thread's `getenv`. The variables aren't independent either: the readers
+  overlap through code neither caller owns, `SettingsData::default()` reaching
+  `XDG_CURRENT_DESKTOP` via `is_kde_desktop()` and `install_target()` reaching
+  `$APPIMAGE` via `target::current_target_key()`. Three separate mutexes sat here
+  (`ENV_LOCK`, `APPIMAGE_ENV_LOCK`, `PATH_ENV_LOCK`), each correct in isolation and
+  collectively guaranteeing nothing. Consolidating assertions into one *test* doesn't
+  help either; it only stops that test racing itself. Keeping the lock private is what
+  stops the next copy: there is nothing to take but the helper.
+- **It is not reentrant, and that is the cost of one lock.** A helper called from inside
+  another helper's body deadlocks the test binary with no message and no failing
+  assertion. A per-variable wrapper therefore **delegates** rather than locking and then
+  calling — `with_locale_env`, `with_appimage_env` and `linux_pkg_tests::with_path_env`
+  are the three worked examples, each a few lines over `with_env_vars`. A wrapper that
+  needs its own lock is a wrapper in the wrong place.
+- **The body may mutate freely.** `with_env_vars` clears `vars` before `body` and
+  restores after, so a wrapper that wants a *value* rather than an absence just sets it
+  inside the closure — it runs with the lock held, which is what makes its own `set_var`
+  sound.
 
 A file-level `#![allow(unsafe_code, reason = "…")]` is fine here — the whole file is
 test scaffolding. **Delete it when the last `unsafe` goes**; a stale allow silently
 pre-authorises the next one, and one sat in `library/settings/tests/folders_tests.rs`
-over a file with no `unsafe` in it at all.
+over a file with no `unsafe` in it at all. Routing a file through the shared helper is
+exactly the edit that strands one, and it has already retired two
+(`target_tests.rs`, `system_install_tests.rs`).
+
+`tests/headless.rs` is the one env mutation that takes no lock, and that is correct
+rather than an oversight: an integration test is its own binary with its own
+environment, and that file holds a single test which sets `XDG_DATA_HOME` before
+anything spawns. Its allow says so, which is what keeps it from reading as the fourth
+mutex nobody consolidated.
 
 ## What to reach for instead
 
 | temptation | reach for |
 |---|---|
 | `get_unchecked` on a hot slice | iterator `zip` — already the idiom in `player/equalizer.rs`, and the comment there says why. Or put the length in the *type* (`[T; N]` over `Box<[T]>`) so the compiler proves the mask itself |
-| `transmute` between plain-data slices | `bytemuck::cast_slice`. It's a new dependency, so it has to earn its place against what it saves |
+| `transmute` between plain-data slices | `bytemuck::cast_slice`. Already in the lock file transitively, so adopting it costs a direct-dependency line rather than a build — but it still has to earn one against what it saves |
 | uninit buffer + `set_len` | `Vec::with_capacity` + `extend`, or build with the fill you need. Every buffer in the DSP and visualizer paths is allocated once per source and reused, which is the win that actually mattered |
 | `std::arch` SIMD | measure first, and read the shape of the work: ten cascaded biquads are *serially dependent*, so there is nothing to vectorise across bands, and two channels caps the other axis at 2× |
-| `unsafe impl Send` / `Sync` | the `const _: fn() = \|\| { fn check<T: Send + Sync>() {} check::<FooUi>(); };` assertion — eight of them in the tree already |
+| `unsafe impl Send` / `Sync` | the `const _: fn() = \|\| { fn check<T: Send + Sync>() {} check::<FooUi>(); };` assertion — nine of them in the tree already |
 | a raw pointer to dodge a lifetime | an owned `Arc` clone. `PlaybackContext` exists for precisely this and says so |
 
 ## Before reaching for unsafe on a hot path
@@ -126,9 +147,10 @@ bounds-check problem. Read these before proposing anything:
   bypass arms — a flat EQ at unity gain, which is the default — touch no buffer at all.
 - **The visualizer's dominant per-frame cost was number *formatting*, not arithmetic.**
   At the column cap the trace writes two vertices per column into an SVG path string,
-  and asking `core::fmt` for a shortest-round-tripping decimal outweighed both FFTs
-  beside it. The fix was `waveform::push_fixed` — integer scale, integer print — in safe
-  code.
+  and asking `core::fmt` for an exactly-rounded decimal at a fixed precision is a far
+  harder question than the coordinates need — Grisu's `format_exact` with a bignum
+  fallback, to print a sign, one digit and a zero-padded remainder. The fix was
+  `waveform::push_fixed` — integer scale, integer print — in safe code.
 - **The backdrop solve's cost was a transcendental with a 256-value domain.** `linearized`
   takes a `u8`; three calls per pixel became three loads from a `LazyLock<[f64; 256]>`
   in `ui/backdrop.rs`.

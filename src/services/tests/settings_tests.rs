@@ -1,9 +1,10 @@
 #![allow(
     unsafe_code,
-    reason = "env::set_var/remove_var are unsafe in Rust 2024; every mutation goes through `with_env_vars`, which holds ENV_LOCK and restores under catch_unwind."
+    reason = "env::set_var/remove_var are unsafe in Rust 2024; every mutation goes through the shared `with_env_vars`, which holds the crate-wide env lock and restores under catch_unwind."
 )]
 
 use crate::error::AppError;
+use crate::test_support::with_env_vars;
 
 use super::*;
 
@@ -275,46 +276,6 @@ fn test_parse_language_code_invalid() {
     assert_eq!(parse_language_code(""), None);
     assert_eq!(parse_language_code("POSIX"), None);
     assert_eq!(parse_language_code("123"), None);
-}
-
-/// Mutex that serializes every test in this file that mutates the environment,
-/// so they are safe even when `cargo test` runs tests in parallel (the default).
-///
-/// One lock for *all* env mutation here, not one per variable: the environment is
-/// process-global, so two tests touching different names still race each other's
-/// reads. `SettingsData::default()` reads `XDG_CURRENT_DESKTOP` through
-/// `is_kde_desktop()`, which is exactly such a reader.
-static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
-
-/// Acquires [`ENV_LOCK`], saves `vars`, clears them, runs `body`, then restores
-/// the originals — including when `body` panics, so a failing assertion can't
-/// leak its variable into the rest of the process.
-///
-/// SAFETY: `std::env::set_var` / `remove_var` are unsafe in Rust 2024 because
-/// they mutate shared process state. [`ENV_LOCK`] ensures only one test in this
-/// binary touches the environment at a time.
-unsafe fn with_env_vars<F: FnOnce() -> R, R>(vars: &[&str], body: F) -> R {
-    let _guard = ENV_LOCK
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner);
-    let saved: Vec<(&str, Option<String>)> =
-        vars.iter().map(|&v| (v, std::env::var(v).ok())).collect();
-    for &v in vars {
-        unsafe { std::env::remove_var(v) };
-    }
-    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(body));
-    for (var, val) in saved {
-        unsafe {
-            match val {
-                Some(v) => std::env::set_var(var, v),
-                None => std::env::remove_var(var),
-            }
-        }
-    }
-    match result {
-        Ok(value) => value,
-        Err(payload) => std::panic::resume_unwind(payload),
-    }
 }
 
 /// The four variables `detect_os_locale` consults, in the order it consults them.

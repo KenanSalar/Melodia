@@ -96,8 +96,8 @@ doctest = false
 
 # cargo-deb metadata — drives the `.deb` build in release CI. Ships the
 # binary, .desktop, icon, license, and the polkit helper + policy. The
-# helper + policy are what `src/services/updater/install.rs` looks for
-# at `/usr/libexec/melodia-update-helper` to surface a branded auth
+# helper + policy are what `src/services/updater/install/swap.rs` looks
+# for at `/usr/libexec/melodia-update-helper` to surface a branded auth
 # dialog on updates ("Install Melodia update" instead of raw
 # `dnf install ...`).
 #
@@ -312,7 +312,7 @@ libc = "0.2.189"
 [target.'cfg(target_os = "windows")'.dependencies]
 # Used only by the auto-updater's atomic-swap fallback path
 # (`MoveFileExW(MOVEFILE_DELAY_UNTIL_REBOOT)` in
-# `src/services/updater/install.rs`). The common case is the early
+# `src/services/updater/install/swap.rs`). The common case is the early
 # `remove_file` of `Melodia.exe.old` at the top of `main()`, which clears
 # the stale rename ~99% of the time. The reboot-delay flag is the
 # fallback for the rare case where `.old` is still loaded — e.g. the

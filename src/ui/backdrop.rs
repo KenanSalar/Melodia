@@ -158,7 +158,10 @@ static LINEARIZED: LazyLock<[f64; 256]> = LazyLock::new(|| {
 
 /// Perceptual lightness (L*) of one sRGB pixel.
 fn pixel_lstar(r: u8, g: u8, b: u8) -> f64 {
-    let linear = |channel: u8| LINEARIZED[usize::from(channel)];
+    // Resolved once rather than per channel: a `LazyLock` deref is a load and a
+    // branch, and this runs three times a pixel across the whole buffer.
+    let table = &*LINEARIZED;
+    let linear = |channel: u8| table[usize::from(channel)];
     let y = 0.0722f64.mul_add(
         linear(b),
         0.2126f64.mul_add(linear(r), 0.7152 * linear(g)),

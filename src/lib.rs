@@ -13,6 +13,8 @@ pub mod player;
 pub mod services;
 pub mod state;
 pub mod tasks;
+#[cfg(test)]
+mod test_support;
 pub mod themes;
 pub mod ui;
 pub mod utils;

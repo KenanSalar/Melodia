@@ -1,10 +1,5 @@
-#![allow(
-    unsafe_code,
-    reason = "env::set_var/remove_var are unsafe in Rust 2024; we hold APPIMAGE_ENV_LOCK so sibling tests in target_tests.rs can't mutate $APPIMAGE concurrently, and prev-value restoration is panic-safe via catch_unwind."
-)]
-
 use crate::services::updater::system_install::is_system_install;
-use crate::services::updater::test_support::APPIMAGE_ENV_LOCK;
+use crate::test_support::with_appimage_env;
 
 // `is_system_install()` queries `install_target().parent()`. Since
 // `install_target()` resolves to either `$APPIMAGE` (when set) or
@@ -28,33 +23,16 @@ use crate::services::updater::test_support::APPIMAGE_ENV_LOCK;
 #[cfg(not(target_os = "windows"))]
 #[test]
 fn writable_install_dir_is_not_system_managed_on_linux() {
-    // Acquire the shared env lock + clear `$APPIMAGE` so the probe
-    // lands on the test binary's `current_exe()` parent (always
-    // writable under `target/debug/deps/`) rather than whatever a
-    // sibling `target_tests.rs` case happened to leave behind.
-    let _guard = APPIMAGE_ENV_LOCK
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner);
-    let prev = std::env::var("APPIMAGE").ok();
-    unsafe {
-        std::env::remove_var("APPIMAGE");
-    }
-    let result = std::panic::catch_unwind(|| {
+    // Clearing `$APPIMAGE` puts the probe on the test binary's
+    // `current_exe()` parent (always writable under `target/debug/deps/`)
+    // rather than whatever a sibling `target_tests.rs` case left behind.
+    with_appimage_env(None, || {
         assert!(
             !is_system_install(),
             "cargo test's target/debug/deps/ must be writable — \
              is_system_install() returning true means the probe is broken"
         );
     });
-    unsafe {
-        match prev {
-            Some(p) => std::env::set_var("APPIMAGE", p),
-            None => std::env::remove_var("APPIMAGE"),
-        }
-    }
-    if let Err(payload) = result {
-        std::panic::resume_unwind(payload);
-    }
 }
 
 /// Mirrors the Linux assertion but inverts the expectation: the test
@@ -68,17 +46,10 @@ fn writable_install_dir_is_not_system_managed_on_linux() {
 #[cfg(target_os = "windows")]
 #[test]
 fn portable_extract_on_windows_is_system_managed() {
-    let _guard = APPIMAGE_ENV_LOCK
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner);
     // `$APPIMAGE` is Linux-only but the probe consults it
     // unconditionally; clear it for hygiene so a sibling test that
     // forgot to restore it can't poison this assertion.
-    let prev = std::env::var("APPIMAGE").ok();
-    unsafe {
-        std::env::remove_var("APPIMAGE");
-    }
-    let result = std::panic::catch_unwind(|| {
+    with_appimage_env(None, || {
         assert!(
             is_system_install(),
             "Windows test binary under target\\debug\\deps\\ isn't under \
@@ -86,13 +57,4 @@ fn portable_extract_on_windows_is_system_managed() {
              updater UI hides instead of msiexec'ing over a portable extract"
         );
     });
-    unsafe {
-        match prev {
-            Some(p) => std::env::set_var("APPIMAGE", p),
-            None => std::env::remove_var("APPIMAGE"),
-        }
-    }
-    if let Err(payload) = result {
-        std::panic::resume_unwind(payload);
-    }
 }
