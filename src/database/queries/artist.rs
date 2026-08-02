@@ -43,9 +43,9 @@ pub async fn update_artist_image_path(
 
 /// Artists that have at least one favorited track, with favorite count.
 ///
-/// Unordered — `ui::favorites::sections::sort_artists` owns the display order
-/// and re-sorts the whole result on every fetch, so an `ORDER BY` here is work
-/// nothing reads.
+/// Unordered — a caller owes its own ordering. The one there is,
+/// `ui::favorites::sections::refresh_grids`, re-sorts the whole result through
+/// `sort_artists` on every fetch, so an `ORDER BY` here would only be overwritten.
 pub async fn get_favorite_artists(db: &DbPool) -> Result<Vec<artist::FavoriteArtist>, AppError> {
     let artists = sqlx::query_as::<_, artist::FavoriteArtist>(
         "SELECT ar.id, ar.name, ar.image_path, \

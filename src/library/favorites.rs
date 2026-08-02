@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use crate::database::queries;
-use crate::entities::{album, artist, track};
+use crate::entities::{artist, track};
 use crate::error::AppError;
 use crate::player::state::{PlayerAction, lock_state, sync_current_track_if_in, with_state_emit};
 use crate::services::scrobble::LoveTarget;
@@ -148,12 +148,6 @@ pub async fn get_favorite_tracks(
 
 pub async fn get_favorite_stats(state: &AppState) -> Result<track::FavoriteStats, AppError> {
     queries::track::get_favorite_stats(&state.db).await
-}
-
-pub async fn get_favorite_albums(
-    state: &AppState,
-) -> Result<Vec<album::FavoriteAlbum>, AppError> {
-    queries::album::get_favorite_albums(&state.db).await
 }
 
 pub async fn get_favorite_artists(

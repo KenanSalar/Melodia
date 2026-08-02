@@ -131,7 +131,8 @@ pub async fn refresh_grids(state: &AppState, fav_ui: &Arc<FavoritesUi>, weak: &W
     if let Some(rows) = fav_artists {
         *fav_ui.state().fav_artists.lock() = rows;
         // Before the prewarm below, which reads this cache for its paths — the
-        // query returns one fixed order and the tab may be showing another.
+        // query returns no order at all, so this is what puts the rows in the
+        // one the tab is about to paint.
         sort_cached_artists(fav_ui);
     }
 
