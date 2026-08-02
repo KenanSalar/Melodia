@@ -337,13 +337,17 @@ export component RecentlyPlayedView inherits Rectangle {
                             show-year <=> RecentlyPlayed.show-year;
                             number-mode: "index";
 
-                            sort-field: RecentlyPlayed.sort-field;
-                            sort-dir: RecentlyPlayed.sort-dir;
+                            // Recency is the only order this page has — a
+                            // column sort would fight the point of it. The
+                            // headers still resize and still toggle.
+                            // Recency is the only order this page has — a
+                            // column sort would fight the point of it. The
+                            // headers still resize and still toggle.
+                            sortable: false;
                             playing-track-id: Player.vm.track.id;
                             view-context: "recently_played";
                             view-selected-ids: RecentlyPlayed.selected-ids;
 
-                            request-sort(f) => { RecentlyPlayed.request-sort(f); }
                             play-row(id, idx) => { RecentlyPlayed.play-row(id, idx); }
                             play-next(ids) => { RecentlyPlayed.play-next(ids); }
                             add-to-queue(ids) => { RecentlyPlayed.add-to-queue(ids); }

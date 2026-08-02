@@ -170,8 +170,9 @@ export global Favorites {
 // have — a hero (mosaic + count + duration + Shuffle / Columns), a
 // non-collapsible "Most Played" strip, and a filterable `TrackList` of the 200
 // most-recently-played tracks — so it keeps the `CompositeScrollbars` wheel
-// routing that Favorites has since shed. Membership is fixed to that set;
-// filter + column sort re-walk the cache in memory (no re-query).
+// routing that Favorites has since shed. Membership is fixed to that set and
+// so is its order: the list is mounted `sortable: false`, and the filter
+// re-walks the cache in memory (no re-query, no re-order).
 export global RecentlyPlayed {
     // Hero — 2×2 cover mosaic of the up-to-4 most-recently-played distinct
     // covers. Empty list renders the empty-state tile.
@@ -190,15 +191,13 @@ export global RecentlyPlayed {
     // unified `EntityStripRow` shape.
     in-out property <[EntityStripRow]> most-played-rows;
 
-    // Recency list — `TrackList` data + filter + sort. `tracks` is the
-    // post-filter/sort view Rust writes. `sort-field` defaults to the synthetic
-    // "recency" (keep fetch order); a column header click swaps in a real field.
+    // Recency list — `TrackList` data + filter. `tracks` is the post-filter
+    // view Rust writes, always in fetch (recency) order. There is no sort
+    // state: the list is mounted non-sortable.
     in-out property <[TrackListRow]> tracks;
     in-out property <int>            filtered-count;
     in-out property <string>         filter;
     in-out property <int>            blur-search-tick: 0;
-    in-out property <string>         sort-field: "recency";  // recency | track_number | title | artist | album | genre | year | length
-    in-out property <string>         sort-dir: "desc";
 
     // Header stats over the full recency set.
     in-out property <int>    track-count;
@@ -245,7 +244,6 @@ export global RecentlyPlayed {
     callback set-row-rating([int] /*track_ids*/, int /*rating*/);
     callback select-row(int /*idx*/, int /*id*/, bool /*shift*/, bool /*ctrl*/);
     callback clear-selection();
-    callback request-sort(string /*field*/);
     callback toggle-column(string /*column_id*/);
     callback filter-changed(string);
     // Cross-tab navigation from a row's right-click "Go to …" entry.

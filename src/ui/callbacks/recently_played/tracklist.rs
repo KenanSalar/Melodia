@@ -1,18 +1,17 @@
 //! `RecentlyPlayed.*` list callbacks: row actions (play, queue, favorite
-//! toggle), the filter pass, in-memory sort, column visibility, modifier-aware
-//! selection, and the header Shuffle pill.
+//! toggle), the filter pass, column visibility, modifier-aware selection, and
+//! the header Shuffle pill.
 //!
-//! Sorting differs from Favorites: the recency set has fixed membership, so a
-//! column sort re-walks the cached rows in memory (`apply_filtered_tracks`)
-//! rather than re-querying.
+//! There is no sort callback: the list is mounted `sortable: false`, so recency
+//! is its only order and the filter re-walks the cached rows without
+//! re-ordering them.
 
 use std::sync::Arc;
 
-use slint::{ComponentHandle, Model, SharedString};
+use slint::{ComponentHandle, Model};
 
 use super::VIEW_ID;
 use crate::library;
-use crate::services::settings::{SortDir, ViewSort};
 use crate::state::AppState;
 use crate::ui::callbacks::{collect_track_ids, play_row_start, spawn_play_then_shuffle};
 use crate::ui::callbacks::macros::{spawn_logged, wire_row_flag};
@@ -20,7 +19,7 @@ use crate::ui::recently_played::{self as recently_played_ui_mod, RecentlyPlayedU
 use crate::ui::track_list_view::TrackListColumnState;
 use crate::{AppWindow, RecentlyPlayed};
 
-/// Wire the list row / filter / sort / selection / header callbacks.
+/// Wire the list row / filter / column / selection / header callbacks.
 pub(super) fn wire(ui: &AppWindow, state: &AppState, rp_ui: &Arc<RecentlyPlayedUi>) {
     let g = ui.global::<RecentlyPlayed>();
     let weak = ui.as_weak();
@@ -107,50 +106,6 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, rp_ui: &Arc<RecentlyPlayedU
             recently_played_ui_mod::set_filter(&ru, text.to_string());
             recently_played_ui_mod::apply_filtered_tracks(&ru, &weak);
             recently_played_ui_mod::apply_filtered_strips(&ru, &weak);
-        });
-    }
-
-    // --- Sort (in-memory over the fixed recency set) --------------
-    {
-        let s = state.clone();
-        let ru = rp_ui.clone();
-        let weak = weak.clone();
-        g.on_request_sort(move |field| {
-            let Some(ui) = weak.upgrade() else { return };
-            let g = ui.global::<RecentlyPlayed>();
-            let cur_field = g.get_sort_field();
-            let cur_dir = g.get_sort_dir();
-            let (new_field, new_dir_s) = if cur_field.as_str() == field.as_str() {
-                let nd = if cur_dir.as_str() == "asc" { "desc" } else { "asc" };
-                (field.to_string(), nd.to_string())
-            } else {
-                (field.to_string(), "asc".to_string())
-            };
-            g.set_sort_field(SharedString::from(new_field.as_str()));
-            g.set_sort_dir(SharedString::from(new_dir_s.as_str()));
-            let new_dir = if new_dir_s == "desc" {
-                SortDir::Desc
-            } else {
-                SortDir::Asc
-            };
-            recently_played_ui_mod::set_sort(&ru, new_field.clone(), new_dir.clone());
-
-            // Persist so the next launch lands on the same order.
-            let s_disk = s.clone();
-            let sort = ViewSort {
-                field: new_field,
-                dir: new_dir,
-            };
-            s.runtime.spawn_blocking(move || {
-                if let Err(e) =
-                    library::settings::set_view_sort(&s_disk, VIEW_ID.to_owned(), sort)
-                {
-                    log::warn!("recently_played::set_view_sort: {e}");
-                }
-            });
-
-            // In-memory re-sort — no re-fetch (membership is fixed).
-            recently_played_ui_mod::apply_filtered_tracks(&ru, &weak);
         });
     }
 

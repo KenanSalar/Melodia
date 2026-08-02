@@ -9,8 +9,10 @@
 //!   `play_count` (non-collapsible; a small fixed strip).
 //! * A filterable `TrackList` bound to the post-filter `RecentlyPlayed.tracks`
 //!   model — the 200 most-recently-played tracks (`last_played DESC`). The set
-//!   is fetched once per refresh; keystrokes and column re-sorts re-walk the
-//!   cached `tracks_all` **in memory** (membership is fixed to the 200).
+//!   is fetched once per refresh; keystrokes re-walk the cached `tracks_all`
+//!   **in memory** (membership is fixed to the 200). The list is mounted
+//!   `sortable: false` — recency is the point of the page, so its column
+//!   headers resize and toggle but never re-order.
 //!
 //! Cache discipline mirrors `src/ui/favorites`: the shared row-tier
 //! `CoverThumbs` plus one dedicated Most Played tier, released on section
@@ -46,16 +48,9 @@ use state::{
 pub use sections::{apply_filtered_strips, refresh_strips};
 pub use selection::{clear_selection, handle_select_row};
 pub use tracks::{
-    apply_filtered_tracks, apply_row_favorite, apply_row_rating, current_filter, current_sort,
-    refresh_tracks, set_filter, set_sort,
+    apply_filtered_tracks, apply_row_favorite, apply_row_rating, current_filter, refresh_tracks,
+    set_filter,
 };
-
-/// Synthetic sort field meaning "keep the recency fetch order" — it is not a
-/// real `TrackListRow` column, so `apply_filtered_tracks` skips the in-memory
-/// sort while it is active. Any other field routes through
-/// [`crate::ui::track_sort::sort_track_rows_by`]. Mirrored as the default
-/// `RecentlyPlayed.sort-field` literal on the Slint side.
-pub const RECENCY_SORT: &str = "recency";
 
 /// Rust-side state for the Recently-Played view. Shared between the UI
 /// callbacks (`wire_recently_played`) and the async fetchers behind an
@@ -173,31 +168,18 @@ impl RecentlyPlayedUi {
             .collect()
     }
 
-    /// Track ids of the post-filter list in **display order** (filter + active
-    /// column sort applied), so `shuffle-all` / `play-row` enqueue what the
-    /// user sees. Recency sort keeps the cached fetch order.
+    /// Track ids of the post-filter list in **display order** — recency, less
+    /// whatever the search bar has narrowed away — so `shuffle-all` /
+    /// `play-row` enqueue what the user sees.
     pub fn filtered_track_ids(&self) -> Vec<i64> {
         let needle = self.inner.filter.lock().to_lowercase();
-        let sort = self.inner.sort.lock().clone();
-        let all = self.inner.tracks_all.lock();
-        let mut rows: Vec<&crate::entities::track::TrackListRow> = all
+        self.inner
+            .tracks_all
+            .lock()
             .iter()
             .filter(|r| crate::ui::detail_filter::track_matches(r, &needle))
-            .collect();
-        if sort.field != RECENCY_SORT {
-            let dir = match sort.dir {
-                crate::services::settings::SortDir::Asc => "asc",
-                crate::services::settings::SortDir::Desc => "desc",
-            };
-            crate::ui::track_sort::sort_track_rows_by(
-                &mut rows,
-                &sort.field,
-                dir,
-                |r| *r,
-                |r| r.title.to_lowercase(),
-            );
-        }
-        rows.iter().map(|r| r.id).collect()
+            .map(|r| r.id)
+            .collect()
     }
 
     /// Surgically flip `is_favorite` on a cached row so a single-row toggle
@@ -259,3 +241,7 @@ const _: fn() = || {
     fn check<T: Send + Sync>() {}
     check::<RecentlyPlayedUi>();
 };
+
+#[cfg(test)]
+#[path = "tests/recently_played_tests.rs"]
+mod tests;

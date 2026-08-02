@@ -68,6 +68,11 @@ export component TrackList inherits Rectangle {
     in property <string> sort-field;
     in property <string> sort-dir;
 
+    // `false` makes the column headers plain labels — no click, no
+    // `request-sort`, no hover affordance. Resizing and the column-toggle
+    // popup are unaffected. Recently Played is the one host that sets it.
+    in property <bool> sortable: true;
+
     // Now-playing highlight.
     in property <int> playing-track-id;
 
@@ -175,6 +180,7 @@ export component TrackList inherits Rectangle {
                 total-w: root.total-w;
                 sort-field: root.sort-field;
                 sort-dir: root.sort-dir;
+                sortable: root.sortable;
                 sort-clicked(f) => { root.request-sort(f); }
             }
 

@@ -62,16 +62,20 @@ component ResizeHandle inherits Rectangle {
     }
 }
 
-// Sortable column-header cell. `field` is the value passed up via the
-// `clicked` callback ("title", "artist", "album", "genre", "year",
-// "length", "track_number"). The active column shows an `arrow_drop_*`
-// chevron driven by `active-field` + `active-dir` inputs.
+// Column-header cell. `field` is the value passed up via the `clicked`
+// callback ("title", "artist", "album", "genre", "year", "length",
+// "track_number"). The active column shows an `arrow_drop_*` chevron driven
+// by `active-field` + `active-dir` inputs.
+//
+// `sortable: false` turns the cell into a plain label — see the note on
+// `TrackListHeader.sortable`.
 component HeaderCell inherits Rectangle {
     in property <string> label;
     in property <string> field;
     in property <bool> right-aligned;
     in property <string> active-field;
     in property <string> active-dir;
+    in property <bool> sortable: true;
 
     callback clicked();
 
@@ -116,7 +120,11 @@ component HeaderCell inherits Rectangle {
         }
     }
 
+    // `enabled: false` is the whole gate: the item forces `has-hover` off,
+    // skips the cursor write and forwards the event, so the hover fill above
+    // and the pointer cursor go with it and nothing intercepts the grab.
     touch := TouchArea {
+        enabled: root.sortable;
         mouse-cursor: pointer;
         clicked => { root.clicked(); }
     }
@@ -167,6 +175,13 @@ export component TrackListHeader inherits Rectangle {
     in property <string> sort-field;
     in property <string> sort-dir;
 
+    // `false` makes every cell a plain label — no click, no hover fill, no
+    // pointer cursor. For lists whose order isn't the user's to pick:
+    // Recently Played is read in recency order, so a column sort would fight
+    // the point of the page. Resizing is unaffected — the handles are
+    // siblings of the cells, not children.
+    in property <bool> sortable: true;
+
     callback sort-clicked(string /*field*/);
 
     // `height: 32px` would be a binding the layout solver may treat as
@@ -198,6 +213,7 @@ export component TrackListHeader inherits Rectangle {
             field: "track_number";
             active-field: root.sort-field;
             active-dir: root.sort-dir;
+            sortable: root.sortable;
             clicked => { root.sort-clicked(self.field); }
         }
         if root.show-number: ResizeHandle {
@@ -213,6 +229,7 @@ export component TrackListHeader inherits Rectangle {
             field: "title";
             active-field: root.sort-field;
             active-dir: root.sort-dir;
+            sortable: root.sortable;
             clicked => { root.sort-clicked(self.field); }
         }
         ResizeHandle {
@@ -228,6 +245,7 @@ export component TrackListHeader inherits Rectangle {
             field: "artist";
             active-field: root.sort-field;
             active-dir: root.sort-dir;
+            sortable: root.sortable;
             clicked => { root.sort-clicked(self.field); }
         }
         if root.show-artist: ResizeHandle {
@@ -243,6 +261,7 @@ export component TrackListHeader inherits Rectangle {
             field: "album";
             active-field: root.sort-field;
             active-dir: root.sort-dir;
+            sortable: root.sortable;
             clicked => { root.sort-clicked(self.field); }
         }
         if root.show-album: ResizeHandle {
@@ -258,6 +277,7 @@ export component TrackListHeader inherits Rectangle {
             field: "genre";
             active-field: root.sort-field;
             active-dir: root.sort-dir;
+            sortable: root.sortable;
             clicked => { root.sort-clicked(self.field); }
         }
         if root.show-genre: ResizeHandle {
@@ -273,6 +293,7 @@ export component TrackListHeader inherits Rectangle {
             field: "year";
             active-field: root.sort-field;
             active-dir: root.sort-dir;
+            sortable: root.sortable;
             clicked => { root.sort-clicked(self.field); }
         }
         if root.show-year: ResizeHandle {
@@ -288,6 +309,7 @@ export component TrackListHeader inherits Rectangle {
             field: "length";
             active-field: root.sort-field;
             active-dir: root.sort-dir;
+            sortable: root.sortable;
             clicked => { root.sort-clicked(self.field); }
         }
         // No handle after Length — it's the last column. (Length is still

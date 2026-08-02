@@ -1,40 +1,26 @@
-//! Recently-Played track list: fetch (recency order), in-memory filter +
-//! column re-sort, header stats, and model apply.
+//! Recently-Played track list: fetch (recency order), in-memory filter, header
+//! stats, and model apply.
 //!
 //! Unlike Favorites (which re-queries with a DB `ORDER BY` on every sort), the
-//! recency set is fetched once and its membership is fixed. Sorting and
-//! filtering re-walk the cached `tracks_all` entirely in memory — the default
-//! [`super::RECENCY_SORT`] keeps the fetch order; a real column field routes
-//! through the shared `sort_track_rows_by`.
+//! recency set is fetched once and both its membership and its order are fixed
+//! — the list is mounted non-sortable. Filtering re-walks the cached
+//! `tracks_all` entirely in memory and preserves that order.
 
 use std::path::PathBuf;
 use std::sync::Arc;
 
 use slint::{ComponentHandle, Model, VecModel, Weak};
 
-use super::{RECENCY_SORT, RecentlyPlayedUi};
-use crate::entities::track::TrackListRow as RsTrackListRow;
+use super::RecentlyPlayedUi;
 use crate::error::AppResult;
 use crate::library;
-use crate::services::settings::{SortDir, ViewSort};
 use crate::state::AppState;
 use crate::ui::tracks::{PreparedTrackRow, finish_track_list_row};
 use crate::{AppWindow, RecentlyPlayed, TrackListRow as UiTrackListRow};
 
-/// Read-and-return the active sort (Rust cache is the source of truth).
-pub fn current_sort(rp_ui: &RecentlyPlayedUi) -> ViewSort {
-    rp_ui.state().sort.lock().clone()
-}
-
 /// Read-and-return the active filter string.
 pub fn current_filter(rp_ui: &RecentlyPlayedUi) -> String {
     rp_ui.state().filter.lock().clone()
-}
-
-/// Update the cached sort. Callers follow with `apply_filtered_tracks`
-/// (in-memory re-sort — no re-fetch) + a `set_view_sort` persist.
-pub fn set_sort(rp_ui: &RecentlyPlayedUi, field: String, dir: SortDir) {
-    *rp_ui.state().sort.lock() = ViewSort { field, dir };
 }
 
 /// Update the cached filter string.
@@ -43,7 +29,7 @@ pub fn set_filter(rp_ui: &RecentlyPlayedUi, filter: String) {
 }
 
 /// Fetch the 200 most-recently-played tracks, cache them, push the header
-/// stats, then apply the in-memory filter/sort into the Slint model. Runs on a
+/// stats, then apply the in-memory filter into the Slint model. Runs on a
 /// tokio worker; the model write hops to the UI thread.
 pub async fn refresh_tracks(
     state: &AppState,
@@ -101,35 +87,17 @@ pub async fn refresh_tracks(
     Ok(())
 }
 
-/// Re-walk the cached `tracks_all` through the active filter + column sort and
-/// push the result into `RecentlyPlayed.tracks`. Cheap — entirely in memory.
-/// Existing selection is re-stamped so a filter/sort change doesn't visually
-/// drop the user's selection.
+/// Re-walk the cached `tracks_all` through the active filter and push the
+/// result into `RecentlyPlayed.tracks`, still in recency order. Cheap —
+/// entirely in memory. Existing selection is re-stamped so a filter change
+/// doesn't visually drop the user's selection.
 pub fn apply_filtered_tracks(rp_ui: &Arc<RecentlyPlayedUi>, weak: &Weak<AppWindow>) {
     let needle = current_filter(rp_ui).to_lowercase();
-    let sort = current_sort(rp_ui);
 
     let prepared: Vec<PreparedTrackRow> = {
         let all = rp_ui.state().tracks_all.lock();
-        let mut filtered: Vec<&RsTrackListRow> = all
-            .iter()
+        all.iter()
             .filter(|r| crate::ui::detail_filter::track_matches(r, &needle))
-            .collect();
-        if sort.field != RECENCY_SORT {
-            let dir = match sort.dir {
-                SortDir::Asc => "asc",
-                SortDir::Desc => "desc",
-            };
-            crate::ui::track_sort::sort_track_rows_by(
-                &mut filtered,
-                &sort.field,
-                dir,
-                |r| *r,
-                |r| r.title.to_lowercase(),
-            );
-        }
-        filtered
-            .into_iter()
             .map(crate::ui::tracks::prepare_track_list_row)
             .collect()
     };

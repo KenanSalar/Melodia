@@ -64,7 +64,7 @@ pub fn save_state_on_exit(
     // range. Other view-state fields (sort, browse path, nav index,
     // detail ids, collapse toggles) are written eagerly by their own
     // callbacks during the session; only the column state needs a
-    // shutdown snapshot.
+    // shutdown snapshot — plus the one retired key below.
     match services::view_state::read_view_state(&state.paths) {
         Ok(mut vs) => {
             ui::track_list_view::snapshot_tracks_view(app, &mut vs);
@@ -76,6 +76,11 @@ pub fn save_state_on_exit(
             ui::track_list_view::snapshot_favorites_view(app, &mut vs);
             ui::track_list_view::snapshot_recently_played_view(app, &mut vs);
             ui::track_list_view::snapshot_search_view(app, &mut vs);
+            // Recently Played stopped being sortable; drop the key builds
+            // before that wrote so an upgraded views.json doesn't carry
+            // state nothing reads.
+            vs.view_sort
+                .remove(ui::track_list_view::view_id::RECENTLY_PLAYED);
             if let Err(e) = services::view_state::write_view_state(&state.paths, &vs) {
                 log::warn!("save_state_on_exit: write views.json: {e}");
             }
