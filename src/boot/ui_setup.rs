@@ -68,10 +68,13 @@ pub fn install_views(
     // `Nav.selected-index` at wire time, so hydrating afterwards left every one
     // of them holding the answer for the global's declared default (3, Tracks)
     // rather than the section actually being restored. They then depended on
-    // `SectionActiveGate`'s `changed` firing to correct themselves — and that
-    // tracker is evaluated eagerly inside `AppWindow::new()`, before any Rust
-    // handler exists, so whether a given gate ever fired came down to what the
-    // miniplayer switch happened to evaluate to on that first pass.
+    // `SectionActiveGate`'s `changed` firing to correct themselves, and that is
+    // not something it can be relied on for: its `ChangeTracker` is evaluated
+    // inside `AppWindow::new()` and adopts that first reading *silently*, so it
+    // becomes the baseline rather than an edge. The restored section recovered
+    // (its gate still had a false→true to deliver); `TracksUi` did not, and sat
+    // marked active for a hidden view all session — see the `SectionActiveGate`
+    // bullet in `.claude/rules/ui-patterns.md` for the cost that carries.
     //
     // The Favorites *tab* still seeds down at `seed_tab` beside the detail
     // views: it needs the `favorites_ui` handle, which doesn't exist yet here.
@@ -187,7 +190,7 @@ pub fn install_views(
     *state.ui_handles.genres.lock() = Some(genres_ui.clone());
     *state.ui_handles.playlists.lock() = Some(playlists_ui.clone());
 
-    // 5c2a. The Favorites tab seeds here rather than in
+    // 5c2h. The Favorites tab seeds here rather than in
     // `hydrate_ui_from_settings` with its siblings, because it seeds two
     // things: the Slint property *and* `FavoritesUi`'s synchronous shadow,
     // which the off-thread fetchers read to decide which cover tier to warm.
@@ -207,8 +210,9 @@ pub fn install_views(
     // empty on a boot that lands on a section with no persisted detail
     // (Tracks / Browse / Favorites / Search / fresh install), so the
     // first sidebar nav records only the destination and `back()` returns
-    // `None`. Reads `Nav.selected-index` (just set above) and the section
-    // detail global (still `-1` — the async `seed_detail_from_settings`
+    // `None`. Reads `Nav.selected-index` (hydrated in 5a, at the top of this
+    // function) and the section detail global (still `-1` — the async
+    // `seed_detail_from_settings`
     // futures haven't run yet); the async future's own `record_current`
     // appends a `{section, Some(id)}` entry on top once it lands.
     ui::nav_history::record_current(state, app);

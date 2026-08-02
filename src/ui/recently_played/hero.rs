@@ -89,7 +89,7 @@ pub async fn refresh_blur(
 
 /// Clear the hero blur (e.g. no covers) without wiping the previous slot, so an
 /// in-flight fade completes before the gradient floor takes over.
-pub fn clear_hero_blur(rp_ui: &Arc<RecentlyPlayedUi>, weak: &Weak<AppWindow>) {
+fn clear_hero_blur(rp_ui: &Arc<RecentlyPlayedUi>, weak: &Weak<AppWindow>) {
     let rp_ui = rp_ui.clone();
     let weak = weak.clone();
     let _ = slint::invoke_from_event_loop(move || {
@@ -143,9 +143,12 @@ fn apply_hero_blur(
         if !rp_ui.section_active() {
             return;
         }
-        // Two refreshes racing at boot both compose, since neither had recorded
-        // yet; the loser has nothing to add but a redundant cross-fade of the
-        // same buffer.
+        // Refreshes overlapping the compose window all get here with the same
+        // covers, since none of them had recorded yet; the losers have nothing
+        // to add but a redundant cross-fade of the same buffer. More reachable
+        // than on Favorites: `refresh_tracks` spawns the compose detached, so a
+        // channel tick can start another one before this record lands. Bounded
+        // by the fetch + cover prewarm every tick pays first.
         {
             let mut last = rp_ui.state().last_mosaic_paths.lock();
             if *last == paths {

@@ -148,9 +148,12 @@ fn apply_hero_blur(
         if !fav_ui.section_active() {
             return;
         }
-        // Two refreshes racing at boot both compose, since neither had recorded
-        // yet; the loser has nothing to add but a redundant cross-fade of the
-        // same buffer.
+        // Refreshes overlapping the compose window all get here with the same
+        // covers, since none of them had recorded yet; the losers have nothing
+        // to add but a redundant cross-fade of the same buffer. Rare on this
+        // side — `refresh_hero` awaits its own `spawn_blocking`, and the
+        // channel subscriber awaits `refresh_hero`, so only the boot fetch can
+        // race a tick.
         {
             let mut last = fav_ui.state().last_mosaic_paths.lock();
             if *last == paths {
