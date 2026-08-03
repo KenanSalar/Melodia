@@ -86,13 +86,13 @@ pub async fn refresh_tracks(
         let _ = tokio::task::spawn_blocking(move || thumbs.prewarm(&cover_paths)).await;
     }
 
-    *fav_ui.state().tracks_all.lock() = rows;
-    // The Songs tab's artist / album chips are folded out of the cache that
-    // line just filled, and nothing else republishes after it — `kick_full_refresh`
+    // The Songs tab's artist / album chips, folded here — on the worker that
+    // holds the rows, before they go into the cache, which is the whole of why
+    // `publish_favorites` costs nothing. Then republish: `kick_full_refresh`
     // runs this task concurrently with the hero and grid fetches, so whichever
-    // of those published did so against an empty `tracks_all`. Here, not in
-    // `apply_filtered_tracks`: that also runs per keystroke, and the fold walks
-    // every favourite.
+    // of those published did so against the previous fold.
+    *fav_ui.state().songs_fold.lock() = crate::ui::hero_chips::fold_tracks(&rows);
+    *fav_ui.state().tracks_all.lock() = rows;
     super::hero::republish_chips(fav_ui, weak);
 
     apply_filtered_tracks(fav_ui, weak);

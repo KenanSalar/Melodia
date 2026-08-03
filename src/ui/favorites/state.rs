@@ -10,6 +10,7 @@ use parking_lot::Mutex;
 use crate::entities::artist::FavoriteArtist;
 use crate::entities::track::{FavoriteStats, MostPlayedFavorite, TrackListRow as RsTrackListRow};
 use crate::services::settings::{SortDir, ViewSort};
+use crate::ui::hero_chips::{HeroFold, MostPlayedTotals};
 
 /// Per-section cached snapshots — every fetch lands here so callbacks
 /// can recover the underlying Rust data without round-tripping through
@@ -46,6 +47,17 @@ pub(crate) struct FavoritesUiState {
     /// one per grid, refreshed in lockstep on `refresh_grids`.
     pub most_played: Mutex<Vec<MostPlayedFavorite>>,
     pub fav_artists: Mutex<Vec<FavoriteArtist>>,
+    /// What the hero band's chips state about the two lists above them, folded
+    /// by the fetch that produced the rows — on that worker, before they reach
+    /// the cache, never at publish time. `publish_favorites` then reads two
+    /// `Copy` words instead of walking every favourite on the UI thread, and a
+    /// publish that beats a sibling fetch is stale rather than half-built.
+    ///
+    /// Both describe the whole set, not the filtered view: the band names the
+    /// page, and the counts that do follow the filter are the ones gating the
+    /// grids' empty states. See [`crate::ui::hero_chips`].
+    pub songs_fold: Mutex<HeroFold>,
+    pub most_played_totals: Mutex<MostPlayedTotals>,
     /// Set of `TrackListRow.id`s currently `selected: true` on the
     /// Slint model. Same diff-then-write pattern Albums uses to keep
     /// selection updates O(changed) rather than O(rows).
@@ -85,6 +97,8 @@ impl FavoritesUiState {
             }),
             most_played: Mutex::new(Vec::new()),
             fav_artists: Mutex::new(Vec::new()),
+            songs_fold: Mutex::new(HeroFold::default()),
+            most_played_totals: Mutex::new(MostPlayedTotals::default()),
             applied_selection: Mutex::new(HashSet::new()),
             last_mosaic_paths: Mutex::new(Vec::new()),
             last_grid_signature: Mutex::new(None),

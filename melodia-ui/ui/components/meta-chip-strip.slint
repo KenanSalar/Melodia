@@ -8,7 +8,8 @@ import { MetaChip } from "meta-chip.slint";
 // inner is the chips in that row — and this walks two real arrays. The strip
 // only reports its width; who chunks it, and whether overflow wraps or is
 // dropped, is the host's business. `Player.recompute-chip-rows` wraps freely;
-// the heroes cap at one row, since their band is a fixed height.
+// the heroes cap at `ui::hero_chips::HERO_MAX_ROWS`, since their band is sized
+// by its artwork tile.
 //
 // Both brushes are inputs for the reason `MetaChip` states, and every mount
 // overrides both — the Now Playing view with the `np-accent-*` pair, a hero
@@ -52,15 +53,24 @@ export component MetaChipStrip inherits Rectangle {
         }
     }
 
-    if root.show-rows: VerticalLayout {
-        spacing: Theme.pad-sm;
-        for row in root.rows: HorizontalLayout {
-            alignment: root.centred ? LayoutAlignment.center : LayoutAlignment.start;
+    // The plain wrapper is what lets a second row grow the strip. A root
+    // inheriting `Rectangle` folds a child *layout* into its own layout info
+    // but not a conditional one — an `if` lowers to a repeater, and
+    // `gen_layout_info_prop` skips those — so with the `if` as the direct
+    // child the strip reported `preferred: 0`, took its 26 px floor from
+    // `min-height`, and drew every row past the first outside the box it was
+    // given. See the `if`-child entry in `.claude/rules/slint-pitfalls.md`.
+    VerticalLayout {
+        if root.show-rows: VerticalLayout {
             spacing: Theme.pad-sm;
-            for t in row: MetaChip {
-                text: t;
-                fill: root.chip-fill;
-                label-color: root.chip-label-color;
+            for row in root.rows: HorizontalLayout {
+                alignment: root.centred ? LayoutAlignment.center : LayoutAlignment.start;
+                spacing: Theme.pad-sm;
+                for t in row: MetaChip {
+                    text: t;
+                    fill: root.chip-fill;
+                    label-color: root.chip-label-color;
+                }
             }
         }
     }

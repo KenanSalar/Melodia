@@ -44,11 +44,11 @@ export global Favorites {
     callback columns-changed(int);
     // Hero — mosaic data + stats. `mosaic-paths` is the top-4 cover
     // paths by play_count (DESC); an empty list renders the empty
-    // state. `track-count == 0` ⇒ hero shows "No favorites yet" copy
-    // instead of the duration line.
+    // state. `track-count == 0` ⇒ the Songs tab's band shows "No favorites
+    // yet" copy instead of chips. The running time is not here — it reaches
+    // the band as a chip, built Rust-side by `ui::hero_chips`.
     in-out property <[string]> mosaic-paths;
     in-out property <int>      track-count;
-    in-out property <string>   duration-text;   // "12h 34m"
 
     // Hero blur cross-fade — two slots, never cleared. Outgoing slot
     // stays painted through the fade so switching mosaics never
@@ -213,9 +213,11 @@ export global RecentlyPlayed {
     in-out property <string>         filter;
     in-out property <int>            blur-search-tick: 0;
 
-    // Header stats over the full recency set.
-    in-out property <int>    track-count;
-    in-out property <string> duration-text;   // "12h 34m"
+    // Header stats over the full recency set. The running time is not here:
+    // it reaches the band as a chip, built Rust-side by `ui::hero_chips`, and
+    // a property only Rust wrote and only Rust read back was a round trip
+    // through Slint for a string Rust had already formatted.
+    in-out property <int> track-count;
 
     // Per-column widths / visibility for the `TrackList` — mirrors the shape
     // `Favorites` / `Tracks` use. Hydrated from

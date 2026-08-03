@@ -19,7 +19,6 @@ use crate::state::AppState;
 use crate::ui::hero_chips::HeroFold;
 use crate::ui::mosaic_blur::{MosaicBlur, compose_mosaic_blur};
 use crate::ui::now_playing::write_crossfade_slot;
-use crate::ui::tracks::format_duration_ms;
 use crate::{AppWindow, RecentlyPlayed};
 
 /// The up-to-`n` most-recently-played *distinct* cover paths, in recency
@@ -41,8 +40,12 @@ pub fn mosaic_paths_from(rows: &[RsTrackListRow], n: usize) -> Vec<String> {
     out
 }
 
-/// Push the hero count + total-duration text + mosaic-path list into the Slint
-/// global. Immediate (the blur composition is kicked separately).
+/// Push the hero count + mosaic-path list into the Slint global, and the band's
+/// chips with them. Immediate (the blur composition is kicked separately).
+///
+/// The running time reaches the band as a chip rather than as a property: the
+/// caller has the millisecond total in hand, so routing it through Slint only
+/// to read it back would be a round trip for a string this crate formatted.
 pub fn push_hero_stats(
     count: i32,
     total_ms: i64,
@@ -51,7 +54,6 @@ pub fn push_hero_stats(
     rp_ui: &Arc<RecentlyPlayedUi>,
     weak: &Weak<AppWindow>,
 ) {
-    let duration = format_duration_ms(total_ms);
     let paths = mosaic_paths.to_vec();
     let rp_ui = rp_ui.clone();
     let weak = weak.clone();
@@ -59,10 +61,13 @@ pub fn push_hero_stats(
         let Some(ui) = weak.upgrade() else { return };
         let g = ui.global::<RecentlyPlayed>();
         g.set_track_count(count);
-        g.set_duration_text(SharedString::from(duration.as_str()));
-        // After the two writes, never before — the chips read them back off
-        // the global rather than taking them as arguments.
-        crate::ui::hero_chips::publish_recently_played(&ui, fold, rp_ui.section_active());
+        crate::ui::hero_chips::publish_recently_played(
+            &ui,
+            count,
+            total_ms,
+            fold,
+            rp_ui.section_active(),
+        );
         let model = g.get_mosaic_paths();
         let Some(vec) = model.as_any().downcast_ref::<VecModel<SharedString>>() else {
             log::warn!("RecentlyPlayed.mosaic-paths: VecModel<SharedString> downcast failed");

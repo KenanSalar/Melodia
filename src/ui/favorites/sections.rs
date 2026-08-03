@@ -126,6 +126,11 @@ pub async fn refresh_grids(state: &AppState, fav_ui: &Arc<FavoritesUi>, weak: &W
     }
 
     if let Some(rows) = most_played {
+        // Folded here rather than at publish time, for the reason
+        // `refresh_tracks` gives: this is the worker holding the rows, and the
+        // UI thread has no business summing a play history inside an
+        // `upgrade_in_event_loop`.
+        *fav_ui.state().most_played_totals.lock() = crate::ui::hero_chips::fold_most_played(&rows);
         *fav_ui.state().most_played.lock() = rows;
     }
     if let Some(rows) = fav_artists {
@@ -135,9 +140,10 @@ pub async fn refresh_grids(state: &AppState, fav_ui: &Arc<FavoritesUi>, weak: &W
         // one the tab is about to paint.
         sort_cached_artists(fav_ui);
     }
-    // The Most Played totals are folded out of the cache just filled. The grid
-    // write below publishes too, but only past its signature early-return — a
-    // play-count flush that leaves the row set alone still moves the totals.
+    // The grid write below publishes too, but only past a signature taken over
+    // the *filtered* rows — so a play-count bump on a track the filter excludes
+    // moves the totals the band states without moving that hash, and on the
+    // Songs tab `mounted_content` is a constant `0` besides.
     super::hero::republish_chips(fav_ui, weak);
 
     // Prewarm the mounted tab's tier off-thread before its rows land in the

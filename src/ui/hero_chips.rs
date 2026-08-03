@@ -5,14 +5,26 @@
 //! over. Six views share one global — see `globals/hero-chips.slint` for why
 //! one is enough — so every hero opens by calling exactly one `publish_*`.
 //!
-//! **Nothing here costs a query.** Every fact is either on a stats struct the
-//! caller already holds at its existing push site, or folded out of a `Vec` the
-//! same fetch just walked. `AlbumStats::disc_count` and `is_compilation` are
-//! the clearest case of the first — both fetched today and dropped on the floor
-//! by `to_slint_album_row`, because nothing painted them; [`fold_tracks`] is
-//! the second, and it runs on the worker beside the fetch rather than on the UI
-//! thread, so a 20 000-track genre doesn't hash its whole track list inside an
-//! `upgrade_in_event_loop`.
+//! **No chip costs a query, and no `publish_*` walks a `Vec`.** Every fact is
+//! either on a stats struct the caller already holds at its existing push site,
+//! or folded out of a `Vec` the same fetch just walked — by the fetch, *on that
+//! worker*, so a 20 000-track genre never hashes its track list inside an
+//! `upgrade_in_event_loop`. `AlbumStats::disc_count` and `is_compilation` are
+//! the clearest case of the first: both fetched today and dropped on the floor
+//! by `to_slint_album_row`, because nothing painted them. [`fold_tracks`] is
+//! the second — defined here, called from there.
+//!
+//! A publisher also reads no Slint property it doesn't own. Two of them used
+//! to, and the cost was an ordering constraint the call site had to honour and
+//! a comment had to state — "after the counts, never before". Taking the facts
+//! as arguments (or off the section's own handle) makes the write order
+//! irrelevant, which is the difference between a rule and a hazard.
+//!
+//! **A band states facts about the set the page is about, never about the
+//! current filter.** That is forced rather than chosen: an album's chips cannot
+//! follow its track filter without lying about the album, so the alternative
+//! rule would hold on two heroes out of six. The counts that *do* track a
+//! filter already exist — they gate the grids' empty states.
 //!
 //! Order matters, because the band wraps at [`HERO_MAX_ROWS`] and drops what
 //! still doesn't fit. Each builder puts the fact a user is most likely to be
@@ -31,7 +43,7 @@ use crate::entities::track::{MostPlayedFavorite, TrackListRow};
 use crate::ui::chips;
 use crate::ui::favorites::{FavoritesTab, FavoritesUi};
 use crate::ui::tracks::format_duration_ms;
-use crate::{AppWindow, Favorites, HeroChips, RecentlyPlayed};
+use crate::{AppWindow, HeroChips};
 
 /// How many rows a hero band gives its chips before dropping the rest.
 ///
@@ -115,10 +127,11 @@ pub struct MostPlayedTotals {
 /// Everything the Favorites band can state, across its three tabs. Which fields
 /// are read follows the tab — the band describes whatever the body below it is
 /// listing.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct FavoritesFacts {
     pub tab: FavoritesTab,
     pub tracks: i32,
-    pub duration_text: SharedString,
+    pub duration_ms: i64,
     pub songs: HeroFold,
     pub most_played: MostPlayedTotals,
     pub artists: i32,
@@ -305,35 +318,58 @@ pub fn publish_playlist(
     publish(ui, chips, section_active);
 }
 
-/// Favorites reads its counts back off the `Favorites` global rather than
-/// taking them as arguments: they are set from three different places (the
-/// stats fetch, the grid build, the tab pick) and the global is the one point
-/// all three have already passed through, so the chips can't disagree with the
-/// grid under them. The two folds come off the handle's own caches for the same
-/// reason — no call site holds both.
+/// Favorites is the one hero assembled from three fetches rather than one, so
+/// it takes the handle and gathers rather than being handed a struct — no call
+/// site holds all of it. Every field is a finished value the fetch that owns it
+/// already folded on its own worker (`FavoritesUiState::songs_fold`,
+/// `::most_played_totals`), which is what keeps this cheap enough to call from
+/// wherever an input lands: a publish that beats a sibling fetch is a tick
+/// stale, never half-built.
+///
+/// Nothing here is read back off a Slint property, and nothing walks a `Vec`.
+/// Both mattered: the first made the caller's write order load-bearing, and the
+/// second put a fold over every favourite on the UI thread.
 pub fn publish_favorites(ui: &AppWindow, fav_ui: &FavoritesUi) {
-    let g = ui.global::<Favorites>();
+    let state = fav_ui.state();
+    // Taken and released one at a time. These are four sibling locks with no
+    // ordering anyone has argued, and a struct literal would hold every guard
+    // it built until the statement ended — nothing here needs two at once.
+    let (tracks, duration_ms) = {
+        let stats = state.stats.lock();
+        (
+            i32::try_from(stats.count).unwrap_or(i32::MAX),
+            stats.total_duration_ms,
+        )
+    };
+    let songs = *state.songs_fold.lock();
+    let most_played = *state.most_played_totals.lock();
+    // The whole set, not the filtered grid: a band names the page it sits on,
+    // and the filtered count is the one gating that tab's empty state.
+    let artists = len_as_i32(state.fav_artists.lock().len());
+
     let facts = FavoritesFacts {
         tab: fav_ui.active_tab(),
-        tracks: g.get_track_count(),
-        // Already formatted on the global — both mosaic heroes run
-        // `format_duration_ms` Rust-side — so it is passed through rather than
-        // re-derived from a millisecond count the global doesn't carry.
-        duration_text: g.get_duration_text(),
-        songs: fold_tracks(&fav_ui.state().tracks_all.lock()),
-        most_played: fold_most_played(&fav_ui.state().most_played.lock()),
-        artists: g.get_artist_count(),
+        tracks,
+        duration_ms,
+        songs,
+        most_played,
+        artists,
     };
     let chips = favorites_chips(&ui.global::<HeroChips>(), &facts);
     publish(ui, chips, fav_ui.section_active());
 }
 
-pub fn publish_recently_played(ui: &AppWindow, fold: HeroFold, section_active: bool) {
-    let r = ui.global::<RecentlyPlayed>();
+pub fn publish_recently_played(
+    ui: &AppWindow,
+    track_count: i32,
+    total_duration_ms: i64,
+    fold: HeroFold,
+    section_active: bool,
+) {
     let chips = recently_played_chips(
         &ui.global::<HeroChips>(),
-        r.get_track_count(),
-        &r.get_duration_text(),
+        track_count,
+        total_duration_ms,
         fold,
     );
     publish(ui, chips, section_active);
@@ -426,7 +462,7 @@ fn favorites_chips(labels: &impl ChipLabels, facts: &FavoritesFacts) -> Vec<Shar
         FavoritesTab::Songs if facts.tracks > 0 => {
             let mut out = Vec::with_capacity(4);
             out.push(labels.favorites(facts.tracks));
-            push_duration_text(&mut out, &facts.duration_text);
+            push_duration(&mut out, facts.duration_ms);
             push_fold(&mut out, labels, facts.songs);
             out
         }
@@ -438,7 +474,7 @@ fn favorites_chips(labels: &impl ChipLabels, facts: &FavoritesFacts) -> Vec<Shar
 fn recently_played_chips(
     labels: &impl ChipLabels,
     track_count: i32,
-    duration_text: &str,
+    total_duration_ms: i64,
     fold: HeroFold,
 ) -> Vec<SharedString> {
     if track_count == 0 {
@@ -446,7 +482,7 @@ fn recently_played_chips(
     }
     let mut out = Vec::with_capacity(4);
     out.push(labels.tracks(track_count));
-    push_duration_text(&mut out, duration_text);
+    push_duration(&mut out, total_duration_ms);
     push_fold(&mut out, labels, fold);
     out
 }
@@ -477,12 +513,6 @@ fn push_fold(out: &mut Vec<SharedString>, labels: &impl ChipLabels, fold: HeroFo
 fn push_duration(out: &mut Vec<SharedString>, total_duration_ms: i64) {
     if total_duration_ms > 0 {
         out.push(SharedString::from(format_duration_ms(total_duration_ms)));
-    }
-}
-
-fn push_duration_text(out: &mut Vec<SharedString>, duration_text: &str) {
-    if !duration_text.is_empty() {
-        out.push(SharedString::from(duration_text));
     }
 }
 

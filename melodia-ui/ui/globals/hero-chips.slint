@@ -16,10 +16,9 @@
 // *literals*, at codegen. Hence the trampolines below.
 export global HeroChips {
     // Outer array is rows, inner is the chips in that row — the `MetaChipStrip`
-    // contract. The heroes cap at one row (`src/ui/chips.rs`), so the outer
-    // array is 0 or 1 long in practice; the shape is the strip's, not a
-    // prediction. Empty means "no chips": no hero mounted, or an entity with
-    // nothing worth stating.
+    // contract. A hero wraps into at most `ui::hero_chips::HERO_MAX_ROWS` and
+    // drops the overflow, so the outer array is 0..=2 long. Empty means "no
+    // chips": no hero mounted, or an entity with nothing worth stating.
     in-out property <[[string]]> rows;
 
     // Strip → Rust: the width to chunk against. `MetaChipStrip` owns the width

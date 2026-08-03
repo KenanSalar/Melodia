@@ -12,6 +12,7 @@ use crate::ui::favorites::FavoritesTab;
 use slint::SharedString;
 
 const STRIP: &str = include_str!("../../../melodia-ui/ui/components/meta-chip-strip.slint");
+const HERO_CHIPS: &str = include_str!("../hero_chips.rs");
 
 /// Every view that mounts a chip strip on a hero band, and the name of the
 /// meta-line property it replaced. Both halves matter — see the two pins below.
@@ -290,7 +291,7 @@ fn favorites_facts(tab: FavoritesTab) -> FavoritesFacts {
     FavoritesFacts {
         tab,
         tracks: 142,
-        duration_text: SharedString::from("9:14:33"),
+        duration_ms: 33_273_000, // 9:14:33
         songs: HeroFold { artists: 37, albums: 51 },
         most_played: MostPlayedTotals {
             tracks: 88,
@@ -329,9 +330,14 @@ fn most_played_sums_itself_and_not_the_songs_tab() {
         texts(&favorites_chips(&EnglishLabels, &facts)),
         vec!["88 tracks", "5:41:02", "1204 plays"]
     );
+    let songs = texts(&favorites_chips(
+        &EnglishLabels,
+        &favorites_facts(FavoritesTab::Songs),
+    ))[1]
+    .to_owned();
     assert_ne!(
         texts(&favorites_chips(&EnglishLabels, &facts))[1],
-        facts.duration_text.as_str(),
+        songs,
         "Most Played must not reuse the Songs tab's duration"
     );
 }
@@ -351,12 +357,12 @@ fn the_two_mosaic_heroes_leave_their_empty_state_to_the_view() {
     // beside it would be redundant.
     let facts = FavoritesFacts {
         tracks: 0,
-        duration_text: SharedString::new(),
+        duration_ms: 0,
         songs: HeroFold::default(),
         ..favorites_facts(FavoritesTab::Songs)
     };
     assert!(favorites_chips(&EnglishLabels, &facts).is_empty());
-    assert!(recently_played_chips(&EnglishLabels, 0, "", HeroFold::default()).is_empty());
+    assert!(recently_played_chips(&EnglishLabels, 0, 0, HeroFold::default()).is_empty());
 }
 
 #[test]
@@ -365,7 +371,7 @@ fn recently_played_states_its_count_running_time_and_spread() {
         texts(&recently_played_chips(
             &EnglishLabels,
             200,
-            "12:04:11",
+            43_451_000, // 12:04:11
             HeroFold { artists: 44, albums: 60 }
         )),
         vec!["200 tracks", "12:04:11", "44 artists", "60 albums"]
@@ -543,54 +549,62 @@ fn no_hero_view_sizes_its_own_artwork_tile() {
     assert_eq!(checked, 2, "both mosaic heroes must still be in HERO_VIEWS");
 }
 
-/// Favorites is the one hero whose chips are folded out of *caches* rather than
-/// out of the rows its own fetch just awaited — and `kick_full_refresh` fills
-/// those caches from three concurrent tasks, so any single publish is only as
-/// complete as whatever has landed by then. The cure is to publish again each
-/// time an input lands, which means the fill and the republish belong to the
-/// same function.
+/// Favorites is the one hero assembled from three fetches rather than one, and
+/// `kick_full_refresh` runs them concurrently — so no ordering can be assumed.
+/// Each fetch folds its own answer and republishes; the fold and the republish
+/// therefore belong to the same function as the fill.
 ///
 /// Left to the grid path alone this is not covered: `write_filtered_grids`
 /// publishes past a signature early-return, and `mounted_content` is a constant
 /// `0` on the Songs tab, so there that publish fires only on a column change.
 #[test]
-fn each_favorites_fetch_republishes_the_chips_it_feeds() {
+fn each_favorites_fetch_folds_and_republishes_what_it_feeds() {
     const FILLS: [(&str, &str, &str, &str); 2] = [
         (
             include_str!("../favorites/tracks.rs"),
             "favorites/tracks.rs",
             "pub async fn refresh_tracks(",
-            "tracks_all.lock() = rows",
+            "songs_fold.lock() = crate::ui::hero_chips::fold_tracks(&rows)",
         ),
         (
             include_str!("../favorites/sections.rs"),
             "favorites/sections.rs",
             "pub async fn refresh_grids(",
-            "fav_artists.lock() = rows",
+            "most_played_totals.lock() = crate::ui::hero_chips::fold_most_played(&rows)",
         ),
     ];
 
-    for (src, name, func, fill) in FILLS {
+    for (src, name, func, fold) in FILLS {
         let body = src
             .split_once(func)
             .and_then(|(_, rest)| rest.split_once("\n}"))
             .map_or("", |(body, _)| body);
-        assert!(body.contains(fill), "{name}: `{func}` no longer writes `{fill}`");
+        assert!(
+            body.contains(fold),
+            "{name}: `{func}` must fold `&rows` — the local it just awaited — and store the \
+             result. Folding at publish time instead puts the walk on the UI thread and makes \
+             the answer depend on which sibling fetch landed first"
+        );
         assert!(
             body.contains("republish_chips("),
-            "{name}: `{func}` fills a cache the Favorites chips fold over but never republishes \
-             them — the sibling fetch that did publish ran against the empty cache, and nothing \
+            "{name}: `{func}` moves a number the Favorites band states but never republishes \
+             it — the sibling fetch that did publish ran against the previous fold, and nothing \
              corrects it"
         );
     }
 }
 
-/// The other five heroes fold from a local the same function just awaited, and
-/// that is what keeps them out of the race above. A fold reading a `.lock()`
-/// here would be reading a cache some *other* task fills.
+/// No hero folds at publish time — every one of them folds a local its own
+/// fetch just awaited, on that worker. A fold whose argument is a `.lock()` is
+/// reading a cache some *other* task fills, which is both a UI-thread walk and
+/// an ordering assumption.
+///
+/// `hero_chips.rs` is in the list precisely because it is where the temptation
+/// lives: it holds the `FavoritesUi` handle, so every cache is one `.lock()`
+/// away.
 #[test]
-fn no_other_hero_folds_out_of_a_shared_cache() {
-    const FOLDERS: [(&str, &str); 5] = [
+fn no_hero_folds_out_of_a_shared_cache() {
+    const FOLDERS: [(&str, &str); 6] = [
         (include_str!("../albums/detail.rs"), "albums/detail.rs"),
         (include_str!("../artists/detail.rs"), "artists/detail.rs"),
         (include_str!("../genres/detail.rs"), "genres/detail.rs"),
@@ -599,10 +613,16 @@ fn no_other_hero_folds_out_of_a_shared_cache() {
             include_str!("../recently_played/tracks.rs"),
             "recently_played/tracks.rs",
         ),
+        (HERO_CHIPS, "hero_chips.rs"),
     ];
 
     for (src, name) in FOLDERS {
-        for fold in ["fold_tracks(", "dominant_genre(", "year_span("] {
+        for fold in [
+            "fold_tracks(",
+            "fold_most_played(",
+            "dominant_genre(",
+            "year_span(",
+        ] {
             for (i, m) in src.match_indices(fold) {
                 let tail = &src[i + m.len()..];
                 // Scan to the first `)`, which a `.lock()` argument reaches
@@ -615,6 +635,37 @@ fn no_other_hero_folds_out_of_a_shared_cache() {
                      awaited instead, or it inherits the Favorites ordering problem"
                 );
             }
+        }
+    }
+}
+
+/// A publisher reads no Slint property it doesn't own.
+///
+/// Both mosaic heroes used to take their counts back off the global the caller
+/// had just written, which made the write order load-bearing and left a
+/// "after the counts, never before" comment standing in for a compiler check.
+/// Facts arrive as arguments, or off the section's own handle.
+#[test]
+fn no_publisher_reads_its_facts_back_off_a_slint_global() {
+    for publisher in ["pub fn publish_favorites(", "pub fn publish_recently_played("] {
+        let body = HERO_CHIPS
+            .split_once(publisher)
+            .and_then(|(_, rest)| rest.split_once("\n}"))
+            .map_or("", |(body, _)| body);
+        // Anchored on the call every publisher ends with, so a window that
+        // truncated early would fail here rather than pass by holding nothing.
+        assert!(
+            body.contains("publish(ui, chips,"),
+            "hero_chips.rs no longer defines `{publisher}` as a body ending in `publish(...)` — \
+             move this pin with it, or the checks below hold over an empty window"
+        );
+        for getter in ["get_track_count(", "get_duration_text(", "get_artist_count("] {
+            assert!(
+                !body.contains(getter),
+                "`{publisher}` reads `{getter}` back off a Slint global. Take the fact as an \
+                 argument or off the handle — reading it back makes the caller's write order \
+                 part of the contract, and nothing enforces that"
+            );
         }
     }
 }
@@ -642,5 +693,29 @@ fn the_strip_reports_its_width_on_resize_and_at_mount() {
         2,
         "MetaChipStrip should report through `measured` exactly twice: once from the resize \
          handler and once from the mount seed"
+    );
+}
+
+/// The strip's rows must sit under a plain layout, not directly under the root.
+///
+/// A root inheriting `Rectangle` folds a child *layout* into its own layout
+/// info but not a conditional one — an `if` lowers to a repeater, which
+/// `gen_layout_info_prop` skips. With the `if` as the direct child the strip
+/// reported `preferred: 0`, so a `VerticalLayout` handed it its 26 px
+/// `min-height` and every row past the first drew *outside* that box: onto the
+/// hero's action pill, or through the bottom of a fixed-height band. Nothing
+/// about it fails to build, and it only shows once the chips actually wrap —
+/// a narrow window, or a locale whose plurals run long.
+///
+/// Pinned as a shape rather than by counting braces: what matters is that
+/// something non-conditional stands between the root and the `if`.
+#[test]
+fn the_strip_rows_hang_off_a_layout_not_off_the_root() {
+    let normalized: String = STRIP.split_whitespace().collect::<Vec<_>>().join(" ");
+    assert!(
+        normalized.contains("VerticalLayout { if root.show-rows:"),
+        "MetaChipStrip must wrap its conditional rows in a plain layout — without it the root \
+         reports `preferred: 0` vertically and a wrapped second row paints outside the strip. \
+         See the `if`-child entry in `.claude/rules/slint-pitfalls.md`"
     );
 }

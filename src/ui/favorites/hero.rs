@@ -78,7 +78,6 @@ fn push_stats_to_slint(
     weak: &Weak<AppWindow>,
 ) {
     let count = i32::try_from(stats.count).unwrap_or(i32::MAX);
-    let duration = crate::ui::tracks::format_duration_ms(stats.total_duration_ms);
     let paths = stats.artwork_paths.clone();
     let fav_ui = fav_ui.clone();
     let weak = weak.clone();
@@ -86,9 +85,8 @@ fn push_stats_to_slint(
         let Some(ui) = weak.upgrade() else { return };
         let g = ui.global::<Favorites>();
         g.set_track_count(count);
-        g.set_duration_text(SharedString::from(duration));
-        // After the counts, never before — the chips read them back off the
-        // global rather than taking them as arguments.
+        // Order-free: the chips take their facts off the handle's own state,
+        // not back off the properties written around them.
         crate::ui::hero_chips::publish_favorites(&ui, &fav_ui);
         let model = g.get_mosaic_paths();
         let Some(vec) = model.as_any().downcast_ref::<VecModel<SharedString>>() else {
@@ -101,17 +99,14 @@ fn push_stats_to_slint(
     });
 }
 
-/// Re-derive the band's chips on the UI thread.
+/// Re-publish the band's chips on the UI thread.
 ///
 /// **Call this wherever one of the chips' inputs lands.** Favorites is the one
-/// hero whose facts are not all in the hand of a single fetch: the counts come
-/// off the `Favorites` global, the Songs spread out of `tracks_all`, and the
-/// Most Played totals out of `most_played` — three caches that
-/// `kick_full_refresh` fills from three *concurrent* tasks. So a publish is
-/// only ever as complete as whatever has landed by the time it runs, and the
-/// cure is to publish again each time something lands rather than to guess an
-/// order. Every other hero folds its facts out of the rows its own fetch just
-/// awaited and needs none of this.
+/// hero built from three fetches rather than one: the stats, the Songs spread,
+/// the Most Played totals — and `kick_full_refresh` runs those *concurrently*,
+/// so no ordering can be assumed. Each fetch folds its own answer on its own
+/// worker and then calls this; the publish itself reads only finished values,
+/// so the worst a mistimed one can be is a tick behind, never half-built.
 ///
 /// The grid path can't stand in for it: `write_filtered_grids` publishes past a
 /// signature early-return, and `mounted_content` is a constant `0` on the Songs
