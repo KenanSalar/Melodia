@@ -34,12 +34,18 @@ component RuleValueInput inherits Rectangle {
             horizontal-stretch: 1;
             if ti.text == "": Text {
                 text: root.placeholder;
-                // Same rung as every other placeholder — see `search-bar.slint`.
+                // Same rung as every other placeholder, and the same bounded
+                // width and elide — see `search-bar.slint` for why an unbounded
+                // one paints out of its field. This one has the tightest slot
+                // in the tree: the row limit's input is a hard 64 px, and its
+                // `N` is a single glyph only in English.
                 color: Theme.overlay2;
                 font-size: Theme.font-size-md;
                 vertical-alignment: center;
                 x: 0;
+                width: 100%;
                 height: 100%;
+                overflow: elide;
             }
             ti := TextInput {
                 text: root.text;

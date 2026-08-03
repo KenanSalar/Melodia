@@ -16,10 +16,10 @@ import { MaterialIcon } from "material-icon.slint";
 //     search icon tints to accent, the chrome scales by 1.5 % from its
 //     centre. All transitions run for `Theme.dur-fast` (200 ms) ease-in-out.
 //
-// Layout: the outer slot is fixed-size (`input-width × 32 px`). The visible
-// chrome lives in an inner Rectangle that scales from its centre via
-// `(parent.size - self.size) / 2` x/y bindings, so neighbouring elements
-// in the parent layout don't shift on focus.
+// Layout: the outer slot asks for `input-width × 32 px` and never stretches
+// past it. The visible chrome lives in an inner Rectangle that scales from its
+// centre via `(parent.size - self.size) / 2` x/y bindings, so neighbouring
+// elements in the parent layout don't shift on focus.
 //
 // Reuse pattern:
 //
@@ -38,7 +38,44 @@ import { MaterialIcon } from "material-icon.slint";
 export component SearchBar inherits Rectangle {
     in-out property <string> text;
     in property <string> placeholder: @tr("Search…");
-    in property <length> input-width: 220px;
+
+    // Resting width of the slot. The default fits the placeholder the bar was
+    // actually handed, because a flat number can't: several catalogues need
+    // noticeably more room than the 220 px this used to be, and which of them
+    // is widest changes from one string to the next. Capped so a verbose locale
+    // can't take a whole header row, and past the cap the placeholder elides —
+    // which every mount does anyway, since a host that budgets its row
+    // (Settings, Favorites, the Search view) sets this outright and the default
+    // never evaluates for it.
+    in property <length> input-width:
+        clamp(root.natural-width, 220px, 320px);
+
+    // The floor the slot compresses to, published so a host budgeting its row
+    // can reserve against it instead of restating the number — the same
+    // contract `tab-bar.slint` publishes as `compact-w`, and for the same
+    // reason: whatever the host leaves behind is exactly what this shrinks to,
+    // so the two can't drift. Below it the placeholder elides; below *that* the
+    // row has bigger problems than the search bar.
+    out property <length> min-w: 140px;
+
+    // Named because `chrome-overhead` has to add the same number the layout
+    // below does.
+    property <length> icon-size: 16px;
+    // Everything in the pill that isn't the text: the left padding, the search
+    // icon, the gap after it, and the right padding. The clear button stays out
+    // of it — that only mounts once there's text, and by then the placeholder
+    // is gone.
+    property <length> chrome-overhead:
+        Theme.pad-sm + root.icon-size + 2 * Theme.pad-xs;
+    // How wide the bar would have to be to show its placeholder whole. Measured
+    // off the Text the bar actually draws, so the shape measured and the shape
+    // drawn can't drift. A Text's *horizontal* layout info is intrinsic to the
+    // string and the font and never reads back the width it was handed
+    // (`i-slint-core::items::text_layout_info`), so sizing the slot from it is a
+    // derivation and not a cycle — the same thing that makes `tab-bar.slint`'s
+    // `label-w` safe.
+    property <length> natural-width:
+        placeholder-text.preferred-width + root.chrome-overhead;
 
     // Counter the parent bumps to force a blur (Slint has no native
     // "click outside" behaviour for TextInput). Each increment fires
@@ -77,9 +114,18 @@ export component SearchBar inherits Rectangle {
         input.focus();
     }
 
-    // Outer slot is fixed-size — keeps the layout in the parent
-    // HorizontalLayout stable so growing on focus doesn't push neighbours.
-    width: input-width;
+    // The slot still doesn't stretch — `preferred` and `max` are the same
+    // number, so in a row with a spacer beside it the bar is handed exactly
+    // `input-width` and the focus swell happens *inside* the slot without
+    // pushing neighbours. What the split buys over the bound `width` it
+    // replaces is the other end: Slint reports a root's bound `width` as both
+    // `min` and `max`, so a locale-sized default would have dragged the
+    // window's own resize floor out with it. Under `min-w` the bar now
+    // compresses and the placeholder elides, where before it drew across its
+    // neighbours.
+    min-width: root.min-w;
+    preferred-width: input-width;
+    max-width: input-width;
     height: 32px;
     background: transparent;
 
@@ -161,7 +207,7 @@ export component SearchBar inherits Rectangle {
                 alignment: center;
                 MaterialIcon {
                     name: "search";
-                    icon-size: 16px;
+                    icon-size: root.icon-size;
                     icon-color: input.has-focus ? Theme.accent : Theme.subtext0;
                     animate icon-color { duration: Theme.dur-fast; easing: ease-in-out; }
                 }
@@ -181,7 +227,7 @@ export component SearchBar inherits Rectangle {
                         // glyph line-box inside it — without an explicit
                         // height they auto-size to the line-box and pin to
                         // the top of the box, reading ~1 px high.
-                        Text {
+                        placeholder-text := Text {
                             visible: root.text == "";
                             text: root.placeholder;
                             // `overlay2`, not `overlay0`: outside Catppuccin
@@ -197,7 +243,21 @@ export component SearchBar inherits Rectangle {
                             font-size: Theme.font-size-md;
                             vertical-alignment: center;
                             x: 0;
+                            // Bounded, and only then elided. The parent is a
+                            // plain Rectangle rather than a layout, so without
+                            // a width of its own the compiler hands this Text
+                            // its *implicit* size — the untruncated string —
+                            // and it paints straight through the pill's right
+                            // edge and out of the bar. Eliding alone doesn't
+                            // save it: elide lowers a Text's layout *minimum*
+                            // to one ellipsis and leaves `preferred` at the
+                            // full string, and the implicit size is the larger
+                            // of the two. The `TextInput` below never had the
+                            // bug because it already carries this same
+                            // `width: 100%`, and clips itself besides.
+                            width: 100%;
                             height: 100%;
+                            overflow: elide;
                         }
                         input := TextInput {
                             text <=> root.text;

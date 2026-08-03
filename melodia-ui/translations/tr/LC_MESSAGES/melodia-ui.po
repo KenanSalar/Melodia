@@ -78,9 +78,6 @@ msgstr "Temizle"
 msgid "Restart"
 msgstr "Yeniden Başlat"
 
-msgid "Deselect"
-msgstr "Seçimi Kaldır"
-
 msgid "Clear selection"
 msgstr "Seçimi temizle"
 
@@ -162,6 +159,8 @@ msgstr "Parça yok"
 msgid "Queue is empty"
 msgstr "Sıra boş"
 
+msgid "Drop to add to queue"
+msgstr "Sıraya eklemek için bırak"
 
 msgid "Remove selected"
 msgstr "Seçimi kaldır"
@@ -376,6 +375,10 @@ msgstr "Nötr"
 msgid "Monochrome"
 msgstr "Tek Renkli"
 
+# Title of the window-chrome settings card.
+msgid "Window"
+msgstr "Pencere"
+
 msgid "Native Title Bar"
 msgstr "Yerel Başlık Çubuğu"
 
@@ -423,6 +426,10 @@ msgstr "Sağ"
 
 msgid "Left"
 msgstr "Sol"
+
+# Title of the overflow-menu settings card.
+msgid "Player Bar"
+msgstr "Çalar Çubuğu"
 
 msgid "Overflow Menu Buttons"
 msgstr "Taşma Menüsü Düğmeleri"
@@ -615,13 +622,30 @@ msgstr "Henüz albüm yok"
 msgid "Add a music folder in Settings to start building your library."
 msgstr "Kitaplığınızı oluşturmaya başlamak için Ayarlar'dan bir müzik klasörü ekleyin."
 
+# ---- Artists & Genres views -------------------------------------------------
+
+msgid "No artists yet"
+msgstr "Henüz sanatçı yok"
+
+# Artist Detail: filters the track list and the album strip at once.
+msgid "Filter tracks & albums…"
+msgstr "Parça ve albümleri filtrele…"
+
+msgid "Filter genres…"
+msgstr "Türleri filtrele…"
+
+msgid "{n} genre"
+msgid_plural "{n} genres"
+msgstr[0] "{n} tür"
+msgstr[1] "{n} tür"
+
+msgid "No genres yet"
+msgstr "Henüz tür yok"
+
 # ---- Playlists view ---------------------------------------------------------
 
 msgid "Filter playlists…"
 msgstr "Çalma listelerini filtrele…"
-
-msgid "Updated"
-msgstr "Güncellenme"
 
 msgid "{n} playlist"
 msgid_plural "{n} playlists"
@@ -697,6 +721,28 @@ msgstr "Açıklama (isteğe bağlı)"
 msgid "Add a description…"
 msgstr "Açıklama ekle…"
 
+msgid "Create Playlist"
+msgstr "Çalma Listesi Oluştur"
+
+# Confirm-button label on the create-playlist dialog.
+msgid "Create"
+msgstr "Oluştur"
+
+msgid "Rename Playlist"
+msgstr "Çalma Listesini Yeniden Adlandır"
+
+# ---- Playlist Detail: Delete confirm ----------------------------------------
+
+msgid "Delete playlist?"
+msgstr "Çalma listesi silinsin mi?"
+
+msgid "The playlist and its track order will be removed. The tracks themselves stay in your library."
+msgstr "Çalma listesi ve parça sırası kaldırılacak. Parçaların kendisi kitaplığınızda kalır."
+
+# Confirm-button label on the delete-playlist dialog.
+msgid "Delete"
+msgstr "Sil"
+
 # ---- Playlist Detail: Remove-selected confirm -------------------------------
 
 msgid "Remove from playlist?"
@@ -738,9 +784,6 @@ msgstr "Son Aramalar"
 
 msgid "Clear all"
 msgstr "Tümünü temizle"
-
-msgid "Remove from recent"
-msgstr "Son aramalardan kaldır"
 
 # ---- Favorites view ---------------------------------------------------------
 
@@ -831,6 +874,12 @@ msgstr "{} / {} zaten ekli"
 
 # ---- Auto-updater (Settings → Updates + notification toasts) ----------------
 
+msgid "Critical update"
+msgstr "Kritik güncelleme"
+
+msgid "This update fixes a critical issue and can't be skipped."
+msgstr "Bu güncelleme kritik bir sorunu düzeltir ve atlanamaz."
+
 msgid "Skip this version"
 msgstr "Bu sürümü atla"
 
@@ -896,11 +945,6 @@ msgstr "Sistem tepsisi simgesini değiştirmek Melodia'yı yeniden başlatmayı 
 
 msgid "Available only while the system tray icon is active."
 msgstr "Yalnızca sistem tepsisi simgesi etkinken kullanılabilir."
-
-# ---- Miniplayer --------------------------------------------------------------
-
-msgid "Exit miniplayer"
-msgstr "Mini oynatıcıdan çık"
 
 # ---- About -------------------------------------------------------------------
 
@@ -989,6 +1033,9 @@ msgstr "Çalma listelerini .m3u8 dosyalarına dışa aktar"
 
 msgid "Choose playlists to export, then pick a folder."
 msgstr "Dışa aktarılacak çalma listelerini seçin, ardından bir klasör belirleyin."
+
+msgid "No playlists to export"
+msgstr "Dışa aktarılacak çalma listesi yok"
 
 msgid "Select all"
 msgstr "Tümünü seç"
@@ -1423,9 +1470,6 @@ msgstr "ListenBrainz'e scrobble yap"
 msgid "Report each play to your ListenBrainz account"
 msgstr "Her çalmayı ListenBrainz hesabına bildir"
 
-msgid "Sync loved tracks"
-msgstr "Beğenilen parçaları eşitle"
-
 msgid "Sync loved tracks to Last.fm"
 msgstr "Beğenilen parçaları Last.fm ile eşitle"
 
@@ -1440,9 +1484,6 @@ msgstr "Beğendiğin parçaları ListenBrainz'de beğenilmiş olarak işaretle �
 
 msgid "Loved tracks"
 msgstr "Beğenilen parçalar"
-
-msgid "Mark tracks you love as loved on your connected services"
-msgstr "Beğendiğin parçaları bağlı servislerinde beğenilmiş olarak işaretle"
 
 msgid "Add MusicBrainz IDs to your music"
 msgstr "Müziğine MusicBrainz kimliklerini ekle"

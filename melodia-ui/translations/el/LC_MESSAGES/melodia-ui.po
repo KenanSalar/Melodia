@@ -78,9 +78,6 @@ msgstr "Εκκαθάριση"
 msgid "Restart"
 msgstr "Επανεκκίνηση"
 
-msgid "Deselect"
-msgstr "Αποεπιλογή"
-
 msgid "Clear selection"
 msgstr "Εκκαθάριση επιλογής"
 
@@ -162,6 +159,8 @@ msgstr "Χωρίς κομμάτια"
 msgid "Queue is empty"
 msgstr "Η ουρά είναι άδεια"
 
+msgid "Drop to add to queue"
+msgstr "Αφήστε για προσθήκη στην ουρά"
 
 msgid "Remove selected"
 msgstr "Κατάργηση επιλεγμένων"
@@ -375,6 +374,10 @@ msgstr "Ουδέτερο"
 msgid "Monochrome"
 msgstr "Μονόχρωμο"
 
+# Title of the window-chrome settings card.
+msgid "Window"
+msgstr "Παράθυρο"
+
 msgid "Native Title Bar"
 msgstr "Εγγενής γραμμή τίτλου"
 
@@ -422,6 +425,10 @@ msgstr "Δεξιά"
 
 msgid "Left"
 msgstr "Αριστερά"
+
+# Title of the overflow-menu settings card.
+msgid "Player Bar"
+msgstr "Γραμμή αναπαραγωγής"
 
 msgid "Overflow Menu Buttons"
 msgstr "Κουμπιά μενού υπερχείλισης"
@@ -614,13 +621,30 @@ msgstr "Δεν υπάρχουν άλμπουμ ακόμη"
 msgid "Add a music folder in Settings to start building your library."
 msgstr "Προσθέστε έναν φάκελο μουσικής στις Ρυθμίσεις για να αρχίσετε να χτίζετε τη βιβλιοθήκη σας."
 
+# ---- Artists & Genres views -------------------------------------------------
+
+msgid "No artists yet"
+msgstr "Δεν υπάρχουν καλλιτέχνες ακόμη"
+
+# Artist Detail: filters the track list and the album strip at once.
+msgid "Filter tracks & albums…"
+msgstr "Φιλτράρισμα κομματιών & άλμπουμ…"
+
+msgid "Filter genres…"
+msgstr "Φιλτράρισμα ειδών…"
+
+msgid "{n} genre"
+msgid_plural "{n} genres"
+msgstr[0] "{n} είδος"
+msgstr[1] "{n} είδη"
+
+msgid "No genres yet"
+msgstr "Δεν υπάρχουν είδη ακόμη"
+
 # ---- Playlists view ---------------------------------------------------------
 
 msgid "Filter playlists…"
 msgstr "Φιλτράρισμα λιστών…"
-
-msgid "Updated"
-msgstr "Ενημερωμένες"
 
 msgid "{n} playlist"
 msgid_plural "{n} playlists"
@@ -696,6 +720,28 @@ msgstr "Περιγραφή (προαιρετική)"
 msgid "Add a description…"
 msgstr "Προσθήκη περιγραφής…"
 
+msgid "Create Playlist"
+msgstr "Δημιουργία λίστας"
+
+# Confirm-button label on the create-playlist dialog.
+msgid "Create"
+msgstr "Δημιουργία"
+
+msgid "Rename Playlist"
+msgstr "Μετονομασία λίστας"
+
+# ---- Playlist Detail: Delete confirm ----------------------------------------
+
+msgid "Delete playlist?"
+msgstr "Διαγραφή λίστας;"
+
+msgid "The playlist and its track order will be removed. The tracks themselves stay in your library."
+msgstr "Η λίστα και η σειρά των κομματιών της θα καταργηθούν. Τα ίδια τα κομμάτια παραμένουν στη βιβλιοθήκη σας."
+
+# Confirm-button label on the delete-playlist dialog.
+msgid "Delete"
+msgstr "Διαγραφή"
+
 # ---- Playlist Detail: Remove-selected confirm -------------------------------
 
 msgid "Remove from playlist?"
@@ -737,9 +783,6 @@ msgstr "Πρόσφατα"
 
 msgid "Clear all"
 msgstr "Καθαρισμός όλων"
-
-msgid "Remove from recent"
-msgstr "Αφαίρεση από τα πρόσφατα"
 
 # ---- Favorites view ---------------------------------------------------------
 
@@ -829,6 +872,12 @@ msgstr "{} από {} ήδη προστέθηκαν"
 
 # ---- Auto-updater (Settings → Updates + notification toasts) ----------------
 
+msgid "Critical update"
+msgstr "Κρίσιμη ενημέρωση"
+
+msgid "This update fixes a critical issue and can't be skipped."
+msgstr "Αυτή η ενημέρωση διορθώνει ένα κρίσιμο πρόβλημα και δεν μπορεί να παραλειφθεί."
+
 msgid "Skip this version"
 msgstr "Παράλειψη αυτής της έκδοσης"
 
@@ -894,11 +943,6 @@ msgstr "Η αλλαγή του εικονιδίου περιοχής ειδοπ�
 
 msgid "Available only while the system tray icon is active."
 msgstr "Διαθέσιμο μόνο όταν το εικονίδιο περιοχής ειδοποιήσεων είναι ενεργό."
-
-# ---- Miniplayer --------------------------------------------------------------
-
-msgid "Exit miniplayer"
-msgstr "Έξοδος από το μίνι πρόγραμμα αναπαραγωγής"
 
 # ---- About -------------------------------------------------------------------
 
@@ -987,6 +1031,9 @@ msgstr "Εξαγωγή λιστών σε αρχεία .m3u8"
 
 msgid "Choose playlists to export, then pick a folder."
 msgstr "Επιλέξτε λίστες για εξαγωγή και έπειτα έναν φάκελο."
+
+msgid "No playlists to export"
+msgstr "Δεν υπάρχουν λίστες για εξαγωγή"
 
 msgid "Select all"
 msgstr "Επιλογή όλων"
@@ -1421,9 +1468,6 @@ msgstr "Scrobble στο ListenBrainz"
 msgid "Report each play to your ListenBrainz account"
 msgstr "Αναφορά κάθε αναπαραγωγής στον λογαριασμό σας στο ListenBrainz"
 
-msgid "Sync loved tracks"
-msgstr "Συγχρονισμός αγαπημένων κομματιών"
-
 msgid "Sync loved tracks to Last.fm"
 msgstr "Συγχρονισμός αγαπημένων κομματιών με το Last.fm"
 
@@ -1438,9 +1482,6 @@ msgstr "Σημειώστε ως αγαπημένα στο ListenBrainz τα κο
 
 msgid "Loved tracks"
 msgstr "Αγαπημένα κομμάτια"
-
-msgid "Mark tracks you love as loved on your connected services"
-msgstr "Σημειώστε τα κομμάτια που αγαπάτε ως αγαπημένα στις συνδεδεμένες υπηρεσίες σας"
 
 msgid "Add MusicBrainz IDs to your music"
 msgstr "Προσθήκη αναγνωριστικών MusicBrainz στη μουσική σας"

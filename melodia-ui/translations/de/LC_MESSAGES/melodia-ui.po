@@ -78,9 +78,6 @@ msgstr "Leeren"
 msgid "Restart"
 msgstr "Neu starten"
 
-msgid "Deselect"
-msgstr "Abwählen"
-
 msgid "Clear selection"
 msgstr "Auswahl aufheben"
 
@@ -162,6 +159,8 @@ msgstr "Keine Lieder"
 msgid "Queue is empty"
 msgstr "Warteschlange ist leer"
 
+msgid "Drop to add to queue"
+msgstr "Zum Hinzufügen zur Warteschlange ablegen"
 
 msgid "Remove selected"
 msgstr "Auswahl entfernen"
@@ -373,6 +372,10 @@ msgstr "Neutral"
 msgid "Monochrome"
 msgstr "Monochrom"
 
+# Title of the window-chrome settings card.
+msgid "Window"
+msgstr "Fenster"
+
 msgid "Native Title Bar"
 msgstr "Native Titelleiste"
 
@@ -420,6 +423,10 @@ msgstr "Rechts"
 
 msgid "Left"
 msgstr "Links"
+
+# Title of the overflow-menu settings card.
+msgid "Player Bar"
+msgstr "Wiedergabeleiste"
 
 msgid "Overflow Menu Buttons"
 msgstr "Überlaufmenü-Schaltflächen"
@@ -612,13 +619,30 @@ msgstr "Noch keine Alben"
 msgid "Add a music folder in Settings to start building your library."
 msgstr "Füge in den Einstellungen einen Musikordner hinzu, um deine Bibliothek aufzubauen."
 
+# ---- Artists & Genres views -------------------------------------------------
+
+msgid "No artists yet"
+msgstr "Noch keine Künstler"
+
+# Artist Detail: filters the track list and the album strip at once.
+msgid "Filter tracks & albums…"
+msgstr "Lieder & Alben filtern…"
+
+msgid "Filter genres…"
+msgstr "Genres filtern…"
+
+msgid "{n} genre"
+msgid_plural "{n} genres"
+msgstr[0] "{n} Genre"
+msgstr[1] "{n} Genres"
+
+msgid "No genres yet"
+msgstr "Noch keine Genres"
+
 # ---- Playlists view ---------------------------------------------------------
 
 msgid "Filter playlists…"
 msgstr "Playlists filtern…"
-
-msgid "Updated"
-msgstr "Aktualisiert"
 
 msgid "{n} playlist"
 msgid_plural "{n} playlists"
@@ -694,6 +718,28 @@ msgstr "Beschreibung (optional)"
 msgid "Add a description…"
 msgstr "Beschreibung hinzufügen…"
 
+msgid "Create Playlist"
+msgstr "Playlist erstellen"
+
+# Confirm-button label on the create-playlist dialog.
+msgid "Create"
+msgstr "Erstellen"
+
+msgid "Rename Playlist"
+msgstr "Playlist umbenennen"
+
+# ---- Playlist Detail: Delete confirm ----------------------------------------
+
+msgid "Delete playlist?"
+msgstr "Playlist löschen?"
+
+msgid "The playlist and its track order will be removed. The tracks themselves stay in your library."
+msgstr "Die Playlist und ihre Titelreihenfolge werden entfernt. Die Titel selbst bleiben in deiner Bibliothek."
+
+# Confirm-button label on the delete-playlist dialog.
+msgid "Delete"
+msgstr "Löschen"
+
 # ---- Playlist Detail: Remove-selected confirm -------------------------------
 
 msgid "Remove from playlist?"
@@ -735,9 +781,6 @@ msgstr "Zuletzt"
 
 msgid "Clear all"
 msgstr "Alle löschen"
-
-msgid "Remove from recent"
-msgstr "Aus den letzten entfernen"
 
 # ---- Favorites view ---------------------------------------------------------
 
@@ -833,6 +876,12 @@ msgstr "{} von {} bereits hinzugefügt"
 # "Restart") map onto `Notifications.action` `kind` values "install-update" /
 # "update-restart" in `ui/globals/updater.slint`.
 
+msgid "Critical update"
+msgstr "Kritische Aktualisierung"
+
+msgid "This update fixes a critical issue and can't be skipped."
+msgstr "Diese Aktualisierung behebt ein kritisches Problem und kann nicht übersprungen werden."
+
 msgid "Skip this version"
 msgstr "Diese Version überspringen"
 
@@ -898,14 +947,6 @@ msgstr "Das Ändern des Systembereich-Symbols erfordert einen Neustart von Melod
 
 msgid "Available only while the system tray icon is active."
 msgstr "Nur verfügbar, solange das Systembereich-Symbol aktiv ist."
-
-# ---- Miniplayer --------------------------------------------------------------
-
-# Tooltip on the `open_in_full` button inside the compact miniplayer
-# (`ui/views/mini-player.slint`). Restores the OS window to its pre-mini
-# size so the full UI returns.
-msgid "Exit miniplayer"
-msgstr "Mini-Player verlassen"
 
 # ---- About -------------------------------------------------------------------
 
@@ -994,6 +1035,9 @@ msgstr "Playlists in .m3u8-Dateien exportieren"
 
 msgid "Choose playlists to export, then pick a folder."
 msgstr "Wählen Sie die zu exportierenden Playlists und dann einen Ordner."
+
+msgid "No playlists to export"
+msgstr "Keine Playlists zum Exportieren"
 
 msgid "Select all"
 msgstr "Alle auswählen"
@@ -1428,9 +1472,6 @@ msgstr "An ListenBrainz scrobbeln"
 msgid "Report each play to your ListenBrainz account"
 msgstr "Jede Wiedergabe an dein ListenBrainz-Konto melden"
 
-msgid "Sync loved tracks"
-msgstr "Lieblingstitel synchronisieren"
-
 msgid "Sync loved tracks to Last.fm"
 msgstr "Lieblingstitel mit Last.fm synchronisieren"
 
@@ -1445,9 +1486,6 @@ msgstr "Titel, die du magst, auf ListenBrainz als Loved markieren — beim Aktiv
 
 msgid "Loved tracks"
 msgstr "Lieblingstitel"
-
-msgid "Mark tracks you love as loved on your connected services"
-msgstr "Titel, die du magst, auf deinen verbundenen Diensten als Loved markieren"
 
 msgid "Add MusicBrainz IDs to your music"
 msgstr "MusicBrainz-IDs zu deiner Musik hinzufügen"

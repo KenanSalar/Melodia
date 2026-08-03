@@ -50,3 +50,9 @@ pub mod tray_bridge;
 pub mod updater_settings;
 pub mod util;
 pub mod window_chrome;
+
+// Source pins for shared components with no Rust module of their own — the
+// three faked-placeholder inputs and the tooltip pill.
+#[cfg(test)]
+#[path = "tests/placeholder_tests.rs"]
+mod placeholder_tests;

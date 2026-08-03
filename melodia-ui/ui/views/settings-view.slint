@@ -146,15 +146,17 @@ export component SettingsView inherits Rectangle {
     // `SearchBar`'s own resting width, restated because this page drives the
     // property rather than taking its default.
     property <length> search-w-max: 220px;
-    // The floor, and it is a budget rather than a taste call. Settings only
-    // exists above the 550 px miniplayer cutover, so the narrowest panel it can
-    // be asked to draw in is that minus the sidebar at its own 105 px floor and
+    // The floor, taken from the bar's own published one rather than restated,
+    // so the width this page stops handing over is the width the bar stops
+    // asking for. It is a budget rather than a taste call: Settings only exists
+    // above the 550 px miniplayer cutover, so the narrowest panel it can be
+    // asked to draw in is that minus the sidebar at its own 105 px floor and
     // the shell's 4 px right margin — call it 440 px, less this page's 2×16 px
     // padding. The header has to seat `compact-w` (240) + two 12 px gaps inside
     // what's left, which leaves the input about 145 px. Anything under that
     // still merely eats into the page padding before the panel clips it, but
     // the point is not to get there.
-    property <length> search-w-min: 140px;
+    property <length> search-w-min: search.min-w;
 
     // The filter yields room before the tabs do. They share a row now, and the
     // tabs are navigation where the search only refines what a tab already
@@ -251,7 +253,7 @@ export component SettingsView inherits Rectangle {
             VerticalLayout {
                 alignment: center;
                 padding-bottom: Theme.pad-sm;
-                SearchBar {
+                search := SearchBar {
                     input-width: root.search-w;
                     text <=> SettingsPage.search-query;
                     placeholder: @tr("Search settings…");

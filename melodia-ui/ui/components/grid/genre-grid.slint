@@ -79,10 +79,12 @@ export component GenreGrid inherits Rectangle {
                     // perceptual level for the fallback-only tile.
                     cover-scale-hover: 1.15;
                     title: genre.name;
-                    // Subtitle: track count · pre-formatted duration.
-                    // Both are pure numerics / display strings from
-                    // Rust — no further formatting in Slint.
-                    subtitle: @tr("{} tracks", genre.track_count)
+                    // Subtitle: track count · pre-formatted duration. The
+                    // duration arrives display-ready from Rust; the count
+                    // takes the same plural pair the Artists grid uses —
+                    // a genre exists for as little as one track.
+                    subtitle:
+                        @tr("{n} track" | "{n} tracks" % genre.track_count)
                         + " · " + genre.display_duration;
                     clicked => { root.open-genre(genre.id); }
                 }

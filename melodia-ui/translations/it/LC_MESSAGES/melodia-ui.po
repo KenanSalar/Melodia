@@ -78,9 +78,6 @@ msgstr "Svuota"
 msgid "Restart"
 msgstr "Riavvia"
 
-msgid "Deselect"
-msgstr "Deseleziona"
-
 msgid "Clear selection"
 msgstr "Cancella selezione"
 
@@ -162,6 +159,8 @@ msgstr "Nessun brano"
 msgid "Queue is empty"
 msgstr "La coda è vuota"
 
+msgid "Drop to add to queue"
+msgstr "Rilascia per aggiungere alla coda"
 
 msgid "Remove selected"
 msgstr "Rimuovi selezionati"
@@ -373,6 +372,10 @@ msgstr "Neutrale"
 msgid "Monochrome"
 msgstr "Monocromatico"
 
+# Title of the window-chrome settings card.
+msgid "Window"
+msgstr "Finestra"
+
 msgid "Native Title Bar"
 msgstr "Barra del titolo nativa"
 
@@ -420,6 +423,10 @@ msgstr "Destra"
 
 msgid "Left"
 msgstr "Sinistra"
+
+# Title of the overflow-menu settings card.
+msgid "Player Bar"
+msgstr "Barra di riproduzione"
 
 msgid "Overflow Menu Buttons"
 msgstr "Pulsanti del menu a comparsa"
@@ -612,13 +619,30 @@ msgstr "Ancora nessun album"
 msgid "Add a music folder in Settings to start building your library."
 msgstr "Aggiungi una cartella musicale nelle Impostazioni per iniziare a creare la tua libreria."
 
+# ---- Artists & Genres views -------------------------------------------------
+
+msgid "No artists yet"
+msgstr "Ancora nessun artista"
+
+# Artist Detail: filters the track list and the album strip at once.
+msgid "Filter tracks & albums…"
+msgstr "Filtra brani e album…"
+
+msgid "Filter genres…"
+msgstr "Filtra generi…"
+
+msgid "{n} genre"
+msgid_plural "{n} genres"
+msgstr[0] "{n} genere"
+msgstr[1] "{n} generi"
+
+msgid "No genres yet"
+msgstr "Ancora nessun genere"
+
 # ---- Playlists view ---------------------------------------------------------
 
 msgid "Filter playlists…"
 msgstr "Filtra playlist…"
-
-msgid "Updated"
-msgstr "Aggiornata"
 
 msgid "{n} playlist"
 msgid_plural "{n} playlists"
@@ -694,6 +718,28 @@ msgstr "Descrizione (facoltativa)"
 msgid "Add a description…"
 msgstr "Aggiungi una descrizione…"
 
+msgid "Create Playlist"
+msgstr "Crea playlist"
+
+# Confirm-button label on the create-playlist dialog.
+msgid "Create"
+msgstr "Crea"
+
+msgid "Rename Playlist"
+msgstr "Rinomina playlist"
+
+# ---- Playlist Detail: Delete confirm ----------------------------------------
+
+msgid "Delete playlist?"
+msgstr "Eliminare la playlist?"
+
+msgid "The playlist and its track order will be removed. The tracks themselves stay in your library."
+msgstr "La playlist e l'ordine dei suoi brani verranno rimossi. I brani restano nella tua libreria."
+
+# Confirm-button label on the delete-playlist dialog.
+msgid "Delete"
+msgstr "Elimina"
+
 # ---- Playlist Detail: Remove-selected confirm -------------------------------
 
 msgid "Remove from playlist?"
@@ -735,9 +781,6 @@ msgstr "Recenti"
 
 msgid "Clear all"
 msgstr "Cancella tutto"
-
-msgid "Remove from recent"
-msgstr "Rimuovi dai recenti"
 
 # ---- Favorites view ---------------------------------------------------------
 
@@ -827,6 +870,12 @@ msgstr "{} di {} già aggiunti"
 
 # ---- Auto-updater (Settings → Updates + notification toasts) ----------------
 
+msgid "Critical update"
+msgstr "Aggiornamento critico"
+
+msgid "This update fixes a critical issue and can't be skipped."
+msgstr "Questo aggiornamento risolve un problema critico e non può essere ignorato."
+
 msgid "Skip this version"
 msgstr "Salta questa versione"
 
@@ -892,11 +941,6 @@ msgstr "La modifica dell'icona nell'area di notifica richiede il riavvio di Melo
 
 msgid "Available only while the system tray icon is active."
 msgstr "Disponibile solo quando l'icona nell'area di notifica è attiva."
-
-# ---- Miniplayer --------------------------------------------------------------
-
-msgid "Exit miniplayer"
-msgstr "Esci dal miniplayer"
 
 # ---- About -------------------------------------------------------------------
 
@@ -985,6 +1029,9 @@ msgstr "Esporta playlist in file .m3u8"
 
 msgid "Choose playlists to export, then pick a folder."
 msgstr "Scegli le playlist da esportare, poi seleziona una cartella."
+
+msgid "No playlists to export"
+msgstr "Nessuna playlist da esportare"
 
 msgid "Select all"
 msgstr "Seleziona tutto"
@@ -1419,9 +1466,6 @@ msgstr "Scrobble su ListenBrainz"
 msgid "Report each play to your ListenBrainz account"
 msgstr "Segnala ogni riproduzione al tuo account ListenBrainz"
 
-msgid "Sync loved tracks"
-msgstr "Sincronizza i brani preferiti"
-
 msgid "Sync loved tracks to Last.fm"
 msgstr "Sincronizza i brani preferiti con Last.fm"
 
@@ -1436,9 +1480,6 @@ msgstr "Segna come preferiti su ListenBrainz i brani che ami — attivandolo si 
 
 msgid "Loved tracks"
 msgstr "Brani preferiti"
-
-msgid "Mark tracks you love as loved on your connected services"
-msgstr "Segna come preferiti sui tuoi servizi collegati i brani che ami"
 
 msgid "Add MusicBrainz IDs to your music"
 msgstr "Aggiungi gli ID MusicBrainz alla tua musica"

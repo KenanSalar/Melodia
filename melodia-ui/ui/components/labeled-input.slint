@@ -58,7 +58,14 @@ export component LabeledInput inherits VerticalLayout {
                 // and hide it the moment the user types. Same idiom
                 // `search-bar.slint` uses, and the same rung — see the
                 // note there for why `overlay0` is unreadable on the
-                // light variants.
+                // light variants. The bounded width and the elide come
+                // from there too, and for the reason spelled out there:
+                // unbounded, this Text takes the untruncated string as
+                // its own width and paints out of the field. The tag
+                // editor's three-up Year / Track / Disc row is where
+                // that showed first, since each field gets a third of
+                // the dialog and the ‹multiple values› sentinel is
+                // translated.
                 Text {
                     visible: root.text == "";
                     text: root.placeholder;
@@ -66,7 +73,9 @@ export component LabeledInput inherits VerticalLayout {
                     font-size: Theme.font-size-md;
                     vertical-alignment: center;
                     x: 0;
+                    width: 100%;
                     height: 100%;
+                    overflow: elide;
                 }
                 input := TextInput {
                     text <=> root.text;

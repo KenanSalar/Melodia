@@ -81,7 +81,8 @@ export component FavoritesView inherits Rectangle {
     // mandatory — `changed` doesn't fire when the first layout settles
     // directly on the final value, which is every window opened at its size.
     property <length> search-w-max: 220px;
-    property <length> search-w-min: 140px;
+    // Off the bar's own published floor, not restated — see `search-w` below.
+    property <length> search-w-min: search.min-w;
 
     property <length> page-w:
         2 * Theme.pad-lg + bar.compact-w + 2 * Theme.pad-md + root.search-w-max;
@@ -98,8 +99,9 @@ export component FavoritesView inherits Rectangle {
     property <length> content-w: root.page-w - 2 * Theme.pad-lg;
 
     // The filter yields room before the tabs do: the tabs navigate, the
-    // search only refines what a tab already shows. Reserved against the
-    // bar's published `compact-w` — its own floor — so the two can't drift.
+    // search only refines what a tab already shows. Both ends are reserved
+    // against a published floor — the tabs' `compact-w`, the input's `min-w` —
+    // so neither can drift from the component it is budgeting for.
     property <length> search-w: clamp(
         root.content-w - bar.compact-w - 2 * Theme.pad-md,
         root.search-w-min, root.search-w-max);
@@ -259,7 +261,7 @@ export component FavoritesView inherits Rectangle {
                     VerticalLayout {
                         alignment: center;
                         padding-bottom: Theme.pad-sm;
-                        SearchBar {
+                        search := SearchBar {
                             input-width: root.search-w;
                             text <=> Favorites.filter;
                             placeholder: root.filter-placeholder;

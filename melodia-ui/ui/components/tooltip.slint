@@ -35,10 +35,19 @@ export component Tooltip inherits Rectangle {
     // Falls back through the same `animate opacity` so the fade-in /
     // fade-out timing matches the hover path.
     in property <bool> force-shown: false;
+    // The pill is absolutely positioned against its host, so nothing downstream
+    // stops it running off the window — and a label that fits in English can be
+    // half again as long in a translation. Every English label clears the cap;
+    // the longest translations of the Playlists header pills don't, and those
+    // wrap to two lines rather than leaving the screen. Only sides that grow
+    // away from the host are safe to overrun, which is why the mounts near a
+    // window edge already pass `below`. (Not `max-width`: that name is taken by
+    // the built-in layout constraint, which a bound `width` overrides anyway.)
+    in property <length> max-pill-width: 240px;
 
     private property <bool> shown;
 
-    width: tip-text.preferred-width + 16px;
+    width: min(tip-text.preferred-width + 16px, root.max-pill-width);
     height: tip-text.preferred-height + 8px;
     // `right` clears the host horizontally and centres on it vertically; the
     // two vertical sides do the mirror of that.
@@ -80,5 +89,13 @@ export component Tooltip inherits Rectangle {
         font-size: 11px;
         horizontal-alignment: center;
         vertical-alignment: center;
+        // Bounded so the wrap has something to wrap against, and the root's
+        // height follows for free: a wrapping Text reports its height against
+        // the width it was handed, while the width above is read from the
+        // *horizontal* layout info, which is intrinsic to the string. So the
+        // chain terminates rather than chasing itself. The 8 px of side padding
+        // still comes from the compiler centring this in the pill.
+        width: root.width - 16px;
+        wrap: word-wrap;
     }
 }
