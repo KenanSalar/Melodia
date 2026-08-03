@@ -3,7 +3,7 @@
 //! Two Slint globals are driven from here:
 //!
 //! * `Albums` — the responsive album-card grid. Rust owns a flat,
-//!   name-sorted `Vec<AlbumStats>` (plus pre-lowercased search/sort keys)
+//!   name-sorted `Vec<AlbumStats>` (plus pre-lowercased sort keys)
 //!   behind `AlbumsUi::grid.data` (fetched once from `album_stats`); the
 //!   grid model is rebuilt from it on every filter / sort / column-count
 //!   change *without* a DB hit. The grid is virtualized by row: Rust chunks

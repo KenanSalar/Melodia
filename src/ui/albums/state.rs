@@ -11,19 +11,21 @@ use crate::entities::album::AlbumStats;
 use crate::entities::track::TrackListRow as RsTrackListRow;
 
 /// An album's pre-lowercased name + artist, computed once per `fetch_grid`
-/// so the per-keystroke filter walk and the name / artist sorts allocate
-/// nothing. Positionally aligned with [`GridData::albums`].
-pub(super) struct AlbumSearchKey {
+/// so the name / artist sorts allocate nothing. Positionally aligned with
+/// [`GridData::albums`]. The filter doesn't read it — it walks the raw
+/// fields through `ui::row_match`, which has to fold accents and so can't
+/// take a plain lowercased key.
+pub(super) struct AlbumSortKey {
     pub name_lc: String,
     pub artist_lc: String,
 }
 
 /// The grid's canonical data: the album list plus its pre-lowercased
-/// search / sort keys, kept together behind one `Arc` so a rebuild is a
+/// sort keys, kept together behind one `Arc` so a rebuild is a
 /// single refcount bump (and the two halves can never drift out of sync).
 pub(super) struct GridData {
     pub albums: Vec<AlbumStats>,
-    pub keys: Vec<AlbumSearchKey>,
+    pub keys: Vec<AlbumSortKey>,
 }
 
 impl GridData {
@@ -32,7 +34,7 @@ impl GridData {
     pub(super) fn new(albums: Vec<AlbumStats>) -> Self {
         let keys = albums
             .iter()
-            .map(|a| AlbumSearchKey {
+            .map(|a| AlbumSortKey {
                 name_lc: a.name.to_lowercase(),
                 artist_lc: a.artist_name.to_lowercase(),
             })
@@ -95,7 +97,10 @@ pub(super) struct AlbumDetailState {
     /// and only re-writes the rows whose membership flipped — O(changed),
     /// not O(rows). Reset to empty whenever the row model is rebuilt fresh.
     pub applied_selection: Mutex<HashSet<i32>>,
-    /// Live lowercased filter needle, mirroring `AlbumDetail.filter`. Lets
+    /// Live filter needle, folded by `set_filter` through
+    /// `ui::row_match::fold_needle` — never a bare `to_lowercase`, which
+    /// would still build and silently drop accent parity on this one view.
+    /// Mirrors `AlbumDetail.filter`. Lets
     /// the re-fetch path (`refresh_detail`) re-apply the filter to fresh
     /// data without round-tripping the UI thread for the property read.
     /// Cleared on fresh-open. Mirrors `ArtistDetailState::filter`.

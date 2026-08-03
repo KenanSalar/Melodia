@@ -89,7 +89,7 @@ pub(super) fn wire(
             // which model to fill and which tier to warm from it, and both can
             // run off the UI thread where the global isn't reachable.
             fu.set_active_tab(entering);
-            favorites_ui_mod::set_filter(&fu, String::new());
+            favorites_ui_mod::set_filter(&fu, "");
 
             // The entering tier was cleared when its tab was last left, so the
             // cards mount cold: hold the lookups at cache-only until the

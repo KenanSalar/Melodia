@@ -36,6 +36,7 @@ pub mod playback_settings;
 pub mod playlists;
 pub mod queue_sheet;
 pub mod recently_played;
+pub mod row_match;
 pub mod scrobbling_settings;
 pub mod search;
 pub mod section_state;

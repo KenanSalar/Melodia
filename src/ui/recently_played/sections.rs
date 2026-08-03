@@ -10,7 +10,7 @@ use slint::{ComponentHandle, Model, VecModel, Weak};
 use super::{RecentlyPlayedUi, to_slint_most_played_row};
 use crate::library;
 use crate::state::AppState;
-use crate::ui::detail_filter::most_played_matches;
+use crate::ui::row_match::most_played_matches;
 use crate::{AppWindow, EntityStripRow as UiEntityStripRow, RecentlyPlayed};
 
 /// Cap for the Most Played strip — enough to fill a horizontal scroll
@@ -58,9 +58,10 @@ pub async fn refresh_strips(
 
 /// Re-walk the cached `most_played` Vec through the current filter and push the
 /// strip rows. Cheap — runs entirely in memory. Empty filter ⇒ all rows;
-/// non-empty ⇒ case-insensitive substring match on title + artist.
+/// non-empty ⇒ the shared [`most_played_matches`] walk, the same one the
+/// recency list beside it runs.
 pub fn apply_filtered_strips(rp_ui: &Arc<RecentlyPlayedUi>, weak: &Weak<AppWindow>) {
-    let needle = rp_ui.state().filter.lock().to_lowercase();
+    let needle = rp_ui.state().filter.lock().clone();
 
     let rows: Vec<UiEntityStripRow> = {
         let cache = rp_ui.state().most_played.lock();

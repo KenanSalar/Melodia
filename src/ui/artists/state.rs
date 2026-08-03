@@ -11,33 +11,29 @@ use crate::entities::album::AlbumStats;
 use crate::entities::artist::ArtistStats;
 use crate::entities::track::TrackListRow as RsTrackListRow;
 
-/// An artist's pre-lowercased `name` + `sort_name`, computed once per
-/// `fetch_grid` so the per-keystroke filter walk and the name sort
-/// allocate nothing. Positionally aligned with [`GridData::artists`].
-pub(super) struct ArtistSearchKey {
+/// An artist's pre-lowercased `name`, computed once per `fetch_grid` so
+/// the name sort allocates nothing. Positionally aligned with
+/// [`GridData::artists`]. The filter doesn't read it — it walks the raw
+/// fields through `ui::row_match`, which has to fold accents and so
+/// can't take a plain lowercased key.
+pub(super) struct ArtistSortKey {
     pub name_lc: String,
-    pub sort_name_lc: String,
 }
 
 /// The grid's canonical data: the artist list plus its pre-lowercased
-/// search / sort keys, kept together behind one `Arc` so a rebuild is a
+/// sort keys, kept together behind one `Arc` so a rebuild is a
 /// single refcount bump.
 pub(super) struct GridData {
     pub artists: Vec<ArtistStats>,
-    pub keys: Vec<ArtistSearchKey>,
+    pub keys: Vec<ArtistSortKey>,
 }
 
 impl GridData {
     pub(super) fn new(artists: Vec<ArtistStats>) -> Self {
         let keys = artists
             .iter()
-            .map(|a| ArtistSearchKey {
+            .map(|a| ArtistSortKey {
                 name_lc: a.name.to_lowercase(),
-                sort_name_lc: a
-                    .sort_name
-                    .as_deref()
-                    .unwrap_or(a.name.as_str())
-                    .to_lowercase(),
             })
             .collect();
         Self { artists, keys }
@@ -73,8 +69,10 @@ pub(super) struct ArtistGridState {
 /// `tracks` and `albums` are the unfiltered canonical lists; the per-
 /// keystroke filter walk runs over these in memory (no DB round-trip)
 /// and re-stamps the Slint `tracks` / `albums` models with the filtered
-/// subsets. `filter` is the live needle (lowercased) — mirroring the
-/// Slint `ArtistDetail.filter` property so a refresh triggered while
+/// subsets. `filter` is the live needle, folded by `set_filter` through
+/// `ui::row_match::fold_needle` (never a bare `to_lowercase`, which would
+/// still build and silently drop accent parity on this one view) —
+/// mirroring the Slint `ArtistDetail.filter` property so a refresh while
 /// the user has a filter typed re-applies the filter to fresh data
 /// without round-tripping through the UI thread.
 pub(super) struct ArtistDetailState {

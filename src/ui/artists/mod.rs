@@ -3,8 +3,8 @@
 //! Two Slint globals are driven from here:
 //!
 //! * `Artists` — the responsive artist-card grid. Same shape as the Albums
-//!   grid: Rust owns a flat, name-sorted `Vec<ArtistStats>` (plus pre-
-//!   lowercased search keys) behind `ArtistsUi::grid.data`; the grid model
+//!   grid: Rust owns a flat, name-sorted `Vec<ArtistStats>` (plus a pre-
+//!   lowercased sort key) behind `ArtistsUi::grid.data`; the grid model
 //!   is rebuilt from it on every filter / sort / column-count change
 //!   without a DB hit. Cards are circular (Tauri parity) and pull their
 //!   cover lazily via `request-cover`, exactly like the Album cards do.

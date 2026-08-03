@@ -103,7 +103,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, rp_ui: &Arc<RecentlyPlayedU
         let ru = rp_ui.clone();
         let weak = weak.clone();
         g.on_filter_changed(move |text| {
-            recently_played_ui_mod::set_filter(&ru, text.to_string());
+            recently_played_ui_mod::set_filter(&ru, &text);
             recently_played_ui_mod::apply_filtered_tracks(&ru, &weak);
             recently_played_ui_mod::apply_filtered_strips(&ru, &weak);
         });

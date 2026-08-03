@@ -370,9 +370,9 @@ pub fn clear_detail(albums_ui: &AlbumsUi) {
 /// live text via the `<=>` binding; this Rust mirror lets the re-fetch
 /// path (`refresh_detail`) re-apply the filter to fresh data without
 /// round-tripping the UI thread for the property read. Always stored
-/// lowercased so the per-keystroke walk doesn't re-lower per row.
+/// folded so the per-keystroke walk doesn't re-fold per row.
 pub fn set_filter(albums_ui: &AlbumsUi, needle: &str) {
-    *albums_ui.detail.filter.lock() = needle.to_lowercase();
+    *albums_ui.detail.filter.lock() = crate::ui::row_match::fold_needle(needle);
 }
 
 /// Re-walk the cached tracks through the current filter and push the

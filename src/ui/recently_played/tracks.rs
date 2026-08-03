@@ -15,17 +15,20 @@ use super::RecentlyPlayedUi;
 use crate::error::AppResult;
 use crate::library;
 use crate::state::AppState;
+use crate::ui::row_match;
 use crate::ui::tracks::{PreparedTrackRow, finish_track_list_row};
 use crate::{AppWindow, RecentlyPlayed, TrackListRow as UiTrackListRow};
 
-/// Read-and-return the active filter string.
+/// Read-and-return the active filter needle, already folded by
+/// [`set_filter`] and ready to hand to a `row_match` predicate.
 pub fn current_filter(rp_ui: &RecentlyPlayedUi) -> String {
     rp_ui.state().filter.lock().clone()
 }
 
-/// Update the cached filter string.
-pub fn set_filter(rp_ui: &RecentlyPlayedUi, filter: String) {
-    *rp_ui.state().filter.lock() = filter;
+/// Update the cached filter needle. Folded on the way in, so the list and
+/// the Most Played strip beside it share one needle.
+pub fn set_filter(rp_ui: &RecentlyPlayedUi, filter: &str) {
+    *rp_ui.state().filter.lock() = row_match::fold_needle(filter);
 }
 
 /// Fetch the 200 most-recently-played tracks, cache them, push the header
@@ -91,12 +94,12 @@ pub async fn refresh_tracks(
 /// entirely in memory. Existing selection is re-stamped so a filter change
 /// doesn't visually drop the user's selection.
 pub fn apply_filtered_tracks(rp_ui: &Arc<RecentlyPlayedUi>, weak: &Weak<AppWindow>) {
-    let needle = current_filter(rp_ui).to_lowercase();
+    let needle = current_filter(rp_ui);
 
     let prepared: Vec<PreparedTrackRow> = {
         let all = rp_ui.state().tracks_all.lock();
         all.iter()
-            .filter(|r| crate::ui::detail_filter::track_matches(r, &needle))
+            .filter(|r| row_match::track_matches(r, &needle))
             .map(crate::ui::tracks::prepare_track_list_row)
             .collect()
     };

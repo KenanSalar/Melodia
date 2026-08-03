@@ -1,5 +1,4 @@
-//! Shared in-memory row filtering — detail track lists and the Most
-//! Played strips.
+//! The detail views' shared filter pass.
 //!
 //! The Album / Genre / Playlist / Artist detail views each carry a hero
 //! `SearchBar` that filters the track list in memory. The filter walk,
@@ -13,78 +12,22 @@
 //! Album / Genre / Playlist Detail run the whole pass on the UI thread
 //! and call [`apply_filtered_detail`] directly. Artist Detail does its
 //! own worker-thread row prep (it also rebuilds an Albums strip), so it
-//! reuses only [`track_matches`] and [`restamp_selection`].
+//! reuses only [`restamp_selection`] from here and the predicate from
+//! [`crate::ui::row_match`].
 //!
-//! The predicates alone are reused further out, by card surfaces of both
-//! shapes — Favorites' Most Played is a virtualized grid tab, Recently
-//! Played's is still a strip, and the predicate doesn't care. Both match on
-//! [`most_played_matches`]; the single-name surfaces (Favorites' Favorite
-//! Artists grid, Artist Detail's Albums strip) on [`field_contains`]. Both
-//! Most Played surfaces run their predicate twice — once to build the card
-//! model, once to resolve the ids `play-track` enqueues — so sharing it is
-//! what keeps a surface and its queue agreeing. The single-name ones only
-//! build a model; their card actions fetch by entity id (Favorite Artists)
-//! or navigate (Albums).
+//! Which fields a row is matched on, and the case/accent fold applied to
+//! both sides, live in `row_match` — every other filter box in the app
+//! shares them, so they can't be a detail-view detail.
 
 use std::collections::HashSet;
 
 use parking_lot::Mutex;
 use slint::{Model, ModelRc, VecModel};
 
-use crate::entities::track::{MostPlayedFavorite, TrackListRow as RsTrackListRow};
+use crate::entities::track::TrackListRow as RsTrackListRow;
 use crate::ui::detail_selection::DetailSelectionView;
+use crate::ui::row_match::track_matches;
 use crate::TrackListRow as UiTrackListRow;
-
-/// Lowered-needle case-insensitive substring match across a track row's
-/// title + artist + album. `needle` must already be lowercased (the
-/// caller stores it that way in `*DetailState::filter`); an empty one
-/// matches every row, so an unfiltered list needs no branch here.
-pub fn track_matches(r: &RsTrackListRow, needle: &str) -> bool {
-    field_contains(&r.title, needle)
-        || r.artist.as_deref().is_some_and(|a| field_contains(a, needle))
-        || r.album.as_deref().is_some_and(|a| field_contains(a, needle))
-}
-
-/// Lowered-needle match for a Most Played card — title + artist, the same
-/// two fields the card renders. Favorites and Recently Played share both the
-/// row type and this predicate, and each uses it twice: once to build the
-/// card model, once to resolve the ids `play-track` hands to
-/// `player_play_tracks`. Keeping those two on one predicate is what stops a
-/// surface and its queue from disagreeing about what's on screen.
-pub fn most_played_matches(t: &MostPlayedFavorite, needle: &str) -> bool {
-    field_contains(&t.title, needle)
-        || t.artist.as_deref().is_some_and(|a| field_contains(a, needle))
-}
-
-/// Case-insensitive substring check without the per-call `to_lowercase`
-/// heap allocation on the (overwhelmingly common) all-ASCII path. The
-/// filter walk runs per throttled keystroke over every row of the open
-/// detail — a "Rock" genre detail can hold thousands of rows, and the
-/// old three-allocations-per-row walk dominated its keystroke cost.
-/// Non-ASCII text falls back to the allocating Unicode-correct path.
-/// `needle` must already be lowercased. An empty needle matches anything
-/// — that's what lets every filter walk run unconditionally rather than
-/// keep its own empty-search-bar fast path.
-///
-/// Public because the single-field card surfaces match on one name rather
-/// than a row — the Favorite Artists grid and the Artist-Detail Albums strip
-/// call it directly instead of carrying their own `to_lowercase().contains(…)`.
-pub fn field_contains(haystack: &str, needle: &str) -> bool {
-    if needle.is_empty() {
-        return true;
-    }
-    if haystack.is_ascii() && needle.is_ascii() {
-        let h = haystack.as_bytes();
-        let n = needle.as_bytes();
-        if n.len() > h.len() {
-            return false;
-        }
-        return h
-            .windows(n.len())
-            .any(|w| w.iter().zip(n).all(|(a, b)| a.to_ascii_lowercase() == *b));
-    }
-    haystack.to_lowercase().contains(needle)
-}
 
 /// Re-apply selection from the view's `selected-ids` onto freshly-built
 /// rows before they're swapped into the Slint model —
@@ -113,7 +56,9 @@ pub struct FilterRefs<'a> {
     pub tracks: &'a Mutex<Vec<RsTrackListRow>>,
     /// Selection set currently stamped onto the Slint row model.
     pub applied: &'a Mutex<HashSet<i32>>,
-    /// Live lowercased filter needle, mirroring the Slint `filter` prop.
+    /// Live filter needle, mirroring the Slint `filter` prop. Already
+    /// folded — the view's `set_filter` is the sole writer and puts it
+    /// through `row_match::fold_needle`, so nothing here re-folds.
     pub filter: &'a Mutex<String>,
 }
 
@@ -126,7 +71,8 @@ pub struct FilterRefs<'a> {
 ///
 /// Used directly by Album / Genre / Playlist Detail. Artist Detail keeps
 /// its own variant (worker-thread prep + Albums strip) but reuses
-/// [`track_matches`] / [`restamp_selection`] from this module.
+/// [`restamp_selection`] from here and [`track_matches`] from
+/// [`crate::ui::row_match`].
 pub fn apply_filtered_detail<V: DetailSelectionView>(view: &V, refs: &FilterRefs<'_>) {
     let needle = refs.filter.lock().clone();
 
@@ -165,7 +111,3 @@ fn install_tracks<V: DetailSelectionView>(view: &V, rows: Vec<UiTrackListRow>) {
         view.replace_track_rows(ModelRc::new(VecModel::from(rows)));
     }
 }
-
-#[cfg(test)]
-#[path = "tests/detail_filter_tests.rs"]
-mod tests;

@@ -12,6 +12,7 @@ use slint::{ComponentHandle, ModelRc, VecModel};
 
 use crate::library;
 use crate::state::AppState;
+use crate::ui::row_match;
 use crate::ui::tab_bar::clamp_tab;
 use crate::{AppWindow, SettingsPage};
 
@@ -55,7 +56,11 @@ pub fn install(ui: &AppWindow, state: &AppState) {
 
     // Slint 1.16 has no `.contains()` on string, so every section's
     // row-visibility expression routes its substring test through here.
-    page.on_matches(|haystack, needle| haystack.to_lowercase().contains(&needle.to_lowercase()));
+    // Same predicate the library filter boxes run, so an ASCII query
+    // reaches the accented labels in the translated catalogues.
+    page.on_matches(|haystack, needle| {
+        row_match::field_contains(&haystack, &row_match::fold_needle(&needle))
+    });
 
     // Row split for the wrapping chip / swatch strips — see `chunk_indices`.
     page.on_chunk_indices(|count, per_row| {

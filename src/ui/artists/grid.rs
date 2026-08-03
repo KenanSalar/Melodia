@@ -14,6 +14,7 @@ use super::{ArtistsUi, to_slint_artist_row};
 use crate::error::AppResult;
 use crate::library;
 use crate::state::AppState;
+use crate::ui::row_match;
 use crate::{
     AppWindow, ArtistGridRow as UiArtistGridRow, ArtistRow as UiArtistRow, Artists,
 };
@@ -95,14 +96,17 @@ pub(super) fn compute_indices(
     sort_dir: &str,
     filter: &str,
 ) -> Vec<usize> {
-    let needle = filter.trim().to_lowercase();
+    let needle = row_match::fold_needle(filter);
     let mut indices: Vec<usize> = if needle.is_empty() {
         (0..data.artists.len()).collect()
     } else {
-        data.keys
+        data.artists
             .iter()
             .enumerate()
-            .filter(|(_, k)| k.name_lc.contains(&needle) || k.sort_name_lc.contains(&needle))
+            .filter(|(_, a)| {
+                row_match::field_contains(&a.name, &needle)
+                    || a.sort_name.as_deref().is_some_and(|s| row_match::field_contains(s, &needle))
+            })
             .map(|(i, _)| i)
             .collect()
     };

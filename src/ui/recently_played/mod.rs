@@ -160,12 +160,12 @@ impl RecentlyPlayedUi {
     /// model with — the strip narrows with the search bar, so the raw cache
     /// would enqueue cards that aren't on screen.
     pub fn most_played_track_ids(&self) -> Vec<i64> {
-        let needle = self.inner.filter.lock().to_lowercase();
+        let needle = self.inner.filter.lock().clone();
         self.inner
             .most_played
             .lock()
             .iter()
-            .filter(|t| crate::ui::detail_filter::most_played_matches(t, &needle))
+            .filter(|t| crate::ui::row_match::most_played_matches(t, &needle))
             .map(|t| t.id)
             .collect()
     }
@@ -174,12 +174,12 @@ impl RecentlyPlayedUi {
     /// whatever the search bar has narrowed away — so `shuffle-all` /
     /// `play-row` enqueue what the user sees.
     pub fn filtered_track_ids(&self) -> Vec<i64> {
-        let needle = self.inner.filter.lock().to_lowercase();
+        let needle = self.inner.filter.lock().clone();
         self.inner
             .tracks_all
             .lock()
             .iter()
-            .filter(|r| crate::ui::detail_filter::track_matches(r, &needle))
+            .filter(|r| crate::ui::row_match::track_matches(r, &needle))
             .map(|r| r.id)
             .collect()
     }

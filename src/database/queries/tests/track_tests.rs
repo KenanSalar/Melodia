@@ -684,6 +684,47 @@ async fn get_most_played_respects_limit() -> Result<(), AppError> {
     Ok(())
 }
 
+#[tokio::test]
+async fn both_most_played_queries_project_what_the_filter_searches() -> Result<(), AppError> {
+    // The cards render title + artist, so a `SELECT` that drops one of the
+    // other four still compiles and still paints correctly — it only stops
+    // the hero search bar narrowing the card grid the way it narrows the
+    // track list beside it. `FromRow` catches a missing column at run time,
+    // which is why this asserts the values rather than just the row count.
+    let db = seed_db().await?;
+    sqlx::query(
+        "UPDATE tracks SET play_count = 5, is_favorite = TRUE, album_artist = 'Various Artists' \
+         WHERE title = 'Alpha'",
+    )
+    .execute(db.write())
+    .await?;
+
+    let favorites = queries::track::get_most_played_favorites(&db).await?;
+    let all = queries::track::get_most_played(&db, 200).await?;
+
+    for (label, rows) in [("favorites", favorites), ("all", all)] {
+        let card = rows.iter().find(|t| t.title == "Alpha");
+        assert_eq!(
+            card.map(|c| (
+                c.artist.as_deref(),
+                c.album_artist.as_deref(),
+                c.album.as_deref(),
+                c.genre.as_deref(),
+                c.year,
+            )),
+            Some((
+                Some("Zeta Artist"),
+                Some("Various Artists"),
+                Some("B Album"),
+                Some("Pop"),
+                Some(2024),
+            )),
+            "{label}: the most-played projection dropped a field the filter searches"
+        );
+    }
+    Ok(())
+}
+
 // --- Tag-edit query tests ---
 
 #[tokio::test]

@@ -706,7 +706,8 @@ pub async fn get_most_played_favorites(
     // The order's trailing keys are read, not selected — `MostPlayedFavorite`
     // is the card projection and has no slot for a timestamp.
     let rows = sqlx::query_as::<_, track::MostPlayedFavorite>(AssertSqlSafe(format!(
-        "SELECT id, title, artist, artwork_path, play_count, duration_ms \
+        "SELECT id, title, artist, album_artist, album, genre, year, \
+                artwork_path, play_count, duration_ms \
            FROM tracks \
           WHERE is_favorite = TRUE AND play_count > 0 \
           ORDER BY {MOST_PLAYED_ORDER}"
@@ -728,7 +729,8 @@ pub async fn get_most_played(
     limit: i64,
 ) -> Result<Vec<track::MostPlayedFavorite>, AppError> {
     let rows = sqlx::query_as::<_, track::MostPlayedFavorite>(AssertSqlSafe(format!(
-        "SELECT id, title, artist, artwork_path, play_count, duration_ms \
+        "SELECT id, title, artist, album_artist, album, genre, year, \
+                artwork_path, play_count, duration_ms \
            FROM tracks \
           WHERE play_count > 0 \
           ORDER BY {MOST_PLAYED_ORDER} \

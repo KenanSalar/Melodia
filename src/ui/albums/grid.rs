@@ -14,6 +14,7 @@ use super::{AlbumsUi, to_slint_album_row};
 use crate::error::AppResult;
 use crate::library;
 use crate::state::AppState;
+use crate::ui::row_match;
 use crate::{
     AlbumGridRow as UiAlbumGridRow, AlbumRow as UiAlbumRow, Albums, AppWindow,
 };
@@ -22,8 +23,8 @@ use crate::{
 /// cover thumbnails, then rebuild the grid model on the UI thread. Async —
 /// runs on the tokio runtime; the UI write hops back via
 /// `upgrade_in_event_loop`. Called once at startup and from the
-/// library-changed subscriber. The pre-lowercased search / sort keys are
-/// built here (on the worker), not per keystroke on the UI thread.
+/// library-changed subscriber. The pre-lowercased sort keys are built here
+/// (on the worker), not per sort click on the UI thread.
 pub async fn fetch_grid(
     state: &AppState,
     albums_ui: &Arc<AlbumsUi>,
@@ -121,23 +122,31 @@ pub fn rebuild_grid(ui: &AppWindow, albums_ui: &AlbumsUi) {
 }
 
 /// Filter + sort the grid data into a display-order list of album indices.
-/// Pure / no UI state. The filter walk and the name / artist sorts read
-/// `data.keys` (pre-lowercased in `fetch_grid`), so this allocates nothing
-/// per album beyond the index `Vec` itself.
+/// Pure / no UI state. The name / artist sorts read `data.keys`
+/// (pre-lowercased in `fetch_grid`); the filter walks the raw fields
+/// through `row_match`, which folds only the rows that carry an accent.
+///
+/// Matching `year` is what lets a query the Search view answers with a
+/// decade ("199") narrow this grid too — `AlbumStats` carries it, so it
+/// costs one predicate rather than a query.
 pub(super) fn compute_indices(
     data: &GridData,
     sort_field: &str,
     sort_dir: &str,
     filter: &str,
 ) -> Vec<usize> {
-    let needle = filter.trim().to_lowercase();
+    let needle = row_match::fold_needle(filter);
     let mut indices: Vec<usize> = if needle.is_empty() {
         (0..data.albums.len()).collect()
     } else {
-        data.keys
+        data.albums
             .iter()
             .enumerate()
-            .filter(|(_, k)| k.name_lc.contains(&needle) || k.artist_lc.contains(&needle))
+            .filter(|(_, a)| {
+                row_match::field_contains(&a.name, &needle)
+                    || row_match::field_contains(&a.artist_name, &needle)
+                    || row_match::year_matches(a.year, &needle)
+            })
             .map(|(i, _)| i)
             .collect()
     };

@@ -15,6 +15,7 @@ use crate::entities::smart_criteria::SmartCriteria;
 use crate::error::AppResult;
 use crate::library;
 use crate::state::AppState;
+use crate::ui::row_match;
 use crate::{
     AppWindow, PlaylistGridRow as UiPlaylistGridRow, PlaylistRow as UiPlaylistRow, Playlists,
 };
@@ -214,14 +215,14 @@ pub(super) fn compute_indices(
     sort_dir: &str,
     filter: &str,
 ) -> Vec<usize> {
-    let needle = filter.trim().to_lowercase();
+    let needle = row_match::fold_needle(filter);
     let mut indices: Vec<usize> = if needle.is_empty() {
         (0..data.playlists.len()).collect()
     } else {
-        data.keys
+        data.playlists
             .iter()
             .enumerate()
-            .filter(|(_, k)| k.name_lc.contains(&needle))
+            .filter(|(_, p)| row_match::field_contains(&p.name, &needle))
             .map(|(i, _)| i)
             .collect()
     };

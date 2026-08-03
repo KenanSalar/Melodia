@@ -19,9 +19,10 @@ use crate::error::AppResult;
 use crate::library;
 use crate::state::AppState;
 use crate::ui::detail_artwork::decode_detail_pair;
-use crate::ui::detail_filter::{field_contains, restamp_selection, track_matches};
+use crate::ui::detail_filter::restamp_selection;
 use crate::ui::detail_view::{impl_detail_view_helpers, resolve_view_sort};
 use crate::ui::model_patch;
+use crate::ui::row_match::{self, field_contains, track_matches};
 use crate::ui::track_list_view::view_id;
 use crate::ui::track_sort::sort_track_list_rows;
 use crate::ui::tracks::PreparedTrackRow;
@@ -303,16 +304,16 @@ pub fn clear_detail(artists_ui: &ArtistsUi) {
 /// live text via `<=>` binding; this Rust mirror lets the re-fetch path
 /// (`open_artist_with` / `refresh_detail`) re-apply the filter to fresh
 /// data without round-tripping through the UI thread for the property
-/// read. Always stored lowercased so the per-keystroke walk doesn't
-/// re-lower per row.
+/// read. Always stored folded so the per-keystroke walk doesn't re-fold
+/// per row.
 pub fn set_filter(artists_ui: &ArtistsUi, needle: &str) {
-    *artists_ui.detail.filter.lock() = needle.to_lowercase();
+    *artists_ui.detail.filter.lock() = row_match::fold_needle(needle);
 }
 
 /// Re-walk the canonical `all_tracks` + `albums` Vecs through the
-/// current filter and push the resulting Slint models. The track match
-/// is a case-insensitive substring on title + artist + album; the album
-/// match is on album name only. Cheap enough to invoke on every
+/// current filter and push the resulting Slint models. The track match is
+/// the shared [`track_matches`] walk; the album match is on album name
+/// only. Cheap enough to invoke on every
 /// keystroke — the lists are fully in-memory. The filtered track result
 /// is stored back into the displayed `tracks` cache so it stays in
 /// lockstep with the model (the generic selection/sort logic maps id ↔

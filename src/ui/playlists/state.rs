@@ -12,18 +12,18 @@ use crate::entities::smart_criteria::SmartCriteria;
 use crate::entities::track::TrackListRow as RsTrackListRow;
 
 /// A playlist's pre-lowercased name, computed once per `fetch_grid` so the
-/// per-keystroke filter walk and the name sort allocate nothing.
-/// Positionally aligned with [`GridData::playlists`].
-pub(super) struct PlaylistSearchKey {
+/// name sort allocates nothing. Positionally aligned with
+/// [`GridData::playlists`].
+pub(super) struct PlaylistSortKey {
     pub name_lc: String,
 }
 
 /// The grid's canonical data: the playlist list plus its pre-lowercased
-/// search / sort keys, kept together behind one `Arc` so a rebuild is a
+/// sort keys, kept together behind one `Arc` so a rebuild is a
 /// single refcount bump (and the two halves can never drift out of sync).
 pub(super) struct GridData {
     pub playlists: Vec<PlaylistStats>,
-    pub keys: Vec<PlaylistSearchKey>,
+    pub keys: Vec<PlaylistSortKey>,
     /// Positionally aligned with [`GridData::playlists`]. `true` iff the row is
     /// a smart playlist whose criteria can be moved by a play-count flush
     /// (`SmartCriteria::depends_on_play_stats`); always `false` for regular
@@ -37,7 +37,7 @@ impl GridData {
     pub(super) fn new(playlists: Vec<PlaylistStats>) -> Self {
         let keys = playlists
             .iter()
-            .map(|p| PlaylistSearchKey {
+            .map(|p| PlaylistSortKey {
                 name_lc: p.name.to_lowercase(),
             })
             .collect();
@@ -124,7 +124,10 @@ pub(super) struct PlaylistDetailState {
     /// Selection set currently *stamped* onto the Slint row model — same
     /// diff-and-write-back contract as `AlbumDetailState::applied_selection`.
     pub applied_selection: Mutex<HashSet<i32>>,
-    /// Live lowercased filter needle, mirroring `PlaylistDetail.filter`.
+    /// Live filter needle, folded by `set_filter` through
+    /// `ui::row_match::fold_needle` — never a bare `to_lowercase`, which
+    /// would still build and silently drop accent parity on this one view.
+    /// Mirrors `PlaylistDetail.filter`.
     /// Lets the re-fetch path (`refresh_detail`) re-apply the filter to
     /// fresh data without round-tripping the UI thread for the property
     /// read. Cleared on fresh-open. Mirrors `ArtistDetailState::filter`.

@@ -155,7 +155,7 @@ fn build_visible(
     order: &[usize],
     filter: &str,
 ) -> Vec<UiTrackListRow> {
-    let needle = filter.trim().to_lowercase();
+    let needle = crate::ui::row_match::fold_needle(filter);
     if needle.is_empty() {
         return order
             .iter()

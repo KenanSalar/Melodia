@@ -42,7 +42,7 @@ use crate::entities::artist::FavoriteArtist;
 use crate::library;
 use crate::services::settings::{SortDir, ViewSort};
 use crate::state::AppState;
-use crate::ui::detail_filter::{field_contains, most_played_matches};
+use crate::ui::row_match::{field_contains, most_played_matches};
 use crate::{
     AppWindow, EntityGridRow as UiEntityGridRow, EntityStripRow as UiEntityStripRow, Favorites,
 };
@@ -178,11 +178,11 @@ struct PreparedGrids {
 
 /// Re-walk the cached `most_played` + `fav_artists` Rust Vecs through the
 /// current `Favorites.filter`, hashing the survivors as they go. Empty filter ⇒
-/// all rows; non-empty ⇒ case-insensitive substring match on title+artist (Most
-/// Played) / name (Artists). Runs entirely in memory and touches no Slint state,
-/// so either thread can call it.
+/// all rows; non-empty ⇒ the shared [`most_played_matches`] walk (Most Played) /
+/// [`field_contains`] on the name (Artists). Runs entirely in memory and touches
+/// no Slint state, so either thread can call it.
 fn build_filtered_grids(fav_ui: &FavoritesUi) -> PreparedGrids {
-    let needle = fav_ui.state().filter.lock().to_lowercase();
+    let needle = fav_ui.state().filter.lock().clone();
     let mut most_played_hasher = DefaultHasher::new();
     let mut artists_hasher = DefaultHasher::new();
 

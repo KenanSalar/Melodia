@@ -1,8 +1,8 @@
 //! Songs tab: fetch, sort persistence, in-memory filter, model
 //! apply. Mirrors the Tracks view's fetch shape — the SQL fetch returns
 //! the entire sorted set once per `library_changed_tx` tick, and the
-//! per-keystroke filter walk is in memory (matches title + artist +
-//! album case-insensitive).
+//! per-keystroke filter walk is in memory over the fields
+//! [`crate::ui::row_match`] defines.
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -14,6 +14,7 @@ use crate::error::AppResult;
 use crate::library;
 use crate::services::settings::{SortDir, ViewSort};
 use crate::state::AppState;
+use crate::ui::row_match;
 use crate::ui::tracks::{PreparedTrackRow, finish_track_list_row};
 use crate::{AppWindow, Favorites, TrackListRow as UiTrackListRow};
 
@@ -26,7 +27,8 @@ pub fn current_sort(fav_ui: &FavoritesUi) -> ViewSort {
     fav_ui.state().sort.lock().clone()
 }
 
-/// Read-and-return the active filter string.
+/// Read-and-return the active filter needle, already folded by
+/// [`set_filter`] and ready to hand to a `row_match` predicate.
 pub fn current_filter(fav_ui: &FavoritesUi) -> String {
     fav_ui.state().filter.lock().clone()
 }
@@ -38,12 +40,13 @@ pub fn set_sort(fav_ui: &FavoritesUi, field: String, dir: SortDir) {
     *fav_ui.state().sort.lock() = ViewSort { field, dir };
 }
 
-/// Update the cached filter string. The Slint side already holds the
+/// Update the cached filter needle. The Slint side already holds the
 /// live text via `<=>` binding; this mirror lets the live-refresh
 /// subscriber re-walk on a background thread without re-reading the
-/// Slint global.
-pub fn set_filter(fav_ui: &FavoritesUi, filter: String) {
-    *fav_ui.state().filter.lock() = filter;
+/// Slint global. Folded on the way in, so all four readers — the Songs
+/// list, both grids, and the two queue-id walks — share one needle.
+pub fn set_filter(fav_ui: &FavoritesUi, filter: &str) {
+    *fav_ui.state().filter.lock() = row_match::fold_needle(filter);
 }
 
 /// Fetch the full favourites list at the current sort, cache it in
@@ -98,7 +101,7 @@ pub async fn refresh_tracks(
 /// doesn't visually drop an existing selection (the row may shift index
 /// but its checkbox + accent background hold).
 pub fn apply_filtered_tracks(fav_ui: &Arc<FavoritesUi>, weak: &Weak<AppWindow>) {
-    let needle = current_filter(fav_ui).to_lowercase();
+    let needle = current_filter(fav_ui);
 
     // Filter + prepare the `Send` row halves on the calling thread,
     // borrowing the cache in place — the old path deep-cloned the whole
@@ -107,7 +110,7 @@ pub fn apply_filtered_tracks(fav_ui: &Arc<FavoritesUi>, weak: &Weak<AppWindow>) 
     let prepared: Vec<PreparedTrackRow> = {
         let all = fav_ui.state().tracks_all.lock();
         all.iter()
-            .filter(|r| crate::ui::detail_filter::track_matches(r, &needle))
+            .filter(|r| row_match::track_matches(r, &needle))
             .map(crate::ui::tracks::prepare_track_list_row)
             .collect()
     };

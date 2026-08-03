@@ -302,6 +302,72 @@ async fn bm25_weights_cover_every_indexed_column() -> Result<(), AppError> {
     Ok(())
 }
 
+/// The per-view filter boxes never reach this index — they narrow in-memory
+/// caches through `ui::row_match::search_fields`, which mirrors the column
+/// list by hand. So a ninth column is two edits, and only the first of them
+/// fails anything on its own: the Search view answers a query the filter box
+/// beside it comes up empty on, which is the split `20260802000001` was
+/// written to close in the first place. Reading the applied schema rather
+/// than a copied array is what makes it a pin on both sides at once.
+///
+/// It names a `ui::` module from a database test for the same reason the
+/// weights above sit in the migration rather than in `search.rs`: what this
+/// column list covers is load-bearing well outside the file that declares it.
+#[tokio::test]
+async fn the_filter_boxes_search_every_indexed_column_they_can_reach() -> Result<(), AppError> {
+    // `composer` has no slot on `TrackListRow`, and `file_name` is left out
+    // deliberately — the tiebreaker weight that keeps a filename echo below
+    // the tags it repeats has no equivalent in an unranked substring filter.
+    // `year` is an integer that joins the match through `row_match::year_matches`
+    // instead of the text list.
+    const NOT_TEXT_SEARCHED: [&str; 3] = ["composer", "file_name", "year"];
+
+    let db = DbPool::test_pool().await;
+    let indexed: Vec<String> =
+        sqlx::query_scalar("SELECT name FROM pragma_table_info('tracks_fts')")
+            .fetch_all(db.read())
+            .await?;
+    let expected: Vec<&str> = indexed
+        .iter()
+        .map(String::as_str)
+        .filter(|c| !NOT_TEXT_SEARCHED.contains(c))
+        .collect();
+
+    // Every searchable field holds its own column name, so `search_fields`
+    // hands back the list it claims to mirror and a failure names the column
+    // that drifted. The literal is exhaustive on purpose: a new `TrackListRow`
+    // field fails this file to compile, which is the prompt to decide whether
+    // it belongs in the index and in the fold.
+    let row = crate::entities::track::TrackListRow {
+        id: 1,
+        file_path: "/m/1.flac".to_owned(),
+        file_name: "file_name".to_owned(),
+        title: "title".to_owned(),
+        artist: Some("artist".to_owned()),
+        album_artist: Some("album_artist".to_owned()),
+        album: Some("album".to_owned()),
+        genre: Some("genre".to_owned()),
+        track_number: None,
+        disc_number: None,
+        year: None,
+        artwork_path: None,
+        duration_ms: 0,
+        is_favorite: false,
+        rating: 0,
+        album_id: None,
+        artist_id: None,
+        genre_id: None,
+        date_added: "2026-01-01T00:00:00Z".to_owned(),
+        sort_key: None,
+    };
+    assert_eq!(
+        crate::ui::row_match::search_fields(&row).as_slice(),
+        expected,
+        "the fts5 column list and what the filter boxes search have drifted"
+    );
+    Ok(())
+}
+
 /// A filename normally repeats the title and artist beside it, so under the
 /// default uniform weights a filename echo outranks the track the query
 /// actually names. Here the term appears three times in one track's filename

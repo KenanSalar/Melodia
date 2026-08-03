@@ -3,7 +3,7 @@
 //! Two Slint globals are driven from here:
 //!
 //! * `Genres` — the responsive genre-card grid. Rust owns a flat,
-//!   name-sorted `Vec<GenreStats>` (plus pre-lowercased search keys)
+//!   name-sorted `Vec<GenreStats>` (plus a pre-lowercased sort key)
 //!   behind `GenresUi::grid.data` (fetched once from `genre_stats`); the
 //!   grid model is rebuilt from it on every filter / sort / column-count
 //!   change *without* a DB hit. The grid is virtualized by row: Rust

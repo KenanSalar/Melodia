@@ -218,6 +218,10 @@ notify-debouncer-full = "0.7"
 rayon = "1.12"
 blake3 = "1.8.5"
 natord = "1.0.9"
+# Accent folding for the in-memory filter boxes, so they narrow on the same
+# spellings `tracks_fts`'s `remove_diacritics 2` tokenizer does. Already in the
+# lock file transitively, so this line costs no extra build.
+unicode-normalization = "0.1.25"
 image = { version = "0.25.10", default-features = false, features = ["jpeg", "png", "webp"] }
 lru = "0.18.1"
 

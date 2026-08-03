@@ -3,7 +3,7 @@
 //! Two Slint globals are driven from here:
 //!
 //! * `Playlists` — the responsive playlist-card grid. Rust owns a flat
-//!   `Vec<PlaylistStats>` (plus pre-lowercased name keys) behind
+//!   `Vec<PlaylistStats>` (plus a pre-lowercased name sort key) behind
 //!   `PlaylistsUi::grid.data`; the grid model is rebuilt from it on every
 //!   filter / sort / column-count change *without* a DB hit. Per-card cover
 //!   lookup is lazy via `request-cover`. The flat `Playlists.rows` model
@@ -47,6 +47,9 @@ use crate::{
 use state::{
     DEFAULT_GRID_COVER_CAP, GRID_COVER_SIZE, GridData, PlaylistDetailState, PlaylistGridState,
 };
+
+#[cfg(test)]
+use grid::compute_indices;
 
 pub use detail::{
     apply_detail_row_favorite, apply_detail_row_rating, apply_filtered_detail,
@@ -307,3 +310,7 @@ const _: fn() = || {
     fn check<T: Send + Sync>() {}
     check::<PlaylistsUi>();
 };
+
+#[cfg(test)]
+#[path = "tests/playlists_tests.rs"]
+mod tests;

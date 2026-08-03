@@ -15,6 +15,7 @@ use super::{GenresUi, to_slint_genre_row};
 use crate::error::AppResult;
 use crate::library;
 use crate::state::AppState;
+use crate::ui::row_match;
 use crate::{
     AppWindow, GenreGridRow as UiGenreGridRow, GenreRow as UiGenreRow, Genres,
 };
@@ -23,8 +24,8 @@ use crate::{
 /// rebuild the grid model on the UI thread. Async — runs on the tokio
 /// runtime; the UI write hops back via `upgrade_in_event_loop`. Called
 /// once at startup and from the library-changed subscriber. The
-/// pre-lowercased search keys are built here (on the worker), not per
-/// keystroke on the UI thread.
+/// pre-lowercased sort key is built here (on the worker), not per sort
+/// click on the UI thread.
 ///
 /// No prewarm step: genres have no artwork to decode (compare
 /// `src/ui/albums/grid.rs::fetch_grid`, which prewarms the first screenful
@@ -99,23 +100,23 @@ pub fn rebuild_grid(ui: &AppWindow, genres_ui: &GenresUi) {
 }
 
 /// Filter + sort the grid data into a display-order list of genre
-/// indices. Pure / no UI state. The filter walk and the name sort read
-/// `data.keys` (pre-lowercased in `fetch_grid`), so this allocates
-/// nothing per genre beyond the index `Vec` itself.
+/// indices. Pure / no UI state. The name sort reads `data.keys`
+/// (pre-lowercased in `fetch_grid`); the filter walks the raw names
+/// through `row_match`, which folds only the ones carrying an accent.
 pub(super) fn compute_indices(
     data: &GridData,
     sort_field: &str,
     sort_dir: &str,
     filter: &str,
 ) -> Vec<usize> {
-    let needle = filter.trim().to_lowercase();
+    let needle = row_match::fold_needle(filter);
     let mut indices: Vec<usize> = if needle.is_empty() {
         (0..data.genres.len()).collect()
     } else {
-        data.keys
+        data.genres
             .iter()
             .enumerate()
-            .filter(|(_, k)| k.name_lc.contains(&needle))
+            .filter(|(_, g)| row_match::field_contains(&g.name, &needle))
             .map(|(i, _)| i)
             .collect()
     };

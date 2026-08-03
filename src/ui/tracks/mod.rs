@@ -13,8 +13,8 @@
 //! Allocation strategy: `full` and `search_keys` are stored behind
 //! `Mutex<Arc<Vec<…>>>`. Refilter takes a cheap `Arc::clone` instead of
 //! deep-cloning a 10 000-element `Vec` of `String`-bearing rows on every
-//! keystroke. Pre-computed lowercase columns in `RowSearchKey` mean the
-//! filter walk allocates zero per row.
+//! keystroke. Pre-folded columns in `RowSearchKey` mean the filter walk
+//! allocates zero per row.
 
 mod fetch;
 mod selection;
@@ -27,6 +27,7 @@ use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 
 use crate::entities::track::TrackListRow as RsTrackListRow;
 use crate::media::cover_thumbs::CoverThumbs;
+use crate::ui::row_match;
 use crate::ui::section_state::SectionState;
 use crate::ui::util::clamp_i64_to_i32;
 use crate::{AppWindow, TrackListRow as UiTrackListRow, Tracks};
@@ -34,61 +35,45 @@ use crate::{AppWindow, TrackListRow as UiTrackListRow, Tracks};
 pub use fetch::{apply_row_favorite, apply_row_rating, fetch_and_apply, refilter, resort_and_apply};
 pub use selection::{clear_selection, handle_select_row};
 
-/// Pre-lowered text columns for fuzzy filtering. Built once per
+/// Pre-folded text columns for fuzzy filtering. Built once per
 /// `fetch_and_apply` and aligned positionally with `TracksUi::full`, so
 /// `full[i]` and `search_keys[i]` describe the same row.
 ///
-/// Storage is a single packed `Box<str>` of `"title\0artist\0album"` —
-/// one heap allocation per row instead of three separate `String`
-/// headers, ~60% memory cut on libraries with 10k+ rows. `\0` is a safe
-/// separator because needles come from text input (no NUL) and the rare
-/// field value containing `\0` is sanitised at build time.
+/// Storage is a single packed `Box<str>` of [`row_match::search_fields`]
+/// joined by `\0` — one heap allocation per row instead of one `String`
+/// header per column. `\0` is a safe separator because needles come from
+/// text input (no NUL) and `push_folded` maps away the rare field value
+/// carrying one.
+///
+/// `year` stays an integer beside the packed text rather than being
+/// rendered into it, so the Tracks view and every `track_matches` surface
+/// run the *same* [`row_match::year_matches`] rule instead of two spellings
+/// of it.
 pub(super) struct RowSearchKey {
     packed: Box<str>,
+    year: Option<i32>,
 }
 
 impl RowSearchKey {
     pub(super) fn from_row(r: &RsTrackListRow) -> Self {
-        let title = r.title.as_str();
-        let artist = r.artist.as_deref().unwrap_or("");
-        let album = r.album.as_deref().unwrap_or("");
-        let mut buf = String::with_capacity(title.len() + artist.len() + album.len() + 2);
-        push_sanitised_lower(&mut buf, title);
-        buf.push('\0');
-        push_sanitised_lower(&mut buf, artist);
-        buf.push('\0');
-        push_sanitised_lower(&mut buf, album);
+        let fields = row_match::search_fields(r);
+        let text_len: usize = fields.iter().map(|f| f.len()).sum();
+        // One separator between each pair, so one fewer than there are fields.
+        let mut buf = String::with_capacity(text_len + fields.len() - 1);
+        for (i, field) in fields.iter().enumerate() {
+            if i > 0 {
+                buf.push('\0');
+            }
+            row_match::push_folded(&mut buf, field);
+        }
         Self {
             packed: buf.into_boxed_str(),
+            year: r.year,
         }
     }
 
-    pub(super) fn matches(&self, lowered_needle: &str) -> bool {
-        self.packed.contains(lowered_needle)
-    }
-}
-
-/// Append `s.to_lowercase()` to `out`, replacing any embedded `\0` with a
-/// space so it can't collide with the field separator. The ASCII fast-path
-/// avoids per-char Unicode-table dispatch.
-fn push_sanitised_lower(out: &mut String, s: &str) {
-    if s.is_ascii() {
-        out.reserve(s.len());
-        for &b in s.as_bytes() {
-            if b == 0 {
-                out.push(' ');
-            } else {
-                out.push(b.to_ascii_lowercase() as char);
-            }
-        }
-        return;
-    }
-    for ch in s.chars() {
-        if ch == '\0' {
-            out.push(' ');
-        } else {
-            out.extend(ch.to_lowercase());
-        }
+    pub(super) fn matches(&self, folded_needle: &str) -> bool {
+        self.packed.contains(folded_needle) || row_match::year_matches(self.year, folded_needle)
     }
 }
 
@@ -98,7 +83,7 @@ pub struct TracksUi {
     /// Canonical row set, kept in DB-fetch order. Never reordered — a
     /// header-click sort only rebuilds `order`, never this Vec.
     pub(super) full: Mutex<Arc<Vec<RsTrackListRow>>>,
-    /// Pre-lowered filter keys, aligned positionally with `full`
+    /// Pre-folded filter keys, aligned positionally with `full`
     /// (`full[i]` ↔ `search_keys[i]`).
     pub(super) search_keys: Mutex<Arc<Vec<RowSearchKey>>>,
     /// Display-order permutation into `full` / `search_keys`. A sort
@@ -167,7 +152,7 @@ impl TracksUi {
             let o = self.order.lock().clone();
             (f, k, o)
         };
-        let needle = filter.trim().to_lowercase();
+        let needle = row_match::fold_needle(filter);
         // Walk `order` so ids come back in the current display sort order.
         // `.get()` keeps this panic-safe if a fetch swapped `full` between
         // the three locks above — the next rebuild restores consistency.
@@ -324,3 +309,7 @@ pub(crate) fn format_duration_ms(ms: i64) -> String {
         format!("{mins}:{secs:02}")
     }
 }
+
+#[cfg(test)]
+#[path = "tests/tracks_tests.rs"]
+mod tests;

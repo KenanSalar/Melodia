@@ -29,18 +29,10 @@ fn names(data: &GridData, indices: &[usize]) -> Vec<String> {
 }
 
 #[test]
-fn grid_data_precomputes_lowercased_keys() {
+fn grid_data_precomputes_the_lowercased_sort_key() {
     let data = GridData::new(vec![artist(1, "The BEATLES", Some("Beatles, The"), 0, 0)]);
     assert_eq!(data.keys.len(), 1);
     assert_eq!(data.keys[0].name_lc, "the beatles");
-    assert_eq!(data.keys[0].sort_name_lc, "beatles, the");
-}
-
-#[test]
-fn grid_data_sort_name_falls_back_to_name_when_missing() {
-    let data = GridData::new(vec![artist(1, "Radiohead", None, 0, 0)]);
-    assert_eq!(data.keys[0].name_lc, "radiohead");
-    assert_eq!(data.keys[0].sort_name_lc, "radiohead");
 }
 
 #[test]
@@ -58,15 +50,27 @@ fn compute_indices_filter_matches_name_or_sort_name_case_insensitively() {
     let data = GridData::new(vec![
         artist(1, "The Beatles", Some("Beatles, The"), 0, 0),
         artist(2, "Radiohead", None, 0, 0),
-        artist(3, "The Rolling Stones", Some("Rolling Stones, The"), 0, 0),
+        artist(3, "坂本龍一", Some("Sakamoto, Ryuichi"), 0, 0),
     ]);
     // Name substring, case-insensitive.
     let by_name = compute_indices(&data, "name", "asc", "BEATLES");
     assert_eq!(names(&data, &by_name), ["The Beatles"]);
-    // sort_name substring (matches "rolling" inside "Rolling Stones, The"
-    // even though `name` is "The Rolling Stones").
-    let by_sort = compute_indices(&data, "name", "asc", "rolling");
-    assert_eq!(names(&data, &by_sort), ["The Rolling Stones"]);
+    // The sort name is the only thing this needle can reach, which is the case
+    // the arm exists for — an artist whose only Latin handle is its sort name.
+    // A needle merely reordered out of the display name ("rolling" against
+    // "Rolling Stones, The") matches `name` as well, so it pins nothing.
+    let by_sort = compute_indices(&data, "name", "asc", "sakamoto");
+    assert_eq!(names(&data, &by_sort), ["坂本龍一"]);
+}
+
+#[test]
+fn compute_indices_filter_ignores_accents_the_way_the_search_view_does() {
+    let data = GridData::new(vec![
+        artist(1, "Björk", None, 0, 0),
+        artist(2, "Sigur Rós", None, 0, 0),
+    ]);
+    assert_eq!(names(&data, &compute_indices(&data, "name", "asc", "bjork")), ["Björk"]);
+    assert_eq!(names(&data, &compute_indices(&data, "name", "asc", "ros")), ["Sigur Rós"]);
 }
 
 #[test]
