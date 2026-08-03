@@ -9,7 +9,7 @@
 //!   the FTS5 + LIKE query via `library::search::search_all` on the
 //!   read pool.
 //! * Top Result — single featured card (album, artist OR genre) computed
-//!   via [`fetch::compute_top_result`]'s 9-step ranking: all three exact
+//!   via [`top_result::compute_top_result`]'s 9-step ranking: all three exact
 //!   matches, then all three starts-with, then first-of-each. A genre
 //!   gets the card rather than a strip of its own — it is a route to a
 //!   page, not a row of things to browse.
@@ -36,9 +36,11 @@
 //! data-driven; a scan completing mid-query MUST NOT swap results out
 //! from under the user).
 
+pub mod apply;
 pub mod fetch;
 mod selection;
 mod state;
+pub mod top_result;
 
 use std::rc::Rc;
 use std::sync::Arc;

@@ -16,6 +16,7 @@ use crate::services::settings::{SortDir, ViewSort};
 use crate::state::AppState;
 use crate::ui::row_match;
 use crate::ui::tracks::{PreparedTrackRow, finish_track_list_row};
+use crate::ui::util::len_as_i32;
 use crate::{AppWindow, Favorites, TrackListRow as UiTrackListRow};
 
 /// Read-and-return the active sort. The Slint side mirrors this in
@@ -68,6 +69,15 @@ pub async fn refresh_tracks(
 
     let rows = library::favorites::get_favorite_tracks(state, sort_by, sort_dir).await?;
 
+    // A leave that landed while the query was in flight has already wiped
+    // `tracks_all` and emptied the model, so everything below would undo that
+    // teardown behind a view nobody can see. Nothing is lost by dropping the
+    // result: every leave sets `mark_dirty`, so the next enter re-fetches. Same
+    // guard, same placement, as `grids::fetch::refresh_grids`.
+    if !fav_ui.section_active() {
+        return Ok(());
+    }
+
     // Prewarm the row covers off-thread before the first model apply:
     // the `!Send` cover lookup in `finish_track_list_row` runs on the UI
     // thread, so a cold cache (first section enter) would otherwise pay
@@ -86,13 +96,28 @@ pub async fn refresh_tracks(
         let _ = tokio::task::spawn_blocking(move || thumbs.prewarm(&cover_paths)).await;
     }
 
+    // The decode burst above is an `.await`, so the guard has to be asked
+    // again — after the slow part, because before it the leave hasn't happened
+    // yet.
+    if !fav_ui.section_active() {
+        return Ok(());
+    }
+
     // The Songs tab's artist / album chips, folded here — on the worker that
     // holds the rows, before they go into the cache, which is the whole of why
-    // `publish_favorites` costs nothing. Then republish: `kick_full_refresh`
-    // runs this task concurrently with the hero and grid fetches, so whichever
-    // of those published did so against the previous fold.
-    *fav_ui.state().songs_fold.lock() = crate::ui::hero_chips::fold_tracks(&rows);
-    *fav_ui.state().tracks_all.lock() = rows;
+    // `publish_favorites` costs nothing. Outside the gate: what must not land
+    // either side of `release_section_state`'s wipe is the pair of *stores*, so
+    // the walk that produces the fold has no business holding a lock the wipe
+    // and both sibling fetches queue behind.
+    let fold = crate::ui::hero_chips::fold_tracks(&rows);
+    {
+        let _gate = fav_ui.gate();
+        *fav_ui.state().songs_fold.lock() = fold;
+        *fav_ui.state().tracks_all.lock() = rows;
+    }
+    // Then republish: `kick_full_refresh` runs this task concurrently with the
+    // hero and grid fetches, so whichever of those published did so against the
+    // previous fold.
     super::hero::republish_chips(fav_ui, weak);
 
     apply_filtered_tracks(fav_ui, weak);
@@ -107,6 +132,11 @@ pub async fn refresh_tracks(
 /// re-stamped before the swap, so a filter change / library refresh
 /// doesn't visually drop an existing selection (the row may shift index
 /// but its checkbox + accent background hold).
+///
+/// A hidden section is never written to, the way
+/// `grids::apply::write_filtered_grids` refuses to: the leave teardown empties
+/// this model deliberately, and the check has to sit *inside* the closure
+/// because the leave can land while the post is in flight.
 pub fn apply_filtered_tracks(fav_ui: &Arc<FavoritesUi>, weak: &Weak<AppWindow>) {
     let needle = current_filter(fav_ui);
 
@@ -121,11 +151,15 @@ pub fn apply_filtered_tracks(fav_ui: &Arc<FavoritesUi>, weak: &Weak<AppWindow>) 
             .map(crate::ui::tracks::prepare_track_list_row)
             .collect()
     };
-    let filtered_count = i32::try_from(prepared.len()).unwrap_or(i32::MAX);
+    let filtered_count = len_as_i32(prepared.len());
 
+    let fav_ui = fav_ui.clone();
     let weak = weak.clone();
     let _ = slint::invoke_from_event_loop(move || {
         let Some(ui) = weak.upgrade() else { return };
+        if !fav_ui.section_active() {
+            return;
+        }
         let g = ui.global::<Favorites>();
         let model = g.get_tracks();
         let Some(vec) = model.as_any().downcast_ref::<VecModel<UiTrackListRow>>() else {

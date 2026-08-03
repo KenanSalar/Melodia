@@ -75,7 +75,7 @@ export global Favorites {
     // and carry track columns this grid has no notion of. The defaults are
     // what the query used to hardcode, so a fresh install opens on the order
     // it always had. Applied to the Rust-side cache, not to the filtered copy
-    // — see `ui::favorites::sections::sort_artists`.
+    // — see `ui::favorites::grids::sort::sort_artists`.
     in-out property <string> artist-sort-field: "favorite_count";  // name | favorite_count
     in-out property <string> artist-sort-dir: "desc";
     callback request-artist-sort(string /*field*/);

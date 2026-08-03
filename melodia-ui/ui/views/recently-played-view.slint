@@ -2,13 +2,11 @@ import { ScrollView } from "std-widgets.slint";
 import { Theme } from "../theme.slint";
 import { RecentlyPlayed } from "../globals/curated.slint";
 import { HeroBackdrop } from "../globals/hero-backdrop.slint";
-import { HeroChips } from "../globals/hero-chips.slint";
 import { Player } from "../globals/player.slint";
 import { CompositeScroll } from "../globals/shell.slint";
-import { CoverMosaic } from "../components/grid/cover-mosaic.slint";
-import { MetaChipStrip } from "../components/meta-chip-strip.slint";
+import { HeroChipStrip } from "../components/hero-chip-strip.slint";
+import { MosaicHeroTile } from "../components/hero/mosaic-hero-tile.slint";
 import { HorizontalCardStrip } from "../components/grid/horizontal-card-strip.slint";
-import { MaterialIcon } from "../components/material-icon.slint";
 import { SearchBar } from "../components/search-bar.slint";
 import { ActionPill, PillLabel, PillButton, PillDivider } from "../components/action-pill.slint";
 import { ColumnTogglePopup } from "../components/track-list/column-toggle-popup.slint";
@@ -75,56 +73,18 @@ export component RecentlyPlayedView inherits Rectangle {
                 spacing: Theme.pad-lg;
                 alignment: stretch;
 
-                // Mosaic tile — outer Rectangle owns the chrome; CoverMosaic
-                // paints the 1..=4 tile layout inside.
+                // Mosaic tile — the shared square both mosaic heroes draw. The
+                // `history` glyph matches the sidebar entry.
                 VerticalLayout {
                     alignment: start;
                     horizontal-stretch: 0;
 
-                    Rectangle {
-                        width: Theme.hero-artwork;
-                        height: Theme.hero-artwork;
-                        // Both fills are hero tokens, not theme brushes — see
-                        // `favorites-view.slint` for why a theme brush is
-                        // wrong on this surface either side of the ternary.
-                        background: RecentlyPlayed.track-count == 0
-                            ? HeroBackdrop.chrome.with-alpha(0.15)
-                            : HeroBackdrop.floor-start;
-                        border-radius: Theme.radius-lg;
-                        border-width: 1px;
-                        border-color: HeroBackdrop.tile-edge;
-                        clip: true;
-
-                        // Empty state — nothing has been played yet. The
-                        // `history` glyph matches the sidebar entry, at full
-                        // strength on the solved chrome tier.
-                        if RecentlyPlayed.track-count == 0: VerticalLayout {
-                            alignment: center;
-                            HorizontalLayout {
-                                alignment: center;
-                                MaterialIcon {
-                                    name: "history";
-                                    icon-size: 56px;
-                                    icon-color: HeroBackdrop.chrome;
-                                }
-                            }
-                        }
-
-                        // Flush-fill 2×2 mosaic of the most-recent covers (see
-                        // Favorites for the gutter/radius override rationale).
-                        if RecentlyPlayed.track-count > 0: CoverMosaic {
-                            width: 100%;
-                            height: 100%;
-                            artwork-paths: RecentlyPlayed.mosaic-paths;
-                            tile-count: RecentlyPlayed.track-count > 4 ? 4 : RecentlyPlayed.track-count;
-                            placeholder-icon: "music-note";
-                            gutter-size: 0px;
-                            tile-radius: 0px;
-                            tile-bg: HeroBackdrop.chrome.with-alpha(0.15);
-                            tile-icon-color: HeroBackdrop.chrome;
-                            request-cover(p) => {
-                                return RecentlyPlayed.request-mosaic-cover(p);
-                            }
+                    MosaicHeroTile {
+                        count: RecentlyPlayed.track-count;
+                        paths: RecentlyPlayed.mosaic-paths;
+                        empty-glyph: "history";
+                        request-cover(p) => {
+                            return RecentlyPlayed.request-mosaic-cover(p);
                         }
                     }
                 }
@@ -168,13 +128,7 @@ export component RecentlyPlayedView inherits Rectangle {
                     // Count and duration, as chips. Nothing played yet
                     // publishes none and the line below takes over — the
                     // Favorites split, for the same reason.
-                    MetaChipStrip {
-                        vertical-stretch: 0;
-                        rows: HeroChips.rows;
-                        chip-fill: HeroBackdrop.chip-fill;
-                        chip-label-color: HeroBackdrop.chrome;
-                        measured(w) => { HeroChips.recompute(w); }
-                    }
+                    HeroChipStrip { }
 
                     if RecentlyPlayed.track-count == 0: Text {
                         vertical-stretch: 0;

@@ -1,10 +1,11 @@
-//! Shared section-visibility state for the entity-grid views.
+//! Shared section-visibility state for the sidebar sections that cache.
 //!
-//! Each entity tab (`AlbumsUi`, `ArtistsUi`, `GenresUi`, `PlaylistsUi`)
-//! tracks the same small state machine around "is this section on screen,
-//! and is its cached data stale?". [`SectionState`] bundles the three
-//! fields that machine needs so each `*Ui` carries one cohesive unit
-//! instead of three loose, separately-documented fields.
+//! Six views (`AlbumsUi`, `ArtistsUi`, `GenresUi`, `PlaylistsUi`,
+//! `FavoritesUi`, `RecentlyPlayedUi`) track the same small state machine
+//! around "is this section on screen, and is its cached data stale?".
+//! [`SectionState`] bundles the three fields that machine needs so each `*Ui`
+//! carries one cohesive unit instead of three loose, separately-documented
+//! fields.
 
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -23,9 +24,11 @@ use parking_lot::{Mutex, MutexGuard};
 ///   cover prewarm. This ordering is what makes it race-correct against an
 ///   in-flight `release_section_state` wipe.
 /// * [`gate`](Self::gate) — serializes a section's bulk-state wipe against
-///   its `fetch_grid` data write so the two can't interleave and leave the
-///   visible state inconsistent. Held only around the write/wipe — never
-///   across an `.await` (`parking_lot` guard).
+///   the fetch that stores into the same caches (`fetch_grid` on the four
+///   entity grids, `favorites::{hero,songs,grids}` and
+///   `recently_played::{strip,tracks}` on the two curated pages) so the two
+///   can't interleave and leave the visible state inconsistent. Held only
+///   around the write/wipe — never across an `.await` (`parking_lot` guard).
 pub struct SectionState {
     active: AtomicBool,
     dirty: AtomicBool,

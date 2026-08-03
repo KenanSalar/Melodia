@@ -13,6 +13,7 @@ use crate::entities::track::TrackListRow as RsTrackListRow;
 use crate::error::AppResult;
 use crate::library;
 use crate::state::AppState;
+use crate::ui::util::len_as_i32;
 use crate::ui::{model_patch, track_sort};
 use crate::{AppWindow, TrackListRow as UiTrackListRow, Tracks};
 
@@ -36,7 +37,7 @@ pub async fn fetch_and_apply(
     // is derived entirely in memory below, so the cold fetch and a later
     // header-click re-sort share the one `compute_track_order` code path.
     let rows = library::tracks::get_tracks(state, None, None).await?;
-    let total = i32::try_from(rows.len()).unwrap_or(i32::MAX);
+    let total = len_as_i32(rows.len());
 
     // Pre-compute lowercase columns for the filter pass. Kept aligned by
     // index with `full`, so `full[i]` and `search_keys[i]` describe the
@@ -88,7 +89,7 @@ pub fn refilter(weak: &Weak<AppWindow>, tracks_ui: &TracksUi, filter: String) {
     let snapshot = tracks_ui.full.lock().clone();
     let keys = tracks_ui.search_keys.lock().clone();
     let order = tracks_ui.order.lock().clone();
-    let total = i32::try_from(snapshot.len()).unwrap_or(i32::MAX);
+    let total = len_as_i32(snapshot.len());
     let _ = weak.upgrade_in_event_loop(move |ui| {
         let visible = build_visible(&snapshot, &keys, &order, &filter);
         apply_visible(&ui, visible, total);
@@ -114,7 +115,7 @@ pub fn resort_and_apply(
     let keys = tracks_ui.search_keys.lock().clone();
     let order = Arc::new(track_sort::compute_track_order(&snapshot, sort_field, sort_dir));
     *tracks_ui.order.lock() = order.clone();
-    let total = i32::try_from(snapshot.len()).unwrap_or(i32::MAX);
+    let total = len_as_i32(snapshot.len());
     let _ = weak.upgrade_in_event_loop(move |ui| {
         let visible = build_visible(&snapshot, &keys, &order, &filter);
         apply_visible(&ui, visible, total);

@@ -28,10 +28,12 @@ pub const COVER_SIZE: u32 = 384;
 pub const BLUR_TARGET: u32 = 192;
 
 /// `fast_blur` sigma at [`BLUR_TARGET`] — a soft wash of colour with no
-/// recognisable shapes left in it.
+/// recognisable shapes left in it. Taken by the Now Playing tier and the
+/// mosaic composition, the two backdrops with nothing painted over them.
 ///
-/// The Album Detail hero deliberately runs lighter than this: its gradient floor
-/// and crust scrim sit on top, so a softer blur is enough.
+/// The detail heroes deliberately run lighter, and say so at their own
+/// `BlurSpec` rather than here: their gradient floor and solved scrim sit on
+/// top, so a softer blur is enough.
 pub const BLUR_SIGMA: f32 = 24.0;
 
 /// Copy an `image` RGB8 buffer into a Slint `SharedPixelBuffer`. Shared by every
@@ -50,6 +52,13 @@ pub fn buffer_from_rgb(img: &image::RgbImage) -> SharedPixelBuffer<Rgb8Pixel> {
 /// fallback keeps the conversion total instead of panicking.
 pub fn clamp_i64_to_i32(v: i64) -> i32 {
     i32::try_from(v).unwrap_or(if v < 0 { i32::MIN } else { i32::MAX })
+}
+
+/// Saturating `usize → i32` for a collection length. Slint counts are `i32`;
+/// a library that overflows one has bigger problems than a wrong stats line,
+/// so saturate rather than wrap.
+pub fn len_as_i32(len: usize) -> i32 {
+    i32::try_from(len).unwrap_or(i32::MAX)
 }
 
 /// Lowercased sort key for an optional string; `None` sorts as the empty

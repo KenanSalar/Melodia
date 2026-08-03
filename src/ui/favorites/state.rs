@@ -33,7 +33,7 @@ pub(crate) struct FavoritesUiState {
     /// Active Favorite Artists sort. A second shadow rather than a shared
     /// one: the two tabs sort different entities over disjoint field sets,
     /// and Songs resolves its order in SQL where this one is applied in
-    /// memory. Read off the UI thread by `sections::sort_cached_artists`,
+    /// memory. Read off the UI thread by `grids::sort::sort_cached_artists`,
     /// which is why it can't just live on the Slint global.
     pub artist_sort: Mutex<ViewSort>,
     /// Hero stats — most recent successful `get_favorite_stats` result.

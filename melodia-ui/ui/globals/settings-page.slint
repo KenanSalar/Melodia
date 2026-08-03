@@ -134,6 +134,26 @@ export global SettingsPage {
     // still knows which option it is.
     pure callback chunk-indices(int /*count*/, int /*per-row*/) -> [[int]];
 
+    // The other half of that wrap, and the half that *is* expressible here:
+    // how many fit, and how tall the result stands. `ChipGroup` and
+    // `ColorDotGrid` derived both identically before this — they differ only
+    // in where the item width comes from (a measured ruler against a 32 px
+    // literal) and in cell height, so the arithmetic belongs beside the split
+    // it feeds rather than in each strip.
+    //
+    // Floored at one: a row of zero items never terminates, and one item too
+    // wide for its slot is a visible overflow rather than a hang.
+    public pure function wrap-per-row(avail: length, item-w: length, gap: length) -> int {
+        return max(1, Math.floor((avail + gap) / (item-w + gap)));
+    }
+    // `count` items at `per-row` to a row, each `cell-h` tall with `gap`
+    // between rows. Zero items stand at zero rather than at minus one gap.
+    public pure function wrap-height(count: int, per-row: int, cell-h: length,
+                                     gap: length) -> length {
+        return max(0px, Math.ceil(count / per-row) * cell-h
+            + (Math.ceil(count / per-row) - 1) * gap);
+    }
+
     // Pure case-insensitive substring test. Slint 1.16 has no `.contains()`
     // on string, so the check is wired in Rust (`src/ui/settings_page.rs`).
     pure callback matches(string /*haystack*/, string /*needle*/) -> bool;

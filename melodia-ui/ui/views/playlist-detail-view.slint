@@ -2,11 +2,10 @@ import { Theme } from "../theme.slint";
 import { SmartEditor } from "../globals/dialog-forms.slint";
 import { Dialog } from "../globals/dialog.slint";
 import { HeroBackdrop } from "../globals/hero-backdrop.slint";
-import { HeroChips } from "../globals/hero-chips.slint";
 import { Player } from "../globals/player.slint";
 import { PlaylistDetail } from "../globals/playlists.slint";
 import { DetailHeader } from "../components/detail-header.slint";
-import { MetaChipStrip } from "../components/meta-chip-strip.slint";
+import { HeroChipStrip } from "../components/hero-chip-strip.slint";
 import { ActionPill, PillLabel, PillButton, PillDivider } from "../components/action-pill.slint";
 import { ColumnTogglePopup } from "../components/track-list/column-toggle-popup.slint";
 import { SearchBar } from "../components/search-bar.slint";
@@ -131,13 +130,7 @@ export component PlaylistDetailView inherits Rectangle {
             }
             // Meta chips — track count + total duration. No "Smart" chip:
             // the title already carries the `auto_awesome` badge.
-            MetaChipStrip {
-                vertical-stretch: 0;
-                rows: HeroChips.rows;
-                chip-fill: HeroBackdrop.chip-fill;
-                chip-label-color: HeroBackdrop.chrome;
-                measured(w) => { HeroChips.recompute(w); }
-            }
+            HeroChipStrip { }
 
             Rectangle { vertical-stretch: 1; }
 

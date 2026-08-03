@@ -169,6 +169,48 @@ pub fn field_contains(haystack: &str, needle: &str) -> bool {
     fold(haystack).contains(needle)
 }
 
+/// Case- and accent-insensitive equality, on the same fold as
+/// [`field_contains`].
+///
+/// Unlike its sibling, an empty `needle` matches only an empty `haystack` —
+/// "equals nothing" is a real question with a real answer, where "contains
+/// nothing" is what lets a filter walk run with an empty search bar.
+///
+/// `needle` must come from [`fold_needle`].
+pub fn field_equals(haystack: &str, needle: &str) -> bool {
+    // Folding an ASCII string is byte-for-byte, so a length mismatch settles
+    // it without touching the contents. It settles nothing in the general
+    // case: NFD decomposition changes length.
+    if haystack.is_ascii() && needle.is_ascii() {
+        let n = needle.as_bytes();
+        return haystack.len() == n.len()
+            && haystack
+                .bytes()
+                .zip(n)
+                .all(|(a, b)| fold_ascii_byte(a) == *b);
+    }
+    fold(haystack) == needle
+}
+
+/// Case- and accent-insensitive prefix check, on the same fold as
+/// [`field_contains`]. An empty `needle` matches anything, as there.
+///
+/// `needle` must come from [`fold_needle`].
+pub fn field_starts_with(haystack: &str, needle: &str) -> bool {
+    if needle.is_empty() {
+        return true;
+    }
+    if haystack.is_ascii() && needle.is_ascii() {
+        let n = needle.as_bytes();
+        return haystack.len() >= n.len()
+            && haystack
+                .bytes()
+                .zip(n)
+                .all(|(a, b)| fold_ascii_byte(a) == *b);
+    }
+    fold(haystack).starts_with(needle)
+}
+
 /// The ASCII half of [`push_folded`]'s rule, in one place so the byte walk
 /// above and the packed key below can't answer a NUL differently.
 const fn fold_ascii_byte(b: u8) -> u8 {

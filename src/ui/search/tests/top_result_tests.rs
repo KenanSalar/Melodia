@@ -344,3 +344,55 @@ fn the_top_tile_matches_artwork_image_and_the_genre_grid() {
          (`{genre_icon}`) with ArtworkImage's (`{placeholder_icon}`)"
     );
 }
+
+/// The card folds accents, because every other surface on the page already
+/// does.
+///
+/// The Songs list and both strips come out of FTS, whose
+/// `unicode61 remove_diacritics 2` tokenizer folds them — so a query typed
+/// without the accent fills the page and, on a bare `to_lowercase`, missed
+/// the exact-name band entirely. The card then fell through to rule 7 and
+/// showed whatever album happened to sort first, which reads as the ranking
+/// being wrong rather than as a folding bug.
+#[test]
+fn an_accent_stripped_query_still_wins_the_exact_band() {
+    let r = results(
+        vec![album(1, "Debut"), album(2, "Homogenic")],
+        vec![artist(9, "Björk")],
+    );
+
+    let top = compute_top_result(&r, "bjork").expect("a top result");
+    assert_eq!(top.kind, TopKind::Artist, "expected the exact artist match");
+    assert_eq!(top.id, 9);
+}
+
+/// And the other direction: an accented query finds an unaccented name, since
+/// the fold runs over both sides.
+#[test]
+fn an_accented_query_reaches_an_unaccented_name() {
+    let r = results(vec![album(1, "Zoo")], vec![artist(9, "Beyonce")]);
+
+    let top = compute_top_result(&r, "Beyoncé").expect("a top result");
+    assert_eq!(top.kind, TopKind::Artist);
+    assert_eq!(top.id, 9);
+}
+
+/// The prefix band folds too, and still ranks below every exact match.
+#[test]
+fn the_prefix_band_folds_and_stays_below_the_exact_band() {
+    let prefix_only = results(vec![album(1, "Amelie Soundtrack")], vec![]);
+    let top = compute_top_result(&prefix_only, "amélie").expect("a top result");
+    assert_eq!(top.kind, TopKind::Album);
+    assert_eq!(top.id, 1);
+
+    // An accent-folded *exact* genre outranks an accent-folded album prefix,
+    // exactly as the unaccented pair already did.
+    let both = results_with_genres(
+        vec![album(1, "Née Again")],
+        vec![],
+        vec![genre(7, "Née")],
+    );
+    let top = compute_top_result(&both, "nee").expect("a top result");
+    assert_eq!(top.kind, TopKind::Genre, "exact genre must beat album prefix");
+    assert_eq!(top.subtitle, TopSubtitle::TrackCount(genre(7, "Née").track_count));
+}

@@ -5,7 +5,6 @@
 //! Genres have no artwork (see the `Genres` global comment in
 //! `melodia-ui/ui/globals/genres.slint`).
 
-use std::rc::Rc;
 use std::sync::Arc;
 
 use slint::{ComponentHandle, Model, ModelRc, VecModel, Weak};
@@ -15,10 +14,10 @@ use super::{GenresUi, to_slint_genre_row};
 use crate::error::AppResult;
 use crate::library;
 use crate::state::AppState;
+use crate::ui::grid_rows::chunk_rows;
 use crate::ui::row_match;
-use crate::{
-    AppWindow, GenreGridRow as UiGenreGridRow, GenreRow as UiGenreRow, Genres,
-};
+use crate::ui::util::len_as_i32;
+use crate::{AppWindow, GenreGridRow as UiGenreGridRow, Genres};
 
 /// Fetch the genre list from the DB into `genres_ui.grid.data`, then
 /// rebuild the grid model on the UI thread. Async — runs on the tokio
@@ -88,7 +87,7 @@ pub fn rebuild_grid(ui: &AppWindow, genres_ui: &GenresUi) {
         let indices = cache.as_ref().map_or(&[][..], |c| c.indices.as_slice());
         chunk_indices(&data, indices, columns)
     };
-    let total = i32::try_from(data.genres.len()).unwrap_or(i32::MAX);
+    let total = len_as_i32(data.genres.len());
 
     g.set_total_count(total);
     let model = g.get_grid_rows();
@@ -129,18 +128,12 @@ pub(super) fn compute_indices(
 /// to redo (the filter+sort `indices` are reused from
 /// `grid.index_cache`).
 fn chunk_indices(data: &GridData, indices: &[usize], columns: i32) -> Vec<UiGenreGridRow> {
-    let cols = usize::try_from(columns.max(1)).unwrap_or(1);
-    let mut rows: Vec<UiGenreGridRow> = Vec::with_capacity(indices.len().div_ceil(cols));
-    for chunk in indices.chunks(cols) {
-        let cards: Vec<UiGenreRow> = chunk
-            .iter()
-            .map(|&i| to_slint_genre_row(&data.genres[i]))
-            .collect();
-        rows.push(UiGenreGridRow {
-            genres: ModelRc::from(Rc::new(VecModel::from(cards))),
-        });
-    }
-    rows
+    chunk_rows(
+        indices,
+        columns,
+        |&i| to_slint_genre_row(&data.genres[i]),
+        |genres| UiGenreGridRow { genres },
+    )
 }
 
 /// Sort `indices` into the grid data by the chosen field. `genre_stats`

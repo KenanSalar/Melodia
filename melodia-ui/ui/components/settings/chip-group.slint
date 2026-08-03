@@ -88,9 +88,8 @@ export component ChipGroup inherits Rectangle {
         }
     }
     property <length> chip-w: measure.preferred-width;
-    property <int> per-row: max(1, Math.floor(
-        (root.avail-width + Theme.pad-sm) / (root.chip-w + Theme.pad-sm)));
-    property <int> row-count: Math.ceil(root.options.length / root.per-row);
+    property <int> per-row:
+        SettingsPage.wrap-per-row(root.avail-width, root.chip-w, Theme.pad-sm);
 
     // `min-width` is pinned rather than derived, and it is what makes the
     // wrap worth anything: left to the children it merges in the hidden
@@ -98,8 +97,7 @@ export component ChipGroup inherits Rectangle {
     // past — the exact incompressibility this lays itself out to avoid.
     min-width: 0px;
     horizontal-stretch: 0;
-    height: max(0px,
-        root.row-count * 32px + (root.row-count - 1) * Theme.pad-sm);
+    height: SettingsPage.wrap-height(root.options.length, root.per-row, 32px, Theme.pad-sm);
 
     VerticalLayout {
         spacing: Theme.pad-sm;

@@ -23,7 +23,7 @@ use crate::ui::model_patch;
 use crate::ui::track_list_view::view_id;
 use crate::ui::track_sort::sort_track_rows_by;
 use crate::ui::tracks::PreparedTrackRow;
-use crate::ui::util::clamp_i64_to_i32;
+use crate::ui::util::{clamp_i64_to_i32, len_as_i32};
 use crate::{AppWindow, NavEnterFrom, PlaylistDetail, TrackListRow as UiTrackListRow};
 
 // `apply_detail_artwork` (cover + hero-blur write) and
@@ -46,7 +46,7 @@ async fn fetch_playlist_detail(
         let criteria =
             crate::entities::smart_criteria::SmartCriteria::from_json_opt(detail.smart_criteria.as_deref());
         let rows = library::smart_playlists::evaluate(state, &criteria).await?;
-        detail.track_count = i32::try_from(rows.len()).unwrap_or(i32::MAX);
+        detail.track_count = len_as_i32(rows.len());
         detail.total_duration_ms = rows.iter().map(|t| t.duration_ms).sum();
         rows
     } else {

@@ -43,6 +43,7 @@ use crate::entities::track::{MostPlayedFavorite, TrackListRow};
 use crate::ui::chips;
 use crate::ui::favorites::{FavoritesTab, FavoritesUi};
 use crate::ui::tracks::format_duration_ms;
+use crate::ui::util::len_as_i32;
 use crate::{AppWindow, HeroChips};
 
 /// How many rows a hero band gives its chips before dropping the rest.
@@ -75,7 +76,7 @@ const HERO_MAX_ROWS: usize = 2;
 /// the part with the actual decisions in them — can be tested without standing
 /// up an `AppWindow`. `@tr` folds literals at codegen and nothing else, so
 /// production has to route through the global's callbacks either way.
-pub trait ChipLabels {
+trait ChipLabels {
     fn tracks(&self, count: i32) -> SharedString;
     fn albums(&self, count: i32) -> SharedString;
     fn artists(&self, count: i32) -> SharedString;
@@ -137,7 +138,7 @@ pub struct MostPlayedTotals {
 /// are read follows the tab — the band describes whatever the body below it is
 /// listing.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub struct FavoritesFacts {
+struct FavoritesFacts {
     pub tab: FavoritesTab,
     pub tracks: i32,
     pub duration_ms: i64,
@@ -215,10 +216,6 @@ pub fn year_span(albums: &[AlbumStats]) -> Option<(i32, i32)> {
     Some(years.fold((first, first), |(lo, hi), y| (lo.min(y), hi.max(y))))
 }
 
-fn len_as_i32(len: usize) -> i32 {
-    i32::try_from(len).unwrap_or(i32::MAX)
-}
-
 /// The published chips plus the width they were chunked against.
 ///
 /// UI-thread state, so a `thread_local` rather than something threaded through
@@ -257,7 +254,7 @@ pub fn install(ui: &AppWindow) {
 /// drops its publish here re-publishes on section-enter, which always re-fetches
 /// (the leave marks it dirty). Exactly the contract
 /// `hero_backdrop::apply` is held to by `apply_detail_artwork`.
-pub fn publish(ui: &AppWindow, chips: Vec<SharedString>, section_active: bool) {
+fn publish(ui: &AppWindow, chips: Vec<SharedString>, section_active: bool) {
     if !section_active {
         return;
     }
@@ -431,12 +428,32 @@ fn artist_chips(
     out
 }
 
-fn genre_chips(labels: &impl ChipLabels, genre: &GenreStats, fold: HeroFold) -> Vec<SharedString> {
+/// The shape four of the six heroes share: what the list holds, how long it
+/// runs, and how far it spreads. Album and Artist are the two that don't —
+/// they lead with a year and gate on facts the others have no equivalent of.
+///
+/// `count` arrives already rendered because it is the one chip whose *noun*
+/// varies: Favorites' Songs tab counts favorites, everyone else counts tracks.
+fn list_chips(
+    labels: &impl ChipLabels,
+    count: SharedString,
+    total_duration_ms: i64,
+    fold: HeroFold,
+) -> Vec<SharedString> {
     let mut out = Vec::with_capacity(4);
-    out.push(labels.tracks(genre.track_count));
-    push_duration(&mut out, genre.total_duration_ms);
+    out.push(count);
+    push_duration(&mut out, total_duration_ms);
     push_fold(&mut out, labels, fold);
     out
+}
+
+fn genre_chips(labels: &impl ChipLabels, genre: &GenreStats, fold: HeroFold) -> Vec<SharedString> {
+    list_chips(
+        labels,
+        labels.tracks(genre.track_count),
+        genre.total_duration_ms,
+        fold,
+    )
 }
 
 /// No "Smart" chip — the title already carries the `auto_awesome` badge, and
@@ -446,11 +463,12 @@ fn playlist_chips(
     playlist: &PlaylistStats,
     fold: HeroFold,
 ) -> Vec<SharedString> {
-    let mut out = Vec::with_capacity(4);
-    out.push(labels.tracks(playlist.track_count));
-    push_duration(&mut out, playlist.total_duration_ms);
-    push_fold(&mut out, labels, fold);
-    out
+    list_chips(
+        labels,
+        labels.tracks(playlist.track_count),
+        playlist.total_duration_ms,
+        fold,
+    )
 }
 
 /// Empty on an empty tab, whichever of the three it is: each paints its own
@@ -474,13 +492,12 @@ fn favorites_chips(labels: &impl ChipLabels, facts: &FavoritesFacts) -> Vec<Shar
             out
         }
         FavoritesTab::Artists if facts.artists > 0 => vec![labels.artists(facts.artists)],
-        FavoritesTab::Songs if facts.tracks > 0 => {
-            let mut out = Vec::with_capacity(4);
-            out.push(labels.favorites(facts.tracks));
-            push_duration(&mut out, facts.duration_ms);
-            push_fold(&mut out, labels, facts.songs);
-            out
-        }
+        FavoritesTab::Songs if facts.tracks > 0 => list_chips(
+            labels,
+            labels.favorites(facts.tracks),
+            facts.duration_ms,
+            facts.songs,
+        ),
         _ => Vec::new(),
     }
 }
@@ -495,11 +512,7 @@ fn recently_played_chips(
     if track_count == 0 {
         return Vec::new();
     }
-    let mut out = Vec::with_capacity(4);
-    out.push(labels.tracks(track_count));
-    push_duration(&mut out, total_duration_ms);
-    push_fold(&mut out, labels, fold);
-    out
+    list_chips(labels, labels.tracks(track_count), total_duration_ms, fold)
 }
 
 /// `1994` for a single year, `1994–2003` for a span — an en dash, the range

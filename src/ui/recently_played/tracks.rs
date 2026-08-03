@@ -17,6 +17,7 @@ use crate::library;
 use crate::state::AppState;
 use crate::ui::row_match;
 use crate::ui::tracks::{PreparedTrackRow, finish_track_list_row};
+use crate::ui::util::len_as_i32;
 use crate::{AppWindow, RecentlyPlayed, TrackListRow as UiTrackListRow};
 
 /// Read-and-return the active filter needle, already folded by
@@ -41,6 +42,17 @@ pub async fn refresh_tracks(
 ) -> AppResult<()> {
     let rows = library::recently_played::get_recently_played(state).await?;
 
+    // A leave that landed while the query was in flight has already cleared
+    // `tracks_all` and emptied the model, so everything below would undo that
+    // teardown behind a view nobody can see — the cover prewarm and the hero
+    // recompose included. The leave set `mark_dirty`, so the next enter
+    // re-fetches. Same guard, same placement, as `strip::refresh_strips` and
+    // `favorites::grids::fetch::refresh_grids`: after the slow part, because
+    // before it the leave hasn't happened yet.
+    if !rp_ui.section_active() {
+        return Ok(());
+    }
+
     // Prewarm the row covers off-thread before the first model apply — the
     // `!Send` cover lookup in `finish_track_list_row` runs on the UI thread,
     // so a cold cache would otherwise pay one synchronous decode per unique
@@ -56,11 +68,20 @@ pub async fn refresh_tracks(
         let _ = tokio::task::spawn_blocking(move || thumbs.prewarm(&cover_paths)).await;
     }
 
+    // The decode burst above is an `.await`, so the guard has to be asked again:
+    // a leave landing inside it has already emptied the models and wiped the
+    // cache, and everything below would fill both back in behind a hidden view.
+    // Same placement rule as the check before it — after the slow part, because
+    // before it the leave hasn't happened yet.
+    if !rp_ui.section_active() {
+        return Ok(());
+    }
+
     // Hero: count + total duration over the full (unfiltered) recency set, and
     // the up-to-4 most-recently-played distinct covers for the mosaic. Stats +
     // mosaic paths push immediately; the CPU-bound blur composition is kicked
     // off-thread so it never delays the track-list paint.
-    let count = i32::try_from(rows.len()).unwrap_or(i32::MAX);
+    let count = len_as_i32(rows.len());
     let total_ms: i64 = rows.iter().map(|r| r.duration_ms).sum();
     let fold = crate::ui::hero_chips::fold_tracks(&rows);
     let mosaic_paths = super::hero::mosaic_paths_from(&rows, 4);
@@ -84,7 +105,14 @@ pub async fn refresh_tracks(
         });
     }
 
-    *rp_ui.state().tracks_all.lock() = rows;
+    // Under the section gate so the store can't interleave with
+    // `release_section_state`'s wipe and leave half of each on screen — the
+    // same pairing `strip::refresh_strips` makes for `most_played`. Held across
+    // the synchronous store only, never across an `.await`.
+    {
+        let _gate = rp_ui.gate();
+        *rp_ui.state().tracks_all.lock() = rows;
+    }
 
     apply_filtered_tracks(rp_ui, weak);
     Ok(())
@@ -94,6 +122,10 @@ pub async fn refresh_tracks(
 /// result into `RecentlyPlayed.tracks`, still in recency order. Cheap —
 /// entirely in memory. Existing selection is re-stamped so a filter change
 /// doesn't visually drop the user's selection.
+///
+/// A hidden section is never written to, for the reason
+/// [`super::strip::apply_filtered_strips`] gives — and the check sits inside
+/// the closure because the leave can land while the post is in flight.
 pub fn apply_filtered_tracks(rp_ui: &Arc<RecentlyPlayedUi>, weak: &Weak<AppWindow>) {
     let needle = current_filter(rp_ui);
 
@@ -104,11 +136,15 @@ pub fn apply_filtered_tracks(rp_ui: &Arc<RecentlyPlayedUi>, weak: &Weak<AppWindo
             .map(crate::ui::tracks::prepare_track_list_row)
             .collect()
     };
-    let filtered_count = i32::try_from(prepared.len()).unwrap_or(i32::MAX);
+    let filtered_count = len_as_i32(prepared.len());
 
+    let rp_ui = rp_ui.clone();
     let weak = weak.clone();
     let _ = slint::invoke_from_event_loop(move || {
         let Some(ui) = weak.upgrade() else { return };
+        if !rp_ui.section_active() {
+            return;
+        }
         let g = ui.global::<RecentlyPlayed>();
         let model = g.get_tracks();
         let Some(vec) = model.as_any().downcast_ref::<VecModel<UiTrackListRow>>() else {

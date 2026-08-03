@@ -205,8 +205,8 @@ fn folding_is_idempotent() {
 // --- most_played_matches ---
 //
 // The card predicate is load-bearing twice over on both surfaces that use it:
-// the model build (`favorites::sections::build_filtered_grids`,
-// `recently_played::sections::apply_filtered_strips`) and the
+// the model build (`favorites::grids::apply::build_filtered_grids`,
+// `recently_played::strip::apply_filtered_strips`) and the
 // `most_played_track_ids` walk that resolves the ids `play-track` enqueues. A
 // drift between the two hands `player_play_tracks` a list the cards aren't
 // showing.
@@ -280,4 +280,60 @@ fn a_card_and_a_track_row_answer_a_needle_the_same_way() {
             "card and row disagree on {needle:?}"
         );
     }
+}
+
+#[test]
+fn equals_and_starts_with_fold_case_and_accents() {
+    let needle = fold_needle("  BJORK ");
+    assert!(field_equals("Björk", &needle));
+    assert!(field_starts_with("Björk", &needle));
+    assert!(field_starts_with("Björk Guðmundsdóttir", &needle));
+
+    // A prefix is not an equality, and a suffix is neither.
+    assert!(!field_equals("Björk Guðmundsdóttir", &needle));
+    assert!(!field_starts_with("The Björk", &needle));
+}
+
+/// The ASCII fast path and the folding path have to answer alike — the fast
+/// path skips the allocation, not the rule.
+#[test]
+fn the_ascii_fast_path_agrees_with_the_folding_path() {
+    const CASES: [(&str, &str); 6] = [
+        ("Rock", "rock"),
+        ("Röck", "rock"),
+        ("rock", "Röck"),
+        ("Rockabilly", "rock"),
+        ("Röckabilly", "rock"),
+        ("Pop", "rock"),
+    ];
+    for (haystack, raw) in CASES {
+        let needle = fold_needle(raw);
+        let folded_haystack: String = {
+            let mut out = String::new();
+            push_folded(&mut out, haystack);
+            out
+        };
+        assert_eq!(
+            field_equals(haystack, &needle),
+            folded_haystack == needle,
+            "field_equals disagrees with the fold on {haystack:?} / {raw:?}"
+        );
+        assert_eq!(
+            field_starts_with(haystack, &needle),
+            folded_haystack.starts_with(&needle),
+            "field_starts_with disagrees with the fold on {haystack:?} / {raw:?}"
+        );
+    }
+}
+
+/// The empty needle splits the two on purpose: "contains nothing" is what
+/// lets a filter walk run with an empty search bar, but "equals nothing" is a
+/// real question, and only an empty string answers it.
+#[test]
+fn the_empty_needle_means_different_things_to_the_three_predicates() {
+    let empty = fold_needle("");
+    assert!(field_contains("Björk", &empty));
+    assert!(field_starts_with("Björk", &empty));
+    assert!(!field_equals("Björk", &empty));
+    assert!(field_equals("", &empty));
 }

@@ -13,6 +13,7 @@ use crate::player::state::QueueViewModel;
 use crate::state::AppState;
 use crate::ui::now_playing_artwork::NowPlayingArtwork;
 use crate::ui::queue_sheet::to_slint_queue_row;
+use crate::ui::util::len_as_i32;
 use crate::{AppWindow, Nav, NowPlaying, QueueRow};
 
 /// Subscribe to `sinks.queue`. While the view is closed the subscriber
@@ -216,7 +217,7 @@ impl SlideKind {
 /// repeat-all and repeat-one navigation animates the right way.
 fn classify_step(old_idx: i32, qvm: &QueueViewModel) -> SlideKind {
     let new_idx = qvm.queue_index;
-    let len = i32::try_from(qvm.queue_tracks.len()).unwrap_or(i32::MAX);
+    let len = len_as_i32(qvm.queue_tracks.len());
     if len <= 0 || old_idx < 0 || new_idx < 0 {
         return SlideKind::Other;
     }
@@ -300,7 +301,7 @@ pub(super) fn rebuild_up_next(
     crate::ui::model_diff::apply_rows_keyed(up_next_model, upcoming, |r| r.id);
     let np = ui.global::<NowPlaying>();
     np.set_base_index(i32::try_from(base).unwrap_or(i32::MAX));
-    np.set_queue_length(i32::try_from(qvm.queue_tracks.len()).unwrap_or(i32::MAX));
+    np.set_queue_length(len_as_i32(qvm.queue_tracks.len()));
     ids
 }
 

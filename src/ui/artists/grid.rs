@@ -2,7 +2,6 @@
 //! the display-aware cover-cache cap tuner. Mirrors `src/ui/albums/grid.rs`.
 
 use std::path::PathBuf;
-use std::rc::Rc;
 use std::sync::Arc;
 
 use slint::{ComponentHandle, Model, ModelRc, VecModel, Weak};
@@ -14,10 +13,10 @@ use super::{ArtistsUi, to_slint_artist_row};
 use crate::error::AppResult;
 use crate::library;
 use crate::state::AppState;
+use crate::ui::grid_rows::chunk_rows;
 use crate::ui::row_match;
-use crate::{
-    AppWindow, ArtistGridRow as UiArtistGridRow, ArtistRow as UiArtistRow, Artists,
-};
+use crate::ui::util::len_as_i32;
+use crate::{AppWindow, ArtistGridRow as UiArtistGridRow, Artists};
 
 /// Fetch the artist list from the DB into `artists_ui.grid.data`, prewarm
 /// cover thumbnails, then rebuild the grid model on the UI thread.
@@ -77,7 +76,7 @@ pub fn rebuild_grid(ui: &AppWindow, artists_ui: &ArtistsUi) {
         let indices = cache.as_ref().map_or(&[][..], |c| c.indices.as_slice());
         chunk_indices(&data, indices, columns)
     };
-    let total = i32::try_from(data.artists.len()).unwrap_or(i32::MAX);
+    let total = len_as_i32(data.artists.len());
 
     g.set_total_count(total);
     let model = g.get_grid_rows();
@@ -117,18 +116,12 @@ pub(super) fn compute_indices(
 /// Chunk a display-order index list into rows of `columns` `ArtistRow`
 /// cards. Pure; only step a `columns-changed` rebuild has to redo.
 fn chunk_indices(data: &GridData, indices: &[usize], columns: i32) -> Vec<UiArtistGridRow> {
-    let cols = usize::try_from(columns.max(1)).unwrap_or(1);
-    let mut rows: Vec<UiArtistGridRow> = Vec::with_capacity(indices.len().div_ceil(cols));
-    for chunk in indices.chunks(cols) {
-        let cards: Vec<UiArtistRow> = chunk
-            .iter()
-            .map(|&i| to_slint_artist_row(&data.artists[i]))
-            .collect();
-        rows.push(UiArtistGridRow {
-            artists: ModelRc::from(Rc::new(VecModel::from(cards))),
-        });
-    }
-    rows
+    chunk_rows(
+        indices,
+        columns,
+        |&i| to_slint_artist_row(&data.artists[i]),
+        |artists| UiArtistGridRow { artists },
+    )
 }
 
 /// Sort `indices` into the grid data by the chosen field. Numeric sorts

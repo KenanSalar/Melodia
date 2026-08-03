@@ -22,19 +22,19 @@
 //! `mark_dirty` / `take_dirty` round-trip.
 
 mod hero;
-mod sections;
 mod selection;
 mod state;
+mod strip;
 mod tracks;
 
 use std::rc::Rc;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
 
 use slint::{ComponentHandle, Image, ModelRc, SharedString, VecModel};
 
 use crate::entities::track::MostPlayedFavorite;
 use crate::media::cover_thumbs::CoverThumbs;
+use crate::ui::section_state::SectionState;
 use crate::ui::util::clamp_i64_to_i32;
 use crate::{
     AppWindow, EntityStripRow as UiEntityStripRow, RecentlyPlayed,
@@ -46,7 +46,7 @@ use state::{
     RecentlyPlayedUiState,
 };
 
-pub use sections::{apply_filtered_strips, refresh_strips};
+pub use strip::{apply_filtered_strips, refresh_strips};
 pub use selection::{clear_selection, handle_select_row};
 pub use tracks::{
     apply_filtered_tracks, apply_row_favorite, apply_row_rating, current_filter, refresh_tracks,
@@ -64,13 +64,11 @@ pub struct RecentlyPlayedUi {
     pub(super) mosaic_thumbs: Arc<CoverThumbs>,
     /// Most Played strip cache (180 px). Released on section leave.
     pub(super) most_played_thumbs: Arc<CoverThumbs>,
-    /// Section-visible shadow — mirrors `Nav.selected-index ==
-    /// NAV_RECENTLY_PLAYED && !Nav.now-playing-open`. Gates the refresh
+    /// Visibility + staleness + the mutation gate, the same unit the four
+    /// entity grids carry. `active` mirrors `Nav.selected-index ==
+    /// NAV_RECENTLY_PLAYED && !Nav.now-playing-open`, and gates the refresh
     /// subscriber so a background tick doesn't repaint a hidden view.
-    section_active: AtomicBool,
-    /// Sticky "data is stale, refetch on next section enter". Set on every
-    /// channel tick that fires while hidden, plus on section leave.
-    data_dirty: AtomicBool,
+    section: SectionState,
 }
 
 impl RecentlyPlayedUi {
@@ -86,26 +84,31 @@ impl RecentlyPlayedUi {
                 MOST_PLAYED_THUMB_SIZE,
                 MOST_PLAYED_THUMB_CAP,
             )),
-            section_active: AtomicBool::new(false),
-            data_dirty: AtomicBool::new(false),
+            section: SectionState::new(),
         }
     }
 
     pub fn set_section_active(&self, active: bool) {
-        self.section_active.store(active, Ordering::Relaxed);
+        self.section.set_active(active);
     }
 
     pub fn section_active(&self) -> bool {
-        self.section_active.load(Ordering::Relaxed)
+        self.section.active()
     }
 
     pub fn mark_dirty(&self) {
-        self.data_dirty.store(true, Ordering::Release);
+        self.section.mark_dirty();
     }
 
     /// Atomically read-and-clear the dirty flag.
     pub fn take_dirty(&self) -> bool {
-        self.data_dirty.swap(false, Ordering::AcqRel)
+        self.section.take_dirty()
+    }
+
+    /// Serialize a bulk-state wipe against a data write. Held only around
+    /// the write; never across an `.await`.
+    pub(super) fn gate(&self) -> parking_lot::MutexGuard<'_, ()> {
+        self.section.gate()
     }
 
     /// Forget the mosaic recorded as being on screen, so the next refresh
@@ -121,16 +124,28 @@ impl RecentlyPlayedUi {
     /// footprint drops to ~0. Called (off the UI thread) on section leave;
     /// `mark_dirty()` was set synchronously on the same leave so the
     /// section-enter handler re-fetches via `take_dirty()`. Release ordering
-    /// matches `FavoritesUi::release_section_state`.
+    /// matches `FavoritesUi::release_section_state`, gate included: the state
+    /// wipe is serialized against a `refresh_strips` / `refresh_tracks` store
+    /// so neither can land halfway through the other.
+    ///
+    /// The gate serializes those writes; it does **not** order them, so it is
+    /// not what stops a fetch that resolves *after* the leave from repopulating
+    /// what this just emptied. That is each fetcher's own `section_active()`
+    /// bail, plus the one inside each apply's event-loop closure — the pair
+    /// `favorites::grids` carries, and the reason the wipe can be unconditional
+    /// below the early return.
     pub fn release_section_state(&self) {
         if self.section_active() {
             return;
         }
         self.mosaic_thumbs.clear();
         self.most_played_thumbs.clear();
-        self.inner.tracks_all.lock().clear();
-        self.inner.most_played.lock().clear();
-        self.inner.applied_selection.lock().clear();
+        {
+            let _gate = self.gate();
+            self.inner.tracks_all.lock().clear();
+            self.inner.most_played.lock().clear();
+            self.inner.applied_selection.lock().clear();
+        }
         crate::tasks::heap_trim::trim();
     }
 

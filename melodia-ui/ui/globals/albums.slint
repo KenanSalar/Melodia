@@ -104,7 +104,7 @@ export global AlbumDetail {
 
     // Header cover — set by Rust on `open_album` / `refresh_detail`,
     // paired with the hero blur below (decoded **once** per album into
-    // an `(cover, blur)` pair via `ui::detail_artwork::ArtworkPair`).
+    // an `(cover, blur)` pair via `ui::artwork_cache::ArtworkPair`).
     in-out property <image> cover;
 
     // Hero-blur cross-fade slots. Mirrors `Player.blur-img-{a,b}` /

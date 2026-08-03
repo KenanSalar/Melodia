@@ -236,7 +236,7 @@ fn bin_centre(bin: usize) -> f64 {
 /// keeps a single global decision honest on a non-uniform backdrop.
 ///
 /// Returns `None` for an empty buffer.
-pub(crate) fn luma_p90(buf: &SharedPixelBuffer<Rgb8Pixel>) -> Option<f64> {
+fn luma_p90(buf: &SharedPixelBuffer<Rgb8Pixel>) -> Option<f64> {
     let bytes = buf.as_bytes();
     if bytes.is_empty() {
         return None;
@@ -331,7 +331,7 @@ impl BackdropSample {
 /// a known quantity rather than a measurement — which is what lets the
 /// artwork-less path run through the *same* solve as every other cover instead
 /// of being special-cased.
-pub(crate) fn floor_luma() -> f64 {
+fn floor_luma() -> f64 {
     gradient_luma_lstar(FLOOR_TONE_START, FLOOR_TONE_END)
 }
 
@@ -370,7 +370,7 @@ fn rgb_lstar(rgb: u32) -> f64 {
 /// monotone in the byte, so with `g` the backdrop's grey byte, `s` the scrim's
 /// and `t` the target's, `α = (g − t) / (g − s)`. The scrim's residual chroma
 /// makes this an approximation on the order of a tenth of an L*.
-pub(crate) fn scrim_alpha(backdrop_luma: f64) -> f32 {
+fn scrim_alpha(backdrop_luma: f64) -> f32 {
     let g = grey_byte(backdrop_luma);
     let t = grey_byte(TARGET_BACKDROP_TONE);
     let s = grey_byte(SCRIM_TONE);
@@ -391,7 +391,7 @@ pub(crate) fn scrim_alpha(backdrop_luma: f64) -> f32 {
 /// The lightness a backdrop of `backdrop_luma` actually presents once the
 /// scrim is painted over it at `alpha`. This — not the raw measurement — is
 /// what the foreground tiers below are solved against.
-pub(crate) fn composited_tone(backdrop_luma: f64, alpha: f32) -> f64 {
+fn composited_tone(backdrop_luma: f64, alpha: f32) -> f64 {
     let a = f64::from(alpha);
     let composited = a.mul_add(grey_byte(SCRIM_TONE), (1.0 - a) * grey_byte(backdrop_luma));
     byte_tone(composited)
@@ -414,17 +414,17 @@ fn solve_tone(backdrop_tone: f64, ratio: f64, min: f64, max: f64) -> f64 {
 }
 
 /// Tone for the hue-carrying chrome tier at [`CHROME_RATIO`].
-pub(crate) fn chrome_tone(backdrop_tone: f64) -> f64 {
+fn chrome_tone(backdrop_tone: f64) -> f64 {
     solve_tone(backdrop_tone, CHROME_RATIO, CHROME_MIN_TONE, CHROME_MAX_TONE)
 }
 
 /// Tone for primary body text at [`TEXT_RATIO`].
-pub(crate) fn text_tone(backdrop_tone: f64) -> f64 {
+fn text_tone(backdrop_tone: f64) -> f64 {
     solve_tone(backdrop_tone, TEXT_RATIO, TEXT_MIN_TONE, TEXT_MAX_TONE)
 }
 
 /// Tone for secondary text at [`CHROME_RATIO`], in its own dimmer band.
-pub(crate) fn muted_tone(backdrop_tone: f64) -> f64 {
+fn muted_tone(backdrop_tone: f64) -> f64 {
     solve_tone(backdrop_tone, CHROME_RATIO, MUTED_MIN_TONE, MUTED_MAX_TONE)
 }
 

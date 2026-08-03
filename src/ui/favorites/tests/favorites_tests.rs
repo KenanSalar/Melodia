@@ -19,6 +19,10 @@ fn write_test_png() -> Result<(tempfile::TempDir, PathBuf), Box<dyn std::error::
 
 const GLOBAL: &str = include_str!("../../../../melodia-ui/ui/globals/curated.slint");
 const VIEW: &str = include_str!("../../../../melodia-ui/ui/views/favorites-view.slint");
+const MOST_PLAYED_TAB: &str =
+    include_str!("../../../../melodia-ui/ui/views/favorites/most-played-tab.slint");
+const ARTISTS_TAB: &str =
+    include_str!("../../../../melodia-ui/ui/views/favorites/artists-tab.slint");
 const GRID: &str =
     include_str!("../../../../melodia-ui/ui/components/grid/entity-card-grid.slint");
 
@@ -234,7 +238,7 @@ fn the_hero_tab_bar_takes_every_brush_from_the_backdrop() {
 /// Every field a sort pill can ask for has to be one the comparator handles.
 ///
 /// The token is a bare string on both sides — `request-artist-sort("name")` in
-/// the Slint, a `match` arm in `sections::sort_artists` — so a typo or a rename
+/// the Slint, a `match` arm in `grids::sort::sort_artists` — so a typo or a rename
 /// on either side compiles, and the pill just quietly sorts by the default arm
 /// while painting its arrow as though it had worked. Nothing pins this for the
 /// Albums / Artists / Genres rows, which is exactly why it's worth pinning here.
@@ -243,7 +247,7 @@ fn the_hero_tab_bar_takes_every_brush_from_the_backdrop() {
 /// arrow slot and the active field is indicated by colour alone.
 #[test]
 fn every_sort_pill_asks_for_a_field_the_comparator_knows() {
-    // The arms of `sections::sort_artists`, restated. A field dropped there and
+    // The arms of `grids::sort::sort_artists`, restated. A field dropped there and
     // left here fails the round-trip below; one added here and not there falls
     // through to the default and this test keeps passing — which is fine, since
     // the default is a defined order, not a no-op.
@@ -310,16 +314,20 @@ fn the_grid_card_reads_the_covers_generation() {
 /// is warmed by `refresh_hero`, not by a tab.
 #[test]
 fn every_grid_mount_forwards_the_covers_generation() {
-    let mounts = VIEW.matches("EntityCardGrid {").count();
-    assert!(mounts > 0, "favorites-view.slint must still mount at least one `EntityCardGrid`");
+    // The two grid tabs live in their own files under `views/favorites/`; the
+    // page itself only mounts them. Concatenated so the counts below stay one
+    // arithmetic rather than one per tab.
+    let grids: String = [MOST_PLAYED_TAB, ARTISTS_TAB].concat();
+    let mounts = grids.matches("EntityCardGrid {").count();
+    assert!(mounts > 0, "the Favorites tabs must still mount an `EntityCardGrid` each");
 
     assert_eq!(
-        VIEW.matches("covers-generation: Favorites.covers-generation;").count(),
+        grids.matches("covers-generation: Favorites.covers-generation;").count(),
         mounts,
         "every `EntityCardGrid` mount must forward `Favorites.covers-generation`"
     );
 
-    let forwards = VIEW
+    let forwards = grids
         .lines()
         .map(str::trim)
         .filter(|line| line.starts_with("request-cover("))
@@ -345,17 +353,17 @@ fn a_cold_generation_serves_the_cache_without_decoding() -> TestResult {
     let path = path.to_str().ok_or("temp path is not UTF-8")?;
 
     assert_eq!(
-        super::grid_cover(&thumbs, path, 0).size().width,
+        super::covers::grid_cover(&thumbs, path, 0).size().width,
         0,
         "a cold tier must hand back a placeholder rather than decode on the UI thread"
     );
     assert_eq!(
-        super::grid_cover(&thumbs, path, 1).size().width,
+        super::covers::grid_cover(&thumbs, path, 1).size().width,
         64,
         "a warmed tier must decode on miss, so rows scrolled to later still get covers"
     );
     assert_eq!(
-        super::grid_cover(&thumbs, path, 0).size().width,
+        super::covers::grid_cover(&thumbs, path, 0).size().width,
         64,
         "generation 0 gates the *decode*, not the lookup — a cached cover still resolves"
     );

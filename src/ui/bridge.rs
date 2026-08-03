@@ -18,6 +18,7 @@ use crate::player::state::{
     PlayerViewModelLight, PositionTick, QueueViewModel,
 };
 use crate::media::cover_thumbs::CoverThumbs;
+use crate::ui::util::len_as_i32;
 use crate::{AppWindow, Player, PlayerVm, QueueVm, TrackSummaryRow};
 
 /// Subscribe to the lightweight player `ViewModel` (status, current track,
@@ -210,7 +211,7 @@ fn speed_to_f32(speed: f64) -> f32 {
 
 pub fn to_slint_queue_vm(qvm: &QueueViewModel) -> QueueVm {
     QueueVm {
-        length: i32::try_from(qvm.queue_tracks.len()).unwrap_or(i32::MAX),
+        length: len_as_i32(qvm.queue_tracks.len()),
         current_index: qvm.queue_index,
         shuffle: qvm.shuffle_enabled,
         repeat_mode: SharedString::from(qvm.repeat_mode.as_str()),

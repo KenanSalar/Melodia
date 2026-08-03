@@ -467,24 +467,38 @@ fn the_year_span_ignores_albums_with_no_year() {
 /// `MetaChipStrip`'s brushes default to `Theme.*`, which is correct nowhere and
 /// wrong invisibly: a chip painting a theme token on a band whose colours are
 /// solved per artwork looks plausible under Mocha and washes out under every
-/// light variant. The Now Playing mount has the same obligation with the
-/// `np-accent-*` pair, so it is checked alongside the six.
+/// light variant.
+///
+/// The six heroes discharge that through `HeroChipStrip`, which fixes both
+/// brushes so the wrong mount can't be spelled — this pins that they mount the
+/// wrapper rather than reaching past it to the raw strip, and that the wrapper
+/// still passes both. Now Playing keeps the raw mount, because its pair is
+/// `Player.np-accent-*`, and carries the same obligation by hand.
 #[test]
 fn every_chip_strip_takes_its_brushes_from_its_backdrop() {
     const NOW_PLAYING: &str = include_str!("../../../melodia-ui/ui/views/now-playing-view.slint");
+    const WRAPPER: &str = include_str!("../../../melodia-ui/ui/components/hero-chip-strip.slint");
+    const CHIP: &str = include_str!("../../../melodia-ui/ui/components/meta-chip.slint");
 
-    let mounts = HERO_VIEWS
-        .iter()
-        .map(|&(src, name)| (src, name, "HeroBackdrop."))
-        .chain(std::iter::once((
-            NOW_PLAYING,
-            "now-playing-view.slint",
-            "Player.np-accent-",
-        )));
+    for (src, name) in HERO_VIEWS {
+        assert!(
+            src.contains("HeroChipStrip {"),
+            "{name} must mount `HeroChipStrip` — reaching past it to `MetaChipStrip` reopens the \
+             `Theme.*` defaults one mount at a time"
+        );
+        assert!(
+            !src.contains("MetaChipStrip {"),
+            "{name} still mounts a raw `MetaChipStrip`; the hero wrapper is what fixes the brushes"
+        );
+    }
 
+    // Bounded by the `measured` handler rather than by a brace, so the
+    // handler's own body can't end the window early.
+    let mounts = [
+        (WRAPPER, "hero-chip-strip.slint", "HeroBackdrop."),
+        (NOW_PLAYING, "now-playing-view.slint", "Player.np-accent-"),
+    ];
     for (src, name, tier) in mounts {
-        // Bounded by the `measured` handler rather than by a brace, so the
-        // handler's own body can't end the window early.
         let mount = src
             .split_once("MetaChipStrip {")
             .and_then(|(_, rest)| rest.split_once("measured("))
@@ -498,6 +512,23 @@ fn every_chip_strip_takes_its_brushes_from_its_backdrop() {
                 mount.contains(&format!("{prop}: {tier}")),
                 "{name}'s MetaChipStrip must pass `{prop}` a `{tier}` tier — omitting it falls \
                  back to the component's `Theme.*` default, a theme value on a solved backdrop"
+            );
+        }
+    }
+
+    // The layering the wrapper exists to preserve: the strip and the chip stay
+    // global-free, which is what lets one component sit on a blurred cover
+    // *and* on a blurred banner.
+    for (src, name) in [(STRIP, "meta-chip-strip.slint"), (CHIP, "meta-chip.slint")] {
+        // Import lines only — both files *mention* `HeroBackdrop` in the prose
+        // arguing why they don't reach for it.
+        let imports = src.lines().filter(|l| l.trim_start().starts_with("import "));
+        for line in imports {
+            assert!(
+                !line.contains("hero-backdrop.slint") && !line.contains("player.slint"),
+                "{name} must import neither hero nor player globals — the defaulted brushes are \
+                 what let the same component paint on both, and the wrapper is where a tier is \
+                 chosen"
             );
         }
     }
@@ -524,13 +555,21 @@ fn no_hero_view_still_declares_a_meta_line() {
 ///
 /// Pinned beside the chip tests because `HERO_MAX_ROWS` is measured against that
 /// tile: a view sizing its own artwork moves the slack the cap was picked for,
-/// and it moves the band's height with it. The four detail views route through
-/// `DetailHeader`, which reads the token and exposes no size knob to override;
-/// the two mosaic heroes have no header component and read it themselves.
+/// and it moves the band's height with it. Neither family of hero spells a size
+/// any more — the four detail views route through `DetailHeader` and the two
+/// mosaic heroes through `MosaicHeroTile`, and neither component exposes a knob
+/// to override the token with.
+///
+/// The tile check has to name `MosaicHeroTile` rather than the two views: the
+/// square moved into it, and each view's surviving `Theme.hero-artwork` is now
+/// the *band height* (`2 * pad-lg + hero-artwork`), which is a different fact.
+/// Asserted against the view alone, a `140px` hardcoded in the component passes.
 #[test]
 fn no_hero_view_sizes_its_own_artwork_tile() {
     const THEME: &str = include_str!("../../../melodia-ui/ui/theme.slint");
     const HEADER: &str = include_str!("../../../melodia-ui/ui/components/detail-header.slint");
+    const MOSAIC_TILE: &str =
+        include_str!("../../../melodia-ui/ui/components/hero/mosaic-hero-tile.slint");
 
     assert!(
         THEME.contains("out property <length> hero-artwork:"),
@@ -555,14 +594,29 @@ fn no_hero_view_sizes_its_own_artwork_tile() {
             "{name} restates the hero tile size as a local property"
         );
     }
+    // The mosaic square itself, which both heroes now mount rather than draw.
+    for axis in ["width", "height"] {
+        assert!(
+            MOSAIC_TILE.contains(&format!("{axis}: Theme.hero-artwork;")),
+            "MosaicHeroTile must take its {axis} from `Theme.hero-artwork` — a literal here \
+             drifts both mosaic heroes away from the four detail bands at once, and every \
+             view-level check still passes because each one keeps the token for its band height"
+        );
+    }
+
     let mosaic = HERO_VIEWS
         .iter()
         .filter(|(_, name)| matches!(*name, "favorites-view.slint" | "recently-played-view.slint"));
     let mut checked = 0;
     for (src, name) in mosaic {
         assert!(
+            src.contains("MosaicHeroTile {"),
+            "{name} must mount `MosaicHeroTile` — drawing the square inline is what put the same \
+             chrome in two files and let the two drift"
+        );
+        assert!(
             src.contains("Theme.hero-artwork"),
-            "{name} paints its own mosaic tile, so it must read the token directly"
+            "{name} derives its hero band height from the tile token, so it must still read it"
         );
         checked += 1;
     }
@@ -579,31 +633,47 @@ fn no_hero_view_sizes_its_own_artwork_tile() {
 /// `0` on the Songs tab, so there that publish fires only on a column change.
 #[test]
 fn each_favorites_fetch_folds_and_republishes_what_it_feeds() {
-    const FILLS: [(&str, &str, &str, &str); 2] = [
+    // The fold call and the store are checked apart, not as one glued
+    // statement: the walk belongs on this worker but *outside* the section
+    // gate, so the two are deliberately separate statements and a pin that
+    // demanded them joined would fail the correct code. Nothing is lost by
+    // splitting them — a fold whose result never reaches the store is an unused
+    // binding, which `-D warnings` already refuses to compile.
+    const FILLS: [(&str, &str, &str, &str, &str); 2] = [
         (
-            include_str!("../favorites/tracks.rs"),
-            "favorites/tracks.rs",
+            include_str!("../favorites/songs.rs"),
+            "favorites/songs.rs",
             "pub async fn refresh_tracks(",
-            "songs_fold.lock() = crate::ui::hero_chips::fold_tracks(&rows)",
+            "crate::ui::hero_chips::fold_tracks(&rows)",
+            "songs_fold.lock() =",
         ),
         (
-            include_str!("../favorites/sections.rs"),
-            "favorites/sections.rs",
+            include_str!("../favorites/grids/fetch.rs"),
+            "favorites/grids/fetch.rs",
             "pub async fn refresh_grids(",
-            "most_played_totals.lock() = crate::ui::hero_chips::fold_most_played(&rows)",
+            "crate::ui::hero_chips::fold_most_played(&rows)",
+            "most_played_totals.lock() =",
         ),
     ];
 
-    for (src, name, func, fold) in FILLS {
+    for (src, name, func, fold, store) in FILLS {
         let body = src
             .split_once(func)
             .and_then(|(_, rest)| rest.split_once("\n}"))
             .map_or("", |(body, _)| body);
+        // Whitespace-normalised, so the pin holds a *statement* rather than the
+        // line breaks it happens to be wrapped at — a fold long enough to wrap
+        // is exactly the one this has to keep catching.
+        let body: String = body.split_whitespace().collect::<Vec<_>>().join(" ");
         assert!(
             body.contains(fold),
-            "{name}: `{func}` must fold `&rows` — the local it just awaited — and store the \
-             result. Folding at publish time instead puts the walk on the UI thread and makes \
-             the answer depend on which sibling fetch landed first"
+            "{name}: `{func}` must fold `&rows` — the local it just awaited. Folding at publish \
+             time instead puts the walk on the UI thread and makes the answer depend on which \
+             sibling fetch landed first"
+        );
+        assert!(
+            body.contains(store),
+            "{name}: `{func}` folds `&rows` but stores the result nowhere the band can read it"
         );
         assert!(
             body.contains("republish_chips("),

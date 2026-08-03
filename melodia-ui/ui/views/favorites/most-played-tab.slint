@@ -1,0 +1,53 @@
+import { Theme } from "../../theme.slint";
+import { Favorites } from "../../globals/curated.slint";
+import { EntityCardGrid } from "../../components/grid/entity-card-grid.slint";
+import { GridEmptyState } from "../../components/grid/grid-empty-state.slint";
+import { OverlayScrollbar } from "../../components/overlay-scrollbar.slint";
+
+// The Favorites page's Most Played tab: a virtualized `EntityCardGrid` over
+// the favourites that have actually been played, ranked by play count.
+//
+// Takes the host's grid geometry rather than deriving its own — the page owns
+// one `GridGeometry`, and both grid tabs draw the same card at the same size.
+export component FavoritesMostPlayedTab inherits Rectangle {
+    in property <length> card-w;
+    in property <length> card-h;
+    in property <length> row-h;
+    in property <length> gap;
+
+    mp := EntityCardGrid {
+        // Positioned rather than wrapped in a layout, so the scrollbar below
+        // can reuse the same two numbers instead of chasing a layout's
+        // padding.
+        y: Theme.pad-md;
+        width: 100%;
+        height: parent.height - Theme.pad-md;
+        rows: Favorites.most-played-rows;
+        card-width: root.card-w;
+        card-height: root.card-h;
+        row-height: root.row-h;
+        gap: root.gap;
+        show-play-count: true;
+        covers-generation: Favorites.covers-generation;
+        request-cover(p, gen) => { Favorites.request-most-played-cover(p, gen) }
+        row-clicked(id) => { Favorites.play-track(id); }
+    }
+
+    if Favorites.most-played-count == 0: GridEmptyState {
+        icon: "bar_chart";
+        title: @tr("Nothing played yet");
+        body: @tr("Play one of your favorites and it will show up here.");
+    }
+
+    OverlayScrollbar {
+        horizontal: false;
+        x: parent.width - self.width;
+        y: Theme.pad-md;
+        width: 10px;
+        height: parent.height - Theme.pad-md;
+        visible-size: mp.v-visible-height;
+        content-size: mp.v-viewport-height;
+        offset: mp.v-offset;
+        scroll-to(o) => { mp.set-v-offset(o); }
+    }
+}

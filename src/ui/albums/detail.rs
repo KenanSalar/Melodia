@@ -111,7 +111,7 @@ where
     // Decode the `(cover, blur)` pair for the detail header on the
     // `spawn_blocking` pool — one image decode + one box blur. Both halves
     // are derived from a single source decode (see
-    // `ui::detail_artwork::ArtworkPair`). The buffers are raw RGB8 so they
+    // `ui::artwork_cache::ArtworkPair`). The buffers are raw RGB8 so they
     // cross the upcoming `upgrade_in_event_loop` boundary; the UI thread
     // wraps them in `slint::Image` via `Image::from_rgb8`.
     let pair = decode_detail_pair(

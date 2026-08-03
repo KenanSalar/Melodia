@@ -1,11 +1,11 @@
-use super::{
-    FavoritesTab, FavoritesUi, build_filtered_grids, grid_signature, mounted_content, set_artist_sort,
-    should_announce_warm, sort_artists,
-};
+use super::apply::build_filtered_grids;
+use super::sort::{set_artist_sort, sort_artists};
+use super::warm::{grid_signature, mounted_content, should_announce_warm};
 use crate::entities::artist::FavoriteArtist;
 use crate::entities::track::MostPlayedFavorite;
 use crate::media::cover_thumbs::CoverThumbs;
 use crate::services::settings::SortDir;
+use crate::ui::favorites::{FavoritesTab, FavoritesUi};
 
 /// Exhaustive struct literals on purpose: a new field on either entity fails
 /// this file to compile, which is the prompt to check that it also belongs in

@@ -1,0 +1,35 @@
+import { HeroBackdrop } from "../globals/hero-backdrop.slint";
+import { HeroChips } from "../globals/hero-chips.slint";
+import { MetaChipStrip } from "meta-chip-strip.slint";
+
+// The hero half of `MetaChipStrip`, wired once instead of six times.
+//
+// All six hero-bearing views — the four detail pages plus Favorites and
+// Recently Played — mount the strip against exactly the same four bindings:
+// the shared `HeroChips.rows`, the `HeroBackdrop` brush pair, and `measured`
+// forwarded back to `HeroChips.recompute`. Only one hero is ever on screen, so
+// there is nothing per-view to parameterise.
+//
+// It exists to make the *wrong* mount unspellable rather than merely tested
+// against. `MetaChip`'s brushes default to `Theme.*` tokens that are correct
+// nowhere and are never taken — the defaults exist so the component imports
+// neither `Player` nor `HeroBackdrop`, which is what lets one strip sit on a
+// blurred cover *and* on a blurred banner. That layering survives here:
+// `MetaChip` and `MetaChipStrip` still import neither, the Now Playing view
+// still mounts the raw strip with its `np-accent-*` pair, and only this
+// hero-side wrapper knows about `HeroBackdrop`.
+//
+// Rust pins that the six heroes mount *this* rather than the raw strip
+// (`ui::hero_chips::tests`).
+export component HeroChipStrip inherits MetaChipStrip {
+    rows: HeroChips.rows;
+    // `chrome` is the 3:1 tier, solved against the composited band — see the
+    // hero-backdrop rule in `.claude/rules/ui-patterns.md`.
+    chip-fill: HeroBackdrop.chip-fill;
+    chip-label-color: HeroBackdrop.chrome;
+    vertical-stretch: 0;
+
+    measured(w) => {
+        HeroChips.recompute(w);
+    }
+}

@@ -2,7 +2,6 @@
 //! the display-aware cover-cache cap tuner. Mirrors `albums::grid`.
 
 use std::path::PathBuf;
-use std::rc::Rc;
 use std::sync::Arc;
 
 use slint::{ComponentHandle, Model, ModelRc, VecModel, Weak};
@@ -15,7 +14,9 @@ use crate::entities::smart_criteria::SmartCriteria;
 use crate::error::AppResult;
 use crate::library;
 use crate::state::AppState;
+use crate::ui::grid_rows::chunk_rows;
 use crate::ui::row_match;
+use crate::ui::util::len_as_i32;
 use crate::{
     AppWindow, PlaylistGridRow as UiPlaylistGridRow, PlaylistRow as UiPlaylistRow, Playlists,
 };
@@ -182,7 +183,7 @@ pub fn rebuild_grid(ui: &AppWindow, playlists_ui: &PlaylistsUi) {
         let indices = cache.as_ref().map_or(&[][..], |c| c.indices.as_slice());
         chunk_indices(&data, indices, columns)
     };
-    let total = i32::try_from(data.playlists.len()).unwrap_or(i32::MAX);
+    let total = len_as_i32(data.playlists.len());
 
     g.set_total_count(total);
     let model = g.get_grid_rows();
@@ -231,18 +232,12 @@ pub(super) fn compute_indices(
 }
 
 fn chunk_indices(data: &GridData, indices: &[usize], columns: i32) -> Vec<UiPlaylistGridRow> {
-    let cols = usize::try_from(columns.max(1)).unwrap_or(1);
-    let mut rows: Vec<UiPlaylistGridRow> = Vec::with_capacity(indices.len().div_ceil(cols));
-    for chunk in indices.chunks(cols) {
-        let cards: Vec<UiPlaylistRow> = chunk
-            .iter()
-            .map(|&i| to_slint_playlist_row(&data.playlists[i]))
-            .collect();
-        rows.push(UiPlaylistGridRow {
-            playlists: ModelRc::from(Rc::new(VecModel::from(cards))),
-        });
-    }
-    rows
+    chunk_rows(
+        indices,
+        columns,
+        |&i| to_slint_playlist_row(&data.playlists[i]),
+        |playlists| UiPlaylistGridRow { playlists },
+    )
 }
 
 /// Sort `indices` into the grid data by the chosen field. `playlist_stats`

@@ -28,11 +28,29 @@ pub async fn refresh_strips(
     rp_ui: &Arc<RecentlyPlayedUi>,
     weak: &Weak<AppWindow>,
 ) {
-    match library::recently_played::get_most_played(state, MOST_PLAYED_LIMIT).await {
-        Ok(most_played) => {
-            *rp_ui.state().most_played.lock() = most_played;
-        }
-        Err(e) => log::warn!("recently_played::refresh_strips most_played: {e}"),
+    let most_played = library::recently_played::get_most_played(state, MOST_PLAYED_LIMIT)
+        .await
+        .inspect_err(|e| log::warn!("recently_played::refresh_strips most_played: {e}"))
+        .ok();
+
+    // A leave that landed while the query was in flight has already cleared
+    // this cache and emptied the strip's model, so everything below — the
+    // store, the cover prewarm and the apply — would undo that teardown behind
+    // a view nobody can see. Nothing is lost by dropping the result: the leave
+    // set `mark_dirty`, so the next enter re-fetches. The gate below does *not*
+    // cover this: it serializes the two writes, it does not order them, so a
+    // store landing wholly after the wipe passes it cleanly.
+    if !rp_ui.section_active() {
+        return;
+    }
+
+    if let Some(rows) = most_played {
+        // Under the section gate so the store can't interleave with
+        // `release_section_state`'s wipe and leave half of each on screen, the
+        // way `favorites::grids::fetch::refresh_grids` does it. Held across the
+        // synchronous store only — never across an `.await`.
+        let _gate = rp_ui.gate();
+        *rp_ui.state().most_played.lock() = rows;
     }
 
     // Prewarm the strip tier off-thread before the rows land in the model —
@@ -50,7 +68,22 @@ pub async fn refresh_strips(
     };
     if !covers.is_empty() {
         let thumbs = rp_ui.most_played_thumbs.clone();
-        let _ = tokio::task::spawn_blocking(move || thumbs.prewarm(&covers)).await;
+        let ru = rp_ui.clone();
+        let _ = tokio::task::spawn_blocking(move || {
+            thumbs.prewarm(&covers);
+            // Hand the buffers straight back when the section was left while
+            // the decode ran — `release_section_state` is spawned on the same
+            // pool by that leave and often wins, so without this the tier it
+            // emptied comes back populated behind a view nobody can see. The
+            // check has to sit *after* the decode, which is the whole point;
+            // `FavoritesUi::prewarm_tab_covers` carries the same one. The
+            // shared row tier `refresh_tracks` warms is deliberately exempt:
+            // every other list draws from it, and the leave doesn't clear it.
+            if !ru.section_active() {
+                thumbs.clear();
+            }
+        })
+        .await;
     }
 
     apply_filtered_strips(rp_ui, weak);
@@ -60,6 +93,11 @@ pub async fn refresh_strips(
 /// strip rows. Cheap — runs entirely in memory. Empty filter ⇒ all rows;
 /// non-empty ⇒ the shared [`most_played_matches`] walk, the same one the
 /// recency list beside it runs.
+///
+/// A hidden section is never written to, the way
+/// `favorites::grids::apply::write_filtered_grids` refuses to: the leave
+/// teardown empties this model deliberately, and the check has to sit *inside*
+/// the closure because the leave can land while the post is in flight.
 pub fn apply_filtered_strips(rp_ui: &Arc<RecentlyPlayedUi>, weak: &Weak<AppWindow>) {
     let needle = rp_ui.state().filter.lock().clone();
 
@@ -72,9 +110,13 @@ pub fn apply_filtered_strips(rp_ui: &Arc<RecentlyPlayedUi>, weak: &Weak<AppWindo
             .collect()
     };
 
+    let rp_ui = rp_ui.clone();
     let weak = weak.clone();
     let _ = slint::invoke_from_event_loop(move || {
         let Some(ui) = weak.upgrade() else { return };
+        if !rp_ui.section_active() {
+            return;
+        }
         let g = ui.global::<RecentlyPlayed>();
         let model = g.get_most_played_rows();
         let Some(vec) = model.as_any().downcast_ref::<VecModel<UiEntityStripRow>>() else {

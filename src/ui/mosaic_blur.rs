@@ -3,8 +3,8 @@
 //! Both hero surfaces (Favorites, Recently Played) paint a blurred backdrop
 //! built from up to 4 cover paths: tile the sources into a 2×2 atlas,
 //! downscale to the now-playing-tier `BLUR_TARGET`, and run
-//! `image::imageops::fast_blur` (parity with
-//! `now_playing_artwork::decode_artwork`), then measure the result for the
+//! `image::imageops::fast_blur` (parity with the single-source decode behind
+//! [`crate::ui::artwork_cache`]), then measure the result for the
 //! hero's colour solve. The per-view `hero.rs` files own the data source and
 //! the `write_crossfade_slot` application; this module owns the CPU-bound
 //! image work, and the quantize behind that measurement is the heaviest of it.

@@ -1,0 +1,54 @@
+import { Theme } from "../../theme.slint";
+import { Favorites } from "../../globals/curated.slint";
+import { EntityCardGrid } from "../../components/grid/entity-card-grid.slint";
+import { GridEmptyState } from "../../components/grid/grid-empty-state.slint";
+import { OverlayScrollbar } from "../../components/overlay-scrollbar.slint";
+
+// The Favorites page's Favorite Artists tab: a virtualized `EntityCardGrid`
+// of circular artist cards, ordered by the page's own sort row.
+//
+// Its own file rather than sharing one with Most Played: the two are the same
+// three elements but differ in eight bindings across forty lines (the model,
+// `show-play-count` vs `circular` + `fallback-icon`, both callbacks, both
+// empty-state strings and the count that gates them), so one parameterised
+// component would be more plumbing than it saves.
+export component FavoritesArtistsTab inherits Rectangle {
+    in property <length> card-w;
+    in property <length> card-h;
+    in property <length> row-h;
+    in property <length> gap;
+
+    ar := EntityCardGrid {
+        y: Theme.pad-md;
+        width: 100%;
+        height: parent.height - Theme.pad-md;
+        rows: Favorites.artist-rows;
+        card-width: root.card-w;
+        card-height: root.card-h;
+        row-height: root.row-h;
+        gap: root.gap;
+        circular: true;
+        fallback-icon: "person";
+        covers-generation: Favorites.covers-generation;
+        request-cover(p, gen) => { Favorites.request-artist-cover(p, gen) }
+        row-clicked(id) => { Favorites.open-artist(id); }
+    }
+
+    if Favorites.artist-count == 0: GridEmptyState {
+        icon: "person";
+        title: @tr("No favorite artists yet");
+        body: @tr("Favorite a song and its artist appears here.");
+    }
+
+    OverlayScrollbar {
+        horizontal: false;
+        x: parent.width - self.width;
+        y: Theme.pad-md;
+        width: 10px;
+        height: parent.height - Theme.pad-md;
+        visible-size: ar.v-visible-height;
+        content-size: ar.v-viewport-height;
+        offset: ar.v-offset;
+        scroll-to(o) => { ar.set-v-offset(o); }
+    }
+}

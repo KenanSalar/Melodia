@@ -40,8 +40,8 @@ const CALLERS: [(&str, &str, &[&str]); 6] = [
     // below. That is the stronger shape, not an exemption: there is no way to
     // hand it another section's answer.
     (
-        include_str!("../favorites/sections.rs"),
-        "favorites/sections.rs",
+        include_str!("../favorites/grids/apply.rs"),
+        "favorites/grids/apply.rs",
         &[],
     ),
     (
@@ -172,14 +172,17 @@ fn the_two_seams_gate_the_shared_write_and_only_that() {
          to paint when it is shown"
     );
 
+    // Anchored without a visibility keyword: what this pins is that the seam
+    // takes the gate and holds it, which is true of `publish` whether it is
+    // `pub`, `pub(crate)` or private to its module.
     assert!(
-        HERO_CHIPS.contains("pub fn publish(ui: &AppWindow, chips: Vec<SharedString>, section_active: bool)")
+        HERO_CHIPS.contains("fn publish(ui: &AppWindow, chips: Vec<SharedString>, section_active: bool)")
             && HERO_CHIPS.contains("if !section_active {"),
         "hero_chips::publish is the single seam every chip publisher shares, and it must hold \
          the gate — a per-caller guard is one a new caller can forget"
     );
     assert!(
-        !HERO_CHIPS.contains("pub fn clear(ui: &AppWindow, section_active"),
+        !HERO_CHIPS.contains("fn clear(ui: &AppWindow, section_active"),
         "hero_chips::clear must stay ungated — it runs on teardown, when the section is already \
          inactive by definition"
     );

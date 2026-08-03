@@ -1,10 +1,9 @@
 import { Theme } from "../theme.slint";
 import { AlbumDetail } from "../globals/albums.slint";
 import { HeroBackdrop } from "../globals/hero-backdrop.slint";
-import { HeroChips } from "../globals/hero-chips.slint";
 import { Player } from "../globals/player.slint";
 import { DetailHeader } from "../components/detail-header.slint";
-import { MetaChipStrip } from "../components/meta-chip-strip.slint";
+import { HeroChipStrip } from "../components/hero-chip-strip.slint";
 import { ActionPill, PillLabel, PillButton, PillDivider } from "../components/action-pill.slint";
 import { ColumnTogglePopup } from "../components/track-list/column-toggle-popup.slint";
 import { SearchBar } from "../components/search-bar.slint";
@@ -112,13 +111,7 @@ export component AlbumDetailView inherits Rectangle {
             }
             // Meta chips — year / track count / duration / discs /
             // compilation, built by `src/ui/hero_chips.rs`.
-            MetaChipStrip {
-                vertical-stretch: 0;
-                rows: HeroChips.rows;
-                chip-fill: HeroBackdrop.chip-fill;
-                chip-label-color: HeroBackdrop.chrome;
-                measured(w) => { HeroChips.recompute(w); }
-            }
+            HeroChipStrip { }
 
             // Spacer — absorbs the slack between the title block and
             // the action row so the action row sits flush with the

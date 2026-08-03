@@ -88,13 +88,12 @@ export component ColorDotGrid inherits Rectangle {
     // 36 px is the dot's cell, 4 px taller than the dot so the selection ring
     // isn't clipped against the row edge.
     property <length> cell-h: 36px;
-    property <int> per-row: max(1, Math.floor(
-        (root.avail-width + Theme.pad-sm) / (32px + Theme.pad-sm)));
-    property <int> row-count: Math.ceil(root.colors.length / root.per-row);
+    // No ruler needed, unlike `ChipGroup`: the dot is a fixed 32 px, so the
+    // count is arithmetic. Both take the same two `SettingsPage` helpers.
+    property <int> per-row: SettingsPage.wrap-per-row(root.avail-width, 32px, Theme.pad-sm);
 
     horizontal-stretch: 0;
-    height: max(0px,
-        root.row-count * root.cell-h + (root.row-count - 1) * Theme.pad-sm);
+    height: SettingsPage.wrap-height(root.colors.length, root.per-row, root.cell-h, Theme.pad-sm);
 
     VerticalLayout {
         spacing: Theme.pad-sm;

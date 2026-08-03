@@ -10,16 +10,24 @@
 
 use std::sync::Arc;
 
-use slint::{ComponentHandle, Image, Model, SharedString, VecModel, Weak};
+use slint::{ComponentHandle, Model, SharedString, VecModel, Weak};
 
 use super::FavoritesUi;
 use crate::entities::track::FavoriteStats;
 use crate::error::AppResult;
 use crate::library;
 use crate::state::AppState;
-use crate::ui::mosaic_blur::{MosaicBlur, compose_mosaic_blur};
-use crate::ui::now_playing::write_crossfade_slot;
+use crate::ui::mosaic_blur::compose_mosaic_blur;
+use crate::ui::mosaic_hero::impl_mosaic_hero;
 use crate::{AppWindow, Favorites};
+
+// The apply/clear pair is shared with the Recently-Played hero — same guard
+// placement, same cross-fade, different global. Overlapping composes are rare
+// on this side: `refresh_hero` awaits its own `spawn_blocking` and the channel
+// subscriber awaits `refresh_hero`, so ticks can't overlap each other. What
+// can race one is the section-enter fetch, which is spawned detached — the
+// first-enter kick at wire time, and every re-enter after that.
+impl_mosaic_hero!(Favorites, FavoritesUi);
 
 /// Fetch fresh stats, push the count + mosaic paths into `Favorites` and the
 /// band's chips with them, then kick a blocking composition+blur task whose
@@ -37,7 +45,22 @@ pub async fn refresh_hero(
     animate: bool,
 ) -> AppResult<()> {
     let stats = library::favorites::get_favorite_stats(state).await?;
-    *fav_ui.state().stats.lock() = stats.clone();
+
+    // A leave that landed while the query was in flight has already wiped
+    // `stats` and emptied the mosaic-path model, so the store and the push
+    // below would fill both back in behind a view nobody can see. The leave set
+    // `mark_dirty`, so the next enter re-fetches — the guard `refresh_grids`
+    // and `refresh_tracks` carry, in the same place, after the slow part.
+    if !fav_ui.section_active() {
+        return Ok(());
+    }
+
+    {
+        // Under the section gate: `release_section_state` wipes this beside the
+        // caches, so the two must not interleave. Synchronous store only.
+        let _gate = fav_ui.gate();
+        *fav_ui.state().stats.lock() = stats.clone();
+    }
     push_stats_to_slint(&stats, fav_ui, weak);
 
     let paths = stats.artwork_paths.clone();
@@ -88,6 +111,12 @@ fn push_stats_to_slint(
     let weak = weak.clone();
     let _ = slint::invoke_from_event_loop(move || {
         let Some(ui) = weak.upgrade() else { return };
+        // The leave can land while this post is in flight, and it empties the
+        // mosaic-path model on its way out — the same guard, in the same place,
+        // as `songs::apply_filtered_tracks`.
+        if !fav_ui.section_active() {
+            return;
+        }
         let g = ui.global::<Favorites>();
         g.set_track_count(count);
         // Order-free: the chips take their facts off the handle's own state,
@@ -122,92 +151,3 @@ pub fn republish_chips(fav_ui: &Arc<FavoritesUi>, weak: &Weak<AppWindow>) {
         crate::ui::hero_chips::publish_favorites(&ui, &fav_ui);
     });
 }
-
-fn clear_hero_blur(fav_ui: &Arc<FavoritesUi>, weak: &Weak<AppWindow>) {
-    let fav_ui = fav_ui.clone();
-    let weak = weak.clone();
-    let _ = slint::invoke_from_event_loop(move || {
-        let Some(ui) = weak.upgrade() else { return };
-        if !fav_ui.section_active() {
-            return;
-        }
-        let g = ui.global::<Favorites>();
-        // Same rule as `apply_hero_blur`: the guard records what is painted, so
-        // it moves only past the check that decides whether anything is. A
-        // clear dropped by that check leaves the previous covers recorded, and
-        // the next refresh tries again.
-        fav_ui.state().last_mosaic_paths.lock().clear();
-        // With no mosaic left, the gradient floor is the whole backdrop —
-        // re-solve against it so the scrim and foreground match what is
-        // actually about to be on screen.
-        crate::ui::hero_backdrop::reset(&ui);
-        // `None` through write_crossfade_slot clears `has-blur` without
-        // wiping the previous slot, so any in-flight fade-out completes
-        // naturally before the gradient floor takes over.
-        write_crossfade_slot(
-            None,
-            true,
-            g.get_blur_use_a(),
-            |img| g.set_blur_img_a(img),
-            |img| g.set_blur_img_b(img),
-            |v| g.set_blur_use_a(v),
-            |v| g.set_has_blur(v),
-        );
-    });
-}
-
-/// Publish the composed mosaic, and record it as the one on screen. Skipped
-/// outright once the section is no longer active: `HeroBackdrop` is shared by
-/// all six heroes, so a compose that finishes after the user has navigated away
-/// would paint this view's solve under whichever hero mounted next. Because the
-/// `last_mosaic_paths` record lives past that check rather than before the
-/// compose, a skip here leaves the next refresh free to try the same covers
-/// again — the leave handler's `forget_mosaic` is a convenience, not the only
-/// thing keeping the guard honest.
-fn apply_hero_blur(
-    fav_ui: &Arc<FavoritesUi>,
-    weak: &Weak<AppWindow>,
-    composed: Option<MosaicBlur>,
-    animate: bool,
-    paths: Vec<String>,
-) {
-    let fav_ui = fav_ui.clone();
-    let weak = weak.clone();
-    let _ = slint::invoke_from_event_loop(move || {
-        let Some(ui) = weak.upgrade() else { return };
-        if !fav_ui.section_active() {
-            return;
-        }
-        // Refreshes overlapping the compose window all get here with the same
-        // covers, since none of them had recorded yet; the losers have nothing
-        // to add but a redundant cross-fade of the same buffer. Rare on this
-        // side — `refresh_hero` awaits its own `spawn_blocking`, and the
-        // channel subscriber awaits `refresh_hero`, so ticks can't overlap
-        // each other. What can race one is the section-enter fetch, which is
-        // spawned detached: the first-enter kick at wire time, and every
-        // re-enter after that.
-        {
-            let mut last = fav_ui.state().last_mosaic_paths.lock();
-            if *last == paths {
-                return;
-            }
-            *last = paths;
-        }
-        let g = ui.global::<Favorites>();
-        // The hue and brightness were measured off this very buffer on the
-        // blocking pool, so the scrim lands in step with the blur under it.
-        let sample = composed.as_ref().map(|m| m.sample).unwrap_or_default();
-        crate::ui::hero_backdrop::apply(&ui, sample);
-        let img = composed.map(|m| Image::from_rgb8(m.blur));
-        write_crossfade_slot(
-            img,
-            animate,
-            g.get_blur_use_a(),
-            |i| g.set_blur_img_a(i),
-            |i| g.set_blur_img_b(i),
-            |v| g.set_blur_use_a(v),
-            |v| g.set_has_blur(v),
-        );
-    });
-}
-

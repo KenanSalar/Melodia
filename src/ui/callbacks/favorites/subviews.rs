@@ -117,13 +117,16 @@ pub(super) fn wire(
                 if let Err(e) = library::settings::set_favorites_tab(&s_disk, tab) {
                     log::warn!("favorites::set_favorites_tab: {e}");
                 }
-                fu_covers.swap_tab_covers(entering);
-                // Re-check on the UI thread, where the shadow is written: a
-                // pick made while the decodes ran has already rewound the
-                // counter, and announcing a tier this task no longer owns puts
-                // the next tab's cards straight back on the decoding path.
+                let warm = fu_covers.swap_tab_covers(entering);
+                // Two ways this task can end up with nothing to announce, and
+                // they need separate checks. `warm` is the decode's own verdict
+                // — a section leave landing inside it handed the buffers back.
+                // The tab re-check is on the UI thread, where the shadow is
+                // written: a pick made while the decodes ran owns a different
+                // tier entirely, and announcing either puts the next surface's
+                // cards straight back on the decoding path.
                 let _ = weak_warm.upgrade_in_event_loop(move |ui| {
-                    if fu_covers.active_tab() == entering {
+                    if warm && fu_covers.active_tab() == entering {
                         favorites_ui_mod::mark_covers_warm(&ui);
                     }
                 });

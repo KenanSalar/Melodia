@@ -1,15 +1,10 @@
 import { Theme } from "../theme.slint";
 import { Favorites } from "../globals/curated.slint";
 import { HeroBackdrop } from "../globals/hero-backdrop.slint";
-import { HeroChips } from "../globals/hero-chips.slint";
-import { Player } from "../globals/player.slint";
-import { CoverMosaic } from "../components/grid/cover-mosaic.slint";
-import { MetaChipStrip } from "../components/meta-chip-strip.slint";
-import { EntityCardGrid } from "../components/grid/entity-card-grid.slint";
-import { GridEmptyState } from "../components/grid/grid-empty-state.slint";
+import { HeroChipStrip } from "../components/hero-chip-strip.slint";
+import { MosaicHeroTile } from "../components/hero/mosaic-hero-tile.slint";
 import { GridColumnsSync } from "../components/grid-columns-sync.slint";
 import { GridGeometry } from "../components/grid-geometry.slint";
-import { MaterialIcon } from "../components/material-icon.slint";
 import { SearchBar } from "../components/search-bar.slint";
 import { TabBar } from "../components/tab-bar.slint";
 import { Tooltip, TooltipSide } from "../components/tooltip.slint";
@@ -17,10 +12,11 @@ import { ViewTransition } from "../components/view-transition.slint";
 import { NavEnterFrom } from "../globals/nav.slint";
 import { ActionPill, PillLabel, PillButton, PillDivider } from "../components/action-pill.slint";
 import { ColumnTogglePopup } from "../components/track-list/column-toggle-popup.slint";
-import { TrackList } from "../components/track-list/track-list.slint";
-import { OverlayScrollbar } from "../components/overlay-scrollbar.slint";
 import { FilterThrottle } from "../components/filter-throttle.slint";
 import { HeroBlurBackdrop } from "../components/hero-blur-backdrop.slint";
+import { FavoritesArtistsTab } from "favorites/artists-tab.slint";
+import { FavoritesMostPlayedTab } from "favorites/most-played-tab.slint";
+import { FavoritesSongsTab } from "favorites/songs-tab.slint";
 
 // The Favorites view (Nav sidebar index 2). A hero banner over three
 // mutually-exclusive sub-views:
@@ -263,86 +259,18 @@ export component FavoritesView inherits Rectangle {
                     vertical-stretch: 1;
                     spacing: Theme.pad-lg;
 
-                    // Mosaic tile. The outer Rectangle owns the chrome
-                    // (background, border, radius, clip); CoverMosaic just
-                    // paints the 1..=4 tile layout inside.
+                    // Mosaic tile — the shared square both mosaic heroes draw.
                     VerticalLayout {
                         alignment: start;
                         horizontal-stretch: 0;
 
-                        Rectangle {
-                            width: Theme.hero-artwork;
-                            height: Theme.hero-artwork;
-                            // Empty state mirrors the tracklist placeholder's
-                            // 15 %-tinted fill so an empty favorites hero
-                            // reads as a giant placeholder tile, not a
-                            // generic surface — but tinted off the solved
-                            // `HeroBackdrop.chrome`, not `Theme.accent`: this
-                            // tile sits *on* the hero, and with no mosaic the
-                            // hero is the dark gradient floor, where a light
-                            // theme's accent lands dark-on-dark. The
-                            // populated fill is a hero token too, and has to
-                            // be: the mosaic's placeholder slots are
-                            // translucent, so whatever fills this rectangle
-                            // is most of what their chrome composites
-                            // against. `Theme.surface1` is near-white on a
-                            // light theme, which would put a light chrome
-                            // glyph on a light tile.
-                            background: Favorites.track-count == 0
-                                ? HeroBackdrop.chrome.with-alpha(0.15)
-                                : HeroBackdrop.floor-start;
-                            border-radius: Theme.radius-lg;
-                            border-width: 1px;
-                            border-color: HeroBackdrop.tile-edge;
-                            clip: true;
-
-                            // Empty-state — zero favorites in the library.
-                            // A favorite that lacks artwork still contributes
-                            // a *tile* to the mosaic (rendered as a
-                            // placeholder by `CoverMosaic`), so this branch
-                            // fires only on an empty favorites set, not on
-                            // "favorites with no artwork".
-                            if Favorites.track-count == 0: VerticalLayout {
-                                alignment: center;
-                                HorizontalLayout {
-                                    alignment: center;
-                                    MaterialIcon {
-                                        name: "favorite";
-                                        filled: true;
-                                        icon-size: 56px;
-                                        icon-color: HeroBackdrop.chrome;
-                                    }
-                                }
-                            }
-
-                            // Layout adapts to favorite count (capped at 4),
-                            // each slot independently artwork-or-placeholder.
-                            // Distinct artwork paths fill leading slots;
-                            // remaining slots paint chrome-tinted placeholder
-                            // tiles via ArtworkImage.
-                            if Favorites.track-count > 0: CoverMosaic {
-                                width: 100%;
-                                height: 100%;
-                                artwork-paths: Favorites.mosaic-paths;
-                                tile-count: Favorites.track-count > 4 ? 4 : Favorites.track-count;
-                                placeholder-icon: "music-note";
-                                // Flush-fill: tiles butt up edge-to-edge and
-                                // hit the outer rectangle's clip border, so
-                                // the hero reads as a single composited image
-                                // (parity with the playlist detail's baked
-                                // composite) rather than as a grid with
-                                // borders between its cells.
-                                gutter-size: 0px;
-                                tile-radius: 0px;
-                                // Slots past the distinct-artwork count paint
-                                // placeholders straight onto the hero, so they
-                                // take the solved chrome for the same reason
-                                // the empty state above does.
-                                tile-bg: HeroBackdrop.chrome.with-alpha(0.15);
-                                tile-icon-color: HeroBackdrop.chrome;
-                                request-cover(p) => {
-                                    return Favorites.request-mosaic-cover(p);
-                                }
+                        MosaicHeroTile {
+                            count: Favorites.track-count;
+                            paths: Favorites.mosaic-paths;
+                            empty-glyph: "favorite";
+                            empty-glyph-filled: true;
+                            request-cover(p) => {
+                                return Favorites.request-mosaic-cover(p);
                             }
                         }
                     }
@@ -368,13 +296,7 @@ export component FavoritesView inherits Rectangle {
                         // publishes none and the line below takes over: a
                         // lone "0 favorites" chip states the same thing far
                         // more bleakly than a sentence does.
-                        MetaChipStrip {
-                            vertical-stretch: 0;
-                            rows: HeroChips.rows;
-                            chip-fill: HeroBackdrop.chip-fill;
-                            chip-label-color: HeroBackdrop.chrome;
-                            measured(w) => { HeroChips.recompute(w); }
-                        }
+                        HeroChipStrip { }
 
                         if Favorites.tab-idx == Favorites.tab-songs
                             && Favorites.track-count == 0: Text {
@@ -502,77 +424,10 @@ export component FavoritesView inherits Rectangle {
                 height: parent.height;
                 enter-from: root.tab-enter-from;
                 enabled: root.tab-anim-armed;
-                HorizontalLayout {
-                    padding-left: Theme.pad-lg;
-                    padding-right: Theme.pad-lg;
-                    padding-top: Theme.pad-md;
 
-                    tl := TrackList {
-                        horizontal-stretch: 1;
-                        vertical-stretch: 1;
-
-                        rows: Favorites.tracks;
-
-                        w-number <=> Favorites.w-number;
-                        w-title <=> Favorites.w-title;
-                        w-artist <=> Favorites.w-artist;
-                        w-album <=> Favorites.w-album;
-                        w-genre <=> Favorites.w-genre;
-                        w-year <=> Favorites.w-year;
-                        w-length <=> Favorites.w-length;
-
-                        show-number <=> Favorites.show-number;
-                        show-artwork <=> Favorites.show-artwork;
-                        show-artist <=> Favorites.show-artist;
-                        show-album <=> Favorites.show-album;
-                        show-genre <=> Favorites.show-genre;
-                        show-year <=> Favorites.show-year;
-                        number-mode: "index";
-
-                        sort-field: Favorites.sort-field;
-                        sort-dir: Favorites.sort-dir;
-                        playing-track-id: Player.vm.track.id;
-                        view-context: "favorites";
-                        view-selected-ids: Favorites.selected-ids;
-
-                        request-sort(f) => { Favorites.request-sort(f); }
-                        play-row(id, idx) => { Favorites.play-row(id, idx); }
-                        play-next(ids) => { Favorites.play-next(ids); }
-                        add-to-queue(ids) => { Favorites.add-to-queue(ids); }
-                        toggle-row-favorite(ids, on) => { Favorites.toggle-row-favorite(ids, on); }
-                        set-row-rating(ids, n) => { Favorites.set-row-rating(ids, n); }
-                        select-row(idx, id, sh, ct) => { Favorites.select-row(idx, id, sh, ct); }
-                        request-blur-search => { Favorites.blur-search-tick += 1; }
-                        go-to-album(aid) => { Favorites.go-to-album(aid); }
-                        go-to-artist(aid) => { Favorites.go-to-artist(aid); }
-                        go-to-genre(gid) => { Favorites.go-to-genre(gid); }
-                    }
-                }
-
-                OverlayScrollbar {
-                    horizontal: false;
-                    x: parent.width - self.width;
-                    // Align with the ListView body inside TrackList so the bar
-                    // stays out of the column-header band.
-                    y: tl.y + tl.body-y;
-                    width: 10px;
-                    height: tl.body-height;
-                    visible-size: tl.v-visible-height;
-                    content-size: tl.v-viewport-height;
-                    offset: tl.v-offset;
-                    scroll-to(o) => { tl.set-v-offset(o); }
-                }
-
-                OverlayScrollbar {
-                    horizontal: true;
-                    x: tl.x;
-                    y: parent.height - self.height;
-                    width: tl.width - 10px;
-                    height: 10px;
-                    visible-size: tl.h-visible-width;
-                    content-size: tl.h-viewport-width;
-                    offset: tl.h-offset;
-                    scroll-to(o) => { tl.set-h-offset(o); }
+                FavoritesSongsTab {
+                    width: 100%;
+                    height: 100%;
                 }
             }
 
@@ -583,40 +438,13 @@ export component FavoritesView inherits Rectangle {
                 enter-from: root.tab-enter-from;
                 enabled: root.tab-anim-armed;
 
-                mp := EntityCardGrid {
-                    // Positioned rather than wrapped in a layout, so the
-                    // scrollbar below can reuse the same two numbers instead
-                    // of chasing a layout's padding.
-                    y: Theme.pad-md;
+                FavoritesMostPlayedTab {
                     width: 100%;
-                    height: parent.height - Theme.pad-md;
-                    rows: Favorites.most-played-rows;
-                    card-width: geom.card-w;
-                    card-height: geom.card-h;
-                    row-height: geom.row-h;
+                    height: 100%;
+                    card-w: geom.card-w;
+                    card-h: geom.card-h;
+                    row-h: geom.row-h;
                     gap: root.grid-gap;
-                    show-play-count: true;
-                    covers-generation: Favorites.covers-generation;
-                    request-cover(p, gen) => { Favorites.request-most-played-cover(p, gen) }
-                    row-clicked(id) => { Favorites.play-track(id); }
-                }
-
-                if Favorites.most-played-count == 0: GridEmptyState {
-                    icon: "bar_chart";
-                    title: @tr("Nothing played yet");
-                    body: @tr("Play one of your favorites and it will show up here.");
-                }
-
-                OverlayScrollbar {
-                    horizontal: false;
-                    x: parent.width - self.width;
-                    y: Theme.pad-md;
-                    width: 10px;
-                    height: parent.height - Theme.pad-md;
-                    visible-size: mp.v-visible-height;
-                    content-size: mp.v-viewport-height;
-                    offset: mp.v-offset;
-                    scroll-to(o) => { mp.set-v-offset(o); }
                 }
             }
 
@@ -627,38 +455,13 @@ export component FavoritesView inherits Rectangle {
                 enter-from: root.tab-enter-from;
                 enabled: root.tab-anim-armed;
 
-                ar := EntityCardGrid {
-                    y: Theme.pad-md;
+                FavoritesArtistsTab {
                     width: 100%;
-                    height: parent.height - Theme.pad-md;
-                    rows: Favorites.artist-rows;
-                    card-width: geom.card-w;
-                    card-height: geom.card-h;
-                    row-height: geom.row-h;
+                    height: 100%;
+                    card-w: geom.card-w;
+                    card-h: geom.card-h;
+                    row-h: geom.row-h;
                     gap: root.grid-gap;
-                    circular: true;
-                    fallback-icon: "person";
-                    covers-generation: Favorites.covers-generation;
-                    request-cover(p, gen) => { Favorites.request-artist-cover(p, gen) }
-                    row-clicked(id) => { Favorites.open-artist(id); }
-                }
-
-                if Favorites.artist-count == 0: GridEmptyState {
-                    icon: "person";
-                    title: @tr("No favorite artists yet");
-                    body: @tr("Favorite a song and its artist appears here.");
-                }
-
-                OverlayScrollbar {
-                    horizontal: false;
-                    x: parent.width - self.width;
-                    y: Theme.pad-md;
-                    width: 10px;
-                    height: parent.height - Theme.pad-md;
-                    visible-size: ar.v-visible-height;
-                    content-size: ar.v-viewport-height;
-                    offset: ar.v-offset;
-                    scroll-to(o) => { ar.set-v-offset(o); }
                 }
             }
         }

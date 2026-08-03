@@ -1,0 +1,89 @@
+import { Theme } from "../../theme.slint";
+import { HeroBackdrop } from "../../globals/hero-backdrop.slint";
+import { CoverMosaic } from "../grid/cover-mosaic.slint";
+import { MaterialIcon } from "../material-icon.slint";
+
+// The artwork square on the two mosaic heroes — Favorites and Recently
+// Played. The outer Rectangle owns the chrome (fill, border, radius, clip);
+// `CoverMosaic` paints the 1..=4 tile layout inside it, and an empty set
+// paints a single centred glyph instead.
+//
+// One component rather than two copies, because the two views differ in
+// exactly three values: the count, the model of paths, and the empty glyph.
+// The cover callback is the fourth, and the only reason it is a callback
+// rather than a global read — each view owns its own mosaic tier.
+//
+// **Every brush here is a `HeroBackdrop` tier, and none may become a
+// `Theme.*` token.** The tile sits *on* the hero: with no mosaic the hero is
+// the dark gradient floor, where a light theme's accent lands dark-on-dark,
+// and the populated fill matters just as much because the mosaic's
+// placeholder slots are translucent — whatever fills this rectangle is most
+// of what their chrome composites against. `Theme.surface1` is near-white
+// under Latte, which put a light chrome glyph on a light tile. The 1 px edge
+// had to follow the fill for the same reason: a `Theme.border` hairline
+// vanishes under Mocha and turns a hard bright ring under every light
+// variant, so it takes the derived `tile-edge` tier.
+export component MosaicHeroTile inherits Rectangle {
+    // How many tiles the mosaic should draw, before the 4-slot cap. Zero
+    // selects the empty state — and it means an empty *set*, not "entries
+    // with no artwork": an entry lacking a cover still contributes a tile,
+    // rendered as a placeholder by `CoverMosaic`.
+    in property <int> count;
+    in property <[string]> paths;
+    // Material Symbols ligature for the empty state. Favorites takes its
+    // sidebar's filled heart, Recently Played its `history`.
+    in property <string> empty-glyph;
+    in property <bool> empty-glyph-filled: false;
+
+    // `pure`, because `CoverMosaic`'s is — a lazy cover lookup is a read, and
+    // Slint refuses to call an impure callback from a pure one.
+    pure callback request-cover(string) -> image;
+
+    width: Theme.hero-artwork;
+    height: Theme.hero-artwork;
+    // The 15 %-tinted empty fill mirrors the tracklist placeholder, so an
+    // empty hero reads as a giant placeholder tile rather than as a generic
+    // surface.
+    background: root.count == 0
+        ? HeroBackdrop.chrome.with-alpha(0.15)
+        : HeroBackdrop.floor-start;
+    border-radius: Theme.radius-lg;
+    border-width: 1px;
+    border-color: HeroBackdrop.tile-edge;
+    clip: true;
+
+    if root.count == 0: VerticalLayout {
+        alignment: center;
+        HorizontalLayout {
+            alignment: center;
+            MaterialIcon {
+                name: root.empty-glyph;
+                filled: root.empty-glyph-filled;
+                icon-size: 56px;
+                icon-color: HeroBackdrop.chrome;
+            }
+        }
+    }
+
+    if root.count > 0: CoverMosaic {
+        width: 100%;
+        height: 100%;
+        artwork-paths: root.paths;
+        tile-count: root.count > 4 ? 4 : root.count;
+        placeholder-icon: "music-note";
+        // Flush-fill: tiles butt up edge-to-edge and hit the outer
+        // rectangle's clip border, so the hero reads as a single composited
+        // image (parity with the playlist detail's baked composite) rather
+        // than as a grid with borders between its cells.
+        gutter-size: 0px;
+        tile-radius: 0px;
+        // Slots past the distinct-artwork count paint placeholders straight
+        // onto the hero, so they take the solved chrome for the same reason
+        // the empty state above does.
+        tile-bg: HeroBackdrop.chrome.with-alpha(0.15);
+        tile-icon-color: HeroBackdrop.chrome;
+        request-cover(p) => {
+            return root.request-cover(p);
+        }
+    }
+}
