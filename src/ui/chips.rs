@@ -19,9 +19,17 @@ use std::rc::Rc;
 const SPACING: f32 = 8.0;
 
 /// Estimated rendered chip width — Vazirmatn at `font-size-sm` with
-/// `MetaChip`'s `pad-md` left+right padding. Approximate but stable; a row is
-/// never full, so minor over/under shoot is absorbed by the layout rather than
-/// overflowing it.
+/// `MetaChip`'s `pad-md` left+right padding.
+///
+/// **The two error directions are not symmetric**, because this packs a row as
+/// full as the estimate allows — unlike `ChipGroup`, which sizes every row off
+/// its widest chip and so is never full at all. Over-shoot only wraps early;
+/// under-shoot overflows, and nothing downstream absorbs it, since a no-wrap
+/// `Text` reports its full string as its layout *minimum* and the row is
+/// therefore incompressible. So `CHAR_W` leans generous: 6.5 px against a 12 px
+/// `font-size-sm` is ≈0.54 em, where Vazirmatn's digits sit near 0.55 and its
+/// lowercase near 0.5, and chip texts are counts, years and short words. Both
+/// spacings are exact (`pad-sm`, `2 × pad-md`) — only the glyph term estimates.
 fn estimated_chip_width(text: &str) -> f32 {
     const CHAR_W: f32 = 6.5;
     const PAD: f32 = 24.0;

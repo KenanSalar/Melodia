@@ -46,6 +46,7 @@ use slint::{ComponentHandle, Image, ModelRc, SharedString, VecModel};
 use crate::entities::artist::FavoriteArtist;
 use crate::entities::track::{FavoriteStats, MostPlayedFavorite};
 use crate::media::cover_thumbs::CoverThumbs;
+use crate::ui::hero_chips::{HeroFold, MostPlayedTotals};
 use crate::ui::util::clamp_i64_to_i32;
 use crate::{
     AppWindow, EntityGridRow as UiEntityGridRow, EntityStripRow as UiEntityStripRow, Favorites,
@@ -302,6 +303,14 @@ impl FavoritesUi {
         };
         self.inner.most_played.lock().clear();
         self.inner.fav_artists.lock().clear();
+        // The folds go with the caches they summarise: a derived value that
+        // outlives its source is the one thing the band can state that is
+        // *wrong* rather than merely absent. `refresh_hero` is the shortest of
+        // the three concurrent fetches, so it publishes first on the re-enter
+        // and would otherwise pair a fresh count with a pre-leave spread — "3
+        // favorites · 37 artists" for as long as `refresh_tracks` takes.
+        *self.inner.songs_fold.lock() = HeroFold::default();
+        *self.inner.most_played_totals.lock() = MostPlayedTotals::default();
         self.inner.applied_selection.lock().clear();
         crate::tasks::heap_trim::trim();
     }

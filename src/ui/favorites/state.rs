@@ -56,6 +56,12 @@ pub(crate) struct FavoritesUiState {
     /// Both describe the whole set, not the filtered view: the band names the
     /// page, and the counts that do follow the filter are the ones gating the
     /// grids' empty states. See [`crate::ui::hero_chips`].
+    ///
+    /// Both are reset by `FavoritesUi::release_section_state` alongside the
+    /// caches they were folded from — a derived value may not outlive its
+    /// source. Dropping that reset doesn't leave the band empty, which would be
+    /// the harmless failure; it leaves it stating a spread that no longer
+    /// matches the count beside it.
     pub songs_fold: Mutex<HeroFold>,
     pub most_played_totals: Mutex<MostPlayedTotals>,
     /// Set of `TrackListRow.id`s currently `selected: true` on the

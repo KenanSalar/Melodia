@@ -594,6 +594,46 @@ fn each_favorites_fetch_folds_and_republishes_what_it_feeds() {
     }
 }
 
+/// The teardown half of the same contract: a fold may not outlive the cache it
+/// was folded from.
+///
+/// `release_section_state` empties `tracks_all` / `most_played` / `fav_artists`
+/// and zeroes `stats`, and the two folds have to go with them. Leaving them is
+/// not the harmless failure it looks like — the band doesn't come back empty,
+/// it comes back **wrong**: `kick_full_refresh` joins the three fetches and
+/// `refresh_hero` is the shortest, so the first publish after a re-enter pairs
+/// a fresh count with a pre-leave spread ("3 favorites · 37 artists") until
+/// `refresh_tracks` lands. Folding at publish time used to hide this, because
+/// the fold read a cache that *was* cleared.
+#[test]
+fn the_section_leave_drops_the_folds_with_the_caches_they_summarise() {
+    const MOD: &str = include_str!("../favorites/mod.rs");
+
+    let body = MOD
+        .split_once("pub fn release_section_state(")
+        .and_then(|(_, rest)| rest.split_once("\n    }"))
+        .map_or("", |(body, _)| body);
+    // Anchored on the statement the teardown ends with, so a window that
+    // truncated early fails here rather than passing over nothing.
+    assert!(
+        body.contains("heap_trim::trim()"),
+        "favorites/mod.rs no longer defines `release_section_state` as a body ending in \
+         `heap_trim::trim()` — move this pin with it, or the checks below hold over an \
+         empty window"
+    );
+    for (field, reset) in [
+        ("songs_fold", "HeroFold::default()"),
+        ("most_played_totals", "MostPlayedTotals::default()"),
+    ] {
+        assert!(
+            body.contains(&format!("{field}.lock() = {reset}")),
+            "`release_section_state` clears the caches `{field}` was folded from but leaves \
+             `{field}` itself — the next publish then states a spread the count beside it no \
+             longer matches"
+        );
+    }
+}
+
 /// No hero folds at publish time — every one of them folds a local its own
 /// fetch just awaited, on that worker. A fold whose argument is a `.lock()` is
 /// reading a cache some *other* task fills, which is both a UI-thread walk and

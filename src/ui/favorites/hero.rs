@@ -21,10 +21,15 @@ use crate::ui::mosaic_blur::{MosaicBlur, compose_mosaic_blur};
 use crate::ui::now_playing::write_crossfade_slot;
 use crate::{AppWindow, Favorites};
 
-/// Fetch fresh stats, push the count + duration text + mosaic paths
-/// into `Favorites`, then kick a blocking composition+blur task whose
+/// Fetch fresh stats, push the count + mosaic paths into `Favorites` and the
+/// band's chips with them, then kick a blocking composition+blur task whose
 /// result lands on the UI thread via `upgrade_in_event_loop`.
 /// `animate` fades the cross-fade between the old mosaic and the new.
+///
+/// The running time reaches the band as a chip rather than as a property: the
+/// millisecond total is already on the stats struct, so routing a formatted
+/// string through Slint only to read it back would be a round trip for
+/// something this crate had in hand.
 pub async fn refresh_hero(
     state: &AppState,
     fav_ui: &Arc<FavoritesUi>,
