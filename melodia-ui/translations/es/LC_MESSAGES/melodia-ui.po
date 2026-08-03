@@ -189,6 +189,22 @@ msgid_plural "{n} artists"
 msgstr[0] "{n} artista"
 msgstr[1] "{n} artistas"
 
+# Plural: disc count chip on the Album Detail hero. Only shown above one.
+msgid "{n} disc"
+msgid_plural "{n} discs"
+msgstr[0] "{n} disco"
+msgstr[1] "{n} discos"
+
+# Plural: total play count chip on the Favorites hero's Most Played tab.
+msgid "{n} play"
+msgid_plural "{n} plays"
+msgstr[0] "{n} reproducción"
+msgstr[1] "{n} reproducciones"
+
+# Chip on the Album Detail hero for a various-artists release.
+msgid "Compilation"
+msgstr "Recopilación"
+
 # Plural: track count for the tracks-view header subtitle ("12 songs").
 msgid "{n} song"
 msgid_plural "{n} songs"

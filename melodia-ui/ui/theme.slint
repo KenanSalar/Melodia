@@ -156,6 +156,21 @@ export global Theme {
     out property <length> pad-md: 12px;
     out property <length> pad-lg: 16px;
 
+    // The artwork tile every hero band leads with — the four detail views'
+    // cover (square, or the artist's disc) and the two curated views' 2×2
+    // mosaic. One number rather than six, because the six banners are the same
+    // band under different content, and a tile that changes size between them
+    // reads as the page shifting under a nav. `DetailHeader` takes it directly
+    // and exposes no size knob, so a detail hero can't diverge from the pair
+    // that has no header component to route through.
+    //
+    // It also sets each band's height, since the tile is the tallest thing in
+    // every one of them — so growing it grows six banners at once, and the
+    // detail heroes have the least room to give: their right column (title row,
+    // subtitle, chips, action pill) comes within a chip row of the tile's lower
+    // edge. See `ui::hero_chips::HERO_MAX_ROWS` for what that costs on a wrap.
+    out property <length> hero-artwork: 140px;
+
     // Typography
     out property <length> font-size-sm: 12px;
     out property <length> font-size-row: 13px;   // Tauri's `.cell` size

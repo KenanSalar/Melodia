@@ -33,6 +33,7 @@ use crate::entities::track::TrackSummary;
 use crate::media::cover_thumbs::CoverThumbs;
 use crate::player::state::{QueueViewModel, lock_state};
 use crate::state::AppState;
+use crate::ui::chips;
 use crate::ui::now_playing_artwork::NowPlayingArtwork;
 use crate::{AppWindow, Nav, NowPlaying, Player, QueueRow};
 
@@ -114,9 +115,9 @@ pub struct NowPlayingState {
     /// `Player.recompute-chip-rows(width)` fire so a window resize doesn't
     /// need to re-walk `TrackMetaRow`.
     pub(super) chip_texts: RefCell<Vec<SharedString>>,
-    /// Last chip-area width reported by the view. Cached so the
-    /// track-change subscriber can chunk against the current layout
-    /// immediately, without waiting for the next Slint `changed` fire.
+    /// Last width the `MetaChipStrip` reported. Cached so the track-change
+    /// subscriber can chunk against the current layout immediately, without
+    /// waiting for the next Slint `changed` fire.
     pub(super) chip_last_width: Cell<f32>,
     /// Re-seeder for the Up Next list — see [`Seeder`]. Populated by
     /// [`install`] after construction (`None` only during the brief
@@ -238,19 +239,18 @@ pub fn install(
         np_state.clone(),
     );
 
-    // Chip-strip width sync. The view fires `recompute-chip-rows(width)` on
-    // mount + every chip-area resize; we cache the width on
-    // `chip_last_width` so the track-change subscriber can re-chunk against
-    // the current layout without waiting for the next Slint `changed` fire.
+    // Chip-strip width sync. `MetaChipStrip` reports its width on mount and
+    // on every resize; we cache it on `chip_last_width` so the track-change
+    // subscriber can re-chunk against the current layout without waiting for
+    // the next Slint `changed` fire.
     {
         let weak = ui.as_weak();
         let np = np_state.clone();
         ui.global::<Player>().on_recompute_chip_rows(move |width| {
             np.chip_last_width.set(width);
             let Some(ui) = weak.upgrade() else { return };
-            let rows = metadata::chunk_chips_to_rows(&np.chip_texts.borrow(), width);
-            ui.global::<Player>()
-                .set_chip_rows(metadata::rows_to_model(rows));
+            let rows = chips::chunk_chips_to_rows(&np.chip_texts.borrow(), width, None);
+            ui.global::<Player>().set_chip_rows(chips::rows_to_model(rows));
         });
     }
 

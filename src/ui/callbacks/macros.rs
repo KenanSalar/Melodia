@@ -149,11 +149,12 @@ macro_rules! wire_row_flag {
 /// `$g` a Slint detail-global handle (`AlbumDetail`, `ArtistDetail`,
 /// `PlaylistDetail`).
 ///
-/// Also re-solves the shared `HeroBackdrop` set back to the gradient floor.
-/// Clearing `has-blur` makes that floor the whole backdrop, and the six heroes
-/// share one global — so without this, backing out of (say) a Genre detail
-/// leaves its hash-derived stops painted under the *next* hero for the frames
-/// before that one's own decode lands.
+/// Also re-solves the shared `HeroBackdrop` set back to the gradient floor and
+/// drops the shared `HeroChips` row. Clearing `has-blur` makes that floor the
+/// whole backdrop, and the six heroes share both globals — so without this,
+/// backing out of (say) a Genre detail leaves its hash-derived stops painted
+/// and its counts spelled out under the *next* hero, for the frames before
+/// that one's own decode and fetch land.
 macro_rules! release_detail_hero_images {
     ($ui:expr, $g:expr) => {{
         let detail = &$g;
@@ -162,6 +163,7 @@ macro_rules! release_detail_hero_images {
         detail.set_blur_img_b(::slint::Image::default());
         detail.set_has_blur(false);
         $crate::ui::hero_backdrop::reset(&$ui);
+        $crate::ui::hero_chips::clear(&$ui);
     }};
 }
 

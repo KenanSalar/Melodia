@@ -61,17 +61,18 @@ export global Player {
     in-out property <TrackMetaRow> track-meta;
 
     // 2D chip strip — outer Vec is rows, inner Vec is chips in that row.
-    // Populated by `src/ui/now_playing/metadata.rs` from `track-meta` + the
-    // current chip-area width reported by the view (see
-    // `recompute-chip-rows`). Empty rows / a 0-length outer Vec mean "no
-    // chips" (no track, stale fetch, or all fields empty).
+    // Chunked by `src/ui/chips.rs` from the fields `now_playing::metadata`
+    // pulls out of `track-meta`, against the width the strip last reported
+    // (see `recompute-chip-rows`). Uncapped: the view has the room to wrap,
+    // unlike the hero band. Empty rows / a 0-length outer Vec mean "no chips"
+    // (no track, stale fetch, or all fields empty).
     in-out property <[[string]]> chip-rows;
 
-    // View → Rust: chip-area's current available width. Wired in
-    // `now-playing-view.slint` via a 1 ms mount Timer + `changed` handler —
-    // mirrors `GridColumnsSync`. Rust re-chunks `chip-rows` on every fire,
-    // and the track-change subscriber also re-chunks after replacing
-    // `track-meta` using the last-reported width cached on the Rust side.
+    // View → Rust: the strip's current available width. `MetaChipStrip` owns
+    // the mirror and the 1 ms mount seed and reports through `measured`;
+    // `now-playing-view.slint` forwards it here. Rust re-chunks `chip-rows`
+    // on every fire, and the track-change subscriber also re-chunks after
+    // replacing `track-meta` using the last-reported width cached Rust-side.
     callback recompute-chip-rows(length);
 
     // --- Now Playing backdrop colour set ---------------------------------

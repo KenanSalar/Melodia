@@ -60,10 +60,12 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, genres_ui: &Arc<GenresUi>) 
 
             g.set_genre_id(-1);
             // Genres have no hero images, so this teardown never reaches
-            // `release_detail_hero_images!` — hand the shared colour set back
-            // to the floor here instead, else the next hero paints this
-            // genre's hash-derived stops until its own decode lands.
+            // `release_detail_hero_images!` — hand the shared colour set and
+            // chip row back here instead, else the next hero paints this
+            // genre's hash-derived stops and its counts until its own decode
+            // and fetch land.
             crate::ui::hero_backdrop::reset(&ui);
+            crate::ui::hero_chips::clear(&ui);
             genres_ui_mod::clear_detail(&gu);
 
             let gu_trim = gu.clone();

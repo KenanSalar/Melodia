@@ -9,12 +9,13 @@ use slint::{Rgb8Pixel, SharedPixelBuffer};
 
 /// Side length (px) a sharp cover tile is downscaled to.
 ///
-/// Roughly matches the ~380 px maximum on-screen tile shared by the Now-Playing
-/// view and the Album Detail header, so it neither upscales nor pays for a 2×
-/// `HiDPI` buffer — and both surfaces decode at one size. The Edit-Tags cover
-/// preview rides the same tier rather than sizing to its own 160 px tile: one
-/// decode size across the app is worth more than the buffer it saves on a
-/// dialog that holds one image.
+/// Roughly matches the ~380 px maximum on-screen tile in the Now-Playing view,
+/// the largest cover the app paints, so it neither upscales nor pays for a 2×
+/// `HiDPI` buffer there. The two smaller consumers ride the same tier rather
+/// than sizing to their own tiles — the Album Detail header's
+/// `Theme.hero-artwork` square and the Edit-Tags dialog's preview, both of
+/// which this covers at 2× with room over: one decode size across the app is
+/// worth more than the buffers it would save on surfaces holding one image.
 pub const COVER_SIZE: u32 = 384;
 
 /// Side length a cover is downscaled to before blurring.

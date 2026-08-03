@@ -270,6 +270,7 @@ pub fn install_library_settings_and_friends(
     ui::updater_settings::install(app, state);
     ui::about::install(app, state);
     ui::settings_page::install(app, state);
+    ui::hero_chips::install(app);
     Ok(notifications)
 }
 

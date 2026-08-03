@@ -4,41 +4,12 @@ import { Nav } from "../globals/nav.slint";
 import { Player } from "../globals/player.slint";
 import { IconButton } from "../components/icon-button.slint";
 import { AccentDiscButton } from "../components/now-playing/accent-disc-button.slint";
+import { MetaChipStrip } from "../components/meta-chip-strip.slint";
 import { StarRating } from "../components/star-rating.slint";
 import { NowPlayingCover } from "../components/now-playing/now-playing-cover.slint";
 import { UpNextList } from "../components/now-playing/up-next-list.slint";
 import { NowPlayingViewMenu } from "../components/now-playing/view-menu.slint";
 import { VisualizerStrip } from "../components/now-playing/visualizer-strip.slint";
-
-// One technical-metadata chip (codec / bitrate / sample rate / …). The
-// caller only instantiates it when the matching `Player.track-meta` field
-// is non-empty, so the chip itself never has to handle a blank string.
-component MetaChip inherits Rectangle {
-    in property <string> text;
-
-    height: 26px;
-    // Fully-rounded pill — `height / 2` keeps the ends circular at any
-    // height.
-    border-radius: self.height / 2;
-    // Soft per-artwork accent tint instead of the opaque `Theme.surface0`
-    // slab, so the strip reads as part of the backdrop's colour family.
-    background: Player.np-accent-pill;
-
-    HorizontalLayout {
-        padding-left: Theme.pad-md;
-        padding-right: Theme.pad-md;
-        VerticalLayout {
-            alignment: center;
-            Text {
-                text: root.text;
-                // Solid, unlike the pill behind it — the label is the part
-                // that has to stay readable on a dark cover.
-                color: Player.np-accent-bright;
-                font-size: Theme.font-size-sm;
-            }
-        }
-    }
-}
 
 // Full-screen Now Playing view. Rendered inside the main content panel
 // (sidebar + now-playing bar stay visible) when `Nav.now-playing-open` is
@@ -324,53 +295,22 @@ export component NowPlayingView inherits Rectangle {
                     }
                 }
 
-                // Technical-metadata chips. A 26 px minimum is ALWAYS
-                // reserved while a track is playing (the `if has_track`
-                // wrapper + `min-height`) so the centred artwork above
-                // never reflows when a slow fetch lands — or when a track
-                // simply has no metadata. On narrow windows the strip
-                // grows downward into 2+ rows: the area's `width` is
-                // mirrored into Rust via `Player.recompute-chip-rows`,
-                // which re-chunks `Player.chip-rows` against the
-                // available width (mirrors the `GridColumnsSync` pattern).
-                // Chip *contents* are still gated on `track_id ==
-                // vm.track.id` so a fetch that lands after a rapid track
-                // change is never shown against the wrong track.
-                if Player.vm.has_track: chip-area := Rectangle {
-                    min-height: 26px;   // == MetaChip height
-                    vertical-stretch: 0;
-
-                    // `changed` can't watch a path expression directly
-                    // (CLAUDE.md note) — mirror the width into a local
-                    // property so the handler fires on resize.
-                    property <length> watched-w: self.width;
-                    changed watched-w => {
-                        Player.recompute-chip-rows(watched-w);
-                    }
-
-                    // First-layout seed. `changed` doesn't fire on the
-                    // initial binding evaluation, so the mount-time width
-                    // never reaches Rust without this. Same 1 ms pattern
-                    // as `GridColumnsSync`.
-                    Timer {
-                        interval: 1ms;
-                        running: true;
-                        triggered() => {
-                            self.running = false;
-                            Player.recompute-chip-rows(chip-area.width);
-                        }
-                    }
-
-                    if Player.track-meta.track_id == Player.vm.track.id: VerticalLayout {
-                        spacing: Theme.pad-sm;
-                        for row in Player.chip-rows: HorizontalLayout {
-                            alignment: center;
-                            spacing: Theme.pad-sm;
-                            for t in row: MetaChip {
-                                text: t;
-                            }
-                        }
-                    }
+                // Technical-metadata chips. The strip reserves its row
+                // unconditionally, so the centred artwork above never
+                // reflows when a slow fetch lands — or when a track simply
+                // has no metadata. On narrow windows it grows downward
+                // into 2+ rows: the strip reports its width, and Rust
+                // re-chunks `Player.chip-rows` against it, uncapped.
+                // Contents are gated on `track_id == vm.track.id` so a
+                // fetch landing after a rapid track change is never shown
+                // against the wrong track.
+                if Player.vm.has_track: MetaChipStrip {
+                    rows: Player.chip-rows;
+                    show-rows: Player.track-meta.track_id == Player.vm.track.id;
+                    centred: true;
+                    chip-fill: Player.np-accent-pill;
+                    chip-label-color: Player.np-accent-bright;
+                    measured(w) => { Player.recompute-chip-rows(w); }
                 }
 
                 // Visualizer strip, as a base under the whole cover → title →

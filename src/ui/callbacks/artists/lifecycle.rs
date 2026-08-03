@@ -44,6 +44,12 @@ pub(super) fn wire(
     // `ArtistDetail.artist-id >= 0`) runs after the grid fetch so the
     // user lands back where they were.
     artists_ui.set_section_active(ui.global::<Nav>().get_selected_index() == NAV_ARTISTS);
+    // See the matching seed in `albums/lifecycle.rs`: a boot pre-fetch for a
+    // section that isn't on screen can't publish the shared hero globals, so
+    // its first enter has to re-fetch rather than take the cheap path.
+    if !artists_ui.section_active() {
+        artists_ui.mark_dirty();
+    }
     {
         let au = artists_ui.clone();
         let albums = albums_ui.clone();

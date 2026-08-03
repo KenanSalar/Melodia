@@ -53,10 +53,11 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, rp_ui: &Arc<RecentlyPlayedU
                 // Unconditional, on the same tick as the wipe — see the
                 // matching call in `favorites/lifecycle.rs`.
                 ru.forget_mosaic();
-                // Six heroes share one colour set, so hand it back to the
-                // floor rather than leaving this mosaic's solve for the
-                // next hero to paint under.
+                // Six heroes share one colour set and one chip row, so hand
+                // both back rather than leaving this mosaic's solve and this
+                // view's counts for the next hero to paint under.
                 crate::ui::hero_backdrop::reset(&ui);
+                crate::ui::hero_chips::clear(&ui);
                 clear_vec_model::<UiTrackListRow>(&g.get_tracks(), "recently_played: clear tracks");
                 clear_vec_model::<UiEntityStripRow>(
                     &g.get_most_played_rows(),

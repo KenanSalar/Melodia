@@ -2,9 +2,11 @@ import { ScrollView } from "std-widgets.slint";
 import { Theme } from "../theme.slint";
 import { ArtistDetail } from "../globals/artists.slint";
 import { HeroBackdrop } from "../globals/hero-backdrop.slint";
+import { HeroChips } from "../globals/hero-chips.slint";
 import { Player } from "../globals/player.slint";
 import { CompositeScroll } from "../globals/shell.slint";
 import { DetailHeader } from "../components/detail-header.slint";
+import { MetaChipStrip } from "../components/meta-chip-strip.slint";
 import { ActionPill, PillLabel, PillButton, PillDivider } from "../components/action-pill.slint";
 import { ColumnTogglePopup } from "../components/track-list/column-toggle-popup.slint";
 import { EntityCard } from "../components/grid/entity-card.slint";
@@ -26,14 +28,6 @@ import { CollapsibleSectionHeader } from "../components/collapsible-section-head
 //     same shape as the Album Detail and Browse views, with the artist
 //     column locked off (every row is the same artist).
 export component ArtistDetailView inherits Rectangle {
-    // Stats line: "12 tracks · 4 albums" — drops the second chunk when
-    // the artist has no album credits (single-track artists, etc.).
-    property <string> stats-line:
-        @tr("{n} track" | "{n} tracks" % ArtistDetail.artist.track_count)
-        + (ArtistDetail.artist.album_count > 0
-            ? " · " + @tr("{n} album" | "{n} albums" % ArtistDetail.artist.album_count)
-            : "");
-
     // Albums sub-section card dimensions. Smaller than the grid view's
     // flex-filled cards so several albums fit at once without dominating
     // the detail page vertically.
@@ -62,7 +56,6 @@ export component ArtistDetailView inherits Rectangle {
         DetailHeader {
             vertical-stretch: 0;
             artwork-path: ArtistDetail.artist.image_path;
-            artwork-size: clamp(root.width * 0.16, 160px, 240px);
             circular-artwork: true;
             fallback-icon: "person";
             cover: ArtistDetail.cover;
@@ -107,13 +100,14 @@ export component ArtistDetailView inherits Rectangle {
                     }
                 }
             }
-            // Stats line — track + album counts.
-            Text {
+            // Meta chips — track + album counts and total duration, built
+            // by `src/ui/hero_chips.rs`.
+            MetaChipStrip {
                 vertical-stretch: 0;
-                text: root.stats-line;
-                color: HeroBackdrop.on-backdrop-muted;
-                font-size: Theme.font-size-md;
-                horizontal-alignment: left;
+                rows: HeroChips.rows;
+                chip-fill: HeroBackdrop.chip-fill;
+                chip-label-color: HeroBackdrop.chrome;
+                measured(w) => { HeroChips.recompute(w); }
             }
 
             Rectangle { vertical-stretch: 1; }

@@ -1,8 +1,10 @@
 import { Theme } from "../theme.slint";
 import { Favorites } from "../globals/curated.slint";
 import { HeroBackdrop } from "../globals/hero-backdrop.slint";
+import { HeroChips } from "../globals/hero-chips.slint";
 import { Player } from "../globals/player.slint";
 import { CoverMosaic } from "../components/grid/cover-mosaic.slint";
+import { MetaChipStrip } from "../components/meta-chip-strip.slint";
 import { EntityCardGrid } from "../components/grid/entity-card-grid.slint";
 import { GridEmptyState } from "../components/grid/grid-empty-state.slint";
 import { GridColumnsSync } from "../components/grid-columns-sync.slint";
@@ -107,13 +109,12 @@ export component FavoritesView inherits Rectangle {
         root.search-w-min, root.search-w-max);
 
     // --- Hero geometry -----------------------------------------------------
-    property <length> hero-artwork: 140px;
     // The bar's own height, restated so the hero can reserve its row.
     property <length> tab-row-h: 48px;
     // Derived rather than a literal, so growing the artwork or the bar can't
     // leave the banner cropping its own contents.
     property <length> hero-height:
-        2 * Theme.pad-lg + root.tab-row-h + Theme.pad-md + root.hero-artwork;
+        2 * Theme.pad-lg + root.tab-row-h + Theme.pad-md + Theme.hero-artwork;
 
     // --- Grid geometry -----------------------------------------------------
     //
@@ -139,20 +140,6 @@ export component FavoritesView inherits Rectangle {
             Favorites.columns-changed(c);
         }
     }
-
-    // --- Hero copy ---------------------------------------------------------
-    //
-    // The stats line follows the tab: what the hero counts is whatever the
-    // body below is showing.
-    property <string> stats-text:
-        Favorites.tab-idx == Favorites.tab-most-played
-            ? @tr("{n} track" | "{n} tracks" % Favorites.most-played-count)
-            : Favorites.tab-idx == Favorites.tab-artists
-                ? @tr("{n} artist" | "{n} artists" % Favorites.artist-count)
-                : Favorites.track-count > 0
-                    ? @tr("{n} favorite" | "{n} favorites" % Favorites.track-count)
-                        + " · " + Favorites.duration-text
-                    : @tr("No favorites yet");
 
     // --- Sub-view transition -----------------------------------------------
     //
@@ -284,8 +271,8 @@ export component FavoritesView inherits Rectangle {
                         horizontal-stretch: 0;
 
                         Rectangle {
-                            width: root.hero-artwork;
-                            height: root.hero-artwork;
+                            width: Theme.hero-artwork;
+                            height: Theme.hero-artwork;
                             // Empty state mirrors the tracklist placeholder's
                             // 15 %-tinted fill so an empty favorites hero
                             // reads as a giant placeholder tile, not a
@@ -375,9 +362,24 @@ export component FavoritesView inherits Rectangle {
                             horizontal-alignment: left;
                         }
 
-                        Text {
+                        // Counts and duration, as chips — which of them the
+                        // band shows follows the tab, decided in
+                        // `src/ui/hero_chips.rs`. The empty Songs tab
+                        // publishes none and the line below takes over: a
+                        // lone "0 favorites" chip states the same thing far
+                        // more bleakly than a sentence does.
+                        MetaChipStrip {
                             vertical-stretch: 0;
-                            text: root.stats-text;
+                            rows: HeroChips.rows;
+                            chip-fill: HeroBackdrop.chip-fill;
+                            chip-label-color: HeroBackdrop.chrome;
+                            measured(w) => { HeroChips.recompute(w); }
+                        }
+
+                        if Favorites.tab-idx == Favorites.tab-songs
+                            && Favorites.track-count == 0: Text {
+                            vertical-stretch: 0;
+                            text: @tr("No favorites yet");
                             color: HeroBackdrop.on-backdrop-muted;
                             font-size: Theme.font-size-md;
                             horizontal-alignment: left;

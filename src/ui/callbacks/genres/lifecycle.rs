@@ -39,6 +39,12 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, genres_ui: &Arc<GenresUi>) 
     // The detail re-fetch (if `GenreDetail.genre-id >= 0`) runs after
     // the grid fetch.
     genres_ui.set_section_active(ui.global::<Nav>().get_selected_index() == 6);
+    // See the matching seed in `albums/lifecycle.rs`: a boot pre-fetch for a
+    // section that isn't on screen can't publish the shared hero globals, so
+    // its first enter has to re-fetch rather than take the cheap path.
+    if !genres_ui.section_active() {
+        genres_ui.mark_dirty();
+    }
     {
         let gu = genres_ui.clone();
         let s = state.clone();
@@ -67,10 +73,11 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, genres_ui: &Arc<GenresUi>) 
                     vm.set_vec(Vec::new());
                 }
                 d.set_selection_anchor(-1);
-                // Six heroes share one colour set, and this one has no images
-                // to release — so the reset that rides in
-                // `release_detail_hero_images!` elsewhere has to be explicit.
+                // Six heroes share one colour set and one chip row, and this
+                // one has no images to release — so what rides in
+                // `release_detail_hero_images!` elsewhere is explicit here.
                 crate::ui::hero_backdrop::reset(&ui);
+                crate::ui::hero_chips::clear(&ui);
             }
             let gu = gu.clone();
             let s = s.clone();
@@ -101,11 +108,13 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, genres_ui: &Arc<GenresUi>) 
                             // `wire_albums` / `wire_artists`. No Image
                             // properties to clear — genres are
                             // procedural-gradient tiles — but the hero colour
-                            // set is shared, so it still has to be handed back.
+                            // set and chip row are shared, so both still have
+                            // to be handed back.
                             genres_ui_mod::clear_detail(&gu);
                             let _ = weak.upgrade_in_event_loop(|ui| {
                                 ui.global::<GenreDetail>().set_genre_id(-1);
                                 crate::ui::hero_backdrop::reset(&ui);
+                                crate::ui::hero_chips::clear(&ui);
                             });
                         }
                     }

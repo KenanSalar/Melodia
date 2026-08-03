@@ -13,9 +13,6 @@
 // bindings: they are what paints in the frame or two before the first solve
 // lands, and a theme binding would make exactly that frame the broken case on a
 // light theme.
-//
-// Where this set *diverges* from `np-*` is the two text tiers, which are fixed
-// rather than solved — see the note on them below.
 export global HeroBackdrop {
     // Scrim over the blur slots, alpha baked in — see `np-scrim`.
     in-out property <brush> scrim: #0a0a0e73;
@@ -30,32 +27,34 @@ export global HeroBackdrop {
     in-out property <color> floor-end: #14101a;
 
     // Hue-carrying tier, 3:1 against the composited backdrop. Read by the
-    // `DetailHeader` artwork-tile fallback, the smart-playlist badge, and both
-    // mosaic heroes — their empty state and their `CoverMosaic` placeholder
-    // slots.
+    // `DetailHeader` artwork-tile fallback, the smart-playlist badge, the
+    // metadata chips' label, and both mosaic heroes — their empty state and
+    // their `CoverMosaic` placeholder slots.
     in-out property <brush> chrome: #cba6f7;
+
+    // Resting fill for every tinted surface on the band, derived here rather
+    // than at each call site so surfaces meant to match can't drift apart —
+    // the `np-accent-pill` precedent, and the same alpha, since the hero chips
+    // and the Now Playing ones are the same component.
+    out property <brush> chip-fill: root.chrome.with-alpha(0.16);
 
     // The two text tiers — the hero title plus the secondary line under it
     // (album artist, playlist description), and the meta / stats line
-    // ("25 tracks · 1:32:22").
+    // ("25 tracks · 1:32:22"). Solved per artwork exactly as `np-*` is: same
+    // `src/ui/backdrop.rs` call, same 4.5:1 and 3:1 targets against the
+    // *composited* band, same chroma caps — so the hero reads as near-white
+    // carrying a whisper of the album's warmth, and the two surfaces that
+    // float on a blur speak with one voice.
     //
-    // `out`, not `in-out`: these are fixed, and deliberately so. The solve
-    // above pins the *backdrop* into a known dark band whatever the cover,
-    // and once it is pinned one light foreground is correct on all of them —
-    // so there is nothing left for a per-artwork text tone to fix, only an
-    // album-hue tint to add and a lightness to drift between covers. Fixed
-    // reads as one typographic voice across the app instead. Both clear
-    // their WCAG targets against the pinned band with margin (~7.4:1 and
-    // ~5.1:1 at the target tone, versus the 4.5:1 and 3:1 they owe), which
-    // is exactly what pinning the backdrop first buys.
-    //
-    // Being `out` is the enforcement: Slint emits no setter, so Rust cannot
-    // quietly start writing these again.
+    // These were fixed constants once, on the argument that pinning the
+    // backdrop leaves nothing for a per-artwork text tone to fix. True as far
+    // as legibility goes — and beside a Now Playing view that *does* tint,
+    // the flat white read as a different app.
     //
     // `on-backdrop` has one non-text reader: the hairline below, which is why
     // it is the tone the edge is derived from rather than a tier of its own.
-    out property <brush> on-backdrop: #f0eef5;
-    out property <brush> on-backdrop-muted: #c9c5d3;
+    in-out property <brush> on-backdrop: #f0eef5;
+    in-out property <brush> on-backdrop-muted: #c9c5d3;
 
     // The 1 px edge on the two mosaic heroes' artwork square — the only
     // bordered hero surfaces, since `DetailHeader`'s artwork tile is

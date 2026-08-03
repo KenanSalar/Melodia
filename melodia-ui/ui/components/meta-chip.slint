@@ -1,0 +1,38 @@
+import { Theme } from "../theme.slint";
+
+// One metadata chip — a codec or bitrate under the Now Playing cover, a track
+// count or year on a hero band. Purely decorative: no TouchArea, no hover, no
+// selected state. The interactive pill is `components/settings/chip-group.slint`'s
+// `Chip`, and the two are deliberately not one component.
+//
+// Both brushes are inputs so the same chip can sit on a blurred cover and on a
+// blurred banner — the surfaces underneath are solved per artwork, and a fixed
+// `Theme.*` brush lands light-on-light on a light theme. The defaults are what
+// a chip on a plain panel would want; no mount takes them today, and keeping
+// them theme-shaped is what leaves this file free of `Player` and
+// `HeroBackdrop` imports.
+export component MetaChip inherits Rectangle {
+    in property <string> text;
+    in property <brush> fill: Theme.surface1;
+    in property <brush> label-color: Theme.text;
+
+    height: 26px;
+    // Fully-rounded pill — `height / 2` keeps the ends circular at any height.
+    border-radius: self.height / 2;
+    background: root.fill;
+
+    HorizontalLayout {
+        padding-left: Theme.pad-md;
+        padding-right: Theme.pad-md;
+        VerticalLayout {
+            alignment: center;
+            Text {
+                text: root.text;
+                // Solid, unlike the pill behind it — the label is the part
+                // that has to stay readable on a dark cover.
+                color: root.label-color;
+                font-size: Theme.font-size-sm;
+            }
+        }
+    }
+}

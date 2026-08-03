@@ -1,0 +1,646 @@
+use super::{
+    ChipLabels, FavoritesFacts, HeroFold, MostPlayedTotals, album_chips, artist_chips,
+    dominant_genre, favorites_chips, fold_most_played, fold_tracks, genre_chips, playlist_chips,
+    recently_played_chips, year_span,
+};
+use crate::entities::album::AlbumStats;
+use crate::entities::artist::ArtistStats;
+use crate::entities::genre::GenreStats;
+use crate::entities::playlist::PlaylistStats;
+use crate::entities::track::{MostPlayedFavorite, TrackListRow};
+use crate::ui::favorites::FavoritesTab;
+use slint::SharedString;
+
+const STRIP: &str = include_str!("../../../melodia-ui/ui/components/meta-chip-strip.slint");
+
+/// Every view that mounts a chip strip on a hero band, and the name of the
+/// meta-line property it replaced. Both halves matter — see the two pins below.
+const HERO_VIEWS: [(&str, &str); 6] = [
+    (
+        include_str!("../../../melodia-ui/ui/views/album-detail-view.slint"),
+        "album-detail-view.slint",
+    ),
+    (
+        include_str!("../../../melodia-ui/ui/views/artist-detail-view.slint"),
+        "artist-detail-view.slint",
+    ),
+    (
+        include_str!("../../../melodia-ui/ui/views/genre-detail-view.slint"),
+        "genre-detail-view.slint",
+    ),
+    (
+        include_str!("../../../melodia-ui/ui/views/playlist-detail-view.slint"),
+        "playlist-detail-view.slint",
+    ),
+    (
+        include_str!("../../../melodia-ui/ui/views/favorites-view.slint"),
+        "favorites-view.slint",
+    ),
+    (
+        include_str!("../../../melodia-ui/ui/views/recently-played-view.slint"),
+        "recently-played-view.slint",
+    ),
+];
+
+/// Stands in for the `HeroChips` global. Production routes through Slint's
+/// `@tr` so the plurals follow the running locale; here they only have to be
+/// distinguishable, so the labels are the English singular-agnostic form.
+struct EnglishLabels;
+
+impl ChipLabels for EnglishLabels {
+    fn tracks(&self, count: i32) -> SharedString {
+        SharedString::from(format!("{count} tracks"))
+    }
+    fn albums(&self, count: i32) -> SharedString {
+        SharedString::from(format!("{count} albums"))
+    }
+    fn artists(&self, count: i32) -> SharedString {
+        SharedString::from(format!("{count} artists"))
+    }
+    fn favorites(&self, count: i32) -> SharedString {
+        SharedString::from(format!("{count} favorites"))
+    }
+    fn discs(&self, count: i32) -> SharedString {
+        SharedString::from(format!("{count} discs"))
+    }
+    fn plays(&self, count: i32) -> SharedString {
+        SharedString::from(format!("{count} plays"))
+    }
+    fn compilation(&self) -> SharedString {
+        SharedString::from("Compilation")
+    }
+}
+
+/// Only the four fields the folds and the genre tally read.
+fn track(artist_id: Option<i64>, album_id: Option<i64>, genre: Option<&str>) -> TrackListRow {
+    TrackListRow {
+        id: 0,
+        file_path: String::new(),
+        file_name: String::new(),
+        title: String::new(),
+        artist: None,
+        album_artist: None,
+        album: None,
+        genre: genre.map(str::to_owned),
+        track_number: None,
+        disc_number: None,
+        year: None,
+        duration_ms: 0,
+        artwork_path: None,
+        is_favorite: false,
+        rating: 0,
+        album_id,
+        artist_id,
+        genre_id: None,
+        date_added: String::new(),
+        sort_key: None,
+    }
+}
+
+fn played(duration_ms: i64, play_count: i32) -> MostPlayedFavorite {
+    MostPlayedFavorite {
+        id: 0,
+        title: String::new(),
+        artist: None,
+        album_artist: None,
+        album: None,
+        genre: None,
+        year: None,
+        artwork_path: None,
+        play_count,
+        duration_ms,
+    }
+}
+
+fn texts(chips: &[SharedString]) -> Vec<&str> {
+    chips.iter().map(SharedString::as_str).collect()
+}
+
+fn album(year: Option<i32>, disc_count: Option<i32>, is_compilation: bool) -> AlbumStats {
+    AlbumStats {
+        id: 1,
+        name: "Kind of Blue".into(),
+        sort_name: None,
+        artist_id: 1,
+        artist_name: "Miles Davis".into(),
+        year,
+        disc_count,
+        is_compilation,
+        musicbrainz_id: None,
+        artwork_path: None,
+        track_count: 5,
+        total_duration_ms: 2_733_000,
+    }
+}
+
+#[test]
+fn an_album_leads_with_its_year() {
+    let chips = album_chips(&EnglishLabels, &album(Some(1959), None, false), None);
+    assert_eq!(texts(&chips), vec!["1959", "5 tracks", "45:33"]);
+}
+
+#[test]
+fn an_album_omits_the_facts_it_does_not_have() {
+    // Year 0 is the "unknown" sentinel the projection writes, a single disc is
+    // every album's default, and a non-compilation has nothing to say.
+    let chips = album_chips(&EnglishLabels, &album(Some(0), Some(1), false), None);
+    assert_eq!(texts(&chips), vec!["5 tracks", "45:33"]);
+
+    let chips = album_chips(&EnglishLabels, &album(None, None, false), None);
+    assert_eq!(texts(&chips), vec!["5 tracks", "45:33"]);
+}
+
+#[test]
+fn an_album_states_its_discs_compilation_flag_and_genre_when_it_has_them() {
+    // Genre last — the one chip here that isn't about this release, so it is
+    // the one worth losing first when the band runs out of room.
+    let chips = album_chips(&EnglishLabels, &album(Some(1998), Some(3), true), Some("Jazz"));
+    assert_eq!(
+        texts(&chips),
+        vec!["1998", "5 tracks", "45:33", "3 discs", "Compilation", "Jazz"]
+    );
+}
+
+#[test]
+fn an_artist_states_albums_only_when_it_has_some() {
+    let mut artist = ArtistStats {
+        id: 1,
+        name: "Miles Davis".into(),
+        sort_name: None,
+        musicbrainz_id: None,
+        image_path: None,
+        track_count: 12,
+        album_count: 4,
+        total_duration_ms: 3_600_000,
+    };
+    assert_eq!(
+        texts(&artist_chips(&EnglishLabels, &artist, Some((1957, 1963)))),
+        vec!["12 tracks", "4 albums", "1:00:00", "1957–1963"]
+    );
+
+    artist.album_count = 0;
+    assert_eq!(
+        texts(&artist_chips(&EnglishLabels, &artist, None)),
+        vec!["12 tracks", "1:00:00"]
+    );
+}
+
+#[test]
+fn a_one_year_discography_reads_as_a_year_not_a_span() {
+    let artist = ArtistStats {
+        id: 1,
+        name: "One Hit".into(),
+        sort_name: None,
+        musicbrainz_id: None,
+        image_path: None,
+        track_count: 3,
+        album_count: 1,
+        total_duration_ms: 600_000,
+    };
+    assert_eq!(
+        texts(&artist_chips(&EnglishLabels, &artist, Some((1999, 1999)))),
+        vec!["3 tracks", "1 albums", "10:00", "1999"]
+    );
+}
+
+#[test]
+fn a_genre_states_its_count_running_time_and_spread() {
+    let genre = GenreStats {
+        id: 1,
+        name: "Jazz".into(),
+        track_count: 30,
+        total_duration_ms: 5_400_000,
+    };
+    assert_eq!(
+        texts(&genre_chips(
+            &EnglishLabels,
+            &genre,
+            HeroFold { artists: 12, albums: 18 }
+        )),
+        vec!["30 tracks", "1:30:00", "12 artists", "18 albums"]
+    );
+}
+
+#[test]
+fn a_spread_of_one_is_not_worth_a_chip() {
+    // A single-artist, single-album list says nothing by saying "1 artist".
+    let genre = GenreStats {
+        id: 1,
+        name: "Jazz".into(),
+        track_count: 5,
+        total_duration_ms: 600_000,
+    };
+    assert_eq!(
+        texts(&genre_chips(
+            &EnglishLabels,
+            &genre,
+            HeroFold { artists: 1, albums: 1 }
+        )),
+        vec!["5 tracks", "10:00"]
+    );
+}
+
+#[test]
+fn a_playlist_does_not_repeat_the_smart_badge() {
+    // The title already carries `auto_awesome` when `is_smart`, so the chips
+    // stay the same either way.
+    let mut playlist = PlaylistStats {
+        id: 1,
+        name: "Focus".into(),
+        description: None,
+        thumbnail_path: None,
+        is_smart: true,
+        smart_criteria: None,
+        created_at: String::new(),
+        updated_at: String::new(),
+        custom_thumbnail: false,
+        track_count: 8,
+        total_duration_ms: 1_800_000,
+    };
+    let fold = HeroFold { artists: 6, albums: 7 };
+    let smart = texts(&playlist_chips(&EnglishLabels, &playlist, fold)).join("|");
+    playlist.is_smart = false;
+    let plain = texts(&playlist_chips(&EnglishLabels, &playlist, fold)).join("|");
+    assert_eq!(smart, plain);
+    assert_eq!(smart, "8 tracks|30:00|6 artists|7 albums");
+}
+
+#[test]
+fn an_empty_entity_says_nothing_about_its_running_time() {
+    let playlist = PlaylistStats {
+        id: 1,
+        name: "New Playlist".into(),
+        description: None,
+        thumbnail_path: None,
+        is_smart: false,
+        smart_criteria: None,
+        created_at: String::new(),
+        updated_at: String::new(),
+        custom_thumbnail: false,
+        track_count: 0,
+        total_duration_ms: 0,
+    };
+    assert_eq!(
+        texts(&playlist_chips(&EnglishLabels, &playlist, HeroFold::default())),
+        vec!["0 tracks"]
+    );
+}
+
+fn favorites_facts(tab: FavoritesTab) -> FavoritesFacts {
+    FavoritesFacts {
+        tab,
+        tracks: 142,
+        duration_text: SharedString::from("9:14:33"),
+        songs: HeroFold { artists: 37, albums: 51 },
+        most_played: MostPlayedTotals {
+            tracks: 88,
+            duration_ms: 20_462_000,
+            plays: 1204,
+        },
+        artists: 9,
+    }
+}
+
+#[test]
+fn the_favorites_chips_follow_the_tab() {
+    assert_eq!(
+        texts(&favorites_chips(
+            &EnglishLabels,
+            &favorites_facts(FavoritesTab::Songs)
+        )),
+        vec!["142 favorites", "9:14:33", "37 artists", "51 albums"]
+    );
+    assert_eq!(
+        texts(&favorites_chips(
+            &EnglishLabels,
+            &favorites_facts(FavoritesTab::Artists)
+        )),
+        vec!["9 artists"]
+    );
+}
+
+/// Most Played is `is_favorite AND play_count > 0` — a strict subset of Songs,
+/// so it states its *own* duration. Borrowing the Songs one would overstate it
+/// by every favourite never played, which is exactly the bug this pins.
+#[test]
+fn most_played_sums_itself_and_not_the_songs_tab() {
+    let facts = favorites_facts(FavoritesTab::MostPlayed);
+    assert_eq!(
+        texts(&favorites_chips(&EnglishLabels, &facts)),
+        vec!["88 tracks", "5:41:02", "1204 plays"]
+    );
+    assert_ne!(
+        texts(&favorites_chips(&EnglishLabels, &facts))[1],
+        facts.duration_text.as_str(),
+        "Most Played must not reuse the Songs tab's duration"
+    );
+}
+
+#[test]
+fn a_never_played_most_played_tab_states_no_plays() {
+    let facts = FavoritesFacts {
+        most_played: MostPlayedTotals::default(),
+        ..favorites_facts(FavoritesTab::MostPlayed)
+    };
+    assert_eq!(texts(&favorites_chips(&EnglishLabels, &facts)), vec!["0 tracks"]);
+}
+
+#[test]
+fn the_two_mosaic_heroes_leave_their_empty_state_to_the_view() {
+    // Both paint a "nothing here yet" line of their own, and a lone "0 …" chip
+    // beside it would be redundant.
+    let facts = FavoritesFacts {
+        tracks: 0,
+        duration_text: SharedString::new(),
+        songs: HeroFold::default(),
+        ..favorites_facts(FavoritesTab::Songs)
+    };
+    assert!(favorites_chips(&EnglishLabels, &facts).is_empty());
+    assert!(recently_played_chips(&EnglishLabels, 0, "", HeroFold::default()).is_empty());
+}
+
+#[test]
+fn recently_played_states_its_count_running_time_and_spread() {
+    assert_eq!(
+        texts(&recently_played_chips(
+            &EnglishLabels,
+            200,
+            "12:04:11",
+            HeroFold { artists: 44, albums: 60 }
+        )),
+        vec!["200 tracks", "12:04:11", "44 artists", "60 albums"]
+    );
+}
+
+#[test]
+fn the_fold_counts_distinct_ids_and_skips_the_untagged() {
+    // A track with no album belongs to none, so it is skipped rather than
+    // pooled into an "unknown" bucket that would read as one more album.
+    let rows = [
+        track(Some(1), Some(10), None),
+        track(Some(1), Some(10), None),
+        track(Some(2), Some(11), None),
+        track(None, None, None),
+    ];
+    assert_eq!(fold_tracks(&rows), HeroFold { artists: 2, albums: 2 });
+    assert_eq!(fold_tracks(&[]), HeroFold::default());
+}
+
+#[test]
+fn most_played_totals_sum_duration_and_plays() {
+    let rows = [played(180_000, 12), played(240_000, 30)];
+    assert_eq!(
+        fold_most_played(&rows),
+        MostPlayedTotals {
+            tracks: 2,
+            duration_ms: 420_000,
+            plays: 42,
+        }
+    );
+}
+
+#[test]
+fn a_genre_is_named_only_when_it_actually_dominates() {
+    let mostly_jazz = [
+        track(None, None, Some("Jazz")),
+        track(None, None, Some("Jazz")),
+        track(None, None, Some("Blues")),
+    ];
+    assert_eq!(dominant_genre(&mostly_jazz).as_deref(), Some("Jazz"));
+
+    // An even split has no majority — naming either would misrepresent the
+    // other half, so a genuinely mixed compilation gets no chip.
+    let split = [
+        track(None, None, Some("Jazz")),
+        track(None, None, Some("Blues")),
+    ];
+    assert_eq!(dominant_genre(&split), None);
+
+    // Untagged tracks don't count toward the total, so one tagged track among
+    // three still dominates the tracks that have a genre at all.
+    let sparse = [
+        track(None, None, Some("Jazz")),
+        track(None, None, None),
+        track(None, None, Some("")),
+    ];
+    assert_eq!(dominant_genre(&sparse).as_deref(), Some("Jazz"));
+    assert_eq!(dominant_genre(&[]), None);
+}
+
+#[test]
+fn the_year_span_ignores_albums_with_no_year() {
+    let dated = |year: Option<i32>| AlbumStats { year, ..album(None, None, false) };
+    assert_eq!(
+        year_span(&[dated(Some(1963)), dated(None), dated(Some(1957))]),
+        Some((1957, 1963))
+    );
+    assert_eq!(year_span(&[dated(Some(0)), dated(None)]), None);
+    assert_eq!(year_span(&[]), None);
+}
+
+/// `MetaChipStrip`'s brushes default to `Theme.*`, which is correct nowhere and
+/// wrong invisibly: a chip painting a theme token on a band whose colours are
+/// solved per artwork looks plausible under Mocha and washes out under every
+/// light variant. The Now Playing mount has the same obligation with the
+/// `np-accent-*` pair, so it is checked alongside the six.
+#[test]
+fn every_chip_strip_takes_its_brushes_from_its_backdrop() {
+    const NOW_PLAYING: &str = include_str!("../../../melodia-ui/ui/views/now-playing-view.slint");
+
+    let mounts = HERO_VIEWS
+        .iter()
+        .map(|&(src, name)| (src, name, "HeroBackdrop."))
+        .chain(std::iter::once((
+            NOW_PLAYING,
+            "now-playing-view.slint",
+            "Player.np-accent-",
+        )));
+
+    for (src, name, tier) in mounts {
+        // Bounded by the `measured` handler rather than by a brace, so the
+        // handler's own body can't end the window early.
+        let mount = src
+            .split_once("MetaChipStrip {")
+            .and_then(|(_, rest)| rest.split_once("measured("))
+            .map_or("", |(body, _)| body);
+        assert!(
+            !mount.is_empty(),
+            "{name} no longer mounts a `MetaChipStrip` ahead of its `measured` handler"
+        );
+        for prop in ["chip-fill", "chip-label-color"] {
+            assert!(
+                mount.contains(&format!("{prop}: {tier}")),
+                "{name}'s MetaChipStrip must pass `{prop}` a `{tier}` tier — omitting it falls \
+                 back to the component's `Theme.*` default, a theme value on a solved backdrop"
+            );
+        }
+    }
+}
+
+/// The chips *replace* the meta line rather than joining it. A half-done
+/// conversion leaves the old property and its `Text` in place, and the band
+/// then says the same thing twice.
+#[test]
+fn no_hero_view_still_declares_a_meta_line() {
+    for (src, name) in HERO_VIEWS {
+        for prop in ["meta-line", "stats-line", "stats-text"] {
+            assert!(
+                !src.contains(&format!("property <string> {prop}")),
+                "{name} still declares `{prop}` — the hero's counts are chips now, and a \
+                 surviving meta line duplicates every one of them"
+            );
+        }
+    }
+}
+
+/// The six banners are one band under different content, so the tile each leads
+/// with is one number — `Theme.hero-artwork`.
+///
+/// Pinned beside the chip tests because `HERO_MAX_ROWS` is measured against that
+/// tile: a view sizing its own artwork moves the slack the cap was picked for,
+/// and it moves the band's height with it. The four detail views route through
+/// `DetailHeader`, which reads the token and exposes no size knob to override;
+/// the two mosaic heroes have no header component and read it themselves.
+#[test]
+fn no_hero_view_sizes_its_own_artwork_tile() {
+    const THEME: &str = include_str!("../../../melodia-ui/ui/theme.slint");
+    const HEADER: &str = include_str!("../../../melodia-ui/ui/components/detail-header.slint");
+
+    assert!(
+        THEME.contains("out property <length> hero-artwork:"),
+        "Theme must own the hero tile size — it is the only thing keeping the six bands aligned"
+    );
+    assert!(
+        HEADER.contains("tile-size: Theme.hero-artwork;"),
+        "DetailHeader must size its tile from the token"
+    );
+    assert!(
+        !HEADER.contains("artwork-size"),
+        "DetailHeader must not reintroduce a per-view size knob — four of the six bands would \
+         then be free to drift from the two that have no header to route through"
+    );
+    for (src, name) in HERO_VIEWS {
+        assert!(
+            !src.contains("artwork-size"),
+            "{name} sizes its hero tile itself — it belongs on `Theme.hero-artwork`"
+        );
+        assert!(
+            !src.contains("property <length> hero-artwork"),
+            "{name} restates the hero tile size as a local property"
+        );
+    }
+    let mosaic = HERO_VIEWS
+        .iter()
+        .filter(|(_, name)| matches!(*name, "favorites-view.slint" | "recently-played-view.slint"));
+    let mut checked = 0;
+    for (src, name) in mosaic {
+        assert!(
+            src.contains("Theme.hero-artwork"),
+            "{name} paints its own mosaic tile, so it must read the token directly"
+        );
+        checked += 1;
+    }
+    assert_eq!(checked, 2, "both mosaic heroes must still be in HERO_VIEWS");
+}
+
+/// Favorites is the one hero whose chips are folded out of *caches* rather than
+/// out of the rows its own fetch just awaited — and `kick_full_refresh` fills
+/// those caches from three concurrent tasks, so any single publish is only as
+/// complete as whatever has landed by then. The cure is to publish again each
+/// time an input lands, which means the fill and the republish belong to the
+/// same function.
+///
+/// Left to the grid path alone this is not covered: `write_filtered_grids`
+/// publishes past a signature early-return, and `mounted_content` is a constant
+/// `0` on the Songs tab, so there that publish fires only on a column change.
+#[test]
+fn each_favorites_fetch_republishes_the_chips_it_feeds() {
+    const FILLS: [(&str, &str, &str, &str); 2] = [
+        (
+            include_str!("../favorites/tracks.rs"),
+            "favorites/tracks.rs",
+            "pub async fn refresh_tracks(",
+            "tracks_all.lock() = rows",
+        ),
+        (
+            include_str!("../favorites/sections.rs"),
+            "favorites/sections.rs",
+            "pub async fn refresh_grids(",
+            "fav_artists.lock() = rows",
+        ),
+    ];
+
+    for (src, name, func, fill) in FILLS {
+        let body = src
+            .split_once(func)
+            .and_then(|(_, rest)| rest.split_once("\n}"))
+            .map_or("", |(body, _)| body);
+        assert!(body.contains(fill), "{name}: `{func}` no longer writes `{fill}`");
+        assert!(
+            body.contains("republish_chips("),
+            "{name}: `{func}` fills a cache the Favorites chips fold over but never republishes \
+             them — the sibling fetch that did publish ran against the empty cache, and nothing \
+             corrects it"
+        );
+    }
+}
+
+/// The other five heroes fold from a local the same function just awaited, and
+/// that is what keeps them out of the race above. A fold reading a `.lock()`
+/// here would be reading a cache some *other* task fills.
+#[test]
+fn no_other_hero_folds_out_of_a_shared_cache() {
+    const FOLDERS: [(&str, &str); 5] = [
+        (include_str!("../albums/detail.rs"), "albums/detail.rs"),
+        (include_str!("../artists/detail.rs"), "artists/detail.rs"),
+        (include_str!("../genres/detail.rs"), "genres/detail.rs"),
+        (include_str!("../playlists/detail.rs"), "playlists/detail.rs"),
+        (
+            include_str!("../recently_played/tracks.rs"),
+            "recently_played/tracks.rs",
+        ),
+    ];
+
+    for (src, name) in FOLDERS {
+        for fold in ["fold_tracks(", "dominant_genre(", "year_span("] {
+            for (i, m) in src.match_indices(fold) {
+                let tail = &src[i + m.len()..];
+                // Scan to the first `)`, which a `.lock()` argument reaches
+                // *inside* itself — hence matching `.lock(` rather than the
+                // full call, or the very shape being banned slips through.
+                let args = tail.find(')').map_or(tail, |end| &tail[..end]);
+                assert!(
+                    !args.contains(".lock("),
+                    "{name}: `{fold}` reads a shared cache — fold the rows this function \
+                     awaited instead, or it inherits the Favorites ordering problem"
+                );
+            }
+        }
+    }
+}
+
+/// The strip owns the width mirror and the mount seed so that no host has to
+/// restate either. Both are documented pitfalls: `changed` rejects a path
+/// expression, and it does not fire on the first binding evaluation — so a
+/// window opened at its final size would never report a width, and every hero
+/// would collapse its chips into the single unlaid-out row forever.
+#[test]
+fn the_strip_reports_its_width_on_resize_and_at_mount() {
+    assert!(
+        STRIP.contains("property <length> watched-w: self.width;")
+            && STRIP.contains("changed watched-w =>"),
+        "MetaChipStrip must mirror its width into a local property — `changed` cannot watch \
+         `self.width` through a path expression"
+    );
+    assert!(
+        STRIP.contains("Timer {") && STRIP.contains("interval: 1ms;"),
+        "MetaChipStrip must keep its 1 ms mount Timer — `changed` doesn't fire when the first \
+         layout settles directly on the final value, which is every window opened at its own size"
+    );
+    assert_eq!(
+        STRIP.matches("root.measured(").count(),
+        2,
+        "MetaChipStrip should report through `measured` exactly twice: once from the resize \
+         handler and once from the mount seed"
+    );
+}

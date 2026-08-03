@@ -68,10 +68,11 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, fav_ui: &Arc<FavoritesUi>) 
                 // surviving signature would match the identical data on
                 // re-enter and skip the refill that fills them back in.
                 fu.forget_grid_signature();
-                // Six heroes share one colour set, so hand it back to the
-                // floor rather than leaving this mosaic's solve for the
-                // next hero to paint under.
+                // Six heroes share one colour set and one chip row, so hand
+                // both back rather than leaving this mosaic's solve and this
+                // tab's counts for the next hero to paint under.
                 crate::ui::hero_backdrop::reset(&ui);
+                crate::ui::hero_chips::clear(&ui);
                 // Both grid tiers go with `release_section_state` below, so
                 // rewind the counter that means "cold" — else the next enter
                 // reads a leftover bump as a warm tier and decodes on mount.

@@ -1,8 +1,10 @@
 import { Theme } from "../theme.slint";
 import { GenreDetail } from "../globals/genres.slint";
 import { HeroBackdrop } from "../globals/hero-backdrop.slint";
+import { HeroChips } from "../globals/hero-chips.slint";
 import { Player } from "../globals/player.slint";
 import { DetailHeader } from "../components/detail-header.slint";
+import { MetaChipStrip } from "../components/meta-chip-strip.slint";
 import { ActionPill, PillLabel, PillButton, PillDivider } from "../components/action-pill.slint";
 import { ColumnTogglePopup } from "../components/track-list/column-toggle-popup.slint";
 import { SearchBar } from "../components/search-bar.slint";
@@ -24,13 +26,6 @@ import { FilterThrottle } from "../components/filter-throttle.slint";
 // is the same genre (mirrors how Album Detail forces `show-album` off
 // and Artist Detail forces `show-artist` off).
 export component GenreDetailView inherits Rectangle {
-    // Meta line: "12 tracks · 45:32". Plural track count is translated;
-    // the duration reuses the pre-formatted string from the Rust side
-    // (`GenreRow.display_duration`).
-    property <string> meta-line:
-        @tr("{n} track" | "{n} tracks" % GenreDetail.genre.track_count)
-        + " · " + GenreDetail.genre.display_duration;
-
     // Filter throttle: each keystroke bumps `filter-tick-pending`; the
     // shared `FilterThrottle` fires the filter callback at most once per
     // ~130 ms while pending is ahead of the last-applied tick.
@@ -67,7 +62,6 @@ export component GenreDetailView inherits Rectangle {
             // measures it, and solves the scrim + foreground against it,
             // exactly as an artwork-bearing detail view does with its
             // decoded blur.
-            artwork-size: clamp(root.width * 0.16, 160px, 240px);
             fallback-icon: "theater_comedy";
             tile-bg: @linear-gradient(135deg,
                 GenreDetail.genre.tile_color_1,
@@ -112,14 +106,14 @@ export component GenreDetailView inherits Rectangle {
                     }
                 }
             }
-            // Meta line — track count + total duration. No "year" /
-            // "artist" sub-line because neither is a per-genre concept.
-            Text {
+            // Meta chips — track count + total duration. No "year" /
+            // "artist" chip because neither is a per-genre concept.
+            MetaChipStrip {
                 vertical-stretch: 0;
-                text: root.meta-line;
-                color: HeroBackdrop.on-backdrop-muted;
-                font-size: Theme.font-size-md;
-                horizontal-alignment: left;
+                rows: HeroChips.rows;
+                chip-fill: HeroBackdrop.chip-fill;
+                chip-label-color: HeroBackdrop.chrome;
+                measured(w) => { HeroChips.recompute(w); }
             }
 
             // Spacer — absorbs the slack between the title block and

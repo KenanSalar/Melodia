@@ -31,9 +31,10 @@ use crate::ui::util::{BLUR_TARGET, COVER_SIZE, buffer_from_rgb};
 
 /// Height the cover is downscaled to before blurring, against the shared
 /// [`BLUR_TARGET`] width. Source album art is always 1:1, but the hero region
-/// paints landscape (full content-panel width × ~250 px tall), so a 3:2 buffer
-/// matches the target aspect better than a square under `image-fit: cover` —
-/// and squashing a square source into it is invisible after the blur.
+/// paints landscape (full content-panel width by a band `Theme.hero-artwork`
+/// tall plus its padding), so a 3:2 buffer matches the target aspect better
+/// than a square under `image-fit: cover` — and squashing a square source into
+/// it is invisible after the blur.
 const BLUR_HEIGHT: u32 = 128;
 
 /// `fast_blur` sigma. Deliberately lighter than the shared

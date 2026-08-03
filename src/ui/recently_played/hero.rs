@@ -16,6 +16,7 @@ use slint::{ComponentHandle, Image, Model, SharedString, VecModel, Weak};
 use super::RecentlyPlayedUi;
 use crate::entities::track::TrackListRow as RsTrackListRow;
 use crate::state::AppState;
+use crate::ui::hero_chips::HeroFold;
 use crate::ui::mosaic_blur::{MosaicBlur, compose_mosaic_blur};
 use crate::ui::now_playing::write_crossfade_slot;
 use crate::ui::tracks::format_duration_ms;
@@ -42,15 +43,26 @@ pub fn mosaic_paths_from(rows: &[RsTrackListRow], n: usize) -> Vec<String> {
 
 /// Push the hero count + total-duration text + mosaic-path list into the Slint
 /// global. Immediate (the blur composition is kicked separately).
-pub fn push_hero_stats(count: i32, total_ms: i64, mosaic_paths: &[String], weak: &Weak<AppWindow>) {
+pub fn push_hero_stats(
+    count: i32,
+    total_ms: i64,
+    fold: HeroFold,
+    mosaic_paths: &[String],
+    rp_ui: &Arc<RecentlyPlayedUi>,
+    weak: &Weak<AppWindow>,
+) {
     let duration = format_duration_ms(total_ms);
     let paths = mosaic_paths.to_vec();
+    let rp_ui = rp_ui.clone();
     let weak = weak.clone();
     let _ = slint::invoke_from_event_loop(move || {
         let Some(ui) = weak.upgrade() else { return };
         let g = ui.global::<RecentlyPlayed>();
         g.set_track_count(count);
         g.set_duration_text(SharedString::from(duration.as_str()));
+        // After the two writes, never before — the chips read them back off
+        // the global rather than taking them as arguments.
+        crate::ui::hero_chips::publish_recently_played(&ui, fold, rp_ui.section_active());
         let model = g.get_mosaic_paths();
         let Some(vec) = model.as_any().downcast_ref::<VecModel<SharedString>>() else {
             log::warn!("RecentlyPlayed.mosaic-paths: VecModel<SharedString> downcast failed");

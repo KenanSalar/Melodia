@@ -2,9 +2,11 @@ import { ScrollView } from "std-widgets.slint";
 import { Theme } from "../theme.slint";
 import { RecentlyPlayed } from "../globals/curated.slint";
 import { HeroBackdrop } from "../globals/hero-backdrop.slint";
+import { HeroChips } from "../globals/hero-chips.slint";
 import { Player } from "../globals/player.slint";
 import { CompositeScroll } from "../globals/shell.slint";
 import { CoverMosaic } from "../components/grid/cover-mosaic.slint";
+import { MetaChipStrip } from "../components/meta-chip-strip.slint";
 import { HorizontalCardStrip } from "../components/grid/horizontal-card-strip.slint";
 import { MaterialIcon } from "../components/material-icon.slint";
 import { SearchBar } from "../components/search-bar.slint";
@@ -43,15 +45,10 @@ export component RecentlyPlayedView inherits Rectangle {
         clicked => { RecentlyPlayed.blur-search-tick += 1; }
     }
 
-    private property <length> hero-height: 180px;
-    private property <length> hero-artwork: 140px;
-
-    // Stats line: "{n} tracks · {duration}". Empty-state copy stands alone.
-    private property <string> stats-text:
-        RecentlyPlayed.track-count > 0
-            ? @tr("{n} track" | "{n} tracks" % RecentlyPlayed.track-count)
-                + " · " + RecentlyPlayed.duration-text
-            : @tr("No recently played tracks");
+    // Derived rather than a literal, for the reason `favorites-view.slint`
+    // gives — and it is what keeps this band the same height as the four
+    // detail heroes, which have no tab row to reserve either.
+    private property <length> hero-height: 2 * Theme.pad-lg + Theme.hero-artwork;
 
     // --- Full-bleed hero blur backdrop ----------------------------------
     // Shared component owns the dual-slot crossfade (outgoing slot never
@@ -85,8 +82,8 @@ export component RecentlyPlayedView inherits Rectangle {
                     horizontal-stretch: 0;
 
                     Rectangle {
-                        width: root.hero-artwork;
-                        height: root.hero-artwork;
+                        width: Theme.hero-artwork;
+                        height: Theme.hero-artwork;
                         // Both fills are hero tokens, not theme brushes — see
                         // `favorites-view.slint` for why a theme brush is
                         // wrong on this surface either side of the ternary.
@@ -168,9 +165,20 @@ export component RecentlyPlayedView inherits Rectangle {
                         }
                     }
 
-                    Text {
+                    // Count and duration, as chips. Nothing played yet
+                    // publishes none and the line below takes over — the
+                    // Favorites split, for the same reason.
+                    MetaChipStrip {
                         vertical-stretch: 0;
-                        text: root.stats-text;
+                        rows: HeroChips.rows;
+                        chip-fill: HeroBackdrop.chip-fill;
+                        chip-label-color: HeroBackdrop.chrome;
+                        measured(w) => { HeroChips.recompute(w); }
+                    }
+
+                    if RecentlyPlayed.track-count == 0: Text {
+                        vertical-stretch: 0;
+                        text: @tr("No recently played tracks");
                         color: HeroBackdrop.on-backdrop-muted;
                         font-size: Theme.font-size-md;
                         horizontal-alignment: left;

@@ -1,0 +1,67 @@
+import { Theme } from "../theme.slint";
+import { MetaChip } from "meta-chip.slint";
+
+// A row (or rows) of `MetaChip`s, wrapped by Rust.
+//
+// Slint 1.16 has no `Flow` and can't build a nested array, so the split comes
+// from `src/ui/chips.rs`: the host publishes `[[string]]` — outer is rows,
+// inner is the chips in that row — and this walks two real arrays. The strip
+// only reports its width; who chunks it, and whether overflow wraps or is
+// dropped, is the host's business. `Player.recompute-chip-rows` wraps freely;
+// the heroes cap at one row, since their band is a fixed height.
+//
+// Both brushes are inputs for the reason `MetaChip` states, and every mount
+// overrides both — the Now Playing view with the `np-accent-*` pair, a hero
+// with the `HeroBackdrop` one.
+export component MetaChipStrip inherits Rectangle {
+    in property <[[string]]> rows;
+    in property <brush> chip-fill;
+    in property <brush> chip-label-color;
+    // Now Playing centres its rows under the cover; a hero's text column is
+    // left-aligned all the way down, so its chips are too.
+    in property <bool> centred: false;
+    // Lets a host hide the chips while keeping the row reserved — Now Playing
+    // drops a metadata fetch that lands after a rapid track change, and a
+    // vanishing row would reflow the centred artwork above it.
+    in property <bool> show-rows: true;
+
+    // Reported on mount and on every resize. The host chunks against it.
+    callback measured(length);
+
+    // == MetaChip height. Reserving it unconditionally is what keeps a track
+    // with no metadata — or a slow fetch — from reflowing whatever sits above.
+    min-height: 26px;
+    vertical-stretch: 0;
+
+    // `changed` can't watch a path expression, so the width is mirrored into a
+    // local property first (see `.claude/rules/slint-pitfalls.md`).
+    property <length> watched-w: self.width;
+    changed watched-w => {
+        root.measured(watched-w);
+    }
+
+    // First-layout seed. `changed` doesn't fire on the initial binding
+    // evaluation, so the mount-time width never reaches the host without this.
+    // Same 1 ms pattern as `GridColumnsSync`.
+    Timer {
+        interval: 1ms;
+        running: true;
+        triggered() => {
+            self.running = false;
+            root.measured(root.width);
+        }
+    }
+
+    if root.show-rows: VerticalLayout {
+        spacing: Theme.pad-sm;
+        for row in root.rows: HorizontalLayout {
+            alignment: root.centred ? LayoutAlignment.center : LayoutAlignment.start;
+            spacing: Theme.pad-sm;
+            for t in row: MetaChip {
+                text: t;
+                fill: root.chip-fill;
+                label-color: root.chip-label-color;
+            }
+        }
+    }
+}

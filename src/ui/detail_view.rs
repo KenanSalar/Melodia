@@ -30,16 +30,30 @@ macro_rules! impl_detail_view_helpers {
         /// The hero's colour set is solved from the measurement the decode
         /// took off that same blur, so the scrim can't fall out of step
         /// with the buffer it is darkening.
+        ///
+        /// **`section_active` gates the `HeroBackdrop` write and nothing
+        /// else.** The per-view properties above and below it are this
+        /// view's own, and writing them while hidden is what leaves the
+        /// page ready to paint — but `HeroBackdrop` is one global shared by
+        /// six heroes, so publishing into it from a view that isn't on
+        /// screen paints this entity's colours under whichever hero is.
+        /// Pass the section's synchronous shadow, never a literal: the
+        /// boot path fetches every persisted detail id regardless of which
+        /// section is being restored, so at cold start up to four of these
+        /// land while a *different* hero owns the band.
         fn apply_detail_artwork(
             ui: &$crate::AppWindow,
             g: &$Global,
             pair: $crate::ui::detail_artwork::DetailPair,
             animate: bool,
+            section_active: bool,
         ) {
             g.set_cover(
                 pair.cover.map(slint::Image::from_rgb8).unwrap_or_default(),
             );
-            $crate::ui::hero_backdrop::apply(ui, pair.sample);
+            if section_active {
+                $crate::ui::hero_backdrop::apply(ui, pair.sample);
+            }
             $crate::ui::now_playing::write_crossfade_slot(
                 pair.blur.map(slint::Image::from_rgb8),
                 animate,

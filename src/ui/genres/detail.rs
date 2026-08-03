@@ -39,7 +39,16 @@ use crate::{
 /// picks them off a name hash and deliberately dims the hero pair), so
 /// unlike every other hero this one keeps its own floor rather than taking
 /// the solved one — only the layers above it are computed.
-fn apply_genre_hero(ui: &AppWindow, header: &UiGenreRow) {
+///
+/// `section_active` is the same gate `apply_detail_artwork` takes, and for
+/// the same reason: `HeroBackdrop` is one global shared by six heroes, and
+/// the boot path seeds every persisted detail id whichever section is being
+/// restored. Genre's stops are name-hashed, so an unguarded publish here
+/// paints an arbitrary hue under whatever hero is actually on screen.
+fn apply_genre_hero(ui: &AppWindow, header: &UiGenreRow, section_active: bool) {
+    if !section_active {
+        return;
+    }
     crate::ui::hero_backdrop::apply_gradient(
         ui,
         color_to_rgb(header.hero_color_1),
@@ -104,6 +113,10 @@ pub async fn open_genre(
     let prepared: Vec<PreparedTrackRow> =
         tracks.iter().map(crate::ui::tracks::prepare_track_list_row).collect();
 
+    // How far the genre spreads — folded on the worker that fetched the rows,
+    // since a broad genre's track list is the longest in the app.
+    let fold = crate::ui::hero_chips::fold_tracks(&tracks);
+
     *genres_ui.detail.genre_id.lock() = genre_id;
 
     let genres_ui = genres_ui.clone();
@@ -116,8 +129,9 @@ pub async fn open_genre(
             .map(crate::ui::tracks::finish_track_list_row)
             .collect();
         let header = to_slint_genre_row(&detail);
-        apply_genre_hero(&ui, &header);
+        apply_genre_hero(&ui, &header, genres_ui.section_active());
         g.set_genre(header);
+        crate::ui::hero_chips::publish_genre(&ui, &detail, fold, genres_ui.section_active());
         replace_tracks_model(&g, ui_tracks);
         reset_detail_selection(&g, &genres_ui);
         // Fresh open clears the filter so the user lands on the full
@@ -154,6 +168,8 @@ pub async fn refresh_detail(
 ) -> AppResult<()> {
     let (detail, mut tracks) = fetch_genre_detail(state, genres_ui, genre_id).await?;
 
+    let fold = crate::ui::hero_chips::fold_tracks(&tracks);
+
     let genres_ui = genres_ui.clone();
     let _ = weak.upgrade_in_event_loop(move |ui| {
         let g = ui.global::<GenreDetail>();
@@ -173,8 +189,9 @@ pub async fn refresh_detail(
         // identical to the open path; the stops are name-derived, so in
         // practice this only matters if the name itself moved.
         let header = to_slint_genre_row(&detail);
-        apply_genre_hero(&ui, &header);
+        apply_genre_hero(&ui, &header, genres_ui.section_active());
         g.set_genre(header);
+        crate::ui::hero_chips::publish_genre(&ui, &detail, fold, genres_ui.section_active());
 
         // With an active filter the displayed model is a subset, so the
         // id-slice fast path below (which assumes an unfiltered model)

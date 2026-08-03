@@ -15,11 +15,9 @@
 //! change therefore reaches an already-open artwork-less hero only on its next
 //! open, and never affects brightness.
 //!
-//! Only the *backdrop* tiers are published: scrim, gradient floor, and the
-//! hue-carrying chrome. The hero's two text tiers are fixed constants on the
-//! global, because a pinned backdrop is precisely what makes one fixed light
-//! foreground correct on every cover — and that is the sole thing this tier does
-//! differently from `np-*`.
+//! The whole set is published — scrim, gradient floor, the hue-carrying chrome
+//! and both text tiers — so a hero and the Now Playing view solve identically
+//! and nothing about the two is left to drift.
 
 use slint::ComponentHandle;
 
@@ -65,12 +63,15 @@ fn write(ui: &AppWindow, colors: &BackdropColors, floor_override: Option<(u32, u
     let (floor_start, floor_end) =
         floor_override.unwrap_or((colors.floor_start, colors.floor_end));
 
-    // No text tiers here: `HeroBackdrop.on-backdrop` / `-muted` are fixed `out`
-    // properties. Pinning the backdrop is what makes one light foreground
-    // correct on every cover — see the note beside them in `globals/hero-backdrop.slint`.
     let g = ui.global::<HeroBackdrop>();
     g.set_floor_start(color(floor_start));
     g.set_floor_end(color(floor_end));
     g.set_chrome(brush(colors.chrome));
     g.set_scrim(backdrop::scrim_brush(colors));
+    g.set_on_backdrop(brush(colors.text));
+    g.set_on_backdrop_muted(brush(colors.muted));
 }
+
+#[cfg(test)]
+#[path = "tests/hero_backdrop_tests.rs"]
+mod tests;

@@ -38,6 +38,15 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, albums_ui: &Arc<AlbumsUi>) 
     // 0`) runs after the grid fetch so the user lands back where they
     // were.
     albums_ui.set_section_active(ui.global::<Nav>().get_selected_index() == 4);
+    // `seed_detail_from_settings` runs for every persisted detail id whichever
+    // section the boot lands on, but it can only publish the two shared hero
+    // globals for the one that is *on screen* — so off-screen its band and its
+    // chips never land, and `SectionState::new`'s "the boot pre-fetch wins the
+    // first enter" would leave them empty until the user opened the detail by
+    // hand. Force that first enter to re-fetch instead.
+    if !albums_ui.section_active() {
+        albums_ui.mark_dirty();
+    }
     {
         let au = albums_ui.clone();
         let s = state.clone();

@@ -87,6 +87,13 @@ pub async fn refresh_tracks(
     }
 
     *fav_ui.state().tracks_all.lock() = rows;
+    // The Songs tab's artist / album chips are folded out of the cache that
+    // line just filled, and nothing else republishes after it — `kick_full_refresh`
+    // runs this task concurrently with the hero and grid fetches, so whichever
+    // of those published did so against an empty `tracks_all`. Here, not in
+    // `apply_filtered_tracks`: that also runs per keystroke, and the fold walks
+    // every favourite.
+    super::hero::republish_chips(fav_ui, weak);
 
     apply_filtered_tracks(fav_ui, weak);
     Ok(())

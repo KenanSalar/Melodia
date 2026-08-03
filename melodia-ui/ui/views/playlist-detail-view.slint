@@ -2,9 +2,11 @@ import { Theme } from "../theme.slint";
 import { SmartEditor } from "../globals/dialog-forms.slint";
 import { Dialog } from "../globals/dialog.slint";
 import { HeroBackdrop } from "../globals/hero-backdrop.slint";
+import { HeroChips } from "../globals/hero-chips.slint";
 import { Player } from "../globals/player.slint";
 import { PlaylistDetail } from "../globals/playlists.slint";
 import { DetailHeader } from "../components/detail-header.slint";
+import { MetaChipStrip } from "../components/meta-chip-strip.slint";
 import { ActionPill, PillLabel, PillButton, PillDivider } from "../components/action-pill.slint";
 import { ColumnTogglePopup } from "../components/track-list/column-toggle-popup.slint";
 import { SearchBar } from "../components/search-bar.slint";
@@ -25,12 +27,6 @@ import { MaterialIcon } from "../components/material-icon.slint";
 // toggle. The selection chip (when rows are selected) carries a
 // "Remove from playlist" action.
 export component PlaylistDetailView inherits Rectangle {
-    // Meta line: "N tracks · 45:32"; description is shown as the
-    // subtitle slot beneath the title.
-    property <string> meta-line:
-        @tr("{n} track" | "{n} tracks" % PlaylistDetail.playlist.track_count)
-        + " · " + Theme.format-duration(PlaylistDetail.playlist.total_duration_ms);
-
     // A fresh mount can't have a drag in flight, but the two `<=>`s below
     // adopt whatever the globals held: Slint's two-way link keeps the
     // right-hand side's value, and the globals outlive this view (nav-away
@@ -63,7 +59,6 @@ export component PlaylistDetailView inherits Rectangle {
         DetailHeader {
             vertical-stretch: 0;
             artwork-path: PlaylistDetail.playlist.artwork_path;
-            artwork-size: clamp(root.width * 0.16, 160px, 240px);
             cover: PlaylistDetail.cover;
             fallback-icon: "playlist";
             hero-blur-a: PlaylistDetail.blur-img-a;
@@ -130,12 +125,14 @@ export component PlaylistDetailView inherits Rectangle {
                 horizontal-alignment: left;
                 overflow: elide;
             }
-            Text {
+            // Meta chips — track count + total duration. No "Smart" chip:
+            // the title already carries the `auto_awesome` badge.
+            MetaChipStrip {
                 vertical-stretch: 0;
-                text: root.meta-line;
-                color: HeroBackdrop.on-backdrop-muted;
-                font-size: Theme.font-size-md;
-                horizontal-alignment: left;
+                rows: HeroChips.rows;
+                chip-fill: HeroBackdrop.chip-fill;
+                chip-label-color: HeroBackdrop.chrome;
+                measured(w) => { HeroChips.recompute(w); }
             }
 
             Rectangle { vertical-stretch: 1; }

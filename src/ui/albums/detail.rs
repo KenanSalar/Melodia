@@ -127,6 +127,11 @@ where
     let prepared: Vec<PreparedTrackRow> =
         tracks.iter().map(crate::ui::tracks::prepare_track_list_row).collect();
 
+    // Folded here rather than inside the `upgrade_in_event_loop` below — this
+    // is the worker that already has the rows, and the UI thread has no reason
+    // to walk a long album's track list a second time.
+    let genre = crate::ui::hero_chips::dominant_genre(&tracks);
+
     *albums_ui.detail.album_id.lock() = album_id;
 
     let albums_ui = albums_ui.clone();
@@ -140,10 +145,18 @@ where
             .collect();
         let header = to_slint_album_row(&detail);
         g.set_album(header);
+        // Off `detail` rather than the row above it — `disc_count` and
+        // `is_compilation` are fetched but never reach `AlbumRow`.
+        crate::ui::hero_chips::publish_album(
+            &ui,
+            &detail,
+            genre.as_deref(),
+            albums_ui.section_active(),
+        );
         // Hero blur cross-fades from the previous album; the cover slot
         // is written directly (no fade — the artwork tile itself is
         // covered by the next album's tile in one frame).
-        apply_detail_artwork(&ui, &g, pair, /* animate */ true);
+        apply_detail_artwork(&ui, &g, pair, /* animate */ true, albums_ui.section_active());
         replace_tracks_model(&g, ui_tracks);
         reset_detail_selection(&g, &albums_ui);
         // Fresh open clears the filter so the user lands on the full
@@ -207,6 +220,8 @@ pub async fn refresh_detail(
     )
     .await;
 
+    let genre = crate::ui::hero_chips::dominant_genre(&tracks);
+
     let albums_ui = albums_ui.clone();
     let _ = weak.upgrade_in_event_loop(move |ui| {
         let g = ui.global::<AlbumDetail>();
@@ -224,10 +239,16 @@ pub async fn refresh_detail(
         // Header is one row — always refresh it (artwork / counts may
         // have changed).
         g.set_album(to_slint_album_row(&detail));
+        crate::ui::hero_chips::publish_album(
+            &ui,
+            &detail,
+            genre.as_deref(),
+            albums_ui.section_active(),
+        );
         // No fade on the refresh path — this is the same album, the
         // user did not navigate. Either it's a cache hit (no change) or
         // the cover/blur is being replaced in place.
-        apply_detail_artwork(&ui, &g, pair, /* animate */ false);
+        apply_detail_artwork(&ui, &g, pair, /* animate */ false, albums_ui.section_active());
 
         // With an active filter the displayed model is a subset, so the
         // id-slice fast path below (which assumes an unfiltered model)

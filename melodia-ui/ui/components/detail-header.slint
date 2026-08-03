@@ -30,7 +30,6 @@ import { IconButton } from "icon-button.slint";
 export component DetailHeader inherits Rectangle {
     in property <string> artwork-path;
     in property <image>  cover;
-    in property <length> artwork-size: 200px;
     in property <image>  hero-blur-a;
     in property <image>  hero-blur-b;
     in property <bool>   hero-blur-use-a;
@@ -79,17 +78,20 @@ export component DetailHeader inherits Rectangle {
         spacing: Theme.pad-lg;
         alignment: stretch;
 
-        // Artwork tile — fixed-size, anchored to the top-left so it
-        // does not stretch with the row height.
+        // Artwork tile — anchored to the top-left so it does not stretch
+        // with the row height. Sized straight off `Theme.hero-artwork`
+        // rather than through an `in property`: the four detail views and
+        // the two mosaic heroes are one band, and a per-view knob is how
+        // they drifted apart in the first place.
         VerticalLayout {
             alignment: start;
             horizontal-stretch: 0;
             ArtworkImage {
                 artwork-path: root.artwork-path;
                 cover: root.cover;
-                tile-size: root.artwork-size;
+                tile-size: Theme.hero-artwork;
                 tile-radius: root.circular-artwork
-                    ? root.artwork-size / 2
+                    ? Theme.hero-artwork / 2
                     : Theme.radius-lg;
                 fallback-icon: root.fallback-icon;
                 tile-bg: root.tile-bg;

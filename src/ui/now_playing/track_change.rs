@@ -16,6 +16,7 @@ use crate::library;
 use crate::state::AppState;
 use crate::themes::{brush, brush_to_rgb, color};
 use crate::ui::backdrop;
+use crate::ui::chips;
 use crate::ui::now_playing_artwork::NowPlayingArtwork;
 use crate::{AppWindow, Player, Theme as ThemeGlobal, TrackMetaRow};
 
@@ -171,14 +172,15 @@ pub(super) async fn apply_track_change(
     let player = ui.global::<Player>();
     // Chip strip: refresh the shadow from the just-fetched `meta` and push
     // a freshly chunked 2D model so the view reflects the new track without
-    // waiting on a width-change fire. The chunk uses the chip-area width
-    // cached by `Player.recompute-chip-rows`; if the view hasn't laid out
-    // yet (`chip_last_width == 0.0`), `chunk_chips_to_rows` collapses to a
-    // single row and the view's mount Timer fires a real width immediately.
+    // waiting on a width-change fire. The chunk uses the strip width cached
+    // by `Player.recompute-chip-rows`; if the view hasn't laid out yet
+    // (`chip_last_width == 0.0`), `chunk_chips_to_rows` collapses to a single
+    // row and the strip's mount Timer fires a real width immediately. `None`
+    // because this column can grow downward — the hero band can't.
     let chip_texts = super::metadata::visible_chip_texts(&meta);
     let chip_rows =
-        super::metadata::chunk_chips_to_rows(&chip_texts, np_state.chip_last_width.get());
-    player.set_chip_rows(super::metadata::rows_to_model(chip_rows));
+        chips::chunk_chips_to_rows(&chip_texts, np_state.chip_last_width.get(), None);
+    player.set_chip_rows(chips::rows_to_model(chip_rows));
     *np_state.chip_texts.borrow_mut() = chip_texts;
     player.set_track_meta(meta);
 

@@ -62,8 +62,9 @@ pub async fn refresh_tracks(
     // off-thread so it never delays the track-list paint.
     let count = i32::try_from(rows.len()).unwrap_or(i32::MAX);
     let total_ms: i64 = rows.iter().map(|r| r.duration_ms).sum();
+    let fold = crate::ui::hero_chips::fold_tracks(&rows);
     let mosaic_paths = super::hero::mosaic_paths_from(&rows, 4);
-    super::hero::push_hero_stats(count, total_ms, &mosaic_paths, weak);
+    super::hero::push_hero_stats(count, total_ms, fold, &mosaic_paths, rp_ui, weak);
     // Only recompose the hero blur when the mosaic covers differ from the ones
     // on screen. A played-track refresh (or an in-view favorite/rating toggle,
     // which also bumps a subscribed channel) usually yields the same top-4

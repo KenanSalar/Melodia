@@ -137,6 +137,10 @@ where
     let prepared: Vec<PreparedTrackRow> =
         tracks.iter().map(crate::ui::tracks::prepare_track_list_row).collect();
 
+    // The album list is the artist's own discography, so its year span is what
+    // "active 1957–1963" means here; folded on the worker that fetched it.
+    let years = crate::ui::hero_chips::year_span(&albums);
+
     *artists_ui.detail.artist_id.lock() = artist_id;
 
     let artists_ui = artists_ui.clone();
@@ -151,6 +155,7 @@ where
 
         let header = to_slint_artist_row(&detail);
         g.set_artist(header);
+        crate::ui::hero_chips::publish_artist(&ui, &detail, years, artists_ui.section_active());
 
         // Albums sub-section model — small grid above the track list.
         let album_rows: Vec<UiAlbumRow> = albums
@@ -159,7 +164,7 @@ where
             .collect();
         write_albums_model(&g, album_rows);
 
-        apply_detail_artwork(&ui, &g, pair, /* animate */ true);
+        apply_detail_artwork(&ui, &g, pair, /* animate */ true, artists_ui.section_active());
         replace_tracks_model(&g, ui_tracks);
         reset_detail_selection(&g, &artists_ui);
         // Fresh open clears the filter so the user lands on the full
@@ -211,6 +216,8 @@ pub async fn refresh_detail(
     )
     .await;
 
+    let years = crate::ui::hero_chips::year_span(&albums);
+
     let weak_for_filter = weak.clone();
     let artists_ui_clone = artists_ui.clone();
     let artists_ui = artists_ui.clone();
@@ -225,7 +232,8 @@ pub async fn refresh_detail(
         sort_track_list_rows(&mut tracks, &field, &dir);
 
         g.set_artist(to_slint_artist_row(&detail));
-        apply_detail_artwork(&ui, &g, pair, /* animate */ false);
+        crate::ui::hero_chips::publish_artist(&ui, &detail, years, artists_ui.section_active());
+        apply_detail_artwork(&ui, &g, pair, /* animate */ false, artists_ui.section_active());
 
         // Refresh the canonical Rust caches (all_tracks + albums) with
         // the freshly-fetched data. The displayed `tracks` cache + the

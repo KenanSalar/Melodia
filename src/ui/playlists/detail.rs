@@ -113,6 +113,9 @@ pub async fn open_playlist(
         playlist_id
     });
 
+    // How far the playlist spreads — folded on the worker that fetched it.
+    let fold = crate::ui::hero_chips::fold_tracks(&tracks);
+
     let playlists_ui = playlists_ui.clone();
     let state_for_history = state.clone();
     let _ = weak.upgrade_in_event_loop(move |ui| {
@@ -123,7 +126,13 @@ pub async fn open_playlist(
             .collect();
         let header = to_slint_playlist_row(&detail);
         g.set_playlist(header);
-        apply_detail_artwork(&ui, &g, pair, /* animate */ true);
+        crate::ui::hero_chips::publish_playlist(
+            &ui,
+            &detail,
+            fold,
+            playlists_ui.section_active(),
+        );
+        apply_detail_artwork(&ui, &g, pair, /* animate */ true, playlists_ui.section_active());
         replace_tracks_model(&g, ui_tracks);
         reset_detail_selection(&g, &playlists_ui);
         // Fresh open clears the filter so the user lands on the full
@@ -173,6 +182,8 @@ pub async fn refresh_detail(
     // before we permute `tracks` to the user's chosen sort.
     let position_order_snapshot: Vec<i64> = tracks.iter().map(|t| t.id).collect();
 
+    let fold = crate::ui::hero_chips::fold_tracks(&tracks);
+
     let playlists_ui = playlists_ui.clone();
     let _ = weak.upgrade_in_event_loop(move |ui| {
         let g = ui.global::<PlaylistDetail>();
@@ -185,7 +196,13 @@ pub async fn refresh_detail(
         sort_playlist_tracks(&mut tracks, &position_order_snapshot, &field, &dir);
 
         g.set_playlist(to_slint_playlist_row(&detail));
-        apply_detail_artwork(&ui, &g, pair, /* animate */ false);
+        crate::ui::hero_chips::publish_playlist(
+            &ui,
+            &detail,
+            fold,
+            playlists_ui.section_active(),
+        );
+        apply_detail_artwork(&ui, &g, pair, /* animate */ false, playlists_ui.section_active());
 
         // With an active filter the displayed model is a subset, so the
         // id-slice fast path below (which assumes an unfiltered model)

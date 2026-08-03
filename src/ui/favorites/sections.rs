@@ -135,6 +135,10 @@ pub async fn refresh_grids(state: &AppState, fav_ui: &Arc<FavoritesUi>, weak: &W
         // one the tab is about to paint.
         sort_cached_artists(fav_ui);
     }
+    // The Most Played totals are folded out of the cache just filled. The grid
+    // write below publishes too, but only past its signature early-return — a
+    // play-count flush that leaves the row set alone still moves the totals.
+    super::hero::republish_chips(fav_ui, weak);
 
     // Prewarm the mounted tab's tier off-thread before its rows land in the
     // Slint model: the cards' `request-*-cover` lookups decode on miss *on
@@ -252,6 +256,10 @@ fn write_filtered_grids(ui: &AppWindow, fav_ui: &FavoritesUi, prepared: &Prepare
 
     g.set_most_played_count(len_as_i32(prepared.most_played.len()));
     g.set_artist_count(len_as_i32(prepared.artists.len()));
+    // Covers a tab pick as well as a count change, because the signature above
+    // hashes the tab — so anything that moves what the band should say has
+    // already got past that early return.
+    crate::ui::hero_chips::publish_favorites(ui, fav_ui);
 
     // Only the mounted tab's model is built, and the other is emptied
     // rather than left holding its last rows: building it would allocate

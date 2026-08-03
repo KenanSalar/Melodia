@@ -452,12 +452,14 @@ fn floor_luma_matches_the_gradient_the_solve_paints() {
     }
 }
 
-// --- the hero's two fixed text tiers ----------------------------------------
+// --- the hero's two pre-solve text defaults ---------------------------------
 
-/// The hero diverges from the `np-*` tier by pinning its two text colours
-/// instead of solving them, and that is only defensible because the *backdrop*
-/// is pinned first. This is the assertion the prose beside them in
-/// `globals/hero-backdrop.slint` makes, and nothing else pins it.
+/// The hero's two text tiers are solved per artwork, exactly as `np-*` is — but
+/// the solve arrives a frame or two after the band first paints, and these
+/// literals are what fills that gap. They are declared as *defaults* on
+/// `in-out` properties rather than as constants, so nothing about them is
+/// enforced by the solve; this is the only thing holding them to the same bar
+/// their solved successors clear.
 const HERO_ON_BACKDROP: u32 = 0x00f0_eef5;
 const HERO_ON_BACKDROP_MUTED: u32 = 0x00c9_c5d3;
 
@@ -471,8 +473,10 @@ fn worst_composited_tone() -> f64 {
         .fold(f64::NEG_INFINITY, f64::max)
 }
 
+/// The frame before the solve lands is a real frame, and on the worst backdrop
+/// the solve can be handed it has to be readable too.
 #[test]
-fn the_fixed_hero_text_tiers_clear_their_targets_on_the_worst_backdrop() {
+fn the_pre_solve_hero_text_defaults_clear_their_targets_on_the_worst_backdrop() {
     let tone = worst_composited_tone();
     let title = ratio_against_tone(HERO_ON_BACKDROP, tone);
     let muted = ratio_against_tone(HERO_ON_BACKDROP_MUTED, tone);
@@ -490,20 +494,28 @@ fn the_fixed_hero_text_tiers_clear_their_targets_on_the_worst_backdrop() {
     );
 }
 
-/// The constants above are copies — assert they still match the `out`
-/// properties they mirror, so editing one side can't silently invalidate the
-/// contrast test.
+/// The constants above are copies — assert they still match the declarations
+/// they mirror, so editing one side can't silently invalidate the contrast test.
+///
+/// **Spell the whole `in-out` prefix.** `"out property"` is a substring of
+/// `"in-out property"`, so the laxer match this replaced went on passing after
+/// the tiers stopped being `out` — it asserted nothing about the half of the
+/// declaration it named. Reverting them to `out` is caught by the compiler
+/// anyway (Slint emits no setter, so `hero_backdrop::write` stops building),
+/// which is why the literals are what this test is really for.
 #[test]
-fn the_fixed_hero_tiers_match_hero_backdrop_slint() {
+fn the_hero_text_defaults_match_hero_backdrop_slint() {
     let declarations = include_str!("../../../melodia-ui/ui/globals/hero-backdrop.slint");
     for (name, literal) in [
         ("on-backdrop", "#f0eef5"),
         ("on-backdrop-muted", "#c9c5d3"),
     ] {
-        let declaration = format!("out property <brush> {name}: {literal};");
+        let declaration = format!("in-out property <brush> {name}: {literal};");
         assert!(
             declarations.contains(&declaration),
-            "hero-backdrop.slint no longer declares `{declaration}` — update the constant here too"
+            "hero-backdrop.slint no longer declares `{declaration}` — if the tier went back to \
+             `out`, `hero_backdrop::write` can no longer publish it and the band is stuck on \
+             this default; if the literal moved, update the constant here too"
         );
     }
 }

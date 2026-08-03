@@ -33,7 +33,7 @@ pub async fn refresh_hero(
 ) -> AppResult<()> {
     let stats = library::favorites::get_favorite_stats(state).await?;
     *fav_ui.state().stats.lock() = stats.clone();
-    push_stats_to_slint(&stats, weak);
+    push_stats_to_slint(&stats, fav_ui, weak);
 
     let paths = stats.artwork_paths.clone();
     if paths.is_empty() {
@@ -72,16 +72,24 @@ pub async fn refresh_hero(
 // The atlas composition itself lives in `crate::ui::mosaic_blur` — shared
 // with the Recently-Played hero so both surfaces read identically.
 
-fn push_stats_to_slint(stats: &FavoriteStats, weak: &Weak<AppWindow>) {
+fn push_stats_to_slint(
+    stats: &FavoriteStats,
+    fav_ui: &Arc<FavoritesUi>,
+    weak: &Weak<AppWindow>,
+) {
     let count = i32::try_from(stats.count).unwrap_or(i32::MAX);
     let duration = crate::ui::tracks::format_duration_ms(stats.total_duration_ms);
     let paths = stats.artwork_paths.clone();
+    let fav_ui = fav_ui.clone();
     let weak = weak.clone();
     let _ = slint::invoke_from_event_loop(move || {
         let Some(ui) = weak.upgrade() else { return };
         let g = ui.global::<Favorites>();
         g.set_track_count(count);
         g.set_duration_text(SharedString::from(duration));
+        // After the counts, never before — the chips read them back off the
+        // global rather than taking them as arguments.
+        crate::ui::hero_chips::publish_favorites(&ui, &fav_ui);
         let model = g.get_mosaic_paths();
         let Some(vec) = model.as_any().downcast_ref::<VecModel<SharedString>>() else {
             log::warn!("Favorites.mosaic-paths: VecModel<SharedString> downcast failed");
@@ -90,6 +98,28 @@ fn push_stats_to_slint(stats: &FavoriteStats, weak: &Weak<AppWindow>) {
         let rendered: Vec<SharedString> =
             paths.iter().map(|p| SharedString::from(p.as_str())).collect();
         vec.set_vec(rendered);
+    });
+}
+
+/// Re-derive the band's chips on the UI thread.
+///
+/// **Call this wherever one of the chips' inputs lands.** Favorites is the one
+/// hero whose facts are not all in the hand of a single fetch: the counts come
+/// off the `Favorites` global, the Songs spread out of `tracks_all`, and the
+/// Most Played totals out of `most_played` — three caches that
+/// `kick_full_refresh` fills from three *concurrent* tasks. So a publish is
+/// only ever as complete as whatever has landed by the time it runs, and the
+/// cure is to publish again each time something lands rather than to guess an
+/// order. Every other hero folds its facts out of the rows its own fetch just
+/// awaited and needs none of this.
+///
+/// The grid path can't stand in for it: `write_filtered_grids` publishes past a
+/// signature early-return, and `mounted_content` is a constant `0` on the Songs
+/// tab — so on Songs that publish fires only when the column count moves.
+pub fn republish_chips(fav_ui: &Arc<FavoritesUi>, weak: &Weak<AppWindow>) {
+    let fav_ui = fav_ui.clone();
+    let _ = weak.upgrade_in_event_loop(move |ui| {
+        crate::ui::hero_chips::publish_favorites(&ui, &fav_ui);
     });
 }
 
