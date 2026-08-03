@@ -5,10 +5,17 @@
 // settled burst. `Timer` is a non-visual pseudo-element, so this component
 // occupies no layout space — drop it anywhere in a view's element tree.
 //
-// Used by every filterable list/grid view (Tracks, Albums, Artists, Genres,
-// Playlists, Favorites) and the four entity detail views, replacing the
-// hand-rolled `filter-tick-pending`/`filter-tick-applied` + `Timer` block
-// each used to carry inline.
+// Every view with a filter box mounts one, replacing the hand-rolled
+// `filter-tick-pending`/`filter-tick-applied` + `Timer` block each used to
+// carry inline. The count is deliberately not listed here — an inventory in a
+// comment is what went stale the last two times a view was added.
+//
+// `fire()` is usually a Rust round-trip (`SomeGlobal.apply-filter(...)`), since
+// what a keystroke costs is a model rebuild. Settings is the exception and
+// assigns one Slint property from another: a query there mounts all five tab
+// pages and fans out to three `matches` calls per row, so the expensive work is
+// Slint's own re-evaluation and the settled value is a second property the
+// sections read.
 export component FilterThrottle {
     // Debounce cadence. ~130 ms sits comfortably below "feels laggy".
     in property <duration> interval: 130ms;

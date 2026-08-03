@@ -86,7 +86,6 @@ export global Favorites {
     // writes the result here, mirroring how the Tracks view handles
     // its search bar).
     in-out property <[TrackListRow]> tracks;
-    in-out property <int>            filtered-count;
     in-out property <string>         filter;
     in-out property <int>            blur-search-tick: 0;
     in-out property <string>         sort-field: "title";  // track_number | title | artist | album | genre | year | length
@@ -209,7 +208,6 @@ export global RecentlyPlayed {
     // view Rust writes, always in fetch (recency) order. There is no sort
     // state: the list is mounted non-sortable.
     in-out property <[TrackListRow]> tracks;
-    in-out property <int>            filtered-count;
     in-out property <string>         filter;
     in-out property <int>            blur-search-tick: 0;
 

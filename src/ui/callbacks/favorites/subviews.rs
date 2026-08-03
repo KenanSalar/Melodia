@@ -13,8 +13,9 @@ use crate::ui::artists::ArtistsUi;
 use crate::ui::callbacks::macros::spawn_logged;
 use crate::ui::callbacks::{cross_tab_nav, next_sort, persist_view_sort};
 use crate::ui::favorites::{self as favorites_ui_mod, FavoritesUi};
+use crate::ui::model_diff::clear_vec_model;
 use crate::ui::track_list_view::view_id;
-use crate::{AppWindow, Favorites};
+use crate::{AppWindow, Favorites, TrackListRow as UiTrackListRow};
 
 /// Wire the card-action and sub-view-routing callbacks.
 pub(super) fn wire(
@@ -105,9 +106,20 @@ pub(super) fn wire(
             favorites_ui_mod::apply_filtered_grids_now(&ui, &fu);
             // Only when Songs is the tab being entered: rebuilding a list
             // nobody can see costs one prepared row per favourite on this
-            // thread, and every entry into Songs comes back through here.
+            // thread, and every entry into Songs comes back through here. The
+            // `_now` variant for the reason the grids' is used two lines up —
+            // the tab mounts on the next frame, and a posted write can lose that
+            // race to a `TrackList` of headers over an emptied model.
+            // Leaving it empties that model rather than leaving it holding its
+            // last rows — the same trade `write_filtered_grids` makes for the
+            // grid it isn't mounting, and for the same reason: a row per
+            // favourite is one `TrackListRow` of `SharedString`s pinned behind
+            // a tab the user has left. `apply_filtered_tracks` refuses to
+            // refill it while that's true, so nothing puts them back.
             if entering == favorites_ui_mod::FavoritesTab::Songs {
-                favorites_ui_mod::apply_filtered_tracks(&fu, &weak);
+                favorites_ui_mod::apply_filtered_tracks_now(&ui, &fu);
+            } else {
+                clear_vec_model::<UiTrackListRow>(&g.get_tracks(), "favorites: leave songs tab");
             }
 
             let fu_covers = fu.clone();

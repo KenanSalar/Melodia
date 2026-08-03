@@ -142,9 +142,9 @@ pub(super) fn compute_indices(
             .iter()
             .enumerate()
             .filter(|(_, a)| {
-                row_match::field_contains(&a.name, &needle)
-                    || row_match::field_contains(&a.artist_name, &needle)
-                    || row_match::year_matches(a.year, &needle)
+                needle.contains(&a.name)
+                    || needle.contains(&a.artist_name)
+                    || needle.matches_year(a.year)
             })
             .map(|(i, _)| i)
             .collect()

@@ -9,14 +9,13 @@ use std::sync::Arc;
 
 use slint::{ComponentHandle, Model, VecModel, Weak};
 
-use super::FavoritesUi;
+use super::{FavoritesTab, FavoritesUi};
 use crate::error::AppResult;
 use crate::library;
 use crate::services::settings::{SortDir, ViewSort};
 use crate::state::AppState;
-use crate::ui::row_match;
+use crate::ui::row_match::{self, Needle};
 use crate::ui::tracks::{PreparedTrackRow, finish_track_list_row};
-use crate::ui::util::len_as_i32;
 use crate::{AppWindow, Favorites, TrackListRow as UiTrackListRow};
 
 /// Read-and-return the active sort. The Slint side mirrors this in
@@ -28,9 +27,9 @@ pub fn current_sort(fav_ui: &FavoritesUi) -> ViewSort {
     fav_ui.state().sort.lock().clone()
 }
 
-/// Read-and-return the active filter needle, already folded by
-/// [`set_filter`] and ready to hand to a `row_match` predicate.
-pub fn current_filter(fav_ui: &FavoritesUi) -> String {
+/// Read-and-return the active filter needle, folded by [`set_filter`] and ready
+/// to hand to a `row_match` predicate.
+pub fn current_filter(fav_ui: &FavoritesUi) -> Needle {
     fav_ui.state().filter.lock().clone()
 }
 
@@ -135,49 +134,95 @@ pub async fn refresh_tracks(
 ///
 /// A hidden section is never written to, the way
 /// `grids::apply::write_filtered_grids` refuses to: the leave teardown empties
-/// this model deliberately, and the check has to sit *inside* the closure
-/// because the leave can land while the post is in flight.
+/// this model deliberately, and the check has to sit in [`write_filtered_tracks`]
+/// rather than out here, because the leave can land while the post is in flight.
+///
+/// **An unmounted tab is refused for the same reason, and asked about twice for
+/// the reason every `section_active()` bail is.** `Favorites.tracks` feeds one
+/// element — `views/favorites/songs-tab.slint`'s `TrackList`, under
+/// `if tab-idx == tab-songs` — so on the other two tabs every prepared row here
+/// reaches nothing. The gate is not new: `callbacks::favorites::subviews`'
+/// tab-change handler already spells it out for its own call, having priced one
+/// prepared row per favourite on this thread. What it couldn't cover is the two
+/// paths that reach here without going through a tab pick — the throttled
+/// keystroke and the `library_changed` / `stats_changed` refresh — and those are
+/// the frequent ones. [`build_filtered_tracks`]' check is what skips the cost;
+/// [`write_filtered_tracks`]' is what stops a pick landing mid-post from leaving
+/// a row per favourite pinned behind a tab the user just left.
 pub fn apply_filtered_tracks(fav_ui: &Arc<FavoritesUi>, weak: &Weak<AppWindow>) {
-    let needle = current_filter(fav_ui);
-
-    // Filter + prepare the `Send` row halves on the calling thread,
-    // borrowing the cache in place — the old path deep-cloned the whole
-    // String-bearing Vec per keystroke and then built every UI row
-    // (including the `!Send` cover lookup) inside the event-loop closure.
-    let prepared: Vec<PreparedTrackRow> = {
-        let all = fav_ui.state().tracks_all.lock();
-        all.iter()
-            .filter(|r| row_match::track_matches(r, &needle))
-            .map(crate::ui::tracks::prepare_track_list_row)
-            .collect()
+    let Some(prepared) = build_filtered_tracks(fav_ui) else {
+        return;
     };
-    let filtered_count = len_as_i32(prepared.len());
 
     let fav_ui = fav_ui.clone();
     let weak = weak.clone();
     let _ = slint::invoke_from_event_loop(move || {
         let Some(ui) = weak.upgrade() else { return };
-        if !fav_ui.section_active() {
-            return;
-        }
-        let g = ui.global::<Favorites>();
-        let model = g.get_tracks();
-        let Some(vec) = model.as_any().downcast_ref::<VecModel<UiTrackListRow>>() else {
-            log::warn!("Favorites.tracks: VecModel<TrackListRow> downcast failed");
-            return;
-        };
-        let mut rendered: Vec<UiTrackListRow> = prepared
-            .into_iter()
-            .map(finish_track_list_row)
-            .collect();
-        super::selection::restamp_rows(&g, &mut rendered);
-        // Per-row rewrite when identities align (same-shape refresh, e.g.
-        // a library tick): keeps the ListView's delegates instead of the
-        // tear-down-everything `set_vec` reset. Structural changes
-        // (filter narrowed/widened) fall back to `set_vec`.
-        crate::ui::model_diff::apply_rows_keyed(vec, rendered, |r| r.id);
-        g.set_filtered_count(filtered_count);
+        write_filtered_tracks(&ui, &fav_ui, prepared);
     });
+}
+
+/// Apply from the UI thread, with no event-loop hop — the rows land in the model
+/// before Slint re-evaluates the `if` that mounts the entering tab.
+///
+/// The twin of `grids::apply::apply_filtered_grids_now`, and here for the same
+/// reason: `slint::invoke_from_event_loop` posts even when it is called *from*
+/// the UI thread, so a redraw can win the race. The tab-leave empties this model,
+/// so what a lost race paints is a `TrackList` of headers over nothing.
+pub fn apply_filtered_tracks_now(ui: &AppWindow, fav_ui: &FavoritesUi) {
+    if let Some(prepared) = build_filtered_tracks(fav_ui) {
+        write_filtered_tracks(ui, fav_ui, prepared);
+    }
+}
+
+/// Walk the cached `tracks_all` through the active filter, or `None` when Songs
+/// isn't the mounted tab and the walk would feed nothing.
+///
+/// Filters and prepares the `Send` row halves on the calling thread, borrowing
+/// the cache in place — the old path deep-cloned the whole String-bearing Vec
+/// per keystroke and then built every UI row (including the `!Send` cover
+/// lookup) inside the event-loop closure.
+fn build_filtered_tracks(fav_ui: &FavoritesUi) -> Option<Vec<PreparedTrackRow>> {
+    if fav_ui.active_tab() != FavoritesTab::Songs {
+        return None;
+    }
+    let needle = current_filter(fav_ui);
+    let all = fav_ui.state().tracks_all.lock();
+    Some(
+        all.iter()
+            .filter(|r| row_match::track_matches(r, &needle))
+            .map(crate::ui::tracks::prepare_track_list_row)
+            .collect(),
+    )
+}
+
+/// Finish the rows and push them into `Favorites.tracks`. UI thread only.
+///
+/// Both gates are re-asked here rather than trusted from the build: on the
+/// posting path a section leave or a tab pick can land while the closure is in
+/// flight, and either one has already emptied this model on purpose.
+fn write_filtered_tracks(
+    ui: &AppWindow,
+    fav_ui: &FavoritesUi,
+    prepared: Vec<PreparedTrackRow>,
+) {
+    if !fav_ui.section_active() || fav_ui.active_tab() != FavoritesTab::Songs {
+        return;
+    }
+    let g = ui.global::<Favorites>();
+    let model = g.get_tracks();
+    let Some(vec) = model.as_any().downcast_ref::<VecModel<UiTrackListRow>>() else {
+        log::warn!("Favorites.tracks: VecModel<TrackListRow> downcast failed");
+        return;
+    };
+    let mut rendered: Vec<UiTrackListRow> =
+        prepared.into_iter().map(finish_track_list_row).collect();
+    super::selection::restamp_rows(&g, &mut rendered);
+    // Per-row rewrite when identities align (same-shape refresh, e.g. a library
+    // tick): keeps the ListView's delegates instead of the tear-down-everything
+    // `set_vec` reset. Structural changes (filter narrowed/widened) fall back to
+    // `set_vec`.
+    crate::ui::model_diff::apply_rows_keyed(vec, rendered, |r| r.id);
 }
 
 /// Set `rating` on a single Songs-tab row in the Slint `VecModel`. Rating is

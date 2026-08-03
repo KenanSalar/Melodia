@@ -103,8 +103,8 @@ pub(super) fn compute_indices(
             .iter()
             .enumerate()
             .filter(|(_, a)| {
-                row_match::field_contains(&a.name, &needle)
-                    || a.sort_name.as_deref().is_some_and(|s| row_match::field_contains(s, &needle))
+                needle.contains(&a.name)
+                    || a.sort_name.as_deref().is_some_and(|s| needle.contains(s))
             })
             .map(|(i, _)| i)
             .collect()

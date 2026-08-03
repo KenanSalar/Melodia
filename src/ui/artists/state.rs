@@ -10,6 +10,7 @@ use parking_lot::Mutex;
 use crate::entities::album::AlbumStats;
 use crate::entities::artist::ArtistStats;
 use crate::entities::track::TrackListRow as RsTrackListRow;
+use crate::ui::row_match::Needle;
 
 /// An artist's pre-lowercased `name`, computed once per `fetch_grid` so
 /// the name sort allocates nothing. Positionally aligned with
@@ -87,7 +88,7 @@ pub(super) struct ArtistDetailState {
     pub all_tracks: Mutex<Vec<RsTrackListRow>>,
     pub albums: Mutex<Vec<AlbumStats>>,
     pub artist_id: Mutex<i64>,
-    pub filter: Mutex<String>,
+    pub filter: Mutex<Needle>,
     pub applied_selection: Mutex<HashSet<i32>>,
 }
 

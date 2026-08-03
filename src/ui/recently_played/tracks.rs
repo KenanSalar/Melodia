@@ -15,14 +15,14 @@ use super::RecentlyPlayedUi;
 use crate::error::AppResult;
 use crate::library;
 use crate::state::AppState;
-use crate::ui::row_match;
+use crate::ui::row_match::{self, Needle};
 use crate::ui::tracks::{PreparedTrackRow, finish_track_list_row};
 use crate::ui::util::len_as_i32;
 use crate::{AppWindow, RecentlyPlayed, TrackListRow as UiTrackListRow};
 
-/// Read-and-return the active filter needle, already folded by
-/// [`set_filter`] and ready to hand to a `row_match` predicate.
-pub fn current_filter(rp_ui: &RecentlyPlayedUi) -> String {
+/// Read-and-return the active filter needle, folded by [`set_filter`] and ready
+/// to hand to a `row_match` predicate.
+pub fn current_filter(rp_ui: &RecentlyPlayedUi) -> Needle {
     rp_ui.state().filter.lock().clone()
 }
 
@@ -136,7 +136,6 @@ pub fn apply_filtered_tracks(rp_ui: &Arc<RecentlyPlayedUi>, weak: &Weak<AppWindo
             .map(crate::ui::tracks::prepare_track_list_row)
             .collect()
     };
-    let filtered_count = len_as_i32(prepared.len());
 
     let rp_ui = rp_ui.clone();
     let weak = weak.clone();
@@ -155,7 +154,6 @@ pub fn apply_filtered_tracks(rp_ui: &Arc<RecentlyPlayedUi>, weak: &Weak<AppWindo
             prepared.into_iter().map(finish_track_list_row).collect();
         super::selection::restamp_rows(&g, &mut rendered);
         crate::ui::model_diff::apply_rows_keyed(vec, rendered, |r| r.id);
-        g.set_filtered_count(filtered_count);
     });
 }
 

@@ -9,6 +9,7 @@ use parking_lot::Mutex;
 
 use crate::entities::album::AlbumStats;
 use crate::entities::track::TrackListRow as RsTrackListRow;
+use crate::ui::row_match::Needle;
 
 /// An album's pre-lowercased name + artist, computed once per `fetch_grid`
 /// so the name / artist sorts allocate nothing. Positionally aligned with
@@ -104,7 +105,7 @@ pub(super) struct AlbumDetailState {
     /// the re-fetch path (`refresh_detail`) re-apply the filter to fresh
     /// data without round-tripping the UI thread for the property read.
     /// Cleared on fresh-open. Mirrors `ArtistDetailState::filter`.
-    pub filter: Mutex<String>,
+    pub filter: Mutex<Needle>,
 }
 
 /// Square decode size (px) for the Albums **grid card** tiles. Bigger than

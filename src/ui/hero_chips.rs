@@ -225,11 +225,14 @@ pub fn year_span(albums: &[AlbumStats]) -> Option<(i32, i32)> {
 struct PublishedChips {
     width: f32,
     chips: Vec<SharedString>,
+    /// Row lengths of the split last handed to Slint — see
+    /// [`chips::split_shape`] for what it buys and why the chips aren't in it.
+    shape: Vec<usize>,
 }
 
 thread_local! {
     static PUBLISHED: RefCell<PublishedChips> = const {
-        RefCell::new(PublishedChips { width: 0.0, chips: Vec::new() })
+        RefCell::new(PublishedChips { width: 0.0, chips: Vec::new(), shape: Vec::new() })
     };
 }
 
@@ -239,7 +242,9 @@ pub fn install(ui: &AppWindow) {
     ui.global::<HeroChips>().on_recompute(move |width| {
         let Some(ui) = weak.upgrade() else { return };
         PUBLISHED.with_borrow_mut(|p| p.width = width);
-        write_rows(&ui);
+        // The one caller that may re-chunk to the shape already on screen, and
+        // the one that fires per pointer motion of a resize drag.
+        write_rows(&ui, false);
     });
 }
 
@@ -259,7 +264,7 @@ fn publish(ui: &AppWindow, chips: Vec<SharedString>, section_active: bool) {
         return;
     }
     PUBLISHED.with_borrow_mut(|p| p.chips = chips);
-    write_rows(ui);
+    write_rows(ui, true);
 }
 
 /// Drop the band's chips on hero teardown, so backing out of one hero and into
@@ -271,13 +276,28 @@ fn publish(ui: &AppWindow, chips: Vec<SharedString>, section_active: bool) {
 /// band.
 pub fn clear(ui: &AppWindow) {
     PUBLISHED.with_borrow_mut(|p| p.chips.clear());
-    write_rows(ui);
+    write_rows(ui, true);
 }
 
-fn write_rows(ui: &AppWindow) {
-    let rows = PUBLISHED.with_borrow(|p| {
-        chips::chunk_chips_to_rows(&p.chips, p.width, Some(HERO_MAX_ROWS))
-    });
+/// Re-chunk and hand the split to Slint.
+///
+/// `force` is the caller answering "did my chips move?" — `true` from [`publish`]
+/// and [`clear`], which is the only way they can, and `false` from the width
+/// channel, where they cannot. Unforced, an unchanged shape skips the write:
+/// `set_rows` is a model reset, so repainting a strip that re-chunked to the
+/// same two rows rebuilds every chip for nothing, once per pointer motion.
+fn write_rows(ui: &AppWindow, force: bool) {
+    let Some(rows) = PUBLISHED.with_borrow_mut(|p| {
+        let rows = chips::chunk_chips_to_rows(&p.chips, p.width, Some(HERO_MAX_ROWS));
+        let shape = chips::split_shape(&rows);
+        if !force && shape == p.shape {
+            return None;
+        }
+        p.shape = shape;
+        Some(rows)
+    }) else {
+        return;
+    };
     ui.global::<HeroChips>()
         .set_rows(chips::rows_to_model(rows));
 }

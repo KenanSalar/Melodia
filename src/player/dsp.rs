@@ -8,10 +8,12 @@ use std::sync::atomic::{AtomicU64, Ordering};
 /// falling. Shared so the two styles fall by the same law rather than each
 /// carrying its own — a decay is a decay whichever drawing is showing.
 ///
-/// Per *frame*, so the wall-clock settle is this against the strip's Timer, and
-/// that interval is per style (`visualizer-strip.slint`): ~0.5 s for the bars at
-/// 16 ms, ~1 s for the trace at 33 ms. Retuning how fast one style dies away
-/// means reaching for one of the two.
+/// Per *frame*, so the wall-clock settle is this against the strip's Timer —
+/// one interval for every style (`visualizer-strip.slint`: 33 ms, or 500 ms once
+/// dormant), so all three settle in about a second. Retuning how fast a drawing
+/// dies away means reaching for one of those two numbers; there is no per-style
+/// rate to reach for, and adding one would move all three styles' settle times
+/// off this constant at once.
 pub(crate) const VISUALIZER_DECAY: f32 = 0.8;
 
 // A bar or trace has to lose height every frame but never invert or vanish

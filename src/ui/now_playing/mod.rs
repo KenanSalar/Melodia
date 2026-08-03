@@ -119,6 +119,11 @@ pub struct NowPlayingState {
     /// subscriber can chunk against the current layout immediately, without
     /// waiting for the next Slint `changed` fire.
     pub(super) chip_last_width: Cell<f32>,
+    /// Row lengths of the split last handed to `Player.chip-rows` — see
+    /// [`crate::ui::chips::split_shape`]. Only the width channel consults it;
+    /// the track-change subscriber writes unconditionally, since its chips have
+    /// moved by definition, and records the shape on its way past.
+    pub(super) chip_last_shape: RefCell<Vec<usize>>,
     /// Re-seeder for the Up Next list — see [`Seeder`]. Populated by
     /// [`install`] after construction (`None` only during the brief
     /// window between `Rc::new(...)` and `install`'s post-init writes,
@@ -219,6 +224,7 @@ pub fn install(
         applied_track_id: Cell::new(None),
         chip_texts: RefCell::new(Vec::new()),
         chip_last_width: Cell::new(0.0),
+        chip_last_shape: RefCell::new(Vec::new()),
         up_next_seeder: RefCell::new(None),
         artwork_seeder: RefCell::new(None),
     });
@@ -250,6 +256,15 @@ pub fn install(
             np.chip_last_width.set(width);
             let Some(ui) = weak.upgrade() else { return };
             let rows = chips::chunk_chips_to_rows(&np.chip_texts.borrow(), width, None);
+            // The chips can't have moved on this path — only `track_change`
+            // writes them — so an unchanged shape means the strip would repaint
+            // itself. `set_chip_rows` is a model reset, and this fires on every
+            // pointer motion of a resize drag.
+            let shape = chips::split_shape(&rows);
+            if *np.chip_last_shape.borrow() == shape {
+                return;
+            }
+            *np.chip_last_shape.borrow_mut() = shape;
             ui.global::<Player>().set_chip_rows(chips::rows_to_model(rows));
         });
     }

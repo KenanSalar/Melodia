@@ -25,6 +25,62 @@ const ARTISTS_TAB: &str =
     include_str!("../../../../melodia-ui/ui/views/favorites/artists-tab.slint");
 const GRID: &str =
     include_str!("../../../../melodia-ui/ui/components/grid/entity-card-grid.slint");
+const SONGS: &str = include_str!("../songs.rs");
+const SONGS_TAB: &str = include_str!("../../../../melodia-ui/ui/views/favorites/songs-tab.slint");
+const SUBVIEWS: &str = include_str!("../../callbacks/favorites/subviews.rs");
+
+/// `Favorites.tracks` feeds one element in the whole tree, under the Songs
+/// tab's `if` — so off that tab, every prepared row the Songs path builds
+/// reaches nothing and every row it leaves in the model is pinned behind a view
+/// nobody can see.
+///
+/// Four things hold that, and each fails differently. `build_filtered_tracks`'
+/// bail is what skips the cost; drop it and the tab gate becomes decorative,
+/// with the whole favourites list still prepared per keystroke on the UI thread.
+/// `write_filtered_tracks`' is what survives a pick landing mid-post; drop it
+/// and the retention comes back on exactly the race the first one can't see. The
+/// tab-leave **clear** is what empties what the last visit left; drop it and the
+/// rows simply stay. And the tab pick writing through the **non-hopping**
+/// `apply_filtered_tracks_now` is what stops that clear becoming visible: the
+/// entering tab mounts on the next frame, and a posted write that loses the race
+/// paints a `TrackList` of headers over nothing.
+///
+/// None of the four shows on screen except the last, and that one only for a
+/// frame — which is why they are pinned rather than trusted.
+#[test]
+fn the_songs_model_is_written_only_while_its_tab_is_mounted() {
+    assert!(
+        SONGS_TAB.contains("rows: Favorites.tracks;"),
+        "songs-tab.slint is the sole reader of `Favorites.tracks` — if that moved, this gate needs re-deriving"
+    );
+
+    let build = SONGS
+        .split_once("fn build_filtered_tracks")
+        .map(|(_, rest)| rest)
+        .unwrap_or_default();
+    assert!(
+        build.contains("if fav_ui.active_tab() != FavoritesTab::Songs {"),
+        "`build_filtered_tracks` must bail before the prepare walk when Songs isn't mounted"
+    );
+
+    let write = SONGS
+        .split_once("fn write_filtered_tracks")
+        .map(|(_, rest)| rest)
+        .unwrap_or_default();
+    assert!(
+        write.contains("|| fav_ui.active_tab() != FavoritesTab::Songs"),
+        "`write_filtered_tracks` must re-check the tab — a pick can land while the post is in flight"
+    );
+
+    assert!(
+        SUBVIEWS.contains(r#"clear_vec_model::<UiTrackListRow>(&g.get_tracks(), "favorites: leave songs tab")"#),
+        "leaving the Songs tab must empty `Favorites.tracks`, the way `write_filtered_grids` empties the grid it isn't mounting"
+    );
+    assert!(
+        SUBVIEWS.contains("apply_filtered_tracks_now(&ui, &fu)"),
+        "the tab pick must write without hopping the event loop, or the clear above shows as a bare list"
+    );
+}
 
 /// The tab count Slint declares today. Kept local so a change to
 /// `Favorites.tab-count` doesn't silently rewrite what this asserts.

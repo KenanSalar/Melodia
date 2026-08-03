@@ -27,7 +27,7 @@ use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 
 use crate::entities::track::TrackListRow as RsTrackListRow;
 use crate::media::cover_thumbs::CoverThumbs;
-use crate::ui::row_match;
+use crate::ui::row_match::{self, Needle};
 use crate::ui::section_state::SectionState;
 use crate::ui::util::clamp_i64_to_i32;
 use crate::{AppWindow, TrackListRow as UiTrackListRow, Tracks};
@@ -47,7 +47,7 @@ pub use selection::{clear_selection, handle_select_row};
 ///
 /// `year` stays an integer beside the packed text rather than being
 /// rendered into it, so the Tracks view and every `track_matches` surface
-/// run the *same* [`row_match::year_matches`] rule instead of two spellings
+/// run the *same* [`row_match::Needle::matches_year`] rule instead of two spellings
 /// of it.
 pub(super) struct RowSearchKey {
     packed: Box<str>,
@@ -72,8 +72,11 @@ impl RowSearchKey {
         }
     }
 
-    pub(super) fn matches(&self, folded_needle: &str) -> bool {
-        self.packed.contains(folded_needle) || row_match::year_matches(self.year, folded_needle)
+    /// A plain `str::contains` on the packed text, because both sides are
+    /// already folded — this is the one matcher that doesn't go through
+    /// [`Needle::contains`], and `Needle::as_str` exists for it.
+    pub(super) fn matches(&self, needle: &Needle) -> bool {
+        self.packed.contains(needle.as_str()) || needle.matches_year(self.year)
     }
 }
 

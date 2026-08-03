@@ -102,6 +102,24 @@ fn finish(
     rows
 }
 
+/// A split's row lengths — enough to tell two splits of the *same* chips apart.
+///
+/// Both strips re-chunk on `MetaChipStrip`'s `measured`, which fires on every
+/// pointer motion of a resize drag, and handing the result to Slint is a
+/// `set_rows` — a model *reset*, so the whole chip repeater is torn down and
+/// rebuilt even when the split came out byte-identical. A drag crosses a wrap
+/// threshold once or twice; every other event is a repaint of what is already
+/// there. This is the `last_grid_signature` / `last_mosaic_paths` discipline at
+/// its smallest: keep the shape, skip the write.
+///
+/// Shape alone, not the chips — comparing those is the caller's half, and each
+/// knows its own answer for free. Now Playing's chips move only in
+/// `track_change`, which writes unconditionally; the hero's move in `publish`,
+/// which says so.
+pub fn split_shape(rows: &[Vec<SharedString>]) -> Vec<usize> {
+    rows.iter().map(Vec::len).collect()
+}
+
 /// `Vec<Vec<SharedString>>` → the `[[string]]` model a `MetaChipStrip` reads.
 pub fn rows_to_model(rows: Vec<Vec<SharedString>>) -> ModelRc<ModelRc<SharedString>> {
     let outer: Vec<ModelRc<SharedString>> = rows

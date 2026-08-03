@@ -223,7 +223,7 @@ pub(super) fn compute_indices(
         data.playlists
             .iter()
             .enumerate()
-            .filter(|(_, p)| row_match::field_contains(&p.name, &needle))
+            .filter(|(_, p)| needle.contains(&p.name))
             .map(|(i, _)| i)
             .collect()
     };

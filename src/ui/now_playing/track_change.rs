@@ -180,6 +180,10 @@ pub(super) async fn apply_track_change(
     let chip_texts = super::metadata::visible_chip_texts(&meta);
     let chip_rows =
         chips::chunk_chips_to_rows(&chip_texts, np_state.chip_last_width.get(), None);
+    // Unconditional — a new track's chips are new text, which a row-length
+    // comparison can't see. Recording the shape is what lets the width channel
+    // skip its own repaints; see `chips::split_shape`.
+    *np_state.chip_last_shape.borrow_mut() = chips::split_shape(&chip_rows);
     player.set_chip_rows(chips::rows_to_model(chip_rows));
     *np_state.chip_texts.borrow_mut() = chip_texts;
     player.set_track_meta(meta);

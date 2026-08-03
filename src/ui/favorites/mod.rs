@@ -65,8 +65,8 @@ pub use hero::refresh_hero;
 pub use rows::{install_favorites_models, to_slint_fav_artist_row, to_slint_most_played_row};
 pub use selection::{clear_selection, handle_select_row};
 pub use songs::{
-    apply_filtered_tracks, apply_row_rating, current_filter, current_sort, refresh_tracks,
-    set_filter, set_sort,
+    apply_filtered_tracks, apply_filtered_tracks_now, apply_row_rating, current_filter,
+    current_sort, refresh_tracks, set_filter, set_sort,
 };
 pub use tabs::{FavoritesTab, seed_tab, tab_from_index};
 

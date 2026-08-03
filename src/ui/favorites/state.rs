@@ -11,6 +11,7 @@ use crate::entities::artist::FavoriteArtist;
 use crate::entities::track::{FavoriteStats, MostPlayedFavorite, TrackListRow as RsTrackListRow};
 use crate::services::settings::{SortDir, ViewSort};
 use crate::ui::hero_chips::{HeroFold, MostPlayedTotals};
+use crate::ui::row_match::Needle;
 
 /// Per-section cached snapshots — every fetch lands here so callbacks
 /// can recover the underlying Rust data without round-tripping through
@@ -23,10 +24,10 @@ pub(crate) struct FavoritesUiState {
     /// retains the unfiltered list so a keystroke can rewalk without
     /// hitting `SQLite`.
     pub tracks_all: Mutex<Vec<RsTrackListRow>>,
-    /// Active filter string — cached so the live-refresh subscriber
+    /// Active filter needle — cached so the live-refresh subscriber
     /// (after a `library_changed_tx` tick) re-applies it without
     /// re-reading the Slint property from a tokio thread.
-    pub filter: Mutex<String>,
+    pub filter: Mutex<Needle>,
     /// Active Songs-tab sort — written on `set-sort-*` callbacks, read on
     /// every re-fetch. Default mirrors the Slint global's defaults.
     pub sort: Mutex<ViewSort>,
@@ -87,7 +88,7 @@ impl FavoritesUiState {
     pub(super) fn new() -> Self {
         Self {
             tracks_all: Mutex::new(Vec::new()),
-            filter: Mutex::new(String::new()),
+            filter: Mutex::new(Needle::default()),
             sort: Mutex::new(ViewSort {
                 field: "title".to_owned(),
                 dir: SortDir::Asc,

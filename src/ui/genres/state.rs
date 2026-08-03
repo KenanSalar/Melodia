@@ -12,6 +12,7 @@ use std::sync::Arc;
 
 use crate::entities::genre::GenreStats;
 use crate::entities::track::TrackListRow as RsTrackListRow;
+use crate::ui::row_match::Needle;
 
 /// A genre's pre-lowercased name, computed once per `fetch_grid` so the
 /// name sort allocates nothing. Positionally aligned with
@@ -107,5 +108,5 @@ pub(super) struct GenreDetailState {
     /// the re-fetch path (`refresh_detail`) re-apply the filter to fresh
     /// data without round-tripping the UI thread for the property read.
     /// Cleared on fresh-open. Mirrors `ArtistDetailState::filter`.
-    pub filter: Mutex<String>,
+    pub filter: Mutex<Needle>,
 }

@@ -11,7 +11,7 @@ use crate::database::queries::SearchResults;
 use crate::entities::album::AlbumStats;
 use crate::entities::artist::ArtistStats;
 use crate::entities::genre::GenreStats;
-use crate::ui::row_match::{field_equals, field_starts_with, fold_needle};
+use crate::ui::row_match::fold_needle;
 
 /// Top Result discriminator. Matches the `top-kind` string slot in the
 /// Slint `Search` global ("album" / "artist" / "genre" / ""). A genre
@@ -86,8 +86,8 @@ pub fn compute_top_result(results: &SearchResults, query: &str) -> Option<TopRes
         return None;
     }
 
-    let exact = |name: &str| field_equals(name, &needle);
-    let prefix = |name: &str| field_starts_with(name, &needle);
+    let exact = |name: &str| needle.equals(name);
+    let prefix = |name: &str| needle.starts_with(name);
 
     // 1-3. Exact name, album → artist → genre.
     if let Some(a) = results.albums.iter().find(|a| exact(&a.name)) {

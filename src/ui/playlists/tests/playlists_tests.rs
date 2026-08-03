@@ -1,6 +1,6 @@
 //! The Playlists grid's filter + sort pass — the last of the four entity
 //! grids to get one. Same three cases its siblings pin, since all four run
-//! the identical `row_match::field_contains` walk over a single name.
+//! the identical `row_match::Needle::contains` walk over a single name.
 
 use super::*;
 

@@ -5,6 +5,7 @@ import { OverlayScrollbar } from "../components/overlay-scrollbar.slint";
 import { SearchBar } from "../components/search-bar.slint";
 import { Tooltip, TooltipSide } from "../components/tooltip.slint";
 import { TabBar } from "../components/tab-bar.slint";
+import { FilterThrottle } from "../components/filter-throttle.slint";
 import { SettingsTabs } from "settings/settings-tabs.slint";
 
 // Settings host page: a pinned header over a vertically scrolling,
@@ -37,6 +38,21 @@ export component SettingsView inherits Rectangle {
         clicked => { SettingsPage.blur-search-tick += 1; }
     }
 
+    // Filter debounce, the same component and the same 130 ms every other
+    // filterable view mounts. Settings was the one that didn't, on the reading
+    // that it only drives visibility rather than rebuilding a model — true, and
+    // beside the point once the query started mounting all five tab pages and
+    // fanning out to three Rust round-trips per row.
+    property <int> filter-tick-pending;
+    FilterThrottle {
+        pending: root.filter-tick-pending;
+        fire() => { SettingsPage.search-query = SettingsPage.search-input; }
+    }
+
+    // Reads the settled query, not the input: the two-column flip is suppressed
+    // while searching because search mounts every page and a hidden card still
+    // claims its grid cell, so flipping a frame before those pages mount is the
+    // one ordering that shows.
     property <bool> searching: SettingsPage.search-query != "";
 
     // Panel width, mirrored imperatively rather than read live. A binding
@@ -205,8 +221,10 @@ export component SettingsView inherits Rectangle {
         // ScrollView so they stay pinned while the body scrolls. The SearchBar
         // is the same reusable component the Tracks view mounts; visibility
         // filtering for each section is driven reactively from
-        // `SettingsPage.search-query` (no `edited` callback needed, unlike
-        // Tracks which throttles model rebuilds).
+        // `SettingsPage.search-query`, which the `FilterThrottle` above feeds
+        // from `search-input` — same debounce as Tracks, for a different cost
+        // (round-trips per row and five mounted pages, rather than a model
+        // rebuild).
         //
         // The title is gone rather than moved. Every other page keeps one, but
         // no other page's heading sat directly above five tabs reading Library
@@ -238,6 +256,7 @@ export component SettingsView inherits Rectangle {
                 avail-width: root.content-w - root.search-w - 2 * Theme.pad-md;
                 selected-index <=> SettingsPage.tab-idx;
                 selected(i) => {
+                    SettingsPage.search-input = "";
                     SettingsPage.search-query = "";
                     SettingsPage.blur-search-tick += 1;
                     SettingsPage.tab-changed(i);
@@ -255,9 +274,10 @@ export component SettingsView inherits Rectangle {
                 padding-bottom: Theme.pad-sm;
                 search := SearchBar {
                     input-width: root.search-w;
-                    text <=> SettingsPage.search-query;
+                    text <=> SettingsPage.search-input;
                     placeholder: @tr("Search settings…");
                     blur-trigger: SettingsPage.blur-search-tick;
+                    edited => { root.filter-tick-pending += 1; }
                 }
             }
         }

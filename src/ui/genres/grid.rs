@@ -115,7 +115,7 @@ pub(super) fn compute_indices(
         data.genres
             .iter()
             .enumerate()
-            .filter(|(_, g)| row_match::field_contains(&g.name, &needle))
+            .filter(|(_, g)| needle.contains(&g.name))
             .map(|(i, _)| i)
             .collect()
     };

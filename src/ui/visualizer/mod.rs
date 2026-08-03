@@ -8,8 +8,10 @@
 //! pickers is `.claude/rules/visualizer.md`. It isn't a `CLAUDE.md` beside this
 //! code because most of what it governs lives under `ui/`.
 //!
-//! A 2048-point real FFT is sub-millisecond, so the render loop stays on the UI
-//! thread rather than paying for a third thread and a second shared cell. Most
+//! The bars frame runs two real FFTs — an 8192-point one for the bass end and a
+//! 2048-point one for everything above it — and the pair is still comfortably
+//! sub-millisecond, so the render loop stays on the UI thread rather than paying
+//! for a third thread and a second shared cell. Most
 //! of what keeps that cheap composes for free from the mount tree: the strip
 //! only mounts while the visualizer is enabled, and the Now-Playing view only
 //! mounts while it's open, so a closed view costs nothing at all.

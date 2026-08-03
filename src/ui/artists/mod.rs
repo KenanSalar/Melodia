@@ -34,6 +34,7 @@ use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 use crate::entities::artist::ArtistStats;
 use crate::media::cover_thumbs::CoverThumbs;
 use crate::ui::detail_artwork::DetailArtwork;
+use crate::ui::row_match::Needle;
 use crate::ui::section_state::SectionState;
 use crate::ui::util::clamp_i64_to_i32;
 use crate::{
@@ -100,7 +101,7 @@ impl ArtistsUi {
                 all_tracks: Mutex::new(Vec::new()),
                 albums: Mutex::new(Vec::new()),
                 artist_id: Mutex::new(-1),
-                filter: Mutex::new(String::new()),
+                filter: Mutex::new(Needle::default()),
                 applied_selection: Mutex::new(HashSet::new()),
             },
             cover_thumbs,

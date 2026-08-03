@@ -47,7 +47,7 @@ fn the_packed_key_matches_every_searchable_field() {
 #[test]
 fn an_empty_needle_matches_the_packed_key() {
     // The unfiltered list relies on this rather than branching itself.
-    assert!(RowSearchKey::from_row(&row(1)).matches(""));
+    assert!(RowSearchKey::from_row(&row(1)).matches(&row_match::fold_needle("")));
 }
 
 #[test]
@@ -87,7 +87,7 @@ fn the_packed_key_and_track_matches_agree_field_for_field() {
     //
     // The second row is the case that isn't structural at all: a field
     // carrying a `\0` (ID3v2.4's multi-value separator) is folded to a space
-    // on the packed side, and `field_contains`' ASCII byte walk used to skip
+    // on the packed side, and `Needle::contains`' ASCII byte walk used to skip
     // that mapping — so the two agreed on every clean row and parted on the
     // one shape the packing exists to handle.
     let mut nul = row(2);

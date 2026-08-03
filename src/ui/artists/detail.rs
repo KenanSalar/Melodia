@@ -22,7 +22,7 @@ use crate::ui::detail_artwork::decode_detail_pair;
 use crate::ui::detail_filter::restamp_selection;
 use crate::ui::detail_view::{impl_detail_view_helpers, resolve_view_sort};
 use crate::ui::model_patch;
-use crate::ui::row_match::{self, field_contains, track_matches};
+use crate::ui::row_match::{self, track_matches};
 use crate::ui::track_list_view::view_id;
 use crate::ui::track_sort::sort_track_list_rows;
 use crate::ui::tracks::PreparedTrackRow;
@@ -171,7 +171,7 @@ where
         // tracks + albums set, not a stale filter from the previous
         // detail. Slint property + Rust cache cleared together.
         g.set_filter(SharedString::from(""));
-        *artists_ui.detail.filter.lock() = String::new();
+        artists_ui.detail.filter.lock().clear();
         g.set_sort_field(SharedString::from(sort_field.as_str()));
         g.set_sort_dir(SharedString::from(sort_dir.as_str()));
         // Set the view-transition direction before the property writes
@@ -337,7 +337,7 @@ pub fn apply_filtered_detail(weak: &Weak<AppWindow>, artists_ui: &Arc<ArtistsUi>
 
     let filtered_albums: Vec<AlbumStats> = {
         let cache = artists_ui.detail.albums.lock();
-        cache.iter().filter(|a| field_contains(&a.name, &needle)).cloned().collect()
+        cache.iter().filter(|a| needle.contains(&a.name)).cloned().collect()
     };
 
     let prepared: Vec<PreparedTrackRow> = displayed_tracks

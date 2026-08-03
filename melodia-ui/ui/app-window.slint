@@ -182,6 +182,9 @@ export component AppWindow inherits Window {
         // outgoing composite view left behind (see `CompositeScroll.reset`).
         CompositeScroll.reset();
         if (self.watched-nav-idx != 9) {
+            // Both halves: the input is what the box shows, the query is what
+            // the page is filtered by, and a throttle sits between them.
+            SettingsPage.search-input = "";
             SettingsPage.search-query = "";
             SettingsPage.blur-search-tick += 1;
         }

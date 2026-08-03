@@ -26,7 +26,7 @@ use slint::{Model, ModelRc, VecModel};
 
 use crate::entities::track::TrackListRow as RsTrackListRow;
 use crate::ui::detail_selection::DetailSelectionView;
-use crate::ui::row_match::track_matches;
+use crate::ui::row_match::{Needle, track_matches};
 use crate::TrackListRow as UiTrackListRow;
 
 /// Re-apply selection from the view's `selected-ids` onto freshly-built
@@ -56,10 +56,10 @@ pub struct FilterRefs<'a> {
     pub tracks: &'a Mutex<Vec<RsTrackListRow>>,
     /// Selection set currently stamped onto the Slint row model.
     pub applied: &'a Mutex<HashSet<i32>>,
-    /// Live filter needle, mirroring the Slint `filter` prop. Already
-    /// folded — the view's `set_filter` is the sole writer and puts it
-    /// through `row_match::fold_needle`, so nothing here re-folds.
-    pub filter: &'a Mutex<String>,
+    /// Live filter needle, mirroring the Slint `filter` prop. Folded by
+    /// construction — the view's `set_filter` is the sole writer and the only
+    /// way to build one is `row_match::fold_needle`.
+    pub filter: &'a Mutex<Needle>,
 }
 
 /// Re-walk the canonical `all_tracks` cache through the current filter

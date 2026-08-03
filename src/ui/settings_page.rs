@@ -6,13 +6,14 @@
 //! `scrobbling_settings`, …), which wire the values the page *configures*.
 //! This module owns the page itself.
 
+use std::cell::RefCell;
 use std::rc::Rc;
 
 use slint::{ComponentHandle, ModelRc, VecModel};
 
 use crate::library;
 use crate::state::AppState;
-use crate::ui::row_match;
+use crate::ui::row_match::{self, Needle};
 use crate::ui::tab_bar::clamp_tab;
 use crate::{AppWindow, SettingsPage};
 
@@ -58,8 +59,22 @@ pub fn install(ui: &AppWindow, state: &AppState) {
     // row-visibility expression routes its substring test through here.
     // Same predicate the library filter boxes run, so an ASCII query
     // reaches the accented labels in the translated catalogues.
-    page.on_matches(|haystack, needle| {
-        row_match::field_contains(&haystack, &row_match::fold_needle(&needle))
+    //
+    // The fold is memoized against the raw needle because this is the one
+    // `row_match` caller that can't hold a folded shadow: `matches` is invoked
+    // per *field*, not per pass — `row-visible` is three of them, and the page
+    // has dozens of call sites across eleven cards, all live at once while
+    // searching. Folding inside meant one `String` per invocation for a value
+    // that doesn't change until the next keystroke. One short string, replaced
+    // rather than accumulated — not a cache in the LRU sense.
+    let folded: RefCell<(String, Needle)> = RefCell::new((String::new(), Needle::default()));
+    page.on_matches(move |haystack, needle| {
+        let mut memo = folded.borrow_mut();
+        if memo.0 != needle.as_str() {
+            memo.1 = row_match::fold_needle(&needle);
+            memo.0 = needle.into();
+        }
+        memo.1.contains(&haystack)
     });
 
     // Row split for the wrapping chip / swatch strips — see `chunk_indices`.

@@ -9,6 +9,7 @@ use std::num::NonZeroUsize;
 use parking_lot::Mutex;
 
 use crate::entities::track::{MostPlayedFavorite, TrackListRow as RsTrackListRow};
+use crate::ui::row_match::Needle;
 
 /// Per-section cached snapshots — every fetch lands here so callbacks can
 /// recover the underlying Rust data without round-tripping through Slint.
@@ -17,9 +18,9 @@ pub(crate) struct RecentlyPlayedUiState {
     /// in-memory search filter. Both membership and order are fixed to this
     /// set — the view never re-queries and never re-orders.
     pub tracks_all: Mutex<Vec<RsTrackListRow>>,
-    /// Active filter string — cached so the live-refresh subscriber can
+    /// Active filter needle — cached so the live-refresh subscriber can
     /// re-apply it off the UI thread.
-    pub filter: Mutex<String>,
+    pub filter: Mutex<Needle>,
     /// Most Played strip rows in Rust shape — kept so click handlers can
     /// resolve `(id) -> entity` without re-fetching.
     pub most_played: Mutex<Vec<MostPlayedFavorite>>,
@@ -37,7 +38,7 @@ impl RecentlyPlayedUiState {
     pub(super) fn new() -> Self {
         Self {
             tracks_all: Mutex::new(Vec::new()),
-            filter: Mutex::new(String::new()),
+            filter: Mutex::new(Needle::default()),
             most_played: Mutex::new(Vec::new()),
             applied_selection: Mutex::new(HashSet::new()),
             last_mosaic_paths: Mutex::new(Vec::new()),

@@ -89,6 +89,77 @@ fn a_play_count_flush_moves_only_the_most_played_hash() {
     );
 }
 
+/// The two grids are mutually exclusive `if`s, so a row built for the tab that
+/// isn't mounted reaches nothing and is dropped — which `write_filtered_grids`
+/// always knew, one layer too late to stop the allocation. The Songs tab is the
+/// case that paid for both.
+///
+/// The mutation this catches is building the wrong tab: swap the two arms and
+/// every grid still paints, because the *write* side would silently hand the
+/// mounted model an empty Vec.
+#[test]
+fn only_the_mounted_tabs_rows_are_built() {
+    let fav_ui = seeded(7, 3);
+
+    fav_ui.set_active_tab(FavoritesTab::MostPlayed);
+    let on_most_played = build_filtered_grids(&fav_ui);
+    assert_eq!(on_most_played.most_played.len(), 1, "the mounted grid owes its rows");
+    assert!(on_most_played.artists.is_empty(), "the hidden grid must build none");
+
+    fav_ui.set_active_tab(FavoritesTab::Artists);
+    let on_artists = build_filtered_grids(&fav_ui);
+    assert!(on_artists.most_played.is_empty(), "the hidden grid must build none");
+    assert_eq!(on_artists.artists.len(), 1, "the mounted grid owes its rows");
+
+    fav_ui.set_active_tab(FavoritesTab::Songs);
+    let on_songs = build_filtered_grids(&fav_ui);
+    assert!(
+        on_songs.most_played.is_empty() && on_songs.artists.is_empty(),
+        "Songs mounts neither grid, so it must build neither"
+    );
+}
+
+/// Counts go to *both* tabs where rows go to one: they gate the two
+/// `GridEmptyState`s and feed the hero's stats band, so the unmounted tab still
+/// owes one. Deriving them from the built rows is the tempting simplification,
+/// and it would silently zero whichever grid isn't showing.
+#[test]
+fn both_tabs_publish_a_count_whichever_one_is_mounted() {
+    let fav_ui = seeded(7, 3);
+    for tab in [FavoritesTab::Songs, FavoritesTab::MostPlayed, FavoritesTab::Artists] {
+        fav_ui.set_active_tab(tab);
+        let prepared = build_filtered_grids(&fav_ui);
+        assert_eq!(prepared.most_played_count, 1, "Most Played count is owed on {tab:?}");
+        assert_eq!(prepared.artists_count, 1, "Artists count is owed on {tab:?}");
+    }
+}
+
+/// Both content hashes come off the *source* entities, which is the whole
+/// reason the rows above can be built for one tab. If the mounted tab moved a
+/// hash, a tab pick would be indistinguishable from a data change — and
+/// `grid_signature` already folds the tab in separately, so the apply that has
+/// to run on a pick is exactly the one that would then be skipped.
+#[test]
+fn which_tab_is_mounted_moves_neither_hash() {
+    let fav_ui = seeded(7, 3);
+
+    fav_ui.set_active_tab(FavoritesTab::MostPlayed);
+    let reference = build_filtered_grids(&fav_ui);
+
+    for tab in [FavoritesTab::Artists, FavoritesTab::Songs] {
+        fav_ui.set_active_tab(tab);
+        let prepared = build_filtered_grids(&fav_ui);
+        assert_eq!(
+            prepared.most_played_content, reference.most_played_content,
+            "the Most Played hash must not depend on {tab:?} being mounted"
+        );
+        assert_eq!(
+            prepared.artists_content, reference.artists_content,
+            "the Artists hash must not depend on {tab:?} being mounted"
+        );
+    }
+}
+
 /// The artist card's subtitle is a translated plural over `favorite_count`, so
 /// that field has to reach the hash even though it never changes the card's
 /// identity. Favouriting a song is a `library_changed` tick, not a stats one.

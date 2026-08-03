@@ -124,8 +124,8 @@ fn a_needle_with_a_non_digit_never_reaches_the_year() {
     // The guard that keeps the ordinary text query off the formatting path.
     // "199x" can't name a year, so a row whose only candidate is one misses.
     let row = mk("Track", None, None, None, Some(1998));
-    assert!(!year_matches(row.year, "199x"));
-    assert!(!year_matches(row.year, ""));
+    assert!(!fold_needle("199x").matches_year(row.year));
+    assert!(!fold_needle("").matches_year(row.year));
 }
 
 #[test]
@@ -184,7 +184,7 @@ fn a_nul_in_a_field_matches_the_way_the_packed_key_does() {
     // ID3v2.4 joins a multi-value text frame with `\0`, so this is a real
     // tag rather than a hypothetical. The Tracks view's packed key maps it
     // to a space (`tracks_tests::a_nul_in_a_field_cannot_forge_a_separator`);
-    // `field_contains` has to agree, on both its arms — the ASCII byte walk
+    // `Needle::contains` has to agree, on both its arms — the ASCII byte walk
     // used to skip the mapping, so one non-ASCII character anywhere in the
     // field flipped the answer.
     let row = plain("Track", Some("Queen\0David Bowie"), None);
@@ -199,7 +199,37 @@ fn folding_is_idempotent() {
     // Views differ in whether they fold at write time or read time, and a
     // path that does both must not change the answer.
     let once = fold_needle("Björk");
-    assert_eq!(fold_needle(&once), once);
+    assert_eq!(fold_needle(once.as_str()), once);
+}
+
+/// Both shape flags are taken off the **folded** text, and nothing else here
+/// can fail on it: the two arms of every predicate agree by construction, so
+/// asking `raw` instead stays correct and quietly strands every accented needle
+/// on the allocating one — which is the cost `Needle` exists to remove.
+///
+/// `Björk` is the case that shows it. It folds to `bjork`, so the ASCII byte
+/// walk is reachable for it; the raw string is not ASCII and would never get
+/// there.
+#[test]
+fn the_shape_flags_are_taken_after_the_fold() {
+    assert!(fold_needle("Björk").ascii);
+    assert!(fold_needle("  1998 ").digits);
+    assert!(!fold_needle("199x").digits);
+}
+
+/// `Default` is hand-written so that it and `fold_needle("")` are the *same*
+/// needle — a derived one leaves `ascii` false, which folding can never
+/// produce. Behaviour is identical either way (an empty needle short-circuits
+/// before the flag is read), so what the derive would actually cost is
+/// `Needle::clear()`'s result taking the allocating arm of `equals` forever
+/// after, and two needles that behave alike comparing unequal.
+#[test]
+fn the_default_needle_is_the_one_folding_an_empty_string_gives() {
+    assert_eq!(Needle::default(), fold_needle(""));
+
+    let mut cleared = fold_needle("Björk");
+    cleared.clear();
+    assert_eq!(cleared, fold_needle(""));
 }
 
 // --- most_played_matches ---
@@ -285,13 +315,13 @@ fn a_card_and_a_track_row_answer_a_needle_the_same_way() {
 #[test]
 fn equals_and_starts_with_fold_case_and_accents() {
     let needle = fold_needle("  BJORK ");
-    assert!(field_equals("Björk", &needle));
-    assert!(field_starts_with("Björk", &needle));
-    assert!(field_starts_with("Björk Guðmundsdóttir", &needle));
+    assert!(needle.equals("Björk"));
+    assert!(needle.starts_with("Björk"));
+    assert!(needle.starts_with("Björk Guðmundsdóttir"));
 
     // A prefix is not an equality, and a suffix is neither.
-    assert!(!field_equals("Björk Guðmundsdóttir", &needle));
-    assert!(!field_starts_with("The Björk", &needle));
+    assert!(!needle.equals("Björk Guðmundsdóttir"));
+    assert!(!needle.starts_with("The Björk"));
 }
 
 /// The ASCII fast path and the folding path have to answer alike — the fast
@@ -314,14 +344,14 @@ fn the_ascii_fast_path_agrees_with_the_folding_path() {
             out
         };
         assert_eq!(
-            field_equals(haystack, &needle),
-            folded_haystack == needle,
-            "field_equals disagrees with the fold on {haystack:?} / {raw:?}"
+            needle.equals(haystack),
+            folded_haystack == needle.as_str(),
+            "Needle::equals disagrees with the fold on {haystack:?} / {raw:?}"
         );
         assert_eq!(
-            field_starts_with(haystack, &needle),
-            folded_haystack.starts_with(&needle),
-            "field_starts_with disagrees with the fold on {haystack:?} / {raw:?}"
+            needle.starts_with(haystack),
+            folded_haystack.starts_with(needle.as_str()),
+            "Needle::starts_with disagrees with the fold on {haystack:?} / {raw:?}"
         );
     }
 }
@@ -332,8 +362,8 @@ fn the_ascii_fast_path_agrees_with_the_folding_path() {
 #[test]
 fn the_empty_needle_means_different_things_to_the_three_predicates() {
     let empty = fold_needle("");
-    assert!(field_contains("Björk", &empty));
-    assert!(field_starts_with("Björk", &empty));
-    assert!(!field_equals("Björk", &empty));
-    assert!(field_equals("", &empty));
+    assert!(empty.contains("Björk"));
+    assert!(empty.starts_with("Björk"));
+    assert!(!empty.equals("Björk"));
+    assert!(empty.equals(""));
 }
