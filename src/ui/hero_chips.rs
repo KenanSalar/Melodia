@@ -48,13 +48,22 @@ use crate::{AppWindow, HeroChips};
 /// How many rows a hero band gives its chips before dropping the rest.
 ///
 /// Two, not one: every hero leaves slack between its meta block and its action
-/// pill (the trailing `Rectangle { vertical-stretch: 1 }`), and on the two
-/// mosaic heroes a second 26 px row plus its 8 px gap fits inside it — so a
-/// narrow window wraps into space that was already there. The four detail
-/// heroes are tighter, because their band is `Theme.hero-artwork` plus padding
-/// and their column carries a subtitle the mosaic pair doesn't: there the
-/// second row grows the band by the few pixels it overruns the tile by, which
-/// is still the better trade against dropping a fact the user came for.
+/// pill (the trailing `Rectangle { vertical-stretch: 1 }`), and a second 26 px
+/// row plus its 4 px gap fits inside it on all six — so a narrow window wraps
+/// into space that was already there rather than growing the band.
+///
+/// The two heroes carrying a second text line (Album's artist, Playlist's
+/// description) are the ones that had to be argued for, since their band is
+/// `Theme.hero-artwork` plus padding and nothing else. It fits because that
+/// line sits *under the title, inside the title row*, where the `SearchBar`
+/// beside it has already claimed the height — a subtitle on a row of its own
+/// spent about a chip row's worth of the tile, and the wrap then overran it.
+/// Moving either one back out is what breaks this, not the row count.
+///
+/// That makes `Theme.hero-title-size` and `font-size-md` a *pair*: the title
+/// row is as tall as those two stacked, and the `SearchBar` only covers the
+/// first. Raising either spends the same slack the second chip row needs.
+///
 /// Not unbounded like the Now Playing strip (which passes `None`), because a
 /// third row overruns the tile on all six and pushes the pill out of the
 /// banner.

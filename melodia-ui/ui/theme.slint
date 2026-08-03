@@ -165,10 +165,11 @@ export global Theme {
     // that has no header component to route through.
     //
     // It also sets each band's height, since the tile is the tallest thing in
-    // every one of them — so growing it grows six banners at once, and the
-    // detail heroes have the least room to give: their right column (title row,
-    // subtitle, chips, action pill) comes within a chip row of the tile's lower
-    // edge. See `ui::hero_chips::HERO_MAX_ROWS` for what that costs on a wrap.
+    // every one of them — so growing it grows six banners at once, and shrinking
+    // it costs the detail heroes first: their right column (title row, chips,
+    // action pill) clears the tile's lower edge by a couple of pixels once the
+    // chips wrap. See `ui::hero_chips::HERO_MAX_ROWS` for how that slack is
+    // spent, and why a subtitle rides inside the title row to leave it there.
     out property <length> hero-artwork: 140px;
 
     // Typography
@@ -184,6 +185,21 @@ export global Theme {
     out property <length> page-title-size: 20px;
     out property <int> page-title-weight: 600;
     out property <brush> page-title-color: root.text;
+
+    // The six hero banners' own title — a step above a plain page heading,
+    // because it sits on a blurred band beside the `hero-artwork` tile rather
+    // than on a flat header row. One number rather than six, for the reason
+    // that token gives: the banners are the same band under different content.
+    // They had already drifted to two sizes before this existed, the four
+    // detail views at 24 px against the two mosaic heroes at 28 px, and
+    // nothing said which was the intended one.
+    //
+    // It also has a floor it can't be raised past without cost. The two heroes
+    // carrying a second text line nest it under the title, inside the title
+    // row, where only the `SearchBar`'s leftover height is free — so growing
+    // this spends the slack a wrapped chip row needs. See
+    // `ui::hero_chips::HERO_MAX_ROWS`.
+    out property <length> hero-title-size: 22px;
 
     // Motion. Easing is inlined as `ease-in-out` at each `animate { }` site
     // because Slint 1.16 cannot expose `easing` properties across the Rust

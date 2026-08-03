@@ -70,7 +70,12 @@ export component MetaChipStrip inherits Rectangle {
     // given. See the `if`-child entry in `.claude/rules/slint-pitfalls.md`.
     VerticalLayout {
         if root.show-rows: VerticalLayout {
-            spacing: Theme.pad-sm;
+            // Rows sit `pad-xs` apart, chips `pad-sm` — a wrapped row is the
+            // same strip continuing, not a second one, and the tighter gap is
+            // what lets a hero band absorb it without growing. Only the
+            // horizontal number is mirrored in Rust (`ui::chips::SPACING`);
+            // this one is Slint's alone.
+            spacing: Theme.pad-xs;
             for row in root.rows: HorizontalLayout {
                 alignment: root.centred ? LayoutAlignment.center : LayoutAlignment.start;
                 spacing: Theme.pad-sm;

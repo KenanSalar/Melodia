@@ -95,11 +95,25 @@ export component PlaylistDetailView inherits Rectangle {
                         Text {
                             text: "‎" + PlaylistDetail.playlist.name;
                             color: HeroBackdrop.on-backdrop;
-                            font-size: 24px;
+                            font-size: Theme.hero-title-size;
                             font-weight: Theme.page-title-weight;
                             horizontal-alignment: left;
                             overflow: elide;
                         }
+                    }
+                    // Description — under the title rather than on a row of
+                    // its own, so it rides in the height the SearchBar beside
+                    // it already claims. That is what leaves the band enough
+                    // slack for a wrapped second chip row; see
+                    // `ui::hero_chips::HERO_MAX_ROWS`. Still gated on being
+                    // non-empty, so a playlist without one leaves the row at
+                    // exactly the SearchBar's height.
+                    if PlaylistDetail.playlist.description != "": Text {
+                        text: "‎" + PlaylistDetail.playlist.description;
+                        color: HeroBackdrop.on-backdrop;
+                        font-size: Theme.font-size-md;
+                        horizontal-alignment: left;
+                        overflow: elide;
                     }
                 }
 
@@ -114,16 +128,6 @@ export component PlaylistDetailView inherits Rectangle {
                         edited(t) => { root.filter-tick-pending += 1; }
                     }
                 }
-            }
-            // Description — shown only when present so empty playlists
-            // don't reserve vertical space.
-            if PlaylistDetail.playlist.description != "": Text {
-                vertical-stretch: 0;
-                text: "‎" + PlaylistDetail.playlist.description;
-                color: HeroBackdrop.on-backdrop;
-                font-size: Theme.font-size-lg;
-                horizontal-alignment: left;
-                overflow: elide;
             }
             // Meta chips — track count + total duration. No "Smart" chip:
             // the title already carries the `auto_awesome` badge.

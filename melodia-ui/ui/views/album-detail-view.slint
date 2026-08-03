@@ -69,15 +69,30 @@ export component AlbumDetailView inherits Rectangle {
 
                 VerticalLayout {
                     alignment: center;
-                    // Title — bumped a step above `page-title-size`
-                    // (20 px) so it carries the larger header surface.
-                    // Leading LRM keeps RTL-bidi titles laid out
-                    // correctly inside an LTR shell.
+                    // Title — `hero-title-size` rather than
+                    // `page-title-size`, so it carries the larger header
+                    // surface and matches the other five banners. Leading
+                    // LRM keeps RTL-bidi titles laid out correctly inside
+                    // an LTR shell.
                     Text {
                         text: "‎" + AlbumDetail.album.name;
                         color: HeroBackdrop.on-backdrop;
-                        font-size: 24px;
+                        font-size: Theme.hero-title-size;
                         font-weight: Theme.page-title-weight;
+                        horizontal-alignment: left;
+                        overflow: elide;
+                    }
+                    // Artist — under the title rather than on a row of
+                    // its own, so it rides in the height the SearchBar
+                    // beside it already claims. That is what leaves the
+                    // band enough slack for a wrapped second chip row;
+                    // see `ui::hero_chips::HERO_MAX_ROWS`. Still gated on
+                    // being non-empty, so an album with no artist leaves
+                    // the row at exactly the SearchBar's height.
+                    if AlbumDetail.album.artist_name != "": Text {
+                        text: "‎" + AlbumDetail.album.artist_name;
+                        color: HeroBackdrop.on-backdrop;
+                        font-size: Theme.font-size-md;
                         horizontal-alignment: left;
                         overflow: elide;
                     }
@@ -94,16 +109,6 @@ export component AlbumDetailView inherits Rectangle {
                         edited(t) => { root.filter-tick-pending += 1; }
                     }
                 }
-            }
-            // Subtitle (artist). Hidden when empty so the row doesn't
-            // reserve vertical space.
-            if AlbumDetail.album.artist_name != "": Text {
-                vertical-stretch: 0;
-                text: "‎" + AlbumDetail.album.artist_name;
-                color: HeroBackdrop.on-backdrop;
-                font-size: Theme.font-size-lg;
-                horizontal-alignment: left;
-                overflow: elide;
             }
             // Meta chips — year / track count / duration / discs /
             // compilation, built by `src/ui/hero_chips.rs`.

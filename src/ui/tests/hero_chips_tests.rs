@@ -804,3 +804,137 @@ fn the_strip_leaks_no_width_floor() {
          clip on a narrowing window instead of wrapping into a second row"
     );
 }
+
+/// The strip's two gaps are different numbers, and only the horizontal one
+/// crosses into Rust.
+///
+/// `ui::chips::SPACING` restates the *inter-chip* gap because the wrap packs
+/// each row against it; the gap between rows is Slint's alone. Collapsing the
+/// two back into one `pad-sm` is the tempting simplification and it costs the
+/// hero band 4 px it doesn't have — a wrapped second row then overruns the
+/// artwork tile and grows the whole banner. Going the other way is worse and
+/// quieter: `pad-xs` between chips leaves `SPACING` over-estimating every row,
+/// so the strip wraps earlier than it needs to and drops chips that would fit.
+#[test]
+fn the_strip_spaces_its_rows_tighter_than_its_chips() {
+    // Split on the repeater, so each half holds exactly one `spacing:` — the
+    // rows layout's before it, the row layout's after.
+    let (rows, chips) = STRIP
+        .split_once("for row in root.rows:")
+        .unwrap_or_default();
+
+    let row_gap = rows.rsplit_once("spacing: Theme.").map_or("", |(_, gap)| gap);
+    assert!(
+        row_gap.starts_with("pad-xs;"),
+        "the gap *between* chip rows must be `pad-xs` — at `pad-sm` a wrapped second row \
+         overruns the hero's artwork tile and the band grows on every wrap"
+    );
+
+    let chip_gap = chips.split_once("spacing: Theme.").map_or("", |(_, gap)| gap);
+    assert!(
+        chip_gap.starts_with("pad-sm;"),
+        "the gap *between chips within a row* must stay `pad-sm` — `ui::chips::SPACING` is 8.0 \
+         and packs every row against exactly this number, so a change here desynchronises the \
+         wrap silently"
+    );
+}
+
+/// Album and Playlist are the two heroes carrying a second text line, and both
+/// keep it *inside* the title row — under the title, beside the `SearchBar`.
+///
+/// That placement is the whole of `HERO_MAX_ROWS`' headroom, not a styling
+/// choice. The title row is as tall as the `SearchBar` and `hero-title-size`
+/// leaves several of those pixels unused, so a line nested there is nearly
+/// free; on a row of its own it costs its full line box plus a `pad-xs` gap,
+/// which is about what a wrapped chip row needs. Promoted back out, the band
+/// still looks right and simply grows every time the chips wrap — which takes a
+/// narrow window or a long-plural locale to notice.
+///
+/// Pinned by position rather than by nesting depth: the line must come before
+/// the title row's `Rectangle { horizontal-stretch: 1; }`, the spacer that pins
+/// the `SearchBar` right. A subtitle promoted back to a direct child of
+/// `DetailHeader` lands after the entire row, and so after that spacer.
+#[test]
+fn the_two_subtitled_heroes_keep_that_line_inside_the_title_row() {
+    const TITLE_ROW_SPACER: &str = "Rectangle { horizontal-stretch: 1; }";
+    const SUBTITLES: [(&str, &str); 2] = [
+        (
+            "album-detail-view.slint",
+            "if AlbumDetail.album.artist_name != \"\": Text {",
+        ),
+        (
+            "playlist-detail-view.slint",
+            "if PlaylistDetail.playlist.description != \"\": Text {",
+        ),
+    ];
+
+    for (name, subtitle) in SUBTITLES {
+        let src = HERO_VIEWS
+            .iter()
+            .find(|(_, view)| *view == name)
+            .map_or("", |(src, _)| *src);
+        let normalized: String = src.split_whitespace().collect::<Vec<_>>().join(" ");
+
+        let title_block = normalized
+            .split_once(TITLE_ROW_SPACER)
+            .map_or("", |(before, _)| before);
+        assert!(
+            title_block.contains(subtitle),
+            "{name}'s second line must be declared before the title row's stretch spacer, i.e. \
+             inside the title block beside the SearchBar. After it, the line is back on a row of \
+             its own — which spends about a wrapped chip row's worth of the hero tile, so the \
+             band grows on every wrap. See `ui::hero_chips::HERO_MAX_ROWS`"
+        );
+
+        let block = normalized
+            .split_once(subtitle)
+            .and_then(|(_, rest)| rest.split_once('}'))
+            .map_or("", |(block, _)| block);
+        assert!(
+            block.contains("font-size: Theme.font-size-md;"),
+            "{name}'s second line must stay at `font-size-md` — the title row has only the \
+             SearchBar's leftover height to lend it, and `hero-title-size` plus a larger line \
+             spends the slack `HERO_MAX_ROWS` is measured against"
+        );
+    }
+}
+
+/// All six hero titles are one number, and it lives on `Theme`.
+///
+/// The same argument `hero-artwork` makes: the banners are the same band under
+/// different content, so a title that changes size between them reads as the
+/// page shifting under a nav. This is not hypothetical — the six had already
+/// drifted to *two* sizes, the four detail views at 24 px against the two
+/// mosaic heroes at 28 px, with nothing recording which was intended.
+///
+/// A literal is what reintroduces that, and a literal is invisible in review
+/// because each view reads correctly on its own.
+#[test]
+fn every_hero_title_reads_the_same_token() {
+    const THEME: &str = include_str!("../../../melodia-ui/ui/theme.slint");
+    // A hero title is the one `Text` in each view carrying
+    // `page-title-weight`, and its size is always the binding directly above.
+    // Counting the pair against the weight alone is what catches a literal:
+    // the view still builds, still looks right on its own, and only diverges
+    // from the other five.
+    const WEIGHT: &str = "font-weight: Theme.page-title-weight;";
+    const TITLE: &str = "font-size: Theme.hero-title-size; font-weight: Theme.page-title-weight;";
+
+    assert!(
+        THEME.contains("out property <length> hero-title-size:"),
+        "Theme must own the hero title size — it is the only thing keeping the six banners' \
+         headings one size"
+    );
+    for (src, name) in HERO_VIEWS {
+        let normalized: String = src.split_whitespace().collect::<Vec<_>>().join(" ");
+        let titles = normalized.matches(WEIGHT).count();
+        assert!(titles > 0, "{name} declares no hero title");
+        assert_eq!(
+            normalized.matches(TITLE).count(),
+            titles,
+            "{name} sizes a hero title with something other than `Theme.hero-title-size` — the \
+             six banners are one band under different content, and they had already drifted to \
+             two sizes once"
+        );
+    }
+}

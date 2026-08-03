@@ -14,8 +14,9 @@
 use slint::{ModelRc, SharedString, VecModel};
 use std::rc::Rc;
 
-/// Gap between chips, and between rows — `Theme.pad-sm`, restated because the
-/// wrap has to know it and Slint tokens don't cross the boundary.
+/// Gap between chips within a row — `Theme.pad-sm`, restated because the wrap
+/// has to know it and Slint tokens don't cross the boundary. The gap *between*
+/// rows is `pad-xs` and is Slint's alone; nothing here measures vertically.
 const SPACING: f32 = 8.0;
 
 /// Estimated rendered chip width — Vazirmatn at `font-size-sm` with
