@@ -1,3 +1,4 @@
+mod backup;
 pub mod queries;
 
 use sqlx::AssertSqlSafe;
@@ -124,42 +125,6 @@ impl DbPool {
     }
 }
 
-/// Create a WAL-safe backup via `VACUUM INTO` before applying migrations.
-/// Produces a self-contained copy with all WAL data merged in.
-/// Skips if the database file doesn't exist (first launch).
-///
-/// If a backup with this name already exists (e.g. the previous launch
-/// hit a failed migration and the file is left behind from that
-/// attempt), it's removed first. `VACUUM INTO` refuses to write to an
-/// existing path, and the stale file is equivalent to the new one
-/// anyway — a failed migration is rolled back so the DB on disk is at
-/// the same applied-version it was at the prior backup.
-async fn backup_database(
-    pool: &SqlitePool,
-    db_path: &std::path::Path,
-    backup_ext: &str,
-) -> Result<(), AppError> {
-    if !db_path.exists() {
-        return Ok(());
-    }
-    let backup_path = db_path.with_extension(backup_ext);
-    if backup_path.exists() {
-        std::fs::remove_file(&backup_path).map_err(|e| {
-            AppError::io_other(format!(
-                "Failed to remove stale backup at {}: {}",
-                backup_path.display(),
-                e
-            ))
-        })?;
-        log::info!("Removed stale backup at {}", backup_path.display());
-    }
-    let safe_path = backup_path.display().to_string().replace('\'', "''");
-    let sql = format!("VACUUM INTO '{safe_path}'");
-    sqlx::raw_sql(AssertSqlSafe(sql)).execute(pool).await?;
-    log::info!("Database backup created at {}", backup_path.display());
-    Ok(())
-}
-
 /// One-shot normalization of Windows verbatim/extended-length path strings
 /// in `folders.path` and `tracks.file_path`, for libraries that were
 /// scanned by older versions which called `std::fs::canonicalize` directly
@@ -227,6 +192,12 @@ pub async fn init_database(paths: &Paths) -> Result<DbPool, AppError> {
 
     log::info!("Database path: {}", db_path.display());
 
+    // Asked before the write pool opens, because `create_if_missing` below turns
+    // it true right there. The equivalent guard used to sit inside the backup
+    // itself, where it could only ever see `true` — so a genuine first launch
+    // snapshotted an empty schema and kept the file forever.
+    let db_existed = db_path.exists();
+
     // Write pool: single connection for serialized writes.
     // `busy_timeout` lets a writer wait briefly for the WAL checkpointer or a
     // read connection's brief lock instead of returning SQLITE_BUSY immediately.
@@ -261,7 +232,7 @@ pub async fn init_database(paths: &Paths) -> Result<DbPool, AppError> {
 
     // Check for pending migrations and backup before applying
     let migrator = sqlx::migrate!("./migrations");
-    let (has_pending, backup_ext) = {
+    let (has_pending, applied_version) = {
         let mut conn = write_pool.acquire().await?;
         conn.ensure_migrations_table(MIGRATIONS_TABLE).await?;
         let applied: std::collections::HashSet<i64> = conn
@@ -276,19 +247,30 @@ pub async fn init_database(paths: &Paths) -> Result<DbPool, AppError> {
             .filter(|m| !m.migration_type.is_down_migration())
             .any(|m| !applied.contains(&m.version));
 
-        let ext = match applied.iter().max() {
-            None => "db.pre-migration-backup".to_owned(),
-            Some(max_version) => format!("db.backup-v{max_version}"),
-        };
         // conn dropped here — releases the single write connection
-        (pending, ext)
+        (pending, applied.iter().max().copied().unwrap_or(0))
     };
 
-    if has_pending {
-        backup_database(&write_pool, &db_path, &backup_ext).await?;
-    }
+    // Fatal on failure: a migration that runs without a recovery point is worse
+    // than a boot that stops and says why.
+    let backup_path = if has_pending && db_existed {
+        Some(backup::create(&write_pool, &paths.backups_dir, applied_version).await?)
+    } else {
+        None
+    };
+    // Unconditional, and after the backup: a launch with nothing pending is the
+    // common one, and it is where loose files from older versions get adopted.
+    backup::maintain(&paths.data_dir, &paths.backups_dir);
 
-    migrator.run(&write_pool).await?;
+    if let Err(e) = migrator.run(&write_pool).await {
+        if let Some(path) = &backup_path {
+            log::error!(
+                "Migration failed — the database as it stood before is at {}",
+                path.display()
+            );
+        }
+        return Err(e.into());
+    }
 
     // One-shot repair for Windows verbatim/extended-length path prefixes
     // (`\\?\C:\…` for drive paths, `\\?\UNC\server\share\…` for shares)
@@ -355,7 +337,10 @@ pub async fn init_database(paths: &Paths) -> Result<DbPool, AppError> {
 impl DbPool {
     /// Create an in-memory `DbPool` for tests. Both read and write share the same
     /// single-connection pool (in-memory `SQLite` is per-connection).
-    #[allow(clippy::unwrap_used)] // test helper; failure here aborts the test run by design
+    #[expect(
+        clippy::unwrap_used,
+        reason = "test helper; failure here aborts the test run by design"
+    )]
     pub async fn test_pool() -> Self {
         let opts = SqliteConnectOptions::from_str("sqlite::memory:")
             .unwrap()

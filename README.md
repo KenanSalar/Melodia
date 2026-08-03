@@ -86,7 +86,7 @@ Shrink the window past a threshold and the full UI collapses into a compact mini
 - Import and export playlists as standard `.m3u8` files (with embedded BLAKE3 content hashes) so they survive a database reset and interoperate with other players
 - Drag-and-drop file import to playlists and the queue
 - Drag-and-drop track reordering in playlists and the play queue
-- Automatic pre-migration database backups
+- Automatic pre-migration database backups, kept in a `backups/` folder beside the library database — the three most recent are retained and older ones retire themselves, so upgrading never accumulates copies of your library without bound
 
 ### Playback
 - Gapless playback with a 2-deep Rodio queue

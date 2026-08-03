@@ -4,7 +4,43 @@
 //! into production binaries.
 
 use std::cell::Cell;
+use std::path::Path;
 use std::sync::{Mutex, MutexGuard, PoisonError};
+
+use crate::config::Paths;
+
+/// A [`Paths`] rooted in a throwaway directory, with the same subdirectories
+/// [`Paths::resolve`] creates already in place — so a test that writes into one
+/// doesn't have to know which of the fields is a directory.
+///
+/// Shared rather than hand-rolled per test file because the struct literal names
+/// every field, so each copy is one more site to fix when `Paths` grows.
+/// Directory creation is best-effort: the caller passed a `TempDir` it just
+/// created, and a failure here surfaces as a plain missing-file error in the
+/// test body.
+pub(crate) fn paths_in(dir: &Path) -> Paths {
+    let artwork_dir = dir.join("artwork");
+    let artists_dir = dir.join("artists");
+    let backups_dir = dir.join("backups");
+    for sub in [&artwork_dir, &artists_dir, &backups_dir] {
+        let _ = std::fs::create_dir_all(sub);
+    }
+
+    Paths {
+        data_dir: dir.to_path_buf(),
+        db_path: dir.join("melodia.db"),
+        settings_path: dir.join("settings.json"),
+        view_state_path: dir.join("views.json"),
+        queue_path: dir.join("queue.json"),
+        search_history_path: dir.join("search_history.json"),
+        scrobble_credentials_path: dir.join("scrobble_credentials.json"),
+        scrobble_queue_path: dir.join("scrobble_queue.json"),
+        scrobble_mbid_state_path: dir.join("scrobble_mbid_attempted.json"),
+        artwork_dir,
+        artists_dir,
+        backups_dir,
+    }
+}
 
 /// Serialises every test in this binary that mutates the process environment,
 /// and every test that opts into reading it through [`reading_env`].
