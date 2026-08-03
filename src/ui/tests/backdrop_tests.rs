@@ -3,8 +3,8 @@ use material_colors::contrast::ratio_of_tones;
 use slint::{Rgb8Pixel, SharedPixelBuffer};
 
 use crate::ui::backdrop::{
-    BackdropColors, BackdropSample, chrome_tone, composited_tone, floor_luma, gradient_luma,
-    luma_p90, muted_tone, rgb_lstar, scrim_alpha, solve, text_tone,
+    BackdropColors, BackdropSample, CHROME_MAX_TONE, CHROME_RATIO, chrome_tone, composited_tone,
+    floor_luma, gradient_luma, luma_p90, muted_tone, rgb_lstar, scrim_alpha, solve, text_tone,
 };
 
 /// A Catppuccin-Mocha-ish mauve, the default accent — a realistic seed for the
@@ -189,6 +189,64 @@ fn a_measured_cover_hue_outranks_the_theme_accent() {
         solve(seed, luma).chrome,
         solve(SEED, luma).chrome,
         "a red cover must not solve to the mauve accent's colour set"
+    );
+}
+
+/// Channel spread of a packed `0x00RR_GGBB` — a proxy for "is this neutral"
+/// that doesn't reuse the HCT machinery the solve runs on.
+fn channel_spread(rgb: u32) -> u8 {
+    let (r, g, b) = unpack(rgb);
+    r.max(g).max(b) - r.min(g).min(b)
+}
+
+/// The regression this pins is the hero's chips coming out vivid periwinkle on
+/// a greyscale sleeve: `Score` discards every cluster under its chroma cutoff
+/// and used to answer Google Blue, which then seeded the whole set. A grey
+/// banner has to solve grey chrome.
+#[test]
+fn a_greyscale_blur_solves_neutral_chrome() {
+    let chrome = BackdropSample::measure(&solid(32, 0x80)).solve(SEED).chrome;
+    assert!(
+        channel_spread(chrome) <= 8,
+        "a grey blur must solve neutral chrome, got 0x{chrome:06X}"
+    );
+}
+
+/// The two ends of the achromatic range, where the seed carries no hue at all
+/// and the solve owns every tone: black has to be lifted clear of its own
+/// backdrop, white has to be held below tone 100, and both stay neutral.
+#[test]
+fn a_black_and_a_white_blur_both_solve_legible_chrome() {
+    for value in [0x00_u8, 0xff] {
+        let sample = BackdropSample::measure(&solid(32, value));
+        let colors = sample.solve(SEED);
+        let band = composited_tone(sample.luma.unwrap_or(f64::NAN), colors.scrim_alpha);
+
+        let ratio = ratio_against_tone(colors.chrome, band);
+        assert!(
+            ratio >= CHROME_RATIO,
+            "0x{value:02X} sleeve: chrome 0x{:06X} reads {ratio:.2}:1 on its own band",
+            colors.chrome
+        );
+        assert!(
+            channel_spread(colors.chrome) <= 8,
+            "0x{value:02X} sleeve: chrome 0x{:06X} is not neutral",
+            colors.chrome
+        );
+    }
+}
+
+/// A near-white sleeve quantizes to tone 100, above every text band there is,
+/// and the chrome tier only ever *raised* a seed's tone — so its chips painted
+/// brighter than the title they sit under. The ceiling now bounds the seed and
+/// not just the solve.
+#[test]
+fn the_chrome_tier_stays_inside_its_band() {
+    let chrome = BackdropSample::measure(&solid(32, 0xff)).solve(SEED).chrome;
+    let tone = rgb_lstar(chrome);
+    assert!(
+        tone <= CHROME_MAX_TONE + 0.5,
+        "a white sleeve solved chrome at tone {tone:.1}, above the {CHROME_MAX_TONE} ceiling"
     );
 }
 

@@ -49,7 +49,7 @@ use material_colors::contrast;
 use slint::{Brush, Rgb8Pixel, SharedPixelBuffer};
 
 use crate::services::material_you::{
-    extract_source_argb_from_rgb8, lift_to_min_tone, to_tone_capped_chroma,
+    clamp_to_tone_band, extract_source_argb_from_rgb8, to_tone_capped_chroma,
 };
 use crate::themes::brush_with_alpha;
 
@@ -110,12 +110,22 @@ const TEXT_RATIO: f64 = 4.5;
 /// replaces: at the worst permitted backdrop the solve only asks for tone 63,
 /// so holding the old floor means the chrome tier cannot regress on any cover.
 /// The ceiling stops a very dark sleeve from pushing the accent so far up the
-/// tone scale that gamut mapping washes the album's hue out of it.
+/// tone scale that gamut mapping washes the album's hue out of it — and, since
+/// `clamp_to_tone_band` reads it too, stops a near-white *seed* arriving above
+/// it on its own. A seed already inside the band is still passed through
+/// untouched; the ceiling only ever pulls one down into it.
 const CHROME_MIN_TONE: f64 = 70.0;
 const CHROME_MAX_TONE: f64 = 92.0;
 
-/// Tone band for primary body text. Sits above the chrome band so the title
-/// reads as the brightest thing on the backdrop whatever the cover.
+/// Tone band for primary body text. Both bounds sit above the chrome band's,
+/// and the 4.5:1 target is the stricter of the two, so whenever both tiers are
+/// *solved* the title is the brighter of them.
+///
+/// The bands do overlap, though, and the chrome tier passes a seed already
+/// inside its own band straight through — so a naturally light cover can still
+/// land chrome above the solved text tone. That is what `CHROME_MAX_TONE`
+/// bounds; closing the gap outright would mean narrowing one of the two bands,
+/// which moves every cover rather than the bright ones.
 const TEXT_MIN_TONE: f64 = 78.0;
 const TEXT_MAX_TONE: f64 = 96.0;
 
@@ -294,10 +304,13 @@ impl BackdropSample {
     /// re-quantizing the full-size cover costs several times more for no
     /// perceptual gain.
     ///
-    /// An empty `accent_argb` means there was no buffer at all. A cover with no
-    /// colour above the scorer's chroma cutoff — a greyscale sleeve — answers
-    /// the quantizer's *own* fallback hue instead, so the `Theme.accent` path in
-    /// [`Self::solve`] is for a missing cover, never a monochrome one.
+    /// An empty `accent_argb` means there was no buffer at all, so the
+    /// `Theme.accent` path in [`Self::solve`] is for a missing cover, never a
+    /// monochrome one: a greyscale sleeve answers with its own dominant grey
+    /// (see `services::material_you::seed_from_pixels`) and solves to neutral
+    /// chrome, which is what a grey banner wants. It used to answer the
+    /// quantizer's own fallback — Google Blue — and painted vivid periwinkle
+    /// chips over that banner.
     pub(crate) fn measure(blur: &SharedPixelBuffer<Rgb8Pixel>) -> Self {
         Self {
             accent_argb: extract_source_argb_from_rgb8(blur),
@@ -466,10 +479,14 @@ pub(crate) fn solve(seed_argb: u32, backdrop_luma: f64) -> BackdropColors {
         scrim_alpha: alpha,
         floor_start: to_tone_capped_chroma(seed_argb, FLOOR_TONE_START, BACKDROP_MAX_CHROMA),
         floor_end: to_tone_capped_chroma(seed_argb, FLOOR_TONE_END, BACKDROP_MAX_CHROMA),
-        // The chrome tier *lifts* rather than sets: a cover whose accent is
+        // The chrome tier *clamps* rather than sets: a cover whose accent is
         // already brighter than the solve asks for keeps its own tone, and so
-        // its own chroma, instead of being dragged down to the minimum.
-        chrome: lift_to_min_tone(seed_argb, chrome_tone(tone)),
+        // its own chroma, instead of being dragged down to the minimum — but
+        // only as far as `CHROME_MAX_TONE`, so a near-white sleeve lands inside
+        // the band rather than at tone 100. It can still sit above the solved
+        // text tone; the band's own doc says why that gap is bounded and not
+        // closed.
+        chrome: clamp_to_tone_band(seed_argb, chrome_tone(tone), CHROME_MAX_TONE),
         text: to_tone_capped_chroma(seed_argb, text_tone(tone), TEXT_MAX_CHROMA),
         muted: to_tone_capped_chroma(seed_argb, muted_tone(tone), MUTED_MAX_CHROMA),
     }

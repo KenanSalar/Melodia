@@ -3,8 +3,8 @@ use slint::{Rgb8Pixel, SharedPixelBuffer};
 use tempfile::NamedTempFile;
 
 use crate::services::material_you::{
-    SchemeStyle, extract_source_argb, extract_source_argb_from_rgb8, generate_palette,
-    lift_to_min_tone, to_tone_capped_chroma,
+    SchemeStyle, clamp_to_tone_band, extract_source_argb, extract_source_argb_from_rgb8,
+    generate_palette, to_tone_capped_chroma,
 };
 
 /// sRGB relative luminance of a `0x00RRGGBB` value, 0..1. Independent of the
@@ -245,26 +245,72 @@ fn extract_source_argb_from_rgb8_produces_seed_for_uniform_colour() {
     );
 }
 
-// --- lift_to_min_tone --------------------------------------------------------
+/// Google Blue — what `material_colors::Score` hands back when no cluster
+/// clears its chroma cutoff. It is the crate's brand default, not a fact about
+/// any artwork, and a greyscale sleeve used to seed the whole backdrop solve
+/// from it: grey banner, vivid periwinkle chips.
+const SCORER_FALLBACK: u32 = 0x0042_85F4;
+
+#[expect(
+    clippy::expect_used,
+    reason = "test setup failures should abort the test; not production code"
+)]
+#[test]
+fn a_greyscale_cover_seeds_from_its_own_grey() {
+    // A tone ramp rather than a flat fill, so the quantizer has several
+    // clusters to choose between and every one of them is under the cutoff —
+    // the shape of a real black-and-white sleeve, not a degenerate one.
+    let mut buf = SharedPixelBuffer::<Rgb8Pixel>::new(72, 72);
+    let bytes = buf.make_mut_bytes();
+    for (i, px) in bytes.chunks_exact_mut(3).enumerate() {
+        let grey = u8::try_from((i / 72) * 3).unwrap_or(u8::MAX);
+        px[0] = grey;
+        px[1] = grey;
+        px[2] = grey;
+    }
+
+    let seed = extract_source_argb_from_rgb8(&buf).expect("a grey ramp should produce a seed");
+    assert_ne!(
+        seed, SCORER_FALLBACK,
+        "a greyscale cover must not seed from the scorer's Google Blue default"
+    );
+
+    let (r, g, b) = channels(seed);
+    let spread = r.max(g).max(b) - r.min(g).min(b);
+    assert!(
+        spread <= 8,
+        "a greyscale cover should seed near-neutral, got 0x{seed:06X}"
+    );
+}
+
+// --- clamp_to_tone_band ------------------------------------------------------
 //
 // The visualizer bars paint an artwork accent opaquely over the Now-Playing
 // backdrop, so a dark album's near-black accent has to be lifted or it's
-// invisible. These pin the guarantee that lift provides.
+// invisible — and a near-white one has to be held down or it out-shines the
+// title beside it. The band here mirrors `backdrop::CHROME_{MIN,MAX}_TONE`.
+
+/// The chrome tier's band, restated so these read as the production case.
+const CHROME_BAND: (f64, f64) = (70.0, 92.0);
 
 #[test]
-fn lift_to_min_tone_leaves_an_already_light_colour_alone() {
-    // Near-white sits far above any floor we'd ask for, so it must be returned
-    // byte-identical — no gratuitous gamut round-trip.
-    let light = 0x00F0_F0F0;
-    assert_eq!(lift_to_min_tone(light, 70.0), light);
+fn clamp_to_tone_band_leaves_a_colour_inside_the_band_alone() {
+    // Inside the band there is nothing to fix, so it must come back
+    // byte-identical — no gratuitous gamut round-trip, and no chroma lost to
+    // one.
+    let inside = 0x00B0_B0B0;
+    assert_eq!(
+        clamp_to_tone_band(inside, CHROME_BAND.0, CHROME_BAND.1),
+        inside
+    );
 }
 
 #[test]
-fn lift_to_min_tone_brightens_pure_black() {
+fn clamp_to_tone_band_brightens_pure_black() {
     // The case a multiplicative brighten cannot fix: scaling HSV value leaves
     // black black forever, which is exactly how a dark cover used to sink the
     // bars into the backdrop.
-    let lifted = lift_to_min_tone(0x0000_0000, 70.0);
+    let lifted = clamp_to_tone_band(0x0000_0000, CHROME_BAND.0, CHROME_BAND.1);
     assert!(
         relative_luminance(lifted) > 0.3,
         "black should lift well clear of the backdrop, got 0x{lifted:06X}"
@@ -272,9 +318,22 @@ fn lift_to_min_tone_brightens_pure_black() {
 }
 
 #[test]
-fn lift_to_min_tone_brightens_a_dark_chromatic_accent() {
+fn clamp_to_tone_band_holds_a_white_seed_at_the_ceiling() {
+    // A greyscale sleeve now seeds from its own grey, and a white one seeds
+    // from tone 100 — above every text band there is. Without the ceiling the
+    // chips came out brighter than the title they sit under.
+    let held = clamp_to_tone_band(0x00FF_FFFF, CHROME_BAND.0, CHROME_BAND.1);
+    assert_ne!(held, 0x00FF_FFFF, "a white seed was passed straight through");
+    assert!(
+        relative_luminance(held) < 0.95,
+        "a white seed must be pulled down to the band's ceiling, got 0x{held:06X}"
+    );
+}
+
+#[test]
+fn clamp_to_tone_band_brightens_a_dark_chromatic_accent() {
     // A deep navy — the realistic dark-album case, not the degenerate one.
-    let lifted = lift_to_min_tone(0x0010_1A3A, 70.0);
+    let lifted = clamp_to_tone_band(0x0010_1A3A, CHROME_BAND.0, CHROME_BAND.1);
     assert!(
         relative_luminance(lifted) > relative_luminance(0x0010_1A3A),
         "expected a lift, got 0x{lifted:06X}"
@@ -286,10 +345,10 @@ fn lift_to_min_tone_brightens_a_dark_chromatic_accent() {
 }
 
 #[test]
-fn lift_to_min_tone_keeps_the_dominant_hue() {
+fn clamp_to_tone_band_keeps_the_dominant_hue() {
     // Tone is the only axis we move: a dark red must come back a light red,
     // not a neutral. That's what keeps the bars recognisably the album's colour.
-    let lifted = lift_to_min_tone(0x0033_0000, 70.0);
+    let lifted = clamp_to_tone_band(0x0033_0000, CHROME_BAND.0, CHROME_BAND.1);
     let r = (lifted >> 16) & 0xFF;
     let g = (lifted >> 8) & 0xFF;
     let b = lifted & 0xFF;
@@ -300,11 +359,11 @@ fn lift_to_min_tone_keeps_the_dominant_hue() {
 }
 
 #[test]
-fn lift_to_min_tone_is_idempotent() {
+fn clamp_to_tone_band_is_idempotent() {
     // A second pass must be a no-op, or repeated track changes would creep the
     // colour lighter each time.
-    let once = lift_to_min_tone(0x0010_1A3A, 70.0);
-    assert_eq!(lift_to_min_tone(once, 70.0), once);
+    let once = clamp_to_tone_band(0x0010_1A3A, CHROME_BAND.0, CHROME_BAND.1);
+    assert_eq!(clamp_to_tone_band(once, CHROME_BAND.0, CHROME_BAND.1), once);
 }
 
 // --- to_tone_capped_chroma ---------------------------------------------------
@@ -333,7 +392,7 @@ fn to_tone_capped_chroma_desaturates_a_vivid_seed() {
 
 #[test]
 fn to_tone_capped_chroma_sets_the_tone_in_both_directions() {
-    // Unlike `lift_to_min_tone` this is a set, not a floor: the caller has
+    // Unlike `clamp_to_tone_band` this is a set, not a band: the caller has
     // already solved the tone, so overshooting it is as wrong as undershooting.
     let dark = to_tone_capped_chroma(0x00F0_F0F0, 8.0, 24.0);
     let light = to_tone_capped_chroma(0x0000_0000, 85.0, 24.0);
