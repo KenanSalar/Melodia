@@ -444,11 +444,17 @@ fn playlist_chips(
     out
 }
 
-/// Empty on an empty Songs tab: the view paints "No favorites yet" instead, and
-/// a lone "0 favorites" chip beside it would be both redundant and bleak.
+/// Empty on an empty tab, whichever of the three it is: each paints its own
+/// "nothing here yet" copy — a sentence on Songs, a `GridEmptyState` on the
+/// other two — and a lone "0 favorites" chip beside one of those states the same
+/// thing far more bleakly.
+///
+/// The guards read the *unfiltered* counts, so a filter that matches nothing
+/// still leaves the band stating what the page holds. That is the same split as
+/// everywhere else here: the empty states are the surfaces that follow a filter.
 fn favorites_chips(labels: &impl ChipLabels, facts: &FavoritesFacts) -> Vec<SharedString> {
     match facts.tab {
-        FavoritesTab::MostPlayed => {
+        FavoritesTab::MostPlayed if facts.most_played.tracks > 0 => {
             let mut out = Vec::with_capacity(3);
             out.push(labels.tracks(facts.most_played.tracks));
             push_duration(&mut out, facts.most_played.duration_ms);
@@ -458,7 +464,7 @@ fn favorites_chips(labels: &impl ChipLabels, facts: &FavoritesFacts) -> Vec<Shar
             }
             out
         }
-        FavoritesTab::Artists => vec![labels.artists(facts.artists)],
+        FavoritesTab::Artists if facts.artists > 0 => vec![labels.artists(facts.artists)],
         FavoritesTab::Songs if facts.tracks > 0 => {
             let mut out = Vec::with_capacity(4);
             out.push(labels.favorites(facts.tracks));
@@ -466,7 +472,7 @@ fn favorites_chips(labels: &impl ChipLabels, facts: &FavoritesFacts) -> Vec<Shar
             push_fold(&mut out, labels, facts.songs);
             out
         }
-        FavoritesTab::Songs => Vec::new(),
+        _ => Vec::new(),
     }
 }
 

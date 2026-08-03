@@ -342,26 +342,46 @@ fn most_played_sums_itself_and_not_the_songs_tab() {
     );
 }
 
+/// A favourite that has never been played is still on the tab (the query is
+/// `play_count > 0`, so in practice it isn't — but the chip is gated on the sum,
+/// not on the query). Zero plays says nothing worth a chip.
 #[test]
 fn a_never_played_most_played_tab_states_no_plays() {
     let facts = FavoritesFacts {
-        most_played: MostPlayedTotals::default(),
+        most_played: MostPlayedTotals { tracks: 3, duration_ms: 600_000, plays: 0 },
         ..favorites_facts(FavoritesTab::MostPlayed)
     };
-    assert_eq!(texts(&favorites_chips(&EnglishLabels, &facts)), vec!["0 tracks"]);
+    assert_eq!(
+        texts(&favorites_chips(&EnglishLabels, &facts)),
+        vec!["3 tracks", "10:00"]
+    );
 }
 
+/// Every empty band leaves the copy to the view — a sentence on the Songs and
+/// Recently Played heroes, a `GridEmptyState` on the two Favorites grids. A lone
+/// "0 …" chip beside one of those is redundant at best.
 #[test]
-fn the_two_mosaic_heroes_leave_their_empty_state_to_the_view() {
-    // Both paint a "nothing here yet" line of their own, and a lone "0 …" chip
-    // beside it would be redundant.
-    let facts = FavoritesFacts {
+fn an_empty_hero_leaves_its_empty_state_to_the_view() {
+    let empty = FavoritesFacts {
         tracks: 0,
         duration_ms: 0,
         songs: HeroFold::default(),
+        most_played: MostPlayedTotals::default(),
+        artists: 0,
         ..favorites_facts(FavoritesTab::Songs)
     };
-    assert!(favorites_chips(&EnglishLabels, &facts).is_empty());
+    for tab in [
+        FavoritesTab::Songs,
+        FavoritesTab::MostPlayed,
+        FavoritesTab::Artists,
+    ] {
+        let facts = FavoritesFacts { tab, ..empty };
+        assert!(
+            favorites_chips(&EnglishLabels, &facts).is_empty(),
+            "the {tab:?} tab states a count over an empty list — the grid beneath it already \
+             says so, and says it better"
+        );
+    }
     assert!(recently_played_chips(&EnglishLabels, 0, 0, HeroFold::default()).is_empty());
 }
 
@@ -757,5 +777,30 @@ fn the_strip_rows_hang_off_a_layout_not_off_the_root() {
         "MetaChipStrip must wrap its conditional rows in a plain layout — without it the root \
          reports `preferred: 0` vertically and a wrapped second row paints outside the strip. \
          See the `if`-child entry in `.claude/rules/slint-pitfalls.md`"
+    );
+}
+
+/// ...and that wrapper owes a `min-width: 0px`, which is the same decision seen
+/// from the other axis.
+///
+/// A layout child is folded into a `Rectangle` root's layout info in *both*
+/// orientations, so the wrapper above hands the root a horizontal `min` equal to
+/// the widest published row. A box layout never shrinks a cell past its `min`
+/// (`i-slint-core::layout::layout_items`), so the strip keeps being allotted the
+/// width it was chunked at — and keeps reporting that width through `measured` —
+/// while the panel around it narrows: the chunker never learns there is less
+/// room, and the row clips against the panel edge instead of wrapping. Which
+/// makes `HERO_MAX_ROWS` reachable only by *mounting* narrow.
+///
+/// An explicit `min-width` replaces the merged constraint rather than maxing
+/// with it, exactly as the `min-height` beside it does — so this one line is the
+/// whole fix. `settings/chip-group.slint` carries it for the same reason.
+#[test]
+fn the_strip_leaks_no_width_floor() {
+    assert!(
+        STRIP.contains("min-width: 0px;"),
+        "MetaChipStrip must pin `min-width: 0px` — its rows wrapper is a real layout, so without \
+         it the widest chip row becomes a floor the hero column can't shrink past, and the chips \
+         clip on a narrowing window instead of wrapping into a second row"
     );
 }

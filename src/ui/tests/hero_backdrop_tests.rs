@@ -106,35 +106,43 @@ fn every_shared_hero_publish_is_gated_on_its_own_section() {
 /// write is the half that is shared.
 #[test]
 fn a_section_pre_fetched_off_screen_re_fetches_on_its_first_enter() {
-    const LIFECYCLES: [(&str, &str); 4] = [
+    // The handle's name is part of the anchor: a bare `if !` would latch onto
+    // whichever negated guard happens to come first in the file, and the
+    // *negation* is the half that has to be pinned — `if handle.section_active()
+    // { mark_dirty() }` is the inverted bug, and it reads almost identically.
+    const LIFECYCLES: [(&str, &str, &str); 4] = [
         (
             include_str!("../callbacks/albums/lifecycle.rs"),
             "albums/lifecycle.rs",
+            "albums_ui",
         ),
         (
             include_str!("../callbacks/artists/lifecycle.rs"),
             "artists/lifecycle.rs",
+            "artists_ui",
         ),
         (
             include_str!("../callbacks/genres/lifecycle.rs"),
             "genres/lifecycle.rs",
+            "genres_ui",
         ),
         (
             include_str!("../callbacks/playlists/lifecycle.rs"),
             "playlists/lifecycle.rs",
+            "playlists_ui",
         ),
     ];
 
-    for (src, name) in LIFECYCLES {
+    for (src, name, handle) in LIFECYCLES {
         let seeded = src
-            .split_once("if !")
+            .split_once(&format!("if !{handle}.section_active() {{"))
             .and_then(|(_, rest)| rest.split_once('}'))
             .map_or("", |(body, _)| body);
         assert!(
-            seeded.contains("section_active()") && seeded.contains("mark_dirty()"),
-            "{name} must seed `mark_dirty()` when the boot doesn't land on it — otherwise its \
-             off-screen pre-fetch publishes nothing to the shared hero globals and the first \
-             enter takes the no-re-fetch path, leaving the band empty"
+            seeded.contains(&format!("{handle}.mark_dirty()")),
+            "{name} must seed `if !{handle}.section_active() {{ {handle}.mark_dirty() }}` — \
+             without it an off-screen boot pre-fetch publishes nothing to the shared hero \
+             globals and the first enter takes the no-re-fetch path, leaving the band empty"
         );
     }
 }

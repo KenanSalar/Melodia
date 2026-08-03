@@ -33,6 +33,14 @@ export component MetaChipStrip inherits Rectangle {
     // with no metadata — or a slow fetch — from reflowing whatever sits above.
     min-height: 26px;
     vertical-stretch: 0;
+    // The other half of the wrapper below, and the half nothing catches at
+    // build time: that wrapper is a real layout, so the root merges its
+    // horizontal constraint and the widest published row becomes a floor. A
+    // box layout never shrinks a cell past its `min`, so the strip would keep
+    // being handed the width it was chunked at — and keep reporting it — while
+    // the panel around it narrowed, so the chips clipped instead of wrapping.
+    // Same floor, same cure, as `settings/chip-group.slint`'s hidden ruler.
+    min-width: 0px;
 
     // `changed` can't watch a path expression, so the width is mirrored into a
     // local property first (see `.claude/rules/slint-pitfalls.md`).
