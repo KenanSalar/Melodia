@@ -77,7 +77,11 @@ pub async fn search_all(db: &DbPool, query: &str) -> Result<SearchResults, AppEr
     // track-derived arms.
     let pattern = like_pattern_escape(trimmed);
 
-    // Run all four queries concurrently — the read pool supports concurrent readers.
+    // `tracks_fts MATCH`, never `fts MATCH`: fts5's match column is named after
+    // the *table*, so an alias doesn't reach it and the aliased spelling fails
+    // to prepare with `no such column: fts`. Same in the two subqueries below.
+    // `rank` is bm25 under the column weights migration 20260802000001 pins, so
+    // the weights pick which 50 rows survive the LIMIT, not only their order.
     let sql = format!(
         "SELECT {cols} FROM tracks t
          JOIN tracks_fts fts ON fts.rowid = t.id
@@ -149,6 +153,7 @@ pub async fn search_all(db: &DbPool, query: &str) -> Result<SearchResults, AppEr
     .bind(&pattern)
     .fetch_all(db.read());
 
+    // All four run concurrently — the read pool supports concurrent readers.
     let (tracks, albums, artists, genres) =
         tokio::try_join!(tracks_fut, albums_fut, artists_fut, genres_fut)?;
 

@@ -17,6 +17,26 @@
 -- The AFTER UPDATE OF list has to name every indexed column or a tag edit
 -- that touches only one of the new ones leaves the index stale;
 -- `update_track_metadata` sets all eight in a single statement.
+--
+-- `remove_diacritics 2` rather than the default 1, which SQLite keeps only
+-- for backwards compatibility: mode 1 folds a character carrying a single
+-- combining mark, so it already reaches Björk and Beyoncé, but it leaves the
+-- two-mark characters of scripts like Vietnamese alone and an ASCII query for
+-- one of those matches nothing.
+--
+-- The bm25 weights are positional against the column list, which is why they
+-- sit under it rather than in `search.rs`. `file_name` normally repeats the
+-- title and artist beside it ("01 - Artist - Title.flac"), so at the default
+-- uniform weight it counts every match twice and can rank a filename echo
+-- above the track whose title *is* the query. It stays indexed at a
+-- tiebreaker weight because it is the only column carrying what the tags
+-- don't -- the extension, a track-number prefix, a spelling the metadata
+-- never had. (An untagged file is not that case: `extract_metadata` falls
+-- back to the file stem for the title, so it already matches at full weight.)
+-- The setting lives in the `tracks_fts_config` shadow table, which only
+-- `DROP TABLE tracks_fts` takes with it -- the 'rebuild' at the bottom of this
+-- file leaves it alone. A future migration that swaps the table has to
+-- re-issue this INSERT.
 
 DROP TRIGGER IF EXISTS tracks_fts_insert;
 
@@ -26,7 +46,11 @@ DROP TRIGGER IF EXISTS tracks_fts_update;
 
 DROP TABLE IF EXISTS tracks_fts;
 
-CREATE VIRTUAL TABLE IF NOT EXISTS tracks_fts USING fts5 (
+-- No IF NOT EXISTS on the CREATE: the DROP above is unconditional, so the
+-- guard could only ever fire if that DROP were reordered away -- and then it
+-- would skip the CREATE silently and apply the rank INSERT below to the *old*
+-- table, leaving the tokenizer unchanged while the migration still passes.
+CREATE VIRTUAL TABLE tracks_fts USING fts5 (
     title,
     artist,
     album_artist,
@@ -36,8 +60,14 @@ CREATE VIRTUAL TABLE IF NOT EXISTS tracks_fts USING fts5 (
     year,
     file_name,
     content = 'tracks',
-    content_rowid = 'id'
+    content_rowid = 'id',
+    tokenize = 'unicode61 remove_diacritics 2'
 );
+
+INSERT INTO
+    tracks_fts (tracks_fts, rank)
+VALUES
+    ('rank', 'bm25(8.0, 6.0, 4.0, 4.0, 2.0, 2.0, 2.0, 0.5)');
 
 CREATE TRIGGER IF NOT EXISTS tracks_fts_insert AFTER INSERT ON tracks BEGIN
 INSERT INTO

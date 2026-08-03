@@ -232,3 +232,155 @@ async fn a_narrow_retag_reindexes_the_new_fts_columns() -> Result<(), AppError> 
     assert!(hit(&queries::search::search_all(&db, "Ligeti").await?), "composer");
     Ok(())
 }
+
+/// The bm25 weights are positional against the fts5 column list, so a ninth
+/// column silently shifts every one of them onto the wrong field — the table
+/// still builds, search still works, and only the ranking is wrong. Reading
+/// the config back rather than the migration text is what makes this a pin on
+/// the *applied* state: a weight list that never took would pass a source
+/// scan. It is the one place anything reads a shadow table, and it stays
+/// confined to this test.
+#[tokio::test]
+async fn bm25_weights_cover_every_indexed_column() -> Result<(), AppError> {
+    const INDEXED: [&str; 8] = [
+        "title",
+        "artist",
+        "album_artist",
+        "album",
+        "genre",
+        "composer",
+        "year",
+        "file_name",
+    ];
+
+    let db = DbPool::test_pool().await;
+
+    let columns: Vec<String> =
+        sqlx::query_scalar("SELECT name FROM pragma_table_info('tracks_fts')")
+            .fetch_all(db.read())
+            .await?;
+    assert_eq!(columns, INDEXED, "fts5 column list moved");
+
+    let rank: String = sqlx::query_scalar("SELECT v FROM tracks_fts_config WHERE k = 'rank'")
+        .fetch_one(db.read())
+        .await?;
+    // A config that isn't a `bm25(…)` expression at all parses to zero
+    // weights, so the arity assertion below covers that too — and prints the
+    // raw value either way.
+    let args = rank
+        .strip_prefix("bm25(")
+        .and_then(|s| s.strip_suffix(')'))
+        .unwrap_or_default();
+    let weights: Vec<f64> = args.split(',').filter_map(|w| w.trim().parse().ok()).collect();
+
+    assert_eq!(
+        weights.len(),
+        INDEXED.len(),
+        "one bm25 weight per indexed column, got {rank}"
+    );
+
+    // Which way the ranking leans is the whole point of setting them at all:
+    // the title is what people search for, the filename carries whatever the
+    // tags don't — the extension, a track-number prefix, a spelling the
+    // metadata never had.
+    let title_weight = weights[0];
+    let file_name_weight = weights[INDEXED.len() - 1];
+    assert!(
+        weights.iter().all(|&w| w <= title_weight),
+        "title should carry the most weight, got {rank}"
+    );
+    assert!(
+        weights.iter().all(|&w| w >= file_name_weight),
+        "file_name should be the tiebreaker, got {rank}"
+    );
+    // Both bounds above hold for a uniform list, which is the fts5 default
+    // and the one thing this migration exists to replace.
+    assert!(
+        file_name_weight < title_weight,
+        "the weights must not be uniform, got {rank}"
+    );
+    Ok(())
+}
+
+/// A filename normally repeats the title and artist beside it, so under the
+/// default uniform weights a filename echo outranks the track the query
+/// actually names. Here the term appears three times in one track's filename
+/// and once as another's title — the loser under equal weights is the one
+/// that has to come first. `LIMIT 50` sits under the same `ORDER BY rank`, so
+/// this decides which rows come back, not only their order.
+#[tokio::test]
+async fn a_title_match_outranks_a_filename_only_match() -> Result<(), AppError> {
+    let db = DbPool::test_pool().await;
+    queries::folder::insert_folder(&db, "/music", true).await?;
+    insert_test_track(
+        &db,
+        "/music/Kestrel Kestrel Kestrel.mp3",
+        "Quiet Hours",
+        "Wren",
+        "Dusk Sessions",
+        "Ambient",
+    )
+    .await?;
+    insert_test_track(&db, "/music/b.mp3", "Kestrel", "Wren", "Dusk Sessions", "Ambient")
+        .await?;
+
+    let results = queries::search::search_all(&db, "Kestrel").await?;
+
+    let titles: Vec<&str> = results.tracks.iter().map(|t| t.title.as_str()).collect();
+    assert_eq!(titles, ["Kestrel", "Quiet Hours"], "the titled match leads");
+    Ok(())
+}
+
+/// `remove_diacritics 1`, the fts5 default, folds a character carrying one
+/// combining mark but leaves two-mark characters alone — so an ASCII query
+/// reaches Björk and stops dead at Vietnamese. `ế` is U+1EBF, the two-mark
+/// case; under the default this finds nothing.
+#[tokio::test]
+async fn a_plain_ascii_query_matches_a_multi_mark_title() -> Result<(), AppError> {
+    let db = DbPool::test_pool().await;
+    queries::folder::insert_folder(&db, "/music", true).await?;
+    insert_test_track(&db, "/music/a.mp3", "Bế Tắc", "Ngoc", "Xuan", "Pop").await?;
+
+    let results = queries::search::search_all(&db, "be").await?;
+
+    let titles: Vec<&str> = results.tracks.iter().map(|t| t.title.as_str()).collect();
+    assert_eq!(titles, ["Bế Tắc"]);
+    Ok(())
+}
+
+/// `build_fts_query` quotes each word and appends `*`, so a query of pure
+/// punctuation reaches fts5 as a phrase the tokenizer reduces to nothing.
+/// That returns no rows rather than raising, which is the behaviour the
+/// search box depends on — this is a pin, not a fix.
+#[tokio::test]
+async fn punctuation_only_queries_return_no_rows_instead_of_erroring() -> Result<(), AppError> {
+    let db = setup_seeded_db().await?;
+
+    for query in ["-", "---", "*", "(", "\"", "^ ~"] {
+        let results = queries::search::search_all(&db, query).await?;
+        assert!(
+            results.tracks.is_empty(),
+            "{query:?} should match no tracks, got {:?}",
+            results.tracks.iter().map(|t| &t.title).collect::<Vec<_>>()
+        );
+    }
+    Ok(())
+}
+
+/// The other half of that: a quote beside a word the fixture actually has.
+/// `build_fts_query` doubles the quote to keep it inside the phrase, and the
+/// unit test above pins the string it builds — but nothing ran that string
+/// past fts5, which is where the escaping is the difference between a match
+/// and a hard `unterminated string` at step time. Asserting the *hit* rather
+/// than the absence of an error is what keeps this from passing vacuously.
+#[tokio::test]
+async fn a_word_carrying_a_quote_still_matches_instead_of_failing_to_parse()
+-> Result<(), AppError> {
+    let db = setup_seeded_db().await?;
+
+    let results = queries::search::search_all(&db, "Alpha\"").await?;
+
+    let titles: Vec<&str> = results.tracks.iter().map(|t| t.title.as_str()).collect();
+    assert_eq!(titles, ["Alpha Song"]);
+    Ok(())
+}

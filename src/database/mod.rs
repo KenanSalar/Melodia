@@ -16,6 +16,12 @@ pub const SQLITE_BIND_LIMIT: usize = 999;
 /// take it explicitly (it became configurable via `sqlx.toml`).
 const MIGRATIONS_TABLE: &str = "_sqlx_migrations";
 
+/// The fts5 index-compaction command [`DbPool::close`] issues at shutdown.
+/// Named so the test that proves it still runs binds to the same string —
+/// fts5 rejects an unknown command at *step* time, and `close` can only
+/// afford to log that.
+const FTS_OPTIMIZE: &str = "INSERT INTO tracks_fts(tracks_fts) VALUES('optimize')";
+
 /// Build a `?, ?, …` placeholder list for an `IN (...)` clause. Single-pass,
 /// capacity-preallocated — replaces the previous `repeat_n("?", n).collect::<Vec<_>>().join(", ")`
 /// idiom that allocated an intermediate `Vec<&str>` of size `n` before joining.
@@ -81,11 +87,38 @@ impl DbPool {
         &self.write
     }
 
-    /// Run `PRAGMA optimize` and close both pools. Call on application shutdown.
+    /// Refresh planner statistics, compact the search index, and close both
+    /// pools. Call on application shutdown.
+    ///
+    /// The two optimizes are unrelated despite the shared name: `PRAGMA
+    /// optimize` updates `sqlite_stat1`, while the fts5 command collapses the
+    /// index's b-tree segments into one and drops the tombstone every track
+    /// delete leaves behind. fts5's own `automerge` folds segments together as
+    /// writes accumulate, so this isn't the only thing keeping the index in
+    /// shape — it's the full collapse `automerge` never gets to, and what it
+    /// buys is a smaller index for every pre-migration `VACUUM INTO` to copy.
+    /// Once the index is a single segment fts5 skips the merge outright, so a
+    /// session that never touched the library pays for a no-op.
+    ///
+    /// All four steps sit inside the one 3 s budget `flush_tasks_and_db` gives
+    /// this call plus the task wait ahead of it, and the merge is the one that
+    /// can grow: it is a full collapse, so the session that just scanned a
+    /// library in is also the one leaving it the most segments to fold.
+    /// Nothing is lost if it doesn't finish — past the budget `main`
+    /// force-exits, `SQLite` rolls the unfinished merge back on the next open,
+    /// and the index is left correct and merely un-compacted.
+    ///
+    /// Both are best-effort, and both log rather than discard: an unrecognised
+    /// fts5 command is a step-time error with no other symptom, so a silent
+    /// discard would make a typo here indistinguishable from a shutdown that
+    /// did the work.
     pub async fn close(&self) {
-        let _ = sqlx::query("PRAGMA optimize")
-            .execute(&self.write)
-            .await;
+        if let Err(e) = sqlx::query("PRAGMA optimize").execute(&self.write).await {
+            log::warn!("db close: PRAGMA optimize: {e}");
+        }
+        if let Err(e) = sqlx::query(FTS_OPTIMIZE).execute(&self.write).await {
+            log::warn!("db close: fts5 optimize: {e}");
+        }
         self.write.close().await;
         self.read.close().await;
     }
