@@ -31,7 +31,7 @@ Melodia is a Slint rewrite of a former Tauri + SolidJS application — moving of
 <table>
   <tr>
     <td width="50%"><img src="assets/screenshots/favorites.png" alt="Favorites view"><br><sub><b>Favorites</b> — an artwork mosaic hero over tabs for songs, most played, and favorite artists.</sub></td>
-    <td width="50%"><img src="assets/screenshots/recently_played.png" alt="Recently Played view"><br><sub><b>Recently Played</b> — newest first, updating live as you listen.</sub></td>
+    <td width="50%"><img src="assets/screenshots/recently_played.png" alt="Recently Played view"><br><sub><b>Recently Played</b> — newest first, updating live as you listen, with a most-played tab beside it.</sub></td>
   </tr>
   <tr>
     <td><img src="assets/screenshots/playlists.png" alt="Playlists view"><br><sub><b>Playlists</b> — manual and smart playlists, with M3U8 import and export.</sub></td>
@@ -76,7 +76,7 @@ Shrink the window past a threshold and the full UI collapses into a compact mini
 - Dedicated detail pages for albums, artists, genres, and playlists
 - Deezer-backed artist image fetching with local caching
 - Favorites view built around a hero banner — artwork mosaic, live counts, and a tab bar sharing that row with the filter — over three sub-views: every favorite as a sortable track list, your most-played favorites as a browsable card grid, and your favorite artists as another. Favorite artists sort by name or by how many of their tracks you've favorited, either direction; the filter narrows whichever tab you're on, and the page reopens on the tab — and the sort — you left it on
-- Recently-Played view listing the tracks you last listened to (newest first), with a most-played strip and a filterable track list that updates live as you play
+- Recently-Played view built the same way, over two sub-views: the tracks you last listened to (newest first, updating live as you play) and your most-played tracks as a browsable card grid. The filter narrows whichever tab you're on, and the page reopens on the tab you left it on. The recency list is deliberately unsortable — recency is what it's for
 - Play-count and skip-count tracking per track
 - Per-track star ratings (0–5), set inline via a hover-revealed star control in any track list and from the Now Playing view
 - Edit track information (title, artist, album, album artist, genre, year, track/disc number, composer, comment, BPM, lyrics, and cover art) for one or many selected tracks at once, written straight back to the files — batch edits leave differing fields untouched and save only the fields you change
@@ -94,7 +94,7 @@ Shrink the window past a threshold and the full UI collapses into a compact mini
 - Audio crossfade (1–12 s) that overlaps the end of one track with the start of the next, running the two on separate mixer decks with a sample-accurate complementary ramp so the sum can never clip; optionally skips same-album transitions to keep continuous mixes gapless, extends to manual track changes, and fades out on pause and stop
 - Queue management with shuffle and repeat modes (Off, All, One)
 - Playing a track from any list — an album, a playlist, a folder in Files, search results, Favorites — loads that whole list into the queue and starts on the track you picked, so the rest of the album or playlist follows on its own. With shuffle already on, the remaining tracks are shuffled behind your pick rather than played in order. **Play Next** and **Add to Queue** in the right-click menu still add to the existing queue without replacing it
-- A **Shuffle** pill on Favorites, Recently Played and the album, artist, genre and playlist pages loads whatever that view is currently showing — filter it first and only the matches are queued — and opens on a random track rather than the top of the list
+- A **Shuffle** pill on Favorites, Recently Played (one per tab on both) and the album, artist, genre and playlist pages loads whatever that view is currently showing — filter it first and only the matches are queued — and opens on a random track rather than the top of the list
 - Full-screen Now Playing view with track details, an up-next list, and album-art cross-fade transitions
 - Audio visualizer under the Now Playing artwork, tapped off the post-DSP audio and tinted to the album's own accent colour, in three styles switchable from the view itself or from Settings — a 64-band spectrum analyzer, the same bands mirrored about a centre line, or a live waveform trace; bands are logarithmic across 50 Hz – 16 kHz (the equalizer's own range) so every bar covers the same musical interval, and the whole thing decays to rest on pause or can be switched off entirely
 - 10-band graphic equalizer (31 Hz – 16 kHz) with adjustable preamp, nine built-in presets plus hand-tuned custom curves, and a soft-knee clip-protection limiter so boosts compress instead of clipping

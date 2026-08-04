@@ -820,6 +820,9 @@ msgstr "Henüz hiçbir şey çalınmadı"
 msgid "Play one of your favorites and it will show up here."
 msgstr "Favorilerinden birini çal, burada görünsün."
 
+msgid "Play something and it will show up here."
+msgstr "Bir şey çal, burada görünsün."
+
 msgid "No favorite artists yet"
 msgstr "Henüz favori sanatçı yok"
 

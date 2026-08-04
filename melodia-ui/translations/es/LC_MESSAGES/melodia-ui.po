@@ -815,6 +815,9 @@ msgstr "Aún no has reproducido nada"
 msgid "Play one of your favorites and it will show up here."
 msgstr "Reproduce uno de tus favoritos y aparecerá aquí."
 
+msgid "Play something and it will show up here."
+msgstr "Reproduce algo y aparecerá aquí."
+
 msgid "No favorite artists yet"
 msgstr "Aún no hay artistas favoritos"
 

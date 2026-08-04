@@ -815,6 +815,9 @@ msgstr "Ancora nessun ascolto"
 msgid "Play one of your favorites and it will show up here."
 msgstr "Ascolta uno dei tuoi preferiti e comparirà qui."
 
+msgid "Play something and it will show up here."
+msgstr "Ascolta qualcosa e comparirà qui."
+
 msgid "No favorite artists yet"
 msgstr "Ancora nessun artista preferito"
 

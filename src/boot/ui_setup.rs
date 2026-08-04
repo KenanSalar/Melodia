@@ -156,9 +156,10 @@ pub fn install_views(
     ui::callbacks::wire_favorites(app, state, &favorites_ui, &artists_ui);
 
     // 5c2e-bis. Recently-Played view (sidebar index 8). A trimmed Favorites —
-    // the shared row-tier `cover_thumbs` serves the list; the handle allocates
-    // its own Most Played strip LRU (released on tab-leave). Its row-menu
-    // "Go to …" entries are wired centrally by `wire_cross_tab_nav` below.
+    // the shared row-tier `cover_thumbs` serves the Songs list; the handle
+    // allocates its own mosaic and Most Played LRUs (the latter released on
+    // tab-leave as well as on section-leave). Its row-menu "Go to …" entries are
+    // wired centrally by `wire_cross_tab_nav` below.
     ui::recently_played::install_recently_played_models(app);
     let recently_played_ui =
         Arc::new(ui::recently_played::RecentlyPlayedUi::new(cover_thumbs.clone()));
@@ -190,15 +191,16 @@ pub fn install_views(
     *state.ui_handles.genres.lock() = Some(genres_ui.clone());
     *state.ui_handles.playlists.lock() = Some(playlists_ui.clone());
 
-    // 5c2h. The Favorites tab seeds here rather than in
-    // `hydrate_ui_from_settings` with its siblings, because it seeds two
-    // things: the Slint property *and* `FavoritesUi`'s synchronous shadow,
-    // which the off-thread fetchers read to decide which cover tier to warm.
-    // That handle is in scope here and deliberately dropped by the time
-    // hydration runs. (The nav index itself is hydrated at the top of this
-    // function — see the note there.)
+    // 5c2h. The two tabbed pages seed here rather than in
+    // `hydrate_ui_from_settings` with their siblings, because each seeds two
+    // things: the Slint property *and* its handle's synchronous shadow, which
+    // the off-thread fetchers read to decide which model to fill and which cover
+    // tier to warm. Those handles are in scope here and deliberately dropped by
+    // the time hydration runs. (The nav index itself is hydrated at the top of
+    // this function — see the note there.)
     if let Some(vs) = startup_view_state {
         ui::favorites::seed_tab(app, &favorites_ui, vs.favorites_tab);
+        ui::recently_played::seed_tab(app, &recently_played_ui, vs.recently_played_tab);
     }
     ui::albums::seed_detail_from_settings(app, state, &albums_ui);
     ui::artists::seed_detail_from_settings(app, state, &artists_ui);
@@ -232,6 +234,7 @@ pub fn install_views(
     ui::artists::tune_cache_for_display(app, &artists_ui);
     ui::playlists::tune_cache_for_display(app, &playlists_ui);
     ui::favorites::tune_cache_for_display(app, &favorites_ui);
+    ui::recently_played::tune_cache_for_display(app, &recently_played_ui);
 
     // `browse_ui` / `favorites_ui` / `search_ui` are deliberately dropped here:
     // their `wire_*` closures each hold a strong `Arc` clone, so the objects

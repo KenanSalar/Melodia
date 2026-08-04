@@ -1,8 +1,10 @@
 import { TrackListRow, EntityStripRow, EntityGridRow } from "../models.slint";
 
-// The two hero-mosaic pages. Recently Played is still the single-scroll shape Favorites
-// used to have — hero, one Most Played strip, one `TrackList` — so the two have
-// diverged; the intent is to bring it onto the tabbed shape below.
+// The two hero-mosaic pages. Both wear the same banner — `MosaicTabHero`, carrying a
+// `TabBar` and the filter `SearchBar` over a mosaic tile, a title and a chip strip — with
+// their sub-views under it. The two globals are separate because a Slint component can't
+// be parameterised over one, which is the same wall `impl_mosaic_hero!` works around in
+// Rust; everything the two pages genuinely share is in the component, not here.
 
 // A hero whose top row carries a `TabBar` and the filter `SearchBar`, over three
 // mutually exclusive sub-views: Songs (a sortable, filterable `TrackList`), Most Played
@@ -149,13 +151,33 @@ export global Favorites {
     }
 }
 
-// The Recently-Played view: a hero, a non-collapsible Most Played strip, and a
-// filterable `TrackList` of the most-recently-played tracks. Being one scroller over
-// three sections, it keeps the `CompositeScrollbars` wheel routing Favorites shed when
-// it became tabbed. **Membership is fixed and so is the order** — the list mounts
-// `sortable: false` and the filter re-walks the cache in memory, never re-querying and
-// never re-ordering.
+// The Recently-Played view: the shared hero over two mutually exclusive sub-views —
+// Songs (a filterable `TrackList` of the most-recently-played tracks) and Most Played (a
+// virtualized `EntityCardGrid` over the whole library, ranked by play count). One
+// scroller per tab, which is what keeps this page off the `CompositeScrollbars` wheel
+// routing it needed while the strip sat above a height-capped list.
+//
+// **The filter is shared across both tabs, and neither has a sort.** Songs mounts
+// `sortable: false` — recency is the whole point of the page, and the filter re-walks the
+// cache in memory, never re-querying and never re-ordering. Most Played's title names its
+// own ordering, the Favorites reasoning.
 export global RecentlyPlayed {
+    // **`tab-count` is the sole definition of how many there are** — Rust clamps the
+    // persisted index against it rather than carrying its own const, so a build with
+    // fewer tabs can't restore onto a branch that mounts nothing.
+    out property <int> tab-songs: 0;
+    out property <int> tab-most-played: 1;
+    out property <int> tab-count: 2;
+
+    in-out property <int> tab-idx: 0;
+    // **Fires after the bar has already moved `tab-idx`.** Rust persists the pick,
+    // releases the departed tab's cover tier and builds the entering one's model.
+    callback tab-changed(int);
+
+    // The Most Played grid's column count, pushed down from the view's `GridGeometry`.
+    in-out property <int> columns: 4;
+    callback columns-changed(int);
+
     // Up to four distinct most-recently-played covers; an empty list renders the
     // empty-state tile.
     in-out property <[string]> mosaic-paths;
@@ -166,8 +188,12 @@ export global RecentlyPlayed {
     in-out property <bool>  blur-use-a;
     in-out property <bool>  has-blur;
 
-    // Library-wide top tracks by play count, on the unified `EntityStripRow` shape.
-    in-out property <[EntityStripRow]> most-played-rows;
+    // Library-wide tracks by play count, chunked into grid rows. **Rust fills this only
+    // while Most Played is the mounted tab**, so the hidden one costs nothing.
+    in-out property <[EntityGridRow]> most-played-rows;
+    // Pre-chunk card count for the hero band and the empty-state gate — `rows.length` is
+    // a row count, not a card count. Published on both tabs, since the band reads it.
+    in-out property <int> most-played-count;
 
     // The post-filter view Rust writes, always in fetch (recency) order. **There is no
     // sort state**: the list is mounted non-sortable, recency being the whole page.
@@ -200,11 +226,22 @@ export global RecentlyPlayed {
     in-out property <[int]> selected-ids;
     in-out property <int>   selection-anchor: -1;
 
-    // The mosaic tiles and the strip cards; list rows go through `RowCovers`.
-    pure callback request-mosaic-cover(string)      -> image;
-    pure callback request-most-played-cover(string) -> image;
+    // The mosaic tiles and the grid cards; Songs rows go through `RowCovers`.
+    //
+    // The grid lookup takes `covers-generation` as a second argument, doing both halves
+    // of the queue sheet's trick: reading it is what makes a `pure` binding re-evaluate
+    // once the tier is warmed behind an already-mounted grid, and its *value* is the
+    // is-it-warm flag Rust branches on. At 0 the answer is cache-only and the card paints
+    // its placeholder — a tab switch clears the entering tier, so decoding on that first
+    // frame is one full-size decode per visible card, on the UI thread.
+    in-out property <int> covers-generation: 0;
+    pure callback request-mosaic-cover(string)           -> image;
+    pure callback request-most-played-cover(string, int) -> image;
 
+    // Hero actions. The pill is per-tab: Songs shuffles the filtered recency list, Most
+    // Played shuffles what its grid is showing.
     callback shuffle-all();
+    callback shuffle-most-played();
 
     // A Most Played card click starts playback in that scope.
     callback play-track(int /*track_id*/);

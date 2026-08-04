@@ -1,10 +1,13 @@
-//! `RecentlyPlayed.*` list callbacks: row actions (play, queue, favorite
+//! `RecentlyPlayed.*` Songs-tab callbacks: row actions (play, queue, favorite
 //! toggle), the filter pass, column visibility, modifier-aware selection, and
-//! the header Shuffle pill.
+//! the tab's Shuffle pill.
 //!
 //! There is no sort callback: the list is mounted `sortable: false`, so recency
 //! is its only order and the filter re-walks the cached rows without
 //! re-ordering them.
+//!
+//! The filter is the one thing here that isn't the Songs tab's alone — it is
+//! shared with the Most Played grid, so a keystroke re-walks both caches.
 
 use std::sync::Arc;
 
@@ -103,9 +106,10 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, rp_ui: &Arc<RecentlyPlayedU
         let ru = rp_ui.clone();
         let weak = weak.clone();
         g.on_filter_changed(move |text| {
+            let Some(ui) = weak.upgrade() else { return };
             recently_played_ui_mod::set_filter(&ru, &text);
             recently_played_ui_mod::apply_filtered_tracks(&ru, &weak);
-            recently_played_ui_mod::apply_filtered_strips(&ru, &weak);
+            recently_played_ui_mod::apply_filtered_grid_now(&ui, &ru);
         });
     }
 

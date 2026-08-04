@@ -817,6 +817,9 @@ msgstr "Δεν έχει παίξει τίποτα ακόμη"
 msgid "Play one of your favorites and it will show up here."
 msgstr "Παίξε ένα από τα αγαπημένα σου και θα εμφανιστεί εδώ."
 
+msgid "Play something and it will show up here."
+msgstr "Παίξε κάτι και θα εμφανιστεί εδώ."
+
 msgid "No favorite artists yet"
 msgstr "Δεν υπάρχουν αγαπημένοι καλλιτέχνες ακόμη"
 

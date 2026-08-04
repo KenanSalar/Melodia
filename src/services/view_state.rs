@@ -67,6 +67,9 @@ pub struct ViewStateData {
     /// sat exactly at clippy's `struct_excessive_bools` cap. A new persisted
     /// view flag has to be an int / string / map.
     pub favorites_tab: i32,
+    /// Recently-Played page tab showing at last shutdown (Songs / Most Played).
+    /// Same contract again, clamped against `RecentlyPlayed.tab-count`.
+    pub recently_played_tab: i32,
 }
 
 impl Default for ViewStateData {
@@ -81,6 +84,7 @@ impl Default for ViewStateData {
             artist_albums_collapsed: false,
             settings_tab: 0,
             favorites_tab: 0,
+            recently_played_tab: 0,
         }
     }
 }

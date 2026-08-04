@@ -1,8 +1,17 @@
-use super::clamp_tab;
+use super::{clamp_tab, grid_signature, should_announce_warm};
 
 /// A representative tab count. The real ones live in each host's Slint global
 /// and are pinned there; this is just a fixture for the arithmetic.
 const TABS: i32 = 5;
+
+/// Stands in for a host's tab enum. Both functions below are about a tab rather
+/// than about what one contains, so a fixture is the honest subject — which tabs
+/// exist is each view's own business and pinned under it.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+enum TestTab {
+    First,
+    Second,
+}
 
 #[test]
 fn clamp_tab_passes_through_valid_indices() {
@@ -26,6 +35,56 @@ fn clamp_tab_pulls_out_of_range_back_in() {
 fn clamp_tab_survives_a_zero_tab_count() {
     assert_eq!(clamp_tab(0, 0), 0);
     assert_eq!(clamp_tab(7, 0), 0);
+}
+
+/// Both shape what is on screen independently of the data — a tab switch fills
+/// one model and empties the other, a column change re-chunks the same cards
+/// into different rows. Leave either out of the signature and the apply that
+/// most needs to run is the one that gets skipped.
+#[test]
+fn the_signature_folds_in_the_tab_and_the_column_count() {
+    let base = grid_signature(TestTab::First, 4, 7);
+
+    assert_ne!(base, grid_signature(TestTab::Second, 4, 7), "the tab must count");
+    assert_ne!(base, grid_signature(TestTab::First, 5, 7), "the column count must count");
+    assert_ne!(base, grid_signature(TestTab::First, 4, 8), "the contents must count");
+}
+
+/// The re-enter case, and the one that was broken: a grid's rows can land before
+/// the prewarm returns (the view's mount-time `columns-changed` writes them), so
+/// by the time the decodes are done there is nothing left to repaint — and the
+/// tier is warm regardless. Gating the announcement on the write left
+/// `covers-generation` at its cold 0 and every card on a placeholder until the
+/// next tab pick.
+#[test]
+fn a_landed_prewarm_announces_even_when_the_rows_did_not_move() {
+    assert!(should_announce_warm(
+        Some(TestTab::Second),
+        /* section_active */ true,
+        TestTab::Second,
+    ));
+}
+
+/// A leave that landed mid-refresh has already rewound the counter and dropped
+/// the buffers, so there is no tier to announce and nothing on screen to hear it.
+#[test]
+fn a_section_left_mid_refresh_announces_nothing() {
+    assert!(!should_announce_warm(
+        Some(TestTab::Second),
+        /* section_active */ false,
+        TestTab::Second,
+    ));
+    // `None` is the same refresh finding the section already hidden before it
+    // ever spawned the prewarm — no decode ran, so nothing is warm.
+    assert!(!should_announce_warm(None, true, TestTab::Second));
+}
+
+/// A tab pick that overtook the decodes owns a different tier — `swap_tab_covers`
+/// cleared the one this task warmed. Announcing it would put the entering tab's
+/// cards straight back on the UI-thread decoding path.
+#[test]
+fn a_tab_pick_that_overtook_the_prewarm_announces_nothing() {
+    assert!(!should_announce_warm(Some(TestTab::Second), true, TestTab::First));
 }
 
 const TAB_BAR: &str = include_str!("../../../melodia-ui/ui/components/tab-bar.slint");

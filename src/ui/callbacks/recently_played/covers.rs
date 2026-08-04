@@ -1,5 +1,5 @@
 //! `RecentlyPlayed` lazy cover-lookup callbacks — the hero mosaic tiles and
-//! the Most Played strip cards. (List rows resolve through the shared
+//! the Most Played grid cards. (Songs rows resolve through the shared
 //! `RowCovers` global like every other `TrackListRowItem`.) See
 //! [`super::wire_recently_played`].
 
@@ -18,7 +18,13 @@ pub(super) fn wire(ui: &AppWindow, rp_ui: &Arc<RecentlyPlayedUi>) {
         g.on_request_mosaic_cover(move |path| ru.mosaic_cover(path.as_str()));
     }
     {
+        // The second argument is `RecentlyPlayed.covers-generation`: reading it
+        // is what makes the card's `pure` binding re-evaluate once the tier is
+        // warmed behind an already-mounted grid, and its value is the is-it-warm
+        // flag `grid_cover` branches on.
         let ru = rp_ui.clone();
-        g.on_request_most_played_cover(move |path| ru.most_played_cover(path.as_str()));
+        g.on_request_most_played_cover(move |path, generation| {
+            ru.most_played_cover(path.as_str(), generation)
+        });
     }
 }

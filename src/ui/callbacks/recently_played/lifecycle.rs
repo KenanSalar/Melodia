@@ -13,7 +13,7 @@ use crate::state::AppState;
 use crate::ui::model_diff::clear_vec_model;
 use crate::ui::recently_played::{self as recently_played_ui_mod, RecentlyPlayedUi};
 use crate::{
-    AppWindow, EntityStripRow as UiEntityStripRow, Nav, RecentlyPlayed,
+    AppWindow, EntityGridRow as UiEntityGridRow, Nav, RecentlyPlayed,
     TrackListRow as UiTrackListRow,
 };
 
@@ -53,13 +53,21 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, rp_ui: &Arc<RecentlyPlayedU
                 // Unconditional, on the same tick as the wipe — see the
                 // matching call in `favorites/lifecycle.rs`.
                 ru.forget_mosaic();
+                // Same tick, same reason: the models are emptied below, so a
+                // surviving signature would match the identical data on re-enter
+                // and skip the refill that fills them back in.
+                ru.forget_grid_signature();
                 // Six heroes share one colour set and one chip row, so hand
                 // both back rather than leaving this mosaic's solve and this
                 // view's counts for the next hero to paint under.
                 crate::ui::hero_backdrop::reset(&ui);
                 crate::ui::hero_chips::clear(&ui);
+                // The grid tier goes with `release_section_state` below, so
+                // rewind the counter that means "cold" — else the next enter
+                // reads a leftover bump as a warm tier and decodes on mount.
+                g.set_covers_generation(0);
                 clear_vec_model::<UiTrackListRow>(&g.get_tracks(), "recently_played: clear tracks");
-                clear_vec_model::<UiEntityStripRow>(
+                clear_vec_model::<UiEntityGridRow>(
                     &g.get_most_played_rows(),
                     "recently_played: clear most-played",
                 );
@@ -92,11 +100,11 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, rp_ui: &Arc<RecentlyPlayedU
 
     // --- library_changed_tx + stats_changed_tx subscriber ---------
     // `library_changed` is bumped by scans / imports / favorite toggles;
-    // `stats_changed` after every play-count flush (which also writes
-    // `last_played`, this view's ordering key). So it is the second
-    // subscriber to `stats_changed` (Favorites is the first). Visible ⇒
-    // refetch strips + tracks in place; hidden ⇒ mark dirty for the next
-    // enter.
+    // `stats_changed` after every play-count flush (which writes both this
+    // view's ordering keys — `last_played` for Songs, `play_count` for Most
+    // Played). So it is the second subscriber to `stats_changed` (Favorites is
+    // the first). Visible ⇒ refetch grid + tracks in place; hidden ⇒ mark dirty
+    // for the next enter.
     {
         let s = state.clone();
         let ru = rp_ui.clone();
@@ -146,16 +154,16 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, rp_ui: &Arc<RecentlyPlayedU
     }
 }
 
-/// Fetch the Most Played strip + the recency list and apply each as it lands.
-/// Concurrent — `tokio::join!` runs both in parallel. `refresh_strips` logs its
+/// Fetch the Most Played grid + the recency list and apply each as it lands.
+/// Concurrent — `tokio::join!` runs both in parallel. `refresh_grid` logs its
 /// own error (returns `()`); `refresh_tracks` returns `AppResult<()>`.
 async fn kick_full_refresh(
     state: &AppState,
     rp_ui: &Arc<RecentlyPlayedUi>,
     weak: &slint::Weak<AppWindow>,
 ) {
-    let (_strips, t) = tokio::join!(
-        recently_played_ui_mod::refresh_strips(state, rp_ui, weak),
+    let (_grid, t) = tokio::join!(
+        recently_played_ui_mod::refresh_grid(state, rp_ui, weak),
         recently_played_ui_mod::refresh_tracks(state, rp_ui, weak),
     );
     if let Err(e) = t {

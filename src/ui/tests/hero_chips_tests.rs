@@ -1,7 +1,7 @@
 use super::{
-    ChipLabels, FavoritesFacts, HeroFold, MostPlayedTotals, album_chips, artist_chips,
-    dominant_genre, favorites_chips, fold_most_played, fold_tracks, genre_chips, playlist_chips,
-    recently_played_chips, year_span,
+    ChipLabels, FavoritesFacts, HeroFold, MostPlayedTotals, RecentlyPlayedFacts, album_chips,
+    artist_chips, dominant_genre, favorites_chips, fold_most_played, fold_tracks, genre_chips,
+    playlist_chips, recently_played_chips, year_span,
 };
 use crate::entities::album::AlbumStats;
 use crate::entities::artist::ArtistStats;
@@ -9,14 +9,17 @@ use crate::entities::genre::GenreStats;
 use crate::entities::playlist::PlaylistStats;
 use crate::entities::track::{MostPlayedFavorite, TrackListRow};
 use crate::ui::favorites::FavoritesTab;
+use crate::ui::recently_played::RecentlyPlayedTab;
 use slint::SharedString;
 
 const STRIP: &str = include_str!("../../../melodia-ui/ui/components/meta-chip-strip.slint");
 const HERO_CHIPS: &str = include_str!("../hero_chips.rs");
 
-/// Every view that mounts a chip strip on a hero band, and the name of the
-/// meta-line property it replaced. Both halves matter — see the two pins below.
-const HERO_VIEWS: [(&str, &str); 6] = [
+/// Every source that *draws* a hero band. Five, not six: the two mosaic pages
+/// wear one shared banner, so `MosaicTabHero` stands for both, which is the
+/// stronger subject — one file to hold to the contract rather than two that can
+/// drift. Whether each page still wears it is [`MOSAIC_HOSTS`]' job.
+const HERO_VIEWS: [(&str, &str); 5] = [
     (
         include_str!("../../../melodia-ui/ui/views/album-detail-view.slint"),
         "album-detail-view.slint",
@@ -33,6 +36,16 @@ const HERO_VIEWS: [(&str, &str); 6] = [
         include_str!("../../../melodia-ui/ui/views/playlist-detail-view.slint"),
         "playlist-detail-view.slint",
     ),
+    (
+        include_str!("../../../melodia-ui/ui/components/hero/mosaic-tab-hero.slint"),
+        "mosaic-tab-hero.slint",
+    ),
+];
+
+/// The two pages wearing the shared mosaic banner. They own no band of their own
+/// — a title, a chip strip or an artwork size appearing in either is the
+/// extraction coming undone one binding at a time.
+const MOSAIC_HOSTS: [(&str, &str); 2] = [
     (
         include_str!("../../../melodia-ui/ui/views/favorites-view.slint"),
         "favorites-view.slint",
@@ -302,6 +315,23 @@ fn favorites_facts(tab: FavoritesTab) -> FavoritesFacts {
     }
 }
 
+/// The same for Recently Played. Its Most Played tab is the whole library where
+/// its Songs tab is the last 200 played, so the two totals are unrelated on
+/// purpose — the sums-itself pin below reads them apart.
+fn recently_played_facts(tab: RecentlyPlayedTab) -> RecentlyPlayedFacts {
+    RecentlyPlayedFacts {
+        tab,
+        tracks: 200,
+        duration_ms: 43_451_000, // 12:04:11
+        songs: HeroFold { artists: 44, albums: 60 },
+        most_played: MostPlayedTotals {
+            tracks: 512,
+            duration_ms: 118_800_000, // 33:00:00
+            plays: 4096,
+        },
+    }
+}
+
 #[test]
 fn the_favorites_chips_follow_the_tab() {
     assert_eq!(
@@ -357,9 +387,9 @@ fn a_never_played_most_played_tab_states_no_plays() {
     );
 }
 
-/// Every empty band leaves the copy to the view — a sentence on the Songs and
-/// Recently Played heroes, a `GridEmptyState` on the two Favorites grids. A lone
-/// "0 …" chip beside one of those is redundant at best.
+/// Every empty band leaves the copy to the view — a sentence on the two Songs
+/// heroes, a `GridEmptyState` on the three grids. A lone "0 …" chip beside one of
+/// those is redundant at best.
 #[test]
 fn an_empty_hero_leaves_its_empty_state_to_the_view() {
     let empty = FavoritesFacts {
@@ -382,7 +412,21 @@ fn an_empty_hero_leaves_its_empty_state_to_the_view() {
              says so, and says it better"
         );
     }
-    assert!(recently_played_chips(&EnglishLabels, 0, 0, HeroFold::default()).is_empty());
+
+    let empty = RecentlyPlayedFacts {
+        tracks: 0,
+        duration_ms: 0,
+        songs: HeroFold::default(),
+        most_played: MostPlayedTotals::default(),
+        ..recently_played_facts(RecentlyPlayedTab::Songs)
+    };
+    for tab in [RecentlyPlayedTab::Songs, RecentlyPlayedTab::MostPlayed] {
+        let facts = RecentlyPlayedFacts { tab, ..empty };
+        assert!(
+            recently_played_chips(&EnglishLabels, &facts).is_empty(),
+            "the {tab:?} tab states a count over an empty list"
+        );
+    }
 }
 
 #[test]
@@ -390,11 +434,24 @@ fn recently_played_states_its_count_running_time_and_spread() {
     assert_eq!(
         texts(&recently_played_chips(
             &EnglishLabels,
-            200,
-            43_451_000, // 12:04:11
-            HeroFold { artists: 44, albums: 60 }
+            &recently_played_facts(RecentlyPlayedTab::Songs)
         )),
         vec!["200 tracks", "12:04:11", "44 artists", "60 albums"]
+    );
+}
+
+/// The Most Played tab on this page is the *whole library*, where its Songs tab
+/// is the last 200 played — so borrowing the Songs totals would understate it,
+/// where on Favorites the same mistake overstates. Two different directions of
+/// wrong, one rule: the tab sums itself.
+#[test]
+fn recently_playeds_most_played_sums_itself_too() {
+    assert_eq!(
+        texts(&recently_played_chips(
+            &EnglishLabels,
+            &recently_played_facts(RecentlyPlayedTab::MostPlayed)
+        )),
+        vec!["512 tracks", "33:00:00", "4096 plays"]
     );
 }
 
@@ -492,6 +549,18 @@ fn every_chip_strip_takes_its_brushes_from_its_backdrop() {
         );
     }
 
+    // The two mosaic pages get theirs through the shared band. A strip mounted
+    // beside it is a second chip row on the same banner, which the `HeroChips`
+    // global has no way to feed twice.
+    for (src, name) in MOSAIC_HOSTS {
+        for mount in ["HeroChipStrip {", "MetaChipStrip {"] {
+            assert!(
+                !src.contains(mount),
+                "{name} mounts `{mount}` itself — its chip row belongs to `MosaicTabHero`"
+            );
+        }
+    }
+
     // Bounded by the `measured` handler rather than by a brace, so the
     // handler's own body can't end the window early.
     let mounts = [
@@ -539,7 +608,7 @@ fn every_chip_strip_takes_its_brushes_from_its_backdrop() {
 /// then says the same thing twice.
 #[test]
 fn no_hero_view_still_declares_a_meta_line() {
-    for (src, name) in HERO_VIEWS {
+    for (src, name) in HERO_VIEWS.iter().chain(MOSAIC_HOSTS.iter()) {
         for prop in ["meta-line", "stats-line", "stats-text"] {
             assert!(
                 !src.contains(&format!("property <string> {prop}")),
@@ -584,7 +653,7 @@ fn no_hero_view_sizes_its_own_artwork_tile() {
         "DetailHeader must not reintroduce a per-view size knob — four of the six bands would \
          then be free to drift from the two that have no header to route through"
     );
-    for (src, name) in HERO_VIEWS {
+    for (src, name) in HERO_VIEWS.iter().chain(MOSAIC_HOSTS.iter()) {
         assert!(
             !src.contains("artwork-size"),
             "{name} sizes its hero tile itself — it belongs on `Theme.hero-artwork`"
@@ -604,23 +673,32 @@ fn no_hero_view_sizes_its_own_artwork_tile() {
         );
     }
 
-    let mosaic = HERO_VIEWS
+    // The banner the two mosaic pages share. It mounts the square rather than
+    // drawing it — inline is what put the same chrome in two files once — and
+    // derives its own band height from the same token.
+    let band = HERO_VIEWS
         .iter()
-        .filter(|(_, name)| matches!(*name, "favorites-view.slint" | "recently-played-view.slint"));
-    let mut checked = 0;
-    for (src, name) in mosaic {
+        .find(|(_, name)| *name == "mosaic-tab-hero.slint")
+        .map_or("", |(src, _)| *src);
+    assert!(
+        band.contains("MosaicHeroTile {"),
+        "mosaic-tab-hero.slint must mount `MosaicHeroTile`"
+    );
+    assert!(
+        band.contains("Theme.hero-artwork"),
+        "mosaic-tab-hero.slint derives its band height from the tile token, so it must read it"
+    );
+
+    // And that both pages still wear it. Asserted here rather than left implicit:
+    // a page that reinlines its own band passes every check above, because the
+    // shared file it stopped using is still correct.
+    for (src, name) in MOSAIC_HOSTS {
         assert!(
-            src.contains("MosaicHeroTile {"),
-            "{name} must mount `MosaicHeroTile` — drawing the square inline is what put the same \
-             chrome in two files and let the two drift"
+            src.contains("MosaicTabHero {"),
+            "{name} must mount `MosaicTabHero` — a page drawing its own band is how the two \
+             drifted apart before, and the shared file goes on passing its own pins"
         );
-        assert!(
-            src.contains("Theme.hero-artwork"),
-            "{name} derives its hero band height from the tile token, so it must still read it"
-        );
-        checked += 1;
     }
-    assert_eq!(checked, 2, "both mosaic heroes must still be in HERO_VIEWS");
 }
 
 /// Favorites is the one hero assembled from three fetches rather than one, and
@@ -734,14 +812,18 @@ fn the_section_leave_drops_the_folds_with_the_caches_they_summarise() {
 /// away.
 #[test]
 fn no_hero_folds_out_of_a_shared_cache() {
-    const FOLDERS: [(&str, &str); 6] = [
+    const FOLDERS: [(&str, &str); 7] = [
         (include_str!("../albums/detail.rs"), "albums/detail.rs"),
         (include_str!("../artists/detail.rs"), "artists/detail.rs"),
         (include_str!("../genres/detail.rs"), "genres/detail.rs"),
         (include_str!("../playlists/detail.rs"), "playlists/detail.rs"),
         (
-            include_str!("../recently_played/tracks.rs"),
-            "recently_played/tracks.rs",
+            include_str!("../recently_played/songs.rs"),
+            "recently_played/songs.rs",
+        ),
+        (
+            include_str!("../recently_played/grid/fetch.rs"),
+            "recently_played/grid/fetch.rs",
         ),
         (HERO_CHIPS, "hero_chips.rs"),
     ];
@@ -969,7 +1051,7 @@ fn the_two_subtitled_heroes_keep_that_line_inside_the_title_row() {
     }
 }
 
-/// All six hero titles are one number, and it lives on `Theme`.
+/// Every hero title is one number, and it lives on `Theme`.
 ///
 /// The same argument `hero-artwork` makes: the banners are the same band under
 /// different content, so a title that changes size between them reads as the
@@ -1005,6 +1087,16 @@ fn every_hero_title_reads_the_same_token() {
             "{name} sizes a hero title with something other than `Theme.hero-title-size` — the \
              six banners are one band under different content, and they had already drifted to \
              two sizes once"
+        );
+    }
+
+    // The two mosaic pages take their heading from the shared band, so a title
+    // reappearing in either is a second one — and the copy that would be free to
+    // drift.
+    for (src, name) in MOSAIC_HOSTS {
+        assert!(
+            !src.contains(WEIGHT),
+            "{name} declares a hero title of its own; `MosaicTabHero` owns that heading"
         );
     }
 }

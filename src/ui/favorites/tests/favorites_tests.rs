@@ -173,122 +173,28 @@ fn tab_count_matches_the_tabs_slint_declares() {
     );
 }
 
-/// The header row is drawn from `page-w` for one frame before the first layout
-/// reports the truth, and that seed has to be the row's own floor rather than a
-/// plausible page width. Seeded wide, the bar believes it can afford full-width
-/// tabs, draws them into a panel that can't seat them, and they spill under the
-/// search bar — which is what a miniplayer → full swap reliably produces. Same
-/// contract `settings-view.slint` carries; a literal reads as harmless to
-/// anyone who hasn't seen it fail, so pin that it stays derived.
+/// A tab pick has to clear the filter it was made under, and clear it on *both*
+/// sides. A Songs needle carried into the Artists grid silently hides cards, and
+/// the two halves fail differently: leaving the Slint property set leaves the
+/// box holding text the page is no longer filtered by, and leaving the Rust
+/// shadow set filters the entering tab's model against it.
 #[test]
-fn the_page_width_seed_is_the_rows_floor() {
-    let seed = VIEW
-        .split_once("property <length> page-w:")
-        .and_then(|(_, rest)| rest.split_once(';'))
-        .map_or("", |(value, _)| value);
-
-    assert!(
-        seed.contains("compact-w"),
-        "favorites-view.slint's `page-w` seed must be the header row's floor, derived from the \
-         bar's own `compact-w` — not a plausible page width"
-    );
-}
-
-/// The tab bodies sit inside the page's own enter transition, so theirs has to
-/// stay off until the user actually switches — a horizontal slide composed with
-/// the page's fade-up reads as a diagonal on every arrival from the sidebar.
-/// `tab-anim-armed` starts `false` and is written by the pick handler; the page
-/// is destroyed and rebuilt on every entry, so it re-disarms for free. Seed it
-/// `true`, or arm it from a mount timer, and the bug is back and looks like a
-/// design choice.
-#[test]
-fn the_sub_view_slide_is_disarmed_until_the_first_switch() {
-    assert!(
-        VIEW.contains("property <bool> tab-anim-armed: false;"),
-        "favorites-view.slint's `tab-anim-armed` must start false — the page's own entrance is \
-         the only thing that should move when it arrives"
-    );
-
+fn a_tab_pick_clears_the_filter_on_both_sides() {
     let handler = VIEW
-        .split_once("selected(i) =>")
+        .split_once("tab-selected(i) =>")
         .and_then(|(_, rest)| rest.split_once("Favorites.tab-changed(i);"))
         .map_or("", |(body, _)| body);
     assert!(
-        handler.contains("root.tab-anim-armed = true;"),
-        "the tab bar's `selected` handler must arm the slide — nothing else can tell a real \
-         switch from the page mounting"
-    );
-    // Pinned down to the operand: the direction has to come off the bar's own
-    // `previous-index`, since `tab-idx` and everything bound to it already read
-    // the tab just picked. A local mirror reintroduced here would compare `i`
-    // against `i` and enter from the left every time.
-    assert!(
-        handler.contains("root.tab-enter-from = i > bar.previous-index"),
-        "the tab bar's `selected` handler must set the direction from `bar.previous-index`, and \
-         *before* the branch flips — the same ordering `nav_transition.rs` follows for the \
-         page-level transition"
-    );
-}
-
-/// A mirrored width only reaches the bar through `changed width`, and `changed`
-/// doesn't fire when the first layout settles directly on the final value —
-/// which is every window opened at its size. Without the mount timer the seed
-/// above is never corrected, and a roomy window draws icon-only tabs until
-/// something resizes it. It only looks fixed coming out of the miniplayer,
-/// where the floor's answer happens to be the right one.
-#[test]
-fn the_page_width_mirror_has_a_mount_seed() {
-    assert!(
-        VIEW.contains("changed width => { self.page-w = self.width; }"),
-        "favorites-view.slint must mirror its width imperatively — a live `root.width` read \
-         feeding a child's size re-enters layout"
+        handler.contains("Favorites.filter = \"\";"),
+        "favorites-view.slint's `tab-selected` handler must clear the Slint-side filter before \
+         handing the pick to Rust"
     );
 
-    let timer = VIEW
-        .split_once("Timer {")
-        .and_then(|(_, rest)| rest.split_once("\n    }"))
-        .map_or("", |(body, _)| body);
     assert!(
-        timer.contains("root.page-w = root.width"),
-        "favorites-view.slint's mount Timer must re-run the `page-w` mirror — `changed` never \
-         fires for a window born at its final size"
+        SUBVIEWS.contains("favorites_ui_mod::set_filter(&fu, \"\");"),
+        "the tab-change handler must drop the Rust filter shadow to match — the model build and \
+         every later fetch read that, not the Slint property"
     );
-}
-
-/// `TabBar`'s four brushes all default to `Theme.*` tokens, which is right for
-/// Settings and wrong on a banner — and a mount that omits one still builds and
-/// still looks correct in Settings, so nothing else catches it.
-///
-/// `active-color` is the one this exists for. It was left at the default long
-/// after the other three moved, and it drives the selected label, its FILL=1
-/// icon *and* the underline from one input, so the omission is three surfaces
-/// at once. Two things make it wrong rather than merely inconsistent: the band
-/// takes its hue from the mosaic now, and a theme accent has no contrast floor
-/// against it — Latte's mauve lands near 1.7:1 on the pinned band, under even
-/// the 3:1 non-text bar, where `HeroBackdrop.chrome` is solved to clear it.
-///
-/// Asserted as "reads *some* `HeroBackdrop` tier" rather than pinning which
-/// one: the tier a brush should take is a design call that may move, but
-/// reaching for `Theme.*` here is a bug at any tier.
-#[test]
-fn the_hero_tab_bar_takes_every_brush_from_the_backdrop() {
-    let mount = VIEW
-        .split_once("bar := TabBar {")
-        .and_then(|(_, rest)| rest.split_once("selected(i) =>"))
-        .map_or("", |(body, _)| body);
-    assert!(
-        !mount.is_empty(),
-        "favorites-view.slint no longer mounts `bar := TabBar` ahead of its `selected` handler"
-    );
-
-    for prop in ["label-color", "active-color", "hover-fill", "divider-color"] {
-        assert!(
-            mount.contains(&format!("{prop}: HeroBackdrop.")),
-            "the Favorites hero's TabBar must pass `{prop}` a `HeroBackdrop` tier — omitting it \
-             falls back to the component's `Theme.*` default, which is a theme value on a band \
-             that is no longer theme-seeded"
-        );
-    }
 }
 
 /// Every field a sort pill can ask for has to be one the comparator handles.

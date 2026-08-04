@@ -145,7 +145,8 @@ component TabBarCell inherits Rectangle {
 
 // Material 3 tab bar. Data-agnostic — parallel label/icon arrays in, picked index out,
 // the `ChipGroup` / `Dropdown` / `ColorDotGrid` shape — and it knows nothing about which
-// tabs exist. Two hosts: the Settings page header and the Favorites hero.
+// tabs exist. Two hosts: the Settings page header and the shared mosaic hero band, which
+// Favorites and Recently Played both wear.
 //
 // **`labels` must arrive as an inline `[@tr("…"), …]` literal at the call site.** `@tr`
 // registers msgids at codegen, so an array populated from Rust renders untranslated.

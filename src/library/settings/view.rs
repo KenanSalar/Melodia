@@ -146,6 +146,14 @@ pub fn set_favorites_tab(state: &AppState, tab: i32) -> Result<(), AppError> {
     })
 }
 
+/// Persist the Recently-Played page's active tab. Same contract again —
+/// `RecentlyPlayed.tab-idx` is two-way bound to its tab bar.
+pub fn set_recently_played_tab(state: &AppState, tab: i32) -> Result<(), AppError> {
+    services::view_state::mutate_view_state(&state.paths, move |s| {
+        s.recently_played_tab = tab;
+    })
+}
+
 /// Persist the visible-column list for `view_id` (e.g. "tracks") into
 /// `views.json`'s `view_columns`. Full file rewrite, matching how the Tauri
 /// app handled this. `columns` is the list of CURRENTLY VISIBLE column

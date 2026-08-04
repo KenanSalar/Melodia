@@ -21,6 +21,7 @@ fn test_view_state_default() {
     assert!(!vs.artist_albums_collapsed);
     assert_eq!(vs.settings_tab, 0);
     assert_eq!(vs.favorites_tab, 0);
+    assert_eq!(vs.recently_played_tab, 0);
 }
 
 #[test]
@@ -34,6 +35,7 @@ fn test_view_state_missing_fields_default() -> Result<(), AppError> {
     // not fail the whole file.
     assert_eq!(vs.settings_tab, 0);
     assert_eq!(vs.favorites_tab, 0);
+    assert_eq!(vs.recently_played_tab, 0);
     Ok(())
 }
 
@@ -62,6 +64,7 @@ fn test_view_state_roundtrip() -> Result<(), AppError> {
         artist_albums_collapsed: true,
         last_detail_ids: HashMap::from([("album_detail".to_owned(), 42)]),
         settings_tab: 3,
+        recently_played_tab: 1,
         ..ViewStateData::default()
     };
     let json = serde_json::to_string(&vs).map_err(|e| json_err(&e))?;
@@ -71,6 +74,7 @@ fn test_view_state_roundtrip() -> Result<(), AppError> {
     assert!(back.artist_albums_collapsed);
     assert_eq!(back.last_detail_ids.get("album_detail").copied(), Some(42));
     assert_eq!(back.settings_tab, 3);
+    assert_eq!(back.recently_played_tab, 1);
     Ok(())
 }
 

@@ -28,10 +28,14 @@ const MULTILINE_INPUT: &str =
     include_str!("../../../melodia-ui/ui/components/multiline-input.slint");
 const TOOLTIP: &str = include_str!("../../../melodia-ui/ui/components/tooltip.slint");
 
-/// The two hosts that budget their header row and drive `input-width` outright.
+/// The two hosts that budget their header row and drive `input-width` outright:
+/// the Settings page, and the banner both mosaic pages wear.
 const BUDGETING_HOSTS: [(&str, &str); 2] = [
     ("settings-view.slint", include_str!("../../../melodia-ui/ui/views/settings-view.slint")),
-    ("favorites-view.slint", include_str!("../../../melodia-ui/ui/views/favorites-view.slint")),
+    (
+        "mosaic-tab-hero.slint",
+        include_str!("../../../melodia-ui/ui/components/hero/mosaic-tab-hero.slint"),
+    ),
 ];
 
 /// Collapses runs of whitespace so a pin reads a token sequence rather than one

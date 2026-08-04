@@ -20,13 +20,14 @@ pub async fn get_recently_played(state: &AppState) -> Result<Vec<track::TrackLis
     queries::track::get_recently_played(&state.db, RECENTLY_PLAYED_LIMIT).await
 }
 
-/// Top-N most-played tracks across the whole library (for the "Most Played"
-/// strip). Clamps `limit` to a sane band — the strip is a capped carousel, not
-/// a virtualized grid like the Favorites tab, so the cap is the whole point.
+/// The most-played tracks across the whole library, for the "Most Played" tab.
+///
+/// Uncapped, like `favorites::get_most_played_favorites`: the tab is a
+/// virtualized grid, so it has nothing to gain by truncating. It used to take a
+/// `limit` clamped to `[1, 100]`, which was the right shape for the ten-card
+/// carousel this replaced and would now be a ceiling the user can scroll into.
 pub async fn get_most_played(
     state: &AppState,
-    limit: i64,
 ) -> Result<Vec<track::MostPlayedFavorite>, AppError> {
-    let limit = limit.clamp(1, 100);
-    queries::track::get_most_played(&state.db, limit).await
+    queries::track::get_most_played(&state.db).await
 }

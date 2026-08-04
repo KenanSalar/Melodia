@@ -4,19 +4,18 @@
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::sync::Arc;
 
-use slint::{ComponentHandle, Model, VecModel, Weak};
+use slint::{ComponentHandle, Weak};
 
-use super::warm::{grid_signature, mounted_content, should_announce_warm};
+use super::warm::mounted_content;
 use crate::entities::artist::FavoriteArtist;
 use crate::ui::favorites::{
     FavoritesTab, FavoritesUi, tab_from_index, to_slint_fav_artist_row, to_slint_most_played_row,
 };
-use crate::ui::grid_rows::chunk_rows;
+use crate::ui::grid_rows::{chunk_entity_rows, write_grid};
 use crate::ui::row_match::most_played_matches;
+use crate::ui::tab_bar::{grid_signature, should_announce_warm};
 use crate::ui::util::len_as_i32;
-use crate::{
-    AppWindow, EntityGridRow as UiEntityGridRow, EntityStripRow as UiEntityStripRow, Favorites,
-};
+use crate::{AppWindow, EntityStripRow as UiEntityStripRow, Favorites};
 
 /// The mounted grid's filtered rows, prepared away from the UI thread by
 /// [`build_filtered_grids`] and consumed by [`write_filtered_grids`].
@@ -170,7 +169,7 @@ fn write_filtered_grids(ui: &AppWindow, fav_ui: &FavoritesUi, prepared: &Prepare
     write_grid(
         &g.get_most_played_rows(),
         chunk_entity_rows(&prepared.most_played, columns),
-        "most-played",
+        "Favorites.most-played-rows",
     );
 
     let artist_rows: Vec<UiEntityStripRow> = prepared
@@ -178,7 +177,11 @@ fn write_filtered_grids(ui: &AppWindow, fav_ui: &FavoritesUi, prepared: &Prepare
         .iter()
         .map(|a| to_slint_fav_artist_row(a, g.invoke_artist_favorite_subtitle(a.favorite_count)))
         .collect();
-    write_grid(&g.get_artist_rows(), chunk_entity_rows(&artist_rows, columns), "artist");
+    write_grid(
+        &g.get_artist_rows(),
+        chunk_entity_rows(&artist_rows, columns),
+        "Favorites.artist-rows",
+    );
 }
 
 /// Apply from a worker thread, hopping to the event loop to write.
@@ -220,21 +223,4 @@ pub fn apply_filtered_grids_now(ui: &AppWindow, fav_ui: &FavoritesUi) {
 pub fn mark_covers_warm(ui: &AppWindow) {
     let g = ui.global::<Favorites>();
     g.set_covers_generation(g.get_covers_generation().saturating_add(1));
-}
-
-/// Chunk a flat card list into rows of `columns` — the cards are already
-/// built here, where the four entity grids project theirs out of a `GridData`
-/// as they chunk.
-fn chunk_entity_rows(rows: &[UiEntityStripRow], columns: i32) -> Vec<UiEntityGridRow> {
-    chunk_rows(rows, columns, Clone::clone, |entities| UiEntityGridRow {
-        entities,
-    })
-}
-
-fn write_grid(model: &slint::ModelRc<UiEntityGridRow>, rows: Vec<UiEntityGridRow>, label: &str) {
-    let Some(vec) = model.as_any().downcast_ref::<VecModel<UiEntityGridRow>>() else {
-        log::warn!("Favorites.{label}-rows: VecModel<EntityGridRow> downcast failed");
-        return;
-    };
-    vec.set_vec(rows);
 }

@@ -717,26 +717,24 @@ pub async fn get_most_played_favorites(
     Ok(rows)
 }
 
-/// Top N tracks by play count across the whole library (only those with
-/// `play_count` > 0). Sibling of [`get_most_played_favorites`] without the
-/// `is_favorite` filter — drives the Recently-Played view's "Most Played"
-/// strip. Reuses the generic `MostPlayedFavorite` card projection, and the same
-/// [`MOST_PLAYED_ORDER`] — the strip re-fetches on every `stats_changed` tick,
-/// so an order that left ties to the planner could reshuffle the cards under
-/// the user with nothing about the library having moved.
-pub async fn get_most_played(
-    db: &DbPool,
-    limit: i64,
-) -> Result<Vec<track::MostPlayedFavorite>, AppError> {
+/// Tracks by play count across the whole library, most played first (only those
+/// with `play_count` > 0). Sibling of [`get_most_played_favorites`] without the
+/// `is_favorite` filter — drives the Recently-Played view's "Most Played" tab.
+/// Reuses the generic `MostPlayedFavorite` card projection, and the same
+/// [`MOST_PLAYED_ORDER`] — the tab re-fetches on every `stats_changed` tick, so
+/// an order that left ties to the planner could reshuffle the cards under the
+/// user with nothing about the library having moved.
+///
+/// Returns the whole set rather than a top N, for the reason its favorites-only
+/// sibling does: the tab is a virtualized grid.
+pub async fn get_most_played(db: &DbPool) -> Result<Vec<track::MostPlayedFavorite>, AppError> {
     let rows = sqlx::query_as::<_, track::MostPlayedFavorite>(AssertSqlSafe(format!(
         "SELECT id, title, artist, album_artist, album, genre, year, \
                 artwork_path, play_count, duration_ms \
            FROM tracks \
           WHERE play_count > 0 \
-          ORDER BY {MOST_PLAYED_ORDER} \
-          LIMIT ?"
+          ORDER BY {MOST_PLAYED_ORDER}"
     )))
-    .bind(limit)
     .fetch_all(db.read())
     .await?;
     Ok(rows)
