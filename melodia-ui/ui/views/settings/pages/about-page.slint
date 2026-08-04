@@ -3,9 +3,8 @@ import { SettingsPage } from "../../../globals/settings-page.slint";
 import { UpdateSection } from "../update-section.slint";
 import { AboutSection } from "../about-section.slint";
 
-// About tab: which version is installed and how it gets to the next one.
-// Updates leads because it's the one a user comes here to act on; the
-// version/author/licence card is reference material below it.
+// Which version is installed and how it gets to the next one. Updates leads
+// because it's the card a user comes here to act on; the rest is reference.
 export component AboutPage inherits Rectangle {
     background: transparent;
     horizontal-stretch: 1;
@@ -13,8 +12,8 @@ export component AboutPage inherits Rectangle {
 
     out property <bool> has-matches: updates.has-matches || about.has-matches;
 
-    // See `library-page.slint` for why the cards live in columns and the
-    // columns place themselves.
+    // See `library-page.slint` for why the cards live in columns that place
+    // themselves.
     GridLayout {
         spacing: Theme.pad-lg;
 

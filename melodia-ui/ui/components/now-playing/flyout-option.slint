@@ -2,11 +2,8 @@ import { Theme } from "../../theme.slint";
 import { MaterialIcon } from "../material-icon.slint";
 import { FlyoutMetrics } from "flyout-presets.slint";
 
-// Single option row inside a left-column flyout (speed / sleep timer).
-// Mirrors `DropdownOption` (`ui/components/settings/dropdown.slint`): label
-// on the left, a `check` glyph on the active row. Hover fill matches the
-// sibling overflow rows (`Theme.surface1`) since both live in the same
-// popup family.
+// One option row inside a flyout — `DropdownOption`'s shape, with the overflow
+// rows' hover fill, since both live in the same popup family.
 export component FlyoutOption inherits Rectangle {
     in property <string> label;
     in property <bool> active;
@@ -35,8 +32,7 @@ export component FlyoutOption inherits Rectangle {
         }
         VerticalLayout {
             alignment: center;
-            // Checkmark only on the active row; the empty branch keeps the
-            // layout box stable so all rows have identical height.
+            // The empty branch holds the box, so every row is the same height.
             if root.active: MaterialIcon {
                 name: "check";
                 icon-size: 16px;

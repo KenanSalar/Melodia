@@ -1,18 +1,12 @@
 import { AlbumRow, AlbumGridRow, TrackListRow } from "../models.slint";
 
-// Albums: drives the Album grid view. `grid-rows` is owned by Rust
-// (`Rc<VecModel<AlbumGridRow>>` in `src/ui/albums/`), installed once at
-// startup and rebuilt in place on every filter / sort / column-count
-// change. The canonical unfiltered album list lives Rust-side; both
-// `apply-filter` and `request-sort` re-derive `grid-rows` *without* a DB
-// hit (`album_stats` is fetched once; Year / Artist sorts are done
-// in-memory since the query is fixed name-ASC).
+// The Album grid. Rust owns `grid-rows`, installed once and rebuilt in place on every
+// filter / sort / column-count change; the canonical unfiltered list lives there too, so
+// **neither `apply-filter` nor `request-sort` hits the DB** — the stats are fetched once
+// and re-sorted in memory.
 //
-// `columns` is computed by `AlbumView` from its body width and pushed back
-// via `columns-changed` so Rust re-chunks the flat album list into rows of
-// N cards (the `ListView` in `AlbumGrid` then virtualizes by row). The
-// detail view's open/closed state lives on the separate `AlbumDetail`
-// global.
+// `columns` is computed by the view from its body width and pushed back, so Rust
+// re-chunks the flat list into rows of N cards and the `ListView` virtualizes by row.
 export global Albums {
     in-out property <[AlbumGridRow]> grid-rows;
     in-out property <int> total-count;          // pre-filter album count
@@ -20,52 +14,36 @@ export global Albums {
     in-out property <string> filter;
     in-out property <string> sort-field: "name";   // "name" | "year" | "artist"
     in-out property <string> sort-dir: "asc";
-    // Bumped by anything that should make the filter input drop keyboard
-    // focus (row clicks, action-pill clicks, body backdrop). The SearchBar
-    // observes the counter via a `changed` handler — same pattern as the
-    // `Tracks` global.
+    // The `Tracks.blur-search-tick` pattern.
     in-out property <int> blur-search-tick: 0;
 
     callback columns-changed(int);
     callback apply-filter(string);
     callback request-sort(string /*field*/);
     callback open-album(int /*album_id*/);
-    // Lazy per-card cover lookup. Bound by Rust to `CoverThumbs`; invoked
-    // from each on-screen card's `cover` binding (via `AlbumGrid`'s
-    // `request-cover`), so only on-screen cards ever decode / lock a cover.
-    // `pure` so Slint may evaluate it inside a binding.
+    // Invoked from each on-screen card's own binding, so only visible cards decode or
+    // lock a cover. `pure` so Slint may evaluate it inside a binding at all.
     pure callback request-cover(string /*artwork_path*/) -> image;
-    // Fired when the Albums section enters / leaves the screen (mirrors
-    // `Nav.selected-index == 4 && !Nav.now-playing-open` from `AppWindow`).
-    // Rust releases the album-tier cover cache on `false` and re-warms the
-    // first screenful on `true` — the large 384 px buffers aren't worth
-    // keeping resident while the section is hidden.
+    // Rust releases the album-tier cover cache on `false` and re-warms the first
+    // screenful on `true` — the grid-size buffers aren't worth keeping resident while
+    // the section is hidden.
     callback section-active-changed(bool);
 }
 
-// AlbumDetail: drives the full Album Detail view. `album-id == -1` ⇒ the
-// grid is shown; `>= 0` ⇒ `AlbumDetailView` replaces it (mirrors the
-// `Nav.now-playing-open` swap in `app-window.slint`). `tracks` is owned by
-// Rust (`Rc<VecModel<TrackListRow>>` in `src/ui/albums/`); `album`
-// carries the header data.
-//
-// The track table is the shared `TrackList` component, so the column-width
-// / visibility / sort / selection shape mirrors the `Tracks` / `Browse`
-// globals — with its own persistence key `"album_detail"`. `show-album`
-// defaults false: the album column is redundant inside a single album.
+// The Album Detail view: `album-id == -1` shows the grid, `>= 0` swaps in the detail.
+// Its table is the shared `TrackList`, so the column / sort / selection shape mirrors
+// `Tracks` and `Browse` under its own persistence key. **`show-album` defaults false** —
+// the album column is redundant inside a single album.
 export global AlbumDetail {
     in-out property <int> album-id: -1;
     in-out property <AlbumRow> album;
     in-out property <[TrackListRow]> tracks;
 
-    // Filter needle for the hero SearchBar. Filters the `tracks`
-    // `TrackList` (title + artist + album substring). Cleared on
-    // fresh-open (`open_album`); preserved across library-changed
-    // refreshes so a user-typed needle survives a scan finishing.
+    // The hero SearchBar's needle. Cleared on a fresh open, but preserved across
+    // library-changed refreshes so a typed needle survives a scan finishing.
     in-out property <string> filter;
     in-out property <int>    blur-search-tick: 0;
 
-    // Per-column widths, edited by the resize handles.
     in-out property <length> w-number: 56px;
     in-out property <length> w-title: 320px;
     in-out property <length> w-artist: 200px;
@@ -74,7 +52,6 @@ export global AlbumDetail {
     in-out property <length> w-year: 72px;
     in-out property <length> w-length: 88px;
 
-    // Per-column visibility. Hydrated from `settings.view_columns["album_detail"]`.
     in-out property <bool> show-number: true;
     in-out property <bool> show-artist: true;
     in-out property <bool> show-album: false;
@@ -82,40 +59,30 @@ export global AlbumDetail {
     in-out property <bool> show-year: true;
     in-out property <bool> show-artwork: true;
 
-    // Sort state. Album detail sorts in-memory in Rust (the DB query is a
-    // fixed disc/track-number order), like the Browse view.
+    // Sorted in memory — the query returns a fixed disc/track-number order.
     in-out property <string> sort-field: "track_number";
     in-out property <string> sort-dir: "asc";
 
     in-out property <[int]> selected-ids;
     in-out property <int> selection-anchor: -1;
 
-    // Sidebar index the user was on when this detail was opened, or `-1`
-    // for a same-tab open from the Albums grid. Set synchronously by the
-    // cross-tab handler in `wire_artists::on_open_album` (currently the
-    // only cross-tab entry point — value is `NAV_ARTISTS = 5`); read by
-    // `wire_albums::on_close_detail` to flip `Nav.selected-index` back to
-    // the originating tab before `album-id` is cleared, so the Slint
-    // conditional reroutes straight to `ArtistDetailView` in the same
-    // frame (no Album-grid flash). In-memory only — the per-tab
-    // `last_detail_ids` persistence already restores both pages
-    // independently on the next launch.
+    // The sidebar index the detail was opened from, or -1 for a same-tab open. Set
+    // synchronously by the cross-tab handler and read by `on_close_detail` to flip
+    // `Nav.selected-index` back **before** clearing `album-id`, so the conditional
+    // reroutes to the originating detail in the same frame with no grid flash.
+    // In-memory only — the per-tab `last_detail_ids` persistence already restores both
+    // pages independently on the next launch.
     in-out property <int> origin-nav-index: -1;
 
-    // Header cover — set by Rust on `open_album` / `refresh_detail`,
-    // paired with the hero blur below (decoded **once** per album into
-    // an `(cover, blur)` pair via `ui::artwork_cache::ArtworkPair`).
+    // Decoded **once** per album into a `(cover, blur)` pair by `ui::artwork_cache`.
     in-out property <image> cover;
 
-    // Hero-blur cross-fade slots. Mirrors `Player.blur-img-{a,b}` /
-    // `Player.blur-use-a` so switching albums never flashes — the
-    // outgoing slot stays painted through the fade.
+    // The `Player.blur-img-*` dual-slot contract, so switching albums never flashes.
     in-out property <image> blur-img-a;
     in-out property <image> blur-img-b;
     in-out property <bool>  blur-use-a;
-    // `false` when there is no artwork or the decode failed: both slots
-    // fade to 0 and the accent gradient floor shows through (same
-    // fallback as `now-playing-view.slint`).
+    // False with no artwork or a failed decode: both slots fade to 0 and the gradient
+    // floor shows through.
     in-out property <bool>  has-blur;
 
     callback close-detail();
@@ -133,8 +100,6 @@ export global AlbumDetail {
     callback clear-selection();
     callback request-sort(string /*field*/);
     callback toggle-column(string /*column_id*/);
-    // Filter keystroke — Rust re-walks the cached tracks through the
-    // new needle and pushes a filtered Slint model. In-memory walk,
-    // no DB round-trip. Mirrors `ArtistDetail.filter-changed`.
+    // Rust re-walks the cached tracks in memory and pushes a filtered model.
     callback filter-changed(string);
 }

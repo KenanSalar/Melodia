@@ -11,21 +11,17 @@ import { ColumnTogglePopup } from "../components/track-list/column-toggle-popup.
 import { TrackList } from "../components/track-list/track-list.slint";
 import { CompositeScrollbars } from "../components/composite-scrollbars.slint";
 
-// One folder row in the Browse list. Folder icon + name + right chevron.
-// Click → `Browse.open-folder(path)`.
+// One folder row: icon, name, chevron.
 //
-// `min-width` of the label tracks its natural text width via
-// `min-width: self.preferred-width`, so when the window narrows the row
-// doesn't compress and elide — instead the body's horizontal scrollbar
-// kicks in. Matches Tauri's "name never truncates" behaviour.
+// **The label's `min-width` tracks its own natural width**, so a narrowing window pans
+// the body's horizontal scrollbar rather than compressing and eliding the row — a folder
+// name never truncates.
 component BrowseFolderRowItem inherits Rectangle {
     in property <string> name;
     in property <string> path;
 
-    // 48 px visual chrome + 2 px gap slot — the `ListView` lays rows
-    // back-to-back (no `spacing` property), so the gap that used to come
-    // from the wrapping `VerticalLayout { spacing: 2px }` is baked into
-    // the row here. Matches the `Browse.folders.length * 50px` cap math.
+    // Chrome plus a gap slot: a `ListView` lays rows back-to-back with no `spacing`, so
+    // the gap is baked into the row itself — and the host's height cap counts on it.
     height: 50px;
 
     inner := Rectangle {
@@ -79,11 +75,8 @@ component BrowseFolderRowItem inherits Rectangle {
     }
 }
 
-// One breadcrumb segment. Hover-highlighted chip; click fires
-// `Browse.navigate-to(path)`. Visual separator (chevron) lives outside
-// this component — see the `for seg[i] in Browse.breadcrumbs` loop in
-// BrowseView, which interleaves a chevron icon before every segment
-// after the first.
+// One breadcrumb segment. The chevron separator lives outside it — the host's loop
+// interleaves one before every segment after the first.
 component BreadcrumbSegment inherits Rectangle {
     in property <string> label;
     in property <string> path;
@@ -116,39 +109,23 @@ component BreadcrumbSegment inherits Rectangle {
     }
 }
 
-// The Browse page. Header strip (back + home + breadcrumb + a single
-// action pill: selection chip + column-toggle) over a body that stacks a
-// folder section above the reusable `TrackList`, with one of three
-// empty-state replacements depending on `current-path` /
-// `has-library-folders` / `error-message`.
+// A header strip — back, home, breadcrumb, one action pill — over a body stacking a
+// folder section above the shared `TrackList`, with one of three empty states replacing
+// it depending on the path, the configured folders and any error.
 //
-// **Layout**: the folder section and the `TrackList` both live inside a
-// single outer `ScrollView` (`below-sv`), so one vertical overlay
-// scrollbar scrolls folders then tracks continuously — the favorites-
-// view pattern. The TrackList is capped at the outer viewport height
-// (`min` in its `height` binding) so its inner ListView virtualizes to
-// ~visible rows; the outer ScrollView's own travel covers the folder
-// section, and the unified scrollbar composes both travels. The mouse
-// WHEEL does NOT hand off between the nested scrollers natively — Slint's
-// inner ListView swallows the wheel at its edge, so a `hover-catch`
-// sentinel reports region hover to the winit MouseWheel filter, which
-// routes vertical wheel through the mounted `CompositeScrollbars`'
-// composite split (see CompositeScroll).
-// The folder `ListView` stays sized to its row count: folder rows are light
-// (icon + label, no popups) and directory listings are bounded.
-// The horizontal bar still drives `TrackList`'s internal column pan via
-// its `h-*` out properties. Both bars are siblings of the padded
-// VerticalLayout so they sit flush with the BrowseView's right/bottom
-// edges.
+// **A composite view**: the folder section and the list live inside one outer
+// `ScrollView`, so a single vertical bar scrolls folders then tracks continuously. The
+// list is capped at the outer viewport height so its inner `ListView` virtualizes, the
+// outer travel covers the folder section, and the mounted `CompositeScrollbars` composes
+// both. The wheel doesn't hand off between nested scrollers natively — the inner list
+// swallows it at its edge — so a `hover-catch` sentinel reports region hover to the winit
+// filter, which routes vertical wheel through that same split.
 //
-// Nav-activation refresh: index 1 == Browse. `changed
-// Nav.selected-index` doesn't accept path expressions on globals
-// (CLAUDE.md pitfall), so mirror it through a local property and watch
-// that.
+// The folder `ListView` stays sized to its row count rather than virtualizing: folder
+// rows are light and a directory listing is bounded.
 export component BrowseView inherits Rectangle {
-    // No background — see TracksView's note. The parent content panel
-    // owns the rounded `Theme.base` fill; a transparent root lets that
-    // fill show through at the rounded corner cells.
+    // No background of its own — the parent panel owns the rounded fill, and a
+    // transparent root lets it show through at the corner cells.
 
     property <int> watched-nav: Nav.selected-index;
     changed watched-nav => {
@@ -158,8 +135,8 @@ export component BrowseView inherits Rectangle {
     }
 
     vl := VerticalLayout {
-        // Three sides — see `tracks-view.slint` for why the uniform form's
-        // bottom pad reads as a dead strip under the list.
+        // Three sides only — `tracks-view.slint` says why a bottom pad here reads as a
+        // dead strip under the list.
         padding-left: Theme.pad-lg;
         padding-right: Theme.pad-lg;
         padding-top: Theme.pad-lg;
@@ -186,9 +163,8 @@ export component BrowseView inherits Rectangle {
                 alignment: center;
                 IconButton {
                     icon: "home";
-                    // Filled variant per design — the home icon is a
-                    // recognisable solid shape rather than the
-                    // outlined glyph used in the sidebar nav.
+                    // Filled: a recognisable solid shape rather than the outlined
+                    // glyph the sidebar nav uses.
                     filled: true;
                     icon-size: 20px;
                     diameter: 32px;
@@ -196,12 +172,9 @@ export component BrowseView inherits Rectangle {
                 }
             }
 
-            // Breadcrumb chip strip. A clipping container so a deep
-            // path doesn't push the action pill off-screen; overflow
-            // hides at the left edge (left segments are less important
-            // — the rightmost is the current folder). Chevron icons
-            // are interleaved between segments so users see a
-            // path-like rendering (e.g. `home > kenan > Music`).
+            // A clipping container, so a deep path doesn't push the action pill off
+            // screen. **Overflow hides at the left**, the rightmost segment being the
+            // current folder and the leftmost the least useful.
             Rectangle {
                 horizontal-stretch: 1;
                 clip: true;
@@ -233,10 +206,8 @@ export component BrowseView inherits Rectangle {
                 }
             }
 
-            // Single trailing action pill. Order: selection chip (when
-            // active) → column toggle. Selection slots sit at the leading
-            // edge so the "N selected | X" group reads to the left of the
-            // column toggle.
+            // The selection chip leads, so its group reads to the left of the column
+            // toggle.
             VerticalLayout {
                 alignment: center;
                 ActionPill {
@@ -262,21 +233,16 @@ export component BrowseView inherits Rectangle {
             }
         }
 
-        // Body. The folder section and the reusable `TrackList` both live
-        // inside one outer `ScrollView` (`below-sv`) so a single overlay
-        // scrollbar scrolls them as one surface. Empty-state overlays
-        // paint over the body with an opaque `Theme.base` fill (so the
-        // TrackList's column header doesn't peek through); Rust clears
-        // `folders` / `rows` whenever an empty state is active.
+        // The empty states paint **over** the body on an opaque fill, so the list's
+        // column header can't peek through; Rust clears both models whenever one is up.
         body := Rectangle {
             horizontal-stretch: 1;
             vertical-stretch: 1;
             clip: true;
 
-            // Ancestor hover sentinel (see CompositeScroll). Wraps only the
-            // scroll region (not the sibling empty-state cards); forwards every
-            // event to the ScrollView child, so folder/row clicks and native
-            // horizontal scroll are unaffected — only its `has-hover` is read.
+            // The `CompositeScroll` hover sentinel, wrapping only the scroll region and
+            // not the sibling empty states. It forwards every event through, so clicks
+            // and native horizontal scroll are unaffected; only `has-hover` is read.
             hover-catch := TouchArea {
                 width: 100%;
                 height: 100%;
@@ -290,21 +256,16 @@ export component BrowseView inherits Rectangle {
                 viewport-width: self.width;
 
                 VerticalLayout {
-                    // No inter-child spacing — the folder section below
-                    // bakes its own gap to the track table in (and is
-                    // unmounted entirely when there are no subfolders),
-                    // so an unconditional `spacing` would leave a
-                    // dangling gap above the TrackList.
+                    // **No spacing**: the folder section bakes its own gap in and
+                    // unmounts entirely when there are no subfolders, so an
+                    // unconditional one would leave a dangling gap above the list.
                     spacing: 0;
 
-                    // Folder section — only mounted when the directory
-                    // has subfolders. The `ListView` is sized to its
-                    // full row count (50 px slot per row, baked into
-                    // `BrowseFolderRowItem`) so every folder renders
-                    // into the outer ScrollView's flow rather than
-                    // scrolling on its own. A `pad-md` bottom gap to the
-                    // track table is added only when drilled in (the
-                    // root view never lists songs below).
+                    // Mounted only when the directory has subfolders, and sized to its
+                    // **full** row count, so every folder renders into the outer
+                    // scroller's flow rather than scrolling on its own. The bottom gap
+                    // is added only when drilled in — the root view lists no songs
+                    // below it.
                     if Browse.folders.length > 0: Rectangle {
                         vertical-stretch: 0;
                         height: Browse.folders.length * 50px
@@ -325,15 +286,11 @@ export component BrowseView inherits Rectangle {
                         }
                     }
 
-                // Track table — hidden at the root view, which only ever
-                // lists library folders (never songs); `visible: false`
-                // stops it painting its (empty) column header at the
-                // root. Height = content (row stride × count + 32 px
-                // header strip + the inner `pad-xs` gap) capped at the
-                // outer viewport: small directories keep the
-                // content-tall layout, large ones pin to the visible
-                // region so the inner ListView virtualizes instead of
-                // instantiating every row.
+                // Hidden at the root view, which lists only library folders — otherwise
+                // it paints an empty column header there. Its height is the content,
+                // **capped at the outer viewport**: a small directory keeps the
+                // content-tall layout, a large one pins to the visible region so the
+                // inner list virtualizes instead of instantiating every row.
                 tl := TrackList {
                     visible: Browse.current-path != "";
                     horizontal-stretch: 1;
@@ -389,7 +346,7 @@ export component BrowseView inherits Rectangle {
             }
             }
 
-            // 1. Root view with no library folders configured.
+            // Root view, no library folders configured.
             if Browse.current-path == "" && !Browse.has-library-folders: Rectangle {
                 background: Theme.base;
                 VerticalLayout {
@@ -425,8 +382,7 @@ export component BrowseView inherits Rectangle {
                     PillButton {
                         icon: "settings";
                         text: @tr("Open Settings");
-                        // Settings is nav index 9 (Recently-Played took 8).
-                        // Persist like every other nav entry so the tab sticks.
+                        // Persisted like every other nav entry, so the tab sticks.
                         clicked => {
                             Nav.selected-index = 9;
                             Nav.persist-selected-index(9);
@@ -436,11 +392,9 @@ export component BrowseView inherits Rectangle {
                 }
             }
 
-            // 2. Error state. The Back button here uses `navigate-to("")`
-            //    rather than `go-back()` because the user may have landed
-            //    on an error from the persisted-path seed with an empty
-            //    history stack — in that case `go-back` would no-op.
-            //    Navigating to root always works and is the safest exit.
+            // Error state. **Its Back navigates to root rather than going back**: the
+            // user may have landed here from the persisted-path seed with an empty
+            // history stack, where `go-back` is a no-op.
             if Browse.error-message != "": Rectangle {
                 background: Theme.base;
                 VerticalLayout {
@@ -484,7 +438,7 @@ export component BrowseView inherits Rectangle {
                 }
             }
 
-            // 3. Empty folder.
+            // Empty folder.
             if Browse.current-path != ""
                 && Browse.error-message == ""
                 && !Browse.loading
@@ -516,17 +470,11 @@ export component BrowseView inherits Rectangle {
         }
     }
 
-    // Overlay scrollbars sit at the BrowseView root, outside the padded
-    // VerticalLayout, so they're flush with the content panel's rounded
-    // edges. The vertical bar drives the outer `below-sv` ScrollView
-    // (folders + tracks scroll as one); the horizontal bar still drives
-    // the `TrackList`'s internal column pan via its `h-*` out properties.
-    // `body` / `tl` are nested inside `vl`, so positions are taken via
-    // `absolute-position` rather than plain `.y` / `.x`.
-    // Composite scroll: unified vbar over the folder section + track rows,
-    // column-pan hbar, and the CompositeScroll wheel routing — owned by the
-    // shared component. The vbar band anchors to `body` here (no hero
-    // banner; the bar spans the whole below-breadcrumbs region).
+    // At the view root, outside the padded layout, so the bars sit flush with the
+    // content panel's rounded edges. `body` and `tl` are nested, so their positions come
+    // through `absolute-position` rather than plain `.x` / `.y`. **The vbar band anchors
+    // to `body`** — there is no hero here, so the bar spans the whole
+    // below-breadcrumbs region.
     CompositeScrollbars {
         x: 0; y: 0;
         width: 100%; height: 100%;

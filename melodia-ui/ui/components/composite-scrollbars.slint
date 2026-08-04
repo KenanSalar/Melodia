@@ -1,44 +1,32 @@
 import { OverlayScrollbar } from "overlay-scrollbar.slint";
 import { CompositeScroll } from "../globals/shell.slint";
 
-// Unified scrollbar pair + wheel routing for the composite views
-// (Favorites, Recently Played, Artist Detail, Browse): an outer
-// `ScrollView` scrolls the strips/sections region while a height-capped
-// (still-virtualizing) inner `TrackList` scrolls the rows, and one
-// vertical bar spans both travels, splitting drags at the boundary. The
-// horizontal bar drives the TrackList's column pan.
+// The unified scrollbar pair and wheel routing every composite view mounts: an outer
+// `ScrollView` scrolls the sections while a height-capped, still-virtualizing inner
+// `TrackList` scrolls the rows, and **one vertical bar spans both travels**, splitting
+// drags at the boundary. The horizontal bar drives the list's column pan.
 //
-// This component also owns the `CompositeScroll` wheel-tick watch (the
-// global is a fixed singleton, so the mirror can live here): the winit
-// MouseWheel filter bumps `wheel-tick` after accumulating `wheel-dy`
-// (+y = up), and the handler applies one composite step through the same
-// `vbar.scroll-to` split the scrollbar drag uses — the host's height cap
-// and the inner ListView's virtualization stay untouched. Only one
-// composite view is mounted at a time, so there is exactly one live
-// watcher.
+// It also owns the `CompositeScroll` wheel-tick watch — the global being a singleton,
+// the mirror can live here, and only one composite view is mounted at a time, so there
+// is exactly one live watcher. The winit filter bumps the tick after accumulating a
+// delta, and the handler applies one composite step through the same split the drag
+// uses, leaving the host's height cap and the inner virtualization untouched.
 //
-// Slint cannot pass element handles into a component, so the host mirrors
-// its named elements through plain props + two callbacks:
-//   * `outer-viewport-y <=> below-sv.viewport-y` (two-way — drags write
-//     back; identity binding, so the "`<=>` blocked by sign flip" pitfall
-//     from the OverlayScrollbar round-trip doesn't apply),
-//   * the outer/inner travel dimensions as `in` lengths,
-//   * `set-inner-offset` / `set-h-offset` forwarding to the TrackList's
-//     own setters (which clamp).
+// Slint can't pass element handles into a component, so the host mirrors its named
+// elements through plain properties plus two setters that forward to the list's own
+// clamping ones. `outer-viewport-y` is two-way, so drags write back — an identity
+// binding, so the sign-flip pitfall from the `OverlayScrollbar` round-trip doesn't apply.
 //
-// MOUNT CONTRACT: instantiate as the LAST child of the view root with
-// `x: 0; y: 0; width: 100%; height: 100%;` — the bars pin to the
-// component's right/bottom edges, and `v-region-y` / `h-region-x` are
-// host-root-relative coordinates, so the component must be congruent with
-// the host root for them to line up.
+// **Mount contract**: the *last* child of the view root, at full size and zero offset.
+// The bars pin to this component's own right and bottom edges and the band coordinates
+// are host-root-relative, so the two must be congruent for them to line up.
 export component CompositeScrollbars inherits Rectangle {
     // Outer ScrollView mirror (`below-sv`).
     in-out property <length> outer-viewport-y;
     in property <length> outer-viewport-height;
     in property <length> outer-visible-height;
 
-    // Inner TrackList vertical mirror. `inner-offset` is read-only here;
-    // writes go through `set-inner-offset` so the TrackList keeps clamping.
+    // Read-only here; writes go through the setter so the list keeps clamping.
     in property <length> inner-offset;
     in property <length> inner-viewport-height;
     in property <length> inner-visible-height;
@@ -50,8 +38,7 @@ export component CompositeScrollbars inherits Rectangle {
     in property <length> h-visible-width;
     callback set-h-offset(length);
 
-    // Vertical-bar band: the below-hero/body region's y + height within the
-    // host root, so the bar starts exactly under the hero banner.
+    // The below-hero region within the host root, so the bar starts under the banner.
     in property <length> v-region-y;
     in property <length> v-region-height;
 
@@ -59,48 +46,41 @@ export component CompositeScrollbars inherits Rectangle {
     in property <length> h-region-x;
     in property <length> h-region-width;
 
-    // Hit-region thickness of both bars; the hbar also reserves this much
-    // at its right end so it never runs under the vbar.
+    // Both bars' hit thickness; the horizontal one reserves this much at its right end
+    // so it never runs under the vertical one.
     property <length> bar-thickness: 10px;
 
-    // Composite scroll math: the outer ScrollView's own travel covers the
-    // strips/sections region (viewport minus visible height), the
-    // TrackList's inner ListView covers the rows. The unified scrollbar
-    // spans both travels; drags split the offset at the boundary.
+    // The outer travel covers the sections, the inner one the rows, and the bar spans
+    // both — a drag splits its offset at the boundary.
     property <length> v-outer-max: max(0px, root.outer-viewport-height - root.outer-visible-height);
     property <length> v-inner-max: max(0px, root.inner-viewport-height - root.inner-visible-height);
 
-    // Pull the outer offset back in range when the content shrinks under it.
-    // A Flickable normally self-corrects, but i-slint-core skips that for a
-    // `viewport-y` that carries a binding (`if *y_out_of_bounds &&
-    // !y.has_binding()`), and the mount contract above binds it two-way. The
-    // scrollers that write `viewport-y` imperatively orphan their binding on
-    // the first write and get the guard back; `<=>` survives a self-write, so
-    // these four views are the only ones permanently without it. Left
-    // uncorrected the viewport stays parked past the end and the region paints
-    // blank: Browse navigating from a deep folder to the much shorter
-    // library-root list, or any of these views filtering a long list down to a
-    // few rows. That same survival is what makes writing the property here safe.
+    // **Pulls the outer offset back in range when content shrinks under it.** A
+    // `Flickable` self-corrects only for a `viewport-y` that carries *no* binding, and
+    // the mount contract binds it two-way. Every scroller that writes `viewport-y`
+    // imperatively orphans its binding on the first write and gets the guard back;
+    // `<=>` survives a self-write, so these views are the only ones permanently without
+    // it — and that same survival is what makes writing the property here safe. Left
+    // uncorrected the viewport parks past the end and the region paints blank: Browse
+    // leaving a deep folder for the much shorter root list, or any of these filtering a
+    // long list down to a few rows.
     changed v-outer-max => {
         if (-root.outer-viewport-y > root.v-outer-max) {
             root.outer-viewport-y = -root.v-outer-max;
         }
     }
 
-    // Globals can't be watched directly, so mirror the tick locally.
+    // A global can't be watched directly, so the tick is mirrored locally.
     property <int> cs-wheel-watch: CompositeScroll.wheel-tick;
     changed cs-wheel-watch => {
         vbar.scroll-to(clamp(
             (-root.outer-viewport-y + root.inner-offset) - CompositeScroll.wheel-dy,
             0px, root.v-outer-max + root.v-inner-max));
-        // Consume the accumulated delta so the winit filter starts the next
-        // batch from zero (deltas accumulate in Rust to survive same-frame
-        // wheel coalescing — see CompositeScroll).
+        // Consume the accumulated delta, so the filter starts its next batch from zero.
         CompositeScroll.wheel-dy = 0px;
     }
 
-    // Outer vertical scrollbar covers the strips/sections + tracklist
-    // together, pinned to the right edge.
+    // Covers the sections and the list together, pinned to the right edge.
     vbar := OverlayScrollbar {
         horizontal: false;
         x: parent.width - self.width;
@@ -116,10 +96,9 @@ export component CompositeScrollbars inherits Rectangle {
         }
     }
 
-    // Horizontal scrollbar drives the TrackList's column pan — the strips
-    // have their own internal horizontal scrollbars, so a unified bottom
-    // bar wouldn't be meaningful for them (different content widths,
-    // independent scroll positions).
+    // Drives the list's column pan only: the strips have their own horizontal
+    // scrollbars, at different content widths and independent positions, so a unified
+    // bottom bar would mean nothing for them.
     OverlayScrollbar {
         horizontal: true;
         x: root.h-region-x;

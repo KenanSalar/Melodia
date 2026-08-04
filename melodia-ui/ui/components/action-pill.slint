@@ -2,30 +2,22 @@ import { Theme } from "../theme.slint";
 import { MaterialIcon } from "material-icon.slint";
 import { Tooltip } from "tooltip.slint";
 
-// Rounded near-opaque chip that hosts a horizontal row of pill segments.
-// Mirrors Tauri's `ActionPill` (`src/components/common/ActionPill.tsx`):
-// callers compose `PillLabel` / `PillDivider` / `PillButton` children to
-// express the desired pill contents.
+// The rounded near-opaque chip hosting a row of pill segments; callers compose
+// `PillLabel` / `PillDivider` / `PillButton` inside it.
 //
-// Each Pill primitive below is `pill-content-height` (32 px) outer with
-// its visible 28 px chrome centered inside via a VerticalLayout wrap.
-// Slint's HorizontalLayout does NOT auto-center fixed-height children
-// cross-axis — explicit `y:` doesn't work, but a wrapping
-// `VerticalLayout { alignment: center; ... }` does (this is the same
-// pattern the original ActionPill used).
+// **Each primitive below wraps its chrome in a centring `VerticalLayout`.** A
+// `HorizontalLayout` doesn't centre a fixed-height child cross-axis, and an explicit
+// `y:` doesn't work either — the wrapper does.
 export component ActionPill inherits Rectangle {
     height: 32px;
     border-radius: self.height / 2;
-    // Shared `Theme.floating-chrome-bg` — `surface0` at 0.75, the same fill
-    // the hero's back button takes, so the two read as one family where they
-    // sit side by side over a blur. See the note on the token in `theme.slint`.
+    // The same fill the hero's back button takes, so the two read as one family where
+    // they sit side by side over a blur.
     background: Theme.floating-chrome-bg;
-    // 1 px `Theme.surface2` outline — same chrome convention as
-    // `popup-surface.slint`. Keeps the pill legible when it sits over a
-    // hero blur whose dominant colour happens to match the fill (Album
-    // Detail header), which the fill's translucency only sharpens. The
-    // Rectangle border paints inside the layout box, so this doesn't shift
-    // any child PillButton.
+    // The `popup-surface.slint` chrome convention. It keeps the pill legible over a hero
+    // blur whose dominant colour happens to match the fill — which the fill's
+    // translucency only sharpens — and paints inside the layout box, so it shifts no
+    // child.
     border-width: 1px;
     border-color: Theme.surface2;
     width: layout.preferred-width;
@@ -39,60 +31,42 @@ export component ActionPill inherits Rectangle {
     }
 }
 
-// Reusable pill-styled button — handles text-only, icon-only, or
-// icon + text. The default home for any interactive segment inside an
-// `ActionPill`, plus any standalone "secondary action" button across
-// the app that wants the same chip chrome (`Theme.floating-chrome-bg`
-// outer, `Theme.surface1` hover fill, 28 px rounded shape on a 32 px
-// row). The hover fill stays fully opaque on purpose — lifting out of a
-// translucent pill is what makes the hover read.
+// The pill-styled button: text-only, icon-only or both. The default home for any
+// interactive segment inside an `ActionPill`, and for any standalone secondary action
+// wanting the same chip chrome. **The hover fill is fully opaque on purpose** — lifting
+// out of a translucent pill is what makes the hover read.
 //
-// `danger: true` keeps the *same* chrome as a non-danger pill (no
-// permanent red fill — Tauri's filled-red treatment read as
-// over-prominent for inline action rows). At rest the pill looks
-// identical to any other; on hover the standard `surface1` background
-// kicks in plus the icon **and** label tint to `Theme.danger`.
-// The result reads as "this is destructive" only when the user is
-// actually about to act on it.
+// **`danger: true` keeps the same chrome as any other pill.** A permanent red fill read
+// as over-prominent for an inline action row, so at rest it looks identical and only the
+// hover tints the icon *and* label to `Theme.danger` — "this is destructive" surfaces
+// exactly when the user is about to act on it.
 //
-// `icon-size` lets callers correct a glyph whose optical weight is off
-// at the 14 px default (e.g. the Playlist Detail `playlist_remove` chip
-// takes 16 px to sit level with its siblings). `icon-filled: true`
-// selects the filled Material Symbols variant for the glyph (e.g. the
-// solid `auto_awesome` on the Playlists header's smart-playlist pill).
+// `icon-size` corrects a glyph whose optical weight is off at the default, and
+// `icon-filled` selects the filled Material Symbols variant.
 export component PillButton inherits Rectangle {
     in property <string> text: "";
     in property <string> icon: "";
     in property <length> icon-size: 14px;
     in property <bool> icon-filled: false;
     in property <bool> danger: false;
-    // `active: true` paints text/icon in `Theme.accent` — used to mark
-    // the current sort field in a row of sort PillButtons (mirrors the
-    // track-list header's active-column treatment).
+    // Marks the current sort field in a row of sort pills, as the track-list header
+    // marks its active column.
     in property <bool> active: false;
-    // Sort-arrow slot: when `reserve-sort-slot: true`, the chrome always
-    // reserves room for a trailing 16 px `arrow_drop_*` chevron, so the
-    // label's x position is stable across active/inactive toggles (no
-    // left-shift when the user clicks a sort pill). `sort-direction`
-    // drives which glyph paints — "" leaves the slot empty (transparent),
-    // "asc" paints `arrow_drop_up`, "desc" paints `arrow_drop_down`.
-    // Concatenating Unicode arrows (`↑`/`↓`) into `text` instead would
-    // pull the line-box into a system fallback font and push the
-    // patched-Vazirmatn glyphs off centre. Same chevron pattern as
-    // `track-list-header.slint`'s active-column indicator.
+    // Reserves room for a trailing chevron **always**, so the label's x doesn't shift
+    // when a sort pill is clicked; `sort-direction` picks the glyph, an empty string
+    // leaving the slot transparent. **Never concatenate Unicode arrows into `text`** —
+    // a character Vazirmatn lacks pulls a fallback font whose line box pushes the
+    // patched glyphs off centre.
     in property <bool> reserve-sort-slot: false;
     in property <string> sort-direction: "";
     in property <string> tooltip-text: "";
-    // Suppress this button's own (in-tree) tooltip so the host can render one
-    // on a higher paint layer instead. Needed where a below-tooltip would be
-    // occluded by later-painted sibling content (Slint has no z-index — paint
-    // order is declaration order), e.g. the Playlists header pills over the
-    // grid. `hovered` is exposed so the host can drive its overlay tooltip.
+    // Suppresses the in-tree tooltip so a host can paint one on a higher layer, needed
+    // wherever later-painted sibling content would occlude it. `hovered` is exposed so
+    // the host can drive that overlay.
     in property <bool> tooltip-overlay: false;
     out property <bool> hovered: touch.has-hover;
-    // Force the hover background to paint regardless of pointer position.
-    // Used by popup triggers (column-toggle) to keep the highlight while
-    // their popup is open — see `PopupHighlight` in `globals/shell.slint`.
+    // Lets a popup trigger keep its highlight while the popup is open — see
+    // `PopupHighlight`.
     in property <bool> force-bg: false;
     callback clicked();
 
@@ -105,13 +79,11 @@ export component PillButton inherits Rectangle {
         alignment: center;
         chrome := Rectangle {
             height: 28px;
-            // Icon-only chips are square so the hover circle reads as a
-            // round button; text and icon+text chips grow to fit content.
+            // Icon-only chips are square so the hover reads as a round button; the
+            // others grow to fit their content.
             width: root.icon-only ? 28px : layout.preferred-width;
             border-radius: self.height / 2;
-            // Same chrome for danger and non-danger — see component
-            // comment. Danger only re-tints the icon / label on hover
-            // (handled below).
+            // One chrome for both; danger only re-tints on hover, below.
             background: (touch.has-hover || root.force-bg)
                 ? Theme.surface1
                 : transparent;
@@ -123,38 +95,28 @@ export component PillButton inherits Rectangle {
                 spacing: 4px;
                 alignment: center;
 
-                // Leading 16 px balance slot, only when the trailing
-                // sort-arrow slot is reserved. The chrome's width binds
-                // to `layout.preferred-width`, so without a matching
-                // leading reservation `alignment: center` centres the
-                // (text + arrow) pair as a group — pushing the label
-                // visually left-of-centre. Mirroring the trailing 16 px
-                // here lands the text at the chrome's optical centre
-                // regardless of active state.
+                // A balance slot mirroring the trailing arrow. The chrome binds its
+                // width to the layout's preferred, so without one, centring the
+                // text-plus-arrow pair as a group pushes the label left of centre.
                 if root.reserve-sort-slot: Rectangle { width: 16px; }
 
-                // `MaterialIcon` pins the glyph in a collapsed
-                // icon-size em-box, so plain center alignment lands it
-                // at the chrome centre — same as the bare `IconButton`.
+                // `MaterialIcon` pins the glyph in a collapsed em-box, so plain centring
+                // lands it at the chrome's centre.
                 if root.icon != "": VerticalLayout {
                     alignment: center;
                     MaterialIcon {
                         name: root.icon;
                         icon-size: root.icon-size;
                         filled: root.icon-filled;
-                        // Danger: default tint at rest, red only on hover.
-                        // Non-danger: accent when active, otherwise text.
+                        // Danger tints red only on hover; otherwise accent when active.
                         icon-color: root.danger
                             ? (touch.has-hover ? Theme.danger : Theme.text)
                             : (root.active ? Theme.accent : Theme.text);
                         animate icon-color { duration: Theme.dur-fast; easing: ease-in-out; }
                     }
                 }
-                // Text path: plain center alignment. The patched
-                // Vazirmatn metrics (see CLAUDE.md > Styling > Fonts)
-                // land the glyph mass at the line-box centre, so
-                // `vertical-alignment: center` inside an HL that fills
-                // the chrome height puts text at the chrome centre.
+                // The patched Vazirmatn metrics land the glyph mass at the line-box
+                // centre, so plain centring inside a full-height row is enough.
                 if root.text != "": VerticalLayout {
                     alignment: center;
                     Text {
@@ -168,10 +130,8 @@ export component PillButton inherits Rectangle {
                         vertical-alignment: center;
                     }
                 }
-                // Trailing sort-arrow slot. Always rendered when
-                // `reserve-sort-slot: true` so the chrome width is the
-                // same whether the pill is active or not; transparent
-                // glyph when `sort-direction` is empty.
+                // Always rendered when reserved, so the chrome's width doesn't depend on
+                // whether the pill is active; transparent with no direction.
                 if root.reserve-sort-slot: VerticalLayout {
                     alignment: center;
                     MaterialIcon {
@@ -201,8 +161,7 @@ export component PillButton inherits Rectangle {
     }
 }
 
-// Non-interactive text segment (e.g. "N selected") inside an ActionPill.
-// 32 px outer with text centered inside via a VerticalLayout wrap.
+// A non-interactive text segment inside an `ActionPill`.
 export component PillLabel inherits Rectangle {
     in property <string> text;
 
@@ -226,8 +185,7 @@ export component PillLabel inherits Rectangle {
     }
 }
 
-// Vertical hairline separating segments inside an ActionPill. 32 px
-// outer with the visible 18 px line centered inside.
+// The hairline separating segments inside an `ActionPill`.
 export component PillDivider inherits Rectangle {
     height: 32px;
     width: 1px;

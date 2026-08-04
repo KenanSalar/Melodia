@@ -7,26 +7,16 @@ import { SettingRow } from "../../components/settings/setting-row.slint";
 import { SectionButton } from "../../components/settings/section-button.slint";
 import { ProgressBar } from "../../components/settings/progress-bar.slint";
 
-// Update section. Mirrors Tauri's `UpdateSection.tsx`. The first row
-// ("Software Updates" + Check button) is always rendered; the other rows
-// stack below it under their own conditions:
-//   - up-to-date row     when up-to-date && !available && !restart-needed
-//   - update-installed   when restart-needed
-//   - version-available  when available && !restart-needed (with optional
-//                        progress bar when installing)
-//   - error              when error-message != ""
+// The Software Updates row is always drawn; the rest — up-to-date, installed,
+// available, error — stack under it on their own mutually exclusive conditions.
 //
-// All state comes from the `MelodiaUpdater` global (owned by Rust, see
-// `src/services/updater/state.rs` for the underlying enum). Every row
-// read-binds to `MelodiaUpdater.*` rather than mirroring into local
-// properties, so the section stays reactive to backend state changes.
+// Every one read-binds `MelodiaUpdater` rather than mirroring into local
+// properties, so the section follows backend state without wiring.
 //
-// Search visibility — see header comment in `language-section.slint`.
-// Each row's visibility ANDs the existing state condition with the search
-// predicate so typing a query that matches the section title surfaces
-// only the rows whose underlying state is true (an up-to-date message
-// won't appear on a session that has an update pending, even if the
-// user types "you're up to date").
+// Search visibility follows `language-section.slint`: each row ANDs its state
+// condition with the predicate, so a query matching the section title still
+// surfaces only the rows whose state is actually true — no up-to-date message
+// on a session with an update pending.
 export component UpdateSection inherits Rectangle {
     background: transparent;
     horizontal-stretch: 1;
@@ -53,10 +43,8 @@ export component UpdateSection inherits Rectangle {
         && row-visible(@tr("Version {} Available", MelodiaUpdater.available-version), MelodiaUpdater.notes-short);
     property <bool> show-error: MelodiaUpdater.error-message != ""
         && row-visible("", MelodiaUpdater.error-message);
-    // Per-platform hint string. The ternary keeps each branch's
-    // literal inside @tr() so Slint's codegen picks them up and the
-    // string re-resolves on locale switch. Order matches the
-    // `platform-kind` values set by `src/ui/updater_settings.rs`.
+    // A ternary, so each branch's literal stays inside `@tr()` and re-resolves
+    // on a locale switch. The order matches `updater_settings.rs`'s values.
     property <string> pkg-manager-hint:
         MelodiaUpdater.platform-kind == "windows"
             ? @tr("Re-run the latest .msi installer from the Releases page.")
@@ -70,13 +58,12 @@ export component UpdateSection inherits Rectangle {
         show-software || show-up-to-date || show-restart
         || show-update-available || show-error || show-package-managed;
 
-    // VerticalLayout wrapper so the Rectangle's preferred-height tracks
-    // the SectionCard's natural height. See `language-section.slint`.
+    // Wrapper so the root's preferred-height tracks the card's natural height —
+    // see `language-section.slint`.
     VerticalLayout {
     if has-matches: SectionCard {
         title: @tr("Updates");
 
-        // Always-visible row: Software Updates + Check button.
         if root.show-software: SettingRow {
             icon: "system_update";
             label: @tr("Software Updates");
@@ -90,9 +77,8 @@ export component UpdateSection inherits Rectangle {
             }
         }
 
-        // Package-manager-managed hint (RPM / deb / MSI installs). Sits
-        // directly below the software row so the user immediately sees
-        // why the action buttons below are missing.
+        // Directly under the software row, so it's clear at once why the action
+        // buttons below are missing.
         if root.show-software && root.show-package-managed: SectionDivider {}
         if root.show-package-managed: SettingRow {
             icon: "package_2";
@@ -100,7 +86,6 @@ export component UpdateSection inherits Rectangle {
             description: pkg-manager-hint;
         }
 
-        // Up-to-date row.
         if root.show-software && root.show-up-to-date: SectionDivider {}
         if root.show-up-to-date: SettingRow {
             icon: "check_circle";
@@ -108,7 +93,6 @@ export component UpdateSection inherits Rectangle {
             description: @tr("Melodia {} is the latest version.", MelodiaUpdater.current-version);
         }
 
-        // Restart needed row (after install).
         if root.show-software && root.show-restart: SectionDivider {}
         if root.show-restart: SettingRow {
             icon: "restart_alt";
@@ -122,18 +106,15 @@ export component UpdateSection inherits Rectangle {
             }
         }
 
-        // Update available row + optional progress bar. The Install +
-        // Skip buttons are hidden when the install path is package-
-        // manager-managed (RPM / MSI / Homebrew) — the user can still
-        // see the available version, but the action belongs to the OS
-        // package manager.
+        // Install and Skip go when the install path is package-managed: the
+        // available version is still worth showing, but the action isn't ours.
         if root.show-software && root.show-update-available: SectionDivider {}
         if root.show-update-available: SettingRow {
             icon: "new_releases";
             label: @tr("Version {} Available", MelodiaUpdater.available-version);
             description: MelodiaUpdater.notes-short;
-            // Changelog can be a long single-line string — cap it to a
-            // reading column so it wraps early instead of widening the card.
+            // The changelog arrives as one long line; capped to a reading
+            // column it wraps early instead of widening the card.
             description-max-width: 480px;
             if !MelodiaUpdater.system-managed: SectionButton {
                 label: MelodiaUpdater.is-installing ? @tr("Installing...") : @tr("Download & Install");
@@ -150,8 +131,8 @@ export component UpdateSection inherits Rectangle {
                 clicked => { MelodiaUpdater.skip(); }
             }
         }
-        // Critical-release hint. Replaces the absent Skip button so the
-        // user understands why they can't dismiss this update permanently.
+        // Stands in for the absent Skip button, so it's clear why this update
+        // can't be dismissed permanently.
         if root.show-update-available && MelodiaUpdater.is-critical
                 && !MelodiaUpdater.system-managed: SettingRow {
             icon: "shield";
@@ -180,7 +161,6 @@ export component UpdateSection inherits Rectangle {
             }
         }
 
-        // Error row.
         if (root.show-software || root.show-up-to-date || root.show-restart
                 || root.show-update-available) && root.show-error: SectionDivider {}
         if root.show-error: SettingRow {

@@ -1,13 +1,10 @@
 import { Theme } from "../../theme.slint";
 import { MaterialIcon } from "../material-icon.slint";
 
-// The "this grid has nothing in it" placeholder — a centred glyph over a
-// heading and a line of guidance. Mounted as an opaque overlay *on top of*
-// the grid rather than as an alternative branch, so the host doesn't have to
-// tear the grid down and rebuild it when the count crosses zero.
-//
-// `body` is optional: a grid whose emptiness needs no explanation (nothing
-// played yet) leaves it out and gets the heading alone.
+// The empty-grid placeholder. Mounted as an opaque overlay *over* the grid
+// rather than as an alternative branch, so the host doesn't tear the grid down
+// and rebuild it every time the count crosses zero. `body` is optional — a grid
+// whose emptiness explains itself takes the heading alone.
 export component GridEmptyState inherits Rectangle {
     in property <string> icon;
     in property <string> title;

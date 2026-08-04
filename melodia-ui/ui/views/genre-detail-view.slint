@@ -11,23 +11,12 @@ import { TrackList } from "../components/track-list/track-list.slint";
 import { OverlayScrollbar } from "../components/overlay-scrollbar.slint";
 import { FilterThrottle } from "../components/filter-throttle.slint";
 
-// The full Genre Detail view. Mounted by `app-window.slint` for nav
-// index 6 when `GenreDetail.genre-id >= 0`. Same DetailHeader + TrackList
-// composition as `album-detail-view.slint` / `artist-detail-view.slint`,
-// but with NO artwork wiring:
-//
-//   * No `cover` / `hero-blur-*` / `has-hero-blur` props passed → the
-//     header's hero region paints only the accent gradient floor + scrim.
-//   * `fallback-icon: "theater_comedy"` so the left-side tile shows the
-//     same glyph the sidebar uses.
-//
-// Track-list column policy: `show-genre` forced off because every row
-// is the same genre (mirrors how Album Detail forces `show-album` off
-// and Artist Detail forces `show-artist` off).
+// The `DetailHeader` + `TrackList` composition its two siblings use, with **no artwork
+// wiring at all**: no image props are passed, so the hero paints only its gradient floor
+// and scrim, and the left tile shows the same glyph the sidebar uses. `show-genre` is
+// forced off for the reason each sibling forces its own column off.
 export component GenreDetailView inherits Rectangle {
-    // Filter throttle: each keystroke bumps `filter-tick-pending`; the
-    // shared `FilterThrottle` fires the filter callback at most once per
-    // ~130 ms while pending is ahead of the last-applied tick.
+    // The shared throttle, on the interval every filterable view uses.
     property <int> filter-tick-pending: 0;
 
     filter-throttle := FilterThrottle {
@@ -35,9 +24,7 @@ export component GenreDetailView inherits Rectangle {
         fire() => { GenreDetail.filter-changed(GenreDetail.filter); }
     }
 
-    // Backdrop catches any click that no inner TouchArea consumes and
-    // bumps the blur tick — the SearchBar observes it and clears focus
-    // on change.
+    // Catches any click no inner TouchArea consumes and bumps the blur tick.
     TouchArea {
         clicked => { GenreDetail.blur-search-tick += 1; }
     }
@@ -45,22 +32,16 @@ export component GenreDetailView inherits Rectangle {
     VerticalLayout {
         DetailHeader {
             vertical-stretch: 0;
-            // No artwork-path / cover / hero-blur props — genres have
-            // no intrinsic image, so the left tile + the full-bleed
-            // hero backdrop are both painted from the four-stop accent
-            // carried on `GenreDetail.genre`. The hero pair uses
-            // dimmer / less-saturated stops than the small tile so the
-            // wide backdrop keeps scrim + foreground text legible; the
-            // tile pair matches the grid card exactly so genre
-            // recognition is consistent across grid ↔ detail. See
-            // `src/ui/genres/color.rs::genre_accent` for how the four
-            // stops are derived on three name-hash axes.
+            // Genres have no intrinsic image, so the tile and the backdrop both paint
+            // from the four name-hashed stops on the row. The hero pair is dimmer and
+            // less saturated than the tile pair, so the wide backdrop keeps its scrim
+            // and text legible, while the tile matches the grid card exactly and genre
+            // recognition survives the drill-in.
             //
-            // The hero pair isn't passed here — `open_genre` writes it
-            // into `HeroBackdrop.floor-{start,end}` on the Rust side,
-            // measures it, and solves the scrim + foreground against it,
-            // exactly as an artwork-bearing detail view does with its
-            // decoded blur.
+            // **The hero pair isn't passed here**: `open_genre` writes it into
+            // `HeroBackdrop.floor-*` on the Rust side, measures it and solves the scrim
+            // and foreground against it — exactly as an artwork-bearing detail does
+            // with its decoded blur.
             fallback-icon: "theater_comedy";
             tile-bg: @linear-gradient(135deg,
                 GenreDetail.genre.tile_color_1,
@@ -68,11 +49,7 @@ export component GenreDetailView inherits Rectangle {
             tile-icon-color: #ffffff.with-alpha(0.3);
             back-clicked => { GenreDetail.close-detail(); }
 
-            // --- Right column @children ------------------------------
-            // Title row — genre name on the left, SearchBar pinned to
-            // the right. The SearchBar filters the `tracks` TrackList
-            // (title + artist + album substring). Mirrors the Artist
-            // Detail hero layout.
+            // The right column, on the Album Detail hero layout.
             HorizontalLayout {
                 vertical-stretch: 0;
                 spacing: Theme.pad-md;
@@ -80,9 +57,7 @@ export component GenreDetailView inherits Rectangle {
 
                 VerticalLayout {
                     alignment: center;
-                    // Title — same typographic hierarchy as Album /
-                    // Artist Detail. Leading LRM keeps RTL-bidi titles
-                    // laid out correctly inside an LTR shell.
+                    // The leading LRM keeps a bidi title laid out inside an LTR shell.
                     Text {
                         text: "‎" + GenreDetail.genre.name;
                         color: HeroBackdrop.on-backdrop;
@@ -105,23 +80,19 @@ export component GenreDetailView inherits Rectangle {
                     }
                 }
             }
-            // Meta chips — track count + total duration. No "year" /
-            // "artist" chip because neither is a per-genre concept.
+            // No year or artist chip here: neither is a per-genre concept.
             HeroChipStrip { }
 
-            // Spacer — absorbs the slack between the title block and
-            // the action row so the row sits flush with the artwork's
-            // lower edge.
+            // Absorbs the slack, so the action row sits flush with the tile's lower edge.
             Rectangle { vertical-stretch: 1; }
 
-            // Action row — primary pill + optional selection pill.
+            // The primary pill and, when rows are selected, its own.
             HorizontalLayout {
                 vertical-stretch: 0;
                 spacing: Theme.pad-md;
                 alignment: start;
 
-                // Single pill: Shuffle → toggle → selection chip
-                // (trailing, when active).
+                // One pill: Shuffle, the column toggle, then the selection chip.
                 ActionPill {
                     PillButton {
                         icon: "shuffle";
@@ -136,8 +107,7 @@ export component GenreDetailView inherits Rectangle {
                         show-album   <=> GenreDetail.show-album;
                         show-genre   <=> GenreDetail.show-genre;
                         show-year    <=> GenreDetail.show-year;
-                        // Genre column is meaningless in this view —
-                        // every row belongs to the same genre.
+                        // Meaningless here: every row is the same genre.
                         hide-genre: true;
                         toggled(id) => { GenreDetail.toggle-column(id); }
                     }
@@ -154,21 +124,15 @@ export component GenreDetailView inherits Rectangle {
             }
         }
 
-        // Indent the TrackList with `Theme.pad-lg` on both sides so its
-        // left/right edges match the Tracks and Browse views (whose
-        // root VLs apply uniform `padding: Theme.pad-lg`). The root VL
-        // here can't use that pattern because `DetailHeader` is
-        // full-bleed for the hero region — so the inset is applied
-        // per-child instead.
+        // Inset per-child rather than on the root column, so the list's edges match the
+        // Tracks and Browse views: the root can't pad uniformly because `DetailHeader`
+        // is full-bleed for the hero.
         HorizontalLayout {
             horizontal-stretch: 1;
             vertical-stretch: 1;
             padding-left: Theme.pad-lg;
             padding-right: Theme.pad-lg;
-            // Vertical gap between the hero and the TrackList header.
-            // Matches the consistent inset every other detail view
-            // applies between hero (or last sub-section) and the
-            // tracks table.
+            // The inset every other detail view applies between its hero and its table.
             padding-top: Theme.pad-lg;
 
             tl := TrackList {
@@ -215,10 +179,8 @@ export component GenreDetailView inherits Rectangle {
         }
     }
 
-    // Overlay scrollbars at the view root, flush with the content panel's
-    // rounded edges. `tl` is nested inside the VerticalLayout, so its
-    // position is taken via `absolute-position` (like
-    // `album-detail-view.slint`).
+    // At the view root, flush with the content panel's rounded edges. `tl` is nested, so
+    // its position comes through `absolute-position`.
     OverlayScrollbar {
         horizontal: false;
         x: parent.width - self.width;

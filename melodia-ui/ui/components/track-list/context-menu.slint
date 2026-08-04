@@ -1,8 +1,7 @@
 import { Theme } from "../../theme.slint";
 import { MaterialIcon } from "../material-icon.slint";
 
-// One row inside a context menu. Click runs `clicked()` and dismisses the
-// host popup (via Slint's `close-on-click: true` on the parent PopupWindow).
+// One row inside a context menu; the host popup's own close policy dismisses it.
 export component MenuItem inherits Rectangle {
     in property <string> label;
     in property <string> icon;

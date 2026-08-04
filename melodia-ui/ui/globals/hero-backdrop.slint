@@ -1,66 +1,52 @@
-// The hero band's solved colour set — the same `src/ui/backdrop.rs` solve the
-// `np-*` tier above runs, applied to the detail / Favorites / Recently-Played
-// heroes. Written by `src/ui/hero_backdrop.rs`.
+// The hero band's solved colour set — the same `ui/backdrop.rs` solve the `np-*` tier
+// runs, applied to the detail / Favorites / Recently-Played heroes.
 //
-// One global for six views rather than six copies of these properties, because
-// only one hero can exist at a time: every hero-bearing view is mounted under a
-// mutually exclusive `if` in `app-window.slint`, and `ViewTransition` is
-// enter-only (Slint's `if` destroys the outgoing view instantly), so two heroes
-// are never on screen together. Whoever opens last owns the set.
+// **One global for six views**, because only one hero can exist at a time: every
+// hero-bearing view sits under a mutually exclusive `if`, and `ViewTransition` is
+// enter-only since Slint's `if` destroys the outgoing view instantly. Whoever opens last
+// owns the set.
 //
-// Everything the `np-*` block says about hue-not-polarity applies verbatim
-// here, including why the `in-out` defaults are literals rather than `Theme.*`
-// bindings: they are what paints in the frame or two before the first solve
-// lands, and a theme binding would make exactly that frame the broken case on a
-// light theme.
+// Everything the `np-*` block says about hue-not-polarity applies verbatim, including
+// why the defaults are literals rather than `Theme.*` bindings.
 export global HeroBackdrop {
-    // Scrim over the blur slots, alpha baked in — see `np-scrim`.
+    // Alpha baked in — see `np-scrim`.
     in-out property <brush> scrim: #0a0a0e73;
 
-    // Gradient-floor stops under the blur slots: what shows for an entity with
-    // no artwork, and the whole backdrop for Genre Detail (which has none by
-    // nature and paints its name-hashed stops here instead). `floor-start`
-    // has a third reader — the two mosaic heroes fill their artwork square
-    // with it *even when the mosaic is populated*, because the placeholder
-    // slots over it are translucent and need a known-dark base.
+    // What shows for an entity with no artwork, and the whole backdrop for Genre Detail,
+    // which paints its name-hashed stops here. **`floor-start` has a third reader**: the
+    // two mosaic heroes fill their artwork square with it *even when the mosaic is
+    // populated*, the placeholder slots over it being translucent and needing a
+    // known-dark base.
     in-out property <color> floor-start: #2b2135;
     in-out property <color> floor-end: #14101a;
 
-    // Hue-carrying tier, 3:1 against the composited backdrop. Read by the
-    // `DetailHeader` artwork-tile fallback, the smart-playlist badge, the
-    // metadata chips' label, and both mosaic heroes — their empty state and
-    // their `CoverMosaic` placeholder slots.
+    // The hue-carrying tier, solved to 3:1 against the composited backdrop. Read by the
+    // `DetailHeader` tile fallback, the smart-playlist badge, the chips' label, and both
+    // mosaic heroes' empty state and placeholder slots.
     in-out property <brush> chrome: #cba6f7;
 
-    // Resting fill for every tinted surface on the band, derived here rather
-    // than at each call site so surfaces meant to match can't drift apart —
-    // the `np-accent-pill` precedent, and the same alpha, since the hero chips
-    // and the Now Playing ones are the same component.
+    // Derived here rather than at each call site, so surfaces meant to match can't
+    // drift — the `np-accent-pill` precedent, at the same alpha, the hero chips and the
+    // Now Playing ones being the same component.
     out property <brush> chip-fill: root.chrome.with-alpha(0.16);
 
-    // The two text tiers — the hero title plus the secondary line under it
-    // (album artist, playlist description), and the meta / stats line
-    // ("25 tracks · 1:32:22"). Solved per artwork exactly as `np-*` is: same
-    // `src/ui/backdrop.rs` call, same 4.5:1 and 3:1 targets against the
-    // *composited* band, same chroma caps — so the hero reads as near-white
-    // carrying a whisper of the album's warmth, and the two surfaces that
-    // float on a blur speak with one voice.
+    // The title and its secondary line, and the meta line under them. Solved per artwork
+    // exactly as `np-*` is — same call, same 4.5:1 and 3:1 targets against the
+    // *composited* band, same chroma caps — so a hero reads as near-white carrying a
+    // whisper of the album's warmth, and the two surfaces floating on a blur speak with
+    // one voice. They were fixed constants once, on the argument that a pinned backdrop
+    // leaves nothing for a per-artwork tone to fix: true of legibility, and beside a Now
+    // Playing view that *does* tint, the flat white read as a different app.
     //
-    // These were fixed constants once, on the argument that pinning the
-    // backdrop leaves nothing for a per-artwork text tone to fix. True as far
-    // as legibility goes — and beside a Now Playing view that *does* tint,
-    // the flat white read as a different app.
-    //
-    // `on-backdrop` has one non-text reader: the hairline below, which is why
-    // it is the tone the edge is derived from rather than a tier of its own.
+    // `on-backdrop` has one non-text reader — the hairline below, which is why the edge
+    // derives from it rather than being a tier of its own.
     in-out property <brush> on-backdrop: #f0eef5;
     in-out property <brush> on-backdrop-muted: #c9c5d3;
 
-    // The 1 px edge on the two mosaic heroes' artwork square — the only
-    // bordered hero surfaces, since `DetailHeader`'s artwork tile is
-    // borderless. A `Theme.border` hairline was a wash against the old
-    // `surface1` fill under either theme, but against a fill pinned dark it
-    // vanishes under Mocha and turns a hard bright ring under every light
-    // theme, so the edge is a hero token for the same reason the fill is.
+    // The mosaic heroes' artwork square, the only bordered hero surface —
+    // `DetailHeader`'s tile is borderless. A `Theme.border` hairline was a wash against
+    // the old `surface1` fill under either theme, but against a fill pinned dark it
+    // vanishes under Mocha and turns a hard bright ring under every light theme, so the
+    // edge is a hero token for the same reason the fill is.
     out property <brush> tile-edge: root.on-backdrop.with-alpha(0.12);
 }

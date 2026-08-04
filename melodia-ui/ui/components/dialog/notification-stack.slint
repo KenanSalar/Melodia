@@ -5,30 +5,19 @@ import { MaterialIcon } from "../material-icon.slint";
 import { IconButton } from "../icon-button.slint";
 import { SectionButton } from "../settings/section-button.slint";
 
-// Single card in the notification stack. Pinned to a fixed 360 px width by
-// its parent (the `for` block inside `NotificationStack`), height derives
-// from content.
+// One card in the notification stack; the parent pins its width and the height
+// follows the content. The variant picks a colour and a glyph, `info` being the
+// fall-through.
 //
-// Variant → colour + glyph mapping:
-//   "info"    → accent / info        (default; falls through)
-//   "success" → green   / check_circle
-//   "warning" → yellow  / warning
-//   "error"   → danger  / error
+// Enter animation is the `Tooltip` pattern — `shown` flips on `init` and the
+// opacity animates in. There is no exit one: dismissing drops the row from the
+// model and the component goes with it.
 //
-// Enter animation mirrors the `Tooltip` pattern (`tooltip.slint`):
-// a private `shown` flips true on `init`, the opacity animates 0 → 1 across
-// `Theme.dur-fast`. No exit animation in v1 — clicking dismiss removes the
-// row from the model and the component disappears immediately. Acceptable
-// for the "minimal UX" directive; a future sweep timer can add a fade-out.
-//
-// Input transparency: this component only paints; clicks are captured by
-// the inner `IconButton` / `PillButton`. The notification stack's empty
-// space between cards and the surrounding container don't block pointer
-// events on the layers below (no root-level TouchArea).
+// It paints and nothing else. There is no root TouchArea, so the gaps between
+// cards don't block the layers underneath; only the inner buttons take clicks.
 component NotificationCard inherits Rectangle {
-    // Named `data` rather than `row` because `row` is the implicit
-    // iteration variable inside `for row[i] in model:` blocks — Slint
-    // rejects a property named `row` with "Cannot override property 'row'".
+    // `data` rather than `row`, which Slint reserves as the `for` iteration
+    // variable and refuses to let a property override.
     in property <NotificationRow> data;
     private property <bool> shown: false;
 
@@ -54,9 +43,8 @@ component NotificationCard inherits Rectangle {
     opacity: root.shown ? 1.0 : 0.0;
     animate opacity { duration: Theme.dur-fast; easing: ease-out; }
 
-    // Left-edge variant accent bar. Sized to the card's height; the
-    // shared `border-radius` on the card masks the bar's right edge so the
-    // accent never paints past the rounded corners.
+    // The card's `border-radius` masks this bar's right edge, so the accent
+    // never paints past the rounded corners.
     Rectangle {
         x: 0;
         y: 0;
@@ -74,7 +62,7 @@ component NotificationCard inherits Rectangle {
         padding-bottom: Theme.pad-sm;
         spacing: Theme.pad-sm;
 
-        // Variant icon — top-aligned so it sits at the start of the title.
+        // Top-aligned so it sits at the start of the title.
         VerticalLayout {
             alignment: start;
             padding-top: 2px;
@@ -85,7 +73,6 @@ component NotificationCard inherits Rectangle {
             }
         }
 
-        // Title + optional message column. Takes the remaining width.
         VerticalLayout {
             horizontal-stretch: 1;
             spacing: 2px;
@@ -97,9 +84,8 @@ component NotificationCard inherits Rectangle {
                 font-weight: 600;
                 wrap: word-wrap;
             }
-            // `if`-conditional element form (not `visible: false`) so an
-            // empty message doesn't reserve a phantom text-line slot —
-            // CLAUDE.md "visible: false does not remove from layout".
+            // An `if` rather than `visible: false`, which would still reserve
+            // the text line for an empty message.
             if root.data.message != "": Text {
                 text: root.data.message;
                 color: Theme.subtext0;
@@ -108,11 +94,8 @@ component NotificationCard inherits Rectangle {
             }
         }
 
-        // Optional action button. An accent-filled `SectionButton` pill so
-        // the action reads as a button, not a label. Wrapped in a
-        // `VerticalLayout { alignment: center; ... }` so it sits centred
-        // against the title-plus-message column and lines up with the
-        // close button beside it.
+        // Filled, so the action reads as a button rather than a label, and
+        // centred against the text column to line up with the close beside it.
         if root.data.action-label != "": VerticalLayout {
             alignment: center;
             SectionButton {
@@ -125,17 +108,15 @@ component NotificationCard inherits Rectangle {
             }
         }
 
-        // Close X — always present. Compact 24 px round button with a
-        // 16 px glyph so it doesn't dominate the card. Vertically centred
-        // to align with the action pill beside it.
+        // Kept small so it doesn't dominate the card, and centred with the
+        // action pill beside it.
         VerticalLayout {
             alignment: center;
             IconButton {
                 icon: "close";
                 icon-size: 16px;
                 diameter: 24px;
-                // The card itself is `surface0`; bump the hover fill one
-                // step so the highlight is visible against it.
+                // A step up from the card's own fill, so the hover reads.
                 hover-bg: Theme.surface1;
                 clicked => {
                     Notifications.dismiss(root.data.id);
@@ -145,23 +126,16 @@ component NotificationCard inherits Rectangle {
     }
 }
 
-// Overlay container that paints the live `Notifications.rows` model as a
-// bottom-right anchored stack. Mounted once at the AppWindow root as a
-// sibling of `DialogOverlay`. Sized to the full window so its inner
-// stack's absolute coordinates resolve against the visible viewport.
+// Paints `Notifications.rows` as a bottom-right anchored stack. Mounted once at
+// the AppWindow root beside `DialogOverlay`, and sized to the whole window so
+// its inner stack's absolute coordinates resolve against the viewport.
 //
-// Newest-at-bottom semantics (Tauri parity, `flex-direction: column-reverse`
-// equivalent): Rust appends to the end of `rows`, the `VerticalLayout`
-// renders top-to-bottom in model order, `alignment: end` pins the whole
-// stack to the bottom edge — so a row added later ends up below earlier
-// rows, closest to the screen corner. Older rows slide upward as new ones
-// arrive.
+// Newest sits at the bottom: Rust appends, the layout renders in model order,
+// and `alignment: end` pins the stack to the bottom edge — so a later row lands
+// closest to the corner and older ones slide up as it arrives.
 export component NotificationStack inherits Rectangle {
-    // The 360 px column width matches the Tauri toast card. `preferred-
-    // height` of the inner layout sums all rows plus 8 px spacing; the
-    // outer Rectangle stays at 100 % × 100 % (set by the caller) so its
-    // children can compute right-edge / bottom-edge insets against the
-    // full window.
+    // The caller keeps the outer Rectangle at full size, so the children can
+    // compute their right- and bottom-edge insets against the whole window.
     inner := VerticalLayout {
         x: parent.width - self.width - 16px;
         y: parent.height - self.preferred-height - 16px - Theme.now-playing-h;

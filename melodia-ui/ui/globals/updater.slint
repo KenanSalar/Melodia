@@ -4,26 +4,20 @@ import { NotificationRow } from "../models.slint";
 // the stack's only cross-global action target is the updater — keeping that
 // edge inside one file rather than turning it into an import.
 
-// MelodiaUpdater: in-app auto-update state. Owned by Rust
-// (`src/ui/updater_settings.rs` + `src/ui/callbacks/updater/`); the
-// `UpdaterState` enum in `src/services/updater/state.rs` is the source of
-// truth, projected onto these properties from the UI thread.
+// In-app auto-update state, owned by `src/ui/updater_settings.rs` and
+// `src/ui/callbacks/updater/`. `UpdaterState` in `src/services/updater/state.rs`
+// is the source of truth and these are its projection;
 // `update-section.slint` imports it aliased back to `Updater`.
 //
-// Named `MelodiaUpdater` and not the natural `Updater` because Slint's
-// codegen mangles that bare identifier — it gets an internal `_NNNN` suffix
-// and isn't re-exported, so `crate::Updater` won't resolve. The prefix keeps
-// the global publicly exported.
+// The prefix is not cosmetic: Slint's codegen mangles a bare `Updater` with an
+// internal `_NNNN` suffix and doesn't re-export it, so `crate::Updater` won't
+// resolve.
 //
-// Wire flow: user click → callback → `runtime.spawn` → back through
-// `invoke_from_event_loop` to push new state → bindings re-render.
-//
-// `notes-short` is plain text; `scripts/build-latest-json.py` strips the
+// `notes-short` is plain text — `scripts/build-latest-json.py` strips the
 // Markdown server-side.
 //
-// Declared BEFORE `Notifications` so that global's `action` dispatcher can
-// forward-reference `install` / `restart` without triggering the same
-// name-mangling on the forward target.
+// Declared BEFORE `Notifications`, so that global's dispatcher can
+// forward-reference `install` / `restart` without hitting the same mangling.
 export global MelodiaUpdater {
     in-out property <bool> is-checking;
     in-out property <bool> up-to-date;
@@ -36,54 +30,44 @@ export global MelodiaUpdater {
     in-out property <string> notes-short;
     in-out property <string> error-message;
     in-out property <bool> auto-check-enabled;
-    // `true` when the manifest marks this release as critical (security
-    // fix etc.). update-section.slint suppresses the "Skip this version"
-    // button so the user can't permanently defer it; the toast is still
-    // dismissable per-session (re-appears at the next daily check).
+    // A critical release suppresses "Skip this version", so it can't be
+    // permanently deferred; the toast still dismisses for the session and comes
+    // back at the next daily check.
     in-out property <bool> is-critical;
-    // True ⇒ install path is read-only (RPM/MSI/Homebrew install).
-    // The section hides Download/Install + Skip and shows a hint row
-    // pointing the user at their package manager. Seeded once at
-    // startup; doesn't change at runtime.
+    // A read-only install path (RPM / MSI / Homebrew): the section trades
+    // Download and Skip for a hint pointing at the package manager. Seeded once
+    // at startup.
     in property <bool> system-managed;
-    // Platform discriminator used by `update-section.slint` to pick the
-    // right package-manager hint string. Set once at startup by
-    // `src/ui/updater_settings.rs::install` from `cfg!(target_os)`.
-    // Values: "linux" | "windows" | "macos". Treating it as a string
-    // (rather than an enum) keeps the Slint side free of conditional
-    // compilation and lets `@tr(...)` resolve inline so the hint
-    // re-translates on locale switch.
+    // Picks that hint string: "linux" | "windows" | "macos", off
+    // `cfg!(target_os)` at startup. A string rather than an enum keeps the Slint
+    // side free of conditional compilation and lets the hint resolve inline, so
+    // it re-translates on a locale switch.
     in property <string> platform-kind;
 
     callback check();
     callback install();
     callback restart();
-    // Explicit "Skip this version" — persists `available-version` into
-    // `settings.updates.skipped_release`. Different from closing the
-    // toast (which is "remind me later").
+    // Persists the version into `settings.updates.skipped_release`. Closing the
+    // toast is the other thing — "remind me later".
     callback skip();
     callback auto-check-changed(bool);
 }
 
-// Notifications: bottom-right transient overlay stack, for messages that
-// don't warrant a modal. Owned by Rust (`src/ui/notifications.rs`), which
-// holds the backing `Rc<VecModel<NotificationRow>>` and does the actual
-// `VecModel::remove` behind `dismiss`. `NotificationStack` renders one card
-// per row, newest on top.
+// The bottom-right transient stack, for messages that don't warrant a modal.
+// `src/ui/notifications.rs` owns the backing model and does the removal behind
+// `dismiss`.
 //
-// Unlike `Dialog`, `kind` lives on the *row* rather than the global —
-// several notifications can be visible at once, each with its own, and a
-// single-global field wouldn't survive stacking.
+// Unlike `Dialog`, `kind` lives on the *row*: several can be up at once, each
+// with its own, and a single field on the global wouldn't survive stacking.
 export global Notifications {
     in-out property <[NotificationRow]> rows: [];
     callback dismiss(int /*id*/);
     callback action(int /*id*/, string /*kind*/);
 
-    // Default action-routing dispatcher. Mirrors `Dialog.accepted` — a new
-    // action flow is one branch here plus a `Notifications.show(...)` on the
-    // Rust side. The close-X dismisses without skipping, so the toast
-    // re-appears next launch; permanent "Skip this version" lives in
-    // Settings → Updates, where those semantics are obvious.
+    // Action-routing dispatcher, mirroring `Dialog.accepted`: a new action flow
+    // is one branch here plus a `show(...)` on the Rust side. Dismissing doesn't
+    // skip, so the toast returns next launch — the permanent skip lives in
+    // Settings, where that's what it obviously means.
     action(id, kind) => {
         if (kind == "install-update") {
             MelodiaUpdater.install();

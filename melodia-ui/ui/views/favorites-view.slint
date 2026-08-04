@@ -18,39 +18,19 @@ import { FavoritesArtistsTab } from "favorites/artists-tab.slint";
 import { FavoritesMostPlayedTab } from "favorites/most-played-tab.slint";
 import { FavoritesSongsTab } from "favorites/songs-tab.slint";
 
-// The Favorites view (Nav sidebar index 2). A hero banner over three
-// mutually-exclusive sub-views:
+// A **pinned** hero banner — its top row carrying the `TabBar` and the filter
+// `SearchBar` over the mosaic, title, stats and action pill — above three mutually
+// exclusive sub-views: the Songs `TrackList`, and the Most Played and Favorite Artists
+// card grids. Only the body scrolls, so the tabs stay reachable. Albums are deliberately
+// absent, being reachable through the Albums tab.
 //
-//   * Hero — its top row carries the `TabBar` and the filter `SearchBar`,
-//     over the live cover mosaic, the title and a per-tab stats line and
-//     action pill. Full-bleed hero blur fades through
-//     `Favorites.blur-img-{a,b}` whenever the top-4 most-played favorites
-//     change. Pinned: the tabs have to stay reachable, so only the body
-//     below scrolls.
-//   * Songs — the sortable / filterable `TrackList` over every favorite.
-//   * Most Played — a virtualized card grid of the played favorites,
-//     ranked by play count.
-//   * Favorite Artists — the same grid with circular cards; a click is a
-//     cross-tab nav to Artist Detail, and the back arrow there returns here.
-//
-// Albums are intentionally not surfaced — they're reachable via the Albums
-// tab. No Favorite Albums tab.
-//
-// Each tab owns exactly one scroller, which is why this view mounts plain
-// `OverlayScrollbar`s rather than `CompositeScrollbars`: the strips used to
-// sit in an outer `ScrollView` above a height-capped `TrackList`, and a
-// nested `ListView` swallows the wheel at its own edge instead of bubbling.
-// One scroller per tab retires that whole problem — and with it the
-// `CompositeScroll` hover sentinel and the two-way `viewport-y` binding that
+// **Each tab owns exactly one scroller**, which is why this view mounts plain
+// `OverlayScrollbar`s rather than `CompositeScrollbars`. The strips used to sit in an
+// outer `ScrollView` above a height-capped `TrackList`, and a nested `ListView` swallows
+// the wheel at its own edge instead of bubbling; one scroller per tab retires that whole
+// problem, along with the hover sentinel and the two-way `viewport-y` binding that
 // opted out of Slint's own out-of-bounds correction.
-//
-// Stays globals-free apart from the `Favorites` + `Player` + `HeroBackdrop`
-// reads — every data fetch and cover lookup is routed through callbacks on
-// `Favorites` that Rust's `wire_favorites` wires to `library::favorites::*`.
 export component FavoritesView inherits Rectangle {
-    // Filter throttle: each keystroke bumps `pending`; the Timer fires the
-    // refilter callback at most once per `interval` while `pending !=
-    // applied`. Same shape as `tracks-view.slint`'s throttle.
     property <int> filter-tick-pending: 0;
 
     filter-throttle := FilterThrottle {
@@ -58,26 +38,20 @@ export component FavoritesView inherits Rectangle {
         fire() => { Favorites.filter-changed(Favorites.filter); }
     }
 
-    // Backdrop catches any click that no inner TouchArea consumes and bumps
-    // the blur tick — the SearchBar observes the counter and clears focus on
-    // change. Same pattern as tracks-view.
+    // Catches any click no inner TouchArea consumes and bumps the blur tick, which the
+    // SearchBar watches to clear focus.
     TouchArea {
         clicked => { Favorites.blur-search-tick += 1; }
     }
 
-    // --- Header width budget ----------------------------------------------
-    //
-    // The same arrangement `settings-view.slint` uses, for the same reasons —
-    // that file carries the long-form rationale. In brief:
-    //
-    // `page-w` is a *mirror*, written imperatively, because a live
-    // `root.width` read feeding a child's size re-enters layout. It is seeded
-    // at this header row's own floor rather than a plausible page width:
-    // seeded wide the bar believes it can afford full-width tabs and draws
-    // them into a panel that can't seat them, which is exactly what a
-    // miniplayer → full swap produces. The 1 ms mount Timer beside it is
-    // mandatory — `changed` doesn't fire when the first layout settles
-    // directly on the final value, which is every window opened at its size.
+    // The header width budget, the arrangement `settings-view.slint` carries the
+    // long-form rationale for. In brief: `page-w` is a **mirror**, written imperatively
+    // because a live `root.width` read feeding a child's size re-enters layout, and it
+    // is seeded at this row's own **floor** — seeded wide, the bar believes it can
+    // afford full-width tabs and draws them into a panel that can't seat them, which is
+    // exactly what a miniplayer → full swap produces. The mount Timer beside it is
+    // mandatory, `changed` not firing when the first layout settles directly on the
+    // final value.
     property <length> search-w-max: 220px;
     // Off the bar's own published floor, not restated — see `search-w` below.
     property <length> search-w-min: search.min-w;
@@ -96,32 +70,27 @@ export component FavoritesView inherits Rectangle {
 
     property <length> content-w: root.page-w - 2 * Theme.pad-lg;
 
-    // The filter yields room before the tabs do: the tabs navigate, the
-    // search only refines what a tab already shows. Both ends are reserved
-    // against a published floor — the tabs' `compact-w`, the input's `min-w` —
-    // so neither can drift from the component it is budgeting for.
+    // **The filter yields before the tabs do**: tabs navigate, search only refines what
+    // a tab already shows. Both ends reserve against a published floor rather than a
+    // restated number, so neither can drift from the component it budgets for.
     property <length> search-w: clamp(
         root.content-w - bar.compact-w - 2 * Theme.pad-md,
         root.search-w-min, root.search-w-max);
 
-    // --- Hero geometry -----------------------------------------------------
     // The bar's own height, restated so the hero can reserve its row.
     property <length> tab-row-h: 48px;
-    // Derived rather than a literal, so growing the artwork or the bar can't
-    // leave the banner cropping its own contents.
+    // Derived rather than a literal, so growing the artwork or the bar can't leave the
+    // banner cropping its own contents.
     property <length> hero-height:
         2 * Theme.pad-lg + root.tab-row-h + Theme.pad-md + Theme.hero-artwork;
 
-    // --- Grid geometry -----------------------------------------------------
+    // Shared by both grid tabs — mutually exclusive, same card shape, so one derivation
+    // and one `columns` push covers both. Measured off the body, whose width the layout
+    // fixes independently of the cards inside it.
     //
-    // Shared by both grid tabs — they're mutually exclusive and use the same
-    // card shape, so one derivation and one `columns` push covers both.
-    // Measured off the body, whose width the layout fixes independently of
-    // the cards inside it.
-    //
-    // The gutter is the host's choice, so it lives here and is handed both to
-    // the geometry and to the grids — an `in` property isn't readable back
-    // from outside the component that declares it.
+    // The gutter is the host's choice, so it lives here and is handed to both the
+    // geometry and the grids — an `in` property isn't readable back from outside the
+    // component declaring it.
     property <length> grid-gap: 20px;
 
     geom := GridGeometry {
@@ -137,19 +106,15 @@ export component FavoritesView inherits Rectangle {
         }
     }
 
-    // --- Sub-view transition -----------------------------------------------
-    //
-    // The tab bodies enter sideways, in the direction the pick moved: forward
-    // along the bar slides in from the right, back from the left. The page's
-    // own entrance stays the sidebar's fade-up, and these two must not
-    // compound — a horizontal slide over a vertical one reads as a diagonal —
-    // so the inner transition stays *disabled* until the first real switch.
-    // The page is rebuilt on every entry, so this re-disarms for free.
+    // Tab bodies enter sideways, in the direction the pick moved. **The page's own
+    // entrance is the sidebar's fade-up, and the two must not compound** — a horizontal
+    // slide over a vertical one reads as a diagonal — so the inner transition stays
+    // disabled until the first real switch. The page is rebuilt on every entry, so this
+    // re-disarms for free.
     property <bool> tab-anim-armed: false;
-    // Which way is `bar.previous-index`'s job, and it has to be — the page can
-    // be re-entered on any tab, and everything else in reach reads the tab just
-    // picked, since the bar writes `selected-index` before it emits `selected`
-    // and `Favorites.tab-idx` is two-way bound to it.
+    // Which way is `bar.previous-index`'s job, and it has to be: the page can be
+    // re-entered on any tab, and everything else in reach already reads the tab just
+    // picked, the bar writing `selected-index` before it emits `selected`.
     property <NavEnterFrom> tab-enter-from: NavEnterFrom.right;
 
     property <string> filter-placeholder:
@@ -159,11 +124,8 @@ export component FavoritesView inherits Rectangle {
                 ? @tr("Filter artists…")
                 : @tr("Filter favorites…");
 
-    // --- Full-bleed hero blur backdrop -------------------------------------
-    // Behind everything else; the shared component owns the dual-slot
-    // crossfade contract (outgoing slot never cleared so mosaic refresh never
-    // flashes). Gradient floor shows through when there is no blur image
-    // (zero favorites / decode failure).
+    // Behind everything else. The shared component owns the dual-slot crossfade
+    // contract; the gradient floor shows through when there is no blur image.
     HeroBlurBackdrop {
         x: 0; y: 0;
         width: 100%; height: root.hero-height;
@@ -174,7 +136,6 @@ export component FavoritesView inherits Rectangle {
     }
 
     VerticalLayout {
-        // --- Hero -----------------------------------------------------------
         Rectangle {
             vertical-stretch: 0;
             height: root.hero-height;
@@ -183,11 +144,9 @@ export component FavoritesView inherits Rectangle {
                 padding: Theme.pad-lg;
                 spacing: Theme.pad-md;
 
-                // Tab bar left, filter right — the Settings header row, on a
-                // banner. Both paint on the blur, so the bar takes
-                // `HeroBackdrop` tiers instead of its `Theme.*` defaults;
-                // `SearchBar` is the documented exception and keeps its own
-                // `floating-chrome-bg` chrome.
+                // The Settings header row, on a banner. Both paint on the blur, so the
+                // bar takes `HeroBackdrop` tiers rather than its `Theme.*` defaults;
+                // `SearchBar` is the documented exception and keeps its own chrome.
                 HorizontalLayout {
                     vertical-stretch: 0;
                     spacing: Theme.pad-md;
@@ -198,38 +157,31 @@ export component FavoritesView inherits Rectangle {
                         avail-width: root.content-w - root.search-w - 2 * Theme.pad-md;
                         selected-index <=> Favorites.tab-idx;
                         label-color: HeroBackdrop.on-backdrop;
-                        // `active-color` is one input for the selected label,
-                        // its FILL=1 icon and the underline, so it has to be a
-                        // hero token like the other three: the band takes its
-                        // hue from the mosaic now, and `Theme.accent` is a
-                        // theme value that no longer has anything to do with
-                        // it. It also had no contrast floor here — Latte's
-                        // mauve lands near 1.7:1 on the pinned band, where
-                        // `chrome` is solved to clear 3:1 against it whatever
-                        // the cover. The cost is that the selected label sits
-                        // on the 3:1 tier while the idle ones sit on
-                        // `on-backdrop`'s 4.5:1; splitting label from
-                        // indicator would mean a second input on `TabBar`,
-                        // which Settings would inherit too.
+                        // One input for the selected label, its FILL=1 icon and the
+                        // underline, so it has to be a hero token like the other three.
+                        // The band takes its hue from the mosaic, so a theme value is
+                        // unrelated to what it sits on — and `Theme.accent` carries no
+                        // contrast floor here, Latte's mauve landing near 1.7:1 on the
+                        // pinned band where `chrome` is solved to clear 3:1 whatever the
+                        // cover. The cost: the selected label sits a tier below the idle
+                        // ones. Splitting label from indicator means a second input on
+                        // `TabBar`, which Settings would inherit too.
                         active-color: HeroBackdrop.chrome;
                         hover-fill: HeroBackdrop.on-backdrop.with-alpha(0.12);
                         divider-color: HeroBackdrop.tile-edge;
                         selected(i) => {
-                            // Direction first, and in the same handler that
-                            // moved the index: the bar has already written
-                            // `tab-idx`, but Slint re-evaluates the `if`
-                            // branches at the next frame, so this still lands
-                            // before the new body mounts. Same ordering rule
-                            // `src/ui/nav_transition.rs` follows for the
-                            // page-level transition.
+                            // Direction first, in the same handler that moved the index:
+                            // the bar has already written `tab-idx`, but Slint
+                            // re-evaluates the `if` branches next frame, so this still
+                            // lands before the new body mounts — the ordering rule
+                            // `nav_transition.rs` follows for the page-level one.
                             root.tab-enter-from = i > bar.previous-index
                                 ? NavEnterFrom.right
                                 : NavEnterFrom.left;
                             root.tab-anim-armed = true;
-                            // A Songs filter carried into the Artists grid
-                            // would silently hide cards, so the pick clears
-                            // it. Rust drops its own filter shadow in
-                            // `tab-changed` — this only moves the Slint side.
+                            // A Songs filter carried into the Artists grid would
+                            // silently hide cards. Rust drops its own shadow in
+                            // `tab-changed`; this only moves the Slint side.
                             Favorites.filter = "";
                             Favorites.blur-search-tick += 1;
                             Favorites.tab-changed(i);
@@ -238,9 +190,8 @@ export component FavoritesView inherits Rectangle {
 
                     Rectangle { horizontal-stretch: 1; }
 
-                    // Padded to the same band the bar keeps clear for its
-                    // divider and underline, so the input centres on the tab
-                    // labels' line rather than on the row's.
+                    // Padded to the band the bar keeps clear for its divider, so the
+                    // input centres on the tab labels' line rather than on the row's.
                     VerticalLayout {
                         alignment: center;
                         padding-bottom: Theme.pad-sm;
@@ -259,7 +210,7 @@ export component FavoritesView inherits Rectangle {
                     vertical-stretch: 1;
                     spacing: Theme.pad-lg;
 
-                    // Mosaic tile — the shared square both mosaic heroes draw.
+                    // The shared square both mosaic heroes draw.
                     VerticalLayout {
                         alignment: start;
                         horizontal-stretch: 0;
@@ -290,12 +241,10 @@ export component FavoritesView inherits Rectangle {
                             horizontal-alignment: left;
                         }
 
-                        // Counts and duration, as chips — which of them the
-                        // band shows follows the tab, decided in
-                        // `src/ui/hero_chips.rs`. The empty Songs tab
-                        // publishes none and the line below takes over: a
-                        // lone "0 favorites" chip states the same thing far
-                        // more bleakly than a sentence does.
+                        // Which chips the band shows follows the tab, decided in
+                        // `ui::hero_chips`. **An empty Songs tab publishes none** and
+                        // the line below takes over — a lone "0 favorites" chip states
+                        // the same thing far more bleakly than a sentence does.
                         HeroChipStrip { }
 
                         if Favorites.tab-idx == Favorites.tab-songs
@@ -309,15 +258,12 @@ export component FavoritesView inherits Rectangle {
 
                         Rectangle { vertical-stretch: 1; }
 
-                        // Per-tab action row. Songs gets the full pill —
-                        // Shuffle, the column toggle and the selection chip;
-                        // Most Played gets a Shuffle scoped to what its grid
-                        // shows. Favorite Artists gets neither — over a list
-                        // of artists, shuffling and track columns both mean
-                        // nothing — and carries a sort row instead, the shape
-                        // the Albums / Artists / Genres grids use. Most Played
-                        // has no sort row on purpose: its title names its own
-                        // ordering.
+                        // Songs gets the full pill — Shuffle, column toggle, selection
+                        // chip; Most Played a Shuffle scoped to what its grid shows.
+                        // Favorite Artists gets neither, since shuffling and track
+                        // columns mean nothing over a list of artists, and carries the
+                        // entity grids' sort row instead. **Most Played has no sort row
+                        // on purpose**: its title names its own ordering.
                         if Favorites.tab-idx == Favorites.tab-songs
                             && Favorites.track-count > 0: HorizontalLayout {
                             vertical-stretch: 0;
@@ -369,12 +315,10 @@ export component FavoritesView inherits Rectangle {
                             }
                         }
 
-                        // Sort row. The two fields are what a card shows —
-                        // its title and its "{n} favorites" subtitle — so an
-                        // ordering is always visibly justified. Clicking the
-                        // active field flips the direction, a new field resets
-                        // to ascending; both handled Rust-side in
-                        // `wire_favorites`, as on every other sort row.
+                        // The two fields are exactly what a card shows — its title and
+                        // its subtitle — so an ordering is always visibly justified.
+                        // The flip-or-reset is Rust's, through the shared helper every
+                        // sort row uses.
                         if Favorites.tab-idx == Favorites.tab-artists
                             && Favorites.artist-count > 0: HorizontalLayout {
                             vertical-stretch: 0;
@@ -405,15 +349,12 @@ export component FavoritesView inherits Rectangle {
             }
         }
 
-        // --- Sub-view body ---------------------------------------------------
-        //
-        // One tab mounted at a time, each owning its own scroller and its own
-        // overlay scrollbars. The bars live inside their branch because Slint
-        // can't read an id declared inside an `if` from outside it — which is
-        // also why each branch wraps in its own `ViewTransition` rather than
-        // the body wrapping one: the slide has to carry the scrollbars with
-        // the content, and the whole thing is destroyed and rebuilt anyway.
-        // `clip` here is what contains the 32 px overshoot.
+        // One tab mounted at a time, each owning its own scroller and its own overlay
+        // scrollbars. **The bars live inside their branch** because Slint can't read an
+        // id declared inside an `if` from outside it — which is also why each branch
+        // wraps its own `ViewTransition` rather than the body wrapping one: the slide
+        // has to carry the scrollbars with the content, and the whole thing is destroyed
+        // and rebuilt anyway. The `clip` contains the slide's overshoot.
         body := Rectangle {
             vertical-stretch: 1;
             clip: true;
@@ -467,12 +408,11 @@ export component FavoritesView inherits Rectangle {
         }
     }
 
-    // Compact-mode tab tooltip, on a layer of its own. It can't hang off the
-    // tab: the bar sits in the hero, and Slint paints in declaration order,
-    // so anything the hero owns is covered by the body underneath it. Equal
-    // width cells let the rect come from the index, so a tab that moves under
-    // a parked pointer keeps its tooltip anchored — and since `tab-w` eases,
-    // the frame morphs with the cell for free.
+    // On a layer of its own. It can't hang off the tab: the bar sits in the hero, and
+    // Slint paints in declaration order, so anything the hero owns is covered by the
+    // body underneath. Equal-width cells let the rect come from the *index*, so a tab
+    // that moves under a parked pointer keeps its tooltip anchored — and since `tab-w`
+    // eases, the frame morphs with the cell for free.
     tab-tip := Rectangle {
         x: bar.absolute-position.x - root.absolute-position.x
             + bar.tab-w * bar.hovered-idx;

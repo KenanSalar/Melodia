@@ -1,11 +1,9 @@
 import { Theme } from "../../theme.slint";
 import { ToggleSwitch } from "../settings/toggle-switch.slint";
 
-// Shared dialog row: `ToggleSwitch` | stretching label | optional trailing
-// cells via `@children` (the equalizer's controls row docks its preset
-// dropdown + Reset button there). Call sites chain the two-way binding
-// through to their global (`checked <=> SomeGlobal.flag`) and forward
-// `toggled` to the global's setter callback.
+// A toggle beside a stretching label, with `@children` as an optional trailing
+// slot — the equalizer docks its preset dropdown and Reset there. Call sites
+// chain the two-way binding through to their global and forward `toggled`.
 export component DialogToggleRow inherits HorizontalLayout {
     in property <string> label;
     in-out property <bool> checked;

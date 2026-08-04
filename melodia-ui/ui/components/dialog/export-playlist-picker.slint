@@ -4,17 +4,10 @@ import { Playlists } from "../../globals/playlists.slint";
 import { MaterialIcon } from "../material-icon.slint";
 import { SelectableRow, SelectAllHeader, PickerListCard } from "selectable-picker.slint";
 
-// Export picker body — rendered inside `DialogOverlay` when
-// `Dialog.kind == "export-playlists"`. A "Select all" header over a
-// scrollable list of selectable playlists; the footer Export button (in
-// `dialog.slint`) commits the selection through the `Dialog.accepted`
-// dispatcher.
-//
-// Toggling a row flips its `selected` flag (Rust mutates the VecModel via
-// `Playlists.toggle-export-pick`); the header flips them all
-// (`set-all-export-picks`). The selectable-row / header / list-card visuals
-// are the shared `selectable-picker.slint` toolkit, so this body is just the
-// wiring + the export-specific empty state.
+// Export picker body: a select-all header over the playlist list, committed by
+// the dialog's own footer through the `Dialog.accepted` dispatcher. Rust owns
+// both the per-row toggle and the select-all, and the visuals are the shared
+// `selectable-picker.slint` toolkit — so this file is wiring and one empty state.
 export component ExportPlaylistPicker inherits Rectangle {
     VerticalLayout {
         spacing: Theme.pad-sm;
@@ -27,8 +20,8 @@ export component ExportPlaylistPicker inherits Rectangle {
             toggled => { Playlists.set-all-export-picks(!Dialog.export-select-all); }
         }
 
-        // Empty state — defensive; the Export pill is only reachable when
-        // playlists exist, but a freshly-emptied library could land here.
+        // Defensive: the Export pill needs playlists to exist, but a
+        // freshly-emptied library can still land here.
         if Dialog.export-pick-rows.length == 0: Rectangle {
             height: 96px;
             border-radius: Theme.radius-md;

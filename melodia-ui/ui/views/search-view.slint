@@ -11,41 +11,24 @@ import { MaterialIcon } from "../components/material-icon.slint";
 import { TrackList } from "../components/track-list/track-list.slint";
 import { OverlayScrollbar } from "../components/overlay-scrollbar.slint";
 
-// The Search view (Nav sidebar index 0). Vertical regions:
-//   * Hero — compact (~96 px). Centered SearchBar (autofocus) only —
-//     no page title, matching the Tauri version. Each keystroke bumps
-//     `Search.debounce-tick-pending`; the local 300 ms Timer fires
-//     `Search.commit-search(query)` once the pending tick catches up.
-//   * Below-hero scroll container — unified `ScrollView` over all
-//     state branches:
-//       (a) Recent searches chip list — only when `query == ""`
-//           AND `recent-rows.length > 0`
-//       (b) Loading — "Searching…" line when `loading && query != ""`
-//       (c) Empty results — `search_off` icon + tagline
-//       (d) Top Result + Songs two-column section — when there is at
-//           least one tracks or a top-result
-//       (e) Albums strip
-//       (f) Artists strip
+// A compact hero — an autofocused `SearchBar` and no page title — over one scroll
+// container holding every state branch: the recent-searches chips on an empty query, a
+// loading line, an empty-results block, the Top Result and Songs two-column section, and
+// the Albums and Artists strips.
 //
-// Both strips match through their own tracks as well as by name, so a
-// query that only reaches track metadata — a song title, a year, a
-// composer, a genre — still fills them, and the Top Result (which ranks
-// over those two lists plus genres) still has something to show.
+// Both strips match through their own tracks as well as by name, so a query reaching
+// only track metadata still fills them — and with them the Top Result, which ranks over
+// those two lists plus genres.
 //
-// There is no Genres strip: a genre is a *route*, not a thing to browse
-// a row of, so a genre match surfaces as the Top Result card instead and
-// clicking it routes through the shared `Search.go-to-genre` — the same
-// callback a track row's "Go to Genre" entry uses.
+// **There is no Genres strip**: a genre is a *route*, not something to browse a row of,
+// so a genre match surfaces as the Top Result card and clicking it goes through the same
+// `go-to-genre` a track row's context entry uses.
 //
-// Cross-tab nav: clicking an album/artist card stamps
-// `*Detail.origin-nav-index = NAV_SEARCH` synchronously *before*
-// flipping `Nav.selected-index` so the detail-view back arrow
-// returns here. Wiring lives in `src/ui/callbacks/search/`.
+// An album or artist card stamps `*Detail.origin-nav-index` **before** flipping
+// `Nav.selected-index`, so the detail's back arrow returns here.
 export component SearchView inherits Rectangle {
-    // Debounce — 300 ms (Tauri parity). The SearchBar's `edited` bumps
-    // `debounce-tick-pending`; the Timer fires `commit-search` after
-    // 300 ms of keystroke quiescence and writes `applied` to halt
-    // itself. Mirrors the Tracks / Favorites filter-throttle shape.
+    // The `edited` bump; this Timer commits after the keystrokes go quiet and writes
+    // `applied` to halt itself — the Tracks / Favorites throttle shape.
     debounce := Timer {
         interval: 300ms;
         running: Search.debounce-tick-pending != Search.debounce-tick-applied;
@@ -55,10 +38,8 @@ export component SearchView inherits Rectangle {
         }
     }
 
-    // Single-shot focus on mount. SearchView is re-instantiated on every
-    // navigation to Nav index 0, so this re-fires each time the user enters
-    // the Search tab. A 1 ms Timer (not `init`) keeps the focus() call out of
-    // binding evaluation — see search-bar.slint / view-transition.slint.
+    // The view is rebuilt on every entry, so this re-fires each time. **A Timer, not
+    // `init`**, which keeps the `focus()` call out of binding evaluation.
     autofocus := Timer {
         interval: 1ms;
         running: true;
@@ -68,9 +49,7 @@ export component SearchView inherits Rectangle {
         }
     }
 
-    // Backdrop catches any click that no inner TouchArea consumes and
-    // bumps the blur tick — the SearchBar observes the counter and
-    // clears focus on change. Same pattern as Favorites / Tracks.
+    // Catches any click no inner TouchArea consumes and bumps the blur tick.
     TouchArea {
         clicked => { Search.blur-search-tick += 1; }
     }
@@ -98,15 +77,11 @@ export component SearchView inherits Rectangle {
                             Search.debounce-tick-pending += 1;
                             Search.query-changed(t);
                         }
-                        // Pressing Enter commits immediately, skipping
-                        // the 300 ms throttle. Aligning the ticks
-                        // cancels any pending Timer fire so the same
-                        // query isn't committed twice. This is what
-                        // lets the user re-run the preserved query
-                        // after returning to the Search tab: tab-
-                        // leave released `last_results` + cleared the
-                        // models, but `Search.query` was kept, so
-                        // editing isn't required — just focus + Enter.
+                        // Enter commits immediately, and aligning the ticks cancels the
+                        // pending fire so the query isn't committed twice. **This is
+                        // what lets a preserved query be re-run**: tab-leave released
+                        // the results and cleared the models but kept `Search.query`,
+                        // so no editing is needed — just focus and Enter.
                         accepted => {
                             Search.debounce-tick-applied = Search.debounce-tick-pending;
                             Search.commit-search(Search.query);
@@ -134,10 +109,7 @@ export component SearchView inherits Rectangle {
                     padding-bottom: Theme.pad-lg;
                     spacing: Theme.pad-lg;
 
-                    // (a) Recent searches ----------------------------
-                    // Shown only when input is empty and there's
-                    // saved history. Section heading + chip flow +
-                    // "Clear all" button.
+                    // Only on an empty query with saved history.
                     if Search.query == "" && Search.recent-rows.length > 0: VerticalLayout {
                         vertical-stretch: 0;
                         spacing: Theme.pad-sm;
@@ -179,16 +151,12 @@ export component SearchView inherits Rectangle {
                             }
                         }
 
-                        // Chip flow — a `HorizontalLayout` with
-                        // `wrap` isn't natively supported in Slint
-                        // 1.16, so we use a plain HorizontalLayout
-                        // with `alignment: start` and let overflow
-                        // sit outside the visible area (the recent
-                        // list caps at 10 chips, and chip widths
-                        // are bounded, so on any sensible window
-                        // size every chip is visible). Tradeoff
-                        // accepted for v1 — a flow layout is a
-                        // future component.
+                        // Slint 1.16 has no wrapping `HorizontalLayout`, so this is a
+                        // plain one and overflow sits outside the visible area. The
+                        // history is capped and chip widths are bounded, so at any
+                        // sensible window size every chip fits — the
+                        // `SettingsPage.chunk-indices` wrap is what a real fix looks
+                        // like, if this ever stops being true.
                         HorizontalLayout {
                             spacing: Theme.pad-sm;
                             alignment: start;
@@ -211,11 +179,9 @@ export component SearchView inherits Rectangle {
                                     font-size: Theme.font-size-sm;
                                 }
 
-                                // Full-chip TouchArea declared before
-                                // `close-cell` below so the close cell's
-                                // nested TouchArea wins click dispatch on
-                                // the X icon (Slint dispatches to the
-                                // last-declared overlapping TouchArea).
+                                // Declared **before** the close cell, so that cell's
+                                // nested TouchArea wins dispatch on the X: Slint
+                                // dispatches to the last-declared overlapping one.
                                 chip-touch := TouchArea {
                                     mouse-cursor: pointer;
                                     clicked => { Search.recent-pick(term); }
@@ -238,11 +204,8 @@ export component SearchView inherits Rectangle {
                                     }
                                     close-touch := TouchArea {
                                         mouse-cursor: pointer;
-                                        // `close-cell` is declared after
-                                        // `chip-touch` above, so this
-                                        // nested TouchArea sits on top
-                                        // and wins click dispatch on the
-                                        // close cell.
+                                        // Declared after the chip's own, so this sits
+                                        // on top and wins dispatch here.
                                         clicked => { Search.recent-remove(term); }
                                     }
                                 }
@@ -307,10 +270,8 @@ export component SearchView inherits Rectangle {
                         }
                     }
 
-                    // (d) Top Result + Songs (two-col) ---------------
-                    // The Top Result subtree is unmounted (`if`, not
-                    // `visible: false`) when there's no top — the
-                    // Songs column then claims full width naturally.
+                    // The Top Result subtree unmounts entirely with no top result, so
+                    // the Songs column claims the full width naturally.
                     if Search.top-kind != "" || Search.tracks.length > 0: HorizontalLayout {
                         vertical-stretch: 0;
                         spacing: Theme.pad-lg;
@@ -322,17 +283,10 @@ export component SearchView inherits Rectangle {
                             alignment: start;
                             spacing: Theme.pad-sm;
 
-                            // Heading row — same shape as the Songs
-                            // heading row below so the two texts
-                            // share a baseline. Songs HL stretches
-                            // to 32 px because of the ActionPill;
-                            // pinning this HL to the same height
-                            // (and centring the text inside via
-                            // alignment: center) keeps the headings
-                            // optically aligned AND the spacing
-                            // below them equal — which means the
-                            // top of `top-card` and the top of the
-                            // TrackList header land at the same y.
+                            // Pinned to the same height as the Songs heading, which its
+                            // `ActionPill` stretches. That keeps the two headings
+                            // aligned *and* the spacing below them equal, so the card
+                            // and the list header start at the same y.
                             HorizontalLayout {
                                 height: 32px;
                                 alignment: start;
@@ -364,17 +318,13 @@ export component SearchView inherits Rectangle {
                                     padding: Theme.pad-md;
                                     spacing: Theme.pad-sm;
 
-                                    // Artwork tile. The shared
-                                    // `ArtworkImage`, not a hand-rolled
-                                    // square: a coverless result here has
-                                    // to look like the same entity does
-                                    // in the strip below it and in every
-                                    // track row, and this card spent a
-                                    // while painting its own grey
-                                    // placeholder that matched neither.
-                                    // Round for everything but an artist,
-                                    // whose circular tile matches the
-                                    // Artists strip's convention.
+                                    // **The shared `ArtworkImage`, not a hand-rolled
+                                    // square**: a coverless result here has to look
+                                    // like the same entity does in the strip below and
+                                    // in every track row, and this card spent a while
+                                    // painting its own placeholder matching neither.
+                                    // Circular for an artist, per the strip's own
+                                    // convention.
                                     ArtworkImage {
                                         tile-size: 216px;
                                         tile-radius: Search.top-kind == "artist"
@@ -386,16 +336,12 @@ export component SearchView inherits Rectangle {
                                             : Search.top-kind == "genre"
                                                 ? "theater_comedy"
                                                 : "album";
-                                        // A genre is the one kind with no
-                                        // cover to ever replace the fill,
-                                        // so it takes the name-hashed
-                                        // gradient `GenreGrid` paints and
-                                        // the two surfaces read as one
-                                        // genre. Every other kind restates
-                                        // `ArtworkImage`'s own placeholder,
-                                        // because a ternary has no way to
-                                        // fall through to the default it
-                                        // would otherwise inherit.
+                                        // A genre is the one kind with no cover to ever
+                                        // replace the fill, so it takes the name-hashed
+                                        // gradient `GenreGrid` paints and the two read
+                                        // as one genre. The other arms restate
+                                        // `ArtworkImage`'s own default, a ternary
+                                        // having no way to fall through to it.
                                         tile-bg: Search.top-kind == "genre"
                                             ? @linear-gradient(135deg,
                                                 Search.top-tile-color-1,
@@ -406,10 +352,8 @@ export component SearchView inherits Rectangle {
                                             : Theme.accent;
                                     }
 
-                                    // Badge — localised inline so the
-                                    // gettext extractor sees the
-                                    // literal strings. Rust-pushed
-                                    // strings can't `@tr()`.
+                                    // Localised inline: a Rust-pushed string can't
+                                    // `@tr`, so the extractor needs literals here.
                                     Text {
                                         text: Search.top-kind == "album"
                                             ? @tr("Album")
@@ -451,13 +395,9 @@ export component SearchView inherits Rectangle {
                             horizontal-stretch: 1;
                             spacing: Theme.pad-sm;
 
-                            // Pinned to 32 px so the heading baseline
-                            // matches the Top Result heading row's,
-                            // regardless of whether the ActionPill
-                            // is currently mounted (it only renders
-                            // when tracks.length > 0, but the row
-                            // height must stay constant for cross-
-                            // column alignment).
+                            // Pinned so the baseline matches the Top Result heading
+                            // whether or not the pill is mounted — it renders only with
+                            // rows, and the row height has to hold either way.
                             HorizontalLayout {
                                 height: 32px;
                                 alignment: space-between;
@@ -472,13 +412,9 @@ export component SearchView inherits Rectangle {
                                     }
                                 }
 
-                                // ActionPill — Columns + selection
-                                // chip. The Shuffle pill is
-                                // intentionally omitted — Search has
-                                // no single "all of these tracks"
-                                // semantic the way Favorites does
-                                // (the user picked the query; play
-                                // expectations are per-row).
+                                // **No Shuffle pill here**: Search has no single "all of
+                                // these tracks" the way Favorites does — the user
+                                // picked a query, so play expectations are per-row.
                                 if Search.tracks.length > 0: ActionPill {
                                     ColumnTogglePopup {
                                         show-number  <=> Search.show-number;
@@ -507,32 +443,21 @@ export component SearchView inherits Rectangle {
                             tl := TrackList {
                                 horizontal-stretch: 1;
                                 vertical-stretch: 0;
-                                // Size to row count so the outer
-                                // ScrollView drives both strips +
-                                // tracklist together. `max(1, …)` keeps
-                                // the column header rendering when zero
-                                // rows are visible.
+                                // Sized to the row count so the outer scroller drives
+                                // the strips and the list together; the floor keeps the
+                                // column header rendering with zero rows.
                                 //
-                                // Uncapped, unlike the four composite
-                                // views (Favorites, Recently Played,
-                                // Artist Detail, Browse), which pin this
-                                // to `below-sv.visible-height` so their
-                                // inner ListView keeps virtualizing.
-                                // Here the *backend* is the cap — search
-                                // returns at most 50 rows (`LIMIT 50` in
-                                // `queries::search`), sliced to
-                                // `COMPACT_TRACK_LIMIT` until the user
-                                // expands — so instantiating them all is
-                                // affordable, and it buys back native
-                                // wheel scrolling: a capped list gains
-                                // inner travel, and a nested ListView
-                                // swallows the wheel at its scroll edge
-                                // rather than bubbling, which is why
-                                // those four need `CompositeScrollbars`
-                                // plus a `CompositeScroll.reset()`
-                                // mirror and this view needs neither.
-                                // Raising that SQL limit is what would
-                                // make the trade wrong.
+                                // **Uncapped, unlike the composite views**, which pin
+                                // this to the viewport so their inner list keeps
+                                // virtualizing. Here the *backend* is the cap — the
+                                // query returns at most a screenful or two — so
+                                // instantiating them all is affordable, and it buys
+                                // back native wheel scrolling: a capped list gains
+                                // inner travel, and a nested `ListView` swallows the
+                                // wheel at its scroll edge rather than bubbling, which
+                                // is why those views need `CompositeScrollbars` and
+                                // this one doesn't. **Raising that SQL limit is what
+                                // would make the trade wrong.**
                                 height: max(1, Search.tracks.length)
                                     * (Search.show-artwork
                                         ? Theme.row-h
@@ -571,43 +496,24 @@ export component SearchView inherits Rectangle {
                                 set-row-rating(ids, n) => { Search.set-row-rating(ids, n); }
                                 select-row(idx, id, sh, ct) => { Search.select-row(idx, id, sh, ct); }
                                 request-blur-search => { Search.blur-search-tick += 1; }
-                                // Search already has `open-album` /
-                                // `open-artist` for grid-card clicks —
-                                // re-use them for the row context menu
-                                // so cross-tab nav semantics stay
-                                // consistent.
+                                // Reuses the card-click callbacks, so cross-tab nav
+                                // means the same thing from either surface.
                                 go-to-album(aid) => { Search.open-album(aid); }
                                 go-to-artist(aid) => { Search.open-artist(aid); }
                                 go-to-genre(gid) => { Search.go-to-genre(gid); }
                             }
 
-                            // Horizontal scrollbar for the TrackList
-                            // — sits right below the table so the
-                            // user can reach off-screen columns
-                            // (artist / album / genre / year /
-                            // length) when the window is too narrow
-                            // for `tl.total-w`. Mounted inside the
-                            // songs column rather than at SearchView
-                            // root because `tl` is declared inside
-                            // the `if Search.top-kind != "" ||
-                            // Search.tracks.length > 0` conditional
-                            // and Slint scopes `id`s to their
-                            // enclosing conditional — root-level
-                            // references would fail to compile.
+                            // Mounted **inside** the songs column rather than at the
+                            // view root, because the list is declared inside a
+                            // conditional and Slint scopes ids to their enclosing one.
                             //
-                            // Always-mounted with a fixed 10 px slot
-                            // — gating the `if` on `tl.h-viewport-
-                            // width > tl.h-visible-width` would
-                            // introduce a binding loop (the `if`
-                            // affects layout → tl.width changes →
-                            // h-visible-width changes → if-condition
-                            // re-evaluates). The `OverlayScrollbar`'s
-                            // built-in `visible: content-size >
-                            // visible-size` gate already auto-hides
-                            // the thumb when there's no overflow,
-                            // leaving a 10 px transparent slot —
-                            // small visual cost in exchange for
-                            // always-correct overflow access.
+                            // **Always mounted, with a fixed slot.** Gating its `if` on
+                            // the overflow would close a binding loop — the `if`
+                            // affects layout, which changes the list's width, which
+                            // changes the visible width, which re-evaluates the `if`.
+                            // The bar's own visibility gate already hides the thumb
+                            // with nothing to scroll, leaving a transparent slot: a
+                            // small visual cost for always-correct overflow access.
                             OverlayScrollbar {
                                 horizontal: true;
                                 height: 10px;
@@ -617,12 +523,9 @@ export component SearchView inherits Rectangle {
                                 scroll-to(o) => { tl.set-h-offset(o); }
                             }
 
-                            // Show all N / Show less toggle — only
-                            // mounted when the backend returned more
-                            // than the compact cap. Clicking flips
-                            // `show-all-tracks`; Rust's apply path
-                            // re-derives the visible slice from the
-                            // cached `last_results` (no DB hit).
+                            // Mounted only when the backend returned more than the
+                            // compact cap; Rust re-derives the visible slice from its
+                            // cache with no DB hit.
                             if Search.tracks-total > 5: HorizontalLayout {
                                 alignment: center;
                                 padding-top: Theme.pad-xs;
@@ -691,25 +594,19 @@ export component SearchView inherits Rectangle {
                         }
                     }
 
-                    // Trailing surplus collector — without this, a
-                    // VerticalLayout whose `if`-gated children are
-                    // all `vertical-stretch: 0` divides spare height
-                    // equally among them, which pushes the Recent
-                    // heading to the top of the scroll area and the
-                    // chips to the bottom with a yawning gap between
-                    // (only the Recent section is mounted in the
-                    // empty-query state). The 1-stretch Rectangle
-                    // absorbs the surplus so every real section sits
-                    // at the top with its natural height.
+                    // **Collects the surplus.** A column whose children are all
+                    // `vertical-stretch: 0` divides spare height equally among them,
+                    // which on the empty-query state — where only the Recent section is
+                    // mounted — pushed its heading to the top and its chips to the
+                    // bottom with a yawning gap between.
                     Rectangle { vertical-stretch: 1; }
                 }
             }
         }
     }
 
-    // Outer vertical scrollbar — drives `below-sv`, covering Top
-    // Result + Songs + strips together. Pinned to the right edge of
-    // the below-hero region so it starts under the hero banner.
+    // Covers the Top Result, Songs and both strips together, pinned to the right edge of
+    // the below-hero region so it starts under the banner.
     OverlayScrollbar {
         horizontal: false;
         x: parent.width - self.width;

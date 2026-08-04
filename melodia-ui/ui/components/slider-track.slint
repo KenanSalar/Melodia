@@ -1,46 +1,35 @@
 import { Theme } from "../theme.slint";
 
-// Horizontal M3 Expressive slider — twin slim rounded bars meeting at the
-// thumb centre, a parent-background stadium masking the seam, and a thin
-// vertical-pill thumb that shrinks along the value axis on press
-// (4 → 2 px, 200 ms cubic-bezier(0.2, 0, 0, 1)). Mirror of `volume-popup`'s
-// slider region, rotated 90°. No hover/press growth — track thickness and
-// the thumb's perpendicular extent are both fixed.
+// Horizontal M3 Expressive slider — twin slim bars meeting at the thumb, a
+// parent-background stadium masking the seam, and a vertical-pill thumb that
+// shrinks along the value axis on press. `volume-popup`'s slider rotated 90°.
 //
-// Mask colour MUST match the parent surface; expose it instead of hardcoding
-// (volume's mask is `Theme.crust` only because its parent `PopupSurface`
-// paints `Theme.crust`; the now-playing-bar parent paints `mantle` /
-// `mantle-unfocused`).
+// The mask colour MUST match the parent surface, hence the property: volume's
+// is `Theme.crust` only because its `PopupSurface` paints crust, where the
+// now-playing bar paints `mantle` / `mantle-unfocused`.
 export component SliderTrack inherits Rectangle {
     in property <float> value;          // bound source-of-truth (0..1)
     in property <bool>  is-disabled: false;
     in property <brush> seam-mask-color: Theme.mantle;
-    // Volume sliders draw a small accent dot at the max (right) end of the
-    // inactive bar — mirrors the vertical popup slider's top-end indicator.
-    // Default false so progress sliders are unaffected.
+    // Volume's max-end dot, mirroring the vertical popup's top-end one.
     in property <bool>  show-max-stop: false;
 
-    // Gated on `dragged-since-press` so a click-inside-mask grab without
-    // movement doesn't flip the visual / time-text into "drag mode";
-    // they keep tracking live `value` until the user actually moves.
+    // Gated on movement, so a no-move grab inside the mask doesn't flip the
+    // visuals and the time text into drag mode.
     out property <bool>  dragging: touch.pressed && root.dragged-since-press;
     out property <float> drag-value;    // valid only while dragging
-    // Surface the inner TouchArea's hover state so popup hosts can gate
-    // floating badges/labels on hover-or-drag without wrapping the slider
-    // in an outer TouchArea (which would steal pointer events).
+    // So a host can gate a floating badge on hover without wrapping this in an
+    // outer TouchArea, which would steal the pointer events.
     out property <bool>  has-hover: touch.has-hover;
-    // Surface raw pressed so popup hosts can restore trigger highlights on
-    // every release. `committed` only fires after movement, but the winit
-    // Release filter clears `PopupHighlight.id` unconditionally on every
-    // mouse-up — a no-move grab needs an unconditional restore path.
+    // Raw pressed, because the winit Release filter clears `PopupHighlight.id`
+    // on every mouse-up while `committed` only fires after movement — a no-move
+    // grab still needs a way back to the trigger highlight.
     out property <bool>  pressed: touch.pressed;
 
     callback changed(float);
     callback committed(float);
 
-    // Set true on a jump-to-click or any `moved` event; stays false during
-    // a no-move grab. Gates both the `dragging` visual switch and the
-    // `committed` callback (no-op grabs don't fire seek).
+    // Set by a jump-to-click or any `moved`; a no-move grab must not fire a seek.
     private property <bool> dragged-since-press: false;
 
     // Tall enough to host the 24 px vertical thumb without clipping.
@@ -52,35 +41,25 @@ export component SliderTrack inherits Rectangle {
 
     private property <length> track-h: 4px;
     private property <length> thumb-h: 24px;
-    // Press shrinks the thumb along the value axis 4 → 2 px (M3 Expressive,
-    // matches volume's `thumb-h` press behaviour rotated 90°).
+    // M3 Expressive: press shrinks the thumb along the value axis.
     private property <length> thumb-w: touch.pressed ? 2px : 4px;
-    // Mask along-axis extent (12 px) is wider than the thumb (4 px rest) so
-    // the seam gap visibly widens to ~5 px on each side when the thumb
-    // shrinks to 2 px under press — "active track absorbs the freed pixels".
+    // Wider than the thumb, so the seam gap visibly widens on each side as the
+    // thumb shrinks under press — the active track absorbs the freed pixels.
     private property <length> thumb-bg-w: 12px;
     private property <length> thumb-bg-h: 24px;
-    // Max-end stop dot — mirror of the vertical volume popup's `stop-d` /
-    // `stop-y` (4 px dot seated inside the inactive bar's rounded end, dot
-    // centre aligned with the bar's end radius). `stop-margin` is the
-    // distance from the slider's right edge to the dot's right edge —
-    // matches the vertical's 3 px far-edge gap, just expressed as a margin
-    // rather than a coordinate.
+    // The dot seats inside the inactive bar's rounded end. `stop-margin` is the
+    // vertical popup's far-edge gap expressed as a margin from the right edge
+    // rather than as a coordinate.
     private property <length> stop-d: 4px;
     private property <length> stop-margin: 3px;
 
     private property <float>  frac: clamp(root.shown-value, 0, 1);
     private property <length> track-cy: root.height / 2;
-    // Centre the thumb against a stable 4 px reference (the rest
-    // `thumb-w`) rather than the live animated width. Deriving thumb-x
-    // from a width-dependent term would pin one edge at the extremes —
-    // at frac=0 the left edge stays at 0 and only the right edge moves
-    // inward on press, looking asymmetric. The 12 px mask hides any
-    // 1-px overflow past the track ends.
-    // Exposed so popup hosts (e.g. `VolumePopupHorizontal`'s percentage
-    // badge) can pin a sibling element to the live thumb position without
-    // re-deriving the formula and risking silent drift if the centring
-    // constants here change.
+    // Centred against the *rest* thumb width, not the live animated one: a
+    // width-dependent term pins one edge at the extremes, so at frac=0 only the
+    // right edge moves inward under press and the shrink reads as lopsided. The
+    // 12 px mask hides the 1 px of overflow past the track ends. `out` so a host
+    // can pin a badge to the thumb without re-deriving this.
     out property <length> thumb-cx: root.frac * (root.width - 4px) + 2px;
     private property <length> thumb-x: root.thumb-cx - root.thumb-w / 2;
     private property <length> active-w: root.thumb-cx;
@@ -88,8 +67,7 @@ export component SliderTrack inherits Rectangle {
 
     animate thumb-w { duration: 200ms; easing: cubic-bezier(0.2, 0, 0, 1); }
 
-    // Active bar — left half, from 0 to thumb-cx. Covered by the mask at
-    // the seam end so it reads as a continuous bar with the thumb on top.
+    // Active bar — masked at the seam end so it reads as one bar under the thumb.
     Rectangle {
         x: 0;
         y: root.track-cy - root.track-h / 2;
@@ -99,7 +77,6 @@ export component SliderTrack inherits Rectangle {
         background: root.is-disabled ? Theme.overlay0 : Theme.accent;
     }
 
-    // Inactive bar — right half, from thumb-cx to width.
     Rectangle {
         x: root.thumb-cx;
         y: root.track-cy - root.track-h / 2;
@@ -109,11 +86,8 @@ export component SliderTrack inherits Rectangle {
         background: Theme.surface1;
     }
 
-    // Stop-indicator dot at the max (right) end of the inactive bar. Always
-    // rendered at full opacity; the mask (painted after this element) covers
-    // it when the thumb approaches the right end, so the dot disappears
-    // behind the moving thumb without a fade. Mirror of the vertical popup
-    // slider's top-end dot.
+    // Never faded — the mask paints after it, so the dot simply disappears
+    // behind the thumb as it reaches the end.
     if root.show-max-stop: Rectangle {
         x: root.width - root.stop-margin - root.stop-d;
         y: root.track-cy - root.stop-d / 2;
@@ -123,9 +97,8 @@ export component SliderTrack inherits Rectangle {
         background: root.is-disabled ? Theme.overlay0 : Theme.accent;
     }
 
-    // Mask — parent-background stadium that hides the bar seam at thumb-cx.
-    // Painted after the bars and before the thumb so the seam stays
-    // invisible while the thumb pill sits on top.
+    // Parent-background stadium hiding the bar seam — after the bars, before
+    // the thumb.
     Rectangle {
         x: root.thumb-cx - root.thumb-bg-w / 2;
         y: root.track-cy - root.thumb-bg-h / 2;
@@ -135,8 +108,7 @@ export component SliderTrack inherits Rectangle {
         background: root.seam-mask-color;
     }
 
-    // Thumb — thin vertical pill in the active accent. Painted on top of
-    // the mask so the seam-cover stays invisible.
+    // On top of the mask, so the seam-cover itself stays invisible.
     Rectangle {
         x: root.thumb-x;
         y: root.track-cy - root.thumb-h / 2;
@@ -144,13 +116,9 @@ export component SliderTrack inherits Rectangle {
         height: root.thumb-h;
         border-radius: self.width / 2;
         background: root.is-disabled ? Theme.overlay0 : Theme.accent;
-        // Snap thumb x to each position-tick instead of easing over 200 ms.
-        // Easing would phase-lag the value source on every 1 Hz publish
-        // (CLAUDE.md "animating a binding derived from another animating
-        // property") and burn ~12 frames of paint per tick on the thumb
-        // and any text cells it overlaps. Snapping makes the thumb track
-        // the source of truth exactly and keeps each tick's paint scope
-        // to the moved cell only.
+        // Snapped, not eased: easing a binding off the position ticks phase-lags
+        // the source, and repaints the thumb plus everything it overlaps for the
+        // length of the curve, once per tick.
         animate x { duration: 0ms; }
     }
 
@@ -160,11 +128,9 @@ export component SliderTrack inherits Rectangle {
 
         pointer-event(ev) => {
             if (ev.kind == PointerEventKind.down) {
-                // Grab zone = the mask region (±thumb-bg-w/2 around
-                // thumb-cx). Inside, capture the press without jumping —
-                // matches the perceived thumb hit area and prevents a 1–2
-                // px sideways nudge from teleporting the value. Outside,
-                // jump-to-click as before.
+                // Inside the mask region the press is captured without jumping —
+                // that band is the perceived thumb, and a 1–2 px nudge there
+                // must not teleport the value. Outside, jump to the click.
                 if (self.mouse-x < root.thumb-cx - root.thumb-bg-w / 2
                     || self.mouse-x > root.thumb-cx + root.thumb-bg-w / 2) {
                     root.drag-value = clamp(self.mouse-x / root.width, 0, 1);
@@ -174,10 +140,9 @@ export component SliderTrack inherits Rectangle {
                     root.dragged-since-press = false;
                 }
             }
-            // Volume's pattern: commit on up OR cancel. Skip the commit
-            // when the user never actually moved — the player advances
-            // during the grab-hold, and committing the captured value
-            // would seek BACKWARDS to the click instant.
+            // Commit on up or cancel, but never on a no-move grab: the player
+            // advances during the hold, so committing the captured value would
+            // seek backwards to the click instant.
             if (ev.kind == PointerEventKind.up
                 || ev.kind == PointerEventKind.cancel) {
                 if (root.dragged-since-press) {

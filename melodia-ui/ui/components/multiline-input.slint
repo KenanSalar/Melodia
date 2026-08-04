@@ -2,20 +2,17 @@ import { ScrollView } from "std-widgets.slint";
 import { Theme } from "../theme.slint";
 import { OverlayScrollbar } from "overlay-scrollbar.slint";
 
-// Multi-line, word-wrapping text box — the one editable control the tree
-// lacked (every other `TextInput` is `single-line: true`, and std-widgets'
-// `TextEdit` forwards no appearance properties, so it can't be themed to match
-// a Catppuccin dialog). The scrolling recipe is copied from Slint's own
-// `widgets/common/textedit-base.slint`; the chrome mirrors `labeled-input.slint`
-// / `search-bar.slint`.
+// The tree's only multi-line, word-wrapping text box — every other `TextInput`
+// is single-line, and std-widgets' `TextEdit` forwards no appearance properties,
+// so it can't be themed to match a dialog. The scrolling recipe comes from
+// Slint's own `widgets/common/textedit-base.slint`; the chrome from
+// `labeled-input.slint`.
 //
-// HiDPI note (CLAUDE.md "a rounded `clip: true` on an element that contains
-// text/children blurs + upscales that subtree on FemtoVG"): the root paints
-// only a rounded *fill* — no `clip`, no `border`. The inner `ScrollView` clips
-// its viewport rectangularly (a cheap scissor, no layer), and the rounded 1 px
-// border is a childless overlay `Rectangle` sibling. This is the `PickerListCard`
-// shape. Never put `border-radius` + `clip: true` on the box holding the
-// `TextInput`.
+// **Never put `border-radius` + `clip: true` on the box holding the
+// `TextInput`** — a rounded clip over text renders the subtree to an offscreen
+// layer and upscales it on HiDPI. The root paints a rounded *fill* only, the
+// inner `ScrollView` clips its viewport rectangularly, and the border is a
+// childless overlay sibling. The `PickerListCard` shape.
 export component MultilineInput inherits Rectangle {
     in property <string> placeholder;
     in-out property <string> text;
@@ -33,11 +30,11 @@ export component MultilineInput inherits Rectangle {
         height: parent.height - 2 * root.pad;
         horizontal-scrollbar-policy: always-off;
         vertical-scrollbar-policy: always-off;
-        // Word-wrap ⇒ lock content width to the viewport so lines wrap instead
-        // of scrolling sideways. `viewport-height: max(visible, preferred)` is
-        // REQUIRED — without it the viewport never grows past the visible
-        // height, so there is no vertical travel and the caret-nudge handler
-        // has nothing to scroll (long text runs off the bottom).
+        // Width locked to the viewport so lines wrap instead of scrolling
+        // sideways. The height's `max` is required: without it the viewport
+        // never grows past what's visible, so there is no vertical travel, the
+        // caret-nudge handler has nothing to scroll, and long text runs off the
+        // bottom.
         viewport-width: self.visible-width;
         viewport-height: max(self.visible-height, ti.preferred-height);
 
@@ -49,9 +46,9 @@ export component MultilineInput inherits Rectangle {
             wrap: word-wrap;
             page-height: sv.visible-height;
             edited => { root.edited(); }
-            // Keep the caret on screen. Under word-wrap the x-axis is inert, so
-            // only the y-branch of the upstream recipe is kept. Upstream hardcodes
-            // one line height at 20px; we derive it from the font size instead.
+            // Keeps the caret on screen. Word-wrap makes the x-axis inert, so
+            // only upstream's y-branch survives — with the line height derived
+            // from the font size rather than hardcoded as upstream does.
             cursor-position-changed(cpos) => {
                 if (cpos.y + sv.viewport-y < 12px) {
                     sv.viewport-y = min(0px, max(sv.visible-height - self.height, -cpos.y + 12px));
@@ -62,8 +59,7 @@ export component MultilineInput inherits Rectangle {
         }
     }
 
-    // Faked placeholder — `TextInput` has no `placeholder-text`. Painted at the
-    // scroll origin, hidden the moment the user types.
+    // Faked, because `TextInput` has no `placeholder-text`.
     Text {
         x: sv.x;
         y: sv.y;
@@ -76,10 +72,8 @@ export component MultilineInput inherits Rectangle {
         wrap: word-wrap;
     }
 
-    // Rounded 1 px border, painted after the text (above it). Childless ⇒ a
-    // direct rounded-rect stroke, never a compositing layer, so the text subtree
-    // isn't rasterized-then-upscaled. A plain Rectangle has no TouchArea, so it
-    // doesn't intercept clicks or the wheel underneath.
+    // Childless, so it strokes directly rather than compositing a layer over the
+    // text; and with no TouchArea it intercepts neither clicks nor the wheel.
     Rectangle {
         border-radius: Theme.radius-md;
         border-width: 1px;

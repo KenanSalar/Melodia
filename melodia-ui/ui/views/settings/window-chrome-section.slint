@@ -9,24 +9,13 @@ import { SettingRowStacked } from "../../components/settings/setting-row-stacked
 import { ToggleSwitch } from "../../components/settings/toggle-switch.slint";
 import { ChipGroup } from "../../components/settings/chip-group.slint";
 
-// Window-chrome section: rows that control the OS-facing window shell.
-// Split out of `appearance-section.slint` because palette config (theme /
-// variant / accent / colour style) and chrome config (titlebar mode,
-// match-unfocused, corner radius) are orthogonal concerns — users tend
-// to set chrome once at install and never revisit, while palette rows
-// drive most of the Appearance page traffic.
+// The OS-facing window shell — titlebar mode, decoration buttons, corner
+// radius, tray. Split from `appearance-section.slint`: chrome is set once and
+// forgotten, where the palette rows carry the page's traffic.
 //
-// Native Title Bar routes through the shared `Dialog` global with
-// `kind: "restart-titlebar"`; Match Unfocused is KDE-only and gated on
-// `Settings.match-unfocused-supported`; Window Corner Radius is owned
-// by the OS in native-titlebar mode (chips disabled with an inline
-// hint).
-//
-// Search visibility — see `language-section.slint`. Each row's
-// visibility ANDs the existing state condition with the search
-// predicate. Dividers gate on "previous visible row exists AND next
-// visible row exists" so the card never ends up with a stranded
-// divider.
+// Search visibility follows `language-section.slint` — each row ANDs its state
+// condition with the predicate, and a divider gates on a visible row either
+// side so the card can't end on a stranded one.
 export component WindowChromeSection inherits Rectangle {
     background: transparent;
     horizontal-stretch: 1;
@@ -74,19 +63,10 @@ export component WindowChromeSection inherits Rectangle {
     property <bool> any-above-tray-icon: any-above-tb-side || show-titlebar-button-side;
     property <bool> any-above-close-to-tray: any-above-tray-icon || show-tray-icon;
 
-    // Tauri's preset → px values, ported verbatim from
-    // `pages/settings/AppearanceSection.tsx`:
-    //
-    //   Square=0, KDE=6, Windows 11=8, macOS=10, GNOME=15.
-    //
-    // Only the preset chips are exposed — the manual stepper was dropped
-    // because off-preset px values in 1..=5 fall below the visible-arc
-    // threshold at 1× DPI (femtovg / pixel grid limitation), making
-    // them indistinguishable from Square. Restricting to the curated
-    // presets keeps every value visually distinct and lets the
-    // titlebar-button hover-radius math in `custom-titlebar.slint`
-    // assume `shell-radius` is either 0 or >= 6 — no piecewise floor
-    // needed.
+    // Square=0, KDE=6, Windows 11=8, macOS=10, GNOME=15. Presets only, no manual
+    // stepper: a radius in 1..=5 falls under femtovg's visible-arc threshold at
+    // 1× DPI and reads as Square anyway. It also lets `custom-titlebar.slint`'s
+    // hover-radius math assume 0 or >= 6 with no piecewise floor.
     pure function px-to-preset(px: int) -> int {
         if (px == 0)  { return 0; }
         if (px == 6)  { return 1; }
@@ -108,17 +88,11 @@ export component WindowChromeSection inherits Rectangle {
     if has-matches: SectionCard {
         title: @tr("Window");
 
-        // Native Title Bar. Slint reads `Window.no-frame` only once at
-        // first show, so flipping the value at runtime would leave the
-        // OS frame stale until restart — instead we route through the
-        // shared `Dialog` global with `kind: "restart-titlebar"` and
-        // `target-id: 1|0` carrying the requested new value, then
-        // respawn the binary on confirm. The ToggleSwitch is in
-        // `manual: true` mode so a click does NOT mutate `checked`;
-        // the visual state stays anchored to `Theme.use-native-titlebar`
-        // (the persisted value) until the new process boots, so
-        // cancelling the dialog leaves the switch correct without any
-        // explicit revert.
+        // Slint reads `Window.no-frame` once at first show, so a runtime flip
+        // would leave the OS frame stale — hence the restart dialog, with
+        // `target-id: 1|0` carrying the requested value. `manual: true` keeps
+        // the switch anchored to the persisted value until the new process
+        // boots, so cancelling needs no explicit revert.
         if root.show-native-titlebar: SettingRow {
             icon: "title";
             label: @tr("Native Title Bar");
@@ -143,17 +117,11 @@ export component WindowChromeSection inherits Rectangle {
 
         if root.any-above-match && root.show-match-unfocused: SectionDivider {}
 
-        // Match Unfocused Window Background. KDE-only feature (no Tauri
-        // counterpart). Hidden entirely off-KDE; greyed out in
-        // custom-titlebar mode because the behaviour mirrors OS-drawn
-        // window decorations fading on focus loss — when we paint our
-        // own chrome the analogy doesn't apply. The raw OS focus mirror
-        // lives in `src/ui/window_chrome/winit_filter.rs` (always
-        // written into `Theme.window-focused`); the actual tint is
-        // gated at the binding sites in `sidebar.slint` and
-        // `now-playing-bar.slint` on the conjunction of
-        // `Settings.match-unfocused-bg`, `Theme.use-native-titlebar`,
-        // and `!Theme.window-focused`.
+        // KDE-only, so hidden off-KDE; greyed out under a custom titlebar
+        // because it mirrors OS-drawn decorations fading on focus loss, and we
+        // paint our own. `Theme.window-focused` is written unconditionally by
+        // `winit_filter.rs`; the tint itself is gated at the binding sites in
+        // `sidebar.slint` / `now-playing-bar.slint` on all three conditions.
         if root.show-match-unfocused: SettingRow {
             icon: "tonality";
             label: @tr("Match Unfocused Window Background");
@@ -169,9 +137,8 @@ export component WindowChromeSection inherits Rectangle {
 
         if root.any-above-corner && root.show-corner-radius: SectionDivider {}
 
-        // Window Corner Radius. Disabled when native titlebar is on
-        // (the OS owns the corner radius then). Stacked layout because
-        // the chip group sits *below* the description.
+        // The OS owns the radius under a native titlebar. Stacked because the
+        // chips sit below the description.
         if root.show-corner-radius: SettingRowStacked {
             icon: "rounded_corner";
             label: @tr("Window Corner Radius");
@@ -181,17 +148,11 @@ export component WindowChromeSection inherits Rectangle {
             disabled: root.native-titlebar;
 
             if !root.native-titlebar: ChipGroup {
-                // Preset chips: the first ("Square") is a generic UI label so
-                // it goes through `@tr()`; the rest are OS / desktop *brand
-                // names* (proper nouns) — not translated. Keeps a localised
-                // settings page consistent with how every other app refers
-                // to "Windows 11" / "macOS" / "GNOME" / "KDE".
+                // "Square" is a generic UI label and takes `@tr()`; the rest are
+                // brand names and never do.
                 options: [@tr("Square"), "KDE", "Windows 11", "macOS", "GNOME"];
-                // `manual: true` because `selected-index` here is a derived
-                // expression — without manual mode, the chip's local
-                // `selected-index = i` write on click would orphan the
-                // px-to-preset binding (CLAUDE.md "Components that write to
-                // their own `in-out property` orphan a one-way binding").
+                // `manual: true` — `selected-index` is a derived expression, and
+                // a self-write on click would orphan the px-to-preset binding.
                 manual: true;
                 selected-index: px-to-preset(Settings.corner-radius);
                 selected(i) => {
@@ -203,12 +164,8 @@ export component WindowChromeSection inherits Rectangle {
 
         if root.any-above-tb-style && root.show-titlebar-button-style: SectionDivider {}
 
-        // Decoration Button Style — Standard (current Material bar icons)
-        // vs macOS (red/yellow/green traffic-light circles with
-        // hover-reveal glyphs and grey-when-unfocused fill). Disabled
-        // under the native titlebar (the OS owns the decoration buttons
-        // there). Stacked layout because the chip group sits below the
-        // description.
+        // Standard Material glyphs vs macOS traffic lights. Disabled under the
+        // native titlebar, which owns its own buttons.
         if root.show-titlebar-button-style: SettingRowStacked {
             icon: "category";
             label: @tr("Decoration Button Style");
@@ -218,9 +175,7 @@ export component WindowChromeSection inherits Rectangle {
             disabled: root.native-titlebar;
 
             if !root.native-titlebar: ChipGroup {
-                // "Standard" is a generic UI label so it goes through
-                // `@tr()`; "macOS" is a proper noun — never translated.
-                // Mirrors the Window Corner Radius row's brand-name rule.
+                // Same brand-name rule as the corner-radius chips above.
                 options: [@tr("Standard"), "macOS"];
                 selected-index <=> Settings.titlebar-button-style;
                 selected(i) => {
@@ -231,10 +186,8 @@ export component WindowChromeSection inherits Rectangle {
 
         if root.any-above-tb-side && root.show-titlebar-button-side: SectionDivider {}
 
-        // Decoration Button Side — Right (default, Windows / KDE
-        // convention) vs Left (macOS convention). Independent of the
-        // style above; close stays at the outer window corner in all
-        // four combinations.
+        // Independent of the style above; close stays at the outer window
+        // corner in all four combinations.
         if root.show-titlebar-button-side: SettingRowStacked {
             icon: "swap_horiz";
             label: @tr("Decoration Button Side");
@@ -254,15 +207,10 @@ export component WindowChromeSection inherits Rectangle {
 
         if root.any-above-tray-icon && root.show-tray-icon: SectionDivider {}
 
-        // System Tray Icon. Master toggle for the whole tray subsystem.
-        // Off by default — when off, `main.rs` skips `tray_bridge::install`
-        // so none of the tray code runs (no D-Bus connection / service
-        // thread / tasks). The startup gate reads the value once, so a
-        // runtime change needs a fresh process: the ToggleSwitch is
-        // `manual: true` and routes through the shared `Dialog` global with
-        // `kind: "restart-tray"` and `target-id: 1|0`, exactly like the
-        // Native Title Bar row. Cancelling the dialog leaves the switch
-        // anchored to the persisted `Settings.tray-enabled` with no revert.
+        // Master toggle for the tray subsystem — off, `main.rs` skips
+        // `tray_bridge::install` entirely (no D-Bus connection, no service
+        // thread). That gate reads the value once at startup, so this takes the
+        // same restart-dialog shape as the Native Title Bar row above.
         if root.show-tray-icon: SettingRow {
             icon: "dock_to_right";
             label: @tr("System Tray Icon");
@@ -285,13 +233,9 @@ export component WindowChromeSection inherits Rectangle {
 
         if root.any-above-close-to-tray && root.show-close-to-tray: SectionDivider {}
 
-        // Close to Tray. When on, the window-close button hides Melodia to
-        // the system tray instead of quitting. Greyed out (via
-        // `SettingRow.disabled`) whenever no tray icon is active — either
-        // the System Tray Icon setting above is off, or the session has no
-        // StatusNotifier host — since the setting then has no effect. The
-        // runtime gate + persistence are wired in
-        // `src/ui/appearance/window_settings.rs`.
+        // Greyed out whenever no tray icon is active — the toggle above is off,
+        // or the session has no StatusNotifier host — since it then does
+        // nothing. Wired in `src/ui/appearance/window_settings.rs`.
         if root.show-close-to-tray: SettingRow {
             icon: "move_to_inbox";
             label: @tr("Close to Tray");

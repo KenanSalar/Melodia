@@ -8,35 +8,20 @@ import { ActionPill, PillButton, PillLabel, PillDivider } from "../components/ac
 import { OverlayScrollbar } from "../components/overlay-scrollbar.slint";
 import { QueueRowItem } from "queue-row-item.slint";
 
-// Bottom-aligned slide-up sheet, ported from Tauri's `QueueSheet.tsx` +
-// `QueueSheet.module.css`. Mounted inside the content panel (not at
-// the AppWindow root) so the animation plays only inside the main
-// view — sidebar and now-playing-bar stay visible and clickable.
+// The bottom-aligned slide-up sheet, mounted **inside the content panel** rather than at
+// the window root, so the animation plays only inside the main view and the sidebar and
+// bar stay visible and clickable. Declared *before* `DialogOverlay`, so a modal raised
+// from it paints above.
 //
-// Motion: single animated `t: float` (0 → 1) drives backdrop alpha
-// and card translate. Both derivations are unanimated (avoids the
-// CLAUDE.md "phase-lag on derived animated bindings" trap).
-//
-// Visual chrome matches Tauri exactly:
-//   * backdrop alpha 0.3 (Tauri's `rgba(0,0,0,0.3)`)
-//   * card width `clamp(400px, 50%, 640px)`, height 80 % of parent
-//   * card bg `Theme.mantle` (Tauri's `--ctp-mantle`)
-//   * top-corner-only radius 16 px (`border-radius: 16px 16px 0 0`)
-//   * card slides up from below — y goes from `parent.height + 24`
-//     (just off the bottom edge) to `parent.height - self.height`
-//     (bottom-aligned).
-//
-// Stacking — declared *before* `DialogOverlay` in `app-window.slint`
-// so the modal dialog (Clear queue?) can paint above the sheet.
+// One animated `t: float` drives both the backdrop alpha and the card's translate, and
+// both derivations are unanimated — a second `animate` on a derived binding phase-lags.
 export component QueueSheet inherits Rectangle {
     width: 100%;
     height: 100%;
 
-    // The sheet is normally permanent, but the miniplayer swap unmounts
-    // the whole full-UI branch (see the `if !mini-render-active` in
-    // `app-window.slint`) without touching `Queue.open` — so a remount
-    // seeds `watched-open` at the current value and the reset below never
-    // fires. Same shape as `playlist-detail-view.slint`.
+    // The sheet is normally permanent, but **the miniplayer swap unmounts the whole
+    // full-UI branch** without touching `Queue.open` — so a remount seeds `watched-open`
+    // at the current value and the reset below never fires.
     init => {
         Queue.drag-source = -1;
         Queue.drop-slot = -1;
@@ -46,18 +31,15 @@ export component QueueSheet inherits Rectangle {
     private property <float> t: Queue.open ? 1.0 : 0.0;
     animate t { duration: Theme.dur-med; easing: ease-out; }
 
-    // Mirror `Queue.open` into a local property so we can use
-    // `changed` to drive the Rust-side atomic (Slint globals can't
-    // own `changed` handlers on their own properties — see CLAUDE.md
-    // "changed doesn't accept path expressions on globals").
+    // Mirrored locally so a `changed` handler can drive the Rust-side atomic — a global
+    // can't watch its own property.
     private property <bool> watched-open: Queue.open;
     changed watched-open => {
         Queue.open-changed(self.watched-open);
-        // Neither an opening nor a closing sheet can have a drag in
-        // flight. Worth spelling out on close: the sheet stays mounted,
-        // so the pressed row outlives it — until the teardown drops the
-        // rows a beat later, and a destroyed row never delivers the
-        // pointer-up that would have cleared these itself.
+        // Neither an opening nor a closing sheet can have a drag in flight. Worth
+        // spelling out on close: the sheet stays mounted, so the pressed row outlives
+        // it — until the teardown drops the rows a beat later, and a destroyed row never
+        // delivers the pointer-up that would have cleared these itself.
         Queue.drag-source = -1;
         Queue.drop-slot = -1;
     }
@@ -65,25 +47,21 @@ export component QueueSheet inherits Rectangle {
     private property <bool> has-rows: Queue.rows.length > 0;
     private property <bool> has-selection: Queue.selected-count > 0;
 
-    // Row pitch, owned here and handed down to every `QueueRowItem`. The
-    // drop indicator and the rows' slot math both derive from it, so one
-    // value is what keeps the painted line and the committed insert on the
-    // same row.
+    // Owned here and handed to every row. The drop indicator and the rows' slot math
+    // both derive from it, so **one value is what keeps the painted line and the
+    // committed insert on the same row**.
     private property <length> row-height: 50px;
-    // Where the dragged row's top currently sits inside the visible list.
-    // Only meaningful while `Queue.drag-source >= 0`; read by the
-    // auto-scroll gate below.
+    // Where the dragged row's top sits inside the visible list — meaningful only
+    // mid-drag, and read by the auto-scroll gate below.
     private property <length> drag-src-screen-y:
         Queue.drag-source * root.row-height + inner-list.viewport-y;
 
-    // Drop-indicator geometry, in the list body's own coordinates. The line
-    // is centred on the slot boundary, then pinned inside the band: the
-    // after-the-last-row slot sits exactly on the content's bottom edge,
-    // which the body's `clip` cuts away once the queue is scrolled to the
-    // end, so an unpinned line for that slot is simply never drawn. The top
-    // end is pinned for the mirror case, and both ends catch a pointer
-    // dragged clean out of the list. Same shape as
-    // `draggable-track-list.slint` — keep the two in step.
+    // In the list body's own coordinates: centred on the slot boundary, then **pinned
+    // inside the band**. The after-the-last-row slot sits exactly on the content's
+    // bottom edge, which the body's `clip` cuts away once the queue is scrolled to the
+    // end, so an unpinned line for that slot is never drawn at all; the top end is
+    // pinned for the mirror case, and both ends catch a pointer dragged clean out of the
+    // list. `draggable-track-list.slint` has the same shape — keep the two in step.
     private property <length> drop-line-h: 2px;
     private property <length> drop-line-y: max(
         0px,
@@ -94,7 +72,7 @@ export component QueueSheet inherits Rectangle {
         ),
     );
 
-    // Backdrop — derivation of `t`, no inner animate block.
+    // A derivation of `t`, with no `animate` of its own.
     Rectangle {
         width: 100%;
         height: 100%;
@@ -112,14 +90,9 @@ export component QueueSheet inherits Rectangle {
         }
     }
 
-    // Card. Width clamp(400, 50 %, 640) and height 80 % of parent.
-    //
-    // Slide-up math: at t=0 the card sits at `parent.height + 24px`
-    // (entirely off the bottom edge); at t=1 it sits at
-    // `parent.height - self.height` (bottom-aligned inside the panel).
-    // The sign convention is "smaller y = higher", so `(1 - t) * (...)`
-    // ADDED to the open Y produces the slide-from-below effect. The
-    // earlier draft *subtracted*, which slid the card from the top.
+    // At t=0 the card sits entirely off the bottom edge; at t=1 it is bottom-aligned
+    // inside the panel. Smaller y is higher, so the residual is **added** to the open
+    // y — subtracting slides the card in from the top.
     card := Rectangle {
         width: min(640px, max(400px, parent.width * 0.5));
         x: (parent.width - self.width) / 2;
@@ -132,8 +105,7 @@ export component QueueSheet inherits Rectangle {
         border-top-right-radius: 16px;
         visible: root.t > 0.01;
 
-        // Catches clicks on the card body so the backdrop dismiss
-        // doesn't fire when the user interacts inside.
+        // Catches clicks on the card so the backdrop dismiss doesn't fire from inside.
         card-touch := TouchArea {
             width: 100%;
             height: 100%;
@@ -142,20 +114,16 @@ export component QueueSheet inherits Rectangle {
             clicked => { }
         }
 
-        // Esc (close, or clear the selection first) and Ctrl+A (select all)
-        // are owned by the root `ShortcutScope` and gated on `Queue.open`.
-        // They used to live in a nested FocusScope here, which only ever took
-        // focus when the user clicked the sheet's blank area — Slint focuses a
-        // FocusScope on mouse press, not on mount — so both keys were dead on
-        // a sheet opened with `Q`, and dead again after any confirm dialog
-        // raised from the sheet handed focus back to the root.
+        // **Esc and Ctrl+A are owned by the root `ShortcutScope`**, gated on
+        // `Queue.open`. They used to live in a nested `FocusScope` here, which only ever
+        // took focus when the user clicked the sheet's blank area — Slint focuses a
+        // `FocusScope` on mouse press, never on mount — so both keys were dead on a
+        // sheet opened with `Q`, and dead again after any confirm dialog raised from it
+        // handed focus back to the root.
         VerticalLayout {
             spacing: 0px;
 
-            // Header — title + track count + (Clear ↔ Remove
-            // selected) action button + close. Tauri's morphing
-            // pill becomes a plain swap here: when `selected-count
-            // > 0` we show "Remove (N)"; otherwise "Clear queue".
+            // Title, count, the Clear ↔ Remove-selected action, and close.
             Rectangle {
                 height: 56px;
                 background: transparent;
@@ -165,13 +133,9 @@ export component QueueSheet inherits Rectangle {
                     spacing: 12px;
                     alignment: stretch;
 
-                    // Stacked title + count, Spotify / Apple-Music
-                    // style — mirrors the tracks-view page header so
-                    // the two surfaces feel uniform. Queue keeps its
-                    // own font sizes (`font-size-lg` for the title,
-                    // `font-size-row` for the count) — the tracks-view
-                    // sizes are tuned for a full page, the sheet's
-                    // header sits in a 56 px row.
+                    // The tracks-view page header, restacked. It keeps its own font
+                    // sizes: the page sizes are tuned for a full page, where this
+                    // header sits in a single short row.
                     VerticalLayout {
                         alignment: center;
                         spacing: 0;
@@ -182,9 +146,8 @@ export component QueueSheet inherits Rectangle {
                             font-weight: 600;
                         }
                         Text {
-                            // Empty branch uses a distinct msgid because
-                            // some locales translate "no items" with a
-                            // different construction than the count form.
+                            // Its own msgid: some locales build "no items" differently
+                            // from the counted form.
                             text: Queue.rows.length == 0
                                 ? @tr("No tracks")
                                 : @tr(
@@ -196,14 +159,9 @@ export component QueueSheet inherits Rectangle {
                     }
                     Rectangle { horizontal-stretch: 1; }
 
-                    // Tauri-parity ActionPill that morphs between two
-                    // states: "Clear queue" text-button when the queue
-                    // has tracks and no selection, and "N selected |
-                    // Deselect | Remove" when one or more rows are
-                    // selected. Same chrome (Theme.surface0, 32 px
-                    // rounded chip) as the tracks-view header pill, so
-                    // the two views feel unified. `if` (not `visible:`)
-                    // so the absent branch leaves no phantom layout slot.
+                    // Swaps between "Clear queue" and the selection actions. Same chrome
+                    // as the tracks-view header pill, and `if` rather than `visible:` so
+                    // the absent branch leaves no phantom layout slot.
                     if root.has-selection: VerticalLayout {
                         alignment: center;
                         ActionPill {
@@ -222,10 +180,8 @@ export component QueueSheet inherits Rectangle {
                                 tooltip-text: @tr("Remove selected");
                                 clicked => {
                                     Dialog.title = @tr("Remove from queue?");
-                                    // Plural form: ICU `singular|plural`
-                                    // syntax with `% n` selects branch by
-                                    // count. Slint forwards this to gettext
-                                    // `msgid`/`msgid_plural`.
+                                    // Slint forwards the `singular|plural % n` form to
+                                    // gettext's `msgid`/`msgid_plural`.
                                     Dialog.message = @tr(
                                         "Remove {n} track from the queue?" | "Remove {n} tracks from the queue?" % Queue.selected-count
                                     );
@@ -273,8 +229,7 @@ export component QueueSheet inherits Rectangle {
                 }
             }
 
-            // Header separator (Tauri: `border-bottom: 1px solid
-            // var(--ctp-border)`).
+            // Header separator.
             Rectangle {
                 height: 1px;
                 background: Theme.border;
@@ -286,18 +241,14 @@ export component QueueSheet inherits Rectangle {
                 clip: true;
 
                 inner-list := ListView {
-                    // Suppress the std-widgets bar — the reusable
-                    // `OverlayScrollbar` below is the only scrollbar.
+                    // The `OverlayScrollbar` below is the only scrollbar.
                     vertical-scrollbar-policy: always-off;
                     horizontal-scrollbar-policy: always-off;
                     x: 0;
                     y: 0;
-                    // Reserve a 14 px rail on the right for the
-                    // overlay scrollbar (10 px bar + 2 px card inset
-                    // + 2 px visible gap to row content). Without
-                    // this, the row hover pill's right edge sits
-                    // 4 px past the scrollbar's left edge and paints
-                    // under it with zero breathing room.
+                    // Reserves the rail for the overlay scrollbar — the bar itself, the
+                    // card inset, and a visible gap to the row content. Without it the
+                    // row hover pill paints under the scrollbar with no breathing room.
                     width: parent.width - 14px;
                     height: 100%;
                     for row[idx] in Queue.rows: QueueRowItem {
@@ -307,34 +258,26 @@ export component QueueSheet inherits Rectangle {
                         list-height: inner-list.height;
                         list-viewport-y: inner-list.viewport-y;
                         row-height: root.row-height;
-                        // Neighbour-selection lookup — drives the per-
-                        // corner radius gating in QueueRowItem so
-                        // contiguous selected rows merge into one
-                        // continuous pill.
+                        // Drives the per-corner radius gating, so contiguous selected
+                        // rows merge into one pill.
                         prev-selected: idx > 0 && Queue.rows[idx - 1].selected;
                         next-selected: idx < Queue.rows.length - 1 && Queue.rows[idx + 1].selected;
                         request-scroll-by(dy) => {
-                            // Skipped outright when the nudge would carry
-                            // the dragged row out of the visible range:
-                            // Slint's ListView destroys the row instances
-                            // that leave it, and a destroyed row can no
-                            // longer deliver its pointer-up, so the drag
-                            // would neither commit nor clean up after
-                            // itself. Auto-scroll therefore stops once the
-                            // source reaches the far edge.
+                            // **Skipped when the nudge would carry the dragged row out
+                            // of the visible range.** A `ListView` destroys the rows
+                            // that leave it, and a destroyed row never delivers its
+                            // pointer-up, so the drag would neither commit nor clean up
+                            // — auto-scroll stops once the source reaches the far edge.
                             if (Queue.drag-source >= 0
                                 && (root.drag-src-screen-y - dy) > -root.row-height
                                 && (root.drag-src-screen-y - dy) < inner-list.visible-height) {
-                                // Not `clamp()`: a queue shorter than the
-                                // list body puts its lower bound *above*
-                                // its upper one, and `clamp(v, lo, hi)`
-                                // expands to `max(lo, min(v, hi))`, which
-                                // then hands back the positive lower bound
-                                // and shoves every row down the screen.
-                                // Capping both arguments at 0 resolves that
-                                // case to 0px instead. Same shape as
-                                // `draggable-track-list.slint` — keep the
-                                // two in step.
+                                // **Not `clamp()`**: a queue shorter than the list body
+                                // puts its lower bound *above* its upper one, and
+                                // `clamp` expands to `max(lo, min(v, hi))`, which then
+                                // hands back the positive lower bound and shoves every
+                                // row down the screen. Capping both arguments at 0
+                                // resolves that case to 0 instead.
+                                // `draggable-track-list.slint` has the same shape.
                                 inner-list.viewport-y = max(
                                     min(0px, inner-list.visible-height - inner-list.viewport-height),
                                     min(0px, inner-list.viewport-y - dy),
@@ -344,18 +287,11 @@ export component QueueSheet inherits Rectangle {
                     }
                 }
 
-                // Insertion line during drag. Painted in the gap
-                // *between* rows (slot-based) rather than at a row's
-                // top edge, so the user sees a clear drop target
-                // independent of the still-painted source ghost.
-                // Hidden when the slot is a no-op:
-                //   * slot == drag-source       → drop right before source
-                //   * slot == drag-source + 1   → drop right after source
-                // both of which mean "song stays put" after the
-                // slot→index adjustment, so showing a line would
-                // mislead the user. Matches Tauri's `.dragAbove` /
-                // `.dragBelow` indicators only firing on
-                // adjacent-OK targets.
+                // Painted in the gap *between* rows rather than at a row's top edge, so
+                // the drop target reads clearly against the still-painted source ghost.
+                // Hidden when the slot is a no-op — either side of the source both mean
+                // "stays put" after the slot → index adjustment, so a line there would
+                // mislead.
                 if Queue.drag-source >= 0
                     && Queue.drop-slot >= 0
                     && Queue.drop-slot != Queue.drag-source
@@ -367,7 +303,7 @@ export component QueueSheet inherits Rectangle {
                     background: Theme.accent;
                 }
 
-                // Overlay scrollbar — sibling, flush with card edge.
+                // A sibling, flush with the card edge.
                 OverlayScrollbar {
                     x: parent.width - self.width - 2px;
                     y: 0;
@@ -406,12 +342,10 @@ export component QueueSheet inherits Rectangle {
             }
         }
 
-        // OS file-drop hint banner. Mounted as the last child of `card`
-        // so it paints over the list. `if` (not `visible:`) so the
-        // empty branch contributes no layout slot. Plain Rectangle —
-        // no TouchArea — so the OS drop event still lands at the winit
-        // layer below Slint. Gated on `open` because the sheet is the
-        // current drop target.
+        // Last child of the card, so it paints over the list, and `if` rather than
+        // `visible:` so the absent branch claims no layout slot. **A plain Rectangle
+        // with no TouchArea**, so the OS drop event still lands at the winit layer
+        // below Slint.
         if Queue.is-drop-hovered && Queue.open: Rectangle {
             x: 0;
             y: 57px; // 56 px header + 1 px separator

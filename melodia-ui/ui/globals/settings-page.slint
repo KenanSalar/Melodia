@@ -1,99 +1,80 @@
 import { Theme } from "../theme.slint";
 
-// SettingsPage: chrome state for the Settings page itself — the search
-// filter, the rule every section applies to it, and the body's responsive
-// geometry.
-//
-// Split out of `Settings`, which holds the values the user is configuring
-// plus a bank of `@tr(...)` string callbacks. How the page is filtered is a
-// different axis of change from what the page configures, and `Settings` is
-// long enough already.
+// Chrome state for the Settings page itself — the search filter, the rule every section
+// applies to it, and the body's responsive geometry. Split out of `Settings`, which
+// holds the values the user configures: how the page is filtered is a different axis of
+// change from what it configures, and `Settings` is long enough already.
 export global SettingsPage {
-    // Tab order. Named so the router in `views/settings/settings-tabs.slint`
-    // and the label/icon arrays in `views/settings-view.slint` key off
-    // something readable instead of a bare 0..4, and so adding a tab is a
-    // rename-safe edit.
+    // Named so the router and the bar's label/icon arrays key off something readable
+    // instead of a bare 0..4, and so adding a tab is a rename-safe edit.
     out property <int> tab-library: 0;
     out property <int> tab-playback: 1;
     out property <int> tab-interface: 2;
     out property <int> tab-services: 3;
     out property <int> tab-about: 4;
 
-    // Sole definition of how many tabs exist. Rust reads it through
-    // `get_tab_count()` to clamp the persisted index rather than carrying its
-    // own copy, so the two can't drift.
+    // **The sole definition of how many tabs exist.** Rust reads it through
+    // `get_tab_count()` to clamp the persisted index rather than carrying a copy.
     out property <int> tab-count: 5;
 
-    // Which tab is showing. Seeded from `views.json` at boot and persisted on
-    // every change, so re-entering the page lands where you left it.
+    // Seeded from `views.json` at boot and persisted on change, so re-entering the page
+    // lands where you left it.
     in-out property <int> tab-idx: 0;
     callback tab-changed(int);
 
-    // What the user is typing, and what the page is actually filtered by. Two
-    // properties rather than one because the filter is expensive here in a way
-    // no other view's is: `row-visible` is three `matches` round-trips into
-    // Rust, there are dozens of call sites across the eleven section cards, and
-    // a non-empty query mounts *all five* tab pages at once — so every keystroke
-    // re-runs the lot, `ChipGroup`'s hidden measuring ruler included. The
-    // `FilterThrottle` in `views/settings-view.slint` is what joins them, on the
-    // same 130 ms the eleven other filterable views coalesce on.
+    // What the user is typing, and what the page is filtered by. **Two properties**,
+    // because the filter is expensive here in a way no other view's is: `row-visible` is
+    // three `matches` round-trips into Rust, there are dozens of call sites across the
+    // eleven cards, and a non-empty query mounts *all five* tab pages at once — so every
+    // keystroke re-runs the lot, `ChipGroup`'s hidden ruler included. A `FilterThrottle`
+    // joins them on the same interval the other filterable views coalesce on.
     //
-    // `search-input` is bound two-way to the SearchBar; `search-query` is the
-    // settled value every section reads. Both are cleared together on nav-away
-    // (`ui/app-window.slint`) and on a tab pick — clearing only the settled one
-    // would leave the box holding text the page is no longer filtered by.
+    // Both are cleared together on nav-away and on a tab pick; clearing only the settled
+    // one leaves the box holding text the page is no longer filtered by.
     in-out property <string> search-input;
     in-out property <string> search-query;
 
-    // Counter the host bumps to release keyboard focus from the SearchBar's
-    // TextInput — same pattern as `Tracks.blur-search-tick`. Used when
-    // navigating away so the next keystroke doesn't land in a hidden field.
+    // Bumped to release keyboard focus from the SearchBar, the `Tracks.blur-search-tick`
+    // pattern, so a keystroke after nav-away can't land in a hidden field.
     in-out property <int> blur-search-tick: 0;
 
-    // --- Responsive body -------------------------------------------------
+    // The two facts the view writes imperatively — a global can't be bound from a view,
+    // and the page can't read its own live width into a binding feeding a child's size
+    // without re-entering layout. **Everything below derives from them**, so the body's
+    // geometry is stated once rather than once per consumer.
     //
-    // These two are written imperatively by `views/settings-view.slint`: a
-    // global can't be bound from a view, and the page can't read its own live
-    // width into a binding that feeds a child's size without re-entering
-    // layout. Everything below them is derived, so the body's geometry is
-    // stated once instead of once per consumer.
-    //
-    // The seed is a plausible narrow page rather than nothing — the view
-    // corrects it on its mount `Timer`, and a frame drawn slightly too narrow
-    // only costs an extra chip row, where a frame drawn at zero collapses the
-    // strips outright.
+    // The seed is a plausible narrow page rather than nothing: the view corrects it on
+    // its mount `Timer`, and a frame drawn slightly too narrow costs an extra chip row
+    // where a frame drawn at zero collapses the strips outright.
     in-out property <length> page-w: 440px;
-    // 1 or 2. Also what `grid-row`/`grid-col` below key off.
+    // 1 or 2. Also what `grid-row`/`grid-col` key off.
     in-out property <int> body-cols: 1;
 
-    // How wide one card column may grow — **one** number, and both layouts
-    // obey it. That is the whole rule: a card grows with the panel until it
-    // reaches the cap, then stops and the page gives it margins instead, and a
-    // second column appears only once two capped cards fit beside each other.
-    // So a card's width only ever grows across the full range of window sizes;
-    // at the flip it doesn't move at all, the second column simply arrives.
+    // How wide one card column may grow — **one number, and both layouts obey it**.
+    // That is the whole rule: a card grows with the panel to the cap, then stops and
+    // takes margins instead, and a second column appears exactly when two *capped* cards
+    // fit beside each other. So a card's width only ever grows, and the flip resizes
+    // nothing — the second column simply arrives.
     //
-    // A cap the *flip* undercuts is the failure to avoid: the single column
-    // then divides before it ever reaches the cap, which reads as the card
-    // growing without limit until it splits in half.
-    // The value is a reading measure, and it is also what decides which
-    // displays ever see two columns: two capped cards plus the gap plus the
-    // sidebar and the page's padding comes to roughly an 1830 px window, so a
-    // maximized 1920 reaches it with room to spare. A wider cap makes a longer
-    // line inside every card *and* pushes the second column out of reach of
-    // the most common large desktop.
+    // A threshold that undercuts the cap is the failure to avoid: the single column then
+    // divides before ever reaching it, which reads as a card growing without limit and
+    // then halving.
+    //
+    // The value is a reading measure, and it also decides which displays ever see two
+    // columns — two capped cards plus the gap, the sidebar and the padding needs roughly
+    // an 1830 px window, so a maximized 1920 clears it. Widening the cap lengthens the
+    // line inside every card *and* pushes the second column out of reach of the most
+    // common large desktop.
     out property <length> card-cap: 800px;
 
-    // What the centred body may grow to: one card, or two plus the gap
-    // between them. A function of the layout, not of the panel — the layout
-    // that surrounds it clamps to what's actually available.
+    // What the centred body may grow to. A function of the layout rather than the panel;
+    // the layout around it clamps to what's actually available.
     out property <length> body-w: root.body-cols == 2
         ? 2 * root.card-cap + Theme.pad-lg
         : root.card-cap;
 
-    // What one column is actually drawn at, which below the cap is just the
-    // panel. The `min` only does anything in a single column; two columns are
-    // reached exactly when both fit at the cap.
+    // What one column is drawn at, which below the cap is just the panel. The `min` only
+    // bites in a single column — two are reached exactly when both fit at the cap.
     out property <length> body-avail: max(0px, root.page-w - 2 * Theme.pad-lg);
     out property <length> card-w: min(
         root.body-cols == 2
@@ -101,37 +82,31 @@ export global SettingsPage {
             : root.body-avail,
         root.card-cap);
 
-    // The glyph column both settings rows lead with. Here rather than in the
-    // rows because `row-content-w` below has to subtract it, and two copies of
-    // the number could drift without anything failing — the strips would just
-    // wrap a little early or a little late.
+    // The glyph column both settings rows lead with. Here rather than in the rows
+    // because `row-content-w` has to subtract it, and two copies could drift with
+    // nothing failing — the strips would just wrap a little early or late.
     out property <length> row-icon-w: 22px;
 
-    // What a `SettingRowStacked` leaves for its content column: the row's own
-    // left and right padding, the gap after the icon, and the icon. Derived
-    // rather than measured because every section card spans a full column, so
-    // the chip and swatch strips can size their wrap off this and need no
-    // width mirror of their own.
+    // What a `SettingRowStacked` leaves its content column. Derived rather than
+    // measured, since every card spans a full column — which is what lets the chip and
+    // swatch strips size their wrap off it with no width mirror of their own.
     out property <length> row-content-w:
         max(0px, root.card-w - (3 * Theme.pad-lg + root.row-icon-w));
 
-    // Where a page's **column** sits in the body grid — not a card. A page
-    // hands the grid one cell per column and each cell is a `VerticalLayout`
-    // of cards, so the two sides flow independently and a short card is
-    // followed straight away by the next one. Cards placed as cells directly
-    // would be row-aligned instead: a grid row is as tall as its taller cell,
-    // so a short card left a hole down to the next row.
+    // Where a page's **column** sits in the body grid — not a card. A page hands the
+    // grid one cell per column, each a `VerticalLayout` of cards, so the two sides flow
+    // independently and a short card is followed straight away by the next. Cards placed
+    // as cells would be row-aligned instead, and a grid row is as tall as its taller
+    // cell, so a short card left a hole down to the next row.
     //
-    // Side by side at two columns, stacked at one — which is why a page's
-    // columns are contiguous halves of its card list rather than alternating:
-    // stacked, column A then column B is the page file's own order, so nothing
-    // reorders when the window narrows.
+    // Side by side at two columns, stacked at one — which is why a page's columns are
+    // **contiguous halves** of its card list rather than alternating: stacked, they read
+    // in source order, so nothing reorders as the window narrows.
     //
-    // The pages mount their sections exactly once and place them through
-    // these, so the one-column and two-column arrangements are the same tree
-    // — which they have to be, since a page reads `has-matches` back off its
-    // section instances and an element inside an `if` branch can't be read
-    // from outside it.
+    // The pages mount their sections exactly once and place them through these, so both
+    // arrangements are the same tree. They have to be: a page reads `has-matches` back
+    // off its section instances, and an element inside an `if` can't be read from
+    // outside it.
     public pure function grid-row(i: int) -> int {
         return root.body-cols == 2 ? Math.floor(i / 2) : i;
     }
@@ -139,55 +114,45 @@ export global SettingsPage {
         return root.body-cols == 2 ? Math.mod(i, 2) : 0;
     }
 
-    // Row split for the wrapping chip / swatch strips: `count` items at most
-    // `per-row` to a row, as index groups. In Rust because Slint can't build
-    // a nested array, and indices rather than the items themselves so a chip
-    // still knows which option it is.
+    // The wrapping strips' row split, as index groups. **In Rust because Slint can't
+    // build a nested array**, and indices rather than items so a chip still knows which
+    // option it is.
     pure callback chunk-indices(int /*count*/, int /*per-row*/) -> [[int]];
 
-    // The other half of that wrap, and the half that *is* expressible here:
-    // how many fit, and how tall the result stands. `ChipGroup` and
-    // `ColorDotGrid` derived both identically before this — they differ only
-    // in where the item width comes from (a measured ruler against a 32 px
-    // literal) and in cell height, so the arithmetic belongs beside the split
-    // it feeds rather than in each strip.
+    // The half of that wrap which *is* expressible here: how many fit, and how tall the
+    // result stands. `ChipGroup` and `ColorDotGrid` derived both identically and differ
+    // only in where the item width comes from, so the arithmetic belongs beside the
+    // split it feeds rather than in each strip.
     //
-    // Floored at one: a row of zero items never terminates, and one item too
-    // wide for its slot is a visible overflow rather than a hang.
+    // Floored at one: a row of zero items never terminates, where one item too wide for
+    // its slot is a visible overflow rather than a hang.
     public pure function wrap-per-row(avail: length, item-w: length, gap: length) -> int {
         return max(1, Math.floor((avail + gap) / (item-w + gap)));
     }
-    // `count` items at `per-row` to a row, each `cell-h` tall with `gap`
-    // between rows. Zero items stand at zero rather than at minus one gap.
+    // Zero items stand at zero rather than at minus one gap.
     public pure function wrap-height(count: int, per-row: int, cell-h: length,
                                      gap: length) -> length {
         return max(0px, Math.ceil(count / per-row) * cell-h
             + (Math.ceil(count / per-row) - 1) * gap);
     }
 
-    // Pure case-insensitive substring test. Slint 1.16 has no `.contains()`
-    // on string, so the check is wired in Rust (`src/ui/settings_page.rs`).
+    // Slint 1.16 has no `.contains()` on string, so the test is wired in Rust.
     pure callback matches(string /*haystack*/, string /*needle*/) -> bool;
 
-    // Whether a settings row survives the filter: an empty query shows
-    // everything, otherwise the tab's name, the section's own title or the
-    // row's text has to match. Every section used to carry a byte-identical
-    // copy of this — ten of them — so changing the rule meant editing ten
-    // files.
+    // Whether a row survives the filter: an empty query shows everything, else the tab
+    // name, the section title or the row's own text has to match. Ten sections used to
+    // carry a byte-identical copy, so changing the rule meant editing ten files.
+    // Sections wrap this in a two-argument local function, which keeps the rule shared
+    // and the per-row call sites short. **Reading `search-query` at the call site is
+    // what makes the result reactive** — Slint tracks the property read; `matches` is
+    // opaque to it.
     //
-    // Sections pass their title and wrap this in a two-argument local
-    // function, which keeps the rule shared and the per-row call sites short.
-    // Reading `search-query` at the call site is what makes the result
-    // reactive: Slint tracks the property read, `matches` is opaque to it.
-    //
-    // `tab` is a term of its own rather than a prefix the sections splice onto
-    // their title, so the join lives here instead of in eleven files — and no
-    // section ends up matching a substring that spans the seam. It arrives as
-    // `tab-name` from the page file that mounts the card: search escapes the
-    // tabs, so a tab name is exactly the query a user types, and without it
-    // "Interface" and "Services" appear nowhere in any haystack and answer
-    // "No matching settings" while sitting in plain view on the bar. The page
-    // owns it so the card-to-tab mapping is still stated once.
+    // `tab` is a term of its own, not a prefix each section splices onto its title, so
+    // the join lives here rather than in eleven files and no card can match a substring
+    // spanning the seam. It arrives as `tab-name` from the page mounting the card:
+    // search escapes the tabs, so a tab name is exactly what a user types, and without
+    // it "Interface" and "Services" appear in no haystack and answer "No matching
+    // settings" while sitting in plain view on the bar.
     public pure function row-visible(tab: string, section: string, haystack: string,
                                      query: string) -> bool {
         return query == ""

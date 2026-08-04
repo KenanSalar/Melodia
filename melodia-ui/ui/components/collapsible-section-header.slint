@@ -1,18 +1,11 @@
 import { Theme } from "../theme.slint";
 import { MaterialIcon } from "material-icon.slint";
 
-// Clickable collapsible-section header pill: label + expand chevron.
-// Hit area is the chevron + label only (compact), not the whole row
-// width — clicking dead space to the right of the chevron shouldn't
-// toggle. Chevron mirrors the app convention: down (`expand_more`)
-// when collapsed ("click to expand downward"), up (`expand_less`)
-// when expanded ("click to collapse upward").
-//
-// Pill chrome on hover matches `PillButton` (`border-radius:
-// self.height / 2`, 10 px horizontal padding so the rounded ends
-// don't crowd the text / chevron). Callers wrap it in a
-// `HorizontalLayout { alignment: start; }` so the pill hugs its
-// natural width.
+// A collapsible section's header pill. The hit area is the label and chevron
+// only — clicking the dead space to their right shouldn't toggle anything — so a
+// caller wraps it in a start-aligned layout to keep it at its natural width. The
+// chevron points the way the content will move: down to expand, up to collapse.
+// Hover chrome matches `PillButton`.
 export component CollapsibleSectionHeader inherits Rectangle {
     in property <string> label;
     in property <bool> collapsed;

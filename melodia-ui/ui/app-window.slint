@@ -1,18 +1,12 @@
-// Vazirmatn (OFL, github.com/rastikerdar/vazirmatn) — single family that
-// covers both Latin and Arabic with consistent metrics, so mixed-script
-// rows / labels don't drift vertically the way they did when Slint fell
-// back from Inter (Latin-only) to a system Arabic font with taller
-// ascenders. Three weights cover the project's usages: Regular (400) for
-// body, Medium (500) for the now-playing title, SemiBold (600) for page
-// titles.
+// Vazirmatn (OFL) — one family covering Latin and Arabic with consistent metrics, so
+// mixed-script rows don't drift vertically the way they did when Slint fell back from
+// Latin-only Inter to a system Arabic face. Regular/Medium/SemiBold is the whole set
+// the app uses.
 //
-// The bundled TTFs are PATCHED — `scripts/patch_vazirmatn.py` rewrites
-// the OS/2 typo + hhea metrics to a Latin-typical line ratio (upstream
-// Vazirmatn ships those at ~1.56× so Arabic combining marks fit; at our
-// UI sizes that pushed every vertically-centred Latin text several px
-// upward). The patched variant lives under `assets/fonts/vazirmatn/`
-// and is imported directly below; pristine upstream copies are kept
-// under `assets/fonts/originals/` as the patch script's input.
+// These TTFs are PATCHED: `scripts/patch_vazirmatn.py` rewrites the OS/2 typo + hhea
+// metrics to a Latin-typical line ratio. Upstream ships ~1.56× so Arabic combining
+// marks fit, which at our sizes pushes every centred Latin text several px up.
+// Pristine copies live in `assets/fonts/originals/` as the script's input.
 import "assets/fonts/vazirmatn/Vazirmatn-Regular.ttf";
 import "assets/fonts/vazirmatn/Vazirmatn-Medium.ttf";
 import "assets/fonts/vazirmatn/Vazirmatn-SemiBold.ttf";
@@ -85,65 +79,39 @@ export {
 
 export component AppWindow inherits Window {
     title: "Melodia";
-    // No `preferred-width` / `preferred-height` here. The initial OS
-    // window size is restored from `settings.json` by
-    // `src/ui/window_chrome/geometry.rs::restore`, which calls
-    // `slint::Window::set_size` after `AppWindow::new()`. That call
-    // sets the winit backend's `has_explicit_size` flag, which is the
-    // only thing that stops Slint from snapping the window to the
-    // content-preferred size on first show — a hardcoded
-    // `preferred-width/height` here would just be that snap target.
-    // Min constraints stay as size hints below.
-    // Floor matches the miniplayer's smallest sensible footprint
-    // (~350×90, mirrors Tauri's `setMinSize` on mini enter). The full UI
-    // is only rendered above `mini-active`'s ~550×250 threshold; below
-    // that, `MiniPlayerView` takes over. Keeping the OS-level minimum at
-    // the mini's floor lets the user drag straight down into mini mode
-    // without us having to runtime-mutate winit constraints.
+    // No `preferred-width`/`-height` on purpose. `window_chrome/geometry.rs::restore`
+    // calls `slint::Window::set_size` after `AppWindow::new()`, which sets winit's
+    // `has_explicit_size` — the only thing stopping Slint from snapping to the
+    // content-preferred size on first show. A preferred size here would just be that
+    // snap target.
+    //
+    // The floor is the miniplayer's smallest sensible footprint. The full UI only
+    // renders above `mini-active`'s ~550×250 threshold, so keeping the OS minimum down
+    // here lets the user drag straight into mini mode with no runtime winit constraint
+    // mutation.
     min-width: 350px;
     min-height: 90px;
-    // Window background mode:
-    //   - Custom-frame + windowed: transparent ARGB surface so the OS
-    //     compositor blends our rounded outer mantle shell with the
-    //     desktop — the alpha=0 corners outside the rounded shell are
-    //     "not our window," giving real rounded window corners on
-    //     Wayland (KWin/Mutter/Sway), X11 (with a compositor), Windows
-    //     (layered window via WS_EX_LAYERED), and macOS (NSWindow with
-    //     opaque=NO). Slint's winit backend always requests a transparent-
-    //     capable surface (`i-slint-backend-winit/winitwindowadapter.rs`),
-    //     so this works without any Cargo features beyond what we already
-    //     enable.
-    //   - Native-frame OR maximized: opaque mantle. Native mode lets the
-    //     OS-drawn frame abut a solid backdrop. Maximized falls back for
-    //     pure UX reasons — rounded corners on an edge-to-edge window
-    //     would clip against the screen edge / adjacent monitor, which
-    //     looks broken; every maximize-aware app does this. (Note: the
-    //     Slint Wayland transparency caveat people sometimes invoke —
-    //     slint-ui/slint#6145 — is fullscreen-specific, not maximized;
-    //     KWin / Mutter / Sway all composite alpha on maximized surfaces
-    //     in practice. Melodia has no fullscreen mode today, so there's
-    //     no separate fullscreen guard. If a fullscreen toggle ever
-    //     lands, mirror `is-maximized` with an `is-fullscreen` flag.)
-    //     `WindowChrome.is-maximized` is reactively maintained by
-    //     `src/ui/window_chrome/`'s `WindowEvent::Resized` filter via
-    //     `winit::Window::is_maximized`, so the toggle flips on every
-    //     maximize/restore.
+    // Custom-frame + windowed gets a transparent ARGB surface, so the compositor
+    // blends the rounded mantle shell with the desktop and the alpha=0 corners read as
+    // "not our window" — real rounded corners on Wayland, X11-with-compositor, Windows
+    // and macOS alike. Slint's winit backend always requests a transparency-capable
+    // surface, so no extra Cargo feature is involved.
+    //
+    // Native-frame or maximized goes opaque instead: native wants the OS frame to abut
+    // a solid backdrop, and rounded corners on an edge-to-edge window clip against the
+    // screen edge. The Wayland transparency caveat sometimes cited here
+    // (slint-ui/slint#6145) is fullscreen-specific — there is no fullscreen mode today,
+    // so if one lands, mirror `is-maximized` with an `is-fullscreen` flag.
     background: (Theme.use-native-titlebar || WindowChrome.is-maximized)
         ? Theme.mantle
         : Colors.transparent;
 
-    // Custom titlebar mode: drop the OS frame so we can paint our own
-    // chrome. Slint reads `no-frame` once when the OS window first
-    // shows, so `Theme.use-native-titlebar` must be hydrated from
-    // `WindowFlags.use_native_titlebar` *before* `app.run()` —
-    // `src/ui/window_chrome/`'s `install` does that. With `no-frame`
-    // on, winit no longer paints resize edges, so `Theme.resize-border`
-    // restores them; in native-frame mode the OS owns resizing, so the
-    // inner border drops to 0. `ResizeRing` below reads the same token —
-    // winit's border check decides where `drag_resize_window` fires, the
-    // ring decides where hover is suppressed, and a drift between them
-    // would leave a band where the cursor changes but the widget under
-    // it still flashes hover, or the reverse.
+    // Slint reads `no-frame` once at first show, so `Theme.use-native-titlebar` must be
+    // hydrated before `app.run()` — `window_chrome::install` does it. Dropping the OS
+    // frame also drops winit's resize edges, which `Theme.resize-border` restores.
+    // `ResizeRing` below reads the same token: winit's border check decides where
+    // `drag_resize_window` fires and the ring decides where hover is suppressed, so a
+    // drift leaves a band where the cursor changes but the widget still flashes hover.
     no-frame: !Theme.use-native-titlebar;
     resize-border-width: Theme.use-native-titlebar ? 0px : Theme.resize-border;
 
@@ -165,82 +133,61 @@ export component AppWindow inherits Window {
         return "Melodia";
     }
 
-    // Clear the Settings page's live search query and blur its TextInput
-    // when the user navigates away. The handler lives at the AppWindow
-    // level so it always fires — `SettingsView` is mounted only when
-    // `Nav.selected-index == 9`, so a `changed` handler placed inside it
-    // would never see the leaving transition (the component gets
-    // de-instantiated before the handler runs). Slint's `changed` only
-    // observes properties on the current element, not path expressions on
-    // globals, so we mirror `Nav.selected-index` into a local property
-    // and watch that. Returning to Settings therefore always shows the
-    // full page; the next keystroke can't land in a hidden field on
-    // another page.
+    // Clears the Settings page's search and blurs its TextInput on nav-away, so the
+    // next keystroke can't land in a hidden field on another page. It lives up here
+    // because `SettingsView` is unmounted before a handler inside it could see the
+    // leaving transition, and it watches a mirror because `changed` rejects path
+    // expressions on globals.
     property <int> watched-nav-idx: Nav.selected-index;
     changed watched-nav-idx => {
-        // A tab switch changes the mounted content view — drop whatever the
-        // outgoing composite view left behind (see `CompositeScroll.reset`).
+        // The mounted content view changed — drop what the outgoing composite left.
         CompositeScroll.reset();
         if (self.watched-nav-idx != 9) {
-            // Both halves: the input is what the box shows, the query is what
-            // the page is filtered by, and a throttle sits between them.
+            // Both halves: the input is what the box shows, the query is what the page
+            // is filtered by, and a throttle sits between them.
             SettingsPage.search-input = "";
             SettingsPage.search-query = "";
             SettingsPage.blur-search-tick += 1;
         }
-        // Re-grab global keyboard focus on every section change. The
-        // outgoing view may hold focus in a TextInput about to be
-        // de-instantiated (Search's autofocused bar, a manually-focused
-        // filter); Slint does not return focus to an ancestor FocusScope
-        // when the focused item is destroyed, so shortcuts would go dead
-        // until the next click. Runs synchronously on the index change —
-        // SearchView's 1 ms autofocus Timer fires afterwards, so entering
-        // Search still lands the caret in the search bar.
+        // The outgoing view may hold focus in a TextInput about to be destroyed, and
+        // Slint doesn't hand focus back to an ancestor FocusScope when that happens —
+        // shortcuts would stay dead until the next click. Synchronous, so SearchView's
+        // 1 ms autofocus Timer still wins when entering Search.
         shortcut-scope.grab-focus();
     }
 
-    // Mirror `Nav.now-playing-open` so Rust can gate the Up Next list
-    // rebuild on the view being visible. Same rationale as
-    // `watched-nav-idx` above: `Nav` is a global and `changed` can't watch
-    // a path expression on a global, so we mirror it into a local property
-    // at the always-mounted `AppWindow` level — `NowPlayingView` itself is
-    // unmounted while closed, so a handler inside it would miss the
-    // open/close transitions.
+    // Lets Rust gate the Up Next rebuild on the view being visible. Mirrored here for
+    // the `watched-nav-idx` reasons — `NowPlayingView` is unmounted while closed, so a
+    // handler inside it would miss both transitions.
     property <bool> watched-now-playing-open: Nav.now-playing-open;
     changed watched-now-playing-open => {
-        // NP open/close swaps the mounted content view.
+        // NP open/close swaps the mounted content view, and destroys the section view
+        // under it — same focus orphaning as a sidebar nav.
         CompositeScroll.reset();
         Nav.now-playing-open-changed(self.watched-now-playing-open);
-        // Opening / closing Now Playing de-instantiates the section view
-        // underneath it — same focus-orphaning risk as a sidebar nav (see
-        // `watched-nav-idx`). Re-grab focus so global shortcuts survive.
         shortcut-scope.grab-focus();
     }
 
-    // Arm the visualizer's audio-thread sample tap only while something is
-    // actually drawing it. Same mirroring rationale as the block above, and it
-    // has to be its own property rather than a second handler on
-    // `now-playing-open-changed` — that callback has one handler slot, already
-    // taken by `wire_now_playing_open`.
+    // Arms the visualizer's audio-thread sample tap only while something is drawing it.
+    // Its own property rather than a second handler on `now-playing-open-changed`:
+    // that callback has one slot, already taken by `wire_now_playing_open`.
     property <bool> watched-viz-active: Nav.now-playing-open && Visualizer.enabled;
     changed watched-viz-active => {
         Visualizer.set-active(self.watched-viz-active);
     }
 
-    // Artist Detail (a composite-scroll view) opens/closes without a nav-index
-    // change — grid ↔ detail both live under index 5 — so the reset above would
-    // miss it. Mirror the detail id and reset on any change, else the unmounting
-    // view's stale hover flag would trap the wheel on the artist grid.
+    // Artist Detail is a composite-scroll view that opens and closes without a
+    // nav-index change — grid and detail both sit under index 5 — so the reset above
+    // misses it, and the unmounting view's stale hover flag would trap the wheel.
     property <int> watched-artist-detail-id: ArtistDetail.artist-id;
     changed watched-artist-detail-id => {
         CompositeScroll.reset();
         shortcut-scope.grab-focus();
     }
 
-    // The other three details unmount their grid the same way, and every grid
-    // carries a filter TextInput that still holds focus when a card is clicked —
-    // the orphaning `watched-nav-idx` describes. None of them is a composite
-    // view, so focus is all they owe.
+    // The other three unmount their grid the same way, and every grid carries a filter
+    // TextInput still holding focus when a card is clicked. None is a composite view,
+    // so focus is all they owe.
     property <int> watched-album-detail-id: AlbumDetail.album-id;
     changed watched-album-detail-id => {
         shortcut-scope.grab-focus();
@@ -256,71 +203,57 @@ export component AppWindow inherits Window {
         shortcut-scope.grab-focus();
     }
 
-    // The miniplayer swap unmounts the whole full-UI branch — and with it any
-    // composite view, and any focused filter — without a nav-index change, so
-    // the resets above would miss it too.
+    // The miniplayer swap unmounts the whole full-UI branch — composite views and
+    // focused filters with it — without a nav-index change, so the resets above miss
+    // it too.
     property <bool> watched-mini-render: mini-switch.render-active;
     changed watched-mini-render => {
         CompositeScroll.reset();
-        // Same class of stale sentinel, one global over: the rail dies with the
-        // branch and its rows get no leave event, so the index they last
-        // published outlives them and the tooltip frame reads it as a live
-        // hover on the way back in.
+        // Same class of stale sentinel one global over: the rail dies with the branch
+        // and its rows get no leave event, so the index they last published outlives
+        // them and the tooltip frame reads it as a live hover on the way back in.
         Nav.sidebar-tip-idx = -1;
         shortcut-scope.grab-focus();
     }
 
-    // The dialog overlay has its own `if` chain — every body mounts under
-    // `if Dialog.kind == "…"` and `closed-teardown()` clears `kind`, so a focused
-    // LabeledInput dies with the body exactly as a filter does above. Ungated on
-    // purpose: the bodies never autofocus (see `components/dialog/dialog.slint`),
-    // so regrabbing on *open* is free, and it takes the keyboard off whatever
-    // view SearchBar still held it — which would otherwise keep swallowing
-    // keystrokes behind the modal backdrop instead of hitting the scope's
-    // `Dialog.open` guard. That file's neighbouring warning is about `focus()`
-    // from `init`, which runs *inside* the property evaluator and trips its
-    // recursion guard; a `changed` handler runs outside it, from the event
-    // loop's `run_change_handlers` pass, so this call is safe. Fires for every
-    // kind-bearing dialog — `library_settings::show_error` is the one opener
-    // that sets no `kind`, and its body has nothing focusable to orphan.
+    // Every dialog body mounts under `if Dialog.kind == "…"` and `closed-teardown()`
+    // clears `kind`, so a focused LabeledInput dies with the body exactly as a filter
+    // does above. Ungated on purpose: the bodies never autofocus, so regrabbing on
+    // *open* is free and it takes the keyboard off whatever SearchBar still held it —
+    // which would otherwise swallow keystrokes behind the backdrop instead of hitting
+    // the scope's `Dialog.open` guard. Safe where `focus()` from `init` isn't: a
+    // `changed` handler runs from `run_change_handlers`, outside the property
+    // evaluator's recursion guard.
     property <string> watched-dialog-kind: Dialog.kind;
     changed watched-dialog-kind => {
         shortcut-scope.grab-focus();
     }
 
-    // The queue sheet is the odd one out: it mounts no view — it's permanent, and
-    // only animates in — but its Esc / Ctrl+A live in the scope (see
-    // `layout/shortcut-scope.slint`), and nothing moves focus when it opens. The
-    // bar button and the overflow entry are both TouchArea clicks, so a filter
-    // SearchBar keeps the keyboard behind the sheet's backdrop and swallows the
-    // `a`. Same reasoning as `watched-dialog-kind` above; the sheet has nothing
-    // focusable of its own, and the close leg wants focus back here anyway.
+    // The sheet is the odd one out: permanent, mounting nothing, only animating in.
+    // But its Esc / Ctrl+A live in the scope and nothing moves focus when it opens —
+    // the bar button and the overflow entry are both TouchArea clicks — so a filter
+    // SearchBar keeps the keyboard behind the backdrop and swallows the `a`.
     property <bool> watched-queue-open: Queue.open;
     changed watched-queue-open => {
         shortcut-scope.grab-focus();
     }
 
-    // The responsive full-UI ↔ miniplayer swap. Owns the size thresholds, the
-    // two-phase fade, and the writes into the `MiniPlayer` global — see
-    // `components/mini-player-switch.slint`. Fed the live window size, since a
-    // component's root binding can't reach `parent`.
+    // The responsive full-UI ↔ miniplayer swap: size thresholds, the two-phase fade,
+    // and the writes into `MiniPlayer`. Fed the live window size because a component's
+    // root binding can't reach `parent`.
     mini-switch := MiniPlayerSwitch {
         host-width: root.width;
         host-height: root.height;
     }
 
-    // ---- Section-visibility hooks ---------------------------------------
-    // One gate per sidebar section, in nav-index order. `SectionActiveGate`
-    // owns the predicate and the `changed` watcher (see its header for why the
-    // watcher has to sit up here rather than inside each view); what differs
-    // per section is only which Rust hook the transition drives, and what that
-    // hook does with it — which is what these comments record.
+    // One gate per sidebar section, in nav-index order. `SectionActiveGate` owns the
+    // predicate and the `changed` watcher (its header says why the watcher can't live
+    // inside each view); all that differs per section is which Rust hook the transition
+    // drives and what that hook does — which is what the comments below record.
 
-    // Search. Query-driven, so there's no library-changed refresh, but Rust
-    // still releases the per-strip album + artist cover LRUs on `false` (and
-    // clears the result models on the UI thread before the `spawn_blocking`
-    // release runs). `query` + `recent-rows` survive, so a brief flip away and
-    // back lands on the same view state.
+    // Search. Query-driven, so no library-changed refresh, but Rust still releases the
+    // per-strip album + artist cover LRUs on `false` (clearing the result models on the
+    // UI thread first). `query` + `recent-rows` survive a flip away and back.
     SectionActiveGate {
         index: 0;
         mini-active: mini-switch.active;
@@ -335,20 +268,18 @@ export component AppWindow inherits Window {
         active-changed(active) => { Browse.section-active-changed(active); }
     }
 
-    // Favorites. The single `FavoritesView` covers the hero and all three tab
-    // bodies, so there's no detail flip inside this branch. Rust releases the
-    // mosaic / Most Played / Artists cover caches AND the borrowed Albums grid
-    // cover cache on `false`, then re-fetches hero + grids + tracks via the
-    // library-changed dirty flag on `true`.
+    // Favorites. One `FavoritesView` covers the hero and all three tabs, so no detail
+    // flip inside this branch. Rust releases the mosaic / Most Played / Artists cover
+    // caches *and* the borrowed Albums grid cache on `false`, then re-fetches hero +
+    // grids + tracks through the library-changed dirty flag on `true`.
     SectionActiveGate {
         index: 2;
         mini-active: mini-switch.active;
         active-changed(active) => { Favorites.section-active-changed(active); }
     }
 
-    // Tracks. Unlike Albums, the view keeps its row model warm across
-    // nav-aways (no cache release on leave) — Rust uses this only to gate the
-    // `library_changed` refresher: hidden ⇒ mark dirty and skip the
+    // Tracks. Unlike Albums, the view keeps its row model warm across nav-aways, so
+    // this only gates the `library_changed` refresher: hidden ⇒ mark dirty and skip the
     // full-library re-fetch, re-enter ⇒ one deferred refresh.
     SectionActiveGate {
         index: 3;
@@ -356,10 +287,9 @@ export component AppWindow inherits Window {
         active-changed(active) => { Tracks.section-active-changed(active); }
     }
 
-    // Albums. Rust releases the album-tier cover cache on `false` (sidebar nav
-    // away, or opening Now Playing *from* Albums) and re-warms it on `true`.
-    // `AlbumView` / `AlbumDetailView` are both inside this branch, so
-    // grid↔detail stays `true` — as it does for Artists, Genres and Playlists.
+    // Albums. Rust releases the album-tier cover cache on `false` (nav away, or opening
+    // Now Playing *from* Albums) and re-warms on `true`. Grid and detail are both in
+    // this branch, so a drill-in stays `true` — as it does for Artists/Genres/Playlists.
     SectionActiveGate {
         index: 4;
         mini-active: mini-switch.active;
@@ -373,43 +303,33 @@ export component AppWindow inherits Window {
         active-changed(active) => { Artists.section-active-changed(active); }
     }
 
-    // Genres. The Rust hook has no cache to release today (genres have no
-    // artwork), but it's wired for symmetry with Albums / Artists.
+    // Genres. The hook has no cache to release — genres have no artwork — but stays
+    // wired for symmetry with Albums / Artists.
     SectionActiveGate {
         index: 6;
         mini-active: mini-switch.active;
         active-changed(active) => { Genres.section-active-changed(active); }
     }
 
-    // Playlists. Releases the playlist-tier cover cache on `false` and re-warms
-    // on `true` — mirrors the Albums hook.
+    // Playlists. Mirrors the Albums hook over the playlist-tier cover cache.
     SectionActiveGate {
         index: 7;
         mini-active: mini-switch.active;
         active-changed(active) => { Playlists.section-active-changed(active); }
     }
 
-    // Recently Played. Like Favorites, Rust releases the section's cover cache
-    // on `false` and re-fetches on `true`.
+    // Recently Played. Like Favorites: release the cover cache on `false`, re-fetch on
+    // `true`.
     SectionActiveGate {
         index: 8;
         mini-active: mini-switch.active;
         active-changed(active) => { RecentlyPlayed.section-active-changed(active); }
     }
 
-    // Outer mantle shell. In custom-frame + windowed mode the Window's
-    // background is transparent, so this rounded mantle Rectangle IS the
-    // visible window outline — the compositor treats the alpha=0 area
-    // outside its rounded corners as "not our window". `clip: true`
-    // ensures any child painting outside the rounded shape is masked.
-    //
-    // In native-frame mode OR when maximized the radius drops to 0 so
-    // the layout stays full-bleed: native mode wants the OS-drawn frame
-    // to abut a square backdrop, and a maximized window's rounded
-    // corners would clip against the screen edge / adjacent monitor (no
-    // shadow gap implied). The inner content panel below still rounds
-    // via `Theme.shell-radius` (custom) / `Theme.native-content-radius`
-    // (native) for Tauri parity.
+    // Outer mantle shell. With a transparent Window background this rounded Rectangle
+    // *is* the visible window outline, and `clip: true` masks anything a child paints
+    // outside it. Native-frame or maximized drops the radius to 0 and stays full-bleed,
+    // per the background comment above; the inner content panel still rounds.
     Rectangle {
         width: 100%;
         height: 100%;
@@ -419,70 +339,46 @@ export component AppWindow inherits Window {
             : Theme.shell-radius;
         clip: true;
 
-        // Global keyboard shortcuts. Wraps the entire main layout (titlebar +
-        // sidebar + content + now-playing-bar), and is the only FocusScope in
-        // the tree — every key that a focused TextInput doesn't consume itself
-        // lands here directly. The bindings, the volume-commit debounce and the
-        // focus contract all live in `layout/shortcut-scope.slint`.
+        // The only FocusScope in the tree, wrapping the whole main layout — every key a
+        // focused TextInput doesn't consume lands here directly. Bindings, the
+        // volume-commit debounce and the focus contract are in the component.
         shortcut-scope := ShortcutScope {
             width: 100%;
             height: 100%;
 
-        // Full UI branch. Wrapped in a Rectangle so we can drive the
-        // miniplayer fade transition from a single ancestor. Conditional on
-        // `mini-switch.render-active` — the fade-delayed shadow of `active` —
-        // so only one branch is mounted at any time (avoids holding sidebar
-        // grid covers + the mini up-next subscriber alive together during the
-        // swap).
+        // Full UI branch, wrapped so the fade is driven from one ancestor. Gated on
+        // `render-active` — the fade-delayed shadow of `active` — so only one branch is
+        // ever mounted, and the sidebar's grid covers never sit alive beside the mini
+        // up-next subscriber mid-swap.
         if !mini-switch.render-active: Rectangle {
             width: 100%;
             height: 100%;
             opacity: mini-switch.fade-opacity;
 
             VerticalLayout {
-            // Custom titlebar — only rendered in custom-frame mode. Use the
-            // conditional element form (not `visible: false`) so the bar's
-            // 36 px slot disappears entirely from the layout when the OS
-            // owns the frame; otherwise we'd add 36 px of dead space above
-            // the sidebar in native mode (CLAUDE.md "visible: false does
-            // not remove an element from layout" pitfall).
+            // `if` rather than `visible: false` so the bar's slot leaves the layout
+            // entirely in native mode — a hidden child still claims its stretch.
             if !Theme.use-native-titlebar: CustomTitleBar { }
 
-            // Top section: sidebar + content.
-            //
-            // `padding-right` on this layout (custom-frame mode only)
-            // pushes the content panel — and its scrollbar — 4 px away
-            // from the window's right edge. Without it, the thin
-            // overlay scrollbar sits flush with the resize border and
-            // grabbing the edge to widen the window catches the
-            // scrollbar's hover instead. Native-frame mode leaves it at
-            // 0 so the OS-drawn frame still abuts the content.
+            // The custom-frame `padding-right` pushes the content panel and its
+            // scrollbar off the window edge; flush, grabbing the edge to resize catches
+            // the scrollbar's hover instead. Native mode leaves the OS frame abutting.
             HorizontalLayout {
                 vertical-stretch: 1;
                 padding-right: Theme.use-native-titlebar ? 0px : 4px;
 
                 sidebar := Sidebar {}
 
-                // Rounded content panel. Single Rectangle with
-                // `border-color` + `border-width` — same pattern as
-                // `components/popup-surface.slint`. The border is a real
-                // rounded stroke on the Rectangle's own primitive, so it
-                // follows the corner curve exactly with no clip-masking
-                // dependency.
+                // Rounded content panel — one Rectangle with a real rounded stroke, the
+                // `popup-surface.slint` pattern, so the border follows the corner curve
+                // with no clip-masking.
                 //
-                // Native-frame mode keeps Tauri's original silhouette —
-                // only the left side rounds (top-left + bottom-left) and
-                // the right edge sits flush against the OS-drawn frame
-                // with no visible border. Slint's `Rectangle` has no
-                // per-side `border-width`, so we use a wrapping
-                // square-clip Rectangle and oversize the panel by 1 px
-                // to the right in native mode: the right border falls
-                // outside the wrapper and gets clipped. Top + bottom +
-                // left borders stay because the panel's height and left
-                // edge match the wrapper exactly. Custom-frame mode
-                // keeps the panel at wrapper-width so the 4 px right-
-                // side margin on the parent layout still lands a fully
-                // closed rounded rectangle.
+                // Native mode rounds only the left side and sits flush against the OS
+                // frame. `Rectangle` has no per-side `border-width`, so the trick is a
+                // square-clip wrapper plus a panel oversized 1 px to the right: that
+                // border falls outside the wrapper and is clipped, while top/bottom/left
+                // survive because those edges match exactly. Custom mode keeps the panel
+                // at wrapper width, so the parent's right margin lands a closed rect.
                 Rectangle {
                     horizontal-stretch: 1;
                     clip: true;
@@ -497,14 +393,10 @@ export component AppWindow inherits Window {
                         background: Theme.base;
                         border-color: Theme.border;
                         border-width: 1px;
-                        // Left-side rounding splits by titlebar mode:
-                        //   - Custom: tracks `Theme.shell-radius` (user-pickable
-                        //     via the Settings page chips), matching the outer
-                        //     mantle shell so the two arcs feel concentric.
-                        //   - Native: tracks `Theme.native-content-radius`
-                        //     (seeded from `get_os_corner_radius()` at startup),
-                        //     so the panel's left-side corners feel native to
-                        //     the host OS / desktop without a user setting.
+                        // Custom mode tracks the user-pickable `shell-radius` so the
+                        // panel and the mantle shell read as concentric arcs; native
+                        // tracks `native-content-radius`, seeded from the OS at
+                        // startup, so it matches the host without a user setting.
                         border-top-left-radius: Theme.use-native-titlebar
                             ? Theme.native-content-radius
                             : Theme.shell-radius;
@@ -519,25 +411,14 @@ export component AppWindow inherits Window {
                             : Theme.shell-radius;
                         clip: true;
 
-                        // Index 1 (Browse), index 3 (Tracks), and index 8
-                        // (Settings) render real views; every other index
-                        // falls through to the placeholder. Use the `if`
-                        // form (not `visible: false`) so the unselected
-                        // branches are fully absent from the layout tree —
-                        // see CLAUDE.md "visible: false does not remove an
-                        // element from layout".
+                        // One branch per nav index, `if` rather than `visible: false` so
+                        // the unselected ones leave the layout tree entirely. Every
+                        // regular branch is also gated on `!now-playing-open`, since the
+                        // full-screen Now Playing view replaces the current view inside
+                        // this panel — so exactly one is ever mounted. Unrouted indices
+                        // fall through to the placeholder at the end.
                         //
-                        // The full-screen Now Playing view *replaces* the
-                        // current view inside this panel when
-                        // `Nav.now-playing-open` is set (opened from the
-                        // now-playing bar's track-info card; closed by the
-                        // view's back button or any sidebar item). Every
-                        // regular branch is gated on `!now-playing-open` so
-                        // exactly one view is mounted at a time.
-                        // Index 0 (Search) — query-driven mixed-results
-                        // page. Backed by FTS5 + LIKE via
-                        // `library::search::search_all`. Wiring in
-                        // `src/ui/callbacks/search/`.
+                        // Search is query-driven over FTS5 + LIKE (`search::search_all`).
                         if !Nav.now-playing-open && Nav.selected-index == 0: ViewTransition {
                             width: parent.width;
                             height: parent.height;
@@ -550,15 +431,11 @@ export component AppWindow inherits Window {
                             enter-from: Nav.pending-enter-from;
                             BrowseView { width: 100%; height: 100%; }
                         }
-                        // Index 2 (Favorites) — a pinned hero mosaic whose
-                        // top row carries the tab bar and the filter, over
-                        // three sub-views (Songs / Most Played / Favorite
-                        // Artists). Cross-tab nav: a favorite artist card,
-                        // and the Songs rows' go-to-{album,artist,genre}
-                        // context actions, all stamp
-                        // `*Detail.origin-nav-index = 2` so the back arrow
-                        // returns here, mirroring the Artist Detail → Album
-                        // Detail → back behaviour.
+                        // Favorites — a pinned hero mosaic carrying the tab bar and the
+                        // filter over three sub-views. An artist card and the Songs
+                        // rows' go-to-{album,artist,genre} actions all stamp
+                        // `*Detail.origin-nav-index = 2`, so the back arrow returns
+                        // here rather than to the entity grid.
                         if !Nav.now-playing-open && Nav.selected-index == 2: ViewTransition {
                             width: parent.width;
                             height: parent.height;
@@ -571,9 +448,9 @@ export component AppWindow inherits Window {
                             enter-from: Nav.pending-enter-from;
                             TracksView { width: 100%; height: 100%; }
                         }
-                        // Index 4 (Albums) swaps between the card grid and
-                        // the full detail view on `AlbumDetail.album-id`
-                        // (-1 = grid) — mirrors the `now-playing-open` swap.
+                        // Albums swaps grid ↔ detail on `AlbumDetail.album-id`, -1 being
+                        // the grid. Artists, Genres and Playlists below are the same
+                        // shape on their own id.
                         if !Nav.now-playing-open && Nav.selected-index == 4
                             && AlbumDetail.album-id < 0: ViewTransition {
                             width: parent.width;
@@ -588,8 +465,6 @@ export component AppWindow inherits Window {
                             enter-from: Nav.pending-enter-from;
                             AlbumDetailView { width: 100%; height: 100%; }
                         }
-                        // Index 5 (Artists) — same grid ↔ detail swap as
-                        // Albums, gated on `ArtistDetail.artist-id`.
                         if !Nav.now-playing-open && Nav.selected-index == 5
                             && ArtistDetail.artist-id < 0: ViewTransition {
                             width: parent.width;
@@ -604,8 +479,6 @@ export component AppWindow inherits Window {
                             enter-from: Nav.pending-enter-from;
                             ArtistDetailView { width: 100%; height: 100%; }
                         }
-                        // Index 6 (Genres) — same grid ↔ detail swap as
-                        // Albums / Artists, gated on `GenreDetail.genre-id`.
                         if !Nav.now-playing-open && Nav.selected-index == 6
                             && GenreDetail.genre-id < 0: ViewTransition {
                             width: parent.width;
@@ -620,8 +493,6 @@ export component AppWindow inherits Window {
                             enter-from: Nav.pending-enter-from;
                             GenreDetailView { width: 100%; height: 100%; }
                         }
-                        // Index 7 (Playlists) — same grid ↔ detail swap,
-                        // gated on `PlaylistDetail.playlist-id`.
                         if !Nav.now-playing-open && Nav.selected-index == 7
                             && PlaylistDetail.playlist-id < 0: ViewTransition {
                             width: parent.width;
@@ -668,11 +539,9 @@ export component AppWindow inherits Window {
                                 title: root.view-title(Nav.selected-index);
                             }
                         }
-                        // Now Playing also rides ViewTransition for parity
-                        // with every other branch. Hard-coded to `below` —
-                        // this `if` branch only fires on open (closing is
-                        // the *outgoing* state, which `ViewTransition` does
-                        // not animate by design).
+                        // Now Playing rides ViewTransition for parity, hard-coded to
+                        // `below`: this branch only fires on open, and closing is the
+                        // outgoing state, which `ViewTransition` doesn't animate.
                         if Nav.now-playing-open: ViewTransition {
                             width: parent.width;
                             height: parent.height;
@@ -680,18 +549,12 @@ export component AppWindow inherits Window {
                             NowPlayingView { width: 100%; height: 100%; }
                         }
 
-                        // Queue bottom-sheet — mounted INSIDE the
-                        // content panel so its backdrop + slide
-                        // animation are confined to the main view
-                        // (Tauri parity: the sheet only covers the
-                        // content area, not the sidebar or now-
-                        // playing-bar). Declared after the view
-                        // branches so it stacks above them; the
-                        // panel's `clip: true` prevents the closed-
-                        // state card from showing past the bottom
-                        // edge. Always rendered so the close
-                        // animation can play after `Queue.open`
-                        // flips back to false.
+                        // Mounted inside the content panel so its backdrop
+                        // and slide stay off the sidebar and the bar, and
+                        // declared after the view branches so it stacks
+                        // above them. The panel's clip hides the closed
+                        // card; always rendered, so the close animation can
+                        // play after `Queue.open` flips back.
                         QueueSheet {
                             x: 0;
                             y: 0;
@@ -705,60 +568,47 @@ export component AppWindow inherits Window {
             NowPlayingBar {}
             }
 
-            // Top-layer tooltip for the collapsed sidebar rail, which hides
-            // every row label. Declared after the layout so it paints above
-            // the content panel (Slint has no z-index — paint order is
-            // declaration order): the Sidebar is the content row's first
-            // child, so anything it drew past its own right edge would land
-            // under the panel, and `nav-scroll` clips it besides. Same
-            // frame-tracks-the-host idiom as `settings-view.slint`'s
-            // `tab-tip`, one axis over.
+            // Top-layer tooltip for the collapsed rail, which hides every row label.
+            // Declared after the layout because paint order is declaration order: the
+            // Sidebar is the content row's first child, so anything it drew past its
+            // right edge would land under the panel, and `nav-scroll` clips it besides.
+            // Same frame-tracks-the-host idiom as `settings-view.slint`'s `tab-tip`.
             //
-            // The hovered row publishes its rect on `Nav`; the x comes off the
-            // live rail instead, so the frame rides the collapse animation.
-            // The tooltip's own 500 ms reveal delay outlasts that animation,
-            // so it can't surface while the labels are still readable. A plain
-            // Rectangle captures no input, so the row underneath keeps its
-            // hover.
+            // The hovered row publishes its rect on `Nav`; the x comes off the live rail
+            // instead, so the frame rides the collapse animation — and the tooltip's own
+            // 500 ms reveal outlasts that animation, so it can't surface while the
+            // labels are still readable. A plain Rectangle captures no input, so the row
+            // underneath keeps its hover.
             sidebar-tip := Rectangle {
                 x: sidebar.absolute-position.x - parent.absolute-position.x;
                 y: Nav.sidebar-tip-y - parent.absolute-position.y;
                 width: sidebar.width;
                 height: Nav.sidebar-tip-h;
 
-                // Rail rows sit 4 px apart and some pairs have a Divider
-                // between them, so a pointer travelling down the rail is over
-                // nothing for a frame or two. Retracting on that restarts the
-                // pill's 500 ms reveal on every row change — the tooltip
-                // flashes the new label, fades out and comes back — where the
-                // Settings tab bar reads as one tooltip following the pointer
-                // because its cells are edge-to-edge and hover never drops.
-                // Hold the last row's tooltip across the gap and retract only
-                // once the pointer has really left the rail. The label and the
-                // frame's rect are left alone on retract, so the held pill
-                // stays where it was and swaps to the next row's name the
-                // moment that row takes the hover.
+                // Rail rows sit 4 px apart with a Divider between some pairs, so a
+                // pointer travelling down the rail is over nothing for a frame or two.
+                // Retracting on that restarts the 500 ms reveal per row and the pill
+                // flashes the new label, fades and comes back — where the Settings tab
+                // bar reads as one tooltip following the pointer, its cells being
+                // edge-to-edge. So hold across the gap and retract only once the pointer
+                // has really left. Retract leaves the label and rect alone, so the held
+                // pill sits still and swaps names the moment the next row takes over.
                 //
-                // `held` only ever *extends* a live tooltip — the arming is
-                // `row-hovered` itself, below. It has to be, because `held` is
-                // set from a `changed` handler and `changed` doesn't fire on a
-                // first evaluation, so a rail that remounts with `row-hovered`
-                // already true would sit dead until the pointer left it once.
-                // The miniplayer swap is that remount, and the reason it can
-                // arrive already true is the stale index it left on `Nav` — so
-                // the real guard is the `sidebar-tip-idx = -1` in
-                // `changed watched-mini-render` above, without which arming on
-                // `row-hovered` reveals a pill for a row nothing is hovering.
-                // Reading both here keeps this frame honest against any future
-                // unmount path that forgets the reset.
+                // `held` can only *extend* a live tooltip; `row-hovered` is what arms
+                // one. It has to be, since `held` is written from a `changed` handler
+                // and `changed` doesn't fire on a first evaluation — a rail remounting
+                // with `row-hovered` already true would sit dead until the pointer left
+                // it once. The miniplayer swap is that remount, and what makes it
+                // arrive true is the stale index left on `Nav`, so the real guard is the
+                // `sidebar-tip-idx = -1` above. Reading both keeps this frame honest
+                // against a future unmount path that forgets the reset.
                 property <bool> row-hovered: Nav.sidebar-tip-idx != -1;
                 property <bool> held;
                 changed row-hovered => {
                     if (self.row-hovered) { self.held = true; }
                 }
-                // Long enough to cross the widest gap (a Divider between two
-                // sections) at a deliberate pace, short enough that leaving the
-                // rail still reads as an immediate dismissal.
+                // Long enough to cross the widest gap — a Divider between sections — at
+                // a deliberate pace, short enough that leaving the rail still dismisses.
                 Timer {
                     interval: 150ms;
                     running: !sidebar-tip.row-hovered && sidebar-tip.held;
@@ -772,17 +622,15 @@ export component AppWindow inherits Window {
                     host-width: sidebar-tip.width;
                     host-height: sidebar-tip.height;
                     side: TooltipSide.right;
-                    // Clears the rail rather than hugging it, so the pill
-                    // reads as part of the content panel it floats over.
+                    // Clears the rail rather than hugging it, so the pill reads as part
+                    // of the content panel it floats over.
                     gap: Theme.pad-md;
                 }
             }
         }
 
-        // Miniplayer branch — replaces the full UI when the OS window
-        // shrinks past the responsive threshold. Same opacity-binding +
-        // inside-the-shortcut-scope shape as the full branch, so the fade
-        // animates symmetrically in either direction.
+        // Miniplayer branch — same opacity-binding, inside-the-scope shape as the full
+        // branch, so the fade animates symmetrically in either direction.
         if mini-switch.render-active: Rectangle {
             width: 100%;
             height: 100%;
@@ -796,22 +644,16 @@ export component AppWindow inherits Window {
         }
     }
 
-    // Resize-affordance ring — the cursor hints over the band winit resizes
-    // from. Mirrors Tauri's `WindowResizeHandles` (a
-    // `<Show when={!isMaximized()}>` block at z-index 9999). Mounted only when
-    // resizing is both possible and ours to advertise: not while maximized
-    // (resize is a no-op then), and not in native-frame mode (the OS draws its
-    // own border). Geometry comes from `Theme.resize-border` /
-    // `Theme.resize-corner`, the same tokens the Window's
-    // `resize-border-width` above reads.
+    // Cursor hints over the band winit resizes from. Mounted only when resizing is both
+    // possible and ours to advertise: not while maximized, where it's a no-op, and not
+    // in native mode, where the OS draws its own border. Geometry comes from the same
+    // `Theme.resize-*` tokens `resize-border-width` above reads.
     if !Theme.use-native-titlebar && !WindowChrome.is-maximized: ResizeRing {
         width: 100%;
         height: 100%;
     }
 
-    // Modal dialog overlay — sibling of the main VerticalLayout. Window
-    // children stack in z-order based on declaration order, so the overlay
-    // paints above the layout. The overlay always renders so its
+    // Declared after the main layout, so it paints above it. Always rendered so the
     // open/close animation can play; its TouchArea is `enabled` only while
     // `Dialog.open`, so closed-state pointer events fall through.
     DialogOverlay {
@@ -819,11 +661,8 @@ export component AppWindow inherits Window {
         height: 100%;
     }
 
-    // Transient bottom-right notification stack — also a sibling of the
-    // main layout. Declared *after* `DialogOverlay` so it paints above an
-    // open dialog's backdrop (so a notification that fires mid-dialog
-    // stays visible). The stack itself contains no root TouchArea, so
-    // its empty area doesn't block clicks on whatever is below.
+    // After `DialogOverlay`, so a toast firing mid-dialog paints above the backdrop
+    // instead of behind it. No root TouchArea, so its empty area blocks no clicks.
     NotificationStack {
         width: 100%;
         height: 100%;

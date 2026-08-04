@@ -1,85 +1,60 @@
-// Direction the next `ViewTransition` mount slides in from. Set on the UI
-// thread immediately before the property write (`Nav.selected-index` or
-// `*Detail.*-id`) that flips an `if` branch — see `Nav.pending-enter-from`
-// below. Lateral sidebar nav uses `below` (fade up); drilling into a
-// detail uses `right`; the detail back button uses `left`.
+// Which edge the next `ViewTransition` mount slides in from: lateral sidebar nav fades
+// up from `below`, drilling into a detail comes from the `right`, the back button from
+// the `left`.
 export enum NavEnterFrom { below, right, left }
 
-// Nav: which content view the shell shows. Rust persists the index into
-// `views.json` and drives cross-tab navigation off it.
+// Which content view the shell shows. Rust persists the index and drives cross-tab
+// navigation off it:
 //   0=search, 1=browse, 2=favorites, 3=tracks, 4=albums, 5=artists,
 //   6=genres, 7=playlists, 8=recently-played, 9=settings
-// Sidebar order is source order, not index order — Recently Played renders
-// under Favorites while keeping index 8.
+// **Sidebar order is source order, not index order** — Recently Played renders under
+// Favorites while keeping index 8.
 export global Nav {
     in-out property <int> selected-index: 3;
-    // True while the full-screen Now Playing view replaces the main content
-    // area. Toggled by clicking the track-info card in the now-playing bar
-    // (the bar stays mounted while the view is open, so the same card also
-    // closes it); additionally closed by the view's back button or by any
-    // sidebar item click (the sidebar resets it alongside `selected-index`).
-    // The content panel in `app-window.slint` renders `NowPlayingView` when
-    // this is true and gates the regular view branches on `!now-playing-open`.
+    // The full-screen Now Playing view replacing the content area. Toggled from the
+    // bar's track-info card — the bar stays mounted, so the same card closes it — and
+    // also closed by the view's back button or any sidebar click.
     in-out property <bool> now-playing-open: false;
-    // Mirror of `now-playing-open` into Rust (`src/ui/now_playing/`).
-    // The Up Next subscriber skips its ~20-row rebuild while the view is
-    // closed (the rows aren't on screen) and rebuilds once on open. Slint
-    // globals can't have `changed` handlers on their own properties
-    // (CLAUDE.md "changed doesn't accept path expressions on globals"), so
-    // `AppWindow` mirrors `now-playing-open` into a local property and
-    // watches that — the changed handler invokes this synchronously.
+    // Mirrored into Rust so the Up Next subscriber can skip its rebuild while the view
+    // is closed. A global can't watch its own property, so `AppWindow` mirrors this
+    // locally and invokes the callback from that `changed` handler.
     callback now-playing-open-changed(bool);
-    // Fire after the user clicks a sidebar item (the SidebarItem TouchArea
-    // invokes this right after assigning `selected-index`). Rust persists
-    // the new index into `settings.last_nav_index` so the next launch
-    // reopens on the same section. Wired in `src/ui/callbacks/`.
+    // Invoked by `SidebarItem` right after it assigns `selected-index`, so the next
+    // launch reopens on the same section.
     callback persist-selected-index(int);
-    // Right-click "Open Containing Folder" on any track row. Carries the
-    // track id; Rust (`callbacks::wire_all`) resolves the file path from
-    // the DB and hands the parent directory to the OS file manager via
-    // the `open` crate. View-independent — every track-list context menu
-    // calls this single global directly, with no per-view plumbing (vs
-    // the `go-to-*` cross-tab callbacks, which need per-view origin
-    // context and are therefore duplicated across the view globals).
+    // Right-click "Open Containing Folder". Rust resolves the path from the DB and hands
+    // the parent directory to the OS file manager. **View-independent** — every context
+    // menu calls this one global with no per-view plumbing, unlike the `go-to-*`
+    // callbacks, which need per-view origin context and are duplicated per global.
     callback reveal-in-folder(int /*track_id*/);
-    // Direction for the next ViewTransition mount. Sidebar lateral nav
-    // resets to `below`; opening a detail sets `right`; the detail back
-    // button sets `left`. Written synchronously on the UI thread immediately
-    // before the property flip (`selected-index` or `*Detail.*-id`) that
-    // triggers the new mount. Typed (not string) so Rust typos are
-    // caught at compile time — see `NavEnterFrom` at the top of this file
-    // and the `mark_*` helpers in `src/ui/nav_transition.rs`.
+    // Written synchronously on the UI thread **immediately before** the property flip
+    // that triggers the new mount. Typed rather than a string, so a Rust typo is a
+    // compile error; `ui/nav_transition.rs` has the `mark_*` helpers.
     in-out property <NavEnterFrom> pending-enter-from: NavEnterFrom.below;
     in-out property <bool> sidebar-collapsed: false;
     in-out property <length> sidebar-width: 180px;
-    // Set by the Sidebar's resize handle while the user is dragging the
-    // right edge. Read by `SidebarItem` and the Collapse-toggle row to
-    // disable the `padding-left` animation during a drag — without this
-    // every mouse move kicks off a fresh `Theme.dur-med` ease, making the
-    // icons visibly lag the sidebar's edge. Same pattern the Sidebar
-    // already uses to gate its own `width` animation.
+    // Set while the resize handle is being dragged, and read by the rows to disable
+    // their `padding-left` ease — without it every mouse move restarts a fresh one and
+    // the icons visibly lag the sidebar's edge. The Sidebar gates its own `width`
+    // animation the same way.
     in-out property <bool> sidebar-dragging: false;
-    // Collapsed-rail tooltip channel. The rail hides every row label, so the
-    // hovered row publishes what it is and where it sits and `app-window.slint`
-    // paints one tooltip beside the rail. It can't be mounted on the row:
-    // `nav-scroll` clips its viewport, and the Sidebar is declared before the
-    // content panel, which paints over anything drawn past the rail's edge.
+    // The collapsed rail's tooltip channel: the hovered row publishes what it is and
+    // where it sits, and `app-window.slint` paints one pill beside the rail. **It can't
+    // be mounted on the row** — `nav-scroll` clips its viewport, and the Sidebar is
+    // declared before the content panel, which paints over anything past the rail's edge.
     //
-    // A global rather than an `out property` chain off `Sidebar` because the
-    // rail's rows are ten hand-written mounts — routing hover up through the
-    // Sidebar would put a forwarding line on every one of them. `-1` is
-    // "nothing hovered", and only the row that owns the hover may clear it,
-    // keyed on this index: a leave arriving after the next row's enter would
+    // A global rather than an `out property` chain off `Sidebar`, because the rail's
+    // rows are ten hand-written mounts and routing hover up would put a forwarding line
+    // on each. -1 is nothing hovered, and **only the row owning the hover may clear
+    // it**, keyed on this index: a leave arriving after the next row's enter would
     // otherwise blank a live tooltip.
     in-out property <int> sidebar-tip-idx: -1;
-    // The Collapse toggle's key in that channel. It sits in the rail and loses
-    // its label like any nav row but owns no nav index, so it takes a slot
-    // outside the range `selected-index` uses.
+    // The Collapse toggle's key. It sits in the rail and loses its label like any nav
+    // row but owns no nav index, so it takes a slot outside `selected-index`'s range.
     out property <int> sidebar-collapse-tip-idx: -2;
     in-out property <string> sidebar-tip-label;
-    // Window-absolute top edge and height of the hovered row, snapshotted on
-    // enter. Nothing moves a row vertically except scrolling `nav-scroll`,
-    // which swaps a different row under the pointer and re-fires this.
+    // Snapshotted on enter. Nothing moves a row vertically except scrolling the rail,
+    // which puts a different row under the pointer and re-fires this anyway.
     in-out property <length> sidebar-tip-y;
     in-out property <length> sidebar-tip-h;
 }

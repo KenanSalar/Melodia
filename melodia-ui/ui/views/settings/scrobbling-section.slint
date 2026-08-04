@@ -9,15 +9,12 @@ import { SettingRow } from "../../components/settings/setting-row.slint";
 import { ToggleSwitch } from "../../components/settings/toggle-switch.slint";
 import { SectionButton } from "../../components/settings/section-button.slint";
 
-// Scrobbling section: per-service status + Connect/Disconnect, an enable toggle
-// that only mounts once the service is connected, and a "Sync loved tracks"
-// toggle (Last.fm-primary, so gated on the Last.fm connection). Rust owns every
-// `Settings.scrobble-*` value; the status props are painted by the
-// `ScrobbleService` status-watch subscriber in `src/ui/scrobbling_settings.rs`.
-// Connect opens its login dialog inline here (the tray-toggle pattern) rather
-// than through a Rust callback, so the `@tr` chrome stays in Slint and we dodge
-// Slint's "recursion detected" guard on a Rust-driven `Dialog.open`.
-// Search visibility — see header comment in `playback-section.slint`.
+// Per service: a status row with Connect / Disconnect, an enable toggle that
+// mounts only once connected, and a loved-tracks sync. Rust owns every value;
+// the status props come off `scrobbling_settings.rs`'s status-watch subscriber.
+// Connect fills its login dialog inline rather than through a callback, so the
+// `@tr` chrome stays in Slint and a Rust-driven open can't trip the recursion
+// guard. Search visibility follows `playback-section.slint`.
 export component ScrobblingSection inherits Rectangle {
     background: transparent;
     horizontal-stretch: 1;
@@ -31,16 +28,15 @@ export component ScrobblingSection inherits Rectangle {
                                         SettingsPage.search-query);
     }
 
-    // One cluster per service; the enable- and love-toggle labels are folded into
-    // the status row's search text so matching "scrobble" or "loved" reveals the
-    // whole cluster (the per-provider love toggle lives inside its cluster).
+    // A cluster searches as one unit: the toggles' labels fold into the status
+    // row's text, so matching any of them reveals the whole thing.
     property <bool> show-lastfm: row-visible(
         @tr("Last.fm") + " " + @tr("Scrobble to Last.fm") + " " + @tr("Sync loved tracks to Last.fm"),
         @tr("Report each play to your Last.fm account"));
     property <bool> show-listenbrainz: row-visible(
         @tr("ListenBrainz") + " " + @tr("Scrobble to ListenBrainz") + " " + @tr("Sync loved tracks to ListenBrainz"),
         @tr("Report each play to your ListenBrainz account"));
-    // MusicBrainz auto-tagging is ListenBrainz-driven (its token resolves the ids).
+    // MusicBrainz auto-tagging rides on the ListenBrainz token.
     property <bool> show-mbid: Settings.scrobble-listenbrainz-connected && row-visible(
         @tr("Add MusicBrainz IDs to your music"),
         @tr("Look up and tag files so loves work on ListenBrainz"));
@@ -51,7 +47,7 @@ export component ScrobblingSection inherits Rectangle {
     if has-matches: SectionCard {
         title: @tr("Scrobbling");
 
-        // ---- Last.fm ----
+        // Last.fm.
         if root.show-lastfm: SettingRow {
             icon: "history";
             label: @tr("Last.fm");
@@ -109,7 +105,7 @@ export component ScrobblingSection inherits Rectangle {
 
         if root.show-lastfm && root.show-listenbrainz: SectionDivider {}
 
-        // ---- ListenBrainz ----
+        // ListenBrainz.
         if root.show-listenbrainz: SettingRow {
             icon: "history";
             label: @tr("ListenBrainz");
@@ -162,7 +158,8 @@ export component ScrobblingSection inherits Rectangle {
             }
         }
 
-        // ---- MusicBrainz auto-tagging (ListenBrainz-driven, part of the LB cluster) ----
+        // MusicBrainz auto-tagging — part of the ListenBrainz cluster, since its
+        // token is what resolves the ids.
         if root.show-mbid: SettingRow {
             icon: "auto_awesome";
             label: @tr("Add MusicBrainz IDs to your music");
@@ -172,11 +169,10 @@ export component ScrobblingSection inherits Rectangle {
                 toggled(v) => { Settings.scrobble-mbid-auto-tag-changed(v); }
             }
         }
-        // When-to-use note: this feature reads existing tags, so it only helps
-        // already-tidy libraries; Picard (audio fingerprint) is for messy ones.
-        // `max-width` caps the wrapping text into a reading column so it doesn't
-        // inflate the section card's width (same idiom as SettingRow's
-        // `description-max-width`).
+        // Worth stating because it decides whether the feature helps at all: the
+        // lookup is text-only, so it tidies an already-tidy library and Picard's
+        // fingerprinting is for a messy one. The `max-width` caps the copy into
+        // a reading column so it can't inflate the card.
         if root.show-mbid: HorizontalLayout {
             padding-left: Theme.pad-lg;
             padding-right: Theme.pad-lg;

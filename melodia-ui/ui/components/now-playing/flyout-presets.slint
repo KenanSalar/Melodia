@@ -1,32 +1,27 @@
-// Single source of truth for the now-playing popup menus' left-column flyouts:
-// the option lists themselves plus the row/chrome metrics the hosts'
-// fixed-reserve geometry math needs. `overflow-menu.slint` (the bar's speed and
-// sleep-timer flyouts) and `view-menu.slint` (the Now-Playing view's visualizer
-// flyout) each compute their reserved height from a list length here, so adding
-// or removing an option can no longer clip the popup.
+// The option lists behind the now-playing menus' flyouts, plus the row and
+// chrome metrics their fixed-reserve geometry needs. Both hosts derive their
+// reserved height from a list length here, so adding an option can't clip a
+// popup.
 
-// One preset in the speed list. `value` is the multiplier handed to
-// `Player.set-playback-speed`; `label` is the (untranslated, numeric)
-// display token. Kept in lock-step with `current-speed-label()` in
-// `overflow-menu.slint`, which maps the live `vm.playback_speed` back to
-// the same label for the collapsed "Speed" row.
+// One speed preset. The label is an untranslated numeric token, kept in
+// lock-step with `current-speed-label()` in `overflow-menu.slint`, which maps
+// the live speed back to it for the collapsed row.
 export struct SpeedPreset {
     value: float,
     label: string,
 }
 
-// One preset in the sleep-timer list. `value` is the minutes argument handed
-// to `Player.set-sleep-timer` (0 = off, > 0 = duration, -1 = "End of current
-// track"); `label` is the translated display string.
+// One sleep-timer preset. `value` is the minutes argument: 0 off, >0 a
+// duration, -1 end-of-track.
 export struct SleepPreset {
     value: int,
     label: string,
 }
 
 export global SpeedPresets {
-    // Fine 0.25 steps from 0.25× up to the player's 2× cap (rodio's naive
-    // speed shifts pitch, so beyond 2× is chipmunk territory). Mirror any
-    // change in `current-speed-label()` in `overflow-menu.slint`.
+    // Capped at the player's 2×: rodio's speed change shifts pitch with it, and
+    // past that it's chipmunk territory. Mirror any change in
+    // `current-speed-label()`.
     out property <[SpeedPreset]> list: [
         { value: 0.25, label: "0.25x" },
         { value: 0.5,  label: "0.5x" },
@@ -53,15 +48,12 @@ export global SleepPresets {
 }
 
 export global VizStylePresets {
-    // Mirrors `STYLES` in `src/ui/visualizer/mod.rs` **by position** — a row's loop
-    // index IS the index `Visualizer.set-style` takes, so there is no separate
-    // value to keep in step. Seeded from Rust it would render untranslated
-    // (`@tr()` only translates literals at codegen), so it stays a literal
-    // array; `src/ui/visualizer/tests/visualizer_tests.rs` pins its length
-    // against `STYLES`.
+    // Mirrors `STYLES` in `src/ui/visualizer/mod.rs` **by position** — a row's
+    // loop index *is* the index `set-style` takes, so there's no separate value
+    // to keep in step, and `visualizer_tests` pins the length. A literal array
+    // because a Rust-seeded one renders untranslated.
     //
-    // Read by both the Settings → Playback chips and the Now-Playing view's
-    // visualizer flyout, so the two pickers can't drift apart.
+    // Read by both pickers, so the two can't drift apart.
     out property <[string]> viz-style-names: [
         @tr("Bars"),
         @tr("Mirrored"),
@@ -70,13 +62,12 @@ export global VizStylePresets {
 }
 
 export global FlyoutMetrics {
-    // Height of one `FlyoutOption` row (and the sleep flyout's stepper /
-    // Start-pill rows, which match it for a uniform rhythm).
+    // One `FlyoutOption` row; the sleep flyout's stepper and pill rows match it.
     out property <length> option-row-h: 32px;
-    // Height of one `OverflowRow` in a menu column. Taller than a flyout row:
-    // the menu is the outer surface and reads as the coarser rhythm.
+    // Taller than a flyout row: the menu is the outer surface, and reads as the
+    // coarser rhythm.
     out property <length> menu-row-h: 36px;
-    // Vertical chrome allowance for a flyout *or* a menu column: 8 px inner pad
-    // + 2 px border + 2 px slack.
+    // Vertical chrome allowance for a flyout *or* a menu column — inner pad,
+    // border and a little slack.
     out property <length> chrome-h: 12px;
 }

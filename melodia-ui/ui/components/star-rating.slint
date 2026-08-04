@@ -1,25 +1,19 @@
 import { Theme } from "../theme.slint";
 import { MaterialIcon } from "material-icon.slint";
 
-// Inline 0–5 star rating control. Five `MaterialIcon` glyphs, each its own
-// `TouchArea` so hit-testing is per-star. Clicking star N (1-based) sets the
-// rating to N; clicking the current top star clears it back to 0 (the same
-// "click-again-to-toggle-off" affordance as the favorite heart).
+// Inline 0–5 rating: five glyphs, each with its own `TouchArea` so hit-testing
+// is per-star. Clicking the current top star clears the rating, the heart's
+// click-again-to-toggle-off affordance.
 //
-// When mounted inside a track row's `touch := TouchArea` (the hover-revealed
-// strip in `track-list-row.slint`), the per-star TouchAreas are descendants of
-// that row TouchArea, so hovering a star keeps the row's `has-hover` true and
-// the strip stays mounted — same reason the favorite/checkbox TouchAreas live
-// inside the row `touch`.
-//
-// Read-only when `enabled: false` (cursor stays default, clicks are ignored).
+// Inside a track row this must stay a *descendant* of the row's own `touch`, so
+// hovering a star keeps `has-hover` true and the strip stays mounted — the
+// reason the favorite and checkbox TouchAreas live there too.
 export component StarRating {
     in property <int> rating;              // 0–5 (values outside are clamped by callers)
     in property <bool> enabled: true;
     in property <length> star-size: 18px;
-    // Defaults are the track-list treatment. Overridden by the Now-Playing
-    // view, which tints the whole star / heart group with the per-artwork
-    // accent the spectrum bars use.
+    // The track-list treatment. Now Playing overrides them, tinting the whole
+    // star / heart group with the per-artwork accent.
     in property <brush> filled-color: Theme.yellow;
     in property <brush> empty-color: Theme.subtext0;
 
@@ -45,7 +39,6 @@ export component StarRating {
                 mouse-cursor: root.enabled ? pointer : default;
                 clicked => {
                     if (root.enabled) {
-                        // Clicking the current top star clears the rating.
                         root.rated(parent.idx == root.rating ? 0 : parent.idx);
                     }
                 }

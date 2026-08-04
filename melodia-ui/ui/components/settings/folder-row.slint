@@ -2,20 +2,13 @@ import { Theme } from "../../theme.slint";
 import { MaterialIcon } from "../material-icon.slint";
 import { IconButton } from "../icon-button.slint";
 
-// One folder entry in the Library section: filled folder icon (accent),
-// path text (elided), `last-scanned` meta tag (empty hides the meta line),
-// and refresh / delete icon buttons on the right. Mirrors Tauri's
-// `.folder-row` block.
+// One folder entry in the Library section.
 export component FolderRow inherits Rectangle {
     in property <string> path;
-    // Pre-formatted display string from Rust; e.g. "scanned 2 hours ago".
-    // Empty string means the folder hasn't been scanned yet — meta line
-    // hidden in that case.
+    // Pre-formatted by Rust; empty means never scanned, and hides the line.
     in property <string> last-scanned;
-    // Disable the row's action buttons (rescan / remove) while a scan is
-    // in flight. Bound from `library-section.slint` to
-    // `!LibrarySettings.scanning` so two concurrent rescans can't fight
-    // for the shared `scan_progress_tx` watch channel.
+    // Held false mid-scan, so two rescans can't fight over the shared
+    // `scan_progress_tx`.
     in property <bool> actions-enabled: true;
 
     callback rescan-clicked();
@@ -73,12 +66,10 @@ export component FolderRow inherits Rectangle {
                     diameter: 32px;
                     icon-size: 18px;
                     idle-fg: Theme.text;
-                    // Bind to the semantic role token, not the raw `red`
-                    // palette entry, so themes can override the destructive
-                    // colour without touching the rest of the palette.
-                    // `hover-fg` (not `active-fg`) — `active` is the toggled
-                    // state and never flips here; we want the recolour on
-                    // pointer hover.
+                    // The semantic role token rather than the raw palette entry,
+                    // so a theme can move the destructive colour alone. And
+                    // `hover-fg`, since `active` is the toggled state and never
+                    // flips here.
                     hover-fg: Theme.danger;
                     tooltip-text: @tr("Remove");
                     button-enabled: root.actions-enabled;

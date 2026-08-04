@@ -2,24 +2,14 @@ import { PopupSurface } from "../popup-surface.slint";
 import { FocusLossWatcher } from "../focus-loss-watcher.slint";
 import { PopupHighlight } from "../../globals/shell.slint";
 
-// The menu column inside a Now-Playing popup: the shared chrome plus the
-// watcher that dismisses it when the OS window loses focus.
+// A Now-Playing popup's menu column: the shared chrome plus the watcher that
+// dismisses it when the OS window loses focus. `popup-id` is what the trigger
+// writes into `PopupHighlight.id` before `show()`, and the watcher mounts only
+// while that id is current, so exactly one open popup ever has a live one.
 //
-// `popup-id` is the discriminator the trigger writes into `PopupHighlight.id`
-// before `show()`. The watcher is mounted only while that id is current, so
-// exactly one open popup ever has a live one; the winit Release path (or any
-// close handler in the host) clears the id back to "".
-//
-// The host keeps its own rows layout and passes it as this component's
-// children, rather than the layout living in here: the popup's width is derived
-// from that layout's `preferred-width`, and only the host can name it.
-//
-//     MenuSurface {
-//         popup-id: "overflow";
-//         x: …; y: …; width: …; height: …;
-//         close-requested => { root.dismiss(); }
-//         menu-vl := VerticalLayout { /* rows */ }
-//     }
+// The rows layout stays in the *host* and arrives through `@children`: the
+// popup's width derives from that layout's `preferred-width`, and only the host
+// can name a descendant.
 export component MenuSurface inherits PopupSurface {
     in property <string> popup-id;
     callback close-requested();

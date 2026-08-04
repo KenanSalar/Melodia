@@ -1,48 +1,32 @@
 import { Theme } from "../theme.slint";
 
-// Which side of the host the pill clears. `above` is the default; `below` is
-// for hosts pinned to the top of the window, where an above-tooltip would clip
-// off-screen (the Playlists header pills, the Settings tab bar); `right` is for
-// the collapsed sidebar rail, where the hidden label sat to the icon's right
-// anyway.
+// Which side the pill clears. `below` is for hosts pinned near the top, where an
+// above-tooltip clips off-screen; `right` is for the collapsed sidebar rail, where the
+// hidden label sat to the icon's right anyway.
 export enum TooltipSide { above, below, right }
 
-// Reusable tooltip pill — anchors on one side of its parent and fades in on
-// hover. Replaces what was the Tauri HTML `title=` attribute (Slint has no
-// native HTML-like tooltip).
-//
-// Usage: place inside the element you want a tooltip for, set
-// `text` and feed `hovered` from the parent's TouchArea. The 500 ms
-// reveal delay (so quick mouse-passes don't flash a tooltip) is
-// owned by this component, gated on `hovered`.
+// A pill anchored on one side of its parent, fading in on hover — Slint has no native
+// tooltip. Place it inside the element it annotates, set `text`, and feed `hovered` from
+// the host's TouchArea; **the reveal delay lives here**, so a quick mouse-pass doesn't
+// flash a tooltip anywhere in the tree.
 export component Tooltip inherits Rectangle {
     in property <string> text;
     in property <bool>  hovered;
-    // Width of the host element. `parent` isn't accessible from a
-    // component's root binding in Slint, so callers pass it
-    // explicitly: `host-width: parent.width`.
+    // `parent` isn't reachable from a component's root binding, so the host passes both
+    // explicitly. The height is needed by every side but `above`.
     in property <length> host-width;
-    // Height of the host element — needed by every side except `above`
-    // (`below` anchors at `host-height + gap`, `right` centres on it).
     in property <length> host-height;
     in property <TooltipSide> side: TooltipSide.above;
     // Gap between the pill and the host, on whichever axis `side` clears.
     in property <length> gap: 6px;
-    // External force-show flag — bypasses the 500 ms hover delay and
-    // shows the pill immediately. Used by callers that want to surface
-    // the tooltip without a real mouse hover (e.g. keyboard-driven
-    // volume changes triggering the VolumePopup button's tooltip).
-    // Falls back through the same `animate opacity` so the fade-in /
-    // fade-out timing matches the hover path.
+    // Bypasses the reveal delay, for a caller surfacing the pill without a real hover —
+    // a keyboard volume change, say. It rides the same `animate`, so the fade matches.
     in property <bool> force-shown: false;
-    // The pill is absolutely positioned against its host, so nothing downstream
-    // stops it running off the window — and a label that fits in English can be
-    // half again as long in a translation. Every English label clears the cap;
-    // the longest translations of the Playlists header pills don't, and those
-    // wrap to two lines rather than leaving the screen. Only sides that grow
-    // away from the host are safe to overrun, which is why the mounts near a
-    // window edge already pass `below`. (Not `max-width`: that name is taken by
-    // the built-in layout constraint, which a bound `width` overrides anyway.)
+    // **The pill is absolutely positioned, so nothing downstream stops it running off
+    // the window** — and a label that fits in English can be half again as long
+    // translated. Every English label clears this cap; the longest translations don't,
+    // and those wrap to two lines rather than leaving the screen. Not named `max-width`:
+    // that is the built-in layout constraint, which a bound `width` overrides anyway.
     in property <length> max-pill-width: 240px;
 
     private property <bool> shown;
@@ -58,11 +42,10 @@ export component Tooltip inherits Rectangle {
         : root.side == TooltipSide.below ? (root.host-height + root.gap)
         : (root.host-height - self.height) / 2;
 
-    // Border, radius and surface rung follow the ActionPill chrome so a tooltip
-    // reads as part of the same control family as the pill it annotates. The
-    // fill is the one place they diverge: the pill takes `floating-chrome-bg`,
-    // but a tooltip is transient and its whole job is to be read, so it stays
-    // fully opaque wherever it lands — a hero blur, a cover, a list row.
+    // The `ActionPill` chrome, so a tooltip reads as part of the same family as what it
+    // annotates. **The fill is the one divergence**: the pill is translucent, but a
+    // tooltip is transient and its whole job is to be read, so it stays fully opaque
+    // wherever it lands — a hero blur, a cover, a list row.
     background: Theme.surface0;
     border-color: Theme.surface2;
     border-width: 1px;
@@ -89,12 +72,11 @@ export component Tooltip inherits Rectangle {
         font-size: 11px;
         horizontal-alignment: center;
         vertical-alignment: center;
-        // Bounded so the wrap has something to wrap against, and the root's
-        // height follows for free: a wrapping Text reports its height against
-        // the width it was handed, while the width above is read from the
-        // *horizontal* layout info, which is intrinsic to the string. So the
-        // chain terminates rather than chasing itself. The 8 px of side padding
-        // still comes from the compiler centring this in the pill.
+        // Bounded, so the wrap has something to wrap against and the root's height
+        // follows for free: a wrapping Text reports its height against the width it was
+        // handed, while the width above is read from the *horizontal* layout info, which
+        // is intrinsic to the string — so the chain terminates rather than chasing
+        // itself.
         width: root.width - 16px;
         wrap: word-wrap;
     }

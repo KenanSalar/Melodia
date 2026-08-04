@@ -1,27 +1,17 @@
-// Bridges a grid view's reactive `computed-cols` (a Slint expression
-// derived from the view's body width) to its backing global's
-// `columns` field + `columns-changed` callback. Each grid view
-// (Albums / Artists / Genres) wires its own globals via the `seed`
-// callback — the component owns the *when*, the host owns the *what*.
+// Carries a grid view's `computed-cols` — derived from its body width — into
+// whichever global backs it. The component owns the *when*, the host's `seed`
+// callback owns the *what*.
 //
-// Two fire sources cover the full lifecycle:
+// **It takes two fire sources, and the second is the one easy to leave out.**
+// `changed watched-cols` covers every later change, mirrored locally because
+// `changed` can't watch a path expression. The 1 ms Timer covers mount, because
+// `changed` doesn't fire on the *initial* binding evaluation — and a window
+// whose first layout settles directly on the final grid width never transitions
+// at all, so Rust would keep chunking against the global's default while the
+// cards render at the size the layout actually fits, leaving a right-edge gap.
 //
-//  1. `changed watched-cols` — fires `seed(N)` on every subsequent
-//     change to the host's `computed-cols` (window resize, sidebar
-//     drag, etc.). Mirrored locally because `changed` can't watch
-//     a path expression on an in-property (CLAUDE.md).
-//  2. Single-shot 1 ms Timer — fires `seed(N)` once at mount.
-//     Required because Slint's `changed` doesn't fire on the
-//     *initial* binding evaluation: in native-titlebar mode the
-//     first layout pass settles on the final grid width directly,
-//     so (1) never fires from the initial transition and Rust would
-//     keep chunking with the global's default while `card-w`
-//     (bound reactively to `computed-cols`) renders at the size the
-//     layout actually fits — leaving a visible right-edge gap.
-//
-// The Timer fires after a 1 ms tick rather than `init` so the first
-// layout pass has assigned the host's `grid.width` and
-// `computed-cols` evaluates to the real value, not the pre-layout 0.
+// A Timer rather than `init` so the first layout pass has assigned the host's
+// width and `computed-cols` reads its real value instead of the pre-layout 0.
 
 export component GridColumnsSync {
     in property <int> computed-cols;

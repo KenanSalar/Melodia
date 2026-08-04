@@ -3,9 +3,8 @@ import { SettingsPage } from "../../../globals/settings-page.slint";
 import { ScrobblingSection } from "../scrobbling-section.slint";
 import { DiscordSection } from "../discord-section.slint";
 
-// Services tab: the outside accounts Melodia talks to — Last.fm and
-// ListenBrainz scrobbling (plus MusicBrainz ID tagging, which rides on the
-// ListenBrainz connection) and Discord Rich Presence.
+// The outside accounts Melodia talks to: the two scrobbling services — with
+// MusicBrainz ID tagging riding on one of them — and Discord Rich Presence.
 export component ServicesPage inherits Rectangle {
     background: transparent;
     horizontal-stretch: 1;
@@ -13,8 +12,8 @@ export component ServicesPage inherits Rectangle {
 
     out property <bool> has-matches: scrobbling.has-matches || discord.has-matches;
 
-    // See `library-page.slint` for why the cards live in columns and the
-    // columns place themselves.
+    // See `library-page.slint` for why the cards live in columns that place
+    // themselves.
     GridLayout {
         spacing: Theme.pad-lg;
 

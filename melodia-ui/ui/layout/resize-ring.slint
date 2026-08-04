@@ -1,27 +1,20 @@
 import { Theme } from "../theme.slint";
 
-// The window's resize-affordance perimeter — eight overlays that do nothing but
-// set a cursor. Mirrors Tauri's `WindowResizeHandles`.
+// The window's resize perimeter — eight overlays that do nothing but set a
+// cursor. No `clicked` handler on purpose: the winit backend processes the
+// resize off the Window's `resize-border-width` before the press ever reaches a
+// TouchArea. So these exist for the visual cue and to *steal* hover from what
+// sits underneath — without that theft, aiming at the band flashes the close
+// button red and paints scrollbar hover.
 //
-// They carry no `clicked` handler on purpose: the actual resize is processed by
-// Slint's winit backend (`i-slint-backend-winit::event_loop`) from the Window's
-// `resize-border-width`, before the press is ever dispatched to a TouchArea. So
-// the only jobs here are the visual cue and stealing hover from whatever sits
-// underneath (close button, scrollbar, now-playing-bar controls) — without that
-// theft, aiming at the resize band flashes the close button red and paints
-// scrollbar hover.
-//
-// The caller mounts this at 100% × 100% and owns the decision to mount at all:
-// it is hidden when maximized (resize is a no-op then) and in native-frame mode
-// (the OS draws its own border), which is one condition at the mount site
-// rather than eight repeated here.
+// The caller mounts it full-size and owns the decision to mount at all: one
+// condition at the mount site instead of eight repeated here.
 export component ResizeRing {
-    // Order matters: edges first, corners after. Slint dispatches hover to the
-    // topmost — i.e. last-declared — item under the cursor, so the diagonal
-    // cursor wins at the corners while the edges win everywhere else along the
-    // perimeter.
+    // Order matters: edges first, corners after. Slint gives hover to the
+    // last-declared item under the cursor, so the diagonal wins at the corners
+    // and the edges win everywhere else.
 
-    // Top edge — full window width.
+    // Top.
     TouchArea {
         x: 0;
         y: 0;
@@ -29,7 +22,7 @@ export component ResizeRing {
         height: Theme.resize-border;
         mouse-cursor: ns-resize;
     }
-    // Bottom edge.
+    // Bottom.
     TouchArea {
         x: 0;
         y: root.height - Theme.resize-border;
@@ -37,7 +30,7 @@ export component ResizeRing {
         height: Theme.resize-border;
         mouse-cursor: ns-resize;
     }
-    // Left edge.
+    // Left.
     TouchArea {
         x: 0;
         y: 0;
@@ -45,7 +38,7 @@ export component ResizeRing {
         height: root.height;
         mouse-cursor: ew-resize;
     }
-    // Right edge — sits over the scrollbar's right-most pixels.
+    // Right — this is the one that overlaps a scrollbar.
     TouchArea {
         x: root.width - Theme.resize-border;
         y: 0;

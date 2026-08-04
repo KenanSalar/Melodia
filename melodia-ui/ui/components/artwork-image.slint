@@ -1,47 +1,31 @@
 import { Theme } from "../theme.slint";
 
-// Square artwork tile. When `cover` carries a decoded image (width > 0) it
-// renders that, otherwise the `music-note` fallback icon paints over the
-// `tile-bg` square. Where that image comes from is the host's business, and
-// the two kinds of host differ: a repeated tile binds `cover` to a lazy
-// per-path lookup (`RowCovers.request`, `Queue`/`NowPlaying.request-cover`,
-// the per-view `request-cover`s) so only a mounted tile costs a cache hit,
-// while the singletons — the now-playing bar, the mini player, the detail
-// heroes, the tag editor — are handed one image Rust decoded eagerly.
+// The square artwork tile. A decoded `cover` renders; otherwise the fallback glyph
+// paints over `tile-bg`.
+//
+// **Where that image comes from is the host's business**, and the two kinds differ: a
+// repeated tile binds `cover` to a lazy per-path lookup, so only a mounted tile costs a
+// cache hit, while the singletons — the bar, the mini player, the detail heroes, the tag
+// editor — are handed one image Rust decoded eagerly.
 export component ArtworkImage inherits Rectangle {
     in property <string> artwork-path;
     in property <image> cover;
     in property <length> tile-size: 56px;
     in property <length> tile-radius: Theme.radius-md;
-    // Fallback glyph painted (as an SVG asset, see below) when no cover
-    // is present. The default is the project's existing `music-note`
-    // placeholder; the Artists view passes `"person"` for the circular
-    // avatar fallback, the Albums views pass `"album"` for the record
-    // glyph, the Playlists views pass `"playlist"` so empty tiles read
-    // as "list of tracks" rather than a single note, and the Genres
-    // views pass `"theater_comedy"` to match the sidebar's theater-
-    // masks glyph. Lookups are by asset filename — see the
-    // `if root.cover.width == 0:` branch.
+    // Painted when no cover is present, as an SVG asset rather than a font glyph — see
+    // the branch below. Each entity view passes the name matching its own sidebar icon,
+    // so an empty tile reads as that kind of thing rather than as a stray note.
     in property <string> fallback-icon: "music-note";
-    // Scale factor for the cover image *inside* the tile frame. Default 1.0
-    // is a no-op for the common case; the now-playing bar drives it to
-    // ~1.06 on hover, the album-grid card to ~1.04, for a Material-3-
-    // expressive artwork zoom. The scaled image is simply cropped by the
-    // tile's own `clip` — it can't escape the host card's bounds.
+    // Scales the cover *inside* the tile frame for the hover zoom; the tile's own clip
+    // crops it, so it can't escape the host's bounds.
     in property <float> cover-scale: 1.0;
-    // Internal animated mirror of `cover-scale`. The hover zoom animates by
-    // animating *this* (the source), not the derived `width`/`height` — so
-    // when the tile frame itself resizes (e.g. the album grid reflowing as
-    // the sidebar collapses) the image tracks the new size instantly with
-    // no easing, while a hover toggle still eases smoothly. Animating
-    // `width`/`height` directly would conflate the two inputs and produce a
-    // delayed zoom-bounce (CLAUDE.md: "don't animate a property driven by
-    // both a toggle and continuous input"; "animate the source only").
+    // **The animated mirror, and what the ease belongs on.** Easing this rather than the
+    // derived size means a tile *frame* resize — the grid reflowing as the sidebar
+    // collapses — tracks instantly while a hover toggle still eases; animating the size
+    // conflates the two inputs and produces a delayed zoom-bounce.
     property <float> anim-scale: root.cover-scale;
     animate anim-scale { duration: Theme.dur-fast; easing: ease-in-out; }
-    // Tauri's `.artwork` rule, now the shared default everywhere: a
-    // 15 %-tinted accent square with the `music-note` placeholder in the
-    // accent colour.
+    // The shared default: a faintly accent-tinted square with an accent-coloured glyph.
     in property <brush> tile-bg: Theme.accent.with-alpha(0.15);
     in property <brush> tile-icon-color: Theme.accent;
 
@@ -52,9 +36,8 @@ export component ArtworkImage inherits Rectangle {
     clip: true;
 
     if root.cover.width > 0: Image {
-        // Derived from the animating `anim-scale` source, so both the size
-        // and the centring track per-frame with no phase-lag — a tile
-        // resize is instant, a hover zoom eases.
+        // Derived from the animating source, so size and centring track per frame with
+        // no phase lag.
         width: parent.width * root.anim-scale;
         height: parent.height * root.anim-scale;
         x: (parent.width - self.width) / 2;
@@ -63,17 +46,13 @@ export component ArtworkImage inherits Rectangle {
         image-fit: ImageFit.cover;
     }
 
-    // Placeholder icon — an SVG `Image`, not a Material Symbols font
-    // glyph. A glyph scales from its text-metrics origin, and the
-    // `music_note` glyph is not centred within its advance box, so
-    // scaling `font-size` for the hover zoom drifts it rightward. An
-    // `Image` scales its *content* to fill the box (like the cover branch
-    // above), so it zooms from the true geometric centre. `colorize`
-    // tints the black source path to `tile-icon-color`.
+    // **An SVG `Image`, not a Material Symbols glyph.** A glyph scales from its
+    // text-metrics origin and isn't centred within its advance box, so scaling
+    // `font-size` for the hover zoom drifts it sideways; an `Image` scales its *content*
+    // to fill the box, so it zooms from the true geometric centre.
     //
-    // Per-fallback `if` branches: Slint can't compose `@image-url(...)`
-    // from a runtime string (resources are resolved at codegen), so each
-    // supported fallback name maps to a dedicated branch.
+    // One `if` per name, because Slint can't compose an `@image-url` from a runtime
+    // string — resources are resolved at codegen.
     if root.cover.width == 0 && root.fallback-icon == "music-note": Image {
         source: @image-url("../assets/icons/music-note.svg");
         colorize: root.tile-icon-color;

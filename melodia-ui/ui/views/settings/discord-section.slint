@@ -5,15 +5,11 @@ import { SectionDivider } from "../../components/settings/section-divider.slint"
 import { SettingRow } from "../../components/settings/setting-row.slint";
 import { ToggleSwitch } from "../../components/settings/toggle-switch.slint";
 
-// Discord Rich Presence section: a master enable toggle, a live status line
-// ("Connected to Discord" / "Discord not running"), and — once enabled — two
-// sub-options (album-artwork lookup, hide-while-paused). Far simpler than the
-// scrobbling section: Discord has no credentials / login dialog, so there's no
-// Connect/Disconnect button and every value is a plain toggle. Rust owns every
-// `Settings.discord-rpc-*` value; the status props are painted by the
-// `DiscordPresenceService` status-watch subscriber in
-// `src/ui/discord_settings.rs`. Search visibility — see header comment in
-// `playback-section.slint`.
+// Rich Presence: a master toggle, a live status line, and two sub-options once
+// enabled. Simpler than the scrobbling section because Discord needs no
+// credentials, so there's no login dialog and every value is a plain toggle.
+// Rust owns them; the status props come off `discord_settings.rs`'s status-watch
+// subscriber. Search visibility follows `playback-section.slint`.
 export component DiscordSection inherits Rectangle {
     background: transparent;
     horizontal-stretch: 1;
@@ -27,8 +23,8 @@ export component DiscordSection inherits Rectangle {
                                         SettingsPage.search-query);
     }
 
-    // The sub-option labels are folded into the search text so matching
-    // "artwork" or "paused" reveals the whole section, not just the enable row.
+    // The section searches as one unit: the sub-options' labels fold in here, so
+    // matching either reveals the whole thing rather than just the enable row.
     property <bool> show-discord: row-visible(
         "Discord Rich Presence" + " " + @tr("Show album artwork") + " " + @tr("Hide while paused"),
         @tr("Show the track you're playing on your Discord profile"));

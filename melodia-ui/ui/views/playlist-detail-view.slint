@@ -14,32 +14,20 @@ import { OverlayScrollbar } from "../components/overlay-scrollbar.slint";
 import { FilterThrottle } from "../components/filter-throttle.slint";
 import { MaterialIcon } from "../components/material-icon.slint";
 
-// The full Playlist Detail view. Mounted by `app-window.slint` for nav
-// index 7 when `PlaylistDetail.playlist-id >= 0`. Same shape as
-// `AlbumDetailView` — `DetailHeader` (hero blur + artwork tile + right
-// column) over a track list — but uses the sibling `DraggableTrackList`
-// (drag-reorder enabled when `sort-field == "position"`) instead of the
-// shared `TrackList`. The shared component is kept drag-free for the
-// other consumers (Tracks / Browse / Album-Artist-Genre Detail).
-//
-// Header actions: Shuffle, Edit Artwork, Rename, Delete + column
-// toggle. The selection chip (when rows are selected) carries a
-// "Remove from playlist" action.
+// Nav index 7, mounted when `PlaylistDetail.playlist-id >= 0`. Same shape as
+// `AlbumDetailView`, but over `DraggableTrackList` — the shared `TrackList`
+// stays drag-free for Tracks / Browse / the other three details.
 export component PlaylistDetailView inherits Rectangle {
-    // A fresh mount can't have a drag in flight, but the two `<=>`s below
-    // adopt whatever the globals held: Slint's two-way link keeps the
-    // right-hand side's value, and the globals outlive this view (nav-away
-    // destroys it — see the `if` in `app-window.slint`). Without the reset,
-    // a drag interrupted by nav-away comes back as a ghosted row under a
-    // stranded drop line. Safe here because `init` runs after the links.
+    // The `<=>`s below adopt whatever the globals held — a two-way link keeps
+    // the right side's value, and the globals outlive this view. Without the
+    // reset a drag interrupted by nav-away returns as a ghosted row under a
+    // stranded drop line. `init` runs after the links, so it wins.
     init => {
         PlaylistDetail.drag-source = -1;
         PlaylistDetail.drop-slot = -1;
     }
 
-    // Filter throttle: each keystroke bumps `filter-tick-pending`; the
-    // shared `FilterThrottle` fires the filter callback at most once per
-    // ~130 ms while pending is ahead of the last-applied tick.
+    // Bumped per keystroke; `FilterThrottle` collapses the burst into one filter.
     property <int> filter-tick-pending: 0;
 
     filter-throttle := FilterThrottle {
@@ -47,9 +35,7 @@ export component PlaylistDetailView inherits Rectangle {
         fire() => { PlaylistDetail.filter-changed(PlaylistDetail.filter); }
     }
 
-    // Backdrop catches any click that no inner TouchArea consumes and
-    // bumps the blur tick — the SearchBar observes it and clears focus
-    // on change.
+    // Catches clicks no inner TouchArea consumes; the SearchBar blurs on the tick.
     TouchArea {
         clicked => { PlaylistDetail.blur-search-tick += 1; }
     }
@@ -66,10 +52,6 @@ export component PlaylistDetailView inherits Rectangle {
             has-hero-blur: PlaylistDetail.has-blur;
             back-clicked => { PlaylistDetail.close-detail(); }
 
-            // Title row — playlist name on the left, SearchBar pinned
-            // to the right. The SearchBar filters the `tracks`
-            // DraggableTrackList (title + artist + album substring).
-            // Mirrors the Artist Detail hero layout.
             HorizontalLayout {
                 vertical-stretch: 0;
                 spacing: Theme.pad-md;
@@ -80,8 +62,7 @@ export component PlaylistDetailView inherits Rectangle {
                     HorizontalLayout {
                         spacing: Theme.pad-sm;
                         alignment: start;
-                        // Smart-playlist badge — leading the title, matching
-                        // the grid card's corner badge.
+                        // Smart-playlist badge — matches the grid card's corner badge.
                         if PlaylistDetail.playlist.is_smart: VerticalLayout {
                             alignment: center;
                             MaterialIcon {
@@ -100,13 +81,9 @@ export component PlaylistDetailView inherits Rectangle {
                             overflow: elide;
                         }
                     }
-                    // Description — under the title rather than on a row of
-                    // its own, so it rides in the height the SearchBar beside
-                    // it already claims. That is what leaves the band enough
-                    // slack for a wrapped second chip row; see
-                    // `ui::hero_chips::HERO_MAX_ROWS`. Still gated on being
-                    // non-empty, so a playlist without one leaves the row at
-                    // exactly the SearchBar's height.
+                    // Inside the title row, not on one of its own — it rides in the
+                    // height the SearchBar already claims, which is what leaves the
+                    // band slack for a wrapped second chip row (`HERO_MAX_ROWS`).
                     if PlaylistDetail.playlist.description != "": Text {
                         text: "‎" + PlaylistDetail.playlist.description;
                         color: HeroBackdrop.on-backdrop;
@@ -128,8 +105,7 @@ export component PlaylistDetailView inherits Rectangle {
                     }
                 }
             }
-            // Meta chips — track count + total duration. No "Smart" chip:
-            // the title already carries the `auto_awesome` badge.
+            // No "Smart" chip — the title already carries the badge.
             HeroChipStrip { }
 
             Rectangle { vertical-stretch: 1; }
@@ -146,23 +122,17 @@ export component PlaylistDetailView inherits Rectangle {
                         clicked => { PlaylistDetail.shuffle-all(); }
                     }
                     PillDivider { }
-                    // Edit-artwork stays as a Rust-callback path — Rust
-                    // must fetch the playlist's track artworks (DB query)
-                    // before opening the picker. Rust populates Dialog
-                    // via `upgrade_in_event_loop`, which lands on a fresh
-                    // event-loop tick (not the click tick), so Slint's
-                    // property-recursion guard doesn't trip.
+                    // Rust-side because the picker needs the playlist's track
+                    // artworks first. It fills Dialog from a fresh event-loop tick,
+                    // so the property-recursion guard doesn't trip.
                     PillButton {
                         icon: "image";
                         tooltip-text: @tr("Edit artwork");
                         clicked => { PlaylistDetail.request-edit-artwork(); }
                     }
                     PillDivider { }
-                    // Rename / Delete populate Dialog inline (Slint-only),
-                    // matching the `queue-sheet` / `library-section`
-                    // pattern — no Rust hop, no recursion risk. Both can
-                    // read header data directly from
-                    // `PlaylistDetail.playlist` / `PlaylistDetail.playlist-id`.
+                    // Rename / Delete fill Dialog inline — everything they need is
+                    // already on `PlaylistDetail`, so no Rust hop and no recursion risk.
                     PillButton {
                         icon: "edit";
                         tooltip-text: @tr("Rename");
@@ -174,18 +144,13 @@ export component PlaylistDetailView inherits Rectangle {
                             Dialog.destructive = false;
                             Dialog.kind = "rename-playlist";
                             Dialog.target-id = PlaylistDetail.playlist-id;
-                            // Pre-fill both fields with current values
-                            // so a quick rename is just a few keystrokes
-                            // and clearing description is one keystroke
-                            // away.
                             Dialog.input-text = PlaylistDetail.playlist.name;
                             Dialog.input-text-2 = PlaylistDetail.playlist.description;
                             Dialog.open = true;
                         }
                     }
-                    // Edit Rules — smart playlists only. Chrome set inline (so
-                    // `@tr` applies); Rust `request-edit` loads the criteria +
-                    // opens the editor from a fresh event-loop tick.
+                    // Chrome inline so `@tr` applies; Rust loads the criteria and
+                    // opens the editor from a fresh tick.
                     if PlaylistDetail.playlist.is_smart: PillDivider { }
                     if PlaylistDetail.playlist.is_smart: PillButton {
                         icon: "tune";
@@ -227,31 +192,23 @@ export component PlaylistDetailView inherits Rectangle {
                         show-year    <=> PlaylistDetail.show-year;
                         toggled(id) => { PlaylistDetail.toggle-column(id); }
                     }
-                    // Selection slots — appended (with leading divider) when
-                    // multi-select is active.
+                    // Selection slots — appended when multi-select is active.
                     if PlaylistDetail.selected-ids.length > 0: PillDivider { }
                     if PlaylistDetail.selected-ids.length > 0: PillLabel {
                         text: @tr("{} selected", PlaylistDetail.selected-ids.length);
                     }
-                    // Removing a track is meaningless for a smart playlist
-                    // (membership is derived, not curated) — hide it there.
+                    // A smart playlist's membership is derived — nothing to remove from.
                     if PlaylistDetail.selected-ids.length > 0
                         && !PlaylistDetail.playlist.is_smart: PillButton {
                         icon: "playlist_remove";
-                        // `playlist_remove`'s glyph weight is lighter
-                        // than `delete` / `edit` etc., so at the
-                        // PillButton 14 px default it reads visually
-                        // smaller than the sibling icons. 16 px brings
-                        // it back into the same optical row.
+                        // Lighter glyph than its siblings — 16 px puts it back on
+                        // the same optical row as their 14 px default.
                         icon-size: 16px;
                         danger: true;
                         tooltip-text: @tr("Remove from playlist");
                         clicked => {
-                            // Always confirm before removing — even for
-                            // a single selected row — so a stray click
-                            // on the destructive chip can't drop tracks
-                            // silently. Dispatcher routes Accept to
-                            // `PlaylistDetail.remove-selected()`.
+                            // Confirm even for one row — a stray click on the
+                            // destructive chip must not drop tracks silently.
                             Dialog.title = @tr("Remove from playlist?");
                             Dialog.message = @tr(
                                 "Remove {n} track from the playlist?"
@@ -276,11 +233,8 @@ export component PlaylistDetailView inherits Rectangle {
             }
         }
 
-        // Body — DraggableTrackList always mounted (so `tl` is always in
-        // scope for the overlay scrollbars). The empty-state Rectangle
-        // is painted ON TOP when the playlist has no tracks; the
-        // DraggableTrackList renders just its header beneath but the
-        // overlay covers it.
+        // The list is always mounted so `tl` stays in scope for the overlay
+        // scrollbars; the empty state paints on top of its bare header.
         body := Rectangle {
             horizontal-stretch: 1;
             vertical-stretch: 1;
@@ -288,9 +242,7 @@ export component PlaylistDetailView inherits Rectangle {
             HorizontalLayout {
                 padding-left: Theme.pad-lg;
                 padding-right: Theme.pad-lg;
-                // Vertical gap between the hero blur and the tracklist
-                // header — keeps the spacing consistent with every
-                // other detail view.
+                // Hero-to-header gap, matching the other detail views.
                 padding-top: Theme.pad-lg;
 
                 tl := DraggableTrackList {
@@ -298,21 +250,15 @@ export component PlaylistDetailView inherits Rectangle {
                     vertical-stretch: 1;
 
                     rows: PlaylistDetail.tracks;
-                    // Drag-reorder is silent unless we're in the user's
-                    // canonical (insertion) order — any other sort makes
-                    // a reorder ambiguous. An active filter also disables
-                    // it: filtered row indices don't map to playlist
-                    // positions.
-                    // Smart playlists are query-derived — there is no curated
-                    // order to reorder into, so drag-reorder is off for them.
+                    // Reorder only in insertion order: any other sort makes it
+                    // ambiguous, a filter breaks the index → position mapping, and
+                    // a smart playlist has no curated order to reorder into.
                     reorder-enabled: PlaylistDetail.sort-field == "position"
                         && PlaylistDetail.filter == ""
                         && !PlaylistDetail.playlist.is_smart;
-                    // Surfaced on the global so Rust can abort an in-flight
-                    // drag: refreshing `tracks` replaces the model, which
-                    // destroys the row instance holding the pointer grab, and
-                    // a destroyed row never delivers its pointer-up to clear
-                    // these itself.
+                    // On the global so Rust can abort an in-flight drag: refreshing
+                    // `tracks` destroys the row holding the pointer grab, and a dead
+                    // row never delivers the pointer-up that would clear these.
                     drag-source <=> PlaylistDetail.drag-source;
                     drop-slot <=> PlaylistDetail.drop-slot;
 
@@ -356,8 +302,6 @@ export component PlaylistDetailView inherits Rectangle {
                 }
             }
 
-            // Empty-state overlay — painted on top of the (still-mounted)
-            // DraggableTrackList when the playlist has no rows.
             if PlaylistDetail.playlist.track_count == 0: Rectangle {
                 background: Theme.base;
                 VerticalLayout {
@@ -397,10 +341,8 @@ export component PlaylistDetailView inherits Rectangle {
                 }
             }
 
-            // Drop-hovered banner — paints over the detail body when the
-            // OS file-hover routes here (queue sheet closed, this detail
-            // open). Z-stacks above the empty-state overlay so users see
-            // a clear "drop target" cue.
+            // OS file-hover banner — routed here when the queue sheet is closed
+            // and this detail is open. Stacks above the empty state.
             if PlaylistDetail.is-drop-hovered && PlaylistDetail.playlist-id >= 0
                 && !PlaylistDetail.playlist.is_smart: Rectangle {
                 background: Theme.accent.with-alpha(0.16);
@@ -433,11 +375,6 @@ export component PlaylistDetailView inherits Rectangle {
         }
     }
 
-    // Overlay scrollbars — `tl` is always in scope (DraggableTrackList
-    // mounts unconditionally), so the scrollbar bindings are
-    // unconditional too. Empty playlists still show the header band but
-    // no scroll travel; the V-bar simply hides itself via its own
-    // visible-size / content-size gating.
     OverlayScrollbar {
         horizontal: false;
         x: parent.width - self.width;

@@ -2,24 +2,19 @@ import { Theme } from "../../theme.slint";
 import { MaterialIcon } from "../material-icon.slint";
 import { FlyoutMetrics } from "./flyout-presets.slint";
 
-// One row inside a now-playing popup menu. Renders the same icon + label pair
-// shown inline in the now-playing bar; active colour mirrors the inline
-// IconButton's `active-fg` (Theme.accent). Optional trailing slots
-// (`trailing-text` + `trailing-icon`) are used by rows that open a flyout, to
-// show the current value and a chevron.
-//
-// Shared by the bar's `overflow-menu.slint` and the Now-Playing view's
-// `view-menu.slint` so both menus keep the same row rhythm.
+// One row inside a now-playing popup menu, drawing the same icon and label the
+// bar shows inline and taking its active colour from the same token. The
+// trailing slots are for a row that opens a flyout: the current value and a
+// chevron. Shared by both menus, so their rhythm can't drift.
 export component OverflowRow inherits Rectangle {
     in property <string> icon;
     in property <string> label;
     in property <bool> active;
-    // FILL=1 variant for active glyphs that should read as solid (favorite,
-    // pin). Mirrors `IconButton.filled` for the inline siblings.
+    // `IconButton.filled` for the inline siblings: the glyphs that read as
+    // solid when active.
     in property <bool> filled;
     in property <bool> button-enabled: true;
-    // Optional right-aligned slots (empty ⇒ not rendered). The label VL
-    // stretches, so these dock to the row's right edge.
+    // Empty means unrendered. The label column stretches, so these dock right.
     in property <string> trailing-text;
     in property <string> trailing-icon;
 

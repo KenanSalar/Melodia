@@ -4,17 +4,14 @@ import { Dropdown } from "../settings/dropdown.slint";
 import { DialogToggleRow } from "dialog-toggle-row.slint";
 import { PreampSliderRow } from "preamp-slider-row.slint";
 
-// Body for the `Dialog.kind == "replaygain"` modal: an enable toggle, a
-// Track/Album mode dropdown, a preamp slider (±15 dB, 0 dB centred), and a
-// "prevent clipping" toggle. Every control drives the `ReplayGain` global; Rust
-// applies each change to the live player and persists it. Mounted by
-// `dialog.slint`. Simpler than the equalizer body — no per-band model.
+// The ReplayGain modal's body — the equalizer's shape without the per-band
+// model. Every control drives the `ReplayGain` global, and Rust applies each
+// change to the live player and persists it.
 export component ReplayGainBody inherits VerticalLayout {
     spacing: Theme.pad-lg;
 
-    // Mode names, order-matched to `RgMode` (0 = Track, 1 = Album). Inline `@tr`
-    // literals — a `[string]` populated from Rust wouldn't be translated
-    // (CLAUDE.md i18n notes).
+    // Order-matched to `RgMode`. Inline literals, since a Rust-seeded
+    // `[string]` renders untranslated.
     property <[string]> mode-names: [@tr("Track"), @tr("Album")];
 
     DialogToggleRow {
@@ -23,7 +20,6 @@ export component ReplayGainBody inherits VerticalLayout {
         toggled(v) => { ReplayGain.set-enabled(v); }
     }
 
-    // Mode row — per-track vs per-album normalization.
     HorizontalLayout {
         spacing: Theme.pad-md;
         alignment: stretch;
@@ -48,7 +44,7 @@ export component ReplayGainBody inherits VerticalLayout {
         }
     }
 
-    // Preamp row — extra gain applied on top of the tag value.
+    // Extra gain on top of the tag's own value.
     PreampSliderRow {
         preamp: ReplayGain.preamp;
         min-preamp: ReplayGain.min-preamp;
@@ -64,8 +60,8 @@ export component ReplayGainBody inherits VerticalLayout {
         toggled(v) => { ReplayGain.set-prevent-clipping(v); }
     }
 
-    // Footnote — ReplayGain reads precomputed loudness tags from the files; it
-    // does nothing on a library that hasn't been scanned by a tagging tool.
+    // Worth saying: this reads precomputed loudness tags, so it does nothing at
+    // all on a library no tagging tool has scanned.
     Text {
         text: @tr("ReplayGain only affects tracks that already have loudness tags. Scan your library with a tool like rsgain or loudgain to add them.");
         color: Theme.subtext0;

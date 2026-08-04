@@ -1,15 +1,12 @@
 import { Theme } from "../../theme.slint";
 
-// Vertical equalizer band slider. Maps a dB `value` in `[min-db, max-db]` to a
-// thumb position (top = max boost, bottom = max cut) and draws the active fill
-// from the 0 dB centre line to the thumb so boosts and cuts read at a glance.
-// Modeled on the now-playing volume popup's vertical slider region.
+// Vertical EQ band slider, on the volume popup's shape. The fill runs from the
+// 0 dB centre line to the thumb, so a boost and a cut read apart at a glance.
 //
-// Stateless: `changed(dB)` fires continuously during a drag (the host applies
-// it to the live player), `committed(dB)` fires once on release (the host
-// persists). The thumb position derives from `value`, which the host updates
-// synchronously inside `changed`, so the slider tracks the cursor without
-// holding its own drag value.
+// Stateless: `changed` fires through the drag for the live player and
+// `committed` once on release for the persist. The thumb derives from `value`,
+// which the host updates synchronously inside `changed`, so it tracks the cursor
+// without holding a drag value of its own.
 export component EqBandSlider inherits Rectangle {
     in property <float> value;            // current gain, dB
     in property <float> min-db: -12.0;
@@ -28,15 +25,15 @@ export component EqBandSlider inherits Rectangle {
 
     property <length> track-w: 6px;
     property <length> thumb-w: 22px;
-    // Press shrinks the thumb along the value axis (M3 Expressive), matching
-    // the volume slider's 4 → 2 px behaviour.
+    // M3 Expressive, as on the volume slider: press shrinks the thumb along the
+    // value axis.
     property <length> thumb-h: touch.pressed ? 2px : 4px;
     animate thumb-h { duration: 200ms; easing: cubic-bezier(0.2, 0, 0, 1); }
 
     property <length> track-cx: root.width / 2;
     property <length> usable-h: root.height - 4px;
-    // Centre the thumb against a stable 4 px reference so it doesn't pin one
-    // edge at the extremes (same reasoning as the volume slider).
+    // Centred against the rest width, or the shrink pins one edge at the
+    // extremes — the volume slider's reasoning.
     property <length> thumb-cy: (1 - root.frac) * root.usable-h + 2px;
     property <length> centre-cy: (1 - root.centre-frac) * root.usable-h + 2px;
     property <length> fill-top: min(root.thumb-cy, root.centre-cy);

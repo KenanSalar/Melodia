@@ -4,9 +4,7 @@ import { SectionCard } from "../../components/settings/section-card.slint";
 import { SettingRow } from "../../components/settings/setting-row.slint";
 import { ToggleSwitch } from "../../components/settings/toggle-switch.slint";
 
-// File Watching section: single toggle row mirroring Tauri's
-// `FileWatchingSection.tsx`. Search visibility — see header comment in
-// `language-section.slint`.
+// One toggle row. Search visibility follows `language-section.slint`.
 export component FileWatchingSection inherits Rectangle {
     background: transparent;
     horizontal-stretch: 1;
@@ -24,8 +22,8 @@ export component FileWatchingSection inherits Rectangle {
         row-visible(@tr("Watch for file changes"),
             @tr("Automatically detect when files are added, removed, or changed in your library folders."));
 
-    // VerticalLayout wrapper so the Rectangle's preferred-height tracks
-    // the SectionCard's natural height. See `language-section.slint`.
+    // Wrapper so the root's preferred-height tracks the card's natural height —
+    // see `language-section.slint`.
     VerticalLayout {
         if has-matches: SectionCard {
             title: @tr("File Watching");

@@ -3,17 +3,10 @@ import { Theme } from "../../theme.slint";
 import { PlaylistGridRow } from "../../models.slint";
 import { EntityCard } from "entity-card.slint";
 
-// Virtualized playlist-card grid — mirrors `AlbumGrid` shape (chunked
-// rows of `EntityCard`s + lazy `request-cover` lookup + host-mounted
-// scrollbar via `v-*` out properties). The `rows` model is
-// `[PlaylistGridRow]`; Rust chunks the flat playlist list into rows of
-// `columns` cards in `src/ui/playlists/`.
-//
-// Cover thumbnails are pulled lazily: each on-screen card's `cover`
-// binding invokes `request-cover(artwork_path)`, which the host
-// forwards to `Playlists.request-cover` (Rust → `CoverThumbs` LRU).
-// Only on-screen cards evaluate the binding, so the model itself stays
-// pure data and off-screen tiles never decode / lock a cover.
+// Virtualized playlist-card grid, `AlbumGrid`'s shape: Rust chunks the flat list
+// into rows of `columns` cards, covers come lazily off the host's
+// `request-cover`, and the host mounts the scrollbar through the `v-*` contract.
+// Only a mounted card evaluates its cover binding, so the model stays pure data.
 export component PlaylistGrid inherits Rectangle {
     in property <[PlaylistGridRow]> rows;
     in property <length> card-width: 180px;
@@ -22,9 +15,7 @@ export component PlaylistGrid inherits Rectangle {
     in property <length> gap: 20px;
 
     callback open-playlist(int /*playlist_id*/);
-    // Per-card overlay actions — fired by the EntityCard's hover-revealed
-    // icon trio. The view above routes each to its dialog populate /
-    // Rust-callback path.
+    // Fired by the card's hover-revealed icons; the view routes each one.
     callback delete-playlist(int /*playlist_id*/);
     callback edit-playlist-artwork(int /*playlist_id*/);
     callback rename-playlist(int /*playlist_id*/);
@@ -55,27 +46,20 @@ export component PlaylistGrid inherits Rectangle {
                     card-height: root.card-height;
                     artwork-path: playlist.artwork_path;
                     cover: root.request-cover(playlist.artwork_path);
-                    // Empty-art tiles read as "list of tracks" via the
-                    // sidebar's `playlist_play` glyph, mirroring the
-                    // Artists grid's `"person"` treatment.
                     fallback-icon: "playlist";
-                    // Placeholder-mode (no artwork) zooms more pronouncedly
-                    // — matches Genres' 1.15. With real artwork the gentle
-                    // Albums / Artists 1.04 stays in play so a cover doesn't
+                    // A pronounced zoom on the placeholder, as on the other
+                    // grids; real artwork stays gentle so a cover doesn't
                     // jitter inside the tile clip on hover.
                     cover-scale-hover: playlist.artwork_path == "" ? 1.15 : 1.04;
                     title: playlist.name;
-                    // "N tracks · 12:34" — track count + total duration.
-                    // Each segment is independently translated; the
-                    // separator is punctuation. Hides the duration
-                    // segment for an empty playlist so the meta reads
-                    // "0 tracks" without a trailing "· 0:00".
+                    // Each segment translates on its own; the separator is
+                    // punctuation. An empty playlist drops the duration rather
+                    // than trailing a zero.
                     subtitle: playlist.track_count > 0
                         ? @tr("{n} track" | "{n} tracks" % playlist.track_count)
                             + " · " + Theme.format-duration(playlist.total_duration_ms)
                         : @tr("0 tracks");
                     show-overlay-actions: true;
-                    // Persistent badge marks smart (dynamic) playlists.
                     badge-icon: playlist.is_smart ? "auto_awesome" : "";
                     clicked => { root.open-playlist(playlist.id); }
                     delete-clicked => { root.delete-playlist(playlist.id); }

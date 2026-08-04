@@ -1,21 +1,17 @@
 // Catppuccin Mocha tokens. The 19 theme-dependent brushes are `in-out` so
-// `src/themes/mod.rs::apply()` can swap palettes at runtime; the values
-// here are the initial defaults that paint correctly before any settings
-// load. Layout, typography and motion tokens stay `out` (driven by the
-// design system, not by user choice).
+// `themes::apply()` can swap palettes at runtime; the values here are the defaults that
+// paint correctly before settings load. Layout, typography and motion stay `out` —
+// design system, not user choice.
 
 export global Theme {
     // Surfaces / structure
     in-out property <brush> base: #1e1e2e;
     in-out property <brush> mantle: #181825;
-    // Surface colour used by the sidebar / now-playing bar when the
-    // window is unfocused AND the user has the KDE-only "Match
-    // Unfocused Window Background" toggle on. `themes::apply()`
-    // sources this from `[WM] inactiveBackground` in `kdeglobals`
-    // when KDE Breeze + System variant is active, so the painted
-    // surfaces match the OS-drawn titlebar exactly. For every other
-    // theme it falls back to `base` (the same colour the previous
-    // implementation used, indistinguishable visually).
+    // What the sidebar and now-playing bar paint when the window is unfocused *and* the
+    // KDE-only "Match Unfocused Window Background" toggle is on. Under KDE Breeze +
+    // System, `themes::apply()` sources it from `[WM] inactiveBackground` in
+    // `kdeglobals`, so the surfaces match the OS titlebar exactly; every other theme
+    // falls back to `base`.
     in-out property <brush> mantle-unfocused: #1e1e2e;
     in-out property <brush> crust: #11111b;
     in-out property <brush> surface0: #313244;
@@ -35,16 +31,16 @@ export global Theme {
     in-out property <brush> accent: #cba6f7;
     in-out property <brush> accent-text: #1e1e2e;
 
-    // Ink for a glyph or label painted directly on `fill`. sRGB luma — the
-    // weights over the gamma-encoded channels, not over linearized ones, so
-    // this is not the relative luminance `src/ui/backdrop.rs` solves scrims
-    // against. Same weights, threshold and return pair as
-    // `themes::apply::on_accent_hex`, which is what produces `accent-text`
-    // above. Reach for this wherever the surface underneath isn't the accent:
-    // `accent-text` answers a question about the *accent*, so on a light theme
-    // with a light accent it puts near-black on a dark red. The two colours
-    // stay literals rather than palette slots on purpose — they're absolute ink
-    // for a fill of known lightness.
+    // Ink for a glyph or label painted directly on `fill`. sRGB luma — weights over the
+    // gamma-encoded channels, not linearized ones, so this is *not* the relative
+    // luminance `ui/backdrop.rs` solves scrims against. A hand-copy of
+    // `themes::apply::on_accent_hex`, pinned from both ends by
+    // `themes::tests::theme_slint_ink_on_matches_on_accent_hex`.
+    //
+    // **Reach for this wherever the surface underneath isn't the accent.**
+    // `accent-text` answers a question about the *accent*, so on a light theme with a
+    // light accent it puts near-black on a dark red. The two colours stay literals
+    // rather than palette slots: they're absolute ink for a fill of known lightness.
     public pure function ink-on(fill: brush) -> brush {
         return (0.2126 * fill.red + 0.7152 * fill.green + 0.0722 * fill.blue) / 255 > 0.5
             ? #1e1e2e
@@ -59,42 +55,33 @@ export global Theme {
     in-out property <brush> green: #a6e3a1;
     in-out property <brush> yellow: #f9e2af;
 
-    // Semantic role aliases for destructive actions: call sites read
-    // `danger` instead of reaching for `red`, and the mapping changes here
-    // rather than at every one of them. `out`, so Rust writes neither — both
-    // follow whatever `apply()` puts in `red`. Hover is *not* a token: the
-    // destructive `SectionButton` lightens its own fill with
-    // `Theme.danger.brighter(10%)`, which reads as the same colour
-    // intensifying rather than as a second hue.
+    // Destructive-action aliases, so call sites read `danger` rather than `red` and the
+    // mapping moves here instead of at every one of them. `out`, so both follow whatever
+    // `apply()` put in `red`. **Hover is deliberately not a token**: the destructive
+    // `SectionButton` lightens its own fill with `Theme.danger.brighter(10%)`, which
+    // reads as one colour intensifying rather than as a second hue.
     out property <brush> danger: root.red;
     out property <brush> danger-text: root.ink-on(root.danger);
 
-    // Fill for chrome that floats over busy visual content — a detail hero's
-    // blur, a playlist card's cover. Nearly opaque on purpose: at a softer
-    // alpha the artwork reads straight through and the control looks like a
-    // watermark. Holding it close to opaque makes it its own surface, so its
-    // glyphs and labels contrast against `surface0` rather than against
-    // whatever the hero happens to be, and the residual translucency is what
-    // keeps `IconButton`'s hover swap to solid `Theme.surface0` visible as a
-    // transition. Read by the detail-view back button (`detail-header.slint`),
-    // the playlist card's hover trio + smart badge (`grid/entity-card.slint`),
-    // and the two chip surfaces that sit alongside them on a hero —
-    // `ActionPill` and `SearchBar`.
+    // Fill for chrome floating over busy content — a detail hero's blur, a playlist
+    // card's cover. **Nearly opaque on purpose**: softer, the artwork reads through and
+    // the control looks like a watermark. Held this close to opaque it is its own
+    // surface, so its glyphs contrast against `surface0` rather than against whatever
+    // the hero happens to be, and the residual translucency is what keeps
+    // `IconButton`'s hover swap to solid `surface0` legible as a transition.
     out property <brush> floating-chrome-bg: root.surface0.with-alpha(0.75);
 
-    // Layout — match Tauri --sidebar-width-* / --now-playing-height
+    // Layout
     out property <length> sidebar-collapsed-w: 46px;
     out property <length> sidebar-default-w: 180px;
     out property <length> sidebar-min-w: 105px;
     out property <length> sidebar-max-w: 400px;
     out property <length> now-playing-h: 72px;
-    // Track-row content height (Tauri's `ROW_CONTENT_HEIGHT`). Header height
-    // is independent — see `track-list-header.slint`'s explicit min/max.
+    // Track-row content height; the header's is independent, pinned in its own file.
     out property <length> row-h: 46px;
-    // Compact row height when the artwork thumbnail is hidden. Picked to give
-    // ~4 px breathing room above/below the hover swap-in (16 px checkbox /
-    // 18 px favorite glyph) so the row reads as intentionally dense, not
-    // cramped.
+    // Compact height when the thumbnail is hidden. Sized to clear the hover swap-in —
+    // the checkbox and favourite glyph — by a few px, so the row reads as deliberately
+    // dense rather than cramped.
     out property <length> row-h-compact: 34px;
     // Vertical gap below each row.
     out property <length> row-gap: 0px;
@@ -103,51 +90,30 @@ export global Theme {
     out property <length> radius-sm: 4px;
     out property <length> radius-md: 8px;
     out property <length> radius-lg: 12px;
-    // Outer-shell corner radius. Drives both the rounded outer mantle
-    // shell that wraps the entire layout (becoming the visible window
-    // outline in custom-frame + windowed mode, since `Window.background`
-    // is transparent then) and the inner content panel. Driven by user
-    // setting (Tauri's `--shell-border-radius`, user-adjustable on the
-    // Settings page → Appearance → Window Corner Radius); decoupled from
-    // `radius-md` so component-level radii stay constant when the user
-    // nudges the shell rounding.
-    //
-    // `in-out` so `src/ui/appearance/` can write the persisted value
-    // at startup and on every change — the callback path is:
-    //   Settings.corner-radius-changed(int)
-    //     → wire_corner_radius_changed (appearance.rs)
-    //     → Theme.set_shell_radius(...)
-    //     → both the outer mantle shell AND the inner panel repaint.
+    // Drives the rounded mantle shell — the visible window outline in custom-frame
+    // windowed mode — and the inner content panel. User-adjustable, and deliberately
+    // decoupled from `radius-md` so component radii stay put when the shell rounding
+    // moves. `in-out` so `ui/appearance/` writes the persisted value at startup and on
+    // every change.
     in-out property <length> shell-radius: 6px;
-    // Concentric-ring helper for the inner content panel: the outer
-    // border rectangle uses `shell-radius`, the inner base rectangle
-    // uses `shell-radius - 1px` to keep the 1 px ring uniform-thickness
-    // around each corner. Clamped to >= 0 so picking radius 0 doesn't
-    // produce a negative value (Slint clamps internally too, but the
-    // explicit max keeps intent legible).
+    // Concentric-ring helper: the border rectangle takes `shell-radius` and the base
+    // rectangle this, keeping the 1 px ring an even thickness around each corner.
+    // Floored at 0 so radius 0 can't go negative — Slint clamps too, but the explicit
+    // `max` keeps the intent on the page.
     out property <length> shell-radius-inner: max(0px, shell-radius - 1px);
-    // Native-titlebar mode: content panel's left-side rounding (top-left
-    // + bottom-left). Seeded once at startup from
-    // `library::settings::get_os_corner_radius()` (Windows = 8, macOS =
-    // 10, GNOME = 15, KDE = 6, other Linux = 6) so the rounding feels
-    // native to the host OS / desktop regardless of the user's
-    // persisted `corner_radius` pick — that pick only governs custom-
-    // titlebar mode where the user explicitly opted into custom chrome.
-    // The Settings page's "Window Corner Radius" row is greyed out in
-    // native mode and the description "Managed by the operating system"
-    // is honest: the rounding here is determined by the OS, not the
-    // user. Doesn't change at runtime — toggle Native Title Bar and
-    // restart to pick up an environment switch.
+    // The content panel's left-side rounding under a native titlebar, seeded once from
+    // `get_os_corner_radius()` so it matches the host desktop regardless of the user's
+    // persisted pick — that pick governs custom mode, which the user opted into. Hence
+    // the greyed-out "Managed by the operating system" row in Settings. Doesn't move at
+    // runtime: an environment switch needs a restart.
     in-out property <length> native-content-radius: 6px;
     out property <length> native-content-radius-inner: max(0px, native-content-radius - 1px);
 
-    // Resize-affordance geometry, read by BOTH the `Window`'s
-    // `resize-border-width` and the `ResizeRing` overlays that set the cursor
-    // over it. Two readers of one number is the whole point: winit decides
-    // where a press resizes from `resize-border-width`, while the ring only
-    // paints the cursor hint, so a drift between them means a band that
-    // resizes without showing a resize cursor (or the reverse). Corners are
-    // deliberately larger than the edge for a more forgiving diagonal grab.
+    // Read by **both** the `Window`'s `resize-border-width` and the `ResizeRing`
+    // overlays setting the cursor over it, which is the whole point: winit decides
+    // where a press resizes, the ring only paints the hint, so a drift leaves a band
+    // that resizes with no resize cursor, or the reverse. Corners are deliberately
+    // larger than the edge for a more forgiving diagonal grab.
     out property <length> resize-border: 4px;
     out property <length> resize-corner: 8px;
 
@@ -156,114 +122,78 @@ export global Theme {
     out property <length> pad-md: 12px;
     out property <length> pad-lg: 16px;
 
-    // The artwork tile every hero band leads with — the four detail views'
-    // cover (square, or the artist's disc) and the two curated views' 2×2
-    // mosaic. One number rather than six, because the six banners are the same
-    // band under different content, and a tile that changes size between them
-    // reads as the page shifting under a nav. `DetailHeader` takes it directly
-    // and exposes no size knob, so a detail hero can't diverge from the pair
-    // that has no header component to route through.
+    // The artwork tile every hero band leads with — the detail views' cover, the
+    // curated views' 2×2 mosaic. **One number rather than six**: the banners are the
+    // same band under different content, and a tile changing size between them reads as
+    // the page shifting under a nav. `DetailHeader` takes it directly and exposes no
+    // size knob, so a detail hero can't diverge from the pair with no header component
+    // to route through.
     //
-    // It also sets each band's height, since the tile is the tallest thing in
-    // every one of them — so growing it grows six banners at once, and shrinking
-    // it costs the detail heroes first: their right column (title row, chips,
-    // action pill) clears the tile's lower edge by a couple of pixels once the
-    // chips wrap. See `ui::hero_chips::HERO_MAX_ROWS` for how that slack is
-    // spent, and why a subtitle rides inside the title row to leave it there.
+    // It sets each band's *height* too, being the tallest thing in all of them. Growing
+    // it grows six banners at once; shrinking it costs the detail heroes first, whose
+    // right column clears the tile's lower edge by only a couple of pixels once the
+    // chips wrap. `ui::hero_chips::HERO_MAX_ROWS` is how that slack is spent.
     out property <length> hero-artwork: 140px;
 
     // Typography
     out property <length> font-size-sm: 12px;
-    out property <length> font-size-row: 13px;   // Tauri's `.cell` size
+    out property <length> font-size-row: 13px;
     out property <length> font-size-md: 14px;
     out property <length> font-size-lg: 16px;
 
-    // Page-title tokens. Shared by every view's header band ("Tracks",
-    // "Albums", "Artists", "Favorites", …) so the headings stay
-    // consistent. Subtitle (count line) reuses `font-size-sm` +
-    // `subtext0`.
+    // Shared by every view's header band so the headings stay consistent; a subtitle
+    // reuses `font-size-sm` + `subtext0`.
     out property <length> page-title-size: 20px;
     out property <int> page-title-weight: 600;
     out property <brush> page-title-color: root.text;
 
-    // The six hero banners' own title — a step above a plain page heading,
-    // because it sits on a blurred band beside the `hero-artwork` tile rather
-    // than on a flat header row. One number rather than six, for the reason
-    // that token gives: the banners are the same band under different content.
-    // They had already drifted to two sizes before this existed, the four
-    // detail views at 24 px against the two mosaic heroes at 28 px, and
-    // nothing said which was the intended one.
+    // The hero banners' own title, a step above a page heading because it sits on a
+    // blurred band beside the `hero-artwork` tile rather than on a flat header row. One
+    // number for the reason that token gives — and the six had already drifted to two
+    // sizes before this existed, with nothing recording which was intended.
     //
-    // It also has a floor it can't be raised past without cost. The two heroes
-    // carrying a second text line nest it under the title, inside the title
-    // row, where only the `SearchBar`'s leftover height is free — so growing
-    // this spends the slack a wrapped chip row needs. See
-    // `ui::hero_chips::HERO_MAX_ROWS`.
+    // **It has a ceiling.** The two heroes carrying a second text line nest it under
+    // the title, inside the title row, where only the `SearchBar`'s leftover height is
+    // free — so raising this spends the slack a wrapped chip row needs.
     out property <length> hero-title-size: 22px;
 
-    // Motion. Easing is inlined as `ease-in-out` at each `animate { }` site
-    // because Slint 1.16 cannot expose `easing` properties across the Rust
-    // boundary, and a global `out property <easing>` triggers a build warning.
+    // Easing is inlined at each `animate` site: Slint 1.16 can't expose an `easing`
+    // property across the Rust boundary, and a global one warns at build time.
     out property <duration> dur-fast: 200ms;
     out property <duration> dur-med: 250ms;
     out property <duration> dur-spatial: 400ms;
 
-    // Window decorations. When `true`, the OS draws the titlebar and the
-    // content panel's top-left stays flat (matches Tauri's
-    // `.content.nativeDecContent`). When `false` the custom titlebar
-    // (`ui/components/custom-titlebar.slint`) renders and the top-left
-    // rounds to match the shell's outer chrome (Tauri's `.content` +
-    // `.shell`). `in-out` so `src/ui/window_chrome/` can hydrate this
-    // from the persisted `WindowFlags.use_native_titlebar` after
-    // `AppWindow::new()` and before `app.run()` — Slint reads
-    // `Window.no-frame` once when the OS window first shows, so the
-    // value must be set in that tight window. Default `false` matches
-    // `WindowFlags::default()` so a fresh install boots with the custom
-    // titlebar.
+    // True hands the titlebar to the OS and leaves the content panel's top-left flat;
+    // false renders `custom-titlebar.slint` and rounds it to the shell's outer chrome.
+    // **`window_chrome` must hydrate this between `AppWindow::new()` and `app.run()`** —
+    // Slint reads `Window.no-frame` once at first show, so that is the only window it
+    // can land in. Defaults false, matching `WindowFlags::default()`, so a fresh install
+    // boots on the custom titlebar.
     in-out property <bool> use-native-titlebar: false;
 
-    // Custom-titlebar decoration button style.
-    //   0 = Standard (Material bar icons; current Windows-like look)
-    //   1 = macOS    (traffic-light circles with hover-reveal glyphs)
-    // Hydrated at startup in `src/ui/appearance/install.rs` from
-    // `WindowFlags.titlebar_button_style` and re-applied on every change
-    // by `wire_titlebar_button_style_changed`. `custom-titlebar.slint`
-    // reads it through this token (same precedent as `shell-radius`)
-    // instead of reaching into the `Settings` global.
+    // 0 = Standard (Material bar icons), 1 = macOS (traffic lights). Hydrated at startup
+    // and re-applied on change; `custom-titlebar.slint` reads it through `Theme` rather
+    // than reaching into `Settings`, the `shell-radius` precedent.
     in-out property <int> titlebar-button-style: 0;
 
-    // Custom-titlebar decoration button side.
-    //   0 = Right (default), 1 = Left.
-    // Same hydration shape as `titlebar-button-style`.
+    // 0 = Right, 1 = Left. Same hydration shape.
     in-out property <int> titlebar-button-side: 0;
 
-    // True when the OS window currently has focus — raw mirror of winit's
-    // `WindowEvent::Focused(bool)`, written unconditionally from
-    // `src/ui/window_chrome/winit_filter.rs`. Two consumers today:
-    // (1) the KDE-only "Match Unfocused Window Background" tint — the
-    // sidebar / now-playing-bar bindings gate themselves on
-    // `Settings.match-unfocused-bg && Theme.use-native-titlebar
-    // && !Theme.window-focused` so the surfaces only swap to
-    // `mantle-unfocused` when the toggle is on AND we're painting under
-    // the native titlebar (the titlebar gate is required because
-    // `match-unfocused-bg` defaults to `true` on KDE and is preserved
-    // across a native-titlebar disable); (2) each `PopupWindow` mounts a
-    // `FocusLossWatcher` (`ui/components/focus-loss-watcher.slint`)
-    // inside an `if popup-is-open` gate so only the currently-open popup
-    // has a live watcher and auto-dismisses on focus loss. Any future
-    // feature needing OS focus state can subscribe directly.
+    // Raw mirror of winit's `WindowEvent::Focused(bool)`, written unconditionally.
+    // Two consumers: the KDE-only unfocused tint, whose bindings gate on
+    // `match-unfocused-bg && use-native-titlebar && !window-focused` — the titlebar term
+    // is required because the toggle defaults on under KDE and survives a
+    // native-titlebar disable — and `FocusLossWatcher`, mounted inside each popup's own
+    // `if` so only the open popup has a live watcher.
     in-out property <bool> window-focused: true;
 
-    // ms → "m:ss". Integer arithmetic avoids float rounding; negative or
-    // zero input collapses to "0:00" so the now-playing bar can safely
-    // format `position_ms` / `duration_ms` mid-transition. Shared by the
-    // track-list row (length cell) and the now-playing bar.
+    // Integer arithmetic, so no float rounding; anything ≤ 0 collapses to "0:00", which
+    // is what lets the now-playing bar format a mid-transition position safely.
     public pure function format-duration(ms: int) -> string {
-        // Output `h:mm:ss` for tracks ≥ 1 h, `m:ss` otherwise. Must stay
-        // byte-identical to `format_duration_ms` in `src/ui/tracks/` — the
-        // track-list rows use the Rust-precomputed string while the
-        // now-playing bar still calls this Slint helper, so any divergence
-        // shows up as inconsistent length labels for long tracks.
+        // `h:mm:ss` past an hour, `m:ss` below. **Must stay byte-identical to
+        // `format_duration_ms`**: the track rows use the Rust-precomputed string while
+        // the now-playing bar calls this, so a divergence shows up as inconsistent
+        // length labels on long tracks.
         ms <= 0
             ? "0:00"
             : Math.floor(ms / 3600000) > 0

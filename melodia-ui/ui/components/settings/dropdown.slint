@@ -3,8 +3,7 @@ import { MaterialIcon } from "../material-icon.slint";
 import { PopupSurface } from "../popup-surface.slint";
 import { FocusLossWatcher } from "../focus-loss-watcher.slint";
 
-// Single option row inside the dropdown popup. Highlights on hover and
-// shows a check glyph when this row matches the dropdown's selection.
+// One option row inside the dropdown popup.
 component DropdownOption inherits Rectangle {
     in property <string> label;
     in property <bool>   active;
@@ -33,8 +32,7 @@ component DropdownOption inherits Rectangle {
         }
         VerticalLayout {
             alignment: center;
-            // Checkmark only on the active row; the empty branch keeps
-            // the layout box stable so all rows have identical height.
+            // The empty branch holds the box, so every row is the same height.
             if root.active: MaterialIcon {
                 name: "check";
                 icon-size: 16px;
@@ -49,23 +47,17 @@ component DropdownOption inherits Rectangle {
     }
 }
 
-// Custom dropdown. Chosen over `std-widgets.ComboBox` because the latter's
-// styling follows the active style backend and won't match the rest of the
-// Catppuccin Mocha controls (Tauri parity: chevron pill + accent ring +
-// active-row checkmark).
+// Custom rather than `std-widgets.ComboBox`, whose styling follows the active
+// backend and can't be made to match the rest of the controls.
 //
-// Slint's PopupWindow auto-dismisses on outside click via the default
-// `close-on-click` policy; option-row TouchAreas write back to the
-// dropdown's `selected-index` and call `popup.close()` (set explicitly to
-// `close-on-click-outside` so a click on a row doesn't close the popup
-// before its handler fires — the row handler closes it manually).
+// The popup is `close-on-click-outside` rather than the default: on
+// `close-on-click` a row's own handler wouldn't get to fire, so the rows close
+// it themselves.
 //
-// `manual: true` suppresses the self-write to `selected-index` (only the
-// `selected(i)` callback fires) — the same "controlled" pattern as
-// `ToggleSwitch { manual: true }`. Use it when the index is a one-way binding
-// to an owned model value (e.g. a repeater row's field): a self-write would
-// orphan that binding (CLAUDE.md Slint pitfall), so the host stays the single
-// source of truth and the binding keeps tracking the model.
+// `manual: true` suppresses the self-write to `selected-index`, leaving only the
+// callback — `ToggleSwitch`'s controlled pattern. Reach for it when the index is
+// a one-way binding to an owned model value, where a self-write would orphan the
+// binding and stop it tracking the model.
 export component Dropdown inherits Rectangle {
     in property <[string]> options;
     in-out property <int> selected-index;
@@ -125,21 +117,17 @@ export component Dropdown inherits Rectangle {
     }
 
     popup := PopupWindow {
-        // Drop directly under the trigger; smart edge-flip (popup above
-        // when near the bottom of the viewport) is deferred — Tauri does
-        // it but it's polish, not a blocker for v1.
+        // Always under the trigger; flipping above near the viewport's bottom
+        // edge is polish nobody has asked for yet.
         x: 0;
         y: trigger.height + 4px;
         width: root.trigger-width;
-        // `close-on-click-outside` (not the default `close-on-click`) lets
-        // the option's TouchArea fire its `clicked` handler before the
-        // popup closes itself; the handler then calls `popup.close()`.
+        // See above — the rows need their handlers to run before it closes.
         close-policy: close-on-click-outside;
 
-        // Auto-dismiss on OS focus loss (alt-tab, click on another app).
-        // Ungated — settings hosts a handful of dropdown instances and
-        // gating each one through `PopupHighlight` would add a global
-        // discriminator without a meaningful efficiency win at this scale.
+        // Ungated, unlike the other popups: Settings hosts a handful of these,
+        // and a `PopupHighlight` discriminator per instance would buy nothing
+        // at that scale.
         FocusLossWatcher {
             close => { popup.close(); }
         }
@@ -153,8 +141,7 @@ export component Dropdown inherits Rectangle {
                     label: option;
                     active: i == root.selected-index;
                     clicked => {
-                        // Controlled mode (`manual`) leaves `selected-index` to
-                        // the host's binding — see the component comment.
+                        // `manual` leaves the index to the host's binding.
                         if !root.manual {
                             root.selected-index = i;
                         }

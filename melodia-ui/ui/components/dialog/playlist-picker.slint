@@ -3,23 +3,15 @@ import { Dialog } from "../../globals/dialog.slint";
 import { Playlists } from "../../globals/playlists.slint";
 import { SelectableRow, SelectAllHeader, PickerListCard } from "selectable-picker.slint";
 
-// Add-to-Playlist picker body — rendered inside `DialogOverlay` when
-// `Dialog.kind == "add-to-playlist"`. A multi-select list (same design as the
-// Export picker): tick any number of playlists, then the footer's primary
-// "Add" button commits the pending track(s) into all of them at once through
-// the `Dialog.accepted` dispatcher (`Playlists.add-tracks-to-selected`).
+// Add-to-Playlist body: the Export picker's multi-select list, committing the
+// pending tracks into every ticked playlist at once through the `Dialog.accepted`
+// dispatcher. The row visuals are the shared `selectable-picker.slint` toolkit,
+// and Rust owns both the per-row toggle and the header's select-all.
 //
-// Per-row overlap state drives the subtitle + disabled flag:
-//   * `contained-count == 0`            ⇒ no subtitle, selectable
-//   * `0 < contained-count < total`     ⇒ "N of M already added", selectable
-//                                         (the `INSERT OR IGNORE` adds only the
-//                                         missing tracks)
-//   * `contained-count >= total`        ⇒ "Already added", row dim + disabled
-//
-// Toggling a row flips its `selected` flag (Rust mutates the VecModel via
-// `Playlists.toggle-add-pick`, which no-ops on disabled rows); the header
-// flips all *enabled* rows (`set-all-add-picks`). The selectable-row / header
-// / list-card visuals are the shared `selectable-picker.slint` toolkit.
+// A row's overlap with the pending set drives its subtitle and its disabled
+// flag: no overlap is plain and selectable, a partial one says how much is
+// already there and stays selectable (the insert only adds what's missing), and
+// a playlist that already contains everything is dimmed out.
 export component PlaylistPicker inherits Rectangle {
     VerticalLayout {
         spacing: Theme.pad-sm;
@@ -32,11 +24,9 @@ export component PlaylistPicker inherits Rectangle {
             toggled => { Playlists.set-all-add-picks(!Dialog.add-select-all); }
         }
 
-        // In-flight placeholder — the menu entry that opens this dialog is
-        // gated on `visible-playlist-count > 0`, so reaching the empty branch
-        // only ever means the parallel Rust queries haven't returned yet.
-        // Hold an 80 px slot so the dialog doesn't snap-resize when the rows
-        // arrive a frame or two later.
+        // The menu entry opening this dialog is gated on there being playlists,
+        // so an empty list only ever means the queries haven't landed yet. The
+        // slot is held so the dialog doesn't snap-resize when they do.
         if Dialog.playlist-pick-rows.length == 0: Rectangle {
             height: 80px;
         }

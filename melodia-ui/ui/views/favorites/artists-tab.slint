@@ -4,14 +4,13 @@ import { EntityCardGrid } from "../../components/grid/entity-card-grid.slint";
 import { GridEmptyState } from "../../components/grid/grid-empty-state.slint";
 import { OverlayScrollbar } from "../../components/overlay-scrollbar.slint";
 
-// The Favorites page's Favorite Artists tab: a virtualized `EntityCardGrid`
-// of circular artist cards, ordered by the page's own sort row.
+// The Favorite Artists tab: a virtualized `EntityCardGrid` of circular cards,
+// ordered by the page's own sort row.
 //
-// Its own file rather than sharing one with Most Played: the two are the same
-// three elements but differ in eight bindings across forty lines (the model,
-// `show-play-count` vs `circular` + `fallback-icon`, both callbacks, both
-// empty-state strings and the count that gates them), so one parameterised
-// component would be more plumbing than it saves.
+// Its own file rather than one shared with Most Played. The two are the same
+// three elements but differ in eight bindings across forty lines — the model,
+// the card flavour, both callbacks, both empty-state strings and the count
+// gating them — so parameterising would be more plumbing than it saves.
 export component FavoritesArtistsTab inherits Rectangle {
     in property <length> card-w;
     in property <length> card-h;

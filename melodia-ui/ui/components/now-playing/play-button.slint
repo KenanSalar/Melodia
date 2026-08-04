@@ -2,30 +2,24 @@ import { Theme } from "../../theme.slint";
 import { MaterialIcon } from "../material-icon.slint";
 import { Tooltip } from "../tooltip.slint";
 
-// The play / pause button shown in the now-playing bar. Owns its own
-// hover-scale disc, the play / pause icon, the click hit-area, the
-// tooltip — and the optional "Equalizer" overlay driven by
-// `Settings.play-button-animation-idx`.
+// The now-playing bar's play / pause button: its hover-scale disc, glyph, hit
+// area and tooltip, plus the optional Equalizer overlay.
 //
-// The Equalizer overlay drives all four bars off a single shared
-// phase-counter Timer instead of one `animate height` block per bar.
-// Slint's animation engine re-evaluates every active `animate` per vsync
-// frame, so four concurrent height animations cost ~240 interpolated
-// updates per second; computing each bar's height directly from
-// `4 * p * (1 - p)` (a parabolic "wave" that rises 0 → 1 → 0 over the
-// period) drops that to one math binding per bar per Timer tick. When
-// equalizer is active the play / pause icon is hidden so the bars take
-// the icon's place; on pause the bars fall back to the icon.
+// That overlay drives all four bars off one shared phase counter rather than an
+// `animate height` each. Slint re-evaluates every active `animate` per vsync
+// frame, so four concurrent height animations interpolate hundreds of times a
+// second; a parabolic `4 * p * (1 - p)` off the counter is one math binding per
+// bar per tick. While it runs the glyph is hidden so the bars stand in its
+// place, and a pause falls back to the glyph.
 export component PlayButton inherits Rectangle {
     in property <bool>   is-playing;
     in property <int>    animation-mode;        // 0 None | 1 Equalizer
     in property <length> wrapper-d: 38px;
     in property <length> icon-size: wrapper-d * 0.5;
-    // Colour of the glyph (and of the Equalizer bars that stand in for it),
-    // punched out of the accent disc. Defaults to the surface the button
-    // sits on so it reads as a hole in the disc rather than as a second
-    // colour; the now-playing bar overrides it with its own background
-    // expression so the KDE unfocused tint tracks too.
+    // Defaults to the surface under the button, so the glyph reads as a hole
+    // punched in the disc rather than as a second colour. The now-playing bar
+    // overrides it with its own background expression, which is what carries
+    // the KDE unfocused tint through.
     in property <brush>  icon-color: Theme.mantle;
     callback clicked();
 
@@ -33,22 +27,16 @@ export component PlayButton inherits Rectangle {
     height: wrapper-d;
     background: transparent;
 
-    // Mirrors Tauri's PlayButtonAnimated hover / press scale: 1.05× on
-    // hover, 0.9× on press. Press clamps to 100 ms (CSS `:active`
-    // override); otherwise the expressive overshoot easing runs the
-    // standard medium duration.
+    // A press clamps to 100 ms; anything else runs the expressive overshoot at
+    // the standard medium duration.
     property <length> disc-d: root.wrapper-d *
         (pp-touch.pressed ? 0.9 : (pp-touch.has-hover ? 1.05 : 1.0));
 
     property <bool> equalizer-active: root.is-playing && root.animation-mode == 1;
 
-    // ---- Equalizer state ----------------------------------------------
-    // One shared Timer at 33 ms (~30 fps) bumps four phase counters,
-    // each with its own period — Tauri's 360 / 280 / 420 / 320 ms bar
-    // durations become 720 / 560 / 840 / 640 ms full up-down cycles
-    // (22 / 17 / 25 / 19 frames at 33 ms tick). Starting frames are
-    // staggered (low / peak / mid-climb / mid-descend) so the first
-    // paint isn't a flat line.
+    // One 30 fps Timer bumps four phase counters, each on its own period so the
+    // bars never march in step. The starting frames are staggered — low, peak,
+    // mid-climb, mid-descend — so the first paint isn't a flat line.
     property <int> bar1-cycle: 22;
     property <int> bar2-cycle: 17;
     property <int> bar3-cycle: 25;
@@ -73,7 +61,7 @@ export component PlayButton inherits Rectangle {
         }
     }
 
-    // ---- Accent disc + icon / equalizer bars --------------------------
+    // Accent disc, then the glyph or the bars.
     pp-disc := Rectangle {
         width: root.disc-d;
         height: root.disc-d;
@@ -86,9 +74,8 @@ export component PlayButton inherits Rectangle {
             easing: cubic-bezier(0.34, 1.56, 0.64, 1);
         }
 
-        // Play / pause icon — gated off when equalizer is taking its
-        // place. `visible: false` keeps the icon out of layout, so the
-        // bars (a fixed-size overlay below) sit on their own.
+        // Hidden rather than unmounted: the bars below are a fixed-size overlay
+        // and claim no layout of their own either way.
         HorizontalLayout {
             alignment: center;
             visible: !root.equalizer-active;
@@ -103,10 +90,8 @@ export component PlayButton inherits Rectangle {
             }
         }
 
-        // Equalizer bars — fixed-area overlay anchored to the disc's
-        // bottom edge so the bars "grow up" from a baseline, matching
-        // the spectrum-analyzer convention. 4 bars × 2 px + 3 × 2 px
-        // gaps = 14 px wide; height bands cover 20 %–100 % of icon-size.
+        // Anchored to the disc's bottom edge, so the bars grow up from a
+        // baseline the way an analyzer's do.
         if root.equalizer-active: Rectangle {
             property <length> bar-area-w: 14px;
             property <length> bar-area-h: root.icon-size;
@@ -116,10 +101,8 @@ export component PlayButton inherits Rectangle {
             y: (parent.height - self.height) / 2;
             background: transparent;
 
-            // Each bar's height is a parabolic wave `4 p (1 - p)` over its
-            // phase counter — peaks at p=0.5, returns to 0 at p=0 and 1.
-            // Cheap to compute, smooth at 30 fps, no `animate` engine
-            // overhead.
+            // The parabola peaks at p=0.5 and returns to 0 at either end — one
+            // multiply per bar per tick, and no `animate` engine involved.
             Rectangle {
                 property <float> phase: 1.0 * root.bar1-frame / root.bar1-cycle;
                 property <float> wave: 4.0 * phase * (1.0 - phase);

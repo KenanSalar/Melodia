@@ -16,11 +16,10 @@ component SidebarItem inherits Rectangle {
 
     private property <bool> selected: Nav.selected-index == root.index;
 
-    // Collapsed-rail tooltip feed. The rail hides the label, so the row hands
-    // `Nav` its identity and window rect and `app-window.slint` paints the
-    // tooltip beside the rail — see `Nav.sidebar-tip-idx` for why it can't be
-    // mounted here. Published in both states so the tooltip is already armed
-    // when Ctrl+B collapses the rail under a parked pointer.
+    // The collapsed rail hides the label, so the row hands `Nav` its identity and rect
+    // and `app-window.slint` paints the pill beside the rail — the global says why it
+    // can't be mounted here. **Published in both states**, so the tooltip is already
+    // armed when Ctrl+B collapses the rail under a parked pointer.
     private property <bool> hover-mirror: touch.has-hover;
     changed hover-mirror => {
         if (self.hover-mirror) {
@@ -33,23 +32,19 @@ component SidebarItem inherits Rectangle {
         }
     }
 
-    // Press-shrink factor — 0.97 while held, 1.0 otherwise. A small
-    // fraction of the now-playing-bar buttons' shrink (0.9) since a
-    // full-width row's wobble reads much stronger than a compact
-    // circular button. Only the *factor* is animated, not the derived
-    // `row` width/height: those also change when the sidebar collapses
-    // / is resized, and animating them directly would make every row
-    // wobble through the collapse animation. Animating the factor
-    // confines it to presses.
+    // Gentler than the now-playing-bar buttons' shrink, a full-width row's wobble
+    // reading much stronger than a compact circular one. **Only the factor is
+    // animated**, not the width and height derived from it: those also move when the
+    // sidebar collapses or resizes, so easing them directly would set every row
+    // wobbling through the collapse.
     property <float> press-scale: touch.pressed ? 0.97 : 1.0;
     animate press-scale {
         duration: touch.pressed ? 100ms : Theme.dur-med;
         easing: cubic-bezier(0.34, 1.56, 0.64, 1);
     }
 
-    // Inner visual row. The root keeps its fixed 36px layout slot so
-    // sibling rows never reflow; `row` is what scales on press — the
-    // tactile press-shrink shared with the now-playing-bar buttons.
+    // The root keeps its fixed layout slot so sibling rows never reflow; `row` is what
+    // scales on press.
     row := Rectangle {
         width: parent.width * root.press-scale;
         height: parent.height * root.press-scale;
@@ -62,12 +57,10 @@ component SidebarItem inherits Rectangle {
         animate background { duration: Theme.dur-fast; easing: ease-in-out; }
 
         HorizontalLayout {
-            // Collapsed: 4px each side centers the 22px icon in the 30px content
-            // row (sidebar 46px − 2×8px outer padding). Expanded: 10% of the
-            // rendered sidebar width so icons drift outward as the user resizes
-            // — matches the old Tauri `padding-left: 10%`. Mirror the same
-            // clamp the Sidebar uses for its own `width` so we track the
-            // *rendered* width, not the raw stored value.
+            // Collapsed, it centres the icon in the content row; expanded, it tracks a
+            // fraction of the sidebar width so icons drift outward as the user resizes.
+            // **Mirrors the clamp the Sidebar applies to its own `width`**, so this
+            // follows the *rendered* width rather than the raw stored value.
             padding-left: Nav.sidebar-collapsed
                 ? 4px
                 : clamp(Nav.sidebar-width, Theme.sidebar-min-w, Theme.sidebar-max-w) * 10%;
@@ -80,11 +73,9 @@ component SidebarItem inherits Rectangle {
                 alignment: center;
                 MaterialIcon {
                     name: root.icon;
-                    // Scale with the press factor so the wobble is visible
-                    // in collapsed mode too — without this, only the row's
-                    // surface fill shrinks (~1.4px) and the icon stays at
-                    // a fixed 22px, making the press feel inert when the
-                    // text label is hidden.
+                    // Scaled directly so the wobble is visible on a collapsed rail too:
+                    // otherwise only the row's fill shrinks, by a pixel or so, and the
+                    // press feels inert with the label hidden.
                     icon-size: 22px * root.press-scale;
                     icon-color: root.selected ? Theme.accent : Theme.text;
                     filled: root.selected;
@@ -107,22 +98,17 @@ component SidebarItem inherits Rectangle {
 
     touch := TouchArea {
         mouse-cursor: pointer;
-        // Also close the full-screen Now Playing view — it's a modal
-        // overlay that sits over any section, so any nav click dismisses
-        // it. Album Detail is NOT reset here: it's part of the Albums
-        // tab's state, so leaving and returning to Albums restores the
-        // last open album. The back button in DetailHeader is the only
-        // user-facing way out (it fires `AlbumDetail.close-detail`).
+        // Closes Now Playing too — it sits over any section, so any nav click dismisses
+        // it. **A detail id is not reset here**: it belongs to that tab's state, so
+        // leaving and returning restores the last open one, and the back button in
+        // `DetailHeader` is the only way out.
         clicked => {
-            // Sidebar nav is always lateral — set the direction before the
-            // `selected-index` write so the new branch's `ViewTransition`
-            // reads `below` and fades up, regardless of what the previous
-            // direction was (e.g. `left` from a recent detail back).
+            // Sidebar nav is always lateral, so the direction is set **before** the
+            // index write and the new branch fades up whatever the last one left behind.
             Nav.pending-enter-from = NavEnterFrom.below;
             Nav.now-playing-open = false;
             Nav.selected-index = root.index;
-            // Persist the new tab into `settings.last_nav_index` so a
-            // restart reopens on the same section.
+            // Persisted, so a restart reopens on the same section.
             Nav.persist-selected-index(root.index);
         }
     }
@@ -135,9 +121,8 @@ component Divider inherits Rectangle {
 }
 
 export component Sidebar inherits Rectangle {
-    // Drag updates set width every mouse move; without this flag the global
-    // width animation would interpolate each delta over dur-med, making the
-    // handle feel laggy. Animate only on the collapse toggle, not during drag.
+    // A drag sets the width on every mouse move, so without this the animation
+    // interpolates each delta and the handle feels laggy. Ease the collapse only.
     property <bool> is-dragging;
 
     width: Nav.sidebar-collapsed
@@ -145,23 +130,15 @@ export component Sidebar inherits Rectangle {
         : clamp(Nav.sidebar-width, Theme.sidebar-min-w, Theme.sidebar-max-w);
     animate width { duration: is-dragging ? 0ms : Theme.dur-med; easing: ease-in-out; }
 
-    // `Theme.window-focused` is the raw OS focus mirror (always written
-    // from winit's `Focused` event in `src/ui/window_chrome/winit_filter.rs`).
-    // The KDE-only "Match Unfocused Window Background" tint feature gates
-    // at the binding site on three conditions: the user toggle, the OS
-    // focus state, and `Theme.use-native-titlebar`. The titlebar gate is
-    // required because the feature mirrors OS-drawn window-decoration
-    // fade — when we paint our own chrome the analogy doesn't apply, and
-    // `Settings.match-unfocused-bg` is preserved (not cleared) across a
-    // native-titlebar disable so it can survive a re-enable. Without the
-    // titlebar gate a KDE user in custom-titlebar mode would still see
-    // the tint on focus loss because the default value is `true` on KDE.
-    // `Theme.mantle-unfocused` is sourced from `[WM] inactiveBackground`
-    // in `kdeglobals` when KDE Breeze + System variant is active, so we
-    // match the OS frame exactly on focus changes; for every other theme
-    // it falls back to `base`. No `animate` here — the OS titlebar swaps
-    // colour instantly on focus loss, so a fade would desync our painted
-    // surfaces from the OS-drawn frame.
+    // The KDE-only unfocused tint gates on **three** terms: the user toggle, the OS
+    // focus state, and `use-native-titlebar`. The titlebar term is required because the
+    // feature mirrors an OS-drawn decoration fade — with our own chrome the analogy
+    // doesn't apply — and the toggle is *preserved* rather than cleared across a
+    // native-titlebar disable so it survives a re-enable. Without it a KDE user in
+    // custom-titlebar mode still sees the tint, the toggle defaulting on there.
+    //
+    // **No `animate`**: the OS titlebar swaps colour instantly on focus loss, so a fade
+    // desyncs our painted surfaces from the OS-drawn frame.
     background: (Settings.match-unfocused-bg && Theme.use-native-titlebar && !Theme.window-focused)
         ? Theme.mantle-unfocused : Theme.mantle;
 
@@ -174,10 +151,9 @@ export component Sidebar inherits Rectangle {
             height: 36px;
             background: transparent;
 
-            // Same tooltip feed as `SidebarItem`. The label is the action the
-            // click performs, and the tooltip only ever shows on a collapsed
-            // rail, so it reads "Expand" rather than mirroring the row's own
-            // "Collapse" text.
+            // The `SidebarItem` tooltip feed. The label is the action the click
+            // performs, and the tooltip only ever shows on a *collapsed* rail — so it
+            // reads "Expand" rather than mirroring the row's own text.
             property <bool> hover-mirror: collapse-touch.has-hover;
             changed hover-mirror => {
                 if (self.hover-mirror) {
@@ -190,18 +166,15 @@ export component Sidebar inherits Rectangle {
                 }
             }
 
-            // Press-shrink factor — animated alone so the wobble only
-            // fires on press, not while the sidebar width animates.
-            // 0.97 to match the gentler SidebarItem shrink.
+            // Animated alone, so the wobble fires on press and not while the sidebar
+            // width eases. Matches `SidebarItem`'s gentler shrink.
             property <float> press-scale: collapse-touch.pressed ? 0.97 : 1.0;
             animate press-scale {
                 duration: collapse-touch.pressed ? 100ms : Theme.dur-med;
                 easing: cubic-bezier(0.34, 1.56, 0.64, 1);
             }
 
-            // Inner visual row — scales on press while the outer keeps
-            // the fixed layout slot. Same press-shrink pattern as
-            // `SidebarItem` and the now-playing-bar buttons.
+            // Scales on press while the outer keeps the fixed layout slot.
             Rectangle {
                 width: parent.width * parent.press-scale;
                 height: parent.height * parent.press-scale;
@@ -211,8 +184,7 @@ export component Sidebar inherits Rectangle {
                 background: collapse-touch.has-hover ? Theme.surface0 : transparent;
                 animate background { duration: Theme.dur-fast; easing: ease-in-out; }
                 HorizontalLayout {
-                    // Same reactive 10% left padding as `SidebarItem` so the
-                    // Collapse-toggle icon stays glued to the same vertical
+                    // `SidebarItem`'s padding, so this icon stays on the same vertical
                     // line as the nav icons below it.
                     padding-left: Nav.sidebar-collapsed
                         ? 4px
@@ -248,15 +220,11 @@ export component Sidebar inherits Rectangle {
             }
         }
 
-        // Scrollable middle — caps the sidebar's preferred height so the
-        // parent HorizontalLayout no longer claims ~363px of vertical space,
-        // freeing the NowPlayingBar to keep its 72px slot at small window
-        // heights. Both built-in scrollbars are hidden; the custom
-        // `OverlayScrollbar` declared at the Sidebar root (below) sits flush
-        // against the right edge to match the tracks view's bar style.
-        // `viewport-width: self.width` locks the orthogonal axis so wheel
-        // events don't get hijacked into horizontal scroll (same idea as
-        // CLAUDE.md's nested-ScrollView pitfall, applied in reverse).
+        // Caps the sidebar's preferred height, so the content row stops claiming a tall
+        // slot and the now-playing bar keeps its own at small window heights. Both
+        // built-in scrollbars are off — the `OverlayScrollbar` at the root sits flush
+        // with the right edge instead — and **`viewport-width: self.width` locks the
+        // orthogonal axis**, so wheel events aren't hijacked into horizontal scroll.
         nav-scroll := ScrollView {
             vertical-stretch: 1;
             vertical-scrollbar-policy: always-off;
@@ -268,17 +236,15 @@ export component Sidebar inherits Rectangle {
 
                 Divider {}
 
-                // Top nav: Search, Browse
+                // Top nav.
                 SidebarItem { index: 0; label: @tr("Search"); icon: "search"; }
                 SidebarItem { index: 1; label: @tr("Browse"); icon: "home"; }
 
                 Divider {}
 
-                // Library. Recently-Played keeps routing index 8 (see the
-                // `Nav` index map / `view_state.rs`) but renders here, right
-                // below Favorites: the sidebar's visual order follows source
-                // order, not the `index` value, so placing it here avoids
-                // renumbering every tab below it.
+                // **Recently Played keeps routing index 8 but renders here**, under
+                // Favorites: visual order follows source order rather than the index
+                // value, so placing it here avoids renumbering every tab below.
                 SidebarItem { index: 2; label: @tr("Favorites");       icon: "favorite";       }
                 SidebarItem { index: 8; label: @tr("Recently Played"); icon: "history";        }
                 SidebarItem { index: 3; label: @tr("Tracks");          icon: "library_music";  }
@@ -305,13 +271,10 @@ export component Sidebar inherits Rectangle {
 
         resize-touch := TouchArea {
             mouse-cursor: ew-resize;
-            // The handle is positioned at `parent.width - 4px`, so its local
-            // coordinate frame moves with the sidebar as we resize it. Using
-            // (mouse-x - pressed-x) underestimates the cursor's true travel —
-            // the sidebar ends up growing by half the cursor delta, leaving
-            // the handle lagging behind the pointer. Track the cursor in
-            // window-absolute coordinates instead so the handle stays glued
-            // to the pointer regardless of the parent moving.
+            // **The handle's own coordinate frame moves with the sidebar as it
+            // resizes**, so a local `mouse-x - pressed-x` underestimates the cursor's
+            // travel: the sidebar grows by half the delta and the handle lags the
+            // pointer. Tracking in window-absolute coordinates keeps it glued.
             property <length> start-w;
             property <length> press-abs-x;
             pointer-event(ev) => {
@@ -340,21 +303,17 @@ export component Sidebar inherits Rectangle {
         }
     }
 
-    // Overlay scrollbar — same component as the tracks view, sitting flush
-    // against the sidebar's right edge so the bar aligns with the panel
-    // boundary instead of stealing column space inside the padded layout.
-    // Aligns vertically with `nav-scroll` (the middle scrollable zone) so
-    // the bar doesn't run through the Collapse toggle or the Settings row.
-    // When expanded, inset by the 4px resize-handle width so the handle's
-    // hit-area stays on the very edge; when collapsed (no handle) the
-    // scrollbar takes the edge itself.
+    // Flush with the sidebar's right edge, so it aligns with the panel boundary rather
+    // than stealing column space inside the padded layout, and aligned vertically with
+    // `nav-scroll` so it doesn't run through the Collapse toggle or the Settings row.
+    // Expanded, it insets by the resize handle's width to leave that hit-area on the
+    // very edge; collapsed, with no handle, it takes the edge itself.
     OverlayScrollbar {
         x: parent.width - self.width
             - (Nav.sidebar-collapsed ? 0px : 4px);
         y: nav-scroll.absolute-position.y - root.absolute-position.y;
-        // Slimmer hit-area + thumb in the collapsed (46px) rail so the bar
-        // doesn't crowd the icons; full-size when expanded to match the
-        // tracks-view bar.
+        // Slimmer on the collapsed rail so the bar doesn't crowd the icons; full-size
+        // expanded, matching every other view's.
         width: Nav.sidebar-collapsed ? 6px : 10px;
         height: nav-scroll.height;
         bar-thickness: Nav.sidebar-collapsed ? 4px : 8px;

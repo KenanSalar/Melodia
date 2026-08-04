@@ -2,20 +2,16 @@ import "../assets/fonts/MaterialSymbolsRounded.ttf";
 import "../assets/fonts/MaterialSymbolsRoundedFilled.ttf";
 import { Theme } from "../theme.slint";
 
-// Renders a Material Symbols Rounded glyph by ligature name (e.g. "play_arrow").
-// The font's GSUB table substitutes the correct outline for the literal name.
-// `filled` swaps to a FILL=1 static instance shipped under a distinct family
-// so Slint can resolve it via `font-family` (FILL is a font-variation axis
-// and Slint 1.16's Text exposes only `font-weight`).
+// A Material Symbols Rounded glyph by ligature name — the font's GSUB
+// substitutes the outline for the literal. `filled` swaps to a FILL=1 static
+// instance shipped under its own family, because FILL is a variation axis and
+// Slint 1.16's `Text` exposes only `font-weight`.
 //
-// The component is a fixed `icon-size × icon-size` square with the Text
-// pinned inside. This is the Slint analogue of the Tauri CSS rule
-// `line-height: 1` on `.material-symbols-rounded`: it collapses the layout
-// box from the font's natural ~1.2× line-height down to the em-box, so
-// `vertical-alignment: center` centers the glyph in its em-box rather than
-// in an inflated line-box. Without this, the icon's centerline sits a
-// pixel or two below adjacent text — invisible on asymmetric glyphs but
-// glaringly obvious on circular ones (album, radio_button_unchecked).
+// **The fixed square is the point.** It collapses the layout box from the font's
+// natural ~1.2× line height down to the em box, so `vertical-alignment: center`
+// centres the glyph in *that* rather than in an inflated line box. Without it
+// the icon's centreline sits a pixel or two below adjacent text — invisible on
+// an asymmetric glyph and glaring on a circular one.
 export component MaterialIcon {
     in property <string> name;
     in property <length> icon-size: 22px;

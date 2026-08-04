@@ -8,9 +8,7 @@ import { MaterialIcon } from "../components/material-icon.slint";
 import { OverlayScrollbar } from "../components/overlay-scrollbar.slint";
 import { FilterThrottle } from "../components/filter-throttle.slint";
 
-// The Artists grid page. Mirrors `AlbumView`: filter throttle, responsive
-// column math, sort pills, virtualized `ArtistGrid` bound to the
-// `Artists` global. Sort fields are name / track count / album count.
+// The Artists grid page, `AlbumView`'s shape over the `Artists` global.
 export component ArtistView inherits Rectangle {
     property <int> filter-tick-pending: 0;
     filter-throttle := FilterThrottle {
@@ -28,9 +26,8 @@ export component ArtistView inherits Rectangle {
     property <length> card-h: root.card-w + root.card-text-h;
     property <length> row-h: root.card-h + root.grid-gap;
 
-    // Push `computed-cols` into `Artists.columns` + fire `columns-changed`
-    // on mount and on every subsequent change. See `grid-columns-sync.slint`
-    // for the Timer+`changed` rationale.
+    // Publishes the count on mount and on every change; see
+    // `grid-columns-sync.slint` for why it needs both a `changed` and a Timer.
     GridColumnsSync {
         computed-cols: root.computed-cols;
         seed(c) => {
@@ -44,8 +41,8 @@ export component ArtistView inherits Rectangle {
     }
 
     VerticalLayout {
-        // Three sides — see `tracks-view.slint` for why the uniform form's
-        // bottom pad reads as a dead strip under the grid.
+        // Three sides: the uniform form's bottom pad sits outside the grid's
+        // viewport and reads as a dead strip under it.
         padding-left: Theme.pad-lg;
         padding-right: Theme.pad-lg;
         padding-top: Theme.pad-lg;

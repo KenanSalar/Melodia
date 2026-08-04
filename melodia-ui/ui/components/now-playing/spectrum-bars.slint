@@ -1,30 +1,27 @@
 import { Visualizer } from "../../globals/audio.slint";
 import { Player } from "../../globals/player.slint";
 
-// Spectrum-analyzer style for the Now-Playing view: one bar per frequency
-// band, bass on the left, treble on the right. A silent band rests as a dot and
-// grows out of it as it gets loud, so an idle strip reads as a row of beads
-// rather than as a flat rule waiting for something to happen.
+// Spectrum-analyzer style: one bar per band, bass left. A silent band rests as a
+// dot and grows out of it, so an idle strip reads as a row of beads rather than
+// as a flat rule waiting for something to happen.
 //
-// Heights come straight from `Visualizer.bars` (normalized 0..1, low → high),
-// which Rust has already smoothed with a fast attack and a slow decay. That is
-// why there is deliberately **no** `animate` on the bar height: animating an
-// already-smoothed value phase-lags, and a single shared Timer plus
-// math-derived bindings is cheaper at vsync than N concurrent `animate` blocks.
+// Heights come straight off `Visualizer.bars`, which Rust has already smoothed
+// with a fast attack and a slow decay — which is why there is deliberately **no**
+// `animate` on the height. Animating an already-smoothed value phase-lags, and
+// one shared Timer plus math-derived bindings is cheaper at vsync than N
+// concurrent `animate` blocks.
 //
-// Pure render — the footprint and the driving Timer belong to the host,
-// `visualizer-strip.slint`.
-//
-// Each bar is a childless Rectangle, so its rounded cap never pushes the
-// subtree through FemtoVG's offscreen layer (the HiDPI clip-blur pitfall).
+// Pure render: the footprint and the Timer belong to `visualizer-strip.slint`.
+// Each bar is a childless Rectangle, so its rounded cap never pushes the subtree
+// through FemtoVG's offscreen layer.
 export component SpectrumBars inherits Rectangle {
     // Centre-line anchoring instead of the baseline — the "Mirrored" style.
     in property <bool> centred;
 
     HorizontalLayout {
-        // Bars are `horizontal-stretch: 1`, so each one is what's left of the
-        // strip after the gaps. Kept tight because there are enough bands that
-        // a wider gap would start eating the bars themselves on a narrow window.
+        // The bars stretch, so each is what's left after the gaps — kept tight
+        // because at this band count a wider one starts eating the bars
+        // themselves on a narrow window.
         spacing: 2px;
 
         for level in Visualizer.bars: Rectangle {
@@ -34,28 +31,25 @@ export component SpectrumBars inherits Rectangle {
             // `dialog/eq-band-slider.slint`.
             Rectangle {
                 width: parent.width;
-                // Floored at the band's own column width, so a silent band is a
-                // dot and grows out of it as its level rises. A floor in fixed
-                // px can't do that: the column width follows the strip width,
-                // so the resting shape would only come out round at one window
-                // size and read as a squashed dash at every other.
+                // Floored at the band's own column width, so a silent band rests
+                // as a circle. A fixed-px floor can't: the column follows the
+                // strip's width, so the resting shape would come out round at
+                // exactly one window size and squashed at every other.
                 height: max(parent.width, parent.height * level);
                 // Height is the total in both anchorings, so a centred bar puts
                 // half either side of the axis rather than a full bar each way.
                 y: root.centred
                     ? (parent.height - self.height) / 2
                     : parent.height - self.height;
-                // Half the short axis — a circle at the floor, semicircular
-                // caps once the band is taller than it is wide. Taking the
-                // `min` rather than assuming the width is the short one is what
-                // keeps it a capsule: FemtoVG clamps a corner's x- and y-radii
-                // independently, so a radius past half the height pinches the
-                // shape into a lens instead of clamping to a stadium.
+                // Half the short axis, so it caps as a circle at the floor.
+                // Taking the `min` rather than assuming width is the short one
+                // is what keeps it a capsule: FemtoVG clamps a corner's x- and
+                // y-radii independently, so a radius past half the height
+                // pinches the shape into a lens.
                 border-radius: min(self.width, self.height) / 2;
-                // The per-artwork accent, so the strip harmonizes with the
-                // blur — but the tone-floored variant, since these bars are
-                // painted opaque: a dark album's raw accent would sink into
-                // the scrimmed backdrop.
+                // The per-artwork accent, so the strip harmonizes with the blur,
+                // but the tone-floored variant — painted opaque, a dark album's
+                // raw accent sinks into the scrimmed backdrop.
                 background: Player.np-accent-bright;
             }
         }

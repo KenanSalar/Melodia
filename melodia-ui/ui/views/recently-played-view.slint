@@ -15,21 +15,17 @@ import { CompositeScrollbars } from "../components/composite-scrollbars.slint";
 import { FilterThrottle } from "../components/filter-throttle.slint";
 import { HeroBlurBackdrop } from "../components/hero-blur-backdrop.slint";
 
-// The Recently-Played view: a hero (live 2×2 cover mosaic + count + duration +
-// Shuffle / Columns) over one unified below-hero scroll — a non-collapsible
-// "Most Played" strip, then the `TrackList`. The hero mosaic shows the up-to-4
-// most-recently-played distinct covers; the list holds the 200 most-
-// recently-played tracks, mounted `sortable: false` so recency stays its only
-// order — the filter re-walks that fixed set in memory without re-ordering it.
-// Data flows through the `RecentlyPlayed` global.
+// A hero over one unified below-hero scroll — a non-collapsible Most Played
+// strip, then the `TrackList` of the 200 most-recently-played tracks. That list
+// is mounted `sortable: false` so recency stays its only order, and the filter
+// re-walks the fixed set in memory without re-ordering it. Everything comes
+// through the `RecentlyPlayed` global.
 //
-// This is the shape Favorites had before it was tabbed, and it is the page
-// that shape now belongs to alone — Favorites pins its hero and mounts one
-// scroller per tab. Converting this one is the intended next step, which is
-// what would retire its `CompositeScrollbars` mount.
+// This is the shape Favorites had before it was tabbed, and the only page still
+// holding it. Converting it is the intended next step, and what would retire its
+// `CompositeScrollbars` mount.
 export component RecentlyPlayedView inherits Rectangle {
-    // Filter throttle: each keystroke bumps `pending`; the Timer fires the
-    // refilter callback at most once per `interval`. Same shape as Favorites.
+    // Bumped per keystroke; `FilterThrottle` collapses the burst into one filter.
     property <int> filter-tick-pending: 0;
 
     filter-throttle := FilterThrottle {
@@ -37,22 +33,18 @@ export component RecentlyPlayedView inherits Rectangle {
         fire() => { RecentlyPlayed.filter-changed(RecentlyPlayed.filter); }
     }
 
-    // Backdrop catches any click no inner TouchArea consumes and bumps the blur
-    // tick — the SearchBar observes the counter and clears focus on change.
+    // Catches clicks no inner TouchArea consumes; the SearchBar blurs on the tick.
     TouchArea {
         clicked => { RecentlyPlayed.blur-search-tick += 1; }
     }
 
-    // Derived rather than a literal, for the reason `favorites-view.slint`
-    // gives — and it is what keeps this band the same height as the four
-    // detail heroes, which have no tab row to reserve either.
+    // Derived for the reason `favorites-view.slint` gives, and it is what keeps
+    // this band level with the four detail heroes — none of them reserves a tab
+    // row either.
     private property <length> hero-height: 2 * Theme.pad-lg + Theme.hero-artwork;
 
-    // --- Full-bleed hero blur backdrop ----------------------------------
-    // Shared component owns the dual-slot crossfade (outgoing slot never
-    // cleared so a mosaic refresh never flashes). Gradient floor shows
-    // through when there is no blur image (nothing played yet / decode
-    // failure).
+    // The component owns the dual-slot crossfade, so a mosaic refresh can't
+    // flash. Its gradient floor shows through with nothing played yet.
     HeroBlurBackdrop {
         x: 0; y: 0;
         width: 100%; height: root.hero-height;
@@ -63,7 +55,7 @@ export component RecentlyPlayedView inherits Rectangle {
     }
 
     VerticalLayout {
-        // --- Hero -------------------------------------------------------
+        // Hero.
         Rectangle {
             vertical-stretch: 0;
             height: root.hero-height;
@@ -73,8 +65,8 @@ export component RecentlyPlayedView inherits Rectangle {
                 spacing: Theme.pad-lg;
                 alignment: stretch;
 
-                // Mosaic tile — the shared square both mosaic heroes draw. The
-                // `history` glyph matches the sidebar entry.
+                // The shared square both mosaic heroes draw; the glyph matches
+                // the sidebar entry.
                 VerticalLayout {
                     alignment: start;
                     horizontal-stretch: 0;
@@ -89,7 +81,6 @@ export component RecentlyPlayedView inherits Rectangle {
                     }
                 }
 
-                // Right column — title row (title + SearchBar) + stats + pills.
                 VerticalLayout {
                     horizontal-stretch: 1;
                     alignment: stretch;
@@ -125,9 +116,8 @@ export component RecentlyPlayedView inherits Rectangle {
                         }
                     }
 
-                    // Count and duration, as chips. Nothing played yet
-                    // publishes none and the line below takes over — the
-                    // Favorites split, for the same reason.
+                    // Nothing played yet publishes no chips at all, and the line
+                    // below takes over — the Favorites split, same reason.
                     HeroChipStrip { }
 
                     if RecentlyPlayed.track-count == 0: Text {
@@ -140,9 +130,8 @@ export component RecentlyPlayedView inherits Rectangle {
 
                     Rectangle { vertical-stretch: 1; }
 
-                    // Shuffle / Columns pill — only mounted when there's
-                    // something to play. The selection chip appears in the
-                    // trailing slot when rows are selected.
+                    // Only mounted when there's something to play; the selection
+                    // chip takes the trailing slot once rows are picked.
                     if RecentlyPlayed.track-count > 0: HorizontalLayout {
                         vertical-stretch: 0;
                         spacing: Theme.pad-md;
@@ -182,23 +171,20 @@ export component RecentlyPlayedView inherits Rectangle {
             }
         }
 
-        // --- Below-hero scroll container --------------------------------
-        // Wraps the Most Played strip AND the TrackList in a single outer
-        // ScrollView so one scrollbar (mounted at the view root) covers both
-        // surfaces — the composite-scroll shape from Favorites, including the
-        // `hover-catch` wheel sentinel (Slint's inner ListView swallows the
-        // wheel at its edge, so vertical wheel is routed via the winit filter
-        // through the mounted `CompositeScrollbars`' composite split — see
-        // CompositeScroll).
+        // The strip and the list share one outer ScrollView, so a single
+        // root-mounted scrollbar covers both — the composite-scroll shape, wheel
+        // sentinel included: an inner ListView swallows the wheel at its edge,
+        // so vertical wheel comes back through the winit filter and
+        // `CompositeScrollbars`' split.
         below-hero := Rectangle {
             vertical-stretch: 1;
             clip: true;
 
-            // Ancestor hover sentinel (see CompositeScroll). Forwards every
-            // event to the ScrollView child — row clicks, drags and native
-            // horizontal scroll are unaffected; only its `has-hover` is
-            // observed. Empty-space clicks fall through to here (rows grab
-            // their own), reproducing the root backdrop's blur-on-empty-click.
+            // Hover sentinel for `CompositeScroll`. It forwards every event on
+            // to the ScrollView, so clicks, drags and native horizontal scroll
+            // are untouched and only its `has-hover` is read. Empty-space
+            // clicks land here, which is what reproduces the root backdrop's
+            // blur-on-click.
             hover-catch := TouchArea {
                 width: 100%;
                 height: 100%;
@@ -215,7 +201,7 @@ export component RecentlyPlayedView inherits Rectangle {
                 VerticalLayout {
                     spacing: 0;
 
-                    // --- Most Played strip (non-collapsible) -----------
+                    // Most Played strip, non-collapsible.
                     if RecentlyPlayed.most-played-rows.length > 0: VerticalLayout {
                         vertical-stretch: 0;
                         padding-left: Theme.pad-lg;
@@ -255,15 +241,14 @@ export component RecentlyPlayedView inherits Rectangle {
                         }
                     }
 
-                    // --- Recently Played TrackList ---------------------
                     HorizontalLayout {
                         horizontal-stretch: 1;
                         vertical-stretch: 0;
                         padding-left: Theme.pad-lg;
                         padding-right: Theme.pad-lg;
-                        // The Most Played strip's hairline supplies the gap
-                        // above the header when it's mounted; otherwise add
-                        // pad-lg so the table doesn't butt the hero edge.
+                        // The strip's hairline supplies the gap above the header
+                        // when it's mounted; without it the table would butt
+                        // straight against the hero edge.
                         padding-top: RecentlyPlayed.most-played-rows.length > 0
                             ? 0px
                             : Theme.pad-lg;
@@ -271,9 +256,8 @@ export component RecentlyPlayedView inherits Rectangle {
                         tl := TrackList {
                             horizontal-stretch: 1;
                             vertical-stretch: 0;
-                            // Row count × per-row stride + header strip + the
-                            // VL gap, capped at the outer viewport so large
-                            // lists let the inner ListView virtualize.
+                            // Capped at the outer viewport, so a large list
+                            // leaves the inner ListView virtualizing.
                             height: min(
                                 max(1, RecentlyPlayed.tracks.length)
                                     * (RecentlyPlayed.show-artwork
@@ -300,8 +284,7 @@ export component RecentlyPlayedView inherits Rectangle {
                             show-year <=> RecentlyPlayed.show-year;
                             number-mode: "index";
 
-                            // Recency is the only order this page has — a
-                            // column sort would fight the point of it. The
+                            // Recency is the only order this page has. The
                             // headers still resize and still toggle.
                             sortable: false;
                             playing-track-id: Player.vm.track.id;
@@ -326,8 +309,8 @@ export component RecentlyPlayedView inherits Rectangle {
         }
     }
 
-    // Composite scroll: unified vbar + column-pan hbar + CompositeScroll
-    // wheel routing, owned by the shared component. Mirrors Favorites.
+    // Unified vbar + column-pan hbar + wheel routing, all owned by the shared
+    // component.
     CompositeScrollbars {
         x: 0; y: 0;
         width: 100%; height: 100%;

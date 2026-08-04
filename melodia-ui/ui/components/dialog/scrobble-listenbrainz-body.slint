@@ -2,10 +2,8 @@ import { Theme } from "../../theme.slint";
 import { ScrobbleUi } from "../../globals/dialog-forms.slint";
 import { LabeledInput } from "../labeled-input.slint";
 
-// Body for `Dialog.kind == "scrobble-listenbrainz-login"`: paste a user token and
-// verify it. The token two-way binds to `ScrobbleUi.lb-token`; Enter (or the
-// dialog's Connect button) fires `listenbrainz-verify`. State lives on the
-// `ScrobbleUi` global, owned by `src/ui/scrobbling_settings.rs`.
+// The ListenBrainz login: paste a token and verify it. Enter and the dialog's
+// own button both fire the verify. State lives on `ScrobbleUi`.
 export component ScrobbleListenbrainzBody inherits VerticalLayout {
     spacing: Theme.pad-md;
 

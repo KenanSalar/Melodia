@@ -6,22 +6,14 @@ import { SectionDivider } from "../../components/settings/section-divider.slint"
 import { SettingRow } from "../../components/settings/setting-row.slint";
 import { SectionButton } from "../../components/settings/section-button.slint";
 
-// About section. The last card on the Settings page — surfaces the app
-// identity (name + version), authorship, a link to the source repository,
-// and the license. Mirrors the conventional desktop "About" pane.
+// The conventional About pane: identity, authorship, a repository link and the
+// license. Unlike Updates, no backend state gates a row — only the search
+// filter can hide one.
 //
-// Unlike the Updates section every row is always present (no backend state
-// gates them); only the live search filter can hide a row.
-//
-// The repository link routes through `Settings.open-repository()` (wired
-// in `src/ui/about.rs`), which opens `CARGO_PKG_REPOSITORY` in the system
-// browser via the `open` crate — the same launcher the "Open Containing
-// Folder" action uses. The version string reads from
-// `MelodiaUpdater.current-version` (already seeded with `CARGO_PKG_VERSION`
-// by `src/ui/updater_settings.rs`), so the About and Updates cards can't
-// disagree.
-//
-// Search visibility — see header comment in `language-section.slint`.
+// The version reads `MelodiaUpdater.current-version` rather than its own copy,
+// so About and Updates can't disagree; the link goes through `src/ui/about.rs`
+// to the same launcher "Open Containing Folder" uses. Search visibility follows
+// `language-section.slint`.
 export component AboutSection inherits Rectangle {
     background: transparent;
     horizontal-stretch: 1;
@@ -35,9 +27,8 @@ export component AboutSection inherits Rectangle {
                                         SettingsPage.search-query);
     }
 
-    // "Melodia" (brand), the SPDX license id, and "GitHub" (proper noun)
-    // are deliberately untranslated but still belong in the search
-    // haystack so a query for them surfaces the right row.
+    // The brand, the SPDX id and "GitHub" stay untranslated but still belong in
+    // the haystack — they're what a user would type.
     property <bool> show-app:
         row-visible("Melodia", @tr("Version {}", MelodiaUpdater.current-version));
     property <bool> show-author:
@@ -47,21 +38,19 @@ export component AboutSection inherits Rectangle {
 
     out property <bool> has-matches: show-app || show-author || show-license;
 
-    // VerticalLayout wrapper so the Rectangle's preferred-height tracks
-    // the SectionCard's natural height. See `language-section.slint`.
+    // Wrapper so the root's preferred-height tracks the card's natural height —
+    // see `language-section.slint`.
     VerticalLayout {
         if has-matches: SectionCard {
             title: @tr("About");
 
-            // App identity + version.
             if root.show-app: SettingRow {
                 icon: "info";
                 label: "Melodia";
                 description: @tr("Version {}", MelodiaUpdater.current-version);
             }
 
-            // Authorship + source-repository link. The button uses no
-            // leading icon, matching the Updates section's action buttons.
+            // No leading icon, matching the Updates section's action buttons.
             if root.show-app && root.show-author: SectionDivider {}
             if root.show-author: SettingRow {
                 icon: "person";
@@ -74,7 +63,6 @@ export component AboutSection inherits Rectangle {
                 }
             }
 
-            // License (SPDX identifier — not translated).
             if (root.show-app || root.show-author) && root.show-license: SectionDivider {}
             if root.show-license: SettingRow {
                 icon: "balance";

@@ -4,11 +4,10 @@ import { EntityCardGrid } from "../../components/grid/entity-card-grid.slint";
 import { GridEmptyState } from "../../components/grid/grid-empty-state.slint";
 import { OverlayScrollbar } from "../../components/overlay-scrollbar.slint";
 
-// The Favorites page's Most Played tab: a virtualized `EntityCardGrid` over
-// the favourites that have actually been played, ranked by play count.
-//
-// Takes the host's grid geometry rather than deriving its own — the page owns
-// one `GridGeometry`, and both grid tabs draw the same card at the same size.
+// The Most Played tab: an `EntityCardGrid` over the favourites that have
+// actually been played, ranked by count. It takes the host's grid geometry
+// rather than deriving its own — the page owns one, and both grid tabs draw the
+// same card at the same size.
 export component FavoritesMostPlayedTab inherits Rectangle {
     in property <length> card-w;
     in property <length> card-h;
@@ -16,9 +15,8 @@ export component FavoritesMostPlayedTab inherits Rectangle {
     in property <length> gap;
 
     mp := EntityCardGrid {
-        // Positioned rather than wrapped in a layout, so the scrollbar below
-        // can reuse the same two numbers instead of chasing a layout's
-        // padding.
+        // Positioned rather than wrapped, so the scrollbar below reuses the same
+        // two numbers instead of chasing a layout's padding.
         y: Theme.pad-md;
         width: 100%;
         height: parent.height - Theme.pad-md;

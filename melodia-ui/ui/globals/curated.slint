@@ -1,90 +1,72 @@
 import { TrackListRow, EntityStripRow, EntityGridRow } from "../models.slint";
 
-// The two hero-mosaic pages. Recently Played is still the single-scroll shape
-// Favorites used to have — hero, one Most Played strip, one `TrackList` — so
-// the two have diverged for now; the intent is to bring it onto the tabbed
-// shape below.
+// The two hero-mosaic pages. Recently Played is still the single-scroll shape Favorites
+// used to have — hero, one Most Played strip, one `TrackList` — so the two have
+// diverged; the intent is to bring it onto the tabbed shape below.
 
-// Favorites: drives the Favorites view (sidebar index 2). A hero whose top
-// row carries a `TabBar` and the filter `SearchBar`, over three mutually
-// exclusive sub-views: Songs (a sortable / filterable `TrackList`), Most
-// Played and Favorite Artists (both virtualized `EntityCardGrid`s). No
-// Favorite Albums tab by design — albums are reachable via the Albums tab.
+// A hero whose top row carries a `TabBar` and the filter `SearchBar`, over three
+// mutually exclusive sub-views: Songs (a sortable, filterable `TrackList`), Most Played
+// and Favorite Artists (both virtualized `EntityCardGrid`s). No Favorite Albums tab by
+// design — albums are reachable through the Albums tab.
 //
-// The filter is shared across all three; sort is per-tab, and only two of
-// them have one — Songs through its list's column headers, Favorite Artists
-// through a pill row. Most Played is ranked by play count by definition.
+// **The filter is shared across all three; sort is per-tab**, and only two of them have
+// one: Songs through its column headers, Favorite Artists through a pill row. Most
+// Played is ranked by play count by definition.
 //
-// The mosaic refreshes live when `library_changed_tx` ticks (favorite
-// toggled, play count bumped, library scanned) so the top-4 most-played
-// favorites stay current. `blur-img-{a,b}` + `blur-use-a` follow the
-// same dual-slot crossfade contract as `Player.blur-img-*` /
-// `AlbumDetail.blur-img-*` — outgoing slot never cleared so the fade
-// never flashes.
+// The mosaic refreshes live on every `library_changed_tx` tick, so the top-4 most-played
+// favorites stay current, and the blur slots follow the dual-slot crossfade contract —
+// outgoing slot never cleared, so the fade never flashes.
 export global Favorites {
-    // Which sub-view is showing. `tab-count` is the sole definition of how
-    // many there are — Rust clamps the persisted `views.json` index against
-    // it rather than carrying its own const, so a build with fewer tabs can't
-    // restore onto a branch that mounts nothing.
+    // **`tab-count` is the sole definition of how many there are** — Rust clamps the
+    // persisted index against it rather than carrying its own const, so a build with
+    // fewer tabs can't restore onto a branch that mounts nothing.
     out property <int> tab-songs: 0;
     out property <int> tab-most-played: 1;
     out property <int> tab-artists: 2;
     out property <int> tab-count: 3;
 
     in-out property <int> tab-idx: 0;
-    // Fires after the bar has already moved `tab-idx` — Rust persists the
-    // pick, releases the departed grid's cover tier and builds the entering
-    // one's model.
+    // **Fires after the bar has already moved `tab-idx`.** Rust persists the pick,
+    // releases the departed grid's cover tier and builds the entering one's model.
     callback tab-changed(int);
 
-    // Column count for whichever grid tab is mounted; one property, because
-    // the two are mutually exclusive and share their card geometry. Pushed
-    // down from the view's `GridGeometry` via `GridColumnsSync`.
+    // One property for whichever grid tab is mounted — the two are mutually exclusive
+    // and share their card geometry. Pushed down from the view's `GridGeometry`.
     in-out property <int> columns: 4;
     callback columns-changed(int);
-    // Hero — mosaic data + stats. `mosaic-paths` is the top-4 cover
-    // paths by play_count (DESC); an empty list renders the empty
-    // state. `track-count == 0` ⇒ the Songs tab's band shows "No favorites
-    // yet" copy instead of chips. The running time is not here — it reaches
-    // the band as a chip, built Rust-side by `ui::hero_chips`.
+    // The top-4 cover paths by play count; an empty list renders the empty state, and a
+    // zero count puts "No favorites yet" copy on the Songs band instead of chips. The
+    // running time isn't here — it reaches the band as a chip built by `ui::hero_chips`.
     in-out property <[string]> mosaic-paths;
     in-out property <int>      track-count;
 
-    // Hero blur cross-fade — two slots, never cleared. Outgoing slot
-    // stays painted through the fade so switching mosaics never
-    // flashes. `has-blur` ⇒ either slot is non-empty (gates the
-    // accent-gradient floor fallback).
+    // Two slots, never cleared, so the outgoing one stays painted through the fade and
+    // a mosaic switch never flashes. `has-blur` gates the gradient-floor fallback.
     in-out property <image> blur-img-a;
     in-out property <image> blur-img-b;
     in-out property <bool>  blur-use-a;
     in-out property <bool>  has-blur;
 
-    // Grid tabs — chunked card rows, one per grid. `EntityStripRow`'s
-    // unified shape (id / title / subtitle / artwork_path / play_count)
-    // drives both surfaces; Rust only fills the model of the tab that is
-    // actually mounted, so the hidden one costs nothing.
+    // Chunked card rows, one per grid, both on `EntityStripRow`'s unified shape. **Rust
+    // fills only the mounted tab's model**, so the hidden one costs nothing.
     in-out property <[EntityGridRow]> most-played-rows;
     in-out property <[EntityGridRow]> artist-rows;
-    // Pre-chunk counts, for the hero's stats line and the empty-state gate —
-    // `rows.length` is a row count, not a card count.
+    // Pre-chunk counts for the hero band and the empty-state gates — `rows.length` is a
+    // row count, not a card count.
     in-out property <int> most-played-count;
     in-out property <int> artist-count;
 
-    // Favorite Artists tab sort. Its own pair rather than the Songs tab's
-    // `sort-field` / `sort-dir` below, which belong to that tab's `TrackList`
-    // and carry track columns this grid has no notion of. The defaults are
-    // what the query used to hardcode, so a fresh install opens on the order
-    // it always had. Applied to the Rust-side cache, not to the filtered copy
-    // — see `ui::favorites::grids::sort::sort_artists`.
+    // Its own pair rather than the Songs tab's below, which belong to that tab's
+    // `TrackList` and name track columns this grid has no notion of. The defaults are
+    // what the query used to hardcode, so a fresh install opens on the order it always
+    // had. **Applied to the Rust-side cache, not to the filtered copy** — the cover
+    // prewarm reads that cache to pick its first screenful.
     in-out property <string> artist-sort-field: "favorite_count";  // name | favorite_count
     in-out property <string> artist-sort-dir: "desc";
     callback request-artist-sort(string /*field*/);
 
-    // Songs tab — `TrackList` data + filter + sort. `tracks` is the
-    // post-filter view that the list actually renders (Rust applies
-    // the in-memory filter against an internal `tracks-all` cache and
-    // writes the result here, mirroring how the Tracks view handles
-    // its search bar).
+    // The post-filter view the list renders: Rust filters an internal `tracks-all` cache
+    // in memory and writes the result here, as the Tracks view does.
     in-out property <[TrackListRow]> tracks;
     in-out property <string>         filter;
     in-out property <int>            blur-search-tick: 0;
@@ -92,10 +74,8 @@ export global Favorites {
     in-out property <string>         sort-dir: "asc";
 
 
-    // Per-column widths / visibility for the Songs tab's `TrackList` —
-    // mirrors the same shape `Tracks` / `AlbumDetail` / `ArtistDetail`
-    // use. Hydrated from `settings.view_columns["favorites"]` +
-    // `settings.view_column_widths["favorites"]`.
+    // The Songs tab's `TrackList` columns, the shape `Tracks` / `AlbumDetail` /
+    // `ArtistDetail` share, hydrated from `views.json` under its own key.
     in-out property <length> w-number: 56px;
     in-out property <length> w-title: 320px;
     in-out property <length> w-artist: 200px;
@@ -114,18 +94,16 @@ export global Favorites {
     in-out property <[int]> selected-ids;
     in-out property <int>   selection-anchor: -1;
 
-    // Lazy cover callbacks — one per cache tier so Rust can route each
-    // surface into the right LRU (mosaic tiles; grid-sized thumbs for
-    // most-played + circular artist). Songs-tab rows resolve through the
-    // shared `RowCovers` global.
+    // One callback per cache tier, so Rust routes each surface into the right LRU.
+    // Songs-tab rows go through the shared `RowCovers` global instead.
     //
-    // The two grid lookups take `covers-generation` as a second argument,
-    // doing both halves of the queue sheet's trick: reading it is what makes
-    // a `pure` binding re-evaluate when the tier is warmed behind an
-    // already-mounted grid, and its value is the "is it warm" flag Rust
-    // branches on. 0 ⇒ answer from the cache and let the card paint its
-    // placeholder; a tab switch clears the entering tier, so decoding on that
-    // first frame is one 448 px decode per visible card, on the UI thread.
+    // The two grid lookups take `covers-generation` as a second argument, doing both
+    // halves of the queue sheet's trick: reading it is what makes a `pure` binding
+    // re-evaluate once the tier is warmed behind an already-mounted grid, and its
+    // *value* is the is-it-warm flag Rust branches on. At 0 the answer is cache-only and
+    // the card paints its placeholder — a tab switch clears the entering tier, so
+    // decoding on that first frame is one full-size decode per visible card, on the UI
+    // thread.
     in-out property <int> covers-generation: 0;
     pure callback request-mosaic-cover(string)           -> image;
     pure callback request-most-played-cover(string, int) -> image;
@@ -136,10 +114,8 @@ export global Favorites {
     callback shuffle-all();
     callback shuffle-most-played();
 
-    // Card clicks. `play-track` ⇒ start playback in that scope;
-    // `open-artist` ⇒ cross-tab nav to the artist's detail view (sets
-    // `ArtistDetail.origin-nav-index = NAV_FAVORITES` synchronously before
-    // flipping `Nav.selected-index` so the back button returns here).
+    // `open-artist` stamps `ArtistDetail.origin-nav-index` **synchronously before**
+    // flipping `Nav.selected-index`, so the back button returns here.
     callback play-track(int /*track_id*/);
     callback open-artist(int /*artist_id*/);
 
@@ -159,68 +135,53 @@ export global Favorites {
     callback go-to-artist(int /*artist_id*/);
     callback go-to-genre(int /*genre_id*/);
 
-    // Section-visible signal — fires when the Favorites tab enters or
-    // leaves the screen (sidebar nav, or Now Playing opened over it).
-    // Driven by `watched-favorites-active` in `app-window.slint`.
-    // `wire_favorites` mirrors this into `FavoritesUi.section_active`
-    // + triggers the cache release / re-fetch dance.
+    // Fires when the page enters or leaves the screen — a sidebar nav, or Now Playing
+    // opening over it. `wire_favorites` mirrors it into `FavoritesUi.section_active` and
+    // drives the cache release / re-fetch.
     callback section-active-changed(bool);
 
-    // Translated "{n} favorite[s]" subtitle for Favorite-Artist cards.
-    // Slint 1.16 doesn't expose `translate_from_bundle` publicly, so
-    // Rust resolves the plural through this `pure callback` at row-build
-    // time (UI thread). Reuses the same `{n} favorite|{n} favorites`
-    // msgid as the hero count line, so adding it to a locale handles
-    // both surfaces. Same pattern as `Settings.watcher-disabled-*`.
+    // The Favorite-Artist card subtitle. Slint 1.16 exposes no Rust-callable `tr`, so
+    // Rust resolves the plural through this at row-build time. It shares its msgid with
+    // the hero count line, so adding it to a locale covers both surfaces.
     pure callback artist-favorite-subtitle(int /*count*/) -> string;
     artist-favorite-subtitle(count) => {
         return @tr("{n} favorite" | "{n} favorites" % count);
     }
 }
 
-// RecentlyPlayed: drives the Recently-Played view. Owned by
-// `src/ui/recently_played`. Still the single-scroll shape Favorites used to
-// have — a hero (mosaic + count + duration + Shuffle / Columns), a
-// non-collapsible "Most Played" strip, and a filterable `TrackList` of the 200
-// most-recently-played tracks — so it keeps the `CompositeScrollbars` wheel
-// routing that Favorites has since shed. Membership is fixed to that set and
-// so is its order: the list is mounted `sortable: false`, and the filter
-// re-walks the cache in memory (no re-query, no re-order).
+// The Recently-Played view: a hero, a non-collapsible Most Played strip, and a
+// filterable `TrackList` of the most-recently-played tracks. Being one scroller over
+// three sections, it keeps the `CompositeScrollbars` wheel routing Favorites shed when
+// it became tabbed. **Membership is fixed and so is the order** — the list mounts
+// `sortable: false` and the filter re-walks the cache in memory, never re-querying and
+// never re-ordering.
 export global RecentlyPlayed {
-    // Hero — 2×2 cover mosaic of the up-to-4 most-recently-played distinct
-    // covers. Empty list renders the empty-state tile.
+    // Up to four distinct most-recently-played covers; an empty list renders the
+    // empty-state tile.
     in-out property <[string]> mosaic-paths;
 
-    // Hero blur cross-fade — two slots, never cleared (outgoing slot stays
-    // painted through the fade so a mosaic refresh never flashes). `has-blur`
-    // ⇒ either slot is non-empty (gates the accent-gradient floor fallback).
-    // Same dual-slot contract as `Favorites`.
+    // The `Favorites` dual-slot contract.
     in-out property <image> blur-img-a;
     in-out property <image> blur-img-b;
     in-out property <bool>  blur-use-a;
     in-out property <bool>  has-blur;
 
-    // Most Played strip — library-wide top tracks by play_count. Reuses the
-    // unified `EntityStripRow` shape.
+    // Library-wide top tracks by play count, on the unified `EntityStripRow` shape.
     in-out property <[EntityStripRow]> most-played-rows;
 
-    // Recency list — `TrackList` data + filter. `tracks` is the post-filter
-    // view Rust writes, always in fetch (recency) order. There is no sort
-    // state: the list is mounted non-sortable.
+    // The post-filter view Rust writes, always in fetch (recency) order. **There is no
+    // sort state**: the list is mounted non-sortable, recency being the whole page.
     in-out property <[TrackListRow]> tracks;
     in-out property <string>         filter;
     in-out property <int>            blur-search-tick: 0;
 
-    // Header stats over the full recency set. The running time is not here:
-    // it reaches the band as a chip, built Rust-side by `ui::hero_chips`, and
-    // a property only Rust wrote and only Rust read back was a round trip
-    // through Slint for a string Rust had already formatted.
+    // Over the full recency set, not the filter. The running time isn't here — it
+    // reaches the band as a chip, and a property only Rust wrote and only Rust read back
+    // was a round trip through Slint for a string Rust had already formatted.
     in-out property <int> track-count;
 
-    // Per-column widths / visibility for the `TrackList` — mirrors the shape
-    // `Favorites` / `Tracks` use. Hydrated from
-    // `settings.view_columns["recently_played"]` +
-    // `settings.view_column_widths["recently_played"]`.
+    // The `Favorites` / `Tracks` column shape, hydrated from `views.json` under its own
+    // key.
     in-out property <length> w-number: 56px;
     in-out property <length> w-title: 320px;
     in-out property <length> w-artist: 200px;
@@ -239,18 +200,16 @@ export global RecentlyPlayed {
     in-out property <[int]> selected-ids;
     in-out property <int>   selection-anchor: -1;
 
-    // Lazy cover callbacks — the hero 2×2 mosaic tiles and the Most Played
-    // strip cards. The list rows resolve through the shared `RowCovers` global.
+    // The mosaic tiles and the strip cards; list rows go through `RowCovers`.
     pure callback request-mosaic-cover(string)      -> image;
     pure callback request-most-played-cover(string) -> image;
 
-    // Header actions.
     callback shuffle-all();
 
-    // Most Played card click ⇒ start playback in that scope.
+    // A Most Played card click starts playback in that scope.
     callback play-track(int /*track_id*/);
 
-    // List row interactions — same shape as Tracks / Favorites.
+    // The Tracks / Favorites row shape.
     callback play-row(int /*track_id*/, int /*index*/);
     callback play-next([int] /*track_ids*/);
     callback add-to-queue([int]);

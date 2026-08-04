@@ -2,14 +2,9 @@ import { Theme } from "../../theme.slint";
 import { SettingsPage } from "../../globals/settings-page.slint";
 import { MaterialIcon } from "../material-icon.slint";
 
-// Stacked-content settings row: icon + (label + description + below content
-// via @children), no right-side control. Mirrors Tauri's `settingsRow`
-// layout for chip-group / accent-grid / checkbox-grid rows where the
-// control sits *inside* `settingsRowContent` below the description.
-//
-// `disabled`: same overlay-TouchArea trick as `SettingRow` — a sibling
-// TouchArea above the row contents absorbs clicks when disabled, so the
-// inner control's TouchArea can't fire.
+// `SettingRow`'s stacked twin, for the rows whose control is a strip that sits
+// *under* the description rather than to its right. `disabled` uses the same
+// overlay TouchArea.
 export component SettingRowStacked inherits Rectangle {
     in property <string> icon;
     in property <string> label;
@@ -25,16 +20,15 @@ export component SettingRowStacked inherits Rectangle {
         spacing: Theme.pad-lg;
         alignment: stretch;
 
-        // Icon column (top-aligned so it sits next to the label, not
-        // centred in the tall row that includes chips below).
+        // Top-aligned so it sits beside the label, not centred in a row whose
+        // height includes the strip below.
         VerticalLayout {
             alignment: start;
-            // Push the icon down so it lines up with the label baseline,
-            // not the row's top padding boundary.
+            // Lines the icon up with the label's baseline rather than the row's
+            // top padding.
             padding-top: 2px;
-            // `SettingsPage.row-content-w` subtracts this to tell the chip
-            // and swatch strips below how much room they have, so the number
-            // lives there rather than in each row.
+            // `SettingsPage.row-content-w` subtracts this to tell the strips
+            // below how much room they have, so the number lives there.
             MaterialIcon {
                 name: root.icon;
                 icon-size: SettingsPage.row-icon-w;
@@ -42,14 +36,12 @@ export component SettingRowStacked inherits Rectangle {
             }
         }
 
-        // Content column: label + description + @children (chips, grid, …).
         VerticalLayout {
             spacing: Theme.pad-xs;
             horizontal-stretch: 1;
 
-            // Wrapped for the reason spelled out in `setting-row.slint`: a
-            // no-wrap `Text`'s minimum is its full width, which no narrowing
-            // can negotiate.
+            // Wrapped for `setting-row.slint`'s reason: a no-wrap `Text`'s
+            // minimum is its full width, which no narrowing can negotiate.
             Text {
                 text: root.label;
                 color: Theme.text;
@@ -63,8 +55,7 @@ export component SettingRowStacked inherits Rectangle {
                 wrap: word-wrap;
             }
 
-            // Below-content slot. A small top margin reads as a clear
-            // visual break between the description and the chips.
+            // The margin is what reads as a break between the copy and the strip.
             Rectangle {
                 background: transparent;
                 vertical-stretch: 0;

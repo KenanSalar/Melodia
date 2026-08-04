@@ -1,29 +1,23 @@
 import { Theme } from "../theme.slint";
 import { HeroBackdrop } from "../globals/hero-backdrop.slint";
 
-// Full-bleed hero blur backdrop: a gradient floor, two stacked cross-fade
-// `Image` slots, and a scrim. One Slint-side source of truth for the
-// dual-slot crossfade contract that Rust's `write_crossfade_slot` drives —
-// the outgoing slot is never cleared, so a blur refresh fades A↔B without
-// flashing, and when `has-blur` is false both slots fade to 0 and the
-// gradient floor shows through.
+// Full-bleed hero blur: a gradient floor, two cross-fading `Image` slots, and a
+// scrim. The Slint half of the dual-slot contract `write_crossfade_slot` drives
+// — the outgoing slot is never cleared, so a refresh fades A↔B without flashing,
+// and with no blur both fade to 0 and the floor shows through.
 //
-// Consumed by `DetailHeader` (fills its whole hero) and the Favorites /
-// Recently-Played heroes (top `hero-height` band). The caller sizes the
-// component (`x/y/width/height`); children fill it.
+// Mounted by `DetailHeader` over its whole hero and by the two mosaic heroes
+// over their top band. The caller sizes it; the children fill it.
 //
-// Every colour here comes from `HeroBackdrop`, solved per artwork in
-// `src/ui/hero_backdrop.rs`, and none of it is a `Theme.*` brush. That is
-// the point: the floor used to be `Theme.accent.mix(Theme.base, 0.2)` →
-// `Theme.base` and the scrim `Theme.crust.with-alpha(0.45)`, both of which
-// flip polarity with the theme — so the same cover painted a dark banner
-// under Mocha and a near-white one under Latte, and the foreground text
-// solved for one was wrong on the other. Don't reintroduce a theme brush
-// on this surface; pass a solved value through the global instead.
+// **Every colour here comes from `HeroBackdrop`, solved per artwork, and none of
+// it may be a `Theme.*` brush.** Theme brushes flip polarity with the variant,
+// so the same cover painted a dark banner under one and a near-white one under
+// another, and the foreground solved for either was wrong on the other. Pass a
+// solved value through the global instead.
 //
-// `width/height: 100%` on the children is mandatory — `Image` does NOT
-// auto-fill its parent in Slint; without these the blur renders at its
-// native buffer size centred in the layout, which is wrong.
+// `width/height: 100%` on the children is mandatory: an `Image` does not
+// auto-fill its parent, and without them the blur draws at its native buffer
+// size, centred.
 export component HeroBlurBackdrop inherits Rectangle {
     in property <image> blur-a;
     in property <image> blur-b;
@@ -52,11 +46,10 @@ export component HeroBlurBackdrop inherits Rectangle {
         opacity: (root.has-blur && !root.use-a) ? 1.0 : 0.0;
         animate opacity { duration: Theme.dur-med; easing: ease-in-out; }
     }
-    // Scrim. Its opacity is solved per artwork and baked into the brush, so
-    // there is no `with-alpha` here — a white sleeve needs roughly twice the
-    // opacity a black one does, which a fixed alpha can't express. Animated
-    // on the same duration as the slots above so a blur swap and its scrim
-    // land together instead of the scrim snapping ahead.
+    // The opacity is solved per artwork and baked into the brush, hence no
+    // `with-alpha`: a white sleeve needs roughly twice what a black one does,
+    // which a fixed alpha can't express. Animated on the slots' own duration, so
+    // a swap and its scrim land together instead of the scrim snapping ahead.
     Rectangle {
         x: 0;
         y: 0;

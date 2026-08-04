@@ -4,27 +4,19 @@ import { SectionCard } from "../../components/settings/section-card.slint";
 import { SettingRow } from "../../components/settings/setting-row.slint";
 import { Dropdown } from "../../components/settings/dropdown.slint";
 
-// Language section: single row with the locale dropdown.
+// One row: the locale dropdown. Its options come from the `Settings` global,
+// which `src/ui/locale.rs::install_locale` fills from `SUPPORTED_LOCALES`. The
+// native-name labels are deliberately untranslated — a language picker always
+// renders each option in its own script — while the title and row label take
+// `@tr()` so the page stays readable in whatever locale is picked.
 //
-// Wiring: the dropdown's options + selected index come from the `Settings`
-// global, which Rust populates in `src/ui/locale.rs::install_locale` from
-// `services::settings::SUPPORTED_LOCALES`. Native-name labels ("English",
-// "Deutsch") are intentionally NOT translated — language pickers always
-// render each option in its own script. Section title and row label are
-// translated via `@tr(...)` so the rest of the page header / label stays
-// readable when the user picks a non-English locale.
-//
-// Search visibility wrapper: each section is a thin Rectangle that hosts
-// the SectionCard inside an `if has-matches:` conditional element so the
-// whole card is removed from layout when no row matches the live query.
-// `visible: false` would keep the title/card slot in the VerticalLayout
-// (CLAUDE.md "visible: false does not remove an element from layout"), so
-// we use the conditional element form. `has-matches` is exposed as an
-// `out property` so the page that mounts this section can detect the
-// "all sections hidden" state and render the no-results placeholder.
-//
-// The rule itself lives on `SettingsPage`; the local wrapper binds this
-// section's title once so the per-row call sites stay two arguments.
+// **This section is the pattern the other ten follow.** Each is a thin
+// Rectangle hosting its card inside an `if has-matches:`, so a card that matches
+// nothing leaves the layout entirely; `visible: false` would keep its slot. The
+// flag is an `out property` so the page can spot the all-hidden state and paint
+// its no-results placeholder. The matching rule lives on `SettingsPage`; the
+// local wrapper binds this section's title once, so the per-row call sites stay
+// two arguments.
 export component LanguageSection inherits Rectangle {
     background: transparent;
     horizontal-stretch: 1;
@@ -41,13 +33,10 @@ export component LanguageSection inherits Rectangle {
     out property <bool> has-matches:
         row-visible(@tr("Choose your preferred language"), "");
 
-    // The Rectangle wrapper around the conditional SectionCard would
-    // report 0 preferred-height to the parent VerticalLayout (Rectangle
-    // sizes to a layout child, not to positioned children — including
-    // `if`-elements). Wrapping in VerticalLayout makes preferred-height
-    // track the SectionCard's natural height when present, 0 when absent,
-    // so the section card collapses cleanly under search filtering and
-    // expands to its real height otherwise.
+    // **The wrapper every section needs.** A `Rectangle` sizes to a layout
+    // child, never to a conditional one, so around a bare `if` it reports 0
+    // preferred-height. Wrapped, the height tracks the card when it's there and
+    // collapses to nothing when the filter hides it.
     VerticalLayout {
         if has-matches: SectionCard {
             title: @tr("Language");
@@ -60,11 +49,9 @@ export component LanguageSection inherits Rectangle {
                     options: Settings.language-names;
                     selected-index <=> Settings.language-idx;
                     trigger-width: 160px;
-                    // Dropdown updates `selected-index` itself before firing
-                    // `selected(i)`. Forward straight to the Settings global's
-                    // `language-changed(int)` callback — Rust resolves idx →
-                    // code, calls `slint::select_bundled_translation`, and
-                    // persists.
+                    // The dropdown has already written `selected-index`, so this
+                    // just forwards; Rust resolves the code, switches the
+                    // bundled translation and persists.
                     selected(idx) => { Settings.language-changed(idx); }
                 }
             }

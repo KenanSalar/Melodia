@@ -1,23 +1,16 @@
 import { Theme } from "../../theme.slint";
 
-// 52×32 Material-3-style switch. Tauri's `Switch` styling: a pill track
-// with a circular thumb that animates left ↔ right. The thumb position is
-// driven by a 0..1 float `a` (the source) so the thumb's `x` is a derived
-// per-frame expression — animating the source avoids the phase-lag pitfall
-// where `animate x` would lag a width-derived binding (CLAUDE.md note).
+// M3-style switch: a pill track with a thumb that slides across it. The travel
+// is animated on a 0..1 float and the thumb's `x` derives from that — animating
+// the `x` itself would phase-lag the width-derived binding under it.
 export component ToggleSwitch inherits Rectangle {
     in-out property <bool> checked;
     in-out property <bool> enabled <=> touch.enabled;
-    // When `true`, clicking does NOT flip `checked` locally — the parent
-    // owns the state and is expected to react to `toggled(new-value)`
-    // (e.g. open a confirm dialog) before mutating the source. Default
-    // `false` preserves the auto-flip behaviour of the existing
-    // `<=>`-bound callsites. Used by the native-titlebar row in
-    // appearance-section, which gates the change behind a restart
-    // confirmation: a local self-flip would orphan the one-way
-    // `checked: Theme.use-native-titlebar` binding (CLAUDE.md
-    // "components that write to their own in-out property orphan a
-    // one-way `name: source` binding" pitfall).
+    // On, a click doesn't flip `checked` here — the parent owns the state and
+    // acts on `toggled` first. That's what the restart-gated rows need: they
+    // bind `checked` one-way to the persisted value, and a self-flip would
+    // orphan that binding. Off by default, so the `<=>`-bound mounts keep
+    // flipping themselves.
     in property <bool> manual: false;
 
     callback toggled(bool /* requested new value */);
@@ -25,17 +18,14 @@ export component ToggleSwitch inherits Rectangle {
     width: 52px;
     height: 32px;
 
-    // Track. Surface1 when off, accent when on; same colour gate uses the
-    // dur-fast token so the visual lines up with other control feedback
-    // around the page.
+    // On the shared fast duration, so it lines up with the page's other
+    // control feedback.
     track := Rectangle {
         background: root.checked ? Theme.accent : Theme.surface1;
         border-radius: root.height / 2;
         animate background { duration: Theme.dur-fast; easing: ease-in-out; }
     }
 
-    // Thumb. 24 px disc, 4 px inset on each side: x travels 0 → 24 px as
-    // `a` goes 0 → 1.
     property <float> a: root.checked ? 1.0 : 0.0;
     animate a { duration: Theme.dur-fast; easing: ease-in-out; }
 
@@ -53,8 +43,7 @@ export component ToggleSwitch inherits Rectangle {
         mouse-cursor: pointer;
         clicked => {
             if (root.manual) {
-                // Don't mutate `checked` — the parent decides whether to
-                // accept the change. Pass the requested new value.
+                // Report the requested value; the parent decides.
                 root.toggled(!root.checked);
             } else {
                 root.checked = !root.checked;

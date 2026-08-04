@@ -4,16 +4,14 @@ import { MetaChip } from "meta-chip.slint";
 // A row (or rows) of `MetaChip`s, wrapped by Rust.
 //
 // Slint 1.16 has no `Flow` and can't build a nested array, so the split comes
-// from `src/ui/chips.rs`: the host publishes `[[string]]` — outer is rows,
-// inner is the chips in that row — and this walks two real arrays. The strip
-// only reports its width; who chunks it, and whether overflow wraps or is
-// dropped, is the host's business. `Player.recompute-chip-rows` wraps freely;
-// the heroes cap at `ui::hero_chips::HERO_MAX_ROWS`, since their band is sized
-// by its artwork tile.
+// from `src/ui/chips.rs` as a `[[string]]` of rows and this walks two real
+// arrays. The strip only reports its width — who chunks against it, and whether
+// overflow wraps or is dropped, is the host's business: Now Playing wraps
+// freely, a hero caps at `ui::hero_chips::HERO_MAX_ROWS` because its band is
+// sized by the artwork tile.
 //
 // Both brushes are inputs for the reason `MetaChip` states, and every mount
-// overrides both — the Now Playing view with the `np-accent-*` pair, a hero
-// with the `HeroBackdrop` one.
+// overrides both.
 export component MetaChipStrip inherits Rectangle {
     in property <[[string]]> rows;
     in property <brush> chip-fill;
@@ -33,13 +31,12 @@ export component MetaChipStrip inherits Rectangle {
     // with no metadata — or a slow fetch — from reflowing whatever sits above.
     min-height: 26px;
     vertical-stretch: 0;
-    // The other half of the wrapper below, and the half nothing catches at
-    // build time: that wrapper is a real layout, so the root merges its
-    // horizontal constraint and the widest published row becomes a floor. A
-    // box layout never shrinks a cell past its `min`, so the strip would keep
-    // being handed the width it was chunked at — and keep reporting it — while
-    // the panel around it narrowed, so the chips clipped instead of wrapping.
-    // Same floor, same cure, as `settings/chip-group.slint`'s hidden ruler.
+    // The other half of the wrapper below, and the half nothing catches at build
+    // time: that wrapper is a real layout, so the root merges its horizontal
+    // constraint and the widest published row becomes a floor no narrowing can
+    // negotiate. The strip would keep being handed the width it was chunked at —
+    // and keep reporting it — so the chips clip instead of wrapping. Same floor
+    // and same cure as `settings/chip-group.slint`'s hidden ruler.
     min-width: 0px;
 
     // `changed` can't watch a path expression, so the width is mirrored into a
@@ -49,9 +46,8 @@ export component MetaChipStrip inherits Rectangle {
         root.measured(watched-w);
     }
 
-    // First-layout seed. `changed` doesn't fire on the initial binding
-    // evaluation, so the mount-time width never reaches the host without this.
-    // Same 1 ms pattern as `GridColumnsSync`.
+    // First-layout seed: `changed` doesn't fire on the initial evaluation, so
+    // the mount-time width reaches the host through nothing else.
     Timer {
         interval: 1ms;
         running: true;
@@ -61,20 +57,18 @@ export component MetaChipStrip inherits Rectangle {
         }
     }
 
-    // The plain wrapper is what lets a second row grow the strip. A root
-    // inheriting `Rectangle` folds a child *layout* into its own layout info
-    // but not a conditional one — an `if` lowers to a repeater, and
-    // `gen_layout_info_prop` skips those — so with the `if` as the direct
-    // child the strip reported `preferred: 0`, took its 26 px floor from
-    // `min-height`, and drew every row past the first outside the box it was
-    // given. See the `if`-child entry in `.claude/rules/slint-pitfalls.md`.
+    // The plain wrapper is what lets a second row grow the strip. A `Rectangle`
+    // root folds a child *layout* into its own layout info but not a conditional
+    // one — an `if` lowers to a repeater, which `gen_layout_info_prop` skips —
+    // so with the `if` as the direct child the strip reported `preferred: 0`,
+    // took its floor from `min-height`, and drew every row past the first
+    // outside the box. See the `if`-child entry in `slint-pitfalls.md`.
     VerticalLayout {
         if root.show-rows: VerticalLayout {
-            // Rows sit `pad-xs` apart, chips `pad-sm` — a wrapped row is the
-            // same strip continuing, not a second one, and the tighter gap is
-            // what lets a hero band absorb it without growing. Only the
-            // horizontal number is mirrored in Rust (`ui::chips::SPACING`);
-            // this one is Slint's alone.
+            // Tighter than the gap between chips: a wrapped row is the same
+            // strip continuing, not a second one, and that is what lets a hero
+            // band absorb it without growing. Only the horizontal number is
+            // mirrored in Rust (`ui::chips::SPACING`); this one is Slint's alone.
             spacing: Theme.pad-xs;
             for row in root.rows: HorizontalLayout {
                 alignment: root.centred ? LayoutAlignment.center : LayoutAlignment.start;

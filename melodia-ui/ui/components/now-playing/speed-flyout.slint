@@ -3,14 +3,10 @@ import { PopupSurface } from "../popup-surface.slint";
 import { FlyoutOption } from "flyout-option.slint";
 import { SpeedPresets } from "flyout-presets.slint";
 
-// The speed-selection flyout: a `PopupSurface` listing the playback-rate
-// presets from the shared `SpeedPresets` global. Lives inside the overflow
-// menu's single PopupWindow (no nested PopupWindow — the app's deliberate
-// single-popup discipline), positioned to the LEFT of the menu column. The
-// host sets `width`/`height`/`x`/`y` (computed from `SpeedPresets.list`);
-// this component just renders the rows and emits `pick(value)`.
+// The playback-rate presets, off the shared global. Like its two siblings it
+// lives *inside* the overflow menu's one PopupWindow, left of the column; the
+// host places it and this renders the rows.
 export component SpeedFlyout inherits PopupSurface {
-    // Live multiplier, used to mark the active row.
     in property <float> current-speed;
     callback pick(float);
 

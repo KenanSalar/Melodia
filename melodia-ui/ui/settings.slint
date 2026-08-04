@@ -1,164 +1,96 @@
-// Settings global — single source of truth for the Settings page's
-// reactive state. Rust populates the lists and indices at startup
-// (`src/ui/appearance/install.rs`) and on every chip / dot click; the
-// Settings UI binds chip groups + colour-dot grids to these properties
-// and forwards `selected(int)` events to the change callbacks.
+// The Settings page's reactive state. Rust populates the lists and indices at startup
+// and on every chip / dot click; the UI binds chip groups and colour-dot grids to them
+// and forwards `selected(int)` to the change callbacks.
+//
+// The page's own search filter and row-visibility rule live on `SettingsPage`, not here:
+// values the user configures vs. how the page configuring them is navigated.
 
 export global Settings {
     // Stable across runs — populated once at startup from `themes::registry()`.
     in property <[string]> theme-names;
     in-out property <int> theme-idx;
 
-    // Variant chips are inlined in `ui/views/settings/appearance-section.slint`
-    // as conditional literal `[@tr("Dark"), @tr("Light"), @tr("System")]` /
-    // Catppuccin proper-noun lists so Slint's bundled translations can
-    // re-render them on locale switch. Rust drives only the selected
-    // index (`variant-idx`).
+    // The chips themselves are inline `@tr` literals in `appearance-section.slint`, so
+    // bundled translations re-render them on a locale switch; Rust drives only the
+    // index. Same for `color-style-idx` below.
     in-out property <int> variant-idx;
 
-    // Re-populated whenever theme OR variant changes (Catppuccin shades
-    // each accent per-variant, so the same id renders different swatches
-    // in Latte vs. Mocha). Length matches `accent-names` 1:1; the
-    // ColorDotGrid renders one tooltip per dot pulled from
-    // `accent-names[i]` (so users can tell which colour is which —
-    // especially when Material You prepends a 9th dynamic dot).
+    // Re-populated on every theme *or* variant change — Catppuccin shades each accent
+    // per variant, so one id renders different swatches in Latte and Mocha. 1:1 with
+    // `accent-names`, which the `ColorDotGrid` turns into per-dot tooltips.
     in property <[brush]> accent-colors;
     in property <[string]> accent-names;
     in-out property <int> accent-idx;
 
-    // True when the active theme is KDE Breeze, the chosen variant is
-    // "System", and a parsed `kdeglobals` palette is available — i.e. the
-    // palette is sourced from Plasma's live colour scheme rather than
-    // the static Light/Dark tables. The Accent Color row reads this to
-    // hide the dot grid (the OS already picked the accent). Rust writes
-    // it on every appearance change.
+    // The palette is coming from Plasma's live colour scheme rather than the static
+    // Light/Dark tables: KDE Breeze, variant "System", and a parsed `kdeglobals`. The
+    // Accent Color row hides its dot grid on it, the OS having already picked one.
     in property <bool> kde-system-active;
 
-    // Material 3 dynamic-colour style picker. The chip labels are inlined
-    // in `ui/views/settings/appearance-section.slint` as a literal
-    // `[@tr("None"), @tr("Tonal Spot"), …]` list so Slint's bundled
-    // translations can re-render them on locale switch. This index
-    // matches `services::material_you::SchemeStyle::all()` 1:1 (length 8,
-    // index 0 = None). Visible only when the active theme is Material 3.
+    // 1:1 with `material_you::SchemeStyle::all()`, index 0 being None. Visible only
+    // under the Material 3 theme.
     in-out property <int> color-style-idx;
 
-    // True when the user has picked a non-`None` Color Style *and* the
-    // Material You coordinator successfully extracted a seed colour from
-    // the current artwork. Drives:
-    //   - The Material 3 accent grid: when active, Rust prepends a 9th
-    //     "Material You" swatch (rendered in the dynamic primary) at
-    //     index 0 of `accent-colors`.
-    //   - The Color Style row's description text — flips between
-    //     "Active — palette derived from the current track's artwork."
-    //     and "Generate theme colors from album artwork." so users
-    //     can tell whether dynamic colour is currently driving the UI.
+    // A non-`None` Color Style *and* a seed the coordinator actually extracted from the
+    // artwork. Prepends the dynamic-primary swatch to `accent-colors`, and flips the
+    // Color Style row's description so it's clear whether dynamic colour is live.
     in property <bool> material-you-active;
 
-    // Fired on chip / dot click. Rust resolves idx → id, persists, applies
-    // the new palette, and writes back the lists.
+    // Fired on chip / dot click. Rust resolves idx → id, persists, applies the new
+    // palette and writes the lists back.
     callback theme-changed(int);
     callback variant-changed(int);
     callback accent-changed(int);
     callback color-style-changed(int);
 
-    // True iff `library::settings::is_kde_desktop()` returned true at
-    // startup. Hides the "Match Unfocused Window Background" row
-    // entirely off-KDE — the behaviour mirrors KDE's window-decoration
-    // fade and isn't meaningful elsewhere. Set once in
-    // `appearance::install`; never written from Slint.
+    // Hides the "Match Unfocused Window Background" row entirely off-KDE — the
+    // behaviour mirrors KDE's window-decoration fade and means nothing elsewhere.
     in property <bool> match-unfocused-supported;
 
-    // User toggle for the "Match Unfocused Window Background" row.
-    // Two-way `<=>` from the ToggleSwitch lets the component's local
-    // `checked` write update this directly; `match-unfocused-bg-changed`
-    // fires on every click so Rust persists through
-    // `library::settings::set_match_unfocused_to_system_bg` and
-    // re-evaluates the runtime gate in `window_chrome.rs`.
     in-out property <bool> match-unfocused-bg;
     callback match-unfocused-bg-changed(bool);
 
-    // User toggle for "System Tray Icon" — whether the tray subsystem runs
-    // at all. Rust-seeded at startup from `settings.tray.enabled`; never
-    // written from Slint (the ToggleSwitch is `manual: true` and routes
-    // through the `restart-tray` Dialog, since the change only applies on
-    // the next launch). Default off — the tray is opt-in.
+    // Whether the tray subsystem runs at all. Never written from Slint: the switch is
+    // `manual: true` and routes through the `restart-tray` Dialog, the change only
+    // applying next launch. Opt-in.
     in property <bool> tray-enabled;
 
-    // True once a system-tray icon has actually been created (see
-    // `ui::tray_bridge`). The "Close to Tray" row is greyed out (not hidden)
-    // when false — either because `tray-enabled` is off, or because the
-    // session has no tray host (e.g. vanilla GNOME without the AppIndicator
-    // extension), in which case the close handlers fall back to quitting and
-    // the toggle would have no effect. Set once tray init succeeds —
-    // synchronously on Linux, from the deferred event-loop init on
-    // Windows / macOS; never written from Slint.
+    // A tray icon was actually created. "Close to Tray" greys out rather than hiding
+    // when false — either the tray is off, or the session has no tray host (vanilla
+    // GNOME without AppIndicator) — because the close handlers then fall back to
+    // quitting and the toggle would do nothing.
     in property <bool> tray-active;
 
-    // Close to Tray toggle. ToggleSwitch in
-    // `ui/views/settings/window-chrome-section.slint` binds two-way; the
-    // `toggled(bool)` event fires `close-to-tray-changed`. Rust applies the
-    // new value synchronously to a process-global atomic via
-    // `ui::tray_bridge::set_close_to_tray` (so `window_chrome`'s close
-    // handlers pick it up on the next close), then persists through
-    // `library::window::set_close_to_tray` on the blocking pool. Seeded at
-    // startup from `settings.tray.close_to_tray`. Default is `false` (off) —
-    // closing the window quits, matching every release before the tray
-    // landed. When no tray icon is active the close handlers fall back to
-    // quitting regardless, so enabling this can never strand the window.
+    // Applied synchronously to a process-global atomic so `window_chrome`'s close
+    // handlers see it on the next close, then persisted on the blocking pool. Off by
+    // default, matching every release before the tray landed; with no tray icon active
+    // the close handlers quit regardless, so this can never strand the window.
     in-out property <bool> close-to-tray: false;
     callback close-to-tray-changed(bool);
 
-    // Gapless playback toggle. ToggleSwitch in
-    // `ui/views/settings/playback-section.slint` binds two-way; the
-    // `toggled(bool)` event fires `gapless-playback-changed`. Rust
-    // applies the new value to `PlayerState.gapless_enabled`
-    // synchronously via `library::playback::player_set_gapless` (so the
-    // next 500 ms position-monitor tick picks it up), then persists
-    // through `library::settings::set_gapless_playback` on the blocking
-    // pool. Seeded at startup from `settings.playback.gapless_playback`
-    // in `src/ui/playback_settings.rs::install_playback_settings`.
+    // Applied to `PlayerState.gapless_enabled` synchronously — the next 500 ms monitor
+    // tick picks it up — then persisted on the blocking pool.
     in-out property <bool> gapless-playback: true;
     callback gapless-playback-changed(bool);
 
-    // Play button animation selector. ChipGroup in
-    // `ui/views/settings/playback-section.slint` binds two-way and forwards
-    // `selected(int)` to `play-button-animation-changed`. The PlayButton in
-    // `ui/components/now-playing/play-button.slint` reads this idx to switch behaviour.
-    // Indices: 0 = None, 1 = Equalizer. Seeded at startup from
-    // `settings.play_button_animation` in
-    // `src/ui/playback_settings.rs::install_playback_settings`; Rust does the
-    // idx ↔ token mapping in both directions so a malformed disk value can't
-    // pin the chip to an invalid index.
+    // 0 = None, 1 = Equalizer; read by `PlayButton`. Rust maps idx ↔ token in both
+    // directions, so a malformed disk value can't pin the chip to an invalid index.
     in-out property <int> play-button-animation-idx: 0;
     callback play-button-animation-changed(int);
 
-    // Resume on Startup toggle. ToggleSwitch in
-    // `ui/views/settings/playback-section.slint` binds two-way; the
-    // `toggled(bool)` event fires `resume-on-startup-changed`. Single-phase
-    // persist via `library::settings::set_resume_on_startup` on the
-    // blocking pool — no runtime side effect, the flag is consulted once
-    // at next launch in `main.rs` after `restore_persisted_queue`. Seeded
-    // at startup from `settings.playback.resume_on_startup` in
-    // `src/ui/playback_settings.rs::install_playback_settings`. Default
-    // is `false` (off) to match `PlaybackFlags::default()`.
+    // Persist-only — no runtime side effect. `main.rs` consults the flag once at the
+    // next launch, after `restore_persisted_queue`.
     in-out property <bool> resume-on-startup: false;
     callback resume-on-startup-changed(bool);
 
-    // Crossfade cluster in `ui/views/settings/playback-section.slint`. The four
-    // toggles bind two-way and each `*-changed` callback applies to the live
-    // Rodio backend synchronously via `library::playback::player_set_crossfade_*`
-    // before persisting through `library::settings::set_crossfade_*` on the
-    // blocking pool — the same two-phase shape as the equalizer / ReplayGain
-    // callbacks. Seeded at startup from `settings.crossfade` in
-    // `src/ui/playback_settings.rs::install_playback_settings`.
+    // Each `*-changed` applies to the live Rodio backend synchronously before
+    // persisting on the blocking pool — the equalizer / ReplayGain two-phase shape.
     //
-    // The duration is carried in **seconds** here (the slider's natural unit);
-    // Rust converts to the milliseconds the backend and `settings.json` use.
-    // `crossfade-min-secs` / `crossfade-max-secs` are `in` and seeded from
-    // `player::crossfade::{MIN,MAX}_CROSSFADE_MS`, so the range lives in exactly
-    // one place. `-changed` fires live during a drag (apply only, no disk write);
-    // `-committed` fires on release and persists — mirroring `set-volume` /
-    // `commit-volume`.
+    // The duration is in **seconds** here, the slider's natural unit; Rust converts to
+    // the milliseconds the backend and `settings.json` use. The bounds are seeded from
+    // `player::crossfade::{MIN,MAX}_CROSSFADE_MS`, so the range lives in one place.
+    // `-changed` fires live during a drag and only applies; `-committed` fires on
+    // release and persists — the `set-volume` / `commit-volume` split.
     in-out property <bool> crossfade-enabled: false;
     callback crossfade-enabled-changed(bool);
     in-out property <float> crossfade-duration-secs: 2.0;
@@ -173,15 +105,12 @@ export global Settings {
     in-out property <bool> crossfade-fade-on-pause: false;
     callback crossfade-fade-on-pause-changed(bool);
 
-    // Scrobbling (`ui/views/settings/scrobbling-section.slint`). Rust owns every
-    // property here: the `connected`/`username`/`enabled` values are painted by
-    // the `ScrobbleService` status-watch subscriber in
-    // `src/ui/scrobbling_settings.rs` (the single writer), and the toggles route
-    // their `-changed(bool)` events back to persist + shadow-refresh. `-connect`
-    // is opened inline from the section markup (not a callback) to avoid Slint's
-    // recursion guard; `-disconnect` clears the stored credential. `configured`
-    // reflects whether this build shipped Last.fm app keys — false ⇒ the section
-    // shows "Not configured in this build" with no Connect button.
+    // Rust owns every property here — the `ScrobbleService` status-watch subscriber is
+    // the single writer — and the toggles route their events back to persist and
+    // refresh the shadow. Connect is opened inline from the section markup rather than
+    // through a callback, dodging Slint's recursion guard. `configured` says whether
+    // this build shipped Last.fm app keys; false shows "Not configured in this build"
+    // with no Connect button.
     in property <bool> scrobble-lastfm-configured;
     in property <bool> scrobble-lastfm-connected;
     in property <string> scrobble-lastfm-username;
@@ -199,21 +128,17 @@ export global Settings {
     // Mirror favorites to ListenBrainz recording feedback.
     in-out property <bool> scrobble-listenbrainz-love;
     callback scrobble-listenbrainz-love-changed(bool);
-    // Auto-tag scanned tracks with their MusicBrainz Recording ID (via
-    // ListenBrainz) so loves work on untagged libraries. The manual button
-    // forces a re-sweep of tracks still missing an id.
+    // Auto-tag scanned tracks with their MusicBrainz Recording ID so loves work on
+    // untagged libraries; the button forces a re-sweep of tracks still missing one.
     in-out property <bool> scrobble-mbid-auto-tag;
     callback scrobble-mbid-auto-tag-changed(bool);
     callback scrobble-lookup-missing-mbids();
 
-    // Discord Rich Presence (`ui/views/settings/discord-section.slint`). Rust
-    // owns every property here: `discord-rpc-connected` (and `-enabled`) are
-    // painted by the `DiscordPresenceService` status-watch subscriber in
-    // `src/ui/discord_settings.rs` (the single writer), so a Discord restart
-    // flips the status row live; the toggles route their `-changed(bool)` events
-    // back to persist + shadow-refresh (`set_flags` starts/stops the IPC
-    // worker). No credentials / login dialog — the application id is a
-    // compile-time constant, so unlike scrobbling everything fits on `Settings`.
+    // Same shape as scrobbling: the `DiscordPresenceService` status-watch subscriber is
+    // the single writer, so a Discord restart flips the status row live, and the
+    // toggles persist and refresh the shadow through `set_flags`, which starts and
+    // stops the IPC worker. No credentials — the application id is a compile-time
+    // constant, so unlike scrobbling everything fits on `Settings`.
     in property <bool> discord-rpc-connected;
     in-out property <bool> discord-rpc-enabled;
     callback discord-rpc-enabled-changed(bool);
@@ -222,67 +147,37 @@ export global Settings {
     in-out property <bool> discord-rpc-hide-when-paused;
     callback discord-rpc-hide-when-paused-changed(bool);
 
-    // Watch for file changes (file-watcher) toggle. ToggleSwitch in
-    // `ui/views/settings/file-watching-section.slint` binds two-way; the
-    // `toggled(bool)` event fires `watch-for-file-changes-changed`. Rust
-    // persists `library.folder_watching_enabled` then flips the
-    // `FolderWatcher` start/stop state via
-    // `library::settings::set_folder_watching_enabled` on the tokio
-    // runtime (the watcher start needs an async DB query before taking
-    // the parking_lot lock). Seeded at startup from
-    // `settings.library.folder_watching_enabled` in
-    // `src/ui/file_watching.rs::install`. Default is `true` (on) — consumer
-    // music players auto-watch with no toggle, and shipping with watching
-    // off out of the box stranded new users in a stale-UI failure mode.
-    // `LibraryFlags::default()` matches this default.
+    // Persists, then flips the `FolderWatcher` on the tokio runtime rather than the
+    // blocking pool — the start needs an async DB query before it can take the
+    // parking_lot lock. **On by default**: consumer players auto-watch with no toggle
+    // at all, and shipping it off stranded new users in a stale-UI failure mode.
     in-out property <bool> watch-for-file-changes: true;
     callback watch-for-file-changes-changed(bool);
 
-    // Window corner radius in logical pixels. Single source of truth for
-    // the AppearanceSection's "Window Corner Radius" row — the preset
-    // chip group binds here, and Rust mirrors the value into
-    // `Theme.shell-radius` on every change so the rounded outer mantle
-    // shell + inner content panel repaint reactively. Set once at
-    // startup in `src/ui/appearance/install.rs` from
-    // `services::settings::SettingsData.corner_radius` (clamped to
-    // `MAX_CORNER_RADIUS = 15` and snapped to the nearest chip preset
-    // via `library::settings::snap_to_preset`, so the value here is
-    // always one of {0, 6, 8, 10, 15} — guarantees the chip selection
-    // matches what's painted, even if `settings.json` was hand-edited
-    // to an off-preset value). Name kept unitless to match the Rust
-    // field `SettingsData.corner_radius` for grep-friendliness.
+    // Logical pixels, mirrored into `Theme.shell-radius` on every change so the mantle
+    // shell and content panel repaint reactively. Rust clamps and snaps to the nearest
+    // chip preset on read, so the value here is always one of the presets and the chip
+    // selection matches what's painted even after a hand-edited `settings.json`. Kept
+    // unitless to match the Rust field name.
     in-out property <int> corner-radius: 6;
     callback corner-radius-changed(int);
 
-    // Custom-titlebar decoration button style.
-    //   0 = Standard (Material bar icons, current Windows-like look)
-    //   1 = macOS    (red/yellow/green traffic-light circles with
-    //                 hover-reveal glyphs and grey-when-unfocused fill)
-    // Mirrored synchronously into `Theme.titlebar-button-style` by the
-    // Rust callback so `ui/components/custom-titlebar.slint` can read it
-    // through `Theme` (same precedent as `Theme.shell-radius`). Only
-    // active when `Theme.use-native-titlebar == false` — under the
-    // native titlebar the OS owns the decoration buttons.
+    // 0 = Standard (Material bar icons), 1 = macOS (traffic lights with hover-reveal
+    // glyphs). Mirrored into `Theme.titlebar-button-style` so `custom-titlebar.slint`
+    // reads it through `Theme`, the `shell-radius` precedent. Inert under the native
+    // titlebar, where the OS owns the buttons.
     in-out property <int> titlebar-button-style: 0;
     callback titlebar-button-style-changed(int);
 
-    // Custom-titlebar decoration button side.
-    //   0 = Right (current default, matches Windows / KDE convention)
-    //   1 = Left  (macOS convention; works with either style)
-    // Independent of `titlebar-button-style` — all four combinations
-    // render cleanly with close always kept at the outer window corner.
+    // 0 = Right (Windows / KDE), 1 = Left (macOS). Independent of the style — all four
+    // combinations render with close always at the outer window corner.
     in-out property <int> titlebar-button-side: 0;
     callback titlebar-button-side-changed(int);
 
-    // Overflow Menu Buttons — five independently-toggleable bools that
-    // mirror `services::settings::SettingsData.overflow_buttons` (a
-    // Vec<String> of ids). Stored as discrete bools (rather than a
-    // [string] model) so the change callback can pinpoint which button
-    // toggled without diffing arrays. Each Appearance-section checkbox
-    // binds two-way to the matching prop and fires
-    // `overflow-buttons-changed(id, on)`; Rust applies the add/remove
-    // against the Vec and persists. The now-playing bar reads them
-    // directly to gate inline-vs-overflow visibility.
+    // Mirrors `SettingsData.overflow_buttons`, a `Vec<String>` of ids. Discrete bools
+    // rather than a `[string]` model so the callback can name which button toggled
+    // without diffing arrays; Rust applies the add/remove and persists. The
+    // now-playing bar reads them to gate inline-vs-overflow visibility.
     in-out property <bool> overflow-favorite;
     in-out property <bool> overflow-repeat;
     in-out property <bool> overflow-shuffle;
@@ -290,37 +185,23 @@ export global Settings {
     in-out property <bool> overflow-queue;
     callback overflow-buttons-changed(string /*id*/, bool /*overflow-on*/);
 
-    // Language picker — bundled `.po` translations are baked into the binary
-    // (build.rs uses `slint_build::CompilerConfiguration::with_bundled_translations`).
-    // Rust populates `language-names` with native-name labels (always shown in
-    // the language's own script, never re-translated) and `language-codes`
-    // with the matching `services::settings::SUPPORTED_LOCALES` codes. The
-    // dropdown two-way binds to `language-idx`; the change callback resolves
-    // idx → code, calls `slint::select_bundled_translation(code)` synchronously
-    // (which re-renders every `@tr(...)` on the next frame), then spawns the
-    // disk persist via `library::settings::set_locale`. See
-    // `src/ui/locale.rs::install_locale`.
+    // `language-names` carries native-name labels, always in the language's own script
+    // and never re-translated; `language-codes` the matching `SUPPORTED_LOCALES` codes.
+    // The change callback resolves idx → code and calls
+    // `slint::select_bundled_translation` synchronously, which re-renders every `@tr`
+    // on the next frame, then spawns the disk persist.
     in property <[string]> language-names;
     in property <[string]> language-codes;
     in-out property <int>  language-idx;
     callback language-changed(int);
 
-    // The page's search filter and its row-visibility rule live on
-    // `SettingsPage` (`globals/settings-page.slint`), not here.
-
-    // About section — opens the project's source repository
-    // (`CARGO_PKG_REPOSITORY`) in the system browser. Action callback
-    // (Slint → Rust); wired in `src/ui/about.rs`, no Slint-side handler.
+    // Opens `CARGO_PKG_REPOSITORY` in the system browser. No Slint-side handler.
     callback open-repository();
 
-    // Translated strings for the "File watching disabled" notification.
-    // Surfaced as `pure callback`s so the Rust side can resolve them
-    // through Slint's bundled-translation pipeline (`@tr(...)`) without
-    // needing a Rust-side `tr(...)` helper — Slint 1.16 doesn't expose
-    // `translate_from_bundle` publicly. Same shape as `matches` above.
-    // Rust calls `ui.global::<Settings>().invoke_watcher_disabled_title()`
-    // / `invoke_watcher_disabled_message()` at the moment the toggle flips
-    // off, so the strings re-resolve in the currently-selected locale.
+    // Everything below is a `pure callback` wrapping an `@tr` literal, because Slint
+    // 1.16 exposes no Rust-callable `tr(...)`: Rust invokes these at push time so each
+    // string resolves in the locale selected right then, rather than the one that was
+    // active when the notification was built.
     pure callback watcher-disabled-title() -> string;
     watcher-disabled-title => {
         return @tr("File watching disabled");
@@ -330,11 +211,7 @@ export global Settings {
         return @tr("Tracks won't reflect disk changes until you re-enable it.");
     }
 
-    // Translated strings for the "Library re-syncing" notification surfaced
-    // on watcher-overflow rescan (`FileEvent::RescanNeeded`). Same `pure
-    // callback` shape as `watcher-disabled-*` so the Rust side resolves
-    // them through Slint's bundled-translation pipeline at notification
-    // push time, picking up the currently-selected locale.
+    // Surfaced on a watcher-overflow rescan (`FileEvent::RescanNeeded`).
     pure callback library-resyncing-title() -> string;
     library-resyncing-title => {
         return @tr("Library re-syncing");
@@ -344,16 +221,9 @@ export global Settings {
         return @tr("Filesystem event burst — rescanning your folders.");
     }
 
-    // Translated strings for the auto-updater notification stack. Same
-    // `pure callback` shape — Rust invokes these at push time so the
-    // string re-resolves against the currently-selected locale.
-    //   - "Update available" toast → carries the "install-update" action
-    //     kind; tapping Install dispatches `Updater.install()` via
-    //     `Notifications.action`.
-    //   - "Update installed" toast → carries "update-restart"; tapping
-    //     Restart respawns the binary.
-    //   - "Update failed" toast → action-less; surfaces the network /
-    //     verification error in the message body.
+    // The updater's three toasts. "Available" carries the `install-update` action kind
+    // and dispatches `Updater.install()`; "installed" carries `update-restart` and
+    // respawns the binary; "failed" is action-less and surfaces the error in its body.
     pure callback update-available-title() -> string;
     update-available-title => {
         return @tr("Update available");
@@ -382,20 +252,10 @@ export global Settings {
     update-failed-title => {
         return @tr("Update failed");
     }
-    // The body of the "Update failed" toast picks a friendly per-
-    // category message from a discriminator string the Rust side
-    // produces by classifying the underlying `AppError` (see
-    // `services::updater::event::FailureKind::as_kind_str`). Keeping
-    // the message bank here means each variant goes through `@tr(...)`
-    // and re-resolves in the active locale at push time. The raw error
-    // string was already logged at the send site for diagnostics.
-    //
-    // Discriminator values (mirror `FailureKind::as_kind_str`):
-    //   "network"   — couldn't reach the update server
-    //   "signature" — artifact didn't match the embedded public key
-    //   "parse"     — manifest didn't parse / missing fields
-    //   "io"        — local disk write / rename failed
-    //   "other"     — anything else (generic fallback)
+    // `kind` mirrors `FailureKind::as_kind_str`, which classifies the underlying
+    // `AppError`: "network", "signature", "parse", "io", or anything else. The bank
+    // lives here so each variant goes through `@tr`; the raw error was already logged
+    // at the send site.
     pure callback update-failed-reason(string /*kind*/) -> string;
     update-failed-reason(kind) => {
         if (kind == "network") {
@@ -413,18 +273,15 @@ export global Settings {
         return @tr("Update failed. See logs for details.");
     }
 
-    // Translated strings for the playlist import/export notification toasts
-    // (header pills on the Playlists view). Same `pure callback` shape as
-    // the updater strings — Rust invokes them at push time so they resolve
-    // in the active locale, with the dynamic counts interpolated.
+    // The import/export header pills on the Playlists view.
     pure callback playlist-import-title(int /*imported*/) -> string;
     playlist-import-title(imported) => {
         return @tr("{n} playlist imported" | "{n} playlists imported" % imported);
     }
     pure callback playlist-import-message(int /*tracks*/, int /*missing*/) -> string;
     playlist-import-message(tracks, missing) => {
-        // Pluralized on the track count (`{n}`); the no-missing branch reuses
-        // the same `{n} track(s) added` msgid as `add-to-playlist-message`.
+        // Pluralized on the track count; the no-missing branch shares its msgid with
+        // `add-to-playlist-message`.
         return missing > 0
             ? @tr("{n} track added · {} missing" | "{n} tracks added · {} missing" % tracks, missing)
             : @tr("{n} track added" | "{n} tracks added" % tracks);
@@ -455,11 +312,9 @@ export global Settings {
         return @tr("Couldn't write the playlist files.");
     }
 
-    // Titles for the generic backend-failure toasts pushed from Rust through
-    // the `services::toast` bridge. Same `pure callback` shape as the playlist
-    // toasts — the UI-thread consumer resolves the localized title by toast
-    // kind at push time; the dynamic detail (a path or error message) rides on
-    // the toast body and is not translated.
+    // Titles for the generic backend-failure toasts coming through the
+    // `services::toast` bridge, resolved by toast kind. The dynamic detail — a path or
+    // an error message — rides on the body and is not translated.
     pure callback toast-playback-error-title() -> string;
     toast-playback-error-title => {
         return @tr("Playback error");
@@ -477,9 +332,8 @@ export global Settings {
         return @tr("Loved tracks");
     }
 
-    // Add-to-Playlist multi-select commit toast (track row context menu →
-    // Add to Playlist → tick playlists → Add). Title pluralizes on the
-    // number of playlists, message on the number of tracks added.
+    // The Add-to-Playlist picker's commit toast: title pluralizes on playlists,
+    // message on tracks added.
     pure callback add-to-playlist-title(int /*playlists*/) -> string;
     add-to-playlist-title(playlists) => {
         return @tr("Added to {n} playlist" | "Added to {n} playlists" % playlists);
@@ -489,10 +343,8 @@ export global Settings {
         return @tr("{n} track added" | "{n} tracks added" % tracks);
     }
 
-    // Edit-Track-Information dialog. `tag-multiple-values` is the placeholder
-    // sentinel a disagreeing field shows in a batch edit; the rest are the Save
-    // completion toast (Rust invokes them at push time so they resolve in the
-    // active locale, with the dynamic counts interpolated).
+    // `tag-multiple-values` is the placeholder a disagreeing field shows in a batch
+    // edit; the rest are the Save completion toast.
     pure callback tag-multiple-values() -> string;
     tag-multiple-values => {
         return @tr("‹multiple values›");

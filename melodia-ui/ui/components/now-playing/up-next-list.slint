@@ -7,24 +7,22 @@ import { MaterialIcon } from "../material-icon.slint";
 import { ArtworkImage } from "../artwork-image.slint";
 import { OverlayScrollbar } from "../overlay-scrollbar.slint";
 
-// One row inside the Up Next list. The two variants differ only in scale and
-// in palette — same three cells, same typography, so a track reads the same
-// way in the miniplayer as it does full-screen.
+// One row inside the Up Next list. The two variants differ only in scale and palette —
+// same three cells, same typography — so a track reads the same way in the miniplayer as
+// it does full-screen.
 //
-// **Scale**: the row height comes from the host (one source of truth, shared
-// with the slide animation); the tile and vertical padding step down with it.
-// The miniplayer sits a little tighter than the full-screen view so more of
-// the queue fits in a window the user is deliberately shrinking, but not so
-// much tighter that it becomes a different list.
+// **Scale** comes from the host, one source of truth shared with the slide animation,
+// and the tile and padding step down with it: the miniplayer sits tighter so more of the
+// queue fits in a window the user is deliberately shrinking, but not so much tighter
+// that it becomes a different list.
 //
-// **Palette** is the `compact` flag's real job. The full-screen host paints on
-// the artwork blur and takes the backdrop-solved brushes; the miniplayer paints
-// on ordinary `Theme.mantle` chrome and takes the neutral list palette,
-// including the shared `TrackListRow` hover — the Now-Playing accent is always
-// solved *light* for the blur, and a light tint on a light theme's mantle is no
-// hover indication at all. Restated in each branch because Slint can't apply a
-// property conditionally. Hover flips without an `animate`, matching
-// `TrackListRow` — an eased fade reads as lag when crossing rows.
+// **Palette is the `compact` flag's real job.** The full-screen host paints on the
+// artwork blur and takes the backdrop-solved brushes; the miniplayer paints on ordinary
+// chrome and takes the neutral list palette, including the shared row hover — the
+// Now-Playing accent is always solved *light* for the blur, and a light tint on a light
+// theme's mantle is no hover indication at all. Restated per branch because Slint can't
+// apply a property conditionally, and flipped without an `animate` like the track rows,
+// where an eased fade reads as lag when crossing rows.
 component UpNextRow inherits Rectangle {
     in property <QueueRow> data;
     in property <bool> compact;
@@ -61,9 +59,7 @@ component UpNextRow inherits Rectangle {
                 }
             }
 
-            // Outer Rectangle clips bidi overflow so `overflow: elide`
-            // triggers — same pattern as the now-playing bar's track-info
-            // cell.
+            // Clips bidi overflow so elide fires — the bar's track-info pattern.
             Rectangle {
                 clip: true;
                 horizontal-stretch: 1;
@@ -78,12 +74,10 @@ component UpNextRow inherits Rectangle {
                     }
                     Text {
                         text: "‎" + root.data.artist;
-                        // Compact (mini player) sits on `Theme.base` and is
-                        // body copy, so it takes `Theme.text` like every
-                        // other row list. The full view keeps its solved
-                        // muted tier — that one floats on the blurred cover,
-                        // where the two-tier split is what holds the
-                        // hierarchy against the artwork.
+                        // Compact is body copy on a plain surface, so it takes
+                        // `Theme.text` like every other row list. The full view keeps
+                        // its solved muted tier: that one floats on the blurred cover,
+                        // where the two-tier split is what holds the hierarchy.
                         color: compact ? Theme.text : Player.np-on-backdrop-muted;
                         font-size: Theme.font-size-sm;
                         overflow: elide;
@@ -109,53 +103,35 @@ component UpNextRow inherits Rectangle {
     }
 }
 
-// Full Up Next list: ListView with advance-by-row slide animation,
-// outgoing-row overlay, overlay scrollbar, and empty state. Reads
-// `NowPlaying.up-next-rows` / `NowPlaying.outgoing-row` /
-// `NowPlaying.slide-phase` / `NowPlaying.slide-direction` /
-// `NowPlaying.base-index` / `NowPlaying.queue-length` — the same data
-// feeds both surfaces.
+// The list itself: advance-by-row slide, outgoing-row overlay, overlay scrollbar and
+// empty state, all off the same `NowPlaying` data for both surfaces.
 //
-// Two hosts mount this component (full-screen Now Playing view and the
-// miniplayer's square variant) but never simultaneously: entering the
-// mini force-closes `Nav.now-playing-open` in `app-window.slint`, so
-// only one local `slide-timer` ever runs.
+// **Two hosts mount it but never at once**: entering the miniplayer force-closes
+// `Nav.now-playing-open`, so only one local slide timer ever runs.
 //
-// `compact: true` is the miniplayer variant; `compact: false` is the
-// full-screen Now Playing variant. Row height, scrollbar slot, list
-// right-inset, the empty-state glyph and — the part that matters — which
-// palette the rows paint all key off this single flag, so callers don't have
-// to thread half a dozen props.
+// Row height, scrollbar slot, list inset, the empty glyph and — the part that
+// matters — which palette the rows paint all key off the single `compact` flag, so a
+// caller threads one property rather than six.
 export component UpNextList inherits Rectangle {
     in property <bool> compact;
-    // Right-edge inset for the list body. Must exceed `scrollbar-width`
-    // so the row hover background doesn't paint under the overlay
-    // scrollbar (the ListView extent and the scrollbar slot overlap
-    // otherwise). Full Now Playing leaves 20 px against a 10 px bar
-    // (matching the queue sheet); the mini leaves 12 px against an 8 px
-    // bar — that 4 px breathing gap also keeps row TouchAreas off the
-    // window's right-edge resize TouchArea.
+    // **Must exceed `scrollbar-width`**, else the list extent and the scrollbar slot
+    // overlap and the row hover paints under the bar. The remaining gap also keeps the
+    // row TouchAreas off the window's right-edge resize band.
     in property <length> list-inset-right: compact ? 12px : 20px;
-    // Width of the scrollbar slot. `OverlayScrollbar` keeps its
-    // internal `bar-thickness` at 8 px; the extra px in the non-compact
-    // host gives the user a 1 px hit-test margin on each side.
+    // The bar keeps its own thickness; the extra in the full host is hit-test margin.
     in property <length> scrollbar-width: compact ? 8px : 10px;
 
-    // The one place a row's height is decided — handed to every `UpNextRow`
-    // and to the slide animation below, so the two can't drift. The compact
-    // variant is a step down from the full-screen one rather than a different
-    // list: same typography, same three cells, just tighter.
+    // **The one place a row's height is decided**, handed to every row and to the slide
+    // below, so the two can't drift.
     property <length> row-h: compact ? 46px : 52px;
     property <int> slide-frames: 18;         // ~288ms at 16ms
     property <float> slide-raw: clamp(1.0 * NowPlaying.slide-phase / root.slide-frames, 0.0, 1.0);
-    // Ease-out cubic so the row decelerates into place instead of stopping
-    // dead — `1 - (1 - t)^3`.
+    // Ease-out cubic, so the row decelerates into place instead of stopping dead.
     property <float> slide-p:
         1.0 - (1.0 - root.slide-raw) * (1.0 - root.slide-raw) * (1.0 - root.slide-raw);
 
-    // Driven purely by `NowPlaying.slide-phase`: Rust resetting it to 0
-    // restarts the timer, which advances the phase each frame and stops
-    // itself once it reaches `slide-frames`.
+    // Rust resetting the phase to 0 restarts this; it advances the phase per frame and
+    // stops itself at the end.
     slide-timer := Timer {
         interval: 16ms;
         running: NowPlaying.slide-phase < root.slide-frames;
@@ -166,21 +142,16 @@ export component UpNextList inherits Rectangle {
 
     clip: true;
 
-    // The ListView is an absolute child of this wrapper (not a layout
-    // child), so its `y` can carry the one-shot slide-up without fighting
-    // a layout. `clip: true` on the wrapper hides the row-height the list
-    // is offset by mid-animation.
+    // An **absolute** child of this wrapper, not a layout child, so its `y` can carry
+    // the one-shot slide without fighting a layout; the clip above hides the row height
+    // it is offset by mid-slide.
     up-next-list := ListView {
-        // Suppress the std-widgets bar — the reusable `OverlayScrollbar`
-        // below is the only scrollbar.
+        // The `OverlayScrollbar` below is the only scrollbar.
         vertical-scrollbar-policy: always-off;
         horizontal-scrollbar-policy: always-off;
         x: 0;
-        // Starts one row-height away from rest on a track change, then
-        // slides into rest at 0. Direction is signed via
-        // `NowPlaying.slide-direction`: `+1` = start +row_h (slides up,
-        // queue advanced forward via Next), `-1` = start -row_h (slides
-        // down, queue rewound via Previous).
+        // Starts one row-height off rest on a track change and slides in. The sign
+        // comes from `slide-direction`: forward slides up, rewound slides down.
         y: NowPlaying.slide-direction * (1.0 - root.slide-p) * root.row-h;
         width: parent.width - root.list-inset-right;
         height: 100%;
@@ -189,9 +160,8 @@ export component UpNextList inherits Rectangle {
             compact: root.compact;
             row-height: root.row-h;
             clicked => {
-                // With repeat-all the list wraps past the end of the
-                // queue, so the play-order index is taken modulo the
-                // queue length.
+                // Under repeat-all the list wraps past the end, so the play-order
+                // index is taken modulo the queue length.
                 Queue.skip-to(Math.mod(
                     NowPlaying.base-index + idx,
                     NowPlaying.queue-length));
@@ -199,14 +169,10 @@ export component UpNextList inherits Rectangle {
         }
     }
 
-    // Transient overlay: the row that just left the visible Up Next list.
-    // Forward (Next) — the row that became current — starts at the top of
-    // the wrapper (y=0) and slides up to y=-row_h, off the top. Backward
-    // (Previous) — the row that fell off the bottom — starts at the
-    // bottom (y=parent.height - row_h) and slides down to y=parent.height,
-    // off the bottom. The wrapping Rectangle clips both ends. Clicks are
-    // intentionally not wired: it disappears in ~288 ms and represents a
-    // position the user can no longer skip to via this row.
+    // The row that just left the list. Forward, it is the track that became current and
+    // slides off the top; backward, the one that fell off the bottom and slides off
+    // there. The wrapper clips both ends. **Clicks are deliberately not wired**: it
+    // lasts a few hundred ms and names a position this row can no longer skip to.
     UpNextRow {
         visible: NowPlaying.outgoing-visible
                  && NowPlaying.slide-phase < root.slide-frames;
@@ -228,12 +194,10 @@ export component UpNextList inherits Rectangle {
         visible-size: up-next-list.visible-height;
         content-size: up-next-list.viewport-height;
         offset: -up-next-list.viewport-y;
-        // Full-screen Now Playing only: tint the bar with the same accent the
-        // spectrum strip paints, both parts translucent so the bar sits into
-        // the artwork blur rather than on top of it. The miniplayer sits on
-        // ordinary panel chrome, so it keeps the neutral default — restated in
-        // each `compact` branch because Slint can't apply a property
-        // conditionally.
+        // Full-screen only: tinted with the visualizer's accent, both parts translucent
+        // so the bar sits *into* the artwork blur rather than on top of it. The
+        // miniplayer keeps the neutral default, restated per branch because Slint can't
+        // apply a property conditionally.
         track-color: root.compact ? Theme.surface0 : Player.np-accent-bright;
         track-opacity: root.compact ? 0.5 : 0.25;
         track-opacity-active: root.compact ? 0.85 : 0.4;

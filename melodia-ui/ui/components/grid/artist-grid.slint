@@ -2,15 +2,10 @@ import { ListView } from "std-widgets.slint";
 import { ArtistGridRow } from "../../models.slint";
 import { EntityCard } from "entity-card.slint";
 
-// Virtualized artist-card grid. Same shape as `AlbumGrid`: the `rows`
-// model is `[ArtistGridRow]`, Rust chunks the flat artist list into rows
-// of `columns` cards (see `src/ui/artists/grid.rs`), and the inner
-// `ListView` virtualizes by row.
-//
-// Cards are circular (Tauri parity) — the `circular: true` prop on
-// `EntityCard` rounds the artwork tile into a perfect disc. The fallback
-// glyph is `"person"` so art-less artists render the avatar silhouette
-// instead of the music-note placeholder.
+// Virtualized artist-card grid, `AlbumGrid`'s shape: Rust chunks the flat list
+// into rows of `columns` cards and the inner `ListView` virtualizes by row. The
+// cards are circular, and an art-less artist falls back to a silhouette rather
+// than the music-note placeholder.
 export component ArtistGrid inherits Rectangle {
     in property <[ArtistGridRow]> rows;
     in property <length> card-width: 180px;
@@ -48,15 +43,13 @@ export component ArtistGrid inherits Rectangle {
                     fallback-icon: "person";
                     artwork-path: artist.image_path;
                     cover: root.request-cover(artist.image_path);
-                    // Pronounced 1.15 zoom in placeholder mode (matches
-                    // Playlists / Genres); real artwork keeps the gentle
-                    // 1.04 so covers don't jitter inside the tile clip
-                    // on hover.
+                    // A pronounced zoom on the placeholder, as on the other
+                    // grids; real artwork stays gentle so a cover doesn't
+                    // jitter inside the tile clip on hover.
                     cover-scale-hover: artist.image_path == "" ? 1.15 : 1.04;
                     title: artist.name;
-                    // "N tracks · M albums" — the separator is punctuation,
-                    // the album-count chunk drops out when there are no
-                    // albums (single-track artists, compilations, etc.).
+                    // The separator is punctuation; the album count drops out
+                    // entirely at zero.
                     subtitle:
                         @tr("{n} track" | "{n} tracks" % artist.track_count)
                         + (artist.album_count > 0

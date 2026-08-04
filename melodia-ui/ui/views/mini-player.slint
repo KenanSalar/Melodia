@@ -9,29 +9,23 @@ import { VolumePopupHorizontal } from "../components/now-playing/volume-popup-ho
 import { PlayButton } from "../components/now-playing/play-button.slint";
 import { UpNextList } from "../components/now-playing/up-next-list.slint";
 
-// Compact miniplayer that replaces the full app UI when the OS window is
-// shrunk past the responsive threshold. Activated by `MiniPlayer.active`
-// (computed at the `AppWindow` root from `width`/`height`); chooses between
-// a horizontal strip and a square variant via `MiniPlayer.square`.
+// Compact miniplayer replacing the full UI once the window shrinks past the
+// responsive threshold. `MiniPlayer.active` (derived at the `AppWindow` root)
+// arms it; `MiniPlayer.square` picks the strip or the square variant.
 //
-// Resize-only entry AND exit — there are no enter/exit buttons. The user
-// shrinks the window past the threshold to engage mini, grows it back
-// past the threshold to leave. Double-clicking the bare drag region
-// maximises (and so also exits mini).
+// Resize is the only way in *and* out — there are no buttons. Double-clicking
+// the bare drag region maximizes, so it also leaves mini.
 //
-// Cap inner gutters at 8px from any window edge that hosts a resize
-// TouchArea (see `app-window.slint` resize-ring). The corner TouchAreas
-// are 8×8; insetting interactive controls (volume / pin pills and
-// the up-next list's right edge) by 8px keeps the cursor showing the
-// resize affordance instead of flickering hover state.
+// Every interactive control stays 8 px clear of any window edge hosting a
+// resize TouchArea (`app-window.slint`'s resize ring, 8×8 at the corners), so
+// the cursor keeps showing the resize affordance instead of flickering hover.
 export component MiniPlayerView inherits Rectangle {
     background: Theme.mantle;
-    // Padding doubles as resize-ring breathing room. The whole component
-    // is gated on `mini-active`, so the resize-ring TouchAreas live above
-    // it and the inset preserves their hit zones at all four edges.
+    // Doubles as resize-ring breathing room: the ring's TouchAreas sit above
+    // this component, and the inset preserves their hit zones at all four edges.
     private property <length> edge-pad: 4px;
-    // Shared with both variants — tracks live progress, applies the
-    // seek-pending hold the same way the bar's slider does.
+    // Shared by both variants — applies the seek-pending hold the way the bar's
+    // slider does.
     private property <float> slider-frac:
         Player.duration-ms > 0
             ? (Player.seek_pending_ms >= 0
@@ -39,16 +33,12 @@ export component MiniPlayerView inherits Rectangle {
                 : clamp(Player.position-ms / Player.duration-ms, 0, 1))
             : 0;
 
-    // ---- Window-move drag region -----------------------------------------
-    // Custom-frame mode hides the `CustomTitleBar` in mini, so without
-    // this the user has no way to move the window — only resize edges.
-    // Covers the whole mini area at z-bottom; controls layered on top
-    // (IconButtons, PlayButton, SliderTrack, UpNextList rows) win
-    // hit-testing because Slint dispatches to the topmost TouchArea, so
-    // `drag-region.has-hover` only goes true over empty space and
-    // press-on-button behaves normally. Wires the same
-    // `drag-region-hover-changed` → winit-press-intercept path used by
-    // `custom-titlebar.slint` (see `src/ui/window_chrome/winit_filter.rs`).
+    // Window-move drag region. Mini hides the `CustomTitleBar`, so without this
+    // the window can't be moved at all. It covers the whole area at z-bottom
+    // and every control sits above it — Slint dispatches to the topmost
+    // TouchArea, so `has-hover` only goes true over empty space. Same
+    // `drag-region-hover-changed` → winit press-intercept path as
+    // `custom-titlebar.slint`.
     drag-region := TouchArea {
         x: 0;
         y: 0;
@@ -59,14 +49,12 @@ export component MiniPlayerView inherits Rectangle {
             WindowChrome.drag-region-hover-changed(self.has-hover);
         }
         double-clicked => {
-            // Tauri parity: double-click the mini's bare area maximizes.
-            // The resulting size flip naturally trips `mini-active = false`
-            // through `app-window.slint`'s derived properties.
+            // The size flip trips `mini-active = false` on its own.
             WindowChrome.toggle-maximize();
         }
     }
 
-    // ---- Horizontal variant (wide & short) -------------------------------
+    // Horizontal variant — wide and short.
     if !MiniPlayer.square: VerticalLayout {
         padding: root.edge-pad;
         spacing: 0;
@@ -115,7 +103,6 @@ export component MiniPlayerView inherits Rectangle {
                 }
             }
 
-            // Transport — centred trio matching the now-playing bar.
             HorizontalLayout {
                 spacing: 2px;
                 horizontal-stretch: 0;
@@ -161,16 +148,14 @@ export component MiniPlayerView inherits Rectangle {
                 spacing: 2px;
                 horizontal-stretch: 0;
                 alignment: end;
-                // 8px inset from the right edge so the corner-resize
-                // TouchAreas in app-window.slint keep their hit zone.
+                // Keeps the corner-resize TouchAreas' hit zone clear.
                 padding-right: 4px;
 
                 VerticalLayout {
                     alignment: center;
-                    // Rectangle mini is wide-and-short; the vertical
-                    // VolumePopup (180 px tall) clips against the top edge
-                    // here. Use the horizontal sibling — same M3 slider,
-                    // rotated 90°, anchored as a LEFT flyout from the disc.
+                    // The vertical `VolumePopup` is 180 px tall and clips against
+                    // this variant's top edge; the horizontal sibling is the same
+                    // slider rotated, flying out to the left of the disc.
                     VolumePopupHorizontal {
                         diameter: 28px;
                         icon-size: 18px;
@@ -193,12 +178,11 @@ export component MiniPlayerView inherits Rectangle {
             }
         }
 
-        // Slim slider hugging the bottom edge. No time labels (cramped).
-        // Keeping `vertical-stretch: 0` here is critical — without it the
-        // surrounding HL would steal vertical space and the slider would
-        // float mid-row. Let `SliderTrack` use its native 24 px min-height
-        // so the 24 px vertical-pill thumb doesn't clip against the
-        // mini-player's bottom edge; the 4 px track itself still reads slim.
+        // Hugs the bottom edge, no time labels — too cramped. `vertical-stretch:
+        // 0` is load-bearing: without it the surrounding layout steals the space
+        // and the slider floats mid-row. Leave `SliderTrack` its native 24 px
+        // min-height so the pill thumb clears the bottom edge; the track still
+        // reads slim at 4 px.
         h-slider := SliderTrack {
             vertical-stretch: 0;
             value: root.slider-frac;
@@ -212,16 +196,14 @@ export component MiniPlayerView inherits Rectangle {
         }
     }
 
-    // ---- Square variant (taller, optionally with Up Next) ----------------
+    // Square variant — taller, optionally with Up Next.
     if MiniPlayer.square: VerticalLayout {
         padding: root.edge-pad;
         spacing: Theme.pad-xs;
 
-        // Top row — pin on the left, favorite on the right, with a
-        // flexible spacer in the middle. Reserves a fixed strip even
-        // when always-on-top is unsupported so the artwork below keeps
-        // the same offset across desktops (the left-side wrapper
-        // collapses to zero width but the row's `min-height` holds).
+        // The row keeps its `min-height` even where always-on-top is
+        // unsupported and the pin wrapper collapses, so the artwork below sits
+        // at the same offset across desktops.
         HorizontalLayout {
             alignment: stretch;
             spacing: 2px;
@@ -230,7 +212,6 @@ export component MiniPlayerView inherits Rectangle {
             padding-right: 4px;
             min-height: 28px;
 
-            // Pin — left side.
             HorizontalLayout {
                 horizontal-stretch: 0;
                 alignment: start;
@@ -249,7 +230,6 @@ export component MiniPlayerView inherits Rectangle {
 
             Rectangle { horizontal-stretch: 1; }
 
-            // Favorite — right side.
             HorizontalLayout {
                 horizontal-stretch: 0;
                 alignment: end;
@@ -268,16 +248,12 @@ export component MiniPlayerView inherits Rectangle {
             }
         }
 
-        // Centred artwork — `tile-size` clamps so the cover scales with
-        // window width without ever ballooning past 180px or shrinking
-        // below 90px (where the placeholder glyph stops reading).
-        //
-        // Source: the high-res `Player.np-cover-{a,b}` slot the
-        // Now Playing view uses (decoded at 384px via
-        // `NowPlayingArtwork`), with the 72px row-tier `cover_img` as a
-        // fallback for the brief window before the seed lands and for
-        // tracks whose decode failed. Rust gates the decode + cache
-        // lifecycle on `mini_square` — see `src/ui/mini_player.rs`.
+        // `tile-size` clamps so the cover follows the window width but never
+        // balloons past 180 px or drops under 90 px, where the placeholder glyph
+        // stops reading. It draws from the 384 px `Player.np-cover-{a,b}` slot
+        // the Now Playing view uses, falling back to the 72 px row tier until
+        // the seed lands and for tracks whose decode failed; `mini_player.rs`
+        // gates that decode on `mini_square`.
         VerticalLayout {
             alignment: center;
             vertical-stretch: 0;
@@ -293,7 +269,6 @@ export component MiniPlayerView inherits Rectangle {
             }
         }
 
-        // Title + artist block.
         VerticalLayout {
             alignment: center;
             vertical-stretch: 0;
@@ -321,8 +296,6 @@ export component MiniPlayerView inherits Rectangle {
             }
         }
 
-        // Transport + modes + volume — symmetric layout with shuffle and
-        // repeat flanking the prev/play/next trio, volume at the end.
         HorizontalLayout {
             alignment: center;
             spacing: Theme.pad-xs;
@@ -400,10 +373,8 @@ export component MiniPlayerView inherits Rectangle {
             }
         }
 
-        // Slim full-width slider. Use `SliderTrack`'s native 24 px height
-        // so the vertical-pill thumb has room — the 4 px track stays slim,
-        // the thumb stops clipping against the Up Next list above and the
-        // mini's bottom edge when Up Next isn't mounted.
+        // Native 24 px height again, so the pill thumb clears the Up Next list
+        // above it and the bottom edge when that list isn't mounted.
         s-slider := SliderTrack {
             vertical-stretch: 0;
             value: root.slider-frac;
@@ -416,13 +387,9 @@ export component MiniPlayerView inherits Rectangle {
             }
         }
 
-        // Up Next list — only renders when the window is tall enough to
-        // hold a couple of rows alongside the artwork + controls. Reuses the
-        // shared `UpNextList` component, so the slide animation +
-        // outgoing-row overlay + empty state behave identically to the
-        // full-screen Now Playing view. The Rust subscriber rebuilds
-        // `NowPlaying.up-next-rows` whenever mini is visible (gate in
-        // `src/ui/now_playing/up_next.rs`).
+        // Only mounted when the window is tall enough for a couple of rows
+        // beside the artwork and controls. Shares `UpNextList` with the
+        // full-screen view, and `up_next.rs` keeps its rows fed while mini is up.
         if root.height >= 350px: VerticalLayout {
             vertical-stretch: 1;
             padding-top: Theme.pad-xs;

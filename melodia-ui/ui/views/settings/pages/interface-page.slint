@@ -5,12 +5,10 @@ import { AppearanceSection } from "../appearance-section.slint";
 import { WindowChromeSection } from "../window-chrome-section.slint";
 import { OverflowMenuSection } from "../overflow-menu-section.slint";
 
-// Interface tab: everything about how the app presents itself — the UI
-// language, palette, window chrome and tray, and which transport buttons the
-// player bar hides.
-//
-// Named "Interface" rather than "Appearance" so the tab and the Appearance
-// card inside it don't share a label; no card had to be renamed for it.
+// How the app presents itself — language, palette, window chrome and tray, and
+// which transport buttons the bar hides. Named "Interface" rather than
+// "Appearance" so the tab and the Appearance card inside it don't share a label;
+// no card had to be renamed for it.
 export component InterfacePage inherits Rectangle {
     background: transparent;
     horizontal-stretch: 1;
@@ -20,10 +18,9 @@ export component InterfacePage inherits Rectangle {
         language.has-matches || appearance.has-matches
         || window.has-matches || overflow.has-matches;
 
-    // See `library-page.slint` for why the cards live in columns and the
-    // columns place themselves. This is the page that shows what it buys:
-    // four cards read as two flowing columns on a wide window instead of one
-    // long scroll.
+    // See `library-page.slint` for why the cards live in columns that place
+    // themselves — this is the page that shows what it buys, four cards
+    // flowing as two columns instead of one long scroll.
     GridLayout {
         spacing: Theme.pad-lg;
 

@@ -11,11 +11,9 @@ import { ChipGroup } from "../../components/settings/chip-group.slint";
 import { VizStylePresets } from "../../components/now-playing/flyout-presets.slint";
 import { SliderTrack } from "../../components/slider-track.slint";
 
-// Playback section: 3 rows mirroring Tauri's `PlaybackSection.tsx`, plus the
-// crossfade cluster (a toggle, a duration slider, and three sub-toggles that
-// only mount while crossfade is on) and the visualizer cluster (a toggle plus a
-// style picker that only mounts while the visualizer is on).
-// Search visibility — see header comment in `language-section.slint`.
+// Three plain rows, plus two clusters whose sub-rows mount only while their
+// toggle is on: crossfade (duration slider + three sub-toggles) and the
+// visualizer (style picker). Search visibility follows `language-section.slint`.
 export component PlaybackSection inherits Rectangle {
     background: transparent;
     horizontal-stretch: 1;
@@ -29,9 +27,8 @@ export component PlaybackSection inherits Rectangle {
                                         SettingsPage.search-query);
     }
 
-    // Seconds ↔ 0..1 track fraction. The bounds are `in` properties on the
-    // `Settings` global, seeded from the player's crossfade constants, so this
-    // formula is the only place the mapping exists.
+    // Seconds ↔ 0..1 track fraction. The bounds are seeded onto `Settings` from
+    // the player's own constants, so this is the only copy of the mapping.
     pure function secs-to-frac(s: float) -> float {
         return (s - Settings.crossfade-min-secs)
             / (Settings.crossfade-max-secs - Settings.crossfade-min-secs);
@@ -41,11 +38,8 @@ export component PlaybackSection inherits Rectangle {
             + f * (Settings.crossfade-max-secs - Settings.crossfade-min-secs);
     }
 
-    // Pre-computed visibility per row — used both for the inner
-    // `if`-wrappers and the section-level `has-matches` aggregate. Folding
-    // the description strings into named properties keeps the long row
-    // labels in one place per row instead of repeating them in three
-    // sites.
+    // Per row, feeding both the inner `if` and the section's `has-matches`.
+    // Named, so each long label is written once rather than at three sites.
     property <bool> show-gapless: row-visible(
         @tr("Gapless Playback"),
         @tr("Seamless transitions between tracks without silence gaps"));
@@ -55,15 +49,14 @@ export component PlaybackSection inherits Rectangle {
     property <bool> show-resume: row-visible(
         @tr("Resume on Startup"),
         @tr("Automatically resume the last track from where you left off when the app starts"));
-    // The whole crossfade cluster searches as one unit — matching any of its
-    // labels reveals the toggle plus whichever sub-rows are currently mounted.
+    // The cluster searches as one unit: any of its labels reveals the toggle
+    // plus whichever sub-rows are mounted.
     property <bool> show-crossfade: row-visible(
         @tr("Crossfade"),
         @tr("Overlap the end of one track with the start of the next"));
 
-    // Toggle plus style picker search as one unit, like the crossfade cluster —
-    // matching either label reveals both, which is also what keeps the upstream
-    // dividers' `|| show-visualizer` gates correct without further edits.
+    // One unit again, which is also what keeps the upstream dividers' gates
+    // right with no further edits.
     property <bool> show-visualizer: row-visible(
         @tr("Visualizer"),
         @tr("Show an audio visualizer on the Now Playing screen"))
@@ -71,21 +64,18 @@ export component PlaybackSection inherits Rectangle {
         @tr("Visualizer Style"),
         @tr("Choose how the visualizer draws the audio"));
 
-    // The style row only exists while the visualizer is on. `if` (not
-    // `visible`) — a hidden child still claims layout space (slint#7377).
+    // An `if` rather than `visible`, which would still claim the layout slot.
     property <bool> show-viz-style: root.show-visualizer && Visualizer.enabled;
 
-    // The sub-rows only exist while crossfade is on. `if` (not `visible`) —
-    // a hidden child still claims layout space in Slint (slint#7377).
+    // Same reason as the style row above.
     property <bool> show-crossfade-details: root.show-crossfade && Settings.crossfade-enabled;
 
     out property <bool> has-matches:
         show-gapless || show-anim || show-resume || show-crossfade || show-visualizer;
 
-    // VerticalLayout wrapper so the Rectangle's preferred-height tracks
-    // the SectionCard's natural height (Rectangle sizes from a layout
-    // child, not from positioned `if`-elements). See
-    // `language-section.slint` for the full rationale.
+    // Wrapper so the root's preferred-height tracks the card's natural height —
+    // a `Rectangle` sizes from a layout child, never from a conditional one.
+    // See `language-section.slint`.
     VerticalLayout {
     if has-matches: SectionCard {
         title: @tr("Playback");
@@ -99,9 +89,7 @@ export component PlaybackSection inherits Rectangle {
                 toggled(v) => { Settings.gapless-playback-changed(v); }
             }
         }
-        // Dividers separate consecutive visible rows. Each one is gated on
-        // both the previous AND the next row being visible so we don't
-        // get stranded dividers above/below a hidden row.
+        // Each gates on a visible row either side, so none is left stranded.
         if root.show-gapless && (root.show-crossfade || root.show-anim || root.show-resume || root.show-visualizer): SectionDivider {}
 
         if root.show-crossfade: SettingRow {
@@ -126,7 +114,7 @@ export component PlaybackSection inherits Rectangle {
                     horizontal-stretch: 1;
                     SliderTrack {
                         value: root.secs-to-frac(Settings.crossfade-duration-secs);
-                        // Must match `SectionCard`'s fill or the track seam shows.
+                        // Must match the card's fill or the track seam shows.
                         seam-mask-color: Theme.surface0;
                         // Live during the drag, persist on release.
                         changed(v) => { Settings.crossfade-duration-changed(root.frac-to-secs(v)); }
@@ -203,11 +191,10 @@ export component PlaybackSection inherits Rectangle {
         }
         if root.show-resume && root.show-visualizer: SectionDivider {}
 
-        // Binds the `Visualizer` global directly rather than mirroring the flags
-        // onto `Settings` — the visualizer owns its own state and callbacks
-        // (`src/ui/visualizer/mod.rs`), the same way the EQ dialog binds
-        // `Equalizer.enabled`. Both two-way bindings have already landed the
-        // value by the time the callback fires, so the callbacks only persist.
+        // Binds `Visualizer` directly rather than mirroring its flags onto
+        // `Settings` — it owns its own state and callbacks, as the EQ dialog
+        // does. Both two-way bindings have landed the value by the time the
+        // callback fires, so the callbacks only persist.
         if root.show-visualizer: SettingRow {
             icon: "bar_chart";
             label: @tr("Visualizer");
@@ -223,8 +210,8 @@ export component PlaybackSection inherits Rectangle {
             icon: "show_chart";
             label: @tr("Visualizer Style");
             description: @tr("Choose how the visualizer draws the audio");
-            // Same list the Now-Playing view's visualizer flyout renders, so
-            // the two pickers can't drift apart.
+            // The same list the Now-Playing flyout renders, so the two pickers
+            // can't drift.
             ChipGroup {
                 options: VizStylePresets.viz-style-names;
                 selected-index <=> Visualizer.style-idx;

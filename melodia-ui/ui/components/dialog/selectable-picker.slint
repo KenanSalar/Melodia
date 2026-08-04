@@ -4,25 +4,21 @@ import { ArtworkImage } from "../artwork-image.slint";
 import { MaterialIcon } from "../material-icon.slint";
 import { OverlayScrollbar } from "../overlay-scrollbar.slint";
 
-// Generic, data-agnostic building blocks for the selectable-list dialogs
-// (Add-to-Playlist, Export-playlists). Each component takes plain `in`
-// properties and exposes callbacks — it knows nothing about which dialog or
-// model drives it, so both pickers share one implementation (the `Playlists`
-// / `Dialog` globals are wired by the host picker, not here).
+// Data-agnostic building blocks for the selectable-list dialogs
+// (Add-to-Playlist, Export-playlists). Everything arrives as plain `in`
+// properties, so neither picker's globals reach in here and both share one
+// implementation.
 //
-// Rendering note (load-bearing): none of the row/list elements carry a
-// `border` or `clip: true`. A rounded clip — or a border — on an element that
-// contains the rows promotes that subtree to a FemtoVG compositing layer
-// whose offscreen texture is allocated at logical size and then upscaled by
-// the display scale factor when blitted, so the row text reads blurry and
-// oversized next to the directly-rendered header. The tonal fill + filled
-// indicator carry the selection state on their own, and `PickerListCard`
-// paints its rounded border with a childless overlay (which needs no layer).
+// **Load-bearing: nothing containing the rows carries a `border` or a
+// `clip`.** Either one promotes that subtree to a FemtoVG compositing layer
+// whose offscreen texture is allocated at logical size and upscaled by the
+// display scale on blit, so the row text reads blurry and oversized beside the
+// directly-rendered header. The tonal fill and the filled indicator carry the
+// selection on their own, and `PickerListCard` paints its border with a
+// childless overlay, which needs no layer.
 
-// Circular tri-state selection indicator (M3 expressive): a filled accent
-// disc with a check glyph when checked, a filled disc with a dash for the
-// header's indeterminate (some-but-not-all) state, and a hollow ring
-// otherwise.
+// Tri-state M3 indicator: a filled disc with a check when checked, with a dash
+// for the header's some-but-not-all state, a hollow ring otherwise.
 export component SelectIndicator inherits Rectangle {
     in property <bool> checked;
     in property <bool> indeterminate;
@@ -47,11 +43,9 @@ export component SelectIndicator inherits Rectangle {
     }
 }
 
-// Selectable list item: leading artwork tile, title + optional subtitle,
-// trailing circular selection indicator. The host supplies the already-
-// formatted `subtitle` (empty ⇒ no subtitle line) and the resolved `cover`
-// image, so the row stays decoupled from the data source. `disabled` dims it
-// and blocks the click. Its `height` MUST match `PickerListCard.row-h`.
+// One list item. The host hands over an already-formatted `subtitle` (empty ⇒
+// no second line) and a resolved `cover`, so the row stays clear of the data
+// source. Its `height` MUST match `PickerListCard.row-h`.
 export component SelectableRow inherits Rectangle {
     in property <string> name;
     in property <string> subtitle;
@@ -65,9 +59,8 @@ export component SelectableRow inherits Rectangle {
     height: 60px;
     border-radius: Theme.radius-md;
     opacity: root.disabled ? 0.5 : 1.0;
-    // Selected rows fill with a tonal accent container; unselected rows are
-    // flat with a soft hover fill. See the file-level rendering note for why
-    // there is deliberately no border.
+    // Tonal accent when selected, flat with a soft hover fill otherwise — and
+    // no border, per the note above.
     background: root.selected
         ? Theme.accent.with-alpha(0.16)
         : (touch.has-hover && !root.disabled ? Theme.surface1 : transparent);
@@ -87,8 +80,7 @@ export component SelectableRow inherits Rectangle {
                 artwork-path: root.artwork-path;
                 cover: root.cover;
                 fallback-icon: root.fallback-icon;
-                // Subtle expressive zoom on hover (same idiom as the grid
-                // cards / now-playing bar); skipped while disabled.
+                // The grid cards' hover zoom, skipped while disabled.
                 cover-scale: touch.has-hover && !root.disabled ? 1.05 : 1.0;
             }
         }
@@ -126,8 +118,7 @@ export component SelectableRow inherits Rectangle {
     }
 }
 
-// "Select all" header: tri-state indicator + label + a count chip that turns
-// accent once at least one row is selected.
+// The "Select all" header; its count chip turns accent once anything is picked.
 export component SelectAllHeader inherits Rectangle {
     in property <bool> checked;
     in property <bool> indeterminate;
@@ -162,7 +153,6 @@ export component SelectAllHeader inherits Rectangle {
                 font-weight: 600;
             }
         }
-        // Count chip.
         VerticalLayout {
             alignment: center;
             Rectangle {
@@ -198,19 +188,16 @@ export component SelectAllHeader inherits Rectangle {
     }
 }
 
-// Rounded card holding a virtualizing-ish scroll list of `SelectableRow`s.
-// The host passes `row-count` and drops its `for … : SelectableRow {}` into
-// `@children`. This is where the blur fix lives (see the file-level note):
-// no `clip` / no `border` on the element that contains the rows; the
-// ScrollView clips its viewport rectangularly (a cheap scissor, no layer),
+// The rounded card the rows scroll inside; the host passes `row-count` and
+// drops its `for` into `@children`. This is where the blur fix lives: the
+// ScrollView clips its viewport rectangularly, a cheap scissor with no layer,
 // and the rounded border is a childless overlay sibling.
 export component PickerListCard inherits Rectangle {
     in property <int> row-count;
     in property <length> list-max-height: 312px;
 
-    // Shared list geometry — every selectable picker uses the same row height
-    // and gaps, so this card sizes itself from `row-count` alone. `row-h`
-    // MUST equal `SelectableRow.height`.
+    // Every picker shares these, so the card sizes itself from `row-count`
+    // alone. `row-h` MUST equal `SelectableRow.height`.
     private property <length> row-h: 60px;
     private property <length> row-spacing: 4px;
     private property <length> pad: 6px;
@@ -236,10 +223,8 @@ export component PickerListCard inherits Rectangle {
         }
     }
 
-    // Rounded 1 px border painted on top of the (rectangularly-clipped) scroll
-    // content. Childless ⇒ a direct rounded-rect stroke, never a compositing
-    // layer; a plain Rectangle has no TouchArea, so it doesn't intercept the
-    // rows' clicks or the scroll wheel underneath.
+    // Childless, so it strokes directly rather than compositing a layer; and
+    // with no TouchArea it intercepts neither the rows' clicks nor the wheel.
     Rectangle {
         border-radius: Theme.radius-md;
         border-width: 1px;

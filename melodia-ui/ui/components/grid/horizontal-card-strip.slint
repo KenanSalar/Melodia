@@ -4,25 +4,19 @@ import { EntityStripRow } from "../../models.slint";
 import { EntityCard } from "entity-card.slint";
 import { OverlayScrollbar } from "../overlay-scrollbar.slint";
 
-// Reusable horizontally-scrolling row of `EntityCard`s with a section
-// heading. Mounted by the Recently Played view (Most Played) and by the
-// Search view's Albums / Artists result strips; Favorites drove the
-// original three and now uses the vertical `EntityCardGrid` instead.
-// The Tauri analogue was a separate JSX block per card flavour; here the
-// shape is unified through `EntityStripRow` + a per-flavour boolean
-// (`circular`, `show-play-count`).
+// A horizontally-scrolling row of `EntityCard`s under a section heading, over
+// one `EntityStripRow` shape with a boolean per flavour. Mounted by Recently
+// Played's Most Played strip and by the Search view's two result strips;
+// Favorites drove the original three and now takes the vertical
+// `EntityCardGrid` instead.
 //
-// Scrolling follows the same pattern as `tracks-view`: stock ScrollView
-// scrollbars are turned off, and a sibling `OverlayScrollbar` along the
-// bottom edge picks up overflow via `viewport-x`. The bar auto-hides
-// when `content-size <= visible-size` (no manual visibility gate needed
-// on the consumer side).
+// Scrolling is the usual pattern: stock scrollbars off, a sibling
+// `OverlayScrollbar` along the bottom edge reading `viewport-x`, and the bar
+// hides itself with no overflow — so no consumer needs a visibility gate.
 //
-// Hover-revealed circular play overlay on each card is opt-in via
-// `show-play-overlay`; the Most Played strip suppresses it (clicking the
-// card already plays the track) while the Albums / Artists strips show
-// it so the user can play the whole album / artist without leaving the
-// Favorites page.
+// The hover play overlay is opt-in. Most Played suppresses it, since clicking
+// the card there already plays the track; the result strips show it so a whole
+// album or artist can be played without leaving the page.
 export component HorizontalCardStrip inherits Rectangle {
     in property <string>             heading;
     in property <[EntityStripRow]>   rows;
@@ -44,13 +38,9 @@ export component HorizontalCardStrip inherits Rectangle {
     VerticalLayout {
         spacing: Theme.pad-sm;
 
-        // Section heading — small caps label sits above the strip; matches
-        // the picker's "Select up to 4 tracks" header weight + tracking so
-        // every section header in the app reads as one family. Gated on
-        // a non-empty `heading` so callers that supply their own outer
-        // header chrome (e.g. the Favorites view's collapsible pill
-        // header) can pass `heading: ""` to suppress this Text entirely
-        // without a separate boolean prop.
+        // Same weight and tracking as every other section header in the app.
+        // Gated on a non-empty `heading`, so a caller supplying its own header
+        // chrome suppresses this one by passing `""` rather than a second flag.
         if root.heading != "": Text {
             text: root.heading;
             color: Theme.text;
@@ -59,10 +49,8 @@ export component HorizontalCardStrip inherits Rectangle {
             letter-spacing: 0.4px;
         }
 
-        // Empty-state — single muted line when the strip would otherwise
-        // be empty (e.g. zero plays in Most Played, zero favorite
-        // albums). Caller supplies the copy so it can be locale-aware
-        // and section-specific.
+        // The caller supplies the copy, so it can be section-specific and
+        // translated at its own site.
         if root.rows.length == 0 && root.empty-text != "": Text {
             text: root.empty-text;
             color: Theme.subtext0;
@@ -109,12 +97,8 @@ export component HorizontalCardStrip inherits Rectangle {
                             clicked => { root.row-clicked(row.id); }
                         }
 
-                        // Hover-revealed play overlay — pinned bottom-
-                        // right of the artwork tile (artwork is the
-                        // upper square portion of the card; the tile
-                        // inset matches EntityCard's `Theme.pad-sm`).
-                        // Suppressed on Most Played because the card
-                        // click already starts playback there.
+                        // Pinned to the bottom right of the artwork tile, whose
+                        // inset matches `EntityCard`'s own.
                         if root.show-play-overlay: play-pill := Rectangle {
                             x: root.card-width - self.width - Theme.pad-md;
                             y: root.card-width - self.height - Theme.pad-md;
@@ -125,11 +109,8 @@ export component HorizontalCardStrip inherits Rectangle {
                             opacity: play-touch.has-hover || card-touch.has-hover ? 1.0 : 0.0;
                             animate opacity { duration: Theme.dur-fast; easing: ease-in-out; }
 
-                            // Material ligature; collapsed em-box per
-                            // CLAUDE.md (`MaterialIcon`-style pinning
-                            // inside a fixed-size Rectangle). Inline
-                            // here to keep the strip's import surface
-                            // small.
+                            // `MaterialIcon`'s collapsed em-box, spelled inline
+                            // to keep the strip's imports small.
                             Text {
                                 text: "play_arrow";
                                 color: Theme.accent-text;
@@ -145,11 +126,10 @@ export component HorizontalCardStrip inherits Rectangle {
                             }
                         }
 
-                        // Card-level hover sentinel — covers the entire
-                        // card slot (transparent, sits below the play
-                        // pill's TouchArea so the pill consumes clicks
-                        // landing on the play icon and the card swallows
-                        // the rest). Drives the play-pill fade-in.
+                        // Covers the whole card slot and drives the pill's
+                        // fade-in. Below the pill's own TouchArea, so a click
+                        // on the icon goes to the pill and everything else
+                        // to the card.
                         card-touch := TouchArea {
                             mouse-cursor: pointer;
                             enabled: false;
@@ -158,7 +138,6 @@ export component HorizontalCardStrip inherits Rectangle {
                 }
             }
 
-            // Bottom-edge overlay scrollbar. Auto-hides on no overflow.
             OverlayScrollbar {
                 horizontal: true;
                 x: 0;

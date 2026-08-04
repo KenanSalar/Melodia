@@ -1,8 +1,7 @@
 import { Theme } from "../../theme.slint";
 
-// Thin (4 px) progress bar used by the Library scan status row and the
-// Update download row. `value` is 0..1; the fill width is animated so the
-// bar slides smoothly when the host updates the value.
+// The thin progress bar behind the scan status and the update download. The
+// fill is animated, so a stepped host value still reads as a slide.
 export component ProgressBar inherits Rectangle {
     in property <float> value;
 

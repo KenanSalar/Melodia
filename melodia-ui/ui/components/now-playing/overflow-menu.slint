@@ -15,34 +15,30 @@ import { SpeedFlyout } from "./speed-flyout.slint";
 import { SleepTimerFlyout } from "./sleep-timer-flyout.slint";
 import { FlyoutMetrics, SleepPresets, SpeedPresets } from "./flyout-presets.slint";
 
-// `more_vert` IconButton + PopupWindow listing the permanent "Speed"
-// row (with its left-opening preset flyout) plus every button the
-// user has routed to the overflow menu. Same structural shape as the
-// volume popup (the canonical fixed-size popup-from-icon pattern): the
-// PopupWindow reserves room for both the menu column (right, under the
-// trigger) and the speed flyout (left), with a transparent click-catcher
-// over the empty regions. Popup opens upward (the bar lives at window
-// bottom) and the menu column right-aligns under the trigger.
+// The bar's overflow trigger and its popup: five permanent rows, two of which open a
+// left-side flyout, plus every button the user routed here.
 //
-// Unlike the configurable buttons, the speed control is ALWAYS here — it
-// is never shown inline in the bar — so the `more_vert` trigger is now
-// always mounted by `now-playing-bar.slint`.
+// **Fixed-reserve geometry**, the volume popup's pattern: the `PopupWindow` is always
+// sized for the menu column *and* the widest flyout, so it never re-layouts when one
+// expands, with a transparent catcher over the empty regions. It opens upward, the bar
+// living at the window's bottom, and the menu column right-aligns under the trigger.
+//
+// The speed control is **always** here rather than configurable — it is never shown
+// inline — which is why the trigger itself is always mounted.
 export component OverflowMenu inherits Rectangle {
     in property <length> bar-w;
 
     width: btn.width;
     height: btn.height;
 
-    // Whether the preset flyout is expanded. Reset to collapsed on every
-    // (re)open via the trigger, and by `dismiss()`. The speed and sleep flyouts
-    // share the one left column, so they are mutually exclusive — opening one
-    // closes the other.
+    // Collapsed again on every reopen and by `dismiss()`. **The two flyouts share one
+    // left column**, so they're mutually exclusive: opening one closes the other.
     property <bool> speed-flyout-open: false;
     property <bool> sleep-flyout-open: false;
 
-    // Every close path: drop the popup, collapse both flyouts, release the
-    // trigger highlight. A function rather than a callback because that's what
-    // it is — the rows invoke it, nothing subscribes to it.
+    // The close triple every row calls: drop the popup, collapse both flyouts, release
+    // the trigger highlight. **A function rather than a callback** — the rows invoke it
+    // and nothing subscribes, so there is no handler slot to clobber.
     public function dismiss() {
         pop.close();
         root.speed-flyout-open = false;
@@ -50,10 +46,9 @@ export component OverflowMenu inherits Rectangle {
         PopupHighlight.id = "";
     }
 
-    // Number of currently-overflowed action buttons (the speed row is
-    // permanent and counted separately, +1 below). The pin row is gated on
-    // always-on-top support, so only count it when actually mounted —
-    // otherwise the menu reserves an empty 36 px slot.
+    // The overflowed buttons only; the permanent rows are counted separately below. The
+    // pin row is gated on always-on-top support, so it counts **only when mounted** —
+    // otherwise the menu reserves an empty slot.
     property <int> overflow-count:
         (Settings.overflow-favorite ? 1 : 0)
         + (Settings.overflow-repeat ? 1 : 0)
@@ -61,39 +56,31 @@ export component OverflowMenu inherits Rectangle {
         + ((WindowChrome.always-on-top-supported && Settings.overflow-pin) ? 1 : 0)
         + (Settings.overflow-queue ? 1 : 0);
 
-    // Menu column height: one row each for the five permanent rows — Speed,
-    // Sleep timer, Equalizer, ReplayGain, Rating — plus the overflowed buttons,
-    // plus the shared chrome allowance. (The content-driven *width* `menu-w` is
-    // declared on the PopupWindow below — Slint forbids the enclosing component
-    // from reading a property *inside* a PopupWindow, so it can't live up here.)
+    // One slot per permanent row, plus the overflowed buttons, plus the chrome. The
+    // content-driven *width* is declared on the popup below instead: Slint forbids the
+    // enclosing component from reading a property inside a `PopupWindow`.
     property <length> menu-h:
         FlyoutMetrics.menu-row-h * (5 + root.overflow-count) + FlyoutMetrics.chrome-h;
 
-    // Speed flyout geometry. Height derives from the shared preset list +
-    // metrics (`flyout-presets.slint`), so adding a preset can't clip the
-    // popup.
+    // Derived from the shared preset list and metrics, so adding a preset can't clip
+    // the popup.
     property <length> flyout-w: 120px;
     property <length> flyout-h:
         FlyoutMetrics.option-row-h * SpeedPresets.list.length + FlyoutMetrics.chrome-h;
-    // Sleep-timer flyout geometry. Wider than the speed flyout to fit the
-    // "End of track" row (and its translations). Height = the preset rows +
-    // a 9 px divider + the ±stepper row + the Start-pill row (both option-row
-    // sized), plus the shared chrome allowance.
+    // Wider than the speed flyout, to fit the "End of track" row and its translations.
+    // Its height is the presets, a divider, the stepper row and the Start pill.
     property <length> sleep-flyout-w: 168px;
     property <length> sleep-flyout-h:
         FlyoutMetrics.option-row-h * (SleepPresets.list.length + 2) + 9px
         + FlyoutMetrics.chrome-h;
-    // The two flyouts share the single left column; reserve the wider one so
-    // the popup never re-layouts when switching between them.
+    // Reserve the wider one, so the popup never re-layouts on a switch.
     property <length> left-col-w: max(root.flyout-w, root.sleep-flyout-w);
-    // Transparent gap between the flyout (left) and menu (right) columns so
-    // they read as two separate floating chromes.
+    // Keeps the two columns reading as separate floating chromes.
     property <length> gap: 8px;
 
-    // Map the live multiplier back to a preset label for the collapsed row.
-    // Kept in lock-step with `SpeedPresets.list` (`flyout-presets.slint`) —
-    // Slint functions can't loop over a model, so this stays hand-rolled.
-    // 1.0 falls through to the "1x" default.
+    // Maps the live multiplier back to a preset label for the collapsed row.
+    // **Hand-rolled and in lock-step with `SpeedPresets.list`**: a Slint function can't
+    // loop over a model.
     function current-speed-label() -> string {
         if (abs(Player.vm.playback_speed - 0.25) < 0.001) { return "0.25x"; }
         if (abs(Player.vm.playback_speed - 0.5) < 0.001) { return "0.5x"; }
@@ -111,8 +98,8 @@ export component OverflowMenu inherits Rectangle {
         diameter: clamp(root.bar-w * 0.05, 28px, 36px);
         icon-size: clamp(root.bar-w * 0.03, 18px, 20px);
         tooltip-text: @tr("More");
-        // Keep the disc highlighted while the popup is open. Cleared by
-        // `dismiss()`, or by the AppWindow scrim catching an outside click.
+        // Keeps the disc highlighted while the popup is open; `dismiss()` and the winit
+        // Release path both clear it.
         force-bg: PopupHighlight.id == "overflow";
         clicked => {
             // Always (re)open collapsed.
@@ -123,19 +110,14 @@ export component OverflowMenu inherits Rectangle {
     }
 
     pop := PopupWindow {
-        // Content-driven menu-column width. Declared HERE (on the
-        // PopupWindow) so it can read its own descendant `menu-vl`'s
-        // `preferred-width` — the enclosing component is not allowed to.
-        // The widest row's content sets the floor; +2 px for the
-        // PopupSurface border; 156 px minimum preserves the English look.
+        // **Declared here, on the popup**, so it can read its own descendant's
+        // `preferred-width` — the enclosing component may not. The widest row sets the
+        // floor, plus the surface border; the minimum preserves the English look.
         property <length> menu-w: max(156px, menu-vl.preferred-width + 2px);
 
-        // Fixed-reserve sizing (volume-popup pattern): the PopupWindow is
-        // always wide and tall enough for the menu column AND the flyout,
-        // so it never has to re-layout when the flyout expands. The menu
-        // column's on-screen position is independent of the popup size
-        // (popup.x + menu.x both cancel `self.width`), so it stays pinned
-        // under the trigger whether or not the flyout is open.
+        // The menu column's on-screen position is independent of the popup's size —
+        // both offsets cancel `self.width` — so it stays pinned under the trigger
+        // whether or not a flyout is open.
         width: root.left-col-w + root.gap + self.menu-w;
         height: max(root.menu-h, max(root.flyout-h, root.sleep-flyout-h));
         x: btn.width - self.width;
@@ -151,12 +133,9 @@ export component OverflowMenu inherits Rectangle {
             }
         }
 
-        // Speed flyout — left column, bottom-anchored (its bottom aligns
-        // with the menu column's bottom, 8 px above the trigger), grows
-        // upward. Mounted only while open so the 12 rows aren't built when
-        // collapsed. Right-aligned within the shared (wider) left column so
-        // the `gap` to the menu column holds regardless of which flyout is
-        // the widest.
+        // Bottom-anchored with the menu column and growing upward, and **mounted only
+        // while open** so its rows aren't built when collapsed. Right-aligned inside the
+        // shared left column, so the gap holds whichever flyout is wider.
         if root.speed-flyout-open: SpeedFlyout {
             x: root.left-col-w - root.flyout-w;
             y: parent.height - root.flyout-h;
@@ -169,9 +148,8 @@ export component OverflowMenu inherits Rectangle {
             }
         }
 
-        // Sleep-timer flyout — same left column as the speed flyout (mutually
-        // exclusive). Presets apply + close; the ±stepper's Start pill arms a
-        // custom duration (seconds) + closes.
+        // The same left column. A preset applies and closes; the stepper's Start pill
+        // arms a custom duration and closes.
         if root.sleep-flyout-open: SleepTimerFlyout {
             x: root.left-col-w - root.sleep-flyout-w;
             y: parent.height - root.sleep-flyout-h;
@@ -204,10 +182,8 @@ export component OverflowMenu inherits Rectangle {
                 padding: Theme.pad-xs;
                 spacing: 0;
 
-                // Permanent Speed row — opens the preset flyout to
-                // the left. Does NOT close the popup; re-asserts the
-                // highlight id so the winit Release clear doesn't unmount
-                // the FocusLossWatcher.
+                // **Doesn't close the popup**, and re-asserts the highlight id so the
+                // winit Release clear can't unmount the `FocusLossWatcher`.
                 OverflowRow {
                     icon: "speed";
                     label: @tr("Speed");
@@ -221,11 +197,8 @@ export component OverflowMenu inherits Rectangle {
                     }
                 }
 
-                // Permanent Sleep-timer row — opens the preset flyout to the
-                // left (mutually exclusive with the speed flyout). Does NOT
-                // close the popup; re-asserts the highlight id. Trailing text
-                // shows the live countdown, or "Track end" while the
-                // end-of-track mode is armed (from `vm.sleep_at_track_end`).
+                // Same shape as the Speed row above. Its trailing text carries the live
+                // countdown, or the end-of-track state while that mode is armed.
                 OverflowRow {
                     icon: "bedtime";
                     label: @tr("Sleep timer");
@@ -243,11 +216,8 @@ export component OverflowMenu inherits Rectangle {
                     }
                 }
 
-                // Permanent Equalizer row — opens the reusable graphic-EQ
-                // dialog. Closes the popup (a modal dialog takes over) and
-                // populates the `Dialog` global inline; the EQ apply/persist
-                // wiring lives on the `Equalizer` global. The "On"/"Off"
-                // trailing text mirrors the live enabled state.
+                // **Closes** the popup, a modal taking over, and populates `Dialog`
+                // inline; the apply-and-persist wiring lives on `Equalizer`.
                 OverflowRow {
                     icon: "graphic_eq";
                     label: @tr("Equalizer");
@@ -265,9 +235,7 @@ export component OverflowMenu inherits Rectangle {
                     }
                 }
 
-                // Permanent ReplayGain row — opens the loudness-normalization
-                // dialog, mirroring the Equalizer row. The "On"/"Off" trailing
-                // text mirrors the live enabled state.
+                // The Equalizer row's shape, over loudness normalization.
                 OverflowRow {
                     icon: "tune";
                     label: @tr("ReplayGain");
@@ -285,11 +253,9 @@ export component OverflowMenu inherits Rectangle {
                     }
                 }
 
-                // Permanent Rating row — inline 5-star control for the current
-                // track. Unlike the dialog rows it neither closes the popup nor
-                // opens a flyout: clicking a star applies immediately and
-                // re-asserts the highlight id so the winit Release clear doesn't
-                // unmount the FocusLossWatcher.
+                // Inline, so unlike the dialog rows it neither closes the popup nor
+                // opens a flyout: a star applies immediately and re-asserts the
+                // highlight id.
                 Rectangle {
                     // Not an `OverflowRow`, so it has to take the shared row
                     // height itself — `menu-h` above reserves one for it.

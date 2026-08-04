@@ -4,33 +4,21 @@ import { TrackListRow } from "../../models.slint";
 import { TrackListHeader } from "track-list-header.slint";
 import { TrackListRowItem } from "track-list-row.slint";
 
-// Drag-reorderable sibling of `TrackList`. Same external property /
-// callback contract — column widths, visibility, sort, selection —
-// plus a `reorder(from, to)` callback fired on a successful drag
-// release.
+// Drag-reorderable sibling of `TrackList` — same external contract plus a
+// `reorder(from, to)` fired on a successful drop. **The shared `TrackList`
+// stays drag-free**; Playlist Detail is this one's only consumer.
 //
-// **The shared `TrackList` stays drag-free.** Tracks / Browse /
-// Album / Artist / Genre Detail all consume `TrackList`; only the
-// Playlist Detail view consumes this component.
+// The drag itself lives inside `TrackListRowItem`, behind its `enable-drag`.
+// Wrapping the row in an outer TouchArea does not work: the row's own `touch`
+// captures press and up exclusively under Slint's deepest-wins routing, so an
+// outer one sees `moved` but never `pointer-event(up)` and the ghost and drop
+// line stay stuck after every drop.
 //
-// Drag mechanics live inside `TrackListRowItem` itself, gated by an
-// `enable-drag: bool` prop the row defaults to false on. We don't try
-// to wrap the row in an outer drag TouchArea — the row's own
-// `touch := TouchArea` captures press / up exclusively (Slint
-// deepest-wins routing), so an outer / sibling TouchArea sees `moved`
-// broadcasts but never `pointer-event(up)`, leaving the ghost +
-// drop-indicator state stuck after every drop. Sharing the row's
-// existing `touch` is the only path that gets reliable press/release
-// pairs.
-//
-// All drag state lives at the list level (`drag-source` / `drop-slot`)
-// and every row two-way binds into it via `<=>`. Rust never drives the
-// drag — the ghost and the drop line are pure Slint feedback, and only
-// the final `reorder(from, to)` callback crosses the boundary — but it
-// does have to *abort* one, so Playlist Detail two-way binds both onto
-// the `PlaylistDetail` global. See that view for why. Drag is gated on
-// `reorder-enabled` (Playlist Detail wires `sort-field == "position"` —
-// drag is ambiguous in any other sort).
+// The state (`drag-source` / `drop-slot`) sits at list level and every row
+// `<=>`s into it. Rust drives none of it — only the final `reorder` crosses the
+// boundary — but it does have to *abort* a drag, which is why Playlist Detail
+// binds both onto its global; see that view. Gated on `reorder-enabled`, since
+// a reorder is ambiguous in any sort but the insertion one.
 export component DraggableTrackList inherits Rectangle {
     in property <[TrackListRow]> rows;
 
@@ -68,31 +56,24 @@ export component DraggableTrackList inherits Rectangle {
         + (root.show-year ? root.w-year + 8px : 0px)
         + root.w-length;
 
-    // Row pitch — mirrors `TrackListRowItem`'s `drag-row-h`, chrome plus
-    // the gap under it. Used by the drop-indicator overlay below and by
-    // the auto-scroll gate in `request-scroll-by`.
+    // Row pitch — mirrors `TrackListRowItem`'s `drag-row-h`. Feeds the
+    // drop-indicator overlay and the auto-scroll gate.
     property <length> row-height:
         (root.show-artwork ? Theme.row-h : Theme.row-h-compact) + Theme.row-gap;
 
-    // List-level drag state — each row two-way binds into these via
-    // `<=>` so all rows share one source of truth (the dragged row's
-    // index + the live drop slot).
+    // Every row `<=>`s into these, so all of them share one source of truth.
     in-out property <int> drag-source: -1;
     in-out property <int> drop-slot: -1;
 
-    // Where the dragged row's top currently sits inside the visible list.
-    // Only meaningful while `drag-source >= 0`; read by the auto-scroll
-    // gate in `request-scroll-by`.
+    // Only meaningful while `drag-source >= 0`; read by the auto-scroll gate.
     property <length> drag-src-screen-y:
         root.drag-source * root.row-height + inner-list.viewport-y;
 
-    // Drop-indicator geometry, in the visible list's own coordinates. The
-    // line is centred on the slot boundary, then pinned inside the band:
-    // the after-the-last-row slot sits exactly on the content's bottom
-    // edge, which is off the list entirely once it's scrolled to the end,
-    // so an unpinned line for that slot is simply never drawn. The top end
-    // is pinned for the mirror case, and both ends catch a pointer dragged
-    // clean out of the list.
+    // In the visible list's own coordinates: centred on the slot boundary, then
+    // pinned inside the band. The after-the-last-row slot sits on the content's
+    // bottom edge, which is off the list once it's scrolled to the end, so
+    // unpinned that line is simply never drawn; the top end mirrors it, and
+    // both catch a pointer dragged clean out of the list.
     property <length> drop-line-h: 2px;
     property <length> drop-line-y: max(
         0px,
@@ -118,10 +99,9 @@ export component DraggableTrackList inherits Rectangle {
     callback go-to-artist(int /*artist_id*/);
     callback go-to-genre(int /*genre_id*/);
 
-    // Per-view context for the row's context menu. Hosts default
-    // `view-context` to "playlist-detail" so the row picks up the
-    // Remove-from-Playlist entry; `current-playlist-id` lets the
-    // Add-to-Playlist sub-list filter the current playlist out.
+    // Context for the row's menu: `view-context` is what surfaces the
+    // Remove-from-Playlist entry, and the id filters this playlist out of the
+    // Add-to-Playlist sub-list.
     in property <string> view-context: "playlist-detail";
     in property <int> current-playlist-id: 0;
     in property <[int]> view-selected-ids;
@@ -196,18 +176,12 @@ export component DraggableTrackList inherits Rectangle {
                     sort-dir: root.sort-dir;
                     total-w: root.total-w;
                     playing-track-id: root.playing-track-id;
-                    // Playlist Detail consumer — view-context surfaces
-                    // both the "Remove from Playlist" entry and the
-                    // current-playlist exclusion in Add-to-Playlist.
                     view-context: root.view-context;
                     current-playlist-id: root.current-playlist-id;
                     view-selected-ids: root.view-selected-ids;
 
-                    // Drag-reorder wiring. `enable-drag` gates ALL
-                    // drag handling inside the row's own `touch`;
-                    // `<=>` two-way binds the shared state so every
-                    // row instance sees the same drag-source /
-                    // drop-slot updates without Rust round-tripping.
+                    // `enable-drag` gates all drag handling inside the row's
+                    // own `touch`; the `<=>`s share the state across rows.
                     enable-drag: root.reorder-enabled;
                     row-count: root.rows.length;
                     list-y0: inner-list.absolute-position.y;
@@ -231,25 +205,20 @@ export component DraggableTrackList inherits Rectangle {
                     go-to-artist(aid) => { root.go-to-artist(aid); }
                     go-to-genre(gid) => { root.go-to-genre(gid); }
                     request-scroll-by(dy) => {
-                        // `dy` is a content-space delta (negative = show
-                        // earlier rows), so it *subtracts* from viewport-y,
-                        // which runs 0 at the top and negative downwards.
-                        // Same shape as `queue-sheet.slint` — keep the two
-                        // in step.
+                        // `dy` is a content-space delta, so it *subtracts* from
+                        // `viewport-y`, which runs 0 at the top and negative
+                        // downwards. Same shape as `queue-sheet.slint`.
                         //
-                        // The nudge is skipped outright when it would carry
-                        // the dragged row out of the visible range: Slint's
-                        // ListView destroys the row instances that leave it,
-                        // and a destroyed row can no longer deliver its
-                        // pointer-up, so the drag would neither commit nor
-                        // clean up after itself. Auto-scroll therefore stops
-                        // once the source reaches the far edge.
+                        // The nudge is skipped when it would carry the dragged
+                        // row out of the visible range: the ListView destroys
+                        // rows that leave it, and a destroyed row never delivers
+                        // its pointer-up, so the drag would neither commit nor
+                        // clean up after itself.
                         if (root.drag-source >= 0
                             && (root.drag-src-screen-y - dy) > -root.row-height
                             && (root.drag-src-screen-y - dy) < inner-list.visible-height) {
-                            // Both arguments are capped at 0 so a list
-                            // shorter than its viewport resolves to 0px
-                            // rather than a positive (over-scrolled) offset.
+                            // Both capped at 0, so a list shorter than its
+                            // viewport lands on 0px rather than over-scrolled.
                             inner-list.viewport-y = max(
                                 min(0px, inner-list.visible-height - inner-list.viewport-height),
                                 min(0px, inner-list.viewport-y - dy),
@@ -261,10 +230,8 @@ export component DraggableTrackList inherits Rectangle {
         }
     }
 
-    // Drop indicator — an accent line painted across the visible list at
-    // the chosen slot's Y (see `drop-line-y` for the geometry). Hidden
-    // when no drag is active OR the slot would no-op (drop right above or
-    // right below source).
+    // Hidden with no drag in flight, and for the two slots either side of the
+    // source, where a drop would be a no-op.
     if root.reorder-enabled
         && root.drag-source >= 0
         && root.drop-slot >= 0

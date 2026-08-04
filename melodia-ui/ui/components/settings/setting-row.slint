@@ -2,25 +2,20 @@ import { Theme } from "../../theme.slint";
 import { SettingsPage } from "../../globals/settings-page.slint";
 import { MaterialIcon } from "../material-icon.slint";
 
-// Generic "icon · label/description · control" row used inside SectionCards.
-// The right-hand control comes in via `@children`; the host puts a single
-// element there (toggle, dropdown, chip group, button, …).
+// The "icon · label · control" row inside a `SectionCard`; the host supplies the
+// control through `@children`.
 //
-// `disabled`: lowers opacity to 0.4 *and* overlays a sibling TouchArea that
-// swallows pointer events so the inner control's TouchArea can't fire. Slint
-// has no automatic enabled-propagation across `@children`, so this is the
-// cleanest way to gate clicks without forcing every consumer's control to
-// thread a `disabled` property through.
+// `disabled` dims the row *and* overlays a TouchArea that swallows the pointer,
+// because Slint propagates nothing across `@children` — the alternative is
+// threading a `disabled` through every consumer's control.
 export component SettingRow inherits Rectangle {
     in property <string> icon;
     in property <string> label;
     in property <string> description;
     in property <bool>   disabled: false;
-    // Caps the description text's width so a long single-line string
-    // (e.g. an updater changelog) wraps into a fixed reading column
-    // instead of inflating the row's preferred width and stretching the
-    // whole section card. The large default is a sentinel meaning
-    // "unbounded" — only rows that need it override this.
+    // Caps the description, so a long single-line string wraps into a reading
+    // column instead of inflating the row's preferred width and stretching the
+    // whole card. The large default is a sentinel for "unbounded".
     in property <length> description-max-width: 100000px;
 
     background: transparent;
@@ -32,8 +27,7 @@ export component SettingRow inherits Rectangle {
         spacing: Theme.pad-lg;
         alignment: stretch;
 
-        // Icon column — pinned width so the label column starts at a
-        // consistent x across rows even when an icon glyph is narrower.
+        // Pinned, so the labels start at the same x however narrow a glyph is.
         VerticalLayout {
             alignment: center;
             MaterialIcon {
@@ -43,19 +37,16 @@ export component SettingRow inherits Rectangle {
             }
         }
 
-        // Label + optional description, vertically centred.
         VerticalLayout {
             alignment: center;
             spacing: Theme.pad-xs;
             horizontal-stretch: 1;
 
-            // Wrapped, and that is what makes the whole card compressible.
-            // A no-wrap `Text` reports its full rendered width as its layout
-            // *minimum*, so every label was an incompressible term in the
-            // row's width and no amount of narrowing could move it — the
-            // control ended up pushed past the panel edge. Wrapped, the
-            // minimum is the longest single word and the control stays put
-            // on the right.
+            // Wrapped, and that is what makes the whole card compressible: a
+            // no-wrap `Text` reports its full rendered width as its layout
+            // *minimum*, so every label was an incompressible term no narrowing
+            // could move, and the control ended up past the panel edge. Wrapped,
+            // the minimum is the longest single word.
             Text {
                 text: root.label;
                 color: Theme.text;
@@ -71,9 +62,7 @@ export component SettingRow inherits Rectangle {
             }
         }
 
-        // Control slot. The consumer's element decides its own width;
-        // we centre it vertically so a 32 px toggle or a 36 px button
-        // sits in the row middle.
+        // The consumer's element sizes itself; this only centres it.
         VerticalLayout {
             alignment: center;
             spacing: Theme.pad-sm;
@@ -81,10 +70,8 @@ export component SettingRow inherits Rectangle {
         }
     }
 
-    // Disabled overlay: an enabled TouchArea above the row contents
-    // absorbs clicks (no `clicked =>` handler → the click stops here).
-    // When `disabled` is false the overlay is absent from the layout
-    // tree, so events pass through to the inner control normally.
+    // A handler-less TouchArea over the row, so the click stops here. Enabled,
+    // it's absent from the tree entirely.
     if root.disabled: TouchArea {
         x: 0;
         y: 0;

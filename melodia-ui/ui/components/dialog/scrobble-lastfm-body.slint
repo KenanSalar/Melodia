@@ -1,11 +1,9 @@
 import { Theme } from "../../theme.slint";
 import { ScrobbleUi } from "../../globals/dialog-forms.slint";
 
-// Body for `Dialog.kind == "scrobble-lastfm-login"`: a two-step browser auth.
-// The dialog's primary button (labelled by `dialog.slint`) drives the step —
-// step 0 opens the Last.fm approval page, step 1 finishes the session exchange —
-// so this body is just instructions plus a busy line and an inline error. State
-// lives on the `ScrobbleUi` global, owned by `src/ui/scrobbling_settings.rs`.
+// The Last.fm login: two-step browser auth driven entirely by the dialog's own
+// primary button, so this body is instructions plus a busy line and an inline
+// error. State lives on `ScrobbleUi`.
 export component ScrobbleLastfmBody inherits VerticalLayout {
     spacing: Theme.pad-md;
 

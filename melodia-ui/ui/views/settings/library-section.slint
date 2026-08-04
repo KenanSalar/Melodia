@@ -8,19 +8,15 @@ import { SectionButton } from "../../components/settings/section-button.slint";
 import { FolderRow } from "../../components/settings/folder-row.slint";
 import { ProgressBar } from "../../components/settings/progress-bar.slint";
 
-// Library section: "Manage Folders" header sub-row + Add Folder button,
-// optional scan progress, list of folder rows (or empty state). Section
-// title is "Library Folders" (Tauri parity, not just "Library"). All state
-// flows from the `LibrarySettings` global, which Rust hydrates from the DB
-// at startup and refreshes after every mutation.
+// Folder management: a header sub-row and Add button, optional scan progress,
+// then the folder rows or an empty state. Everything comes off
+// `LibrarySettings`, which Rust hydrates at startup and refreshes after each
+// mutation.
 //
-// Search visibility — this section has no SettingRows (it's a folder
-// management UI, not a stack of toggleable settings), so we treat the
-// whole card as one searchable atom: matches the section title or one of
-// the keyword aliases ("manage folders", "add folder") and shows the
-// section in full; otherwise hides the card entirely. This is the same
-// behaviour macOS System Settings / VS Code / JetBrains use for container
-// UIs in their settings search.
+// **The whole card is one searchable atom** — it has no setting rows to match
+// individually, so a query hitting the title or one of its keyword aliases
+// reveals the section in full and anything else hides it outright. That's what
+// every settings search does with a container UI.
 export component LibrarySection inherits Rectangle {
     background: transparent;
     horizontal-stretch: 1;
@@ -33,15 +29,14 @@ export component LibrarySection inherits Rectangle {
                                  @tr("Manage Folders") + " " + @tr("Add Folder"),
                                  SettingsPage.search-query);
 
-    // VerticalLayout wrapper so the Rectangle's preferred-height tracks
-    // the SectionCard's natural height. See `language-section.slint`.
+    // Wrapper so the root's preferred-height tracks the card's natural height —
+    // see `language-section.slint`.
     VerticalLayout {
     if has-matches: SectionCard {
         title: @tr("Library Folders");
 
-        // Header row: "Manage Folders" label + Add Folder button. Same row
-        // chrome pattern as SettingRow but without the icon column — this is
-        // a card-internal sub-header, not a setting row.
+        // `SettingRow`'s chrome without the icon column — a card-internal
+        // sub-header, not a setting row.
         Rectangle {
             background: transparent;
             HorizontalLayout {
@@ -80,8 +75,7 @@ export component LibrarySection inherits Rectangle {
 
         SectionDivider {}
 
-        // Scan progress (conditional). Single column laying out the bar +
-        // file label + counter; fits within 16 px row padding.
+        // One column for the bar, the file label and the counter.
         if LibrarySettings.scanning: Rectangle {
             background: transparent;
             VerticalLayout {
@@ -107,30 +101,24 @@ export component LibrarySection inherits Rectangle {
         }
         if LibrarySettings.scanning: SectionDivider {}
 
-        // Folder list. Folders is a tiny list (a handful of entries) so a
-        // plain `for` loop is fine; no virtualization. Each row is followed
-        // by a divider except the last — Slint has no `last-child` selector,
-        // so we draw a divider above each row from index 1 onward. The row's
-        // `id` is captured by the closure so callbacks know which folder.
+        // A handful of entries, so a plain `for` needs no virtualization. Slint
+        // has no `last-child`, hence a divider *above* each row from index 1.
         for row[i] in LibrarySettings.folders: VerticalLayout {
             if i > 0: SectionDivider {}
             FolderRow {
                 path: row.path;
                 last-scanned: row.last-scanned;
-                // Block per-row actions while a scan is in flight: prevents
-                // two rescans from racing on `scan_progress_tx` (shared
-                // watch channel; the first scan's drop-guard would clear
-                // the bar mid-second-scan, causing a visible flicker).
+                // Blocked mid-scan so two rescans can't race on the shared
+                // `scan_progress_tx`: the first's drop-guard would clear the
+                // bar out from under the second.
                 actions-enabled: !LibrarySettings.scanning;
                 rescan-clicked => {
                     LibrarySettings.rescan-folder(row.id);
                 }
                 remove-clicked => {
-                    // Route through the centralised confirmation dialog so a
-                    // stray click can't cascade-delete every track in the
-                    // folder. `kind` + `target-id` are picked up by the
-                    // default `accepted` handler on the `Dialog` global,
-                    // which calls `LibrarySettings.remove-folder` on confirm.
+                    // Confirmed, so a stray click can't cascade-delete every
+                    // track in the folder; the `Dialog` dispatcher routes the
+                    // accept back to `remove-folder`.
                     Dialog.kind = "remove-folder";
                     Dialog.target-id = row.id;
                     Dialog.title = @tr("Remove Folder?");
@@ -143,8 +131,6 @@ export component LibrarySection inherits Rectangle {
             }
         }
 
-        // Empty state (only when `folders` is empty). Tauri uses
-        // `folder_open` icon + "No folders added" + the description below.
         if LibrarySettings.folders.length == 0: Rectangle {
             background: transparent;
             height: 140px;

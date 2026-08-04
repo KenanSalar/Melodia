@@ -4,40 +4,21 @@ import { TrackListRow } from "../../models.slint";
 import { TrackListHeader } from "track-list-header.slint";
 import { TrackListRowItem } from "track-list-row.slint";
 
-// Reusable, globals-free track table. Wraps the column header + a
-// virtualized list body inside a horizontal ScrollView (so growing columns
-// past the visible width pans the table). The component itself reads no
-// globals.
+// The reusable, **globals-free** track table: a column header over a virtualized list
+// body inside a horizontal `ScrollView`, so growing the columns past the visible width
+// pans the table. Every view with a track list embeds it, each owning its own column
+// state and persistence.
 //
-// Overlay scrollbars are NOT mounted inside this component — viewport
-// metrics are exposed via the `v-*` / `h-*` out properties and the
-// `set-v-viewport-y` / `set-h-viewport-x` callbacks so the host can mount
-// `OverlayScrollbar`s at its own root and have them sit flush against the
-// outer panel's rounded edges (instead of inside whatever padding the host
-// applies to TrackList).
+// **Overlay scrollbars are not mounted inside it.** The viewport metrics are exposed as
+// `out` properties with clamping setters, so a host can mount its own at its root and
+// have them sit flush against the panel's rounded edges rather than inside whatever
+// padding it applies here.
 //
-// Embedded by every view that needs a track table (Tracks, Browse, Search,
-// Favorites, Recently Played, and the Album / Artist / Genre / Playlist
-// detail pages), each owning its own column state and persistence.
-//
-// Property contract:
-//   * `rows`            — the model to render. Back it with
-//                          `Rc<VecModel<TrackListRow>>` so the host can swap
-//                          via `set_rows(ModelRc::from(...))`.
-//   * `w-*` / `show-*`  — per-column width and visibility. `in-out` so a
-//                          resize drag or a column-toggle popup writes host
-//                          state synchronously.
-//   * `sort-field` /
-//     `sort-dir`        — drive the header chevron. Pure inputs; clicking a
-//                          header fires `request-sort`.
-//   * `playing-track-id`— this row's cells flip to accent. Usually bound to
-//                          `Player.vm.track.id`, but the component imports no
-//                          globals, so it stays reusable outside player
-//                          contexts.
-//
-// Callbacks fire on user actions; the host is expected to dispatch them to
-// the appropriate `library::*` function via a tokio runtime spawn, then
-// push fresh data back through `rows`.
+// The contract: `rows` is the model to swap; `w-*` / `show-*` are `in-out`, so a resize
+// drag or the column popup writes host state synchronously; the sort pair is a pure
+// input driving the header chevron, with clicks emitting `request-sort`; and
+// `playing-track-id` flips that row's cells to accent — usually bound to the player, but
+// this file imports no globals, so it stays reusable outside a player context.
 export component TrackList inherits Rectangle {
     in property <[TrackListRow]> rows;
 
@@ -50,8 +31,8 @@ export component TrackList inherits Rectangle {
     in-out property <length> w-year: 72px;
     in-out property <length> w-length: 88px;
 
-    // Column visibility. `show-artwork` is a pseudo-toggle that controls
-    // only the small thumbnail inside the title cell, not a column.
+    // `show-artwork` is a pseudo-toggle controlling only the thumbnail inside the title
+    // cell, not a column.
     in-out property <bool> show-number: true;
     in-out property <bool> show-artwork: true;
     in-out property <bool> show-artist: true;
@@ -59,28 +40,25 @@ export component TrackList inherits Rectangle {
     in-out property <bool> show-genre: true;
     in-out property <bool> show-year: true;
 
-    // Number-column mode — forwarded to every row. `"index"` (default)
-    // shows the 1-based row position; `"track_number"` shows the row's
-    // real album track number (Album Detail).
+    // Forwarded to every row: `"index"` is the row position, `"track_number"` the real
+    // album track number.
     in property <string> number-mode: "index";
 
     // Sort indicator (passive; the host owns the actual sort state).
     in property <string> sort-field;
     in property <string> sort-dir;
 
-    // `false` makes the column headers plain labels — no click, no
-    // `request-sort`, no hover affordance. Resizing and the column-toggle
-    // popup are unaffected. Recently Played is the one host that sets it.
+    // `false` makes the headers plain labels — no click, no `request-sort`, no hover
+    // affordance — while **resizing and the column popup keep working**. Recently Played
+    // is the one host that sets it, its recency order being the point of the page.
     in property <bool> sortable: true;
 
     // Now-playing highlight.
     in property <int> playing-track-id;
 
-    // Cumulative table width: padding + sum(visible column widths) +
-    // (N_visible − 1) × handle-width. Handles are 8 px (= Theme.pad-sm).
-    // Title and length are always visible, so the floor is 2 visible
-    // columns + 1 handle. The outer horizontal ScrollView reads this to
-    // decide whether to pan.
+    // Padding, plus the visible column widths, plus one resize handle between each pair.
+    // Title and length are always visible, so the floor is two columns and one handle.
+    // The outer `ScrollView` reads it to decide whether to pan.
     out property <length> total-w: 16px /* L+R padding */
         + (root.show-number ? root.w-number + 8px : 0px)
         + root.w-title + 8px
@@ -92,40 +70,31 @@ export component TrackList inherits Rectangle {
 
     callback request-sort(string /*field*/);
     callback play-row(int /*track_id*/, int /*index*/);
-    // Batch-shaped — single-row mode emits a 1-element array, multi-
-    // select mode emits the entire view selection. Hosts forward
-    // straight to their per-view Rust callback.
+    // Batch-shaped: one element in single-row mode, the whole selection in multi.
     callback play-next([int]);
     callback add-to-queue([int]);
     callback toggle-row-favorite([int] /*track_ids*/, bool /*new_state*/);
     callback set-row-rating([int] /*track_ids*/, int /*rating*/);
     callback select-row(int /*idx*/, int /*id*/, bool /*shift*/, bool /*ctrl*/);
     callback request-blur-search();
-    // Cross-tab navigation from the row's context menu — host wires
-    // these to `albums_ui_mod::open_album_with` / equivalents in Rust.
+    // Cross-tab navigation from the row's context menu.
     callback go-to-album(int /*album_id*/);
     callback go-to-artist(int /*artist_id*/);
     callback go-to-genre(int /*genre_id*/);
 
-    // Per-view context for the right-click menu (see TrackListRowItem
-    // for the value vocabulary). Plumbed straight through to every row.
+    // Plumbed straight through to every row; `TrackListRowItem` has the vocabulary.
     in property <string> view-context;
     in property <int> current-playlist-id: 0;
     in property <[int]> view-selected-ids;
 
-    // Viewport metrics for host-mounted overlay scrollbars. The host reads
-    // these to drive its `OverlayScrollbar`s and writes back through the
-    // `set-*` callbacks. Slint can't take a `<=>` two-way binding through a
-    // sign flip, and inner ids (`inner-list`, `outer-scroll`) aren't
-    // visible at the host's scope, so the property+callback pair is the
-    // canonical pattern. Sign convention: positive `v-offset` /
-    // `h-offset` means "scrolled by N pixels"; the inner ScrollView/ListView
-    // store the same as a non-positive `viewport-y` / `viewport-x`, so we
-    // negate at the boundary.
+    // Read by the host to drive its scrollbars, written back through the setters. **A
+    // property-plus-callback pair rather than `<=>`**: Slint can't two-way bind through
+    // a sign flip, and the inner ids aren't visible at the host's scope. Positive here
+    // means "scrolled by N pixels", where the inner scrollers store the same as a
+    // non-positive viewport offset, so the boundary negates.
     //
-    // The host also reads `body-y` to align the vertical bar with the
-    // ListView body (skipping the 32 px column header band). It's relative
-    // to TrackList's own root.
+    // `body-y` lets the host align its vertical bar with the list body, skipping the
+    // column header band; it is relative to this component's own root.
     out property <length> v-visible-height: inner-list.visible-height;
     out property <length> v-viewport-height: inner-list.viewport-height;
     out property <length> v-offset: -inner-list.viewport-y;
@@ -142,20 +111,14 @@ export component TrackList inherits Rectangle {
     set-v-offset(o) => { inner-list.viewport-y = -o; }
     set-h-offset(o) => { outer-scroll.viewport-x = -o; }
 
-    // Horizontal scroll container. Header + list inside have a total width
-    // of `total-w`; if that exceeds the visible width, this ScrollView
-    // handles horizontal panning. Vertical scrolling stays on the inner
-    // ListView (which keeps its virtualization). `viewport-height:
-    // self.height` locks the outer's vertical viewport to its own height
-    // so it doesn't try to scroll vertically too — the inner ListView owns
-    // that axis.
+    // Handles the horizontal pan once the columns exceed the visible width. **Vertical
+    // scrolling stays on the inner `ListView`**, which keeps its virtualization, and
+    // `viewport-height: self.height` locks this one's vertical viewport to its own
+    // height so it doesn't try to claim that axis too.
     //
-    // Both built-in scrollbars are hidden (`always-off`) because they ride
-    // along with the scrolled content and end up offscreen when columns
-    // overflow horizontally. The host mounts custom `OverlayScrollbar`s at
-    // its own root and binds them to the `v-*` / `h-*` out properties /
-    // `set-*` callbacks above so the bars sit flush with the outer panel
-    // edges instead of with TrackList's (potentially padded) edges.
+    // Both built-in scrollbars are off: they ride along with the scrolled content and
+    // end up offscreen once the columns overflow. The host mounts its own instead, per
+    // the metrics above.
     outer-scroll := ScrollView {
         horizontal-scrollbar-policy: always-off;
         vertical-scrollbar-policy: always-off;
@@ -191,9 +154,8 @@ export component TrackList inherits Rectangle {
                 for r[idx] in root.rows: TrackListRowItem {
                     row-data: r;
                     row-index: idx;
-                    // Neighbour-selection lookup — drives the per-corner
-                    // radius gating in TrackListRowItem so contiguous
-                    // selected rows merge into one continuous pill.
+                    // Drives the per-corner radius gating, so contiguous selected rows
+                    // merge into one pill.
                     prev-selected: idx > 0 && root.rows[idx - 1].selected;
                     next-selected: idx < root.rows.length - 1 && root.rows[idx + 1].selected;
                     w-number: root.w-number;

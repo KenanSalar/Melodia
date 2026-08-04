@@ -1,12 +1,10 @@
 import { Theme } from "../../theme.slint";
 import { ArtworkImage } from "../artwork-image.slint";
 
-// One tile of the cover mosaic — delegates to `ArtworkImage` so the
-// missing-cover branch shares the placeholder chrome every other empty
-// tile in the app uses. The slot-index lookup is guarded so the same
-// component handles both the "real artwork in this slot" and
-// "placeholder in this slot" cases without separate call sites
-// per layout.
+// One tile, over `ArtworkImage` so a missing cover falls back to the same
+// placeholder chrome every other empty tile in the app draws. The guarded index
+// lookup is what lets one component cover both cases, so no layout below needs
+// a second call site for the placeholder.
 component MosaicSlot inherits Rectangle {
     in property <int>      idx;
     in property <[string]> artwork-paths;
@@ -33,70 +31,48 @@ component MosaicSlot inherits Rectangle {
         width: parent.width;
         height: parent.height;
         tile-radius: root.tile-radius;
-        // No cover, no path — `ArtworkImage`'s `cover.width == 0` branch
-        // paints `tile-bg` plus the fallback glyph colourised to
-        // `tile-icon-color`.
+        // No cover and no path, so `ArtworkImage` takes its empty branch.
         fallback-icon: root.fallback-icon;
         tile-bg: root.tile-bg;
         tile-icon-color: root.tile-icon-color;
     }
 }
 
-// Reusable 1/2/3/4-tile artwork mosaic. Pure layout — the caller owns
-// the outer chrome (background, border, radius). Only the *inner* tile
-// branches are rendered here; an effective tile count of 0 draws
-// nothing, so the caller can render their own empty state behind /
-// inside the component.
+// Reusable 1/2/3/4-tile artwork mosaic. Pure layout — the caller owns the outer
+// chrome, and only the inner tiles are drawn here, so an effective count of 0
+// draws nothing and the caller's own empty state shows through. Every tile
+// resolves through `request-cover`, so each consumer keeps its own LRU tier.
 //
-// Tile sources resolve through the `request-cover` callback, so each consumer
-// routes the lookup into its own LRU cache tier rather than sharing one.
-//
-// Layout count is `tile-count` when set (`> 0`), else `artwork-paths.length`.
-// The distinction is what separates the two consumers:
-//
-// * Picker (default, `tile-count: 0`) — shape follows the user's running
-//   selection, and every slot has real artwork since the two are equal.
-// * Favorites hero (`tile-count: min(track-count, 4)`) — shape follows the
-//   *favorite count*, so slots past the distinct-artwork count fall back to
-//   `MosaicSlot`'s placeholder. Five favorites over two distinct covers give
-//   a 2×2 of two covers plus two placeholders, not the two duplicated.
-//
-// Layouts mirror the canonical playlist composition: 1 = full bleed,
+// The layouts mirror the canonical playlist composition: 1 = full bleed,
 // 2 = left/right, 3 = left full-height + right split, 4 = 2×2.
 //
-// `tile-radius` defaults to `Theme.radius-sm`. Pass `0px` (with
-// `gutter-size: 0px`, so the outer background can't bleed through the
-// padding) for a flush mosaic that reads as one composited image — right
-// when surrounding chrome already supplies the only curve, as in the
-// Favorites hero.
+// **`tile-count` versus `artwork-paths.length` is what separates the two
+// consumers.** The picker leaves it 0 and takes the path count, since its shape
+// follows a selection where every slot has real artwork. A hero sets it from the
+// *entity* count, so slots past the distinct covers fall back to placeholders —
+// five favorites over two covers give a 2×2 of two covers and two placeholders,
+// not the two duplicated.
 export component CoverMosaic inherits Rectangle {
     in property <[string]> artwork-paths;
     in property <length>   gutter-size: 3px;
+    // Pass `0px` (with `gutter-size: 0px`, so the outer background can't bleed
+    // through) for a flush mosaic reading as one composited image — right where
+    // the surrounding chrome already supplies the only curve.
     in property <length>   tile-radius: Theme.radius-sm;
-    // Material-Symbols-style icon ligature name forwarded to each
-    // empty-slot `ArtworkImage.fallback-icon`. Defaults to
-    // `"music-note"`; consumers can pass `"album"` / `"person"` /
-    // `"playlist"` / `"theater_comedy"` for context-appropriate
-    // chrome. Same names `EntityCard` / `DetailHeader` use.
+    // The `ArtworkImage` placeholder vocabulary, shared with `EntityCard` and
+    // `DetailHeader`.
     in property <string>   placeholder-icon: "music-note";
-    // Chrome for the empty slots, forwarded to each `ArtworkImage`.
-    // Defaults are `ArtworkImage`'s own accent tint, which is right on a
-    // dialog surface (the mosaic picker). The two hero mosaics override
-    // both with `HeroBackdrop.chrome` — they paint on the solved hero
-    // band, where a light theme's accent lands dark-on-dark.
+    // The defaults are `ArtworkImage`'s accent tint, right on a dialog surface.
+    // Both hero mosaics override them with `HeroBackdrop` tiers instead: they
+    // paint on the solved band, where a light theme's accent lands dark-on-dark.
     in property <brush>    tile-bg: Theme.accent.with-alpha(0.15);
     in property <brush>    tile-icon-color: Theme.accent;
-    // Forces the layout to render N tiles regardless of how many
-    // artworks are supplied (slots beyond `artwork-paths.length`
-    // become placeholders). `0` keeps the picker behaviour — layout
-    // count tracks `artwork-paths.length`.
     in property <int>      tile-count: 0;
     pure callback request-cover(string) -> image;
 
     private property <int> effective-count:
         root.tile-count > 0 ? root.tile-count : root.artwork-paths.length;
 
-    // 1 tile — fills the full preview rectangle.
     if root.effective-count == 1: MosaicSlot {
         idx: 0;
         artwork-paths: root.artwork-paths;
@@ -107,7 +83,6 @@ export component CoverMosaic inherits Rectangle {
         request-cover(p) => { return root.request-cover(p); }
     }
 
-    // 2 tiles — left / right split with a gutter.
     if root.effective-count == 2: HorizontalLayout {
         spacing: root.gutter-size;
         padding: root.gutter-size;
@@ -131,7 +106,6 @@ export component CoverMosaic inherits Rectangle {
         }
     }
 
-    // 3 tiles — left full-height + right column split top / bottom.
     if root.effective-count == 3: HorizontalLayout {
         spacing: root.gutter-size;
         padding: root.gutter-size;
@@ -169,7 +143,6 @@ export component CoverMosaic inherits Rectangle {
         }
     }
 
-    // 4+ tiles — 2×2 grid.
     if root.effective-count >= 4: VerticalLayout {
         spacing: root.gutter-size;
         padding: root.gutter-size;

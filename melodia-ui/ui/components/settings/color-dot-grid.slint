@@ -2,23 +2,19 @@ import { Theme } from "../../theme.slint";
 import { SettingsPage } from "../../globals/settings-page.slint";
 import { Tooltip, TooltipSide } from "../tooltip.slint";
 
-// One color swatch in a ColorDotGrid. 32 px button; the active swatch
-// gets a 2 px ring in `text` colour so it stays legible regardless of
-// which palette the grid hosts. A tooltip pill anchored above the dot
-// reveals `label` on 500 ms hover dwell.
+// One swatch. The active one takes its ring from `text`, so it stays legible
+// whichever palette the grid is hosting.
 //
-// `is-dynamic: true` renders a rounded-square (radius-md) instead of a
-// circle. Used to mark the Material You swatch as visually distinct
-// from the 8 static palette accents — the shape difference reads at a
-// glance without relying on tooltip dwell.
+// `is-dynamic` renders a rounded square rather than a circle, marking the
+// Material You swatch apart from the static accents — a shape difference reads
+// at a glance where a tooltip needs dwell.
 component ColorDot inherits Rectangle {
     in property <brush> swatch;
     in property <bool>  selected;
     in property <bool>  is-dynamic;
     in property <string> label;
-    // Which edge the tooltip clears. Rows after the first point downward —
-    // anchored above, a second-row swatch's pill lands on the row of dots
-    // over it.
+    // Rows after the first point downward: anchored above, their pill would
+    // land on the row of dots over them.
     in property <TooltipSide> tip-side: TooltipSide.above;
 
     callback clicked();
@@ -31,9 +27,9 @@ component ColorDot inherits Rectangle {
     border-width: 4px;
     animate border-color { duration: Theme.dur-fast; easing: ease-in-out; }
 
-    // Subtle hover scale via a 1 px outer ring (Slint has no transform/scale
-    // on Rectangle in 1.16, so a coloured ring stands in for the hover lift).
-    // Ring radius follows the dot's shape so the squircle stays a squircle on hover.
+    // Slint 1.16 has no transform on a Rectangle, so a 1 px ring stands in for
+    // the hover lift. Its radius follows the dot's, or the squircle stops being
+    // one on hover.
     if touch.has-hover && !root.selected: Rectangle {
         x: -2px;
         y: -2px;
@@ -58,23 +54,18 @@ component ColorDot inherits Rectangle {
     }
 }
 
-// Grid of color swatches. Each entry in `colors` becomes a 32 px dot;
-// clicking one writes `selected-index` and emits `selected(idx)`.
-// `labels` is read by index alongside `colors` so each dot can show a
-// tooltip naming the accent ("Material You", "Mauve", "Blue", …).
+// A grid of accent swatches; `labels` is read by index alongside `colors` so
+// each dot names its accent in a tooltip.
 //
 // It wraps, and it has to: Catppuccin ships fourteen accents, fifteen with
-// Material You prepended, so a single row was 592 px of incompressible width
-// and the widest thing on the settings page by some margin. The dots are a
-// fixed size, so unlike `ChipGroup` this needs no ruler — how many fit is
-// straight arithmetic, and `SettingsPage.chunk-indices` splits the swatches
-// into rows of that many.
+// Material You prepended, which on one row was the widest incompressible thing
+// on the settings page by some margin. The dots are fixed-size, so unlike
+// `ChipGroup` this needs no ruler — how many fit is arithmetic, and
+// `SettingsPage.chunk-indices` splits the swatches into rows of that many.
 //
-// `first-is-dynamic: true` marks index 0 as a dynamic swatch (rendered
-// as a rounded square instead of a circle). The host wires this from
-// `Settings.material-you-active`; the invariant that Material You is
-// always prepended at index 0 when active lives in
-// `src/ui/appearance/accent_picker.rs::accent_swatches_with_my`.
+// `first-is-dynamic` marks index 0 as the dynamic swatch. The host wires it from
+// `Settings.material-you-active`; that Material You is always prepended at index
+// 0 when active is `accent_picker.rs::accent_swatches_with_my`'s invariant.
 export component ColorDotGrid inherits Rectangle {
     in property <[brush]> colors;
     in property <[string]> labels;
@@ -85,11 +76,10 @@ export component ColorDotGrid inherits Rectangle {
 
     callback selected(int);
 
-    // 36 px is the dot's cell, 4 px taller than the dot so the selection ring
-    // isn't clipped against the row edge.
+    // The cell runs a little taller than the dot, so the selection ring isn't
+    // clipped against the row edge.
     property <length> cell-h: 36px;
-    // No ruler needed, unlike `ChipGroup`: the dot is a fixed 32 px, so the
-    // count is arithmetic. Both take the same two `SettingsPage` helpers.
+    // Both wrapping strips take the same two `SettingsPage` helpers.
     property <int> per-row: SettingsPage.wrap-per-row(root.avail-width, 32px, Theme.pad-sm);
 
     horizontal-stretch: 0;
@@ -101,8 +91,6 @@ export component ColorDotGrid inherits Rectangle {
         for row[r] in SettingsPage.chunk-indices(root.colors.length, root.per-row):
             HorizontalLayout {
                 spacing: Theme.pad-sm;
-                // Match Tauri's `.accentGrid` (flex row, default start-edge
-                // alignment).
                 alignment: start;
 
                 for i in row: VerticalLayout {

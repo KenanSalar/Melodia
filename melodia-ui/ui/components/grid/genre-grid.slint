@@ -2,35 +2,28 @@ import { ListView } from "std-widgets.slint";
 import { GenreGridRow } from "../../models.slint";
 import { EntityCard } from "entity-card.slint";
 
-// Virtualized genre-card grid. Mirror of `AlbumGrid` minus the
-// `request-cover` plumbing: genres have no intrinsic artwork, so each
-// on-screen `EntityCard` falls back to its `fallback-icon` glyph and the
-// model stays pure data. Rust chunks the flat genre list into rows of
-// `columns` cards (see `src/ui/genres/grid.rs`), so the inner `ListView`
-// virtualizes by row: only on-screen rows instantiate their `EntityCard`
-// component instances. Memory stays trivially bounded — no per-card
-// `Image` allocations, no LRU.
+// Virtualized genre-card grid: `AlbumGrid` minus the cover plumbing. A genre has
+// no artwork, so each card falls back to its glyph and nothing here allocates an
+// `Image` or needs an LRU. Rust chunks the flat list into rows of `columns`
+// cards, so the inner `ListView` virtualizes by row.
 //
-// Mirrors `TrackList` / `AlbumGrid`'s host-mounted-scrollbar contract:
-// viewport metrics are exposed via the `v-*` out properties +
-// `set-v-offset` so the host view mounts its `OverlayScrollbar` flush
-// with the content-panel edge, outside whatever padding the host applies.
+// Same host-mounted-scrollbar contract as `TrackList` and `AlbumGrid`: the `v-*`
+// properties and `set-v-offset` let the host place its `OverlayScrollbar` flush
+// with the content-panel edge, outside its own padding.
 export component GenreGrid inherits Rectangle {
     in property <[GenreGridRow]> rows;
     in property <length> card-width: 180px;
     in property <length> card-height: 226px;
-    // Full row slot height — `card-height` plus the inter-row gap, baked
-    // in so the `ListView` (which lays delegates back-to-back, no
-    // `spacing`) gets even vertical gaps.
+    // The gap is baked into the slot height because a `ListView` lays its
+    // delegates back-to-back and has no `spacing`.
     in property <length> row-height: 246px;
     in property <length> gap: 20px;
 
     callback open-genre(int /*genre_id*/);
 
-    // Viewport metrics for a host-mounted `OverlayScrollbar`. Sign
-    // convention matches `TrackList` / `AlbumGrid`: positive `v-offset`
-    // = scrolled by N px; the inner `ListView` stores the same as a
-    // non-positive `viewport-y`, so we negate at the boundary.
+    // Same sign convention as `TrackList` — a positive `v-offset` is N px
+    // scrolled, where the inner `ListView` holds that as a non-positive
+    // `viewport-y`, so the boundary negates.
     out property <length> v-visible-height: list.visible-height;
     out property <length> v-viewport-height: list.viewport-height;
     out property <length> v-offset: -list.viewport-y;
@@ -42,9 +35,8 @@ export component GenreGrid inherits Rectangle {
         horizontal-scrollbar-policy: always-off;
 
         for grid-row in root.rows: Rectangle {
-            // Pin the delegate's layout slot — a `ListView` delegate
-            // needs a fixed height or the virtualization math breaks
-            // (CLAUDE.md).
+            // A `ListView` delegate needs a fixed height or the virtualization
+            // math breaks.
             min-height: root.row-height;
             max-height: root.row-height;
 
@@ -57,32 +49,23 @@ export component GenreGrid inherits Rectangle {
                 for genre in grid-row.genres: EntityCard {
                     card-width: root.card-width;
                     card-height: root.card-height;
-                    // No artwork-path / cover binding: the card falls
-                    // back to its `fallback-icon` glyph painted over a
-                    // hash-derived linear-gradient. The two stops are
-                    // precomputed in Rust on three independent axes
-                    // (hue, hue-offset, S/V jitter) so cards stay
-                    // visually distinguishable even at similar hues —
-                    // see `src/ui/genres/color.rs::genre_accent`.
+                    // With no cover binding the card paints its glyph over a
+                    // name-hashed gradient. Rust precomputes both stops on
+                    // three independent axes — hue, hue offset, S/V jitter — so
+                    // cards stay distinguishable even at neighbouring hues.
                     fallback-icon: "theater_comedy";
                     tile-bg: @linear-gradient(135deg,
                         genre.tile_color_1,
                         genre.tile_color_2);
-                    // 30% white glyph over the saturated gradient,
-                    // matching Tauri's `rgba(255, 255, 255, 0.3)`.
                     tile-icon-color: #ffffff.with-alpha(0.3);
-                    // Match the now-playing-bar tile's hover zoom — a
-                    // genre card carries no real artwork, only the
-                    // procedural glyph, so the default 1.04 Albums /
-                    // Artists zoom reads as no zoom at all on the
-                    // 0.55× glyph. 1.15 puts the motion at the right
-                    // perceptual level for the fallback-only tile.
+                    // The pronounced zoom, not the covers' gentle one: on a
+                    // glyph drawn at just over half the tile, the gentle one
+                    // reads as no zoom at all.
                     cover-scale-hover: 1.15;
                     title: genre.name;
-                    // Subtitle: track count · pre-formatted duration. The
-                    // duration arrives display-ready from Rust; the count
-                    // takes the same plural pair the Artists grid uses —
-                    // a genre exists for as little as one track.
+                    // The duration arrives display-ready from Rust; the count
+                    // takes the Artists grid's plural pair, since a genre can
+                    // exist for a single track.
                     subtitle:
                         @tr("{n} track" | "{n} tracks" % genre.track_count)
                         + " · " + genre.display_duration;

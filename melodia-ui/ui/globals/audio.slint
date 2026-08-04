@@ -1,21 +1,12 @@
-// UI state for the three DSP dialogs. All three are Rust-owned and seeded from
-// `settings.json` at boot; the DSP chain they drive lives in `src/player/`.
+// UI state for the three DSP surfaces. All three are Rust-owned and seeded from
+// `settings.json` at boot; the chain they drive lives in `src/player/`. Every callback
+// applies to the live player *and* persists — on release for the drag pairs, mirroring
+// the `set-volume` / `commit-volume` split.
 
-// Equalizer: drives the graphic-EQ dialog (`Dialog.kind == "equalizer"`).
-// State is owned by Rust (`src/ui/equalizer.rs`): `enabled` + the `band-gains`
-// model are seeded from `settings.json` at boot and updated on every user
-// action; the dialog body reads them and fires the callbacks below. Each
-// callback applies to the live Rodio player AND (for non-drag actions, or on
-// drag release via `commit-band`) persists to `settings.json` — mirroring the
-// `set-volume` / `commit-volume` split.
-//
-// `band-gains` is a Rust-owned `Rc<VecModel<f32>>` (gain in dB per band,
-// low → high), length == `equalizer::NUM_BANDS` (10). `preset-idx` indexes the
-// dropdown: `0..PRESET_COUNT-1` are the built-in presets (Flat first), and
-// `PRESET_COUNT` (the last entry) is the synthetic "Custom" shown once the user
-// hand-edits a band. `min-gain` / `max-gain` are seeded from
-// `equalizer::{MIN,MAX}_GAIN_DB` by `install_equalizer` (Rust is the single
-// source of truth — no literals to drift here).
+// `band-gains` is a Rust-owned model of dB per band, low → high, sized by
+// `equalizer::NUM_BANDS`. `preset-idx` indexes the dropdown, whose last entry is the
+// synthetic "Custom" shown once the user hand-edits a band. **Every bound is seeded
+// from the Rust consts** rather than restated here, so there is nothing to drift.
 export global Equalizer {
     in-out property <bool> enabled;
     in-out property <[float]> band-gains;
@@ -23,34 +14,21 @@ export global Equalizer {
     in property <float> min-gain;
     in property <float> max-gain;
 
-    // Preamp / master gain (dB) — transparent headroom for boosting without
-    // clipping. `min-preamp` / `max-preamp` are seeded from
-    // `equalizer::{MIN,MAX}_PREAMP_DB` by `install_equalizer`.
+    // Master gain in dB — headroom for boosting without clipping.
     in-out property <float> preamp;
     in property <float> min-preamp;
     in property <float> max-preamp;
 
     callback set-enabled(bool);
-    // Live band change during a drag — apply to the player, don't persist.
     callback set-band(int /*band index*/, float /*gain dB*/);
-    // Drag release — persist the current curve.
     callback commit-band(int /*band index*/, float /*gain dB*/);
     callback select-preset(int /*dropdown index*/);
     callback reset();
-    // Preamp: live during drag (apply only), persist on release — same split.
     callback set-preamp(float /*dB*/);
     callback commit-preamp(float /*dB*/);
 }
 
-// ReplayGain: drives the loudness-normalization dialog
-// (`Dialog.kind == "replaygain"`). State is owned by Rust
-// (`src/ui/replaygain.rs`): seeded from `settings.json` at boot and updated on
-// every user action. Each callback applies to the live Rodio player AND
-// persists to `settings.json` (the preamp uses the live `set-preamp` /
-// release `commit-preamp` split, like the EQ preamp and volume). `mode-idx`:
-// 0 = Track, 1 = Album (matches `player::replaygain::RgMode`). `min-preamp` /
-// `max-preamp` are seeded from `replaygain::RG_{MIN,MAX}_PREAMP_DB` by
-// `install_replaygain` (Rust is the single source of truth — no literals here).
+// Loudness normalization. `mode-idx` matches `player::replaygain::RgMode`.
 export global ReplayGain {
     in-out property <bool> enabled;
     in-out property <int> mode-idx;
@@ -62,58 +40,40 @@ export global ReplayGain {
     callback set-enabled(bool);
     callback set-mode(int /*0 = Track, 1 = Album*/);
     callback set-prevent-clipping(bool);
-    // Preamp: live during drag (apply only), persist on release — same split.
     callback set-preamp(float /*dB*/);
     callback commit-preamp(float /*dB*/);
 }
 
-// Visualizer: drives the audio-visualizer strip in the Now-Playing view. State
-// is owned by Rust (`src/ui/visualizer/mod.rs`): `enabled` is seeded from
-// `settings.json` at boot, then two-way bound by the Settings → Playback
-// toggle, which also fires `set-enabled` to persist the choice. Ships **on** —
-// see `VisualizerFlags`.
+// The Now-Playing visualizer strip.
 //
-// `enabled` and `set-active` are deliberately separate. `enabled` is the
-// persisted setting and decides whether the strip mounts at all; `set-active`
-// is session state — the strip is mounted *and* the window is on screen — and
-// is the only thing that arms the backend sample tap. Without the split the
-// audio thread would keep filling the ring for a view nobody has open.
+// **`enabled` and `set-active` are deliberately separate.** `enabled` is the persisted
+// setting and decides whether the strip mounts at all; `set-active` is session state —
+// mounted *and* the window on screen — and is the only thing arming the backend sample
+// tap. Without the split, the audio thread keeps filling the ring for a view nobody has
+// open.
 //
-// `style` and `style-idx` are one choice in two shapes, both written by Rust:
-// `VisualizerStrip` mounts on the **key**, so reordering the picker can never
-// repoint an existing install's setting, while the Settings chips need the
-// index. `set-style(i)` carries the picker's index back and Rust answers with
-// both.
+// `style` and `style-idx` are one choice in two shapes, both written by Rust: the strip
+// mounts on the **key**, so reordering the picker can't repoint an existing install's
+// setting, while the Settings chips need the index.
 //
-// Each style feeds off its own property, and `tick` fills only the active one:
+// Each style feeds off its own property and `tick` fills only the active one. `bars` is
+// normalized 0..1 heights, low → high, **already smoothed in Rust** — so they must not
+// be `animate`d, which would phase-lag an already-smoothed value. `wave-path` is SVG
+// commands for the trace, one closed figure whose edges are each column's loudest and
+// quietest sample; a string because Slint rejects `for`-generated path elements
+// (slint-ui/slint#754).
 //
-//  - `bars` — a Rust-owned `Rc<VecModel<f32>>` of normalized 0..1 heights, low →
-//    high frequency, length == `spectrum::NUM_BANDS`. Already smoothed (fast
-//    attack / slow decay) in Rust, so the bars must NOT be `animate`d —
-//    animating an already-smoothed value phase-lags.
-//  - `wave-path` — SVG path commands for the oscilloscope trace: one closed
-//    figure whose upper and lower edges are the loudest and quietest sample of
-//    each drawn column, x over 0..1 and y over -1..1 against the `Path`'s fixed
-//    viewbox. A string because Slint rejects `for`-generated path elements
-//    (slint-ui/slint#754).
+// `tick` does the whole snapshot → analysis → property pass and carries the strip's
+// width, the trace drawing one column per couple of pixels rather than a fixed count.
+// `idle` reports the drawing has decayed to rest, which lets the Timer stop once a
+// paused player settles — pausing halts the tap but leaves stale samples in the ring, so
+// re-analysing them would freeze the drawing mid-shape instead of letting it fall.
 //
-// `tick` is fired by `VisualizerStrip`'s Timer and does the whole
-// snapshot → analysis → property pass. It carries the strip's width because the
-// trace draws one column per couple of pixels rather than a fixed count, so its
-// resolution has to follow the window. `idle` reports back that the drawing has
-// decayed to rest, which lets that Timer stop once a paused player has settled:
-// pausing halts the audio tap but leaves stale samples in the ring, so
-// re-analysing them would freeze the drawing mid-shape instead of letting it
-// fall.
-//
-// `window-shown` and `dormant` are the other two halves of that Timer's gate, and
-// they carry different amounts of certainty on purpose. `window-shown` is the OS
-// telling us the window is off screen — a tray hide, a minimize we handled or one
-// we asked about — and every one of those has a matching event that puts it back,
-// so it is safe to stop the Timer on. `dormant` says the drawing has settled *and*
-// no frames are being painted, which is inferred rather than reported (see
-// `src/ui/visualizer/pulse.rs`) and has no wake-up event, so it slows the Timer
-// down instead of stopping it — leaving it able to notice frames coming back.
+// **`window-shown` and `dormant` carry different certainty on purpose.** `window-shown`
+// is the OS saying the window is off screen, and every such event has a matching one
+// putting it back, so it is safe to stop the Timer on. `dormant` says the drawing has
+// settled *and* no frames are being painted — inferred, with no wake-up event — so it
+// slows the Timer instead of stopping it, leaving it able to notice frames return.
 export global Visualizer {
     in-out property <bool> enabled: true;
     in-out property <string> style: "bars";
@@ -126,14 +86,14 @@ export global Visualizer {
 
     callback set-enabled(bool);
     callback set-style(int);
-    // Fired by `AppWindow`'s `watched-viz-active` mirror, not by the strip —
-    // `NowPlayingView` is destroyed while closed and Slint has no unmount
-    // callback, so the gate has to live somewhere always mounted.
+    // Fired by `AppWindow`'s mirror, not by the strip: `NowPlayingView` is destroyed
+    // while closed and Slint has no unmount callback, so the gate has to live somewhere
+    // always mounted.
     callback set-active(bool);
-    // Fired by whoever lowers `window-shown`. The tick is the steady-state writer
-    // of the audio tap's arm state, but it can't be relied on here: `window-shown`
-    // also gates the strip's Timer, so a hide landing on an already-settled
-    // drawing stops it in the same pass and no further tick arrives.
+    // Fired by whoever lowers `window-shown`. The tick is the steady-state writer of the
+    // tap's arm state but can't be relied on here — `window-shown` also gates the
+    // strip's Timer, so a hide landing on an already-settled drawing stops it in the
+    // same pass and no further tick arrives.
     callback window-hidden();
     callback tick(bool /*is-playing*/, float /*strip width, logical px*/);
 }

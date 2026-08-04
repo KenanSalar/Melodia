@@ -1,21 +1,11 @@
 import { Theme } from "../theme.slint";
 
-// Themed chrome for popup-style overlays — right-click menus, dropdowns,
-// floating toggles, slider popups. One look across the app.
+// Themed chrome for every popup overlay — context menus, dropdowns, flyouts,
+// slider popups — so they read as one thing. Mount it as the immediate child of
+// the `PopupWindow` and put the content inside.
 //
-// Mount as the immediate child of a PopupWindow and put your content inside:
-//
-//     PopupWindow {
-//         x: …; y: …; width: …; height: …;
-//         close-policy: close-on-click-outside;
-//         PopupSurface {
-//             VerticalLayout { padding: Theme.pad-xs; /* rows */ }
-//         }
-//     }
-//
-// `pill: true` switches to a half-short-axis radius for the volume slider's
-// vertical pill chrome. No entry animation is declared — popups appear
-// instantly per design.
+// `pill: true` takes the half-short-axis radius the volume slider's vertical
+// chrome wants. No entry animation: a popup appears instantly by design.
 export component PopupSurface inherits Rectangle {
     in property <bool> pill: false;
 

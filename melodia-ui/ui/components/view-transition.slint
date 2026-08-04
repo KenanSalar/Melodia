@@ -1,40 +1,28 @@
 import { Theme } from "../theme.slint";
 import { NavEnterFrom } from "../globals/nav.slint";
 
-// Enter-only wrapper. Re-instantiated on every `if` branch mount, so the
-// state flip + animation replay on every nav. No exit animation — Slint's
-// `if` form destroys the outgoing view instantly.
+// Enter-only wrapper, re-instantiated on every branch mount so the flip and the
+// animation replay per nav. There is no exit half — Slint's `if` destroys the
+// outgoing view instantly. `enter-from` picks the axis: `below` for sidebar nav,
+// `right` for drilling into a detail, `left` for coming back out.
 //
-//   enter-from:
-//     NavEnterFrom.below → lateral sidebar nav (fade + slide up)
-//     NavEnterFrom.right → drilling into a detail (fade + slide L)
-//     NavEnterFrom.left  → returning from a detail (fade + slide R)
-//
-// Why a single-shot Timer and not `init => { shown = true; }`:
-// Slint's `init` runs *after* property bindings are resolved with their
-// final values (see docs/reference/common.mdx#init), so flipping `shown`
-// inside `init` makes `true` the initial property value — there's no
-// from-state for `animate opacity / x / y` to interpolate from and the
-// view appears instantly. A 1 ms Timer fires after the first render with
-// `shown: false` has painted, so the flip is a true *change* and the
-// `animate` blocks engage. Same pattern as `ui/components/grid-columns-
-// sync.slint:30-37`.
+// **A single-shot Timer, not `init`.** `init` runs *after* bindings resolve to
+// their final values, so flipping `shown` there makes `true` the initial value —
+// no from-state to interpolate, and the view appears instantly. The Timer fires
+// once the first `shown: false` frame has painted, so the flip is a real change
+// and the `animate` blocks engage.
 export component ViewTransition inherits Rectangle {
     in property <NavEnterFrom> enter-from: NavEnterFrom.below;
-    // Whether to play at all. Off, the view is simply *there* — no fade, no
-    // slide, no animation to interrupt.
+    // Off, the view is simply *there* — no fade, no slide, nothing to interrupt.
     //
-    // It exists for the nested case. Favorites wraps each of its tab bodies
-    // in one of these, inside the page's own enter transition: on the frame
-    // the page mounts, both would play, and a horizontal tab slide composed
-    // with the page's fade-up reads as a diagonal instead of the sidebar nav
-    // it is. The host arms this on the first real tab switch, so the page's
-    // own entrance is the only thing moving when the page arrives.
+    // It exists for the nested case: Favorites wraps each tab body in one of
+    // these, inside the page's own enter transition, so on the mount frame both
+    // would play and a horizontal tab slide composed with the page's fade-up
+    // reads as a diagonal. The host arms it on the first real tab pick.
     in property <bool> enabled: true;
     private property <bool> shown: false;
-    // Disabled, this is `true` from the first evaluation, so the three
-    // bindings below never transition and the `animate` blocks never engage
-    // — the Timer's flip is then a write nothing reads.
+    // Disabled, this is `true` from the first evaluation, so the three bindings
+    // below never transition and the Timer's flip is a write nothing reads.
     private property <bool> settled: !root.enabled || root.shown;
 
     Timer {

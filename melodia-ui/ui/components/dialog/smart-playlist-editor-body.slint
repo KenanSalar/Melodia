@@ -7,14 +7,11 @@ import { ToggleSwitch } from "../settings/toggle-switch.slint";
 import { LabeledInput } from "../labeled-input.slint";
 import { IconButton } from "../icon-button.slint";
 
-// Compact, controlled value input for a rule row / the limit count. `text` is
-// one-way (the host owns it via the model / a global); each keystroke reports
-// the new text through `edited(string)`. After the first keystroke Slint
-// detaches the inner `TextInput.text` binding (a component writing its own
-// in-out property orphans a one-way binding), so re-emitting the same value
-// from Rust never resets the cursor; a remount (the host's `if input-kind == …`
-// swap) re-reads `text` fresh. See the editor body for how that keeps the model
-// and the visible input in agreement.
+// Controlled value input for a rule row or the limit count. `text` is one-way —
+// the host owns it — and every keystroke reports back through `edited`. The
+// first keystroke orphans the inner `TextInput.text` binding, so re-emitting the
+// same value from Rust never resets the cursor, while a remount re-reads `text`
+// fresh; the editor body below leans on both halves.
 component RuleValueInput inherits Rectangle {
     in property <string> text;
     in property <string> placeholder;
@@ -34,11 +31,10 @@ component RuleValueInput inherits Rectangle {
             horizontal-stretch: 1;
             if ti.text == "": Text {
                 text: root.placeholder;
-                // Same rung as every other placeholder, and the same bounded
-                // width and elide — see `search-bar.slint` for why an unbounded
-                // one paints out of its field. This one has the tightest slot
-                // in the tree: the row limit's input is a hard 64 px, and its
-                // `N` is a single glyph only in English.
+                // Bounded and elided like every other placeholder — see
+                // `search-bar.slint` for why an unbounded one paints out of its
+                // field. This is the tightest slot in the tree: the limit input
+                // is a hard 64 px, and its hint is one glyph only in English.
                 color: Theme.overlay2;
                 font-size: Theme.font-size-md;
                 vertical-alignment: center;
@@ -60,10 +56,9 @@ component RuleValueInput inherits Rectangle {
     }
 }
 
-// A dialog-row label, vertically centered against its sibling controls. Wraps
-// the "fixed-width children don't center in a wider layout" pitfall once (a bare
-// `Text` won't centre cross-axis inside a taller row) instead of hand-rolling
-// the `VerticalLayout { alignment: center; Text {…} }` at each label site.
+// A dialog-row label centred against its sibling controls. Wraps the
+// "fixed-width children don't centre in a wider layout" pitfall once, rather
+// than hand-rolling the centring layout at every label site.
 component RowLabel inherits VerticalLayout {
     in property <string> text;
     alignment: center;
@@ -74,16 +69,13 @@ component RowLabel inherits VerticalLayout {
     }
 }
 
-// One editable rule row: field dropdown · operator dropdown · value input · a
-// remove button. Purely presentational — Rust owns the `SmartRuleRow` model and
-// applies every edit through the callbacks below (so this component never
-// mutates `rule`). Named `SmartRuleRowView` to avoid clashing with the
-// `SmartRuleRow` model struct.
+// One editable rule row. Purely presentational — Rust owns the model and applies
+// every edit through the callbacks below, so this never mutates `rule`. The
+// `View` suffix is to keep it clear of the model struct's name.
 component SmartRuleRowView inherits HorizontalLayout {
     in property <SmartRuleRow> rule;
     in property <[string]> field-names;
-    // The operator label array for this row's field-kind (resolved by the host
-    // so the four `@tr` op arrays live in one place).
+    // Resolved by the host, so the four operator arrays live in one place.
     in property <[string]> ops;
     callback set-field(int /*field index*/);
     callback set-op(int /*op index*/);
@@ -96,10 +88,10 @@ component SmartRuleRowView inherits HorizontalLayout {
     Dropdown {
         trigger-width: 148px;
         options: root.field-names;
-        // One-way binding + `manual` (no self-write) keeps Rust the single
-        // source of truth: `field-index` re-reads after every model edit, so a
-        // field change that resets the operator can't leave a stale selection
-        // (a plain `Dropdown` would orphan this binding on first pick).
+        // One-way plus `manual` keeps Rust the single source of truth: the index
+        // re-reads after every model edit, so a field change that resets the
+        // operator can't leave a stale selection. A self-writing `Dropdown`
+        // would orphan the binding on the first pick.
         manual: true;
         selected-index: root.rule.field-index;
         selected(idx) => { root.set-field(idx); }
@@ -112,11 +104,10 @@ component SmartRuleRowView inherits HorizontalLayout {
         selected(idx) => { root.set-op(idx); }
     }
 
-    // Value widget — split by input-kind so switching between text / number /
-    // none remounts a fresh input that re-reads the (Rust-reset) value; a
-    // same-kind field change reuses it and keeps the value. The two branches are
-    // load-bearing: do NOT collapse them into one with a ternary placeholder —
-    // the `input-kind == …` boundary IS the remount key that resyncs the input.
+    // Split by input-kind so switching kinds remounts a fresh input that
+    // re-reads the Rust-reset value, while a same-kind change reuses it and
+    // keeps what's typed. Do NOT collapse the branches into one with a ternary
+    // placeholder — that boundary *is* the remount key that resyncs the input.
     if root.rule.input-kind == 1: RuleValueInput {
         horizontal-stretch: 1;
         min-width: 90px;
@@ -135,8 +126,7 @@ component SmartRuleRowView inherits HorizontalLayout {
     if root.rule.field-kind == 3 && root.rule.input-kind == 2: RowLabel {
         text: @tr("days");
     }
-    // Keep the remove button flush-right when there's no value widget
-    // (presence / boolean operators).
+    // Keeps the remove button flush-right when the operator takes no value.
     if root.rule.input-kind == 0: Rectangle { horizontal-stretch: 1; }
 
     VerticalLayout {
@@ -152,29 +142,25 @@ component SmartRuleRowView inherits HorizontalLayout {
     }
 }
 
-// Body of the Smart-Playlist rule-builder dialog (`Dialog.kind ==
-// "smart-playlist-editor"`). Reads/writes the `SmartEditor` global; Rust owns
-// the `rules` model and reconstructs a `SmartCriteria` on commit.
+// Body of the rule-builder dialog, over the `SmartEditor` global; Rust owns the
+// rules model and rebuilds a `SmartCriteria` on commit.
 //
-// i18n contract: every dropdown option array below is an inline `@tr` literal
-// list, ordered to mirror `entities::smart_criteria::{FIELDS, ops_for,
-// LimitOrder}` by index — a Rust-populated `[string]` would not be translated.
-// Adding/reordering a field or operator means editing BOTH sides in lockstep.
+// Every dropdown array below is an inline literal list — a Rust-populated
+// `[string]` renders untranslated — ordered to mirror
+// `entities::smart_criteria::{FIELDS, ops_for, LimitOrder}` **by index**. Adding
+// or reordering a field or operator means editing both sides in lockstep;
+// `entities::tests::smart_criteria_tests` pins the leading order and each
+// array's length against the Rust side.
 export component SmartPlaylistEditorBody inherits VerticalLayout {
     spacing: Theme.pad-md;
 
-    // Field names (16) — mirrors `smart_criteria::FIELDS` by index. The counts
-    // annotated below are a reading aid; `entities::tests::smart_criteria_tests`
-    // is the guard — it pins the leading order and asserts each array's length
-    // against the Rust editor-order array it mirrors.
     property <[string]> field-names: [
         @tr("Title"), @tr("Artist"), @tr("Album Artist"), @tr("Album"),
         @tr("Genre"), @tr("Year"), @tr("Duration (sec)"), @tr("Plays"),
         @tr("Skips"), @tr("Rating"), @tr("Bitrate (kbps)"), @tr("Sample rate (Hz)"),
         @tr("File size (bytes)"), @tr("Favorite"), @tr("Last played"), @tr("Date added"),
     ];
-    // Operator arrays by field-kind — mirror `ops_for(value_type)` by index
-    // (text 8, number 8, bool 2, date 4).
+    // By field-kind, mirroring `ops_for(value_type)`.
     property <[string]> text-ops: [
         @tr("contains"), @tr("does not contain"), @tr("is"), @tr("is not"),
         @tr("starts with"), @tr("ends with"), @tr("is set"), @tr("is not set"),
@@ -187,9 +173,9 @@ export component SmartPlaylistEditorBody inherits VerticalLayout {
     property <[string]> date-ops: [
         @tr("in the last"), @tr("not in the last"), @tr("is set"), @tr("is not set"),
     ];
-    // (2) — mirrors `smart_criteria::MATCH_MODES` by index.
+    // Mirrors `smart_criteria::MATCH_MODES`.
     property <[string]> match-modes: [ @tr("all"), @tr("any") ];
-    // (8) — mirrors `smart_criteria::LIMIT_ORDERS` by index.
+    // Mirrors `smart_criteria::LIMIT_ORDERS`.
     property <[string]> limit-orders: [
         @tr("most recently added"), @tr("least recently added"),
         @tr("most played"), @tr("least played"),
@@ -204,14 +190,12 @@ export component SmartPlaylistEditorBody inherits VerticalLayout {
             : root.date-ops;
     }
 
-    // Name.
     LabeledInput {
         label: @tr("Name");
         placeholder: @tr("Smart playlist name");
         text <=> SmartEditor.name;
     }
 
-    // Match all / any header.
     HorizontalLayout {
         spacing: Theme.pad-sm;
         alignment: start;
@@ -224,17 +208,15 @@ export component SmartPlaylistEditorBody inherits VerticalLayout {
         RowLabel { text: @tr("of the following rules"); }
     }
 
-    // Rule rows — scrollable so a long rule set doesn't overflow the card.
+    // Scrollable so a long rule set doesn't overflow the card.
     Rectangle {
         min-height: 76px;
         max-height: 280px;
         vertical-stretch: 1;
         rules-sv := ScrollView {
-            // Lock the content width to the viewport so the rows fill the
-            // width and each value input's `horizontal-stretch` has real
-            // space to expand into — without this, a ScrollView sizes its
-            // content to the content's own preferred width and the stretchy
-            // input collapses to ~0 (CLAUDE.md "lock viewport-width").
+            // Locked to the viewport so each value input's stretch has real
+            // space: left alone, a ScrollView sizes its content to the content's
+            // own preferred width and the stretchy input collapses to nothing.
             viewport-width: rules-sv.visible-width;
             VerticalLayout {
                 spacing: Theme.pad-sm;
@@ -251,7 +233,6 @@ export component SmartPlaylistEditorBody inherits VerticalLayout {
         }
     }
 
-    // Add-rule.
     HorizontalLayout {
         alignment: start;
         Rectangle {
@@ -282,7 +263,6 @@ export component SmartPlaylistEditorBody inherits VerticalLayout {
         }
     }
 
-    // Optional limit.
     HorizontalLayout {
         spacing: Theme.pad-sm;
         alignment: start;

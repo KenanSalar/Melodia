@@ -8,25 +8,18 @@ import { TrackList } from "../components/track-list/track-list.slint";
 import { OverlayScrollbar } from "../components/overlay-scrollbar.slint";
 import { FilterThrottle } from "../components/filter-throttle.slint";
 
-// The Tracks page. The page-header chrome (title, count, filter input,
-// action pill with column-toggle popup) lives here; the table itself is the
-// reusable `TrackList` component, bound to the per-view `Tracks` global so
-// Rust keeps wiring callbacks the same way it does today. Other list views
-// (Favorites, Album/Playlist Detail, …) will mirror this pattern with their
-// own globals as they land in their respective phases.
+// The page-header chrome — title, count, filter, action pill — over the shared
+// `TrackList`, bound to the per-view global. Every other list view mirrors this shape
+// with its own global.
 export component TracksView inherits Rectangle {
     // No own background — the parent content panel owns the rounded
     // `Theme.base` fill, and a transparent root lets that fill show
     // through at the rounded corner cells.
 
-    // Filter throttle: each keystroke bumps `pending`; the Timer fires the
-    // refilter callback at most once per `interval` while `pending !=
-    // applied`. Stops itself by syncing `applied` to `pending` inside the
-    // trigger. Throttle (not pure debounce) so the user sees partial
-    // results during fast typing on huge libraries — each rebuild is now
-    // cheap (Arc-bumped snapshot + pre-computed lowercase keys), so the
-    // ~130 ms cadence is comfortably below "feels laggy" while collapsing
-    // hundreds of allocs/keystroke down to ~one per fire.
+    // **A throttle rather than a pure debounce**, so the user sees partial results while
+    // typing fast over a huge library. Each rebuild is cheap — an `Arc`-bumped snapshot
+    // over pre-folded keys — so the cadence sits below "feels laggy" while collapsing
+    // hundreds of allocations per keystroke into roughly one per fire.
     property <int> filter-tick-pending: 0;
 
     filter-throttle := FilterThrottle {
@@ -34,21 +27,17 @@ export component TracksView inherits Rectangle {
         fire() => { Tracks.apply-filter(Tracks.filter); }
     }
 
-    // Backdrop catches any click that no inner TouchArea consumes (the
-    // padding around the layout, gaps between cells, etc.) and bumps the
-    // blur tick — the SearchBar observes the counter and clears focus on
-    // change.
+    // Catches any click no inner TouchArea consumes — the padding, the gaps between
+    // cells — and bumps the blur tick.
     TouchArea {
         clicked => { Tracks.blur-search-tick += 1; }
     }
 
     VerticalLayout {
-        // Three sides, not `padding: Theme.pad-lg`. The uniform form also pads
-        // the *bottom*, which sits outside the track list's viewport and reads
-        // as a dead strip of page background above the panel border — with the
-        // last row clipped against the viewport edge rather than scrolling
-        // clear of it. Album / Genre / Playlist Detail inset left/right/top
-        // only, which is why their tables run flush to the border.
+        // **Three sides, never uniform.** A uniform pad also pads the *bottom*, which
+        // sits outside the list's viewport and reads as a dead strip of page background
+        // above the panel border — with the last row clipped against the viewport edge
+        // rather than scrolling clear of it. The detail views inset the same three.
         padding-left: Theme.pad-lg;
         padding-right: Theme.pad-lg;
         padding-top: Theme.pad-lg;
@@ -59,11 +48,8 @@ export component TracksView inherits Rectangle {
             spacing: Theme.pad-md;
             alignment: stretch;
 
-            // Title + count subtitle stacked Spotify / Apple-Music style:
-            // title large, count small below it. Avoids the
-            // baseline-vs-box-center mismatch that made the inline
-            // "Tracks • 504 songs" layout look off, and reads as a
-            // conventional library-section header.
+            // Stacked rather than inline: an inline "Tracks • N songs" hit the
+            // baseline-versus-box-centre mismatch and read as misaligned.
             VerticalLayout {
                 alignment: center;
                 spacing: 0;
@@ -83,10 +69,8 @@ export component TracksView inherits Rectangle {
 
             Rectangle { horizontal-stretch: 1; }
 
-            // Single right-aligned action pill. Order: selection chip
-            // (when active) → column toggle. Selection slots sit at the
-            // leading edge of the pill so they appear "left" of the
-            // column toggle.
+            // The selection chip leads, so its group reads to the left of the column
+            // toggle.
             VerticalLayout {
                 alignment: center;
                 ActionPill {
@@ -119,20 +103,15 @@ export component TracksView inherits Rectangle {
                     text <=> Tracks.filter;
                     placeholder: @tr("Filter tracks…");
                     blur-trigger: Tracks.blur-search-tick;
-                    // Don't call apply-filter directly — bump the pending
-                    // tick so the Timer above coalesces fast typing into
-                    // one refilter per 130 ms. `play-row` resolves its id
-                    // list from the live filter via `current_ids_filtered`,
-                    // not from the throttled model.
+                    // **Never call `apply-filter` directly** — bumping the tick is what
+                    // lets the throttle coalesce fast typing. `play-row` resolves its
+                    // ids from the live filter, not from the throttled model.
                     edited(t) => { root.filter-tick-pending += 1; }
                 }
             }
         }
 
-        // Reusable track table. State stays in the `Tracks` global; this
-        // is just a binding-only consumer. Future views (Favorites / Album
-        // Detail / Playlist Detail) will re-use the same component with
-        // their own per-view globals and persistence keys.
+        // Binding-only: the state stays on the `Tracks` global.
         tl := TrackList {
             horizontal-stretch: 1;
             vertical-stretch: 1;
@@ -175,19 +154,14 @@ export component TracksView inherits Rectangle {
         }
     }
 
-    // Overlay scrollbars sit at the TracksView root, outside the padded
-    // VerticalLayout, so they're flush with the content panel's rounded
-    // edges. They drive the inner ScrollView/ListView through TrackList's
-    // `v-*` / `h-*` out properties + `set-*` callbacks (the bars live
-    // outside TrackList's scope, so they can't reach the inner ids
-    // directly).
+    // At the view root, outside the padded layout, so they sit flush with the content
+    // panel's rounded edges. They drive the inner scrollers through the list's published
+    // metrics and setters — living outside its scope, they can't reach the inner ids.
     OverlayScrollbar {
         horizontal: false;
         x: parent.width - self.width;
-        // Align with the ListView body inside TrackList so the bar (and
-        // its thumb) stays out of the column header band. `tl.body-y`
-        // includes the header offset; we add the TrackList's own y offset
-        // within TracksView to get root-relative coords.
+        // Aligned with the list body, so the bar stays out of the column header band.
+        // `body-y` carries the header offset; the list's own y makes it root-relative.
         y: tl.y + tl.body-y;
         width: 10px;
         height: tl.body-height;

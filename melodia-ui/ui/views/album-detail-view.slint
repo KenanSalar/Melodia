@@ -11,22 +11,14 @@ import { TrackList } from "../components/track-list/track-list.slint";
 import { OverlayScrollbar } from "../components/overlay-scrollbar.slint";
 import { FilterThrottle } from "../components/filter-throttle.slint";
 
-// The full Album Detail view. Mounted by `app-window.slint` for nav index
-// 4 when `AlbumDetail.album-id >= 0`. A reusable `DetailHeader` (hero
-// blur backdrop + left-side artwork + bottom-anchored right column) sits
-// over the shared, virtualized `TrackList` — consumed here exactly the
-// way `tracks-view.slint` / `browse-view.slint` consume it, just bound
-// to the per-view `AlbumDetail` global.
+// A `DetailHeader` — hero blur, left artwork, bottom-anchored right column — over the
+// shared virtualized `TrackList`, consumed exactly as the Tracks and Browse views
+// consume it and bound to the per-view global.
 //
-// Layout mirrors Tauri's `pages/AlbumDetail.tsx`: the column-toggle is
-// merged into the primary `[Shuffle | Columns]` pill so the action row
-// collapses into a single line beside the artwork; the selection chip
-// (when rows are selected) lives as a separate `ActionPill` next to the
-// primary one.
+// The column toggle is merged into the primary pill, so the action row collapses into a
+// single line beside the artwork; the selection chip rides in its own pill next to it.
 export component AlbumDetailView inherits Rectangle {
-    // Filter throttle: each keystroke bumps `filter-tick-pending`; the
-    // shared `FilterThrottle` fires the filter callback at most once per
-    // ~130 ms while pending is ahead of the last-applied tick.
+    // The shared throttle, on the interval every filterable view uses.
     property <int> filter-tick-pending: 0;
 
     filter-throttle := FilterThrottle {
@@ -34,9 +26,7 @@ export component AlbumDetailView inherits Rectangle {
         fire() => { AlbumDetail.filter-changed(AlbumDetail.filter); }
     }
 
-    // Backdrop catches any click that no inner TouchArea consumes and
-    // bumps the blur tick — the SearchBar observes it and clears focus
-    // on change.
+    // Catches any click no inner TouchArea consumes and bumps the blur tick.
     TouchArea {
         clicked => { AlbumDetail.blur-search-tick += 1; }
     }
@@ -53,14 +43,8 @@ export component AlbumDetailView inherits Rectangle {
             has-hero-blur: AlbumDetail.has-blur;
             back-clicked => { AlbumDetail.close-detail(); }
 
-            // --- Right column @children ------------------------------
-            // Top block: title + subtitle + meta, pinned to the top of
-            // the column. Each entry has `vertical-stretch: 0` so the
-            // trailing spacer below collects all the slack.
-            // Title row — album name on the left, SearchBar pinned to
-            // the right. The SearchBar filters the `tracks` TrackList
-            // (title + artist + album substring). Mirrors the Artist
-            // Detail hero layout.
+            // The right column. Every entry is `vertical-stretch: 0`, so the trailing
+            // spacer collects all the slack and the action row sits at the bottom.
             HorizontalLayout {
                 vertical-stretch: 0;
                 spacing: Theme.pad-md;
@@ -68,11 +52,9 @@ export component AlbumDetailView inherits Rectangle {
 
                 VerticalLayout {
                     alignment: center;
-                    // Title — `hero-title-size` rather than
-                    // `page-title-size`, so it carries the larger header
-                    // surface and matches the other five banners. Leading
-                    // LRM keeps RTL-bidi titles laid out correctly inside
-                    // an LTR shell.
+                    // `hero-title-size` rather than `page-title-size`, so it carries the
+                    // larger header surface and matches the other five banners. The
+                    // leading LRM keeps a bidi title laid out inside an LTR shell.
                     Text {
                         text: "‎" + AlbumDetail.album.name;
                         color: HeroBackdrop.on-backdrop;
@@ -81,13 +63,11 @@ export component AlbumDetailView inherits Rectangle {
                         horizontal-alignment: left;
                         overflow: elide;
                     }
-                    // Artist — under the title rather than on a row of
-                    // its own, so it rides in the height the SearchBar
-                    // beside it already claims. That is what leaves the
-                    // band enough slack for a wrapped second chip row;
-                    // see `ui::hero_chips::HERO_MAX_ROWS`. Still gated on
-                    // being non-empty, so an album with no artist leaves
-                    // the row at exactly the SearchBar's height.
+                    // **Under the title, inside the title row**, rather than on a row of
+                    // its own — so it rides in the height the `SearchBar` beside it has
+                    // already claimed, which is what leaves the band slack for a wrapped
+                    // second chip row. Gated on being non-empty, so an artist-less album
+                    // leaves the row at exactly the bar's height.
                     if AlbumDetail.album.artist_name != "": Text {
                         text: "‎" + AlbumDetail.album.artist_name;
                         color: HeroBackdrop.on-backdrop;
@@ -109,27 +89,21 @@ export component AlbumDetailView inherits Rectangle {
                     }
                 }
             }
-            // Meta chips — year / track count / duration / discs /
-            // compilation, built by `src/ui/hero_chips.rs`.
+            // Built by `ui::hero_chips` off the stats the fetch already returned.
             HeroChipStrip { }
 
-            // Spacer — absorbs the slack between the title block and
-            // the action row so the action row sits flush with the
-            // artwork's lower edge (title at top, pills at bottom).
+            // Absorbs the slack, so the action row sits flush with the artwork's lower
+            // edge. It is also the slack a wrapped chip row spends.
             Rectangle { vertical-stretch: 1; }
 
-            // Action row — primary pill + optional selection pill.
-            // Both align to the start (left), matching Tauri's
-            // `headerActionsRow`.
+            // The primary pill and, when rows are selected, its own.
             HorizontalLayout {
                 vertical-stretch: 0;
                 spacing: Theme.pad-md;
                 alignment: start;
 
-                // Single pill: Shuffle → toggle → selection chip
-                // (trailing, when active). Selection slots sit at the
-                // trailing edge so they read to the right of the
-                // primary actions.
+                // One pill: Shuffle, the column toggle, then the selection chip, which
+                // trails so it reads to the right of the primary actions.
                 ActionPill {
                     PillButton {
                         icon: "shuffle";
@@ -144,8 +118,7 @@ export component AlbumDetailView inherits Rectangle {
                         show-album   <=> AlbumDetail.show-album;
                         show-genre   <=> AlbumDetail.show-genre;
                         show-year    <=> AlbumDetail.show-year;
-                        // Album column is meaningless in this view —
-                        // every row belongs to the same album.
+                        // Meaningless here: every row is the same album.
                         hide-album: true;
                         toggled(id) => { AlbumDetail.toggle-column(id); }
                     }
@@ -162,20 +135,16 @@ export component AlbumDetailView inherits Rectangle {
             }
         }
 
-        // Indent the TrackList with `Theme.pad-lg` on both sides so its
-        // left/right edges match the Tracks and Browse views (whose root
-        // VLs apply uniform `padding: Theme.pad-lg`). The root VL here
-        // can't use that pattern because `DetailHeader` is full-bleed
-        // for the hero blur — so the inset is applied per-child instead.
+        // Inset per-child rather than on the root column, so the list's edges match the
+        // Tracks and Browse views: the root can't pad uniformly because `DetailHeader`
+        // is full-bleed for the hero blur.
         HorizontalLayout {
             horizontal-stretch: 1;
             vertical-stretch: 1;
             padding-left: Theme.pad-lg;
             padding-right: Theme.pad-lg;
-            // Vertical gap between the hero blur and the TrackList
-            // header. Matches Artist Detail's "Albums sub-section ↔
-            // TrackList" gap so the spacing reads consistent across
-            // every detail view in the app.
+            // Matches Artist Detail's own gap, so spacing reads the same across the
+            // detail views.
             padding-top: Theme.pad-lg;
 
             tl := TrackList {
@@ -222,9 +191,8 @@ export component AlbumDetailView inherits Rectangle {
         }
     }
 
-    // Overlay scrollbars at the view root, flush with the content panel's
-    // rounded edges. `tl` is nested inside the VerticalLayout, so its
-    // position is taken via `absolute-position` (like `browse-view.slint`).
+    // At the view root, flush with the content panel's rounded edges. `tl` is nested, so
+    // its position comes through `absolute-position`.
     OverlayScrollbar {
         horizontal: false;
         x: parent.width - self.width;

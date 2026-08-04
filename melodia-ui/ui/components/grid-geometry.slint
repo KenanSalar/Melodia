@@ -1,27 +1,19 @@
-// Responsive card-grid geometry, derived once instead of once per view.
+// Responsive card-grid geometry, derived once instead of once per view: every
+// grid page answers the same three questions from its body width, and the
+// arithmetic had been copied verbatim into each. `GridColumnsSync` beside it
+// owns *when* the column count reaches Rust, so the two split along
+// what-versus-when. Non-visual, so it costs a property evaluation and no layout.
 //
-// Every grid page answers the same three questions from its body width — how
-// many columns fit, how wide each card ends up, how tall a row slot is — and
-// the arithmetic was copied verbatim into each of them. This component owns
-// it; `GridColumnsSync` beside it owns *when* the resulting column count gets
-// pushed into Rust, so the two split cleanly along what-versus-when.
-//
-// Non-visual: no children, no size, nothing painted. It costs a property
-// evaluation, not a layout pass — the `FilterThrottle` / `GridColumnsSync`
-// shape.
-//
-// `avail-width` must come from the element the grid actually fills (the body
-// `Rectangle`), whose width the layout fixes independently of the grid's
-// children — so a card sizing itself from it is a derivation, not a cycle.
+// **`avail-width` must come from the element the grid fills**, whose width the
+// layout fixes independently of the grid's children — so a card sizing itself
+// from it is a derivation and not a cycle.
 export component GridGeometry {
     in property <length> avail-width;
-    // The narrowest a card may be drawn. Columns are packed until one more
-    // would take every card below this.
+    // Columns are packed until one more would take every card below this.
     in property <length> min-card-w: 180px;
-    // Gutter, applied between cards *and* at both outer edges — hence the
-    // `cols + 1` in `card-w`.
+    // Between cards *and* at both outer edges — hence the `cols + 1` below.
     in property <length> gap: 20px;
-    // Height the title + subtitle block adds under the square artwork tile.
+    // What the text block adds under the artwork tile.
     in property <length> card-text-h: 46px;
 
     out property <int> cols:

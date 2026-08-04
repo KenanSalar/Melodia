@@ -1,30 +1,18 @@
 import { Theme } from "../../theme.slint";
 
-// One text cell in the Tracks table — the shared shape used by the artist,
-// album, and genre columns. A width-bounded `Rectangle { clip; }` holding a
-// centered Text with LRM-prefixed content and `overflow: elide`.
+// One text cell in the track table — the shape the artist, album and genre
+// columns share. The leading U+200E it prepends is what keeps `overflow: elide`
+// putting its ellipsis at the right edge whatever the script's direction.
 //
-// Title (artwork + favorite badge), number (checkbox), year (no LRM, no
-// elide), and length (favorite-on-hover swap) are structurally different
-// and stay inline in `track-list-row.slint`.
+// Title, number, year and length are structurally different and stay inline in
+// `track-list-row.slint`.
 //
-// Visibility is gated at the CALL SITE with `if Tracks.show-*: DataCell { … }`
-// (matches the header). An internal `show` toggle does not work: a
-// `DataCell { show: false }` is still a child of the row's HorizontalLayout
-// and reserves an 8 px `spacing` slot that `total-w` in globals/tracks.slint does
-// not account for, drifting cells away from the header. Inheriting from
-// `Rectangle` and binding `width: cell-width` at the wrapper level is also
-// load-bearing — without it the parent HorizontalLayout doesn't pin this
-// slot to `cell-width`, and resizing a sibling column makes the cell drift
-// off-grid (artist text bleeds over the title column).
-//
-// Properties:
-//   * `cell-width`   — fixed width matching the header column.
-//   * `text-content` — value to render. The component prepends U+200E
-//                       (LRM) so `overflow: elide` renders the ellipsis at
-//                       the right edge regardless of script direction.
-//   * `playing`      — whether this row is the currently playing track;
-//                       drives the accent-vs-subtext0 colour swap.
+// **Two things here are load-bearing.** Visibility is gated at the *call site*,
+// matching the header: a cell hidden from inside is still a child of the row's
+// layout and reserves a `spacing` slot that `total-w` doesn't account for, so
+// every cell after it drifts off the header. And the wrapper must bind
+// `width: cell-width` — without it the parent layout doesn't pin the slot, and
+// resizing a sibling column bleeds this cell's text over its neighbour.
 export component DataCell inherits Rectangle {
     in property <length> cell-width;
     in property <string> text-content;
@@ -36,11 +24,10 @@ export component DataCell inherits Rectangle {
         alignment: center;
         Text {
             text: "‎" + root.text-content;
-            // `text`, not `subtext0`: rows are body copy. On `subtext0` this
-            // cell fell under the 4.5:1 body-text bar on macOS Light and sat
-            // on it under Latte / GNOME Light. The whole list — header
-            // included — is on this one rung; hierarchy comes from size and
-            // weight instead, so nothing has to trade away contrast for it.
+            // The body-copy rung, not the muted one: muted, this cell fell
+            // under 4.5:1 on macOS Light and sat exactly on it under two other
+            // light variants. The whole list, header included, is on this one
+            // rung, and hierarchy comes from size and weight instead.
             color: root.playing ? Theme.accent : Theme.text;
             font-size: Theme.font-size-row;
             overflow: elide;

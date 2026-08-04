@@ -4,13 +4,11 @@ import { Player } from "../../globals/player.slint";
 import { OverlayScrollbar } from "../../components/overlay-scrollbar.slint";
 import { TrackList } from "../../components/track-list/track-list.slint";
 
-// The Favorites page's Songs tab: a full `TrackList` over the post-filter
-// `Favorites.tracks` model, with its own overlay scrollbars.
-//
-// Zero inputs — everything it reads is on the `Favorites` global or on
-// `Player`. The scrollbars live here rather than at the mount site because
-// Slint can't read an id declared inside an `if` from outside it, which is
-// also what makes a per-tab file the natural boundary.
+// The Songs tab: a `TrackList` over the post-filter model, with its own overlay
+// scrollbars. No inputs — everything it reads is on a global. The scrollbars
+// live here rather than at the mount site because Slint can't read an id
+// declared inside an `if` from outside it, which is also what makes a per-tab
+// file the natural boundary.
 export component FavoritesSongsTab inherits Rectangle {
     HorizontalLayout {
         padding-left: Theme.pad-lg;
@@ -62,8 +60,8 @@ export component FavoritesSongsTab inherits Rectangle {
     OverlayScrollbar {
         horizontal: false;
         x: parent.width - self.width;
-        // Align with the ListView body inside TrackList so the bar
-        // stays out of the column-header band.
+        // Aligned with the inner ListView, so the bar stays clear of the header
+        // band.
         y: tl.y + tl.body-y;
         width: 10px;
         height: tl.body-height;

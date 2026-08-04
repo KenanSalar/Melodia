@@ -5,10 +5,8 @@ import { Checkbox } from "../checkbox.slint";
 import { PopupSurface } from "../popup-surface.slint";
 import { FocusLossWatcher } from "../focus-loss-watcher.slint";
 
-// Single row inside the column-toggle popup. Reads its checked state from
-// the matching `show-*` flag passed in via `checked` and reports clicks via
-// `toggled()`. Locked entries (Title, Length) render dimmed and don't fire
-// the callback.
+// One row inside the column-toggle popup. Locked entries (Title, Length) render
+// dimmed and never fire `toggled()`.
 component ColumnToggleRow inherits Rectangle {
     in property <string> label;
     in property <bool> checked;
@@ -45,9 +43,8 @@ component ColumnToggleRow inherits Rectangle {
 
     touch := TouchArea {
         mouse-cursor: root.locked ? default : pointer;
-        // Row release keeps the popup open (toggles don't close the
-        // ColumnTogglePopup), so restore the trigger highlight that the
-        // winit Release filter just cleared.
+        // A toggle doesn't close the popup, so restore the trigger highlight
+        // the winit Release filter just cleared.
         pointer-event(ev) => {
             if (ev.kind == PointerEventKind.up
                 || ev.kind == PointerEventKind.cancel) {
@@ -60,17 +57,13 @@ component ColumnToggleRow inherits Rectangle {
     }
 }
 
-// Column-toggle popup: a labelled `tune` pill that opens a PopupWindow
-// listing every column with a checkbox-style toggle. Mirrors the
-// volume-popup pattern: right-aligned PopupWindow, `close-on-click-outside`,
-// opacity fade-in entry animation.
+// A labelled pill opening a PopupWindow of per-column toggles, on the
+// volume-popup pattern — right-aligned, close-on-click-outside, fade-in.
 //
-// Globals-free: takes the six `show-*` flags as in-out properties (so the
-// host's bound state flips synchronously for instant UI feedback) and emits
-// `toggled(column-id)` so the host can persist the new visible-column list
-// to settings under its own per-view key. Locked rows (Title, Length) match
-// the Tauri parity table; they appear in the menu so the user can see why
-// they can't be hidden, but don't react to clicks.
+// Globals-free: the six flags come in as `in-out` so the host's bound state
+// flips synchronously, and `toggled` lets it persist the list under its own
+// per-view key. Title and Length are listed but locked, so it's visible *why*
+// they can't be hidden.
 export component ColumnTogglePopup inherits Rectangle {
     in-out property <bool> show-number;
     in-out property <bool> show-artwork;
@@ -79,64 +72,45 @@ export component ColumnTogglePopup inherits Rectangle {
     in-out property <bool> show-genre;
     in-out property <bool> show-year;
 
-    // Drop the Album row entirely for hosts where the column is meaningless
-    // (Album Detail: every row is the same album).
+    // Each drops its row outright on the detail view where every track shares
+    // that field, and the column says nothing.
     in property <bool> hide-album: false;
-    // Drop the Artist row entirely for hosts where the column is meaningless
-    // (Artist Detail: every row is the same artist).
     in property <bool> hide-artist: false;
-    // Drop the Genre row entirely for hosts where the column is meaningless
-    // (Genre Detail: every row is the same genre).
     in property <bool> hide-genre: false;
 
     callback toggled(string /*column_id*/);
 
-    // Outer width tracks the PillButton's content width; height is
-    // fixed to the 32 px pill row so the popup anchors below the chip's
-    // bottom edge regardless of inner button alignment.
+    // Fixed to the pill row's height so the popup anchors below the chip's
+    // bottom edge whatever the inner button's alignment.
     width: btn.width;
     height: 32px;
 
-    // Same chrome as the queue-sheet pill buttons — `PillButton` handles
-    // the 32 px outer, 28 px visible chrome, hover fill (Theme.surface1),
-    // and the renderer-aware glyph baseline correction. The label carries
-    // the meaning, so there's no tooltip to repeat it.
+    // The label carries the meaning, so there's no tooltip repeating it.
     btn := PillButton {
         icon: "tune";
         text: @tr("Columns");
-        // Keep the chrome highlighted while the popup is open. Cleared by
-        // the AppWindow scrim catching an outside click — rows inside the
-        // popup don't auto-close (the popup stays open across toggles by
-        // design), so there's no per-row id reset.
+        // Held while the popup is open, and cleared by the AppWindow scrim
+        // catching an outside click — the rows inside never close it.
         force-bg: PopupHighlight.id == "columns";
         clicked => { PopupHighlight.id = "columns"; pop.show(); }
     }
 
     pop := PopupWindow {
-        // Right-align under the button, 8 px gap below — same cadence as
-        // the volume popup's vertical offset, but here the popup hangs
-        // BELOW because the trigger sits in the page header.
-        //
-        // Slint's `place_popup` clamps a PopupWindow's right edge to the
-        // window's clip region, which on a page-edge trigger overrides any
-        // negative-x offset we set here (we'd just be claiming space the
-        // clamp eats back). To get visible breathing room from the window
-        // edge, the wrapper HorizontalLayout below reserves `pad-lg` of
-        // transparent margin on the right of the popup itself — so even
-        // when the popup's bounding box gets clamped flush, the visible
-        // chrome stops `pad-lg` short of it.
+        // Hangs below rather than above, since the trigger sits in the page
+        // header. Slint's `place_popup` clamps a popup's right edge to the
+        // window clip region, so a negative-x offset on a page-edge trigger just
+        // claims space the clamp takes back — the wrapper layout below reserves
+        // transparent margin *inside* the popup instead, and the visible chrome
+        // stops short of the edge even when the bounding box is clamped flush.
         x: btn.width - self.width;
-        // Anchor 8 px below the bottom of the 32 px outer (which the
-        // button now centres inside via the VerticalLayout wrap), so the
-        // popup hangs the same distance below the trigger regardless of
-        // the inner button's positioning.
+        // Off the outer's bottom, not the button's, so the gap holds whatever
+        // the inner positioning does.
         y: root.height + 8px;
         close-policy: close-on-click-outside;
 
-        // Live only while this popup is the one currently open — the
-        // trigger sets `PopupHighlight.id = "columns"` before `pop.show()`,
-        // and the winit Release path clears it back to "". One watcher
-        // per focus-loss instead of one per popup-host component instance.
+        // Live only while this is the open popup — the trigger claims
+        // `PopupHighlight.id` before `show()`, so focus loss costs one watcher
+        // rather than one per popup host in the tree.
         if PopupHighlight.id == "columns": FocusLossWatcher {
             close => { pop.close(); PopupHighlight.id = ""; }
         }

@@ -6,57 +6,38 @@ import { ArtworkImage } from "../artwork-image.slint";
 import { CoverMosaic } from "../grid/cover-mosaic.slint";
 import { SectionButton } from "../settings/section-button.slint";
 
-// Mosaic picker body — rendered inside `DialogOverlay` when
-// `Dialog.kind == "edit-playlist-artwork"`. Single-column layout
-// mirroring Tauri's `EditPlaylistDialog`:
+// Mosaic picker body — mounted by `DialogOverlay` for
+// `Dialog.kind == "edit-playlist-artwork"`: preview over a counter row over a
+// wrapping candidate grid.
 //
-//   ┌──────────────────────────┐
-//   │     Large preview        │  (centred, ~220 px square)
-//   ├──────────────────────────┤
-//   │  N/4 selected   [Clear]  │
-//   ├──────────────────────────┤
-//   │   Candidate grid         │  (auto-wrap, 6 cols of 64 px,
-//   │   ┌──┬──┬──┬──┬──┬──┐    │   scrollable past one row of overflow)
-//   │   │  │  │  │  │  │  │    │
-//   │   └──┴──┴──┴──┴──┴──┘    │
-//   └──────────────────────────┘
+// The two cover tiers are picked by size. The 64 px candidate tiles take the
+// shared row tier (72 px, a near-exact fit), the ~110–220 px preview cells the
+// grid tier (448 px), whose downscale stays crisp where a 72 px source
+// pixelates badly.
 //
-// Cover resolution tiers:
-//   * Candidate tiles (64 px) → `Playlists.request-row-cover`
-//     (shared row-tier 72 px LRU — perfect fit, no oversized decodes).
-//   * Preview slots (~110–220 px per cell) → `Playlists.request-cover`
-//     (grid-tier 448 px LRU — sharp at the preview size; downscale
-//     stays crisp where the row-tier 72 px source pixelates badly).
-//
-// Candidate selection is delegated to Rust
-// (`Playlists.toggle-mosaic-candidate`) — caps at 4, silent no-op
-// past that. Per-tile order badge resolves the slot via an inline
-// 4-arm conditional (cap = 4, so no loop needed).
+// Rust owns selection (`Playlists.toggle-mosaic-candidate`) and caps it at 4 —
+// past that the toggle is a silent no-op.
 export component PlaylistMosaicPicker inherits Rectangle {
-    // Wrapping candidate grid layout constants.
     private property <length> cand-tile: 64px;
     private property <length> cand-gap: 8px;
     private property <int> cand-cols: 6;
-    // Each candidate's slot width = tile + gap.
     private property <length> cand-stride: root.cand-tile + root.cand-gap;
     private property <length> grid-row-h: root.cand-stride;
     private property <int> total-rows:
         Math.ceil(Dialog.mosaic-candidates.length / root.cand-cols);
-    // Cap visible candidate area at ~2 rows; ScrollView handles the
-    // overflow. Matches Tauri's `max-height: 160px` ceiling.
+    // Two rows visible; the ScrollView takes the overflow.
     private property <length> grid-area-h: 160px;
     private property <length> grid-content-h: root.total-rows * root.grid-row-h;
 
-    // Mosaic preview gutter — surface1 painted *behind* the cells so the
-    // gaps between tiles read as visual gutters (Material-3 "tiled"
-    // composition) instead of butted-up halves. Outer padding inside the
-    // preview rectangle picks up the same colour for a uniform inset ring.
+    // Painted *behind* the cells, so the gaps between tiles read as gutters
+    // rather than as butted-up halves; the preview's own padding picks up the
+    // same colour for a uniform inset ring.
     private property <length> mosaic-gap: 3px;
 
     VerticalLayout {
         spacing: Theme.pad-md;
 
-        // --- Centred preview ---------------------------------------
+        // Centred preview.
         HorizontalLayout {
             alignment: center;
             vertical-stretch: 0;
@@ -70,11 +51,8 @@ export component PlaylistMosaicPicker inherits Rectangle {
                 border-color: Theme.border;
                 clip: true;
 
-                // Untouched + the playlist has a saved cover ⇒ render
-                // it as the initial preview. This is the "preview of
-                // what's already saved" view the user sees on dialog
-                // open. The branch unmounts as soon as they pick a
-                // candidate or click Clear (both flip `mosaic-touched`).
+                // The saved cover, shown until the first pick or Clear flips
+                // `mosaic-touched` and unmounts this branch.
                 if Dialog.mosaic-selection.length == 0
                         && !Dialog.mosaic-touched
                         && Dialog.current-artwork.width > 0: Image {
@@ -84,11 +62,7 @@ export component PlaylistMosaicPicker inherits Rectangle {
                     image-fit: ImageFit.cover;
                 }
 
-                // Otherwise (no selection AND (user cleared OR there's
-                // no saved cover)) ⇒ render a softly tinted accent
-                // backdrop with a larger placeholder tile and "No
-                // artwork" caption — modernised empty state that
-                // matches the rest of the dialog's expressive look.
+                // Empty state — nothing picked, and either cleared or never saved.
                 if Dialog.mosaic-selection.length == 0
                         && (Dialog.mosaic-touched || Dialog.current-artwork.width == 0): Rectangle {
                     background: @linear-gradient(180deg,
@@ -116,11 +90,8 @@ export component PlaylistMosaicPicker inherits Rectangle {
                     }
                 }
 
-                // 1..=4 image branches delegated to `CoverMosaic`. The
-                // empty / saved-cover / cleared cases above stay local
-                // because they're picker-specific UX (the Favorites hero
-                // wants a different "no favorites yet" treatment, so
-                // CoverMosaic itself stays empty-state-agnostic).
+                // The empty cases above stay local: `CoverMosaic` is
+                // empty-state-agnostic, since the Favorites hero wants its own.
                 if Dialog.mosaic-selection.length >= 1: CoverMosaic {
                     width: 100%;
                     height: 100%;
@@ -133,10 +104,7 @@ export component PlaylistMosaicPicker inherits Rectangle {
             }
         }
 
-        // --- Pip progress + counter + Clear ------------------------
-        // The four pips visually communicate the cap; the text echoes
-        // it numerically. Pips animate background colour on slot fill
-        // so adding/removing a candidate produces a soft transition.
+        // Pips + counter + Clear. The pips show the cap; the text states it.
         HorizontalLayout {
             vertical-stretch: 0;
             alignment: space-between;
@@ -172,30 +140,24 @@ export component PlaylistMosaicPicker inherits Rectangle {
                 }
             }
 
-            // Clear uses the same outline-pill chrome as the dialog's
-            // Cancel (`SectionButton` with `primary: false`) so the
-            // three buttons in the dialog (Clear + Cancel + Apply)
-            // read as one family.
+            // Same outline chrome as Cancel, so Clear / Cancel / Apply read as
+            // one family.
             SectionButton {
                 label: @tr("Clear");
                 icon: "";
                 primary: false;
                 clicked => {
                     Dialog.mosaic-selection = [];
-                    // Distinguishes "user deliberately cleared" from
-                    // "untouched empty selection on open". The dispatcher
-                    // gates `clear-artwork` on this flag.
+                    // Separates a deliberate clear from an untouched open — the
+                    // dispatcher gates `clear-artwork` on it.
                     Dialog.mosaic-touched = true;
                 }
             }
         }
 
-        // --- Wrapping candidate grid -------------------------------
-        // Auto-fill 6 columns of 64 px tiles inside a fixed-height
-        // ScrollView. Slint can't compose a CSS-style `flex-wrap`,
-        // so candidates are absolute-positioned by index/cols within
-        // a Rectangle of known content height. The Rectangle is the
-        // ScrollView's child, so vertical overflow scrolls past 160 px.
+        // Wrapping candidate grid. Slint has no `flex-wrap`, so the tiles are
+        // absolutely positioned by index inside a Rectangle of known height —
+        // which is what lets the ScrollView around it take the overflow.
         if Dialog.mosaic-candidates.length == 0: Rectangle {
             vertical-stretch: 1;
             height: 80px;
@@ -214,9 +176,7 @@ export component PlaylistMosaicPicker inherits Rectangle {
             }
         }
 
-        // Section header — small caps label sits above the candidate
-        // grid. Only mounted when there are candidates, so it doesn't
-        // float above the empty-state hint.
+        // Mounted only with candidates, so it can't float above the empty-state hint.
         if Dialog.mosaic-candidates.length > 0: Text {
             text: @tr("Select up to 4 tracks");
             color: Theme.subtext0;
@@ -241,8 +201,7 @@ export component PlaylistMosaicPicker inherits Rectangle {
 
                 Rectangle {
                     width: 100%;
-                    // Padding wrapper — keeps the absolute-positioned
-                    // children inset from the ScrollView edges.
+                    // Insets the absolutely-positioned children from the edges.
                     VerticalLayout {
                         padding: Theme.pad-xs;
 
@@ -250,8 +209,6 @@ export component PlaylistMosaicPicker inherits Rectangle {
                             height: root.grid-content-h;
 
                             for path[i] in Dialog.mosaic-candidates: cand := Rectangle {
-                                // Index → grid (col, row), then to
-                                // (x, y) using the shared tile + gap.
                                 x: Math.mod(i, root.cand-cols) * root.cand-stride;
                                 y: Math.floor(i / root.cand-cols) * root.cand-stride;
                                 width: root.cand-tile;
@@ -259,13 +216,9 @@ export component PlaylistMosaicPicker inherits Rectangle {
                                 clip: true;
                                 border-radius: Theme.radius-sm;
 
-                                // Slot lookup — capped at 4 entries,
-                                // so a 4-arm conditional resolves
-                                // without a loop. Defined on the
-                                // `cand` Rectangle (Slint's `parent`
-                                // doesn't propagate through nested
-                                // layouts, so descendants reference
-                                // `cand.slot` directly).
+                                // Cap is 4, so four arms beat a loop. On `cand`
+                                // itself because `parent` doesn't reach through
+                                // nested layouts — descendants read `cand.slot`.
                                 property <int> slot:
                                     (Dialog.mosaic-selection.length >= 1
                                         && Dialog.mosaic-selection[0] == path) ? 0 :
@@ -281,21 +234,13 @@ export component PlaylistMosaicPicker inherits Rectangle {
                                     cover: Playlists.request-row-cover(path);
                                     tile-size: root.cand-tile;
                                     tile-radius: Theme.radius-sm;
-                                    // Hover zoom — drives the
-                                    // ArtworkImage's `cover-scale`
-                                    // (Material-3 expressive artwork
-                                    // pop, also used by the album grid
-                                    // card). ArtworkImage animates the
-                                    // scale internally.
+                                    // Hover pop, as on the album grid card.
+                                    // `ArtworkImage` animates the scale itself.
                                     cover-scale: cand-touch.has-hover ? 1.06 : 1.0;
                                 }
 
-                                // Hover hairline — subtle outline that
-                                // appears on hover when the tile is
-                                // *not* already selected. Always
-                                // mounted with opacity 0 ↔ 1 so the
-                                // border fades in/out instead of
-                                // popping.
+                                // Always mounted and opacity-animated, so the
+                                // hairline fades instead of popping.
                                 Rectangle {
                                     width: 100%;
                                     height: 100%;
@@ -307,12 +252,9 @@ export component PlaylistMosaicPicker inherits Rectangle {
                                     animate opacity { duration: Theme.dur-fast; easing: ease-out; }
                                 }
 
-                                // Selection ring + badge — always
-                                // mounted; opacity animates so
-                                // (de)selecting a tile fades the ring
-                                // in/out smoothly. Mounting via `if`
-                                // would unmount on deselect and skip
-                                // the fade entirely.
+                                // Selection ring + badge, always mounted for the
+                                // same reason — an `if` would unmount on
+                                // deselect and skip the fade out.
                                 Rectangle {
                                     width: 100%;
                                     height: 100%;
@@ -330,11 +272,8 @@ export component PlaylistMosaicPicker inherits Rectangle {
                                         y: 4px;
                                         border-radius: 11px;
                                         background: Theme.accent;
-                                        // Slot text empty when
-                                        // deselected — visible only
-                                        // while the parent ring fades
-                                        // out, but reads cleanly
-                                        // either way.
+                                        // Empty when deselected; only ever seen
+                                        // during the ring's fade-out.
                                         Text {
                                             text: cand.slot >= 0 ? (cand.slot + 1) + "" : "";
                                             color: Theme.accent-text;

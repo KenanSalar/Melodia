@@ -2,10 +2,8 @@ import { Theme } from "../../../theme.slint";
 import { SettingsPage } from "../../../globals/settings-page.slint";
 import { PlaybackSection } from "../playback-section.slint";
 
-// Playback tab. One card today — gapless, crossfade and its four
-// sub-settings, resume-on-startup, the play-button animation and the
-// visualizer. It keeps its own file anyway so the router treats all five
-// tabs identically and a second card is a one-line addition here.
+// Playback tab, one card today. It keeps its own file anyway, so the router
+// treats all five tabs identically and a second card is one line here.
 export component PlaybackPage inherits Rectangle {
     background: transparent;
     horizontal-stretch: 1;
@@ -13,11 +11,10 @@ export component PlaybackPage inherits Rectangle {
 
     out property <bool> has-matches: pb.has-matches;
 
-    // See `library-page.slint` for why the cards live in columns and the
-    // columns place themselves. One card is one column here, so a wide body
-    // leaves the second column's width empty rather than splitting the card —
-    // the shape still matches the other four pages, so a second card is the
-    // one-line addition promised above, and adding a second *column* is four.
+    // See `library-page.slint` for why the cards live in columns that place
+    // themselves. One card is one column, so a wide body leaves the second
+    // column empty rather than splitting it — and the shape still matches the
+    // other four pages, which is what keeps that second card cheap.
     GridLayout {
         spacing: Theme.pad-lg;
 

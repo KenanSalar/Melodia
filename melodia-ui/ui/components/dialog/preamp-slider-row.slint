@@ -1,12 +1,9 @@
 import { Theme } from "../../theme.slint";
 import { SliderTrack } from "../slider-track.slint";
 
-// Shared "Preamp" dialog row: label | horizontal `SliderTrack` | right-
-// aligned dB readout. Owns the dB ↔ 0..1 track mapping (computed from the
-// `min-preamp` / `max-preamp` props the host seeds from its DSP constants)
-// so the formula exists once for both the equalizer and `ReplayGain`
-// dialogs. Emits dB values — the host forwards them to its global's
-// live-`changed` / persist-`committed` split.
+// The shared Preamp row. It owns the dB ↔ 0..1 mapping, off bounds the host
+// seeds from its own DSP constants, so the formula exists once across both
+// dialogs. It emits dB, which the host splits into live and persist.
 export component PreampSliderRow inherits HorizontalLayout {
     in property <float> preamp; // dB
     in property <float> min-preamp; // dB
@@ -48,7 +45,7 @@ export component PreampSliderRow inherits HorizontalLayout {
     VerticalLayout {
         alignment: center;
         Text {
-            // "dB" is a universal unit symbol — not translated.
+            // A unit symbol, so untranslated.
             text: (root.preamp > 0 ? "+" : "") + round(root.preamp) + " dB";
             color: root.enabled ? Theme.subtext0 : Theme.overlay0;
             font-size: Theme.font-size-sm;

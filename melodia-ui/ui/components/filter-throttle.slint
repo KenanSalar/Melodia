@@ -1,21 +1,16 @@
-// Debounces rapid filter-box keystrokes. The host bumps `pending` on every
-// SearchBar `edited`; this fires `fire()` at most once per `interval` while
-// `pending` is ahead of the last-applied tick. Collapses the hundreds of
-// re-filter allocations a fast typist generates down to roughly one per
-// settled burst. `Timer` is a non-visual pseudo-element, so this component
-// occupies no layout space — drop it anywhere in a view's element tree.
+// Debounces filter-box keystrokes: the host bumps `pending` on every `edited`,
+// and this fires at most once per `interval` while `pending` runs ahead of the
+// last-applied tick — collapsing a fast typist's burst into roughly one
+// re-filter. Non-visual, so mount it anywhere in a view's tree.
 //
-// Every view with a filter box mounts one, replacing the hand-rolled
-// `filter-tick-pending`/`filter-tick-applied` + `Timer` block each used to
-// carry inline. The count is deliberately not listed here — an inventory in a
-// comment is what went stale the last two times a view was added.
+// Every view with a filter box mounts one, in place of the hand-rolled counter
+// pair each used to carry inline.
 //
-// `fire()` is usually a Rust round-trip (`SomeGlobal.apply-filter(...)`), since
-// what a keystroke costs is a model rebuild. Settings is the exception and
-// assigns one Slint property from another: a query there mounts all five tab
-// pages and fans out to three `matches` calls per row, so the expensive work is
-// Slint's own re-evaluation and the settled value is a second property the
-// sections read.
+// **`fire()` has two shapes.** Usually it's a Rust round-trip, since a keystroke
+// costs a model rebuild. Settings assigns one Slint property from another
+// instead: a query there mounts all five tab pages and fans out to several
+// `matches` calls per row, so the expensive work is Slint's own re-evaluation
+// and the settled value has to be a property the sections can read.
 export component FilterThrottle {
     // Debounce cadence. ~130 ms sits comfortably below "feels laggy".
     in property <duration> interval: 130ms;

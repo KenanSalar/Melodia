@@ -4,29 +4,18 @@ import { ArtworkImage } from "artwork-image.slint";
 import { HeroBlurBackdrop } from "hero-blur-backdrop.slint";
 import { IconButton } from "icon-button.slint";
 
-// Reusable large-artwork detail header, shared by all four detail views
-// (Album, Artist, Genre, Playlist). The component owns the chrome only:
+// The large-artwork header all four detail views share. **It owns the chrome only**: the
+// full-bleed hero blur, its solved floor and scrim, the floating back button and the
+// left-side artwork tile.
 //
-//   * Full-bleed hero blur backdrop (two-slot cross-fade, mirroring
-//     `now-playing-view.slint`'s `Player.blur-img-{a,b}` pattern — the
-//     outgoing slot stays painted for the whole fade so album switches
-//     never flash).
-//   * Gradient floor underneath the blurs and a scrim on top, both solved
-//     per artwork into the `HeroBackdrop` global.
-//   * Floating back button at the top-left.
-//   * The left-side artwork tile.
+// **Text injected into the right column must read `HeroBackdrop`, never `Theme.*`** — it
+// paints straight onto that backdrop, which is pinned dark under every theme, where the
+// theme brushes land light-on-light on a light variant.
 //
-// Text injected into the right column paints straight onto that backdrop,
-// so it must use `HeroBackdrop.on-backdrop` / `-muted` rather than
-// `Theme.text` / `subtext0` — the hero is dark under every theme, and the
-// theme brushes are light-on-light there on a light variant.
-//
-// Everything inside the right column is `@children` — the caller composes
-// title / subtitle / meta / actions and pins them top/bottom via
-// `vertical-stretch` on each injected child (e.g. a trailing spacer with
-// `vertical-stretch: 1` to push the action row to the artwork's lower
-// edge). Slint only supports one `@children` per component, so this is
-// the slot through which the entire right column is supplied.
+// The whole right column arrives through `@children`: the caller composes it and pins
+// its parts with `vertical-stretch`, typically a trailing spacer pushing the action row
+// to the artwork's lower edge. Slint allows one `@children` per component, so that slot
+// is the entire column.
 export component DetailHeader inherits Rectangle {
     in property <string> artwork-path;
     in property <image>  cover;
@@ -34,20 +23,15 @@ export component DetailHeader inherits Rectangle {
     in property <image>  hero-blur-b;
     in property <bool>   hero-blur-use-a;
     in property <bool>   has-hero-blur;
-    // Circular hero artwork — used by Artist Detail to render the artist
-    // avatar as a disc (Tauri parity).
+    // Artist Detail's disc.
     in property <bool>   circular-artwork: false;
-    // Forwarded to the inner `ArtworkImage.fallback-icon`. Artist Detail
-    // passes `"person"`; every other entity detail takes the default.
+    // Artist Detail passes `"person"`; every other detail takes the default.
     in property <string> fallback-icon: "music-note";
 
-    // Forwarded to the inner `ArtworkImage.tile-bg` / `tile-icon-color`
-    // for the left-side artwork tile when no `cover` is supplied. Same
-    // story as `EntityCard`: callers that paint a custom fallback chrome
-    // (Genre Detail's hash-derived gradient + white glyph) override
-    // these. The defaults take the solved `HeroBackdrop.chrome` rather
-    // than `Theme.accent` because this tile sits *on* the hero, and a
-    // light theme's accent is dark — it would land dark-on-dark there.
+    // The tile's fallback chrome, overridden by Genre Detail's hash-derived gradient.
+    // **The defaults take the solved `HeroBackdrop.chrome`, not `Theme.accent`**: this
+    // tile sits *on* the hero, and a light theme's accent is dark — it would land
+    // dark-on-dark there.
     in property <brush> tile-bg: HeroBackdrop.chrome.with-alpha(0.15);
     in property <brush> tile-icon-color: HeroBackdrop.chrome;
 
@@ -56,11 +40,8 @@ export component DetailHeader inherits Rectangle {
     height: layout.preferred-height;
     clip: true;
 
-    // --- Hero blur backdrop (full-bleed, behind everything) ----------
-    // Shared component: gradient floor (always painted; shows through
-    // when `has-hero-blur` is false) + the dual-slot crossfade + scrim.
-    // Every colour it paints comes from the `HeroBackdrop` global, so
-    // there is nothing to forward here.
+    // The shared component: gradient floor, dual-slot crossfade, scrim. Every colour it
+    // paints comes off `HeroBackdrop`, so there is nothing to forward.
     HeroBlurBackdrop {
         x: 0;
         y: 0;
@@ -72,17 +53,14 @@ export component DetailHeader inherits Rectangle {
         has-blur: root.has-hero-blur;
     }
 
-    // --- Content -----------------------------------------------------
     layout := HorizontalLayout {
         padding: Theme.pad-lg;
         spacing: Theme.pad-lg;
         alignment: stretch;
 
-        // Artwork tile — anchored to the top-left so it does not stretch
-        // with the row height. Sized straight off `Theme.hero-artwork`
-        // rather than through an `in property`: the four detail views and
-        // the two mosaic heroes are one band, and a per-view knob is how
-        // they drifted apart in the first place.
+        // Top-left anchored, so it doesn't stretch with the row height. **Sized straight
+        // off `Theme.hero-artwork` rather than through an `in property`**: the six heroes
+        // are one band, and a per-view knob is how they drifted apart before.
         VerticalLayout {
             alignment: start;
             horizontal-stretch: 0;
@@ -99,16 +77,9 @@ export component DetailHeader inherits Rectangle {
             }
         }
 
-        // Right column — caller fully controls placement of children.
-        // Typical pattern (see `album-detail-view.slint`):
-        //     Text { /* title */ ; vertical-stretch: 0; }
-        //     Text { /* subtitle */ ; vertical-stretch: 0; }
-        //     Text { /* meta */ ; vertical-stretch: 0; }
-        //     Rectangle { vertical-stretch: 1; }     // spacer
-        //     HorizontalLayout { /* actions */ ; vertical-stretch: 0; }
-        // The trailing spacer absorbs the slack between the title block
-        // and the action row so the row sits flush with the artwork's
-        // lower edge — title at top, pills at bottom.
+        // The caller controls placement entirely: pin each child with
+        // `vertical-stretch: 0` and let a trailing stretch spacer absorb the slack, so
+        // the title sits at the top and the action row flush with the tile's lower edge.
         VerticalLayout {
             horizontal-stretch: 1;
             alignment: stretch;
@@ -118,14 +89,10 @@ export component DetailHeader inherits Rectangle {
         }
     }
 
-    // Floating back button — absolutely positioned at the header's
-    // top-left, mirrors Tauri's `floatingBackButton`. Lives outside the
-    // HL so it doesn't take a row of its own. Idle chrome is the shared
-    // `Theme.floating-chrome-bg` — a near-opaque surface0 disc, so the
-    // glyph contrasts against `surface0` rather than against whatever
-    // the hero happens to be; `IconButton`'s hover state paints solid
-    // `Theme.surface0`, which the residual translucency keeps visible
-    // as a transition. See the note on the token in `theme.slint`.
+    // Absolutely positioned, outside the layout so it takes no row of its own. Its idle
+    // chrome is the near-opaque shared disc, so the glyph contrasts against `surface0`
+    // rather than against whatever the hero happens to be — and the residual
+    // translucency is what keeps the hover swap to solid visible as a transition.
     IconButton {
         x: Theme.pad-md;
         y: Theme.pad-md;

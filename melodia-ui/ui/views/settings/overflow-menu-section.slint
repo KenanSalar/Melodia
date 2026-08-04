@@ -6,11 +6,9 @@ import { SettingRowStacked } from "../../components/settings/setting-row-stacked
 import { Checkbox } from "../../components/checkbox.slint";
 import { MaterialIcon } from "../../components/material-icon.slint";
 
-// One overflow-menu checkbox cell. Local component because it's only
-// used inside this section's 2-column grid. `id` is the persisted
-// button id (e.g. "favorite"); `toggled` fires after `checked` has
-// been flipped so the host can pass the freshly-flipped value
-// straight to Rust.
+// One checkbox cell, local because nothing outside this section's grid wants it.
+// `toggled` fires *after* `checked` flips, so the host can pass the new value
+// straight through.
 component OverflowCheckCell inherits Rectangle {
     in property <string> id;
     in property <string> icon;
@@ -42,9 +40,7 @@ component OverflowCheckCell inherits Rectangle {
         VerticalLayout {
             alignment: center;
             horizontal-stretch: 1;
-            // The `label` property is already a translated string when
-            // populated by the caller (each OverflowCheckCell instantiation
-            // below passes `@tr("...")` literals), so no `@tr()` here.
+            // Every mount below passes a translated literal, so no `@tr()` here.
             Text {
                 text: root.label;
                 color: Theme.text;
@@ -62,12 +58,9 @@ component OverflowCheckCell inherits Rectangle {
     }
 }
 
-// Overflow Menu Buttons section. Split out of `appearance-section.slint`
-// because it's a now-playing-bar feature, not a palette / chrome
-// concern. The 2-column grid binds two-way to `Settings.overflow-*`;
-// each cell fires `Settings.overflow-buttons-changed(id, checked)` on
-// click so Rust can persist the new state into
-// `settings.overflow_buttons`.
+// Which buttons the now-playing bar's overflow menu carries. Split from
+// `appearance-section.slint` because it's a bar feature, not a palette one. Each
+// cell two-way binds its flag and reports the flip for Rust to persist.
 export component OverflowMenuSection inherits Rectangle {
     background: transparent;
     horizontal-stretch: 1;
@@ -90,22 +83,16 @@ export component OverflowMenuSection inherits Rectangle {
     if has-matches: SectionCard {
         title: @tr("Player Bar");
 
-        // Overflow Menu Buttons. 2-column checkbox grid below the
-        // description.
         if root.show-overflow: SettingRowStacked {
             icon: "more_vert";
             label: @tr("Overflow Menu Buttons");
             description: @tr("Move selected buttons into a compact overflow menu in the player bar");
 
-            // GridLayout (not nested HorizontalLayouts) is the canonical
-            // Slint pattern for a 2-column grid with equal-width cells.
-            // `horizontal-stretch: 1` distributes only the *extra* space
-            // proportionally on top of each cell's preferred width — so
-            // cells with longer labels (e.g. "Pin on Top" vs "Repeat") end
-            // up wider, and the right column visibly drifts left between
-            // rows. GridLayout sizes each column to the widest cell in
-            // that column, then enforces that width across all rows, so
-            // columns line up by construction.
+            // A `GridLayout` rather than rows of `HorizontalLayout`s: equal
+            // stretch only divides the *surplus* on top of each cell's
+            // preferred width, so a row with a longer label lands wider and the
+            // second column drifts between rows. A grid sizes each column to its
+            // widest cell and holds that across every row.
             GridLayout {
                 spacing: Theme.pad-xs;
                 Row {

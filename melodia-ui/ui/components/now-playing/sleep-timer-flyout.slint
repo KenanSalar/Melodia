@@ -4,10 +4,9 @@ import { PopupSurface } from "../popup-surface.slint";
 import { FlyoutOption } from "flyout-option.slint";
 import { FlyoutMetrics, SleepPresets } from "flyout-presets.slint";
 
-// Round − / + stepper button. Reports press *down* and *up* (not just click) so
-// the host can implement hold-to-accelerate. The `TouchArea` stays enabled even
-// at a bound so the release event always fires (the host clamps the value); the
-// button just dims to signal the bound.
+// A stepper button. It reports press *and* release rather than a click, so the
+// host can accelerate on hold — and stays enabled at a bound so that release
+// always fires (the host clamps), only dimming to signal it.
 component StepperButton inherits Rectangle {
     in property <string> icon;
     in property <bool> at-bound: false;
@@ -18,8 +17,7 @@ component StepperButton inherits Rectangle {
     width: 26px;
     height: 26px;
     border-radius: self.height / 2;
-    // Darker "page background" fill (matches the content views), lifting to
-    // `surface0` on hover.
+    // The content views' darker page fill, lifting on hover.
     background: touch.has-hover && !root.at-bound ? Theme.surface0 : Theme.base;
     opacity: root.at-bound ? 0.4 : 1;
     animate background { duration: Theme.dur-fast; easing: ease-in-out; }
@@ -44,12 +42,10 @@ component StepperButton inherits Rectangle {
     }
 }
 
-// The sleep-timer flyout: quick presets + a custom ±stepper with a Start pill.
-// Lives inside the overflow menu's single PopupWindow (no nested PopupWindow —
-// the app's deliberate single-popup discipline), positioned to the LEFT of the
-// menu column, mutually exclusive with the speed flyout. The host sets
-// `width`/`height`/`x`/`y`; this component renders the rows and emits
-// `pick(minutes)` (presets) / `start-custom(seconds)` (the stepper).
+// Quick presets over a custom ±stepper. It lives *inside* the overflow menu's
+// one PopupWindow — the app nests no popups — left of the menu column and
+// mutually exclusive with the speed flyout. The host places it; this renders the
+// rows and emits the pick.
 export component SleepTimerFlyout inherits PopupSurface {
     // Armed duration in seconds (0 = none), from `Player.sleep-timer-total-seconds`.
     in property <int> active-total-seconds;
@@ -58,19 +54,17 @@ export component SleepTimerFlyout inherits PopupSurface {
     callback pick(int);          // preset value: 0 off / minutes / -1 end-of-track
     callback start-custom(int);  // custom duration in seconds
 
-    // Custom-stepper bounds (mirror `MIN_/MAX_SLEEP_SECONDS` in sleep_timer.rs).
+    // Mirrors `MIN_`/`MAX_SLEEP_SECONDS` in `sleep_timer.rs`.
     property <int> min-seconds: 30;
     property <int> max-seconds: 2 * 60 * 60;
-    // Pending value the ±stepper is dialing. Session-local — resets to the
-    // 10-minute default each time the flyout is (re)mounted.
+    // What the stepper is dialing; resets to the default on every remount.
     property <int> pending-seconds: 10 * 60;
 
     // Hold-to-accelerate state.
     property <int> repeat-dir: 0;   // -1 / 0 / +1
     property <int> hold-ticks: 0;   // 90 ms ticks since the press began
 
-    // Step size grows with hold time: 30 s → 1 min → 2 min → 5 min. `t` is in
-    // 90 ms ticks, so 17 ≈ 1.5 s, 34 ≈ 3 s, 67 ≈ 6 s.
+    // The step grows with hold time; `t` counts 90 ms ticks.
     pure function step-for-ticks(t: int) -> int {
         t >= 67 ? 300 : t >= 34 ? 120 : t >= 17 ? 60 : 30
     }
@@ -91,8 +85,8 @@ export component SleepTimerFlyout inherits PopupSurface {
         running: root.repeat-dir != 0;
         triggered => {
             root.hold-ticks += 1;
-            // ~450 ms initial delay (5 ticks) before the repeat kicks in — the
-            // press already applied one 30 s step, so a tap ≠ a hold.
+            // The press already applied one step, so the repeat waits — a tap
+            // must not read as a hold.
             if (root.hold-ticks >= 5) {
                 root.adjust(root.repeat-dir * root.step-for-ticks(root.hold-ticks));
             }
@@ -103,8 +97,7 @@ export component SleepTimerFlyout inherits PopupSurface {
         padding: Theme.pad-xs;
         spacing: 0;
 
-        // Presets live in the shared `SleepPresets` global — the host's
-        // `sleep-flyout-h` reserve math reads the same list's length.
+        // The host's height reserve reads the same list's length.
         for p in SleepPresets.list: FlyoutOption {
             label: p.label;
             active: p.value == -1
@@ -113,7 +106,6 @@ export component SleepTimerFlyout inherits PopupSurface {
             clicked => { root.pick(p.value); }
         }
 
-        // Divider between the quick presets and the custom stepper.
         Rectangle {
             height: 9px;
             Rectangle {
@@ -123,7 +115,7 @@ export component SleepTimerFlyout inherits PopupSurface {
             }
         }
 
-        // Custom ±stepper: [−] [ M:SS ] [+]. Tap = ±30 s; hold accelerates.
+        // Tap steps by the base amount; hold accelerates.
         HorizontalLayout {
             height: FlyoutMetrics.option-row-h;
             padding-left: Theme.pad-sm;
@@ -163,8 +155,7 @@ export component SleepTimerFlyout inherits PopupSurface {
             }
         }
 
-        // Rounded "Start" pill — arms the pending custom duration. Accent fill
-        // (the primary action), lifting on hover.
+        // Arms the pending duration; accent-filled as the primary action.
         HorizontalLayout {
             padding-left: Theme.pad-sm;
             padding-right: Theme.pad-sm;

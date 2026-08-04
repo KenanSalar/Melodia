@@ -6,17 +6,14 @@ import { PopupSurface } from "../popup-surface.slint";
 import { SliderTrack } from "../slider-track.slint";
 import { FocusLossWatcher } from "../focus-loss-watcher.slint";
 
-// Horizontal counterpart to `VolumePopup`. Used by the rectangle miniplayer,
-// where the wide-short window can't fit the 180 px-tall vertical popup
-// without clipping. Reuses `SliderTrack` (with its opt-in `show-max-stop`)
-// inside the same `PopupSurface { pill: true }` chrome the vertical popup
-// uses, just rotated 90°: chrome along the bottom of the popup, percentage
-// badge floating above the thumb in the empty top strip.
+// `VolumePopup` rotated 90°, for the rectangle miniplayer, whose wide-short
+// window clips the vertical one. Same `SliderTrack` in the same `PopupSurface`
+// chrome, laid along the bottom with the percentage badge floating above the
+// thumb.
 //
-// Anchored as a LEFT flyout from the trigger disc — the popup extends
-// leftward into the title/artist area, vertically centred on the disc. The
-// rectangle miniplayer is always wide enough horizontally; vertical room is
-// the constraint we're escaping.
+// It flies out to the *left* of the trigger disc, into the title area, centred
+// on it: that miniplayer is always wide enough, and vertical room is the whole
+// constraint being escaped.
 export component VolumePopupHorizontal inherits Rectangle {
     in property <length> diameter: 36px;
     in property <length> icon-size: 22px;
@@ -24,11 +21,9 @@ export component VolumePopupHorizontal inherits Rectangle {
     width: btn.width;
     height: btn.height;
 
-    // Same keyboard-driven tooltip-force wiring as the vertical popup —
-    // `Player.volume-hud-tick` bumps on ↑ / ↓ / Ctrl±, we observe it here,
-    // set a tick-down counter, and force the trigger's tooltip to show with
-    // the current `% ` text. Slider drags don't bump the tick (they raise
-    // the popup chrome itself).
+    // The vertical popup's keyboard-HUD wiring: a volume key bumps the tick,
+    // this counts down from it and forces the trigger's tooltip open on the
+    // current percentage. A drag doesn't bump it — it raises the chrome itself.
     property <int> hud-tick-mirror: Player.volume-hud-tick;
     property <int> tooltip-ticks-remaining: 0;
 
@@ -67,11 +62,9 @@ export component VolumePopupHorizontal inherits Rectangle {
     }
 
     pop := PopupWindow {
-        // Left flyout: popup's right edge sits 8 px left of the trigger
-        // disc, vertically centred on it. The disc-adjacent edge is the
-        // popup's right edge, so the slider chrome (mirror of vertical's
-        // "right strip", rotated 90°) lands along the bottom — same Y as
-        // the disc, with the badge floating above.
+        // The popup's right edge sits just left of the disc and centres on it,
+        // which puts the slider chrome along the bottom at the disc's own Y and
+        // leaves the badge floating above.
         x: -self.width - 8px;
         y: (btn.height - self.height) / 2;
         width: 220px;
@@ -82,9 +75,8 @@ export component VolumePopupHorizontal inherits Rectangle {
             close => { pop.close(); PopupHighlight.id = ""; }
         }
 
-        // Click-catcher for the empty top strip (badge area + transparent
-        // gap above the chrome). Declared before `chrome` so the chrome's
-        // TouchArea wins for slider clicks.
+        // Catches clicks in the empty top strip. Declared before `chrome`, so
+        // the slider's own TouchArea still wins.
         TouchArea {
             x: 0;
             y: 0;
@@ -100,10 +92,8 @@ export component VolumePopupHorizontal inherits Rectangle {
             height: 40px;
             pill: true;
 
-            // Per-integer emit gate — `SliderTrack.changed` fires per
-            // pixel-level `moved` event; mirror the vertical popup's
-            // `emit()` helper so only integer-step changes hit
-            // `Player.set-volume` (≤ 100 emits per full drag).
+            // `SliderTrack.changed` fires per pixel of movement, so this gates
+            // on integer steps and a full drag costs at most 100 emits.
             property <int> last-emitted: -1;
             function emit-volume(v: int) {
                 if (v != self.last-emitted) {
@@ -112,12 +102,10 @@ export component VolumePopupHorizontal inherits Rectangle {
                 }
             }
 
-            // Restore the trigger disc's highlight on every slider release
-            // (drag or no-move grab). The winit Release filter clears
-            // `PopupHighlight.id` unconditionally on every mouse-up, and
-            // `SliderTrack.committed` only fires after movement — so a
-            // bare click-release inside the slider would otherwise leave
-            // the disc unhighlighted while the popup is still open.
+            // Restores the disc's highlight on every release, moved or not: the
+            // winit Release filter clears `PopupHighlight.id` on any mouse-up
+            // while `committed` only fires after movement, so a bare click
+            // inside the slider would leave the disc dark under an open popup.
             property <bool> slider-pressed: slider.pressed;
             changed slider-pressed => {
                 if (!self.slider-pressed) {
@@ -132,32 +120,27 @@ export component VolumePopupHorizontal inherits Rectangle {
                 height: parent.height;
                 value: clamp(Player.vm.volume / 100, 0, 1);
                 show-max-stop: true;
-                // Inside PopupSurface (crust background), the seam mask
-                // must match crust — default is mantle (now-playing bar).
+                // The seam mask has to match the surface behind it, and the
+                // default is the now-playing bar's.
                 seam-mask-color: Theme.crust;
 
                 changed(v) => {
                     chrome.emit-volume(round(v * 100));
                 }
                 committed(v) => {
-                    // Highlight restore is handled by `slider-pressed`'s
-                    // edge handler above; this only fires post-drag, so
-                    // it just needs to flush the persisted volume.
+                    // The highlight is `slider-pressed`'s job above; this fires
+                    // only post-drag and just flushes the persisted volume.
                     Player.commit-volume();
                 }
             }
         }
 
-        // Percentage badge — floats above the thumb in the empty top strip,
-        // horizontally pinned to the thumb's x. Mirror of the vertical
-        // popup's left-strip badge (pinned to the thumb's y). Consumes
-        // `SliderTrack.thumb-cx` directly so the badge follows the live
-        // thumb (including drag preview) without re-deriving the formula.
+        // Reads `SliderTrack.thumb-cx` straight, so it follows the live thumb
+        // through a drag preview without re-deriving the centring.
         Rectangle {
             width: 42px;
             height: 22px;
             x: chrome.x + slider.x + slider.thumb-cx - self.width / 2;
-            // 10 px transparent gap above the chrome.
             y: chrome.y - 10px - self.height;
             background: Theme.surface2;
             border-radius: Theme.radius-sm;

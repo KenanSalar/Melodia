@@ -8,26 +8,18 @@ import { MaterialIcon } from "../components/material-icon.slint";
 import { OverlayScrollbar } from "../components/overlay-scrollbar.slint";
 import { FilterThrottle } from "../components/filter-throttle.slint";
 
-// The Genres grid page. Mirror of `AlbumView` — page-header chrome
-// (title, count, sort action-pill, filter input) lives here; the grid
-// itself is the reusable, virtualized `GenreGrid` component bound to the
-// `Genres` global.
-//
-// Genres have no covers, so `GenreGrid` doesn't expose a
-// `request-cover` callback (compare `AlbumView`'s
-// `request-cover(p) => { Albums.request-cover(p) }` plumbing — it's
-// simply absent here).
+// The Genres grid page, `AlbumView`'s shape: header chrome here, the virtualized
+// `GenreGrid` below it. Genres have no covers, so unlike its sibling this mount
+// has no `request-cover` to wire.
 export component GenresView inherits Rectangle {
-    // Filter throttle: each keystroke bumps `filter-tick-pending`; the
-    // shared `FilterThrottle` fires `apply-filter` at most once per
-    // ~130 ms while pending is ahead of the last-applied tick.
+    // Bumped per keystroke; `FilterThrottle` collapses the burst into one filter.
     property <int> filter-tick-pending: 0;
     filter-throttle := FilterThrottle {
         pending: root.filter-tick-pending;
         fire() => { Genres.apply-filter(Genres.filter); }
     }
 
-    // --- Responsive grid geometry --------------------------------------
+    // Responsive grid geometry.
     property <length> min-card-w: 180px;
     property <length> grid-gap: 20px;
     property <length> card-text-h: 46px;
@@ -38,9 +30,8 @@ export component GenresView inherits Rectangle {
     property <length> card-h: root.card-w + root.card-text-h;
     property <length> row-h: root.card-h + root.grid-gap;
 
-    // Push `computed-cols` into `Genres.columns` + fire `columns-changed`
-    // on mount and on every subsequent change. See `grid-columns-sync.slint`
-    // for the Timer+`changed` rationale.
+    // Publishes the count on mount and on every change; see
+    // `grid-columns-sync.slint` for why it needs both a `changed` and a Timer.
     GridColumnsSync {
         computed-cols: root.computed-cols;
         seed(c) => {
@@ -49,15 +40,14 @@ export component GenresView inherits Rectangle {
         }
     }
 
-    // Backdrop — any click the inner widgets don't consume blurs the
-    // SearchBar (same pattern as the Tracks / Albums views).
+    // Catches clicks no inner widget consumes; the SearchBar blurs on the tick.
     TouchArea {
         clicked => { Genres.blur-search-tick += 1; }
     }
 
     VerticalLayout {
-        // Three sides — see `tracks-view.slint` for why the uniform form's
-        // bottom pad reads as a dead strip under the grid.
+        // Three sides: the uniform form's bottom pad sits outside the grid's
+        // viewport and reads as a dead strip under it.
         padding-left: Theme.pad-lg;
         padding-right: Theme.pad-lg;
         padding-top: Theme.pad-lg;
@@ -68,7 +58,6 @@ export component GenresView inherits Rectangle {
             spacing: Theme.pad-md;
             alignment: stretch;
 
-            // Title + count, stacked Spotify / Apple-Music style.
             VerticalLayout {
                 alignment: center;
                 spacing: 0;
@@ -87,10 +76,9 @@ export component GenresView inherits Rectangle {
 
             Rectangle { horizontal-stretch: 1; }
 
-            // Sort control: three pill buttons; the active field carries
-            // an ↑ / ↓ direction arrow. Clicking the active field flips
-            // the direction, a new field resets to ascending (handled
-            // Rust-side in `wire_genres`).
+            // The active field carries the direction arrow. Clicking it flips
+            // the direction and a new field starts ascending — both Rust's, in
+            // `wire_genres`.
             VerticalLayout {
                 alignment: center;
                 ActionPill {
@@ -134,9 +122,8 @@ export component GenresView inherits Rectangle {
             }
         }
 
-        // Body: the virtualized grid, with an empty-state overlay
-        // painted on top (opaque `Theme.base` fill) when the library
-        // has no genres yet.
+        // The grid, with an opaque empty state painted over it when there's
+        // nothing to show.
         body := Rectangle {
             horizontal-stretch: 1;
             vertical-stretch: 1;
@@ -189,9 +176,8 @@ export component GenresView inherits Rectangle {
         }
     }
 
-    // Overlay scrollbar — flush with the content panel's rounded right
-    // edge, outside the padded VerticalLayout. Drives `GenreGrid`'s
-    // inner ListView through its `v-*` out properties + `set-v-offset`.
+    // Outside the padded layout, so it sits flush with the panel's right edge;
+    // it drives the grid's inner ListView through the `v-*` contract.
     OverlayScrollbar {
         horizontal: false;
         x: parent.width - self.width;

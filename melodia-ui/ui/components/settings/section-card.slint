@@ -1,14 +1,12 @@
 import { Theme } from "../../theme.slint";
 import { SettingsPage } from "../../globals/settings-page.slint";
 
-// Card chrome that wraps every settings section. Renders the uppercase
-// section heading above a `surface0` rounded card; the host puts rows (and
-// `SectionDivider`s) inside via `@children`. Mirrors Tauri's
-// `.section > h2` + `.card` pair on the settings page.
+// The chrome around every settings section: an uppercase heading over a rounded
+// card, the host's rows and dividers inside through `@children`.
 export component SectionCard inherits Rectangle {
     in property <string> title;
-    // The width the body means this card to take. Defaults to the settings
-    // body's own answer; override it anywhere a card isn't a body column.
+    // Defaults to the settings body's own answer; override it anywhere a card
+    // isn't a body column.
     in property <length> card-width: SettingsPage.card-w;
 
     background: transparent;
@@ -18,26 +16,22 @@ export component SectionCard inherits Rectangle {
     // `width` as the element's minimum *and* maximum, and that floor climbs out
     // to the window's own.
     //
-    // Pinning the preferred is what keeps the two body columns the same width:
-    // Slint's grid seeds every column at its cells' *preferred* width and only
-    // then hands out the surplus by stretch, so cards with different natural
-    // widths would give columns with different widths, which side by side
-    // reads as a misalignment rather than as a layout.
-    //
-    // The max then holds the cap even where a column is wider than one card —
-    // a page with a single column drawn into a two-column body. `min-width` is
-    // deliberately left alone, so the card still compresses all the way down
-    // when the body is narrow.
+    // Pinning the preferred is what keeps the two body columns equal: the grid
+    // seeds every column at its cells' *preferred* width and only then hands out
+    // the surplus by stretch, so cards of different natural width give columns
+    // of different width, which side by side reads as a misalignment rather than
+    // as a layout. The max then holds the cap where a column is wider than one
+    // card — a single-column page drawn into a two-column body. `min-width` is
+    // deliberately left alone, so the card still compresses all the way down.
     preferred-width: root.card-width;
     max-width: root.card-width;
 
     VerticalLayout {
         spacing: Theme.pad-sm;
 
-        // Uppercase section heading. 13 px is one-off enough to stay
-        // inline; if a second site shows up later, hoist to Theme.
-        // Wrapped in a HorizontalLayout so the heading optically aligns
-        // with the row icons inside the card (16 px left inset).
+        // The size is one-off enough to stay inline; hoist it to Theme if a
+        // second site turns up. The layout inset is what optically aligns the
+        // heading with the row icons inside the card.
         HorizontalLayout {
             padding-left: Theme.pad-lg;
             Text {
@@ -45,19 +39,15 @@ export component SectionCard inherits Rectangle {
                 color: Theme.subtext0;
                 font-size: 13px;
                 font-weight: 600;
-                // Material-3 sectionheader cadence: a touch of letter
-                // spacing reinforces the uppercase rhythm.
+                // M3 section-header cadence — the tracking carries the
+                // uppercase rhythm.
                 letter-spacing: 0.5px;
-                // Wrapped, so a long title in a long locale can't hold
-                // the card open — a no-wrap Text reports its full width
-                // as its *minimum*, which no narrowing can negotiate.
+                // Wrapped, so a long locale's title can't hold the card open —
+                // a no-wrap `Text` reports its full width as its *minimum*.
                 wrap: word-wrap;
             }
         }
 
-        // The actual rounded card. Children supplied by the host fill the
-        // card vertically; a SectionDivider between rows draws the inset
-        // 1 px line.
         Rectangle {
             background: Theme.surface0;
             border-radius: Theme.radius-lg;

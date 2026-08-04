@@ -1,17 +1,13 @@
 import { Theme } from "../theme.slint";
 import { MaterialIcon } from "material-icon.slint";
 
-// 16×16 custom checkbox shared by `track-list-row.slint` (selection state)
-// and `column-toggle-popup.slint` (column visibility). Filled accent square
-// when checked, hollow + surface1 border when not. The check glyph sits
-// inside a fixed 14 px square so it centres in its em-box, not in the
-// inflated line-box (CLAUDE.md Slint pitfall: Material Symbols glyphs need
-// a collapsed line-box).
+// The custom checkbox, shared by the track row's selection and the column
+// toggle. Its glyph sits in a fixed square so it centres in its em box rather
+// than in an inflated line box.
 //
-// The component is purely visual — callers wrap it in a `TouchArea` to
-// drive the click semantics they need (the track-list-row's checkbox has
-// shift / ctrl / range-select behaviour; the column-toggle's is a plain
-// click).
+// Purely visual: the caller wraps it in whatever `TouchArea` its click semantics
+// need — the row's carries shift / ctrl range-select, the popup's is a plain
+// click.
 export component Checkbox inherits Rectangle {
     in property <bool> checked;
 

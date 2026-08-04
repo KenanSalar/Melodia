@@ -4,13 +4,10 @@ import { MaterialIcon } from "material-icon.slint";
 import { Tooltip } from "tooltip.slint";
 import { MacOsTitleBarCluster } from "macos-titlebar-cluster.slint";
 
-// Per-button cell. 40 px wide, full titlebar height. Hover paints a
-// rounded background; the close button overrides `hover-bg` /
-// `hover-fg` to flash the active theme's danger red. Bespoke rather
-// than reusing `IconButton` because the titlebar buttons are
-// rectangular (not circular) and need a `hover-bg` knob that
-// `IconButton` doesn't expose. Kept private to this file — no reuse
-// outside the titlebar.
+// One decoration button. Hover paints a rounded fill; the close button overrides both
+// hover brushes to flash the theme's danger red. Bespoke rather than an `IconButton`
+// because these are rectangular and need a `hover-bg` knob that component doesn't
+// expose. Private to this file.
 component TitleBarButton inherits Rectangle {
     in property <string> icon;
     in property <string> tooltip-text;
@@ -20,9 +17,8 @@ component TitleBarButton inherits Rectangle {
 
     callback clicked();
 
-    // Explicit min/max on both axes pin the cell as a layout child —
-    // `height: 100%` triggered the CLAUDE.md unbounded-layout cycle and
-    // collapsed sibling buttons to zero width.
+    // Pinned on both axes as a layout child: `height: 100%` forms the unbounded-layout
+    // cycle and collapses the sibling buttons to zero width.
     min-width: 40px;
     max-width: 40px;
     min-height: 32px;
@@ -31,36 +27,22 @@ component TitleBarButton inherits Rectangle {
     vertical-stretch: 0;
     background: transparent;
 
-    // Hover highlight is an inner Rectangle inset by 4 px on each side
-    // so the painted pill is ~32 × 24 inside the 40 × 32 click target.
-    // Mirrors Tauri's 2 px decorative top/bottom borders that visually
-    // shrunk the hover surface — keeps the click target wide for
-    // Fitts-friendly aim while making the highlight feel less heavy.
+    // Inset inside the cell, so the click target stays wide for aim while the painted
+    // highlight reads lighter than the full button would.
     Rectangle {
         x: 4px;
         y: 4px;
         width: parent.width - 8px;
         height: parent.height - 8px;
-        // Hover background tracks the window's outer corner radius so
-        // every titlebar button (minimize / maximize / close) feels
-        // visually matched to the window outline. The close button at
-        // the top-right is naturally concentric with the window's arc
-        // (4 px inset + outer radius `shell-radius` ⇒ inner radius
-        // `shell-radius - 4 px` shares the same centre); the minimize
-        // and maximize buttons aren't at a window corner but the same
-        // value keeps all three hovers consistent. Clamped to >= 0 for
-        // the Square preset (`shell-radius == 0 px`).
+        // Tracks the window's outer radius, so every button reads as matched to the
+        // outline: the close button at the corner is genuinely concentric with the
+        // window's arc — same centre, inset by the cell's own inset — and the other two
+        // take the same value for consistency. Floored at 0 for the Square preset.
         //
-        // Only the preset chips populate `Theme.shell-radius` (Square=0,
-        // KDE=6, Win11=8, macOS=10, GNOME=15) — the manual stepper was
-        // removed in `views/settings/appearance-section.slint`, so we
-        // never hit a value in 1..=5 where the geometric subtraction
-        // would yield a sub-3 px arc. No piecewise floor needed.
-        //
-        // Falls back to a friendly 6 px pill when the window is
-        // maximized — the outline goes square then (see the outer
-        // mantle shell in `app-window.slint`), so an arc of 0 would
-        // feel too sharp on the buttons.
+        // Only the preset chips populate `shell-radius`, so the subtraction never lands
+        // on a sub-3 px arc and needs no piecewise floor. Maximized falls back to a
+        // friendly pill: the outline goes square there, and an arc of 0 reads too sharp
+        // on the buttons themselves.
         border-radius: WindowChrome.is-maximized
             ? 6px
             : max(0px, Theme.shell-radius - 4px);
@@ -93,39 +75,24 @@ component TitleBarButton inherits Rectangle {
     }
 }
 
-// Custom titlebar — 32 px tall, `Theme.mantle` background. Mirrors
-// Tauri's `TitleBar.tsx` (logo + title on one side, drag region in the
-// middle, decoration buttons on the opposite side) using Slint primitives.
+// The brand on one side, a drag region in the middle, the decoration cluster opposite.
 //
-// Drag handling is split: Slint tracks only **hover** over the drag region
-// (plus double-click to toggle maximize), and Rust intercepts the actual
-// press at the winit layer. Dragging from a `TouchArea` would strand its
-// mouse grab — see `src/ui/window_chrome/`'s module docs for why.
+// **Drag handling is split**: Slint tracks only *hover* over the drag region, plus
+// double-click to toggle maximize, and Rust intercepts the press at the winit layer —
+// dragging from a `TouchArea` strands its mouse grab. The maximize icon reads
+// `WindowChrome.is-maximized`, fed from winit's `Resized`, so tiling shortcuts update it
+// too.
 //
-// Maximize/restore icon swap reads `WindowChrome.is-maximized`, fed from
-// winit `WindowEvent::Resized` so window-tile / Win+↑ shortcuts also update
-// the icon.
-//
-// Style + side selection. The settings rows in
-// `ui/views/settings/window-chrome-section.slint` write
-// `Theme.titlebar-button-style` (Standard vs macOS) and
-// `Theme.titlebar-button-side` (Right vs Left); the four conditional
-// branches mount the appropriate cluster on the appropriate side.
-// The buttons are inlined directly inside the outer HorizontalLayout
-// (not wrapped in a sub-component) because a Rectangle-inheriting
-// wrapper with conditional layout children reports 0 × 0 — see
-// CLAUDE.md "Rectangle-inheriting components don't size from
-// `if`-conditional children".
-//
-// The brand (logo + "Melodia" text) lives inside the drag-region and
-// pins to whichever side of the window the buttons aren't on, so the
-// two visual groups never overlap.
+// Style and side come from `Theme.titlebar-button-{style,side}`, and the four
+// conditional branches mount the right cluster on the right side. **The buttons are
+// inlined into the outer layout rather than wrapped in a sub-component**: a
+// Rectangle-inheriting wrapper with conditional layout children reports 0 × 0. The brand
+// lives inside the drag region and pins to whichever side the buttons aren't on, so the
+// two groups never crowd each other.
 export component CustomTitleBar inherits Rectangle {
-    // Pin the bar to a fixed 32 px slot in the parent VerticalLayout.
-    // Plain `height: 32px` is ignored by the layout (CLAUDE.md "height
-    // on a layout child + parent → unbounded layout"); the bar then
-    // claims the whole window's vertical space, leaving the sidebar /
-    // content / now-playing-bar with zero height.
+    // Pinned as a fixed slot. A plain `height` is ignored by the layout — the
+    // height-on-a-layout-child cycle — and the bar then claims the window's whole
+    // vertical space, leaving everything below it at zero.
     min-height: 32px;
     max-height: 32px;
     vertical-stretch: 0;
@@ -134,29 +101,23 @@ export component CustomTitleBar inherits Rectangle {
     HorizontalLayout {
         spacing: 0;
         alignment: stretch;
-        // Inset on the brand side (12 px) so the logo / title doesn't
-        // kiss the window edge; flush against the cluster side so the
-        // close button sits at the corner.
+        // Inset on the brand side so the logo doesn't kiss the window edge, flush on the
+        // cluster side so close sits at the corner.
         padding-left: Theme.titlebar-button-side == 1 ? 0 : 12px;
         padding-right: Theme.titlebar-button-side == 1 ? 12px : 0;
 
-        // --- LEFT-SIDE CLUSTER ---------------------------------------
-        // macOS-style traffic lights when style == 1 + side == 1.
+        // Left cluster: traffic lights.
         if Theme.titlebar-button-side == 1 && Theme.titlebar-button-style == 1: MacOsTitleBarCluster {}
 
-        // Standard bar icons on the left, with close at the left corner
-        // (so muscle-memory "click corner = close" still holds). Inlined
-        // as three siblings inside the outer HBL — wrapping them in a
-        // helper Rectangle produces a 0-width cell (CLAUDE.md
-        // Rectangle-with-conditional-children gotcha).
+        // Standard icons on the left, close at the *corner* so "click corner = close"
+        // still holds. Three siblings rather than a wrapper, per the header.
         if Theme.titlebar-button-side == 1 && Theme.titlebar-button-style == 0: TitleBarButton {
             icon: "close";
             tooltip-text: @tr("Close");
             hover-bg: Theme.danger;
-            // The on-danger ink, not a chrome token: `Theme.mantle` used to
-            // stand in here and it tracks the theme's background rather than
-            // the red, so GNOME Dark (dark red on a dark mantle) dropped the
-            // glyph to ~2:1.
+            // **The on-danger ink, not a chrome token.** `Theme.mantle` stood in here
+            // once and it tracks the theme's *background* rather than the red, so GNOME
+            // Dark put a dark glyph on a dark red at ~2:1.
             hover-fg: Theme.danger-text;
             clicked => { WindowChrome.close-window(); }
         }
@@ -171,22 +132,14 @@ export component CustomTitleBar inherits Rectangle {
             clicked => { WindowChrome.minimize(); }
         }
 
-        // --- DRAG REGION ---------------------------------------------
-        // Drag area: wraps the brand (logo + "Melodia") plus the middle
-        // stretch space so everything except the cluster is draggable.
-        // The TouchArea only tracks `has-hover` — Rust reads the latest
-        // value through `drag-region-hover-changed` and intercepts the
-        // press at the winit layer. `double-clicked` is left on this
-        // TouchArea because it fires *after* release, by which point
-        // the press has been intercepted at the winit level — Slint
-        // sees the second press normally.
+        // Wraps the brand plus the middle stretch, so everything but the cluster is
+        // draggable. The TouchArea tracks only `has-hover`; Rust reads it and intercepts
+        // the press at the winit layer. `double-clicked` stays here because it fires
+        // *after* release, by which point the press was intercepted and Slint sees the
+        // second one normally.
         //
-        // The brand pins to whichever side of the window is OPPOSITE
-        // the cluster, so the two visual groups never crowd each other.
-        // We accomplish this with a stretch spacer placed before or
-        // after the logo+text based on `Theme.titlebar-button-side`:
-        //   * side == 0 (buttons RIGHT) → spacer LAST  → brand pins LEFT
-        //   * side == 1 (buttons LEFT)  → spacer FIRST → brand pins RIGHT
+        // A stretch spacer placed before or after the brand is what pins it to the side
+        // the cluster isn't on.
         drag-region := TouchArea {
             horizontal-stretch: 1;
             mouse-cursor: default;
@@ -201,9 +154,7 @@ export component CustomTitleBar inherits Rectangle {
                 spacing: 6px;
                 alignment: stretch;
 
-                // Leading spacer for side == Left so the brand floats to
-                // the right edge of the drag region (i.e. the right edge
-                // of the window minus the brand-side 12 px padding).
+                // Buttons left ⇒ leading spacer ⇒ brand pins right.
                 if Theme.titlebar-button-side == 1: Rectangle { horizontal-stretch: 1; }
 
                 VerticalLayout {
@@ -228,18 +179,15 @@ export component CustomTitleBar inherits Rectangle {
                     }
                 }
 
-                // Trailing spacer for side == Right so the brand pins to
-                // the left edge of the drag region (current default).
+                // Buttons right ⇒ trailing spacer ⇒ brand pins left.
                 if Theme.titlebar-button-side == 0: Rectangle { horizontal-stretch: 1; }
             }
         }
 
-        // --- RIGHT-SIDE CLUSTER --------------------------------------
-        // macOS-style traffic lights when style == 1 + side == 0.
+        // Right cluster: traffic lights.
         if Theme.titlebar-button-side == 0 && Theme.titlebar-button-style == 1: MacOsTitleBarCluster {}
 
-        // Standard bar icons on the right (current default Windows /
-        // KDE order): min, max, close — close at the right corner.
+        // Standard icons in Windows / KDE order, close at the corner.
         if Theme.titlebar-button-side == 0 && Theme.titlebar-button-style == 0: TitleBarButton {
             icon: "minimize";
             tooltip-text: @tr("Minimize");
@@ -259,10 +207,7 @@ export component CustomTitleBar inherits Rectangle {
         }
     }
 
-    // Resize affordance overlays for this bar are NOT mounted here.
-    // The whole-window resize ring (top / right / bottom / left
-    // edges + 4 corners) lives in `ui/app-window.slint` so it can
-    // also suppress hover on the scrollbar at the right edge and on
-    // the now-playing bar at the bottom — not just the titlebar
-    // buttons. See the ResizeAffordances block there.
+    // **No resize affordance here.** The whole-window ring lives in `app-window.slint`,
+    // so it can suppress hover on the scrollbar at the right edge and the now-playing
+    // bar at the bottom as well as on these buttons.
 }

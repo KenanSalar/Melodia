@@ -2,61 +2,42 @@ import { Theme } from "../theme.slint";
 import { MaterialIcon } from "material-icon.slint";
 import { Tooltip } from "tooltip.slint";
 
-// One of the three macOS "traffic-light" decoration buttons. Paints a
-// 14 px circle in `circle-color` (or a neutral grey when the window is
-// unfocused), with a hover-reveal glyph centred inside. The reveal is
-// gated on `cluster-hovered`, not the button's own hover — moving the
-// cursor across the three buttons should reveal all three symbols at
-// once, not flicker per-button (matches real macOS).
+// One of the three macOS traffic-light decoration buttons: a 14 px circle with
+// a hover-reveal glyph inside. The reveal is gated on `cluster-hovered` rather
+// than on this button's own hover, because crossing the cluster should reveal
+// all three symbols at once instead of flickering one at a time.
 //
-// Click handling is the parent's responsibility — this component just
-// fires `clicked()`. The macOS-style cluster is a sibling of the
-// drag-region inside `custom-titlebar.slint`, so the parent layout
-// chooses which side of the window the buttons sit on independently
-// of the visual style they paint in.
+// The parent owns the click; this only fires `clicked()`. It's a sibling of the
+// drag region in `custom-titlebar.slint`, so which side of the window the
+// cluster sits on is independent of the style it paints in.
 export component MacOsTrafficLight inherits Rectangle {
-    // The "live" circle fill (semantic Theme colour — red / yellow /
-    // green — so the lights pick up the active palette rather than
-    // hardcoded macOS hex codes). `brush` (not `color`) so a future
-    // gradient theme can plug in.
+    // A semantic Theme colour, so the lights follow the palette instead of
+    // macOS's own hex codes. `brush`, so a gradient theme could plug in.
     in property <brush> circle-color;
-    // Material Symbols ligature: `"close"`, `"minimize"`, or `"add"`.
     in property <string> glyph-icon;
     in property <string> tooltip-text;
 
-    // ORed cluster hover — true whenever the cursor is over ANY of the
-    // three traffic lights. The owning cluster computes
-    // `a.hovered || b.hovered || c.hovered` and forwards it down so all
-    // three glyphs reveal/conceal together.
+    // True whenever the cursor is over *any* of the three; the cluster ORs
+    // their `hovered` and hands the result back down.
     in property <bool> cluster-hovered: false;
 
-    // Read out by the cluster to compute `cluster-hovered`. Slint has no
-    // first-class "child has-hover" upward channel, so each traffic light
-    // exposes its TouchArea's `has-hover` as an out-property.
+    // Slint has no upward "child has-hover" channel, so each light publishes
+    // its own for the cluster to OR.
     out property <bool> hovered: touch.has-hover;
 
-    // What actually gets painted. The "grey when unfocused" mirror reads
-    // `Theme.window-focused`, written from winit's `Focused(bool)` event in
-    // `src/ui/window_chrome/winit_filter.rs`. The unfocused fill is
-    // `Theme.overlay0` — a theme-aware neutral grey that tracks the active
-    // palette rather than hardcoding macOS's #D5D5D5.
+    // The unfocused grey is a theme-aware neutral rather than macOS's #D5D5D5.
     property <brush> fill: Theme.window-focused ? root.circle-color : Theme.overlay0;
 
-    // Derived here rather than handed down: the fill can be any of three
-    // semantic hues in any of ~20 palettes, plus the unfocused grey, so no
-    // single Theme brush is right for all of them. `ink-on` answers per fill —
-    // its declaration in `theme.slint` carries the rest of the reasoning.
+    // Derived rather than handed down: the fill is one of three semantic hues
+    // across ~20 palettes plus that grey, so no single token is right for all
+    // of them. `ink-on`'s declaration in `theme.slint` carries the rest.
     property <brush> glyph-color: Theme.ink-on(root.fill);
 
     callback clicked();
 
-    // 18 px wide click target — tight enough to give the cluster a
-    // macOS-style ~20 px center-to-center cadence, but still Fitts-
-    // friendly (cursor only needs ~7 px aim radius). 32 px tall so the
-    // cell fills the titlebar's full vertical extent — GridLayout in
-    // the cluster centres the 14 px circle inside it automatically
-    // (children of Rectangle default to top-left, hence the explicit
-    // x/y math below).
+    // 18 px gives the cluster macOS's ~20 px centre-to-centre cadence while
+    // staying Fitts-friendly; 32 px fills the titlebar's height, and the
+    // cluster's GridLayout centres the circle in it.
     min-width: 18px;
     max-width: 18px;
     min-height: 32px;
@@ -65,22 +46,11 @@ export component MacOsTrafficLight inherits Rectangle {
     vertical-stretch: 0;
     background: transparent;
 
-    // The painted circle. Diameter 14 px to read at typical desktop
-    // viewing distance without feeling oversized for the 32 px bar.
-    // Border-radius pinned to half the width so the rectangle is a
-    // true circle even if Slint ever adds non-uniform DPI scaling
-    // that drifts width vs. height.
-    //
-    // Centring math is intentionally all-integer: the click target is
-    // 18 × 32 px, the circle is 14 × 14, so `(18 - 14) / 2 = 2 px` and
-    // `(32 - 14) / 2 = 9 px` — both exact integers. Earlier revisions
-    // used an 11 px glyph wrapped in `HorizontalLayout / VerticalLayout
-    // { alignment: center }`, which left the glyph at sub-pixel
-    // coordinates (`(14 - 11) / 2 = 1.5 px`); the renderer then snapped
-    // differently on hover state changes, making the symbol appear to
-    // jiggle right by ~1 px when the opacity fade kicked in. Sticking
-    // to explicit x/y with even dimensions sidesteps the problem
-    // entirely.
+    // The centring is all-integer on purpose. An 11 px glyph inside centring
+    // layouts left it at `(14 - 11) / 2 = 1.5 px`, and the renderer snapped that
+    // differently across hover states — so the symbol jiggled a pixel sideways
+    // as the opacity fade came in. Explicit x/y off even dimensions has no such
+    // half-pixel to round.
     circle := Rectangle {
         width: 14px;
         height: 14px;
@@ -89,15 +59,10 @@ export component MacOsTrafficLight inherits Rectangle {
         background: root.fill;
         border-radius: self.width / 2;
 
-        // The hover-reveal glyph. `add` substitutes for macOS's two
-        // opposing triangles on the green button — Material Symbols
-        // Rounded doesn't ship the inverted-arrow zoom glyph, and `add`
-        // is the closest universally-recognised "expand / grow"
-        // analogue. Sized to 10 px so it sits cleanly inside the 14 px
-        // circle (2 px clearance each side); `MaterialIcon`'s inner
-        // Text element self-centres within the 10 px box, and the box
-        // itself is positioned via explicit x/y instead of wrapping
-        // layouts — see the centring comment above.
+        // `add` stands in for macOS's opposing triangles on the green button:
+        // Material Symbols Rounded ships no inverted-arrow zoom glyph, and it
+        // is the closest widely-read "expand". 10 px leaves 2 px clearance
+        // inside the circle, and the box is placed by x/y for the reason above.
         MaterialIcon {
             name: root.glyph-icon;
             icon-size: 10px;
