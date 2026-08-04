@@ -34,18 +34,29 @@ from pathlib import Path
 # wins. The patterns intentionally pin both the format AND the arch so
 # a future macOS dmg doesn't accidentally land in the wrong slot.
 #
-# aarch64 entries come BEFORE x86_64 — `melodia-vX-aarch64.AppImage`
-# would also match the x86_64 AppImage pattern's `.AppImage$` suffix
-# if it weren't for the explicit `-x86_64` token, but ordering matters
-# for the cargo-deb arm64 fragment (`_arm64.deb`) which has no leading
-# arch token to disambiguate against a hypothetical fragment overlap.
+# Every pattern carries an explicit arch token, so the two groups are
+# disjoint and the grouping below is readability, not disambiguation.
+# That was NOT true while the deb was matched on cargo-deb's native
+# `melodia_<ver>_amd64.deb`, whose `_amd64`/`_arm64` fragments have no
+# leading arch token — which is what the aarch64-first ordering existed
+# for.
+#
+# `release.yml` renames the deb to the same `melodia-<tag>-<arch>.deb`
+# scheme every other slot produces (its `melodia-*.deb` globs in the
+# attest/sign/upload steps depend on that), and this table was left on
+# the old name. Nothing complained: `classify` returned None, the loop
+# below skipped it, and v0.8.0 shipped a manifest with no deb entry at
+# all while both signed .deb files sat on the release. Deb users got
+# `NoAssetForTarget` — "no update available" — indefinitely. These
+# patterns are downstream of release.yml's packaging steps; move them
+# together.
 PLATFORM_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     # aarch64 (ARM64 — Apple Silicon on Linux, Snapdragon X laptops,
     # Raspberry Pi 4/5, AWS Graviton, Ampere Altra).
     (re.compile(r"-aarch64\.AppImage$"), "linux-aarch64-appimage"),
     (re.compile(r"-aarch64-linux\.tar\.gz$"), "linux-aarch64-tarball"),
     (re.compile(r"\.aarch64\.rpm$"), "linux-aarch64-rpm"),
-    (re.compile(r"_arm64\.deb$"), "linux-aarch64-deb"),
+    (re.compile(r"-aarch64\.deb$"), "linux-aarch64-deb"),
     (re.compile(r"-aarch64-windows\.zip$"), "windows-aarch64-zip"),
     (re.compile(r"-aarch64\.msi$"), "windows-aarch64-msi"),
     # x86_64.
@@ -54,9 +65,7 @@ PLATFORM_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     # build-rpm.sh emits melodia-<ver>-1.fc<rel>.x86_64.rpm; the suffix
     # is invariant across Fedora releases.
     (re.compile(r"\.x86_64\.rpm$"), "linux-x86_64-rpm"),
-    # cargo-deb default: melodia_<ver>_amd64.deb (Debian uses amd64,
-    # not x86_64).
-    (re.compile(r"_amd64\.deb$"), "linux-x86_64-deb"),
+    (re.compile(r"-x86_64\.deb$"), "linux-x86_64-deb"),
     (re.compile(r"-x86_64-windows\.zip$"), "windows-x86_64-zip"),
     (re.compile(r"-x86_64\.msi$"), "windows-x86_64-msi"),
 ]
@@ -213,9 +222,25 @@ def build_manifest(
     for path in sorted(artifacts_dir.iterdir()):
         if not path.is_file():
             continue
+        # Signatures are read through their artifact's `sig_path` below, never
+        # on their own pass.
+        if path.suffix == ".minisig":
+            continue
         key = classify(path.name)
         if key is None:
-            continue
+            # This used to `continue`, and that silence is the whole reason the
+            # deb went missing from v0.8.0's manifest unnoticed: the file was
+            # built, signed, uploaded and listed on the release, and only the
+            # one table that names it had drifted. `artifacts/` holds installable
+            # artifacts and their .minisig siblings and nothing else, so an
+            # unclassifiable file means a rename landed upstream of this table —
+            # louder than a platform quietly dropping out of the manifest.
+            raise SystemExit(
+                f"{path.name} matches no PLATFORM_PATTERNS entry. Something in "
+                "release.yml's packaging steps renamed an artifact out from "
+                "under this table — fix the pattern; do not let the platform "
+                "drop out of the manifest silently."
+            )
         sig_path = path.with_suffix(path.suffix + ".minisig")
         if not sig_path.exists():
             print(f"SKIP {path.name}: missing .minisig", file=sys.stderr)
