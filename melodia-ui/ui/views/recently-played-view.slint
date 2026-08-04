@@ -65,7 +65,7 @@ export component RecentlyPlayedView inherits Rectangle {
     VerticalLayout {
         hero := MosaicTabHero {
             tab-labels: [@tr("Songs"), @tr("Most Played")];
-            tab-icons: ["history", "bar_chart"];
+            tab-icons: ["music_note", "bar_chart"];
             tab-idx <=> RecentlyPlayed.tab-idx;
 
             title: @tr("Recently Played");
