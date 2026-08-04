@@ -44,9 +44,12 @@ jobs:
       # would never skip. `every` requires a file to match ALL patterns, which is
       # what turns `!` into an exclusion.
       #
-      # assets/ is split: screenshots are README-only, but `melodia.ico` is a
-      # build.rs input and `desktop/Melodia.desktop.tmpl` is `include_str!`d by
-      # src/services/desktop_integration.rs, so both must still trigger a build.
+      # assets/ is split: screenshots are README-only, everything else under it
+      # is compiled in. `melodia.ico` is a build.rs input;
+      # `desktop/Melodia.desktop.tmpl` and `icons/logo-with-background.svg` are
+      # `include_*!`d by src/services/desktop_integration.rs, and
+      # `icons/tray.png` by src/services/tray/mod.rs — all four must still
+      # trigger a build.
       - uses: dorny/paths-filter@7b450fff21473bca461d4b92ce414b9d0420d706 # v4.0.2
         id: paths
         if: github.event_name == 'pull_request'
@@ -69,6 +72,27 @@ jobs:
       # a path only one of them knows about.
       - uses: fkirc/skip-duplicate-actions@b974a9395958c231af965b70070979a577efa578 # v5.3.2
         id: skip_check
+
+  # Advisory scan — the same gate release.yml runs, moved forward to the PR so a
+  # vulnerable or unmaintained dep is caught while the Cargo.lock change is under
+  # review, rather than at release time where it blocks all ten build slots and
+  # the fix is urgent. Both callers go through ./.github/actions/cargo-audit
+  # precisely so the two gates cannot reach different verdicts; an early warning
+  # that disagrees with the release gate is worse than none.
+  #
+  # Sibling of clippy, not a parent: it compiles nothing, and an advisory hit
+  # shouldn't hide the lint and test results. No system deps, no toolchain
+  # install, no rust-cache — see the composite for why.
+  audit:
+    name: audit
+    runs-on: ubuntu-latest
+    needs: [changes]
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (needs.changes.outputs.code == 'true' && needs.changes.outputs.should_skip != 'true')
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/cargo-audit
 
   # Clippy — mirrors the project's local gate (`cargo clippy --all-targets -- -D
   # warnings`). The crate-wide `[lints]` set pedantic/style/complexity to warn,
@@ -97,6 +121,19 @@ jobs:
         with:
           shared-key: ci-clippy
           cache-on-failure: true
+      # One invocation covers both packages. Package *selection* stops at the
+      # root (it is the only default member of a non-virtual workspace root),
+      # but that is not what decides clippy's reach: cargo sets
+      # RUSTC_WORKSPACE_WRAPPER=clippy-driver for every workspace member it
+      # compiles, and clippy-driver skips non-primary packages only under
+      # `--no-deps`. So `melodia-ui` is linted as a path dependency, lib and
+      # build script both, with `-D warnings` applied. Verified by planting a
+      # `clippy::needless_return` in each of `melodia-ui/src/lib.rs` and
+      # `melodia-ui/build.rs` and watching this command fail on them.
+      #
+      # A second `-p melodia-ui` step used to sit here on the assumption that
+      # selection governed reach. It was redundant; don't reintroduce it
+      # without re-running that probe.
       - name: cargo clippy
         run: cargo clippy --all-targets --locked -- -D warnings
 
@@ -109,12 +146,22 @@ jobs:
   # to decide a merge. It runs once per merge in deploy-coverage.yml instead.
   # Debug info stays at the profile default here (unlike the coverage job, which
   # drops it): this is the job whose failures someone actually reads a backtrace
-  # from. Instrumentation was measured at ~0.5 GiB of the peak, so dropping it
-  # bought speed, not headroom — the two-phase build below is what buys headroom.
+  # from.
+  #
+  # `CARGO_BUILD_JOBS: 4` matches the runner's vCPUs and overrides the repo's
+  # dev-machine jobs=8 in .cargo/config.toml. It is not just a CPU match — it is
+  # a memory cap. The build's peak is `rustc` on the `melodia-ui` crate (the
+  # Slint compiler's ~390k-line output), and the job count scales one rustc's
+  # peak because its LLVM codegen threads draw jobserver tokens: measured 13.30 /
+  # 10.71 / 8.83 GiB at jobs=8/4/2 on a clean build. jobs=8 on a 16 GB runner
+  # does not fail, it swaps, and the job silently runs for most of an hour
+  # looking like a hang. Don't drop this to pick up the config default.
   test:
     name: test
     runs-on: ubuntu-latest
     needs: [changes, clippy]
+    env:
+      CARGO_BUILD_JOBS: 4
     if: >-
       github.event_name == 'workflow_dispatch' ||
       (needs.changes.outputs.code == 'true' && needs.changes.outputs.should_skip != 'true')
@@ -141,30 +188,7 @@ jobs:
           ctl.!default { type null }
           EOF
 
-      # Built in two phases, because the memory peak here is CONCURRENCY, not
-      # instrumentation — dropping coverage from this job did not change it. The
-      # crate emits four large link targets (the lib test binary, the `Melodia`
-      # bin, and the two integration tests) and each links the ~390k-line
-      # generated `app-window.rs` at roughly 5.3 GiB. Cargo runs three at once,
-      # which measured 21.5 GiB against the runner's 16 GB. It does not fail, it
-      # swaps, and the job silently takes the better part of an hour.
-      #
-      # Phase 1 builds only the lib target, so the ~600 dependencies still
-      # compile at full width — they are many small units and never the problem.
-      # Phase 2 then has just the remaining links left and runs them one at a
-      # time. Measured 10.25 GiB peak, which is what lets this job keep the
-      # profile's default debug info instead of trading backtraces for headroom.
-      #
-      # Do NOT collapse these into one `cargo test`: the margin is the point, and
-      # losing it looks like a hang rather than an error.
-      - name: Build dependencies and lib target (parallel)
-        env:
-          CARGO_BUILD_JOBS: 4
-        run: cargo test --locked --no-run --lib
-
-      - name: Build remaining targets and run tests (serialized links)
-        env:
-          CARGO_BUILD_JOBS: 1
+      - name: cargo test
         run: cargo test --locked
 
   # Single gate job — mark THIS as the required status check in branch
@@ -174,13 +198,17 @@ jobs:
   pr-validation:
     name: pr-validation
     if: always()
-    needs: [changes, clippy, test]
+    needs: [changes, audit, clippy, test]
     runs-on: ubuntu-latest
     steps:
       - name: Check job results
         run: |
+          # Adding a job is TWO edits — `needs:` above and this array. A job
+          # named in only the first is unenforced: nothing here reads its
+          # result, so the gate goes green on its failure.
           results=(
             "${{ needs.changes.result }}"
+            "${{ needs.audit.result }}"
             "${{ needs.clippy.result }}"
             "${{ needs.test.result }}"
           )

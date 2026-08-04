@@ -56,9 +56,17 @@ jobs:
         id: meta
         shell: bash
         run: |
-          VERSION="$(awk -F\" '/^version = / { print $2; exit }' Cargo.toml)"
+          # Both packages inherit the version from `[workspace.package]`, so
+          # `[package]` reads `version.workspace = true` and carries no
+          # literal. This runs on a bare checkout with no toolchain, so it's a
+          # scrape rather than `cargo metadata` — anchor on the table rather
+          # than taking the file's first `version = ` line.
+          VERSION="$(awk -F'"' '
+            /^\[/                  { in_ws = ($0 == "[workspace.package]") }
+            in_ws && /^version = / { print $2; exit }
+          ' Cargo.toml)"
           if [[ -z "$VERSION" ]]; then
-            echo "ERROR: failed to extract version from Cargo.toml" >&2
+            echo "ERROR: no version in Cargo.toml's [workspace.package]" >&2
             exit 1
           fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
@@ -141,21 +149,26 @@ jobs:
   # reqwest/openssl/whatever to every installed client. Soft-fails on
   # informational advisories so a warning-only RUSTSEC-XXXX entry
   # doesn't block a fix shipment.
+  #
+  # The scan itself lives in ./.github/actions/cargo-audit, shared with
+  # pr-validation.yml so this gate and the PR's early warning can't drift
+  # into different verdicts. Anything arriving via `dev` has already passed
+  # the same command on the PR; a `hotfix/*` merging straight into `main`
+  # has not, and the advisory DB moves on its own besides — so this stays a
+  # gate, not a formality.
   # ---------------------------------------------------------------------------
   audit:
     needs: prepare
     if: needs.prepare.outputs.should_release == 'true'
     runs-on: ubuntu-latest
+    # Reads Cargo.lock and nothing else. The workflow-level grant exists for the
+    # jobs that publish and attest; don't leave it reachable from a job whose
+    # whole body is a third-party scanner.
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: taiki-e/install-action@41049aa56687c35e0afa74eed4f09cec4f9afabf # v2.85.2
-        with:
-          tool: cargo-audit
-      - name: cargo audit
-        # `--deny warnings` would over-trigger on transitive deps we
-        # don't directly control; `--deny unsound,unmaintained` fails
-        # the build only on the categories worth blocking a release.
-        run: cargo audit --deny unsound --deny unmaintained
+      - uses: ./.github/actions/cargo-audit
 
   # ---------------------------------------------------------------------------
   # Per-format artifact builds. Each matrix slot produces one artifact +
@@ -265,9 +278,10 @@ jobs:
         if: runner.os == 'Linux'
         run: cargo build --release --target ${{ matrix.target }} --locked
 
-      # build.rs spawns the slint compile on a 16 MiB thread, so the
-      # 1 MiB Windows main-thread stack no longer overflows during the
-      # build-script run. No RUSTFLAGS/CARGO_HOST_RUSTFLAGS workaround.
+      # `melodia-ui/build.rs` spawns the slint compile on a 16 MiB thread, so
+      # the 1 MiB Windows main-thread stack no longer overflows during the
+      # build-script run. No RUSTFLAGS/CARGO_HOST_RUSTFLAGS workaround. (The
+      # root build.rs does no Slint work — don't go looking for it there.)
       - name: cargo build --release (Windows)
         if: runner.os == 'Windows'
         run: cargo build --release --target ${{ matrix.target }} --locked
@@ -290,7 +304,7 @@ jobs:
           mkdir -p staging/melodia
           cp target/${{ matrix.target }}/release/Melodia staging/melodia/Melodia
           cp LICENSE                                     staging/melodia/
-          cp ui/assets/icons/logo-with-background.svg    staging/melodia/melodia.svg
+          cp assets/icons/logo-with-background.svg       staging/melodia/melodia.svg
           cp scripts/Melodia.desktop                     staging/melodia/com.github.kenansalar.melodia.desktop
           cp scripts/install-linux.sh                    staging/melodia/install-linux.sh
           cp scripts/uninstall-linux.sh                  staging/melodia/uninstall-linux.sh

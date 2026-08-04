@@ -45,8 +45,6 @@ mod probe;
 pub mod state;
 pub mod system_install;
 pub mod target;
-#[cfg(test)]
-mod test_support;
 pub mod version;
 
 pub use check::{CheckOutcome, check_for_update};

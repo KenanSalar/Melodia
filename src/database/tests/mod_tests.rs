@@ -4,7 +4,7 @@ use crate::database::{chunked_in_query, DbPool, SQLITE_BIND_LIMIT};
 use crate::error::AppError;
 
 // Private to `database/mod.rs`; reachable from this child test module via `super::`.
-use super::strip_windows_verbatim_paths;
+use super::{FTS_OPTIMIZE, strip_windows_verbatim_paths};
 
 #[test]
 fn sqlite_bind_limit_is_999() {
@@ -154,6 +154,17 @@ async fn db_pool_close_succeeds() -> Result<(), AppError> {
     let _: Vec<(i64,)> = sqlx::query_as("SELECT 1").fetch_all(db.read()).await?;
     db.close().await;
     // No panic means success
+    Ok(())
+}
+
+/// `close` can only log this one, so nothing it does is visible to the test
+/// above — and fts5 rejects an unrecognised command at *step* time, not at
+/// prepare, so a typo would be a shutdown that quietly stopped compacting the
+/// index. Running the same const here is what turns that into a failure.
+#[tokio::test]
+async fn the_shutdown_fts_optimize_is_a_command_fts5_accepts() -> Result<(), AppError> {
+    let db = DbPool::test_pool().await;
+    sqlx::query(FTS_OPTIMIZE).execute(db.write()).await?;
     Ok(())
 }
 

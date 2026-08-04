@@ -2,7 +2,7 @@
 
 **A fast, lightweight cross-platform desktop music player built with [Slint](https://slint.dev/) and pure Rust.**
 
-Melodia is a Slint rewrite of a former Tauri + SolidJS application — moving off the embedded WebKitGTK browser engine cut the real-world footprint from a combined **~900 MB** down to **below 150 MiB on Fedora**, with no IPC layer and no web runtime.
+Melodia is a Slint rewrite of a former Tauri + SolidJS application — moving off the embedded WebKitGTK browser engine cut the real-world footprint from a combined **~900 MB** down to **below 150 MiB on Fedora** and **below 110 MB on Windows**, with no IPC layer and no web runtime.
 
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](LICENSE)
 [![Version](https://img.shields.io/github/v/release/KenanSalar/Melodia?label=version&color=blueviolet)](https://github.com/KenanSalar/Melodia/releases)
@@ -30,7 +30,7 @@ Melodia is a Slint rewrite of a former Tauri + SolidJS application — moving of
 
 <table>
   <tr>
-    <td width="50%"><img src="assets/screenshots/favorites.png" alt="Favorites view"><br><sub><b>Favorites</b> — an artwork mosaic hero, a most-played strip, and favorite artists.</sub></td>
+    <td width="50%"><img src="assets/screenshots/favorites.png" alt="Favorites view"><br><sub><b>Favorites</b> — an artwork mosaic hero over tabs for songs, most played, and favorite artists.</sub></td>
     <td width="50%"><img src="assets/screenshots/recently_played.png" alt="Recently Played view"><br><sub><b>Recently Played</b> — newest first, updating live as you listen.</sub></td>
   </tr>
   <tr>
@@ -70,11 +70,12 @@ Shrink the window past a threshold and the full UI collapses into a compact mini
 - First-launch auto-detection of the OS Music directory
 - Real-time folder watching with debounced re-scanning and incremental updates
 - Content-hash-based moved-file detection (BLAKE3) that preserves play counts, favorites, and queue state when files are renamed or relocated
-- Full-text search across tracks, albums, and artists (SQLite FTS5) with a top-result card, entity rows, and persistent recent search history
+- Search across tracks, albums, artists, and genres, with a top-result card, entity rows, and persistent recent search history. Tracks are full-text indexed (SQLite FTS5) on title, artist, album artist, album, genre, composer, year, and file name, so a genre or a year finds everything tagged with it and a partial year ("199") finds the decade. The album and artist rows match by name *and* through their own tracks, so searching a song title, a year or a genre surfaces the albums and artists behind it — and a genre can itself be the top result. That index ignores accents on both sides, so "bjork" finds Björk and "be" finds Bế Tắc — and because the album and artist rows match through it too, an unaccented query still surfaces them. Results are ranked by relevance: a match in the title outranks one in the artist, and a filename that merely echoes the tags beside it ranks below the tags it repeats
+- Every view's own filter box searches the same fields and ignores accents at least as readily — so a genre, an album artist, a year or a decade narrows the Tracks list, an album / artist / genre / playlist page, Favorites or Recently Played much as it narrows the Search view. Years are the one place a filter box is looser on purpose: it matches them anywhere, so "98" finds 1998 and the 1980s alike. The Albums grid takes a year too, and the Settings page's search reaches the accented labels in the translated catalogues
 - Browse by albums, artists, genres, or the file system
 - Dedicated detail pages for albums, artists, genres, and playlists
 - Deezer-backed artist image fetching with local caching
-- Favorites view with a hero header, artwork mosaic, most-played section, and a filterable track list
+- Favorites view built around a hero banner — artwork mosaic, live counts, and a tab bar sharing that row with the filter — over three sub-views: every favorite as a sortable track list, your most-played favorites as a browsable card grid, and your favorite artists as another. Favorite artists sort by name or by how many of their tracks you've favorited, either direction; the filter narrows whichever tab you're on, and the page reopens on the tab — and the sort — you left it on
 - Recently-Played view listing the tracks you last listened to (newest first), with a most-played strip and a filterable track list that updates live as you play
 - Play-count and skip-count tracking per track
 - Per-track star ratings (0–5), set inline via a hover-revealed star control in any track list and from the Now Playing view
@@ -86,12 +87,14 @@ Shrink the window past a threshold and the full UI collapses into a compact mini
 - Import and export playlists as standard `.m3u8` files (with embedded BLAKE3 content hashes) so they survive a database reset and interoperate with other players
 - Drag-and-drop file import to playlists and the queue
 - Drag-and-drop track reordering in playlists and the play queue
-- Automatic pre-migration database backups
+- Automatic pre-migration database backups, kept in a `backups/` folder beside the library database — the three most recent are retained and older ones retire themselves, so upgrading never accumulates copies of your library without bound
 
 ### Playback
 - Gapless playback with a 2-deep Rodio queue
 - Audio crossfade (1–12 s) that overlaps the end of one track with the start of the next, running the two on separate mixer decks with a sample-accurate complementary ramp so the sum can never clip; optionally skips same-album transitions to keep continuous mixes gapless, extends to manual track changes, and fades out on pause and stop
 - Queue management with shuffle and repeat modes (Off, All, One)
+- Playing a track from any list — an album, a playlist, a folder in Files, search results, Favorites — loads that whole list into the queue and starts on the track you picked, so the rest of the album or playlist follows on its own. With shuffle already on, the remaining tracks are shuffled behind your pick rather than played in order. **Play Next** and **Add to Queue** in the right-click menu still add to the existing queue without replacing it
+- A **Shuffle** pill on Favorites, Recently Played and the album, artist, genre and playlist pages loads whatever that view is currently showing — filter it first and only the matches are queued — and opens on a random track rather than the top of the list
 - Full-screen Now Playing view with track details, an up-next list, and album-art cross-fade transitions
 - Audio visualizer under the Now Playing artwork, tapped off the post-DSP audio and tinted to the album's own accent colour, in three styles switchable from the view itself or from Settings — a 64-band spectrum analyzer, the same bands mirrored about a centre line, or a live waveform trace; bands are logarithmic across 50 Hz – 16 kHz (the equalizer's own range) so every bar covers the same musical interval, and the whole thing decays to rest on pause or can be switched off entirely
 - 10-band graphic equalizer (31 Hz – 16 kHz) with adjustable preamp, nine built-in presets plus hand-tuned custom curves, and a soft-knee clip-protection limiter so boosts compress instead of clipping
@@ -127,7 +130,7 @@ MP3, FLAC, M4A/AAC, OGG/Vorbis, WAV, ALAC, AIFF
 ### System Integration
 - Scrobbling to **Last.fm** and **ListenBrainz** — connect either or both, report each qualifying play plus a live "now playing" status, and mirror your favorites to their loved/feedback tracks with a **per-service toggle** (each independent). Turning a service's loved-tracks sync on — or connecting it later while sync is on — **syncs your existing favorites automatically**, no need to re-toggle each heart. Plays and loves are held in a durable offline queue and submitted on reconnect
 - Optional **MusicBrainz auto-tagging** (opt-in, ListenBrainz-driven) — resolves each track's MusicBrainz Recording ID and writes it into your files, so "loved" favorites work on ListenBrainz even for an untagged library; runs automatically on new imports and on demand from Settings
-- **Discord Rich Presence** (opt-in, off by default) — shows **Listening to \<song\>** on your Discord profile with artist, album cover, a live progress bar, and a link button; updates on track change, pause, resume, seek and stop, and clears when playback stops or you quit. A **Hide while paused** option and an album-cover toggle live in Settings → Discord
+- **Discord Rich Presence** (opt-in, off by default) — shows **Listening to \<song\>** on your Discord profile with artist, album cover, a live progress bar, and a link button; updates on track change, pause, resume, seek and stop, and clears when playback stops or you quit. A **Hide while paused** option and an album-cover toggle live in Settings → Services → Discord
 - OS media controls (Linux: MPRIS2, Windows: SMTC)
 - Always-on-top support (Linux: KDE via KWin D-Bus, GNOME via shell extension)
 - Window state persistence (size, position, maximized)
@@ -267,7 +270,7 @@ cargo test                                      # run tests
 > `MELODIA_DISCORD_APP_ID` compile-time override.
 
 > **Tip — cleaning up a loosely-tagged library.**
-> The optional MusicBrainz auto-tagging (Settings → Scrobbling → *Add MusicBrainz
+> The optional MusicBrainz auto-tagging (Settings → Services → Scrobbling → *Add MusicBrainz
 > IDs to your music*) resolves each track's MusicBrainz Recording ID by looking up
 > its **artist + title** on ListenBrainz, so it only works when your files already
 > carry reasonably correct tags. For music ripped from YouTube or otherwise loosely
@@ -327,6 +330,10 @@ src/
 ├── services/    updater, desktop integration, system theme
 ├── state/       AppState, error types
 └── ui/          Slint bridge, callbacks, view handles, models
+
+melodia-ui/          the UI in its own crate, so it builds once
+├── ui/              the .slint sources, plus the fonts and icons they embed
+└── translations/    bundled .po catalogues
 ```
 
 See [`CLAUDE.md`](CLAUDE.md) for a detailed architecture reference.
@@ -367,8 +374,17 @@ separately on each merge to `dev` and published to GitHub Pages at
 
 ## License
 
-Melodia is licensed under the
-[GNU Affero General Public License v3.0](LICENSE).
+Copyright (C) 2026 Kenan Salar
+
+Melodia is free software: you can redistribute it and/or modify it under the
+terms of the [GNU Affero General Public License](LICENSE) as published by the
+Free Software Foundation, either version 3 of the License, or (at your option)
+any later version.
+
+Melodia is distributed in the hope that it will be useful, but WITHOUT ANY
+WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
+PARTICULAR PURPOSE. See the [GNU Affero General Public License](LICENSE) for
+more details.
 
 ## Acknowledgments
 

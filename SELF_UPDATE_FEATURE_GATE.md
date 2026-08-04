@@ -115,16 +115,22 @@ optional.
 | `system_install`, `linux_pkg`, `probe`, `target`, `version` | **ungated** | pure detection/metadata; called by `main.rs` + `updater_settings::install` |
 | `event`, `state` | **gated** | update-only data types; gating keeps them out of the feature-off binary and avoids a broken doc link (event→install) |
 | `check`, `github`, `manifest`, `minisign`, `install`, `asset_cache` | **gated** | network / crypto / swap (these pull `reqwest` stream + `minisign-verify`) |
-| `test_support` | **keep `#[cfg(test)]` only — NOT feature-gated** | **[fix]** used by *ungated* detection tests (`linux_pkg_tests`, `system_install_tests`, `target_tests` import `test_support::APPIMAGE_ENV_LOCK`); gating it would break `--no-default-features` tests |
+
+*(A `test_support` submodule used to sit in this table. It held the env-var mutex the
+ungated detection tests take, and the row said to keep it `#[cfg(test)]`-only rather than
+feature-gate it. It has since moved to `src/test_support.rs` at the crate root — the lock
+had to cover `settings_tests` too — so the question no longer arises here: a crate-root
+`#[cfg(test)]` module is outside the `self-update` gate by construction. Nothing to do,
+but don't re-add the submodule when working through this plan.)*
 
 `mod.rs` free functions **[fix]** (the first draft conflated these two):
 
 | Item | Gate | Why |
 |---|---|---|
-| `install_target()` (mod.rs:82) | **ungated** | std-only (`current_exe`/`$APPIMAGE`); used by `system_install.rs:55` + `linux_pkg.rs:40` |
-| `install_target_old()` (mod.rs:71) | **gated** | calls `install::old_path()` — depends on the gated `install` submodule |
+| `install_target()` (mod.rs:85) | **ungated** | std-only (`current_exe`/`$APPIMAGE`); used by `system_install.rs:55` + `linux_pkg.rs:40` |
+| `install_target_old()` (mod.rs:74) | **gated** | calls `install::old_path()` — depends on the gated `install` submodule |
 
-`mod.rs` re-exports (lines 49-53):
+`mod.rs` re-exports (lines 52-56):
 - **Ungated:** `pub use system_install::is_system_install;`
 - **Gated** (`#[cfg(feature = "self-update")]`): `check::{CheckOutcome, check_for_update}`,
   `event::{FailureKind, UpdaterEvent}`, `install::{download_and_install, prune_stale_staging}`,
@@ -143,19 +149,19 @@ are gated internally.
   `#[cfg(all(target_os = "linux", feature = "self-update"))]`. (A feature-off
   build never produces a `.old`, so reaping it is moot anyway.)
 - **Gate** (`#[cfg(feature = "self-update")]`) the updater block at
-  ~`src/main.rs:370-419`:
+  ~`src/main.rs:394-437`:
   - `updater_event_tx/rx` channel
   - `ui::updater_settings::install_event_subscriber(...)`
   - `ui::callbacks::wire_updater(...)`
   - the `updater_daily::spawn(...)` gate (incl. the `else` log branch)
-  - the `prune_stale_staging()` boot task at ~`:416-419`
+  - the `prune_stale_staging()` boot task at ~`:434-437`
 
 `src/tasks/mod.rs`
-- Gate `pub mod updater_daily;` (`src/tasks/mod.rs:19`).
+- Gate `pub mod updater_daily;` (`src/tasks/mod.rs:22`).
 
 `src/ui/callbacks/mod.rs`
-- Gate `mod updater;` (line 23) and `pub use updater::wire as wire_updater;`
-  (line 47). The `ui/callbacks/updater/` dir (`check.rs`, `install.rs`,
+- Gate `mod updater;` (line 25) and `pub use updater::wire as wire_updater;`
+  (line 52). The `src/ui/callbacks/updater/` dir (`check.rs`, `install.rs`,
   `paint.rs`, `mod.rs`) is referenced **only** via `wire_updater` (verified — no
   other module imports it), so gating the whole dir is clean.
 
@@ -178,7 +184,7 @@ are gated internally.
 Add a feature flag the UI can read, and **hide the Update section without
 unmounting it.**
 
-`ui/globals.slint` — `MelodiaUpdater` global (block at lines 1234-1305):
+`melodia-ui/ui/globals/updater.slint` — the `MelodiaUpdater` global:
 ```slint
 in property <bool> feature-enabled: true;   // Rust overrides at startup
 ```
@@ -186,21 +192,21 @@ The `install()` / `restart()` / `check()` callbacks stay defined; with the
 feature off the Rust side simply never wires or invokes them (unwired Slint
 callbacks are no-ops).
 
-`ui/views/settings/update-section.slint` (`UpdateSection`):
+`melodia-ui/ui/views/settings/update-section.slint` (`UpdateSection`):
 - AND every row's visibility with `MelodiaUpdater.feature-enabled`.
 - Force the section's `has-matches` out-property to `false` when
   `!feature-enabled` so the section collapses via the **existing** search-hide
   path (it already collapses when a section has no matches).
 
 > **Slint pitfall — do NOT wrap the mount in `if`.** In
-> `ui/views/settings-view.slint:112` the section is `upd-sec := UpdateSection {}`,
+> `melodia-ui/ui/views/settings-view.slint:116` the section is `upd-sec := UpdateSection {}`,
 > and the no-results placeholder predicate references it by id
-> (`&& !upd-sec.has-matches`, line 127). Wrapping `upd-sec` in
+> (`&& !upd-sec.has-matches`, line 133). Wrapping `upd-sec` in
 > `if MelodiaUpdater.feature-enabled :` would put the id inside a conditional and
 > break that sibling reference (and the `vertical-stretch` collapse math). Keep
 > the component mounted; gate its content + `has-matches` internally instead.
 
-`ui/views/settings/about-section.slint` — unchanged (reads `current-version`,
+`melodia-ui/ui/views/settings/about-section.slint` — unchanged (reads `current-version`,
 still seeded by the ungated `install()`).
 
 ## Doc-comment cleanup (avoids `cargo doc --no-default-features` warnings)
@@ -243,8 +249,10 @@ its parent module automatically — no separate gating step:
   `install/mod.rs:182` via `#[path = "../tests/install_tests.rs"]`).
 - Ungated detection tests stay compiled: `version_tests`, `linux_pkg_tests`,
   `probe_tests`, `target_tests`, `system_install_tests` (declared from their
-  ungated source files). These rely on `test_support` — hence test_support must
-  remain `#[cfg(test)]`-only (see split table).
+  ungated source files). Three of them take the shared env helpers, which now
+  live in `crate::test_support` at the crate root — outside the `self-update`
+  gate by construction, so nothing here has to keep them out of it (see the note
+  where the split table's `test_support` row used to be).
 - `check`/`github`/`event`/`state`/`asset_cache` declare no test module today.
 
 Run matrix:

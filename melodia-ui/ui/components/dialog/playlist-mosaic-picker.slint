@@ -1,0 +1,301 @@
+import { ScrollView } from "std-widgets.slint";
+import { Theme } from "../../theme.slint";
+import { Dialog } from "../../globals/dialog.slint";
+import { Playlists } from "../../globals/playlists.slint";
+import { ArtworkImage } from "../artwork-image.slint";
+import { CoverMosaic } from "../grid/cover-mosaic.slint";
+import { SectionButton } from "../settings/section-button.slint";
+
+// Mosaic picker body — mounted by `DialogOverlay` for
+// `Dialog.kind == "edit-playlist-artwork"`: preview over a counter row over a
+// wrapping candidate grid.
+//
+// The two cover tiers are picked by size. The 64 px candidate tiles take the
+// shared row tier (72 px, a near-exact fit), the ~110–220 px preview cells the
+// grid tier (448 px), whose downscale stays crisp where a 72 px source
+// pixelates badly.
+//
+// Rust owns selection (`Playlists.toggle-mosaic-candidate`) and caps it at 4 —
+// past that the toggle is a silent no-op.
+export component PlaylistMosaicPicker inherits Rectangle {
+    private property <length> cand-tile: 64px;
+    private property <length> cand-gap: 8px;
+    private property <int> cand-cols: 6;
+    private property <length> cand-stride: root.cand-tile + root.cand-gap;
+    private property <length> grid-row-h: root.cand-stride;
+    private property <int> total-rows:
+        Math.ceil(Dialog.mosaic-candidates.length / root.cand-cols);
+    // Two rows visible; the ScrollView takes the overflow.
+    private property <length> grid-area-h: 160px;
+    private property <length> grid-content-h: root.total-rows * root.grid-row-h;
+
+    // Painted *behind* the cells, so the gaps between tiles read as gutters
+    // rather than as butted-up halves; the preview's own padding picks up the
+    // same colour for a uniform inset ring.
+    private property <length> mosaic-gap: 3px;
+
+    VerticalLayout {
+        spacing: Theme.pad-md;
+
+        // Centred preview.
+        HorizontalLayout {
+            alignment: center;
+            vertical-stretch: 0;
+
+            preview := Rectangle {
+                width: 220px;
+                height: 220px;
+                background: Theme.surface1;
+                border-radius: Theme.radius-lg;
+                border-width: 1px;
+                border-color: Theme.border;
+                clip: true;
+
+                // The saved cover, shown until the first pick or Clear flips
+                // `mosaic-touched` and unmounts this branch.
+                if Dialog.mosaic-selection.length == 0
+                        && !Dialog.mosaic-touched
+                        && Dialog.current-artwork.width > 0: Image {
+                    width: 100%;
+                    height: 100%;
+                    source: Dialog.current-artwork;
+                    image-fit: ImageFit.cover;
+                }
+
+                // Empty state — nothing picked, and either cleared or never saved.
+                if Dialog.mosaic-selection.length == 0
+                        && (Dialog.mosaic-touched || Dialog.current-artwork.width == 0): Rectangle {
+                    background: @linear-gradient(180deg,
+                        Theme.accent.with-alpha(0.10) 0%,
+                        Theme.accent.with-alpha(0.04) 100%);
+                    VerticalLayout {
+                        alignment: center;
+                        spacing: Theme.pad-sm;
+                        HorizontalLayout {
+                            alignment: center;
+                            ArtworkImage {
+                                tile-size: 130px;
+                                tile-radius: Theme.radius-md;
+                            }
+                        }
+                        HorizontalLayout {
+                            alignment: center;
+                            Text {
+                                text: @tr("No artwork");
+                                color: Theme.subtext0;
+                                font-size: Theme.font-size-sm;
+                                font-weight: 600;
+                            }
+                        }
+                    }
+                }
+
+                // The empty cases above stay local: `CoverMosaic` is
+                // empty-state-agnostic, since the Favorites hero wants its own.
+                if Dialog.mosaic-selection.length >= 1: CoverMosaic {
+                    width: 100%;
+                    height: 100%;
+                    artwork-paths: Dialog.mosaic-selection;
+                    gutter-size: root.mosaic-gap;
+                    request-cover(p) => {
+                        return Playlists.request-cover(p);
+                    }
+                }
+            }
+        }
+
+        // Pips + counter + Clear. The pips show the cap; the text states it.
+        HorizontalLayout {
+            vertical-stretch: 0;
+            alignment: space-between;
+            spacing: Theme.pad-sm;
+
+            HorizontalLayout {
+                spacing: Theme.pad-sm;
+                alignment: start;
+
+                VerticalLayout {
+                    alignment: center;
+                    HorizontalLayout {
+                        spacing: 6px;
+                        for i in [0, 1, 2, 3]: Rectangle {
+                            width: 8px;
+                            height: 8px;
+                            border-radius: 4px;
+                            background: i < Dialog.mosaic-selection.length
+                                ? Theme.accent
+                                : Theme.surface2;
+                            animate background { duration: Theme.dur-fast; easing: ease-in-out; }
+                        }
+                    }
+                }
+
+                VerticalLayout {
+                    alignment: center;
+                    Text {
+                        text: @tr("{} / 4 selected", Dialog.mosaic-selection.length);
+                        color: Theme.subtext0;
+                        font-size: Theme.font-size-sm;
+                    }
+                }
+            }
+
+            // Same outline chrome as Cancel, so Clear / Cancel / Apply read as
+            // one family.
+            SectionButton {
+                label: @tr("Clear");
+                icon: "";
+                primary: false;
+                clicked => {
+                    Dialog.mosaic-selection = [];
+                    // Separates a deliberate clear from an untouched open — the
+                    // dispatcher gates `clear-artwork` on it.
+                    Dialog.mosaic-touched = true;
+                }
+            }
+        }
+
+        // Wrapping candidate grid. Slint has no `flex-wrap`, so the tiles are
+        // absolutely positioned by index inside a Rectangle of known height —
+        // which is what lets the ScrollView around it take the overflow.
+        if Dialog.mosaic-candidates.length == 0: Rectangle {
+            vertical-stretch: 1;
+            height: 80px;
+            VerticalLayout {
+                alignment: center;
+                HorizontalLayout {
+                    alignment: center;
+                    Text {
+                        text: @tr("Add tracks to this playlist to pick artwork.");
+                        color: Theme.subtext0;
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                        wrap: word-wrap;
+                    }
+                }
+            }
+        }
+
+        // Mounted only with candidates, so it can't float above the empty-state hint.
+        if Dialog.mosaic-candidates.length > 0: Text {
+            text: @tr("Select up to 4 tracks");
+            color: Theme.subtext0;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.6px;
+        }
+
+        if Dialog.mosaic-candidates.length > 0: Rectangle {
+            vertical-stretch: 1;
+            height: root.grid-area-h;
+            background: Theme.surface0;
+            border-radius: Theme.radius-md;
+            border-width: 1px;
+            border-color: Theme.border;
+            clip: true;
+
+            ScrollView {
+                horizontal-scrollbar-policy: always-off;
+                viewport-width: self.visible-width;
+                viewport-height: root.grid-content-h + 8px;
+
+                Rectangle {
+                    width: 100%;
+                    // Insets the absolutely-positioned children from the edges.
+                    VerticalLayout {
+                        padding: Theme.pad-xs;
+
+                        Rectangle {
+                            height: root.grid-content-h;
+
+                            for path[i] in Dialog.mosaic-candidates: cand := Rectangle {
+                                x: Math.mod(i, root.cand-cols) * root.cand-stride;
+                                y: Math.floor(i / root.cand-cols) * root.cand-stride;
+                                width: root.cand-tile;
+                                height: root.cand-tile;
+                                clip: true;
+                                border-radius: Theme.radius-sm;
+
+                                // Cap is 4, so four arms beat a loop. On `cand`
+                                // itself because `parent` doesn't reach through
+                                // nested layouts — descendants read `cand.slot`.
+                                property <int> slot:
+                                    (Dialog.mosaic-selection.length >= 1
+                                        && Dialog.mosaic-selection[0] == path) ? 0 :
+                                    (Dialog.mosaic-selection.length >= 2
+                                        && Dialog.mosaic-selection[1] == path) ? 1 :
+                                    (Dialog.mosaic-selection.length >= 3
+                                        && Dialog.mosaic-selection[2] == path) ? 2 :
+                                    (Dialog.mosaic-selection.length >= 4
+                                        && Dialog.mosaic-selection[3] == path) ? 3 : -1;
+
+                                ArtworkImage {
+                                    artwork-path: path;
+                                    cover: Playlists.request-row-cover(path);
+                                    tile-size: root.cand-tile;
+                                    tile-radius: Theme.radius-sm;
+                                    // Hover pop, as on the album grid card.
+                                    // `ArtworkImage` animates the scale itself.
+                                    cover-scale: cand-touch.has-hover ? 1.06 : 1.0;
+                                }
+
+                                // Always mounted and opacity-animated, so the
+                                // hairline fades instead of popping.
+                                Rectangle {
+                                    width: 100%;
+                                    height: 100%;
+                                    border-radius: Theme.radius-sm;
+                                    border-width: 1px;
+                                    border-color: Theme.overlay1;
+                                    background: transparent;
+                                    opacity: cand-touch.has-hover && cand.slot < 0 ? 1.0 : 0.0;
+                                    animate opacity { duration: Theme.dur-fast; easing: ease-out; }
+                                }
+
+                                // Selection ring + badge, always mounted for the
+                                // same reason — an `if` would unmount on
+                                // deselect and skip the fade out.
+                                Rectangle {
+                                    width: 100%;
+                                    height: 100%;
+                                    border-radius: Theme.radius-sm;
+                                    border-width: 2px;
+                                    border-color: Theme.accent;
+                                    background: Theme.accent.with-alpha(0.18);
+                                    opacity: cand.slot >= 0 ? 1.0 : 0.0;
+                                    animate opacity { duration: Theme.dur-fast; easing: ease-out; }
+
+                                    Rectangle {
+                                        width: 22px;
+                                        height: 22px;
+                                        x: 4px;
+                                        y: 4px;
+                                        border-radius: 11px;
+                                        background: Theme.accent;
+                                        // Empty when deselected; only ever seen
+                                        // during the ring's fade-out.
+                                        Text {
+                                            text: cand.slot >= 0 ? (cand.slot + 1) + "" : "";
+                                            color: Theme.accent-text;
+                                            font-size: 12px;
+                                            font-weight: 700;
+                                            horizontal-alignment: center;
+                                            vertical-alignment: center;
+                                        }
+                                    }
+                                }
+
+                                cand-touch := TouchArea {
+                                    mouse-cursor: pointer;
+                                    clicked => {
+                                        Playlists.toggle-mosaic-candidate(path);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

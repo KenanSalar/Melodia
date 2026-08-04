@@ -1,0 +1,50 @@
+import { Theme } from "../theme.slint";
+import { MaterialIcon } from "material-icon.slint";
+
+// A collapsible section's header pill. The hit area is the label and chevron
+// only — clicking the dead space to their right shouldn't toggle anything — so a
+// caller wraps it in a start-aligned layout to keep it at its natural width. The
+// chevron points the way the content will move: down to expand, up to collapse.
+// Hover chrome matches `PillButton`.
+export component CollapsibleSectionHeader inherits Rectangle {
+    in property <string> label;
+    in property <bool> collapsed;
+
+    callback toggled();
+
+    width: row.preferred-width;
+    height: 28px;
+    border-radius: self.height / 2;
+    background: touch.has-hover ? Theme.surface1 : transparent;
+    animate background { duration: Theme.dur-fast; easing: ease-in-out; }
+
+    row := HorizontalLayout {
+        padding-left: 10px;
+        padding-right: 10px;
+        spacing: 2px;
+        alignment: start;
+
+        VerticalLayout {
+            alignment: center;
+            Text {
+                text: root.label;
+                color: Theme.text;
+                font-size: Theme.font-size-lg;
+                font-weight: 600;
+            }
+        }
+        VerticalLayout {
+            alignment: center;
+            MaterialIcon {
+                name: root.collapsed ? "expand_more" : "expand_less";
+                icon-size: 20px;
+                icon-color: Theme.subtext0;
+            }
+        }
+    }
+
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.toggled(); }
+    }
+}

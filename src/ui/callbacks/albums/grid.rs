@@ -9,7 +9,7 @@ use crate::library;
 use crate::state::AppState;
 use crate::ui::albums::{self as albums_ui_mod, AlbumsUi};
 use crate::ui::callbacks::macros::spawn_logged;
-use crate::ui::callbacks::{persist_view_sort, persisted_sort};
+use crate::ui::callbacks::{next_sort, persist_view_sort, persisted_sort};
 use crate::ui::track_list_view::view_id;
 use crate::{AlbumDetail, Albums, AppWindow};
 
@@ -68,16 +68,12 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, albums_ui: &Arc<AlbumsUi>) 
         albums.on_request_sort(move |field| {
             let Some(ui) = weak.upgrade() else { return };
             let g = ui.global::<Albums>();
-            let (new_field, new_dir) = if g.get_sort_field().as_str() == field.as_str() {
-                let nd = if g.get_sort_dir().as_str() == "asc" { "desc" } else { "asc" };
-                (field.to_string(), nd.to_string())
-            } else {
-                (field.to_string(), "asc".to_string())
-            };
+            let (new_field, new_dir) =
+                next_sort(g.get_sort_field().as_str(), g.get_sort_dir().as_str(), &field);
             g.set_sort_field(SharedString::from(new_field.as_str()));
             g.set_sort_dir(SharedString::from(new_dir.as_str()));
             albums_ui_mod::rebuild_grid(&ui, &au);
-            persist_view_sort(&s, view_id::ALBUMS, new_field, &new_dir);
+            persist_view_sort(&s, view_id::ALBUMS, new_field, new_dir);
         });
     }
 

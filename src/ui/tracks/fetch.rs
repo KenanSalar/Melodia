@@ -13,6 +13,7 @@ use crate::entities::track::TrackListRow as RsTrackListRow;
 use crate::error::AppResult;
 use crate::library;
 use crate::state::AppState;
+use crate::ui::util::len_as_i32;
 use crate::ui::{model_patch, track_sort};
 use crate::{AppWindow, TrackListRow as UiTrackListRow, Tracks};
 
@@ -36,7 +37,7 @@ pub async fn fetch_and_apply(
     // is derived entirely in memory below, so the cold fetch and a later
     // header-click re-sort share the one `compute_track_order` code path.
     let rows = library::tracks::get_tracks(state, None, None).await?;
-    let total = i32::try_from(rows.len()).unwrap_or(i32::MAX);
+    let total = len_as_i32(rows.len());
 
     // Pre-compute lowercase columns for the filter pass. Kept aligned by
     // index with `full`, so `full[i]` and `search_keys[i]` describe the
@@ -51,30 +52,18 @@ pub async fn fetch_and_apply(
     // decoding is CPU-bound; Rayon parallelizes across cores while
     // `spawn_blocking` keeps the tokio runtime responsive. Walked in
     // DISPLAY order (through the `order` permutation, not raw fetch order)
-    // and truncated at the LRU capacity: `prewarm` decodes at most that
-    // many anyway, and on a library with more unique covers than the cache
-    // holds, the surviving entries are the ones the user sees first.
-    // Stopping the build at `cap` avoids allocating a path Vec longer than
-    // the cache can ever hold.
+    // so that on a library with more unique covers than the cache holds,
+    // the entries surviving the cap are the ones the user sees first.
     let unique_paths: Vec<PathBuf> = {
         let full = tracks_ui.full.lock().clone();
         let order = tracks_ui.order.lock().clone();
-        let cap = tracks_ui.cover_thumbs.capacity();
-        let prealloc = ((full.len() / 8).max(16)).min(cap);
-        let mut seen: HashSet<&str> = HashSet::with_capacity(prealloc);
-        let mut out: Vec<PathBuf> = Vec::with_capacity(prealloc);
-        for r in order.iter().filter_map(|&i| full.get(i)) {
-            if out.len() >= cap {
-                break;
-            }
-            if let Some(p) = r.artwork_path.as_deref()
-                && !p.is_empty()
-                && seen.insert(p)
-            {
-                out.push(PathBuf::from(p));
-            }
-        }
-        out
+        crate::ui::grid_prewarm::unique_artwork_paths(
+            order
+                .iter()
+                .filter_map(|&i| full.get(i))
+                .map(|r| r.artwork_path.as_deref()),
+            tracks_ui.cover_thumbs.capacity(),
+        )
     };
     if !unique_paths.is_empty() {
         let thumbs = tracks_ui.cover_thumbs.clone();
@@ -100,7 +89,7 @@ pub fn refilter(weak: &Weak<AppWindow>, tracks_ui: &TracksUi, filter: String) {
     let snapshot = tracks_ui.full.lock().clone();
     let keys = tracks_ui.search_keys.lock().clone();
     let order = tracks_ui.order.lock().clone();
-    let total = i32::try_from(snapshot.len()).unwrap_or(i32::MAX);
+    let total = len_as_i32(snapshot.len());
     let _ = weak.upgrade_in_event_loop(move |ui| {
         let visible = build_visible(&snapshot, &keys, &order, &filter);
         apply_visible(&ui, visible, total);
@@ -126,7 +115,7 @@ pub fn resort_and_apply(
     let keys = tracks_ui.search_keys.lock().clone();
     let order = Arc::new(track_sort::compute_track_order(&snapshot, sort_field, sort_dir));
     *tracks_ui.order.lock() = order.clone();
-    let total = i32::try_from(snapshot.len()).unwrap_or(i32::MAX);
+    let total = len_as_i32(snapshot.len());
     let _ = weak.upgrade_in_event_loop(move |ui| {
         let visible = build_visible(&snapshot, &keys, &order, &filter);
         apply_visible(&ui, visible, total);
@@ -167,7 +156,7 @@ fn build_visible(
     order: &[usize],
     filter: &str,
 ) -> Vec<UiTrackListRow> {
-    let needle = filter.trim().to_lowercase();
+    let needle = crate::ui::row_match::fold_needle(filter);
     if needle.is_empty() {
         return order
             .iter()

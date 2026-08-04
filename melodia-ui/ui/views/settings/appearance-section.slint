@@ -1,0 +1,146 @@
+import { Settings } from "../../settings.slint";
+import { SettingsPage } from "../../globals/settings-page.slint";
+import { SectionCard } from "../../components/settings/section-card.slint";
+import { SectionDivider } from "../../components/settings/section-divider.slint";
+import { SettingRowStacked } from "../../components/settings/setting-row-stacked.slint";
+import { ChipGroup } from "../../components/settings/chip-group.slint";
+import { ColorDotGrid } from "../../components/settings/color-dot-grid.slint";
+
+// Palette config — Theme / Variant / Accent / Color Style, all through the
+// `Settings` global. `src/themes/` owns the registry, `src/ui/appearance/`
+// populates the lists and applies a palette on every change, and
+// `src/tasks/material_you.rs` drives the dynamic one. The window-chrome rows
+// live in `window-chrome-section.slint`.
+//
+// Search visibility follows `language-section.slint` — each row ANDs its state
+// condition with the predicate, and a divider gates on a visible row either
+// side so the card can't end on a stranded one.
+export component AppearanceSection inherits Rectangle {
+    background: transparent;
+    horizontal-stretch: 1;
+    vertical-stretch: 0;
+
+    // Hidden only for KDE Breeze on System on a live KDE session, where
+    // `kdeglobals` dictates the accent and the user has no say. Material You
+    // does *not* hide it — Rust prepends a dynamic swatch there, so a static
+    // accent can still override it.
+    pure function show-accent-row() -> bool {
+        return !Settings.kde-system-active;
+    }
+
+    in property <string> tab-name;
+
+    pure function row-visible(label: string, desc: string) -> bool {
+        return SettingsPage.row-visible(root.tab-name, @tr("Appearance"),
+                                        label + " " + desc,
+                                        SettingsPage.search-query);
+    }
+
+    // Color Style's description swaps with `material-you-active`, so whichever
+    // form is on screen is the one in the haystack.
+    property <bool> show-theme: row-visible(@tr("Theme"), "");
+    property <bool> show-variant: row-visible(@tr("Theme Variant"), "");
+    property <bool> show-accent: show-accent-row()
+        && row-visible(@tr("Accent Color"), "");
+    property <bool> show-color-style: Settings.theme-idx == 4
+        && row-visible(@tr("Color Style"),
+            Settings.material-you-active
+                ? @tr("Active — palette derived from the current track's artwork.")
+                : @tr("Generate theme colors from album artwork."));
+
+    out property <bool> has-matches:
+        show-theme || show-variant || show-accent || show-color-style;
+
+    // A divider needs a visible row on both sides; filtering down to one row
+    // would otherwise leave one dangling above it and another below.
+    property <bool> any-above-variant: show-theme;
+    property <bool> any-above-accent: show-theme || show-variant;
+    property <bool> any-above-color-style: show-theme || show-variant || show-accent;
+
+    // Wrapper so the root's preferred-height tracks the card's natural height —
+    // see `language-section.slint`.
+    VerticalLayout {
+    if has-matches: SectionCard {
+        title: @tr("Appearance");
+
+        // `<=>` is mandatory: `ChipGroup` writes its own `selected-index` on
+        // click, which orphans a one-way binding, and Rust's later
+        // `set_theme_idx` would then never reach the chips.
+        if root.show-theme: SettingRowStacked {
+            icon: "brush";
+            label: @tr("Theme");
+            description: "";
+            ChipGroup {
+                options: Settings.theme-names;
+                selected-index <=> Settings.theme-idx;
+                selected(i) => { Settings.theme-changed(i); }
+            }
+        }
+        if root.show-theme && root.show-variant: SectionDivider {}
+
+        // Variant names depend on the active theme. The labels are inlined
+        // literals rather than pushed from Rust because `@tr()` only translates
+        // at codegen — a Rust-seeded `[string]` renders English whatever the
+        // locale. Order MUST match `theme.variants` in `src/themes/`, plus the
+        // synthetic "System" chip Rust's index math appends, since
+        // `Settings.variant-idx` indexes the list both sides see. Catppuccin
+        // variant names are proper nouns and stay verbatim.
+        if root.show-variant: SettingRowStacked {
+            icon: "palette";
+            label: @tr("Theme Variant");
+            description: "";
+            ChipGroup {
+                options: Settings.theme-idx == 0
+                    ? ["Latte", "Frappe", "Macchiato", "Mocha", @tr("System")]
+                    : [@tr("Dark"), @tr("Light"), @tr("System")];
+                selected-index <=> Settings.variant-idx;
+                selected(i) => { Settings.variant-changed(i); }
+            }
+        }
+
+        // Swatches are per-(theme, variant); Rust computes the brush list.
+        if root.any-above-accent && root.show-accent: SectionDivider {}
+        if root.show-accent: SettingRowStacked {
+            icon: "colorize";
+            label: @tr("Accent Color");
+            description: "";
+            ColorDotGrid {
+                colors: Settings.accent-colors;
+                labels: Settings.accent-names;
+                // Rust prepends the Material You swatch at index 0 — a rounded
+                // square, so it reads apart from the static accents.
+                first-is-dynamic: Settings.material-you-active;
+                selected-index <=> Settings.accent-idx;
+                selected(i) => { Settings.accent-changed(i); }
+            }
+        }
+
+        // Material 3 only. Same `<=>` requirement and same inlined-literal
+        // labels as the two rows above; order MUST match
+        // `services::material_you::SchemeStyle::all()`, which
+        // `Settings.color-style-idx` indexes alongside these chips.
+        if root.any-above-color-style && root.show-color-style: SectionDivider {}
+        if root.show-color-style: SettingRowStacked {
+            icon: "auto_awesome";
+            label: @tr("Color Style");
+            description: Settings.material-you-active
+                ? @tr("Active — palette derived from the current track's artwork.")
+                : @tr("Generate theme colors from album artwork.");
+            ChipGroup {
+                options: [
+                    @tr("None"),
+                    @tr("Tonal Spot"),
+                    @tr("Content"),
+                    @tr("Vibrant"),
+                    @tr("Expressive"),
+                    @tr("Fidelity"),
+                    @tr("Neutral"),
+                    @tr("Monochrome"),
+                ];
+                selected-index <=> Settings.color-style-idx;
+                selected(i) => { Settings.color-style-changed(i); }
+            }
+        }
+    }
+    }
+}

@@ -59,7 +59,7 @@ pub const TRIGGER_SLACK_MS: u32 = 20;
 /// Logical pixels per drawn column.
 ///
 /// `DeaDBeeF` uses one column per pixel. One per two is visually
-/// indistinguishable under the envelope's own 1.25 px stroke and halves
+/// indistinguishable under the envelope's own stroke and halves
 /// everything downstream — the path string, its re-parse, and the tessellation
 /// of the filled figure — which matters here in a way it doesn't for a scope
 /// drawing straight to a canvas.
@@ -68,8 +68,15 @@ const LOGICAL_PX_PER_COLUMN: f32 = 2.0;
 /// Column bounds. The floor keeps a sub-100 px strip from degenerating into a
 /// handful of very wide columns; the ceiling bounds the per-frame path string,
 /// and is what the analyzer's buffer is sized to.
+///
+/// The ceiling is the widest strip the view can ask for, resolved at
+/// [`LOGICAL_PX_PER_COLUMN`]: the strip's width is capped against its own
+/// height there, and its height is capped outright, so nothing past this is
+/// reachable. Set below it, the trace would keep drawing the same columns
+/// stretched wider as the window grows — which is what it did while the strip
+/// was a fixed 56 px tall.
 const MIN_COLUMNS: usize = 64;
-pub const MAX_COLUMNS: usize = 512;
+pub const MAX_COLUMNS: usize = 1024;
 
 /// How far below zero the signal must dip before a crossing back up counts.
 /// Without it the trigger latches onto noise around the axis and the trace
@@ -85,10 +92,12 @@ const TRIGGER_HYSTERESIS: f32 = 0.02;
 /// the figure a real shape at every amplitude.
 ///
 /// Its size is chosen against the stroke rather than for its own sake. The
-/// viewbox is two units tall across the strip's fixed 56 px, so this is half a
-/// pixel either side of the centre — close enough that the two edges' 1.25 px
+/// viewbox is two units tall across the strip, so this is half a pixel either
+/// side of the centre at the strip's floor — close enough that the two edges'
 /// strokes still overlap and a resting trace reads as one line rather than as a
-/// pair of rails, far enough that they are nowhere near coincident.
+/// pair of rails, far enough that they are nowhere near coincident. Being in
+/// viewbox units it grows with the strip, and so does the stroke it is measured
+/// against, so the pair keeps its relationship at every height.
 const MIN_HALF_THICKNESS: f32 = 0.018;
 
 /// Samples spanning `ms` at `sample_rate`. Saturates rather than wrapping; the
@@ -214,9 +223,52 @@ pub fn write_path_commands(columns: &[Column], out: &mut String) {
 /// Bytes one entry of [`XPrefixes`] takes: `"0.1234 "`.
 const X_PREFIX_BYTES: usize = 7;
 
+/// Append `value` to `out` with exactly `DECIMALS` fractional digits.
+///
+/// Every coordinate the trace emits is normalized to a unit range and quantized
+/// to a few places, so the whole format is a sign, one digit and a zero-padded
+/// remainder. Going through `{value:.DECIMALS$}` instead asks `core::fmt` for
+/// the exactly-rounded decimal at that precision — a much harder question,
+/// answered by Grisu's `format_exact` with a bignum fallback, and at the
+/// [`MAX_COLUMNS`] cap this runs twice per column per frame. Scaling to an
+/// integer and printing the two halves is the same bytes for a fraction of the
+/// work.
+///
+/// `DECIMALS` is a const parameter rather than an argument so the scale is a
+/// compile-time constant: a request wider than a `u16` scale holds — five places
+/// or more — overflows the `const` block instead of needing a runtime clamp.
+/// That diagnostic arrives at **codegen**, though, since a `const` block reading
+/// a generic parameter is only evaluated once monomorphized: `cargo build` and
+/// `cargo test` reject `push_fixed::<5>` with `E0080`, and `cargo clippy` — which
+/// stops before codegen — passes it. Worth knowing, since clippy is this repo's
+/// usual gate.
+///
+/// Two deliberate differences from `core::fmt`, neither reaching the figure:
+/// negative zero prints as `0`, and an exact tie rounds away from zero rather
+/// than to even. Both move a coordinate one unit in the last place, across a
+/// viewbox two units tall drawn into a strip a few tens of pixels high.
+fn push_fixed<const DECIMALS: u32>(out: &mut String, value: f32) {
+    let scale = const { 10u16.pow(DECIMALS) };
+
+    #[expect(
+        clippy::cast_possible_truncation,
+        reason = "coordinates are normalized to a unit range, so the scaled value is at most ±10_000; a float→int `as` saturates besides, so even a forged input clamps rather than wrapping"
+    )]
+    let units = (value * f32::from(scale)).round() as i32;
+
+    if units < 0 {
+        out.push('-');
+    }
+    let magnitude = units.unsigned_abs();
+    let scale = u32::from(scale);
+    let width = DECIMALS as usize;
+    // Writing into a String cannot fail.
+    let _ = write!(out, "{}.{:0width$}", magnitude / scale, magnitude % scale);
+}
+
 /// What every vertex but the first opens with. Not part of the cached entry: a
-/// two-byte `push_str` costs nothing next to the float format it sits beside,
-/// and keeping it here is what lets the opening `M` vertex reuse the same entry
+/// two-byte `push_str` costs nothing next to the coordinate it sits beside, and
+/// keeping it here is what lets the opening `M` vertex reuse the same entry
 /// rather than slice a lead off it.
 ///
 /// The space before the `L` is not required by the SVG grammar — a command
@@ -229,16 +281,17 @@ const LINE_TO: &str = " L";
 /// `x` is the column's position across the strip, so it depends on the column
 /// index and the column count and nothing else — between resizes it is
 /// byte-identical on every frame while the `y` beside it changes. Formatting it
-/// per frame is half of all the float formatting the trace does, and the trace
-/// is by a wide margin the most expensive thing the visualizer does per frame:
-/// at the [`MAX_COLUMNS`] cap it writes 1024 vertices, against a whole spectrum
-/// frame's two FFTs.
+/// per frame is half of all the coordinate writing the trace does, and the trace
+/// is the most expensive thing the visualizer draws: at the [`MAX_COLUMNS`] cap
+/// it writes two vertices a column, and Slint re-parses and re-tessellates the
+/// whole figure behind it. This cache and [`push_fixed`] took the two halves of
+/// the *writing* side down between them; the parse and the fill are the floor.
 ///
 /// One packed string plus each entry's end offset, so a resize rebuilds a single
-/// buffer rather than reallocating a string per column. Entries are written with
-/// the same `{x:.4}` the per-frame path used to run, so the bytes are identical
-/// by construction rather than by a second float formatter agreeing with
-/// `core::fmt`'s rounding at every tie.
+/// buffer rather than reallocating a string per column. Entries go through
+/// [`push_fixed`], the same writer the per-frame `y` takes, so the two halves of
+/// a vertex are rounded by one rule rather than by two formatters that have to
+/// agree at every tie.
 struct XPrefixes {
     /// `"0.1234 "` per column, packed end to end.
     text: String,
@@ -272,9 +325,8 @@ impl XPrefixes {
         // A lone column has no span to normalize against; it lands at x = 0.
         let span = index_to_f32(columns.saturating_sub(1)).max(1.0);
         for i in 0..columns {
-            let x = index_to_f32(i) / span;
-            // Writing into a String cannot fail.
-            let _ = write!(self.text, "{x:.4} ");
+            push_fixed::<4>(&mut self.text, index_to_f32(i) / span);
+            self.text.push(' ');
             self.ends.push(self.text.len());
         }
     }
@@ -314,13 +366,13 @@ fn write_path(columns: &[Column], prefixes: &XPrefixes, out: &mut String) {
         // is a line to.
         out.push_str(if i == 0 { "M" } else { LINE_TO });
         out.push_str(prefixes.get(i));
-        let _ = write!(out, "{y:.3}");
+        push_fixed::<3>(out, y);
     }
     for (i, column) in columns.iter().enumerate().rev() {
         let y = edges(*column).0;
         out.push_str(LINE_TO);
         out.push_str(prefixes.get(i));
-        let _ = write!(out, "{y:.3}");
+        push_fixed::<3>(out, y);
     }
     out.push('Z');
 }

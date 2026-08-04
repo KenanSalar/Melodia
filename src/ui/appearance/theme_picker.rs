@@ -23,8 +23,8 @@ use super::{
 };
 
 /// True when KDE Breeze + System is active *and* a parsed kdeglobals
-/// palette is in hand — i.e. the 22 brushes are sourced from Plasma's
-/// live scheme rather than the static Light/Dark palette. The Settings
+/// palette is in hand — i.e. the palette is sourced from Plasma's live
+/// scheme rather than the static Light/Dark tables. The Settings
 /// UI reads this via the `Settings.kde-system-active` property to hide
 /// the Accent Color row (Plasma already picked the accent).
 pub(super) fn kde_system_active(theme_id: &str, variant_id: &str, system: &SystemColorState) -> bool {

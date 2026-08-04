@@ -1,0 +1,18 @@
+import { Theme } from "../theme.slint";
+
+// Fires `close()` once each time the OS window goes unfocused. The local mirror
+// is there because `changed` doesn't accept a path expression on a global.
+//
+// **Mount it behind an is-this-popup-open `if`.** Slint instantiates `if`
+// children lazily, so the watcher exists only while its popup is shown — which
+// collapses what would be one binding per mass-instantiated row and per
+// singleton popup, all firing on every focus loss, down to a single live one.
+export component FocusLossWatcher {
+    callback close();
+    property <bool> watched-focused: Theme.window-focused;
+    changed watched-focused => {
+        if (!self.watched-focused) {
+            root.close();
+        }
+    }
+}

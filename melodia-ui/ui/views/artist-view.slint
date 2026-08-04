@@ -1,0 +1,181 @@
+import { Theme } from "../theme.slint";
+import { Artists } from "../globals/artists.slint";
+import { SearchBar } from "../components/search-bar.slint";
+import { ActionPill, PillButton, PillDivider } from "../components/action-pill.slint";
+import { ArtistGrid } from "../components/grid/artist-grid.slint";
+import { GridColumnsSync } from "../components/grid-columns-sync.slint";
+import { MaterialIcon } from "../components/material-icon.slint";
+import { OverlayScrollbar } from "../components/overlay-scrollbar.slint";
+import { FilterThrottle } from "../components/filter-throttle.slint";
+
+// The Artists grid page, `AlbumView`'s shape over the `Artists` global.
+export component ArtistView inherits Rectangle {
+    property <int> filter-tick-pending: 0;
+    filter-throttle := FilterThrottle {
+        pending: root.filter-tick-pending;
+        fire() => { Artists.apply-filter(Artists.filter); }
+    }
+
+    property <length> min-card-w: 180px;
+    property <length> grid-gap: 20px;
+    property <length> card-text-h: 46px;
+    property <int> computed-cols:
+        max(1, Math.floor((grid.width - root.grid-gap) / (root.min-card-w + root.grid-gap)));
+    property <length> card-w:
+        max(0px, (grid.width - (root.computed-cols + 1) * root.grid-gap) / root.computed-cols);
+    property <length> card-h: root.card-w + root.card-text-h;
+    property <length> row-h: root.card-h + root.grid-gap;
+
+    // Publishes the count on mount and on every change; see
+    // `grid-columns-sync.slint` for why it needs both a `changed` and a Timer.
+    GridColumnsSync {
+        computed-cols: root.computed-cols;
+        seed(c) => {
+            Artists.columns = c;
+            Artists.columns-changed(c);
+        }
+    }
+
+    TouchArea {
+        clicked => { Artists.blur-search-tick += 1; }
+    }
+
+    VerticalLayout {
+        // Three sides: the uniform form's bottom pad sits outside the grid's
+        // viewport and reads as a dead strip under it.
+        padding-left: Theme.pad-lg;
+        padding-right: Theme.pad-lg;
+        padding-top: Theme.pad-lg;
+        spacing: Theme.pad-md;
+
+        HorizontalLayout {
+            vertical-stretch: 0;
+            spacing: Theme.pad-md;
+            alignment: stretch;
+
+            VerticalLayout {
+                alignment: center;
+                spacing: 0;
+                Text {
+                    text: @tr("Artists");
+                    color: Theme.page-title-color;
+                    font-size: Theme.page-title-size;
+                    font-weight: Theme.page-title-weight;
+                }
+                Text {
+                    text: @tr("{n} artist" | "{n} artists" % Artists.total-count);
+                    color: Theme.subtext0;
+                    font-size: Theme.font-size-sm;
+                }
+            }
+
+            Rectangle { horizontal-stretch: 1; }
+
+            VerticalLayout {
+                alignment: center;
+                ActionPill {
+                    PillButton {
+                        text: @tr("Name");
+                        reserve-sort-slot: true;
+                        sort-direction: Artists.sort-field == "name"
+                            ? Artists.sort-dir : "";
+                        active: Artists.sort-field == "name";
+                        clicked => { Artists.request-sort("name"); }
+                    }
+                    PillDivider { }
+                    PillButton {
+                        text: @tr("Tracks");
+                        reserve-sort-slot: true;
+                        sort-direction: Artists.sort-field == "track_count"
+                            ? Artists.sort-dir : "";
+                        active: Artists.sort-field == "track_count";
+                        clicked => { Artists.request-sort("track_count"); }
+                    }
+                    PillDivider { }
+                    PillButton {
+                        text: @tr("Albums");
+                        reserve-sort-slot: true;
+                        sort-direction: Artists.sort-field == "album_count"
+                            ? Artists.sort-dir : "";
+                        active: Artists.sort-field == "album_count";
+                        clicked => { Artists.request-sort("album_count"); }
+                    }
+                }
+            }
+
+            VerticalLayout {
+                alignment: center;
+                SearchBar {
+                    text <=> Artists.filter;
+                    placeholder: @tr("Filter artists…");
+                    blur-trigger: Artists.blur-search-tick;
+                    edited(t) => { root.filter-tick-pending += 1; }
+                }
+            }
+        }
+
+        body := Rectangle {
+            horizontal-stretch: 1;
+            vertical-stretch: 1;
+
+            grid := ArtistGrid {
+                width: 100%;
+                height: 100%;
+                rows: Artists.grid-rows;
+                card-width: root.card-w;
+                card-height: root.card-h;
+                row-height: root.row-h;
+                gap: root.grid-gap;
+                open-artist(id) => { Artists.open-artist(id); }
+                request-cover(p) => { Artists.request-cover(p) }
+            }
+
+            if Artists.total-count == 0: Rectangle {
+                background: Theme.base;
+                VerticalLayout {
+                    alignment: center;
+                    spacing: Theme.pad-md;
+                    HorizontalLayout {
+                        alignment: center;
+                        MaterialIcon {
+                            name: "person";
+                            icon-size: 64px;
+                            icon-color: Theme.overlay0;
+                        }
+                    }
+                    HorizontalLayout {
+                        alignment: center;
+                        Text {
+                            text: @tr("No artists yet");
+                            color: Theme.text;
+                            font-size: Theme.font-size-lg;
+                            font-weight: 600;
+                        }
+                    }
+                    HorizontalLayout {
+                        alignment: center;
+                        Text {
+                            text: @tr("Add a music folder in Settings to start building your library.");
+                            color: Theme.subtext0;
+                            font-size: Theme.font-size-sm;
+                            horizontal-alignment: center;
+                            wrap: word-wrap;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    OverlayScrollbar {
+        horizontal: false;
+        x: parent.width - self.width;
+        y: grid.absolute-position.y - root.absolute-position.y;
+        width: 10px;
+        height: grid.height;
+        visible-size: grid.v-visible-height;
+        content-size: grid.v-viewport-height;
+        offset: grid.v-offset;
+        scroll-to(o) => { grid.set-v-offset(o); }
+    }
+}

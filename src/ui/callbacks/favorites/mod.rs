@@ -1,11 +1,11 @@
 //! `Favorites.*` callbacks, split by concern:
 //!
-//! * [`covers`] — the lazy cover-lookup callbacks for the four card tiers.
-//! * [`hero`] — the play-all / shuffle-all hero pills.
-//! * [`strip`] — Most Played + Favorite Artists strip-card actions, the
-//!   cross-tab open-artist hand-off, and the two collapse toggles.
-//! * [`tracklist`] — the All Songs list: row actions, filter, sort,
-//!   column visibility, and modifier-aware selection.
+//! * [`covers`] — the lazy cover-lookup callbacks for the three card tiers.
+//! * [`hero`] — the per-tab shuffle pills.
+//! * [`subviews`] — the grid cards' actions, the cross-tab open-artist
+//!   hand-off, the tab switch, and the grid column-count push.
+//! * [`tracklist`] — the Songs tab: row actions, filter, sort, column
+//!   visibility, and modifier-aware selection.
 //! * [`lifecycle`] — section enter/leave cache management + the
 //!   `library_changed` re-fetch subscriber.
 //!
@@ -19,18 +19,19 @@
 mod covers;
 mod hero;
 mod lifecycle;
-mod strip;
+mod subviews;
 mod tracklist;
 
 use std::sync::Arc;
 
 use slint::{ComponentHandle, SharedString};
 
-use crate::library;
 use crate::services::settings::SortDir;
 use crate::state::AppState;
 use crate::ui::artists::ArtistsUi;
+use crate::ui::callbacks::persisted_sort;
 use crate::ui::favorites::{self as favorites_ui_mod, FavoritesUi};
+use crate::ui::track_list_view::view_id;
 use crate::{AppWindow, Favorites};
 
 /// Nav-sidebar index of the Favorites tab. Used by the cross-tab
@@ -43,7 +44,7 @@ pub(super) const NAV_FAVORITES: i32 = 2;
 
 /// Wire every `Favorites.*` callback. Call once after
 /// `favorites::install_favorites_models` and after the Artists UI handle
-/// exists (the strip module borrows it for the cross-tab open-artist
+/// exists (the sub-view module borrows it for the cross-tab open-artist
 /// hand-off).
 pub fn wire_favorites(
     ui: &AppWindow,
@@ -55,29 +56,30 @@ pub fn wire_favorites(
 
     covers::wire(ui, fav_ui);
     hero::wire(ui, state, fav_ui);
-    strip::wire(ui, state, fav_ui, artists_ui);
+    subviews::wire(ui, state, fav_ui, artists_ui);
     tracklist::wire(ui, state, fav_ui);
     lifecycle::wire(ui, state, fav_ui);
 }
 
-/// Read the persisted sort from settings and seed both the Rust cache
+/// Read the two persisted sorts from settings and seed both the Rust cache
 /// and the Slint properties. `None` (never persisted) leaves the
 /// defaults in place.
+///
+/// Two, because the page has two independently sortable sub-views: the Songs
+/// tab's `TrackList` and the Favorite Artists grid. They share the `view_sort`
+/// map under separate keys.
 fn hydrate_sort_from_settings(state: &AppState, fav_ui: &FavoritesUi, g: &Favorites<'_>) {
-    let Some(sort) = library::settings::get_view_sort(state, "favorites") else {
-        return;
-    };
-    g.set_sort_field(SharedString::from(sort.field.as_str()));
-    g.set_sort_dir(SharedString::from(match sort.dir {
-        SortDir::Asc => "asc",
-        SortDir::Desc => "desc",
-    }));
-    favorites_ui_mod::set_sort(
-        fav_ui,
-        sort.field,
-        match sort.dir {
-            SortDir::Asc => SortDir::Asc,
-            SortDir::Desc => SortDir::Desc,
-        },
-    );
+    if let Some((field, dir)) = persisted_sort(state, view_id::FAVORITES) {
+        g.set_sort_field(SharedString::from(field.as_str()));
+        g.set_sort_dir(SharedString::from(dir));
+        favorites_ui_mod::set_sort(fav_ui, field, SortDir::from_token(dir));
+    }
+
+    // Sorts an empty cache — the fetch hasn't run yet — but going through the
+    // one setter is what keeps "shadow and rows move together" unconditional.
+    if let Some((field, dir)) = persisted_sort(state, view_id::FAVORITE_ARTISTS) {
+        g.set_artist_sort_field(SharedString::from(field.as_str()));
+        g.set_artist_sort_dir(SharedString::from(dir));
+        favorites_ui_mod::set_artist_sort(fav_ui, field, SortDir::from_token(dir));
+    }
 }

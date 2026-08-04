@@ -1,0 +1,27 @@
+import { Theme } from "../theme.slint";
+
+export component PlaceholderView inherits Rectangle {
+    in property <string> title;
+
+    // No background of its own, so the content panel's rounded fill shows
+    // through at the corners — see `tracks-view.slint`.
+
+    VerticalLayout {
+        alignment: center;
+        spacing: Theme.pad-sm;
+
+        Text {
+            text: root.title;
+            color: Theme.text;
+            font-size: 28px;
+            font-weight: 600;
+            horizontal-alignment: center;
+        }
+        Text {
+            text: @tr("Coming soon");
+            color: Theme.subtext0;
+            font-size: Theme.font-size-md;
+            horizontal-alignment: center;
+        }
+    }
+}

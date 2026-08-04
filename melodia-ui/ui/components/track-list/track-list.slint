@@ -1,0 +1,200 @@
+import { ListView, ScrollView } from "std-widgets.slint";
+import { Theme } from "../../theme.slint";
+import { TrackListRow } from "../../models.slint";
+import { TrackListHeader } from "track-list-header.slint";
+import { TrackListRowItem } from "track-list-row.slint";
+
+// The reusable, **globals-free** track table: a column header over a virtualized list
+// body inside a horizontal `ScrollView`, so growing the columns past the visible width
+// pans the table. Every view with a track list embeds it, each owning its own column
+// state and persistence.
+//
+// **Overlay scrollbars are not mounted inside it.** The viewport metrics are exposed as
+// `out` properties with clamping setters, so a host can mount its own at its root and
+// have them sit flush against the panel's rounded edges rather than inside whatever
+// padding it applies here.
+//
+// The contract: `rows` is the model to swap; `w-*` / `show-*` are `in-out`, so a resize
+// drag or the column popup writes host state synchronously; the sort pair is a pure
+// input driving the header chevron, with clicks emitting `request-sort`; and
+// `playing-track-id` flips that row's cells to accent — usually bound to the player, but
+// this file imports no globals, so it stays reusable outside a player context.
+export component TrackList inherits Rectangle {
+    in property <[TrackListRow]> rows;
+
+    // Column widths.
+    in-out property <length> w-number: 56px;
+    in-out property <length> w-title: 320px;
+    in-out property <length> w-artist: 200px;
+    in-out property <length> w-album: 220px;
+    in-out property <length> w-genre: 140px;
+    in-out property <length> w-year: 72px;
+    in-out property <length> w-length: 88px;
+
+    // `show-artwork` is a pseudo-toggle controlling only the thumbnail inside the title
+    // cell, not a column.
+    in-out property <bool> show-number: true;
+    in-out property <bool> show-artwork: true;
+    in-out property <bool> show-artist: true;
+    in-out property <bool> show-album: true;
+    in-out property <bool> show-genre: true;
+    in-out property <bool> show-year: true;
+
+    // Forwarded to every row: `"index"` is the row position, `"track_number"` the real
+    // album track number.
+    in property <string> number-mode: "index";
+
+    // Sort indicator (passive; the host owns the actual sort state).
+    in property <string> sort-field;
+    in property <string> sort-dir;
+
+    // `false` makes the headers plain labels — no click, no `request-sort`, no hover
+    // affordance — while **resizing and the column popup keep working**. Recently Played
+    // is the one host that sets it, its recency order being the point of the page.
+    in property <bool> sortable: true;
+
+    // Now-playing highlight.
+    in property <int> playing-track-id;
+
+    // Padding, plus the visible column widths, plus one resize handle between each pair.
+    // Title and length are always visible, so the floor is two columns and one handle.
+    // The outer `ScrollView` reads it to decide whether to pan.
+    out property <length> total-w: 16px /* L+R padding */
+        + (root.show-number ? root.w-number + 8px : 0px)
+        + root.w-title + 8px
+        + (root.show-artist ? root.w-artist + 8px : 0px)
+        + (root.show-album ? root.w-album + 8px : 0px)
+        + (root.show-genre ? root.w-genre + 8px : 0px)
+        + (root.show-year ? root.w-year + 8px : 0px)
+        + root.w-length;
+
+    callback request-sort(string /*field*/);
+    callback play-row(int /*track_id*/, int /*index*/);
+    // Batch-shaped: one element in single-row mode, the whole selection in multi.
+    callback play-next([int]);
+    callback add-to-queue([int]);
+    callback toggle-row-favorite([int] /*track_ids*/, bool /*new_state*/);
+    callback set-row-rating([int] /*track_ids*/, int /*rating*/);
+    callback select-row(int /*idx*/, int /*id*/, bool /*shift*/, bool /*ctrl*/);
+    callback request-blur-search();
+    // Cross-tab navigation from the row's context menu.
+    callback go-to-album(int /*album_id*/);
+    callback go-to-artist(int /*artist_id*/);
+    callback go-to-genre(int /*genre_id*/);
+
+    // Plumbed straight through to every row; `TrackListRowItem` has the vocabulary.
+    in property <string> view-context;
+    in property <int> current-playlist-id: 0;
+    in property <[int]> view-selected-ids;
+
+    // Read by the host to drive its scrollbars, written back through the setters. **A
+    // property-plus-callback pair rather than `<=>`**: Slint can't two-way bind through
+    // a sign flip, and the inner ids aren't visible at the host's scope. Positive here
+    // means "scrolled by N pixels", where the inner scrollers store the same as a
+    // non-positive viewport offset, so the boundary negates.
+    //
+    // `body-y` lets the host align its vertical bar with the list body, skipping the
+    // column header band; it is relative to this component's own root.
+    out property <length> v-visible-height: inner-list.visible-height;
+    out property <length> v-viewport-height: inner-list.viewport-height;
+    out property <length> v-offset: -inner-list.viewport-y;
+    out property <length> body-y: inner-list.absolute-position.y - root.absolute-position.y;
+    out property <length> body-height: inner-list.height;
+
+    out property <length> h-visible-width: outer-scroll.visible-width;
+    out property <length> h-viewport-width: outer-scroll.viewport-width;
+    out property <length> h-offset: -outer-scroll.viewport-x;
+
+    callback set-v-offset(length);
+    callback set-h-offset(length);
+
+    set-v-offset(o) => { inner-list.viewport-y = -o; }
+    set-h-offset(o) => { outer-scroll.viewport-x = -o; }
+
+    // Handles the horizontal pan once the columns exceed the visible width. **Vertical
+    // scrolling stays on the inner `ListView`**, which keeps its virtualization, and
+    // `viewport-height: self.height` locks this one's vertical viewport to its own
+    // height so it doesn't try to claim that axis too.
+    //
+    // Both built-in scrollbars are off: they ride along with the scrolled content and
+    // end up offscreen once the columns overflow. The host mounts its own instead, per
+    // the metrics above.
+    outer-scroll := ScrollView {
+        horizontal-scrollbar-policy: always-off;
+        vertical-scrollbar-policy: always-off;
+        viewport-height: self.height;
+
+        VerticalLayout {
+            spacing: Theme.pad-xs;
+
+            TrackListHeader {
+                w-number <=> root.w-number;
+                w-title <=> root.w-title;
+                w-artist <=> root.w-artist;
+                w-album <=> root.w-album;
+                w-genre <=> root.w-genre;
+                w-year <=> root.w-year;
+                w-length <=> root.w-length;
+                show-number: root.show-number;
+                show-artist: root.show-artist;
+                show-album: root.show-album;
+                show-genre: root.show-genre;
+                show-year: root.show-year;
+                total-w: root.total-w;
+                sort-field: root.sort-field;
+                sort-dir: root.sort-dir;
+                sortable: root.sortable;
+                sort-clicked(f) => { root.request-sort(f); }
+            }
+
+            inner-list := ListView {
+                vertical-stretch: 1;
+                vertical-scrollbar-policy: always-off;
+                width: root.total-w;
+                for r[idx] in root.rows: TrackListRowItem {
+                    row-data: r;
+                    row-index: idx;
+                    // Drives the per-corner radius gating, so contiguous selected rows
+                    // merge into one pill.
+                    prev-selected: idx > 0 && root.rows[idx - 1].selected;
+                    next-selected: idx < root.rows.length - 1 && root.rows[idx + 1].selected;
+                    w-number: root.w-number;
+                    w-title: root.w-title;
+                    w-artist: root.w-artist;
+                    w-album: root.w-album;
+                    w-genre: root.w-genre;
+                    w-year: root.w-year;
+                    w-length: root.w-length;
+                    show-number: root.show-number;
+                    show-artwork: root.show-artwork;
+                    show-artist: root.show-artist;
+                    show-album: root.show-album;
+                    show-genre: root.show-genre;
+                    show-year: root.show-year;
+                    number-mode: root.number-mode;
+                    sort-field: root.sort-field;
+                    sort-dir: root.sort-dir;
+                    row-count: root.rows.length;
+                    total-w: root.total-w;
+                    playing-track-id: root.playing-track-id;
+                    view-context: root.view-context;
+                    current-playlist-id: root.current-playlist-id;
+                    view-selected-ids: root.view-selected-ids;
+                    double-clicked-row => { root.play-row(r.id, idx); }
+                    toggle-favorite => { root.toggle-row-favorite([r.id], !r.is_favorite); }
+                    play-row(id, i) => { root.play-row(id, i); }
+                    play-next(ids) => { root.play-next(ids); }
+                    add-to-queue(ids) => { root.add-to-queue(ids); }
+                    toggle-row-favorite(ids, on) => { root.toggle-row-favorite(ids, on); }
+                    set-row-rating(ids, n) => { root.set-row-rating(ids, n); }
+                    select-row(i, id, sh, ct) => { root.select-row(i, id, sh, ct); }
+                    request-blur-search => { root.request-blur-search(); }
+                    go-to-album(aid) => { root.go-to-album(aid); }
+                    go-to-artist(aid) => { root.go-to-artist(aid); }
+                    go-to-genre(gid) => { root.go-to-genre(gid); }
+                }
+            }
+        }
+    }
+
+}

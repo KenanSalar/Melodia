@@ -1,0 +1,74 @@
+import { Theme } from "../../theme.slint";
+import { MaterialIcon } from "../material-icon.slint";
+
+// The settings page's labelled pill button — `icon-button.slint`'s sibling, in a
+// filled primary variant and an outline secondary one.
+export component SectionButton inherits Rectangle {
+    in property <string> label;
+    in property <string> icon;            // empty = no leading icon
+    in property <bool>   button-enabled: true;
+    in property <bool>   primary: true;   // false = outline / "text" variant
+    // Only meaningful on the filled variant, where it swaps both the fill and
+    // its ink to the destructive pair. Hover *brightens* that red rather than
+    // reaching for a second hue, which would read as a colour jump.
+    // `PillButton`'s `danger` is a different treatment entirely — neutral hover
+    // fill, tinted label — so don't read the two as one pattern.
+    in property <bool>   destructive;
+
+    callback clicked();
+
+    height: 32px;
+    horizontal-stretch: 0;
+    border-radius: self.height / 2;
+    background: !root.button-enabled
+        ? Theme.surface1
+        : (root.primary
+            ? (root.destructive
+                ? (touch.has-hover ? Theme.danger.brighter(10%) : Theme.danger)
+                : (touch.has-hover ? Theme.accent.brighter(10%) : Theme.accent))
+            : (touch.has-hover ? Theme.surface2 : Theme.surface1));
+    border-color: root.primary || !root.button-enabled
+        ? transparent
+        : Theme.surface2;
+    border-width: 1px;
+    opacity: root.button-enabled ? 1.0 : 0.5;
+    animate background { duration: Theme.dur-fast; easing: ease-in-out; }
+
+    HorizontalLayout {
+        padding-left: Theme.pad-md;
+        padding-right: Theme.pad-md;
+        spacing: Theme.pad-xs;
+        alignment: center;
+
+        if root.icon != "": VerticalLayout {
+            alignment: center;
+            MaterialIcon {
+                name: root.icon;
+                icon-size: 18px;
+                icon-color: root.primary
+                    ? (root.destructive ? Theme.danger-text : Theme.accent-text)
+                    : Theme.text;
+            }
+        }
+
+        VerticalLayout {
+            alignment: center;
+            Text {
+                text: root.label;
+                color: root.primary
+                    ? (root.destructive ? Theme.danger-text : Theme.accent-text)
+                    : Theme.text;
+                font-size: Theme.font-size-sm;
+                font-weight: 600;
+                vertical-alignment: center;
+            }
+        }
+    }
+
+    touch := TouchArea {
+        mouse-cursor: root.button-enabled ? pointer : default;
+        clicked => {
+            if (root.button-enabled) { root.clicked(); }
+        }
+    }
+}

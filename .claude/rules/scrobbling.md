@@ -6,7 +6,7 @@ paths:
   - src/library/favorites.rs
   - src/library/mbid.rs
   - src/ui/scrobbling_settings.rs
-  - ui/views/settings/scrobbling-section.slint
+  - melodia-ui/ui/views/settings/scrobbling-section.slint
 ---
 
 # Scrobbling — Last.fm + ListenBrainz, and love↔favorite sync

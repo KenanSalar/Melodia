@@ -1,0 +1,23 @@
+[package]
+name = "melodia-ui"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Compiled Slint UI for Melodia"
+publish = false
+
+[lib]
+# Same reason the root package sets it: nothing here is a doc example, and this
+# lib is `slint::include_modules!()` over a ~390k-line generated file. Without
+# it, the first `cargo test --workspace` sends rustdoc walking all of it.
+doctest = false
+
+[dependencies]
+slint.workspace = true
+
+[build-dependencies]
+slint-build.workspace = true
+
+[lints]
+workspace = true

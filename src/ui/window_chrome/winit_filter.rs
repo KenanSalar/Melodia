@@ -291,7 +291,7 @@ pub(super) fn install(app: &AppWindow, state: &AppState, drag_hover: Arc<AtomicB
             // Slint's inner `ListView` swallows the vertical wheel at its top
             // edge instead of bubbling to the outer scroller, so the strips/hero
             // can't be wheeled back once scrolled away (see `CompositeScroll` in
-            // globals.slint for the full root-cause note). There is no
+            // globals/shell.slint for the full root-cause note). There is no
             // Slint-native seam to intercept the wheel without eating row
             // clicks, so we do it here: only vertical-dominant wheel over a live
             // composite region is taken over and fed into that view's existing

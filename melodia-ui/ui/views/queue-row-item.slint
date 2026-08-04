@@ -1,0 +1,367 @@
+import { Theme } from "../theme.slint";
+import { Queue } from "../globals/queue.slint";
+import { QueueRow } from "../models.slint";
+import { MaterialIcon } from "../components/material-icon.slint";
+import { ArtworkImage } from "../components/artwork-image.slint";
+import { IconButton } from "../components/icon-button.slint";
+import { Checkbox } from "../components/checkbox.slint";
+
+// One fixed-height queue row: number-or-checkbox, artwork, title, duration, delete. The
+// number swaps to a checkbox on hover or selection, and the delete button fades in on
+// hover rather than mounting.
+//
+// **Selection is driven by the checkbox only** — a click on the row body is a no-op for
+// it. The whole-row TouchArea is reserved for drag-to-reorder, past a 4 px threshold,
+// and double-click skip-to.
+//
+// **The drag is hand-rolled rather than built on `DragArea` / `DropArea`.** Those
+// negotiate a drop onto a whole element: no insertion-slot granularity — the line has to
+// land in the *gap* between rows, picked from which half of a row the pointer is in —
+// and no edge auto-scroll. What they add over a TouchArea is a mime-typed payload for a
+// `can-drop` / `dropped` pair, in-process only on this stack, and a reorder has no
+// payload to carry. 1.16's `DragArea` doesn't even expose `dragging`, so it couldn't
+// drive the source-row ghost below.
+//
+// `moved` keeps firing after the pointer leaves the TouchArea's bounds — implicit
+// pointer capture, the same thing `track-list-header.slint`'s ResizeHandle relies on —
+// which is what makes `absolute-position.y + mouse-y` → row index reliable.
+export component QueueRowItem inherits Rectangle {
+    in property <QueueRow> row-data;
+    in property <int> row-index;
+    in property <length> list-y0;
+    in property <length> list-height;
+    in property <length> list-viewport-y;
+    // Owned by the host, so the slot math here and the host's drop indicator can't
+    // disagree about how tall a row is.
+    in property <length> row-height;
+    // Merge contiguous selected rows into one continuous pill; `QueueSheet` computes
+    // both from `Queue.rows[idx ± 1].selected`.
+    in property <bool> prev-selected;
+    in property <bool> next-selected;
+
+    property <bool> playing: root.row-index == Queue.current-index;
+    property <bool> is-drag-source: root.row-index == Queue.drag-source;
+    property <bool> selected: root.row-data.selected;
+    property <bool> show-checkbox: touch.has-hover || root.selected;
+
+    private property <length> press-abs-y;
+    private property <bool> drag-started: false;
+    // Defers the drag-source ghost so a single click — and especially a double-click's
+    // two quick press/release pairs — doesn't strobe the row dim and back. Started on
+    // press, cancelled on release, and pre-empted by a real drag crossing the threshold,
+    // which publishes `Queue.drag-source` directly.
+    private property <bool> arming-ghost: false;
+    ghost-arm-timer := Timer {
+        interval: Theme.dur-med;
+        running: root.arming-ghost;
+        triggered => {
+            // Skip the ghost when the press itself closed the sheet: the row outlives
+            // the close by the teardown delay, so publishing here would land *after*
+            // the close transition's reset with nothing left to clear it. Gated here
+            // rather than on `running`, so the pointer handlers stay the only writers of
+            // `arming-ghost` and the timer's lifetime follows its own flag — otherwise a
+            // global flipping underneath stops a still-armed timer that the next open
+            // restarts from zero.
+            if (Queue.open) {
+                Queue.drag-source = root.row-index;
+            }
+            root.arming-ghost = false;
+        }
+    }
+    // Window-absolute pointer Y, captured per `moved`, so the slot below can be reactive
+    // and the handler stays one line.
+    private property <length> cur-abs-y: 0px;
+    // The same point in the list's *content* space. A row sits on screen at
+    // `list-y0 + viewport-y + idx * row-height`, so recovering the index means taking
+    // the scroll offset back out — without it the slot walks off the moment the queue is
+    // scrolled while the host's indicator, which does account for it, points elsewhere.
+    private property <length> cur-list-y:
+        root.cur-abs-y - root.list-y0 - root.list-viewport-y;
+    private property <int> cur-row: clamp(
+        Math.floor(root.cur-list-y / root.row-height),
+        0,
+        max(0, Queue.rows.length - 1),
+    );
+    // Upper half inserts before the row, lower half after it. The clamp pins the slot to
+    // `[0, rows.length]`, so it can land in the after-last-row gap.
+    private property <bool> upper-half:
+        (root.cur-list-y - root.cur-row * root.row-height) < root.row-height / 2;
+    private property <int> computed-slot: clamp(
+        root.upper-half ? root.cur-row : root.cur-row + 1,
+        0,
+        Queue.rows.length,
+    );
+
+    callback request-scroll-by(length /*delta-y*/);
+
+    height: root.row-height;
+
+    // Inset so the rounded hover pill clears the card edges. The whole-row `TouchArea`
+    // lives **inside** chrome and **wraps** the cells layout, the `track-list-row.slint`
+    // pattern: that makes the checkbox and the delete button real descendants of
+    // `touch`, so deepest-wins hit-testing routes clicks to them first and falls through
+    // to `touch` only on empty cell area. Declared as a sibling instead, the inner
+    // TouchAreas are cousins, get none of that routing, and the row swallows every click.
+    chrome := Rectangle {
+        x: 8px;
+        width: parent.width - 16px;
+        height: parent.height;
+        // Merge contiguous selected rows into one pill; `TrackListRowItem` has the same
+        // gating.
+        border-top-left-radius: (root.selected && root.prev-selected) ? 0 : Theme.radius-md;
+        border-top-right-radius: (root.selected && root.prev-selected) ? 0 : Theme.radius-md;
+        border-bottom-left-radius: (root.selected && root.next-selected) ? 0 : Theme.radius-md;
+        border-bottom-right-radius: (root.selected && root.next-selected) ? 0 : Theme.radius-md;
+        background: root.selected
+            ? (touch.has-hover
+                ? Theme.accent.with-alpha(0.14)
+                : Theme.accent.with-alpha(0.08))
+            : (touch.has-hover ? Theme.surface0 : transparent);
+        // The drag ghost: dim enough that the still-painted source doesn't read as a
+        // live row, but not invisible — the faint silhouette is what tells the user
+        // which song they grabbed.
+        opacity: root.is-drag-source ? 0.4 : 1.0;
+
+        // Grabbing only while actually pressing, not on idle hover.
+        touch := TouchArea {
+            mouse-cursor: self.pressed ? grabbing : default;
+            double-clicked => {
+                if (!root.drag-started) {
+                    Queue.skip-to(root.row-index);
+                }
+            }
+            pointer-event(ev) => {
+                if (ev.kind == PointerEventKind.down && ev.button == PointerEventButton.left) {
+                    root.press-abs-y = self.absolute-position.y + self.pressed-y;
+                    root.drag-started = false;
+                    // Arm the ghost. The timer publishes `drag-source` a beat later so
+                    // double-clicks don't flicker; a move past the threshold pre-empts
+                    // it for an instant ghost on a real drag.
+                    root.arming-ghost = true;
+                    // -1 until the first `moved` past the threshold computes one; the
+                    // sheet's insertion line gates on `>= 0`, so nothing paints during
+                    // the press-only state.
+                    Queue.drop-slot = -1;
+                }
+                if (ev.kind == PointerEventKind.up && ev.button == PointerEventButton.left) {
+                    // Slot → `to` index; removing the source shifts higher indices down
+                    // by one. Both `slot == source` and `slot == source + 1` map to
+                    // `to == source` after that adjustment, so they're skipped.
+                    //
+                    // `drag-source == row-index` ties the commit to state nobody reset
+                    // behind our back. `drag-started` is per-row and survives a
+                    // close-then-reopen mid-press, after which `moved` refills
+                    // `drop-slot` while `drag-source` stays cleared — no indicator
+                    // paints, so committing there would reorder the queue invisibly.
+                    if (root.drag-started
+                        && Queue.drag-source == root.row-index
+                        && Queue.drop-slot >= 0
+                        && Queue.drop-slot != root.row-index
+                        && Queue.drop-slot != root.row-index + 1) {
+                        Queue.reorder(
+                            root.row-index,
+                            Queue.drop-slot <= root.row-index
+                                ? Queue.drop-slot
+                                : Queue.drop-slot - 1,
+                        );
+                    }
+                    root.arming-ghost = false;
+                    Queue.drag-source = -1;
+                    Queue.drop-slot = -1;
+                    root.drag-started = false;
+                }
+                if (ev.kind == PointerEventKind.cancel) {
+                    root.arming-ghost = false;
+                    Queue.drag-source = -1;
+                    Queue.drop-slot = -1;
+                    root.drag-started = false;
+                }
+            }
+            moved => {
+                if (self.pressed) {
+                    if (!root.drag-started
+                        && Math.abs((self.absolute-position.y + self.mouse-y) - root.press-abs-y) > 4px) {
+                        root.drag-started = true;
+                        // Pre-empt the delayed timer and publish now, so the dim
+                        // appears the instant motion is recognised.
+                        root.arming-ghost = false;
+                        Queue.drag-source = root.row-index;
+                    }
+                    // **Only the row holding `drag-source` may drive `drop-slot`.**
+                    // Anything clearing the pair from outside — the sheet's close reset,
+                    // a Rust rebuild — ends this row's drag, and a per-row
+                    // `drag-started` alone would keep refilling the slot afterwards. The
+                    // branch above assigns `drag-source` on the same event, so a real
+                    // drag-start still passes.
+                    if (root.drag-started && Queue.drag-source == root.row-index) {
+                        // Stashing the pointer Y is enough — `cur-list-y`, `cur-row`,
+                        // `upper-half` and `computed-slot` all recompute reactively.
+                        root.cur-abs-y = self.absolute-position.y + self.mouse-y;
+                        Queue.drop-slot = root.computed-slot;
+                        if (root.list-height > 0px) {
+                            if ((self.absolute-position.y + self.mouse-y) - root.list-y0 < 40px) {
+                                root.request-scroll-by(-6px);
+                            } else if (((root.list-y0 + root.list-height)
+                                        - (self.absolute-position.y + self.mouse-y)) < 40px) {
+                                root.request-scroll-by(6px);
+                            }
+                        }
+                    }
+                }
+            }
+
+            HorizontalLayout {
+                padding-left: Theme.pad-md;
+                padding-right: Theme.pad-md;
+                spacing: 10px;
+                alignment: stretch;
+
+                // Fixed width, with the number by default and the checkbox swapping in
+                // on hover or selection.
+                Rectangle {
+                    width: 28px;
+                    if !root.show-checkbox: VerticalLayout {
+                        alignment: center;
+                        HorizontalLayout {
+                            alignment: center;
+                            Text {
+                                text: root.row-index + 1;
+                                // `Theme.text` throughout, as in the track lists: same
+                                // body copy on the same background, and reading dimmer
+                                // than the lists behind the sheet is the one thing
+                                // these rows shouldn't do.
+                                color: root.playing ? Theme.accent : Theme.text;
+                                font-size: Theme.font-size-row;
+                                horizontal-alignment: center;
+                            }
+                        }
+                    }
+                    if root.show-checkbox: VerticalLayout {
+                        alignment: center;
+                        HorizontalLayout {
+                            alignment: center;
+                            Rectangle {
+                                width: 16px;
+                                height: 16px;
+                                Checkbox {
+                                    checked: root.selected;
+                                }
+                                // Selection is the checkbox's alone; the row body is
+                                // unbound. Modifiers ride through `ev.modifiers`.
+                                cb-touch := TouchArea {
+                                    mouse-cursor: pointer;
+                                    pointer-event(ev) => {
+                                        if (ev.kind == PointerEventKind.up
+                                            && ev.button == PointerEventButton.left) {
+                                            Queue.toggle-select(
+                                                root.row-index,
+                                                ev.modifiers.control || !ev.modifiers.shift,
+                                                ev.modifiers.shift,
+                                            );
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Artwork tile.
+                VerticalLayout {
+                    alignment: center;
+                    ArtworkImage {
+                        artwork-path: root.row-data.artwork_path;
+                        cover: Queue.request-cover(root.row-data.artwork_path,
+                                                   Queue.covers-generation);
+                        tile-size: 36px;
+                        tile-radius: Theme.radius-sm;
+                    }
+                }
+
+                // The `track-list-row.slint` title-cell pattern: `horizontal-stretch: 1`
+                // on the wrapping layout is what makes `overflow: elide` fire at all,
+                // since without it the inner layout falls back to the Text's intrinsic
+                // width — the full title — and elide never triggers. The right padding
+                // is breathing room between the ellipsis and the duration, which
+                // otherwise butt against each other across the layout's spacing.
+                VerticalLayout {
+                    horizontal-stretch: 1;
+                    alignment: center;
+                    padding-right: Theme.pad-md;
+                    Text {
+                        // The LRM forces an LTR base direction, so the ellipsis anchors
+                        // right whatever the script — as in `track-list-row.slint`.
+                        text: "‎" + root.row-data.title;
+                        color: root.playing ? Theme.accent : Theme.text;
+                        font-size: Theme.font-size-row;
+                        horizontal-alignment: left;
+                        overflow: elide;
+                    }
+                }
+
+                // The track-list length-cell pattern: duration by default, swapping to a
+                // heart on hover. The `min-width` keeps the cell wide enough that the
+                // heart lands where the duration's right edge was, and `alignment: end`
+                // right-aligns both states; an `h:mm:ss` duration expands it naturally.
+                Rectangle {
+                    min-width: 50px;
+                    clip: true;
+                    HorizontalLayout {
+                        alignment: end;
+                        if !touch.has-hover: VerticalLayout {
+                            alignment: center;
+                            Text {
+                                text: root.row-data.display_duration;
+                                color: Theme.text;
+                                font-size: Theme.font-size-sm;
+                                horizontal-alignment: right;
+                            }
+                        }
+                        if touch.has-hover: Rectangle {
+                            width: 26px;
+                            height: 26px;
+                            y: (parent.height - self.height) / 2;
+                            border-radius: self.height / 2;
+                            background: fav-touch.has-hover ? Theme.surface1 : transparent;
+                            MaterialIcon {
+                                x: (parent.width - self.width) / 2;
+                                y: (parent.height - self.height) / 2;
+                                name: root.row-data.is_favorite ? "favorite" : "favorite_border";
+                                icon-size: 18px;
+                                icon-color: root.row-data.is_favorite ? Theme.red : Theme.subtext0;
+                                filled: root.row-data.is_favorite;
+                            }
+                            fav-touch := TouchArea {
+                                mouse-cursor: pointer;
+                                clicked => {
+                                    Queue.toggle-row-favorite(
+                                        root.row-data.id,
+                                        !root.row-data.is_favorite,
+                                    );
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Always laid out, snapping via opacity to match the checkbox's instant
+                // swap — a fade leaves trails as the pointer sweeps across rows.
+                VerticalLayout {
+                    alignment: center;
+                    Rectangle {
+                        width: 26px;
+                        height: 26px;
+                        opacity: touch.has-hover ? 1.0 : 0.0;
+                        IconButton {
+                            diameter: 26px;
+                            icon-size: 18px;
+                            icon: "close";
+                            hover-fg: Theme.danger;
+                            clicked => { Queue.remove(root.row-index); }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

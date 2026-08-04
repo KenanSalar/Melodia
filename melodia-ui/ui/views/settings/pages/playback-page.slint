@@ -1,0 +1,29 @@
+import { Theme } from "../../../theme.slint";
+import { SettingsPage } from "../../../globals/settings-page.slint";
+import { PlaybackSection } from "../playback-section.slint";
+
+// Playback tab, one card today. It keeps its own file anyway, so the router
+// treats all five tabs identically and a second card is one line here.
+export component PlaybackPage inherits Rectangle {
+    background: transparent;
+    horizontal-stretch: 1;
+    vertical-stretch: 0;
+
+    out property <bool> has-matches: pb.has-matches;
+
+    // See `library-page.slint` for why the cards live in columns that place
+    // themselves. One card is one column, so a wide body leaves the second
+    // column empty rather than splitting it — and the shape still matches the
+    // other four pages, which is what keeps that second card cheap.
+    GridLayout {
+        spacing: Theme.pad-lg;
+
+        VerticalLayout {
+            row: SettingsPage.grid-row(0); col: SettingsPage.grid-col(0);
+            alignment: start;
+            spacing: Theme.pad-lg;
+
+            pb := PlaybackSection { tab-name: @tr("Playback"); }
+        }
+    }
+}

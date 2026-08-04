@@ -1,0 +1,99 @@
+import { ArtistRow, ArtistGridRow, AlbumRow, TrackListRow } from "../models.slint";
+
+// The Artist grid, on the `Albums` ownership contract — Rust owns the flat list and
+// neither the filter nor the sort hits the DB.
+export global Artists {
+    in-out property <[ArtistGridRow]> grid-rows;
+    in-out property <int> total-count;
+    in-out property <int> columns: 4;
+    in-out property <string> filter;
+    in-out property <string> sort-field: "name";   // "name" | "track_count" | "album_count"
+    in-out property <string> sort-dir: "asc";
+    in-out property <int> blur-search-tick: 0;
+
+    callback columns-changed(int);
+    callback apply-filter(string);
+    callback request-sort(string /*field*/);
+    callback open-artist(int /*artist_id*/);
+    pure callback request-cover(string /*image_path*/) -> image;
+    callback section-active-changed(bool);
+}
+
+// The Artist Detail view, on the `AlbumDetail` shape plus an `albums` list driving the
+// horizontal sub-section above the track list, and an `open-album` that navigates
+// cross-tab. **The column defaults invert Album Detail's** — `show-album` on because
+// tracks span albums, `show-artist` off because every row is the same artist — and the
+// default sort is by album, so tracks group naturally.
+export global ArtistDetail {
+    in-out property <int> artist-id: -1;
+    in-out property <ArtistRow> artist;
+    in-out property <[AlbumRow]> albums;
+    in-out property <[TrackListRow]> tracks;
+
+    in-out property <length> w-number: 56px;
+    in-out property <length> w-title: 320px;
+    in-out property <length> w-artist: 200px;
+    in-out property <length> w-album: 220px;
+    in-out property <length> w-genre: 140px;
+    in-out property <length> w-year: 72px;
+    in-out property <length> w-length: 88px;
+
+    in-out property <bool> show-number: false;
+    in-out property <bool> show-artist: false;
+    in-out property <bool> show-album: true;
+    in-out property <bool> show-genre: true;
+    in-out property <bool> show-year: true;
+    in-out property <bool> show-artwork: true;
+
+    // Sorted in memory, as Album Detail is.
+    in-out property <string> sort-field: "album";
+    in-out property <string> sort-dir: "asc";
+
+    in-out property <[int]> selected-ids;
+    in-out property <int> selection-anchor: -1;
+
+    // The `AlbumDetail` dual-slot contract, so switching artists never flashes.
+    in-out property <image> cover;
+    in-out property <image> blur-img-a;
+    in-out property <image> blur-img-b;
+    in-out property <bool>  blur-use-a;
+    in-out property <bool>  has-blur;
+
+    in-out property <bool> albums-collapsed: false;
+
+    // The hero SearchBar's needle, filtering **both** the track list and the Albums
+    // sub-section. Cleared on a fresh open, preserved across library-changed refreshes.
+    in-out property <string> filter;
+    in-out property <int>    blur-search-tick: 0;
+
+    // `AlbumDetail.origin-nav-index`, so cross-tab back-nav takes the same atomic
+    // flip-Nav-then-clear-id path.
+    in-out property <int> origin-nav-index: -1;
+
+    callback close-detail();
+    callback shuffle-artist();
+    callback play-row(int /*track_id*/, int /*index*/);
+    callback play-next([int] /*track_ids*/);
+    callback add-to-queue([int]);
+    callback toggle-row-favorite([int] /*track_ids*/, bool /*new*/);
+    callback set-row-rating([int] /*track_ids*/, int /*rating*/);
+    callback select-row(int /*idx*/, int /*id*/, bool /*shift*/, bool /*ctrl*/);
+    callback clear-selection();
+    callback request-sort(string /*field*/);
+    callback toggle-column(string /*column_id*/);
+    // Cross-tab navigation from a row's right-click "Go to …" entry.
+    callback go-to-album(int /*album_id*/);
+    callback go-to-artist(int /*artist_id*/);
+    callback go-to-genre(int /*genre_id*/);
+
+    // Rust flips `Nav.selected-index` to Albums *and* opens that album's detail.
+    callback open-album(int /*album_id*/);
+    // **Borrows `AlbumsUi`'s grid tier** rather than keeping a cache of its own — which
+    // is why `wire_artists` releases it on both Artists section-leave and detail close.
+    pure callback request-album-cover(string /*artwork_path*/) -> image;
+    // Rust negates and persists, so Slint only fires the event.
+    callback toggle-albums-collapsed();
+
+    // Rust re-walks the cached tracks *and* albums and pushes both filtered models.
+    callback filter-changed(string);
+}

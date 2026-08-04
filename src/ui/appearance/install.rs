@@ -219,11 +219,5 @@ pub fn install(ui: &AppWindow, state: &AppState) -> Result<AppearanceHandles, Ap
     window_settings::wire_overflow_buttons_changed(ui, state);
     window_settings::wire_close_to_tray_changed(ui, state);
 
-    // Settings page search predicate. Slint 1.16 has no `.contains()` on
-    // string, so each section's row-visibility expression routes through
-    // this pure callback.
-    ui.global::<Settings>()
-        .on_matches(|haystack, needle| haystack.to_lowercase().contains(&needle.to_lowercase()));
-
     Ok(AppearanceHandles { os_state, kick_tx, repaint_tx })
 }

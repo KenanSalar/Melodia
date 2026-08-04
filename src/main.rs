@@ -92,7 +92,20 @@ fn main() -> AppResult<()> {
     // thread does its first malloc; `env_logger::init()` and the tokio
     // runtime builder both allocate, so staying first in `main()` covers it.
     //
-    // `M_ARENA_MAX = -8` per glibc's `malloc.h`.
+    // The other two calls freeze the mmap and trim thresholds, which glibc
+    // otherwise moves on its own: freeing an mmap'd block raises the mmap
+    // threshold to that block's size and the trim threshold to twice it. One
+    // large short-lived allocation — a full-resolution cover decode, say — is
+    // enough to leave the threshold above every later one, and those then come
+    // off the arena free list instead of mmap, where freeing them hands nothing
+    // back to the kernel. Setting either parameter explicitly disables the
+    // adjustment; the values below are glibc's own initial ones, so this pins
+    // the behaviour the process starts with rather than tuning it. The trade is
+    // more minor faults (every allocation past the threshold is a fresh mmap)
+    // for less resident anonymous memory, which is the direction this app wants.
+    //
+    // `M_TRIM_THRESHOLD = -1`, `M_MMAP_THRESHOLD = -3` and `M_ARENA_MAX = -8`
+    // per glibc's `malloc.h`.
     #[cfg(all(target_os = "linux", target_env = "gnu"))]
     #[allow(
         unsafe_code,
@@ -100,6 +113,8 @@ fn main() -> AppResult<()> {
     )]
     unsafe {
         libc::mallopt(-8, 2);
+        libc::mallopt(-3, 128 * 1024);
+        libc::mallopt(-1, 128 * 1024);
     }
 
     // Give PipeWire's ALSA-compat layer a clean stream name. CPAL (via

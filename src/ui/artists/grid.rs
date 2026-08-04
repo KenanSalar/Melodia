@@ -1,9 +1,7 @@
 //! Artists grid: DB fetch + filter / sort / chunk / prewarm logic, plus
 //! the display-aware cover-cache cap tuner. Mirrors `src/ui/albums/grid.rs`.
 
-use std::num::NonZeroUsize;
 use std::path::PathBuf;
-use std::rc::Rc;
 use std::sync::Arc;
 
 use slint::{ComponentHandle, Model, ModelRc, VecModel, Weak};
@@ -15,9 +13,10 @@ use super::{ArtistsUi, to_slint_artist_row};
 use crate::error::AppResult;
 use crate::library;
 use crate::state::AppState;
-use crate::{
-    AppWindow, ArtistGridRow as UiArtistGridRow, ArtistRow as UiArtistRow, Artists,
-};
+use crate::ui::grid_rows::chunk_rows;
+use crate::ui::row_match;
+use crate::ui::util::len_as_i32;
+use crate::{AppWindow, ArtistGridRow as UiArtistGridRow, Artists};
 
 /// Fetch the artist list from the DB into `artists_ui.grid.data`, prewarm
 /// cover thumbnails, then rebuild the grid model on the UI thread.
@@ -77,7 +76,7 @@ pub fn rebuild_grid(ui: &AppWindow, artists_ui: &ArtistsUi) {
         let indices = cache.as_ref().map_or(&[][..], |c| c.indices.as_slice());
         chunk_indices(&data, indices, columns)
     };
-    let total = i32::try_from(data.artists.len()).unwrap_or(i32::MAX);
+    let total = len_as_i32(data.artists.len());
 
     g.set_total_count(total);
     let model = g.get_grid_rows();
@@ -96,14 +95,17 @@ pub(super) fn compute_indices(
     sort_dir: &str,
     filter: &str,
 ) -> Vec<usize> {
-    let needle = filter.trim().to_lowercase();
+    let needle = row_match::fold_needle(filter);
     let mut indices: Vec<usize> = if needle.is_empty() {
         (0..data.artists.len()).collect()
     } else {
-        data.keys
+        data.artists
             .iter()
             .enumerate()
-            .filter(|(_, k)| k.name_lc.contains(&needle) || k.sort_name_lc.contains(&needle))
+            .filter(|(_, a)| {
+                needle.contains(&a.name)
+                    || a.sort_name.as_deref().is_some_and(|s| needle.contains(s))
+            })
             .map(|(i, _)| i)
             .collect()
     };
@@ -114,18 +116,12 @@ pub(super) fn compute_indices(
 /// Chunk a display-order index list into rows of `columns` `ArtistRow`
 /// cards. Pure; only step a `columns-changed` rebuild has to redo.
 fn chunk_indices(data: &GridData, indices: &[usize], columns: i32) -> Vec<UiArtistGridRow> {
-    let cols = usize::try_from(columns.max(1)).unwrap_or(1);
-    let mut rows: Vec<UiArtistGridRow> = Vec::with_capacity(indices.len().div_ceil(cols));
-    for chunk in indices.chunks(cols) {
-        let cards: Vec<UiArtistRow> = chunk
-            .iter()
-            .map(|&i| to_slint_artist_row(&data.artists[i]))
-            .collect();
-        rows.push(UiArtistGridRow {
-            artists: ModelRc::from(Rc::new(VecModel::from(cards))),
-        });
-    }
-    rows
+    chunk_rows(
+        indices,
+        columns,
+        |&i| to_slint_artist_row(&data.artists[i]),
+        |artists| UiArtistGridRow { artists },
+    )
 }
 
 /// Sort `indices` into the grid data by the chosen field. Numeric sorts
@@ -146,73 +142,27 @@ fn sort_artist_indices(indices: &mut [usize], data: &GridData, field: &str, dir:
     }
 }
 
-/// The deduplicated artwork paths of the first `GRID_PREWARM_AHEAD`
-/// (name-sorted) artists' covers — the ones first on screen.
+/// The first `GRID_PREWARM_AHEAD` distinct artist images in display
+/// (name-sorted) order. The cap counts kept *paths*, which matters more
+/// here than on the album grid: most artists have no image, so this walks
+/// well past the first screenful to find that many rather than prewarming
+/// the two or three the opening rows happen to carry.
 pub(super) fn first_screenful_paths(data: &GridData) -> Vec<PathBuf> {
     crate::ui::grid_prewarm::unique_artwork_paths(
-        data.artists
-            .iter()
-            .take(GRID_PREWARM_AHEAD)
-            .map(|a| a.image_path.as_deref()),
+        data.artists.iter().map(|a| a.image_path.as_deref()),
+        GRID_PREWARM_AHEAD,
     )
 }
 
 // --- Cap tuning -----------------------------------------------------------
 
-/// Estimate a sensible grid-cover LRU capacity for a display of the given
-/// *logical* pixel dimensions. Same shape as
-/// `albums::grid::compute_album_cover_cap` — artist cards land at roughly
-/// the same on-screen size, so the tunables match.
-pub(super) fn compute_artist_cover_cap(logical_w: u32, logical_h: u32) -> NonZeroUsize {
-    const CARD_FOOTPRINT_W: u32 = 260;
-    const ROW_FOOTPRINT_H: u32 = 320;
-    const MIN_CAP: usize = 32;
-    const MAX_CAP: usize = 96;
-
-    let cols = (logical_w / CARD_FOOTPRINT_W).max(1);
-    let rows = logical_h.div_ceil(ROW_FOOTPRINT_H) + 1;
-    let visible = usize::try_from(cols.saturating_mul(rows)).unwrap_or(MAX_CAP);
-    let cap = visible.clamp(MIN_CAP, MAX_CAP);
-    NonZeroUsize::new(cap).unwrap_or(DEFAULT_GRID_COVER_CAP)
-}
-
-#[allow(
-    clippy::cast_possible_truncation,
-    clippy::cast_sign_loss,
-    reason = "logical screen extent stays well below u32::MAX; this is the saturating boundary"
-)]
-fn logical_dim(physical: u32, scale: f64) -> u32 {
-    let scale = if scale > 0.0 { scale } else { 1.0 };
-    let v = (f64::from(physical) / scale).round();
-    if v.is_nan() || v <= 0.0 {
-        physical
-    } else if v >= f64::from(u32::MAX) {
-        u32::MAX
-    } else {
-        v as u32
-    }
-}
-
-fn artist_cover_cap_for_window(app: &AppWindow) -> NonZeroUsize {
-    use slint::winit_030::WinitWindowAccessor;
-
-    app.window()
-        .with_winit_window(|w| {
-            let monitor = w.current_monitor()?;
-            let physical = monitor.size();
-            let scale = w.scale_factor();
-            Some(compute_artist_cover_cap(
-                logical_dim(physical.width, scale),
-                logical_dim(physical.height, scale),
-            ))
-        })
-        .flatten()
-        .unwrap_or(DEFAULT_GRID_COVER_CAP)
-}
-
-/// Retune the grid-tier cover cache to the real display resolution.
+/// Retune the grid-tier cover cache to the real display resolution. Called
+/// once at startup after the winit window is live (`main.rs`); the cache is
+/// constructed with `DEFAULT_GRID_COVER_CAP` and resized here. The
+/// detail-tier `(cover, blur)` pair cache keeps its small fixed cap (see
+/// [`crate::ui::detail_artwork`]).
 pub fn tune_cache_for_display(app: &AppWindow, artists_ui: &ArtistsUi) {
-    let cap = artist_cover_cap_for_window(app);
+    let cap = crate::ui::grid_prewarm::cover_cap_for_window(app, DEFAULT_GRID_COVER_CAP);
     artists_ui.grid_covers.resize(cap);
     log::debug!("ui::artists artist-cover cache cap tuned to {cap}");
 }

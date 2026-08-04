@@ -41,7 +41,7 @@ ReplayGain pre-gain → EQ bands → limiter → clamp → crossfade ramp → Vi
 `visualizer.rs` and `spectrum.rs` argue the design in their `//!` docs and justify
 every tuning constant at its definition; `waveform.rs` does the same for the trace.
 The UI half — arming, window-visibility gating, styles — is `.claude/rules/visualizer.md`,
-which spans `src/ui/visualizer/` and the strip's `.slint` under `ui/`.
+which spans `src/ui/visualizer/` and the strip's `.slint` under `melodia-ui/ui/`.
 What lives here is what crosses modules:
 
 - **The tap is read-only and bit-identical.** `VisualizerTap<S>` wraps `EqSource` — after the bands, ReplayGain, the limiter's clamp and the crossfade ramp, but *before* rodio's speed/pause/volume wrappers, so the volume slider can't flatten the bars. Wrapping rather than living inside `EqSource` is what keeps that module's `frame_phase == 0` poll gate and bypass path clear of a change with nothing to do with them. (Clementine's per-pipeline probe and Audacious's post-effect, pre-volume vis buffer tap at the same point.)

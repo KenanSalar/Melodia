@@ -3,7 +3,7 @@
 
 use std::sync::Arc;
 
-use melodia::{AppWindow, ArtistDetail, Favorites, Nav, Player, media, services, state::AppState, ui};
+use melodia::{AppWindow, ArtistDetail, Nav, Player, media, services, state::AppState, ui};
 use slint::ComponentHandle;
 
 /// Hydrate Slint's bundled-translation runtime from the persisted
@@ -63,6 +63,28 @@ pub fn install_views(
     state: &AppState,
     startup_view_state: Option<&services::view_state::ViewStateData>,
 ) -> UiHandles {
+    // 5a. The persisted nav index, *before* any `wire_*` runs. Each of the nine
+    // section handles seeds its synchronous `section_active` shadow by reading
+    // `Nav.selected-index` at wire time, so hydrating afterwards left every one
+    // of them holding the answer for the global's declared default (3, Tracks)
+    // rather than the section actually being restored. They then depended on
+    // `SectionActiveGate`'s `changed` firing to correct themselves, and that is
+    // not something it can be relied on for: its `ChangeTracker` is evaluated
+    // inside `AppWindow::new()` and adopts that first reading *silently*, so it
+    // becomes the baseline rather than an edge. The restored section recovered
+    // (its gate still had a false→true to deliver); `TracksUi` did not, and sat
+    // marked active for a hidden view all session — see the `SectionActiveGate`
+    // bullet in `.claude/rules/ui-patterns.md` for the cost that carries.
+    //
+    // The Favorites *tab* still seeds down at `seed_tab` beside the detail
+    // views: it needs the `favorites_ui` handle, which doesn't exist yet here.
+    if let Some(vs) = startup_view_state {
+        let idx = vs.last_nav_index;
+        if (0..=9).contains(&idx) {
+            app.global::<Nav>().set_selected_index(idx);
+        }
+    }
+
     ui::callbacks::wire_all(app, state);
 
     // 5b. Tracks view.
@@ -91,7 +113,7 @@ pub fn install_views(
     ui::callbacks::wire_browse(app, state, &browse_ui);
     ui::browse::seed_from_settings(app, state, &browse_ui);
 
-    // 5c2. Albums view.
+    // 5c2a. Albums view.
     ui::albums::install_albums_models(app);
     let albums_ui = Arc::new(ui::albums::AlbumsUi::new(cover_thumbs.clone()));
     ui::callbacks::wire_albums(app, state, &albums_ui);
@@ -168,12 +190,15 @@ pub fn install_views(
     *state.ui_handles.genres.lock() = Some(genres_ui.clone());
     *state.ui_handles.playlists.lock() = Some(playlists_ui.clone());
 
-    // 5c2a. Hydrate persisted nav state.
+    // 5c2h. The Favorites tab seeds here rather than in
+    // `hydrate_ui_from_settings` with its siblings, because it seeds two
+    // things: the Slint property *and* `FavoritesUi`'s synchronous shadow,
+    // which the off-thread fetchers read to decide which cover tier to warm.
+    // That handle is in scope here and deliberately dropped by the time
+    // hydration runs. (The nav index itself is hydrated at the top of this
+    // function — see the note there.)
     if let Some(vs) = startup_view_state {
-        let idx = vs.last_nav_index;
-        if (0..=9).contains(&idx) {
-            app.global::<Nav>().set_selected_index(idx);
-        }
+        ui::favorites::seed_tab(app, &favorites_ui, vs.favorites_tab);
     }
     ui::albums::seed_detail_from_settings(app, state, &albums_ui);
     ui::artists::seed_detail_from_settings(app, state, &artists_ui);
@@ -185,10 +210,11 @@ pub fn install_views(
     // empty on a boot that lands on a section with no persisted detail
     // (Tracks / Browse / Favorites / Search / fresh install), so the
     // first sidebar nav records only the destination and `back()` returns
-    // `None`. Reads `Nav.selected-index` (just set above) and the section
-    // detail global (still `-1` — the async `seed_detail_from_settings`
-    // futures haven't run yet); the async future's own `record_current`
-    // appends a `{section, Some(id)}` entry on top once it lands.
+    // `None`. Reads `Nav.selected-index` (hydrated in 5a, at the top of this
+    // function) and the section detail global (still `-1` — the async
+    // `seed_detail_from_settings` futures haven't run yet); the async
+    // future's own `record_current` appends a `{section, Some(id)}` entry on
+    // top once it lands.
     ui::nav_history::record_current(state, app);
 
     // 5c3. Now-Playing favourite heart + star rating fan into every per-row cache.
@@ -198,11 +224,14 @@ pub fn install_views(
     ui::callbacks::wire_now_playing_rating(
         app, state, &tracks_ui, &browse_ui, &albums_ui, &artists_ui, &genres_ui,
     );
-    // Retune the album-tier + artist-tier + playlist-tier cover LRUs
-    // to the real display. Genres has no cover cache, so no tuning step.
+    // Retune every grid-tier cover LRU to the real display — same band for
+    // all of them, since they all draw the same card at the same size (see
+    // `ui::grid_prewarm::cover_cap`). Genres has no cover cache, so no
+    // tuning step.
     ui::albums::tune_cache_for_display(app, &albums_ui);
     ui::artists::tune_cache_for_display(app, &artists_ui);
     ui::playlists::tune_cache_for_display(app, &playlists_ui);
+    ui::favorites::tune_cache_for_display(app, &favorites_ui);
 
     // `browse_ui` / `favorites_ui` / `search_ui` are deliberately dropped here:
     // their `wire_*` closures each hold a strong `Arc` clone, so the objects
@@ -240,6 +269,8 @@ pub fn install_library_settings_and_friends(
     ui::file_watching::install(app, state, &notifications);
     ui::updater_settings::install(app, state);
     ui::about::install(app, state);
+    ui::settings_page::install(app, state);
+    ui::hero_chips::install(app);
     Ok(notifications)
 }
 
@@ -262,7 +293,7 @@ pub fn seed_initial_view_model(
     // Seed the position scalars from the snapshot so a freshly-restored
     // session shows the saved position immediately, before the first
     // playback-monitor tick lands. Position scalars live outside `vm` —
-    // see `ui/models.slint` for the rationale.
+    // see `melodia-ui/ui/models.slint` for the rationale.
     let pos = i32::try_from(light.position_ms).unwrap_or(i32::MAX);
     let dur = i32::try_from(light.duration_ms).unwrap_or(i32::MAX);
     player.set_position_ms(pos);
@@ -335,14 +366,12 @@ pub fn hydrate_ui_from_settings(
     ui::track_list_view::hydrate_search_view(app, vs);
     app.global::<ArtistDetail>()
         .set_albums_collapsed(vs.artist_albums_collapsed);
-    let fav = app.global::<Favorites>();
-    fav.set_artists_collapsed(vs.favorites_artists_collapsed);
-    fav.set_most_played_collapsed(vs.favorites_most_played_collapsed);
+    ui::settings_page::seed_tab(app, vs.settings_tab);
 }
 
 /// The Slint side already clamps `Nav.sidebar-width` to
 /// `[Theme.sidebar-min-w, Theme.sidebar-max-w]` at the use site
-/// (`ui/layout/sidebar.slint`), so no Rust-side clamp is needed.
+/// (`melodia-ui/ui/layout/sidebar.slint`), so no Rust-side clamp is needed.
 fn apply_sidebar_width(app: &AppWindow, settings: &services::settings::SettingsData) {
     // Persisted sidebar width is f64 (settings.json) — Slint uses f32. Widths
     // are tens-to-hundreds of pixels, well within f32 precision.
@@ -590,3 +619,7 @@ pub fn install_toast_bridge(
     .map(|_| ())
     .map_err(|e| melodia::error::AppError::Window(format!("toast bridge: {e}")))
 }
+
+#[cfg(test)]
+#[path = "tests/ui_setup_tests.rs"]
+mod tests;

@@ -19,7 +19,7 @@
 //!
 //! What still reports as system-managed (hiding the UI and surfacing the
 //! "managed by your package manager" hint in
-//! `ui/views/settings/update-section.slint`):
+//! `melodia-ui/ui/views/settings/update-section.slint`):
 //!
 //!   - A tarball hand-dropped under a root-owned directory (`/opt/melodia/`) —
 //!     no package manager owns the file, so none can drive the update. The

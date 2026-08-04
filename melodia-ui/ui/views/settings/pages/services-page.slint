@@ -1,0 +1,36 @@
+import { Theme } from "../../../theme.slint";
+import { SettingsPage } from "../../../globals/settings-page.slint";
+import { ScrobblingSection } from "../scrobbling-section.slint";
+import { DiscordSection } from "../discord-section.slint";
+
+// The outside accounts Melodia talks to: the two scrobbling services — with
+// MusicBrainz ID tagging riding on one of them — and Discord Rich Presence.
+export component ServicesPage inherits Rectangle {
+    background: transparent;
+    horizontal-stretch: 1;
+    vertical-stretch: 0;
+
+    out property <bool> has-matches: scrobbling.has-matches || discord.has-matches;
+
+    // See `library-page.slint` for why the cards live in columns that place
+    // themselves.
+    GridLayout {
+        spacing: Theme.pad-lg;
+
+        VerticalLayout {
+            row: SettingsPage.grid-row(0); col: SettingsPage.grid-col(0);
+            alignment: start;
+            spacing: Theme.pad-lg;
+
+            scrobbling := ScrobblingSection { tab-name: @tr("Services"); }
+        }
+
+        VerticalLayout {
+            row: SettingsPage.grid-row(1); col: SettingsPage.grid-col(1);
+            alignment: start;
+            spacing: Theme.pad-lg;
+
+            discord := DiscordSection { tab-name: @tr("Services"); }
+        }
+    }
+}

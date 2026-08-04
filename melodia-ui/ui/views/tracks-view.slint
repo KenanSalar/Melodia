@@ -1,0 +1,185 @@
+import { Theme } from "../theme.slint";
+import { Player } from "../globals/player.slint";
+import { Tracks } from "../globals/tracks.slint";
+import { SearchBar } from "../components/search-bar.slint";
+import { ActionPill, PillLabel, PillButton, PillDivider } from "../components/action-pill.slint";
+import { ColumnTogglePopup } from "../components/track-list/column-toggle-popup.slint";
+import { TrackList } from "../components/track-list/track-list.slint";
+import { OverlayScrollbar } from "../components/overlay-scrollbar.slint";
+import { FilterThrottle } from "../components/filter-throttle.slint";
+
+// The page-header chrome — title, count, filter, action pill — over the shared
+// `TrackList`, bound to the per-view global. Every other list view mirrors this shape
+// with its own global.
+export component TracksView inherits Rectangle {
+    // No own background — the parent content panel owns the rounded
+    // `Theme.base` fill, and a transparent root lets that fill show
+    // through at the rounded corner cells.
+
+    // **A throttle rather than a pure debounce**, so the user sees partial results while
+    // typing fast over a huge library. Each rebuild is cheap — an `Arc`-bumped snapshot
+    // over pre-folded keys — so the cadence sits below "feels laggy" while collapsing
+    // hundreds of allocations per keystroke into roughly one per fire.
+    property <int> filter-tick-pending: 0;
+
+    filter-throttle := FilterThrottle {
+        pending: root.filter-tick-pending;
+        fire() => { Tracks.apply-filter(Tracks.filter); }
+    }
+
+    // Catches any click no inner TouchArea consumes — the padding, the gaps between
+    // cells — and bumps the blur tick.
+    TouchArea {
+        clicked => { Tracks.blur-search-tick += 1; }
+    }
+
+    VerticalLayout {
+        // **Three sides, never uniform.** A uniform pad also pads the *bottom*, which
+        // sits outside the list's viewport and reads as a dead strip of page background
+        // above the panel border — with the last row clipped against the viewport edge
+        // rather than scrolling clear of it. The detail views inset the same three.
+        padding-left: Theme.pad-lg;
+        padding-right: Theme.pad-lg;
+        padding-top: Theme.pad-lg;
+        spacing: Theme.pad-md;
+
+        HorizontalLayout {
+            vertical-stretch: 0;
+            spacing: Theme.pad-md;
+            alignment: stretch;
+
+            // Stacked rather than inline: an inline "Tracks • N songs" hit the
+            // baseline-versus-box-centre mismatch and read as misaligned.
+            VerticalLayout {
+                alignment: center;
+                spacing: 0;
+                Text {
+                    text: @tr("Tracks");
+                    color: Theme.page-title-color;
+                    font-size: Theme.page-title-size;
+                    font-weight: Theme.page-title-weight;
+                }
+                Text {
+                    // Plural form: singular/plural picked by count via gettext.
+                    text: @tr("{n} song" | "{n} songs" % Tracks.total-count);
+                    color: Theme.subtext0;
+                    font-size: Theme.font-size-sm;
+                }
+            }
+
+            Rectangle { horizontal-stretch: 1; }
+
+            // The selection chip leads, so its group reads to the left of the column
+            // toggle.
+            VerticalLayout {
+                alignment: center;
+                ActionPill {
+                    if Tracks.selected-ids.length > 0: PillLabel {
+                        text: @tr("{} selected", Tracks.selected-ids.length);
+                    }
+                    if Tracks.selected-ids.length > 0: PillButton {
+                        icon: "close";
+                        clicked => {
+                            Tracks.clear-selection();
+                            Tracks.blur-search-tick += 1;
+                        }
+                    }
+                    if Tracks.selected-ids.length > 0: PillDivider { }
+                    ColumnTogglePopup {
+                        show-number <=> Tracks.show-number;
+                        show-artwork <=> Tracks.show-artwork;
+                        show-artist <=> Tracks.show-artist;
+                        show-album <=> Tracks.show-album;
+                        show-genre <=> Tracks.show-genre;
+                        show-year <=> Tracks.show-year;
+                        toggled(id) => { Tracks.toggle-column(id); }
+                    }
+                }
+            }
+
+            VerticalLayout {
+                alignment: center;
+                SearchBar {
+                    text <=> Tracks.filter;
+                    placeholder: @tr("Filter tracks…");
+                    blur-trigger: Tracks.blur-search-tick;
+                    // **Never call `apply-filter` directly** — bumping the tick is what
+                    // lets the throttle coalesce fast typing. `play-row` resolves its
+                    // ids from the live filter, not from the throttled model.
+                    edited(t) => { root.filter-tick-pending += 1; }
+                }
+            }
+        }
+
+        // Binding-only: the state stays on the `Tracks` global.
+        tl := TrackList {
+            horizontal-stretch: 1;
+            vertical-stretch: 1;
+
+            rows: Tracks.rows;
+
+            w-number <=> Tracks.w-number;
+            w-title <=> Tracks.w-title;
+            w-artist <=> Tracks.w-artist;
+            w-album <=> Tracks.w-album;
+            w-genre <=> Tracks.w-genre;
+            w-year <=> Tracks.w-year;
+            w-length <=> Tracks.w-length;
+
+            show-number <=> Tracks.show-number;
+            show-artwork <=> Tracks.show-artwork;
+            show-artist <=> Tracks.show-artist;
+            show-album <=> Tracks.show-album;
+            show-genre <=> Tracks.show-genre;
+            show-year <=> Tracks.show-year;
+            number-mode: "index";
+
+            sort-field: Tracks.sort-field;
+            sort-dir: Tracks.sort-dir;
+            playing-track-id: Player.vm.track.id;
+            view-context: "tracks";
+            view-selected-ids: Tracks.selected-ids;
+
+            request-sort(f) => { Tracks.request-sort(f); }
+            play-row(id, idx) => { Tracks.play-row(id, idx); }
+            play-next(ids) => { Tracks.play-next(ids); }
+            add-to-queue(ids) => { Tracks.add-to-queue(ids); }
+            toggle-row-favorite(ids, on) => { Tracks.toggle-row-favorite(ids, on); }
+            set-row-rating(ids, n) => { Tracks.set-row-rating(ids, n); }
+            select-row(idx, id, sh, ct) => { Tracks.select-row(idx, id, sh, ct); }
+            request-blur-search => { Tracks.blur-search-tick += 1; }
+            go-to-album(aid) => { Tracks.go-to-album(aid); }
+            go-to-artist(aid) => { Tracks.go-to-artist(aid); }
+            go-to-genre(gid) => { Tracks.go-to-genre(gid); }
+        }
+    }
+
+    // At the view root, outside the padded layout, so they sit flush with the content
+    // panel's rounded edges. They drive the inner scrollers through the list's published
+    // metrics and setters — living outside its scope, they can't reach the inner ids.
+    OverlayScrollbar {
+        horizontal: false;
+        x: parent.width - self.width;
+        // Aligned with the list body, so the bar stays out of the column header band.
+        // `body-y` carries the header offset; the list's own y makes it root-relative.
+        y: tl.y + tl.body-y;
+        width: 10px;
+        height: tl.body-height;
+        visible-size: tl.v-visible-height;
+        content-size: tl.v-viewport-height;
+        offset: tl.v-offset;
+        scroll-to(o) => { tl.set-v-offset(o); }
+    }
+
+    OverlayScrollbar {
+        horizontal: true;
+        x: tl.x;
+        y: parent.height - self.height;
+        width: tl.width - 10px;
+        height: 10px;
+        visible-size: tl.h-visible-width;
+        content-size: tl.h-viewport-width;
+        offset: tl.h-offset;
+        scroll-to(o) => { tl.set-h-offset(o); }
+    }
+}

@@ -1,0 +1,94 @@
+import { Theme } from "../../theme.slint";
+import { Equalizer } from "../../globals/audio.slint";
+import { Dropdown } from "../settings/dropdown.slint";
+import { SectionButton } from "../settings/section-button.slint";
+import { DialogToggleRow } from "dialog-toggle-row.slint";
+import { EqBandSlider } from "eq-band-slider.slint";
+import { PreampSliderRow } from "preamp-slider-row.slint";
+
+// The equalizer modal's body. Every control drives the `Equalizer` global, and
+// Rust applies each change to the live player and persists it.
+export component EqualizerBody inherits VerticalLayout {
+    spacing: Theme.pad-lg;
+
+    // Order-matched to `equalizer::BAND_FREQS`; numeric, so untranslated.
+    property <[string]> band-labels: ["31", "62", "125", "250", "500", "1k", "2k", "4k", "8k", "16k"];
+
+    // Order-matched to `equalizer::PRESETS`, plus a synthetic trailing entry.
+    // Inline literals, since a Rust-seeded `[string]` renders untranslated.
+    property <[string]> preset-names: [
+        @tr("Flat"), @tr("Rock"), @tr("Pop"), @tr("Jazz"), @tr("Classical"),
+        @tr("Bass Boost"), @tr("Treble Boost"), @tr("Vocal"), @tr("Electronic"),
+        @tr("Custom"),
+    ];
+
+    // The trailing cells dock into `DialogToggleRow`'s `@children`.
+    DialogToggleRow {
+        label: @tr("Enable equalizer");
+        checked <=> Equalizer.enabled;
+        toggled(v) => { Equalizer.set-enabled(v); }
+
+        VerticalLayout {
+            alignment: center;
+            Dropdown {
+                options: root.preset-names;
+                trigger-width: 150px;
+                selected-index <=> Equalizer.preset-idx;
+                selected(i) => { Equalizer.select-preset(i); }
+            }
+        }
+        VerticalLayout {
+            alignment: center;
+            SectionButton {
+                label: @tr("Reset");
+                icon: "";
+                primary: false;
+                clicked => { Equalizer.reset(); }
+            }
+        }
+    }
+
+    // Master gain, so a boost has headroom and doesn't clip.
+    PreampSliderRow {
+        preamp: Equalizer.preamp;
+        min-preamp: Equalizer.min-preamp;
+        max-preamp: Equalizer.max-preamp;
+        enabled: Equalizer.enabled;
+        changed(db) => { Equalizer.set-preamp(db); }
+        committed(db) => { Equalizer.commit-preamp(db); }
+    }
+
+    HorizontalLayout {
+        spacing: Theme.pad-sm;
+        alignment: stretch;
+
+        for label[i] in root.band-labels: VerticalLayout {
+            spacing: Theme.pad-xs;
+            horizontal-stretch: 1;
+
+            Text {
+                text: (Equalizer.band-gains[i] > 0 ? "+" : "") + round(Equalizer.band-gains[i]);
+                color: Equalizer.enabled ? Theme.subtext0 : Theme.overlay0;
+                font-size: Theme.font-size-sm;
+                horizontal-alignment: center;
+            }
+
+            EqBandSlider {
+                height: 150px;
+                value: Equalizer.band-gains[i];
+                min-db: Equalizer.min-gain;
+                max-db: Equalizer.max-gain;
+                is-disabled: !Equalizer.enabled;
+                changed(v) => { Equalizer.set-band(i, v); }
+                committed(v) => { Equalizer.commit-band(i, v); }
+            }
+
+            Text {
+                text: label;
+                color: Theme.subtext1;
+                font-size: Theme.font-size-sm;
+                horizontal-alignment: center;
+            }
+        }
+    }
+}

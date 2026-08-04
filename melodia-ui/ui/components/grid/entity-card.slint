@@ -1,0 +1,233 @@
+import { Theme } from "../../theme.slint";
+import { ArtworkImage } from "../artwork-image.slint";
+import { IconButton } from "../icon-button.slint";
+import { MaterialIcon } from "../material-icon.slint";
+
+// The card every grid and strip draws: a square artwork tile with an elided title and
+// subtitle beneath it, inside a hover-highlighted rounded surface.
+//
+// **The outer slot is a fixed size**, so the grid layout stays stable — the host
+// computes both dimensions from the available width and passes them down — and a
+// trailing stretch Rectangle absorbs any slack, so a generous height doesn't distort the
+// artwork-to-text spacing.
+export component EntityCard inherits Rectangle {
+    in property <string> artwork-path;
+    in property <image> cover;
+    in property <string> title;
+    in property <string> subtitle;
+    in property <length> card-width: 180px;
+    in property <length> card-height: 226px;
+    // The Artists grid's avatar mode: the tile takes a radius of half its size, and the
+    // text block beneath stays square-aligned.
+    in property <bool> circular: false;
+    // Artists passes `"person"`; everything else takes the default.
+    in property <string> fallback-icon: "music-note";
+
+    // The tile's chrome. The Genres grid overrides both, painting its per-genre
+    // name-hashed gradient and tinting the fallback glyph against it.
+    in property <brush> tile-bg: Theme.accent.with-alpha(0.15);
+    in property <brush> tile-icon-color: Theme.accent;
+
+    // The Genres grid raises this: with no real artwork on a genre card, a subtle scale
+    // reads as no scale at all.
+    in property <float> cover-scale-hover: 1.04;
+
+    // The Playlists grid's hover-revealed CRUD trio, which is what lets it skip a
+    // per-card overflow menu. Off everywhere else.
+    in property <bool> show-overlay-actions: false;
+
+    // A Material Symbols ligature, marking a smart playlist. Empty means no badge.
+    in property <string> badge-icon: "";
+
+    // The play count on the Most Played surfaces. **It lives here rather than on a
+    // host**, so the horizontal strip and the vertical grid render the same badge
+    // instead of one growing a second copy. Shares the corner with `badge-icon`; no
+    // caller sets both.
+    in property <string> badge-text: "";
+
+    callback clicked();
+    callback delete-clicked();
+    callback edit-artwork-clicked();
+    callback edit-name-clicked();
+
+    // **Every hover-driven binding on this card reads this, not `touch.has-hover`.** A
+    // higher-z TouchArea captures the pointer, so hovering any nested button flips that
+    // false and the fill, the zoom and the overlay would all drop out while the user is
+    // aiming at one. Each button's own flag is false while they're hidden, so this stays
+    // correct on the cards that don't use the overlay.
+    property <bool> card-hovered: touch.has-hover
+        || delete_btn.has-hover
+        || artwork_btn.has-hover
+        || name_btn.has-hover;
+
+    width: card-width;
+    height: card-height;
+
+    inner := Rectangle {
+        width: 100%;
+        height: 100%;
+        border-radius: Theme.radius-md;
+        background: root.card-hovered ? Theme.surface0 : transparent;
+        animate background { duration: Theme.dur-fast; easing: ease-in-out; }
+
+        VerticalLayout {
+            padding: Theme.pad-sm;
+            spacing: Theme.pad-sm;
+
+            ArtworkImage {
+                artwork-path: root.artwork-path;
+                cover: root.cover;
+                tile-size: root.card-width - 2 * Theme.pad-sm;
+                tile-radius: root.circular
+                    ? (root.card-width - 2 * Theme.pad-sm) / 2
+                    : Theme.radius-md;
+                cover-scale: root.card-hovered ? root.cover-scale-hover : 1.0;
+                fallback-icon: root.fallback-icon;
+                tile-bg: root.tile-bg;
+                tile-icon-color: root.tile-icon-color;
+            }
+
+            VerticalLayout {
+                spacing: 2px;
+                // The LRM keeps mixed-script titles from drifting, as in the rows.
+                Text {
+                    text: "‎" + root.title;
+                    color: Theme.text;
+                    font-size: Theme.font-size-md;
+                    font-weight: 600;
+                    overflow: elide;
+                }
+                Text {
+                    text: "‎" + root.subtitle;
+                    color: Theme.subtext0;
+                    font-size: Theme.font-size-sm;
+                    overflow: elide;
+                    visible: root.subtitle != "";
+                }
+            }
+
+            // Absorbs the slack, so the block stays top-pinned whatever height the host
+            // computes.
+            Rectangle { vertical-stretch: 1; }
+        }
+    }
+
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+
+    // **After `touch`**, so the nested buttons consume their own clicks before the
+    // card's open action fires, and matched to the artwork square so the icons frame the
+    // artwork rather than the title row.
+    //
+    // **Always mounted rather than behind an `if`**, so the root can reference each
+    // button's `has-hover` from `card-hovered`. `visible` propagates to the children, so
+    // they aren't rendered, hit-tested or hover-tracked when a host doesn't opt in.
+    overlay := Rectangle {
+        visible: root.show-overlay-actions;
+        x: Theme.pad-sm;
+        y: Theme.pad-sm;
+        width: root.card-width - 2 * Theme.pad-sm;
+        height: root.card-width - 2 * Theme.pad-sm;
+
+        opacity: root.card-hovered ? 1.0 : 0.0;
+        animate opacity { duration: Theme.dur-fast; easing: ease-in-out; }
+
+        delete_btn := IconButton {
+            x: parent.width - self.width - Theme.pad-sm;
+            y: Theme.pad-sm;
+            icon: "delete";
+            icon-size: 18px;
+            diameter: 30px;
+            idle-bg: Theme.floating-chrome-bg;
+            hover-fg: Theme.danger;
+            clicked => { root.delete-clicked(); }
+        }
+
+        artwork_btn := IconButton {
+            x: Theme.pad-sm;
+            y: parent.height - self.height - Theme.pad-sm;
+            icon: "image";
+            icon-size: 18px;
+            diameter: 30px;
+            idle-bg: Theme.floating-chrome-bg;
+            clicked => { root.edit-artwork-clicked(); }
+        }
+
+        name_btn := IconButton {
+            x: parent.width - self.width - Theme.pad-sm;
+            y: parent.height - self.height - Theme.pad-sm;
+            icon: "edit";
+            icon-size: 18px;
+            diameter: 30px;
+            idle-bg: Theme.floating-chrome-bg;
+            clicked => { root.edit-name-clicked(); }
+        }
+    }
+
+    // Top-left of the tile, clear of the hover trio. Non-interactive, so card clicks
+    // pass straight through.
+    badge := Rectangle {
+        visible: root.badge-icon != "";
+        x: 2 * Theme.pad-sm;
+        y: 2 * Theme.pad-sm;
+        width: 28px;
+        height: 28px;
+        border-radius: self.height / 2;
+        background: Theme.floating-chrome-bg;
+        MaterialIcon {
+            x: (parent.width - self.width) / 2;
+            y: (parent.height - self.height) / 2;
+            name: root.badge-icon;
+            icon-size: 18px;
+            icon-color: Theme.accent;
+            filled: true;
+        }
+    }
+
+    // The same corner, sized to its own content. Reading the row's `preferred-width` is
+    // a derivation, not a cycle: a layout reports its children's intrinsic widths and
+    // never reads back the width it is handed.
+    //
+    // **The play glyph is a `MaterialIcon`, not a "▶" in the label.** A character
+    // Vazirmatn lacks pulls a fallback font whose taller metrics define the line box,
+    // dropping the digits off the patched centring — so the number and the glyph would
+    // sit at different heights.
+    Rectangle {
+        visible: root.badge-text != "";
+        x: 2 * Theme.pad-sm;
+        y: 2 * Theme.pad-sm;
+        height: 22px;
+        width: badge-row.preferred-width + 16px;
+        border-radius: self.height / 2;
+        background: Theme.crust.with-alpha(0.85);
+        border-width: 1px;
+        border-color: Theme.surface2;
+
+        badge-row := HorizontalLayout {
+            alignment: center;
+            spacing: 2px;
+
+            VerticalLayout {
+                alignment: center;
+                Text {
+                    text: root.badge-text;
+                    color: Theme.text;
+                    font-size: Theme.font-size-sm;
+                    font-weight: 600;
+                }
+            }
+
+            VerticalLayout {
+                alignment: center;
+                MaterialIcon {
+                    name: "play_arrow";
+                    icon-size: 14px;
+                    icon-color: Theme.text;
+                    filled: true;
+                }
+            }
+        }
+    }
+}

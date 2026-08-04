@@ -1,0 +1,83 @@
+import { Theme } from "../theme.slint";
+
+// Which side the pill clears. `below` is for hosts pinned near the top, where an
+// above-tooltip clips off-screen; `right` is for the collapsed sidebar rail, where the
+// hidden label sat to the icon's right anyway.
+export enum TooltipSide { above, below, right }
+
+// A pill anchored on one side of its parent, fading in on hover — Slint has no native
+// tooltip. Place it inside the element it annotates, set `text`, and feed `hovered` from
+// the host's TouchArea; **the reveal delay lives here**, so a quick mouse-pass doesn't
+// flash a tooltip anywhere in the tree.
+export component Tooltip inherits Rectangle {
+    in property <string> text;
+    in property <bool>  hovered;
+    // `parent` isn't reachable from a component's root binding, so the host passes both
+    // explicitly. The height is needed by every side but `above`.
+    in property <length> host-width;
+    in property <length> host-height;
+    in property <TooltipSide> side: TooltipSide.above;
+    // Gap between the pill and the host, on whichever axis `side` clears.
+    in property <length> gap: 6px;
+    // Bypasses the reveal delay, for a caller surfacing the pill without a real hover —
+    // a keyboard volume change, say. It rides the same `animate`, so the fade matches.
+    in property <bool> force-shown: false;
+    // **The pill is absolutely positioned, so nothing downstream stops it running off
+    // the window** — and a label that fits in English can be half again as long
+    // translated. Every English label clears this cap; the longest translations don't,
+    // and those wrap to two lines rather than leaving the screen. Not named `max-width`:
+    // that is the built-in layout constraint, which a bound `width` overrides anyway.
+    in property <length> max-pill-width: 240px;
+
+    private property <bool> shown;
+
+    width: min(tip-text.preferred-width + 16px, root.max-pill-width);
+    height: tip-text.preferred-height + 8px;
+    // `right` clears the host horizontally and centres on it vertically; the
+    // two vertical sides do the mirror of that.
+    x: root.side == TooltipSide.right
+        ? (root.host-width + root.gap)
+        : (root.host-width - self.width) / 2;
+    y: root.side == TooltipSide.above ? (-self.height - root.gap)
+        : root.side == TooltipSide.below ? (root.host-height + root.gap)
+        : (root.host-height - self.height) / 2;
+
+    // The `ActionPill` chrome, so a tooltip reads as part of the same family as what it
+    // annotates. **The fill is the one divergence**: the pill is translucent, but a
+    // tooltip is transient and its whole job is to be read, so it stays fully opaque
+    // wherever it lands — a hero blur, a cover, a list row.
+    background: Theme.surface0;
+    border-color: Theme.surface2;
+    border-width: 1px;
+    border-radius: 6px;
+    opacity: (shown || root.force-shown) ? 1.0 : 0.0;
+    animate opacity { duration: 150ms; easing: ease-out; }
+    visible: root.text != "";
+
+    reveal-timer := Timer {
+        interval: 500ms;
+        running: root.hovered && !root.shown && root.text != "";
+        triggered => { root.shown = true; }
+    }
+
+    // Reset when hover ends so the next hover restarts the delay.
+    // `changed` callback fires on either edge.
+    changed hovered => {
+        if (!root.hovered) { root.shown = false; }
+    }
+
+    tip-text := Text {
+        text: root.text;
+        color: Theme.text;
+        font-size: 11px;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+        // Bounded, so the wrap has something to wrap against and the root's height
+        // follows for free: a wrapping Text reports its height against the width it was
+        // handed, while the width above is read from the *horizontal* layout info, which
+        // is intrinsic to the string — so the chain terminates rather than chasing
+        // itself.
+        width: root.width - 16px;
+        wrap: word-wrap;
+    }
+}

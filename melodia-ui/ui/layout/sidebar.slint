@@ -1,0 +1,329 @@
+import { ScrollView } from "std-widgets.slint";
+import { Theme } from "../theme.slint";
+import { Settings } from "../settings.slint";
+import { Nav, NavEnterFrom } from "../globals/nav.slint";
+import { MaterialIcon } from "../components/material-icon.slint";
+import { OverlayScrollbar } from "../components/overlay-scrollbar.slint";
+
+// Single nav row. Reads selected state from Nav, fires `select` on click.
+component SidebarItem inherits Rectangle {
+    in property <int> index;
+    in property <string> label;
+    in property <string> icon;
+
+    height: 36px;
+    background: transparent;
+
+    private property <bool> selected: Nav.selected-index == root.index;
+
+    // The collapsed rail hides the label, so the row hands `Nav` its identity and rect
+    // and `app-window.slint` paints the pill beside the rail — the global says why it
+    // can't be mounted here. **Published in both states**, so the tooltip is already
+    // armed when Ctrl+B collapses the rail under a parked pointer.
+    private property <bool> hover-mirror: touch.has-hover;
+    changed hover-mirror => {
+        if (self.hover-mirror) {
+            Nav.sidebar-tip-idx = root.index;
+            Nav.sidebar-tip-label = root.label;
+            Nav.sidebar-tip-y = root.absolute-position.y;
+            Nav.sidebar-tip-h = root.height;
+        } else if (Nav.sidebar-tip-idx == root.index) {
+            Nav.sidebar-tip-idx = -1;
+        }
+    }
+
+    // Gentler than the now-playing-bar buttons' shrink, a full-width row's wobble
+    // reading much stronger than a compact circular one. **Only the factor is
+    // animated**, not the width and height derived from it: those also move when the
+    // sidebar collapses or resizes, so easing them directly would set every row
+    // wobbling through the collapse.
+    property <float> press-scale: touch.pressed ? 0.97 : 1.0;
+    animate press-scale {
+        duration: touch.pressed ? 100ms : Theme.dur-med;
+        easing: cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+
+    // The root keeps its fixed layout slot so sibling rows never reflow; `row` is what
+    // scales on press.
+    row := Rectangle {
+        width: parent.width * root.press-scale;
+        height: parent.height * root.press-scale;
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        border-radius: Theme.radius-md;
+        background: root.selected
+            ? Theme.surface1
+            : (touch.has-hover ? Theme.surface0 : transparent);
+        animate background { duration: Theme.dur-fast; easing: ease-in-out; }
+
+        HorizontalLayout {
+            // Collapsed, it centres the icon in the content row; expanded, it tracks a
+            // fraction of the sidebar width so icons drift outward as the user resizes.
+            // **Mirrors the clamp the Sidebar applies to its own `width`**, so this
+            // follows the *rendered* width rather than the raw stored value.
+            padding-left: Nav.sidebar-collapsed
+                ? 4px
+                : clamp(Nav.sidebar-width, Theme.sidebar-min-w, Theme.sidebar-max-w) * 10%;
+            padding-right: Nav.sidebar-collapsed ? 4px : Theme.pad-md;
+            spacing: Theme.pad-md;
+            alignment: start;
+            animate padding-left, padding-right { duration: Nav.sidebar-dragging ? 0ms : Theme.dur-med; easing: ease-in-out; }
+
+            VerticalLayout {
+                alignment: center;
+                MaterialIcon {
+                    name: root.icon;
+                    // Scaled directly so the wobble is visible on a collapsed rail too:
+                    // otherwise only the row's fill shrinks, by a pixel or so, and the
+                    // press feels inert with the label hidden.
+                    icon-size: 22px * root.press-scale;
+                    icon-color: root.selected ? Theme.accent : Theme.text;
+                    filled: root.selected;
+                }
+            }
+
+            if !Nav.sidebar-collapsed: VerticalLayout {
+                alignment: center;
+                Text {
+                    text: root.label;
+                    color: root.selected ? Theme.text : Theme.subtext0;
+                    font-size: Theme.font-size-md * root.press-scale;
+                    font-weight: root.selected ? 600 : 500;
+                    vertical-alignment: center;
+                    overflow: elide;
+                }
+            }
+        }
+    }
+
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        // Closes Now Playing too — it sits over any section, so any nav click dismisses
+        // it. **A detail id is not reset here**: it belongs to that tab's state, so
+        // leaving and returning restores the last open one, and the back button in
+        // `DetailHeader` is the only way out.
+        clicked => {
+            // Sidebar nav is always lateral, so the direction is set **before** the
+            // index write and the new branch fades up whatever the last one left behind.
+            Nav.pending-enter-from = NavEnterFrom.below;
+            Nav.now-playing-open = false;
+            Nav.selected-index = root.index;
+            // Persisted, so a restart reopens on the same section.
+            Nav.persist-selected-index(root.index);
+        }
+    }
+}
+
+// Tiny separator between sidebar sections.
+component Divider inherits Rectangle {
+    height: 1px;
+    background: Theme.surface0;
+}
+
+export component Sidebar inherits Rectangle {
+    // A drag sets the width on every mouse move, so without this the animation
+    // interpolates each delta and the handle feels laggy. Ease the collapse only.
+    property <bool> is-dragging;
+
+    width: Nav.sidebar-collapsed
+        ? Theme.sidebar-collapsed-w
+        : clamp(Nav.sidebar-width, Theme.sidebar-min-w, Theme.sidebar-max-w);
+    animate width { duration: is-dragging ? 0ms : Theme.dur-med; easing: ease-in-out; }
+
+    // The KDE-only unfocused tint gates on **three** terms: the user toggle, the OS
+    // focus state, and `use-native-titlebar`. The titlebar term is required because the
+    // feature mirrors an OS-drawn decoration fade — with our own chrome the analogy
+    // doesn't apply — and the toggle is *preserved* rather than cleared across a
+    // native-titlebar disable so it survives a re-enable. Without it a KDE user in
+    // custom-titlebar mode still sees the tint, the toggle defaulting on there.
+    //
+    // **No `animate`**: the OS titlebar swaps colour instantly on focus loss, so a fade
+    // desyncs our painted surfaces from the OS-drawn frame.
+    background: (Settings.match-unfocused-bg && Theme.use-native-titlebar && !Theme.window-focused)
+        ? Theme.mantle-unfocused : Theme.mantle;
+
+    VerticalLayout {
+        padding: Theme.pad-sm;
+        spacing: Theme.pad-xs;
+
+        // Collapse / expand toggle
+        Rectangle {
+            height: 36px;
+            background: transparent;
+
+            // The `SidebarItem` tooltip feed. The label is the action the click
+            // performs, and the tooltip only ever shows on a *collapsed* rail — so it
+            // reads "Expand" rather than mirroring the row's own text.
+            property <bool> hover-mirror: collapse-touch.has-hover;
+            changed hover-mirror => {
+                if (self.hover-mirror) {
+                    Nav.sidebar-tip-idx = Nav.sidebar-collapse-tip-idx;
+                    Nav.sidebar-tip-label = @tr("Expand");
+                    Nav.sidebar-tip-y = self.absolute-position.y;
+                    Nav.sidebar-tip-h = self.height;
+                } else if (Nav.sidebar-tip-idx == Nav.sidebar-collapse-tip-idx) {
+                    Nav.sidebar-tip-idx = -1;
+                }
+            }
+
+            // Animated alone, so the wobble fires on press and not while the sidebar
+            // width eases. Matches `SidebarItem`'s gentler shrink.
+            property <float> press-scale: collapse-touch.pressed ? 0.97 : 1.0;
+            animate press-scale {
+                duration: collapse-touch.pressed ? 100ms : Theme.dur-med;
+                easing: cubic-bezier(0.34, 1.56, 0.64, 1);
+            }
+
+            // Scales on press while the outer keeps the fixed layout slot.
+            Rectangle {
+                width: parent.width * parent.press-scale;
+                height: parent.height * parent.press-scale;
+                x: (parent.width - self.width) / 2;
+                y: (parent.height - self.height) / 2;
+                border-radius: Theme.radius-md;
+                background: collapse-touch.has-hover ? Theme.surface0 : transparent;
+                animate background { duration: Theme.dur-fast; easing: ease-in-out; }
+                HorizontalLayout {
+                    // `SidebarItem`'s padding, so this icon stays on the same vertical
+                    // line as the nav icons below it.
+                    padding-left: Nav.sidebar-collapsed
+                        ? 4px
+                        : clamp(Nav.sidebar-width, Theme.sidebar-min-w, Theme.sidebar-max-w) * 10%;
+                    padding-right: Nav.sidebar-collapsed ? 4px : Theme.pad-md;
+                    spacing: Theme.pad-md;
+                    alignment: start;
+                    animate padding-left, padding-right { duration: Nav.sidebar-dragging ? 0ms : Theme.dur-med; easing: ease-in-out; }
+                    VerticalLayout {
+                        alignment: center;
+                        MaterialIcon {
+                            name: Nav.sidebar-collapsed ? "dock_to_right" : "dock_to_left";
+                            icon-size: 22px;
+                            icon-color: Theme.text;
+                            filled: true;
+                        }
+                    }
+                    if !Nav.sidebar-collapsed: VerticalLayout {
+                        alignment: center;
+                        Text {
+                            text: @tr("Collapse");
+                            color: Theme.subtext0;
+                            font-size: Theme.font-size-md;
+                            vertical-alignment: center;
+                            overflow: elide;
+                        }
+                    }
+                }
+            }
+            collapse-touch := TouchArea {
+                mouse-cursor: pointer;
+                clicked => { Nav.sidebar-collapsed = !Nav.sidebar-collapsed; }
+            }
+        }
+
+        // Caps the sidebar's preferred height, so the content row stops claiming a tall
+        // slot and the now-playing bar keeps its own at small window heights. Both
+        // built-in scrollbars are off — the `OverlayScrollbar` at the root sits flush
+        // with the right edge instead — and **`viewport-width: self.width` locks the
+        // orthogonal axis**, so wheel events aren't hijacked into horizontal scroll.
+        nav-scroll := ScrollView {
+            vertical-stretch: 1;
+            vertical-scrollbar-policy: always-off;
+            horizontal-scrollbar-policy: always-off;
+            viewport-width: self.width;
+
+            VerticalLayout {
+                spacing: Theme.pad-xs;
+
+                Divider {}
+
+                // Top nav.
+                SidebarItem { index: 0; label: @tr("Search"); icon: "search"; }
+                SidebarItem { index: 1; label: @tr("Browse"); icon: "home"; }
+
+                Divider {}
+
+                // **Recently Played keeps routing index 8 but renders here**, under
+                // Favorites: visual order follows source order rather than the index
+                // value, so placing it here avoids renumbering every tab below.
+                SidebarItem { index: 2; label: @tr("Favorites");       icon: "favorite";       }
+                SidebarItem { index: 8; label: @tr("Recently Played"); icon: "history";        }
+                SidebarItem { index: 3; label: @tr("Tracks");          icon: "library_music";  }
+                SidebarItem { index: 4; label: @tr("Albums");          icon: "album";          }
+                SidebarItem { index: 5; label: @tr("Artists");         icon: "person";         }
+                SidebarItem { index: 6; label: @tr("Genres");          icon: "theater_comedy"; }
+                SidebarItem { index: 7; label: @tr("Playlists");       icon: "playlist_play";  }
+            }
+        }
+
+        Divider {}
+
+        SidebarItem { index: 9; label: @tr("Settings"); icon: "settings"; }
+    }
+
+    // Drag-resize handle on the right edge — only meaningful when expanded.
+    if !Nav.sidebar-collapsed: Rectangle {
+        x: parent.width - 4px;
+        y: 0;
+        width: 4px;
+        height: parent.height;
+        background: resize-touch.pressed ? Theme.accent : transparent;
+        animate background { duration: Theme.dur-fast; easing: ease-in-out; }
+
+        resize-touch := TouchArea {
+            mouse-cursor: ew-resize;
+            // **The handle's own coordinate frame moves with the sidebar as it
+            // resizes**, so a local `mouse-x - pressed-x` underestimates the cursor's
+            // travel: the sidebar grows by half the delta and the handle lags the
+            // pointer. Tracking in window-absolute coordinates keeps it glued.
+            property <length> start-w;
+            property <length> press-abs-x;
+            pointer-event(ev) => {
+                if (ev.kind == PointerEventKind.down) {
+                    self.start-w = Nav.sidebar-width;
+                    self.press-abs-x = self.absolute-position.x + self.pressed-x;
+                    root.is-dragging = true;
+                    Nav.sidebar-dragging = true;
+                }
+                if (ev.kind == PointerEventKind.up || ev.kind == PointerEventKind.cancel) {
+                    root.is-dragging = false;
+                    Nav.sidebar-dragging = false;
+                }
+            }
+            moved => {
+                if (self.pressed) {
+                    Nav.sidebar-width = clamp(
+                        self.start-w + (self.absolute-position.x + self.mouse-x - self.press-abs-x),
+                        Theme.sidebar-min-w,
+                        Theme.sidebar-max-w);
+                }
+            }
+            double-clicked => {
+                Nav.sidebar-width = Theme.sidebar-default-w;
+            }
+        }
+    }
+
+    // Flush with the sidebar's right edge, so it aligns with the panel boundary rather
+    // than stealing column space inside the padded layout, and aligned vertically with
+    // `nav-scroll` so it doesn't run through the Collapse toggle or the Settings row.
+    // Expanded, it insets by the resize handle's width to leave that hit-area on the
+    // very edge; collapsed, with no handle, it takes the edge itself.
+    OverlayScrollbar {
+        x: parent.width - self.width
+            - (Nav.sidebar-collapsed ? 0px : 4px);
+        y: nav-scroll.absolute-position.y - root.absolute-position.y;
+        // Slimmer on the collapsed rail so the bar doesn't crowd the icons; full-size
+        // expanded, matching every other view's.
+        width: Nav.sidebar-collapsed ? 6px : 10px;
+        height: nav-scroll.height;
+        bar-thickness: Nav.sidebar-collapsed ? 4px : 8px;
+        bar-radius: Nav.sidebar-collapsed ? 2px : 4px;
+        min-thumb: Nav.sidebar-collapsed ? 20px : 28px;
+        visible-size: nav-scroll.visible-height;
+        content-size: nav-scroll.viewport-height;
+        offset: -nav-scroll.viewport-y;
+        scroll-to(o) => {
+            nav-scroll.viewport-y = -o;
+        }
+    }
+}

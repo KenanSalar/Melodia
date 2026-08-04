@@ -44,7 +44,7 @@ use crate::{AppWindow, Settings};
 
 /// Stable mapping between the on-disk token and the Slint chip index.
 /// Kept in lock-step with the `[None, Equalizer]` literal in
-/// `ui/views/settings/playback-section.slint` — both sides must agree
+/// `melodia-ui/ui/views/settings/playback-section.slint` — both sides must agree
 /// on the order or the chip will paint the wrong selection. Anything
 /// unrecognised (including the retired `"ripple"` token) lands on None
 /// (idx 0), matching `SettingsData::default().play_button_animation`.

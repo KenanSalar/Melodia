@@ -20,7 +20,7 @@ pub enum UpdaterEvent {
     /// `check_for_update` reported a strictly-newer version that
     /// hasn't been skipped. UI translates → "Update available" toast
     /// with `kind = "install-update"` so the dispatcher in
-    /// `ui/globals.slint` fires `Updater.install()` on tap.
+    /// `melodia-ui/ui/globals/updater.slint` fires `Updater.install()` on tap.
     ///
     /// `critical = true` mirrors the manifest's `critical` flag so the
     /// Settings → Updates panel hides the "Skip this version" button.

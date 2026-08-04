@@ -1,0 +1,313 @@
+import { Theme } from "../../theme.slint";
+import { SmartEditor, TagEditor, ScrobbleUi } from "../../globals/dialog-forms.slint";
+import { Dialog as DialogGlobal } from "../../globals/dialog.slint";
+import { SectionButton } from "../settings/section-button.slint";
+import { PlaylistMosaicPicker } from "playlist-mosaic-picker.slint";
+import { PlaylistPicker } from "playlist-picker.slint";
+import { ExportPlaylistPicker } from "export-playlist-picker.slint";
+import { EqualizerBody } from "equalizer-body.slint";
+import { ReplayGainBody } from "replaygain-body.slint";
+import { SmartPlaylistEditorBody } from "smart-playlist-editor-body.slint";
+import { TagEditorBody } from "tag-editor-body.slint";
+import { ScrobbleLastfmBody } from "scrobble-lastfm-body.slint";
+import { ScrobbleListenbrainzBody } from "scrobble-listenbrainz-body.slint";
+import { LabeledInput } from "../labeled-input.slint";
+import { MaterialIcon } from "../material-icon.slint";
+
+// The modal overlay the `Dialog` global drives, mounted once at the root. A caller sets
+// the chrome and the routing payload, then flips `open`. Cancel is a conditional element
+// rather than `visible: false`, so an info-only dialog keeps its primary button flush
+// right with no phantom slot.
+//
+// **Only `t` animates.** The backdrop's alpha and the card's opacity and y-offset are
+// pure derivations of it — a second `animate` on a derived binding phase-lags — and `x`
+// isn't animated at all, since `width` doesn't move.
+//
+// The card derives a *faster* `card-t` so its small-area fade finishes early, landing
+// about when the backdrop's dim hits its perceptual ceiling. Without that bias the
+// uniform full-viewport dim wins the race and the card reads as arriving after it, even
+// though both literally start together.
+//
+// **Always rendered**, never gated on `open`, so the closing animation can play; the
+// backdrop's TouchArea is `enabled` only while open, so it catches nothing meanwhile.
+export component DialogOverlay inherits Rectangle {
+    width: 100%;
+    height: 100%;
+
+    // 0 is fully closed and catching no input; 1 fully open.
+    private property <float> t: DialogGlobal.open ? 1.0 : 0.0;
+    animate t { duration: Theme.dur-fast; easing: ease-out; }
+
+    // The falling edge of the close animation. **Starts true**, so the initial layout
+    // pass — which settles directly at 0 — doesn't fire `closed` on mount; it flips
+    // false once `t` enters the open region and back true, firing the callback, when `t`
+    // returns to ~0. That is the only safe moment to clear the routing state: any
+    // earlier unmounts the body branch mid-fade.
+    private property <bool> fully-closed: true;
+    changed t => {
+        if (root.t > 0.99) {
+            root.fully-closed = false;
+        } else if (root.t < 0.001 && !root.fully-closed) {
+            root.fully-closed = true;
+            DialogGlobal.closed();
+        }
+    }
+
+    // Biased so the card reaches full visibility early — see the header. A pure
+    // derivation, with no `animate` of its own.
+    private property <float> card-t: min(1.0, root.t * 1.5);
+
+    // Click anywhere outside the card to dismiss. The TouchArea has to be the topmost
+    // backdrop element, so it catches clicks falling through from outside the card.
+    Rectangle {
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.45 * root.t);
+    }
+    backdrop-touch := TouchArea {
+        width: 100%;
+        height: 100%;
+        enabled: DialogGlobal.open;
+        mouse-cursor: pointer;
+        clicked => {
+            // Dismiss is a cancel, so the dispatcher still cleans up and a listener can
+            // tell accepted from dismissed.
+            DialogGlobal.cancelled();
+            DialogGlobal.open = false;
+        }
+    }
+
+    // Clamped to a comfortable reading width even on a narrow window; `card-touch`
+    // swallows clicks on the card so they don't bubble to the backdrop dismiss.
+    card := Rectangle {
+        // Per kind, so a picker's grid and preview have room without pinching while
+        // every other kind stays at the regular footprint.
+        property <length> max-w:
+            DialogGlobal.kind == "equalizer" ? 600px
+            : DialogGlobal.kind == "replaygain" ? 480px
+            : DialogGlobal.kind == "edit-playlist-artwork" ? 520px
+            : DialogGlobal.kind == "smart-playlist-editor" ? 660px
+            : DialogGlobal.kind == "edit-tags" ? 720px
+            : DialogGlobal.kind == "scrobble-lastfm-login" ? 460px
+            : DialogGlobal.kind == "scrobble-listenbrainz-login" ? 460px
+            : 540px;
+        // Confirmation kinds only; a form or picker kind keeps the title-only header.
+        // Mapped by kind, so a caller doesn't have to set an extra field, and its tile
+        // colour is driven independently by `destructive`.
+        property <string> kind-icon:
+            DialogGlobal.kind == "delete-playlist" ? "delete" :
+            DialogGlobal.kind == "remove-playlist-selected" ? "playlist_remove" :
+            DialogGlobal.kind == "remove-queue-selected" ? "playlist_remove" :
+            DialogGlobal.kind == "remove-folder" ? "folder_off" :
+            DialogGlobal.kind == "clear-queue" ? "clear_all" :
+            DialogGlobal.kind == "restart-titlebar" ? "restart_alt" :
+            "";
+        width: min(self.max-w, max(360px, parent.width - 96px));
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2 + (1.0 - root.card-t) * 12px;
+        height: layout.preferred-height;
+        background: Theme.surface0;
+        border-color: Theme.border;
+        border-width: 1px;
+        border-radius: Theme.radius-lg;
+        opacity: root.card-t;
+        // Blocked while closed, so a stale click can't reach a button mid-fade.
+        visible: root.card-t > 0.01;
+
+        card-touch := TouchArea {
+            width: 100%;
+            height: 100%;
+            enabled: DialogGlobal.open;
+            // Discards clicks on the card body so the backdrop's dismiss doesn't fire;
+            // buttons inside have their own TouchAreas and win, being deeper.
+            clicked => { }
+        }
+
+        layout := VerticalLayout {
+            padding: Theme.pad-lg;
+            spacing: Theme.pad-md;
+
+            // A confirmation kind leads with an icon tile, danger-tinted when
+            // destructive; a form or picker kind leaves the icon empty, so the tile
+            // unmounts and the column hugs the left edge.
+            HorizontalLayout {
+                spacing: Theme.pad-md;
+                alignment: start;
+
+                if card.kind-icon != "": Rectangle {
+                    width: 48px;
+                    height: 48px;
+                    horizontal-stretch: 0;
+                    vertical-stretch: 0;
+                    border-radius: Theme.radius-md;
+                    background: DialogGlobal.destructive
+                        ? Theme.danger.with-alpha(0.15)
+                        : Theme.accent.with-alpha(0.15);
+                    MaterialIcon {
+                        name: card.kind-icon;
+                        icon-size: 28px;
+                        icon-color: DialogGlobal.destructive
+                            ? Theme.danger
+                            : Theme.accent;
+                    }
+                }
+
+                VerticalLayout {
+                    horizontal-stretch: 1;
+                    spacing: Theme.pad-xs;
+
+                    Text {
+                        text: DialogGlobal.title;
+                        color: Theme.text;
+                        font-size: Theme.font-size-lg;
+                        font-weight: 600;
+                        wrap: word-wrap;
+                    }
+
+                    // Hidden when empty, so an input-only dialog reserves no stale row.
+                    if DialogGlobal.message != "": Text {
+                        text: DialogGlobal.message;
+                        color: Theme.subtext0;
+                        font-size: Theme.font-size-md;
+                        wrap: word-wrap;
+                    }
+                }
+            }
+
+            // Name plus optional description, both on the shared `LabeledInput`; the
+            // dispatcher reads them back on Accept. Enter in either field commits, so
+            // the keyboard-only flow works, gated on a non-empty name.
+            //
+            // **No auto-focus on init**: calling `focus()` during the open re-enters
+            // Slint's property evaluator and trips its recursion guard.
+            if DialogGlobal.kind == "create-playlist"
+                || DialogGlobal.kind == "rename-playlist": VerticalLayout {
+                spacing: Theme.pad-sm;
+
+                LabeledInput {
+                    label: @tr("Name");
+                    placeholder: @tr("Playlist name");
+                    text <=> DialogGlobal.input-text;
+                    accepted => {
+                        if (DialogGlobal.input-text != "") {
+                            DialogGlobal.accepted();
+                            DialogGlobal.open = false;
+                        }
+                    }
+                }
+
+                LabeledInput {
+                    label: @tr("Description (optional)");
+                    placeholder: @tr("Add a description…");
+                    text <=> DialogGlobal.input-text-2;
+                    accepted => {
+                        if (DialogGlobal.input-text != "") {
+                            DialogGlobal.accepted();
+                            DialogGlobal.open = false;
+                        }
+                    }
+                }
+            }
+
+            // Reads `mosaic-candidates` and mutates `mosaic-selection`; the dispatcher
+            // routes to apply-or-clear on Accept.
+            if DialogGlobal.kind == "edit-playlist-artwork": PlaylistMosaicPicker { }
+
+            // Multi-select; the footer's primary button commits through the dispatcher,
+            // as the Export picker does.
+            if DialogGlobal.kind == "add-to-playlist": PlaylistPicker { }
+
+            // The same toolkit, committing through its own primary button.
+            if DialogGlobal.kind == "export-playlists": ExportPlaylistPicker { }
+
+            // Changes apply live and persist; the footer keeps only its Done button,
+            // the caller leaving `cancel-label` empty.
+            if DialogGlobal.kind == "equalizer": EqualizerBody { }
+
+            if DialogGlobal.kind == "replaygain": ReplayGainBody { }
+
+            // The rule builder; the dispatcher routes Accept to its commit.
+            if DialogGlobal.kind == "smart-playlist-editor": SmartPlaylistEditorBody { }
+
+            // **Its tab strip wraps, so it needs the width it is actually drawn at** —
+            // the card less this layout's padding, both of which are this file's to
+            // know. Reading `card.width` from in here closes no cycle: that depends on
+            // the dialog root's width and never on its children.
+            if DialogGlobal.kind == "edit-tags": TagEditorBody {
+                host-w: card.width - 2 * Theme.pad-lg;
+            }
+
+            // The primary button drives the flow; **the dialog stays open across the
+            // async round-trip** and Rust closes it on success.
+            if DialogGlobal.kind == "scrobble-lastfm-login": ScrobbleLastfmBody { }
+            if DialogGlobal.kind == "scrobble-listenbrainz-login": ScrobbleListenbrainzBody { }
+
+            HorizontalLayout {
+                alignment: end;
+                spacing: Theme.pad-sm;
+                padding-top: Theme.pad-sm;
+
+                // Confirm-mode only. `if` rather than `visible: false`, so the absent
+                // button claims no space.
+                if DialogGlobal.cancel-label != "": SectionButton {
+                    label: DialogGlobal.cancel-label;
+                    icon: "";
+                    primary: false;
+                    button-enabled: DialogGlobal.open;
+                    clicked => {
+                        DialogGlobal.cancelled();
+                        DialogGlobal.open = false;
+                    }
+                }
+
+                SectionButton {
+                    // The login kinds pick their label here rather than in Rust, so the
+                    // `@tr` literals localize; every other kind takes the caller's.
+                    label: DialogGlobal.kind == "scrobble-lastfm-login"
+                        ? (ScrobbleUi.lastfm-step == 0 ? @tr("Open Last.fm") : @tr("Finish"))
+                        : DialogGlobal.kind == "scrobble-listenbrainz-login"
+                        ? @tr("Connect")
+                        : DialogGlobal.confirm-label;
+                    icon: "";
+                    primary: true;
+                    destructive: DialogGlobal.destructive;
+                    // The dispatcher already gates each commit on the same condition; a
+                    // disabled button surfaces the requirement instead of no-opping on
+                    // click. Every other kind stays enabled while the dialog is open.
+                    button-enabled: DialogGlobal.open
+                        && ((DialogGlobal.kind != "create-playlist"
+                                && DialogGlobal.kind != "rename-playlist")
+                            || DialogGlobal.input-text != "")
+                        // Export needs at least one playlist selected.
+                        && (DialogGlobal.kind != "export-playlists"
+                            || DialogGlobal.export-selected-count > 0)
+                        // Add-to-Playlist needs at least one playlist selected.
+                        && (DialogGlobal.kind != "add-to-playlist"
+                            || DialogGlobal.add-selected-count > 0)
+                        // Smart-playlist editor needs a name and ≥1 rule.
+                        && (DialogGlobal.kind != "smart-playlist-editor"
+                            || (SmartEditor.name != "" && SmartEditor.rules.length > 0))
+                        // Enabled whenever a selection is loaded; Rust short-circuits a
+                        // no-op Save.
+                        && (DialogGlobal.kind != "edit-tags"
+                            || TagEditor.track-count > 0)
+                        // ListenBrainz: needs a token and no in-flight request.
+                        && (DialogGlobal.kind != "scrobble-listenbrainz-login"
+                            || (ScrobbleUi.lb-token != "" && !ScrobbleUi.busy))
+                        // Last.fm: just gate on the in-flight request.
+                        && (DialogGlobal.kind != "scrobble-lastfm-login"
+                            || !ScrobbleUi.busy);
+                    clicked => {
+                        DialogGlobal.accepted();
+                        // The login kinds stay open across their round-trip and Rust
+                        // closes them; everything else closes on confirm.
+                        if (DialogGlobal.kind != "scrobble-lastfm-login"
+                                && DialogGlobal.kind != "scrobble-listenbrainz-login") {
+                            DialogGlobal.open = false;
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

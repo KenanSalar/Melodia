@@ -1,0 +1,71 @@
+import { Theme } from "../../theme.slint";
+import { ReplayGain } from "../../globals/audio.slint";
+import { Dropdown } from "../settings/dropdown.slint";
+import { DialogToggleRow } from "dialog-toggle-row.slint";
+import { PreampSliderRow } from "preamp-slider-row.slint";
+
+// The ReplayGain modal's body — the equalizer's shape without the per-band
+// model. Every control drives the `ReplayGain` global, and Rust applies each
+// change to the live player and persists it.
+export component ReplayGainBody inherits VerticalLayout {
+    spacing: Theme.pad-lg;
+
+    // Order-matched to `RgMode`. Inline literals, since a Rust-seeded
+    // `[string]` renders untranslated.
+    property <[string]> mode-names: [@tr("Track"), @tr("Album")];
+
+    DialogToggleRow {
+        label: @tr("Enable ReplayGain");
+        checked <=> ReplayGain.enabled;
+        toggled(v) => { ReplayGain.set-enabled(v); }
+    }
+
+    HorizontalLayout {
+        spacing: Theme.pad-md;
+        alignment: stretch;
+
+        VerticalLayout {
+            alignment: center;
+            horizontal-stretch: 1;
+            Text {
+                text: @tr("Normalization mode");
+                color: Theme.text;
+                font-size: Theme.font-size-md;
+            }
+        }
+        VerticalLayout {
+            alignment: center;
+            Dropdown {
+                options: root.mode-names;
+                trigger-width: 150px;
+                selected-index <=> ReplayGain.mode-idx;
+                selected(i) => { ReplayGain.set-mode(i); }
+            }
+        }
+    }
+
+    // Extra gain on top of the tag's own value.
+    PreampSliderRow {
+        preamp: ReplayGain.preamp;
+        min-preamp: ReplayGain.min-preamp;
+        max-preamp: ReplayGain.max-preamp;
+        enabled: ReplayGain.enabled;
+        changed(db) => { ReplayGain.set-preamp(db); }
+        committed(db) => { ReplayGain.commit-preamp(db); }
+    }
+
+    DialogToggleRow {
+        label: @tr("Prevent clipping");
+        checked <=> ReplayGain.prevent-clipping;
+        toggled(v) => { ReplayGain.set-prevent-clipping(v); }
+    }
+
+    // Worth saying: this reads precomputed loudness tags, so it does nothing at
+    // all on a library no tagging tool has scanned.
+    Text {
+        text: @tr("ReplayGain only affects tracks that already have loudness tags. Scan your library with a tool like rsgain or loudgain to add them.");
+        color: Theme.subtext0;
+        font-size: Theme.font-size-sm;
+        wrap: word-wrap;
+    }
+}

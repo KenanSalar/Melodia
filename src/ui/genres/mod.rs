@@ -3,7 +3,7 @@
 //! Two Slint globals are driven from here:
 //!
 //! * `Genres` — the responsive genre-card grid. Rust owns a flat,
-//!   name-sorted `Vec<GenreStats>` (plus pre-lowercased search keys)
+//!   name-sorted `Vec<GenreStats>` (plus a pre-lowercased sort key)
 //!   behind `GenresUi::grid.data` (fetched once from `genre_stats`); the
 //!   grid model is rebuilt from it on every filter / sort / column-count
 //!   change *without* a DB hit. The grid is virtualized by row: Rust
@@ -14,7 +14,7 @@
 //! * `GenreDetail` — the full genre detail view. `open_genre` fetches
 //!   the header + track list; the cached `Vec<TrackListRow>` in
 //!   `GenresUi::detail.tracks` lets `play-row` / `select-row` /
-//!   `play-genre` recover ids and re-sort in memory without
+//!   `shuffle-genre` recover ids and re-sort in memory without
 //!   round-tripping the Slint model (mirrors `AlbumsUi::detail.tracks`).
 //!
 //! Unlike Albums / Artists, **no cover or hero-blur caches** live here:
@@ -45,6 +45,7 @@ use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 
 use crate::entities::genre::GenreStats;
 use crate::media::cover_thumbs::CoverThumbs;
+use crate::ui::row_match::Needle;
 use crate::ui::section_state::SectionState;
 use crate::ui::util::clamp_i64_to_i32;
 use crate::{
@@ -59,6 +60,10 @@ use grid::compute_indices;
 #[cfg(test)]
 use state::GridIndexCache;
 
+// Re-exported for the Search view's Top Result card: a genre shown there
+// has to carry the same tint as its card in this grid, and the only way
+// to guarantee that is to derive both from the one function.
+pub use color::{GenreAccent, genre_accent};
 pub use detail::{
     apply_detail_row_favorite, apply_detail_row_rating, apply_filtered_detail, clear_detail,
     open_genre, refresh_detail,
@@ -103,7 +108,7 @@ impl GenresUi {
                 all_tracks: Mutex::new(Vec::new()),
                 genre_id: Mutex::new(-1),
                 applied_selection: Mutex::new(HashSet::new()),
-                filter: Mutex::new(String::new()),
+                filter: Mutex::new(Needle::default()),
             },
             cover_thumbs,
             section: SectionState::new(),
@@ -184,7 +189,7 @@ impl GenresUi {
 
     /// Track ids of the **displayed** detail list, in display order — the
     /// filter-applied subset when a search is active, otherwise the full
-    /// genre. `play-genre` / shuffle / add-to-queue pass these straight to
+    /// genre. `play-row` / shuffle / add-to-queue pass these straight to
     /// `player_play_tracks`, so those actions operate on the visible rows.
     pub fn detail_track_ids(&self) -> Vec<i64> {
         self.detail.tracks.lock().iter().map(|r| r.id).collect()

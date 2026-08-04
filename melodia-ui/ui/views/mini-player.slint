@@ -1,0 +1,402 @@
+import { Theme } from "../theme.slint";
+import { Player } from "../globals/player.slint";
+import { MiniPlayer, WindowChrome } from "../globals/shell.slint";
+import { IconButton } from "../components/icon-button.slint";
+import { ArtworkImage } from "../components/artwork-image.slint";
+import { SliderTrack } from "../components/slider-track.slint";
+import { VolumePopup } from "../components/now-playing/volume-popup.slint";
+import { VolumePopupHorizontal } from "../components/now-playing/volume-popup-horizontal.slint";
+import { PlayButton } from "../components/now-playing/play-button.slint";
+import { UpNextList } from "../components/now-playing/up-next-list.slint";
+
+// Compact miniplayer replacing the full UI once the window shrinks past the
+// responsive threshold. `MiniPlayer.active` (derived at the `AppWindow` root)
+// arms it; `MiniPlayer.square` picks the strip or the square variant.
+//
+// Resize is the only way in *and* out — there are no buttons. Double-clicking
+// the bare drag region maximizes, so it also leaves mini.
+//
+// Every interactive control stays 8 px clear of any window edge hosting a
+// resize TouchArea (`app-window.slint`'s resize ring, 8×8 at the corners), so
+// the cursor keeps showing the resize affordance instead of flickering hover.
+export component MiniPlayerView inherits Rectangle {
+    background: Theme.mantle;
+    // Doubles as resize-ring breathing room: the ring's TouchAreas sit above
+    // this component, and the inset preserves their hit zones at all four edges.
+    private property <length> edge-pad: 4px;
+    // Shared by both variants — applies the seek-pending hold the way the bar's
+    // slider does.
+    private property <float> slider-frac:
+        Player.duration-ms > 0
+            ? (Player.seek_pending_ms >= 0
+                ? clamp(Player.seek_pending_ms / Player.duration-ms, 0, 1)
+                : clamp(Player.position-ms / Player.duration-ms, 0, 1))
+            : 0;
+
+    // Window-move drag region. Mini hides the `CustomTitleBar`, so without this
+    // the window can't be moved at all. It covers the whole area at z-bottom
+    // and every control sits above it — Slint dispatches to the topmost
+    // TouchArea, so `has-hover` only goes true over empty space. Same
+    // `drag-region-hover-changed` → winit press-intercept path as
+    // `custom-titlebar.slint`.
+    drag-region := TouchArea {
+        x: 0;
+        y: 0;
+        width: 100%;
+        height: 100%;
+        mouse-cursor: default;
+        changed has-hover => {
+            WindowChrome.drag-region-hover-changed(self.has-hover);
+        }
+        double-clicked => {
+            // The size flip trips `mini-active = false` on its own.
+            WindowChrome.toggle-maximize();
+        }
+    }
+
+    // Horizontal variant — wide and short.
+    if !MiniPlayer.square: VerticalLayout {
+        padding: root.edge-pad;
+        spacing: 0;
+
+        HorizontalLayout {
+            vertical-stretch: 1;
+            spacing: Theme.pad-sm;
+            padding-left: Theme.pad-xs;
+            padding-right: Theme.pad-xs;
+            alignment: stretch;
+
+            VerticalLayout {
+                alignment: center;
+                ArtworkImage {
+                    artwork-path: Player.vm.track.artwork_path;
+                    cover: Player.vm.track.cover_img;
+                    tile-size: 48px;
+                }
+            }
+
+            Rectangle {
+                clip: true;
+                horizontal-stretch: 1;
+                VerticalLayout {
+                    alignment: center;
+                    spacing: 2px;
+                    Text {
+                        text: Player.vm.has_track
+                            ? "‎" + Player.vm.track.title
+                            : @tr("No track playing");
+                        color: Theme.text;
+                        font-size: Theme.font-size-sm;
+                        font-weight: 500;
+                        overflow: elide;
+                    }
+                    Text {
+                        text: Player.vm.has_track
+                            ? "‎" + (Player.vm.track.artist == ""
+                                ? @tr("Unknown artist")
+                                : Player.vm.track.artist)
+                            : "—";
+                        color: Theme.subtext0;
+                        font-size: 11px;
+                        overflow: elide;
+                    }
+                }
+            }
+
+            HorizontalLayout {
+                spacing: 2px;
+                horizontal-stretch: 0;
+                alignment: center;
+
+                VerticalLayout {
+                    alignment: center;
+                    IconButton {
+                        icon: "chevron_left";
+                        press-shrink: true;
+                        diameter: 28px;
+                        icon-size: 18px;
+                        button-enabled: Player.vm.has_previous;
+                        tooltip-text: @tr("Previous");
+                        clicked => { Player.previous(); }
+                    }
+                }
+                VerticalLayout {
+                    alignment: center;
+                    PlayButton {
+                        wrapper-d: 30px;
+                        icon-size: 16px;
+                        is-playing: Player.vm.is_playing;
+                        animation-mode: 0;
+                        clicked => { Player.play-pause(); }
+                    }
+                }
+                VerticalLayout {
+                    alignment: center;
+                    IconButton {
+                        icon: "chevron_right";
+                        press-shrink: true;
+                        diameter: 28px;
+                        icon-size: 18px;
+                        button-enabled: Player.vm.has_next;
+                        tooltip-text: @tr("Next");
+                        clicked => { Player.next(); }
+                    }
+                }
+            }
+
+            HorizontalLayout {
+                spacing: 2px;
+                horizontal-stretch: 0;
+                alignment: end;
+                // Keeps the corner-resize TouchAreas' hit zone clear.
+                padding-right: 4px;
+
+                VerticalLayout {
+                    alignment: center;
+                    // The vertical `VolumePopup` is 180 px tall and clips against
+                    // this variant's top edge; the horizontal sibling is the same
+                    // slider rotated, flying out to the left of the disc.
+                    VolumePopupHorizontal {
+                        diameter: 28px;
+                        icon-size: 18px;
+                    }
+                }
+                if WindowChrome.always-on-top-supported: VerticalLayout {
+                    alignment: center;
+                    IconButton {
+                        icon: "push_pin";
+                        press-shrink: true;
+                        diameter: 28px;
+                        icon-size: 18px;
+                        active: WindowChrome.always-on-top-active;
+                        filled: WindowChrome.always-on-top-active;
+                        tooltip-text: WindowChrome.always-on-top-active
+                            ? @tr("Unpin from Top") : @tr("Pin on Top");
+                        clicked => { WindowChrome.toggle-always-on-top(); }
+                    }
+                }
+            }
+        }
+
+        // Hugs the bottom edge, no time labels — too cramped. `vertical-stretch:
+        // 0` is load-bearing: without it the surrounding layout steals the space
+        // and the slider floats mid-row. Leave `SliderTrack` its native 24 px
+        // min-height so the pill thumb clears the bottom edge; the track still
+        // reads slim at 4 px.
+        h-slider := SliderTrack {
+            vertical-stretch: 0;
+            value: root.slider-frac;
+            is-disabled: !Player.vm.has_track || Player.duration-ms <= 0;
+            seam-mask-color: Theme.mantle;
+            committed(v) => {
+                if (Player.duration-ms > 0) {
+                    Player.seek(round(v * Player.duration-ms));
+                }
+            }
+        }
+    }
+
+    // Square variant — taller, optionally with Up Next.
+    if MiniPlayer.square: VerticalLayout {
+        padding: root.edge-pad;
+        spacing: Theme.pad-xs;
+
+        // The row keeps its `min-height` even where always-on-top is
+        // unsupported and the pin wrapper collapses, so the artwork below sits
+        // at the same offset across desktops.
+        HorizontalLayout {
+            alignment: stretch;
+            spacing: 2px;
+            vertical-stretch: 0;
+            padding-left: 4px;
+            padding-right: 4px;
+            min-height: 28px;
+
+            HorizontalLayout {
+                horizontal-stretch: 0;
+                alignment: start;
+                if WindowChrome.always-on-top-supported: IconButton {
+                    icon: "push_pin";
+                    press-shrink: true;
+                    diameter: 28px;
+                    icon-size: 18px;
+                    active: WindowChrome.always-on-top-active;
+                    filled: WindowChrome.always-on-top-active;
+                    tooltip-text: WindowChrome.always-on-top-active
+                        ? @tr("Unpin from Top") : @tr("Pin on Top");
+                    clicked => { WindowChrome.toggle-always-on-top(); }
+                }
+            }
+
+            Rectangle { horizontal-stretch: 1; }
+
+            HorizontalLayout {
+                horizontal-stretch: 0;
+                alignment: end;
+                IconButton {
+                    icon: Player.vm.track.is_favorite ? "favorite" : "favorite_border";
+                    press-shrink: true;
+                    diameter: 28px;
+                    icon-size: 18px;
+                    active: Player.vm.track.is_favorite;
+                    filled: Player.vm.track.is_favorite;
+                    button-enabled: Player.vm.has_track;
+                    tooltip-text: Player.vm.track.is_favorite
+                        ? @tr("Unfavorite") : @tr("Favorite");
+                    clicked => { Player.toggle-favorite(); }
+                }
+            }
+        }
+
+        // `tile-size` clamps so the cover follows the window width but never
+        // balloons past 180 px or drops under 90 px, where the placeholder glyph
+        // stops reading. It draws from the 384 px `Player.np-cover-{a,b}` slot
+        // the Now Playing view uses, falling back to the 72 px row tier until
+        // the seed lands and for tracks whose decode failed; `mini_player.rs`
+        // gates that decode on `mini_square`.
+        VerticalLayout {
+            alignment: center;
+            vertical-stretch: 0;
+            HorizontalLayout {
+                alignment: center;
+                ArtworkImage {
+                    artwork-path: Player.vm.track.artwork_path;
+                    cover: Player.np-cover-has-image
+                        ? (Player.np-cover-use-a ? Player.np-cover-a : Player.np-cover-b)
+                        : Player.vm.track.cover_img;
+                    tile-size: clamp(root.width * 0.5, 90px, 180px);
+                }
+            }
+        }
+
+        VerticalLayout {
+            alignment: center;
+            vertical-stretch: 0;
+            spacing: 2px;
+            Text {
+                text: Player.vm.has_track
+                    ? "‎" + Player.vm.track.title
+                    : @tr("No track playing");
+                color: Theme.text;
+                font-size: Theme.font-size-md;
+                font-weight: 500;
+                horizontal-alignment: center;
+                overflow: elide;
+            }
+            Text {
+                text: Player.vm.has_track
+                    ? "‎" + (Player.vm.track.artist == ""
+                        ? @tr("Unknown artist")
+                        : Player.vm.track.artist)
+                    : "—";
+                color: Theme.subtext0;
+                font-size: 11px;
+                horizontal-alignment: center;
+                overflow: elide;
+            }
+        }
+
+        HorizontalLayout {
+            alignment: center;
+            spacing: Theme.pad-xs;
+            vertical-stretch: 0;
+
+            VerticalLayout {
+                alignment: center;
+                IconButton {
+                    icon: "shuffle";
+                    press-shrink: true;
+                    diameter: 32px;
+                    icon-size: 20px;
+                    active: Player.queue.shuffle;
+                    tooltip-text: Player.queue.shuffle
+                        ? @tr("Shuffle: on") : @tr("Shuffle: off");
+                    clicked => { Player.toggle-shuffle(); }
+                }
+            }
+            VerticalLayout {
+                alignment: center;
+                IconButton {
+                    icon: "chevron_left";
+                    press-shrink: true;
+                    diameter: 32px;
+                    icon-size: 20px;
+                    button-enabled: Player.vm.has_previous;
+                    tooltip-text: @tr("Previous");
+                    clicked => { Player.previous(); }
+                }
+            }
+            VerticalLayout {
+                alignment: center;
+                PlayButton {
+                    wrapper-d: 36px;
+                    icon-size: 18px;
+                    is-playing: Player.vm.is_playing;
+                    animation-mode: 0;
+                    clicked => { Player.play-pause(); }
+                }
+            }
+            VerticalLayout {
+                alignment: center;
+                IconButton {
+                    icon: "chevron_right";
+                    press-shrink: true;
+                    diameter: 32px;
+                    icon-size: 20px;
+                    button-enabled: Player.vm.has_next;
+                    tooltip-text: @tr("Next");
+                    clicked => { Player.next(); }
+                }
+            }
+            VerticalLayout {
+                alignment: center;
+                IconButton {
+                    icon: Player.queue.repeat_mode == "one" ? "repeat_one" : "repeat";
+                    press-shrink: true;
+                    diameter: 32px;
+                    icon-size: 20px;
+                    active: Player.queue.repeat_mode != "off";
+                    tooltip-text: Player.queue.repeat_mode == "off"
+                        ? @tr("Repeat: off")
+                        : (Player.queue.repeat_mode == "one"
+                            ? @tr("Repeat: one")
+                            : @tr("Repeat: all"));
+                    clicked => { Player.cycle-repeat(); }
+                }
+            }
+            VerticalLayout {
+                alignment: center;
+                VolumePopup {
+                    diameter: 32px;
+                    icon-size: 20px;
+                }
+            }
+        }
+
+        // Native 24 px height again, so the pill thumb clears the Up Next list
+        // above it and the bottom edge when that list isn't mounted.
+        s-slider := SliderTrack {
+            vertical-stretch: 0;
+            value: root.slider-frac;
+            is-disabled: !Player.vm.has_track || Player.duration-ms <= 0;
+            seam-mask-color: Theme.mantle;
+            committed(v) => {
+                if (Player.duration-ms > 0) {
+                    Player.seek(round(v * Player.duration-ms));
+                }
+            }
+        }
+
+        // Only mounted when the window is tall enough for a couple of rows
+        // beside the artwork and controls. Shares `UpNextList` with the
+        // full-screen view, and `up_next.rs` keeps its rows fed while mini is up.
+        if root.height >= 350px: VerticalLayout {
+            vertical-stretch: 1;
+            padding-top: Theme.pad-xs;
+            UpNextList {
+                vertical-stretch: 1;
+                compact: true;
+            }
+        }
+    }
+}

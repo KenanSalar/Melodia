@@ -6,7 +6,7 @@ use std::sync::Arc;
 use async_compat::Compat;
 use slint::{ComponentHandle, Model, SharedString};
 
-use super::collect_nonzero_track_ids;
+use super::{collect_nonzero_track_ids, next_sort, play_row_start};
 use super::macros::{spawn_logged, spawn_logged_sync, wire_row_flag};
 use crate::library;
 use crate::state::AppState;
@@ -34,9 +34,12 @@ pub fn wire_browse(ui: &AppWindow, state: &AppState, browse_ui: &Arc<BrowseUi>) 
     // and, on re-enter, re-fetch the current directory once if a
     // `library_changed` bump arrived while the section was hidden (the
     // subscriber below marks dirty instead of re-fetching a view the user
-    // can't see). Seed the shadow from the current nav state — `changed`
-    // in `AppWindow` won't fire for a session that *starts* on Browse
-    // (sidebar index 1).
+    // can't see). Seed the shadow from the current nav state (sidebar index
+    // 1): the gate's `ChangeTracker` baselines inside `AppWindow::new()` and
+    // fires only on a later difference, so a section the boot doesn't land on
+    // gets no edge at all, and the one it does land on gets its edge a frame
+    // late — after boot has already read this shadow. See the
+    // `SectionActiveGate` bullet in `.claude/rules/ui-patterns.md`.
     browse_ui.set_section_active(ui.global::<crate::Nav>().get_selected_index() == 1);
     {
         let s = state.clone();
@@ -147,20 +150,27 @@ pub fn wire_browse(ui: &AppWindow, state: &AppState, browse_ui: &Arc<BrowseUi>) 
         });
     }
 
-    // play-row: double-click on a library track appends just that track
-    // to the queue (skipping duplicates). Disk-only rows (`id == 0`)
-    // aren't in the library and are ignored. Use `play-all` for "load
-    // every in-library file in this folder".
+    // play-row: double-click loads every in-library file in this folder into
+    // the queue and starts on the clicked one. Disk-only rows (`id == 0`)
+    // aren't in the library and are ignored — they also *displace* the row
+    // index, since `current_in_library_ids` drops them, which is the case
+    // `play_row_start`'s lookup-by-id fallback exists for.
     {
         let s = state.clone();
-        g.on_play_row(move |track_id, _idx| {
+        let bu = browse_ui.clone();
+        g.on_play_row(move |track_id, idx| {
             let id = i64::from(track_id);
             if id == 0 {
                 return;
             }
+            let ids = bu.current_in_library_ids();
+            if ids.is_empty() {
+                return;
+            }
+            let start = play_row_start(&ids, id, idx);
             let s = s.clone();
             spawn_logged!(s, "browse::play_row",
-                library::queue::queue_append_unique(&s, id));
+                library::playback::player_play_tracks(&s.playback_ctx(), ids, start));
         });
     }
 
@@ -237,18 +247,12 @@ pub fn wire_browse(ui: &AppWindow, state: &AppState, browse_ui: &Arc<BrowseUi>) 
         g.on_request_sort(move |field| {
             let Some(ui) = weak.upgrade() else { return };
             let g = ui.global::<Browse>();
-            let cur_field = g.get_sort_field();
-            let cur_dir = g.get_sort_dir();
-            let (new_field, new_dir) = if cur_field.as_str() == field.as_str() {
-                let nd = if cur_dir.as_str() == "asc" { "desc" } else { "asc" };
-                (field.to_string(), nd.to_string())
-            } else {
-                (field.to_string(), "asc".to_string())
-            };
+            let (new_field, new_dir) =
+                next_sort(g.get_sort_field().as_str(), g.get_sort_dir().as_str(), &field);
             g.set_sort_field(SharedString::from(new_field.as_str()));
             g.set_sort_dir(SharedString::from(new_dir.as_str()));
-            super::persist_view_sort(&s, view_id::BROWSE, new_field.clone(), &new_dir);
-            bu.set_sort(new_field, new_dir);
+            bu.set_sort(new_field.clone(), new_dir.as_str().to_owned());
+            super::persist_view_sort(&s, view_id::BROWSE, new_field, new_dir);
             browse_ui_mod::resort_and_apply(&ui, &bu);
         });
     }
@@ -290,21 +294,6 @@ pub fn wire_browse(ui: &AppWindow, state: &AppState, browse_ui: &Arc<BrowseUi>) 
         });
     }
 
-    // play-all: all in-library ids in display order, start at 0.
-    {
-        let s = state.clone();
-        let bu = browse_ui.clone();
-        g.on_play_all(move || {
-            let ids = bu.current_in_library_ids();
-            if ids.is_empty() {
-                return;
-            }
-            let s = s.clone();
-            spawn_logged!(s, "browse::play_all",
-                library::playback::player_play_tracks(&s.playback_ctx(), ids, Some(0)));
-        });
-    }
-
     // refresh: re-fetch the current path, no history change, no persist.
     // Fired by the BrowseView when nav lands on it (so a fresh activation
     // surfaces watcher-driven additions even when nothing else triggers a
@@ -339,11 +328,10 @@ pub fn wire_browse(ui: &AppWindow, state: &AppState, browse_ui: &Arc<BrowseUi>) 
             rx.mark_unchanged();
             while rx.changed().await.is_ok() {
                 // Skip the directory re-fetch (read_dir + a full-index LIKE
-                // scan) while the section is hidden — play-count flushes
-                // bump this channel after every track completion, so an
-                // ungated re-fetch would run O(library) work per song
-                // during plain listening. Mark dirty so the next
-                // section-enter re-fetches once instead.
+                // scan) while the section is hidden — a scan or a busy
+                // watcher can bump this channel repeatedly, and re-fetching
+                // a view nobody is looking at is O(library) per bump. Mark
+                // dirty so the next section-enter re-fetches once instead.
                 if !bu.section_active() {
                     bu.mark_dirty();
                     continue;

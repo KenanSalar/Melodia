@@ -14,7 +14,7 @@
 //! `request-edit-artwork-for`, which fetch from `SQLite` first and write
 //! Dialog via `upgrade_in_event_loop` (a fresh event-loop tick, safe).
 //!
-//! The dispatcher in `globals.slint` routes Accept to
+//! The dispatcher in `globals/dialog.slint` routes Accept to
 //! `Playlists.create-playlist` / `rename-playlist` / `delete-playlist` /
 //! `apply-mosaic` / `clear-artwork` — those are the commit-side
 //! callbacks wired here.
@@ -47,7 +47,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
     // THE `Dialog.closed` handler — there is exactly one, and there must
     // stay exactly one. `on_closed` is `Callback::set_handler`, which has
     // a single slot: a second registration anywhere would silently clobber
-    // this one (and a default `closed => { … }` body in `globals.slint`
+    // this one (and a default `closed => { … }` body in `globals/dialog.slint`
     // would be clobbered BY it, which is precisely the leak this shape
     // replaced). A new dialog kind that pins an `image` extends this
     // handler; it does not add another.
@@ -213,7 +213,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
             if was_open && let Some(ui) = weak.upgrade() {
                 let d = ui.global::<PlaylistDetail>();
                 d.set_playlist_id(-1);
-                release_detail_hero_images!(d);
+                release_detail_hero_images!(ui, d);
                 playlists_ui_mod::clear_detail(&pu);
             }
             let s = s.clone();

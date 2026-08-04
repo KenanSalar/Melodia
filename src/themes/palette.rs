@@ -2,9 +2,11 @@
 //! signals — those live in `apply.rs` and `system_color_state.rs`
 //! respectively.
 
-/// Every brush slot the Slint `Theme` global exposes that depends on the
-/// active theme. Stored as packed `0x00RRGGBB` so the data tables stay
-/// readable next to the Tauri-source hex strings.
+/// The theme-dependent brush slots that come from a palette table. Stored as
+/// packed `0x00RRGGBB` so the data tables stay readable next to the
+/// Tauri-source hex strings. `apply()` writes three more that don't:
+/// `mantle_unfocused` (an OS signal), and `accent` / `accent_text` (picked
+/// independently of the variant).
 #[derive(Clone, Copy, Debug)]
 pub struct Palette {
     // 13 base / structure
@@ -21,49 +23,15 @@ pub struct Palette {
     pub subtext0: u32,
     pub subtext1: u32,
     pub border: u32,
-    // 7 semantic. Themes that don't natively define a slot mirror Tauri's
-    // `applyThemeColors()` fallback to `overlay1` so any component reading
-    // `Theme.green` etc. stays muted-but-on-palette.
+    // 3 semantic. Every palette names all three — there is deliberately no
+    // struct-update fallback to fill them, because the one that used to exist
+    // let the two generated palettes (Material You, KDE-from-kdeglobals) ship
+    // a neutral grey into `green` / `yellow` without anyone noticing. The
+    // surfaces reading them are signals: the macOS-style traffic lights, the
+    // success/warning toasts, the star rating.
     pub red: u32,
     pub green: u32,
     pub yellow: u32,
-    pub peach: u32,
-    pub mauve: u32,
-    pub pink: u32,
-    pub lavender: u32,
-}
-
-impl Palette {
-    /// Returns a `Palette` whose six Catppuccin-only semantic slots
-    /// (green / yellow / peach / mauve / pink / lavender) are set to
-    /// `fallback`, and every other field is a placeholder zero. Designed
-    /// to be used with struct-update syntax so non-Catppuccin variants
-    /// can name only the fields they actually define:
-    ///
-    /// ```ignore
-    /// const DARK: Palette = Palette {
-    ///     base: 0x222226, mantle: 0x2e2e32, /* ... 13 base fields ... */
-    ///     red: 0xc01c28,
-    ///     ..Palette::fallback_semantics(0x808088)  // overlay1 fills the rest
-    /// };
-    /// ```
-    pub const fn fallback_semantics(fallback: u32) -> Self {
-        Self {
-            // Placeholders — overridden by every explicit field at the call site.
-            base: 0, mantle: 0, crust: 0,
-            surface0: 0, surface1: 0, surface2: 0,
-            overlay0: 0, overlay1: 0, overlay2: 0,
-            text: 0, subtext0: 0, subtext1: 0,
-            border: 0, red: 0,
-            // The 6 slots that pass through.
-            green: fallback,
-            yellow: fallback,
-            peach: fallback,
-            mauve: fallback,
-            pink: fallback,
-            lavender: fallback,
-        }
-    }
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -97,7 +65,7 @@ impl AccentDef {
 /// `Variant` in any theme's `variants` list — `apply()` resolves it to the
 /// theme's `system_dark_variant` / `system_light_variant` based on the
 /// current OS appearance, and on KDE Breeze it can additionally re-source
-/// the 22 brushes from `~/.config/kdeglobals` so the player matches Plasma
+/// the whole palette from `~/.config/kdeglobals` so the player matches Plasma
 /// exactly.
 pub const SYSTEM_VARIANT_ID: &str = "system";
 

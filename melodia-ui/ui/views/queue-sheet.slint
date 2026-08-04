@@ -1,0 +1,384 @@
+import { ListView } from "std-widgets.slint";
+import { Theme } from "../theme.slint";
+import { Dialog } from "../globals/dialog.slint";
+import { Queue } from "../globals/queue.slint";
+import { MaterialIcon } from "../components/material-icon.slint";
+import { IconButton } from "../components/icon-button.slint";
+import { ActionPill, PillButton, PillLabel, PillDivider } from "../components/action-pill.slint";
+import { OverlayScrollbar } from "../components/overlay-scrollbar.slint";
+import { QueueRowItem } from "queue-row-item.slint";
+
+// The bottom-aligned slide-up sheet, mounted **inside the content panel** rather than at
+// the window root, so the animation plays only inside the main view and the sidebar and
+// bar stay visible and clickable. Declared *before* `DialogOverlay`, so a modal raised
+// from it paints above.
+//
+// One animated `t: float` drives both the backdrop alpha and the card's translate, and
+// both derivations are unanimated — a second `animate` on a derived binding phase-lags.
+export component QueueSheet inherits Rectangle {
+    width: 100%;
+    height: 100%;
+
+    // The sheet is normally permanent, but **the miniplayer swap unmounts the whole
+    // full-UI branch** without touching `Queue.open` — so a remount seeds `watched-open`
+    // at the current value and the reset below never fires.
+    init => {
+        Queue.drag-source = -1;
+        Queue.drop-slot = -1;
+    }
+
+    // 0 = fully closed; 1 = fully open.
+    private property <float> t: Queue.open ? 1.0 : 0.0;
+    animate t { duration: Theme.dur-med; easing: ease-out; }
+
+    // Mirrored locally so a `changed` handler can drive the Rust-side atomic — a global
+    // can't watch its own property.
+    private property <bool> watched-open: Queue.open;
+    changed watched-open => {
+        Queue.open-changed(self.watched-open);
+        // Neither an opening nor a closing sheet can have a drag in flight. Worth
+        // spelling out on close: the sheet stays mounted, so the pressed row outlives
+        // it — until the teardown drops the rows a beat later, and a destroyed row never
+        // delivers the pointer-up that would have cleared these itself.
+        Queue.drag-source = -1;
+        Queue.drop-slot = -1;
+    }
+
+    private property <bool> has-rows: Queue.rows.length > 0;
+    private property <bool> has-selection: Queue.selected-count > 0;
+
+    // Owned here and handed to every row. The drop indicator and the rows' slot math
+    // both derive from it, so **one value is what keeps the painted line and the
+    // committed insert on the same row**.
+    private property <length> row-height: 50px;
+    // Where the dragged row's top sits inside the visible list — meaningful only
+    // mid-drag, and read by the auto-scroll gate below.
+    private property <length> drag-src-screen-y:
+        Queue.drag-source * root.row-height + inner-list.viewport-y;
+
+    // In the list body's own coordinates: centred on the slot boundary, then **pinned
+    // inside the band**. The after-the-last-row slot sits exactly on the content's
+    // bottom edge, which the body's `clip` cuts away once the queue is scrolled to the
+    // end, so an unpinned line for that slot is never drawn at all; the top end is
+    // pinned for the mirror case, and both ends catch a pointer dragged clean out of the
+    // list. `draggable-track-list.slint` has the same shape — keep the two in step.
+    private property <length> drop-line-h: 2px;
+    private property <length> drop-line-y: max(
+        0px,
+        min(
+            inner-list.visible-height - root.drop-line-h,
+            Queue.drop-slot * root.row-height + inner-list.viewport-y
+                - root.drop-line-h / 2,
+        ),
+    );
+
+    // A derivation of `t`, with no `animate` of its own.
+    Rectangle {
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.3 * root.t);
+    }
+    backdrop-touch := TouchArea {
+        width: 100%;
+        height: 100%;
+        enabled: Queue.open && root.t > 0.05;
+        mouse-cursor: pointer;
+        clicked => {
+            Queue.close();
+            Queue.open = false;
+            Queue.clear-selection();
+        }
+    }
+
+    // At t=0 the card sits entirely off the bottom edge; at t=1 it is bottom-aligned
+    // inside the panel. Smaller y is higher, so the residual is **added** to the open
+    // y — subtracting slides the card in from the top.
+    card := Rectangle {
+        width: min(640px, max(400px, parent.width * 0.5));
+        x: (parent.width - self.width) / 2;
+        height: parent.height * 0.8;
+        y: parent.height - self.height + (1 - root.t) * (self.height + 24px);
+        background: Theme.mantle;
+        border-color: Theme.border;
+        border-width: 1px;
+        border-top-left-radius: 16px;
+        border-top-right-radius: 16px;
+        visible: root.t > 0.01;
+
+        // Catches clicks on the card so the backdrop dismiss doesn't fire from inside.
+        card-touch := TouchArea {
+            width: 100%;
+            height: 100%;
+            enabled: Queue.open;
+            mouse-cursor: default;
+            clicked => { }
+        }
+
+        // **Esc and Ctrl+A are owned by the root `ShortcutScope`**, gated on
+        // `Queue.open`. They used to live in a nested `FocusScope` here, which only ever
+        // took focus when the user clicked the sheet's blank area — Slint focuses a
+        // `FocusScope` on mouse press, never on mount — so both keys were dead on a
+        // sheet opened with `Q`, and dead again after any confirm dialog raised from it
+        // handed focus back to the root.
+        VerticalLayout {
+            spacing: 0px;
+
+            // Title, count, the Clear ↔ Remove-selected action, and close.
+            Rectangle {
+                height: 56px;
+                background: transparent;
+                HorizontalLayout {
+                    padding-left: 20px;
+                    padding-right: 8px;
+                    spacing: 12px;
+                    alignment: stretch;
+
+                    // The tracks-view page header, restacked. It keeps its own font
+                    // sizes: the page sizes are tuned for a full page, where this
+                    // header sits in a single short row.
+                    VerticalLayout {
+                        alignment: center;
+                        spacing: 0;
+                        Text {
+                            text: @tr("Queue");
+                            color: Theme.text;
+                            font-size: Theme.font-size-lg;
+                            font-weight: 600;
+                        }
+                        Text {
+                            // Its own msgid: some locales build "no items" differently
+                            // from the counted form.
+                            text: Queue.rows.length == 0
+                                ? @tr("No tracks")
+                                : @tr(
+                                    "{n} track" | "{n} tracks" % Queue.rows.length
+                                );
+                            color: Theme.subtext0;
+                            font-size: Theme.font-size-row;
+                        }
+                    }
+                    Rectangle { horizontal-stretch: 1; }
+
+                    // Swaps between "Clear queue" and the selection actions. Same chrome
+                    // as the tracks-view header pill, and `if` rather than `visible:` so
+                    // the absent branch leaves no phantom layout slot.
+                    if root.has-selection: VerticalLayout {
+                        alignment: center;
+                        ActionPill {
+                            PillLabel {
+                                text: @tr("{} selected", Queue.selected-count);
+                            }
+                            PillButton {
+                                icon: "close";
+                                tooltip-text: @tr("Clear selection");
+                                clicked => { Queue.clear-selection(); }
+                            }
+                            PillDivider { }
+                            PillButton {
+                                text: @tr("Remove");
+                                danger: true;
+                                tooltip-text: @tr("Remove selected");
+                                clicked => {
+                                    Dialog.title = @tr("Remove from queue?");
+                                    // Slint forwards the `singular|plural % n` form to
+                                    // gettext's `msgid`/`msgid_plural`.
+                                    Dialog.message = @tr(
+                                        "Remove {n} track from the queue?" | "Remove {n} tracks from the queue?" % Queue.selected-count
+                                    );
+                                    Dialog.confirm-label = @tr("Remove");
+                                    Dialog.cancel-label = @tr("Cancel");
+                                    Dialog.destructive = true;
+                                    Dialog.kind = "remove-queue-selected";
+                                    Dialog.target-id = -1;
+                                    Dialog.open = true;
+                                }
+                            }
+                        }
+                    }
+                    if !root.has-selection && root.has-rows: VerticalLayout {
+                        alignment: center;
+                        ActionPill {
+                            PillButton {
+                                text: @tr("Clear queue");
+                                clicked => {
+                                    Dialog.title = @tr("Clear queue?");
+                                    Dialog.message = @tr("Remove all tracks from the queue? Playback will stop.");
+                                    Dialog.confirm-label = @tr("Clear");
+                                    Dialog.cancel-label = @tr("Cancel");
+                                    Dialog.destructive = true;
+                                    Dialog.kind = "clear-queue";
+                                    Dialog.target-id = -1;
+                                    Dialog.open = true;
+                                }
+                            }
+                        }
+                    }
+                    VerticalLayout {
+                        alignment: center;
+                        IconButton {
+                            icon: "close";
+                            diameter: 32px;
+                            icon-size: 18px;
+                            clicked => {
+                                Queue.close();
+                                Queue.open = false;
+                                Queue.clear-selection();
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Header separator.
+            Rectangle {
+                height: 1px;
+                background: Theme.border;
+            }
+
+            // List body.
+            Rectangle {
+                vertical-stretch: 1;
+                clip: true;
+
+                inner-list := ListView {
+                    // The `OverlayScrollbar` below is the only scrollbar.
+                    vertical-scrollbar-policy: always-off;
+                    horizontal-scrollbar-policy: always-off;
+                    x: 0;
+                    y: 0;
+                    // Reserves the rail for the overlay scrollbar — the bar itself, the
+                    // card inset, and a visible gap to the row content. Without it the
+                    // row hover pill paints under the scrollbar with no breathing room.
+                    width: parent.width - 14px;
+                    height: 100%;
+                    for row[idx] in Queue.rows: QueueRowItem {
+                        row-data: row;
+                        row-index: idx;
+                        list-y0: inner-list.absolute-position.y;
+                        list-height: inner-list.height;
+                        list-viewport-y: inner-list.viewport-y;
+                        row-height: root.row-height;
+                        // Drives the per-corner radius gating, so contiguous selected
+                        // rows merge into one pill.
+                        prev-selected: idx > 0 && Queue.rows[idx - 1].selected;
+                        next-selected: idx < Queue.rows.length - 1 && Queue.rows[idx + 1].selected;
+                        request-scroll-by(dy) => {
+                            // **Skipped when the nudge would carry the dragged row out
+                            // of the visible range.** A `ListView` destroys the rows
+                            // that leave it, and a destroyed row never delivers its
+                            // pointer-up, so the drag would neither commit nor clean up
+                            // — auto-scroll stops once the source reaches the far edge.
+                            if (Queue.drag-source >= 0
+                                && (root.drag-src-screen-y - dy) > -root.row-height
+                                && (root.drag-src-screen-y - dy) < inner-list.visible-height) {
+                                // **Not `clamp()`**: a queue shorter than the list body
+                                // puts its lower bound *above* its upper one, and
+                                // `clamp` expands to `max(lo, min(v, hi))`, which then
+                                // hands back the positive lower bound and shoves every
+                                // row down the screen. Capping both arguments at 0
+                                // resolves that case to 0 instead.
+                                // `draggable-track-list.slint` has the same shape.
+                                inner-list.viewport-y = max(
+                                    min(0px, inner-list.visible-height - inner-list.viewport-height),
+                                    min(0px, inner-list.viewport-y - dy),
+                                );
+                            }
+                        }
+                    }
+                }
+
+                // Painted in the gap *between* rows rather than at a row's top edge, so
+                // the drop target reads clearly against the still-painted source ghost.
+                // Hidden when the slot is a no-op — either side of the source both mean
+                // "stays put" after the slot → index adjustment, so a line there would
+                // mislead.
+                if Queue.drag-source >= 0
+                    && Queue.drop-slot >= 0
+                    && Queue.drop-slot != Queue.drag-source
+                    && Queue.drop-slot != Queue.drag-source + 1: Rectangle {
+                    x: 0;
+                    y: root.drop-line-y;
+                    width: inner-list.width;
+                    height: root.drop-line-h;
+                    background: Theme.accent;
+                }
+
+                // A sibling, flush with the card edge.
+                OverlayScrollbar {
+                    x: parent.width - self.width - 2px;
+                    y: 0;
+                    width: 10px;
+                    height: parent.height;
+                    visible-size: inner-list.visible-height;
+                    content-size: inner-list.viewport-height;
+                    offset: -inner-list.viewport-y;
+                    scroll-to(o) => { inner-list.viewport-y = -o; }
+                }
+
+                // Empty state.
+                if Queue.rows.length == 0: VerticalLayout {
+                    alignment: center;
+                    HorizontalLayout {
+                        alignment: center;
+                        VerticalLayout {
+                            spacing: Theme.pad-sm;
+                            HorizontalLayout {
+                                alignment: center;
+                                MaterialIcon {
+                                    name: "queue_music";
+                                    icon-size: 40px;
+                                    icon-color: Theme.surface2;
+                                }
+                            }
+                            Text {
+                                text: @tr("Queue is empty");
+                                color: Theme.subtext0;
+                                font-size: Theme.font-size-md;
+                                horizontal-alignment: center;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Last child of the card, so it paints over the list, and `if` rather than
+        // `visible:` so the absent branch claims no layout slot. **A plain Rectangle
+        // with no TouchArea**, so the OS drop event still lands at the winit layer
+        // below Slint.
+        if Queue.is-drop-hovered && Queue.open: Rectangle {
+            x: 0;
+            y: 57px; // 56 px header + 1 px separator
+            width: 100%;
+            height: parent.height - 57px;
+            background: Theme.crust.with-alpha(0.85);
+            border-bottom-left-radius: 16px;
+            border-bottom-right-radius: 16px;
+
+            VerticalLayout {
+                alignment: center;
+                HorizontalLayout {
+                    alignment: center;
+                    VerticalLayout {
+                        spacing: Theme.pad-md;
+                        HorizontalLayout {
+                            alignment: center;
+                            MaterialIcon {
+                                name: "library_add";
+                                icon-size: 40px;
+                                icon-color: Theme.accent;
+                            }
+                        }
+                        Text {
+                            text: @tr("Drop to add to queue");
+                            color: Theme.text;
+                            font-size: Theme.font-size-md;
+                            font-weight: 600;
+                            horizontal-alignment: center;
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

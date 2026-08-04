@@ -1,0 +1,16 @@
+import { Theme } from "../theme.slint";
+
+// Themed chrome for every popup overlay — context menus, dropdowns, flyouts,
+// slider popups — so they read as one thing. Mount it as the immediate child of
+// the `PopupWindow` and put the content inside.
+//
+// `pill: true` takes the half-short-axis radius the volume slider's vertical
+// chrome wants. No entry animation: a popup appears instantly by design.
+export component PopupSurface inherits Rectangle {
+    in property <bool> pill: false;
+
+    background: Theme.crust;
+    border-color: Theme.surface2;
+    border-width: 1px;
+    border-radius: root.pill ? min(self.width, self.height) / 2 : Theme.radius-md;
+}

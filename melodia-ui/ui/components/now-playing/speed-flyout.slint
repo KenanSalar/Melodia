@@ -1,0 +1,23 @@
+import { Theme } from "../../theme.slint";
+import { PopupSurface } from "../popup-surface.slint";
+import { FlyoutOption } from "flyout-option.slint";
+import { SpeedPresets } from "flyout-presets.slint";
+
+// The playback-rate presets, off the shared global. Like its two siblings it
+// lives *inside* the overflow menu's one PopupWindow, left of the column; the
+// host places it and this renders the rows.
+export component SpeedFlyout inherits PopupSurface {
+    in property <float> current-speed;
+    callback pick(float);
+
+    VerticalLayout {
+        padding: Theme.pad-xs;
+        spacing: 0;
+
+        for p in SpeedPresets.list: FlyoutOption {
+            label: p.label;
+            active: abs(root.current-speed - p.value) < 0.001;
+            clicked => { root.pick(p.value); }
+        }
+    }
+}

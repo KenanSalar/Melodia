@@ -1,20 +1,7 @@
-#[allow(
-    unsafe_code,
-    clippy::all,
-    clippy::pedantic,
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::panic,
-    clippy::todo,
-    clippy::dbg_macro,
-    clippy::print_stdout,
-    clippy::print_stderr,
-    clippy::await_holding_lock,
-)]
-mod generated_ui {
-    slint::include_modules!();
-}
-pub use generated_ui::*;
+// The Slint compiler's output lives in its own crate so it is built once rather
+// than once per compilation of this one. Re-exported flat, so every call site
+// keeps naming the generated types as `crate::AppWindow`, `crate::TrackRow`, ….
+pub use melodia_ui::*;
 
 pub mod config;
 pub mod database;
@@ -26,6 +13,8 @@ pub mod player;
 pub mod services;
 pub mod state;
 pub mod tasks;
+#[cfg(test)]
+mod test_support;
 pub mod themes;
 pub mod ui;
 pub mod utils;

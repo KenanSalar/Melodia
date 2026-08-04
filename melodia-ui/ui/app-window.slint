@@ -1,0 +1,670 @@
+// Vazirmatn (OFL) — one family covering Latin and Arabic with consistent metrics, so
+// mixed-script rows don't drift vertically the way they did when Slint fell back from
+// Latin-only Inter to a system Arabic face. Regular/Medium/SemiBold is the whole set
+// the app uses.
+//
+// These TTFs are PATCHED: `scripts/patch_vazirmatn.py` rewrites the OS/2 typo + hhea
+// metrics to a Latin-typical line ratio. Upstream ships ~1.56× so Arabic combining
+// marks fit, which at our sizes pushes every centred Latin text several px up.
+// Pristine copies live in `assets/fonts/originals/` as the script's input.
+import "assets/fonts/vazirmatn/Vazirmatn-Regular.ttf";
+import "assets/fonts/vazirmatn/Vazirmatn-Medium.ttf";
+import "assets/fonts/vazirmatn/Vazirmatn-SemiBold.ttf";
+
+import { Theme } from "theme.slint";
+import { Settings } from "settings.slint";
+import { Albums, AlbumDetail } from "globals/albums.slint";
+import { Artists, ArtistDetail } from "globals/artists.slint";
+import { Equalizer, ReplayGain, Visualizer } from "globals/audio.slint";
+import { Favorites, RecentlyPlayed } from "globals/curated.slint";
+import { SmartEditor, TagEditor, ScrobbleUi } from "globals/dialog-forms.slint";
+import { Dialog } from "globals/dialog.slint";
+import { Genres, GenreDetail } from "globals/genres.slint";
+import { HeroBackdrop } from "globals/hero-backdrop.slint";
+import { HeroChips } from "globals/hero-chips.slint";
+import { LibrarySettings } from "globals/library-settings.slint";
+import { Nav, NavEnterFrom } from "globals/nav.slint";
+import { Player } from "globals/player.slint";
+import { Playlists, PlaylistDetail } from "globals/playlists.slint";
+import { Queue, NowPlaying } from "globals/queue.slint";
+import { Search } from "globals/search.slint";
+import { SettingsPage } from "globals/settings-page.slint";
+import { WindowChrome, MiniPlayer, CompositeScroll, PopupHighlight } from "globals/shell.slint";
+import { Tracks, Browse, RowCovers } from "globals/tracks.slint";
+import { MelodiaUpdater, Notifications } from "globals/updater.slint";
+import { TrackSummaryRow, TrackListRow, PlayerVm, QueueVm, QueueRow, FolderListRow,
+         BrowseFolderRow, BreadcrumbRow, NotificationRow, TrackMetaRow,
+         AlbumRow, AlbumGridRow, ArtistRow, ArtistGridRow,
+         GenreRow, GenreGridRow,
+         PlaylistRow, PlaylistGridRow, SmartRuleRow } from "models.slint";
+import { Sidebar } from "layout/sidebar.slint";
+import { NowPlayingBar } from "layout/now-playing-bar.slint";
+import { ResizeRing } from "layout/resize-ring.slint";
+import { ShortcutScope } from "layout/shortcut-scope.slint";
+import { PlaceholderView } from "views/placeholder-view.slint";
+import { TracksView } from "views/tracks-view.slint";
+import { FavoritesView } from "views/favorites-view.slint";
+import { RecentlyPlayedView } from "views/recently-played-view.slint";
+import { BrowseView } from "views/browse-view.slint";
+import { AlbumView } from "views/album-view.slint";
+import { AlbumDetailView } from "views/album-detail-view.slint";
+import { ArtistView } from "views/artist-view.slint";
+import { ArtistDetailView } from "views/artist-detail-view.slint";
+import { GenresView } from "views/genres-view.slint";
+import { GenreDetailView } from "views/genre-detail-view.slint";
+import { PlaylistsView } from "views/playlists-view.slint";
+import { PlaylistDetailView } from "views/playlist-detail-view.slint";
+import { SearchView } from "views/search-view.slint";
+import { SettingsView } from "views/settings-view.slint";
+import { NowPlayingView } from "views/now-playing-view.slint";
+import { MiniPlayerView } from "views/mini-player.slint";
+import { QueueSheet } from "views/queue-sheet.slint";
+import { DialogOverlay } from "components/dialog/dialog.slint";
+import { CustomTitleBar } from "components/custom-titlebar.slint";
+import { NotificationStack } from "components/dialog/notification-stack.slint";
+import { MiniPlayerSwitch } from "components/mini-player-switch.slint";
+import { SectionActiveGate } from "components/section-active-gate.slint";
+import { Tooltip, TooltipSide } from "components/tooltip.slint";
+import { ViewTransition } from "components/view-transition.slint";
+
+// Re-export so Rust can mention these from `slint::include_modules!`.
+export {
+    Theme, Settings, SettingsPage, Player, HeroBackdrop, HeroChips, Equalizer, ReplayGain, Visualizer, ScrobbleUi, SmartEditor, TagEditor, Nav, CompositeScroll, MiniPlayer, Tracks, Browse, LibrarySettings, Dialog, WindowChrome, Queue, Notifications, NowPlaying, Favorites, RecentlyPlayed, Albums, AlbumDetail, Artists, ArtistDetail, Genres, GenreDetail, Playlists, PlaylistDetail, PopupHighlight, Search, MelodiaUpdater, RowCovers,
+    TrackSummaryRow, TrackListRow, PlayerVm, QueueVm, QueueRow, FolderListRow,
+    BrowseFolderRow, BreadcrumbRow, NotificationRow, TrackMetaRow,
+    AlbumRow, AlbumGridRow, ArtistRow, ArtistGridRow,
+    GenreRow, GenreGridRow,
+    PlaylistRow, PlaylistGridRow, SmartRuleRow,
+}
+
+export component AppWindow inherits Window {
+    title: "Melodia";
+    // No `preferred-width`/`-height` on purpose. `window_chrome/geometry.rs::restore`
+    // calls `slint::Window::set_size` after `AppWindow::new()`, which sets winit's
+    // `has_explicit_size` — the only thing stopping Slint from snapping to the
+    // content-preferred size on first show. A preferred size here would just be that
+    // snap target.
+    //
+    // The floor is the miniplayer's smallest sensible footprint. The full UI only
+    // renders above `mini-active`'s ~550×250 threshold, so keeping the OS minimum down
+    // here lets the user drag straight into mini mode with no runtime winit constraint
+    // mutation.
+    min-width: 350px;
+    min-height: 90px;
+    // Custom-frame + windowed gets a transparent ARGB surface, so the compositor
+    // blends the rounded mantle shell with the desktop and the alpha=0 corners read as
+    // "not our window" — real rounded corners on Wayland, X11-with-compositor, Windows
+    // and macOS alike. Slint's winit backend always requests a transparency-capable
+    // surface, so no extra Cargo feature is involved.
+    //
+    // Native-frame or maximized goes opaque instead: native wants the OS frame to abut
+    // a solid backdrop, and rounded corners on an edge-to-edge window clip against the
+    // screen edge. The Wayland transparency caveat sometimes cited here
+    // (slint-ui/slint#6145) is fullscreen-specific — there is no fullscreen mode today,
+    // so if one lands, mirror `is-maximized` with an `is-fullscreen` flag.
+    background: (Theme.use-native-titlebar || WindowChrome.is-maximized)
+        ? Theme.mantle
+        : Colors.transparent;
+
+    // Slint reads `no-frame` once at first show, so `Theme.use-native-titlebar` must be
+    // hydrated before `app.run()` — `window_chrome::install` does it. Dropping the OS
+    // frame also drops winit's resize edges, which `Theme.resize-border` restores.
+    // `ResizeRing` below reads the same token: winit's border check decides where
+    // `drag_resize_window` fires and the ring decides where hover is suppressed, so a
+    // drift leaves a band where the cursor changes but the widget still flashes hover.
+    no-frame: !Theme.use-native-titlebar;
+    resize-border-width: Theme.use-native-titlebar ? 0px : Theme.resize-border;
+
+    default-font-family: "Vazirmatn";
+    default-font-size: Theme.font-size-md;
+
+    function view-title(idx: int) -> string {
+        if (idx == 0) { return @tr("Search"); }
+        if (idx == 1) { return @tr("Browse"); }
+        if (idx == 2) { return @tr("Favorites"); }
+        if (idx == 3) { return @tr("Tracks"); }
+        if (idx == 4) { return @tr("Albums"); }
+        if (idx == 5) { return @tr("Artists"); }
+        if (idx == 6) { return @tr("Genres"); }
+        if (idx == 7) { return @tr("Playlists"); }
+        if (idx == 8) { return @tr("Recently Played"); }
+        if (idx == 9) { return @tr("Settings"); }
+        // App name (proper noun) — never translated.
+        return "Melodia";
+    }
+
+    // Clears the Settings page's search and blurs its TextInput on nav-away, so the
+    // next keystroke can't land in a hidden field on another page. It lives up here
+    // because `SettingsView` is unmounted before a handler inside it could see the
+    // leaving transition, and it watches a mirror because `changed` rejects path
+    // expressions on globals.
+    property <int> watched-nav-idx: Nav.selected-index;
+    changed watched-nav-idx => {
+        // The mounted content view changed — drop what the outgoing composite left.
+        CompositeScroll.reset();
+        if (self.watched-nav-idx != 9) {
+            // Both halves: the input is what the box shows, the query is what the page
+            // is filtered by, and a throttle sits between them.
+            SettingsPage.search-input = "";
+            SettingsPage.search-query = "";
+            SettingsPage.blur-search-tick += 1;
+        }
+        // The outgoing view may hold focus in a TextInput about to be destroyed, and
+        // Slint doesn't hand focus back to an ancestor FocusScope when that happens —
+        // shortcuts would stay dead until the next click. Synchronous, so SearchView's
+        // 1 ms autofocus Timer still wins when entering Search.
+        shortcut-scope.grab-focus();
+    }
+
+    // Lets Rust gate the Up Next rebuild on the view being visible. Mirrored here for
+    // the `watched-nav-idx` reasons — `NowPlayingView` is unmounted while closed, so a
+    // handler inside it would miss both transitions.
+    property <bool> watched-now-playing-open: Nav.now-playing-open;
+    changed watched-now-playing-open => {
+        // NP open/close swaps the mounted content view, and destroys the section view
+        // under it — same focus orphaning as a sidebar nav.
+        CompositeScroll.reset();
+        Nav.now-playing-open-changed(self.watched-now-playing-open);
+        shortcut-scope.grab-focus();
+    }
+
+    // Arms the visualizer's audio-thread sample tap only while something is drawing it.
+    // Its own property rather than a second handler on `now-playing-open-changed`:
+    // that callback has one slot, already taken by `wire_now_playing_open`.
+    property <bool> watched-viz-active: Nav.now-playing-open && Visualizer.enabled;
+    changed watched-viz-active => {
+        Visualizer.set-active(self.watched-viz-active);
+    }
+
+    // Artist Detail is a composite-scroll view that opens and closes without a
+    // nav-index change — grid and detail both sit under index 5 — so the reset above
+    // misses it, and the unmounting view's stale hover flag would trap the wheel.
+    property <int> watched-artist-detail-id: ArtistDetail.artist-id;
+    changed watched-artist-detail-id => {
+        CompositeScroll.reset();
+        shortcut-scope.grab-focus();
+    }
+
+    // The other three unmount their grid the same way, and every grid carries a filter
+    // TextInput still holding focus when a card is clicked. None is a composite view,
+    // so focus is all they owe.
+    property <int> watched-album-detail-id: AlbumDetail.album-id;
+    changed watched-album-detail-id => {
+        shortcut-scope.grab-focus();
+    }
+
+    property <int> watched-genre-detail-id: GenreDetail.genre-id;
+    changed watched-genre-detail-id => {
+        shortcut-scope.grab-focus();
+    }
+
+    property <int> watched-playlist-detail-id: PlaylistDetail.playlist-id;
+    changed watched-playlist-detail-id => {
+        shortcut-scope.grab-focus();
+    }
+
+    // The miniplayer swap unmounts the whole full-UI branch — composite views and
+    // focused filters with it — without a nav-index change, so the resets above miss
+    // it too.
+    property <bool> watched-mini-render: mini-switch.render-active;
+    changed watched-mini-render => {
+        CompositeScroll.reset();
+        // Same class of stale sentinel one global over: the rail dies with the branch
+        // and its rows get no leave event, so the index they last published outlives
+        // them and the tooltip frame reads it as a live hover on the way back in.
+        Nav.sidebar-tip-idx = -1;
+        shortcut-scope.grab-focus();
+    }
+
+    // Every dialog body mounts under `if Dialog.kind == "…"` and `closed-teardown()`
+    // clears `kind`, so a focused LabeledInput dies with the body exactly as a filter
+    // does above. Ungated on purpose: the bodies never autofocus, so regrabbing on
+    // *open* is free and it takes the keyboard off whatever SearchBar still held it —
+    // which would otherwise swallow keystrokes behind the backdrop instead of hitting
+    // the scope's `Dialog.open` guard. Safe where `focus()` from `init` isn't: a
+    // `changed` handler runs from `run_change_handlers`, outside the property
+    // evaluator's recursion guard.
+    property <string> watched-dialog-kind: Dialog.kind;
+    changed watched-dialog-kind => {
+        shortcut-scope.grab-focus();
+    }
+
+    // The sheet is the odd one out: permanent, mounting nothing, only animating in.
+    // But its Esc / Ctrl+A live in the scope and nothing moves focus when it opens —
+    // the bar button and the overflow entry are both TouchArea clicks — so a filter
+    // SearchBar keeps the keyboard behind the backdrop and swallows the `a`.
+    property <bool> watched-queue-open: Queue.open;
+    changed watched-queue-open => {
+        shortcut-scope.grab-focus();
+    }
+
+    // The responsive full-UI ↔ miniplayer swap: size thresholds, the two-phase fade,
+    // and the writes into `MiniPlayer`. Fed the live window size because a component's
+    // root binding can't reach `parent`.
+    mini-switch := MiniPlayerSwitch {
+        host-width: root.width;
+        host-height: root.height;
+    }
+
+    // One gate per sidebar section, in nav-index order. `SectionActiveGate` owns the
+    // predicate and the `changed` watcher (its header says why the watcher can't live
+    // inside each view); all that differs per section is which Rust hook the transition
+    // drives and what that hook does — which is what the comments below record.
+
+    // Search. Query-driven, so no library-changed refresh, but Rust still releases the
+    // per-strip album + artist cover LRUs on `false` (clearing the result models on the
+    // UI thread first). `query` + `recent-rows` survive a flip away and back.
+    SectionActiveGate {
+        index: 0;
+        mini-active: mini-switch.active;
+        active-changed(active) => { Search.section-active-changed(active); }
+    }
+
+    // Browse. Gate-only, like Tracks: the `library_changed` subscriber skips
+    // re-fetching the current directory while the view is hidden.
+    SectionActiveGate {
+        index: 1;
+        mini-active: mini-switch.active;
+        active-changed(active) => { Browse.section-active-changed(active); }
+    }
+
+    // Favorites. One `FavoritesView` covers the hero and all three tabs, so no detail
+    // flip inside this branch. Rust releases the mosaic / Most Played / Artists cover
+    // caches *and* the borrowed Albums grid cache on `false`, then re-fetches hero +
+    // grids + tracks through the library-changed dirty flag on `true`.
+    SectionActiveGate {
+        index: 2;
+        mini-active: mini-switch.active;
+        active-changed(active) => { Favorites.section-active-changed(active); }
+    }
+
+    // Tracks. Unlike Albums, the view keeps its row model warm across nav-aways, so
+    // this only gates the `library_changed` refresher: hidden ⇒ mark dirty and skip the
+    // full-library re-fetch, re-enter ⇒ one deferred refresh.
+    SectionActiveGate {
+        index: 3;
+        mini-active: mini-switch.active;
+        active-changed(active) => { Tracks.section-active-changed(active); }
+    }
+
+    // Albums. Rust releases the album-tier cover cache on `false` (nav away, or opening
+    // Now Playing *from* Albums) and re-warms on `true`. Grid and detail are both in
+    // this branch, so a drill-in stays `true` — as it does for Artists/Genres/Playlists.
+    SectionActiveGate {
+        index: 4;
+        mini-active: mini-switch.active;
+        active-changed(active) => { Albums.section-active-changed(active); }
+    }
+
+    // Artists.
+    SectionActiveGate {
+        index: 5;
+        mini-active: mini-switch.active;
+        active-changed(active) => { Artists.section-active-changed(active); }
+    }
+
+    // Genres. The hook has no cache to release — genres have no artwork — but stays
+    // wired for symmetry with Albums / Artists.
+    SectionActiveGate {
+        index: 6;
+        mini-active: mini-switch.active;
+        active-changed(active) => { Genres.section-active-changed(active); }
+    }
+
+    // Playlists. Mirrors the Albums hook over the playlist-tier cover cache.
+    SectionActiveGate {
+        index: 7;
+        mini-active: mini-switch.active;
+        active-changed(active) => { Playlists.section-active-changed(active); }
+    }
+
+    // Recently Played. Like Favorites: release the cover cache on `false`, re-fetch on
+    // `true`.
+    SectionActiveGate {
+        index: 8;
+        mini-active: mini-switch.active;
+        active-changed(active) => { RecentlyPlayed.section-active-changed(active); }
+    }
+
+    // Outer mantle shell. With a transparent Window background this rounded Rectangle
+    // *is* the visible window outline, and `clip: true` masks anything a child paints
+    // outside it. Native-frame or maximized drops the radius to 0 and stays full-bleed,
+    // per the background comment above; the inner content panel still rounds.
+    Rectangle {
+        width: 100%;
+        height: 100%;
+        background: Theme.mantle;
+        border-radius: (Theme.use-native-titlebar || WindowChrome.is-maximized)
+            ? 0px
+            : Theme.shell-radius;
+        clip: true;
+
+        // The only FocusScope in the tree, wrapping the whole main layout — every key a
+        // focused TextInput doesn't consume lands here directly. Bindings, the
+        // volume-commit debounce and the focus contract are in the component.
+        shortcut-scope := ShortcutScope {
+            width: 100%;
+            height: 100%;
+
+        // Full UI branch, wrapped so the fade is driven from one ancestor. Gated on
+        // `render-active` — the fade-delayed shadow of `active` — so only one branch is
+        // ever mounted, and the sidebar's grid covers never sit alive beside the mini
+        // up-next subscriber mid-swap.
+        if !mini-switch.render-active: Rectangle {
+            width: 100%;
+            height: 100%;
+            opacity: mini-switch.fade-opacity;
+
+            VerticalLayout {
+            // `if` rather than `visible: false` so the bar's slot leaves the layout
+            // entirely in native mode — a hidden child still claims its stretch.
+            if !Theme.use-native-titlebar: CustomTitleBar { }
+
+            // The custom-frame `padding-right` pushes the content panel and its
+            // scrollbar off the window edge; flush, grabbing the edge to resize catches
+            // the scrollbar's hover instead. Native mode leaves the OS frame abutting.
+            HorizontalLayout {
+                vertical-stretch: 1;
+                padding-right: Theme.use-native-titlebar ? 0px : 4px;
+
+                sidebar := Sidebar {}
+
+                // Rounded content panel — one Rectangle with a real rounded stroke, the
+                // `popup-surface.slint` pattern, so the border follows the corner curve
+                // with no clip-masking.
+                //
+                // Native mode rounds only the left side and sits flush against the OS
+                // frame. `Rectangle` has no per-side `border-width`, so the trick is a
+                // square-clip wrapper plus a panel oversized 1 px to the right: that
+                // border falls outside the wrapper and is clipped, while top/bottom/left
+                // survive because those edges match exactly. Custom mode keeps the panel
+                // at wrapper width, so the parent's right margin lands a closed rect.
+                Rectangle {
+                    horizontal-stretch: 1;
+                    clip: true;
+
+                    Rectangle {
+                        x: 0;
+                        y: 0;
+                        width: Theme.use-native-titlebar
+                            ? parent.width + 1px
+                            : parent.width;
+                        height: parent.height;
+                        background: Theme.base;
+                        border-color: Theme.border;
+                        border-width: 1px;
+                        // Custom mode tracks the user-pickable `shell-radius` so the
+                        // panel and the mantle shell read as concentric arcs; native
+                        // tracks `native-content-radius`, seeded from the OS at
+                        // startup, so it matches the host without a user setting.
+                        border-top-left-radius: Theme.use-native-titlebar
+                            ? Theme.native-content-radius
+                            : Theme.shell-radius;
+                        border-bottom-left-radius: Theme.use-native-titlebar
+                            ? Theme.native-content-radius
+                            : Theme.shell-radius;
+                        border-top-right-radius: Theme.use-native-titlebar
+                            ? 0px
+                            : Theme.shell-radius;
+                        border-bottom-right-radius: Theme.use-native-titlebar
+                            ? 0px
+                            : Theme.shell-radius;
+                        clip: true;
+
+                        // One branch per nav index, `if` rather than `visible: false` so
+                        // the unselected ones leave the layout tree entirely. Every
+                        // regular branch is also gated on `!now-playing-open`, since the
+                        // full-screen Now Playing view replaces the current view inside
+                        // this panel — so exactly one is ever mounted. Unrouted indices
+                        // fall through to the placeholder at the end.
+                        //
+                        // Search is query-driven over FTS5 + LIKE (`search::search_all`).
+                        if !Nav.now-playing-open && Nav.selected-index == 0: ViewTransition {
+                            width: parent.width;
+                            height: parent.height;
+                            enter-from: Nav.pending-enter-from;
+                            SearchView { width: 100%; height: 100%; }
+                        }
+                        if !Nav.now-playing-open && Nav.selected-index == 1: ViewTransition {
+                            width: parent.width;
+                            height: parent.height;
+                            enter-from: Nav.pending-enter-from;
+                            BrowseView { width: 100%; height: 100%; }
+                        }
+                        // Favorites — a pinned hero mosaic carrying the tab bar and the
+                        // filter over three sub-views. An artist card and the Songs
+                        // rows' go-to-{album,artist,genre} actions all stamp
+                        // `*Detail.origin-nav-index = 2`, so the back arrow returns
+                        // here rather than to the entity grid.
+                        if !Nav.now-playing-open && Nav.selected-index == 2: ViewTransition {
+                            width: parent.width;
+                            height: parent.height;
+                            enter-from: Nav.pending-enter-from;
+                            FavoritesView { width: 100%; height: 100%; }
+                        }
+                        if !Nav.now-playing-open && Nav.selected-index == 3: ViewTransition {
+                            width: parent.width;
+                            height: parent.height;
+                            enter-from: Nav.pending-enter-from;
+                            TracksView { width: 100%; height: 100%; }
+                        }
+                        // Albums swaps grid ↔ detail on `AlbumDetail.album-id`, -1 being
+                        // the grid. Artists, Genres and Playlists below are the same
+                        // shape on their own id.
+                        if !Nav.now-playing-open && Nav.selected-index == 4
+                            && AlbumDetail.album-id < 0: ViewTransition {
+                            width: parent.width;
+                            height: parent.height;
+                            enter-from: Nav.pending-enter-from;
+                            AlbumView { width: 100%; height: 100%; }
+                        }
+                        if !Nav.now-playing-open && Nav.selected-index == 4
+                            && AlbumDetail.album-id >= 0: ViewTransition {
+                            width: parent.width;
+                            height: parent.height;
+                            enter-from: Nav.pending-enter-from;
+                            AlbumDetailView { width: 100%; height: 100%; }
+                        }
+                        if !Nav.now-playing-open && Nav.selected-index == 5
+                            && ArtistDetail.artist-id < 0: ViewTransition {
+                            width: parent.width;
+                            height: parent.height;
+                            enter-from: Nav.pending-enter-from;
+                            ArtistView { width: 100%; height: 100%; }
+                        }
+                        if !Nav.now-playing-open && Nav.selected-index == 5
+                            && ArtistDetail.artist-id >= 0: ViewTransition {
+                            width: parent.width;
+                            height: parent.height;
+                            enter-from: Nav.pending-enter-from;
+                            ArtistDetailView { width: 100%; height: 100%; }
+                        }
+                        if !Nav.now-playing-open && Nav.selected-index == 6
+                            && GenreDetail.genre-id < 0: ViewTransition {
+                            width: parent.width;
+                            height: parent.height;
+                            enter-from: Nav.pending-enter-from;
+                            GenresView { width: 100%; height: 100%; }
+                        }
+                        if !Nav.now-playing-open && Nav.selected-index == 6
+                            && GenreDetail.genre-id >= 0: ViewTransition {
+                            width: parent.width;
+                            height: parent.height;
+                            enter-from: Nav.pending-enter-from;
+                            GenreDetailView { width: 100%; height: 100%; }
+                        }
+                        if !Nav.now-playing-open && Nav.selected-index == 7
+                            && PlaylistDetail.playlist-id < 0: ViewTransition {
+                            width: parent.width;
+                            height: parent.height;
+                            enter-from: Nav.pending-enter-from;
+                            PlaylistsView { width: 100%; height: 100%; }
+                        }
+                        if !Nav.now-playing-open && Nav.selected-index == 7
+                            && PlaylistDetail.playlist-id >= 0: ViewTransition {
+                            width: parent.width;
+                            height: parent.height;
+                            enter-from: Nav.pending-enter-from;
+                            PlaylistDetailView { width: 100%; height: 100%; }
+                        }
+                        if !Nav.now-playing-open && Nav.selected-index == 8: ViewTransition {
+                            width: parent.width;
+                            height: parent.height;
+                            enter-from: Nav.pending-enter-from;
+                            RecentlyPlayedView { width: 100%; height: 100%; }
+                        }
+                        if !Nav.now-playing-open && Nav.selected-index == 9: ViewTransition {
+                            width: parent.width;
+                            height: parent.height;
+                            enter-from: Nav.pending-enter-from;
+                            SettingsView { width: 100%; height: 100%; }
+                        }
+                        if !Nav.now-playing-open
+                            && Nav.selected-index != 0
+                            && Nav.selected-index != 1
+                            && Nav.selected-index != 2
+                            && Nav.selected-index != 3
+                            && Nav.selected-index != 4
+                            && Nav.selected-index != 5
+                            && Nav.selected-index != 6
+                            && Nav.selected-index != 7
+                            && Nav.selected-index != 8
+                            && Nav.selected-index != 9: ViewTransition {
+                            width: parent.width;
+                            height: parent.height;
+                            enter-from: Nav.pending-enter-from;
+                            PlaceholderView {
+                                width: 100%;
+                                height: 100%;
+                                title: root.view-title(Nav.selected-index);
+                            }
+                        }
+                        // Now Playing rides ViewTransition for parity, hard-coded to
+                        // `below`: this branch only fires on open, and closing is the
+                        // outgoing state, which `ViewTransition` doesn't animate.
+                        if Nav.now-playing-open: ViewTransition {
+                            width: parent.width;
+                            height: parent.height;
+                            enter-from: NavEnterFrom.below;
+                            NowPlayingView { width: 100%; height: 100%; }
+                        }
+
+                        // Mounted inside the content panel so its backdrop
+                        // and slide stay off the sidebar and the bar, and
+                        // declared after the view branches so it stacks
+                        // above them. The panel's clip hides the closed
+                        // card; always rendered, so the close animation can
+                        // play after `Queue.open` flips back.
+                        QueueSheet {
+                            x: 0;
+                            y: 0;
+                            width: parent.width;
+                            height: parent.height;
+                        }
+                    }
+                }
+            }
+
+            NowPlayingBar {}
+            }
+
+            // Top-layer tooltip for the collapsed rail, which hides every row label.
+            // Declared after the layout because paint order is declaration order: the
+            // Sidebar is the content row's first child, so anything it drew past its
+            // right edge would land under the panel, and `nav-scroll` clips it besides.
+            // Same frame-tracks-the-host idiom as `settings-view.slint`'s `tab-tip`.
+            //
+            // The hovered row publishes its rect on `Nav`; the x comes off the live rail
+            // instead, so the frame rides the collapse animation — and the tooltip's own
+            // 500 ms reveal outlasts that animation, so it can't surface while the
+            // labels are still readable. A plain Rectangle captures no input, so the row
+            // underneath keeps its hover.
+            sidebar-tip := Rectangle {
+                x: sidebar.absolute-position.x - parent.absolute-position.x;
+                y: Nav.sidebar-tip-y - parent.absolute-position.y;
+                width: sidebar.width;
+                height: Nav.sidebar-tip-h;
+
+                // Rail rows sit 4 px apart with a Divider between some pairs, so a
+                // pointer travelling down the rail is over nothing for a frame or two.
+                // Retracting on that restarts the 500 ms reveal per row and the pill
+                // flashes the new label, fades and comes back — where the Settings tab
+                // bar reads as one tooltip following the pointer, its cells being
+                // edge-to-edge. So hold across the gap and retract only once the pointer
+                // has really left. Retract leaves the label and rect alone, so the held
+                // pill sits still and swaps names the moment the next row takes over.
+                //
+                // `held` can only *extend* a live tooltip; `row-hovered` is what arms
+                // one. It has to be, since `held` is written from a `changed` handler
+                // and `changed` doesn't fire on a first evaluation — a rail remounting
+                // with `row-hovered` already true would sit dead until the pointer left
+                // it once. The miniplayer swap is that remount, and what makes it
+                // arrive true is the stale index left on `Nav`, so the real guard is the
+                // `sidebar-tip-idx = -1` above. Reading both keeps this frame honest
+                // against a future unmount path that forgets the reset.
+                property <bool> row-hovered: Nav.sidebar-tip-idx != -1;
+                property <bool> held;
+                changed row-hovered => {
+                    if (self.row-hovered) { self.held = true; }
+                }
+                // Long enough to cross the widest gap — a Divider between sections — at
+                // a deliberate pace, short enough that leaving the rail still dismisses.
+                Timer {
+                    interval: 150ms;
+                    running: !sidebar-tip.row-hovered && sidebar-tip.held;
+                    triggered => { sidebar-tip.held = false; }
+                }
+
+                Tooltip {
+                    text: Nav.sidebar-tip-label;
+                    hovered: (sidebar-tip.row-hovered || sidebar-tip.held)
+                        && Nav.sidebar-collapsed;
+                    host-width: sidebar-tip.width;
+                    host-height: sidebar-tip.height;
+                    side: TooltipSide.right;
+                    // Clears the rail rather than hugging it, so the pill reads as part
+                    // of the content panel it floats over.
+                    gap: Theme.pad-md;
+                }
+            }
+        }
+
+        // Miniplayer branch — same opacity-binding, inside-the-scope shape as the full
+        // branch, so the fade animates symmetrically in either direction.
+        if mini-switch.render-active: Rectangle {
+            width: 100%;
+            height: 100%;
+            opacity: mini-switch.fade-opacity;
+
+            MiniPlayerView {
+                width: 100%;
+                height: 100%;
+            }
+        }
+        }
+    }
+
+    // Cursor hints over the band winit resizes from. Mounted only when resizing is both
+    // possible and ours to advertise: not while maximized, where it's a no-op, and not
+    // in native mode, where the OS draws its own border. Geometry comes from the same
+    // `Theme.resize-*` tokens `resize-border-width` above reads.
+    if !Theme.use-native-titlebar && !WindowChrome.is-maximized: ResizeRing {
+        width: 100%;
+        height: 100%;
+    }
+
+    // Declared after the main layout, so it paints above it. Always rendered so the
+    // open/close animation can play; its TouchArea is `enabled` only while
+    // `Dialog.open`, so closed-state pointer events fall through.
+    DialogOverlay {
+        width: 100%;
+        height: 100%;
+    }
+
+    // After `DialogOverlay`, so a toast firing mid-dialog paints above the backdrop
+    // instead of behind it. No root TouchArea, so its empty area blocks no clicks.
+    NotificationStack {
+        width: 100%;
+        height: 100%;
+    }
+}

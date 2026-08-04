@@ -1,0 +1,24 @@
+name: cargo audit
+description: >-
+  Fail on RustSec advisories covering any dependency in Cargo.lock. Shared by
+  pr-validation.yml (early warning on a PR into dev) and release.yml (the gate
+  that holds a release). Deliberately takes no inputs — one policy, one verdict.
+
+runs:
+  using: composite
+  steps:
+    - uses: taiki-e/install-action@41049aa56687c35e0afa74eed4f09cec4f9afabf # v2.85.2
+      with:
+        tool: cargo-audit
+
+    # No toolchain install and no system deps: cargo-audit arrives as a prebuilt
+    # binary and reads the committed Cargo.lock without compiling anything, so
+    # rust-toolchain.toml never comes into it.
+    #
+    # `--deny warnings` would over-trigger on transitive deps we don't directly
+    # control, and on `yanked`, which is not a vulnerability. `unsound` and
+    # `unmaintained` are the categories worth blocking on; the escape hatch is
+    # the documented `ignore` list in .cargo/audit.toml.
+    - name: cargo audit
+      shell: bash
+      run: cargo audit --deny unsound --deny unmaintained

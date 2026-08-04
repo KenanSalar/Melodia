@@ -1,0 +1,237 @@
+import { ScrollView } from "std-widgets.slint";
+import { Theme } from "../../theme.slint";
+import { TagEditor } from "../../globals/dialog-forms.slint";
+import { LabeledInput } from "../labeled-input.slint";
+import { ChipGroup } from "../settings/chip-group.slint";
+import { ArtworkImage } from "../artwork-image.slint";
+import { PillButton } from "../action-pill.slint";
+import { MultilineInput } from "../multiline-input.slint";
+import { OverlayScrollbar } from "../overlay-scrollbar.slint";
+
+// One read-only row for the Summary tab. Useful nowhere else.
+component SummaryRow inherits HorizontalLayout {
+    in property <string> label;
+    in property <string> value;
+    spacing: Theme.pad-md;
+
+    Text {
+        text: root.label;
+        color: Theme.subtext0;
+        font-size: Theme.font-size-sm;
+        width: 108px;
+        horizontal-stretch: 0;
+    }
+    Text {
+        text: root.value;
+        color: Theme.text;
+        font-size: Theme.font-size-sm;
+        horizontal-stretch: 1;
+        wrap: word-wrap;
+    }
+}
+
+// Edit-Track-Information body: a cover panel beside a `ChipGroup` tab bar over
+// Tags / Lyrics / Summary. Every input two-way-binds a `TagEditor` field and
+// Rust owns the snapshot and the tri-state diff. Lyrics and Summary are
+// single-selection only, and in multi mode their chips leave the `options` list
+// and their bodies go unmounted — never merely disabled, and never
+// `visible: false`, which would still claim the layout slot.
+export component TagEditorBody inherits HorizontalLayout {
+    spacing: Theme.pad-lg;
+
+    // Handed over rather than measured: a component root can't reach `parent`,
+    // and this one is a layout root besides, so reading its own `width` to size
+    // a child would re-enter layout. `dialog.slint` owns the card's ceiling and
+    // its padding, so it owns the subtraction.
+    in property <length> host-w;
+
+    // Fixed body height so switching tabs doesn't resize + recenter the card.
+    private property <length> body-h: 360px;
+    private property <length> cover-w: 160px;
+
+    // What the right column is drawn at, which the wrapping `ChipGroup` below
+    // needs and can't work out itself. Stating it is mandatory: the fallback is
+    // `SettingsPage.row-content-w`, so left alone the *dialog's* tab strip wraps
+    // on whatever width the **Settings page** was last drawn at.
+    //
+    // Derived from the host rather than from the card's own cap, which it only
+    // reaches on a window wide enough to afford it. Below that, three chips in a
+    // long locale no longer fit the line the cap would have claimed for them,
+    // and nothing here clips — they would paint past the card's edge.
+    private property <length> tabs-w:
+        max(0px, root.host-w - Theme.pad-lg - root.cover-w);
+
+    // Left column: cover + artwork actions.
+    VerticalLayout {
+        horizontal-stretch: 0;
+        spacing: Theme.pad-sm;
+
+        ArtworkImage {
+            cover: TagEditor.cover;
+            tile-size: root.cover-w;
+            tile-radius: Theme.radius-md;
+            fallback-icon: "album";
+        }
+        PillButton {
+            text: @tr("Replace…");
+            icon: "image";
+            clicked => { TagEditor.pick-artwork(); }
+        }
+        if TagEditor.has-cover: PillButton {
+            text: @tr("Remove");
+            icon: "delete";
+            danger: true;
+            clicked => { TagEditor.remove-artwork(); }
+        }
+        // Pins this column to the top of the taller one beside it; without it
+        // the layout divides the surplus equally.
+        Rectangle { vertical-stretch: 1; }
+    }
+
+    // Right column: tab bar + body.
+    VerticalLayout {
+        horizontal-stretch: 1;
+        spacing: Theme.pad-md;
+
+        // `@tr` only translates literals, so the two tab sets are inline arrays
+        // rather than a Rust-seeded `[string]`.
+        ChipGroup {
+            options: TagEditor.track-count == 1
+                ? [@tr("Tags"), @tr("Lyrics"), @tr("Summary")]
+                : [@tr("Tags")];
+            selected-index <=> TagEditor.active-tab;
+            avail-width: root.tabs-w;
+        }
+
+        // The children may take 100% here, which is normally a trap: the parent
+        // is a plain Rectangle with an explicit height, so its size isn't
+        // derived from theirs.
+        Rectangle {
+            height: root.body-h;
+
+            if TagEditor.active-tab == 0: Rectangle {
+                width: 100%;
+                height: 100%;
+
+                tags-sv := ScrollView {
+                    horizontal-scrollbar-policy: always-off;
+                    vertical-scrollbar-policy: always-off;
+                    // Locked to the viewport, or the stretchy inputs collapse to
+                    // nothing — the smart-editor pitfall.
+                    viewport-width: tags-sv.visible-width;
+
+                    VerticalLayout {
+                        spacing: Theme.pad-sm;
+                        padding-right: Theme.pad-md;
+
+                        LabeledInput {
+                            label: @tr("Title");
+                            placeholder: TagEditor.title-placeholder;
+                            text <=> TagEditor.title;
+                        }
+                        LabeledInput {
+                            label: @tr("Artist");
+                            placeholder: TagEditor.artist-placeholder;
+                            text <=> TagEditor.artist;
+                        }
+                        LabeledInput {
+                            label: @tr("Album");
+                            placeholder: TagEditor.album-placeholder;
+                            text <=> TagEditor.album;
+                        }
+                        LabeledInput {
+                            label: @tr("Album Artist");
+                            placeholder: TagEditor.album-artist-placeholder;
+                            text <=> TagEditor.album-artist;
+                        }
+                        LabeledInput {
+                            label: @tr("Genre");
+                            placeholder: TagEditor.genre-placeholder;
+                            text <=> TagEditor.genre;
+                        }
+                        LabeledInput {
+                            label: @tr("Composer");
+                            placeholder: TagEditor.composer-placeholder;
+                            text <=> TagEditor.composer;
+                        }
+
+                        HorizontalLayout {
+                            spacing: Theme.pad-sm;
+                            LabeledInput {
+                                label: @tr("Year");
+                                placeholder: TagEditor.year-placeholder;
+                                text <=> TagEditor.year;
+                            }
+                            LabeledInput {
+                                label: @tr("Track");
+                                placeholder: TagEditor.track-number-placeholder;
+                                text <=> TagEditor.track-number;
+                            }
+                            LabeledInput {
+                                label: @tr("Disc");
+                                placeholder: TagEditor.disc-number-placeholder;
+                                text <=> TagEditor.disc-number;
+                            }
+                        }
+
+                        LabeledInput {
+                            label: @tr("Original Year");
+                            placeholder: TagEditor.original-year-placeholder;
+                            text <=> TagEditor.original-year;
+                        }
+                        LabeledInput {
+                            label: @tr("BPM");
+                            placeholder: TagEditor.bpm-placeholder;
+                            text <=> TagEditor.bpm;
+                        }
+                        LabeledInput {
+                            label: @tr("Comment");
+                            placeholder: TagEditor.comment-placeholder;
+                            text <=> TagEditor.comment;
+                        }
+                    }
+                }
+
+                OverlayScrollbar {
+                    horizontal: false;
+                    x: parent.width - self.width;
+                    y: 0;
+                    width: 10px;
+                    height: parent.height;
+                    visible-size: tags-sv.visible-height;
+                    content-size: tags-sv.viewport-height;
+                    offset: -tags-sv.viewport-y;
+                    scroll-to(o) => { tags-sv.viewport-y = -o; }
+                }
+            }
+
+            if TagEditor.active-tab == 1 && TagEditor.track-count == 1: MultilineInput {
+                width: 100%;
+                height: 100%;
+                placeholder: TagEditor.lyrics-placeholder;
+                text <=> TagEditor.lyrics;
+            }
+
+            if TagEditor.active-tab == 2 && TagEditor.track-count == 1: Rectangle {
+                width: 100%;
+                height: 100%;
+
+                VerticalLayout {
+                    spacing: Theme.pad-xs;
+                    alignment: start;
+
+                    SummaryRow { label: @tr("Path"); value: TagEditor.summary-path; }
+                    SummaryRow { label: @tr("Codec"); value: TagEditor.summary-codec; }
+                    SummaryRow { label: @tr("Bitrate"); value: TagEditor.summary-bitrate; }
+                    SummaryRow { label: @tr("Sample Rate"); value: TagEditor.summary-sample-rate; }
+                    SummaryRow { label: @tr("Bit Depth"); value: TagEditor.summary-bit-depth; }
+                    SummaryRow { label: @tr("Channels"); value: TagEditor.summary-channels; }
+                    SummaryRow { label: @tr("Size"); value: TagEditor.summary-size; }
+                    SummaryRow { label: @tr("Duration"); value: TagEditor.summary-duration; }
+                    SummaryRow { label: @tr("Modified"); value: TagEditor.summary-modified; }
+                    SummaryRow { label: @tr("BLAKE3"); value: TagEditor.summary-hash; }
+                }
+            }
+        }
+    }
+}

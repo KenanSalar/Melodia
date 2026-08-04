@@ -1,4 +1,7 @@
-#![allow(unsafe_code)] // env::set_var is unsafe in Rust 2024; this test is single-process.
+#![allow(
+    unsafe_code,
+    reason = "env::set_var is unsafe in Rust 2024; an integration test is its own binary with its own environment, and this file holds one test that sets XDG_DATA_HOME before anything spawns — so it needs no lock, unlike the unit tests behind `test_support::with_env_vars`."
+)]
 
 //! End-to-end smoke test: boot the full backend in a tempdir, ingest a
 //! fixture audio file via the library API, and assert the row lands in the DB.

@@ -61,13 +61,15 @@ impl SearchUiState {
 /// Albums-strip tile size (px). The strip renders 160 px square cards, and
 /// `FemtoVG` minifies with plain bilinear (no mipmaps), so staying near the
 /// on-screen size keeps `image-fit: cover` clean without the album grid's
-/// 448 px tier. Matches the Favorites Most-Played tier so the two surfaces
-/// feel like siblings.
+/// 448 px tier. Sized against these cards rather than against another view's
+/// tier: the grids draw flex-filled cards that keep growing with the window
+/// and take that tier for it, so a strip following them would decode a tile
+/// several times larger than any card it can draw.
 pub(super) const ALBUM_STRIP_THUMB_SIZE: u32 = 180;
 
 /// Artists-strip tile size (px). Slightly larger than the albums tier
 /// because the circular avatar reads softer when downscaled less
-/// aggressively. 200 px matches Favorites' Favorite Artists strip.
+/// aggressively.
 pub(super) const ARTIST_STRIP_THUMB_SIZE: u32 = 200;
 
 /// LRU capacity per strip — `search_all` clamps album + artist results
@@ -80,6 +82,7 @@ pub(super) const STRIP_THUMB_CAP: NonZeroUsize = match NonZeroUsize::new(24) {
 };
 
 /// Number of Songs rows shown when `show-all-tracks` is off. The
-/// toggle expands to the full 50-row result; clicking "Show less" or
-/// starting a new query collapses back to this cap.
+/// toggle expands to whatever `search_all` returned — its own `LIMIT`
+/// is the only cap, so don't restate that number here; clicking "Show
+/// less" or starting a new query collapses back to this one.
 pub(super) const COMPACT_TRACK_LIMIT: usize = 5;

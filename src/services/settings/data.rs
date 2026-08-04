@@ -30,7 +30,7 @@ pub struct ThemePreference {
     pub last_static_accent: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum SortDir {
     #[default]
@@ -79,7 +79,7 @@ pub struct ColumnWidths {
 
 impl Default for ColumnWidths {
     fn default() -> Self {
-        // Match the Slint side initial values in `ui/globals.slint` —
+        // Match the Slint side initial values in `melodia-ui/ui/globals/tracks.slint` —
         // the GTK-FIXED column model needs `title` to have a real width
         // (Tauri's flex-cap model didn't).
         Self {
@@ -681,7 +681,8 @@ impl Default for SettingsData {
     }
 }
 
-/// Locale codes the bundled `.po` files cover (`translations/<code>/LC_MESSAGES/Melodia.po`).
+/// Locale codes the bundled `.po` files cover
+/// (`melodia-ui/translations/<code>/LC_MESSAGES/melodia-ui.po`).
 /// Index 0 is the canonical default — its msgid baseline is English literals, so no
 /// `en.po` is shipped (English is the source language and lives in `.slint` directly).
 /// Order is the display order rendered in the Language section dropdown.

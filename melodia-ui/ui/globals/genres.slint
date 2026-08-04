@@ -1,0 +1,84 @@
+import { GenreRow, GenreGridRow, TrackListRow } from "../models.slint";
+
+// The Genre grid, on the `Albums` / `Artists` ownership contract.
+//
+// **No `request-cover` callback**, unlike its siblings: genres have no intrinsic
+// artwork, so each tile renders the `EntityCard` fallback glyph and the detail header
+// paints only its gradient floor and scrim. That keeps the whole tab free of cover-cache
+// plumbing — and makes `section-active-changed` a no-op today, kept for symmetry.
+export global Genres {
+    in-out property <[GenreGridRow]> grid-rows;
+    in-out property <int> total-count;
+    in-out property <int> columns: 4;
+    in-out property <string> filter;
+    in-out property <string> sort-field: "name";   // "name" | "track_count" | "duration"
+    in-out property <string> sort-dir: "asc";
+    in-out property <int> blur-search-tick: 0;
+
+    callback columns-changed(int);
+    callback apply-filter(string);
+    callback request-sort(string /*field*/);
+    callback open-genre(int /*genre_id*/);
+    callback section-active-changed(bool);
+}
+
+// The Genre Detail view, on the `AlbumDetail` shape under its own persistence key.
+// `show-genre` defaults false — the column is redundant inside a single genre — and
+// **there are no image slots at all**, since a genre has no artwork: the header renders
+// its gradient floor and scrim alone.
+export global GenreDetail {
+    in-out property <int> genre-id: -1;
+    in-out property <GenreRow> genre;
+    in-out property <[TrackListRow]> tracks;
+
+    // The hero SearchBar's needle. Cleared on a fresh open, preserved across
+    // library-changed refreshes.
+    in-out property <string> filter;
+    in-out property <int>    blur-search-tick: 0;
+
+    // `AlbumDetail.origin-nav-index`, so cross-tab back-nav takes the same atomic
+    // flip-Nav-then-clear-id path.
+    in-out property <int> origin-nav-index: -1;
+
+    in-out property <length> w-number: 56px;
+    in-out property <length> w-title: 320px;
+    in-out property <length> w-artist: 200px;
+    in-out property <length> w-album: 220px;
+    in-out property <length> w-genre: 140px;
+    in-out property <length> w-year: 72px;
+    in-out property <length> w-length: 88px;
+
+    // `show-number` defaults false: ordering inside a genre is incidental, tracks
+    // spanning many albums, not a tracklist position.
+    in-out property <bool> show-number: false;
+    in-out property <bool> show-artist: true;
+    in-out property <bool> show-album: true;
+    in-out property <bool> show-genre: false;
+    in-out property <bool> show-year: true;
+    in-out property <bool> show-artwork: true;
+
+    // Sorted in memory, as the other details are; by album so rows group naturally.
+    in-out property <string> sort-field: "album";
+    in-out property <string> sort-dir: "asc";
+
+    in-out property <[int]> selected-ids;
+    in-out property <int> selection-anchor: -1;
+
+    callback close-detail();
+    callback shuffle-genre();
+    callback play-row(int /*track_id*/, int /*index*/);
+    callback play-next([int] /*track_ids*/);
+    callback add-to-queue([int]);
+    callback toggle-row-favorite([int] /*track_ids*/, bool /*new*/);
+    callback set-row-rating([int] /*track_ids*/, int /*rating*/);
+    callback select-row(int /*idx*/, int /*id*/, bool /*shift*/, bool /*ctrl*/);
+    callback clear-selection();
+    callback request-sort(string /*field*/);
+    callback toggle-column(string /*column_id*/);
+    // Cross-tab navigation from a row's right-click "Go to …" entry.
+    callback go-to-album(int /*album_id*/);
+    callback go-to-artist(int /*artist_id*/);
+    callback go-to-genre(int /*genre_id*/);
+    // Rust re-walks the cached tracks in memory and pushes a filtered model.
+    callback filter-changed(string);
+}

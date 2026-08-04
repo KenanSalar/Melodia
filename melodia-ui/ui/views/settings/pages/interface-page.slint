@@ -1,0 +1,45 @@
+import { Theme } from "../../../theme.slint";
+import { SettingsPage } from "../../../globals/settings-page.slint";
+import { LanguageSection } from "../language-section.slint";
+import { AppearanceSection } from "../appearance-section.slint";
+import { WindowChromeSection } from "../window-chrome-section.slint";
+import { OverflowMenuSection } from "../overflow-menu-section.slint";
+
+// How the app presents itself — language, palette, window chrome and tray, and
+// which transport buttons the bar hides. Named "Interface" rather than
+// "Appearance" so the tab and the Appearance card inside it don't share a label;
+// no card had to be renamed for it.
+export component InterfacePage inherits Rectangle {
+    background: transparent;
+    horizontal-stretch: 1;
+    vertical-stretch: 0;
+
+    out property <bool> has-matches:
+        language.has-matches || appearance.has-matches
+        || window.has-matches || overflow.has-matches;
+
+    // See `library-page.slint` for why the cards live in columns that place
+    // themselves — this is the page that shows what it buys, four cards
+    // flowing as two columns instead of one long scroll.
+    GridLayout {
+        spacing: Theme.pad-lg;
+
+        VerticalLayout {
+            row: SettingsPage.grid-row(0); col: SettingsPage.grid-col(0);
+            alignment: start;
+            spacing: Theme.pad-lg;
+
+            language := LanguageSection { tab-name: @tr("Interface"); }
+            appearance := AppearanceSection { tab-name: @tr("Interface"); }
+        }
+
+        VerticalLayout {
+            row: SettingsPage.grid-row(1); col: SettingsPage.grid-col(1);
+            alignment: start;
+            spacing: Theme.pad-lg;
+
+            window := WindowChromeSection { tab-name: @tr("Interface"); }
+            overflow := OverflowMenuSection { tab-name: @tr("Interface"); }
+        }
+    }
+}

@@ -1,0 +1,85 @@
+import { Theme } from "../../theme.slint";
+import { Favorites } from "../../globals/curated.slint";
+import { Player } from "../../globals/player.slint";
+import { OverlayScrollbar } from "../../components/overlay-scrollbar.slint";
+import { TrackList } from "../../components/track-list/track-list.slint";
+
+// The Songs tab: a `TrackList` over the post-filter model, with its own overlay
+// scrollbars. No inputs — everything it reads is on a global. The scrollbars
+// live here rather than at the mount site because Slint can't read an id
+// declared inside an `if` from outside it, which is also what makes a per-tab
+// file the natural boundary.
+export component FavoritesSongsTab inherits Rectangle {
+    HorizontalLayout {
+        padding-left: Theme.pad-lg;
+        padding-right: Theme.pad-lg;
+        padding-top: Theme.pad-md;
+
+        tl := TrackList {
+            horizontal-stretch: 1;
+            vertical-stretch: 1;
+
+            rows: Favorites.tracks;
+
+            w-number <=> Favorites.w-number;
+            w-title <=> Favorites.w-title;
+            w-artist <=> Favorites.w-artist;
+            w-album <=> Favorites.w-album;
+            w-genre <=> Favorites.w-genre;
+            w-year <=> Favorites.w-year;
+            w-length <=> Favorites.w-length;
+
+            show-number <=> Favorites.show-number;
+            show-artwork <=> Favorites.show-artwork;
+            show-artist <=> Favorites.show-artist;
+            show-album <=> Favorites.show-album;
+            show-genre <=> Favorites.show-genre;
+            show-year <=> Favorites.show-year;
+            number-mode: "index";
+
+            sort-field: Favorites.sort-field;
+            sort-dir: Favorites.sort-dir;
+            playing-track-id: Player.vm.track.id;
+            view-context: "favorites";
+            view-selected-ids: Favorites.selected-ids;
+
+            request-sort(f) => { Favorites.request-sort(f); }
+            play-row(id, idx) => { Favorites.play-row(id, idx); }
+            play-next(ids) => { Favorites.play-next(ids); }
+            add-to-queue(ids) => { Favorites.add-to-queue(ids); }
+            toggle-row-favorite(ids, on) => { Favorites.toggle-row-favorite(ids, on); }
+            set-row-rating(ids, n) => { Favorites.set-row-rating(ids, n); }
+            select-row(idx, id, sh, ct) => { Favorites.select-row(idx, id, sh, ct); }
+            request-blur-search => { Favorites.blur-search-tick += 1; }
+            go-to-album(aid) => { Favorites.go-to-album(aid); }
+            go-to-artist(aid) => { Favorites.go-to-artist(aid); }
+            go-to-genre(gid) => { Favorites.go-to-genre(gid); }
+        }
+    }
+
+    OverlayScrollbar {
+        horizontal: false;
+        x: parent.width - self.width;
+        // Aligned with the inner ListView, so the bar stays clear of the header
+        // band.
+        y: tl.y + tl.body-y;
+        width: 10px;
+        height: tl.body-height;
+        visible-size: tl.v-visible-height;
+        content-size: tl.v-viewport-height;
+        offset: tl.v-offset;
+        scroll-to(o) => { tl.set-v-offset(o); }
+    }
+
+    OverlayScrollbar {
+        horizontal: true;
+        x: tl.x;
+        y: parent.height - self.height;
+        width: tl.width - 10px;
+        height: 10px;
+        visible-size: tl.h-visible-width;
+        content-size: tl.h-viewport-width;
+        offset: tl.h-offset;
+        scroll-to(o) => { tl.set-h-offset(o); }
+    }
+}

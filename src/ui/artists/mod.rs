@@ -3,8 +3,8 @@
 //! Two Slint globals are driven from here:
 //!
 //! * `Artists` — the responsive artist-card grid. Same shape as the Albums
-//!   grid: Rust owns a flat, name-sorted `Vec<ArtistStats>` (plus pre-
-//!   lowercased search keys) behind `ArtistsUi::grid.data`; the grid model
+//!   grid: Rust owns a flat, name-sorted `Vec<ArtistStats>` (plus a pre-
+//!   lowercased sort key) behind `ArtistsUi::grid.data`; the grid model
 //!   is rebuilt from it on every filter / sort / column-count change
 //!   without a DB hit. Cards are circular (Tauri parity) and pull their
 //!   cover lazily via `request-cover`, exactly like the Album cards do.
@@ -34,6 +34,7 @@ use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 use crate::entities::artist::ArtistStats;
 use crate::media::cover_thumbs::CoverThumbs;
 use crate::ui::detail_artwork::DetailArtwork;
+use crate::ui::row_match::Needle;
 use crate::ui::section_state::SectionState;
 use crate::ui::util::clamp_i64_to_i32;
 use crate::{
@@ -46,7 +47,7 @@ use state::{
 };
 
 #[cfg(test)]
-use grid::{compute_artist_cover_cap, compute_indices};
+use grid::compute_indices;
 #[cfg(test)]
 use state::GridIndexCache;
 
@@ -100,7 +101,7 @@ impl ArtistsUi {
                 all_tracks: Mutex::new(Vec::new()),
                 albums: Mutex::new(Vec::new()),
                 artist_id: Mutex::new(-1),
-                filter: Mutex::new(String::new()),
+                filter: Mutex::new(Needle::default()),
                 applied_selection: Mutex::new(HashSet::new()),
             },
             cover_thumbs,

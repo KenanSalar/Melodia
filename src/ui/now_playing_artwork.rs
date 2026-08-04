@@ -1,31 +1,16 @@
 //! Album-art decode + cache for the full-screen Now Playing view.
 //!
 //! The view needs the active cover in two forms — a sharp tile and a
-//! heavily-blurred backdrop. Both derive from the *same* source image, so
-//! this module decodes it **once** per track and produces both buffers from
-//! that single `DynamicImage`, held as an [`ArtworkPair`] in one small LRU
-//! keyed by artwork path.
-//!
-//! Deliberately a **separate, small** cache from the row-tier
-//! [`crate::media::cover_thumbs::CoverThumbs`]: mixing these much larger
-//! buffers into that LRU would evict row thumbnails wholesale. The working
-//! set here is the active track plus a handful of neighbours, so
-//! [`ARTWORK_CACHE_CAP`] is small.
-//!
-//! Caches buffers rather than `Image` because `slint::Image` is not
-//! `Send`/`Sync` and so can't cross the `spawn_blocking` boundary the decode
-//! runs on; the caller builds both `Image`s on the UI thread.
+//! heavily-blurred backdrop — so it takes a [`crate::ui::artwork_cache`] tier
+//! configured for its own working set. Everything about how that cache
+//! behaves is documented there; this file is the two numbers that make it the
+//! Now Playing one.
 
 use std::num::NonZeroUsize;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
-use image::imageops::fast_blur;
-use lru::LruCache;
-use parking_lot::Mutex;
-use slint::{Rgb8Pixel, SharedPixelBuffer};
-
-use crate::media::image_decode::{MAX_SOURCE_DIM, decode_capped};
-use crate::ui::util::{BLUR_SIGMA, BLUR_TARGET, COVER_SIZE, buffer_from_rgb};
+use crate::ui::artwork_cache::{ArtworkCache, BlurSpec, CachedArtwork};
+use crate::ui::util::{BLUR_SIGMA, BLUR_TARGET};
 
 /// LRU capacity. "Up Next" surfaces ~20 tracks and the user skips through
 /// neighbours, so too small a cap thrashes on exactly the interaction the
@@ -36,40 +21,18 @@ const ARTWORK_CACHE_CAP: NonZeroUsize = match NonZeroUsize::new(8) {
     None => panic!("ARTWORK_CACHE_CAP > 0"),
 };
 
-/// A decoded artwork pair: the sharp foreground cover tile and the blurred
-/// backdrop, both derived from one source decode.
-#[derive(Clone)]
-pub struct ArtworkPair {
-    /// Sharp, aspect-preserved cover tile (≤ `COVER_SIZE` on its long edge).
-    pub cover: SharedPixelBuffer<Rgb8Pixel>,
-    /// Heavily-blurred `BLUR_TARGET`-square backdrop.
-    pub blur: SharedPixelBuffer<Rgb8Pixel>,
-    /// Dominant accent extracted via `material_you::extract_source_argb_from_rgb8`
-    /// from the blur buffer (192² is plenty of pixels for `QuantizerCelebi`
-    /// and re-quantizing the sharp tile would burn ~4× more CPU for no
-    /// perceptual gain). Supplies the *hue* for every colour the Now Playing
-    /// view solves in [`crate::ui::now_playing::backdrop`].
-    pub accent_argb: Option<u32>,
-    /// 90th-percentile lightness (L*) of `blur` — how bright the backdrop
-    /// actually is, and the input the scrim opacity is solved from. See
-    /// [`crate::ui::now_playing::backdrop::luma_p90`] for why it's a
-    /// percentile and not a mean. `None` only for an empty buffer.
-    pub backdrop_luma: Option<f64>,
-}
+/// Square, at the full wash: this backdrop has nothing painted over it, and
+/// the view it fills is as tall as it is wide.
+const BLUR: BlurSpec = BlurSpec {
+    height: BLUR_TARGET,
+    sigma: BLUR_SIGMA,
+};
 
-/// `None` records a previously-attempted decode that failed — cached so a
-/// broken cover file isn't re-opened on every track change.
-type CachedArtwork = Option<ArtworkPair>;
-
-pub struct NowPlayingArtwork {
-    cache: Mutex<LruCache<PathBuf, CachedArtwork>>,
-}
+pub struct NowPlayingArtwork(ArtworkCache);
 
 impl Default for NowPlayingArtwork {
     fn default() -> Self {
-        Self {
-            cache: Mutex::new(LruCache::new(ARTWORK_CACHE_CAP)),
-        }
+        Self(ArtworkCache::new(ARTWORK_CACHE_CAP, BLUR))
     }
 }
 
@@ -78,73 +41,13 @@ impl NowPlayingArtwork {
         Self::default()
     }
 
-    /// Cached lookup; decode the source **once** + derive both buffers +
-    /// insert on miss. Returns the raw `SharedPixelBuffer` pair (both
-    /// `Send`) so this can run inside `tokio::task::spawn_blocking` — the
-    /// caller wraps each in a `slint::Image` on the UI thread via
-    /// `Image::from_rgb8`.
-    ///
-    /// `None` means the cover failed to decode; the failure is cached so
-    /// the same broken file isn't retried on every track change. Hits
-    /// promote the entry to most-recently-used.
+    /// See [`ArtworkCache::get_or_decode`].
     pub fn get_or_decode(&self, path: &Path) -> CachedArtwork {
-        // Fast path: hit promotes LRU position. `LruCache::get` needs
-        // `&mut self`, hence the Mutex.
-        if let Some(cached) = self.cache.lock().get(path) {
-            return cached.clone();
-        }
-        // Miss: decode + blur without holding the lock so a concurrent
-        // lookup isn't blocked behind the (slow) CPU work.
-        let pair = decode_artwork(path);
-        let returned = pair.clone();
-        self.cache.lock().put(path.to_path_buf(), pair);
-        returned
+        self.0.get_or_decode(path)
     }
 
-    /// Drop every cached `(cover, blur)` pair. Called when the Now Playing
-    /// view closes — the heavy buffers aren't needed while it's hidden, and
-    /// the caller pairs this with `heap_trim::trim()` so glibc hands the
-    /// freed pages back to the OS. Re-opening re-decodes the active cover.
+    /// Drop every cached pair — called when the Now Playing view closes.
     pub fn clear(&self) {
-        self.cache.lock().clear();
+        self.0.clear();
     }
 }
-
-/// Decode `path` **once**, then derive both the sharp cover tile and the
-/// blurred backdrop from that single `DynamicImage`.
-fn decode_artwork(path: &Path) -> CachedArtwork {
-    let decoded = decode_capped(path, MAX_SOURCE_DIM).ok()?;
-
-    // Sharp cover tile: `thumbnail` (not `thumbnail_exact`) preserves aspect
-    // ratio and fits the image inside `COVER_SIZE × COVER_SIZE`. A non-square
-    // cover yields e.g. a `640 × 600` buffer; the Slint side's
-    // `image-fit: cover` crops it to the square tile.
-    let cover = buffer_from_rgb(&decoded.thumbnail(COVER_SIZE, COVER_SIZE).to_rgb8());
-
-    // Blurred backdrop: downscale hard first (cheap blur, tiny buffer), then
-    // an approximate Gaussian. `thumbnail_exact` is the integer-only fast
-    // downscale — album art is overwhelmingly square and any minor aspect
-    // distortion is invisible once blurred and re-cropped by `image-fit:
-    // cover`. `fast_blur` is a 3-pass box blur — much cheaper than
-    // `imageops::blur`'s true Gaussian and indistinguishable at this scale
-    // for a backdrop.
-    let small = decoded.thumbnail_exact(BLUR_TARGET, BLUR_TARGET).to_rgb8();
-    let blur = buffer_from_rgb(&fast_blur(&small, BLUR_SIGMA));
-
-    // Both statistics come off the same buffer in one place: the quantize the
-    // hue is scored from, and the percentile the scrim is sized from. The
-    // percentile pass is linear over ~110 KiB — noise beside the quantize.
-    let accent_argb = crate::services::material_you::extract_source_argb_from_rgb8(&blur);
-    let backdrop_luma = crate::ui::now_playing::backdrop::luma_p90(&blur);
-
-    Some(ArtworkPair {
-        cover,
-        blur,
-        accent_argb,
-        backdrop_luma,
-    })
-}
-
-#[cfg(test)]
-#[path = "tests/now_playing_artwork_tests.rs"]
-mod tests;

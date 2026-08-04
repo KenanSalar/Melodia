@@ -1,9 +1,7 @@
 //! Playlists grid: DB fetch + filter / sort / chunk / prewarm logic, plus
 //! the display-aware cover-cache cap tuner. Mirrors `albums::grid`.
 
-use std::num::NonZeroUsize;
 use std::path::PathBuf;
-use std::rc::Rc;
 use std::sync::Arc;
 
 use slint::{ComponentHandle, Model, ModelRc, VecModel, Weak};
@@ -16,6 +14,9 @@ use crate::entities::smart_criteria::SmartCriteria;
 use crate::error::AppResult;
 use crate::library;
 use crate::state::AppState;
+use crate::ui::grid_rows::chunk_rows;
+use crate::ui::row_match;
+use crate::ui::util::len_as_i32;
 use crate::{
     AppWindow, PlaylistGridRow as UiPlaylistGridRow, PlaylistRow as UiPlaylistRow, Playlists,
 };
@@ -182,7 +183,7 @@ pub fn rebuild_grid(ui: &AppWindow, playlists_ui: &PlaylistsUi) {
         let indices = cache.as_ref().map_or(&[][..], |c| c.indices.as_slice());
         chunk_indices(&data, indices, columns)
     };
-    let total = i32::try_from(data.playlists.len()).unwrap_or(i32::MAX);
+    let total = len_as_i32(data.playlists.len());
 
     g.set_total_count(total);
     let model = g.get_grid_rows();
@@ -215,14 +216,14 @@ pub(super) fn compute_indices(
     sort_dir: &str,
     filter: &str,
 ) -> Vec<usize> {
-    let needle = filter.trim().to_lowercase();
+    let needle = row_match::fold_needle(filter);
     let mut indices: Vec<usize> = if needle.is_empty() {
         (0..data.playlists.len()).collect()
     } else {
-        data.keys
+        data.playlists
             .iter()
             .enumerate()
-            .filter(|(_, k)| k.name_lc.contains(&needle))
+            .filter(|(_, p)| needle.contains(&p.name))
             .map(|(i, _)| i)
             .collect()
     };
@@ -231,18 +232,12 @@ pub(super) fn compute_indices(
 }
 
 fn chunk_indices(data: &GridData, indices: &[usize], columns: i32) -> Vec<UiPlaylistGridRow> {
-    let cols = usize::try_from(columns.max(1)).unwrap_or(1);
-    let mut rows: Vec<UiPlaylistGridRow> = Vec::with_capacity(indices.len().div_ceil(cols));
-    for chunk in indices.chunks(cols) {
-        let cards: Vec<UiPlaylistRow> = chunk
-            .iter()
-            .map(|&i| to_slint_playlist_row(&data.playlists[i]))
-            .collect();
-        rows.push(UiPlaylistGridRow {
-            playlists: ModelRc::from(Rc::new(VecModel::from(cards))),
-        });
-    }
-    rows
+    chunk_rows(
+        indices,
+        columns,
+        |&i| to_slint_playlist_row(&data.playlists[i]),
+        |playlists| UiPlaylistGridRow { playlists },
+    )
 }
 
 /// Sort `indices` into the grid data by the chosen field. `playlist_stats`
@@ -268,66 +263,27 @@ fn sort_playlist_indices(indices: &mut [usize], data: &GridData, field: &str, di
     }
 }
 
+/// The first `GRID_PREWARM_AHEAD` distinct thumbnail paths in display order —
+/// the covers first on screen. Shared by `fetch_grid` and
+/// `PlaylistsUi::prewarm_visible_covers`. The cap counts kept *paths*, so a run
+/// of thumbnail-less playlists is walked past rather than spending the budget
+/// on them.
 pub(super) fn first_screenful_paths(data: &GridData) -> Vec<PathBuf> {
     crate::ui::grid_prewarm::unique_artwork_paths(
-        data.playlists
-            .iter()
-            .take(GRID_PREWARM_AHEAD)
-            .map(|p| p.thumbnail_path.as_deref()),
+        data.playlists.iter().map(|p| p.thumbnail_path.as_deref()),
+        GRID_PREWARM_AHEAD,
     )
 }
 
 // --- Cap tuning -----------------------------------------------------------
 
-pub(super) fn compute_playlist_cover_cap(logical_w: u32, logical_h: u32) -> NonZeroUsize {
-    const CARD_FOOTPRINT_W: u32 = 260;
-    const ROW_FOOTPRINT_H: u32 = 320;
-    const MIN_CAP: usize = 32;
-    const MAX_CAP: usize = 96;
-
-    let cols = (logical_w / CARD_FOOTPRINT_W).max(1);
-    let rows = logical_h.div_ceil(ROW_FOOTPRINT_H) + 1;
-    let visible = usize::try_from(cols.saturating_mul(rows)).unwrap_or(MAX_CAP);
-    let cap = visible.clamp(MIN_CAP, MAX_CAP);
-    NonZeroUsize::new(cap).unwrap_or(DEFAULT_GRID_COVER_CAP)
-}
-
-#[allow(
-    clippy::cast_possible_truncation,
-    clippy::cast_sign_loss,
-    reason = "logical screen extent stays well below u32::MAX; this is the saturating boundary"
-)]
-fn logical_dim(physical: u32, scale: f64) -> u32 {
-    let scale = if scale > 0.0 { scale } else { 1.0 };
-    let v = (f64::from(physical) / scale).round();
-    if v.is_nan() || v <= 0.0 {
-        physical
-    } else if v >= f64::from(u32::MAX) {
-        u32::MAX
-    } else {
-        v as u32
-    }
-}
-
-fn playlist_cover_cap_for_window(app: &AppWindow) -> NonZeroUsize {
-    use slint::winit_030::WinitWindowAccessor;
-
-    app.window()
-        .with_winit_window(|w| {
-            let monitor = w.current_monitor()?;
-            let physical = monitor.size();
-            let scale = w.scale_factor();
-            Some(compute_playlist_cover_cap(
-                logical_dim(physical.width, scale),
-                logical_dim(physical.height, scale),
-            ))
-        })
-        .flatten()
-        .unwrap_or(DEFAULT_GRID_COVER_CAP)
-}
-
+/// Retune the grid-tier cover cache to the real display resolution. Called
+/// once at startup after the winit window is live (`main.rs`); the cache is
+/// constructed with `DEFAULT_GRID_COVER_CAP` and resized here. The
+/// detail-tier `(cover, blur)` pair cache keeps its small fixed cap (see
+/// [`crate::ui::detail_artwork`]).
 pub fn tune_cache_for_display(app: &AppWindow, playlists_ui: &PlaylistsUi) {
-    let cap = playlist_cover_cap_for_window(app);
+    let cap = crate::ui::grid_prewarm::cover_cap_for_window(app, DEFAULT_GRID_COVER_CAP);
     playlists_ui.grid_covers.resize(cap);
     log::debug!("ui::playlists playlist-cover cache cap tuned to {cap}");
 }

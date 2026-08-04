@@ -1,0 +1,64 @@
+import { Theme } from "../../theme.slint";
+import { Dialog } from "../../globals/dialog.slint";
+import { Playlists } from "../../globals/playlists.slint";
+import { MaterialIcon } from "../material-icon.slint";
+import { SelectableRow, SelectAllHeader, PickerListCard } from "selectable-picker.slint";
+
+// Export picker body: a select-all header over the playlist list, committed by
+// the dialog's own footer through the `Dialog.accepted` dispatcher. Rust owns
+// both the per-row toggle and the select-all, and the visuals are the shared
+// `selectable-picker.slint` toolkit — so this file is wiring and one empty state.
+export component ExportPlaylistPicker inherits Rectangle {
+    VerticalLayout {
+        spacing: Theme.pad-sm;
+
+        SelectAllHeader {
+            checked: Dialog.export-select-all;
+            indeterminate: !Dialog.export-select-all
+                && Dialog.export-selected-count > 0;
+            selected-count: Dialog.export-selected-count;
+            toggled => { Playlists.set-all-export-picks(!Dialog.export-select-all); }
+        }
+
+        // Defensive: the Export pill needs playlists to exist, but a
+        // freshly-emptied library can still land here.
+        if Dialog.export-pick-rows.length == 0: Rectangle {
+            height: 96px;
+            border-radius: Theme.radius-md;
+            background: Theme.surface0;
+            VerticalLayout {
+                alignment: center;
+                spacing: Theme.pad-xs;
+                HorizontalLayout {
+                    alignment: center;
+                    MaterialIcon {
+                        name: "playlist_add";
+                        icon-size: 28px;
+                        icon-color: Theme.overlay0;
+                    }
+                }
+                HorizontalLayout {
+                    alignment: center;
+                    Text {
+                        text: @tr("No playlists to export");
+                        color: Theme.subtext0;
+                        font-size: Theme.font-size-sm;
+                    }
+                }
+            }
+        }
+
+        if Dialog.export-pick-rows.length > 0: PickerListCard {
+            row-count: Dialog.export-pick-rows.length;
+            for r in Dialog.export-pick-rows: SelectableRow {
+                name: r.name;
+                subtitle: @tr("{n} track" | "{n} tracks" % r.track-count);
+                cover: Playlists.request-row-cover(r.artwork_path);
+                artwork-path: r.artwork_path;
+                fallback-icon: "playlist";
+                selected: r.selected;
+                toggled => { Playlists.toggle-export-pick(r.id); }
+            }
+        }
+    }
+}

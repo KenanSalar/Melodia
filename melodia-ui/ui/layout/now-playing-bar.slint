@@ -1,0 +1,406 @@
+import { Theme } from "../theme.slint";
+import { Nav } from "../globals/nav.slint";
+import { Player } from "../globals/player.slint";
+import { Queue } from "../globals/queue.slint";
+import { WindowChrome } from "../globals/shell.slint";
+import { Settings } from "../settings.slint";
+import { IconButton } from "../components/icon-button.slint";
+import { ArtworkImage } from "../components/artwork-image.slint";
+import { SliderTrack } from "../components/slider-track.slint";
+import { VolumePopup } from "../components/now-playing/volume-popup.slint";
+import { OverflowMenu } from "../components/now-playing/overflow-menu.slint";
+import { PlayButton } from "../components/now-playing/play-button.slint";
+
+export component NowPlayingBar inherits Rectangle {
+    // Pinned with min/max and no stretch so the parent always reserves this slot —
+    // without it a short window hands the height to the taller layout above and the bar
+    // disappears below the visible edge. The pair rather than `height`, which Slint
+    // won't let sit beside a `min-height`.
+    min-height: Theme.now-playing-h;
+    max-height: Theme.now-playing-h;
+    vertical-stretch: 0;
+    // The sidebar carries the same three-term gate, so both surfaces swap to the OS
+    // inactive titlebar colour in lock step; its comment says why all three terms are
+    // needed. **Named rather than inlined** because the play button punches its glyph
+    // out in exactly this colour, and spelling the ternary twice would let the two drift
+    // apart in the unfocused case.
+    out property <brush> surface-bg:
+        (Settings.match-unfocused-bg && Theme.use-native-titlebar && !Theme.window-focused)
+            ? Theme.mantle-unfocused : Theme.mantle;
+    background: root.surface-bg;
+
+    // Written imperatively from `changed width`, so the child intrinsic sizes derived
+    // from it — tile, button diameters, padding — don't bind to `root.width` and form a
+    // `layoutinfo-h` loop in the parent layout.
+    property <length> bar-w: 1100px;
+    changed width => { self.bar-w = self.width; }
+
+    // **The mount seed the mirror owes.** `changed` doesn't fire when the first layout
+    // settles directly on the final value, so a window opened at its final size never
+    // corrects the seed above. Every consumer is a `clamp` that saturates long before
+    // it, which is why this went unnoticed — at ordinary widths the stale seed and the
+    // real width agree, and only a narrow window diverges and keeps wide-window padding
+    // until something resizes it.
+    Timer {
+        interval: 1ms;
+        triggered => {
+            root.bar-w = root.width;
+            self.running = false;
+        }
+    }
+
+    // One clamp for every standard button in the bar. Inline it lived at a dozen call
+    // sites; cached here, Slint evaluates it once per `bar-w` change rather than once
+    // per use.
+    out property <length> btn-d: clamp(root.bar-w * 0.05, 28px, 36px);
+    out property <length> btn-icon-d: clamp(root.bar-w * 0.03, 18px, 20px);
+
+    // The overflow trigger is **always** mounted: it permanently houses the
+    // playback-speed flyout, which is never shown inline, and additionally collects
+    // whatever the user routed to it through `Settings.overflow-*`.
+
+    // No divider here: the content panel's own bottom border draws the seam, so it
+    // follows the rounded bottom-left curve cleanly.
+
+    // Each section wraps in a centring `VerticalLayout`, so its content sits centred
+    // against the bar height whatever its intrinsic size — the sidebar's row pattern.
+    HorizontalLayout {
+        padding-left: clamp(root.bar-w * 0.02, 10px, 16px);
+        padding-right: clamp(root.bar-w * 0.02, 10px, 16px);
+        spacing: clamp(root.bar-w * 0.015, 6px, 12px);
+        alignment: stretch;
+
+        // Track info. A Rectangle rather than a layout so it can clip bidi overflow, and
+        // the inner text column takes `horizontal-stretch: 1` so `overflow: elide` fires
+        // at all — the `track-list-row.slint` title-cell pattern.
+        //
+        // **The whole cell is a button**, toggling the full-screen Now Playing view, so
+        // a second click closes it just as the view's back button does. Its TouchArea is
+        // declared last so it sits above the artwork and text, neither of which has one,
+        // and it's disabled when nothing is playing.
+        track-info-cell := Rectangle {
+            width: clamp(root.bar-w * 0.25, 120px, 200px);
+            // Redundant — a Rectangle already defaults to 0 — but spelled out beside
+            // the transport and extra columns below, which genuinely need it.
+            horizontal-stretch: 0;
+            clip: true;
+
+            // The `IconButton` press wobble, driving **both** the hover fill and the
+            // content wrapper below so chrome and content contract together toward the
+            // cell's centre. Doing it at the wrapper rather than per element is what
+            // keeps the shrink centred: the artwork's left edge moves right as the
+            // text's right edge moves left, instead of both anchoring left. And **only
+            // the factor is animated** — the cell re-clamps as `bar-w` changes, so
+            // easing the derived sizes would wobble on every resize tick.
+            property <float> press-scale: track-info-touch.pressed && Player.vm.has_track
+                ? 0.99
+                : 1.0;
+            animate press-scale {
+                duration: track-info-touch.pressed ? 100ms : Theme.dur-med;
+                easing: cubic-bezier(0.34, 1.56, 0.64, 1);
+            }
+
+            // A low-alpha accent fill behind the content. The vertical inset keeps it
+            // off the bar's top and bottom edges, so it reads as a discrete button
+            // rather than a full-height swap; the x/y recentring is what makes it pulse
+            // in place instead of drifting toward a corner.
+            Rectangle {
+                width: parent.width * track-info-cell.press-scale;
+                height: (parent.height - 12px) * track-info-cell.press-scale;
+                x: (parent.width - self.width) / 2;
+                y: (parent.height - self.height) / 2;
+                border-radius: Theme.radius-md;
+                background: track-info-touch.has-hover && Player.vm.has_track
+                    ? Theme.accent.with-alpha(0.12)
+                    : transparent;
+                animate background { duration: Theme.dur-fast; easing: ease-in-out; }
+            }
+
+            // Shares `press-scale` with the fill, so the row inside contracts toward the
+            // cell's centre. Without the wrapper, scaling per element anchors each to
+            // its own left edge and the block collapses leftward instead of pulsing.
+            Rectangle {
+                width: parent.width * track-info-cell.press-scale;
+                height: parent.height * track-info-cell.press-scale;
+                x: (parent.width - self.width) / 2;
+                y: (parent.height - self.height) / 2;
+
+                HorizontalLayout {
+                    // Nests the content inside the hover fill, which spans the wrapper's
+                    // full width — without it the tile sits flush against its edge.
+                    padding-left: 8px;
+                    padding-right: 8px;
+                    spacing: clamp(root.bar-w * 0.015, 6px, 10px);
+                    alignment: start;
+
+                    VerticalLayout {
+                        alignment: center;
+                        ArtworkImage {
+                            artwork-path: Player.vm.track.artwork_path;
+                            cover: Player.vm.track.cover_img;
+                            tile-size: clamp(root.bar-w * 0.07, 36px, 46px);
+                            // The frame stays fixed; the cover scales within it.
+                            cover-scale: track-info-touch.has-hover && Player.vm.has_track
+                                ? 1.15
+                                : 1.0;
+                        }
+                    }
+
+                    VerticalLayout {
+                        alignment: center;
+                        horizontal-stretch: 1;
+
+                        VerticalLayout {
+                            spacing: 2px;
+
+                            // The LRM forces an LTR base direction, so elide renders its
+                            // `…` at the right edge for RTL scripts too — see the
+                            // title-cell note in `track-list-row.slint`.
+                            Text {
+                                text: Player.vm.has_track
+                                    ? "‎" + Player.vm.track.title
+                                    : @tr("No track playing");
+                                color: Theme.text;
+                                font-size: Theme.font-size-sm;
+                                font-weight: 500;
+                                overflow: elide;
+                            }
+                            Text {
+                                text: Player.vm.has_track
+                                    ? "‎" + (Player.vm.track.artist == ""
+                                        ? @tr("Unknown artist")
+                                        : Player.vm.track.artist)
+                                    : "—";
+                                color: Theme.text;
+                                font-size: 11px;
+                                overflow: elide;
+                            }
+                            Text {
+                                text: "‎" + Player.vm.track.album;
+                                // All three lines are `Theme.text`; size and weight are
+                                // what separate them. Artist and album were `subtext0`
+                                // and `overlay1` — the latter isn't even a text rung —
+                                // which put the album two steps under the title in a
+                                // bar this short.
+                                color: Theme.text;
+                                font-size: 11px;
+                                overflow: elide;
+                                visible: Player.vm.has_track && Player.vm.track.album != "";
+                            }
+                        }
+                    }
+                }
+            }
+
+            track-info-touch := TouchArea {
+                mouse-cursor: Player.vm.has_track ? pointer : default;
+                enabled: Player.vm.has_track;
+                clicked => { Nav.now-playing-open = !Nav.now-playing-open; }
+            }
+        }
+
+        // Transport. A `VerticalLayout` defaults to stretch 1, so without the explicit 0
+        // this column absorbs a share of the bar's surplus as dead padding around the
+        // button row and starves the slider — the only section that should grow.
+        VerticalLayout {
+            alignment: center;
+            horizontal-stretch: 0;
+
+            HorizontalLayout {
+                spacing: Theme.pad-xs;
+                alignment: center;
+
+                VerticalLayout {
+                    alignment: center;
+                    IconButton {
+                        icon: "chevron_left";
+                        press-shrink: true;
+                        diameter: root.btn-d;
+                        icon-size: root.btn-icon-d;
+                        button-enabled: Player.vm.has_previous;
+                        tooltip-text: @tr("Previous");
+                        clicked => { Player.previous(); }
+                    }
+                }
+
+                // Disc geometry, hover and press scale, tooltip and the optional
+                // Equalizer overlay all live inside `PlayButton`. The bar feeds it the
+                // playing state, the animation mode, a diameter clamped to the bar
+                // width, and its own fill for the glyph to be punched out in.
+                VerticalLayout {
+                    alignment: center;
+                    PlayButton {
+                        wrapper-d: clamp(root.bar-w * 0.055, 30px, 38px);
+                        icon-size: clamp(root.bar-w * 0.025, 14px, 20px);
+                        icon-color: root.surface-bg;
+                        is-playing: Player.vm.is_playing;
+                        animation-mode: Settings.play-button-animation-idx;
+                        clicked => { Player.play-pause(); }
+                    }
+                }
+
+                VerticalLayout {
+                    alignment: center;
+                    IconButton {
+                        icon: "chevron_right";
+                        press-shrink: true;
+                        diameter: root.btn-d;
+                        icon-size: root.btn-icon-d;
+                        button-enabled: Player.vm.has_next;
+                        tooltip-text: @tr("Next");
+                        clicked => { Player.next(); }
+                    }
+                }
+            }
+        }
+
+        // Elapsed, slider, total. The inner row keeps the default `alignment: stretch`,
+        // which is what lets the slider's own stretch factor expand it.
+        VerticalLayout {
+            alignment: center;
+            min-width: 140px;
+            horizontal-stretch: 2;
+
+            HorizontalLayout {
+                spacing: Theme.pad-sm;
+
+                Text {
+                    text: Theme.format-duration(slider.dragging
+                        ? round(slider.drag-value * Player.duration-ms)
+                        : (Player.seek_pending_ms >= 0
+                            ? Player.seek_pending_ms
+                            : Player.position-ms));
+                    // Both ends are `Theme.text`: unlike the track block these are a
+                    // live readout the user tracks continuously, so they sit at body
+                    // weight rather than a rung under it.
+                    color: Theme.text;
+                    font-size: 11px;
+                    min-width: 40px;
+                    horizontal-alignment: right;
+                    vertical-alignment: center;
+                }
+
+                slider := SliderTrack {
+                    horizontal-stretch: 1;
+                    value: Player.duration-ms > 0
+                        ? (Player.seek_pending_ms >= 0
+                            ? clamp(Player.seek_pending_ms / Player.duration-ms, 0, 1)
+                            : clamp(Player.position-ms / Player.duration-ms, 0, 1))
+                        : 0;
+                    is-disabled: !Player.vm.has_track || Player.duration-ms <= 0;
+                    // Reads the bar's own fill rather than restating the focus-aware
+                    // ternary, so the mask disappears against it either way.
+                    seam-mask-color: root.surface-bg;
+
+                    committed(v) => {
+                        if (Player.duration-ms > 0) {
+                            Player.seek(round(v * Player.duration-ms));
+                        }
+                    }
+                }
+
+                Text {
+                    text: Theme.format-duration(Player.duration-ms);
+                    color: Theme.text;
+                    font-size: 11px;
+                    min-width: 40px;
+                    horizontal-alignment: left;
+                    vertical-alignment: center;
+                }
+            }
+        }
+
+        // Pinned like the transport column, so a button routed into the overflow menu
+        // frees its space *to the slider* rather than into padding here.
+        VerticalLayout {
+            alignment: center;
+            horizontal-stretch: 0;
+
+            HorizontalLayout {
+                spacing: clamp(root.bar-w * 0.005, 0px, 2px);
+                alignment: end;
+
+                // `if` rather than `visible: false`, so a button moved into the overflow
+                // menu vacates its layout slot instead of leaving a hole.
+                if !Settings.overflow-repeat: VerticalLayout {
+                    alignment: center;
+                    IconButton {
+                        icon: Player.queue.repeat_mode == "one" ? "repeat_one" : "repeat";
+                        press-shrink: true;
+                        diameter: root.btn-d;
+                        icon-size: root.btn-icon-d;
+                        active: Player.queue.repeat_mode != "off";
+                        tooltip-text: Player.queue.repeat_mode == "off"
+                            ? @tr("Repeat: off")
+                            : (Player.queue.repeat_mode == "one"
+                                ? @tr("Repeat: one")
+                                : @tr("Repeat: all"));
+                        clicked => { Player.cycle-repeat(); }
+                    }
+                }
+                if !Settings.overflow-shuffle: VerticalLayout {
+                    alignment: center;
+                    IconButton {
+                        icon: "shuffle";
+                        press-shrink: true;
+                        diameter: root.btn-d;
+                        icon-size: root.btn-icon-d;
+                        active: Player.queue.shuffle;
+                        tooltip-text: Player.queue.shuffle ? @tr("Shuffle: on") : @tr("Shuffle: off");
+                        clicked => { Player.toggle-shuffle(); }
+                    }
+                }
+                if !Settings.overflow-favorite: VerticalLayout {
+                    alignment: center;
+                    IconButton {
+                        icon: Player.vm.track.is_favorite ? "favorite" : "favorite_border";
+                        press-shrink: true;
+                        diameter: root.btn-d;
+                        icon-size: root.btn-icon-d;
+                        active: Player.vm.track.is_favorite;
+                        filled: Player.vm.track.is_favorite;
+                        button-enabled: Player.vm.has_track;
+                        tooltip-text: Player.vm.track.is_favorite ? @tr("Unfavorite") : @tr("Favorite");
+                        clicked => { Player.toggle-favorite(); }
+                    }
+                }
+                if WindowChrome.always-on-top-supported && !Settings.overflow-pin: VerticalLayout {
+                    alignment: center;
+                    IconButton {
+                        icon: "push_pin";
+                        press-shrink: true;
+                        diameter: root.btn-d;
+                        icon-size: root.btn-icon-d;
+                        active: WindowChrome.always-on-top-active;
+                        filled: WindowChrome.always-on-top-active;
+                        tooltip-text: WindowChrome.always-on-top-active ? @tr("Unpin from Top") : @tr("Pin on Top");
+                        clicked => { WindowChrome.toggle-always-on-top(); }
+                    }
+                }
+                if !Settings.overflow-queue: VerticalLayout {
+                    alignment: center;
+                    IconButton {
+                        icon: "queue_music";
+                        press-shrink: true;
+                        diameter: root.btn-d;
+                        icon-size: root.btn-icon-d;
+                        active: Queue.open;
+                        tooltip-text: @tr("Queue");
+                        clicked => { Queue.open = !Queue.open; }
+                    }
+                }
+                VerticalLayout {
+                    alignment: center;
+                    VolumePopup {
+                        diameter: root.btn-d;
+                        icon-size: clamp(root.bar-w * 0.035, 22px, 22px);
+                    }
+                }
+                VerticalLayout {
+                    alignment: center;
+                    OverflowMenu { bar-w: root.bar-w; }
+                }
+            }
+        }
+    }
+}

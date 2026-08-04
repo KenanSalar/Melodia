@@ -7,7 +7,7 @@
 //! hydrate-on-startup / snapshot-on-shutdown flow generically, so adding a
 //! new view is a matter of:
 //!
-//! 1. Declaring the new global in `ui/globals.slint` mirroring `Tracks`.
+//! 1. Declaring the new global in `melodia-ui/ui/globals/` mirroring `Tracks`.
 //! 2. Adding a `view_id::*` constant and one
 //!    [`impl_track_list_column_state!`] invocation below.
 //! 3. Calling the generated `hydrate_*_view` at startup and
@@ -115,6 +115,10 @@ pub mod view_id {
     pub const ALBUMS: &str = "albums";
     pub const ARTISTS: &str = "artists";
     pub const GENRES: &str = "genres";
+    /// The Favorites page's Favorite Artists *tab*, whose sort is its own —
+    /// [`FAVORITES`] is the Songs tab's, over track columns this grid has no
+    /// notion of. One page, two keys in the same `view_sort` map.
+    pub const FAVORITE_ARTISTS: &str = "favorite_artists";
 }
 
 /// Force a detail-view's locked column off, regardless of what

@@ -197,14 +197,17 @@ impl CoverThumbs {
 
     /// Cache-only lookup: returns the already-decoded [`Image`] for `path`,
     /// or [`Image::default()`] on miss — **never** decodes synchronously.
-    /// Used by the queue sheet's first-frame "skeleton" render: rows must
-    /// land in the model before the open callback returns so the slide-up
-    /// animation has something to display, but blocking the UI thread on
-    /// cover decode would freeze the animation itself. After this
-    /// synchronous skeleton paint, the caller kicks off
-    /// [`Self::prewarm`] off-thread and re-runs the row build with
-    /// [`Self::get_or_load_opt`] once the cache is hot — covers fade in
-    /// without ever blocking a frame.
+    ///
+    /// For a surface that mounts rows *before* its tier is warm, which in
+    /// this app is the queue sheet alone: its rows have to land in the model
+    /// before `on_open_changed` returns so the slide-up has text on frame
+    /// one, and a per-row [`Self::get_or_load_opt`] on that frame would
+    /// block the UI thread on a screenful of decodes — freezing the very
+    /// animation the synchronous build exists to feed. It serves the
+    /// placeholder instead, and the sheet swaps to
+    /// [`Self::get_or_load_opt`] once its off-thread [`Self::prewarm`] has
+    /// landed. Everywhere else prewarms and awaits before setting rows, so
+    /// the decoding lookup is already a cache hit and this isn't needed.
     pub fn get_cached_opt(&self, path: Option<&str>) -> Image {
         let Some(p) = path.filter(|p| !p.is_empty()) else {
             return Image::default();

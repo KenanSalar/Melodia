@@ -23,7 +23,7 @@ use crate::ui::model_patch;
 use crate::ui::track_list_view::view_id;
 use crate::ui::track_sort::sort_track_rows_by;
 use crate::ui::tracks::PreparedTrackRow;
-use crate::ui::util::clamp_i64_to_i32;
+use crate::ui::util::{clamp_i64_to_i32, len_as_i32};
 use crate::{AppWindow, NavEnterFrom, PlaylistDetail, TrackListRow as UiTrackListRow};
 
 // `apply_detail_artwork` (cover + hero-blur write) and
@@ -46,7 +46,7 @@ async fn fetch_playlist_detail(
         let criteria =
             crate::entities::smart_criteria::SmartCriteria::from_json_opt(detail.smart_criteria.as_deref());
         let rows = library::smart_playlists::evaluate(state, &criteria).await?;
-        detail.track_count = i32::try_from(rows.len()).unwrap_or(i32::MAX);
+        detail.track_count = len_as_i32(rows.len());
         detail.total_duration_ms = rows.iter().map(|t| t.duration_ms).sum();
         rows
     } else {
@@ -55,6 +55,7 @@ async fn fetch_playlist_detail(
 
     let track_covers: Vec<PathBuf> = crate::ui::grid_prewarm::unique_artwork_paths(
         tracks.iter().map(|t| t.artwork_path.as_deref()),
+        playlists_ui.cover_thumbs.capacity(),
     );
     if !track_covers.is_empty() {
         let row_thumbs = playlists_ui.cover_thumbs.clone();
@@ -112,6 +113,9 @@ pub async fn open_playlist(
         playlist_id
     });
 
+    // How far the playlist spreads — folded on the worker that fetched it.
+    let fold = crate::ui::hero_chips::fold_tracks(&tracks);
+
     let playlists_ui = playlists_ui.clone();
     let state_for_history = state.clone();
     let _ = weak.upgrade_in_event_loop(move |ui| {
@@ -122,7 +126,13 @@ pub async fn open_playlist(
             .collect();
         let header = to_slint_playlist_row(&detail);
         g.set_playlist(header);
-        apply_detail_artwork(&g, pair, /* animate */ true);
+        crate::ui::hero_chips::publish_playlist(
+            &ui,
+            &detail,
+            fold,
+            playlists_ui.section_active(),
+        );
+        apply_detail_artwork(&ui, &g, pair, /* animate */ true, playlists_ui.section_active());
         replace_tracks_model(&g, ui_tracks);
         reset_detail_selection(&g, &playlists_ui);
         // Fresh open clears the filter so the user lands on the full
@@ -172,6 +182,8 @@ pub async fn refresh_detail(
     // before we permute `tracks` to the user's chosen sort.
     let position_order_snapshot: Vec<i64> = tracks.iter().map(|t| t.id).collect();
 
+    let fold = crate::ui::hero_chips::fold_tracks(&tracks);
+
     let playlists_ui = playlists_ui.clone();
     let _ = weak.upgrade_in_event_loop(move |ui| {
         let g = ui.global::<PlaylistDetail>();
@@ -184,7 +196,13 @@ pub async fn refresh_detail(
         sort_playlist_tracks(&mut tracks, &position_order_snapshot, &field, &dir);
 
         g.set_playlist(to_slint_playlist_row(&detail));
-        apply_detail_artwork(&g, pair, /* animate */ false);
+        crate::ui::hero_chips::publish_playlist(
+            &ui,
+            &detail,
+            fold,
+            playlists_ui.section_active(),
+        );
+        apply_detail_artwork(&ui, &g, pair, /* animate */ false, playlists_ui.section_active());
 
         // With an active filter the displayed model is a subset, so the
         // id-slice fast path below (which assumes an unfiltered model)
@@ -240,6 +258,13 @@ pub async fn refresh_detail(
                 .map(crate::ui::tracks::to_slint_track_list_row)
                 .collect();
             replace_tracks_model(&g, ui_tracks);
+            // Abort any in-flight drag-reorder: the row indices it was
+            // computed against no longer describe the playlist, and the
+            // model swap destroys the row instance holding the pointer
+            // grab, so it can never clear this state itself. Left set,
+            // the source row stays ghosted and the drop line stranded.
+            g.set_drag_source(-1);
+            g.set_drop_slot(-1);
             playlists_ui.detail.applied_selection.lock().clear();
             // No filter on this path — displayed cache equals canonical.
             playlists_ui.detail.all_tracks.lock().clone_from(&tracks);
@@ -393,9 +418,9 @@ pub fn clear_detail(playlists_ui: &PlaylistsUi) {
 /// live text via the `<=>` binding; this Rust mirror lets the re-fetch
 /// path (`refresh_detail`) re-apply the filter to fresh data without
 /// round-tripping the UI thread for the property read. Always stored
-/// lowercased so the per-keystroke walk doesn't re-lower per row.
+/// folded so the per-keystroke walk doesn't re-fold per row.
 pub fn set_filter(playlists_ui: &PlaylistsUi, needle: &str) {
-    *playlists_ui.detail.filter.lock() = needle.to_lowercase();
+    *playlists_ui.detail.filter.lock() = crate::ui::row_match::fold_needle(needle);
 }
 
 /// Re-walk the cached tracks through the current filter and push the

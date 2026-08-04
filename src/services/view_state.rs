@@ -52,10 +52,21 @@ pub struct ViewStateData {
     /// Artist Detail "Albums" sub-section header toggle. `true` hides the
     /// horizontal album scroller so the all-tracks list claims that space.
     pub artist_albums_collapsed: bool,
-    /// Favorites view "Favorite Artists" sub-section header toggle.
-    pub favorites_artists_collapsed: bool,
-    /// Favorites view "Most Played" sub-section header toggle.
-    pub favorites_most_played_collapsed: bool,
+    /// Settings page tab showing at last shutdown. Hydrated into
+    /// `SettingsPage.tab-idx` at startup, clamped against that global's
+    /// `tab-count` so a value written by a build with more tabs can't land
+    /// on a blank page.
+    pub settings_tab: i32,
+    /// Favorites page tab showing at last shutdown (Songs / Most Played /
+    /// Favorite Artists). Same contract as [`Self::settings_tab`], clamped
+    /// against `Favorites.tab-count`.
+    ///
+    /// An index rather than a set of bools, and that is now the rule rather
+    /// than a preference: this replaced the two `favorites_*_collapsed` flags
+    /// the strips used, which together with [`Self::artist_albums_collapsed`]
+    /// sat exactly at clippy's `struct_excessive_bools` cap. A new persisted
+    /// view flag has to be an int / string / map.
+    pub favorites_tab: i32,
 }
 
 impl Default for ViewStateData {
@@ -68,13 +79,13 @@ impl Default for ViewStateData {
             last_nav_index: default_last_nav_index(),
             last_detail_ids: HashMap::new(),
             artist_albums_collapsed: false,
-            favorites_artists_collapsed: false,
-            favorites_most_played_collapsed: false,
+            settings_tab: 0,
+            favorites_tab: 0,
         }
     }
 }
 
-/// Matches the `Nav.selected-index` default in `ui/globals.slint`
+/// Matches the `Nav.selected-index` default in `melodia-ui/ui/globals/nav.slint`
 /// (3 = Tracks). Fresh installs without a `views.json` land on the
 /// Tracks view.
 fn default_last_nav_index() -> i32 {

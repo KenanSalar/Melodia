@@ -1,67 +1,21 @@
 // All tests in this file gate on `#[cfg(unix)]` or `#[cfg(target_os = "linux")]`
 // — they exercise APPIMAGE / PATH env-mutation helpers and an executable-bit
-// shim that only make sense on Unix. The shared helpers (PATH lock, env
-// resetters, etc.) are unused on Windows, so file-scope the whole module.
+// shim that only make sense on Unix. The env-resetting helpers are unused on
+// Windows, so file-scope the whole module.
 #![cfg(unix)]
-#![allow(
-    unsafe_code,
-    reason = "env::set_var/remove_var are unsafe in Rust 2024; we acquire APPIMAGE_ENV_LOCK for env-mutating cases (mirrors sibling test files) and PATH_ENV_LOCK for resolve_install_program tests."
-)]
-
-use std::sync::Mutex;
 
 use crate::services::updater::linux_pkg::{
     LinuxPackageFormat, detect, resolve_install_program,
 };
-use crate::services::updater::test_support::APPIMAGE_ENV_LOCK;
+use crate::test_support::{with_appimage_env, with_env_var};
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 
-/// Serialises tests that mutate `$PATH`. Kept local — only this test
-/// file needs PATH isolation.
-static PATH_ENV_LOCK: Mutex<()> = Mutex::new(());
-
+/// Runs `body` with `$PATH` replaced by `value`. Local because this is the only
+/// file that needs PATH isolation; `with_appimage_env` is shared, since
+/// `target_tests.rs` overrides the same variable.
 fn with_path_env<F: FnOnce()>(value: &str, body: F) {
-    let _guard = PATH_ENV_LOCK
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner);
-    let prev = std::env::var("PATH").ok();
-    unsafe {
-        std::env::set_var("PATH", value);
-    }
-    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(body));
-    unsafe {
-        match prev {
-            Some(p) => std::env::set_var("PATH", p),
-            None => std::env::remove_var("PATH"),
-        }
-    }
-    if let Err(payload) = result {
-        std::panic::resume_unwind(payload);
-    }
-}
-
-fn with_appimage_env<F: FnOnce()>(value: Option<&str>, body: F) {
-    let _guard = APPIMAGE_ENV_LOCK
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner);
-    let prev = std::env::var("APPIMAGE").ok();
-    unsafe {
-        match value {
-            Some(v) => std::env::set_var("APPIMAGE", v),
-            None => std::env::remove_var("APPIMAGE"),
-        }
-    }
-    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(body));
-    unsafe {
-        match prev {
-            Some(p) => std::env::set_var("APPIMAGE", p),
-            None => std::env::remove_var("APPIMAGE"),
-        }
-    }
-    if let Err(payload) = result {
-        std::panic::resume_unwind(payload);
-    }
+    with_env_var("PATH", Some(value), body);
 }
 
 /// Creates an executable shim file at `path` with `0o755` permissions.

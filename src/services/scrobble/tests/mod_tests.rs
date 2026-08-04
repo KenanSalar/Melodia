@@ -1,4 +1,3 @@
-use std::path::Path;
 use std::sync::{Arc, OnceLock};
 
 use super::{
@@ -8,6 +7,7 @@ use super::{
 use crate::config::Paths;
 use crate::entities::track::ScrobbleRow;
 use crate::services::settings::ScrobbleFlags;
+use crate::test_support::paths_in;
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 
@@ -15,24 +15,6 @@ type TestResult = Result<(), Box<dyn std::error::Error>>;
 /// credential/queue tests here never touch the network.
 fn init_service(paths: &Paths, flags: &ScrobbleFlags) -> ScrobbleService {
     ScrobbleService::init(paths, flags, Arc::new(OnceLock::new()))
-}
-
-/// A `Paths` rooted in a throwaway dir. Only the two scrobble paths matter here,
-/// but `ScrobbleService::init` takes the whole struct.
-fn paths_in(dir: &Path) -> Paths {
-    Paths {
-        data_dir: dir.to_path_buf(),
-        db_path: dir.join("melodia.db"),
-        settings_path: dir.join("settings.json"),
-        view_state_path: dir.join("views.json"),
-        queue_path: dir.join("queue.json"),
-        search_history_path: dir.join("search_history.json"),
-        scrobble_credentials_path: dir.join("scrobble_credentials.json"),
-        scrobble_queue_path: dir.join("scrobble_queue.json"),
-        scrobble_mbid_state_path: dir.join("scrobble_mbid_attempted.json"),
-        artwork_dir: dir.join("artwork"),
-        artists_dir: dir.join("artists"),
-    }
 }
 
 fn sample_item() -> QueuedItem {

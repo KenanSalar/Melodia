@@ -26,7 +26,7 @@ use crate::ui::artists::ArtistsUi;
 pub(super) const NAV_ALBUMS: i32 = 4;
 
 /// Nav-sidebar index of the Artists tab. Mirrors the comment block in
-/// `globals.slint::Nav`.
+/// `globals/nav.slint::Nav`.
 pub(super) const NAV_ARTISTS: i32 = 5;
 
 /// Wire every `Artists.*` / `ArtistDetail.*` callback. Mirrors `wire_albums`,

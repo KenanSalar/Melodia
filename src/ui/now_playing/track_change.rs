@@ -8,20 +8,21 @@ use std::sync::Arc;
 use async_compat::Compat;
 use slint::{ComponentHandle, Image, Weak};
 
-use super::backdrop;
 use super::metadata::to_slint_track_meta;
 use super::write_crossfade_slot;
 use super::NowPlayingState;
 use crate::entities::track::TrackSummary;
 use crate::library;
 use crate::state::AppState;
-use crate::themes::{brush, brush_to_rgb, brush_with_alpha, color};
+use crate::themes::{brush, brush_to_rgb, color};
+use crate::ui::backdrop;
+use crate::ui::chips;
 use crate::ui::now_playing_artwork::NowPlayingArtwork;
 use crate::{AppWindow, Player, Theme as ThemeGlobal, TrackMetaRow};
 
 /// What one artwork decode hands back to the UI thread: the sharp cover, the
-/// blurred backdrop, the hue quantized out of it, and how bright it measured.
-type DecodedArtwork = (Option<Image>, Option<Image>, Option<u32>, Option<f64>);
+/// blurred backdrop, and the hue + brightness measured off that blur.
+type DecodedArtwork = (Option<Image>, Option<Image>, backdrop::BackdropSample);
 
 /// Subscribe to `sinks.view_model`, react only to actual track changes.
 /// Always stashes the current track into `NowPlayingState::current_track`;
@@ -131,7 +132,7 @@ pub(super) async fn apply_track_change(
         .and_then(|t| t.artwork_path.clone())
         .filter(|p| !p.is_empty());
 
-    let (cover, blurred, accent_argb, backdrop_luma): DecodedArtwork = match artwork {
+    let (cover, blurred, sample): DecodedArtwork = match artwork {
         Some(path) => {
             let np = np_artwork.clone();
             match state
@@ -142,17 +143,16 @@ pub(super) async fn apply_track_change(
                 Ok(Some(pair)) => (
                     Some(Image::from_rgb8(pair.cover)),
                     Some(Image::from_rgb8(pair.blur)),
-                    pair.accent_argb,
-                    pair.backdrop_luma,
+                    pair.sample,
                 ),
-                Ok(None) => (None, None, None, None),
+                Ok(None) => (None, None, backdrop::BackdropSample::default()),
                 Err(e) => {
                     log::warn!("ui::now_playing artwork task join: {e}");
-                    (None, None, None, None)
+                    (None, None, backdrop::BackdropSample::default())
                 }
             }
         }
-        None => (None, None, None, None),
+        None => (None, None, backdrop::BackdropSample::default()),
     };
 
     // --- Write to Slint (UI thread) ---
@@ -172,46 +172,35 @@ pub(super) async fn apply_track_change(
     let player = ui.global::<Player>();
     // Chip strip: refresh the shadow from the just-fetched `meta` and push
     // a freshly chunked 2D model so the view reflects the new track without
-    // waiting on a width-change fire. The chunk uses the chip-area width
-    // cached by `Player.recompute-chip-rows`; if the view hasn't laid out
-    // yet (`chip_last_width == 0.0`), `chunk_chips_to_rows` collapses to a
-    // single row and the view's mount Timer fires a real width immediately.
+    // waiting on a width-change fire. The chunk uses the strip width cached
+    // by `Player.recompute-chip-rows`; if the view hasn't laid out yet
+    // (`chip_last_width == 0.0`), `chunk_chips_to_rows` collapses to a single
+    // row and the strip's mount Timer fires a real width immediately. `None`
+    // because this column can grow downward — the hero band can't.
     let chip_texts = super::metadata::visible_chip_texts(&meta);
     let chip_rows =
-        super::metadata::chunk_chips_to_rows(&chip_texts, np_state.chip_last_width.get());
-    player.set_chip_rows(super::metadata::rows_to_model(chip_rows));
+        chips::chunk_chips_to_rows(&chip_texts, np_state.chip_last_width.get(), None);
+    // Unconditional — a new track's chips are new text, which a row-length
+    // comparison can't see. Recording the shape is what lets the width channel
+    // skip its own repaints; see `chips::split_shape`.
+    *np_state.chip_last_shape.borrow_mut() = chips::split_shape(&chip_rows);
+    player.set_chip_rows(chips::rows_to_model(chip_rows));
     *np_state.chip_texts.borrow_mut() = chip_texts;
     player.set_track_meta(meta);
 
     // Every colour the view paints on the backdrop, solved together from one
     // hue and one brightness measurement — see `backdrop` for the reasoning
-    // and `globals.slint` for what each brush drives.
-    //
-    // The hue falls back to the live `Theme.accent` so a missing-artwork or
-    // failed-decode track doesn't strand the slots on the previous track's
-    // colour, and a theme change propagates on the next track change. Only the
-    // hue is borrowed: `backdrop::solve` owns every tone, so the view looks the
-    // same whether the theme underneath it is light or dark.
-    let seed = accent_argb
-        .unwrap_or_else(|| brush_to_rgb(&ui.global::<ThemeGlobal>().get_accent()));
-    // No blur to measure means the gradient floor is what shows, and both of
-    // its stops are ours — so this is a known value, not a guess, and the
-    // artwork-less path runs through the same solve as every other cover.
-    let luma = backdrop_luma.unwrap_or_else(backdrop::floor_luma);
-    let colors = backdrop::solve(seed, luma);
+    // and `globals/player.slint` for what each brush drives. Both fallbacks (a
+    // missing hue, a missing measurement) live on `BackdropSample::solve`, so
+    // this tier and the hero's resolve them identically.
+    let colors = sample.solve(brush_to_rgb(&ui.global::<ThemeGlobal>().get_accent()));
 
     player.set_np_accent_bright(brush(colors.chrome));
     player.set_np_on_backdrop(brush(colors.text));
     player.set_np_on_backdrop_muted(brush(colors.muted));
     player.set_np_floor_start(color(colors.floor_start));
     player.set_np_floor_end(color(colors.floor_end));
-    #[expect(
-        clippy::cast_possible_truncation,
-        clippy::cast_sign_loss,
-        reason = "solved alpha is clamped to 0..=1 by `backdrop::scrim_alpha`"
-    )]
-    let scrim_alpha = (colors.scrim_alpha * 255.0).round() as u8;
-    player.set_np_scrim(brush_with_alpha(colors.scrim, scrim_alpha));
+    player.set_np_scrim(backdrop::scrim_brush(&colors));
 
     write_crossfade_slot(
         blurred,

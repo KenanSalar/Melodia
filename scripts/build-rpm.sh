@@ -29,7 +29,14 @@ fi
 BINARY="${BINARY:-$REPO_ROOT/target/release/Melodia}"
 [[ -f "$BINARY" ]] || { echo "ERROR: $BINARY not found. Run with --build first."; exit 1; }
 
-VERSION="$(awk -F\" '/^version = / { print $2; exit }' Cargo.toml)"
+# Both packages inherit the version from `[workspace.package]`, so `[package]`
+# reads `version.workspace = true` and carries no literal. Anchor on the table
+# rather than taking the file's first `version = ` line.
+VERSION="$(awk -F'"' '
+  /^\[/                  { in_ws = ($0 == "[workspace.package]") }
+  in_ws && /^version = / { print $2; exit }
+' Cargo.toml)"
+[[ -n "$VERSION" ]] || { echo "ERROR: no version in Cargo.toml's [workspace.package]"; exit 1; }
 FEDORA_REL="$(rpm -E '%{?dist}' | sed 's/^\.//')"
 ARCH="${ARCH:-$(uname -m)}"
 case "$ARCH" in
@@ -54,7 +61,7 @@ chmod 0755 "$PKG_DIR/melodia"
 # With-background SVG for the OS launcher / taskbar / KRunner icon —
 # the without-background variant is reserved for the in-app custom
 # titlebar where the window mantle provides the disc behind the glyph.
-cp "$REPO_ROOT/ui/assets/icons/logo-with-background.svg" "$PKG_DIR/melodia.svg"
+cp "$REPO_ROOT/assets/icons/logo-with-background.svg" "$PKG_DIR/melodia.svg"
 cp "$REPO_ROOT/LICENSE" "$PKG_DIR/LICENSE"
 
 # Polkit helper + policy for branded auth prompts on in-app updater.

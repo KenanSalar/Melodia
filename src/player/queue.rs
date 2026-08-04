@@ -12,10 +12,9 @@ use super::types::{PersistableQueue, RepeatMode};
 pub struct PruneOutcome {
     /// Number of distinct entries removed from `tracks`.
     pub removed: usize,
-    /// True if the thing the player believes is currently playing was in
-    /// `ids_to_remove` — i.e. the active `direct_play_track`, or the
-    /// `play_order[current_index]` entry. Caller uses this to decide whether
-    /// to auto-skip to the next track.
+    /// True if the `play_order[current_index]` entry — the thing the player
+    /// believes is currently playing — was in `ids_to_remove`. Caller uses
+    /// this to decide whether to auto-skip to the next track.
     pub current_was_removed: bool,
 }
 
@@ -34,8 +33,6 @@ pub struct QueueState {
     pub current_index: Option<usize>,
     pub shuffle_enabled: bool,
     pub repeat_mode: RepeatMode,
-    pub direct_play_track: Option<Arc<TrackSummary>>,
-    pub direct_play_active: bool,
     /// Monotonic counter incremented on every queue mutation.
     /// Used by `with_state_emit` to detect whether the queue changed.
     pub version: u64,
@@ -50,8 +47,6 @@ impl Default for QueueState {
             current_index: None,
             shuffle_enabled: false,
             repeat_mode: RepeatMode::Off,
-            direct_play_track: None,
-            direct_play_active: false,
             version: 0,
         }
     }
@@ -212,8 +207,6 @@ impl QueueState {
         self.play_order.clear();
         self.original_order.clear();
         self.current_index = None;
-        self.direct_play_track = None;
-        self.direct_play_active = false;
         self.version += 1;
     }
 
@@ -222,29 +215,12 @@ impl QueueState {
         if index >= self.len() {
             return None;
         }
-        self.direct_play_active = false;
-        self.direct_play_track = None;
         self.current_index = Some(index);
         self.version += 1;
         self.track_at(index)
     }
 
-    pub fn set_direct_play(&mut self, track: Arc<TrackSummary>) {
-        self.direct_play_track = Some(track);
-        self.direct_play_active = true;
-        self.version += 1;
-    }
-
-    pub fn clear_direct_play(&mut self) {
-        self.direct_play_track = None;
-        self.direct_play_active = false;
-        self.version += 1;
-    }
-
     pub fn get_current(&self) -> Option<&Arc<TrackSummary>> {
-        if self.direct_play_active {
-            return self.direct_play_track.as_ref();
-        }
         let ci = self.current_index?;
         if ci >= self.len() {
             return None;
@@ -253,13 +229,6 @@ impl QueueState {
     }
 
     pub fn advance(&mut self) -> Option<&Arc<TrackSummary>> {
-        if self.direct_play_active {
-            self.clear_direct_play();
-            if self.play_order.is_empty() {
-                return None;
-            }
-        }
-
         if self.play_order.is_empty() {
             return None;
         }
@@ -289,13 +258,6 @@ impl QueueState {
     /// `RepeatMode::One` wraps like `RepeatMode::All`: manual navigation
     /// walks the queue in a loop. Only `Off` stops at the end.
     pub fn advance_skip(&mut self) -> Option<&Arc<TrackSummary>> {
-        if self.direct_play_active {
-            self.clear_direct_play();
-            if self.play_order.is_empty() {
-                return None;
-            }
-        }
-
         if self.play_order.is_empty() {
             return None;
         }
@@ -321,10 +283,6 @@ impl QueueState {
     }
 
     pub fn previous(&mut self) -> Option<&Arc<TrackSummary>> {
-        if self.direct_play_active {
-            self.clear_direct_play();
-        }
-
         if self.play_order.is_empty() {
             return None;
         }
@@ -388,8 +346,8 @@ impl QueueState {
     /// double `Vec<usize>` allocation that the shell-driven path required
     /// (one for the indices in the caller, one for the remapped play
     /// order here). If `anchor_to_current` is true and the queue has a
-    /// current track, the post-shuffle play order is rotated so the
-    /// current track stays at position 0.
+    /// current track, that track is swapped to the front of the shuffled
+    /// order so playback carries on from it.
     pub fn shuffle_play_order_in_place<R: rand::Rng + ?Sized>(
         &mut self,
         rng: &mut R,
@@ -452,8 +410,7 @@ impl QueueState {
     /// surviving track-indices. Adjusts `current_index` to land on the next
     /// surviving play-order entry at or after the old slot (or, if everything
     /// at or after was removed, the last survivor — or `None` for an empty
-    /// queue). Clears `direct_play_track` and `direct_play_active` if the
-    /// direct-play track was among the removed IDs.
+    /// queue).
     ///
     /// Bumps `version` only when at least one entry actually changed, so a
     /// no-op call (empty input or no matches) won't trigger a `ViewModel` re-emit.
@@ -480,29 +437,17 @@ impl QueueState {
 
         let removed = old_len - new_tracks.len();
 
-        // Step 2: figure out whether the "currently playing" entry is among
-        // the casualties — *before* mutating anything else, so `current_index`
-        // still resolves through the old `play_order`.
-        let direct_play_removed = self.direct_play_active
-            && self
-                .direct_play_track
-                .as_ref()
-                .is_some_and(|t| ids_to_remove.contains(&t.id));
-
-        // No change to the regular queue *and* no change to direct play →
-        // nothing to do. (A direct-play-only prune still has to fall through
-        // so the lingering `direct_play_track` is cleared and the version
-        // bumped.)
-        if removed == 0 && !direct_play_removed {
+        if removed == 0 {
             return PruneOutcome::default();
         }
 
-        let queue_current_removed = self
+        // Step 2: figure out whether the "currently playing" entry is among
+        // the casualties — *before* mutating anything else, so `current_index`
+        // still resolves through the old `play_order`.
+        let current_was_removed = self
             .current_index
             .and_then(|ci| self.play_order.get(ci).copied())
             .is_some_and(|ti| !keep_mask[ti]);
-
-        let current_was_removed = direct_play_removed || queue_current_removed;
 
         // Step 3: rebuild play_order, dropping entries whose target was
         // removed, and remember where each old slot lands (or that it
@@ -542,14 +487,6 @@ impl QueueState {
                 .find_map(|s| *s)
                 .or_else(|| self.play_order.len().checked_sub(1))
         });
-
-        // Step 6: clear direct play if its track was pruned.
-        if let Some(t) = &self.direct_play_track
-            && ids_to_remove.contains(&t.id)
-        {
-            self.direct_play_track = None;
-            self.direct_play_active = false;
-        }
 
         self.tracks = new_tracks;
         self.version += 1;

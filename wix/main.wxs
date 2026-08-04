@@ -121,7 +121,7 @@
           running-window icon in one place. To regenerate from the
           WITH-background brand SVG:
               magick -density 384 -background none \
-                ui/assets/icons/logo-with-background.svg \
+                assets/icons/logo-with-background.svg \
                 -define icon:auto-resize=256,128,96,64,48,32,24,16 \
                 assets/melodia.ico
         -->

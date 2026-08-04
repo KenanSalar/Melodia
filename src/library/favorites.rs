@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use crate::database::queries;
-use crate::entities::{album, artist, track};
+use crate::entities::{artist, track};
 use crate::error::AppError;
 use crate::player::state::{PlayerAction, lock_state, sync_current_track_if_in, with_state_emit};
 use crate::services::scrobble::LoveTarget;
@@ -150,22 +150,16 @@ pub async fn get_favorite_stats(state: &AppState) -> Result<track::FavoriteStats
     queries::track::get_favorite_stats(&state.db).await
 }
 
-pub async fn get_favorite_albums(
-    state: &AppState,
-) -> Result<Vec<album::FavoriteAlbum>, AppError> {
-    queries::album::get_favorite_albums(&state.db).await
-}
-
 pub async fn get_favorite_artists(
     state: &AppState,
 ) -> Result<Vec<artist::FavoriteArtist>, AppError> {
     queries::artist::get_favorite_artists(&state.db).await
 }
 
+/// Favorite tracks ranked by play count — the whole set, since the Most Played
+/// tab is a virtualized grid and has no reason to truncate.
 pub async fn get_most_played_favorites(
     state: &AppState,
-    limit: i64,
 ) -> Result<Vec<track::MostPlayedFavorite>, AppError> {
-    let limit = limit.clamp(1, 100);
-    queries::track::get_most_played_favorites(&state.db, limit).await
+    queries::track::get_most_played_favorites(&state.db).await
 }

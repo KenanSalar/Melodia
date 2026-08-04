@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use slint::{ComponentHandle, Model, SharedString};
 
-use super::collect_track_ids;
+use super::{collect_track_ids, next_sort};
 use super::macros::{spawn_logged, spawn_logged_sync, wire_row_flag};
 use crate::library;
 use crate::state::AppState;
@@ -31,8 +31,12 @@ pub fn wire_tracks(ui: &AppWindow, state: &AppState, tracks_ui: &Arc<TracksUi>) 
     // and, on re-enter, run the deferred refresh if a `library_changed` bump
     // arrived while the section was hidden (the refresher marks dirty
     // instead of re-fetching a view the user can't see). Seed the shadow
-    // from the current nav state — `changed` in `AppWindow` won't fire for
-    // a session that *starts* on Tracks (sidebar index 3).
+    // from the current nav state (sidebar index 3): the gate's
+    // `ChangeTracker` baselines inside `AppWindow::new()` and fires only on
+    // a later difference, so a section the boot doesn't land on gets no edge
+    // at all, and the one it does land on gets its edge a frame late — after
+    // boot has already read this shadow. See the `SectionActiveGate` bullet
+    // in `.claude/rules/ui-patterns.md`.
     tracks_ui.set_section_active(ui.global::<crate::Nav>().get_selected_index() == 3);
     {
         let tu = tracks_ui.clone();
@@ -59,20 +63,14 @@ pub fn wire_tracks(ui: &AppWindow, state: &AppState, tracks_ui: &Arc<TracksUi>) 
         tracks.on_request_sort(move |field| {
             let Some(ui) = weak.upgrade() else { return };
             let g = ui.global::<Tracks>();
-            let cur_field = g.get_sort_field();
-            let cur_dir = g.get_sort_dir();
-            let (new_field, new_dir) = if cur_field.as_str() == field.as_str() {
-                let nd = if cur_dir.as_str() == "asc" { "desc" } else { "asc" };
-                (field.to_string(), nd.to_string())
-            } else {
-                (field.to_string(), "asc".to_string())
-            };
+            let (new_field, new_dir) =
+                next_sort(g.get_sort_field().as_str(), g.get_sort_dir().as_str(), &field);
             g.set_sort_field(SharedString::from(new_field.as_str()));
             g.set_sort_dir(SharedString::from(new_dir.as_str()));
             let filter = g.get_filter().to_string();
 
-            tracks_ui_mod::resort_and_apply(&weak, &tu, &new_field, &new_dir, filter);
-            super::persist_view_sort(&s, view_id::TRACKS, new_field, &new_dir);
+            tracks_ui_mod::resort_and_apply(&weak, &tu, &new_field, new_dir.as_str(), filter);
+            super::persist_view_sort(&s, view_id::TRACKS, new_field, new_dir);
         });
     }
 
@@ -85,37 +83,23 @@ pub fn wire_tracks(ui: &AppWindow, state: &AppState, tracks_ui: &Arc<TracksUi>) 
         });
     }
 
-    // play-row: double-click on a row appends just that track to the queue
-    // (skipping if already present). Auto-starts when the player was idle.
-    // The "Play All" button is the explicit affordance for loading the full
-    // filtered list — see `on_play_all` below.
-    {
-        let s = state.clone();
-        tracks.on_play_row(move |track_id, _idx| {
-            let s = s.clone();
-            let id = i64::from(track_id);
-            spawn_logged!(s, "tracks::play_row",
-                library::queue::queue_append_unique(&s, id));
-        });
-    }
-
-    // play-all: load every track in the current filter into the queue and
-    // start at index 0. Matches the explicit "replace queue + play"
-    // semantics of Album/Artist/Genre/Browse Play-All buttons.
+    // play-row: double-click loads the current view into the queue and starts
+    // on the clicked track — the standard music-player contract.
     {
         let s = state.clone();
         let tu = tracks_ui.clone();
         let weak = weak.clone();
-        tracks.on_play_all(move || {
+        tracks.on_play_row(move |track_id, idx| {
             let Some(ui) = weak.upgrade() else { return };
             let filter = ui.global::<Tracks>().get_filter().to_string();
             let ids = tu.current_ids_filtered(&filter);
             if ids.is_empty() {
                 return;
             }
+            let start = super::play_row_start(&ids, i64::from(track_id), idx);
             let s = s.clone();
-            spawn_logged!(s, "tracks::play_all",
-                library::playback::player_play_tracks(&s.playback_ctx(), ids, Some(0)));
+            spawn_logged!(s, "tracks::play_row",
+                library::playback::player_play_tracks(&s.playback_ctx(), ids, start));
         });
     }
 

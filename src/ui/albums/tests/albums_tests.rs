@@ -24,7 +24,7 @@ fn names(data: &GridData, indices: &[usize]) -> Vec<String> {
 }
 
 #[test]
-fn grid_data_precomputes_lowercased_keys() {
+fn grid_data_precomputes_lowercased_sort_keys() {
     let data = GridData::new(vec![album(1, "AbBey Road", "The BEATLES", None)]);
     assert_eq!(data.keys.len(), 1);
     assert_eq!(data.keys[0].name_lc, "abbey road");
@@ -57,6 +57,35 @@ fn compute_indices_filter_matches_name_or_artist_case_insensitively() {
 }
 
 #[test]
+fn compute_indices_filter_matches_year_and_its_decade() {
+    // `AlbumStats` carries the year, so a query the Search view answers
+    // with a decade narrows this grid too.
+    let data = GridData::new(vec![
+        album(1, "Loveless", "My Bloody Valentine", Some(1991)),
+        album(2, "Nevermind", "Nirvana", Some(1991)),
+        album(3, "Kid A", "Radiohead", Some(2000)),
+    ]);
+    let by_year = compute_indices(&data, "name", "asc", "1991");
+    assert_eq!(names(&data, &by_year), ["Loveless", "Nevermind"]);
+    let by_decade = compute_indices(&data, "name", "asc", "199");
+    assert_eq!(names(&data, &by_decade), ["Loveless", "Nevermind"]);
+}
+
+#[test]
+fn compute_indices_filter_ignores_accents_the_way_the_search_view_does() {
+    let data = GridData::new(vec![
+        album(1, "Ágætis byrjun", "Sigur Rós", None),
+        album(2, "Kid A", "Radiohead", None),
+    ]);
+    let by_name = compute_indices(&data, "name", "asc", "agaetis");
+    assert!(by_name.is_empty(), "æ is a letter, not an accented a");
+    let by_title = compute_indices(&data, "name", "asc", "byrjun");
+    assert_eq!(names(&data, &by_title), ["Ágætis byrjun"]);
+    let by_artist = compute_indices(&data, "name", "asc", "sigur ros");
+    assert_eq!(names(&data, &by_artist), ["Ágætis byrjun"]);
+}
+
+#[test]
 fn compute_indices_year_sort_breaks_ties_by_name_and_honours_dir() {
     let data = GridData::new(vec![
         album(1, "Later", "X", Some(2001)),
@@ -81,22 +110,4 @@ fn grid_index_cache_matches_only_identical_filter_and_sort() {
     assert!(!c.matches("y", "name", "asc"));
     assert!(!c.matches("x", "year", "asc"));
     assert!(!c.matches("x", "name", "desc"));
-}
-
-#[test]
-fn compute_album_cover_cap_clamps_and_scales_with_resolution() {
-    // A tiny display can't fill many cards — clamps to the floor (32).
-    assert_eq!(compute_album_cover_cap(640, 480).get(), 32);
-    // A 4K panel shows far more than the ceiling — clamps to the cap (96).
-    assert_eq!(compute_album_cover_cap(3840, 2160).get(), 96);
-    // A mid-range display lands strictly between the clamps...
-    let mid = compute_album_cover_cap(1920, 1080).get();
-    assert!(
-        mid > 32 && mid < 96,
-        "1080p cap {mid} should sit between the clamps"
-    );
-    // ...and the cap is monotonic in display area.
-    let small = compute_album_cover_cap(1280, 720).get();
-    let large = compute_album_cover_cap(2560, 1440).get();
-    assert!(small <= mid && mid <= large);
 }

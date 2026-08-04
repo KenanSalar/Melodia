@@ -101,8 +101,12 @@ impl Dispatch<WlDataDevice, DataDeviceData, WinitState> for DataDeviceState {
                     return;
                 };
 
+                // Every bail-out below owns destroying the offer. `finish_offer`
+                // only ever sees an offer that reached `data_device_state.offer`,
+                // so an early return here would drop the proxy and leak it.
                 let Some(data_offer) = wl_data_offer.data::<DataOfferData>() else {
                     warn!("Received data device enter event without data offer");
+                    wl_data_offer.destroy();
                     return;
                 };
 
@@ -116,6 +120,7 @@ impl Dispatch<WlDataDevice, DataDeviceData, WinitState> for DataDeviceState {
                     },
                 }) else {
                     warn!("Data deviced entered with no valid MIME type");
+                    wl_data_offer.destroy();
                     return;
                 };
 
@@ -127,6 +132,7 @@ impl Dispatch<WlDataDevice, DataDeviceData, WinitState> for DataDeviceState {
                     Ok((read_fd, write_fd)) => (read_fd, write_fd),
                     Err(e) => {
                         warn!("Failed to create pipe to read data offer from: {e}");
+                        wl_data_offer.destroy();
                         return;
                     },
                 };
@@ -222,11 +228,29 @@ impl Dispatch<WlDataDevice, DataDeviceData, WinitState> for DataDeviceState {
                     state
                         .events_sink
                         .push_window_event(WindowEvent::HoveredFileCancelled, hovered_window);
-                    data_device_state.finish_offer();
+                    data_device_state.release_offer();
                 }
             },
-            WlDataDeviceEvent::DataOffer { id: _ } => {},
-            WlDataDeviceEvent::Selection { id: _ } => {},
+            WlDataDeviceEvent::DataOffer { id: _ } => {
+                // Nothing to do: `event_created_child!` above has already built
+                // the proxy, and the follow-up event hands it to whichever arm
+                // owns it — `Enter` for a drag, `Selection` for the clipboard.
+                // Both destroy it.
+            },
+            WlDataDeviceEvent::Selection { id } => {
+                // This data device exists for drag-and-drop; winit exposes no
+                // clipboard API of its own (that is copypasta's separate data
+                // device). A selection offer is therefore dead on arrival here.
+                //
+                // It still has to be destroyed. The compositor mints a *new*
+                // `wl_data_offer` on every selection change and the client owns
+                // its lifetime, so dropping the proxy silently leaks one object
+                // — plus its accumulated MIME-type strings — per clipboard
+                // change, for the life of the process.
+                if let Some(offer) = id {
+                    offer.destroy();
+                }
+            },
             _ => unreachable!(),
         }
     }
@@ -325,10 +349,30 @@ impl DataDeviceState {
         callback(paths);
     }
 
+    /// Tear down after a *completed* drop: tell the source the drag finished,
+    /// then release.
+    ///
+    /// `wl_data_offer.finish` is only valid once `wl_data_device.drop` has been
+    /// received — sending it on any other path is an `invalid_finish` protocol
+    /// error. It also only exists from version 3, and [`DataDeviceManager::new`]
+    /// binds `1..=3`, so an older compositor really can hand back an offer that
+    /// has no such request. Either mistake is grounds for the compositor to drop
+    /// the connection, so both are guarded here. Cancellation goes through
+    /// [`Self::release_offer`] instead.
     fn finish_offer(&mut self) {
+        if let Some(offer) = self.offer.as_ref() {
+            if offer.version() >= 3 {
+                offer.finish();
+            }
+        }
+        self.release_offer();
+    }
+
+    /// Release the current offer without claiming the drag completed — the
+    /// cancel path, and the only correct teardown when no drop was received.
+    fn release_offer(&mut self) {
         self.hovered_window = None;
         if let Some(offer) = self.offer.take() {
-            offer.finish();
             offer.destroy();
         }
         if let Some(token) = self.read_token.take() {

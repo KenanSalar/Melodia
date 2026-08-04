@@ -1,0 +1,31 @@
+import { Theme } from "../../theme.slint";
+import { ScrobbleUi } from "../../globals/dialog-forms.slint";
+
+// The Last.fm login: two-step browser auth driven entirely by the dialog's own
+// primary button, so this body is instructions plus a busy line and an inline
+// error. State lives on `ScrobbleUi`.
+export component ScrobbleLastfmBody inherits VerticalLayout {
+    spacing: Theme.pad-md;
+
+    Text {
+        text: ScrobbleUi.lastfm-step == 0
+            ? @tr("Click Open Last.fm to approve Melodia in your browser.")
+            : @tr("After approving Melodia in your browser, click Finish.");
+        color: Theme.text;
+        font-size: Theme.font-size-md;
+        wrap: word-wrap;
+    }
+
+    if ScrobbleUi.busy: Text {
+        text: @tr("Connecting…");
+        color: Theme.subtext0;
+        font-size: Theme.font-size-sm;
+    }
+
+    if ScrobbleUi.error != "": Text {
+        text: ScrobbleUi.error;
+        color: Theme.danger;
+        font-size: Theme.font-size-sm;
+        wrap: word-wrap;
+    }
+}

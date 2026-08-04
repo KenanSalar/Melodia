@@ -16,13 +16,3 @@ pub struct AlbumStats {
     pub track_count: i32,
     pub total_duration_ms: i64,
 }
-
-/// Lightweight struct for albums containing favorited tracks.
-#[derive(Clone, Debug, PartialEq, FromRow, Serialize, Deserialize)]
-pub struct FavoriteAlbum {
-    pub id: i64,
-    pub name: String,
-    pub artist_name: String,
-    pub artwork_path: Option<String>,
-    pub favorite_count: i32,
-}

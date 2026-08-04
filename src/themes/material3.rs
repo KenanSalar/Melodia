@@ -6,6 +6,21 @@
 
 use super::{AccentDef, Palette, ThemeDef, Variant};
 
+// Traffic-light green / yellow, one pair per polarity. Same hues as the Green
+// and Yellow accents, so they read as traffic-light colours on an M3 palette;
+// the light pair is a touch more saturated than the MD3 reference `tertiary`
+// slots, which are too washed to signal anything at these tones.
+//
+// `pub(crate)` because the Material You dynamic palette reuses them verbatim
+// (`services::material_you::generate_palette`). A dynamic scheme has no green
+// or yellow role to map, and deriving one from the album seed puts a moving
+// colour on the three surfaces that need a fixed one — maximize, the
+// success/warning toasts, and the star rating.
+pub(crate) const DARK_GREEN: u32 = 0xa8dab5;
+pub(crate) const DARK_YELLOW: u32 = 0xe2c569;
+pub(crate) const LIGHT_GREEN: u32 = 0x1b6d2f;
+pub(crate) const LIGHT_YELLOW: u32 = 0xc69a17;
+
 const DARK: Palette = Palette {
     base:     0x141218,
     mantle:   0x1d1b20,
@@ -21,12 +36,8 @@ const DARK: Palette = Palette {
     subtext1: 0x938f99,
     border:   0x36343b,
     red:      0xffb4ab,
-    // Material 3 tertiary green / yellow tones — same hues as the
-    // Green / Yellow accents so the macOS-style titlebar traffic lights
-    // read on a Material 3 palette.
-    yellow:   0xe2c569,
-    green:    0xa8dab5,
-    ..Palette::fallback_semantics(0x79747e)
+    yellow:   DARK_YELLOW,
+    green:    DARK_GREEN,
 };
 
 const LIGHT: Palette = Palette {
@@ -44,12 +55,8 @@ const LIGHT: Palette = Palette {
     subtext1: 0x79747e,
     border:   0xcac4d0,
     red:      0xb3261e,
-    // Material 3 light mode uses darker yellow/green tones; pump up the
-    // saturation a touch (over the MD3 reference `tertiary` slots) so
-    // the traffic lights still read as bright traffic-light colours.
-    yellow:   0xc69a17,
-    green:    0x1b6d2f,
-    ..Palette::fallback_semantics(0x938f99)
+    yellow:   LIGHT_YELLOW,
+    green:    LIGHT_GREEN,
 };
 
 const VARIANTS: &[Variant] = &[

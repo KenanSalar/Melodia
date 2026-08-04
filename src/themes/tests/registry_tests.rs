@@ -3,7 +3,7 @@
 #![allow(clippy::unreadable_literal)]
 
 use super::*;
-use crate::themes::apply::on_accent_hex;
+use crate::themes::apply::{LUMA_B, LUMA_G, LUMA_R, LUMA_THRESHOLD, on_accent_hex};
 
 #[test]
 fn registry_lists_six_themes_in_display_order() {
@@ -37,25 +37,47 @@ fn unknown_accent_or_variant_returns_none_or_first_variant() {
 }
 
 #[test]
-fn non_catppuccin_themes_collapse_unspecified_semantics_to_overlay1() {
-    // GNOME Dark's overlay1 is 0x808088. The Catppuccin-only semantic
-    // slots GNOME doesn't define (peach / mauve / pink / lavender)
-    // mirror it via `Palette::fallback_semantics`.
+fn gnome_dark_semantics_match_adwaita_tokens() {
+    // Adwaita's error / warning / success tokens.
     let gnome = get("gnome-adwaita");
     let dark = gnome.variant("dark");
     assert!(dark.is_some(), "gnome dark variant must exist");
     let Some(dark) = dark else { return };
     let p = &dark.palette;
-    assert_eq!(p.overlay1, 0x808088);
-    assert_eq!(p.peach, 0x808088);
-    assert_eq!(p.mauve, 0x808088);
-    assert_eq!(p.pink, 0x808088);
-    assert_eq!(p.lavender, 0x808088);
-    // `red`, `green` and `yellow` are theme-defined (Adwaita's error /
-    // success / warning tokens) and must NOT collapse to the fallback.
     assert_eq!(p.red, 0xc01c28);
     assert_eq!(p.green, 0x57e389);
     assert_eq!(p.yellow, 0xf6d32d);
+}
+
+#[test]
+fn every_variant_defines_three_distinct_semantic_colours() {
+    // The regression guard for the grey traffic lights: `red` / `green` /
+    // `yellow` drive the macOS-style titlebar cluster, the success / warning
+    // toasts and the star rating, so a palette that leaves one sitting on a
+    // neutral from the surface ramp turns those signals grey. There is no
+    // struct-update fallback left to make that happen silently, but a
+    // hand-written table can still paste the wrong hex in.
+    for theme in registry() {
+        for variant in theme.variants {
+            let p = &variant.palette;
+            let where_ = format!("{}/{}", theme.id, variant.id);
+            for (name, semantic) in [("red", p.red), ("green", p.green), ("yellow", p.yellow)] {
+                for (neutral_name, neutral) in [
+                    ("overlay0", p.overlay0),
+                    ("overlay1", p.overlay1),
+                    ("overlay2", p.overlay2),
+                ] {
+                    assert_ne!(
+                        semantic, neutral,
+                        "{where_}: {name} must not be the {neutral_name} neutral",
+                    );
+                }
+            }
+            assert_ne!(p.red, p.green, "{where_}: red and green must differ");
+            assert_ne!(p.red, p.yellow, "{where_}: red and yellow must differ");
+            assert_ne!(p.green, p.yellow, "{where_}: green and yellow must differ");
+        }
+    }
 }
 
 #[test]
@@ -104,6 +126,32 @@ fn on_accent_picks_dark_text_for_light_accent() {
     // Pure white → dark text; pure black → light text.
     assert_eq!(on_accent_hex(0x00ffffff), 0x001e1e2e);
     assert_eq!(on_accent_hex(0x00000000), 0x00ffffff);
+}
+
+/// `theme.slint`'s `Theme.ink-on` is a hand-copy of `on_accent_hex`, for the
+/// surfaces whose fill isn't the accent. Nothing links the two, so pin the copy
+/// — a silent divergence here is exactly the bug that put `accent-text` on the
+/// destructive confirm button.
+#[test]
+fn theme_slint_ink_on_matches_on_accent_hex() {
+    const THEME_SLINT: &str = include_str!("../../../melodia-ui/ui/theme.slint");
+
+    // Every number comes off the Rust side — the weights and threshold as
+    // consts, the two inks by asking the function itself — so the pin holds in
+    // both directions rather than only catching an edit to the Slint copy.
+    let dark_ink = on_accent_hex(0x00ffffff);
+    let light_ink = on_accent_hex(0x00000000);
+    let expected = format!(
+        "return ({LUMA_R} * fill.red + {LUMA_G} * fill.green + {LUMA_B} * fill.blue) \
+         / 255 > {LUMA_THRESHOLD} ? #{dark_ink:06x} : #{light_ink:06x};"
+    );
+
+    // Normalized so re-wrapping the Slint expression doesn't fail the test.
+    let declaration = THEME_SLINT.split_whitespace().collect::<Vec<_>>().join(" ");
+    assert!(
+        declaration.contains(&expected),
+        "theme.slint's `ink-on` drifted from `on_accent_hex` — update both or neither"
+    );
 }
 
 #[test]

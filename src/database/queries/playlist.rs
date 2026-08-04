@@ -451,19 +451,23 @@ pub async fn count_tracks_in_playlists_for_selection(
     Ok(map)
 }
 
-/// Returns distinct artwork paths from tracks in the given playlist.
+/// Returns up to `limit` distinct artwork paths from tracks in the given
+/// playlist, in playlist order.
 pub async fn get_playlist_artwork_paths(
     db: &DbPool,
     playlist_id: i64,
+    limit: i64,
 ) -> Result<Vec<String>, AppError> {
     let paths: Vec<(String,)> = sqlx::query_as(
         "SELECT t.artwork_path FROM tracks t
          JOIN playlist_items pi ON pi.track_id = t.id
          WHERE pi.playlist_id = ? AND t.artwork_path IS NOT NULL AND t.artwork_path != ''
          GROUP BY t.artwork_path
-         ORDER BY MIN(pi.position) ASC"
+         ORDER BY MIN(pi.position) ASC
+         LIMIT ?"
     )
     .bind(playlist_id)
+    .bind(limit)
     .fetch_all(db.read())
     .await?;
     Ok(paths.into_iter().map(|(p,)| p).collect())

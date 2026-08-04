@@ -504,11 +504,29 @@ pub struct FavoriteStats {
 }
 
 /// Lightweight struct for "Most Played Favorites" cards.
-#[derive(Clone, Debug, PartialEq, FromRow, Serialize, Deserialize)]
+///
+/// `Hash` is what the Favorites grid compares against its last applied set —
+/// derived rather than hand-listed so a new field can't silently drop out of
+/// the comparison and leave a card stale.
+///
+/// The card renders title + artist; the four fields below them are carried
+/// only so `ui::row_match::most_played_matches` searches the same set as
+/// `track_matches`. On Recently Played that is load-bearing — the strip and
+/// the recency list share one scroll under one search bar, so the narrower
+/// projection let a single query show a genre's tracks in the list and none
+/// of its cards above them. Favorites mounts the same cards in a *tab*,
+/// mutually exclusive with its track list and cleared on every switch, so
+/// there the reason is only the general one: a query means the same thing on
+/// every page that offers a filter box.
+#[derive(Clone, Debug, PartialEq, Hash, FromRow, Serialize, Deserialize)]
 pub struct MostPlayedFavorite {
     pub id: i64,
     pub title: String,
     pub artist: Option<String>,
+    pub album_artist: Option<String>,
+    pub album: Option<String>,
+    pub genre: Option<String>,
+    pub year: Option<i32>,
     pub artwork_path: Option<String>,
     pub play_count: i32,
     pub duration_ms: i64,

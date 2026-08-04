@@ -24,9 +24,11 @@ mod tags;
 mod tracks;
 mod updater;
 
+use rand::RngExt;
 use slint::{ComponentHandle, Model, ModelRc};
 
 use crate::library;
+use crate::services::settings::{SortDir, ViewSort};
 use crate::state::AppState;
 use crate::{AppWindow, Nav, Player};
 
@@ -67,17 +69,97 @@ pub(super) fn collect_nonzero_track_ids(ids: &ModelRc<i32>) -> Vec<i64> {
     ids.iter().filter(|&id| id != 0).map(i64::from).collect()
 }
 
+/// Resolve the queue slot a `play-row` activation should start on.
+///
+/// The row index a view hands over indexes its *displayed* rows, which is the
+/// same space as `ids` everywhere except Browse — that list also shows
+/// disk-only files, which `current_in_library_ids` drops. Fall back to a lookup
+/// by id there, and to the head of the queue when the track isn't in the list
+/// at all (`player_play_tracks` reads `None` as index 0).
+pub(super) fn play_row_start(ids: &[i64], track_id: i64, idx: i32) -> Option<usize> {
+    if let Ok(i) = usize::try_from(idx)
+        && ids.get(i) == Some(&track_id)
+    {
+        return Some(i);
+    }
+    ids.iter().position(|&id| id == track_id)
+}
+
+/// Track ids of a live `VecModel<TrackListRow>`, in display order.
+///
+/// Only Search needs this. Every other view caches its displayed rows on a
+/// `*Ui` handle, but Search's visible set is a sorted, `COMPACT_TRACK_LIMIT`-
+/// truncated projection of `last_results` that is assembled at render time —
+/// so the model is the only place the displayed order actually exists. Result
+/// sets are LIMIT-bounded, so walking it on the UI thread is cheap.
+pub(super) fn model_track_ids(rows: &ModelRc<crate::TrackListRow>) -> Vec<i64> {
+    rows.iter().map(|r| i64::from(r.id)).collect()
+}
+
+/// Replace the queue with `ids`, open on a random one, then turn shuffle on —
+/// the header Shuffle pill on the six views that carry one. `tag` names the
+/// call site in the two failure logs.
+///
+/// The two halves have to be sequenced (shuffle re-anchors around whatever is
+/// playing), so this is a spawned task rather than one `library::*` call. Use
+/// `queue_set_shuffle` and not a read-then-toggle pair: the pill means "on",
+/// and a toggle racing the transport's shuffle button would turn it off.
+///
+/// The start slot is random, and has to be: the shuffle anchors the current
+/// track at the front, so starting at the head would open every press on the
+/// same song — a shuffle whose first track you can predict.
+pub(super) fn spawn_play_then_shuffle(state: &AppState, tag: &'static str, ids: Vec<i64>) {
+    // Not just an early exit — `random_range` panics on an empty range, and a
+    // filter that matches nothing leaves a live pill over an empty list (the
+    // header gates on the view's *unfiltered* count).
+    if ids.is_empty() {
+        return;
+    }
+    let start = rand::rng().random_range(..ids.len());
+    let state = state.clone();
+    state.runtime.clone().spawn(async move {
+        if let Err(e) =
+            library::playback::player_play_tracks(&state.playback_ctx(), ids, Some(start)).await
+        {
+            log::warn!("{tag} play: {e}");
+            return;
+        }
+        if let Err(e) = library::queue::queue_set_shuffle(&state, true) {
+            log::warn!("{tag} shuffle: {e}");
+        }
+    });
+}
+
+/// Resolve a sort-pill (or column-header) click against the sort in force.
+///
+/// Clicking the field already sorted on flips the direction; clicking a
+/// different one starts it ascending. Every sortable view spelled this out
+/// identically, so a change of mind about the reset direction meant finding
+/// eleven copies.
+///
+/// `cur_dir` is read the way [`SortDir::from_token`] reads it — only `"desc"`
+/// is descending — rather than testing for `"asc"` and treating everything else
+/// as descending. The two only differ on a token neither side can currently
+/// produce, but disagreeing about it would leave that pill unable to reach
+/// descending at all.
+pub(super) fn next_sort(cur_field: &str, cur_dir: &str, clicked: &str) -> (String, SortDir) {
+    let flip = cur_field == clicked && cur_dir != "desc";
+    let dir = if flip { SortDir::Desc } else { SortDir::Asc };
+    (clicked.to_owned(), dir)
+}
+
 /// Spawn a fire-and-forget task that persists `view_id`'s sort field +
 /// direction into `views.json`'s `view_sort`. A write failure is logged, not
 /// surfaced — the in-memory re-sort already applied, so the only loss is
 /// across a restart. Shared by every sortable view's `on_request_sort`.
-pub(super) fn persist_view_sort(state: &AppState, view_id: &'static str, field: String, dir: &str) {
-    use crate::services::settings::{SortDir, ViewSort};
+pub(super) fn persist_view_sort(
+    state: &AppState,
+    view_id: &'static str,
+    field: String,
+    dir: SortDir,
+) {
     let s = state.clone();
-    let sort = ViewSort {
-        field,
-        dir: SortDir::from_token(dir),
-    };
+    let sort = ViewSort { field, dir };
     state.runtime.spawn_blocking(move || {
         if let Err(e) = library::settings::set_view_sort(&s, view_id.to_owned(), sort) {
             log::warn!("{view_id}::set_view_sort: {e}");
@@ -203,3 +285,7 @@ pub fn wire_all(ui: &AppWindow, state: &AppState) {
         });
     }
 }
+
+#[cfg(test)]
+#[path = "tests/play_row_tests.rs"]
+mod tests;

@@ -1,0 +1,154 @@
+import { ScrollView } from "std-widgets.slint";
+import { Theme } from "../../theme.slint";
+import { EntityStripRow } from "../../models.slint";
+import { EntityCard } from "entity-card.slint";
+import { OverlayScrollbar } from "../overlay-scrollbar.slint";
+
+// A horizontally-scrolling row of `EntityCard`s under a section heading, over
+// one `EntityStripRow` shape with a boolean per flavour. Mounted by Recently
+// Played's Most Played strip and by the Search view's two result strips;
+// Favorites drove the original three and now takes the vertical
+// `EntityCardGrid` instead.
+//
+// Scrolling is the usual pattern: stock scrollbars off, a sibling
+// `OverlayScrollbar` along the bottom edge reading `viewport-x`, and the bar
+// hides itself with no overflow — so no consumer needs a visibility gate.
+//
+// The hover play overlay is opt-in. Most Played suppresses it, since clicking
+// the card there already plays the track; the result strips show it so a whole
+// album or artist can be played without leaving the page.
+export component HorizontalCardStrip inherits Rectangle {
+    in property <string>             heading;
+    in property <[EntityStripRow]>   rows;
+    in property <length>             card-width: 160px;
+    in property <length>             card-height: 206px;
+    in property <length>             card-gap: 12px;
+    in property <bool>               circular: false;
+    in property <bool>               show-play-count: false;
+    in property <bool>               show-play-overlay: true;
+    in property <string>             fallback-icon: "music-note";
+    in property <string>             empty-text;
+
+    pure callback request-cover(string) -> image;
+    callback row-clicked(int);
+    callback play-clicked(int);
+
+    private property <length> strip-height: root.card-height + 18px;
+
+    VerticalLayout {
+        spacing: Theme.pad-sm;
+
+        // Same weight and tracking as every other section header in the app.
+        // Gated on a non-empty `heading`, so a caller supplying its own header
+        // chrome suppresses this one by passing `""` rather than a second flag.
+        if root.heading != "": Text {
+            text: root.heading;
+            color: Theme.text;
+            font-size: Theme.font-size-md;
+            font-weight: 700;
+            letter-spacing: 0.4px;
+        }
+
+        // The caller supplies the copy, so it can be section-specific and
+        // translated at its own site.
+        if root.rows.length == 0 && root.empty-text != "": Text {
+            text: root.empty-text;
+            color: Theme.subtext0;
+            font-size: Theme.font-size-sm;
+            wrap: word-wrap;
+        }
+
+        if root.rows.length > 0: Rectangle {
+            height: root.strip-height;
+            clip: true;
+
+            sv := ScrollView {
+                width: 100%;
+                height: 100%;
+                horizontal-scrollbar-policy: always-off;
+                vertical-scrollbar-policy:   always-off;
+                viewport-height: self.height;
+
+                HorizontalLayout {
+                    spacing: root.card-gap;
+                    alignment: start;
+
+                    for row[i] in root.rows: card-slot := Rectangle {
+                        width: root.card-width;
+                        height: root.card-height;
+                        clip: false;
+
+                        EntityCard {
+                            width: 100%;
+                            height: 100%;
+                            artwork-path: row.artwork_path;
+                            cover: root.request-cover(row.artwork_path);
+                            title: row.title;
+                            subtitle: row.subtitle;
+                            card-width: root.card-width;
+                            card-height: root.card-height;
+                            circular: root.circular;
+                            fallback-icon: root.fallback-icon;
+                            // The card owns the badge, so the strip and the
+                            // vertical `EntityCardGrid` render the same one.
+                            badge-text: root.show-play-count && row.play_count > 0
+                                ? row.play_count
+                                : "";
+                            clicked => { root.row-clicked(row.id); }
+                        }
+
+                        // Pinned to the bottom right of the artwork tile, whose
+                        // inset matches `EntityCard`'s own.
+                        if root.show-play-overlay: play-pill := Rectangle {
+                            x: root.card-width - self.width - Theme.pad-md;
+                            y: root.card-width - self.height - Theme.pad-md;
+                            width: 36px;
+                            height: 36px;
+                            border-radius: 18px;
+                            background: Theme.accent;
+                            opacity: play-touch.has-hover || card-touch.has-hover ? 1.0 : 0.0;
+                            animate opacity { duration: Theme.dur-fast; easing: ease-in-out; }
+
+                            // `MaterialIcon`'s collapsed em-box, spelled inline
+                            // to keep the strip's imports small.
+                            Text {
+                                text: "play_arrow";
+                                color: Theme.accent-text;
+                                font-family: "Material Symbols Rounded";
+                                font-size: 22px;
+                                horizontal-alignment: center;
+                                vertical-alignment: center;
+                            }
+
+                            play-touch := TouchArea {
+                                mouse-cursor: pointer;
+                                clicked => { root.play-clicked(row.id); }
+                            }
+                        }
+
+                        // Covers the whole card slot and drives the pill's
+                        // fade-in. Below the pill's own TouchArea, so a click
+                        // on the icon goes to the pill and everything else
+                        // to the card.
+                        card-touch := TouchArea {
+                            mouse-cursor: pointer;
+                            enabled: false;
+                        }
+                    }
+                }
+            }
+
+            OverlayScrollbar {
+                horizontal: true;
+                x: 0;
+                y: parent.height - self.height;
+                width: parent.width;
+                height: 8px;
+                visible-size: sv.visible-width;
+                content-size: sv.viewport-width;
+                offset: -sv.viewport-x;
+                scroll-to(o) => { sv.viewport-x = -o; }
+            }
+        }
+    }
+}

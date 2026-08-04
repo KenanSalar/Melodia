@@ -1,0 +1,209 @@
+// Catppuccin Mocha tokens. The 19 theme-dependent brushes are `in-out` so
+// `themes::apply()` can swap palettes at runtime; the values here are the defaults that
+// paint correctly before settings load. Layout, typography and motion stay `out` —
+// design system, not user choice.
+
+export global Theme {
+    // Surfaces / structure
+    in-out property <brush> base: #1e1e2e;
+    in-out property <brush> mantle: #181825;
+    // What the sidebar and now-playing bar paint when the window is unfocused *and* the
+    // KDE-only "Match Unfocused Window Background" toggle is on. Under KDE Breeze +
+    // System, `themes::apply()` sources it from `[WM] inactiveBackground` in
+    // `kdeglobals`, so the surfaces match the OS titlebar exactly; every other theme
+    // falls back to `base`.
+    in-out property <brush> mantle-unfocused: #1e1e2e;
+    in-out property <brush> crust: #11111b;
+    in-out property <brush> surface0: #313244;
+    in-out property <brush> surface1: #45475a;
+    in-out property <brush> surface2: #585b70;
+
+    // Overlays / text
+    in-out property <brush> overlay0: #6c7086;
+    in-out property <brush> overlay1: #7f849c;
+    in-out property <brush> overlay2: #9399b2;
+    in-out property <brush> text: #cdd6f4;
+    in-out property <brush> subtext0: #a6adc8;
+    in-out property <brush> subtext1: #bac2de;
+    in-out property <brush> border: #313244;
+
+    // Accent (default mauve) + colour on accent
+    in-out property <brush> accent: #cba6f7;
+    in-out property <brush> accent-text: #1e1e2e;
+
+    // Ink for a glyph or label painted directly on `fill`. sRGB luma — weights over the
+    // gamma-encoded channels, not linearized ones, so this is *not* the relative
+    // luminance `ui/backdrop.rs` solves scrims against. A hand-copy of
+    // `themes::apply::on_accent_hex`, pinned from both ends by
+    // `themes::tests::theme_slint_ink_on_matches_on_accent_hex`.
+    //
+    // **Reach for this wherever the surface underneath isn't the accent.**
+    // `accent-text` answers a question about the *accent*, so on a light theme with a
+    // light accent it puts near-black on a dark red. The two colours stay literals
+    // rather than palette slots: they're absolute ink for a fill of known lightness.
+    public pure function ink-on(fill: brush) -> brush {
+        return (0.2126 * fill.red + 0.7152 * fill.green + 0.0722 * fill.blue) / 255 > 0.5
+            ? #1e1e2e
+            : #ffffff;
+    }
+
+    // Semantic colours (Mocha palette). Three, and every theme defines all
+    // three — see `src/themes/palette.rs` for why there's no fallback.
+    // `green` and `yellow` are signals: the macOS-style traffic lights, the
+    // success / warning toasts, the star rating.
+    in-out property <brush> red: #f38ba8;
+    in-out property <brush> green: #a6e3a1;
+    in-out property <brush> yellow: #f9e2af;
+
+    // Destructive-action aliases, so call sites read `danger` rather than `red` and the
+    // mapping moves here instead of at every one of them. `out`, so both follow whatever
+    // `apply()` put in `red`. **Hover is deliberately not a token**: the destructive
+    // `SectionButton` lightens its own fill with `Theme.danger.brighter(10%)`, which
+    // reads as one colour intensifying rather than as a second hue.
+    out property <brush> danger: root.red;
+    out property <brush> danger-text: root.ink-on(root.danger);
+
+    // Fill for chrome floating over busy content — a detail hero's blur, a playlist
+    // card's cover. **Nearly opaque on purpose**: softer, the artwork reads through and
+    // the control looks like a watermark. Held this close to opaque it is its own
+    // surface, so its glyphs contrast against `surface0` rather than against whatever
+    // the hero happens to be, and the residual translucency is what keeps
+    // `IconButton`'s hover swap to solid `surface0` legible as a transition.
+    out property <brush> floating-chrome-bg: root.surface0.with-alpha(0.75);
+
+    // Layout
+    out property <length> sidebar-collapsed-w: 46px;
+    out property <length> sidebar-default-w: 180px;
+    out property <length> sidebar-min-w: 105px;
+    out property <length> sidebar-max-w: 400px;
+    out property <length> now-playing-h: 72px;
+    // Track-row content height; the header's is independent, pinned in its own file.
+    out property <length> row-h: 46px;
+    // Compact height when the thumbnail is hidden. Sized to clear the hover swap-in —
+    // the checkbox and favourite glyph — by a few px, so the row reads as deliberately
+    // dense rather than cramped.
+    out property <length> row-h-compact: 34px;
+    // Vertical gap below each row.
+    out property <length> row-gap: 0px;
+
+    // Radii / spacing
+    out property <length> radius-sm: 4px;
+    out property <length> radius-md: 8px;
+    out property <length> radius-lg: 12px;
+    // Drives the rounded mantle shell — the visible window outline in custom-frame
+    // windowed mode — and the inner content panel. User-adjustable, and deliberately
+    // decoupled from `radius-md` so component radii stay put when the shell rounding
+    // moves. `in-out` so `ui/appearance/` writes the persisted value at startup and on
+    // every change.
+    in-out property <length> shell-radius: 6px;
+    // Concentric-ring helper: the border rectangle takes `shell-radius` and the base
+    // rectangle this, keeping the 1 px ring an even thickness around each corner.
+    // Floored at 0 so radius 0 can't go negative — Slint clamps too, but the explicit
+    // `max` keeps the intent on the page.
+    out property <length> shell-radius-inner: max(0px, shell-radius - 1px);
+    // The content panel's left-side rounding under a native titlebar, seeded once from
+    // `get_os_corner_radius()` so it matches the host desktop regardless of the user's
+    // persisted pick — that pick governs custom mode, which the user opted into. Hence
+    // the greyed-out "Managed by the operating system" row in Settings. Doesn't move at
+    // runtime: an environment switch needs a restart.
+    in-out property <length> native-content-radius: 6px;
+    out property <length> native-content-radius-inner: max(0px, native-content-radius - 1px);
+
+    // Read by **both** the `Window`'s `resize-border-width` and the `ResizeRing`
+    // overlays setting the cursor over it, which is the whole point: winit decides
+    // where a press resizes, the ring only paints the hint, so a drift leaves a band
+    // that resizes with no resize cursor, or the reverse. Corners are deliberately
+    // larger than the edge for a more forgiving diagonal grab.
+    out property <length> resize-border: 4px;
+    out property <length> resize-corner: 8px;
+
+    out property <length> pad-xs: 4px;
+    out property <length> pad-sm: 8px;
+    out property <length> pad-md: 12px;
+    out property <length> pad-lg: 16px;
+
+    // The artwork tile every hero band leads with — the detail views' cover, the
+    // curated views' 2×2 mosaic. **One number rather than six**: the banners are the
+    // same band under different content, and a tile changing size between them reads as
+    // the page shifting under a nav. `DetailHeader` takes it directly and exposes no
+    // size knob, so a detail hero can't diverge from the pair with no header component
+    // to route through.
+    //
+    // It sets each band's *height* too, being the tallest thing in all of them. Growing
+    // it grows six banners at once; shrinking it costs the detail heroes first, whose
+    // right column clears the tile's lower edge by only a couple of pixels once the
+    // chips wrap. `ui::hero_chips::HERO_MAX_ROWS` is how that slack is spent.
+    out property <length> hero-artwork: 140px;
+
+    // Typography
+    out property <length> font-size-sm: 12px;
+    out property <length> font-size-row: 13px;
+    out property <length> font-size-md: 14px;
+    out property <length> font-size-lg: 16px;
+
+    // Shared by every view's header band so the headings stay consistent; a subtitle
+    // reuses `font-size-sm` + `subtext0`.
+    out property <length> page-title-size: 20px;
+    out property <int> page-title-weight: 600;
+    out property <brush> page-title-color: root.text;
+
+    // The hero banners' own title, a step above a page heading because it sits on a
+    // blurred band beside the `hero-artwork` tile rather than on a flat header row. One
+    // number for the reason that token gives — and the six had already drifted to two
+    // sizes before this existed, with nothing recording which was intended.
+    //
+    // **It has a ceiling.** The two heroes carrying a second text line nest it under
+    // the title, inside the title row, where only the `SearchBar`'s leftover height is
+    // free — so raising this spends the slack a wrapped chip row needs.
+    out property <length> hero-title-size: 22px;
+
+    // Easing is inlined at each `animate` site: Slint 1.16 can't expose an `easing`
+    // property across the Rust boundary, and a global one warns at build time.
+    out property <duration> dur-fast: 200ms;
+    out property <duration> dur-med: 250ms;
+    out property <duration> dur-spatial: 400ms;
+
+    // True hands the titlebar to the OS and leaves the content panel's top-left flat;
+    // false renders `custom-titlebar.slint` and rounds it to the shell's outer chrome.
+    // **`window_chrome` must hydrate this between `AppWindow::new()` and `app.run()`** —
+    // Slint reads `Window.no-frame` once at first show, so that is the only window it
+    // can land in. Defaults false, matching `WindowFlags::default()`, so a fresh install
+    // boots on the custom titlebar.
+    in-out property <bool> use-native-titlebar: false;
+
+    // 0 = Standard (Material bar icons), 1 = macOS (traffic lights). Hydrated at startup
+    // and re-applied on change; `custom-titlebar.slint` reads it through `Theme` rather
+    // than reaching into `Settings`, the `shell-radius` precedent.
+    in-out property <int> titlebar-button-style: 0;
+
+    // 0 = Right, 1 = Left. Same hydration shape.
+    in-out property <int> titlebar-button-side: 0;
+
+    // Raw mirror of winit's `WindowEvent::Focused(bool)`, written unconditionally.
+    // Two consumers: the KDE-only unfocused tint, whose bindings gate on
+    // `match-unfocused-bg && use-native-titlebar && !window-focused` — the titlebar term
+    // is required because the toggle defaults on under KDE and survives a
+    // native-titlebar disable — and `FocusLossWatcher`, mounted inside each popup's own
+    // `if` so only the open popup has a live watcher.
+    in-out property <bool> window-focused: true;
+
+    // Integer arithmetic, so no float rounding; anything ≤ 0 collapses to "0:00", which
+    // is what lets the now-playing bar format a mid-transition position safely.
+    public pure function format-duration(ms: int) -> string {
+        // `h:mm:ss` past an hour, `m:ss` below. **Must stay byte-identical to
+        // `format_duration_ms`**: the track rows use the Rust-precomputed string while
+        // the now-playing bar calls this, so a divergence shows up as inconsistent
+        // length labels on long tracks.
+        ms <= 0
+            ? "0:00"
+            : Math.floor(ms / 3600000) > 0
+                ? Math.floor(ms / 3600000) + ":"
+                    + (Math.mod(Math.floor(ms / 60000), 60) < 10 ? "0" : "")
+                    + Math.mod(Math.floor(ms / 60000), 60) + ":"
+                    + (Math.mod(Math.floor(ms / 1000), 60) < 10 ? "0" : "")
+                    + Math.mod(Math.floor(ms / 1000), 60)
+                : Math.floor(ms / 60000) + ":"
+                    + (Math.mod(Math.floor(ms / 1000), 60) < 10 ? "0" : "")
+                    + Math.mod(Math.floor(ms / 1000), 60)
+    }
+}

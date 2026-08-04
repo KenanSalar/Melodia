@@ -1,0 +1,60 @@
+import { Settings } from "../../settings.slint";
+import { SettingsPage } from "../../globals/settings-page.slint";
+import { SectionCard } from "../../components/settings/section-card.slint";
+import { SettingRow } from "../../components/settings/setting-row.slint";
+import { Dropdown } from "../../components/settings/dropdown.slint";
+
+// One row: the locale dropdown. Its options come from the `Settings` global,
+// which `src/ui/locale.rs::install_locale` fills from `SUPPORTED_LOCALES`. The
+// native-name labels are deliberately untranslated — a language picker always
+// renders each option in its own script — while the title and row label take
+// `@tr()` so the page stays readable in whatever locale is picked.
+//
+// **This section is the pattern the other ten follow.** Each is a thin
+// Rectangle hosting its card inside an `if has-matches:`, so a card that matches
+// nothing leaves the layout entirely; `visible: false` would keep its slot. The
+// flag is an `out property` so the page can spot the all-hidden state and paint
+// its no-results placeholder. The matching rule lives on `SettingsPage`; the
+// local wrapper binds this section's title once, so the per-row call sites stay
+// two arguments.
+export component LanguageSection inherits Rectangle {
+    background: transparent;
+    horizontal-stretch: 1;
+    vertical-stretch: 0;
+
+    in property <string> tab-name;
+
+    pure function row-visible(label: string, desc: string) -> bool {
+        return SettingsPage.row-visible(root.tab-name, @tr("Language"),
+                                        label + " " + desc,
+                                        SettingsPage.search-query);
+    }
+
+    out property <bool> has-matches:
+        row-visible(@tr("Choose your preferred language"), "");
+
+    // **The wrapper every section needs.** A `Rectangle` sizes to a layout
+    // child, never to a conditional one, so around a bare `if` it reports 0
+    // preferred-height. Wrapped, the height tracks the card when it's there and
+    // collapses to nothing when the filter hides it.
+    VerticalLayout {
+        if has-matches: SectionCard {
+            title: @tr("Language");
+
+            if root.row-visible(@tr("Choose your preferred language"), ""): SettingRow {
+                icon: "translate";
+                label: @tr("Choose your preferred language");
+                description: "";
+                Dropdown {
+                    options: Settings.language-names;
+                    selected-index <=> Settings.language-idx;
+                    trigger-width: 160px;
+                    // The dropdown has already written `selected-index`, so this
+                    // just forwards; Rust resolves the code, switches the
+                    // bundled translation and persists.
+                    selected(idx) => { Settings.language-changed(idx); }
+                }
+            }
+        }
+    }
+}

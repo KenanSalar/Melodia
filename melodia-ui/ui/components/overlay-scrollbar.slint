@@ -1,0 +1,124 @@
+import { Theme } from "../theme.slint";
+
+// **The only scrollbar in the tree** — std-widgets' bar paints inside padded containers
+// and can't be reskinned. Every colour comes off `Theme`, so a new theme re-skins it for
+// free, and the thumb keeps one size at all times: only the colour shifts on hover.
+//
+// Generic across both axes. It reads the viewport and content extents, renders the thumb
+// proportionally, and emits `scroll-to` on interaction. **The host owns the source of
+// truth**: it binds `offset` from its scroller and writes the negated value back on
+// every emit, which feeds through the binding — no two-way `<=>`, which the sign flip
+// would block anyway.
+//
+// The drag works in **absolute** coordinates, snapshotted on press, so the thumb tracks
+// the cursor 1:1 even if the host resizes mid-drag — the `ResizeHandle` fix. A click on
+// the bare track jumps the thumb's centre to the cursor and drags on from there.
+export component OverlayScrollbar inherits Rectangle {
+    in property <bool> horizontal: false;
+    in property <length> visible-size;
+    in property <length> content-size;
+    in property <length> offset;
+
+    // Overridden by tighter contexts — the collapsed sidebar rail, the mini player.
+    in property <length> bar-thickness: 8px;
+    in property <length> bar-radius: 4px;
+    in property <length> min-thumb: 28px;
+
+    // The neutral treatment every list view takes; the one override is Now Playing's Up
+    // Next, tinted with the per-artwork accent to match the visualizer. Passing the same
+    // brush for both thumb states drops its hover shift — the track's own ramp below
+    // still reports hover.
+    in property <brush> track-color: Theme.surface0;
+    in property <brush> thumb-color: Theme.surface2;
+    in property <brush> thumb-active-color: Theme.accent;
+    // A knob rather than an alpha baked into `track-color`, because it *animates*
+    // between the two. The thumb has no such ramp, so a caller wanting a translucent one
+    // bakes the alpha into its brushes instead.
+    in property <float> track-opacity: 0.5;
+    in property <float> track-opacity-active: 0.85;
+
+    out property <bool> dragging: touch.pressed;
+
+    callback scroll-to(length);
+
+    visible: root.content-size > root.visible-size;
+    background: transparent;
+    private property <length> max-extent: max(1px, root.content-size - root.visible-size);
+    private property <length> track-len: root.horizontal ? root.width : root.height;
+    private property <length> thumb-len: max(
+        root.min-thumb,
+        root.track-len * root.visible-size / max(1px, root.content-size)
+    );
+    private property <length> thumb-travel: max(0px, root.track-len - root.thumb-len);
+    private property <length> thumb-pos: root.thumb-travel * (root.offset / root.max-extent);
+
+    private property <bool> active: touch.has-hover || root.dragging;
+
+    // Drag snapshot taken on press.
+    private property <length> press-offset;
+    private property <length> press-abs;
+
+    // The channel the thumb runs in rather than floating in empty space. Subtle by
+    // design, so it reads against the panel without competing with the content.
+    Rectangle {
+        x: root.horizontal ? 0px : (root.width - root.bar-thickness) / 2;
+        y: root.horizontal ? (root.height - root.bar-thickness) / 2 : 0px;
+        width: root.horizontal ? root.width : root.bar-thickness;
+        height: root.horizontal ? root.bar-thickness : root.height;
+        border-radius: root.bar-radius;
+        background: root.track-color;
+        opacity: root.active ? root.track-opacity-active : root.track-opacity;
+        animate opacity { duration: Theme.dur-fast; easing: ease-in-out; }
+    }
+
+    // Only the colour transitions. **The position is deliberately un-animated**: derived
+    // from `offset`, it would phase-lag the cursor through a drag.
+    Rectangle {
+        x: root.horizontal ? root.thumb-pos : (root.width - root.bar-thickness) / 2;
+        y: root.horizontal ? (root.height - root.bar-thickness) / 2 : root.thumb-pos;
+        width: root.horizontal ? root.thumb-len : root.bar-thickness;
+        height: root.horizontal ? root.bar-thickness : root.thumb-len;
+        border-radius: root.bar-radius;
+        background: root.active ? root.thumb-active-color : root.thumb-color;
+        animate background { duration: Theme.dur-fast; easing: ease-in-out; }
+    }
+
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        pointer-event(ev) => {
+            if (ev.kind == PointerEventKind.down) {
+                // A press inside the thumb snapshots from the current offset, so it
+                // stays put and drags from where it was grabbed; a press on the bare
+                // track jumps its centre to the cursor first and snapshots from there.
+                if ((root.horizontal ? self.pressed-x : self.pressed-y) >= root.thumb-pos
+                    && (root.horizontal ? self.pressed-x : self.pressed-y) <= root.thumb-pos + root.thumb-len) {
+                    root.press-offset = root.offset;
+                } else {
+                    root.press-offset = clamp(
+                        (((root.horizontal ? self.pressed-x : self.pressed-y)
+                            - root.thumb-len / 2)
+                         / max(1px, root.thumb-travel)) * root.max-extent,
+                        0px, root.max-extent
+                    );
+                    root.scroll-to(root.press-offset);
+                }
+                root.press-abs = root.horizontal
+                    ? (self.absolute-position.x + self.pressed-x)
+                    : (self.absolute-position.y + self.pressed-y);
+            }
+        }
+        moved => {
+            if (self.pressed) {
+                root.scroll-to(clamp(
+                    root.press-offset
+                        + (((root.horizontal
+                                ? (self.absolute-position.x + self.mouse-x)
+                                : (self.absolute-position.y + self.mouse-y))
+                            - root.press-abs)
+                           / max(1px, root.thumb-travel)) * root.max-extent,
+                    0px, root.max-extent
+                ));
+            }
+        }
+    }
+}

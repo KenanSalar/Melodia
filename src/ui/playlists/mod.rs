@@ -3,7 +3,7 @@
 //! Two Slint globals are driven from here:
 //!
 //! * `Playlists` — the responsive playlist-card grid. Rust owns a flat
-//!   `Vec<PlaylistStats>` (plus pre-lowercased name keys) behind
+//!   `Vec<PlaylistStats>` (plus a pre-lowercased name sort key) behind
 //!   `PlaylistsUi::grid.data`; the grid model is rebuilt from it on every
 //!   filter / sort / column-count change *without* a DB hit. Per-card cover
 //!   lookup is lazy via `request-cover`. The flat `Playlists.rows` model
@@ -37,6 +37,7 @@ use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 use crate::entities::playlist::PlaylistStats;
 use crate::media::cover_thumbs::CoverThumbs;
 use crate::ui::detail_artwork::DetailArtwork;
+use crate::ui::row_match::Needle;
 use crate::ui::section_state::SectionState;
 use crate::ui::util::clamp_i64_to_i32;
 use crate::{
@@ -47,6 +48,9 @@ use crate::{
 use state::{
     DEFAULT_GRID_COVER_CAP, GRID_COVER_SIZE, GridData, PlaylistDetailState, PlaylistGridState,
 };
+
+#[cfg(test)]
+use grid::compute_indices;
 
 pub use detail::{
     apply_detail_row_favorite, apply_detail_row_rating, apply_filtered_detail,
@@ -93,7 +97,7 @@ impl PlaylistsUi {
                 position_order: Mutex::new(Vec::new()),
                 playlist_id: Mutex::new(-1),
                 applied_selection: Mutex::new(HashSet::new()),
-                filter: Mutex::new(String::new()),
+                filter: Mutex::new(Needle::default()),
             },
             cover_thumbs,
             grid_covers: Arc::new(CoverThumbs::with_config(
@@ -164,12 +168,7 @@ impl PlaylistsUi {
 
     pub fn prewarm_visible_covers(&self) {
         let data = self.grid.data.lock().clone();
-        let unique = crate::ui::grid_prewarm::unique_artwork_paths(
-            data.playlists
-                .iter()
-                .take(state::GRID_PREWARM_AHEAD)
-                .map(|p| p.thumbnail_path.as_deref()),
-        );
+        let unique = grid::first_screenful_paths(&data);
         if !unique.is_empty() {
             self.grid_covers.prewarm(&unique);
         }
@@ -203,7 +202,7 @@ impl PlaylistsUi {
 
     /// Track ids of the **displayed** detail list, in display order — the
     /// filter-applied subset when a search is active, otherwise the full
-    /// playlist. `play-all` / shuffle / add-to-queue pass these to
+    /// playlist. `play-row` / shuffle / add-to-queue pass these to
     /// `player_play_tracks`, so those actions operate on the visible rows.
     pub fn detail_track_ids(&self) -> Vec<i64> {
         self.detail.tracks.lock().iter().map(|r| r.id).collect()
@@ -312,3 +311,7 @@ const _: fn() = || {
     fn check<T: Send + Sync>() {}
     check::<PlaylistsUi>();
 };
+
+#[cfg(test)]
+#[path = "tests/playlists_tests.rs"]
+mod tests;

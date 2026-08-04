@@ -1,7 +1,7 @@
 //! `GenreDetail.*` callbacks: close, play / shuffle / play-row, queue
 //! actions, favorite toggle, row selection, in-memory sort, column toggle,
-//! filter. Genres have no artwork, so close-detail releases only the cached
-//! track list + selection (no `(cover, blur)` pair to clear).
+//! filter. Genres have no artwork, so close-detail releases the cached track
+//! list + selection and the hero colour set — but no `(cover, blur)` pair.
 
 use std::sync::Arc;
 
@@ -9,9 +9,9 @@ use slint::{ComponentHandle, Model, SharedString};
 
 use crate::library;
 use crate::state::AppState;
-use crate::ui::callbacks::collect_track_ids;
+use crate::ui::callbacks::{collect_track_ids, play_row_start, spawn_play_then_shuffle};
 use crate::ui::callbacks::macros::{spawn_logged, spawn_logged_sync, wire_row_flag};
-use crate::ui::callbacks::persist_view_sort;
+use crate::ui::callbacks::{next_sort, persist_view_sort};
 use crate::ui::genres::{self as genres_ui_mod, GenresUi};
 use crate::ui::track_list_view::{TrackListColumnState, view_id};
 use crate::{AppWindow, GenreDetail, Nav};
@@ -59,6 +59,13 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, genres_ui: &Arc<GenresUi>) 
             }
 
             g.set_genre_id(-1);
+            // Genres have no hero images, so this teardown never reaches
+            // `release_detail_hero_images!` — hand the shared colour set and
+            // chip row back here instead, else the next hero paints this
+            // genre's hash-derived stops and its counts until its own decode
+            // and fetch land.
+            crate::ui::hero_backdrop::reset(&ui);
+            crate::ui::hero_chips::clear(&ui);
             genres_ui_mod::clear_detail(&gu);
 
             let gu_trim = gu.clone();
@@ -81,56 +88,29 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, genres_ui: &Arc<GenresUi>) 
         });
     }
 
-    // play-genre / shuffle-genre: play every track in display order
-    // from the top. Shuffle plays the genre then turns shuffle on.
-    {
-        let s = state.clone();
-        let gu = genres_ui.clone();
-        detail.on_play_genre(move || {
-            let ids = gu.detail_track_ids();
-            if ids.is_empty() {
-                return;
-            }
-            let s = s.clone();
-            spawn_logged!(s, "genres::play_genre",
-                library::playback::player_play_tracks(&s.playback_ctx(), ids, Some(0)));
-        });
-    }
-
     {
         let s = state.clone();
         let gu = genres_ui.clone();
         detail.on_shuffle_genre(move || {
+            spawn_play_then_shuffle(&s, "genres::shuffle_genre", gu.detail_track_ids());
+        });
+    }
+
+    // play-row: double-click loads every *visible* track into the queue and
+    // starts on the clicked one — when a search filter is active that is the
+    // filtered subset, not the whole genre.
+    {
+        let s = state.clone();
+        let gu = genres_ui.clone();
+        detail.on_play_row(move |track_id, idx| {
             let ids = gu.detail_track_ids();
             if ids.is_empty() {
                 return;
             }
+            let start = play_row_start(&ids, i64::from(track_id), idx);
             let s = s.clone();
-            s.runtime.clone().spawn(async move {
-                if let Err(e) =
-                    library::playback::player_play_tracks(&s.playback_ctx(), ids, Some(0)).await
-                {
-                    log::warn!("genres::shuffle_genre play: {e}");
-                    return;
-                }
-                if let Err(e) = library::queue::queue_set_shuffle(&s, true) {
-                    log::warn!("genres::shuffle_genre set_shuffle: {e}");
-                }
-            });
-        });
-    }
-
-    // play-row: double-click appends only that track to the queue
-    // (skipping duplicates). Use `play-genre` to load every *visible*
-    // track — when a search filter is active that is the filtered subset,
-    // not the whole genre.
-    {
-        let s = state.clone();
-        detail.on_play_row(move |track_id, _idx| {
-            let s = s.clone();
-            let id = i64::from(track_id);
             spawn_logged!(s, "genres::play_row",
-                library::queue::queue_append_unique(&s, id));
+                library::playback::player_play_tracks(&s.playback_ctx(), ids, start));
         });
     }
 
@@ -213,16 +193,12 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, genres_ui: &Arc<GenresUi>) 
         detail.on_request_sort(move |field| {
             let Some(ui) = weak.upgrade() else { return };
             let g = ui.global::<GenreDetail>();
-            let (new_field, new_dir) = if g.get_sort_field().as_str() == field.as_str() {
-                let nd = if g.get_sort_dir().as_str() == "asc" { "desc" } else { "asc" };
-                (field.to_string(), nd.to_string())
-            } else {
-                (field.to_string(), "asc".to_string())
-            };
+            let (new_field, new_dir) =
+                next_sort(g.get_sort_field().as_str(), g.get_sort_dir().as_str(), &field);
             g.set_sort_field(SharedString::from(new_field.as_str()));
             g.set_sort_dir(SharedString::from(new_dir.as_str()));
             genres_ui_mod::resort_detail(&ui, &gu);
-            persist_view_sort(&s, view_id::GENRE_DETAIL, new_field, &new_dir);
+            persist_view_sort(&s, view_id::GENRE_DETAIL, new_field, new_dir);
         });
     }
 

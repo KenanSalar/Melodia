@@ -6,7 +6,7 @@
 //! ## Resize-only trigger
 //!
 //! Tauri parity: the miniplayer is engaged purely by the OS window being
-//! shrunk past the threshold derived inside `ui/app-window.slint`
+//! shrunk past the threshold derived inside `melodia-ui/ui/app-window.slint`
 //! (`mini-active: self.width < 550px || self.height < 250px`). There is
 //! no entry or exit button anywhere in the UI — the user grows the
 //! window past the threshold again to leave (or double-clicks the bare

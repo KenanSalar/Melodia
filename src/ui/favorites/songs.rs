@@ -1,0 +1,240 @@
+//! Songs tab: fetch, sort persistence, in-memory filter, model
+//! apply. Mirrors the Tracks view's fetch shape — the SQL fetch returns
+//! the entire sorted set once per `library_changed_tx` tick, and the
+//! per-keystroke filter walk is in memory over the fields
+//! [`crate::ui::row_match`] defines.
+
+use std::path::PathBuf;
+use std::sync::Arc;
+
+use slint::{ComponentHandle, Model, VecModel, Weak};
+
+use super::{FavoritesTab, FavoritesUi};
+use crate::error::AppResult;
+use crate::library;
+use crate::services::settings::{SortDir, ViewSort};
+use crate::state::AppState;
+use crate::ui::row_match::{self, Needle};
+use crate::ui::tracks::{PreparedTrackRow, finish_track_list_row};
+use crate::{AppWindow, Favorites, TrackListRow as UiTrackListRow};
+
+/// Read-and-return the active sort. The Slint side mirrors this in
+/// `Favorites.sort-field` / `Favorites.sort-dir`, but the Rust cache
+/// is the source of truth (Slint properties are written from Rust,
+/// not the reverse — `set-sort-*` callbacks update the cache + persist
+/// + re-fetch).
+pub fn current_sort(fav_ui: &FavoritesUi) -> ViewSort {
+    fav_ui.state().sort.lock().clone()
+}
+
+/// Read-and-return the active filter needle, folded by [`set_filter`] and ready
+/// to hand to a `row_match` predicate.
+pub fn current_filter(fav_ui: &FavoritesUi) -> Needle {
+    fav_ui.state().filter.lock().clone()
+}
+
+/// Update the cached sort. Callers (`wire_favorites`) are expected to
+/// follow this with a `refresh_tracks` call + a `set_view_sort` persist
+/// so the next launch lands on the same order.
+pub fn set_sort(fav_ui: &FavoritesUi, field: String, dir: SortDir) {
+    *fav_ui.state().sort.lock() = ViewSort { field, dir };
+}
+
+/// Update the cached filter needle. The Slint side already holds the
+/// live text via `<=>` binding; this mirror lets the live-refresh
+/// subscriber re-walk on a background thread without re-reading the
+/// Slint global. Folded on the way in, so all four readers — the Songs
+/// list, both grids, and the two queue-id walks — share one needle.
+pub fn set_filter(fav_ui: &FavoritesUi, filter: &str) {
+    *fav_ui.state().filter.lock() = row_match::fold_needle(filter);
+}
+
+/// Fetch the full favourites list at the current sort, cache it in
+/// Rust, then re-apply the in-memory filter so the Slint model
+/// reflects the new data. Runs on a tokio worker; the model write
+/// happens via `upgrade_in_event_loop` because Slint models are UI-
+/// thread only.
+pub async fn refresh_tracks(
+    state: &AppState,
+    fav_ui: &Arc<FavoritesUi>,
+    weak: &Weak<AppWindow>,
+) -> AppResult<()> {
+    let sort = current_sort(fav_ui);
+    let sort_by = Some(sort.field.clone());
+    let sort_dir = Some(match sort.dir {
+        SortDir::Asc => "asc".to_owned(),
+        SortDir::Desc => "desc".to_owned(),
+    });
+
+    let rows = library::favorites::get_favorite_tracks(state, sort_by, sort_dir).await?;
+
+    // A leave that landed while the query was in flight has already wiped
+    // `tracks_all` and emptied the model, so everything below would undo that
+    // teardown behind a view nobody can see. Nothing is lost by dropping the
+    // result: every leave sets `mark_dirty`, so the next enter re-fetches. Same
+    // guard, same placement, as `grids::fetch::refresh_grids`.
+    if !fav_ui.section_active() {
+        return Ok(());
+    }
+
+    // Prewarm the row covers off-thread before the first model apply:
+    // the `!Send` cover lookup in `finish_track_list_row` runs on the UI
+    // thread, so a cold cache (first section enter) would otherwise pay
+    // one synchronous decode per unique favourite cover at paint time.
+    // The rows arrive in the sort's display order, so the prefix surviving
+    // the cap is the one that paints first — pre-filter, which only diverges
+    // on a library refresh taken with a filter already narrowing the set past
+    // the cap. Keystroke re-filters skip this entirely: they only narrow an
+    // already-painted (warm) set.
+    let cover_paths: Vec<PathBuf> = crate::ui::grid_prewarm::unique_artwork_paths(
+        rows.iter().map(|r| r.artwork_path.as_deref()),
+        fav_ui.cover_thumbs.capacity(),
+    );
+    if !cover_paths.is_empty() {
+        let thumbs = fav_ui.cover_thumbs.clone();
+        let _ = tokio::task::spawn_blocking(move || thumbs.prewarm(&cover_paths)).await;
+    }
+
+    // The decode burst above is an `.await`, so the guard has to be asked
+    // again — after the slow part, because before it the leave hasn't happened
+    // yet.
+    if !fav_ui.section_active() {
+        return Ok(());
+    }
+
+    // The Songs tab's artist / album chips, folded here — on the worker that
+    // holds the rows, before they go into the cache, which is the whole of why
+    // `publish_favorites` costs nothing. Outside the gate: what must not land
+    // either side of `release_section_state`'s wipe is the pair of *stores*, so
+    // the walk that produces the fold has no business holding a lock the wipe
+    // and both sibling fetches queue behind.
+    let fold = crate::ui::hero_chips::fold_tracks(&rows);
+    {
+        let _gate = fav_ui.gate();
+        *fav_ui.state().songs_fold.lock() = fold;
+        *fav_ui.state().tracks_all.lock() = rows;
+    }
+    // Then republish: `kick_full_refresh` runs this task concurrently with the
+    // hero and grid fetches, so whichever of those published did so against the
+    // previous fold.
+    super::hero::republish_chips(fav_ui, weak);
+
+    apply_filtered_tracks(fav_ui, weak);
+    Ok(())
+}
+
+/// Re-walk the cached `tracks_all` through the active filter and push
+/// the result into `Favorites.tracks`. Cheap — runs entirely in memory.
+/// The filter match is case-insensitive across title + artist + album,
+/// same shape as the Tracks view's `apply_filter`. Any rows whose id is
+/// currently in `Favorites.selected-ids` get their `selected` flag
+/// re-stamped before the swap, so a filter change / library refresh
+/// doesn't visually drop an existing selection (the row may shift index
+/// but its checkbox + accent background hold).
+///
+/// A hidden section is never written to, the way
+/// `grids::apply::write_filtered_grids` refuses to: the leave teardown empties
+/// this model deliberately, and the check has to sit in [`write_filtered_tracks`]
+/// rather than out here, because the leave can land while the post is in flight.
+///
+/// **An unmounted tab is refused for the same reason, and asked about twice for
+/// the reason every `section_active()` bail is.** `Favorites.tracks` feeds one
+/// element — `views/favorites/songs-tab.slint`'s `TrackList`, under
+/// `if tab-idx == tab-songs` — so on the other two tabs every prepared row here
+/// reaches nothing. The gate is not new: `callbacks::favorites::subviews`'
+/// tab-change handler already spells it out for its own call, having priced one
+/// prepared row per favourite on this thread. What it couldn't cover is the two
+/// paths that reach here without going through a tab pick — the throttled
+/// keystroke and the `library_changed` / `stats_changed` refresh — and those are
+/// the frequent ones. [`build_filtered_tracks`]' check is what skips the cost;
+/// [`write_filtered_tracks`]' is what stops a pick landing mid-post from leaving
+/// a row per favourite pinned behind a tab the user just left.
+pub fn apply_filtered_tracks(fav_ui: &Arc<FavoritesUi>, weak: &Weak<AppWindow>) {
+    let Some(prepared) = build_filtered_tracks(fav_ui) else {
+        return;
+    };
+
+    let fav_ui = fav_ui.clone();
+    let weak = weak.clone();
+    let _ = slint::invoke_from_event_loop(move || {
+        let Some(ui) = weak.upgrade() else { return };
+        write_filtered_tracks(&ui, &fav_ui, prepared);
+    });
+}
+
+/// Apply from the UI thread, with no event-loop hop — the rows land in the model
+/// before Slint re-evaluates the `if` that mounts the entering tab.
+///
+/// The twin of `grids::apply::apply_filtered_grids_now`, and here for the same
+/// reason: `slint::invoke_from_event_loop` posts even when it is called *from*
+/// the UI thread, so a redraw can win the race. The tab-leave empties this model,
+/// so what a lost race paints is a `TrackList` of headers over nothing.
+pub fn apply_filtered_tracks_now(ui: &AppWindow, fav_ui: &FavoritesUi) {
+    if let Some(prepared) = build_filtered_tracks(fav_ui) {
+        write_filtered_tracks(ui, fav_ui, prepared);
+    }
+}
+
+/// Walk the cached `tracks_all` through the active filter, or `None` when Songs
+/// isn't the mounted tab and the walk would feed nothing.
+///
+/// Filters and prepares the `Send` row halves on the calling thread, borrowing
+/// the cache in place — the old path deep-cloned the whole String-bearing Vec
+/// per keystroke and then built every UI row (including the `!Send` cover
+/// lookup) inside the event-loop closure.
+fn build_filtered_tracks(fav_ui: &FavoritesUi) -> Option<Vec<PreparedTrackRow>> {
+    if fav_ui.active_tab() != FavoritesTab::Songs {
+        return None;
+    }
+    let needle = current_filter(fav_ui);
+    let all = fav_ui.state().tracks_all.lock();
+    Some(
+        all.iter()
+            .filter(|r| row_match::track_matches(r, &needle))
+            .map(crate::ui::tracks::prepare_track_list_row)
+            .collect(),
+    )
+}
+
+/// Finish the rows and push them into `Favorites.tracks`. UI thread only.
+///
+/// Both gates are re-asked here rather than trusted from the build: on the
+/// posting path a section leave or a tab pick can land while the closure is in
+/// flight, and either one has already emptied this model on purpose.
+fn write_filtered_tracks(
+    ui: &AppWindow,
+    fav_ui: &FavoritesUi,
+    prepared: Vec<PreparedTrackRow>,
+) {
+    if !fav_ui.section_active() || fav_ui.active_tab() != FavoritesTab::Songs {
+        return;
+    }
+    let g = ui.global::<Favorites>();
+    let model = g.get_tracks();
+    let Some(vec) = model.as_any().downcast_ref::<VecModel<UiTrackListRow>>() else {
+        log::warn!("Favorites.tracks: VecModel<TrackListRow> downcast failed");
+        return;
+    };
+    let mut rendered: Vec<UiTrackListRow> =
+        prepared.into_iter().map(finish_track_list_row).collect();
+    super::selection::restamp_rows(&g, &mut rendered);
+    // Per-row rewrite when identities align (same-shape refresh, e.g. a library
+    // tick): keeps the ListView's delegates instead of the tear-down-everything
+    // `set_vec` reset. Structural changes (filter narrowed/widened) fall back to
+    // `set_vec`.
+    crate::ui::model_diff::apply_rows_keyed(vec, rendered, |r| r.id);
+}
+
+/// Set `rating` on a single Songs-tab row in the Slint `VecModel`. Rating is
+/// independent of favorite membership (and there is no in-table rating sort),
+/// so the row stays put — patch it in place rather than rebuilding the whole
+/// filtered list. Mirrors [`crate::ui::tracks::apply_row_rating`].
+pub fn apply_row_rating(weak: &Weak<AppWindow>, id: i64, rating: i32) {
+    let _ = weak.upgrade_in_event_loop(move |ui| {
+        crate::ui::model_patch::patch_track_row_by_id(
+            &ui.global::<Favorites>().get_tracks(),
+            id,
+            |r| r.rating = rating,
+        );
+    });
+}
