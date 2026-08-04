@@ -459,6 +459,19 @@ jobs:
           # cargo-wix derives `-arch x64` / `-arch arm64` from --target
           # automatically; no wxs change needed for arm64.
           #
+          # `--package` is REQUIRED and is not redundant with the root
+          # manifest being a package in its own right: cargo-wix auto-
+          # selects a package only when the workspace has exactly one
+          # member, and otherwise refuses with "Workspace detected.
+          # Please pass a package name." Splitting the UI out into
+          # `melodia-ui` made that two, so the flag stops being optional.
+          # Naming it also makes the selection independent of the member
+          # count, which is what keeps a future third crate from breaking
+          # this again. Nothing else here is package-scoped —
+          # `CargoTargetBinDir` comes off the shared workspace target
+          # directory and the wxs names `Melodia.exe` outright — so this
+          # only decides whose name and version land on the MSI.
+          #
           # `--toolset modern` is REQUIRED — cargo-wix's default is
           # `Toolset::Legacy` (candle.exe + light.exe), which on
           # `windows-2025-vs2026` would pick up the preinstalled WiX 3.14
@@ -467,7 +480,7 @@ jobs:
           # outright (no WiX preinstalled). There is no auto-detect
           # path and no Cargo.toml metadata override — must be a CLI
           # flag.
-          cargo wix --toolset modern --target ${{ matrix.target }} --no-build --nocapture
+          cargo wix --toolset modern --package Melodia --target ${{ matrix.target }} --no-build --nocapture
           Get-ChildItem -Path "target/wix/" -Filter "*.msi" -Recurse |
             ForEach-Object { Copy-Item $_.FullName -Destination "melodia-${env:TAG}-${env:ARCH}.msi" }
 
