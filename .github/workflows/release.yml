@@ -584,10 +584,29 @@ jobs:
           # across all matrix slots in a job). The release job's
           # download-artifact step uses merge-multiple: true to flatten
           # all of these back into one directory.
+          #
+          # Extension-qualified, like the attest and sign steps above — this is
+          # the third spelling of that same list and has to stay in lockstep
+          # with them. It was a bare `melodia-*` prefix, which also matches
+          # DIRECTORIES: `melodia-ui/` is a workspace member, so every slot
+          # uploaded the whole Slint source tree, merge-multiple flattened it
+          # into `artifacts/melodia-ui/`, and the release job's
+          # `gh release upload artifacts/*` died on "is a directory". An
+          # extension-qualified glob can't reach a directory by accident, which
+          # is the property to keep if this list ever grows.
+          #
+          # `.minisig` is here because the sign step writes each signature
+          # beside its artifact as `<file>.minisig`. The old `!*.key` guard went
+          # with the prefix: the signing key is written to `$RUNNER_TEMP`, never
+          # the workspace, and none of these globs could match it regardless.
           name: ${{ matrix.kind }}-${{ matrix.arch }}
           path: |
-            melodia-*
-            !*.key
+            melodia-*.tar.gz
+            melodia-*.AppImage
+            melodia-*.rpm
+            melodia-*.deb
+            melodia-*.msi
+            melodia-*.minisig
           retention-days: 7
           if-no-files-found: error
 
