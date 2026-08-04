@@ -16,6 +16,7 @@ use super::state::{GRID_PREWARM_AHEAD, GRID_THUMB_CAP};
 use super::{FavoritesTab, FavoritesUi};
 use crate::AppWindow;
 use crate::media::cover_thumbs::CoverThumbs;
+use crate::ui::grid_prewarm::grid_cover;
 
 impl FavoritesUi {
     /// First-screenful cover paths for a grid tab, in display order.
@@ -139,25 +140,6 @@ impl FavoritesUi {
     /// Lazy cover lookup for the Favorite Artists circular cards.
     pub fn artist_cover(&self, artwork_path: &str, generation: i32) -> Image {
         grid_cover(&self.artist_thumbs, artwork_path, generation)
-    }
-}
-
-/// Resolve one grid card's cover, decoding only once the tier is known warm.
-///
-/// `generation` is `Favorites.covers-generation`: 0 means the tab was just
-/// entered and its tier was cleared on the previous tab-leave, so answer from
-/// the cache alone and let the card paint its placeholder. Decoding here
-/// instead puts one 448 px decode per visible card on the UI thread, in the
-/// frame that mounts the grid — the off-thread prewarm bumps the counter when
-/// it lands, which re-runs these bindings and lets rows scrolled to later load
-/// on demand. Same contract as `Queue.request-cover`; see the "Covers" section
-/// of `.claude/rules/ui-patterns.md`.
-pub(super) fn grid_cover(thumbs: &CoverThumbs, artwork_path: &str, generation: i32) -> Image {
-    let path = Some(artwork_path).filter(|s| !s.is_empty());
-    if generation == 0 {
-        thumbs.get_cached_opt(path)
-    } else {
-        thumbs.get_or_load_opt(path)
     }
 }
 

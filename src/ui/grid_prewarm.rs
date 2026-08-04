@@ -1,21 +1,23 @@
 //! Small shared helpers for the entity grids' cover caches.
 //!
-//! Two things every grid needs and none of them should own. Every entity grid
-//! (`albums`, `artists`, `playlists`, both Favorites tabs) and the genre
+//! Three things every grid needs and none of them should own. Every entity grid
+//! (`albums`, `artists`, `playlists`, the three grid tabs) and the genre
 //! detail view turns an iterator of optional artwork-path strings into a
 //! deduplicated, display-ordered `Vec<PathBuf>` to hand to
-//! `CoverThumbs::prewarm`; and every one with a cover cache sizes that cache
-//! against the display it will actually be drawn on. The per-entity
-//! `first_screenful_paths` wrappers still own the entity-specific projection
-//! (which field, how many ahead); only these cores are shared.
+//! `CoverThumbs::prewarm`; every one with a cover cache sizes that cache
+//! against the display it will actually be drawn on; and every grid *tab*
+//! resolves a card's cover against its page's `covers-generation`. The
+//! per-entity `first_screenful_paths` wrappers still own the entity-specific
+//! projection (which field, how many ahead); only these cores are shared.
 
 use std::collections::HashSet;
 use std::num::NonZeroUsize;
 use std::path::PathBuf;
 
-use slint::ComponentHandle;
+use slint::{ComponentHandle, Image};
 
 use crate::AppWindow;
+use crate::media::cover_thumbs::CoverThumbs;
 
 /// Deduplicated, non-empty artwork paths from an iterator of optional path
 /// strings, preserving first-seen order and stopping at `cap` — fed to
@@ -125,6 +127,29 @@ pub fn cover_cap_for_window(app: &AppWindow, fallback: NonZeroUsize) -> NonZeroU
         })
         .flatten()
         .unwrap_or(fallback)
+}
+
+/// Resolve one grid card's cover, decoding only once the tier is known warm.
+///
+/// `generation` is the page's `covers-generation`: 0 means the tab was just
+/// entered and its tier was cleared on the previous tab-leave, so answer from
+/// the cache alone and let the card paint its placeholder. Decoding here instead
+/// puts one 448 px decode per visible card on the UI thread, in the frame that
+/// mounts the grid — the off-thread prewarm bumps the counter when it lands,
+/// which re-runs these bindings and lets rows scrolled to later load on demand.
+/// Same contract as `Queue.request-cover`; see the "Covers" section of
+/// `.claude/rules/ui-patterns.md`.
+///
+/// Shared by the three grid tabs rather than spelled out per page: the tier and
+/// the counter differ, the rule doesn't, and a copy that grew a decoding `else`
+/// arm would look right and quietly retire the whole mechanism.
+pub fn grid_cover(thumbs: &CoverThumbs, artwork_path: &str, generation: i32) -> Image {
+    let path = Some(artwork_path).filter(|s| !s.is_empty());
+    if generation == 0 {
+        thumbs.get_cached_opt(path)
+    } else {
+        thumbs.get_or_load_opt(path)
+    }
 }
 
 #[cfg(test)]

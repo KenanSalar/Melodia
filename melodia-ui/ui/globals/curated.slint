@@ -40,7 +40,17 @@ export global Favorites {
     // zero count puts "No favorites yet" copy on the Songs band instead of chips. The
     // running time isn't here — it reaches the band as a chip built by `ui::hero_chips`.
     in-out property <[string]> mosaic-paths;
-    in-out property <int>      track-count;
+    // **`-1` is "not fetched yet", and every count on both curated globals carries it**
+    // (the `selection-anchor: -1` idiom below). A section leave empties the models these
+    // number, so a count left at its last real value is a derived value outliving its
+    // source — and each of them gates an *empty state*, which would then be suppressed
+    // over a model that really is empty. Resetting to `0` instead is the opposite bug and
+    // the louder one: every re-enter would assert "No favorites yet" for the length of
+    // the fetch. The sentinel matches neither `== 0` nor `> 0`, so every gate below reads
+    // exactly as written and simply stays quiet until there is an answer. Only the
+    // `MosaicHeroTile` mount has to say so, since that component splits on the same
+    // two comparisons and would render nothing between them — so it clamps with `max`.
+    in-out property <int>      track-count: -1;
 
     // Two slots, never cleared, so the outgoing one stays painted through the fade and
     // a mosaic switch never flashes. `has-blur` gates the gradient-floor fallback.
@@ -54,9 +64,9 @@ export global Favorites {
     in-out property <[EntityGridRow]> most-played-rows;
     in-out property <[EntityGridRow]> artist-rows;
     // Pre-chunk counts for the hero band and the empty-state gates — `rows.length` is a
-    // row count, not a card count.
-    in-out property <int> most-played-count;
-    in-out property <int> artist-count;
+    // row count, not a card count. `-1` until fetched; see `track-count` above.
+    in-out property <int> most-played-count: -1;
+    in-out property <int> artist-count: -1;
 
     // Its own pair rather than the Songs tab's below, which belong to that tab's
     // `TrackList` and name track columns this grid has no notion of. The defaults are
@@ -193,7 +203,8 @@ export global RecentlyPlayed {
     in-out property <[EntityGridRow]> most-played-rows;
     // Pre-chunk card count for the hero band and the empty-state gate — `rows.length` is
     // a row count, not a card count. Published on both tabs, since the band reads it.
-    in-out property <int> most-played-count;
+    // `-1` until fetched; see `Favorites.track-count` for why that sentinel exists.
+    in-out property <int> most-played-count: -1;
 
     // The post-filter view Rust writes, always in fetch (recency) order. **There is no
     // sort state**: the list is mounted non-sortable, recency being the whole page.
@@ -204,7 +215,8 @@ export global RecentlyPlayed {
     // Over the full recency set, not the filter. The running time isn't here — it
     // reaches the band as a chip, and a property only Rust wrote and only Rust read back
     // was a round trip through Slint for a string Rust had already formatted.
-    in-out property <int> track-count;
+    // `-1` until fetched; see `Favorites.track-count` for why that sentinel exists.
+    in-out property <int> track-count: -1;
 
     // The `Favorites` / `Tracks` column shape, hydrated from `views.json` under its own
     // key.

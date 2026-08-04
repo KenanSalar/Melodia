@@ -4,10 +4,27 @@
 //! into production binaries.
 
 use std::cell::Cell;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use crate::config::Paths;
+
+/// A solid-colour `side` × `side` PNG in a fresh temp dir. The dir is returned
+/// alongside the path so the caller can keep it alive — dropping it deletes the
+/// file, which is the failure mode to watch for when adopting this.
+///
+/// Shared because every cover-cache test needs a real decodable image and the
+/// two that did each wrote their own; the tier tests want a large source to
+/// downscale from and the lookup tests only want *an* image, so the size is the
+/// one thing worth parameterising.
+pub(crate) fn write_test_png(
+    side: u32,
+) -> Result<(tempfile::TempDir, PathBuf), Box<dyn std::error::Error>> {
+    let tmp = tempfile::tempdir()?;
+    let path = tmp.path().join("cover.png");
+    image::RgbImage::from_pixel(side, side, image::Rgb([120, 60, 200])).save(&path)?;
+    Ok((tmp, path))
+}
 
 /// A [`Paths`] rooted in a throwaway directory, with the same subdirectories
 /// [`Paths::resolve`] creates already in place — so a test that writes into one

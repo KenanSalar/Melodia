@@ -1,4 +1,4 @@
-use super::{clamp_tab, grid_signature, should_announce_warm};
+use super::{UNFETCHED_COUNT, clamp_tab, grid_signature, should_announce_warm};
 
 /// A representative tab count. The real ones live in each host's Slint global
 /// and are pinned there; this is just a fixture for the arithmetic.
@@ -85,6 +85,122 @@ fn a_section_left_mid_refresh_announces_nothing() {
 #[test]
 fn a_tab_pick_that_overtook_the_prewarm_announces_nothing() {
     assert!(!should_announce_warm(Some(TestTab::Second), true, TestTab::First));
+}
+
+const CURATED: &str = include_str!("../../../melodia-ui/ui/globals/curated.slint");
+
+/// One curated page's sources and the counts its two globals-plus-lifecycle have
+/// to agree about. Named fields rather than a tuple because `global` and `label`
+/// are both strings that read as "the page" and are used for different things —
+/// one slices `CURATED`, the other builds the view filename in a failure message.
+struct CuratedPage {
+    /// The page's `-view.slint` basename, and how a failure names it.
+    label: &'static str,
+    /// The Slint global declaring this page's counts. `track-count` and
+    /// `most-played-count` are declared by *both*, so a search over the whole
+    /// file can't tell which page lost its default.
+    global: &'static str,
+    view: &'static str,
+    lifecycle: &'static str,
+    counts: &'static [&'static str],
+}
+
+const CURATED_PAGES: [CuratedPage; 2] = [
+    CuratedPage {
+        label: "favorites",
+        global: "Favorites",
+        view: include_str!("../../../melodia-ui/ui/views/favorites-view.slint"),
+        lifecycle: include_str!("../callbacks/favorites/lifecycle.rs"),
+        counts: &["track-count", "most-played-count", "artist-count"],
+    },
+    CuratedPage {
+        label: "recently-played",
+        global: "RecentlyPlayed",
+        view: include_str!("../../../melodia-ui/ui/views/recently-played-view.slint"),
+        lifecycle: include_str!("../callbacks/recently_played/lifecycle.rs"),
+        counts: &["track-count", "most-played-count"],
+    },
+];
+
+/// The body of one `export global` block in `curated.slint`.
+///
+/// Bounded at the next `export global` rather than at a closing brace: the
+/// globals carry nested blocks, and matching braces here would be a parser.
+fn global_body<'a>(source: &'a str, name: &str) -> &'a str {
+    let after_header = source
+        .split_once(&format!("export global {name} {{"))
+        .map_or("", |(_, body)| body);
+    after_header
+        .split_once("\nexport global")
+        .map_or(after_header, |(body, _)| body)
+}
+
+/// Every count is declared at the sentinel and rewound to it on section leave.
+///
+/// Both halves matter and they fail differently. A count declared at Slint's `0`
+/// default asserts "nothing here" on the very first entry, before any fetch has
+/// run; a count left at its last real value across a leave suppresses the empty
+/// state over a model the leave just emptied — a derived value outliving its
+/// source, which is the rule the hero folds already follow.
+///
+/// The declaration half is asserted against the page's **own** global body, not
+/// against the file: two of the three names are declared by both globals, so a
+/// whole-file search passes on the sibling's default and the page that lost one
+/// goes unnoticed.
+#[test]
+fn every_curated_count_starts_and_returns_to_unfetched() {
+    for page in CURATED_PAGES {
+        let declarations = global_body(CURATED, page.global);
+        assert!(
+            !declarations.is_empty(),
+            "curated.slint must declare `export global {}`",
+            page.global
+        );
+        for count in page.counts {
+            assert!(
+                declarations.contains(&format!("{count}: {UNFETCHED_COUNT};")),
+                "{} must declare `{count}` at the unfetched sentinel, else {} paints an empty \
+                 state before its first fetch has run",
+                page.global,
+                page.label
+            );
+            let setter = count.replace('-', "_");
+            assert!(
+                page.lifecycle.contains(&format!("set_{setter}(UNFETCHED_COUNT)")),
+                "{}'s section leave must rewind `{count}` on the same tick it empties the model \
+                 that count numbers",
+                page.label
+            );
+        }
+    }
+}
+
+/// `MosaicHeroTile` is the one reader that splits on `== 0` *and* `> 0`, so the
+/// sentinel satisfies neither and the square would paint nothing between them —
+/// no glyph, no tiles. Both mounts clamp it onto 0 so the empty glyph shows,
+/// which is what matches the `mosaic-paths` model cleared beside the count.
+///
+/// The mutation this exists for is dropping the `max` while the page still looks
+/// correct everywhere else: the tile is blank only during a re-enter's fetch
+/// window, which is exactly the window nobody reviews. The clamped operand is
+/// named too, so pointing the mount at the sibling page's count fails here rather
+/// than only on screen.
+#[test]
+fn both_mosaic_mounts_clamp_the_unfetched_sentinel() {
+    for page in CURATED_PAGES {
+        let mount = page
+            .view
+            .split_once("mosaic-count:")
+            .and_then(|(_, rest)| rest.split_once(';'))
+            .map_or("", |(value, _)| value);
+        assert!(
+            mount.contains(&format!("max({}.track-count, 0)", page.global)),
+            "{}-view.slint must clamp `mosaic-count` with `max({}.track-count, 0)` — \
+             `MosaicHeroTile` splits on both comparisons and renders nothing for a negative count",
+            page.label,
+            page.global
+        );
+    }
 }
 
 const TAB_BAR: &str = include_str!("../../../melodia-ui/ui/components/tab-bar.slint");

@@ -7,11 +7,40 @@
 //! read-side clamp, and the component's source-level invariants are pinned here
 //! rather than under any host, since none owns it.
 //!
-//! The two grid-bearing pages additionally share the pair of predicates below.
-//! Both are about a *tab*, not about what a tab contains, which is what makes
-//! them generic over the host's own tab enum rather than duplicated per view.
+//! The two grid-bearing pages additionally share the pair of predicates below,
+//! plus the count sentinel. The predicates are about a *tab*, not about what a
+//! tab contains, which is what makes them generic over the host's own tab enum
+//! rather than duplicated per view; the sentinel is about a curated page's
+//! teardown, and lives here because those two pages are its only users.
 
 use std::hash::{DefaultHasher, Hash, Hasher};
+
+/// What a curated page's card / track counts hold before anything has been
+/// fetched, and again after a section leave has emptied the models they number.
+///
+/// Every one of those counts gates an *empty state* (`== 0`) or an action pill
+/// (`> 0`), so leaving a real value behind across a leave suppresses a
+/// placeholder over a model that really is empty — a derived value outliving its
+/// source, the rule `songs_fold` and `most_played_totals` already follow. Writing
+/// `0` instead is the opposite bug and the louder one: every re-enter would
+/// assert "No favorites yet" for as long as the re-fetch takes, and on the Most
+/// Played tabs that fetch waits on a cover-decode burst.
+///
+/// `-1` satisfies neither comparison, so every gate keeps the expression it
+/// already had and simply stays quiet until there is an answer. The one reader
+/// that has to know is `MosaicHeroTile`, which splits on *both* and would render
+/// nothing in between — its two mounts clamp with `max(…, 0)` so the square
+/// shows its empty glyph, matching the `mosaic-paths` model cleared beside it.
+pub(crate) const UNFETCHED_COUNT: i32 = -1;
+
+// The sentinel's whole job is to satisfy neither gate, which for an `i32` is
+// exactly "negative". A compile-time assertion rather than a test, because a
+// value that failed it would be a contradiction in terms rather than a
+// regression to catch on the next run.
+const _: () = assert!(
+    UNFETCHED_COUNT < 0,
+    "UNFETCHED_COUNT must miss both the `== 0` empty-state gates and the `> 0` pill gates"
+);
 
 /// Clamp a persisted tab index into range.
 ///

@@ -1,21 +1,11 @@
-use std::num::NonZeroUsize;
-use std::path::PathBuf;
 use std::sync::Arc;
 
 use super::{FavoritesTab, FavoritesUi};
 use crate::entities::artist::FavoriteArtist;
 use crate::media::cover_thumbs::CoverThumbs;
+use crate::test_support::write_test_png;
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
-
-/// A solid-colour square PNG in a fresh temp dir; the dir is returned so the
-/// caller can keep it alive.
-fn write_test_png() -> Result<(tempfile::TempDir, PathBuf), Box<dyn std::error::Error>> {
-    let tmp = tempfile::tempdir()?;
-    let path = tmp.path().join("cover.png");
-    image::RgbImage::from_pixel(512, 512, image::Rgb([120, 60, 200])).save(&path)?;
-    Ok((tmp, path))
-}
 
 const GLOBAL: &str = include_str!("../../../../melodia-ui/ui/globals/curated.slint");
 const VIEW: &str = include_str!("../../../../melodia-ui/ui/views/favorites-view.slint");
@@ -302,36 +292,6 @@ fn every_grid_mount_forwards_the_covers_generation() {
     );
 }
 
-/// Generation 0 means "this tier was cleared when its tab was left", and the
-/// lookup must answer from the cache alone — a decode here lands on the UI
-/// thread, in the frame that mounts the grid, once per visible card. It is not
-/// "return nothing": an entry that survives still comes back, which is what
-/// makes a re-entered warm tab paint instantly.
-#[test]
-fn a_cold_generation_serves_the_cache_without_decoding() -> TestResult {
-    let cap = NonZeroUsize::new(4).ok_or("cap must be > 0")?;
-    let thumbs = CoverThumbs::with_config(64, cap);
-    let (_tmp, path) = write_test_png()?;
-    let path = path.to_str().ok_or("temp path is not UTF-8")?;
-
-    assert_eq!(
-        super::covers::grid_cover(&thumbs, path, 0).size().width,
-        0,
-        "a cold tier must hand back a placeholder rather than decode on the UI thread"
-    );
-    assert_eq!(
-        super::covers::grid_cover(&thumbs, path, 1).size().width,
-        64,
-        "a warmed tier must decode on miss, so rows scrolled to later still get covers"
-    );
-    assert_eq!(
-        super::covers::grid_cover(&thumbs, path, 0).size().width,
-        64,
-        "generation 0 gates the *decode*, not the lookup — a cached cover still resolves"
-    );
-    Ok(())
-}
-
 /// The decode outlives a fast section leave, and `release_section_state` is
 /// spawned on that leave — it can easily finish first, so a prewarm that
 /// ignored it would refill the tier that release just emptied and hold a
@@ -340,7 +300,7 @@ fn a_cold_generation_serves_the_cache_without_decoding() -> TestResult {
 /// happened yet, which is the whole problem.
 #[test]
 fn a_prewarm_outliving_the_leave_keeps_nothing() -> TestResult {
-    let (_tmp, path) = write_test_png()?;
+    let (_tmp, path) = write_test_png(512)?;
     let path = path.to_str().ok_or("temp path is not UTF-8")?;
 
     let fav_ui = FavoritesUi::new(Arc::new(CoverThumbs::new()));

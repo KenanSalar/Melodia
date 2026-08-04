@@ -76,7 +76,10 @@ export component RecentlyPlayedView inherits Rectangle {
                 && RecentlyPlayed.track-count == 0;
             empty-copy: @tr("No recently played tracks");
 
-            mosaic-count: RecentlyPlayed.track-count;
+            // Clamped, unlike every other reader of this count — see the same mount in
+            // `favorites-view.slint`: `MosaicHeroTile` splits on `== 0` and `> 0`, so the
+            // not-yet-fetched `-1` satisfies neither and the square paints nothing.
+            mosaic-count: max(RecentlyPlayed.track-count, 0);
             mosaic-paths: RecentlyPlayed.mosaic-paths;
             // Matches the sidebar entry's glyph.
             empty-glyph: "history";

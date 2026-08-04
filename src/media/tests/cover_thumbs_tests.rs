@@ -1,15 +1,7 @@
 use super::*;
+use crate::test_support::write_test_png;
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
-
-/// Write a solid-colour square PNG to a fresh temp dir; returns the dir
-/// (kept alive by the caller) and the file path.
-fn write_test_png(side: u32) -> Result<(tempfile::TempDir, PathBuf), Box<dyn std::error::Error>> {
-    let tmp = tempfile::tempdir()?;
-    let path = tmp.path().join("cover.png");
-    image::RgbImage::from_pixel(side, side, image::Rgb([120, 60, 200])).save(&path)?;
-    Ok((tmp, path))
-}
 
 #[test]
 fn new_decodes_to_row_tier_size() -> TestResult {
