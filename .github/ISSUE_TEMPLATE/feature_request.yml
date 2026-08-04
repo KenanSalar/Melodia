@@ -1,0 +1,45 @@
+name: Feature request
+description: Suggest something Melodia should be able to do
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before opening this, please check the
+        [existing issues](https://github.com/KenanSalar/Melodia/issues?q=is%3Aissue) —
+        it may already be planned.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+      description: What are you trying to do that Melodia makes hard or impossible today?
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: What would you like it to do?
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Which part of the app?
+      description: A rough guess is fine — it just helps with triage.
+      options:
+        - Playback, audio, equalizer, visualizer
+        - Library, scanning, metadata, playlists
+        - Interface, views, theming
+        - Last.fm / ListenBrainz / Discord
+        - Packaging or installation
+        - Updates
+        - Translations
+        - Not sure
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives you've considered
+      description: Other ways of solving it, or how other players handle this.
