@@ -1,0 +1,112 @@
+import { Theme } from "../../theme.slint";
+import { Search } from "../../globals/search.slint";
+import { ArtworkImage } from "../../components/artwork-image.slint";
+
+// The featured card for the single best match, ranked over the albums, artists and
+// genres a query reached. No inputs — the whole card comes off `Search.top-*`, and the
+// mount site gates it on `top-kind` being non-empty.
+export component TopResultCard inherits VerticalLayout {
+    horizontal-stretch: 0;
+    alignment: start;
+    spacing: Theme.pad-sm;
+
+    // Pinned to the same height as the Songs heading, which its `ActionPill` stretches.
+    // That keeps the two headings aligned *and* the spacing below them equal, so the card
+    // and the list header start at the same y.
+    HorizontalLayout {
+        height: 32px;
+        alignment: start;
+        VerticalLayout {
+            alignment: center;
+            Text {
+                text: @tr("Top Result");
+                color: Theme.text;
+                font-size: Theme.font-size-md;
+                font-weight: 700;
+                letter-spacing: 0.4px;
+            }
+        }
+    }
+
+    top-card := Rectangle {
+        width: 240px;
+        height: 320px;
+        background: top-touch.has-hover
+            ? Theme.surface1
+            : Theme.surface0;
+        border-radius: Theme.radius-lg;
+        border-width: 1px;
+        border-color: Theme.surface2;
+        animate background { duration: Theme.dur-fast; easing: ease-in-out; }
+        clip: true;
+
+        VerticalLayout {
+            padding: Theme.pad-md;
+            spacing: Theme.pad-sm;
+
+            // **The shared `ArtworkImage`, not a hand-rolled square**: a coverless result
+            // here has to look like the same entity does in the strip below and in every
+            // track row, and this card spent a while painting its own placeholder
+            // matching neither. Circular for an artist, per the strip's own convention.
+            ArtworkImage {
+                tile-size: 216px;
+                tile-radius: Search.top-kind == "artist"
+                    ? self.tile-size / 2
+                    : Theme.radius-md;
+                cover: Search.request-top-result-cover(Search.top-artwork-path);
+                fallback-icon: Search.top-kind == "artist"
+                    ? "person"
+                    : Search.top-kind == "genre"
+                        ? "theater_comedy"
+                        : "album";
+                // A genre is the one kind with no cover to ever replace the fill, so it
+                // takes the name-hashed gradient `GenreGrid` paints and the two read as
+                // one genre. The other arms restate `ArtworkImage`'s own default, a
+                // ternary having no way to fall through to it.
+                tile-bg: Search.top-kind == "genre"
+                    ? @linear-gradient(135deg,
+                        Search.top-tile-color-1,
+                        Search.top-tile-color-2)
+                    : Theme.accent.with-alpha(0.15);
+                tile-icon-color: Search.top-kind == "genre"
+                    ? #ffffff.with-alpha(0.3)
+                    : Theme.accent;
+            }
+
+            // Localised inline: a Rust-pushed string can't `@tr`, so the extractor needs
+            // literals here.
+            Text {
+                text: Search.top-kind == "album"
+                    ? @tr("Album")
+                    : Search.top-kind == "artist"
+                        ? @tr("Artist")
+                        : @tr("Genre");
+                color: Theme.accent;
+                font-size: Theme.font-size-sm;
+                font-weight: 600;
+                letter-spacing: 0.4px;
+            }
+            Text {
+                text: Search.top-title;
+                color: Theme.text;
+                font-size: Theme.font-size-md;
+                font-weight: 700;
+                overflow: elide;
+            }
+            Text {
+                text: Search.top-subtitle;
+                color: Theme.subtext0;
+                font-size: Theme.font-size-sm;
+                overflow: elide;
+            }
+        }
+
+        top-touch := TouchArea {
+            mouse-cursor: pointer;
+            clicked => {
+                Search.blur-search-tick += 1;
+                Search.open-top-result();
+            }
+        }
+    }
+}
