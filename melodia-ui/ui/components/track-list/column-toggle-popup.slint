@@ -1,0 +1,190 @@
+import { Theme } from "../../theme.slint";
+import { PopupHighlight } from "../../globals/shell.slint";
+import { PillButton } from "../action-pill.slint";
+import { Checkbox } from "../checkbox.slint";
+import { PopupSurface } from "../popup-surface.slint";
+import { FocusLossWatcher } from "../focus-loss-watcher.slint";
+
+// One row inside the column-toggle popup. Locked entries (Title, Length) render
+// dimmed and never fire `toggled()`.
+component ColumnToggleRow inherits Rectangle {
+    in property <string> label;
+    in property <bool> checked;
+    in property <bool> locked;
+
+    callback toggled();
+
+    height: 32px;
+    border-radius: Theme.radius-sm;
+    background: !root.locked && touch.has-hover ? Theme.surface2 : transparent;
+    animate background { duration: 100ms; easing: ease-in-out; }
+    opacity: root.locked ? 0.5 : 1.0;
+
+    HorizontalLayout {
+        padding-left: Theme.pad-sm;
+        padding-right: Theme.pad-sm;
+        spacing: Theme.pad-sm;
+        alignment: start;
+
+        VerticalLayout {
+            alignment: center;
+            Checkbox { checked: root.checked; }
+        }
+
+        VerticalLayout {
+            alignment: center;
+            Text {
+                text: root.label;
+                color: Theme.text;
+                font-size: Theme.font-size-md;
+            }
+        }
+    }
+
+    touch := TouchArea {
+        mouse-cursor: root.locked ? default : pointer;
+        // A toggle doesn't close the popup, so restore the trigger highlight
+        // the winit Release filter just cleared.
+        pointer-event(ev) => {
+            if (ev.kind == PointerEventKind.up
+                || ev.kind == PointerEventKind.cancel) {
+                PopupHighlight.id = "columns";
+            }
+        }
+        clicked => {
+            if (!root.locked) { root.toggled(); }
+        }
+    }
+}
+
+// A labelled pill opening a PopupWindow of per-column toggles, on the
+// volume-popup pattern — right-aligned, close-on-click-outside, fade-in.
+//
+// Globals-free: the six flags come in as `in-out` so the host's bound state
+// flips synchronously, and `toggled` lets it persist the list under its own
+// per-view key. Title and Length are listed but locked, so it's visible *why*
+// they can't be hidden.
+export component ColumnTogglePopup inherits Rectangle {
+    in-out property <bool> show-number;
+    in-out property <bool> show-artwork;
+    in-out property <bool> show-artist;
+    in-out property <bool> show-album;
+    in-out property <bool> show-genre;
+    in-out property <bool> show-year;
+
+    // Each drops its row outright on the detail view where every track shares
+    // that field, and the column says nothing.
+    in property <bool> hide-album: false;
+    in property <bool> hide-artist: false;
+    in property <bool> hide-genre: false;
+
+    callback toggled(string /*column_id*/);
+
+    // Fixed to the pill row's height so the popup anchors below the chip's
+    // bottom edge whatever the inner button's alignment.
+    width: btn.width;
+    height: 32px;
+
+    // The label carries the meaning, so there's no tooltip repeating it.
+    btn := PillButton {
+        icon: "tune";
+        text: @tr("Columns");
+        // Held while the popup is open, and cleared by the AppWindow scrim
+        // catching an outside click — the rows inside never close it.
+        force-bg: PopupHighlight.id == "columns";
+        clicked => { PopupHighlight.id = "columns"; pop.show(); }
+    }
+
+    pop := PopupWindow {
+        // Hangs below rather than above, since the trigger sits in the page
+        // header. Slint's `place_popup` clamps a popup's right edge to the
+        // window clip region, so a negative-x offset on a page-edge trigger just
+        // claims space the clamp takes back — the wrapper layout below reserves
+        // transparent margin *inside* the popup instead, and the visible chrome
+        // stops short of the edge even when the bounding box is clamped flush.
+        x: btn.width - self.width;
+        // Off the outer's bottom, not the button's, so the gap holds whatever
+        // the inner positioning does.
+        y: root.height + 8px;
+        close-policy: close-on-click-outside;
+
+        // Live only while this is the open popup — the trigger claims
+        // `PopupHighlight.id` before `show()`, so focus loss costs one watcher
+        // rather than one per popup host in the tree.
+        if PopupHighlight.id == "columns": FocusLossWatcher {
+            close => { pop.close(); PopupHighlight.id = ""; }
+        }
+
+        HorizontalLayout {
+            padding-right: Theme.pad-lg;
+            alignment: start;
+
+            chrome := PopupSurface {
+                VerticalLayout {
+                    padding: Theme.pad-xs;
+                    spacing: 0;
+
+                ColumnToggleRow {
+                    // `#` is a numeric column glyph, not a word — left as-is.
+                    label: "#";
+                    checked: root.show-number;
+                    toggled => {
+                        root.show-number = !root.show-number;
+                        root.toggled("number");
+                    }
+                }
+                ColumnToggleRow {
+                    label: @tr("Artwork");
+                    checked: root.show-artwork;
+                    toggled => {
+                        root.show-artwork = !root.show-artwork;
+                        root.toggled("artwork");
+                    }
+                }
+                ColumnToggleRow {
+                    label: @tr("Title");
+                    checked: true;
+                    locked: true;
+                }
+                if !root.hide-artist: ColumnToggleRow {
+                    label: @tr("Artist");
+                    checked: root.show-artist;
+                    toggled => {
+                        root.show-artist = !root.show-artist;
+                        root.toggled("artist");
+                    }
+                }
+                if !root.hide-album: ColumnToggleRow {
+                    label: @tr("Album");
+                    checked: root.show-album;
+                    toggled => {
+                        root.show-album = !root.show-album;
+                        root.toggled("album");
+                    }
+                }
+                if !root.hide-genre: ColumnToggleRow {
+                    label: @tr("Genre");
+                    checked: root.show-genre;
+                    toggled => {
+                        root.show-genre = !root.show-genre;
+                        root.toggled("genre");
+                    }
+                }
+                ColumnToggleRow {
+                    label: @tr("Year");
+                    checked: root.show-year;
+                    toggled => {
+                        root.show-year = !root.show-year;
+                        root.toggled("year");
+                    }
+                }
+                ColumnToggleRow {
+                    label: @tr("Length");
+                    checked: true;
+                    locked: true;
+                }
+                }
+            }
+        }
+    }
+}

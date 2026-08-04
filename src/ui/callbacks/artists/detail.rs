@@ -10,7 +10,7 @@ use crate::library;
 use crate::state::AppState;
 use crate::ui::albums::AlbumsUi;
 use crate::ui::artists::{self as artists_ui_mod, ArtistsUi};
-use crate::ui::callbacks::collect_track_ids;
+use crate::ui::callbacks::{collect_track_ids, play_row_start, spawn_play_then_shuffle};
 use crate::ui::callbacks::macros::{
     release_detail_hero_images, spawn_logged, spawn_logged_sync, wire_row_flag,
 };
@@ -65,7 +65,7 @@ pub(super) fn wire(
             // release the Arc the LRU is about to clear too. Without this,
             // ~650 KiB of CPU buffer + ~1.5 MiB of mapped GPU texture stay
             // pinned on the global until another detail page overwrites it.
-            release_detail_hero_images!(g);
+            release_detail_hero_images!(ui, g);
             // Clear the SearchBar so the next open lands on the full
             // tracks + albums set, not a stale needle from the last
             // detail. `clear_detail` drops the Rust-side mirror too.
@@ -108,55 +108,28 @@ pub(super) fn wire(
         });
     }
 
-    // play-artist / shuffle-artist: replace the queue with the artist's
-    // tracks in display order; shuffle additionally flips the shuffle
-    // mode on.
-    {
-        let s = state.clone();
-        let au = artists_ui.clone();
-        detail.on_play_artist(move || {
-            let ids = au.detail_track_ids();
-            if ids.is_empty() {
-                return;
-            }
-            let s = s.clone();
-            spawn_logged!(s, "artists::play_artist",
-                library::playback::player_play_tracks(&s.playback_ctx(), ids, Some(0)));
-        });
-    }
-
     {
         let s = state.clone();
         let au = artists_ui.clone();
         detail.on_shuffle_artist(move || {
+            spawn_play_then_shuffle(&s, "artists::shuffle_artist", au.detail_track_ids());
+        });
+    }
+
+    // play-row: double-click loads the artist's tracks into the queue and
+    // starts on the clicked one.
+    {
+        let s = state.clone();
+        let au = artists_ui.clone();
+        detail.on_play_row(move |track_id, idx| {
             let ids = au.detail_track_ids();
             if ids.is_empty() {
                 return;
             }
+            let start = play_row_start(&ids, i64::from(track_id), idx);
             let s = s.clone();
-            s.runtime.clone().spawn(async move {
-                if let Err(e) =
-                    library::playback::player_play_tracks(&s.playback_ctx(), ids, Some(0)).await
-                {
-                    log::warn!("artists::shuffle_artist play: {e}");
-                    return;
-                }
-                if let Err(e) = library::queue::queue_set_shuffle(&s, true) {
-                    log::warn!("artists::shuffle_artist set_shuffle: {e}");
-                }
-            });
-        });
-    }
-
-    // play-row: double-click appends only that track to the queue
-    // (skipping duplicates). Use `play-artist` for "load every track".
-    {
-        let s = state.clone();
-        detail.on_play_row(move |track_id, _idx| {
-            let s = s.clone();
-            let id = i64::from(track_id);
             spawn_logged!(s, "artists::play_row",
-                library::queue::queue_append_unique(&s, id));
+                library::playback::player_play_tracks(&s.playback_ctx(), ids, start));
         });
     }
 
@@ -232,12 +205,11 @@ pub(super) fn wire(
         detail.on_request_sort(move |field| {
             let Some(ui) = weak.upgrade() else { return };
             let g = ui.global::<ArtistDetail>();
-            let (new_field, new_dir) = if g.get_sort_field().as_str() == field.as_str() {
-                let nd = if g.get_sort_dir().as_str() == "asc" { "desc" } else { "asc" };
-                (field.to_string(), nd.to_string())
-            } else {
-                (field.to_string(), "asc".to_string())
-            };
+            let (new_field, new_dir) = crate::ui::callbacks::next_sort(
+                g.get_sort_field().as_str(),
+                g.get_sort_dir().as_str(),
+                &field,
+            );
             g.set_sort_field(SharedString::from(new_field.as_str()));
             g.set_sort_dir(SharedString::from(new_dir.as_str()));
             artists_ui_mod::resort_detail(&ui, &au);
@@ -245,7 +217,7 @@ pub(super) fn wire(
                 &s,
                 view_id::ARTIST_DETAIL,
                 new_field,
-                &new_dir,
+                new_dir,
             );
         });
     }

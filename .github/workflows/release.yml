@@ -38,16 +38,6 @@ concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: false
 
-# Force every JS action (including transitives that we don't pin
-# directly, e.g. `actions/attest-build-provenance`'s nested
-# `actions/attest` + `actions/attest/predicate`) to run on Node 24.
-# GitHub deprecates Node 20 on 2026-06-02 and removes it on
-# 2026-09-16. Setting this here keeps the deprecation warning out
-# of every job's annotation list until the upstream actions
-# republish on Node 24 themselves.
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
-
 jobs:
   # ---------------------------------------------------------------------------
   # Resolve the target version + tag, and gate the rest of the workflow on
@@ -60,15 +50,23 @@ jobs:
       tag: ${{ steps.meta.outputs.tag }}
       should_release: ${{ steps.gate.outputs.should_release }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Resolve version + tag from Cargo.toml
         id: meta
         shell: bash
         run: |
-          VERSION="$(awk -F\" '/^version = / { print $2; exit }' Cargo.toml)"
+          # Both packages inherit the version from `[workspace.package]`, so
+          # `[package]` reads `version.workspace = true` and carries no
+          # literal. This runs on a bare checkout with no toolchain, so it's a
+          # scrape rather than `cargo metadata` — anchor on the table rather
+          # than taking the file's first `version = ` line.
+          VERSION="$(awk -F'"' '
+            /^\[/                  { in_ws = ($0 == "[workspace.package]") }
+            in_ws && /^version = / { print $2; exit }
+          ' Cargo.toml)"
           if [[ -z "$VERSION" ]]; then
-            echo "ERROR: failed to extract version from Cargo.toml" >&2
+            echo "ERROR: no version in Cargo.toml's [workspace.package]" >&2
             exit 1
           fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
@@ -151,21 +149,26 @@ jobs:
   # reqwest/openssl/whatever to every installed client. Soft-fails on
   # informational advisories so a warning-only RUSTSEC-XXXX entry
   # doesn't block a fix shipment.
+  #
+  # The scan itself lives in ./.github/actions/cargo-audit, shared with
+  # pr-validation.yml so this gate and the PR's early warning can't drift
+  # into different verdicts. Anything arriving via `dev` has already passed
+  # the same command on the PR; a `hotfix/*` merging straight into `main`
+  # has not, and the advisory DB moves on its own besides — so this stays a
+  # gate, not a formality.
   # ---------------------------------------------------------------------------
   audit:
     needs: prepare
     if: needs.prepare.outputs.should_release == 'true'
     runs-on: ubuntu-latest
+    # Reads Cargo.lock and nothing else. The workflow-level grant exists for the
+    # jobs that publish and attest; don't leave it reachable from a job whose
+    # whole body is a third-party scanner.
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v5
-      - uses: taiki-e/install-action@v2
-        with:
-          tool: cargo-audit
-      - name: cargo audit
-        # `--deny warnings` would over-trigger on transitive deps we
-        # don't directly control; `--deny unsound,unmaintained` fails
-        # the build only on the categories worth blocking a release.
-        run: cargo audit --deny unsound --deny unmaintained
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/cargo-audit
 
   # ---------------------------------------------------------------------------
   # Per-format artifact builds. Each matrix slot produces one artifact +
@@ -211,7 +214,7 @@ jobs:
       LASTFM_API_KEY: ${{ secrets.LASTFM_API_KEY }}
       LASTFM_SHARED_SECRET: ${{ secrets.LASTFM_SHARED_SECRET }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # GitHub's arm64 runners default to community-hosted
       # `ports.ubuntu.com`, which suffers sustained connectivity dropouts
@@ -258,7 +261,7 @@ jobs:
       - name: Install pinned Rust toolchain
         run: rustup toolchain install -t ${{ matrix.target }}
 
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
           # arch included so x86_64 and aarch64 caches don't collide on
           # the same `kind` (target triple differs but Swatinem keys on
@@ -275,9 +278,10 @@ jobs:
         if: runner.os == 'Linux'
         run: cargo build --release --target ${{ matrix.target }} --locked
 
-      # build.rs spawns the slint compile on a 16 MiB thread, so the
-      # 1 MiB Windows main-thread stack no longer overflows during the
-      # build-script run. No RUSTFLAGS/CARGO_HOST_RUSTFLAGS workaround.
+      # `melodia-ui/build.rs` spawns the slint compile on a 16 MiB thread, so
+      # the 1 MiB Windows main-thread stack no longer overflows during the
+      # build-script run. No RUSTFLAGS/CARGO_HOST_RUSTFLAGS workaround. (The
+      # root build.rs does no Slint work — don't go looking for it there.)
       - name: cargo build --release (Windows)
         if: runner.os == 'Windows'
         run: cargo build --release --target ${{ matrix.target }} --locked
@@ -300,7 +304,7 @@ jobs:
           mkdir -p staging/melodia
           cp target/${{ matrix.target }}/release/Melodia staging/melodia/Melodia
           cp LICENSE                                     staging/melodia/
-          cp ui/assets/icons/logo-with-background.svg    staging/melodia/melodia.svg
+          cp assets/icons/logo-with-background.svg       staging/melodia/melodia.svg
           cp scripts/Melodia.desktop                     staging/melodia/com.github.kenansalar.melodia.desktop
           cp scripts/install-linux.sh                    staging/melodia/install-linux.sh
           cp scripts/uninstall-linux.sh                  staging/melodia/uninstall-linux.sh
@@ -433,7 +437,7 @@ jobs:
       # multi-binary cargo-wix workspace.
       - name: Install cargo-wix (pinned to PR #295 — modern WiX v4+ support, unreleased on crates.io)
         if: matrix.kind == 'windows-msi'
-        uses: taiki-e/cache-cargo-install-action@v3.0.7
+        uses: taiki-e/cache-cargo-install-action@417450f3c33ee20393705369577571770643d4c7 # v3.0.7
         with:
           tool: cargo-wix
           git: https://github.com/volks73/cargo-wix
@@ -483,7 +487,7 @@ jobs:
       # it. `subject-path` globs only over files this slot produced; the
       # action no-ops on unmatched globs.
       - name: Generate build provenance attestation
-        uses: actions/attest-build-provenance@v2
+        uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373 # v4.1.1
         with:
           subject-path: |
             melodia-*.tar.gz
@@ -560,7 +564,7 @@ jobs:
           echo "signed $signed artifact(s)"
           [[ "$signed" -gt 0 ]] || { echo "ERROR: nothing was signed"; exit 1; }
 
-      - uses: actions/upload-artifact@v5
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           # arch in the name so the x86_64 and arm64 slots for the same
           # kind don't collide (upload-artifact requires unique names
@@ -587,9 +591,9 @@ jobs:
       TAG: ${{ needs.prepare.outputs.tag }}
       VERSION: ${{ needs.prepare.outputs.version }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: actions/download-artifact@v5
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           path: artifacts
           merge-multiple: true
@@ -739,7 +743,7 @@ jobs:
     env:
       TAG: ${{ needs.prepare.outputs.tag }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Download release assets and generate checksums
         env:

@@ -2,6 +2,7 @@ pub mod always_on_top;
 pub mod artist_images;
 #[cfg(target_os = "linux")]
 pub mod desktop_integration;
+pub mod discord;
 #[cfg(target_os = "windows")]
 pub mod dwm_titlebar;
 pub mod material_you;

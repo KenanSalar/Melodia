@@ -21,9 +21,9 @@ use crate::{AppWindow, Queue, QueueRow};
 pub(crate) use rows::to_slint_queue_row;
 
 /// Per-row selection snapshot. Kept deliberately minimal so the
-/// shadow is `Send + Sync` regardless of `slint::Image` /
-/// `SharedString` thread-safety guarantees — those live on the UI
-/// side inside `Rc<VecModel<QueueRow>>`.
+/// shadow is `Send + Sync` regardless of `SharedString`'s
+/// thread-safety guarantees — those live on the UI side inside
+/// `Rc<VecModel<QueueRow>>`.
 #[derive(Clone, Copy)]
 pub(super) struct ShadowEntry {
     pub id: i64,
@@ -59,6 +59,31 @@ pub fn install(
     // Tracks / Browse views and the now-playing bar still need).
     let queue_covers = Arc::new(CoverThumbs::new());
 
+    // Lazy row covers, wired once — the `boot::ui_setup` `RowCovers` shape,
+    // against this sheet's private tier.
+    //
+    // `generation` is both the token that re-runs the row bindings and the
+    // "is this tier warm yet" flag, which is what keeps the first frame off
+    // the decoder. The teardown rewinds it to 0 in the same guarded closure
+    // that clears the cache, so 0 always coincides with an empty tier — and
+    // an open facing one would otherwise have every row it mounts
+    // synchronously under `on_open_changed` miss and decode *on the UI
+    // thread*, mid-slide-up, which is the one thing the synchronous row build
+    // exists to avoid. Cache-only until the warm-up bump; after it, a row
+    // scrolled into view decodes on demand like every other list in the app.
+    // See the callback's declaration in `globals/queue.slint`.
+    {
+        let covers = queue_covers.clone();
+        ui.global::<Queue>().on_request_cover(move |path, generation| {
+            let path = Some(path.as_str()).filter(|s| !s.is_empty());
+            if generation == 0 {
+                covers.get_cached_opt(path)
+            } else {
+                covers.get_or_load_opt(path)
+            }
+        });
+    }
+
     callbacks::wire_callbacks(
         ui,
         state,
@@ -68,14 +93,7 @@ pub fn install(
         &anchor,
         &is_open,
     );
-    rows::spawn_queue_rows_subscriber(
-        ui,
-        state,
-        queue_covers,
-        queue_model,
-        shadow,
-        is_open.clone(),
-    )?;
+    rows::spawn_queue_rows_subscriber(ui, state, queue_model, shadow, is_open.clone())?;
 
     // No install-time seed: the sheet is closed at startup, so the
     // subscriber is gated and the model stays empty (no covers decoded

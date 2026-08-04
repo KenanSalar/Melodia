@@ -1,8 +1,3 @@
-#![allow(
-    unsafe_code,
-    reason = "geteuid() is async-signal-safe and only used to skip a root-uid CI case."
-)]
-
 use crate::services::updater::probe::dir_is_writable;
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
@@ -34,10 +29,21 @@ fn detects_readonly_dir() -> TestResult {
     let ro = tmp.path().join("ro");
     std::fs::create_dir(&ro)?;
     std::fs::set_permissions(&ro, std::fs::Permissions::from_mode(0o555))?;
-    // Skip the assertion if running as root (CI containers occasionally
-    // do): mode 0555 is no barrier to uid 0, and the probe would (correctly)
-    // succeed.
-    if nix_geteuid_is_zero() {
+    // Skip the assertion where the mode isn't a barrier — running as root (CI
+    // containers occasionally do), or a filesystem that ignores permissions. Ask
+    // the question directly rather than through `geteuid`: uid 0 is only one of
+    // the reasons a write can land, and the probe would (correctly) succeed for
+    // any of them.
+    //
+    // The sentinel is the same primitive `dir_is_writable` uses, so this reads as
+    // a precondition on the environment rather than as an oracle for the
+    // function — it establishes that 0555 means something here, and the assertion
+    // below is what tests the probe. Removed either way so the skip path leaves
+    // the directory as it found it.
+    let sentinel = ro.join("melodia-mode-check");
+    let mode_is_enforced = std::fs::File::create(&sentinel).is_err();
+    let _ = std::fs::remove_file(&sentinel);
+    if !mode_is_enforced {
         return Ok(());
     }
     assert!(
@@ -71,10 +77,4 @@ fn unique_probe_names_under_repeated_calls() -> TestResult {
         "leaked probe files: {leaked:?}"
     );
     Ok(())
-}
-
-#[cfg(unix)]
-fn nix_geteuid_is_zero() -> bool {
-    // SAFETY: `geteuid` is async-signal-safe and has no preconditions.
-    unsafe { libc::geteuid() == 0 }
 }

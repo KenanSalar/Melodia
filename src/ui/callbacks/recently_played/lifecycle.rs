@@ -23,8 +23,12 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, rp_ui: &Arc<RecentlyPlayedU
     let weak = ui.as_weak();
 
     // --- Section-active mirror + cache release / re-enter ---------
-    // Seed the synchronous shadow — `changed` in `AppWindow` won't fire for a
-    // session that starts on this tab.
+    // Seed the synchronous shadow from the current nav state: the gate's
+    // `ChangeTracker` baselines inside `AppWindow::new()` and fires only on a
+    // later difference, so a section the boot doesn't land on gets no edge at
+    // all, and the one it does land on gets its edge a frame late — after
+    // boot has already read this shadow. See the `SectionActiveGate` bullet
+    // in `.claude/rules/ui-patterns.md`.
     rp_ui.set_section_active(ui.global::<Nav>().get_selected_index() == NAV_RECENTLY_PLAYED);
     {
         let ru = rp_ui.clone();
@@ -46,6 +50,14 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, rp_ui: &Arc<RecentlyPlayedU
                 g.set_blur_img_a(Image::default());
                 g.set_blur_img_b(Image::default());
                 g.set_has_blur(false);
+                // Unconditional, on the same tick as the wipe — see the
+                // matching call in `favorites/lifecycle.rs`.
+                ru.forget_mosaic();
+                // Six heroes share one colour set and one chip row, so hand
+                // both back rather than leaving this mosaic's solve and this
+                // view's counts for the next hero to paint under.
+                crate::ui::hero_backdrop::reset(&ui);
+                crate::ui::hero_chips::clear(&ui);
                 clear_vec_model::<UiTrackListRow>(&g.get_tracks(), "recently_played: clear tracks");
                 clear_vec_model::<UiEntityStripRow>(
                     &g.get_most_played_rows(),

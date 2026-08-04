@@ -163,7 +163,7 @@ fn build_sections(rows: &[(&str, &str, &str)]) -> HashMap<String, HashMap<String
 /// hex values byte-for-byte. Each blended slot below was hand-computed
 /// from the inputs and lands exactly on the Catppuccin target with no
 /// rounding drift.
-#[allow(clippy::expect_used, reason = "test fixture is fully populated; Some is invariant")]
+#[expect(clippy::expect_used, reason = "test fixture is fully populated; Some is invariant")]
 #[test]
 fn kde_palette_matches_catppuccin_mocha_sapphire() {
     let sections = build_sections(&[
@@ -176,6 +176,8 @@ fn kde_palette_matches_catppuccin_mocha_sapphire() {
         ("Colors:View", "ForegroundNormal", "205, 214, 244"),
         ("Colors:View", "ForegroundInactive", "166, 173, 200"),
         ("Colors:View", "ForegroundNegative", "243, 139, 168"),
+        ("Colors:View", "ForegroundPositive", "166, 227, 161"),
+        ("Colors:View", "ForegroundNeutral", "249, 226, 175"),
         ("Colors:View", "DecorationFocus", "116, 199, 236"),
         // [Colors:Button] — surface0 of clickable controls
         ("Colors:Button", "BackgroundNormal", "49, 50, 68"),
@@ -215,12 +217,34 @@ fn kde_palette_matches_catppuccin_mocha_sapphire() {
     // Border == surface0 by design
     assert_eq!(g("border"), Some("#313244"), "border == surface0");
 
-    // Accent + red
+    // Accent + the semantic trio, which Plasma publishes as its three
+    // [Colors:View] status foregrounds.
     assert_eq!(p.accent, "#74c7ec", "accent ← Colors:Selection BackgroundNormal");
     assert_eq!(p.red, "#f38ba8", "red ← Colors:View ForegroundNegative");
+    assert_eq!(p.green, "#a6e3a1", "green ← Colors:View ForegroundPositive");
+    assert_eq!(p.yellow, "#f9e2af", "yellow ← Colors:View ForegroundNeutral");
 }
 
-#[allow(clippy::expect_used, reason = "test fixture is fully populated; Some is invariant")]
+/// A scheme that omits the status foregrounds has to land on Breeze's own
+/// defaults, not on a neutral — the macOS-style traffic lights, the success /
+/// warning toasts and the star rating all read `green` / `yellow`.
+#[expect(clippy::expect_used, reason = "test fixture is fully populated; Some is invariant")]
+#[test]
+fn kde_palette_semantics_fall_back_to_breeze_defaults() {
+    let sections = build_sections(&[
+        ("Colors:Window", "BackgroundNormal", "24, 24, 37"),
+        ("Colors:View", "BackgroundNormal", "30, 30, 46"),
+        ("Colors:View", "ForegroundNormal", "205, 214, 244"),
+        ("Colors:Selection", "BackgroundNormal", "116, 199, 236"),
+    ]);
+
+    let p = kde_palette_from_sections(&sections).expect("palette built");
+    assert_eq!(p.red, "#da4453", "red ← Breeze ForegroundNegative default");
+    assert_eq!(p.green, "#27ae60", "green ← Breeze ForegroundPositive default");
+    assert_eq!(p.yellow, "#f67400", "yellow ← Breeze ForegroundNeutral default");
+}
+
+#[expect(clippy::expect_used, reason = "test fixture is fully populated; Some is invariant")]
 #[test]
 fn kde_palette_falls_back_when_button_section_missing() {
     // Same scheme minus [Colors:Button] — surface0 should fall back

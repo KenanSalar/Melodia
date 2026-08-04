@@ -369,7 +369,7 @@ pub async fn scan_folder_internal(
 
     let scan_timestamp = crate::utils::now_rfc3339();
 
-    // --- Phase 1: ingest, chunked into separate write transactions on the
+    // --- Stage 1: ingest, chunked into separate write transactions on the
     // bulk path. The single writer connection frees between chunks, so
     // interactive writes (favorite toggles, play-count flushes, position
     // saves) no longer queue behind a multi-minute first scan. Each chunk
@@ -409,7 +409,7 @@ pub async fn scan_folder_internal(
         updated_count += result.updated_count;
     }
 
-    // --- Phase 2: orphan pruning + album-artwork roll-up + stats recalc
+    // --- Stage 2: orphan pruning + album-artwork roll-up + stats recalc
     // in one final transaction.
     let mut tx = state.db.write().begin().await?;
     let all_db_paths = queries::scan::get_all_track_paths_for_folder(&mut tx, folder.id).await?;
@@ -450,6 +450,8 @@ pub async fn scan_folder_internal(
 
     if any_changes {
         queries::scan::update_album_artwork_from_tracks(&mut tx).await?;
+        // Purged orphan tracks can leave their album/artist/genre empty; sweep those.
+        queries::scan::prune_orphans(&mut tx).await?;
     }
     // Small deltas (`!is_bulk`) never dropped the triggers, so per-row
     // maintenance already kept the stats correct — no recalc needed at all.

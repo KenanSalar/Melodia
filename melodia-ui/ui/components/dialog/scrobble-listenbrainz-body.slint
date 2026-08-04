@@ -1,0 +1,40 @@
+import { Theme } from "../../theme.slint";
+import { ScrobbleUi } from "../../globals/dialog-forms.slint";
+import { LabeledInput } from "../labeled-input.slint";
+
+// The ListenBrainz login: paste a token and verify it. Enter and the dialog's
+// own button both fire the verify. State lives on `ScrobbleUi`.
+export component ScrobbleListenbrainzBody inherits VerticalLayout {
+    spacing: Theme.pad-md;
+
+    LabeledInput {
+        label: @tr("User token");
+        placeholder: @tr("Paste your ListenBrainz user token");
+        text <=> ScrobbleUi.lb-token;
+        accepted => {
+            if (ScrobbleUi.lb-token != "" && !ScrobbleUi.busy) {
+                ScrobbleUi.listenbrainz-verify(ScrobbleUi.lb-token);
+            }
+        }
+    }
+
+    Text {
+        text: @tr("Find your token on your ListenBrainz profile settings page.");
+        color: Theme.subtext0;
+        font-size: Theme.font-size-sm;
+        wrap: word-wrap;
+    }
+
+    if ScrobbleUi.busy: Text {
+        text: @tr("Connecting…");
+        color: Theme.subtext0;
+        font-size: Theme.font-size-sm;
+    }
+
+    if ScrobbleUi.error != "": Text {
+        text: ScrobbleUi.error;
+        color: Theme.danger;
+        font-size: Theme.font-size-sm;
+        wrap: word-wrap;
+    }
+}

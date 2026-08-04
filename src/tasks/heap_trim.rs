@@ -6,18 +6,38 @@
 //! via `madvise(MADV_DONTNEED)`. A single `malloc_trim(0)` once the startup
 //! churn has settled hands that retained slack back to the kernel.
 //!
-//! Previously this fired every 60 s from `player::handlers` — measurement
-//! showed only the first call returned meaningful pages, every subsequent
-//! one was a no-op. One-shot is sufficient. No-op on non-glibc Linux and
-//! other platforms.
+//! ## Why this is one-shot, and must stay one-shot
 //!
-//! [`trim`] is also called ad-hoc after a bulk free elsewhere (e.g. clearing
-//! an artwork cache on view exit) so the released pages don't linger in the
-//! arena until the next process-wide event.
+//! It fired every 60 s from `player::handlers` once, and was cut back on a
+//! measurement showing later calls returned nothing. That was re-litigated and
+//! **the original measurement was right.** A periodic trim gated on the
+//! visualizer being on screen was tried against the RSS climb that shows up
+//! over an hour of playback with Now Playing open: the sampler showed no
+//! sawtooth at the trim cadence — not one drop at a 60 s boundary in a
+//! quarter-hour — and closing the view after an hour handed back less than the
+//! artwork LRU's own live contents, with the rest of the hour's growth staying
+//! put.
+//!
+//! That is the expected result, because the growth is **not** reclaimable heap.
+//! `malloc_trim` can only release fully-free, page-aligned runs, and the thing
+//! that actually grows is *live* allocations — Wayland event closures piling up
+//! under a high repaint rate (`wl_closure_init` via `wl_display_read_events`,
+//! which profiling put at the large majority of what survives a session). No
+//! amount of trimming reaches memory that is still referenced. Reach for the
+//! producer, not the allocator.
+//!
+//! [`trim`] is still worth calling ad-hoc after a bulk free (e.g. clearing an
+//! artwork cache on view exit) so those pages don't linger until the next
+//! process-wide event. That case is different: the memory really is free.
+//!
+//! No-op on non-glibc Linux and other platforms.
 
 use std::time::Duration;
 
 use crate::tasks::TaskSpawner;
+
+/// How long to let the startup churn settle before the one-shot trim.
+const STARTUP_DELAY: Duration = Duration::from_secs(5);
 
 /// Hand glibc's retained free-list pages back to the kernel. A well-defined
 /// no-op when there's nothing to release, and a compile-time no-op off
@@ -39,7 +59,7 @@ pub fn spawn(spawner: &TaskSpawner) {
         tokio::select! {
             biased;
             () = shutdown.cancelled() => {}
-            () = tokio::time::sleep(Duration::from_secs(5)) => {
+            () = tokio::time::sleep(STARTUP_DELAY) => {
                 trim();
             }
         }

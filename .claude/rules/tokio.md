@@ -1,3 +1,9 @@
+---
+paths:
+  - src/**/*.rs
+  - tests/**/*.rs
+---
+
 # Tokio Best Practices
 
 ## Task Spawning

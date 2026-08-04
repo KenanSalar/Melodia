@@ -1,0 +1,108 @@
+import { Theme } from "../theme.slint";
+import { MaterialIcon } from "material-icon.slint";
+import { Tooltip } from "tooltip.slint";
+
+// Generic icon-only button with hover/pressed/active visual states.
+export component IconButton inherits Rectangle {
+    in property <string> icon;
+    in property <length> icon-size: 22px;
+    in property <length> diameter: 36px;
+    in property <bool> active: false;
+    // Selects the FILL=1 Material Symbols variant, so a toggled button reads as a solid
+    // glyph rather than an outlined one.
+    in property <bool> filled: false;
+    in property <bool> button-enabled: true;
+    // Lets a popup trigger keep its highlight while the popup is open — see
+    // `PopupHighlight`.
+    in property <bool> force-bg: false;
+    in property <brush> idle-bg: transparent;
+    // Overridden where the button sits on `surface0` itself — a notification card,
+    // say — and the default hover fill would be invisible against it.
+    in property <brush> hover-bg: Theme.surface0;
+    // The active state changes only the icon colour, never the background.
+    in property <brush> active-bg: transparent;
+    in property <brush> active-fg: Theme.accent;
+    in property <brush> idle-fg: Theme.text;
+    // Independent of `active-fg`, which is the *toggled* colour: set this to recolour
+    // the glyph on hover, as a destructive action does.
+    in property <brush> hover-fg: root.idle-fg;
+    in property <string> tooltip-text: "";
+    // Falls through to `Tooltip.force-shown` — a keyboard volume change uses it.
+    in property <bool> force-tooltip: false;
+    // Scales the inner disc while held, snapping back on the play button's overshoot
+    // curve. Off by default; the now-playing bar enables it on every control.
+    in property <bool> press-shrink: false;
+    // Lets a host gate its own visuals on *either* hover: a higher-z TouchArea captures
+    // the pointer and flips the outer one's `has-hover` false — see `EntityCard`.
+    out property <bool> has-hover: touch.has-hover;
+
+    callback clicked();
+
+    width: diameter;
+    height: diameter;
+    background: transparent;
+
+    // **Only the factor is animated**, not the width and height derived from it: those
+    // also move when the diameter re-clamps on a window resize, so easing them directly
+    // wobbles the button on every resize tick.
+    property <float> press-scale: root.press-shrink && touch.pressed ? 0.9 : 1.0;
+    animate press-scale {
+        duration: touch.pressed ? 100ms : Theme.dur-med;
+        easing: cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+
+    // The root keeps a fixed layout slot so siblings never reflow; the disc scales.
+    disc := Rectangle {
+        width: root.diameter * root.press-scale;
+        height: root.diameter * root.press-scale;
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        border-radius: self.width / 2;
+        background: !root.button-enabled
+            ? root.idle-bg
+            : ((touch.has-hover || root.force-bg)
+                ? root.hover-bg
+                : (root.active ? root.active-bg : root.idle-bg));
+
+        animate background { duration: Theme.dur-fast; easing: ease-in-out; }
+
+        // Nested layouts, because Slint doesn't auto-centre a child in a Rectangle.
+        HorizontalLayout {
+            alignment: center;
+            VerticalLayout {
+                alignment: center;
+                MaterialIcon {
+                    name: root.icon;
+                    // Scales with the disc, so the glyph wobbles with the chrome rather
+                    // than sitting static on top of it.
+                    icon-size: root.icon-size * root.press-scale;
+                    filled: root.filled;
+                    // Active beats hover, so a hovered toggled button still reads as
+                    // toggled; hover then beats idle, which is what carries a
+                    // destructive cue.
+                    icon-color: !root.button-enabled
+                        ? Theme.overlay0
+                        : (root.active
+                            ? root.active-fg
+                            : (touch.has-hover ? root.hover-fg : root.idle-fg));
+                    opacity: root.button-enabled ? 1 : 0.5;
+                    animate icon-color { duration: Theme.dur-fast; easing: ease-in-out; }
+                }
+            }
+        }
+    }
+
+    Tooltip {
+        text: root.tooltip-text;
+        hovered: touch.has-hover;
+        host-width: root.width;
+        force-shown: root.force-tooltip;
+    }
+
+    touch := TouchArea {
+        mouse-cursor: root.button-enabled ? pointer : default;
+        clicked => {
+            if (root.button-enabled) { root.clicked(); }
+        }
+    }
+}

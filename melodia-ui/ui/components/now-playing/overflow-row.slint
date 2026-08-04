@@ -1,0 +1,77 @@
+import { Theme } from "../../theme.slint";
+import { MaterialIcon } from "../material-icon.slint";
+import { FlyoutMetrics } from "./flyout-presets.slint";
+
+// One row inside a now-playing popup menu, drawing the same icon and label the
+// bar shows inline and taking its active colour from the same token. The
+// trailing slots are for a row that opens a flyout: the current value and a
+// chevron. Shared by both menus, so their rhythm can't drift.
+export component OverflowRow inherits Rectangle {
+    in property <string> icon;
+    in property <string> label;
+    in property <bool> active;
+    // `IconButton.filled` for the inline siblings: the glyphs that read as
+    // solid when active.
+    in property <bool> filled;
+    in property <bool> button-enabled: true;
+    // Empty means unrendered. The label column stretches, so these dock right.
+    in property <string> trailing-text;
+    in property <string> trailing-icon;
+
+    callback clicked();
+
+    height: FlyoutMetrics.menu-row-h;
+    border-radius: Theme.radius-sm;
+    background: touch.has-hover && root.button-enabled ? Theme.surface1 : transparent;
+    animate background { duration: Theme.dur-fast; easing: ease-in-out; }
+    opacity: root.button-enabled ? 1 : 0.5;
+
+    HorizontalLayout {
+        padding-left: Theme.pad-sm;
+        padding-right: Theme.pad-sm;
+        spacing: Theme.pad-sm;
+        alignment: stretch;
+
+        VerticalLayout {
+            alignment: center;
+            MaterialIcon {
+                name: root.icon;
+                icon-size: 20px;
+                icon-color: root.active ? Theme.accent : Theme.text;
+                filled: root.filled;
+            }
+        }
+        VerticalLayout {
+            alignment: center;
+            horizontal-stretch: 1;
+            Text {
+                text: root.label;
+                color: root.active ? Theme.accent : Theme.text;
+                font-size: Theme.font-size-md;
+            }
+        }
+        if root.trailing-text != "": VerticalLayout {
+            alignment: center;
+            Text {
+                text: root.trailing-text;
+                color: root.active ? Theme.accent : Theme.subtext0;
+                font-size: Theme.font-size-md;
+            }
+        }
+        if root.trailing-icon != "": VerticalLayout {
+            alignment: center;
+            MaterialIcon {
+                name: root.trailing-icon;
+                icon-size: 18px;
+                icon-color: root.active ? Theme.accent : Theme.subtext0;
+            }
+        }
+    }
+
+    touch := TouchArea {
+        mouse-cursor: root.button-enabled ? pointer : default;
+        clicked => {
+            if (root.button-enabled) { root.clicked(); }
+        }
+    }
+}

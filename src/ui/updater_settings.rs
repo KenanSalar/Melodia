@@ -47,7 +47,7 @@ pub fn install(ui: &AppWindow, state: &AppState) {
 /// system-managed installs. The Slint side branches on the value to
 /// pick the right `@tr(...)` literal so the hint re-resolves on locale
 /// switch. Keep the values in sync with the ternary in
-/// `ui/views/settings/update-section.slint`.
+/// `melodia-ui/ui/views/settings/update-section.slint`.
 fn platform_kind() -> &'static str {
     if cfg!(target_os = "windows") {
         "windows"

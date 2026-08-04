@@ -22,8 +22,12 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, albums_ui: &Arc<AlbumsUi>) 
 
     // section-active-changed: the Albums section entered / left the screen
     // (sidebar nav, or Now Playing opened over it). Seed the synchronous
-    // shadow from the current nav state — `changed` in `AppWindow` won't
-    // fire for a session that *starts* on Albums.
+    // shadow from the current nav state: the gate's `ChangeTracker` baselines
+    // inside `AppWindow::new()` and fires only on a later difference, so a
+    // section the boot doesn't land on gets no edge at all, and the one it
+    // does land on gets its edge a frame late — after boot has already read
+    // this shadow. See the `SectionActiveGate` bullet in
+    // `.claude/rules/ui-patterns.md`.
     //
     // On leave: synchronously wipe the Slint `grid-rows` model (UI thread,
     // so its `AlbumGridRow` `SharedString`s drop), then off-thread call
@@ -34,6 +38,15 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, albums_ui: &Arc<AlbumsUi>) 
     // 0`) runs after the grid fetch so the user lands back where they
     // were.
     albums_ui.set_section_active(ui.global::<Nav>().get_selected_index() == 4);
+    // `seed_detail_from_settings` runs for every persisted detail id whichever
+    // section the boot lands on, but it can only publish the two shared hero
+    // globals for the one that is *on screen* — so off-screen its band and its
+    // chips never land, and `SectionState::new`'s "the boot pre-fetch wins the
+    // first enter" would leave them empty until the user opened the detail by
+    // hand. Force that first enter to re-fetch instead.
+    if !albums_ui.section_active() {
+        albums_ui.mark_dirty();
+    }
     {
         let au = albums_ui.clone();
         let s = state.clone();
@@ -67,7 +80,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, albums_ui: &Arc<AlbumsUi>) 
                 }
 
                 let d = ui.global::<AlbumDetail>();
-                release_detail_hero_images!(d);
+                release_detail_hero_images!(ui, d);
                 let tm = d.get_tracks();
                 if let Some(vm) = tm.as_any().downcast_ref::<VecModel<UiTrackListRow>>() {
                     vm.set_vec(Vec::new());
@@ -127,7 +140,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, albums_ui: &Arc<AlbumsUi>) 
                             let _ = weak.upgrade_in_event_loop(|ui| {
                                 let g = ui.global::<AlbumDetail>();
                                 g.set_album_id(-1);
-                                release_detail_hero_images!(g);
+                                release_detail_hero_images!(ui, g);
                             });
                         }
                     } else {

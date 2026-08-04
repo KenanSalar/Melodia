@@ -1,6 +1,6 @@
 //! Artist Detail header + Albums sub-section + track list: fetch, artwork
 //! pair decode, re-sort, refresh-preserving, startup seed. Mirrors
-//! `ui/albums/detail.rs`, plus an `albums` slice that drives the
+//! `src/ui/albums/detail.rs`, plus an `albums` slice that drives the
 //! horizontal Albums strip above the all-tracks `TrackList`.
 
 use std::collections::HashMap;
@@ -19,9 +19,10 @@ use crate::error::AppResult;
 use crate::library;
 use crate::state::AppState;
 use crate::ui::detail_artwork::decode_detail_pair;
-use crate::ui::detail_filter::{restamp_selection, track_matches};
+use crate::ui::detail_filter::restamp_selection;
 use crate::ui::detail_view::{impl_detail_view_helpers, resolve_view_sort};
 use crate::ui::model_patch;
+use crate::ui::row_match::{self, track_matches};
 use crate::ui::track_list_view::view_id;
 use crate::ui::track_sort::sort_track_list_rows;
 use crate::ui::tracks::PreparedTrackRow;
@@ -32,7 +33,7 @@ use crate::{
 
 // `apply_detail_artwork` (cover + hero-blur write) and
 // `replace_tracks_model` (in-place `tracks` `VecModel` swap) — see
-// `ui/detail_view.rs`.
+// `src/ui/detail_view.rs`.
 impl_detail_view_helpers!(artwork ArtistDetail);
 
 /// Fetch an artist's header + albums sub-section + track list, and prewarm
@@ -49,6 +50,7 @@ async fn fetch_artist_detail(
 
     let track_covers: Vec<PathBuf> = crate::ui::grid_prewarm::unique_artwork_paths(
         tracks.iter().map(|t| t.artwork_path.as_deref()),
+        artists_ui.cover_thumbs.capacity(),
     );
     // The Albums strip resolves its cards through the borrowed Albums
     // grid tier (`request-album-cover` → `AlbumsUi::grid_cover`,
@@ -57,6 +59,7 @@ async fn fetch_artist_detail(
     // the UI for one full-res decode per album card at first paint.
     let strip_covers: Vec<PathBuf> = crate::ui::grid_prewarm::unique_artwork_paths(
         albums.iter().map(|a| a.artwork_path.as_deref()),
+        artists_ui.albums_grid_covers.capacity(),
     );
     if !track_covers.is_empty() || !strip_covers.is_empty() {
         let row_thumbs = artists_ui.cover_thumbs.clone();
@@ -134,6 +137,10 @@ where
     let prepared: Vec<PreparedTrackRow> =
         tracks.iter().map(crate::ui::tracks::prepare_track_list_row).collect();
 
+    // The album list is the artist's own discography, so its year span is what
+    // "active 1957–1963" means here; folded on the worker that fetched it.
+    let years = crate::ui::hero_chips::year_span(&albums);
+
     *artists_ui.detail.artist_id.lock() = artist_id;
 
     let artists_ui = artists_ui.clone();
@@ -148,6 +155,7 @@ where
 
         let header = to_slint_artist_row(&detail);
         g.set_artist(header);
+        crate::ui::hero_chips::publish_artist(&ui, &detail, years, artists_ui.section_active());
 
         // Albums sub-section model — small grid above the track list.
         let album_rows: Vec<UiAlbumRow> = albums
@@ -156,14 +164,14 @@ where
             .collect();
         write_albums_model(&g, album_rows);
 
-        apply_detail_artwork(&g, pair, /* animate */ true);
+        apply_detail_artwork(&ui, &g, pair, /* animate */ true, artists_ui.section_active());
         replace_tracks_model(&g, ui_tracks);
         reset_detail_selection(&g, &artists_ui);
         // Fresh open clears the filter so the user lands on the full
         // tracks + albums set, not a stale filter from the previous
         // detail. Slint property + Rust cache cleared together.
         g.set_filter(SharedString::from(""));
-        *artists_ui.detail.filter.lock() = String::new();
+        artists_ui.detail.filter.lock().clear();
         g.set_sort_field(SharedString::from(sort_field.as_str()));
         g.set_sort_dir(SharedString::from(sort_dir.as_str()));
         // Set the view-transition direction before the property writes
@@ -208,6 +216,8 @@ pub async fn refresh_detail(
     )
     .await;
 
+    let years = crate::ui::hero_chips::year_span(&albums);
+
     let weak_for_filter = weak.clone();
     let artists_ui_clone = artists_ui.clone();
     let artists_ui = artists_ui.clone();
@@ -222,7 +232,8 @@ pub async fn refresh_detail(
         sort_track_list_rows(&mut tracks, &field, &dir);
 
         g.set_artist(to_slint_artist_row(&detail));
-        apply_detail_artwork(&g, pair, /* animate */ false);
+        crate::ui::hero_chips::publish_artist(&ui, &detail, years, artists_ui.section_active());
+        apply_detail_artwork(&ui, &g, pair, /* animate */ false, artists_ui.section_active());
 
         // Refresh the canonical Rust caches (all_tracks + albums) with
         // the freshly-fetched data. The displayed `tracks` cache + the
@@ -301,16 +312,16 @@ pub fn clear_detail(artists_ui: &ArtistsUi) {
 /// live text via `<=>` binding; this Rust mirror lets the re-fetch path
 /// (`open_artist_with` / `refresh_detail`) re-apply the filter to fresh
 /// data without round-tripping through the UI thread for the property
-/// read. Always stored lowercased so the per-keystroke walk doesn't
-/// re-lower per row.
+/// read. Always stored folded so the per-keystroke walk doesn't re-fold
+/// per row.
 pub fn set_filter(artists_ui: &ArtistsUi, needle: &str) {
-    *artists_ui.detail.filter.lock() = needle.to_lowercase();
+    *artists_ui.detail.filter.lock() = row_match::fold_needle(needle);
 }
 
 /// Re-walk the canonical `all_tracks` + `albums` Vecs through the
-/// current filter and push the resulting Slint models. The track match
-/// is a case-insensitive substring on title + artist + album; the album
-/// match is on album name only. Cheap enough to invoke on every
+/// current filter and push the resulting Slint models. The track match is
+/// the shared [`track_matches`] walk; the album match is on album name
+/// only. Cheap enough to invoke on every
 /// keystroke — the lists are fully in-memory. The filtered track result
 /// is stored back into the displayed `tracks` cache so it stays in
 /// lockstep with the model (the generic selection/sort logic maps id ↔
@@ -321,27 +332,12 @@ pub fn apply_filtered_detail(weak: &Weak<AppWindow>, artists_ui: &Arc<ArtistsUi>
 
     let displayed_tracks: Vec<RsTrackListRow> = {
         let all = artists_ui.detail.all_tracks.lock();
-        if needle.is_empty() {
-            all.clone()
-        } else {
-            all.iter()
-                .filter(|r| track_matches(r, &needle))
-                .cloned()
-                .collect()
-        }
+        all.iter().filter(|r| track_matches(r, &needle)).cloned().collect()
     };
 
     let filtered_albums: Vec<AlbumStats> = {
         let cache = artists_ui.detail.albums.lock();
-        if needle.is_empty() {
-            cache.clone()
-        } else {
-            cache
-                .iter()
-                .filter(|a| a.name.to_lowercase().contains(&needle))
-                .cloned()
-                .collect()
-        }
+        cache.iter().filter(|a| needle.contains(&a.name)).cloned().collect()
     };
 
     let prepared: Vec<PreparedTrackRow> = displayed_tracks

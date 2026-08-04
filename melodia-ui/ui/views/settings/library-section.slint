@@ -1,0 +1,174 @@
+import { Theme } from "../../theme.slint";
+import { SettingsPage } from "../../globals/settings-page.slint";
+import { Dialog } from "../../globals/dialog.slint";
+import { LibrarySettings } from "../../globals/library-settings.slint";
+import { SectionCard } from "../../components/settings/section-card.slint";
+import { SectionDivider } from "../../components/settings/section-divider.slint";
+import { SectionButton } from "../../components/settings/section-button.slint";
+import { FolderRow } from "../../components/settings/folder-row.slint";
+import { ProgressBar } from "../../components/settings/progress-bar.slint";
+
+// Folder management: a header sub-row and Add button, optional scan progress,
+// then the folder rows or an empty state. Everything comes off
+// `LibrarySettings`, which Rust hydrates at startup and refreshes after each
+// mutation.
+//
+// **The whole card is one searchable atom** — it has no setting rows to match
+// individually, so a query hitting the title or one of its keyword aliases
+// reveals the section in full and anything else hides it outright. That's what
+// every settings search does with a container UI.
+export component LibrarySection inherits Rectangle {
+    background: transparent;
+    horizontal-stretch: 1;
+    vertical-stretch: 0;
+
+    in property <string> tab-name;
+
+    out property <bool> has-matches:
+        SettingsPage.row-visible(root.tab-name, @tr("Library Folders"),
+                                 @tr("Manage Folders") + " " + @tr("Add Folder"),
+                                 SettingsPage.search-query);
+
+    // Wrapper so the root's preferred-height tracks the card's natural height —
+    // see `language-section.slint`.
+    VerticalLayout {
+    if has-matches: SectionCard {
+        title: @tr("Library Folders");
+
+        // `SettingRow`'s chrome without the icon column — a card-internal
+        // sub-header, not a setting row.
+        Rectangle {
+            background: transparent;
+            HorizontalLayout {
+                padding: Theme.pad-lg;
+                spacing: Theme.pad-md;
+                alignment: stretch;
+
+                VerticalLayout {
+                    alignment: center;
+                    horizontal-stretch: 1;
+                    Text {
+                        text: @tr("Manage Folders");
+                        color: Theme.text;
+                        font-size: Theme.font-size-md;
+                        font-weight: 600;
+                        // Same reason the row labels wrap — see
+                        // `components/settings/setting-row.slint`.
+                        wrap: word-wrap;
+                    }
+                }
+
+                VerticalLayout {
+                    alignment: center;
+                    SectionButton {
+                        label: @tr("Add Folder");
+                        icon: "create_new_folder";
+                        button-enabled: !LibrarySettings.scanning;
+                        primary: true;
+                        clicked => {
+                            LibrarySettings.add-folder();
+                        }
+                    }
+                }
+            }
+        }
+
+        SectionDivider {}
+
+        // One column for the bar, the file label and the counter.
+        if LibrarySettings.scanning: Rectangle {
+            background: transparent;
+            VerticalLayout {
+                padding: Theme.pad-lg;
+                spacing: Theme.pad-sm;
+                ProgressBar {
+                    value: LibrarySettings.scan-progress;
+                }
+                Text {
+                    text: LibrarySettings.scanning-file != ""
+                        ? @tr("{} / {} files · {}",
+                              LibrarySettings.scanned-count,
+                              LibrarySettings.total-count,
+                              LibrarySettings.scanning-file)
+                        : @tr("{} / {} files",
+                              LibrarySettings.scanned-count,
+                              LibrarySettings.total-count);
+                    color: Theme.subtext0;
+                    font-size: Theme.font-size-sm;
+                    overflow: elide;
+                }
+            }
+        }
+        if LibrarySettings.scanning: SectionDivider {}
+
+        // A handful of entries, so a plain `for` needs no virtualization. Slint
+        // has no `last-child`, hence a divider *above* each row from index 1.
+        for row[i] in LibrarySettings.folders: VerticalLayout {
+            if i > 0: SectionDivider {}
+            FolderRow {
+                path: row.path;
+                last-scanned: row.last-scanned;
+                // Blocked mid-scan so two rescans can't race on the shared
+                // `scan_progress_tx`: the first's drop-guard would clear the
+                // bar out from under the second.
+                actions-enabled: !LibrarySettings.scanning;
+                rescan-clicked => {
+                    LibrarySettings.rescan-folder(row.id);
+                }
+                remove-clicked => {
+                    // Confirmed, so a stray click can't cascade-delete every
+                    // track in the folder; the `Dialog` dispatcher routes the
+                    // accept back to `remove-folder`.
+                    Dialog.kind = "remove-folder";
+                    Dialog.target-id = row.id;
+                    Dialog.title = @tr("Remove Folder?");
+                    Dialog.message = @tr("Remove \"{}\" from your library? All tracks under this folder will be removed.", row.path);
+                    Dialog.confirm-label = @tr("Remove");
+                    Dialog.cancel-label = @tr("Cancel");
+                    Dialog.destructive = true;
+                    Dialog.open = true;
+                }
+            }
+        }
+
+        if LibrarySettings.folders.length == 0: Rectangle {
+            background: transparent;
+            height: 140px;
+            VerticalLayout {
+                alignment: center;
+                spacing: Theme.pad-sm;
+                HorizontalLayout {
+                    alignment: center;
+                    Rectangle {
+                        width: 32px;
+                        height: 32px;
+                        Text {
+                            width: 100%;
+                            height: 100%;
+                            text: "folder_open";
+                            font-family: "Material Symbols Rounded";
+                            font-size: 32px;
+                            color: Theme.subtext0;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+                    }
+                }
+                Text {
+                    text: @tr("No folders added");
+                    color: Theme.text;
+                    font-size: Theme.font-size-md;
+                    font-weight: 600;
+                    horizontal-alignment: center;
+                }
+                Text {
+                    text: @tr("Add a folder to scan for music files.");
+                    color: Theme.subtext0;
+                    font-size: Theme.font-size-sm;
+                    horizontal-alignment: center;
+                }
+            }
+        }
+    }
+    }
+}

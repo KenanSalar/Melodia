@@ -1,6 +1,10 @@
 name: Deploy Coverage
 
-# On merge to `dev`, publish the latest successful PR coverage report to Pages.
+# Coverage runs here, once per merge to `dev` — not on every PR. The
+# instrumented build is the most expensive thing in this repo's CI (it has
+# OOM-killed the runner), and a coverage delta is not what anyone reads to
+# decide a merge, so pr-validation.yml runs a plain `cargo test` instead.
+# `workflow_dispatch` is the escape hatch for checking coverage off-cycle.
 on:
   push:
     branches: [ dev ]
@@ -8,79 +12,148 @@ on:
 
 permissions:
   contents: read
-  actions: read      # read artifacts from the pr-validation workflow
-  pages: write
-  id-token: write
 
-# GitHub removes Node 20 on 2026-09-16; without this, Node-20 JS actions
-# (dawidd6/action-download-artifact@v11) fail once it's gone. Mirrors release.yml.
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
-
-# Never cancel an in-flight Pages deployment; just queue the next one.
+# Never cancel an in-flight Pages deployment; just queue the next one. The
+# trade: two merges landing close together now queue two full instrumented
+# builds rather than cancelling the first. Merges to `dev` are infrequent
+# enough that this beats risking a half-published report.
 concurrency:
   group: pages
   cancel-in-progress: false
 
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
 jobs:
-  deploy-coverage:
-    name: deploy-coverage
+  coverage:
+    name: coverage
     runs-on: ubuntu-latest
+    # The instrumented build OOM-killed the runner (143) once the crate grew.
+    # LLVM source-based coverage carries its own file/region table in
+    # `__llvm_covmap` and reads nothing from DWARF, so debug info can go to zero
+    # rather than `line-tables-only` — verified against cargo-llvm-cov 0.8.7,
+    # both the summary and the annotated-source HTML render identically without
+    # it. Nothing reads a backtrace out of this job, so there is no trade here.
+    # It is worth ~0.5 GiB off the peak; `CARGO_BUILD_JOBS` below is the lever
+    # that actually keeps this job inside the runner's memory.
+    #
+    # jobs=4 matches the runner's vCPUs and overrides the repo's dev-machine
+    # jobs=8 in .cargo/config.toml — but it is a memory cap first. The peak is
+    # `rustc` on the `melodia-ui` crate (the Slint compiler's ~390k-line
+    # output), and the job count scales one rustc's peak because its LLVM
+    # codegen threads draw jobserver tokens. On a 16 GB runner jobs=8 does not
+    # fail, it swaps, and the job silently runs for most of an hour looking like
+    # a hang. Don't drop this to pick up the config default.
+    env:
+      CARGO_BUILD_JOBS: 4
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_PROFILE_TEST_DEBUG: "0"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/linux-system-deps
+      # The pin drives the toolchain, and `llvm-tools-preview` (needed by
+      # cargo-llvm-cov) comes from its `components` list, not a workflow input.
+      - name: Install pinned Rust toolchain
+        run: rustup toolchain install
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        with:
+          shared-key: ci-coverage
+          cache-on-failure: true
+      - uses: taiki-e/install-action@41049aa56687c35e0afa74eed4f09cec4f9afabf # v2.85.2
+        with:
+          tool: cargo-llvm-cov
+
+      # `tests/headless.rs` boots AppState, which opens rodio's default output
+      # device (cpal -> ALSA). Headless runners have no sound card, and the
+      # GitHub Azure kernel ships no snd-dummy/snd-aloop module, so point ALSA's
+      # default PCM at the built-in userspace `null` device (part of alsa-lib —
+      # no kernel module, daemon, or extra package). rodio/cpal open it and
+      # discard output; verified locally against tests/headless.rs.
+      - name: Set up dummy ALSA device (userspace null)
+        run: |
+          sudo tee /etc/asound.conf >/dev/null <<'EOF'
+          pcm.!default { type null }
+          ctl.!default { type null }
+          EOF
+
+      # One instrumented test run feeds both the HTML report and the text
+      # summary (the report phases don't re-run tests).
+      #
+      # The regex drops `melodia-ui`'s generated `app-window.rs` from the report.
+      # cargo-llvm-cov's built-in excludes cover the rustc sysroot and
+      # ~/.cargo/registry, not a workspace member's OUT_DIR — and that file is
+      # ~390k lines, enough to swamp the denominator and make the headline
+      # percentage meaningless. Scoped to that crate rather than every
+      # `build/*/out/`, so a build script that one day generates code the tests
+      # actually exercise doesn't vanish from the report without anyone noticing.
+      #
+      # `pipefail` because the default `run:` shell is `bash -e` without it, so a
+      # failing `report` would be swallowed by `tee` and publish an empty summary.
+      - name: Run tests with coverage
+        env:
+          IGNORE_GENERATED: '.*/build/melodia-ui-[^/]*/out/.*'
+        run: |
+          set -o pipefail
+          cargo llvm-cov --locked --no-report
+          cargo llvm-cov report --html --ignore-filename-regex "$IGNORE_GENERATED"
+          cargo llvm-cov report --summary-only --ignore-filename-regex "$IGNORE_GENERATED" \
+            | tee coverage-summary.txt
+
+      - name: Coverage summary to job log
+        if: ${{ !cancelled() }}
+        run: |
+          {
+            echo '### Coverage'
+            echo '```'
+            cat coverage-summary.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: coverage-report
+          path: target/llvm-cov/html
+          if-no-files-found: error
+          retention-days: 30
+
+  # Split from `coverage` so the Pages environment (and its write scopes) gate
+  # only the publish, and a Pages failure still leaves the artifact behind.
+  deploy:
+    name: deploy
+    runs-on: ubuntu-latest
+    needs: [coverage]
+    # A job-level block REPLACES the workflow-level one rather than merging, so
+    # `contents: read` has to be restated here.
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      # Pull the `coverage-report` artifact (the llvm-cov HTML tree, which has
-      # its own index.html at the root) from the most recent successful
-      # pr-validation run.
+      # Same-run artifact. This used to reach into the pr-validation workflow via
+      # dawidd6/action-download-artifact, which needed `actions: read`, a retry
+      # step and an is-it-empty guard because the fetch could come back with
+      # nothing. Producing coverage in this workflow removes all of that.
       - name: Download coverage report
-        id: download
-        continue-on-error: true
-        uses: dawidd6/action-download-artifact@v11
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          workflow: pr-validation.yml
-          workflow_conclusion: success
           name: coverage-report
           path: site
-          search_artifacts: true
-          if_no_artifact_found: warn
-
-      - name: Retry download on failure
-        if: steps.download.outcome == 'failure'
-        continue-on-error: true
-        uses: dawidd6/action-download-artifact@v11
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          workflow: pr-validation.yml
-          workflow_conclusion: success
-          name: coverage-report
-          path: site
-          search_artifacts: true
-          if_no_artifact_found: warn
-
-      - name: Check artifact
-        id: check
-        run: |
-          if [ -d site ] && [ -n "$(ls -A site 2>/dev/null)" ]; then
-            echo "found=true" >> "$GITHUB_OUTPUT"
-            echo "Coverage artifact found"
-          else
-            echo "found=false" >> "$GITHUB_OUTPUT"
-            echo "No coverage artifact found - skipping deployment"
-          fi
 
       - name: Setup Pages
-        if: steps.check.outputs.found == 'true'
-        uses: actions/configure-pages@v6
+        uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
 
+      # The llvm-cov HTML tree has its own index.html at the root, so it is
+      # served as-is with no landing page of ours.
       - name: Upload to Pages
-        if: steps.check.outputs.found == 'true'
-        uses: actions/upload-pages-artifact@v5
+        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
           path: site
 
       - name: Deploy to GitHub Pages
-        if: steps.check.outputs.found == 'true'
         id: deployment
-        uses: actions/deploy-pages@v5
+        uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128 # v5.0.0

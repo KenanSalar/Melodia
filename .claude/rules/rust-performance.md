@@ -1,3 +1,12 @@
+---
+paths:
+  - src/**/*.rs
+  - tests/**/*.rs
+  - build.rs
+  - melodia-ui/build.rs
+  - Cargo.toml
+---
+
 # Rust Performance Best Practices
 
 ## Allocation Reduction

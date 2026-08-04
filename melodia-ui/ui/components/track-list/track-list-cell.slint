@@ -1,0 +1,36 @@
+import { Theme } from "../../theme.slint";
+
+// One text cell in the track table — the shape the artist, album and genre
+// columns share. The leading U+200E it prepends is what keeps `overflow: elide`
+// putting its ellipsis at the right edge whatever the script's direction.
+//
+// Title, number, year and length are structurally different and stay inline in
+// `track-list-row.slint`.
+//
+// **Two things here are load-bearing.** Visibility is gated at the *call site*,
+// matching the header: a cell hidden from inside is still a child of the row's
+// layout and reserves a `spacing` slot that `total-w` doesn't account for, so
+// every cell after it drifts off the header. And the wrapper must bind
+// `width: cell-width` — without it the parent layout doesn't pin the slot, and
+// resizing a sibling column bleeds this cell's text over its neighbour.
+export component DataCell inherits Rectangle {
+    in property <length> cell-width;
+    in property <string> text-content;
+    in property <bool> playing;
+
+    width: root.cell-width;
+    clip: true;
+    VerticalLayout {
+        alignment: center;
+        Text {
+            text: "‎" + root.text-content;
+            // The body-copy rung, not the muted one: muted, this cell fell
+            // under 4.5:1 on macOS Light and sat exactly on it under two other
+            // light variants. The whole list, header included, is on this one
+            // rung, and hierarchy comes from size and weight instead.
+            color: root.playing ? Theme.accent : Theme.text;
+            font-size: Theme.font-size-row;
+            overflow: elide;
+        }
+    }
+}

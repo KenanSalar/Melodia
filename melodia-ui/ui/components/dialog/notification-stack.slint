@@ -1,0 +1,152 @@
+import { Theme } from "../../theme.slint";
+import { Notifications } from "../../globals/updater.slint";
+import { NotificationRow } from "../../models.slint";
+import { MaterialIcon } from "../material-icon.slint";
+import { IconButton } from "../icon-button.slint";
+import { SectionButton } from "../settings/section-button.slint";
+
+// One card in the notification stack; the parent pins its width and the height
+// follows the content. The variant picks a colour and a glyph, `info` being the
+// fall-through.
+//
+// Enter animation is the `Tooltip` pattern — `shown` flips on `init` and the
+// opacity animates in. There is no exit one: dismissing drops the row from the
+// model and the component goes with it.
+//
+// It paints and nothing else. There is no root TouchArea, so the gaps between
+// cards don't block the layers underneath; only the inner buttons take clicks.
+component NotificationCard inherits Rectangle {
+    // `data` rather than `row`, which Slint reserves as the `for` iteration
+    // variable and refuses to let a property override.
+    in property <NotificationRow> data;
+    private property <bool> shown: false;
+
+    init => { root.shown = true; }
+
+    private property <brush> accent-brush:
+        root.data.variant == "success" ? Theme.green
+        : root.data.variant == "warning" ? Theme.yellow
+        : root.data.variant == "error" ? Theme.danger
+        : Theme.accent;
+
+    private property <string> variant-icon:
+        root.data.variant == "success" ? "check_circle"
+        : root.data.variant == "warning" ? "warning"
+        : root.data.variant == "error" ? "error"
+        : "info";
+
+    height: layout.preferred-height;
+    background: Theme.surface0;
+    border-color: Theme.border;
+    border-width: 1px;
+    border-radius: Theme.radius-md;
+    opacity: root.shown ? 1.0 : 0.0;
+    animate opacity { duration: Theme.dur-fast; easing: ease-out; }
+
+    // The card's `border-radius` masks this bar's right edge, so the accent
+    // never paints past the rounded corners.
+    Rectangle {
+        x: 0;
+        y: 0;
+        width: 4px;
+        height: parent.height;
+        background: root.accent-brush;
+        border-top-left-radius: Theme.radius-md;
+        border-bottom-left-radius: Theme.radius-md;
+    }
+
+    layout := HorizontalLayout {
+        padding-left: 16px; // 4 px accent bar + 12 px inset
+        padding-right: Theme.pad-sm;
+        padding-top: Theme.pad-sm;
+        padding-bottom: Theme.pad-sm;
+        spacing: Theme.pad-sm;
+
+        // Top-aligned so it sits at the start of the title.
+        VerticalLayout {
+            alignment: start;
+            padding-top: 2px;
+            MaterialIcon {
+                name: root.variant-icon;
+                icon-size: 20px;
+                icon-color: root.accent-brush;
+            }
+        }
+
+        VerticalLayout {
+            horizontal-stretch: 1;
+            spacing: 2px;
+            alignment: start;
+            Text {
+                text: root.data.title;
+                color: Theme.text;
+                font-size: Theme.font-size-md;
+                font-weight: 600;
+                wrap: word-wrap;
+            }
+            // An `if` rather than `visible: false`, which would still reserve
+            // the text line for an empty message.
+            if root.data.message != "": Text {
+                text: root.data.message;
+                color: Theme.subtext0;
+                font-size: Theme.font-size-sm;
+                wrap: word-wrap;
+            }
+        }
+
+        // Filled, so the action reads as a button rather than a label, and
+        // centred against the text column to line up with the close beside it.
+        if root.data.action-label != "": VerticalLayout {
+            alignment: center;
+            SectionButton {
+                label: root.data.action-label;
+                icon: "";
+                primary: true;
+                clicked => {
+                    Notifications.action(root.data.id, root.data.action-kind);
+                }
+            }
+        }
+
+        // Kept small so it doesn't dominate the card, and centred with the
+        // action pill beside it.
+        VerticalLayout {
+            alignment: center;
+            IconButton {
+                icon: "close";
+                icon-size: 16px;
+                diameter: 24px;
+                // A step up from the card's own fill, so the hover reads.
+                hover-bg: Theme.surface1;
+                clicked => {
+                    Notifications.dismiss(root.data.id);
+                }
+            }
+        }
+    }
+}
+
+// Paints `Notifications.rows` as a bottom-right anchored stack. Mounted once at
+// the AppWindow root beside `DialogOverlay`, and sized to the whole window so
+// its inner stack's absolute coordinates resolve against the viewport.
+//
+// Newest sits at the bottom: Rust appends, the layout renders in model order,
+// and `alignment: end` pins the stack to the bottom edge — so a later row lands
+// closest to the corner and older ones slide up as it arrives.
+export component NotificationStack inherits Rectangle {
+    // The caller keeps the outer Rectangle at full size, so the children can
+    // compute their right- and bottom-edge insets against the whole window.
+    inner := VerticalLayout {
+        x: parent.width - self.width - 16px;
+        y: parent.height - self.preferred-height - 16px - Theme.now-playing-h;
+        width: 360px;
+        height: self.preferred-height;
+        spacing: 8px;
+        alignment: end;
+
+        for row[i] in Notifications.rows: NotificationCard {
+            data: row;
+            width: 100%;
+        }
+    }
+}

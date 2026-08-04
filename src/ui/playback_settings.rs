@@ -28,7 +28,7 @@
 //!   (drag release, persists), like `set-volume` / `commit-volume`.
 //!
 //! The default (`true`) is enforced in two places that already agree:
-//! `PlaybackFlags::default()` (`src/services/settings.rs`) and
+//! `PlaybackFlags::default()` (`src/services/settings/data.rs`) and
 //! `PlayerState::default()` (`src/player/state.rs`). First-launch
 //! installs read no `settings.json`, fall through to defaults, and the
 //! toggle paints ON.
@@ -44,7 +44,7 @@ use crate::{AppWindow, Settings};
 
 /// Stable mapping between the on-disk token and the Slint chip index.
 /// Kept in lock-step with the `[None, Equalizer]` literal in
-/// `ui/views/settings/playback-section.slint` — both sides must agree
+/// `melodia-ui/ui/views/settings/playback-section.slint` — both sides must agree
 /// on the order or the chip will paint the wrong selection. Anything
 /// unrecognised (including the retired `"ripple"` token) lands on None
 /// (idx 0), matching `SettingsData::default().play_button_animation`.

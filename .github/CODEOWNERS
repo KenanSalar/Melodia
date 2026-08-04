@@ -10,3 +10,7 @@
 # Protect CI/CD workflows — these run with repo secrets
 # and can be abused to exfiltrate them or alter releases.
 /.github/workflows/ @KenanSalar
+
+# Same reach, same protection: a composite action runs
+# inside the workflow that calls it, with its permissions.
+/.github/actions/ @KenanSalar

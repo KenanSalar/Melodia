@@ -1,0 +1,48 @@
+import { Theme } from "../theme.slint";
+import { MaterialIcon } from "material-icon.slint";
+
+// Inline 0–5 rating: five glyphs, each with its own `TouchArea` so hit-testing
+// is per-star. Clicking the current top star clears the rating, the heart's
+// click-again-to-toggle-off affordance.
+//
+// Inside a track row this must stay a *descendant* of the row's own `touch`, so
+// hovering a star keeps `has-hover` true and the strip stays mounted — the
+// reason the favorite and checkbox TouchAreas live there too.
+export component StarRating {
+    in property <int> rating;              // 0–5 (values outside are clamped by callers)
+    in property <bool> enabled: true;
+    in property <length> star-size: 18px;
+    // The track-list treatment. Now Playing overrides them, tinting the whole
+    // star / heart group with the per-artwork accent.
+    in property <brush> filled-color: Theme.yellow;
+    in property <brush> empty-color: Theme.subtext0;
+
+    callback rated(int /*new_rating*/);
+
+    HorizontalLayout {
+        spacing: 1px;
+        alignment: start;
+
+        for i in 5: Rectangle {
+            property <int> idx: i + 1;
+            width: root.star-size;
+            height: root.star-size;
+
+            MaterialIcon {
+                name: parent.idx <= root.rating ? "star" : "star_border";
+                icon-size: root.star-size;
+                icon-color: parent.idx <= root.rating ? root.filled-color : root.empty-color;
+                filled: parent.idx <= root.rating;
+            }
+
+            TouchArea {
+                mouse-cursor: root.enabled ? pointer : default;
+                clicked => {
+                    if (root.enabled) {
+                        root.rated(parent.idx == root.rating ? 0 : parent.idx);
+                    }
+                }
+            }
+        }
+    }
+}

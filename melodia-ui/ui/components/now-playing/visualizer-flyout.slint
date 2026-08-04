@@ -1,0 +1,37 @@
+import { Theme } from "../../theme.slint";
+import { PopupSurface } from "../popup-surface.slint";
+import { FlyoutOption } from "flyout-option.slint";
+import { VizStylePresets } from "flyout-presets.slint";
+
+// An "Off" row over one row per shared style preset. Like the sleep flyout it
+// lives *inside* the menu's one PopupWindow, left of the column; the host places
+// it and this renders the rows.
+//
+// The style rows take their loop index directly, so the leading "Off" row can't
+// shift them out of step with `STYLES` in `src/ui/visualizer/mod.rs`.
+export component VisualizerFlyout inherits PopupSurface {
+    // Wins over the style: off, the pick is still persisted but nothing is
+    // drawn, so "Off" is the active row whatever `current-index` says.
+    in property <bool> viz-enabled;
+    in property <int> current-index;
+
+    // `-1` = "Off"; otherwise an index into `VizStylePresets.viz-style-names`.
+    callback pick(int);
+
+    VerticalLayout {
+        padding: Theme.pad-xs;
+        spacing: 0;
+
+        FlyoutOption {
+            label: @tr("Off");
+            active: !root.viz-enabled;
+            clicked => { root.pick(-1); }
+        }
+
+        for name[i] in VizStylePresets.viz-style-names: FlyoutOption {
+            label: name;
+            active: root.viz-enabled && i == root.current-index;
+            clicked => { root.pick(i); }
+        }
+    }
+}

@@ -26,6 +26,12 @@ pub(super) fn wire(ui: &AppWindow, search_ui: &Arc<SearchUi>) {
     // Top Result cover routes per kind — album → album-strip tier,
     // artist → artist-strip tier. Cache parity with the strip below
     // means clicking a strip card after the top card hits a warm LRU.
+    // A genre still reaches this, with an empty path — `ArtworkImage`
+    // reads `cover` in every one of its branch conditions, so the card's
+    // binding evaluates whatever the kind is. `get_or_load_opt` filters
+    // the empty string to `Image::default()`, so which tier it lands in
+    // is a no-op and the card paints its gradient branch. Same for a
+    // coverless album or artist, which is why the `else` needs no arm.
     {
         let su = search_ui.clone();
         let weak = weak.clone();

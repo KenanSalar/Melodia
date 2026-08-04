@@ -341,6 +341,50 @@ pub async fn update_album_artwork_from_tracks(
     Ok(())
 }
 
+/// Delete album, artist, and genre rows left with no tracks — orphans stranded
+/// by a retag that moved a track to a different album/genre, or by a track
+/// deletion that removed a parent's last member. Nothing else prunes these: the
+/// stats triggers decrement counts on the emptied row but never delete it.
+///
+/// Order matters — albums first, so an artist whose only album just emptied
+/// becomes prunable in the same pass; then artists, except the id-1 "unknown"
+/// default that `albums.artist_id` falls back to. `artists.album_count` has no
+/// delete-side trigger, so it's recomputed afterwards. Genres share no FK with
+/// albums/artists and have no sentinel, so they're pruned independently.
+pub async fn prune_orphans(tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>) -> Result<(), AppError> {
+    sqlx::query(
+        "DELETE FROM albums \
+         WHERE NOT EXISTS (SELECT 1 FROM tracks WHERE tracks.album_id = albums.id)",
+    )
+    .execute(&mut **tx)
+    .await?;
+
+    sqlx::query(
+        "DELETE FROM artists \
+         WHERE id <> 1 \
+           AND NOT EXISTS (SELECT 1 FROM tracks WHERE tracks.artist_id = artists.id) \
+           AND NOT EXISTS (SELECT 1 FROM albums WHERE albums.artist_id = artists.id)",
+    )
+    .execute(&mut **tx)
+    .await?;
+
+    sqlx::query(
+        "DELETE FROM genres \
+         WHERE NOT EXISTS (SELECT 1 FROM tracks WHERE tracks.genre_id = genres.id)",
+    )
+    .execute(&mut **tx)
+    .await?;
+
+    sqlx::query(
+        "UPDATE artists \
+         SET album_count = (SELECT COUNT(*) FROM albums WHERE albums.artist_id = artists.id)",
+    )
+    .execute(&mut **tx)
+    .await?;
+
+    Ok(())
+}
+
 /// Delete a single track by file path.
 /// The `tracks_stats_delete` trigger fires automatically, keeping stats correct.
 pub async fn delete_track_by_path(

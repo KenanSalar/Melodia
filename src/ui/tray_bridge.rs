@@ -21,7 +21,7 @@ use std::sync::{Arc, Mutex};
 
 use slint::ComponentHandle;
 
-use crate::{AppWindow, Settings};
+use crate::{AppWindow, Settings, Visualizer};
 use crate::player::event_sink::{EventSink, PlayerEvent};
 use crate::player::state::PlayerViewModelLight;
 use crate::services::tray::{self, TRAY_ACTION_CHANNEL_CAP, TrayAction, TraySnapshot};
@@ -71,16 +71,49 @@ pub fn should_hide_to_tray() -> bool {
     CLOSE_TO_TRAY.load(Ordering::Relaxed) && TRAY_ACTIVE.load(Ordering::Relaxed)
 }
 
-/// Update the visibility shadow from outside this module. Two call sites:
+/// Update the visibility shadow from outside this module. Three call sites:
 /// the titlebar minimize handler (drops it to `false` after
-/// `xdg_toplevel.set_minimized`) and the winit `Focused(true)` listener
-/// (raises it back to `true` when `KWin` restores via the taskbar). Without
-/// these hooks the shadow desynchronises from reality and the next tray
-/// click does the wrong thing — most visibly: after a button-minimize the
-/// tray click hides the (already-minimized) surface, forcing the user to
-/// click the tray a second time to actually restore the window.
-pub fn set_window_visible(visible: bool) {
+/// `xdg_toplevel.set_minimized`), the deferred `is_minimized` probe the winit
+/// filter runs after a focus loss (catches a minimize the OS chrome or the
+/// taskbar drove), and the winit `Focused(true)` listener (raises it back to
+/// `true` when the window is restored). Without these hooks the shadow
+/// desynchronises from reality and the next tray click does the wrong thing —
+/// most visibly: after a button-minimize the tray click hides the
+/// (already-minimized) surface, forcing the user to click the tray a second
+/// time to actually restore the window.
+///
+/// `Visualizer.window-shown` moves with it. The visualizer's Timer gates on
+/// the Slint half and its tick reads the atomic, so the two must never
+/// disagree — hence one writer rather than two. That gate is also why hiding
+/// has to hand the visualizer its own notice rather than leave it to the next
+/// tick: lowering `window-shown` can stop the Timer that would have run it.
+pub fn set_window_visible(ui: &AppWindow, visible: bool) {
     WINDOW_VISIBLE.store(visible, Ordering::Relaxed);
+    let viz = ui.global::<Visualizer>();
+    viz.set_window_shown(visible);
+    if visible {
+        // The strip may have gone dormant while it was off screen, leaving its
+        // Timer down at the polling rate — where it would take another half a
+        // second to work out that it is being drawn again. This *is* that
+        // notice, so hand it over rather than making it infer the same thing.
+        viz.set_dormant(false);
+    } else {
+        // The audio tap can't wait for the strip's next tick to be disarmed:
+        // `window-shown` gates that Timer too, so on an already-settled drawing
+        // the `set_window_shown` above just stopped it outright.
+        viz.invoke_window_hidden();
+    }
+}
+
+/// Read the visibility shadow. For UI work that keeps running off a `Timer`
+/// while the window is hidden — Slint timers fire off the event loop, not the
+/// render loop, and the loop deliberately stays alive through a close-to-tray
+/// hide. Covers the tray hide and every minimize the OS will admit to; Wayland
+/// tells a client nothing about being minimized, so this is a cheap gate rather
+/// than a guarantee, and `ui::visualizer::pulse` is what covers the rest.
+#[must_use]
+pub fn is_window_visible() -> bool {
+    WINDOW_VISIBLE.load(Ordering::Relaxed)
 }
 
 /// Hide the main window to the tray. Snapshots the current size + position
@@ -91,12 +124,13 @@ pub fn set_window_visible(visible: bool) {
 /// hiding mid-dispatch leaves the winit window `Arc` borrowed by the
 /// dispatcher, and Slint then logs "request to hide window failed because
 /// references to the window still exist".
-pub fn hide_window(window: &slint::Window) {
+pub fn hide_window(ui: &AppWindow) {
+    let window = ui.window();
     if let Ok(mut slot) = SAVED_WINDOW_GEOM.lock() {
         *slot = Some((window.size(), window.position()));
     }
     match window.hide() {
-        Ok(()) => WINDOW_VISIBLE.store(false, Ordering::Relaxed),
+        Ok(()) => set_window_visible(ui, false),
         Err(e) => log::warn!("tray: failed to hide the window: {e}"),
     }
 }
@@ -110,12 +144,11 @@ pub fn hide_window(window: &slint::Window) {
 /// 2. **`None`**: surface is still mapped, but the window was minimized via
 ///    the titlebar button. Wayland exposes no client-side un-minimize:
 ///    `xdg_toplevel` has `set_minimized` but no inverse, and winit's
-///    `focus_window` is a documented no-op on Wayland
-///    (`winit/src/platform_impl/linux/wayland/window/mod.rs:629`). The only
-///    reliable way to bring the surface back from inside the app is to
-///    destroy and recreate it via `hide()` + `show()`. The current geometry
-///    is snapshotted first so the recreated surface lands where the
-///    button-minimized window was, not at the content-preferred minimum.
+///    `focus_window` is an empty no-op on Wayland
+///    (`winit/src/platform_impl/linux/wayland/window/mod.rs`). The only way
+///    back from inside the app is to destroy and recreate the surface via
+///    `hide()` + `show()`. Geometry is snapshotted first so it lands where
+///    the minimized window was, not at the content-preferred minimum.
 ///
 /// Both branches converge on the same `set_size` + `reschedule_geometry_restore`
 /// path: Slint's first layout pass on the new winit window snaps it to the
@@ -164,7 +197,7 @@ fn show_window(ui: &AppWindow) {
     );
     reschedule_geometry_restore(ui.as_weak(), size, position, RESTORE_ATTEMPTS);
 
-    WINDOW_VISIBLE.store(true, Ordering::Relaxed);
+    set_window_visible(ui, true);
 }
 
 /// Re-assert `size` + `position` on the window from a 16 ms single-shot timer,
@@ -311,7 +344,7 @@ fn dispatch_action(
 fn toggle_window(ui_weak: &slint::Weak<AppWindow>) {
     let Some(ui) = ui_weak.upgrade() else { return };
     if WINDOW_VISIBLE.load(Ordering::Relaxed) {
-        hide_window(ui.window());
+        hide_window(&ui);
     } else {
         show_window(&ui);
     }

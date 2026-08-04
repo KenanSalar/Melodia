@@ -1,0 +1,32 @@
+// Debounces filter-box keystrokes: the host bumps `pending` on every `edited`,
+// and this fires at most once per `interval` while `pending` runs ahead of the
+// last-applied tick — collapsing a fast typist's burst into roughly one
+// re-filter. Non-visual, so mount it anywhere in a view's tree.
+//
+// Every view with a filter box mounts one, in place of the hand-rolled counter
+// pair each used to carry inline.
+//
+// **`fire()` has two shapes.** Usually it's a Rust round-trip, since a keystroke
+// costs a model rebuild. Settings assigns one Slint property from another
+// instead: a query there mounts all five tab pages and fans out to several
+// `matches` calls per row, so the expensive work is Slint's own re-evaluation
+// and the settled value has to be a property the sections can read.
+export component FilterThrottle {
+    // Debounce cadence. ~130 ms sits comfortably below "feels laggy".
+    in property <duration> interval: 130ms;
+    // Monotonic keystroke counter; the host bumps this on each `edited`.
+    in property <int> pending;
+    // Fired once per settled burst — the host runs its re-filter here.
+    callback fire();
+
+    private property <int> applied: 0;
+
+    Timer {
+        interval: root.interval;
+        running: root.pending != root.applied;
+        triggered() => {
+            root.applied = root.pending;
+            root.fire();
+        }
+    }
+}

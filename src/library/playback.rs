@@ -7,19 +7,37 @@ use crate::player::state::{lock_state, play_track_inner, with_state_emit};
 use crate::player::types::PlaybackStatus;
 use crate::state::PlaybackContext;
 
-pub async fn player_play_track(ctx: &PlaybackContext, track_id: i64) -> Result<(), AppError> {
-    let summary = queries::track::get_track_summary_by_id(&ctx.db, track_id)
-        .await?
-        .ok_or_else(|| AppError::NotFound(format!("track {track_id}")))?;
-    let summary = Arc::new(summary);
-
-    ctx.emit_and_execute(|s| {
-        s.queue.set_direct_play(Arc::clone(&summary));
-        play_track_inner(s, summary, None)
-    });
-    Ok(())
+/// Which slot of `summaries` playback should start on.
+///
+/// `start_index` names a row in `track_ids` — the list the caller was looking
+/// at — but `get_track_summaries_by_ids` drops ids that no longer exist, so the
+/// two index spaces diverge the moment one row is gone and every slot past the
+/// gap shifts. Resolving through the id keeps the picked track picked. `None`
+/// means there is no slot to start on: the caller picked no row at all, the
+/// index it passed is past the end of its own list, or the row it picked didn't
+/// survive. The caller falls back to the head and warns on the last two — they
+/// are different faults, and the messages say which.
+fn resolve_start_slot(
+    track_ids: &[i64],
+    summaries: &[Arc<TrackSummary>],
+    start_index: Option<usize>,
+) -> Option<usize> {
+    let wanted = start_index.and_then(|i| track_ids.get(i).copied())?;
+    summaries.iter().position(|t| t.id == wanted)
 }
 
+/// Replace the queue with `track_ids` and start at `start_index` (`None` =
+/// head). Every way of starting playback from a browsing surface routes here —
+/// activating a row passes the clicked slot, the header Shuffle pill passes a
+/// random one — so the queue always ends up being the list the user was
+/// looking at.
+///
+/// With shuffle already on, the rest of the list is shuffled behind the chosen
+/// track rather than played in display order: a freshly seeded `play_order` is
+/// the identity permutation, so without this the transport's shuffle button
+/// would stay lit while playback walked the album straight through.
+/// `original_order` is left as seeded, so turning shuffle back off restores
+/// display order.
 pub async fn player_play_tracks(
     ctx: &PlaybackContext,
     track_ids: Vec<i64>,
@@ -36,12 +54,27 @@ pub async fn player_play_tracks(
         return Err(AppError::Queue("No valid tracks provided".to_owned()));
     }
 
-    let start = start_index.unwrap_or(0).min(summaries.len() - 1);
+    let start = resolve_start_slot(&track_ids, &summaries, start_index).unwrap_or_else(|| {
+        match start_index {
+            None => {}
+            Some(i) if i >= track_ids.len() => log::warn!(
+                "play_tracks: start_index {i} is past the {} ids handed in; starting at the head",
+                track_ids.len()
+            ),
+            Some(_) => log::warn!(
+                "play_tracks: the picked track didn't survive the fetch; starting at the head"
+            ),
+        }
+        0
+    });
     ctx.emit_and_execute(|s| {
         s.queue.clear();
         s.queue.add_tracks(summaries);
         s.queue.current_index = Some(start);
-        s.queue.clear_direct_play();
+        if s.queue.shuffle_enabled {
+            s.queue
+                .shuffle_play_order_in_place(&mut rand::rng(), /* anchor_to_current */ true);
+        }
 
         if let Some(track) = s.queue.get_current().cloned() {
             play_track_inner(s, track, None)
@@ -285,6 +318,11 @@ pub fn player_set_crossfade_skip_same_album(ctx: &PlaybackContext, on: bool) {
 pub fn player_set_crossfade_fade_on_pause(ctx: &PlaybackContext, on: bool) {
     ctx.rodio.set_crossfade_fade_on_pause(on);
 }
+
+// The visualizer has no setter here on purpose: its tap is armed by the
+// Now-Playing view's visibility rather than by a persisted setting, so
+// `crate::ui::visualizer` calls `VisualizerShared::set_enabled` on the cell it
+// already holds — `RodioPlayer::visualizer()` — for snapshotting.
 
 #[cfg(test)]
 #[path = "tests/playback_tests.rs"]

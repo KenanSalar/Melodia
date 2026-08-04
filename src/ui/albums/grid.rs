@@ -1,9 +1,7 @@
 //! Albums grid: DB fetch + filter / sort / chunk / prewarm logic, plus the
 //! display-aware cover-cache cap tuner.
 
-use std::num::NonZeroUsize;
 use std::path::PathBuf;
-use std::rc::Rc;
 use std::sync::Arc;
 
 use slint::{ComponentHandle, Model, ModelRc, VecModel, Weak};
@@ -15,16 +13,17 @@ use super::{AlbumsUi, to_slint_album_row};
 use crate::error::AppResult;
 use crate::library;
 use crate::state::AppState;
-use crate::{
-    AlbumGridRow as UiAlbumGridRow, AlbumRow as UiAlbumRow, Albums, AppWindow,
-};
+use crate::ui::grid_rows::chunk_rows;
+use crate::ui::row_match;
+use crate::ui::util::len_as_i32;
+use crate::{AlbumGridRow as UiAlbumGridRow, Albums, AppWindow};
 
 /// Fetch the album list from the DB into `albums_ui.grid.data`, prewarm
 /// cover thumbnails, then rebuild the grid model on the UI thread. Async —
 /// runs on the tokio runtime; the UI write hops back via
 /// `upgrade_in_event_loop`. Called once at startup and from the
-/// library-changed subscriber. The pre-lowercased search / sort keys are
-/// built here (on the worker), not per keystroke on the UI thread.
+/// library-changed subscriber. The pre-lowercased sort keys are built here
+/// (on the worker), not per sort click on the UI thread.
 pub async fn fetch_grid(
     state: &AppState,
     albums_ui: &Arc<AlbumsUi>,
@@ -110,7 +109,7 @@ pub fn rebuild_grid(ui: &AppWindow, albums_ui: &AlbumsUi) {
         let indices = cache.as_ref().map_or(&[][..], |c| c.indices.as_slice());
         chunk_indices(&data, indices, columns)
     };
-    let total = i32::try_from(data.albums.len()).unwrap_or(i32::MAX);
+    let total = len_as_i32(data.albums.len());
 
     g.set_total_count(total);
     let model = g.get_grid_rows();
@@ -122,23 +121,31 @@ pub fn rebuild_grid(ui: &AppWindow, albums_ui: &AlbumsUi) {
 }
 
 /// Filter + sort the grid data into a display-order list of album indices.
-/// Pure / no UI state. The filter walk and the name / artist sorts read
-/// `data.keys` (pre-lowercased in `fetch_grid`), so this allocates nothing
-/// per album beyond the index `Vec` itself.
+/// Pure / no UI state. The name / artist sorts read `data.keys`
+/// (pre-lowercased in `fetch_grid`); the filter walks the raw fields
+/// through `row_match`, which folds only the rows that carry an accent.
+///
+/// Matching `year` is what lets a query the Search view answers with a
+/// decade ("199") narrow this grid too — `AlbumStats` carries it, so it
+/// costs one predicate rather than a query.
 pub(super) fn compute_indices(
     data: &GridData,
     sort_field: &str,
     sort_dir: &str,
     filter: &str,
 ) -> Vec<usize> {
-    let needle = filter.trim().to_lowercase();
+    let needle = row_match::fold_needle(filter);
     let mut indices: Vec<usize> = if needle.is_empty() {
         (0..data.albums.len()).collect()
     } else {
-        data.keys
+        data.albums
             .iter()
             .enumerate()
-            .filter(|(_, k)| k.name_lc.contains(&needle) || k.artist_lc.contains(&needle))
+            .filter(|(_, a)| {
+                needle.contains(&a.name)
+                    || needle.contains(&a.artist_name)
+                    || needle.matches_year(a.year)
+            })
             .map(|(i, _)| i)
             .collect()
     };
@@ -150,18 +157,12 @@ pub(super) fn compute_indices(
 /// cards. Pure; this is the only step a `columns-changed` rebuild has to
 /// redo (the filter+sort `indices` are reused from `grid.index_cache`).
 fn chunk_indices(data: &GridData, indices: &[usize], columns: i32) -> Vec<UiAlbumGridRow> {
-    let cols = usize::try_from(columns.max(1)).unwrap_or(1);
-    let mut rows: Vec<UiAlbumGridRow> = Vec::with_capacity(indices.len().div_ceil(cols));
-    for chunk in indices.chunks(cols) {
-        let cards: Vec<UiAlbumRow> = chunk
-            .iter()
-            .map(|&i| to_slint_album_row(&data.albums[i]))
-            .collect();
-        rows.push(UiAlbumGridRow {
-            albums: ModelRc::from(Rc::new(VecModel::from(cards))),
-        });
-    }
-    rows
+    chunk_rows(
+        indices,
+        columns,
+        |&i| to_slint_album_row(&data.albums[i]),
+        |albums| UiAlbumGridRow { albums },
+    )
 }
 
 /// Sort `indices` into the grid data by the chosen field. `album_stats` is
@@ -184,97 +185,27 @@ fn sort_album_indices(indices: &mut [usize], data: &GridData, field: &str, dir: 
     }
 }
 
-/// The deduplicated artwork paths of the first `GRID_PREWARM_AHEAD`
-/// (name-sorted) albums — the covers first on screen. Shared by
-/// `fetch_grid` and `AlbumsUi::prewarm_visible_covers`.
+/// The first `GRID_PREWARM_AHEAD` distinct artwork paths in display
+/// (name-sorted) order — the covers first on screen. Shared by
+/// `fetch_grid` and `AlbumsUi::prewarm_visible_covers`. The cap counts
+/// kept *paths*, so a run of covertless albums is walked past rather than
+/// spending the budget on them.
 pub(super) fn first_screenful_paths(data: &GridData) -> Vec<PathBuf> {
     crate::ui::grid_prewarm::unique_artwork_paths(
-        data.albums
-            .iter()
-            .take(GRID_PREWARM_AHEAD)
-            .map(|a| a.artwork_path.as_deref()),
+        data.albums.iter().map(|a| a.artwork_path.as_deref()),
+        GRID_PREWARM_AHEAD,
     )
 }
 
 // --- Cap tuning -----------------------------------------------------------
 
-/// Estimate a sensible grid-cover LRU capacity for a display of the given
-/// *logical* (DPI-divided) pixel dimensions. The grid virtualizes by row,
-/// so the working set is "cards visible at once" — a bigger panel shows
-/// more.
-///
-/// The flex-filled grid cards are *large* (the user runs them well past
-/// 200 px), so this uses a generous footprint (~260 px wide incl. gap,
-/// ~320 px tall incl. text + gap) — a smaller footprint over-counts what's
-/// really on screen. `rows` adds one partial row as the only scroll-back
-/// headroom: no extra multiplier, because even fullscreen at 1440p only
-/// ~50 cards are visible at once, so a 1.5× cushion was just dead weight.
-/// Clamped to `[32, 96]` — at 448 px / ~600 KB per entry that's a
-/// ~19–58 MB band, and the cache is released entirely when the user
-/// leaves the section anyway. The footprint constants and clamps are the
-/// tunable knobs. Lands ≈ 1080p → 35, 1440p → 54, 4K → 96.
-pub(super) fn compute_album_cover_cap(logical_w: u32, logical_h: u32) -> NonZeroUsize {
-    const CARD_FOOTPRINT_W: u32 = 260;
-    const ROW_FOOTPRINT_H: u32 = 320;
-    const MIN_CAP: usize = 32;
-    const MAX_CAP: usize = 96;
-
-    let cols = (logical_w / CARD_FOOTPRINT_W).max(1);
-    // `+ 1` for the partially-visible row — the only scroll headroom.
-    let rows = logical_h.div_ceil(ROW_FOOTPRINT_H) + 1;
-    let visible = usize::try_from(cols.saturating_mul(rows)).unwrap_or(MAX_CAP);
-    let cap = visible.clamp(MIN_CAP, MAX_CAP);
-    NonZeroUsize::new(cap).unwrap_or(DEFAULT_GRID_COVER_CAP)
-}
-
-/// Convert a physical pixel extent + DPI scale into a logical extent.
-/// Saturating boundary for the `f64 → u32` step — mirrors
-/// `media::artwork::f64_to_pixel`; monitor extents stay far below
-/// `u32::MAX` in practice.
-#[allow(
-    clippy::cast_possible_truncation,
-    clippy::cast_sign_loss,
-    reason = "logical screen extent stays well below u32::MAX; this is the saturating boundary"
-)]
-fn logical_dim(physical: u32, scale: f64) -> u32 {
-    let scale = if scale > 0.0 { scale } else { 1.0 };
-    let v = (f64::from(physical) / scale).round();
-    if v.is_nan() || v <= 0.0 {
-        physical
-    } else if v >= f64::from(u32::MAX) {
-        u32::MAX
-    } else {
-        v as u32
-    }
-}
-
-/// Query the window's current monitor and derive a grid-cover cap from
-/// its logical resolution. Falls back to `DEFAULT_GRID_COVER_CAP` when
-/// the monitor can't be read (e.g. some Wayland setups report `None`).
-fn album_cover_cap_for_window(app: &AppWindow) -> NonZeroUsize {
-    use slint::winit_030::WinitWindowAccessor;
-
-    app.window()
-        .with_winit_window(|w| {
-            let monitor = w.current_monitor()?;
-            let physical = monitor.size();
-            let scale = w.scale_factor();
-            Some(compute_album_cover_cap(
-                logical_dim(physical.width, scale),
-                logical_dim(physical.height, scale),
-            ))
-        })
-        .flatten()
-        .unwrap_or(DEFAULT_GRID_COVER_CAP)
-}
-
-/// Retune the grid-tier cover cache to the real display resolution.
-/// Called once at startup after the winit window is live (`main.rs`); the
-/// cache is constructed with `DEFAULT_GRID_COVER_CAP` and resized here.
-/// The detail-tier `(cover, blur)` pair cache keeps its small fixed cap
-/// (see [`crate::ui::detail_artwork`]).
+/// Retune the grid-tier cover cache to the real display resolution. Called
+/// once at startup after the winit window is live (`main.rs`); the cache is
+/// constructed with `DEFAULT_GRID_COVER_CAP` and resized here. The
+/// detail-tier `(cover, blur)` pair cache keeps its small fixed cap (see
+/// [`crate::ui::detail_artwork`]).
 pub fn tune_cache_for_display(app: &AppWindow, albums_ui: &AlbumsUi) {
-    let cap = album_cover_cap_for_window(app);
+    let cap = crate::ui::grid_prewarm::cover_cap_for_window(app, DEFAULT_GRID_COVER_CAP);
     albums_ui.grid_covers.resize(cap);
     log::debug!("ui::albums album-cover cache cap tuned to {cap}");
 }

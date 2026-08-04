@@ -9,7 +9,10 @@
 //!    decode buffer is dropped before quantization, so we only ever hold
 //!    `64 × 64 × 4 = 16 KiB` of pixels.
 //! 2. Run `QuantizerCelebi::quantize` with up to 128 cluster centres, then
-//!    `Score::score(desired = 1)` to pick the best UI-suitable seed colour.
+//!    `Score::score(desired = 1)` to pick the best UI-suitable seed colour —
+//!    falling back to the *dominant* cluster rather than to the crate's own
+//!    Google Blue when the artwork has no colour above the scorer's chroma
+//!    bar. See [`seed_from_pixels`].
 //! 3. Build a `DynamicScheme` of the requested style (`SchemeTonalSpot`,
 //!    `SchemeVibrant`, …) at contrast 0.0 / `is_dark` matching the user's
 //!    variant, then map the M3 roles directly into a [`themes::Palette`].
@@ -20,7 +23,6 @@
 use std::num::NonZeroUsize;
 use std::path::{Path, PathBuf};
 
-use image::ImageReader;
 use image::imageops::FilterType;
 use lru::LruCache;
 use material_colors::color::Argb;
@@ -33,7 +35,8 @@ use material_colors::scheme::variant::{
 use material_colors::score::Score;
 use slint::{Rgb8Pixel, SharedPixelBuffer};
 
-use crate::themes::Palette;
+use crate::media::image_decode::decode_capped;
+use crate::themes::{Palette, material3};
 
 /// One of the seven Material 3 dynamic-colour scheme variants exposed by
 /// the [`material-colors`](https://docs.rs/material-colors) crate, plus a
@@ -115,42 +118,15 @@ const QUANTIZE_MAX_COLOURS: usize = 128;
 /// tests, the future palette debug tool, etc.
 const MATERIAL_YOU_MAX_SOURCE_DIM: u32 = 2048;
 
-/// Decode `artwork_path`, downscale to 64×64 RGBA8, quantize via Celebi,
-/// then score with `desired = 1`. Returns the seed colour as a 32-bit
-/// `0xAARRGGBB` ARGB integer, or `None` on decode/score miss. **Blocking**
-/// — call from `tokio::task::spawn_blocking` only.
+/// Decode `artwork_path`, downscale to 64×64 RGBA8, then take the seed off it
+/// via [`seed_from_pixels`]. Returns the seed colour as a 32-bit `0xAARRGGBB`
+/// ARGB integer, or `None` when the decode failed or left nothing opaque.
+/// **Blocking** — call from `tokio::task::spawn_blocking` only.
 pub fn extract_source_argb(artwork_path: &Path) -> Option<u32> {
-    let reader = match ImageReader::open(artwork_path) {
-        Ok(r) => r,
-        Err(e) => {
-            log::warn!(
-                "material_you: open artwork {}: {e}",
-                artwork_path.display()
-            );
-            return None;
-        }
-    };
-    let mut reader = match reader.with_guessed_format() {
-        Ok(r) => r,
-        Err(e) => {
-            log::warn!(
-                "material_you: guess format {}: {e}",
-                artwork_path.display()
-            );
-            return None;
-        }
-    };
-    let mut limits = image::Limits::default();
-    limits.max_image_width = Some(MATERIAL_YOU_MAX_SOURCE_DIM);
-    limits.max_image_height = Some(MATERIAL_YOU_MAX_SOURCE_DIM);
-    reader.limits(limits);
-    let decoded = match reader.decode() {
+    let decoded = match decode_capped(artwork_path, MATERIAL_YOU_MAX_SOURCE_DIM) {
         Ok(d) => d,
         Err(e) => {
-            log::warn!(
-                "material_you: decode {}: {e}",
-                artwork_path.display()
-            );
+            log::warn!("material_you: decode {}: {e}", artwork_path.display());
             return None;
         }
     };
@@ -179,14 +155,44 @@ pub fn extract_source_argb(artwork_path: &Path) -> Option<u32> {
         pixels.push(Argb::new(0xff, r, g, b));
     }
 
+    seed_from_pixels(&pixels)
+}
+
+/// Quantize `pixels` and score the best UI seed out of the resulting clusters.
+///
+/// `Score` discards every cluster under its own chroma cutoff and answers
+/// Google Blue when nothing survives — a brand colour, not a fact about this
+/// artwork, which is how a greyscale sleeve came to paint vivid blue chrome
+/// over a grey banner. The *dominant* cluster is such a fact: what the image
+/// mostly is, whatever its chroma. Handed over as the fallback it leaves a
+/// colourless cover seeding its own grey — which every consumer then owns the
+/// lightness of — and, being the only fallback named here, keeps the crate's
+/// out of reach rather than merely unlikely.
+///
+/// **The fallback reaches the app-wide palette too, not just the backdrop**, so
+/// which Color Style is picked decides how visible it is. [`SchemeStyle`]'s
+/// `TonalSpot`, `Vibrant`, `Expressive` and `Neutral` force their own primary
+/// chroma, and a neutral sRGB grey still has a CAM16 hue (≈203, the white
+/// point's own), so those land blue-ish much as the scorer's default did.
+/// `Content` and `Fidelity` take the *source's* chroma, which for a grey is
+/// nearly none — so a monochrome sleeve now themes the app near-neutral where
+/// it used to theme it blue. That is the faithful answer and the same one
+/// Android gives a greyscale wallpaper, but unlike [`crate::ui::backdrop`]'s
+/// tiers there is no tone band downstream to put a floor under it.
+///
+/// `None` means the quantizer had nothing to say, and both consumers already
+/// spell that as the theme accent ([`crate::ui::backdrop`]'s `unwrap_or`, and
+/// the static palette in `tasks::material_you`). So there is no last-resort
+/// colour to pick in here, and no layer-crossing theme dependency to acquire
+/// in order to pick one.
+fn seed_from_pixels(pixels: &[Argb]) -> Option<u32> {
     if pixels.is_empty() {
         return None;
     }
-
-    let result = QuantizerCelebi::quantize(&pixels, QUANTIZE_MAX_COLOURS);
-    let scored = Score::score(&result.color_to_count, Some(1), None, None);
-    let best = scored.first()?;
-    Some(argb_to_u32(*best))
+    let counts = QuantizerCelebi::quantize(pixels, QUANTIZE_MAX_COLOURS).color_to_count;
+    let dominant = *counts.iter().max_by_key(|(_, count)| **count)?.0;
+    let seed = *Score::score(&counts, Some(1), Some(dominant), None).first()?;
+    Some(argb_to_u32(seed))
 }
 
 /// Same quantization pipeline as [`extract_source_argb`] but starting from
@@ -201,22 +207,74 @@ pub fn extract_source_argb(artwork_path: &Path) -> Option<u32> {
 /// **Blocking** (CPU-bound quantize) — call from `spawn_blocking`.
 pub fn extract_source_argb_from_rgb8(buf: &SharedPixelBuffer<Rgb8Pixel>) -> Option<u32> {
     let bytes = buf.as_bytes();
-    if bytes.is_empty() {
-        return None;
-    }
     // RGB8 has no alpha → every pixel is opaque, so the alpha-skip branch
     // from `extract_source_argb` collapses to an unconditional push.
     let mut pixels: Vec<Argb> = Vec::with_capacity(bytes.len() / 3);
     for chunk in bytes.chunks_exact(3) {
         pixels.push(Argb::new(0xff, chunk[0], chunk[1], chunk[2]));
     }
-    if pixels.is_empty() {
-        return None;
+    seed_from_pixels(&pixels)
+}
+
+/// Move `argb` into the `min_tone..=max_tone` HCT lightness band, leaving hue
+/// and chroma alone; returns it unchanged when it is already inside.
+///
+/// This is the M3 way to make an arbitrary extracted colour legible on a known
+/// surface: tone *is* the contrast axis, so flooring it lifts a near-black
+/// artwork accent into view while keeping the colour recognisably the album's.
+/// A naive multiplicative brighten (Slint's `.brighter()`) can't do this — it
+/// scales HSV value, so anything near black stays near black.
+///
+/// **The ceiling is not symmetric with the floor in what it's for.** The floor
+/// buys contrast; the ceiling stops a seed that is already near-white from
+/// out-shining everything solved beside it — a pure-white sleeve quantizes to
+/// tone 100, which is above every text band there is. Leaving the seed
+/// untouched *inside* the band is what keeps a bright accent's own chroma
+/// rather than dragging it to a bound it didn't need.
+///
+/// Note the round-trip is gamut-mapped: at high tones sRGB can't hold the
+/// original chroma, so a saturated seed comes back a little less saturated.
+/// That's the correct trade — legibility is the point.
+///
+/// A bound outside the valid 0..=100 HCT range doesn't panic: `set_tone`
+/// forwards to the solver, which answers an out-of-range lightness with a plain
+/// greyscale `Argb::from_lstar`. An *inverted* band is the one shape that does
+/// — `f64::clamp` panics on `min > max`, and it runs before the solver ever
+/// sees the tone — so the ordering is asserted in debug.
+pub fn clamp_to_tone_band(argb: u32, min_tone: f64, max_tone: f64) -> u32 {
+    debug_assert!(
+        min_tone <= max_tone,
+        "inverted tone band {min_tone}..={max_tone}"
+    );
+    let mut hct = Hct::new(Argb::from_u32(argb));
+    let tone = hct.get_tone();
+    if tone >= min_tone && tone <= max_tone {
+        return argb;
     }
-    let result = QuantizerCelebi::quantize(&pixels, QUANTIZE_MAX_COLOURS);
-    let scored = Score::score(&result.color_to_count, Some(1), None, None);
-    let best = scored.first()?;
-    Some(argb_to_u32(*best))
+    hct.set_tone(tone.clamp(min_tone, max_tone));
+    argb_to_u32(Argb::from(hct))
+}
+
+/// Drive `argb` to exactly `tone`, capping chroma at `max_chroma` and keeping
+/// the hue.
+///
+/// The sibling of [`clamp_to_tone_band`] for surfaces that want the source
+/// colour's *identity* but not its saturation — Now-Playing body text, which
+/// should read as near-white carrying a whisper of the album's warmth rather
+/// than as coloured type. Tone is set unconditionally (not floored): the
+/// caller has already solved it for a contrast target, so landing above it
+/// would be as wrong as landing below.
+///
+/// Order matters — chroma is capped *before* the tone is set, because the
+/// solver gamut-maps against the chroma it is given and a saturated seed
+/// pushed to a high tone comes back desaturated anyway.
+pub fn to_tone_capped_chroma(argb: u32, tone: f64, max_chroma: f64) -> u32 {
+    let mut hct = Hct::new(Argb::from_u32(argb));
+    if hct.get_chroma() > max_chroma {
+        hct.set_chroma(max_chroma);
+    }
+    hct.set_tone(tone);
+    argb_to_u32(Argb::from(hct))
 }
 
 /// Build a `DynamicScheme` of `style` × `is_dark` (contrast = default)
@@ -265,6 +323,17 @@ pub fn generate_palette(source_argb: u32, is_dark: bool, style: SchemeStyle) -> 
     let surface2 = mix_rgb_u32(surface_container_highest, outline);
     let subtext0 = mix_rgb_u32(on_surface_variant, on_surface);
 
+    // Green and yellow come from the static M3 theme rather than the scheme.
+    // A dynamic scheme has no green or yellow role to map, and the three
+    // surfaces reading them — the maximize traffic light, the success/warning
+    // toasts, the star rating — are semantic signals that have to stay
+    // recognisable, so they get the same pair Color Style = None paints.
+    let (green, yellow) = if is_dark {
+        (material3::DARK_GREEN, material3::DARK_YELLOW)
+    } else {
+        (material3::LIGHT_GREEN, material3::LIGHT_YELLOW)
+    };
+
     let palette = Palette {
         base: surface,
         mantle: surface_container_low,
@@ -281,7 +350,8 @@ pub fn generate_palette(source_argb: u32, is_dark: bool, style: SchemeStyle) -> 
         // Match the static M3 palette: `border == surface_container_highest`.
         border: surface_container_highest,
         red: error,
-        ..Palette::fallback_semantics(outline)
+        green,
+        yellow,
     };
 
     (palette, primary)

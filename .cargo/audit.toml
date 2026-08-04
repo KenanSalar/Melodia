@@ -1,8 +1,11 @@
-# cargo-audit config. Consumed by `cargo audit` in `.github/workflows/release.yml`
-# (the `audit` job, which runs `cargo audit --deny unsound --deny unmaintained`).
+# cargo-audit config. Consumed by `.github/actions/cargo-audit`, which runs
+# `cargo audit --deny unsound --deny unmaintained` from two callers: the `audit`
+# job in `pr-validation.yml` (every PR into `dev`) and the one in `release.yml`.
 #
 # `--deny unmaintained` is correct policy: a flagged advisory should block the
-# release until the team decides what to do. The escape hatch lives here.
+# merge until the team decides what to do. The escape hatch lives here — and it
+# now unblocks a PR, not just a release, so an entry is on the critical path of
+# whoever is trying to land unrelated work.
 #
 # Rules for adding an entry to `ignore`:
 #
@@ -24,17 +27,6 @@ ignore = [
     # tracking issue. Build-time only (proc-macro / build.rs).
     # revisit: 2026-08-19
     "RUSTSEC-2025-0141",
-
-    # quick-xml 0.39.4 DoS advisories (quadratic duplicate-attribute check,
-    # unbounded namespace allocation) — pulled only via wayland-scanner
-    # 0.31.10, a build-time proc-macro that parses the *vendored* Wayland
-    # protocol XML shipped in the wayland-protocols crates; no
-    # attacker-controlled input ever reaches it. wayland-scanner pins
-    # quick-xml `^0.39`, so no upgrade path to the fixed >=0.41 exists
-    # until smithay releases against it.
-    # revisit: 2026-10-06
-    "RUSTSEC-2026-0194",
-    "RUSTSEC-2026-0195",
 
     # ttf-parser 0.25.1 unmaintained — pulled via i-slint-compiler /
     # i-slint-core 1.16.1 → resvg 0.47 → usvg → fontdb. Slint 1.16.1 is

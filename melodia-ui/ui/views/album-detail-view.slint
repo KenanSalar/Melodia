@@ -1,0 +1,219 @@
+import { Theme } from "../theme.slint";
+import { AlbumDetail } from "../globals/albums.slint";
+import { HeroBackdrop } from "../globals/hero-backdrop.slint";
+import { Player } from "../globals/player.slint";
+import { DetailHeader } from "../components/detail-header.slint";
+import { HeroChipStrip } from "../components/hero-chip-strip.slint";
+import { ActionPill, PillLabel, PillButton, PillDivider } from "../components/action-pill.slint";
+import { ColumnTogglePopup } from "../components/track-list/column-toggle-popup.slint";
+import { SearchBar } from "../components/search-bar.slint";
+import { TrackList } from "../components/track-list/track-list.slint";
+import { OverlayScrollbar } from "../components/overlay-scrollbar.slint";
+import { FilterThrottle } from "../components/filter-throttle.slint";
+
+// A `DetailHeader` — hero blur, left artwork, bottom-anchored right column — over the
+// shared virtualized `TrackList`, consumed exactly as the Tracks and Browse views
+// consume it and bound to the per-view global.
+//
+// The column toggle is merged into the primary pill, so the action row collapses into a
+// single line beside the artwork; the selection chip rides in its own pill next to it.
+export component AlbumDetailView inherits Rectangle {
+    // The shared throttle, on the interval every filterable view uses.
+    property <int> filter-tick-pending: 0;
+
+    filter-throttle := FilterThrottle {
+        pending: root.filter-tick-pending;
+        fire() => { AlbumDetail.filter-changed(AlbumDetail.filter); }
+    }
+
+    // Catches any click no inner TouchArea consumes and bumps the blur tick.
+    TouchArea {
+        clicked => { AlbumDetail.blur-search-tick += 1; }
+    }
+
+    VerticalLayout {
+        DetailHeader {
+            vertical-stretch: 0;
+            artwork-path: AlbumDetail.album.artwork_path;
+            cover: AlbumDetail.cover;
+            fallback-icon: "album";
+            hero-blur-a: AlbumDetail.blur-img-a;
+            hero-blur-b: AlbumDetail.blur-img-b;
+            hero-blur-use-a: AlbumDetail.blur-use-a;
+            has-hero-blur: AlbumDetail.has-blur;
+            back-clicked => { AlbumDetail.close-detail(); }
+
+            // The right column. Every entry is `vertical-stretch: 0`, so the trailing
+            // spacer collects all the slack and the action row sits at the bottom.
+            HorizontalLayout {
+                vertical-stretch: 0;
+                spacing: Theme.pad-md;
+                alignment: stretch;
+
+                VerticalLayout {
+                    alignment: center;
+                    // `hero-title-size` rather than `page-title-size`, so it carries the
+                    // larger header surface and matches the other five banners. The
+                    // leading LRM keeps a bidi title laid out inside an LTR shell.
+                    Text {
+                        text: "‎" + AlbumDetail.album.name;
+                        color: HeroBackdrop.on-backdrop;
+                        font-size: Theme.hero-title-size;
+                        font-weight: Theme.page-title-weight;
+                        horizontal-alignment: left;
+                        overflow: elide;
+                    }
+                    // **Under the title, inside the title row**, rather than on a row of
+                    // its own — so it rides in the height the `SearchBar` beside it has
+                    // already claimed, which is what leaves the band slack for a wrapped
+                    // second chip row. Gated on being non-empty, so an artist-less album
+                    // leaves the row at exactly the bar's height.
+                    if AlbumDetail.album.artist_name != "": Text {
+                        text: "‎" + AlbumDetail.album.artist_name;
+                        color: HeroBackdrop.on-backdrop;
+                        font-size: Theme.font-size-md;
+                        horizontal-alignment: left;
+                        overflow: elide;
+                    }
+                }
+
+                Rectangle { horizontal-stretch: 1; }
+
+                VerticalLayout {
+                    alignment: center;
+                    SearchBar {
+                        text <=> AlbumDetail.filter;
+                        placeholder: @tr("Filter tracks…");
+                        blur-trigger: AlbumDetail.blur-search-tick;
+                        edited(t) => { root.filter-tick-pending += 1; }
+                    }
+                }
+            }
+            // Built by `ui::hero_chips` off the stats the fetch already returned.
+            HeroChipStrip { }
+
+            // Absorbs the slack, so the action row sits flush with the artwork's lower
+            // edge. It is also the slack a wrapped chip row spends.
+            Rectangle { vertical-stretch: 1; }
+
+            // The primary pill and, when rows are selected, its own.
+            HorizontalLayout {
+                vertical-stretch: 0;
+                spacing: Theme.pad-md;
+                alignment: start;
+
+                // One pill: Shuffle, the column toggle, then the selection chip, which
+                // trails so it reads to the right of the primary actions.
+                ActionPill {
+                    PillButton {
+                        icon: "shuffle";
+                        text: @tr("Shuffle");
+                        clicked => { AlbumDetail.shuffle-album(); }
+                    }
+                    PillDivider { }
+                    ColumnTogglePopup {
+                        show-number  <=> AlbumDetail.show-number;
+                        show-artwork <=> AlbumDetail.show-artwork;
+                        show-artist  <=> AlbumDetail.show-artist;
+                        show-album   <=> AlbumDetail.show-album;
+                        show-genre   <=> AlbumDetail.show-genre;
+                        show-year    <=> AlbumDetail.show-year;
+                        // Meaningless here: every row is the same album.
+                        hide-album: true;
+                        toggled(id) => { AlbumDetail.toggle-column(id); }
+                    }
+                    if AlbumDetail.selected-ids.length > 0: PillDivider { }
+                    if AlbumDetail.selected-ids.length > 0: PillLabel {
+                        text: @tr("{} selected", AlbumDetail.selected-ids.length);
+                    }
+                    if AlbumDetail.selected-ids.length > 0: PillButton {
+                        icon: "close";
+                        tooltip-text: @tr("Clear selection");
+                        clicked => { AlbumDetail.clear-selection(); }
+                    }
+                }
+            }
+        }
+
+        // Inset per-child rather than on the root column, so the list's edges match the
+        // Tracks and Browse views: the root can't pad uniformly because `DetailHeader`
+        // is full-bleed for the hero blur.
+        HorizontalLayout {
+            horizontal-stretch: 1;
+            vertical-stretch: 1;
+            padding-left: Theme.pad-lg;
+            padding-right: Theme.pad-lg;
+            // Matches Artist Detail's own gap, so spacing reads the same across the
+            // detail views.
+            padding-top: Theme.pad-lg;
+
+            tl := TrackList {
+                horizontal-stretch: 1;
+                vertical-stretch: 1;
+
+                rows: AlbumDetail.tracks;
+
+                w-number <=> AlbumDetail.w-number;
+                w-title <=> AlbumDetail.w-title;
+                w-artist <=> AlbumDetail.w-artist;
+                w-album <=> AlbumDetail.w-album;
+                w-genre <=> AlbumDetail.w-genre;
+                w-year <=> AlbumDetail.w-year;
+                w-length <=> AlbumDetail.w-length;
+
+                show-number <=> AlbumDetail.show-number;
+                show-artwork <=> AlbumDetail.show-artwork;
+                show-artist <=> AlbumDetail.show-artist;
+                show-album <=> AlbumDetail.show-album;
+                show-genre <=> AlbumDetail.show-genre;
+                show-year <=> AlbumDetail.show-year;
+                number-mode: "track_number";
+
+                sort-field: AlbumDetail.sort-field;
+                sort-dir: AlbumDetail.sort-dir;
+                playing-track-id: Player.vm.track.id;
+                view-context: "album-detail";
+                view-selected-ids: AlbumDetail.selected-ids;
+
+                request-sort(f) => { AlbumDetail.request-sort(f); }
+                play-row(id, idx) => { AlbumDetail.play-row(id, idx); }
+                play-next(ids) => { AlbumDetail.play-next(ids); }
+                add-to-queue(ids) => { AlbumDetail.add-to-queue(ids); }
+                toggle-row-favorite(ids, on) => { AlbumDetail.toggle-row-favorite(ids, on); }
+                set-row-rating(ids, n) => { AlbumDetail.set-row-rating(ids, n); }
+                select-row(idx, id, sh, ct) => { AlbumDetail.select-row(idx, id, sh, ct); }
+                // A click in the track list blurs the hero SearchBar.
+                request-blur-search => { AlbumDetail.blur-search-tick += 1; }
+                go-to-album(aid) => { AlbumDetail.go-to-album(aid); }
+                go-to-artist(aid) => { AlbumDetail.go-to-artist(aid); }
+                go-to-genre(gid) => { AlbumDetail.go-to-genre(gid); }
+            }
+        }
+    }
+
+    // At the view root, flush with the content panel's rounded edges. `tl` is nested, so
+    // its position comes through `absolute-position`.
+    OverlayScrollbar {
+        horizontal: false;
+        x: parent.width - self.width;
+        y: tl.absolute-position.y - root.absolute-position.y + tl.body-y;
+        width: 10px;
+        height: tl.body-height;
+        visible-size: tl.v-visible-height;
+        content-size: tl.v-viewport-height;
+        offset: tl.v-offset;
+        scroll-to(o) => { tl.set-v-offset(o); }
+    }
+
+    OverlayScrollbar {
+        horizontal: true;
+        x: tl.absolute-position.x - root.absolute-position.x;
+        y: parent.height - self.height;
+        width: tl.width - 10px;
+        height: 10px;
+        visible-size: tl.h-visible-width;
+        content-size: tl.h-viewport-width;
+        offset: tl.h-offset;
+        scroll-to(o) => { tl.set-h-offset(o); }
+    }
+}

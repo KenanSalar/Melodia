@@ -1,43 +1,10 @@
-#![allow(
-    unsafe_code,
-    reason = "env::set_var/remove_var are unsafe in Rust 2024; ENV_LOCK serialises all sibling tests in this module so concurrent mutations can't race, and prev-value restoration is panic-safe via catch_unwind."
-)]
-
 use std::path::PathBuf;
 
 use crate::services::updater::linux_pkg::LinuxPackageFormat;
-use crate::services::updater::test_support::APPIMAGE_ENV_LOCK;
 use crate::services::updater::{install_target, target::current_target_key, target::format_key};
+use crate::test_support::with_appimage_env;
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
-
-/// Helper that lets a test temporarily override `APPIMAGE` for the
-/// duration of a closure, restoring whatever was set before. Holds
-/// the shared [`APPIMAGE_ENV_LOCK`] for the full duration so sibling
-/// tests across the updater test files can't race against each
-/// other's `set_var`/`remove_var` calls.
-fn with_appimage_env<F: FnOnce()>(value: Option<&str>, body: F) {
-    let _guard = APPIMAGE_ENV_LOCK
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner);
-    let prev = std::env::var("APPIMAGE").ok();
-    unsafe {
-        match value {
-            Some(v) => std::env::set_var("APPIMAGE", v),
-            None => std::env::remove_var("APPIMAGE"),
-        }
-    }
-    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(body));
-    unsafe {
-        match prev {
-            Some(p) => std::env::set_var("APPIMAGE", p),
-            None => std::env::remove_var("APPIMAGE"),
-        }
-    }
-    if let Err(payload) = result {
-        std::panic::resume_unwind(payload);
-    }
-}
 
 // ---------------------------------------------------------------------------
 // Pure `format_key` table tests — these run on every host arch and exercise

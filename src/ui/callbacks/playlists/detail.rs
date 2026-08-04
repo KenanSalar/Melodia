@@ -8,7 +8,7 @@ use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel};
 
 use crate::library;
 use crate::state::AppState;
-use crate::ui::callbacks::collect_track_ids;
+use crate::ui::callbacks::{collect_track_ids, play_row_start, spawn_play_then_shuffle};
 use crate::ui::callbacks::macros::{release_detail_hero_images, spawn_logged, wire_row_flag};
 use crate::ui::playlists::{self as playlists_ui_mod, PlaylistsUi};
 use crate::ui::track_list_view::{TrackListColumnState, view_id};
@@ -31,7 +31,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
             // Set before the `playlist-id` write that flips the `if` branch.
             crate::ui::nav_transition::mark_drill_back(&ui);
             g.set_playlist_id(-1);
-            release_detail_hero_images!(g);
+            release_detail_hero_images!(ui, g);
             playlists_ui_mod::clear_detail(&pu);
 
             let pu_swap = pu.clone();
@@ -60,47 +60,25 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
     {
         let s = state.clone();
         let pu = playlists_ui.clone();
-        detail.on_play_all(move || {
-            let ids = pu.detail_track_ids();
-            if ids.is_empty() {
-                return;
-            }
-            let s = s.clone();
-            spawn_logged!(s, "playlists::play_all",
-                library::playback::player_play_tracks(&s.playback_ctx(), ids, Some(0)));
+        detail.on_shuffle_all(move || {
+            spawn_play_then_shuffle(&s, "playlists::shuffle_all", pu.detail_track_ids());
         });
     }
 
+    // play-row: double-click loads the playlist into the queue and starts on
+    // the clicked track.
     {
         let s = state.clone();
         let pu = playlists_ui.clone();
-        detail.on_shuffle_all(move || {
+        detail.on_play_row(move |track_id, idx| {
             let ids = pu.detail_track_ids();
             if ids.is_empty() {
                 return;
             }
+            let start = play_row_start(&ids, i64::from(track_id), idx);
             let s = s.clone();
-            s.runtime.clone().spawn(async move {
-                if let Err(e) =
-                    library::playback::player_play_tracks(&s.playback_ctx(), ids, Some(0)).await
-                {
-                    log::warn!("playlists::shuffle_all play: {e}");
-                    return;
-                }
-                if let Err(e) = library::queue::queue_set_shuffle(&s, true) {
-                    log::warn!("playlists::shuffle_all set_shuffle: {e}");
-                }
-            });
-        });
-    }
-
-    {
-        let s = state.clone();
-        detail.on_play_row(move |track_id, _idx| {
-            let s = s.clone();
-            let id = i64::from(track_id);
             spawn_logged!(s, "playlists::play_row",
-                library::queue::queue_append_unique(&s, id));
+                library::playback::player_play_tracks(&s.playback_ctx(), ids, start));
         });
     }
 
@@ -176,12 +154,11 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
         detail.on_request_sort(move |field| {
             let Some(ui) = weak.upgrade() else { return };
             let g = ui.global::<PlaylistDetail>();
-            let (new_field, new_dir) = if g.get_sort_field().as_str() == field.as_str() {
-                let nd = if g.get_sort_dir().as_str() == "asc" { "desc" } else { "asc" };
-                (field.to_string(), nd.to_string())
-            } else {
-                (field.to_string(), "asc".to_string())
-            };
+            let (new_field, new_dir) = crate::ui::callbacks::next_sort(
+                g.get_sort_field().as_str(),
+                g.get_sort_dir().as_str(),
+                &field,
+            );
             g.set_sort_field(SharedString::from(new_field.as_str()));
             g.set_sort_dir(SharedString::from(new_dir.as_str()));
             playlists_ui_mod::resort_detail(&ui, &pu);
@@ -189,7 +166,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
                 &s,
                 view_id::PLAYLIST_DETAIL,
                 new_field,
-                &new_dir,
+                new_dir,
             );
         });
     }

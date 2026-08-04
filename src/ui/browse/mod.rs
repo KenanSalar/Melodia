@@ -75,10 +75,9 @@ pub struct BrowseUi {
     /// switching.
     pub(super) history: Mutex<Vec<String>>,
     /// Last fetched files in display order (already sorted by the
-    /// current `sort_field` / `sort_dir`) — used by `play-row`,
-    /// `play-all`, the selection helpers, and the favourite toggle to
-    /// recover full row data without round-tripping through the Slint
-    /// model.
+    /// current `sort_field` / `sort_dir`) — used by `play-row`, the
+    /// selection helpers, and the favourite toggle to recover full row
+    /// data without round-tripping through the Slint model.
     pub(super) last_files: Mutex<Vec<BrowseFile>>,
     /// In-memory sort state. Browse can't push an `ORDER BY` to the DB
     /// (it mixes disk-only + DB files), so it re-sorts `last_files`.
@@ -194,7 +193,7 @@ impl BrowseUi {
     }
 
     /// IDs of `last_files` rows that are in the library, in display
-    /// order. `play_all` passes the result to `player_play_tracks`.
+    /// order. `play-row` passes the result to `player_play_tracks`.
     pub fn current_in_library_ids(&self) -> Vec<i64> {
         self.last_files
             .lock()

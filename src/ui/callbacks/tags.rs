@@ -1,6 +1,6 @@
 //! Edit-Track-Information dialog callbacks.
 //!
-//! The `TagEditor` global (`ui/globals.slint`) is Rust-owned: `request-edit`
+//! The `TagEditor` global (`melodia-ui/ui/globals/dialog-forms.slint`) is Rust-owned: `request-edit`
 //! fetches the selected rows and fills the fields + cover, `pick-artwork` /
 //! `remove-artwork` drive the cover panel, and `commit` (fired by the
 //! `Dialog.accepted` dispatcher) diffs the form against the populate-time
@@ -28,10 +28,11 @@ use crate::entities::track::TagEditRow;
 use crate::error::AppError;
 use crate::library;
 use crate::library::tags::TagEditReport;
+use crate::media::image_decode::{MAX_SOURCE_DIM, decode_capped};
 use crate::media::tag_writer::{self, ArtworkEdit, FieldEdit, TagEdit};
 use crate::state::AppState;
 use crate::ui::notifications::{NotificationParams, NotificationsUi};
-use crate::ui::util::buffer_from_rgb;
+use crate::ui::util::{COVER_SIZE, buffer_from_rgb};
 use crate::{AppWindow, Dialog, Settings, TagEditor};
 
 /// Canonical field order, shared by the three positional lists that must stay
@@ -54,14 +55,6 @@ const LYRICS: usize = 12;
 
 /// Number of editable fields (`title`..`lyrics`).
 const FIELD_COUNT: usize = LYRICS + 1;
-
-/// Preview cover cap — the dialog tile renders at 160 px; 384 keeps it crisp on
-/// `HiDPI` while staying a small bounded buffer (mirrors `detail_artwork`).
-const PREVIEW_SIZE: u32 = 384;
-
-/// Reject absurd source dimensions before allocating (forged-header guard),
-/// the same bound `CoverThumbs` / `detail_artwork` use.
-const MAX_SOURCE_DIM: u32 = 8192;
 
 /// Auto-dismiss window for the completion toast, matching the playlist
 /// import/export toasts.
@@ -669,13 +662,12 @@ fn clamp_i32(n: usize) -> i32 {
 /// Blocking (image decode) — call under `spawn_blocking`. `None` on any decode
 /// error: the preview is best-effort, and the write path re-validates the pick.
 fn decode_cover_preview(path: &Path) -> Option<SharedPixelBuffer<Rgb8Pixel>> {
-    let mut reader = image::ImageReader::open(path).ok()?.with_guessed_format().ok()?;
-    let mut limits = image::Limits::default();
-    limits.max_image_width = Some(MAX_SOURCE_DIM);
-    limits.max_image_height = Some(MAX_SOURCE_DIM);
-    reader.limits(limits);
-
-    let rgb = reader.decode().ok()?.thumbnail(PREVIEW_SIZE, PREVIEW_SIZE).to_rgb8();
+    // The dialog tile renders at 160 px, so the shared 384 px cover tier keeps
+    // it crisp on HiDPI while staying a small bounded buffer.
+    let rgb = decode_capped(path, MAX_SOURCE_DIM)
+        .ok()?
+        .thumbnail(COVER_SIZE, COVER_SIZE)
+        .to_rgb8();
     Some(buffer_from_rgb(&rgb))
 }
 

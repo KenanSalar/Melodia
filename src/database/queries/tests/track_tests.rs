@@ -501,12 +501,87 @@ async fn get_favorite_stats_empty_when_favorites_have_no_artwork() -> Result<(),
     // Seed leaves artwork_path as NULL — favorites exist but none have
     // covers. The mosaic should render no tiles so the FavoritesView's
     // outer `favorite_border` placeholder is what the user sees.
+    //
+    // One of them carries `''` instead: the scan path treats an empty
+    // artwork_path as "no cover" in the same breath as NULL
+    // (`scan::mutations::update_track_artwork_if_missing`), so it is a value
+    // that reaches this table — and it must not take a slot it can't paint.
+    sqlx::query("UPDATE tracks SET artwork_path = '' WHERE title = 'Alpha'")
+        .execute(db.write())
+        .await?;
+
     let stats = queries::track::get_favorite_stats(&db).await?;
     assert_eq!(stats.count, 3);
     assert!(
         stats.artwork_paths.is_empty(),
         "no artworks among favorites ⇒ empty list, got {:?}",
         stats.artwork_paths
+    );
+    Ok(())
+}
+
+/// The hero mosaic and the Most Played tab are the same list seen two ways, so
+/// they have to resolve a tie the same way. The mosaic used to rank distinct
+/// covers by `MAX(play_count)` under a tiebreaker of its own, and the grid broke
+/// ties not at all — so on a tie they picked different winners, and the grid's
+/// own order could move between refreshes. Both now read `MOST_PLAYED_ORDER`.
+#[tokio::test]
+async fn the_hero_mosaic_leads_with_the_covers_the_most_played_tab_shows()
+-> Result<(), AppError> {
+    let db = seed_db().await?;
+    let all = queries::track::get_all_tracks(&db, None, None).await?;
+    let ids: Vec<i64> = all.iter().map(|t| t.id).collect();
+    queries::track::set_favorite(&db, &ids, true).await?;
+
+    // Alpha and Beta are level on plays and Beta was played more recently, so
+    // Beta leads. Gamma is a favorite nobody has played, carrying a cover of
+    // its own — it's what pads the mosaic once the played covers run out. Every
+    // cover here is distinct, so "first four" and "first four distinct" coincide
+    // and the assertions below can stay about ordering.
+    //
+    // Which of the pair is the recent one is the whole fixture, because both
+    // orders this has to reject put *Alpha* first. Drop the tiebreakers and
+    // `SQLite` sorts the tied pair into a temp B-tree in rowid order, i.e. the
+    // order `seed_db` inserted them. Restore the mosaic's old `MAX(date_added)
+    // DESC` and it follows insertion too — so `date_added` is written here
+    // against recency rather than left to the seed, and a fixture with Alpha as
+    // the recent one would pass against all three queries and pin nothing.
+    sqlx::query(
+        "UPDATE tracks SET artwork_path = '/art/alpha.jpg', play_count = 4, \
+         last_played = '2026-01-01T00:00:00+00:00', date_added = '2026-05-01T00:00:00+00:00' \
+         WHERE title = 'Alpha'",
+    )
+    .execute(db.write())
+    .await?;
+    sqlx::query(
+        "UPDATE tracks SET artwork_path = '/art/beta.jpg', play_count = 4, \
+         last_played = '2026-06-01T00:00:00+00:00', date_added = '2026-01-01T00:00:00+00:00' \
+         WHERE title = 'Beta'",
+    )
+    .execute(db.write())
+    .await?;
+    sqlx::query("UPDATE tracks SET artwork_path = '/art/gamma.jpg' WHERE title = 'Gamma'")
+        .execute(db.write())
+        .await?;
+
+    let grid = queries::track::get_most_played_favorites(&db).await?;
+    let titles: Vec<&str> = grid.iter().map(|t| t.title.as_str()).collect();
+    assert_eq!(
+        titles,
+        ["Beta", "Alpha"],
+        "a tie on play_count breaks toward the track played most recently"
+    );
+
+    // Derived from the grid rather than restated, so the day the two clauses
+    // drift apart again this fails here instead of only on screen.
+    let mut expected: Vec<String> = grid.iter().filter_map(|t| t.artwork_path.clone()).collect();
+    expected.push("/art/gamma.jpg".to_owned());
+
+    let stats = queries::track::get_favorite_stats(&db).await?;
+    assert_eq!(
+        stats.artwork_paths, expected,
+        "the mosaic must lead with the Most Played tab's covers in its order, then pad from the \
+         favorites that tab excludes"
     );
     Ok(())
 }
@@ -553,11 +628,31 @@ async fn get_recently_played_respects_limit() -> Result<(), AppError> {
 #[tokio::test]
 async fn get_most_played_orders_by_count_and_excludes_zero() -> Result<(), AppError> {
     let db = seed_db().await?;
+    insert_test_track(&db, "/music/delta.mp3", "Delta", "Zeta Artist", "B Album", "Pop").await?;
 
-    // Beta highest, Alpha lower, Gamma left at play_count 0 (must be excluded).
-    sqlx::query("UPDATE tracks SET play_count = 3 WHERE title = 'Alpha'")
-        .execute(db.write())
-        .await?;
+    // Beta highest; Alpha and Delta tie on count and are separated by recency
+    // alone; Gamma left at play_count 0 (must be excluded). The tie is the part
+    // worth having — `play_count DESC` on its own leaves it to the planner, and
+    // this strip re-fetches on every `stats_changed` tick, so the cards could
+    // reshuffle with nothing about the library having moved.
+    //
+    // Alpha is the recent one on purpose. Without the tiebreakers this query
+    // walks the partial `idx_tracks_play_count` backwards, which hands back a
+    // tied group newest-rowid-first — so Delta, inserted last, is what the
+    // un-tiebroken order puts ahead, and only a fixture pointing the other way
+    // can tell the two apart.
+    sqlx::query(
+        "UPDATE tracks SET play_count = 3, last_played = '2026-06-01T00:00:00+00:00' \
+         WHERE title = 'Alpha'",
+    )
+    .execute(db.write())
+    .await?;
+    sqlx::query(
+        "UPDATE tracks SET play_count = 3, last_played = '2026-01-01T00:00:00+00:00' \
+         WHERE title = 'Delta'",
+    )
+    .execute(db.write())
+    .await?;
     sqlx::query("UPDATE tracks SET play_count = 9 WHERE title = 'Beta'")
         .execute(db.write())
         .await?;
@@ -566,8 +661,9 @@ async fn get_most_played_orders_by_count_and_excludes_zero() -> Result<(), AppEr
     let titles: Vec<&str> = rows.iter().map(|r| r.title.as_str()).collect();
     assert_eq!(
         titles,
-        vec!["Beta", "Alpha"],
-        "play_count DESC; the play_count == 0 track is excluded (no favorite filter)"
+        ["Beta", "Alpha", "Delta"],
+        "play_count DESC, then most-recently-played first; the play_count == 0 track is \
+         excluded (no favorite filter)"
     );
     Ok(())
 }
@@ -585,6 +681,47 @@ async fn get_most_played_respects_limit() -> Result<(), AppError> {
     let rows = queries::track::get_most_played(&db, 1).await?;
     assert_eq!(rows.len(), 1);
     assert_eq!(rows[0].title, "Beta");
+    Ok(())
+}
+
+#[tokio::test]
+async fn both_most_played_queries_project_what_the_filter_searches() -> Result<(), AppError> {
+    // The cards render title + artist, so a `SELECT` that drops one of the
+    // other four still compiles and still paints correctly — it only stops
+    // the hero search bar narrowing the card grid the way it narrows the
+    // track list beside it. `FromRow` catches a missing column at run time,
+    // which is why this asserts the values rather than just the row count.
+    let db = seed_db().await?;
+    sqlx::query(
+        "UPDATE tracks SET play_count = 5, is_favorite = TRUE, album_artist = 'Various Artists' \
+         WHERE title = 'Alpha'",
+    )
+    .execute(db.write())
+    .await?;
+
+    let favorites = queries::track::get_most_played_favorites(&db).await?;
+    let all = queries::track::get_most_played(&db, 200).await?;
+
+    for (label, rows) in [("favorites", favorites), ("all", all)] {
+        let card = rows.iter().find(|t| t.title == "Alpha");
+        assert_eq!(
+            card.map(|c| (
+                c.artist.as_deref(),
+                c.album_artist.as_deref(),
+                c.album.as_deref(),
+                c.genre.as_deref(),
+                c.year,
+            )),
+            Some((
+                Some("Zeta Artist"),
+                Some("Various Artists"),
+                Some("B Album"),
+                Some("Pop"),
+                Some(2024),
+            )),
+            "{label}: the most-played projection dropped a field the filter searches"
+        );
+    }
     Ok(())
 }
 

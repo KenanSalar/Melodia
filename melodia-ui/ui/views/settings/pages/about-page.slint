@@ -1,0 +1,36 @@
+import { Theme } from "../../../theme.slint";
+import { SettingsPage } from "../../../globals/settings-page.slint";
+import { UpdateSection } from "../update-section.slint";
+import { AboutSection } from "../about-section.slint";
+
+// Which version is installed and how it gets to the next one. Updates leads
+// because it's the card a user comes here to act on; the rest is reference.
+export component AboutPage inherits Rectangle {
+    background: transparent;
+    horizontal-stretch: 1;
+    vertical-stretch: 0;
+
+    out property <bool> has-matches: updates.has-matches || about.has-matches;
+
+    // See `library-page.slint` for why the cards live in columns that place
+    // themselves.
+    GridLayout {
+        spacing: Theme.pad-lg;
+
+        VerticalLayout {
+            row: SettingsPage.grid-row(0); col: SettingsPage.grid-col(0);
+            alignment: start;
+            spacing: Theme.pad-lg;
+
+            updates := UpdateSection { tab-name: @tr("About"); }
+        }
+
+        VerticalLayout {
+            row: SettingsPage.grid-row(1); col: SettingsPage.grid-col(1);
+            alignment: start;
+            spacing: Theme.pad-lg;
+
+            about := AboutSection { tab-name: @tr("About"); }
+        }
+    }
+}

@@ -1,3 +1,12 @@
+---
+paths:
+  - src/database/**/*.rs
+  - src/entities/**/*.rs
+  - src/library/**/*.rs
+  - src/tasks/**/*.rs
+  - migrations/**/*.sql
+---
+
 # SQLx (SQLite) Best Practices
 
 ## Connection Pooling
@@ -56,6 +65,7 @@
 - Avoid `SELECT *` — specify only needed columns
 - Use covering indexes for frequently accessed column combinations
 - Regular `VACUUM` for reclaiming space after bulk deletes (but not during normal operation)
+- `VACUUM INTO '<path>'` is the safe way to copy a *live* database — it runs through the open connection, so WAL content is folded in and the output needs no `-wal`/`-shm` beside it. Takes no bind parameter, so the path is interpolated (wrap in `AssertSqlSafe`, double any `'`). **It silently no-ops against an in-memory pool**: `sqlite::memory:` through sqlx returns `Ok` and writes no file, while the identical statement in the `sqlite3` CLI against `:memory:` does write one. So a test covering a backup path must build a **file-backed** pool — `DbPool::test_pool()` will pass while proving nothing. `src/database/tests/backup_tests.rs::open_db` is the worked example.
 
 ## Fetch Methods
 

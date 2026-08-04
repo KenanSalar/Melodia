@@ -20,6 +20,7 @@
 
 pub mod appearance;
 pub mod crossfade;
+pub mod discord;
 pub mod equalizer;
 pub mod folders;
 pub mod playback;
@@ -27,6 +28,7 @@ pub mod replaygain;
 pub mod scrobble;
 pub mod updates;
 pub mod view;
+pub mod visualizer;
 
 pub use appearance::{
     set_appearance, set_corner_radius, set_dynamic_color_style, set_match_unfocused_to_system_bg,
@@ -34,6 +36,9 @@ pub use appearance::{
 pub use crossfade::{
     set_crossfade_duration_ms, set_crossfade_enabled, set_crossfade_fade_on_pause,
     set_crossfade_manual, set_crossfade_skip_same_album,
+};
+pub use discord::{
+    set_discord_rpc_artwork, set_discord_rpc_enabled, set_discord_rpc_hide_when_paused,
 };
 pub use equalizer::{set_eq_band_gains_and_preset, set_eq_enabled, set_eq_preamp};
 pub use replaygain::{
@@ -57,10 +62,11 @@ pub use updates::{
     set_skipped_release,
 };
 pub use view::{
-    get_view_sort, set_artist_albums_collapsed, set_browse_path, set_favorites_artists_collapsed,
-    set_favorites_most_played_collapsed, set_last_detail_id, set_last_nav_index, set_locale,
-    set_overflow_button, set_view_sort, snap_to_preset, update_view_columns,
+    get_view_sort, set_artist_albums_collapsed, set_browse_path, set_favorites_tab,
+    set_last_detail_id, set_last_nav_index, set_locale, set_overflow_button, set_settings_tab,
+    set_view_sort, snap_to_preset, update_view_columns,
 };
+pub use visualizer::{set_visualizer_enabled, set_visualizer_style};
 
 use crate::error::AppError;
 use crate::services::{self, settings::SettingsData, view_state::ViewStateData};

@@ -24,6 +24,7 @@ use crate::player::state::{
 };
 use crate::services::{
     always_on_top::{self, AlwaysOnTopCapability},
+    discord::DiscordPresenceService,
     media_controls::{self, MediaControlsHandle},
     scrobble::ScrobbleService,
     search_history::SearchHistoryState,
@@ -85,6 +86,10 @@ pub struct AppState {
     /// Scrobbling service: credential/enabled shadow + durable offline queue.
     /// Loaded at boot; the detector/submitter tasks that drive it wire in later.
     pub scrobble: Arc<ScrobbleService>,
+    /// Discord Rich Presence: enable-flags shadow + connection-status watch,
+    /// lazily spawning a blocking IPC worker thread. Stateless (no on-disk
+    /// state); the detector task in `tasks::discord_presence` drives it.
+    pub discord: Arc<DiscordPresenceService>,
     pub media_controls: Option<Arc<MediaControlsHandle>>,
     /// Shared `reqwest::Client`, built lazily on first use via
     /// [`AppState::http_client`]. Only the updater and the post-scan Deezer
@@ -109,9 +114,9 @@ pub struct AppState {
     pub ui_handles: Arc<crate::ui::nav_history::UiHandles>,
 }
 
-/// Receivers handed back from `AppState::init` for sub-phase I to consume.
-/// Holding them on `AppState` would force a `Mutex<Option<...>>` shape that
-/// Phase 1 doesn't need; returning them keeps the struct stable.
+/// Receivers handed back from `AppState::init` for `boot::tasks` to consume.
+/// Holding them on `AppState` would force a `Mutex<Option<…>>` shape nothing
+/// needs; returning them keeps the struct stable.
 pub struct StartupChannels {
     pub media_control_rx: Option<mpsc::Receiver<MediaControlEvent>>,
     pub file_event_rx: mpsc::Receiver<FileEvent>,
@@ -206,6 +211,13 @@ impl AppState {
             &settings.scrobble,
             http_client.clone(),
         ));
+        // Persists nothing (the application id is a compile-time constant, not a
+        // secret), so unlike scrobble it needs no `&paths` — but it shares the
+        // one `http_client` pool for the album-cover lookup.
+        let discord = Arc::new(DiscordPresenceService::init(
+            &settings.discord,
+            http_client.clone(),
+        ));
 
         let state = Self {
             paths: Arc::new(paths),
@@ -225,6 +237,7 @@ impl AppState {
             always_on_top: always_on_top_capability,
             search_history,
             scrobble,
+            discord,
             media_controls: Some(mc_handle),
             http_client,
             task_tracker: TaskTracker::new(),
@@ -304,4 +317,9 @@ fn hydrate_audio_dsp(rodio: &RodioPlayer, settings: &settings::SettingsData) {
     rodio.set_crossfade_skip_same_album(settings.crossfade.crossfade_skip_same_album);
     rodio.set_crossfade_fade_on_pause(settings.crossfade.crossfade_fade_on_pause);
     rodio.set_crossfade_enabled(settings.crossfade.crossfade_enabled);
+
+    // The visualizer is deliberately absent: its tap is armed by the
+    // Now-Playing view being on screen, not by a persisted flag, so it must
+    // stay disarmed until `Visualizer.set-active` fires. See
+    // `crate::ui::visualizer`.
 }

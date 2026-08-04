@@ -25,7 +25,6 @@ const DARK: Palette = Palette {
     // they pick up the active palette rather than falling back to grey.
     yellow:   0xffd60a,
     green:    0x30d158,
-    ..Palette::fallback_semantics(0x545454)
 };
 
 const LIGHT: Palette = Palette {
@@ -46,7 +45,6 @@ const LIGHT: Palette = Palette {
     // System Yellow / Green Light mode.
     yellow:   0xffcc00,
     green:    0x28cd41,
-    ..Palette::fallback_semantics(0xaeaeb2)
 };
 
 const VARIANTS: &[Variant] = &[

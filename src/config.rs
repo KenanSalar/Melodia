@@ -18,6 +18,10 @@ pub struct Paths {
     pub scrobble_mbid_state_path: PathBuf,
     pub artwork_dir: PathBuf,
     pub artists_dir: PathBuf,
+    /// Pre-migration copies of [`Self::db_path`], written by
+    /// `database::backup`. Its own directory so the retention sweep runs
+    /// somewhere the live database and its `-wal`/`-shm` sidecars aren't.
+    pub backups_dir: PathBuf,
 }
 
 impl Paths {
@@ -29,8 +33,10 @@ impl Paths {
 
         let artwork_dir = data_dir.join("artwork");
         let artists_dir = data_dir.join("artists");
+        let backups_dir = data_dir.join("backups");
         std::fs::create_dir_all(&artwork_dir)?;
         std::fs::create_dir_all(&artists_dir)?;
+        std::fs::create_dir_all(&backups_dir)?;
 
         Ok(Self {
             db_path: data_dir.join("melodia.db"),
@@ -43,6 +49,7 @@ impl Paths {
             scrobble_mbid_state_path: data_dir.join("scrobble_mbid_attempted.json"),
             artwork_dir,
             artists_dir,
+            backups_dir,
             data_dir,
         })
     }

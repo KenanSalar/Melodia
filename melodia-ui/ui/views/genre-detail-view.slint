@@ -1,0 +1,207 @@
+import { Theme } from "../theme.slint";
+import { GenreDetail } from "../globals/genres.slint";
+import { HeroBackdrop } from "../globals/hero-backdrop.slint";
+import { Player } from "../globals/player.slint";
+import { DetailHeader } from "../components/detail-header.slint";
+import { HeroChipStrip } from "../components/hero-chip-strip.slint";
+import { ActionPill, PillLabel, PillButton, PillDivider } from "../components/action-pill.slint";
+import { ColumnTogglePopup } from "../components/track-list/column-toggle-popup.slint";
+import { SearchBar } from "../components/search-bar.slint";
+import { TrackList } from "../components/track-list/track-list.slint";
+import { OverlayScrollbar } from "../components/overlay-scrollbar.slint";
+import { FilterThrottle } from "../components/filter-throttle.slint";
+
+// The `DetailHeader` + `TrackList` composition its two siblings use, with **no artwork
+// wiring at all**: no image props are passed, so the hero paints only its gradient floor
+// and scrim, and the left tile shows the same glyph the sidebar uses. `show-genre` is
+// forced off for the reason each sibling forces its own column off.
+export component GenreDetailView inherits Rectangle {
+    // The shared throttle, on the interval every filterable view uses.
+    property <int> filter-tick-pending: 0;
+
+    filter-throttle := FilterThrottle {
+        pending: root.filter-tick-pending;
+        fire() => { GenreDetail.filter-changed(GenreDetail.filter); }
+    }
+
+    // Catches any click no inner TouchArea consumes and bumps the blur tick.
+    TouchArea {
+        clicked => { GenreDetail.blur-search-tick += 1; }
+    }
+
+    VerticalLayout {
+        DetailHeader {
+            vertical-stretch: 0;
+            // Genres have no intrinsic image, so the tile and the backdrop both paint
+            // from the four name-hashed stops on the row. The hero pair is dimmer and
+            // less saturated than the tile pair, so the wide backdrop keeps its scrim
+            // and text legible, while the tile matches the grid card exactly and genre
+            // recognition survives the drill-in.
+            //
+            // **The hero pair isn't passed here**: `open_genre` writes it into
+            // `HeroBackdrop.floor-*` on the Rust side, measures it and solves the scrim
+            // and foreground against it — exactly as an artwork-bearing detail does
+            // with its decoded blur.
+            fallback-icon: "theater_comedy";
+            tile-bg: @linear-gradient(135deg,
+                GenreDetail.genre.tile_color_1,
+                GenreDetail.genre.tile_color_2);
+            tile-icon-color: #ffffff.with-alpha(0.3);
+            back-clicked => { GenreDetail.close-detail(); }
+
+            // The right column, on the Album Detail hero layout.
+            HorizontalLayout {
+                vertical-stretch: 0;
+                spacing: Theme.pad-md;
+                alignment: stretch;
+
+                VerticalLayout {
+                    alignment: center;
+                    // The leading LRM keeps a bidi title laid out inside an LTR shell.
+                    Text {
+                        text: "‎" + GenreDetail.genre.name;
+                        color: HeroBackdrop.on-backdrop;
+                        font-size: Theme.hero-title-size;
+                        font-weight: Theme.page-title-weight;
+                        horizontal-alignment: left;
+                        overflow: elide;
+                    }
+                }
+
+                Rectangle { horizontal-stretch: 1; }
+
+                VerticalLayout {
+                    alignment: center;
+                    SearchBar {
+                        text <=> GenreDetail.filter;
+                        placeholder: @tr("Filter tracks…");
+                        blur-trigger: GenreDetail.blur-search-tick;
+                        edited(t) => { root.filter-tick-pending += 1; }
+                    }
+                }
+            }
+            // No year or artist chip here: neither is a per-genre concept.
+            HeroChipStrip { }
+
+            // Absorbs the slack, so the action row sits flush with the tile's lower edge.
+            Rectangle { vertical-stretch: 1; }
+
+            // The primary pill and, when rows are selected, its own.
+            HorizontalLayout {
+                vertical-stretch: 0;
+                spacing: Theme.pad-md;
+                alignment: start;
+
+                // One pill: Shuffle, the column toggle, then the selection chip.
+                ActionPill {
+                    PillButton {
+                        icon: "shuffle";
+                        text: @tr("Shuffle");
+                        clicked => { GenreDetail.shuffle-genre(); }
+                    }
+                    PillDivider { }
+                    ColumnTogglePopup {
+                        show-number  <=> GenreDetail.show-number;
+                        show-artwork <=> GenreDetail.show-artwork;
+                        show-artist  <=> GenreDetail.show-artist;
+                        show-album   <=> GenreDetail.show-album;
+                        show-genre   <=> GenreDetail.show-genre;
+                        show-year    <=> GenreDetail.show-year;
+                        // Meaningless here: every row is the same genre.
+                        hide-genre: true;
+                        toggled(id) => { GenreDetail.toggle-column(id); }
+                    }
+                    if GenreDetail.selected-ids.length > 0: PillDivider { }
+                    if GenreDetail.selected-ids.length > 0: PillLabel {
+                        text: @tr("{} selected", GenreDetail.selected-ids.length);
+                    }
+                    if GenreDetail.selected-ids.length > 0: PillButton {
+                        icon: "close";
+                        tooltip-text: @tr("Clear selection");
+                        clicked => { GenreDetail.clear-selection(); }
+                    }
+                }
+            }
+        }
+
+        // Inset per-child rather than on the root column, so the list's edges match the
+        // Tracks and Browse views: the root can't pad uniformly because `DetailHeader`
+        // is full-bleed for the hero.
+        HorizontalLayout {
+            horizontal-stretch: 1;
+            vertical-stretch: 1;
+            padding-left: Theme.pad-lg;
+            padding-right: Theme.pad-lg;
+            // The inset every other detail view applies between its hero and its table.
+            padding-top: Theme.pad-lg;
+
+            tl := TrackList {
+                horizontal-stretch: 1;
+                vertical-stretch: 1;
+
+                rows: GenreDetail.tracks;
+
+                w-number <=> GenreDetail.w-number;
+                w-title <=> GenreDetail.w-title;
+                w-artist <=> GenreDetail.w-artist;
+                w-album <=> GenreDetail.w-album;
+                w-genre <=> GenreDetail.w-genre;
+                w-year <=> GenreDetail.w-year;
+                w-length <=> GenreDetail.w-length;
+
+                show-number <=> GenreDetail.show-number;
+                show-artwork <=> GenreDetail.show-artwork;
+                show-artist <=> GenreDetail.show-artist;
+                show-album <=> GenreDetail.show-album;
+                show-genre <=> GenreDetail.show-genre;
+                show-year <=> GenreDetail.show-year;
+                number-mode: "index";
+
+                sort-field: GenreDetail.sort-field;
+                sort-dir: GenreDetail.sort-dir;
+                playing-track-id: Player.vm.track.id;
+                view-context: "genre-detail";
+                view-selected-ids: GenreDetail.selected-ids;
+
+                request-sort(f) => { GenreDetail.request-sort(f); }
+                play-row(id, idx) => { GenreDetail.play-row(id, idx); }
+                play-next(ids) => { GenreDetail.play-next(ids); }
+                add-to-queue(ids) => { GenreDetail.add-to-queue(ids); }
+                toggle-row-favorite(ids, on) => { GenreDetail.toggle-row-favorite(ids, on); }
+                set-row-rating(ids, n) => { GenreDetail.set-row-rating(ids, n); }
+                select-row(idx, id, sh, ct) => { GenreDetail.select-row(idx, id, sh, ct); }
+                // A click in the track list blurs the hero SearchBar.
+                request-blur-search => { GenreDetail.blur-search-tick += 1; }
+                go-to-album(aid) => { GenreDetail.go-to-album(aid); }
+                go-to-artist(aid) => { GenreDetail.go-to-artist(aid); }
+                go-to-genre(gid) => { GenreDetail.go-to-genre(gid); }
+            }
+        }
+    }
+
+    // At the view root, flush with the content panel's rounded edges. `tl` is nested, so
+    // its position comes through `absolute-position`.
+    OverlayScrollbar {
+        horizontal: false;
+        x: parent.width - self.width;
+        y: tl.absolute-position.y - root.absolute-position.y + tl.body-y;
+        width: 10px;
+        height: tl.body-height;
+        visible-size: tl.v-visible-height;
+        content-size: tl.v-viewport-height;
+        offset: tl.v-offset;
+        scroll-to(o) => { tl.set-v-offset(o); }
+    }
+
+    OverlayScrollbar {
+        horizontal: true;
+        x: tl.absolute-position.x - root.absolute-position.x;
+        y: parent.height - self.height;
+        width: tl.width - 10px;
+        height: 10px;
+        visible-size: tl.h-visible-width;
+        content-size: tl.h-viewport-width;
+        offset: tl.h-offset;
+        scroll-to(o) => { tl.set-h-offset(o); }
+    }
+}

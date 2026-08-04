@@ -1,0 +1,81 @@
+import { Theme } from "../../theme.slint";
+import { MaterialIcon } from "../material-icon.slint";
+import { IconButton } from "../icon-button.slint";
+
+// One folder entry in the Library section.
+export component FolderRow inherits Rectangle {
+    in property <string> path;
+    // Pre-formatted by Rust; empty means never scanned, and hides the line.
+    in property <string> last-scanned;
+    // Held false mid-scan, so two rescans can't fight over the shared
+    // `scan_progress_tx`.
+    in property <bool> actions-enabled: true;
+
+    callback rescan-clicked();
+    callback remove-clicked();
+
+    background: transparent;
+
+    HorizontalLayout {
+        padding: Theme.pad-lg;
+        spacing: Theme.pad-md;
+        alignment: stretch;
+
+        VerticalLayout {
+            alignment: center;
+            MaterialIcon {
+                name: "folder";
+                icon-size: 22px;
+                icon-color: Theme.accent;
+                filled: true;
+            }
+        }
+
+        VerticalLayout {
+            alignment: center;
+            spacing: Theme.pad-xs;
+            horizontal-stretch: 1;
+
+            Text {
+                text: root.path;
+                color: Theme.text;
+                font-size: Theme.font-size-md;
+                overflow: elide;
+            }
+            if root.last-scanned != "": Text {
+                text: root.last-scanned;
+                color: Theme.subtext0;
+                font-size: Theme.font-size-sm;
+            }
+        }
+
+        VerticalLayout {
+            alignment: center;
+            HorizontalLayout {
+                spacing: Theme.pad-xs;
+                IconButton {
+                    icon: "refresh";
+                    diameter: 32px;
+                    icon-size: 18px;
+                    tooltip-text: @tr("Rescan");
+                    button-enabled: root.actions-enabled;
+                    clicked => { root.rescan-clicked(); }
+                }
+                IconButton {
+                    icon: "delete";
+                    diameter: 32px;
+                    icon-size: 18px;
+                    idle-fg: Theme.text;
+                    // The semantic role token rather than the raw palette entry,
+                    // so a theme can move the destructive colour alone. And
+                    // `hover-fg`, since `active` is the toggled state and never
+                    // flips here.
+                    hover-fg: Theme.danger;
+                    tooltip-text: @tr("Remove");
+                    button-enabled: root.actions-enabled;
+                    clicked => { root.remove-clicked(); }
+                }
+            }
+        }
+    }
+}

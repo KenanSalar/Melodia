@@ -1,0 +1,287 @@
+import { ScrollView } from "std-widgets.slint";
+import { Theme } from "../../theme.slint";
+import { SmartEditor } from "../../globals/dialog-forms.slint";
+import { SmartRuleRow } from "../../models.slint";
+import { Dropdown } from "../settings/dropdown.slint";
+import { ToggleSwitch } from "../settings/toggle-switch.slint";
+import { LabeledInput } from "../labeled-input.slint";
+import { IconButton } from "../icon-button.slint";
+
+// Controlled value input for a rule row or the limit count. `text` is one-way —
+// the host owns it — and every keystroke reports back through `edited`. The
+// first keystroke orphans the inner `TextInput.text` binding, so re-emitting the
+// same value from Rust never resets the cursor, while a remount re-reads `text`
+// fresh; the editor body below leans on both halves.
+component RuleValueInput inherits Rectangle {
+    in property <string> text;
+    in property <string> placeholder;
+    callback edited(string);
+
+    height: 34px;
+    background: Theme.surface1;
+    border-color: ti.has-focus ? Theme.accent : Theme.border;
+    border-width: 1px;
+    border-radius: Theme.radius-md;
+    animate border-color { duration: Theme.dur-fast; easing: ease-in-out; }
+
+    HorizontalLayout {
+        padding-left: Theme.pad-sm;
+        padding-right: Theme.pad-sm;
+        Rectangle {
+            horizontal-stretch: 1;
+            if ti.text == "": Text {
+                text: root.placeholder;
+                // Bounded and elided like every other placeholder — see
+                // `search-bar.slint` for why an unbounded one paints out of its
+                // field. This is the tightest slot in the tree: the limit input
+                // is a hard 64 px, and its hint is one glyph only in English.
+                color: Theme.overlay2;
+                font-size: Theme.font-size-md;
+                vertical-alignment: center;
+                x: 0;
+                width: 100%;
+                height: 100%;
+                overflow: elide;
+            }
+            ti := TextInput {
+                text: root.text;
+                color: Theme.text;
+                font-size: Theme.font-size-md;
+                single-line: true;
+                vertical-alignment: center;
+                height: 100%;
+                edited => { root.edited(self.text); }
+            }
+        }
+    }
+}
+
+// A dialog-row label centred against its sibling controls. Wraps the
+// "fixed-width children don't centre in a wider layout" pitfall once, rather
+// than hand-rolling the centring layout at every label site.
+component RowLabel inherits VerticalLayout {
+    in property <string> text;
+    alignment: center;
+    Text {
+        text: root.text;
+        color: Theme.subtext0;
+        font-size: Theme.font-size-md;
+    }
+}
+
+// One editable rule row. Purely presentational — Rust owns the model and applies
+// every edit through the callbacks below, so this never mutates `rule`. The
+// `View` suffix is to keep it clear of the model struct's name.
+component SmartRuleRowView inherits HorizontalLayout {
+    in property <SmartRuleRow> rule;
+    in property <[string]> field-names;
+    // Resolved by the host, so the four operator arrays live in one place.
+    in property <[string]> ops;
+    callback set-field(int /*field index*/);
+    callback set-op(int /*op index*/);
+    callback set-value(string);
+    callback remove();
+
+    spacing: Theme.pad-sm;
+    alignment: start;
+
+    Dropdown {
+        trigger-width: 148px;
+        options: root.field-names;
+        // One-way plus `manual` keeps Rust the single source of truth: the index
+        // re-reads after every model edit, so a field change that resets the
+        // operator can't leave a stale selection. A self-writing `Dropdown`
+        // would orphan the binding on the first pick.
+        manual: true;
+        selected-index: root.rule.field-index;
+        selected(idx) => { root.set-field(idx); }
+    }
+    Dropdown {
+        trigger-width: 148px;
+        options: root.ops;
+        manual: true;
+        selected-index: root.rule.op-index;
+        selected(idx) => { root.set-op(idx); }
+    }
+
+    // Split by input-kind so switching kinds remounts a fresh input that
+    // re-reads the Rust-reset value, while a same-kind change reuses it and
+    // keeps what's typed. Do NOT collapse the branches into one with a ternary
+    // placeholder — that boundary *is* the remount key that resyncs the input.
+    if root.rule.input-kind == 1: RuleValueInput {
+        horizontal-stretch: 1;
+        min-width: 90px;
+        text: root.rule.value-text;
+        placeholder: @tr("value");
+        edited(t) => { root.set-value(t); }
+    }
+    if root.rule.input-kind == 2: RuleValueInput {
+        horizontal-stretch: 1;
+        min-width: 90px;
+        text: root.rule.value-text;
+        placeholder: root.rule.field-kind == 3 ? @tr("days") : @tr("number");
+        edited(t) => { root.set-value(t); }
+    }
+    // Days suffix for the relative-date operators.
+    if root.rule.field-kind == 3 && root.rule.input-kind == 2: RowLabel {
+        text: @tr("days");
+    }
+    // Keeps the remove button flush-right when the operator takes no value.
+    if root.rule.input-kind == 0: Rectangle { horizontal-stretch: 1; }
+
+    VerticalLayout {
+        alignment: center;
+        IconButton {
+            icon: "close";
+            icon-size: 16px;
+            diameter: 28px;
+            idle-bg: Theme.surface1;
+            hover-fg: Theme.danger;
+            clicked => { root.remove(); }
+        }
+    }
+}
+
+// Body of the rule-builder dialog, over the `SmartEditor` global; Rust owns the
+// rules model and rebuilds a `SmartCriteria` on commit.
+//
+// Every dropdown array below is an inline literal list — a Rust-populated
+// `[string]` renders untranslated — ordered to mirror
+// `entities::smart_criteria::{FIELDS, ops_for, LimitOrder}` **by index**. Adding
+// or reordering a field or operator means editing both sides in lockstep;
+// `entities::tests::smart_criteria_tests` pins the leading order and each
+// array's length against the Rust side.
+export component SmartPlaylistEditorBody inherits VerticalLayout {
+    spacing: Theme.pad-md;
+
+    property <[string]> field-names: [
+        @tr("Title"), @tr("Artist"), @tr("Album Artist"), @tr("Album"),
+        @tr("Genre"), @tr("Year"), @tr("Duration (sec)"), @tr("Plays"),
+        @tr("Skips"), @tr("Rating"), @tr("Bitrate (kbps)"), @tr("Sample rate (Hz)"),
+        @tr("File size (bytes)"), @tr("Favorite"), @tr("Last played"), @tr("Date added"),
+    ];
+    // By field-kind, mirroring `ops_for(value_type)`.
+    property <[string]> text-ops: [
+        @tr("contains"), @tr("does not contain"), @tr("is"), @tr("is not"),
+        @tr("starts with"), @tr("ends with"), @tr("is set"), @tr("is not set"),
+    ];
+    property <[string]> number-ops: [
+        @tr("is"), @tr("is not"), @tr("greater than"), @tr("at least"),
+        @tr("less than"), @tr("at most"), @tr("is set"), @tr("is not set"),
+    ];
+    property <[string]> bool-ops: [ @tr("is true"), @tr("is false") ];
+    property <[string]> date-ops: [
+        @tr("in the last"), @tr("not in the last"), @tr("is set"), @tr("is not set"),
+    ];
+    // Mirrors `smart_criteria::MATCH_MODES`.
+    property <[string]> match-modes: [ @tr("all"), @tr("any") ];
+    // Mirrors `smart_criteria::LIMIT_ORDERS`.
+    property <[string]> limit-orders: [
+        @tr("most recently added"), @tr("least recently added"),
+        @tr("most played"), @tr("least played"),
+        @tr("most recently played"), @tr("least recently played"),
+        @tr("highest rated"), @tr("random"),
+    ];
+
+    function ops-for-kind(kind: int) -> [string] {
+        return kind == 0 ? root.text-ops
+            : kind == 1 ? root.number-ops
+            : kind == 2 ? root.bool-ops
+            : root.date-ops;
+    }
+
+    LabeledInput {
+        label: @tr("Name");
+        placeholder: @tr("Smart playlist name");
+        text <=> SmartEditor.name;
+    }
+
+    HorizontalLayout {
+        spacing: Theme.pad-sm;
+        alignment: start;
+        RowLabel { text: @tr("Match"); }
+        Dropdown {
+            trigger-width: 90px;
+            options: root.match-modes;
+            selected-index <=> SmartEditor.match-mode-index;
+        }
+        RowLabel { text: @tr("of the following rules"); }
+    }
+
+    // Scrollable so a long rule set doesn't overflow the card.
+    Rectangle {
+        min-height: 76px;
+        max-height: 280px;
+        vertical-stretch: 1;
+        rules-sv := ScrollView {
+            // Locked to the viewport so each value input's stretch has real
+            // space: left alone, a ScrollView sizes its content to the content's
+            // own preferred width and the stretchy input collapses to nothing.
+            viewport-width: rules-sv.visible-width;
+            VerticalLayout {
+                spacing: Theme.pad-sm;
+                for rule[i] in SmartEditor.rules: SmartRuleRowView {
+                    rule: rule;
+                    field-names: root.field-names;
+                    ops: root.ops-for-kind(rule.field-kind);
+                    set-field(idx) => { SmartEditor.set-rule-field(i, idx); }
+                    set-op(idx) => { SmartEditor.set-rule-op(i, idx); }
+                    set-value(t) => { SmartEditor.set-rule-value(i, t); }
+                    remove => { SmartEditor.remove-rule(i); }
+                }
+            }
+        }
+    }
+
+    HorizontalLayout {
+        alignment: start;
+        Rectangle {
+            height: 30px;
+            horizontal-stretch: 0;
+            border-radius: self.height / 2;
+            background: add-touch.has-hover ? Theme.surface2 : Theme.surface1;
+            animate background { duration: Theme.dur-fast; easing: ease-in-out; }
+            HorizontalLayout {
+                padding-left: Theme.pad-md;
+                padding-right: Theme.pad-md;
+                spacing: Theme.pad-xs;
+                alignment: center;
+                VerticalLayout {
+                    alignment: center;
+                    Text {
+                        text: "+ " + @tr("Add rule");
+                        color: Theme.text;
+                        font-size: Theme.font-size-md;
+                        font-weight: 600;
+                    }
+                }
+            }
+            add-touch := TouchArea {
+                mouse-cursor: pointer;
+                clicked => { SmartEditor.add-rule(); }
+            }
+        }
+    }
+
+    HorizontalLayout {
+        spacing: Theme.pad-sm;
+        alignment: start;
+        VerticalLayout {
+            alignment: center;
+            ToggleSwitch { checked <=> SmartEditor.limit-enabled; }
+        }
+        RowLabel { text: @tr("Limit to"); }
+        if SmartEditor.limit-enabled: RuleValueInput {
+            width: 64px;
+            text: SmartEditor.limit-count-text;
+            placeholder: @tr("N");
+            edited(t) => { SmartEditor.limit-count-text = t; }
+        }
+        if SmartEditor.limit-enabled: RowLabel { text: @tr("tracks by"); }
+        if SmartEditor.limit-enabled: Dropdown {
+            trigger-width: 190px;
+            options: root.limit-orders;
+            selected-index <=> SmartEditor.limit-order-index;
+        }
+    }
+}

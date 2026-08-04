@@ -1,0 +1,200 @@
+import { Theme } from "../theme.slint";
+import { Albums } from "../globals/albums.slint";
+import { SearchBar } from "../components/search-bar.slint";
+import { ActionPill, PillButton, PillDivider } from "../components/action-pill.slint";
+import { AlbumGrid } from "../components/grid/album-grid.slint";
+import { GridColumnsSync } from "../components/grid-columns-sync.slint";
+import { MaterialIcon } from "../components/material-icon.slint";
+import { OverlayScrollbar } from "../components/overlay-scrollbar.slint";
+import { FilterThrottle } from "../components/filter-throttle.slint";
+
+// The Albums grid page: header chrome here, the virtualized `AlbumGrid` below
+// it, both over the `Albums` global.
+//
+// The view owns the responsive-column math — how many cards fit at
+// `min-card-w`, each sized to fill the row — and hands the count to
+// `GridColumnsSync`, whose `columns-changed` re-chunks the flat list.
+export component AlbumView inherits Rectangle {
+    // Bumped per keystroke; `FilterThrottle` collapses the burst into one filter.
+    property <int> filter-tick-pending: 0;
+    filter-throttle := FilterThrottle {
+        pending: root.filter-tick-pending;
+        fire() => { Albums.apply-filter(Albums.filter); }
+    }
+
+    // Responsive grid geometry.
+    property <length> min-card-w: 180px;
+    property <length> grid-gap: 20px;
+    // Headroom for the two text lines; the card's trailing stretch takes the
+    // slack.
+    property <length> card-text-h: 46px;
+    // Largest N with `2·gap + N·min-card + (N-1)·gap <= grid.width`.
+    property <int> computed-cols:
+        max(1, Math.floor((grid.width - root.grid-gap) / (root.min-card-w + root.grid-gap)));
+    property <length> card-w:
+        max(0px, (grid.width - (root.computed-cols + 1) * root.grid-gap) / root.computed-cols);
+    property <length> card-h: root.card-w + root.card-text-h;
+    property <length> row-h: root.card-h + root.grid-gap;
+
+    // Publishes the count on mount and on every change; see
+    // `grid-columns-sync.slint` for why it needs both a `changed` and a Timer.
+    GridColumnsSync {
+        computed-cols: root.computed-cols;
+        seed(c) => {
+            Albums.columns = c;
+            Albums.columns-changed(c);
+        }
+    }
+
+    // Catches clicks no inner widget consumes; the SearchBar blurs on the tick.
+    TouchArea {
+        clicked => { Albums.blur-search-tick += 1; }
+    }
+
+    VerticalLayout {
+        // Three sides: the uniform form's bottom pad sits outside the grid's
+        // viewport and reads as a dead strip above the panel border, with the
+        // last row of cards clipped against the edge.
+        padding-left: Theme.pad-lg;
+        padding-right: Theme.pad-lg;
+        padding-top: Theme.pad-lg;
+        spacing: Theme.pad-md;
+
+        HorizontalLayout {
+            vertical-stretch: 0;
+            spacing: Theme.pad-md;
+            alignment: stretch;
+
+            VerticalLayout {
+                alignment: center;
+                spacing: 0;
+                Text {
+                    text: @tr("Albums");
+                    color: Theme.page-title-color;
+                    font-size: Theme.page-title-size;
+                    font-weight: Theme.page-title-weight;
+                }
+                Text {
+                    text: @tr("{n} album" | "{n} albums" % Albums.total-count);
+                    color: Theme.subtext0;
+                    font-size: Theme.font-size-sm;
+                }
+            }
+
+            Rectangle { horizontal-stretch: 1; }
+
+            // The active field carries the direction arrow. Clicking it flips
+            // the direction and a new field starts ascending — both Rust's, in
+            // `wire_albums`.
+            VerticalLayout {
+                alignment: center;
+                ActionPill {
+                    PillButton {
+                        text: @tr("Name");
+                        reserve-sort-slot: true;
+                        sort-direction: Albums.sort-field == "name"
+                            ? Albums.sort-dir : "";
+                        active: Albums.sort-field == "name";
+                        clicked => { Albums.request-sort("name"); }
+                    }
+                    PillDivider { }
+                    PillButton {
+                        text: @tr("Year");
+                        reserve-sort-slot: true;
+                        sort-direction: Albums.sort-field == "year"
+                            ? Albums.sort-dir : "";
+                        active: Albums.sort-field == "year";
+                        clicked => { Albums.request-sort("year"); }
+                    }
+                    PillDivider { }
+                    PillButton {
+                        text: @tr("Artist");
+                        reserve-sort-slot: true;
+                        sort-direction: Albums.sort-field == "artist"
+                            ? Albums.sort-dir : "";
+                        active: Albums.sort-field == "artist";
+                        clicked => { Albums.request-sort("artist"); }
+                    }
+                }
+            }
+
+            VerticalLayout {
+                alignment: center;
+                SearchBar {
+                    text <=> Albums.filter;
+                    placeholder: @tr("Filter albums…");
+                    blur-trigger: Albums.blur-search-tick;
+                    edited(t) => { root.filter-tick-pending += 1; }
+                }
+            }
+        }
+
+        // The grid, with an opaque empty state painted over it when there's
+        // nothing to show.
+        body := Rectangle {
+            horizontal-stretch: 1;
+            vertical-stretch: 1;
+
+            grid := AlbumGrid {
+                width: 100%;
+                height: 100%;
+                rows: Albums.grid-rows;
+                card-width: root.card-w;
+                card-height: root.card-h;
+                row-height: root.row-h;
+                gap: root.grid-gap;
+                open-album(id) => { Albums.open-album(id); }
+                request-cover(p) => { Albums.request-cover(p) }
+            }
+
+            if Albums.total-count == 0: Rectangle {
+                background: Theme.base;
+                VerticalLayout {
+                    alignment: center;
+                    spacing: Theme.pad-md;
+                    HorizontalLayout {
+                        alignment: center;
+                        MaterialIcon {
+                            name: "album";
+                            icon-size: 64px;
+                            icon-color: Theme.overlay0;
+                        }
+                    }
+                    HorizontalLayout {
+                        alignment: center;
+                        Text {
+                            text: @tr("No albums yet");
+                            color: Theme.text;
+                            font-size: Theme.font-size-lg;
+                            font-weight: 600;
+                        }
+                    }
+                    HorizontalLayout {
+                        alignment: center;
+                        Text {
+                            text: @tr("Add a music folder in Settings to start building your library.");
+                            color: Theme.subtext0;
+                            font-size: Theme.font-size-sm;
+                            horizontal-alignment: center;
+                            wrap: word-wrap;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Outside the padded layout, so it sits flush with the panel's right edge;
+    // it drives the grid's inner ListView through the `v-*` contract.
+    OverlayScrollbar {
+        horizontal: false;
+        x: parent.width - self.width;
+        y: grid.absolute-position.y - root.absolute-position.y;
+        width: 10px;
+        height: grid.height;
+        visible-size: grid.v-visible-height;
+        content-size: grid.v-viewport-height;
+        offset: grid.v-offset;
+        scroll-to(o) => { grid.set-v-offset(o); }
+    }
+}

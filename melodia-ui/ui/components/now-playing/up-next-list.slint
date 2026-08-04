@@ -1,0 +1,235 @@
+import { ListView } from "std-widgets.slint";
+import { Theme } from "../../theme.slint";
+import { Player } from "../../globals/player.slint";
+import { Queue, NowPlaying } from "../../globals/queue.slint";
+import { QueueRow } from "../../models.slint";
+import { MaterialIcon } from "../material-icon.slint";
+import { ArtworkImage } from "../artwork-image.slint";
+import { OverlayScrollbar } from "../overlay-scrollbar.slint";
+
+// One row inside the Up Next list. The two variants differ only in scale and palette —
+// same three cells, same typography — so a track reads the same way in the miniplayer as
+// it does full-screen.
+//
+// **Scale** comes from the host, one source of truth shared with the slide animation,
+// and the tile and padding step down with it: the miniplayer sits tighter so more of the
+// queue fits in a window the user is deliberately shrinking, but not so much tighter
+// that it becomes a different list.
+//
+// **Palette is the `compact` flag's real job.** The full-screen host paints on the
+// artwork blur and takes the backdrop-solved brushes; the miniplayer paints on ordinary
+// chrome and takes the neutral list palette, including the shared row hover — the
+// Now-Playing accent is always solved *light* for the blur, and a light tint on a light
+// theme's mantle is no hover indication at all. Restated per branch because Slint can't
+// apply a property conditionally, and flipped without an `animate` like the track rows,
+// where an eased fade reads as lag when crossing rows.
+component UpNextRow inherits Rectangle {
+    in property <QueueRow> data;
+    in property <bool> compact;
+    // Owned by the host so the row and the slide animation can't disagree
+    // about how tall a row is.
+    in property <length> row-height;
+    callback clicked();
+
+    height: row-height;
+
+    property <length> pad-v: compact ? Theme.pad-xs : Theme.pad-sm;
+
+    Rectangle {
+        background: touch.has-hover
+            ? (compact ? Theme.surface0 : Player.np-accent-pill)
+            : transparent;
+        border-radius: Theme.radius-md;
+
+        HorizontalLayout {
+            padding-left: Theme.pad-sm;
+            padding-right: Theme.pad-sm;
+            padding-top: root.pad-v;
+            padding-bottom: root.pad-v;
+            spacing: Theme.pad-sm;
+            alignment: stretch;
+
+            VerticalLayout {
+                alignment: center;
+                ArtworkImage {
+                    artwork-path: root.data.artwork_path;
+                    cover: NowPlaying.request-cover(root.data.artwork_path);
+                    tile-size: compact ? 34px : 38px;
+                    tile-radius: Theme.radius-md;
+                }
+            }
+
+            // Clips bidi overflow so elide fires — the bar's track-info pattern.
+            Rectangle {
+                clip: true;
+                horizontal-stretch: 1;
+                VerticalLayout {
+                    alignment: center;
+                    spacing: 2px;
+                    Text {
+                        text: "‎" + root.data.title;
+                        color: compact ? Theme.text : Player.np-on-backdrop;
+                        font-size: Theme.font-size-row;
+                        overflow: elide;
+                    }
+                    Text {
+                        text: "‎" + root.data.artist;
+                        // Compact is body copy on a plain surface, so it takes
+                        // `Theme.text` like every other row list. The full view keeps
+                        // its solved muted tier: that one floats on the blurred cover,
+                        // where the two-tier split is what holds the hierarchy.
+                        color: compact ? Theme.text : Player.np-on-backdrop-muted;
+                        font-size: Theme.font-size-sm;
+                        overflow: elide;
+                        visible: root.data.artist != "";
+                    }
+                }
+            }
+
+            VerticalLayout {
+                alignment: center;
+                Text {
+                    text: root.data.display_duration;
+                    color: compact ? Theme.text : Player.np-on-backdrop-muted;
+                    font-size: Theme.font-size-sm;
+                }
+            }
+        }
+
+        touch := TouchArea {
+            mouse-cursor: pointer;
+            clicked => { root.clicked(); }
+        }
+    }
+}
+
+// The list itself: advance-by-row slide, outgoing-row overlay, overlay scrollbar and
+// empty state, all off the same `NowPlaying` data for both surfaces.
+//
+// **Two hosts mount it but never at once**: entering the miniplayer force-closes
+// `Nav.now-playing-open`, so only one local slide timer ever runs.
+//
+// Row height, scrollbar slot, list inset, the empty glyph and — the part that
+// matters — which palette the rows paint all key off the single `compact` flag, so a
+// caller threads one property rather than six.
+export component UpNextList inherits Rectangle {
+    in property <bool> compact;
+    // **Must exceed `scrollbar-width`**, else the list extent and the scrollbar slot
+    // overlap and the row hover paints under the bar. The remaining gap also keeps the
+    // row TouchAreas off the window's right-edge resize band.
+    in property <length> list-inset-right: compact ? 12px : 20px;
+    // The bar keeps its own thickness; the extra in the full host is hit-test margin.
+    in property <length> scrollbar-width: compact ? 8px : 10px;
+
+    // **The one place a row's height is decided**, handed to every row and to the slide
+    // below, so the two can't drift.
+    property <length> row-h: compact ? 46px : 52px;
+    property <int> slide-frames: 18;         // ~288ms at 16ms
+    property <float> slide-raw: clamp(1.0 * NowPlaying.slide-phase / root.slide-frames, 0.0, 1.0);
+    // Ease-out cubic, so the row decelerates into place instead of stopping dead.
+    property <float> slide-p:
+        1.0 - (1.0 - root.slide-raw) * (1.0 - root.slide-raw) * (1.0 - root.slide-raw);
+
+    // Rust resetting the phase to 0 restarts this; it advances the phase per frame and
+    // stops itself at the end.
+    slide-timer := Timer {
+        interval: 16ms;
+        running: NowPlaying.slide-phase < root.slide-frames;
+        triggered => {
+            NowPlaying.slide-phase += 1;
+        }
+    }
+
+    clip: true;
+
+    // An **absolute** child of this wrapper, not a layout child, so its `y` can carry
+    // the one-shot slide without fighting a layout; the clip above hides the row height
+    // it is offset by mid-slide.
+    up-next-list := ListView {
+        // The `OverlayScrollbar` below is the only scrollbar.
+        vertical-scrollbar-policy: always-off;
+        horizontal-scrollbar-policy: always-off;
+        x: 0;
+        // Starts one row-height off rest on a track change and slides in. The sign
+        // comes from `slide-direction`: forward slides up, rewound slides down.
+        y: NowPlaying.slide-direction * (1.0 - root.slide-p) * root.row-h;
+        width: parent.width - root.list-inset-right;
+        height: 100%;
+        for row[idx] in NowPlaying.up-next-rows: UpNextRow {
+            data: row;
+            compact: root.compact;
+            row-height: root.row-h;
+            clicked => {
+                // Under repeat-all the list wraps past the end, so the play-order
+                // index is taken modulo the queue length.
+                Queue.skip-to(Math.mod(
+                    NowPlaying.base-index + idx,
+                    NowPlaying.queue-length));
+            }
+        }
+    }
+
+    // The row that just left the list. Forward, it is the track that became current and
+    // slides off the top; backward, the one that fell off the bottom and slides off
+    // there. The wrapper clips both ends. **Clicks are deliberately not wired**: it
+    // lasts a few hundred ms and names a position this row can no longer skip to.
+    UpNextRow {
+        visible: NowPlaying.outgoing-visible
+                 && NowPlaying.slide-phase < root.slide-frames;
+        x: 0;
+        width: parent.width - root.list-inset-right;
+        compact: root.compact;
+        row-height: root.row-h;
+        y: NowPlaying.slide-direction == 1
+            ? -root.slide-p * root.row-h
+            : parent.height - (1.0 - root.slide-p) * root.row-h;
+        data: NowPlaying.outgoing-row;
+    }
+
+    OverlayScrollbar {
+        x: parent.width - self.width;
+        y: 0;
+        width: root.scrollbar-width;
+        height: parent.height;
+        visible-size: up-next-list.visible-height;
+        content-size: up-next-list.viewport-height;
+        offset: -up-next-list.viewport-y;
+        // Full-screen only: tinted with the visualizer's accent, both parts translucent
+        // so the bar sits *into* the artwork blur rather than on top of it. The
+        // miniplayer keeps the neutral default, restated per branch because Slint can't
+        // apply a property conditionally.
+        track-color: root.compact ? Theme.surface0 : Player.np-accent-bright;
+        track-opacity: root.compact ? 0.5 : 0.25;
+        track-opacity-active: root.compact ? 0.85 : 0.4;
+        thumb-color: root.compact ? Theme.surface2 : Player.np-accent-dim;
+        thumb-active-color: root.compact ? Theme.accent : Player.np-accent-bright.with-alpha(0.8);
+        scroll-to(o) => { up-next-list.viewport-y = -o; }
+    }
+
+    // Empty state.
+    if NowPlaying.up-next-rows.length == 0: VerticalLayout {
+        alignment: center;
+        HorizontalLayout {
+            alignment: center;
+            VerticalLayout {
+                spacing: Theme.pad-sm;
+                HorizontalLayout {
+                    alignment: center;
+                    MaterialIcon {
+                        name: "queue_music";
+                        icon-size: compact ? 28px : 40px;
+                        icon-color: compact
+                            ? Theme.surface2
+                            : Player.np-on-backdrop-muted.with-alpha(0.5);
+                    }
+                }
+                Text {
+                    text: @tr("No tracks up next");
+                    color: compact ? Theme.subtext0 : Player.np-on-backdrop-muted;
+                    font-size: compact ? Theme.font-size-sm : Theme.font-size-md;
+                    horizontal-alignment: center;
+                }
+            }
+        }
+    }
+}

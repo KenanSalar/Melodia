@@ -9,21 +9,24 @@ use parking_lot::Mutex;
 
 use crate::entities::album::AlbumStats;
 use crate::entities::track::TrackListRow as RsTrackListRow;
+use crate::ui::row_match::Needle;
 
 /// An album's pre-lowercased name + artist, computed once per `fetch_grid`
-/// so the per-keystroke filter walk and the name / artist sorts allocate
-/// nothing. Positionally aligned with [`GridData::albums`].
-pub(super) struct AlbumSearchKey {
+/// so the name / artist sorts allocate nothing. Positionally aligned with
+/// [`GridData::albums`]. The filter doesn't read it — it walks the raw
+/// fields through `ui::row_match`, which has to fold accents and so can't
+/// take a plain lowercased key.
+pub(super) struct AlbumSortKey {
     pub name_lc: String,
     pub artist_lc: String,
 }
 
 /// The grid's canonical data: the album list plus its pre-lowercased
-/// search / sort keys, kept together behind one `Arc` so a rebuild is a
+/// sort keys, kept together behind one `Arc` so a rebuild is a
 /// single refcount bump (and the two halves can never drift out of sync).
 pub(super) struct GridData {
     pub albums: Vec<AlbumStats>,
-    pub keys: Vec<AlbumSearchKey>,
+    pub keys: Vec<AlbumSortKey>,
 }
 
 impl GridData {
@@ -32,7 +35,7 @@ impl GridData {
     pub(super) fn new(albums: Vec<AlbumStats>) -> Self {
         let keys = albums
             .iter()
-            .map(|a| AlbumSearchKey {
+            .map(|a| AlbumSortKey {
                 name_lc: a.name.to_lowercase(),
                 artist_lc: a.artist_name.to_lowercase(),
             })
@@ -78,9 +81,9 @@ pub(super) struct AlbumDetailState {
     /// Cached detail track rows — the **displayed** (filter-applied)
     /// subset, kept in lockstep with the Slint `tracks` model so the
     /// generic selection/sort logic (which maps id ↔ row-index through
-    /// this cache) stays valid. `play-row` / `select-row` / `play-album`
-    /// / the in-memory re-sort read this without round-tripping the
-    /// Slint model — mirrors `BrowseUi::last_files`.
+    /// this cache) stays valid. `play-row` / `select-row` /
+    /// `shuffle-album` / the in-memory re-sort read this without
+    /// round-tripping the Slint model — mirrors `BrowseUi::last_files`.
     pub tracks: Mutex<Vec<RsTrackListRow>>,
     /// Canonical full track set for this album, in display-sort order.
     /// `tracks` holds only the displayed subset; `apply_filtered_detail`
@@ -95,17 +98,20 @@ pub(super) struct AlbumDetailState {
     /// and only re-writes the rows whose membership flipped — O(changed),
     /// not O(rows). Reset to empty whenever the row model is rebuilt fresh.
     pub applied_selection: Mutex<HashSet<i32>>,
-    /// Live lowercased filter needle, mirroring `AlbumDetail.filter`. Lets
+    /// Live filter needle, folded by `set_filter` through
+    /// `ui::row_match::fold_needle` — never a bare `to_lowercase`, which
+    /// would still build and silently drop accent parity on this one view.
+    /// Mirrors `AlbumDetail.filter`. Lets
     /// the re-fetch path (`refresh_detail`) re-apply the filter to fresh
     /// data without round-tripping the UI thread for the property read.
     /// Cleared on fresh-open. Mirrors `ArtistDetailState::filter`.
-    pub filter: Mutex<String>,
+    pub filter: Mutex<Needle>,
 }
 
 /// Square decode size (px) for the Albums **grid card** tiles. Bigger than
 /// the detail header tier because the flex-filled grid cards get large on a
-/// wide panel (well past 280 px); 448 px keeps them crisp under
-/// `image-fit: cover` + Skia mipmaps. The knob to retune grid sharpness.
+/// wide panel (well past 280 px), and a tile upscaled past its decode size
+/// visibly softens. The knob to retune grid sharpness.
 pub(super) const GRID_COVER_SIZE: u32 = 448;
 
 /// Fallback LRU capacity for the **grid** cover cache, used at construction
@@ -120,7 +126,7 @@ pub(super) const DEFAULT_GRID_COVER_CAP: NonZeroUsize = match NonZeroUsize::new(
 /// How many leading (name-sorted) albums' covers `fetch_grid` prewarms
 /// before the grid first paints. Covers roughly the first screenful at any
 /// reasonable column count; everything past it decodes lazily on
-/// scroll-in via `request-cover`. Kept ≤ the `compute_album_cover_cap`
+/// scroll-in via `request-cover`. Kept ≤ the `ui::grid_prewarm::cover_cap`
 /// floor (32) so the prewarm can't thrash the grid-tier LRU it fills —
 /// each 448 px buffer is ~600 KB, so this stays deliberately small.
 pub(super) const GRID_PREWARM_AHEAD: usize = 24;

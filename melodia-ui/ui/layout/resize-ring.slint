@@ -1,0 +1,79 @@
+import { Theme } from "../theme.slint";
+
+// The window's resize perimeter — eight overlays that do nothing but set a
+// cursor. No `clicked` handler on purpose: the winit backend processes the
+// resize off the Window's `resize-border-width` before the press ever reaches a
+// TouchArea. So these exist for the visual cue and to *steal* hover from what
+// sits underneath — without that theft, aiming at the band flashes the close
+// button red and paints scrollbar hover.
+//
+// The caller mounts it full-size and owns the decision to mount at all: one
+// condition at the mount site instead of eight repeated here.
+export component ResizeRing {
+    // Order matters: edges first, corners after. Slint gives hover to the
+    // last-declared item under the cursor, so the diagonal wins at the corners
+    // and the edges win everywhere else.
+
+    // Top.
+    TouchArea {
+        x: 0;
+        y: 0;
+        width: root.width;
+        height: Theme.resize-border;
+        mouse-cursor: ns-resize;
+    }
+    // Bottom.
+    TouchArea {
+        x: 0;
+        y: root.height - Theme.resize-border;
+        width: root.width;
+        height: Theme.resize-border;
+        mouse-cursor: ns-resize;
+    }
+    // Left.
+    TouchArea {
+        x: 0;
+        y: 0;
+        width: Theme.resize-border;
+        height: root.height;
+        mouse-cursor: ew-resize;
+    }
+    // Right — this is the one that overlaps a scrollbar.
+    TouchArea {
+        x: root.width - Theme.resize-border;
+        y: 0;
+        width: Theme.resize-border;
+        height: root.height;
+        mouse-cursor: ew-resize;
+    }
+
+    // Corners.
+    TouchArea {
+        x: 0;
+        y: 0;
+        width: Theme.resize-corner;
+        height: Theme.resize-corner;
+        mouse-cursor: nwse-resize;
+    }
+    TouchArea {
+        x: root.width - Theme.resize-corner;
+        y: 0;
+        width: Theme.resize-corner;
+        height: Theme.resize-corner;
+        mouse-cursor: nesw-resize;
+    }
+    TouchArea {
+        x: 0;
+        y: root.height - Theme.resize-corner;
+        width: Theme.resize-corner;
+        height: Theme.resize-corner;
+        mouse-cursor: nesw-resize;
+    }
+    TouchArea {
+        x: root.width - Theme.resize-corner;
+        y: root.height - Theme.resize-corner;
+        width: Theme.resize-corner;
+        height: Theme.resize-corner;
+        mouse-cursor: nwse-resize;
+    }
+}

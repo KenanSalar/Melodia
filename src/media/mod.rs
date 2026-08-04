@@ -1,6 +1,8 @@
 pub mod artwork;
 pub mod cover_thumbs;
 pub mod deezer;
+pub mod image_decode;
+pub mod itunes;
 pub mod metadata;
 pub mod scanner;
 pub mod self_writes;

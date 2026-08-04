@@ -227,8 +227,9 @@ fn translate_event(event: MediaControlEvent) -> Option<PlayerEvent> {
             None
         }
         MediaControlEvent::Raise | MediaControlEvent::Quit => {
-            // Window control needs a Slint window handle — wired in Phase 2.
-            log::debug!("Window control media event ignored in Phase 1");
+            // Window control needs a Slint window handle, which this layer
+            // deliberately doesn't hold — see the `EventSink` split.
+            log::debug!("Window control media event ignored");
             None
         }
         MediaControlEvent::OpenUri(uri) => {

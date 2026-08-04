@@ -8,13 +8,18 @@
 //!
 //! This helper runs the same fast-path used by `tracks::apply_visible`:
 //! if the new vec is the same length as the model and ids align
-//! positionally, rewrite every row via `set_row_data`; otherwise fall
-//! back to `set_vec`.
+//! positionally, write the rows that actually differ via `set_row_data`;
+//! otherwise fall back to `set_vec`.
 //!
-//! Row types here don't implement `PartialEq` (`slint::Image` doesn't),
-//! so we rewrite every aligned row rather than diffing per-field — still
-//! strictly cheaper than a reset, and it ensures field updates always
-//! propagate.
+//! Comparing is worth it because every generated row type is `PartialEq`
+//! and cheap to compare: `slint::Image`'s equality bottoms out in a
+//! pointer compare on the shared pixel buffer, not a pixel walk, so two
+//! rows handed the same cached cover compare equal without touching the
+//! data. A false "changed" verdict is therefore the only possible error
+//! and it just writes the row, which is what the helper used to do
+//! unconditionally. The win is in the common case: a track advance with
+//! the whole library queued used to fire one `row_changed` per library
+//! track for a row set in which nothing moved.
 
 use slint::{Model, ModelRc, VecModel};
 
@@ -27,15 +32,19 @@ use slint::{Model, ModelRc, VecModel};
 /// fast path is safe.
 pub fn apply_rows_keyed<T, F>(vec_model: &VecModel<T>, new_rows: Vec<T>, id_of: F)
 where
-    T: Clone + 'static,
+    T: Clone + PartialEq + 'static,
     F: Fn(&T) -> i32,
 {
     let cur_count = vec_model.row_count();
     if cur_count == new_rows.len() {
+        // One pass decides both questions. The id check needs each current
+        // row in hand anyway, so comparing it in full costs nothing extra
+        // and tells the write loop below which rows to skip.
+        let mut differs = Vec::with_capacity(cur_count);
         let mut all_match = true;
         for (i, new_r) in new_rows.iter().enumerate() {
             match vec_model.row_data(i) {
-                Some(cur) if id_of(&cur) == id_of(new_r) => {}
+                Some(cur) if id_of(&cur) == id_of(new_r) => differs.push(cur != *new_r),
                 _ => {
                     all_match = false;
                     break;
@@ -44,7 +53,9 @@ where
         }
         if all_match {
             for (i, new_r) in new_rows.into_iter().enumerate() {
-                vec_model.set_row_data(i, new_r);
+                if differs[i] {
+                    vec_model.set_row_data(i, new_r);
+                }
             }
             return;
         }
@@ -62,3 +73,7 @@ pub fn clear_vec_model<T: Clone + 'static>(model: &ModelRc<T>, label: &str) {
         log::warn!("{label}: VecModel downcast failed");
     }
 }
+
+#[cfg(test)]
+#[path = "tests/model_diff_tests.rs"]
+mod tests;

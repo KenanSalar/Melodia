@@ -1,0 +1,88 @@
+import { Nav } from "../globals/nav.slint";
+import { MiniPlayer } from "../globals/shell.slint";
+
+// The responsive full-UI ↔ miniplayer swap, as a non-visual state machine: both `Timer`s
+// are pseudo-elements, so it occupies no layout space and can be mounted anywhere.
+//
+// Compact when the window is either narrow *or* short, and the `square` variant — the one
+// that can show an Up Next list — once the aspect is roughly square or taller. The host
+// passes its size in, a component's root binding not reaching `parent`; winit drives that
+// directly, so nothing else needs plumbing.
+//
+// **The swap is two-phase on purpose**: `render-active` lags `active` by the fade, so
+// only *one* branch is ever mounted. Overlapping them holds the sidebar's grid covers
+// and the mini's up-next subscriber alive at once, which is a memory regression.
+export component MiniPlayerSwitch {
+    // The host window's live size.
+    in property <length> host-width;
+    in property <length> host-height;
+
+    // Flips the instant the threshold is crossed. **`render-active` is what a host
+    // branches on**; this is only the decision.
+    out property <bool> active: root.host-width < 550px || root.host-height < 250px;
+
+    // Which branch is mounted right now: `active`, delayed by one fade so the
+    // outgoing layout can reach opacity 0 before it is destroyed.
+    out property <bool> render-active: false;
+
+    // Named around the builtin property of that name.
+    out property <float> fade-opacity: 1.0;
+    animate fade-opacity { duration: 100ms; easing: ease-in-out; }
+
+    // Internal: nothing outside needs the variant, it only feeds the global.
+    private property <bool> square: root.host-height >= root.host-width * 0.8;
+
+    // Mirrored locally because a `changed` handler can't watch a global's property.
+    //
+    // It publishes to the global so children see the new value, schedules
+    // fade-out → swap → fade-in, closes any open Now Playing view so its artwork release
+    // runs, and notifies Rust for the up-next gate and the square variant's cover cache.
+    // **`MiniPlayer.square` is `watched-square`'s to own** — Rust re-reads it from the
+    // global on entry, so no redundant write belongs here.
+    private property <bool> watched-active: root.active;
+    changed watched-active => {
+        MiniPlayer.active = root.watched-active;
+        if (root.watched-active && Nav.now-playing-open) {
+            Nav.now-playing-open = false;
+        }
+        root.fade-opacity = 0.0;
+        swap-timer.running = true;
+        MiniPlayer.active-changed(root.watched-active);
+    }
+
+    // **A variant change inside mini deliberately doesn't fade**: it is an in-place
+    // re-layout of the same component, and a flash on every aspect wobble through a
+    // window drag would be jarring. The callback drives the high-res cover cache — seed
+    // on rectangle→square, release on the way back.
+    private property <bool> watched-square: root.square;
+    changed watched-square => {
+        MiniPlayer.square = root.watched-square;
+        MiniPlayer.square-changed(root.watched-square);
+    }
+
+    // The mount seed: `changed` doesn't fire when the first settle lands directly on the
+    // final value, so without it an app launched straight into a mini-sized window
+    // paints the full UI for a frame before switching.
+    seed-timer := Timer {
+        interval: 1ms;
+        triggered => {
+            MiniPlayer.active = root.active;
+            MiniPlayer.square = root.square;
+            root.render-active = root.active;
+            MiniPlayer.active-changed(root.active);
+            self.running = false;
+        }
+    }
+
+    // Flips the render shadow and eases the opacity back. Single-shot and re-armed on
+    // each flip, so a fast wiggle just restarts the same timer.
+    swap-timer := Timer {
+        interval: 100ms;
+        running: false;
+        triggered => {
+            root.render-active = root.active;
+            root.fade-opacity = 1.0;
+            self.running = false;
+        }
+    }
+}

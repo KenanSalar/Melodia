@@ -26,7 +26,7 @@ use crate::{AlbumDetail, AppWindow, NavEnterFrom, TrackListRow as UiTrackListRow
 
 // `apply_detail_artwork` (cover + hero-blur write) and
 // `replace_tracks_model` (in-place `tracks` `VecModel` swap) — see
-// `ui/detail_view.rs`.
+// `src/ui/detail_view.rs`.
 impl_detail_view_helpers!(artwork AlbumDetail);
 
 /// Fetch an album's header + track list and prewarm their cover
@@ -46,6 +46,7 @@ async fn fetch_album_detail(
     // `refresh_detail`) decodes that pair into the `detail_artwork` LRU.
     let track_covers: Vec<PathBuf> = crate::ui::grid_prewarm::unique_artwork_paths(
         tracks.iter().map(|t| t.artwork_path.as_deref()),
+        albums_ui.cover_thumbs.capacity(),
     );
     if !track_covers.is_empty() {
         let row_thumbs = albums_ui.cover_thumbs.clone();
@@ -110,7 +111,7 @@ where
     // Decode the `(cover, blur)` pair for the detail header on the
     // `spawn_blocking` pool — one image decode + one box blur. Both halves
     // are derived from a single source decode (see
-    // `ui::detail_artwork::ArtworkPair`). The buffers are raw RGB8 so they
+    // `ui::artwork_cache::ArtworkPair`). The buffers are raw RGB8 so they
     // cross the upcoming `upgrade_in_event_loop` boundary; the UI thread
     // wraps them in `slint::Image` via `Image::from_rgb8`.
     let pair = decode_detail_pair(
@@ -126,6 +127,11 @@ where
     let prepared: Vec<PreparedTrackRow> =
         tracks.iter().map(crate::ui::tracks::prepare_track_list_row).collect();
 
+    // Folded here rather than inside the `upgrade_in_event_loop` below — this
+    // is the worker that already has the rows, and the UI thread has no reason
+    // to walk a long album's track list a second time.
+    let genre = crate::ui::hero_chips::dominant_genre(&tracks);
+
     *albums_ui.detail.album_id.lock() = album_id;
 
     let albums_ui = albums_ui.clone();
@@ -139,10 +145,18 @@ where
             .collect();
         let header = to_slint_album_row(&detail);
         g.set_album(header);
+        // Off `detail` rather than the row above it — `disc_count` and
+        // `is_compilation` are fetched but never reach `AlbumRow`.
+        crate::ui::hero_chips::publish_album(
+            &ui,
+            &detail,
+            genre.as_deref(),
+            albums_ui.section_active(),
+        );
         // Hero blur cross-fades from the previous album; the cover slot
         // is written directly (no fade — the artwork tile itself is
         // covered by the next album's tile in one frame).
-        apply_detail_artwork(&g, pair, /* animate */ true);
+        apply_detail_artwork(&ui, &g, pair, /* animate */ true, albums_ui.section_active());
         replace_tracks_model(&g, ui_tracks);
         reset_detail_selection(&g, &albums_ui);
         // Fresh open clears the filter so the user lands on the full
@@ -206,6 +220,8 @@ pub async fn refresh_detail(
     )
     .await;
 
+    let genre = crate::ui::hero_chips::dominant_genre(&tracks);
+
     let albums_ui = albums_ui.clone();
     let _ = weak.upgrade_in_event_loop(move |ui| {
         let g = ui.global::<AlbumDetail>();
@@ -223,10 +239,16 @@ pub async fn refresh_detail(
         // Header is one row — always refresh it (artwork / counts may
         // have changed).
         g.set_album(to_slint_album_row(&detail));
+        crate::ui::hero_chips::publish_album(
+            &ui,
+            &detail,
+            genre.as_deref(),
+            albums_ui.section_active(),
+        );
         // No fade on the refresh path — this is the same album, the
         // user did not navigate. Either it's a cache hit (no change) or
         // the cover/blur is being replaced in place.
-        apply_detail_artwork(&g, pair, /* animate */ false);
+        apply_detail_artwork(&ui, &g, pair, /* animate */ false, albums_ui.section_active());
 
         // With an active filter the displayed model is a subset, so the
         // id-slice fast path below (which assumes an unfiltered model)
@@ -369,9 +391,9 @@ pub fn clear_detail(albums_ui: &AlbumsUi) {
 /// live text via the `<=>` binding; this Rust mirror lets the re-fetch
 /// path (`refresh_detail`) re-apply the filter to fresh data without
 /// round-tripping the UI thread for the property read. Always stored
-/// lowercased so the per-keystroke walk doesn't re-lower per row.
+/// folded so the per-keystroke walk doesn't re-fold per row.
 pub fn set_filter(albums_ui: &AlbumsUi, needle: &str) {
-    *albums_ui.detail.filter.lock() = needle.to_lowercase();
+    *albums_ui.detail.filter.lock() = crate::ui::row_match::fold_needle(needle);
 }
 
 /// Re-walk the cached tracks through the current filter and push the

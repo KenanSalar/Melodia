@@ -26,6 +26,12 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
     // Rust-side caches off-thread; on return, full re-fetch if dirty
     // else just prewarm visible covers.
     playlists_ui.set_section_active(ui.global::<Nav>().get_selected_index() == 7);
+    // See the matching seed in `albums/lifecycle.rs`: a boot pre-fetch for a
+    // section that isn't on screen can't publish the shared hero globals, so
+    // its first enter has to re-fetch rather than take the cheap path.
+    if !playlists_ui.section_active() {
+        playlists_ui.mark_dirty();
+    }
     {
         let pu = playlists_ui.clone();
         let s = state.clone();
@@ -43,7 +49,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
                 }
 
                 let d = ui.global::<PlaylistDetail>();
-                release_detail_hero_images!(d);
+                release_detail_hero_images!(ui, d);
                 let tm = d.get_tracks();
                 if let Some(vm) = tm.as_any().downcast_ref::<VecModel<UiTrackListRow>>() {
                     vm.set_vec(Vec::new());
@@ -84,7 +90,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
                             let _ = weak.upgrade_in_event_loop(|ui| {
                                 let g = ui.global::<PlaylistDetail>();
                                 g.set_playlist_id(-1);
-                                release_detail_hero_images!(g);
+                                release_detail_hero_images!(ui, g);
                             });
                         }
                     } else {

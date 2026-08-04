@@ -1,0 +1,247 @@
+import { ListView, ScrollView } from "std-widgets.slint";
+import { Theme } from "../../theme.slint";
+import { TrackListRow } from "../../models.slint";
+import { TrackListHeader } from "track-list-header.slint";
+import { TrackListRowItem } from "track-list-row.slint";
+
+// Drag-reorderable sibling of `TrackList` — same external contract plus a
+// `reorder(from, to)` fired on a successful drop. **The shared `TrackList`
+// stays drag-free**; Playlist Detail is this one's only consumer.
+//
+// The drag itself lives inside `TrackListRowItem`, behind its `enable-drag`.
+// Wrapping the row in an outer TouchArea does not work: the row's own `touch`
+// captures press and up exclusively under Slint's deepest-wins routing, so an
+// outer one sees `moved` but never `pointer-event(up)` and the ghost and drop
+// line stay stuck after every drop.
+//
+// The state (`drag-source` / `drop-slot`) sits at list level and every row
+// `<=>`s into it. Rust drives none of it — only the final `reorder` crosses the
+// boundary — but it does have to *abort* a drag, which is why Playlist Detail
+// binds both onto its global; see that view. Gated on `reorder-enabled`, since
+// a reorder is ambiguous in any sort but the insertion one.
+export component DraggableTrackList inherits Rectangle {
+    in property <[TrackListRow]> rows;
+
+    in-out property <length> w-number: 56px;
+    in-out property <length> w-title: 320px;
+    in-out property <length> w-artist: 200px;
+    in-out property <length> w-album: 220px;
+    in-out property <length> w-genre: 140px;
+    in-out property <length> w-year: 72px;
+    in-out property <length> w-length: 88px;
+
+    in-out property <bool> show-number: true;
+    in-out property <bool> show-artwork: true;
+    in-out property <bool> show-artist: true;
+    in-out property <bool> show-album: true;
+    in-out property <bool> show-genre: true;
+    in-out property <bool> show-year: true;
+
+    // Number-column mode — forwarded to every row. See TrackList.
+    in property <string> number-mode: "index";
+
+    in property <string> sort-field;
+    in property <string> sort-dir;
+
+    in property <int> playing-track-id;
+
+    in property <bool> reorder-enabled: false;
+
+    out property <length> total-w: 16px
+        + (root.show-number ? root.w-number + 8px : 0px)
+        + root.w-title + 8px
+        + (root.show-artist ? root.w-artist + 8px : 0px)
+        + (root.show-album ? root.w-album + 8px : 0px)
+        + (root.show-genre ? root.w-genre + 8px : 0px)
+        + (root.show-year ? root.w-year + 8px : 0px)
+        + root.w-length;
+
+    // Row pitch — mirrors `TrackListRowItem`'s `drag-row-h`. Feeds the
+    // drop-indicator overlay and the auto-scroll gate.
+    property <length> row-height:
+        (root.show-artwork ? Theme.row-h : Theme.row-h-compact) + Theme.row-gap;
+
+    // Every row `<=>`s into these, so all of them share one source of truth.
+    in-out property <int> drag-source: -1;
+    in-out property <int> drop-slot: -1;
+
+    // Only meaningful while `drag-source >= 0`; read by the auto-scroll gate.
+    property <length> drag-src-screen-y:
+        root.drag-source * root.row-height + inner-list.viewport-y;
+
+    // In the visible list's own coordinates: centred on the slot boundary, then
+    // pinned inside the band. The after-the-last-row slot sits on the content's
+    // bottom edge, which is off the list once it's scrolled to the end, so
+    // unpinned that line is simply never drawn; the top end mirrors it, and
+    // both catch a pointer dragged clean out of the list.
+    property <length> drop-line-h: 2px;
+    property <length> drop-line-y: max(
+        0px,
+        min(
+            inner-list.visible-height - root.drop-line-h,
+            root.drop-slot * root.row-height + inner-list.viewport-y
+                - root.drop-line-h / 2,
+        ),
+    );
+
+    callback request-sort(string /*field*/);
+    callback play-row(int /*track_id*/, int /*index*/);
+    // Batch-shaped — see TrackList for the contract.
+    callback play-next([int]);
+    callback add-to-queue([int]);
+    callback toggle-row-favorite([int] /*track_ids*/, bool /*new_state*/);
+    callback set-row-rating([int] /*track_ids*/, int /*rating*/);
+    callback select-row(int /*idx*/, int /*id*/, bool /*shift*/, bool /*ctrl*/);
+    callback request-blur-search();
+    callback reorder(int /*from*/, int /*to*/);
+    callback remove-from-playlist([int] /*track_ids*/);
+    callback go-to-album(int /*album_id*/);
+    callback go-to-artist(int /*artist_id*/);
+    callback go-to-genre(int /*genre_id*/);
+
+    // Context for the row's menu: `view-context` is what surfaces the
+    // Remove-from-Playlist entry, and the id filters this playlist out of the
+    // Add-to-Playlist sub-list.
+    in property <string> view-context: "playlist-detail";
+    in property <int> current-playlist-id: 0;
+    in property <[int]> view-selected-ids;
+
+    out property <length> v-visible-height: inner-list.visible-height;
+    out property <length> v-viewport-height: inner-list.viewport-height;
+    out property <length> v-offset: -inner-list.viewport-y;
+    out property <length> body-y: inner-list.absolute-position.y - root.absolute-position.y;
+    out property <length> body-height: inner-list.height;
+
+    out property <length> h-visible-width: outer-scroll.visible-width;
+    out property <length> h-viewport-width: outer-scroll.viewport-width;
+    out property <length> h-offset: -outer-scroll.viewport-x;
+
+    callback set-v-offset(length);
+    callback set-h-offset(length);
+
+    set-v-offset(o) => { inner-list.viewport-y = -o; }
+    set-h-offset(o) => { outer-scroll.viewport-x = -o; }
+
+    outer-scroll := ScrollView {
+        horizontal-scrollbar-policy: always-off;
+        vertical-scrollbar-policy: always-off;
+        viewport-height: self.height;
+
+        VerticalLayout {
+            spacing: Theme.pad-xs;
+
+            TrackListHeader {
+                w-number <=> root.w-number;
+                w-title <=> root.w-title;
+                w-artist <=> root.w-artist;
+                w-album <=> root.w-album;
+                w-genre <=> root.w-genre;
+                w-year <=> root.w-year;
+                w-length <=> root.w-length;
+                show-number: root.show-number;
+                show-artist: root.show-artist;
+                show-album: root.show-album;
+                show-genre: root.show-genre;
+                show-year: root.show-year;
+                total-w: root.total-w;
+                sort-field: root.sort-field;
+                sort-dir: root.sort-dir;
+                sort-clicked(f) => { root.request-sort(f); }
+            }
+
+            inner-list := ListView {
+                vertical-stretch: 1;
+                vertical-scrollbar-policy: always-off;
+                width: root.total-w;
+                for r[idx] in root.rows: TrackListRowItem {
+                    row-data: r;
+                    row-index: idx;
+                    prev-selected: idx > 0 && root.rows[idx - 1].selected;
+                    next-selected: idx < root.rows.length - 1 && root.rows[idx + 1].selected;
+                    w-number: root.w-number;
+                    w-title: root.w-title;
+                    w-artist: root.w-artist;
+                    w-album: root.w-album;
+                    w-genre: root.w-genre;
+                    w-year: root.w-year;
+                    w-length: root.w-length;
+                    show-number: root.show-number;
+                    show-artwork: root.show-artwork;
+                    show-artist: root.show-artist;
+                    show-album: root.show-album;
+                    show-genre: root.show-genre;
+                    show-year: root.show-year;
+                    number-mode: root.number-mode;
+                    sort-field: root.sort-field;
+                    sort-dir: root.sort-dir;
+                    total-w: root.total-w;
+                    playing-track-id: root.playing-track-id;
+                    view-context: root.view-context;
+                    current-playlist-id: root.current-playlist-id;
+                    view-selected-ids: root.view-selected-ids;
+
+                    // `enable-drag` gates all drag handling inside the row's
+                    // own `touch`; the `<=>`s share the state across rows.
+                    enable-drag: root.reorder-enabled;
+                    row-count: root.rows.length;
+                    list-y0: inner-list.absolute-position.y;
+                    list-height: inner-list.height;
+                    list-viewport-y: inner-list.viewport-y;
+                    drag-source <=> root.drag-source;
+                    drop-slot <=> root.drop-slot;
+
+                    double-clicked-row => { root.play-row(r.id, idx); }
+                    toggle-favorite => { root.toggle-row-favorite([r.id], !r.is_favorite); }
+                    play-row(id, i) => { root.play-row(id, i); }
+                    play-next(ids) => { root.play-next(ids); }
+                    add-to-queue(ids) => { root.add-to-queue(ids); }
+                    toggle-row-favorite(ids, on) => { root.toggle-row-favorite(ids, on); }
+                    set-row-rating(ids, n) => { root.set-row-rating(ids, n); }
+                    select-row(i, id, sh, ct) => { root.select-row(i, id, sh, ct); }
+                    request-remove-from-playlist(ids) => { root.remove-from-playlist(ids); }
+                    request-blur-search => { root.request-blur-search(); }
+                    drag-reorder(from, to) => { root.reorder(from, to); }
+                    go-to-album(aid) => { root.go-to-album(aid); }
+                    go-to-artist(aid) => { root.go-to-artist(aid); }
+                    go-to-genre(gid) => { root.go-to-genre(gid); }
+                    request-scroll-by(dy) => {
+                        // `dy` is a content-space delta, so it *subtracts* from
+                        // `viewport-y`, which runs 0 at the top and negative
+                        // downwards. Same shape as `queue-sheet.slint`.
+                        //
+                        // The nudge is skipped when it would carry the dragged
+                        // row out of the visible range: the ListView destroys
+                        // rows that leave it, and a destroyed row never delivers
+                        // its pointer-up, so the drag would neither commit nor
+                        // clean up after itself.
+                        if (root.drag-source >= 0
+                            && (root.drag-src-screen-y - dy) > -root.row-height
+                            && (root.drag-src-screen-y - dy) < inner-list.visible-height) {
+                            // Both capped at 0, so a list shorter than its
+                            // viewport lands on 0px rather than over-scrolled.
+                            inner-list.viewport-y = max(
+                                min(0px, inner-list.visible-height - inner-list.viewport-height),
+                                min(0px, inner-list.viewport-y - dy),
+                            );
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Hidden with no drag in flight, and for the two slots either side of the
+    // source, where a drop would be a no-op.
+    if root.reorder-enabled
+        && root.drag-source >= 0
+        && root.drop-slot >= 0
+        && root.drop-slot != root.drag-source
+        && root.drop-slot != root.drag-source + 1: Rectangle {
+        x: inner-list.absolute-position.x - root.absolute-position.x;
+        y: inner-list.absolute-position.y - root.absolute-position.y
+            + root.drop-line-y;
+        width: root.total-w;
+        height: root.drop-line-h;
+        background: Theme.accent;
+    }
+}

@@ -1,0 +1,155 @@
+import { Theme } from "../../theme.slint";
+import { MaterialIcon } from "../material-icon.slint";
+import { PopupSurface } from "../popup-surface.slint";
+import { FocusLossWatcher } from "../focus-loss-watcher.slint";
+
+// One option row inside the dropdown popup.
+component DropdownOption inherits Rectangle {
+    in property <string> label;
+    in property <bool>   active;
+
+    callback clicked();
+
+    height: 32px;
+    border-radius: Theme.radius-sm;
+    background: touch.has-hover ? Theme.surface2 : transparent;
+    animate background { duration: 100ms; easing: ease-in-out; }
+
+    HorizontalLayout {
+        padding-left: Theme.pad-sm;
+        padding-right: Theme.pad-sm;
+        spacing: Theme.pad-sm;
+        alignment: stretch;
+
+        VerticalLayout {
+            alignment: center;
+            horizontal-stretch: 1;
+            Text {
+                text: root.label;
+                color: Theme.text;
+                font-size: Theme.font-size-md;
+            }
+        }
+        VerticalLayout {
+            alignment: center;
+            // The empty branch holds the box, so every row is the same height.
+            if root.active: MaterialIcon {
+                name: "check";
+                icon-size: 16px;
+                icon-color: Theme.accent;
+            }
+        }
+    }
+
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+// Custom rather than `std-widgets.ComboBox`, whose styling follows the active
+// backend and can't be made to match the rest of the controls.
+//
+// The popup is `close-on-click-outside` rather than the default: on
+// `close-on-click` a row's own handler wouldn't get to fire, so the rows close
+// it themselves.
+//
+// `manual: true` suppresses the self-write to `selected-index`, leaving only the
+// callback — `ToggleSwitch`'s controlled pattern. Reach for it when the index is
+// a one-way binding to an owned model value, where a self-write would orphan the
+// binding and stop it tracking the model.
+export component Dropdown inherits Rectangle {
+    in property <[string]> options;
+    in-out property <int> selected-index;
+    in property <length> trigger-width: 160px;
+    in property <bool> manual: false;
+
+    callback selected(int);
+
+    width: root.trigger-width;
+    height: trigger.height;
+
+    function current-label() -> string {
+        return root.selected-index >= 0 && root.selected-index < root.options.length
+            ? root.options[root.selected-index]
+            : "";
+    }
+
+    trigger := Rectangle {
+        width: root.trigger-width;
+        height: 32px;
+        border-radius: Theme.radius-md;
+        background: touch.has-hover ? Theme.surface2 : Theme.surface1;
+        border-color: touch.has-hover ? Theme.accent : transparent;
+        border-width: 1px;
+        animate background { duration: Theme.dur-fast; easing: ease-in-out; }
+        animate border-color { duration: Theme.dur-fast; easing: ease-in-out; }
+
+        HorizontalLayout {
+            padding-left: Theme.pad-md;
+            padding-right: Theme.pad-sm;
+            spacing: Theme.pad-sm;
+
+            VerticalLayout {
+                alignment: center;
+                horizontal-stretch: 1;
+                Text {
+                    text: root.current-label();
+                    color: Theme.text;
+                    font-size: Theme.font-size-md;
+                    overflow: elide;
+                }
+            }
+            VerticalLayout {
+                alignment: center;
+                MaterialIcon {
+                    name: "arrow_drop_down";
+                    icon-size: 22px;
+                    icon-color: Theme.text;
+                }
+            }
+        }
+
+        touch := TouchArea {
+            mouse-cursor: pointer;
+            clicked => { popup.show(); }
+        }
+    }
+
+    popup := PopupWindow {
+        // Always under the trigger; flipping above near the viewport's bottom
+        // edge is polish nobody has asked for yet.
+        x: 0;
+        y: trigger.height + 4px;
+        width: root.trigger-width;
+        // See above — the rows need their handlers to run before it closes.
+        close-policy: close-on-click-outside;
+
+        // Ungated, unlike the other popups: Settings hosts a handful of these,
+        // and a `PopupHighlight` discriminator per instance would buy nothing
+        // at that scale.
+        FocusLossWatcher {
+            close => { popup.close(); }
+        }
+
+        PopupSurface {
+            VerticalLayout {
+                padding: Theme.pad-xs;
+                spacing: 0;
+
+                for option[i] in root.options: DropdownOption {
+                    label: option;
+                    active: i == root.selected-index;
+                    clicked => {
+                        // `manual` leaves the index to the host's binding.
+                        if !root.manual {
+                            root.selected-index = i;
+                        }
+                        root.selected(i);
+                        popup.close();
+                    }
+                }
+            }
+        }
+    }
+}

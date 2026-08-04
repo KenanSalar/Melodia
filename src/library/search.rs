@@ -8,6 +8,7 @@ pub async fn search_all(state: &AppState, query: String) -> Result<SearchResults
             tracks: vec![],
             albums: vec![],
             artists: vec![],
+            genres: vec![],
         });
     }
     queries::search::search_all(&state.db, &query).await

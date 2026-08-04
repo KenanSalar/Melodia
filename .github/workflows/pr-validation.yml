@@ -7,7 +7,6 @@ on:
 
 permissions:
   contents: read
-  pull-requests: write   # the `test` job posts/updates a coverage comment
 
 # Cancel superseded runs on the same PR/branch.
 concurrency:
@@ -17,19 +16,99 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
-  # GitHub removes Node 20 on 2026-09-16; without this, Node-20 JS actions
-  # (github-script@v7, rust-cache@v2) fail once it's gone. Mirrors release.yml.
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
 jobs:
+  # Two-phase skip detection, deciding whether the compiling jobs need to run at
+  # all. Coverage lives in deploy-coverage.yml now, so this workflow is purely
+  # the merge gate — the cheapest correct answer for a docs-only PR is "nothing".
+  changes:
+    name: detect-changes
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read   # paths-filter lists a PR's changed files via the API
+      actions: write        # skip-duplicate-actions' documented minimum
+    outputs:
+      code: ${{ steps.paths.outputs.code }}
+      should_skip: ${{ steps.skip_check.outputs.should_skip }}
+    steps:
+      # A DENYLIST, deliberately — `**` plus exclusions, not a list of source
+      # globs. An allowlist fails open in the worst direction: the gate job below
+      # counts `skipped` as a pass, so a path nobody remembered to list merges
+      # green with zero checks run. Here a new top-level directory defaults to
+      # "run everything" and the exclusions are the part under review.
+      #
+      # `predicate-quantifier: every` is load-bearing. The default (`some`) makes
+      # a filter true when a changed file matches ANY pattern — and every file
+      # matches `**`, so the `!` lines would silently do nothing and this job
+      # would never skip. `every` requires a file to match ALL patterns, which is
+      # what turns `!` into an exclusion.
+      #
+      # assets/ is split: screenshots are README-only, everything else under it
+      # is compiled in. `melodia.ico` is a build.rs input;
+      # `desktop/Melodia.desktop.tmpl` and `icons/logo-with-background.svg` are
+      # `include_*!`d by src/services/desktop_integration.rs, and
+      # `icons/tray.png` by src/services/tray/mod.rs — all four must still
+      # trigger a build.
+      - uses: dorny/paths-filter@7b450fff21473bca461d4b92ce414b9d0420d706 # v4.0.2
+        id: paths
+        if: github.event_name == 'pull_request'
+        with:
+          predicate-quantifier: 'every'
+          filters: |
+            code:
+              - '**'
+              - '!**/*.md'
+              - '!.claude/**'
+              - '!assets/screenshots/**'
+              - '!LICENSE'
+              - '!.gitignore'
+              - '!.env.example'
+
+      # Catches the identical tree arriving twice (rebases, reverts, a branch
+      # renamed). Deliberately given NO `paths_filter` — paths are decided above
+      # and nowhere else. Splitting that list across two actions means they can
+      # drift, and the failure mode is silent: a stale green gets handed back for
+      # a path only one of them knows about.
+      - uses: fkirc/skip-duplicate-actions@b974a9395958c231af965b70070979a577efa578 # v5.3.2
+        id: skip_check
+
+  # Advisory scan — the same gate release.yml runs, moved forward to the PR so a
+  # vulnerable or unmaintained dep is caught while the Cargo.lock change is under
+  # review, rather than at release time where it blocks all ten build slots and
+  # the fix is urgent. Both callers go through ./.github/actions/cargo-audit
+  # precisely so the two gates cannot reach different verdicts; an early warning
+  # that disagrees with the release gate is worse than none.
+  #
+  # Sibling of clippy, not a parent: it compiles nothing, and an advisory hit
+  # shouldn't hide the lint and test results. No system deps, no toolchain
+  # install, no rust-cache — see the composite for why.
+  audit:
+    name: audit
+    runs-on: ubuntu-latest
+    needs: [changes]
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (needs.changes.outputs.code == 'true' && needs.changes.outputs.should_skip != 'true')
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/cargo-audit
+
   # Clippy — mirrors the project's local gate (`cargo clippy --all-targets -- -D
   # warnings`). The crate-wide `[lints]` set pedantic/style/complexity to warn,
   # so `-D warnings` promotes them to hard errors.
+  #
+  # `workflow_dispatch` bypasses the filters: paths-filter has no base ref to
+  # diff against there, and a manual run is an explicit "run this now".
   clippy:
     name: clippy
     runs-on: ubuntu-latest
+    needs: [changes]
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (needs.changes.outputs.code == 'true' && needs.changes.outputs.should_skip != 'true')
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/linux-system-deps
       # Installs the toolchain pinned by `rust-toolchain.toml` (bare `install`
       # takes the *active* toolchain), with the components declared there.
@@ -38,44 +117,63 @@ jobs:
       # land on a toolchain nothing builds with and clippy would go missing.
       - name: Install pinned Rust toolchain
         run: rustup toolchain install
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
           shared-key: ci-clippy
           cache-on-failure: true
+      # One invocation covers both packages. Package *selection* stops at the
+      # root (it is the only default member of a non-virtual workspace root),
+      # but that is not what decides clippy's reach: cargo sets
+      # RUSTC_WORKSPACE_WRAPPER=clippy-driver for every workspace member it
+      # compiles, and clippy-driver skips non-primary packages only under
+      # `--no-deps`. So `melodia-ui` is linted as a path dependency, lib and
+      # build script both, with `-D warnings` applied. Verified by planting a
+      # `clippy::needless_return` in each of `melodia-ui/src/lib.rs` and
+      # `melodia-ui/build.rs` and watching this command fail on them.
+      #
+      # A second `-p melodia-ui` step used to sit here on the assumption that
+      # selection governed reach. It was redundant; don't reintroduce it
+      # without re-running that probe.
       - name: cargo clippy
         run: cargo clippy --all-targets --locked -- -D warnings
 
-  # Tests + coverage. Gated behind clippy so a lint failure fast-fails the
-  # pipeline without paying for the expensive instrumented run. Runs the FULL
-  # suite including the audio-dependent integration test `tests/headless.rs`
-  # behind a userspace ALSA null device.
+  # Tests. Gated behind clippy so a lint failure fast-fails the pipeline without
+  # paying for a full build. Runs the FULL suite including the audio-dependent
+  # integration test `tests/headless.rs` behind a userspace ALSA null device.
+  #
+  # Plain `cargo test`, NOT `cargo llvm-cov`. The instrumented build is the
+  # expensive half and it earns nothing on a PR — nobody reads a coverage delta
+  # to decide a merge. It runs once per merge in deploy-coverage.yml instead.
+  # Debug info stays at the profile default here (unlike the coverage job, which
+  # drops it): this is the job whose failures someone actually reads a backtrace
+  # from.
+  #
+  # `CARGO_BUILD_JOBS: 4` matches the runner's vCPUs and overrides the repo's
+  # dev-machine jobs=8 in .cargo/config.toml. It is not just a CPU match — it is
+  # a memory cap. The build's peak is `rustc` on the `melodia-ui` crate (the
+  # Slint compiler's ~390k-line output), and the job count scales one rustc's
+  # peak because its LLVM codegen threads draw jobserver tokens: measured 13.30 /
+  # 10.71 / 8.83 GiB at jobs=8/4/2 on a clean build. jobs=8 on a 16 GB runner
+  # does not fail, it swaps, and the job silently runs for most of an hour
+  # looking like a hang. Don't drop this to pick up the config default.
   test:
     name: test
     runs-on: ubuntu-latest
-    needs: [clippy]
-    # The instrumented `cargo llvm-cov` link OOM-killed the runner (143) once the
-    # crate grew. Source-based coverage needs no DWARF, so drop the debug info
-    # that dominates link memory (test targets + deps profiles); jobs=4 matches
-    # the runner's vCPUs, overriding the repo's dev-machine jobs=6.
+    needs: [changes, clippy]
     env:
       CARGO_BUILD_JOBS: 4
-      CARGO_PROFILE_DEV_DEBUG: "line-tables-only"
-      CARGO_PROFILE_TEST_DEBUG: "line-tables-only"
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (needs.changes.outputs.code == 'true' && needs.changes.outputs.should_skip != 'true')
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/linux-system-deps
-      # As in the clippy job: the pin drives the toolchain, and
-      # `llvm-tools-preview` (needed by cargo-llvm-cov) comes from its
-      # `components` list, not from a workflow input.
       - name: Install pinned Rust toolchain
         run: rustup toolchain install
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
           shared-key: ci-test
           cache-on-failure: true
-      - uses: taiki-e/install-action@v2
-        with:
-          tool: cargo-llvm-cov
 
       # `tests/headless.rs` boots AppState, which opens rodio's default output
       # device (cpal -> ALSA). Headless runners have no sound card, and the
@@ -90,81 +188,27 @@ jobs:
           ctl.!default { type null }
           EOF
 
-      # One instrumented test run feeds both the HTML report and the text
-      # summary (report phases don't re-run tests).
-      - name: Run tests with coverage
-        run: |
-          cargo llvm-cov --locked --no-report
-          cargo llvm-cov report --html
-          cargo llvm-cov report --summary-only | tee coverage-summary.txt
-
-      - name: Coverage summary to job log
-        if: ${{ !cancelled() }}
-        run: |
-          {
-            echo '### Coverage'
-            echo '```'
-            cat coverage-summary.txt
-            echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Upload coverage report
-        if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@v5
-        with:
-          name: coverage-report
-          path: target/llvm-cov/html
-          retention-days: 30
-
-      # Fork PRs get a read-only GITHUB_TOKEN (the `permissions:` block above is
-      # ignored for forks), so createComment 403s. Don't let that redden an
-      # otherwise-green run — the comment is a convenience, not a gate.
-      - name: Post coverage comment on PR
-        if: github.event_name == 'pull_request'
-        continue-on-error: true
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const fs = require('fs');
-            const marker = '## Melodia Coverage Report';
-            const summary = fs.readFileSync('coverage-summary.txt', 'utf8');
-            const body = `${marker}\n\n\`\`\`\n${summary}\n\`\`\`\n\n*Updated: ${new Date().toISOString()}*`;
-
-            const { data: comments } = await github.rest.issues.listComments({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-            });
-            const botComment = comments.find(
-              (c) => c.user.type === 'Bot' && c.body.includes(marker)
-            );
-            if (botComment) {
-              await github.rest.issues.updateComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                comment_id: botComment.id,
-                body,
-              });
-            } else {
-              await github.rest.issues.createComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: context.issue.number,
-                body,
-              });
-            }
+      - name: cargo test
+        run: cargo test --locked
 
   # Single gate job — mark THIS as the required status check in branch
-  # protection. Green iff every job passed or was skipped.
+  # protection. Green iff every job passed or was skipped. `skipped` counting as
+  # a pass is what lets a docs-only PR merge without a build; see the denylist
+  # rationale on the `changes` job for why that is safe here.
   pr-validation:
     name: pr-validation
     if: always()
-    needs: [clippy, test]
+    needs: [changes, audit, clippy, test]
     runs-on: ubuntu-latest
     steps:
       - name: Check job results
         run: |
+          # Adding a job is TWO edits — `needs:` above and this array. A job
+          # named in only the first is unenforced: nothing here reads its
+          # result, so the gate goes green on its failure.
           results=(
+            "${{ needs.changes.result }}"
+            "${{ needs.audit.result }}"
             "${{ needs.clippy.result }}"
             "${{ needs.test.result }}"
           )

@@ -41,7 +41,7 @@ pub struct NotificationParams {
     /// Empty ⇒ no action button rendered.
     pub action_label: SharedString,
     /// Routing key for the optional action button. Read by the default
-    /// `Notifications.action(id, kind) => { … }` handler in `globals.slint`,
+    /// `Notifications.action(id, kind) => { … }` handler in `globals/updater.slint`,
     /// plus used by [`NotificationsUi::dismiss_by_kind`] to clear lingering
     /// rows for a given category (e.g. `"watcher-disabled"`).
     pub action_kind: SharedString,
@@ -134,7 +134,7 @@ impl NotificationsUi {
 /// future `Updater` task, …).
 ///
 /// The `action` callback is intentionally left to the Slint-side default
-/// dispatcher in `globals.slint` — adding a new action flow is a single
+/// dispatcher in `globals/updater.slint` — adding a new action flow is a single
 /// branch there plus a `notifications.show(...)` call from Rust, no
 /// closure threading.
 pub fn install(ui: &AppWindow) -> Rc<NotificationsUi> {

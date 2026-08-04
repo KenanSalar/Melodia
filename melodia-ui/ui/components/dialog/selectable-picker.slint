@@ -1,0 +1,245 @@
+import { ScrollView } from "std-widgets.slint";
+import { Theme } from "../../theme.slint";
+import { ArtworkImage } from "../artwork-image.slint";
+import { MaterialIcon } from "../material-icon.slint";
+import { OverlayScrollbar } from "../overlay-scrollbar.slint";
+
+// Data-agnostic building blocks for the selectable-list dialogs
+// (Add-to-Playlist, Export-playlists). Everything arrives as plain `in`
+// properties, so neither picker's globals reach in here and both share one
+// implementation.
+//
+// **Load-bearing: nothing containing the rows carries a `border` or a
+// `clip`.** Either one promotes that subtree to a FemtoVG compositing layer
+// whose offscreen texture is allocated at logical size and upscaled by the
+// display scale on blit, so the row text reads blurry and oversized beside the
+// directly-rendered header. The tonal fill and the filled indicator carry the
+// selection on their own, and `PickerListCard` paints its border with a
+// childless overlay, which needs no layer.
+
+// Tri-state M3 indicator: a filled disc with a check when checked, with a dash
+// for the header's some-but-not-all state, a hollow ring otherwise.
+export component SelectIndicator inherits Rectangle {
+    in property <bool> checked;
+    in property <bool> indeterminate;
+
+    private property <bool> active: root.checked || root.indeterminate;
+
+    width: 24px;
+    height: 24px;
+    border-radius: self.width / 2;
+    background: root.active ? Theme.accent : transparent;
+    border-width: root.active ? 0px : 2px;
+    border-color: Theme.overlay0;
+    animate background { duration: Theme.dur-fast; easing: ease-in-out; }
+    animate border-color { duration: Theme.dur-fast; easing: ease-in-out; }
+
+    if root.active: MaterialIcon {
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        name: root.indeterminate ? "remove" : "check";
+        icon-size: 16px;
+        icon-color: Theme.accent-text;
+    }
+}
+
+// One list item. The host hands over an already-formatted `subtitle` (empty ⇒
+// no second line) and a resolved `cover`, so the row stays clear of the data
+// source. Its `height` MUST match `PickerListCard.row-h`.
+export component SelectableRow inherits Rectangle {
+    in property <string> name;
+    in property <string> subtitle;
+    in property <image> cover;
+    in property <string> artwork-path;
+    in property <string> fallback-icon: "playlist";
+    in property <bool> selected;
+    in property <bool> disabled;
+    callback toggled();
+
+    height: 60px;
+    border-radius: Theme.radius-md;
+    opacity: root.disabled ? 0.5 : 1.0;
+    // Tonal accent when selected, flat with a soft hover fill otherwise — and
+    // no border, per the note above.
+    background: root.selected
+        ? Theme.accent.with-alpha(0.16)
+        : (touch.has-hover && !root.disabled ? Theme.surface1 : transparent);
+    animate background { duration: Theme.dur-fast; easing: ease-in-out; }
+
+    HorizontalLayout {
+        padding-left: Theme.pad-sm;
+        padding-right: Theme.pad-md;
+        spacing: Theme.pad-md;
+        alignment: start;
+
+        VerticalLayout {
+            alignment: center;
+            ArtworkImage {
+                tile-size: 44px;
+                tile-radius: Theme.radius-md;
+                artwork-path: root.artwork-path;
+                cover: root.cover;
+                fallback-icon: root.fallback-icon;
+                // The grid cards' hover zoom, skipped while disabled.
+                cover-scale: touch.has-hover && !root.disabled ? 1.05 : 1.0;
+            }
+        }
+
+        VerticalLayout {
+            horizontal-stretch: 1;
+            alignment: center;
+            spacing: 2px;
+            Text {
+                text: root.name;
+                color: Theme.text;
+                font-size: Theme.font-size-md;
+                font-weight: 600;
+                overflow: elide;
+            }
+            if root.subtitle != "": Text {
+                text: root.subtitle;
+                color: root.selected ? Theme.accent : Theme.subtext0;
+                font-size: Theme.font-size-sm;
+                overflow: elide;
+                animate color { duration: Theme.dur-fast; easing: ease-in-out; }
+            }
+        }
+
+        VerticalLayout {
+            alignment: center;
+            SelectIndicator { checked: root.selected; }
+        }
+    }
+
+    touch := TouchArea {
+        enabled: !root.disabled;
+        mouse-cursor: pointer;
+        clicked => { root.toggled(); }
+    }
+}
+
+// The "Select all" header; its count chip turns accent once anything is picked.
+export component SelectAllHeader inherits Rectangle {
+    in property <bool> checked;
+    in property <bool> indeterminate;
+    in property <int> selected-count;
+    callback toggled();
+
+    height: 52px;
+    border-radius: Theme.radius-md;
+    background: header-touch.has-hover ? Theme.surface1 : Theme.surface0;
+    animate background { duration: Theme.dur-fast; easing: ease-in-out; }
+
+    HorizontalLayout {
+        padding-left: Theme.pad-md;
+        padding-right: Theme.pad-md;
+        spacing: Theme.pad-md;
+        alignment: start;
+
+        VerticalLayout {
+            alignment: center;
+            SelectIndicator {
+                checked: root.checked;
+                indeterminate: root.indeterminate;
+            }
+        }
+        VerticalLayout {
+            horizontal-stretch: 1;
+            alignment: center;
+            Text {
+                text: @tr("Select all");
+                color: Theme.text;
+                font-size: Theme.font-size-md;
+                font-weight: 600;
+            }
+        }
+        VerticalLayout {
+            alignment: center;
+            Rectangle {
+                height: 26px;
+                width: chip-l.preferred-width;
+                border-radius: self.height / 2;
+                background: root.selected-count > 0
+                    ? Theme.accent.with-alpha(0.18)
+                    : Theme.surface1;
+                animate background { duration: Theme.dur-fast; easing: ease-in-out; }
+
+                chip-l := HorizontalLayout {
+                    padding-left: 12px;
+                    padding-right: 12px;
+                    alignment: center;
+                    Text {
+                        text: @tr("{} selected", root.selected-count);
+                        color: root.selected-count > 0
+                            ? Theme.accent
+                            : Theme.subtext0;
+                        font-size: Theme.font-size-sm;
+                        font-weight: 600;
+                        vertical-alignment: center;
+                    }
+                }
+            }
+        }
+    }
+
+    header-touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.toggled(); }
+    }
+}
+
+// The rounded card the rows scroll inside; the host passes `row-count` and
+// drops its `for` into `@children`. This is where the blur fix lives: the
+// ScrollView clips its viewport rectangularly, a cheap scissor with no layer,
+// and the rounded border is a childless overlay sibling.
+export component PickerListCard inherits Rectangle {
+    in property <int> row-count;
+    in property <length> list-max-height: 312px;
+
+    // Every picker shares these, so the card sizes itself from `row-count`
+    // alone. `row-h` MUST equal `SelectableRow.height`.
+    private property <length> row-h: 60px;
+    private property <length> row-spacing: 4px;
+    private property <length> pad: 6px;
+    private property <length> content-h:
+        root.row-count * root.row-h
+        + (root.row-count > 0 ? (root.row-count - 1) * root.row-spacing : 0px)
+        + 2 * root.pad;
+
+    height: min(root.list-max-height, root.content-h);
+    background: Theme.surface0;
+    border-radius: Theme.radius-md;
+
+    sv := ScrollView {
+        horizontal-scrollbar-policy: always-off;
+        vertical-scrollbar-policy: always-off;
+        viewport-width: self.visible-width;
+        viewport-height: root.content-h;
+
+        VerticalLayout {
+            padding: root.pad;
+            spacing: root.row-spacing;
+            @children
+        }
+    }
+
+    // Childless, so it strokes directly rather than compositing a layer; and
+    // with no TouchArea it intercepts neither the rows' clicks nor the wheel.
+    Rectangle {
+        border-radius: Theme.radius-md;
+        border-width: 1px;
+        border-color: Theme.border;
+    }
+
+    OverlayScrollbar {
+        horizontal: false;
+        x: parent.width - self.width - 2px;
+        y: 2px;
+        width: 10px;
+        height: parent.height - 4px;
+        visible-size: sv.visible-height;
+        content-size: sv.viewport-height;
+        offset: -sv.viewport-y;
+        scroll-to(o) => { sv.viewport-y = -o; }
+    }
+}

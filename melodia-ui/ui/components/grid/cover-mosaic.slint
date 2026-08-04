@@ -1,0 +1,192 @@
+import { Theme } from "../../theme.slint";
+import { ArtworkImage } from "../artwork-image.slint";
+
+// One tile, over `ArtworkImage` so a missing cover falls back to the same
+// placeholder chrome every other empty tile in the app draws. The guarded index
+// lookup is what lets one component cover both cases, so no layout below needs
+// a second call site for the placeholder.
+component MosaicSlot inherits Rectangle {
+    in property <int>      idx;
+    in property <[string]> artwork-paths;
+    in property <length>   tile-radius;
+    in property <string>   fallback-icon;
+    in property <brush>    tile-bg;
+    in property <brush>    tile-icon-color;
+    pure callback request-cover(string) -> image;
+
+    clip: true;
+    border-radius: tile-radius;
+
+    if root.artwork-paths.length > root.idx: ArtworkImage {
+        width: parent.width;
+        height: parent.height;
+        tile-radius: root.tile-radius;
+        artwork-path: root.artwork-paths[root.idx];
+        cover: root.request-cover(root.artwork-paths[root.idx]);
+        fallback-icon: root.fallback-icon;
+        tile-bg: root.tile-bg;
+        tile-icon-color: root.tile-icon-color;
+    }
+    if root.artwork-paths.length <= root.idx: ArtworkImage {
+        width: parent.width;
+        height: parent.height;
+        tile-radius: root.tile-radius;
+        // No cover and no path, so `ArtworkImage` takes its empty branch.
+        fallback-icon: root.fallback-icon;
+        tile-bg: root.tile-bg;
+        tile-icon-color: root.tile-icon-color;
+    }
+}
+
+// Reusable 1/2/3/4-tile artwork mosaic. Pure layout — the caller owns the outer
+// chrome, and only the inner tiles are drawn here, so an effective count of 0
+// draws nothing and the caller's own empty state shows through. Every tile
+// resolves through `request-cover`, so each consumer keeps its own LRU tier.
+//
+// The layouts mirror the canonical playlist composition: 1 = full bleed,
+// 2 = left/right, 3 = left full-height + right split, 4 = 2×2.
+//
+// **`tile-count` versus `artwork-paths.length` is what separates the two
+// consumers.** The picker leaves it 0 and takes the path count, since its shape
+// follows a selection where every slot has real artwork. A hero sets it from the
+// *entity* count, so slots past the distinct covers fall back to placeholders —
+// five favorites over two covers give a 2×2 of two covers and two placeholders,
+// not the two duplicated.
+export component CoverMosaic inherits Rectangle {
+    in property <[string]> artwork-paths;
+    in property <length>   gutter-size: 3px;
+    // Pass `0px` (with `gutter-size: 0px`, so the outer background can't bleed
+    // through) for a flush mosaic reading as one composited image — right where
+    // the surrounding chrome already supplies the only curve.
+    in property <length>   tile-radius: Theme.radius-sm;
+    // The `ArtworkImage` placeholder vocabulary, shared with `EntityCard` and
+    // `DetailHeader`.
+    in property <string>   placeholder-icon: "music-note";
+    // The defaults are `ArtworkImage`'s accent tint, right on a dialog surface.
+    // Both hero mosaics override them with `HeroBackdrop` tiers instead: they
+    // paint on the solved band, where a light theme's accent lands dark-on-dark.
+    in property <brush>    tile-bg: Theme.accent.with-alpha(0.15);
+    in property <brush>    tile-icon-color: Theme.accent;
+    in property <int>      tile-count: 0;
+    pure callback request-cover(string) -> image;
+
+    private property <int> effective-count:
+        root.tile-count > 0 ? root.tile-count : root.artwork-paths.length;
+
+    if root.effective-count == 1: MosaicSlot {
+        idx: 0;
+        artwork-paths: root.artwork-paths;
+        tile-radius: root.tile-radius;
+        fallback-icon: root.placeholder-icon;
+        tile-bg: root.tile-bg;
+        tile-icon-color: root.tile-icon-color;
+        request-cover(p) => { return root.request-cover(p); }
+    }
+
+    if root.effective-count == 2: HorizontalLayout {
+        spacing: root.gutter-size;
+        padding: root.gutter-size;
+        MosaicSlot {
+            idx: 0;
+            artwork-paths: root.artwork-paths;
+            tile-radius: root.tile-radius;
+            fallback-icon: root.placeholder-icon;
+            tile-bg: root.tile-bg;
+            tile-icon-color: root.tile-icon-color;
+            request-cover(p) => { return root.request-cover(p); }
+        }
+        MosaicSlot {
+            idx: 1;
+            artwork-paths: root.artwork-paths;
+            tile-radius: root.tile-radius;
+            fallback-icon: root.placeholder-icon;
+            tile-bg: root.tile-bg;
+            tile-icon-color: root.tile-icon-color;
+            request-cover(p) => { return root.request-cover(p); }
+        }
+    }
+
+    if root.effective-count == 3: HorizontalLayout {
+        spacing: root.gutter-size;
+        padding: root.gutter-size;
+        MosaicSlot {
+            idx: 0;
+            horizontal-stretch: 1;
+            artwork-paths: root.artwork-paths;
+            tile-radius: root.tile-radius;
+            fallback-icon: root.placeholder-icon;
+            tile-bg: root.tile-bg;
+            tile-icon-color: root.tile-icon-color;
+            request-cover(p) => { return root.request-cover(p); }
+        }
+        VerticalLayout {
+            horizontal-stretch: 1;
+            spacing: root.gutter-size;
+            MosaicSlot {
+                idx: 1;
+                artwork-paths: root.artwork-paths;
+                tile-radius: root.tile-radius;
+                fallback-icon: root.placeholder-icon;
+                tile-bg: root.tile-bg;
+                tile-icon-color: root.tile-icon-color;
+                request-cover(p) => { return root.request-cover(p); }
+            }
+            MosaicSlot {
+                idx: 2;
+                artwork-paths: root.artwork-paths;
+                tile-radius: root.tile-radius;
+                fallback-icon: root.placeholder-icon;
+                tile-bg: root.tile-bg;
+                tile-icon-color: root.tile-icon-color;
+                request-cover(p) => { return root.request-cover(p); }
+            }
+        }
+    }
+
+    if root.effective-count >= 4: VerticalLayout {
+        spacing: root.gutter-size;
+        padding: root.gutter-size;
+        HorizontalLayout {
+            spacing: root.gutter-size;
+            MosaicSlot {
+                idx: 0;
+                artwork-paths: root.artwork-paths;
+                tile-radius: root.tile-radius;
+                fallback-icon: root.placeholder-icon;
+                tile-bg: root.tile-bg;
+                tile-icon-color: root.tile-icon-color;
+                request-cover(p) => { return root.request-cover(p); }
+            }
+            MosaicSlot {
+                idx: 1;
+                artwork-paths: root.artwork-paths;
+                tile-radius: root.tile-radius;
+                fallback-icon: root.placeholder-icon;
+                tile-bg: root.tile-bg;
+                tile-icon-color: root.tile-icon-color;
+                request-cover(p) => { return root.request-cover(p); }
+            }
+        }
+        HorizontalLayout {
+            spacing: root.gutter-size;
+            MosaicSlot {
+                idx: 2;
+                artwork-paths: root.artwork-paths;
+                tile-radius: root.tile-radius;
+                fallback-icon: root.placeholder-icon;
+                tile-bg: root.tile-bg;
+                tile-icon-color: root.tile-icon-color;
+                request-cover(p) => { return root.request-cover(p); }
+            }
+            MosaicSlot {
+                idx: 3;
+                artwork-paths: root.artwork-paths;
+                tile-radius: root.tile-radius;
+                fallback-icon: root.placeholder-icon;
+                tile-bg: root.tile-bg;
+                tile-icon-color: root.tile-icon-color;
+                request-cover(p) => { return root.request-cover(p); }
+            }
+        }
+    }
+}

@@ -1,7 +1,7 @@
 //! Internal data structures for the Recently-Played view. Trimmed sibling
-//! of `src/ui/favorites/state.rs` — no hero/mosaic or artist strip, and the
-//! track list orders by recency (a fixed fetch order) rather than a DB sort,
-//! so the cached set is filtered/re-sorted in memory.
+//! of `src/ui/favorites/state.rs` — no hero/mosaic or artist strip, and no
+//! sort state at all: the track list keeps its recency fetch order, so the
+//! cached set is only ever filtered.
 
 use std::collections::HashSet;
 use std::num::NonZeroUsize;
@@ -9,22 +9,18 @@ use std::num::NonZeroUsize;
 use parking_lot::Mutex;
 
 use crate::entities::track::{MostPlayedFavorite, TrackListRow as RsTrackListRow};
-use crate::services::settings::{SortDir, ViewSort};
+use crate::ui::row_match::Needle;
 
 /// Per-section cached snapshots — every fetch lands here so callbacks can
 /// recover the underlying Rust data without round-tripping through Slint.
 pub(crate) struct RecentlyPlayedUiState {
     /// The most-recently-played rows in fetch (recency) order, *before* the
-    /// in-memory search filter and any column re-sort. Membership is fixed to
-    /// this set — the view never re-queries on filter/sort.
+    /// in-memory search filter. Both membership and order are fixed to this
+    /// set — the view never re-queries and never re-orders.
     pub tracks_all: Mutex<Vec<RsTrackListRow>>,
-    /// Active filter string — cached so the live-refresh subscriber can
+    /// Active filter needle — cached so the live-refresh subscriber can
     /// re-apply it off the UI thread.
-    pub filter: Mutex<String>,
-    /// Active sort. Default is the synthetic [`super::RECENCY_SORT`] field
-    /// (keep fetch order); a column header click swaps in a real
-    /// `TrackListRow` field and the list re-sorts in memory.
-    pub sort: Mutex<ViewSort>,
+    pub filter: Mutex<Needle>,
     /// Most Played strip rows in Rust shape — kept so click handlers can
     /// resolve `(id) -> entity` without re-fetching.
     pub most_played: Mutex<Vec<MostPlayedFavorite>>,
@@ -42,11 +38,7 @@ impl RecentlyPlayedUiState {
     pub(super) fn new() -> Self {
         Self {
             tracks_all: Mutex::new(Vec::new()),
-            filter: Mutex::new(String::new()),
-            sort: Mutex::new(ViewSort {
-                field: super::RECENCY_SORT.to_owned(),
-                dir: SortDir::Desc,
-            }),
+            filter: Mutex::new(Needle::default()),
             most_played: Mutex::new(Vec::new()),
             applied_selection: Mutex::new(HashSet::new()),
             last_mosaic_paths: Mutex::new(Vec::new()),

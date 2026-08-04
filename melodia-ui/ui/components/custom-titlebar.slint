@@ -1,0 +1,213 @@
+import { Theme } from "../theme.slint";
+import { WindowChrome } from "../globals/shell.slint";
+import { MaterialIcon } from "material-icon.slint";
+import { Tooltip } from "tooltip.slint";
+import { MacOsTitleBarCluster } from "macos-titlebar-cluster.slint";
+
+// One decoration button. Hover paints a rounded fill; the close button overrides both
+// hover brushes to flash the theme's danger red. Bespoke rather than an `IconButton`
+// because these are rectangular and need a `hover-bg` knob that component doesn't
+// expose. Private to this file.
+component TitleBarButton inherits Rectangle {
+    in property <string> icon;
+    in property <string> tooltip-text;
+    in property <brush> hover-bg: Theme.surface0;
+    in property <brush> idle-fg: Theme.overlay1;
+    in property <brush> hover-fg: Theme.text;
+
+    callback clicked();
+
+    // Pinned on both axes as a layout child: `height: 100%` forms the unbounded-layout
+    // cycle and collapses the sibling buttons to zero width.
+    min-width: 40px;
+    max-width: 40px;
+    min-height: 32px;
+    max-height: 32px;
+    horizontal-stretch: 0;
+    vertical-stretch: 0;
+    background: transparent;
+
+    // Inset inside the cell, so the click target stays wide for aim while the painted
+    // highlight reads lighter than the full button would.
+    Rectangle {
+        x: 4px;
+        y: 4px;
+        width: parent.width - 8px;
+        height: parent.height - 8px;
+        // Tracks the window's outer radius, so every button reads as matched to the
+        // outline: the close button at the corner is genuinely concentric with the
+        // window's arc — same centre, inset by the cell's own inset — and the other two
+        // take the same value for consistency. Floored at 0 for the Square preset.
+        //
+        // Only the preset chips populate `shell-radius`, so the subtraction never lands
+        // on a sub-3 px arc and needs no piecewise floor. Maximized falls back to a
+        // friendly pill: the outline goes square there, and an arc of 0 reads too sharp
+        // on the buttons themselves.
+        border-radius: WindowChrome.is-maximized
+            ? 6px
+            : max(0px, Theme.shell-radius - 4px);
+        background: touch.has-hover ? root.hover-bg : transparent;
+        animate background { duration: Theme.dur-fast; easing: ease-in-out; }
+    }
+
+    HorizontalLayout {
+        alignment: center;
+        VerticalLayout {
+            alignment: center;
+            MaterialIcon {
+                name: root.icon;
+                icon-size: 16px;
+                icon-color: touch.has-hover ? root.hover-fg : root.idle-fg;
+                animate icon-color { duration: Theme.dur-fast; easing: ease-in-out; }
+            }
+        }
+    }
+
+    Tooltip {
+        text: root.tooltip-text;
+        hovered: touch.has-hover;
+        host-width: root.width;
+    }
+
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+// The brand on one side, a drag region in the middle, the decoration cluster opposite.
+//
+// **Drag handling is split**: Slint tracks only *hover* over the drag region, plus
+// double-click to toggle maximize, and Rust intercepts the press at the winit layer —
+// dragging from a `TouchArea` strands its mouse grab. The maximize icon reads
+// `WindowChrome.is-maximized`, fed from winit's `Resized`, so tiling shortcuts update it
+// too.
+//
+// Style and side come from `Theme.titlebar-button-{style,side}`, and the four
+// conditional branches mount the right cluster on the right side. **The buttons are
+// inlined into the outer layout rather than wrapped in a sub-component**: a
+// Rectangle-inheriting wrapper with conditional layout children reports 0 × 0. The brand
+// lives inside the drag region and pins to whichever side the buttons aren't on, so the
+// two groups never crowd each other.
+export component CustomTitleBar inherits Rectangle {
+    // Pinned as a fixed slot. A plain `height` is ignored by the layout — the
+    // height-on-a-layout-child cycle — and the bar then claims the window's whole
+    // vertical space, leaving everything below it at zero.
+    min-height: 32px;
+    max-height: 32px;
+    vertical-stretch: 0;
+    background: Theme.mantle;
+
+    HorizontalLayout {
+        spacing: 0;
+        alignment: stretch;
+        // Inset on the brand side so the logo doesn't kiss the window edge, flush on the
+        // cluster side so close sits at the corner.
+        padding-left: Theme.titlebar-button-side == 1 ? 0 : 12px;
+        padding-right: Theme.titlebar-button-side == 1 ? 12px : 0;
+
+        // Left cluster: traffic lights.
+        if Theme.titlebar-button-side == 1 && Theme.titlebar-button-style == 1: MacOsTitleBarCluster {}
+
+        // Standard icons on the left, close at the *corner* so "click corner = close"
+        // still holds. Three siblings rather than a wrapper, per the header.
+        if Theme.titlebar-button-side == 1 && Theme.titlebar-button-style == 0: TitleBarButton {
+            icon: "close";
+            tooltip-text: @tr("Close");
+            hover-bg: Theme.danger;
+            // **The on-danger ink, not a chrome token.** `Theme.mantle` stood in here
+            // once and it tracks the theme's *background* rather than the red, so GNOME
+            // Dark put a dark glyph on a dark red at ~2:1.
+            hover-fg: Theme.danger-text;
+            clicked => { WindowChrome.close-window(); }
+        }
+        if Theme.titlebar-button-side == 1 && Theme.titlebar-button-style == 0: TitleBarButton {
+            icon: WindowChrome.is-maximized ? "filter_none" : "crop_square";
+            tooltip-text: WindowChrome.is-maximized ? @tr("Restore") : @tr("Maximize");
+            clicked => { WindowChrome.toggle-maximize(); }
+        }
+        if Theme.titlebar-button-side == 1 && Theme.titlebar-button-style == 0: TitleBarButton {
+            icon: "minimize";
+            tooltip-text: @tr("Minimize");
+            clicked => { WindowChrome.minimize(); }
+        }
+
+        // Wraps the brand plus the middle stretch, so everything but the cluster is
+        // draggable. The TouchArea tracks only `has-hover`; Rust reads it and intercepts
+        // the press at the winit layer. `double-clicked` stays here because it fires
+        // *after* release, by which point the press was intercepted and Slint sees the
+        // second one normally.
+        //
+        // A stretch spacer placed before or after the brand is what pins it to the side
+        // the cluster isn't on.
+        drag-region := TouchArea {
+            horizontal-stretch: 1;
+            mouse-cursor: default;
+            changed has-hover => {
+                WindowChrome.drag-region-hover-changed(self.has-hover);
+            }
+            double-clicked => {
+                WindowChrome.toggle-maximize();
+            }
+
+            HorizontalLayout {
+                spacing: 6px;
+                alignment: stretch;
+
+                // Buttons left ⇒ leading spacer ⇒ brand pins right.
+                if Theme.titlebar-button-side == 1: Rectangle { horizontal-stretch: 1; }
+
+                VerticalLayout {
+                    alignment: center;
+                    horizontal-stretch: 0;
+                    Image {
+                        source: @image-url("../assets/icons/logo-without-background.svg");
+                        width: 18px;
+                        height: 18px;
+                        image-fit: contain;
+                    }
+                }
+
+                VerticalLayout {
+                    alignment: center;
+                    horizontal-stretch: 0;
+                    Text {
+                        text: "Melodia";
+                        color: Theme.overlay2;
+                        font-size: 12px;
+                        font-weight: 500;
+                    }
+                }
+
+                // Buttons right ⇒ trailing spacer ⇒ brand pins left.
+                if Theme.titlebar-button-side == 0: Rectangle { horizontal-stretch: 1; }
+            }
+        }
+
+        // Right cluster: traffic lights.
+        if Theme.titlebar-button-side == 0 && Theme.titlebar-button-style == 1: MacOsTitleBarCluster {}
+
+        // Standard icons in Windows / KDE order, close at the corner.
+        if Theme.titlebar-button-side == 0 && Theme.titlebar-button-style == 0: TitleBarButton {
+            icon: "minimize";
+            tooltip-text: @tr("Minimize");
+            clicked => { WindowChrome.minimize(); }
+        }
+        if Theme.titlebar-button-side == 0 && Theme.titlebar-button-style == 0: TitleBarButton {
+            icon: WindowChrome.is-maximized ? "filter_none" : "crop_square";
+            tooltip-text: WindowChrome.is-maximized ? @tr("Restore") : @tr("Maximize");
+            clicked => { WindowChrome.toggle-maximize(); }
+        }
+        if Theme.titlebar-button-side == 0 && Theme.titlebar-button-style == 0: TitleBarButton {
+            icon: "close";
+            tooltip-text: @tr("Close");
+            hover-bg: Theme.danger;
+            hover-fg: Theme.danger-text;
+            clicked => { WindowChrome.close-window(); }
+        }
+    }
+
+    // **No resize affordance here.** The whole-window ring lives in `app-window.slint`,
+    // so it can suppress hover on the scrollbar at the right edge and the now-playing
+    // bar at the bottom as well as on these buttons.
+}

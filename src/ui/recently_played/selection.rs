@@ -27,7 +27,7 @@ pub fn handle_select_row(
     let (new_selected, new_anchor) = list_selection::compute_click_selection(
         cur_anchor,
         cur_selected,
-        // Range select over the currently-displayed rows (post-filter/sort,
+        // Range select over the currently-displayed rows (post-filter,
         // already in the same order as the Slint `tracks` model).
         || {
             let rows = g.get_tracks();

@@ -4,20 +4,24 @@
 //! mixed-results page composed of:
 //!
 //! * Hero — centered `SearchBar` (autofocus). Each keystroke bumps a
-//!   debounce tick; a 300 ms Timer in `ui/views/search-view.slint` then
+//!   debounce tick; a 300 ms Timer in `melodia-ui/ui/views/search-view.slint` then
 //!   fires `commit-search`, which calls [`fetch::kick_search`] to run
 //!   the FTS5 + LIKE query via `library::search::search_all` on the
 //!   read pool.
-//! * Top Result — single featured card (album OR artist) computed via
-//!   [`fetch::compute_top_result`]'s 6-step ranking (exact album →
-//!   exact artist → starts-with album → starts-with artist → first
-//!   album → first artist).
+//! * Top Result — single featured card (album, artist OR genre) computed
+//!   via [`top_result::compute_top_result`]'s 9-step ranking: all three exact
+//!   matches, then all three starts-with, then first-of-each. A genre
+//!   gets the card rather than a strip of its own — it is a route to a
+//!   page, not a row of things to browse.
 //! * Songs — shared `TrackList` bound to `Search.tracks`. Compact by
-//!   default (first 4 rows; cap [`state::COMPACT_TRACK_LIMIT`]); the
-//!   "Show all N" toggle swaps to the full 50-row backend result from
-//!   the cached `last_results` without a DB round-trip.
+//!   default ([`state::COMPACT_TRACK_LIMIT`] rows); the "Show all N"
+//!   toggle swaps to the whole backend result — capped by `search_all`'s
+//!   own `LIMIT` — from the cached `last_results`, no DB round-trip.
 //! * Albums + Artists strips — `EntityCard` in a horizontal scroller
-//!   (max 20 each, the backend's `LIKE` cap).
+//!   (max 20 each, the backend's cap). Both match through their own
+//!   tracks as well as by name, so a query that only reaches track
+//!   metadata — a song title, a year, a composer, a genre — fills them
+//!   rather than leaving the page a lone Songs list with no Top Result.
 //! * Recent searches — shown only when the `SearchBar` is empty;
 //!   chip-style buttons backed by [`crate::services::search_history::
 //!   SearchHistoryState`] (cap 10, JSON-persisted under
@@ -32,9 +36,11 @@
 //! data-driven; a scan completing mid-query MUST NOT swap results out
 //! from under the user).
 
+pub mod apply;
 pub mod fetch;
 mod selection;
 mod state;
+pub mod top_result;
 
 use std::rc::Rc;
 use std::sync::Arc;
@@ -209,8 +215,8 @@ pub fn install_search_models(ui: &AppWindow) {
 }
 
 /// Map an `AlbumStats` to its Slint strip row. Subtitle is the artist
-/// name (parity with Favorites' Most-Played strip). `play_count` is
-/// unused (the cards don't surface it).
+/// name (parity with the Most Played cards). `play_count` is unused
+/// (the cards don't surface it).
 pub fn to_slint_album_strip_row(a: &AlbumStats) -> UiEntityStripRow {
     UiEntityStripRow {
         id: clamp_i64_to_i32(a.id),

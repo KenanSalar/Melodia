@@ -4,8 +4,8 @@
 //! rodio's `mixer()` builds a device-less `Mixer` + `MixerSource`, so we can
 //! connect two real `Player` decks to it and pull the summed output by hand.
 //! Everything downstream of the decision layer is exercised for real: the
-//! Symphonia decoder, `EqSource`'s fade stage, rodio's per-deck volume/pause
-//! wrappers, and `MixerSource`'s (unclamped) sum.
+//! Symphonia decoder, `EqSource`'s fade stage, the visualizer tap, rodio's
+//! per-deck volume/pause wrappers, and `MixerSource`'s (unclamped) sum.
 //!
 //! The fixtures are constant-amplitude DC WAVs. Two perfectly correlated
 //! signals under a complementary *linear* crossfade sum to a constant — so the
@@ -259,6 +259,48 @@ async fn crossfade_overlaps_two_decks_without_ever_clipping_the_mixer() -> std::
     let after = pull(&mut mix, WARMUP_FRAMES * 2);
     assert!(!rodio.is_crossfading(), "outgoing deck must drain when its ramp lands");
     assert_holds_at(&after[WARMUP_FRAMES..], AMPLITUDE, 1e-3, "deck B alone");
+
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn the_visualizer_tap_reads_the_mix_not_the_two_decks_interleaved() -> std::io::Result<()> {
+    /// A spectrum window's worth — 46 ms at this rate.
+    const WINDOW: usize = 2_048;
+
+    let fx = fixture()?;
+    let (rodio, mut mix) = player();
+    // Arm the tap. The Now-Playing view reaches the same cell through
+    // `visualizer()`, one line down; this is the backend's own spelling of it.
+    rodio.set_visualizer_enabled(true);
+    let viz = rodio.visualizer();
+    let mut window = vec![0.0; WINDOW];
+
+    start(&rodio, &fx.track_a);
+    pull(&mut mix, WARMUP_FRAMES * 2);
+
+    viz.snapshot(&mut window);
+    assert_holds_at(&window, AMPLITUDE, 1e-3, "one deck playing");
+
+    crossfade_into(&rodio, &fx.track_b);
+    // A quarter of the way in, so the two ramps are far apart: one deck is at
+    // three quarters gain and the other at a quarter.
+    pull(&mut mix, frames_for_ms(FADE_MS / 4));
+    viz.snapshot(&mut window);
+    // Two identical DC tracks under complementary linear ramps sum to the
+    // constant either deck carries alone — the same property the mixer output
+    // above is pinned on, which is the point: the tap must see what the mixer
+    // sees. Interleaved into one ring instead, this window would alternate
+    // between the two ramps sample by sample, averaging half the level.
+    // `assert_holds_at` is per-sample, so that alternation cannot hide in it.
+    assert_holds_at(&window, AMPLITUDE, AMPLITUDE * SKEW, "mid-overlap tap");
+
+    // And the handover: once the outgoing deck's ramp lands it ends, releasing
+    // its ring, and the survivor carries the window alone.
+    pull(&mut mix, frames_for_ms(FADE_MS) + WARMUP_FRAMES * 2);
+    assert!(!rodio.is_crossfading(), "outgoing deck must drain when its ramp lands");
+    viz.snapshot(&mut window);
+    assert_holds_at(&window, AMPLITUDE, 1e-3, "after the overlap");
 
     Ok(())
 }

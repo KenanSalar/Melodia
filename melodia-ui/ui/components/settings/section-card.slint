@@ -1,0 +1,61 @@
+import { Theme } from "../../theme.slint";
+import { SettingsPage } from "../../globals/settings-page.slint";
+
+// The chrome around every settings section: an uppercase heading over a rounded
+// card, the host's rows and dividers inside through `@children`.
+export component SectionCard inherits Rectangle {
+    in property <string> title;
+    // Defaults to the settings body's own answer; override it anywhere a card
+    // isn't a body column.
+    in property <length> card-width: SettingsPage.card-w;
+
+    background: transparent;
+    vertical-stretch: 0;
+
+    // `preferred-width` and `max-width`, never `width` — Slint reports a bound
+    // `width` as the element's minimum *and* maximum, and that floor climbs out
+    // to the window's own.
+    //
+    // Pinning the preferred is what keeps the two body columns equal: the grid
+    // seeds every column at its cells' *preferred* width and only then hands out
+    // the surplus by stretch, so cards of different natural width give columns
+    // of different width, which side by side reads as a misalignment rather than
+    // as a layout. The max then holds the cap where a column is wider than one
+    // card — a single-column page drawn into a two-column body. `min-width` is
+    // deliberately left alone, so the card still compresses all the way down.
+    preferred-width: root.card-width;
+    max-width: root.card-width;
+
+    VerticalLayout {
+        spacing: Theme.pad-sm;
+
+        // The size is one-off enough to stay inline; hoist it to Theme if a
+        // second site turns up. The layout inset is what optically aligns the
+        // heading with the row icons inside the card.
+        HorizontalLayout {
+            padding-left: Theme.pad-lg;
+            Text {
+                text: root.title;
+                color: Theme.subtext0;
+                font-size: 13px;
+                font-weight: 600;
+                // M3 section-header cadence — the tracking carries the
+                // uppercase rhythm.
+                letter-spacing: 0.5px;
+                // Wrapped, so a long locale's title can't hold the card open —
+                // a no-wrap `Text` reports its full width as its *minimum*.
+                wrap: word-wrap;
+            }
+        }
+
+        Rectangle {
+            background: Theme.surface0;
+            border-radius: Theme.radius-lg;
+            clip: true;
+
+            VerticalLayout {
+                @children
+            }
+        }
+    }
+}

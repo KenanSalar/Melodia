@@ -1,0 +1,61 @@
+import { Theme } from "../theme.slint";
+import { HeroBackdrop } from "../globals/hero-backdrop.slint";
+
+// Full-bleed hero blur: a gradient floor, two cross-fading `Image` slots, and a
+// scrim. The Slint half of the dual-slot contract `write_crossfade_slot` drives
+// — the outgoing slot is never cleared, so a refresh fades A↔B without flashing,
+// and with no blur both fade to 0 and the floor shows through.
+//
+// Mounted by `DetailHeader` over its whole hero and by the two mosaic heroes
+// over their top band. The caller sizes it; the children fill it.
+//
+// **Every colour here comes from `HeroBackdrop`, solved per artwork, and none of
+// it may be a `Theme.*` brush.** Theme brushes flip polarity with the variant,
+// so the same cover painted a dark banner under one and a near-white one under
+// another, and the foreground solved for either was wrong on the other. Pass a
+// solved value through the global instead.
+//
+// `width/height: 100%` on the children is mandatory: an `Image` does not
+// auto-fill its parent, and without them the blur draws at its native buffer
+// size, centred.
+export component HeroBlurBackdrop inherits Rectangle {
+    in property <image> blur-a;
+    in property <image> blur-b;
+    in property <bool> use-a;
+    in property <bool> has-blur;
+
+    background: @linear-gradient(135deg, HeroBackdrop.floor-start, HeroBackdrop.floor-end);
+
+    Image {
+        x: 0;
+        y: 0;
+        width: 100%;
+        height: 100%;
+        source: root.blur-a;
+        image-fit: ImageFit.cover;
+        opacity: (root.has-blur && root.use-a) ? 1.0 : 0.0;
+        animate opacity { duration: Theme.dur-med; easing: ease-in-out; }
+    }
+    Image {
+        x: 0;
+        y: 0;
+        width: 100%;
+        height: 100%;
+        source: root.blur-b;
+        image-fit: ImageFit.cover;
+        opacity: (root.has-blur && !root.use-a) ? 1.0 : 0.0;
+        animate opacity { duration: Theme.dur-med; easing: ease-in-out; }
+    }
+    // The opacity is solved per artwork and baked into the brush, hence no
+    // `with-alpha`: a white sleeve needs roughly twice what a black one does,
+    // which a fixed alpha can't express. Animated on the slots' own duration, so
+    // a swap and its scrim land together instead of the scrim snapping ahead.
+    Rectangle {
+        x: 0;
+        y: 0;
+        width: 100%;
+        height: 100%;
+        background: HeroBackdrop.scrim;
+        animate background { duration: Theme.dur-med; easing: ease-in-out; }
+    }
+}

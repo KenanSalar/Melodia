@@ -5,39 +5,33 @@
 //! Runs in `main.rs` between `AppWindow::new()` and `app.run()`:
 //!
 //! - **Size + position** — [`restore`] calls `slint::Window::set_size` /
-//!   `set_position`. `set_size` flips the winit backend's internal
-//!   `has_explicit_size` flag (`i-slint-backend-winit`
-//!   `winitwindowadapter.rs:1227`); that flag, checked at first show
-//!   (`winitwindowadapter.rs:1082`), is what stops Slint from snapping
-//!   the window to the component's content-preferred size. Without an
-//!   explicit `set_size` the window opens at the ~640×420 layout
-//!   minimum. The `WindowAttributes` hook's `with_inner_size` does
-//!   *not* set that flag, so it cannot be used for size.
-//!   Both calls land before the winit window exists, so they're stored
-//!   into the pending `WindowAttributes` (`winitwindowadapter.rs:762`,
-//!   `:1220`) — i.e. they become the standard WM size/position request.
-//!   KDE window rules ("Force" / "Apply Initially") intercept that
-//!   request at the compositor level and win; because `has_explicit_size`
-//!   also suppresses the post-map preferred-size resize, we never fight
-//!   an "Apply Initially" rule afterwards either.
-//! - **Maximized** — there is no `slint::Window` API for it, so the
-//!   `BackendSelector::with_winit_window_attributes_hook` in `main.rs`
-//!   applies `WindowAttributes::with_maximized(true)`. Doing it through
-//!   the attributes hook (applied during `AppWindow::new()`) means the
-//!   window is created already maximized — no un-maximize→maximize
-//!   flash.
+//!   `set_position`. `set_size` flips `has_explicit_size` in
+//!   `i-slint-backend-winit`'s `winitwindowadapter.rs`, and that flag —
+//!   re-read at first show — is what stops Slint snapping the window to the
+//!   component's content-preferred size; without it the window opens at the
+//!   layout minimum. The `WindowAttributes` hook's `with_inner_size` does
+//!   *not* set the flag, so it can't be used for size.
+//!
+//!   Both calls land before the winit window exists, so they're stored into
+//!   the pending `WindowAttributes` — i.e. they become the ordinary WM
+//!   size/position request. KDE window rules ("Force" / "Apply Initially")
+//!   intercept that at the compositor level and win; `has_explicit_size` also
+//!   suppresses the post-map preferred-size resize, so we never fight an
+//!   "Apply Initially" rule afterwards either.
+//! - **Maximized** — no `slint::Window` API exists, so `main.rs`'s
+//!   `BackendSelector::with_winit_window_attributes_hook` applies
+//!   `WindowAttributes::with_maximized(true)`. The hook runs during
+//!   `AppWindow::new()`, so the window is created already maximized — no
+//!   un-maximize→maximize flash.
 //!
 //! ## Save
 //!
-//! `shutdown::save_state_on_exit` runs after `app.run()` returns, by
-//! which point the winit window is destroyed —
-//! `WinitWindowAccessor::with_winit_window` returns `None`. So we can't
-//! read geometry from winit at shutdown. Instead every
-//! `WindowEvent::Resized` / `WindowEvent::Moved` handler in
-//! [`super::winit_filter`] calls [`record`], updating an in-memory
-//! mirror while the winit window is still alive. At shutdown
-//! [`snapshot_into`] reads the mirror — ~48 bytes, one uncontended
-//! `parking_lot::Mutex` lock per event.
+//! `shutdown::save_state_on_exit` runs after `app.run()` returns, by which
+//! point the winit window is destroyed and
+//! `WinitWindowAccessor::with_winit_window` returns `None` — so geometry
+//! can't be read from winit at shutdown. Instead [`super::winit_filter`]'s
+//! `Resized` / `Moved` handlers call [`record`] to keep an in-memory mirror
+//! while the window is still alive, and [`snapshot_into`] reads it at exit.
 //!
 //! Wayland caveat: the compositor security model forbids clients from
 //! setting their own position, so `set_position` is a silent no-op on
@@ -58,7 +52,7 @@ use crate::AppWindow;
 use crate::services::settings::SettingsData;
 
 /// Lower bound for restored window size, mirroring `min-width` /
-/// `min-height` in `ui/app-window.slint`. Guards against a corrupt
+/// `min-height` in `melodia-ui/ui/app-window.slint`. Guards against a corrupt
 /// `settings.json` producing a 0×0 window.
 const MIN_RESTORE_WIDTH: f64 = 640.0;
 const MIN_RESTORE_HEIGHT: f64 = 420.0;

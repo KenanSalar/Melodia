@@ -3,45 +3,41 @@
 //! Both hero surfaces (Favorites, Recently Played) paint a blurred backdrop
 //! built from up to 4 cover paths: tile the sources into a 2×2 atlas,
 //! downscale to the now-playing-tier `BLUR_TARGET`, and run
-//! `image::imageops::fast_blur` (parity with
-//! `now_playing_artwork::decode_artwork`). The per-view `hero.rs` files own
-//! the data source and the `write_crossfade_slot` application; this module
-//! owns the CPU-bound image work.
+//! `image::imageops::fast_blur` (parity with the single-source decode behind
+//! [`crate::ui::artwork_cache`]), then measure the result for the
+//! hero's colour solve. The per-view `hero.rs` files own the data source and
+//! the `write_crossfade_slot` application; this module owns the CPU-bound
+//! image work, and the quantize behind that measurement is the heaviest of it.
 
 use std::path::Path;
 
 use image::imageops::fast_blur;
 use slint::{Rgb8Pixel, SharedPixelBuffer};
 
-use crate::ui::util::buffer_from_rgb;
+use crate::media::image_decode::{MAX_SOURCE_DIM, decode_capped};
+use crate::ui::backdrop::BackdropSample;
+use crate::ui::util::{BLUR_SIGMA, BLUR_TARGET, buffer_from_rgb};
 
-/// Atlas + blur target size. Matches `now_playing_artwork::BLUR_DOWNSCALE`
-/// so the GPU pipeline / cache pressure stays consistent across blur
-/// surfaces. Bigger than this gains nothing because the surface is
-/// `image-fit: cover`-stretched.
-const BLUR_TARGET: u32 = 192;
-
-/// `fast_blur` sigma. Mirrors `now_playing_artwork::BLUR_SIGMA` so the hero
-/// blurs read the same as the Now Playing backdrop.
-const BLUR_SIGMA: f32 = 24.0;
-
-/// Per-tile source decode cap before atlasing. Each tile is a quarter
-/// of the atlas, so decoding above this is wasted work. Stays well
-/// below the artwork hard cap so a forged dimension header in a tag
-/// can't trigger an absurd allocation. Same hard cap as
-/// `now_playing_artwork::MAX_SOURCE_DIM` / `cover_thumbs::MAX_DIM`.
-const MAX_SOURCE_DIM: u32 = 8192;
+/// Side length of one tile in the 2×2 atlas.
 const PER_TILE: u32 = BLUR_TARGET / 2;
 
+/// A composed mosaic backdrop and what the hero's colour solve needs to know
+/// about it. Both halves are produced by the same blocking call, so the scrim
+/// can't fall out of step with the blur it is darkening.
+pub(crate) struct MosaicBlur {
+    pub(crate) blur: SharedPixelBuffer<Rgb8Pixel>,
+    pub(crate) sample: BackdropSample,
+}
+
 /// Compose up to 4 source images into a `BLUR_TARGET × BLUR_TARGET`
-/// 2×2 atlas, then blur. Mirrors the picker's mosaic layout for the
-/// 4-tile case; the 1 / 2 / 3 / 0 cases fall back to "fill the whole
-/// atlas with the available tiles" so a partially-populated mosaic
-/// still produces a usable hero backdrop. Runs on the blocking pool.
+/// 2×2 atlas, blur it, and measure the result. Mirrors the picker's mosaic
+/// layout for the 4-tile case; the 1 / 2 / 3 / 0 cases fall back to "fill the
+/// whole atlas with the available tiles" so a partially-populated mosaic still
+/// produces a usable hero backdrop. Runs on the blocking pool.
 ///
 /// Returns `None` when every source decode failed — the caller clears
-/// `has-blur` so the accent gradient floor shows through.
-pub fn compose_mosaic_blur(paths: &[String]) -> Option<SharedPixelBuffer<Rgb8Pixel>> {
+/// `has-blur` so the gradient floor shows through.
+pub(crate) fn compose_mosaic_blur(paths: &[String]) -> Option<MosaicBlur> {
     use image::{ImageBuffer, RgbImage};
 
     if paths.is_empty() {
@@ -91,19 +87,15 @@ pub fn compose_mosaic_blur(paths: &[String]) -> Option<SharedPixelBuffer<Rgb8Pix
         }
     }
 
-    let blurred = fast_blur(&atlas, BLUR_SIGMA);
-    Some(buffer_from_rgb(&blurred))
+    let blur = buffer_from_rgb(&fast_blur(&atlas, BLUR_SIGMA));
+    let sample = BackdropSample::measure(&blur);
+    Some(MosaicBlur { blur, sample })
 }
 
 /// Decode one cover at its tile size. Bounded so a forged header can't
 /// allocate gigabytes before the downscale kicks in.
 fn decode_tile(path: &Path) -> Option<image::RgbImage> {
-    let mut reader = image::ImageReader::open(path).ok()?.with_guessed_format().ok()?;
-    let mut limits = image::Limits::default();
-    limits.max_image_width = Some(MAX_SOURCE_DIM);
-    limits.max_image_height = Some(MAX_SOURCE_DIM);
-    reader.limits(limits);
-    let decoded = reader.decode().ok()?;
+    let decoded = decode_capped(path, MAX_SOURCE_DIM).ok()?;
     Some(decoded.thumbnail_exact(BLUR_TARGET, BLUR_TARGET).to_rgb8())
 }
 
@@ -112,15 +104,23 @@ fn decode_tile(path: &Path) -> Option<image::RgbImage> {
 /// (`decode_tile`'s output), so the per-tile blit is a sub-block of
 /// the larger atlas; sampling is nearest-neighbour because the blur
 /// pass that immediately follows obliterates any aliasing.
+///
+/// The per-pixel `get_pixel`/`put_pixel` is deliberate, not an oversight:
+/// the whole rectangle is at most `BLUR_TARGET²` pixels and runs once per
+/// artwork change, so trading the bounds-checked accessors for hand-rolled
+/// row offsets would buy a fraction of a cold path and cost the reader the
+/// coordinates. Reach for a row-wise rewrite only with a profile saying this
+/// is what a mosaic recompose spends its time on — it is the `fast_blur`
+/// below and the quantize behind it.
 fn blit(dst: &mut image::RgbImage, src: &image::RgbImage, dx: u32, dy: u32, dw: u32, dh: u32) {
     let (sw, sh) = src.dimensions();
     if sw == 0 || sh == 0 {
         return;
     }
     for y in 0..dh {
+        let sy = y * sh / dh;
         for x in 0..dw {
             let sx = x * sw / dw;
-            let sy = y * sh / dh;
             let px = *src.get_pixel(sx, sy);
             dst.put_pixel(dx + x, dy + y, px);
         }

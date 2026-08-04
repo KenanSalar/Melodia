@@ -1,0 +1,750 @@
+import { Theme } from "../../theme.slint";
+import { TrackListRow } from "../../models.slint";
+import { TagEditor } from "../../globals/dialog-forms.slint";
+import { Dialog } from "../../globals/dialog.slint";
+import { Nav } from "../../globals/nav.slint";
+import { Playlists } from "../../globals/playlists.slint";
+import { PopupHighlight } from "../../globals/shell.slint";
+import { RowCovers } from "../../globals/tracks.slint";
+import { MaterialIcon } from "../material-icon.slint";
+import { StarRating } from "../star-rating.slint";
+import { ArtworkImage } from "../artwork-image.slint";
+import { MenuItem, MenuSeparator } from "context-menu.slint";
+import { DataCell } from "track-list-cell.slint";
+import { Checkbox } from "../checkbox.slint";
+import { PopupSurface } from "../popup-surface.slint";
+import { FocusLossWatcher } from "../focus-loss-watcher.slint";
+
+// One body row in a track table. The outer Rectangle is the virtualizer slot the
+// ListView measures — `Theme.row-h` plus `Theme.row-gap` of transparent space, so a row
+// leaves a gap under itself without painting over the next one. **Anything deriving a
+// row pitch has to sum both.** The inner `chrome` Rectangle is the visible pill and owns
+// the TouchArea, the cell layout and the context popup.
+//
+// Globals-free: column widths, visibility and the playing track id arrive as `in`
+// properties; user actions emit callbacks the host wires up.
+export component TrackListRowItem inherits Rectangle {
+    in property <TrackListRow> row-data;
+    in property <int> row-index;
+
+    // `row-data.id` snapshotted at right-click, so a ListView row recycle — a data swap
+    // behind the same instance during a scroll — can't unmount the FocusLossWatcher
+    // mid-popup. Reset by the same close path that clears `PopupHighlight.row-ctx-id`,
+    // else a stale value keeps this row's gate true after the popup is gone.
+    property <int> right-click-row-id: -1;
+
+    // Column widths — must match the header so cell boundaries align.
+    in property <length> w-number;
+    in property <length> w-title;
+    in property <length> w-artist;
+    in property <length> w-album;
+    in property <length> w-genre;
+    in property <length> w-year;
+    in property <length> w-length;
+
+    // Same flags the header reads. `show-artwork` is a pseudo-toggle controlling only
+    // the thumbnail inside the title cell, not the cell.
+    in property <bool> show-number;
+    in property <bool> show-artwork;
+    in property <bool> show-artist;
+    in property <bool> show-album;
+    in property <bool> show-genre;
+    in property <bool> show-year;
+
+    // `"track_number"` shows the real album track number (Album Detail only); `"index"`
+    // the 1-based position in the current view, counting down N..1 under a descending
+    // `#` sort so the column reads as sorted — which is why the row needs the sort state
+    // and the list length.
+    in property <string> number-mode: "index";
+    in property <string> sort-field;
+    in property <string> sort-dir;
+
+    // Bound by `TrackList`, so header and rows share one width source of truth.
+    in property <length> total-w;
+
+    // Rows matching it flip their cells to accent. Handed down rather than read off
+    // `Player` so the component stays reusable with no implicit dependencies.
+    in property <int> playing-track-id;
+
+    // Merge contiguous selected rows into one continuous pill: top corners square when
+    // the row above is selected, bottom when the row below is. `TrackList` computes both
+    // from `rows[idx ± 1].selected`, keeping this component loop-agnostic.
+    in property <bool> prev-selected;
+    in property <bool> next-selected;
+
+    // Derived state.
+    property <bool> playing: root.row-data.id == root.playing-track-id;
+    property <bool> selected: root.row-data.selected;
+    // Disk-only Browse rows arrive `enabled == false` — dimmed, and swallowing every
+    // interaction: row body, # checkbox, favourite button and right-click menu alike.
+    property <bool> enabled: root.row-data.enabled;
+
+    // Drives context-menu entry visibility (no "Go to Album" inside Album Detail,
+    // "Remove from Playlist" only in Playlist Detail) and the current-playlist exclusion
+    // in the Add-to-Playlist sub-list. One of "tracks", "album-detail",
+    // "artist-detail", "genre-detail", "playlist-detail", "browse", "favorites",
+    // "search"; empty means no view-specific suppression.
+    in property <string> view-context;
+    // Set only under `view-context == "playlist-detail"`; the Add-to-Playlist sub-list
+    // filters it out so "add to the playlist you're looking at" never appears. 0 = none.
+    in property <int> current-playlist-id: 0;
+    // Mirror of the per-view global's `selected-ids`, which is how the menu decides
+    // between the right-clicked row and the whole selection. Multi-mode needs this row
+    // selected *and* more than one entry — right-clicking an unselected row always
+    // falls back to that row alone.
+    in property <[int]> view-selected-ids;
+    property <bool> multi-active:
+        root.row-data.selected && root.view-selected-ids.length > 1;
+    property <int> multi-count: root.view-selected-ids.length;
+
+    // One source of truth for the "Go to …" entries, read by each entry's own `if` and
+    // by the preceding separator's `any-cross-tab-visible` — so the divider tracks
+    // *any* entry being visible rather than just the album one.
+    property <bool> show-go-to-album:
+        !root.multi-active && root.row-data.album_id != 0
+            && root.view-context != "album-detail";
+    property <bool> show-go-to-artist:
+        !root.multi-active && root.row-data.artist_id != 0
+            && root.view-context != "artist-detail";
+    property <bool> show-go-to-genre:
+        !root.multi-active && root.row-data.genre_id != 0
+            && root.view-context != "genre-detail";
+    property <bool> any-cross-tab-visible:
+        show-go-to-album || show-go-to-artist || show-go-to-genre;
+
+    // Drag-reorder, opt-in via `enable-drag`; `TrackList` and every other consumer
+    // leave it off and pay nothing. On, the row's own `touch` also tracks
+    // press → move → release. A wrapping or sibling TouchArea can't: Slint's
+    // deepest-wins routing delivers press/up exclusively to `touch` and the outer one
+    // only sees `moved`, so a drag started and never cleaned up. The shared state lives
+    // on the host `DraggableTrackList` through two-way `drag-source` / `drop-slot`
+    // bindings, and the host also passes the geometry the slot math needs.
+    in property <bool> enable-drag: false;
+    in property <int> row-count: 0;
+    in property <length> list-y0: 0px;
+    in property <length> list-height: 0px;
+    in property <length> list-viewport-y: 0px;
+    in-out property <int> drag-source: -1;
+    in-out property <int> drop-slot: -1;
+    // Per-row drag state — meaningful only while `enable-drag` is on and this row is
+    // pressed.
+    property <length> drag-press-abs-y;
+    property <bool> drag-started: false;
+    property <length> drag-cur-abs-y: 0px;
+    // Slot math: list-relative pointer Y → row index → upper/lower half → slot in
+    // `0..=row-count`. The pitch is the whole virtualizer slot, pill plus the gap under
+    // it — leave the gap out and the slot drifts further with every row down the list.
+    property <length> drag-row-h:
+        (root.show-artwork ? Theme.row-h : Theme.row-h-compact) + Theme.row-gap;
+    property <length> drag-cur-list-y:
+        root.drag-cur-abs-y - root.list-y0 - root.list-viewport-y;
+    property <int> drag-cur-row: clamp(
+        Math.floor(root.drag-cur-list-y / root.drag-row-h),
+        0,
+        max(0, root.row-count - 1),
+    );
+    property <bool> drag-upper-half:
+        (root.drag-cur-list-y - root.drag-cur-row * root.drag-row-h)
+            < root.drag-row-h / 2;
+    property <int> drag-computed-slot: clamp(
+        root.drag-upper-half ? root.drag-cur-row : root.drag-cur-row + 1,
+        0,
+        root.row-count,
+    );
+
+    callback double-clicked-row();
+    callback toggle-favorite();
+    callback play-row(int /*track_id*/, int /*index*/);
+    // Batch-shaped: a single-row click emits a 1-element array, a multi-select
+    // right-click the whole `view-selected-ids`. One signature for both spares the Rust
+    // handlers a single/batch dispatch branch.
+    callback play-next([int]);
+    callback add-to-queue([int]);
+    callback toggle-row-favorite([int] /*track_ids*/, bool /*new_state*/);
+    // 0–5, batch-shaped like the favorite toggle; the hover strip emits one id today
+    // and leaves room for multi-select later.
+    callback set-row-rating([int] /*track_ids*/, int /*rating*/);
+    callback select-row(int /*idx*/, int /*id*/, bool /*shift*/, bool /*ctrl*/);
+    // Only emitted under `view-context == "playlist-detail"`.
+    callback request-remove-from-playlist([int] /*track_ids*/);
+    // The id is the row's own album/artist/genre linkage, already non-zero — the menu
+    // hides the entry when the row carries none.
+    callback go-to-album(int /*album_id*/);
+    callback go-to-artist(int /*artist_id*/);
+    callback go-to-genre(int /*genre_id*/);
+    // Bumped by anything that should make the host's filter input give up the keyboard:
+    // row clicks, checkbox clicks, right-click. Slint doesn't blur a TextInput on an
+    // outside click, so the host watches this counter and clears focus itself.
+    callback request-blur-search();
+    // Fires on pointer-up only when a drag really started (4 px threshold) and the slot
+    // would move this row. `DraggableTrackList` routes it to `reorder_playlist`.
+    callback drag-reorder(int /*from*/, int /*to*/);
+    // Requested viewport delta while dragging near a list edge, negative being up. The
+    // host re-clamps and applies it.
+    callback request-scroll-by(length /*delta-y*/);
+
+    // `width: root.total-w` makes the row exactly as wide as the header so cell
+    // boundaries align, and lets the parent view's horizontal ScrollView see a content
+    // size past its own width once columns grow — which is what raises the scrollbar.
+    // **No `horizontal-stretch: 1`**: that would force every row to fill the ListView
+    // viewport and defeat the fixed width.
+    //
+    // Pinning min- and max-height equal is what lets the virtualizer measure rows, and
+    // `vertical-stretch: 0` stops them sharing leftover space. The `show-artwork`
+    // ternary collapses the row to `row-h-compact` when the 36 px tile unmounts;
+    // without it, thumbnail-less rows keep full-height chrome and read as low-density.
+    min-height: (root.show-artwork ? Theme.row-h : Theme.row-h-compact) + Theme.row-gap;
+    max-height: (root.show-artwork ? Theme.row-h : Theme.row-h-compact) + Theme.row-gap;
+    width: root.total-w;
+    vertical-stretch: 0;
+    background: transparent;
+
+    // Owns the cross-axis sizing of `chrome`, with `padding-bottom` carving off the
+    // inter-row gap. Without the layout, a free-positioned `width: 100%` chrome under a
+    // free Rectangle forms the height-100%-vs-Npx cycle and the ListView hands every row
+    // ~0 height, stacking them all at y=0.
+    VerticalLayout {
+        padding-bottom: Theme.row-gap;
+
+        chrome := Rectangle {
+            // Per-corner radii merge contiguous selected rows into one pill. An
+            // unselected row always rounds both ends, so a hover-only pill keeps the
+            // shape of a single-row one.
+            border-top-left-radius: (root.selected && root.prev-selected) ? 0 : Theme.radius-md;
+            border-top-right-radius: (root.selected && root.prev-selected) ? 0 : Theme.radius-md;
+            border-bottom-left-radius: (root.selected && root.next-selected) ? 0 : Theme.radius-md;
+            border-bottom-right-radius: (root.selected && root.next-selected) ? 0 : Theme.radius-md;
+            // Pinned so the pill always fills the slot. Left to size from its content,
+            // chrome grows on hover as the checkbox and fav button swap in, which reads
+            // as a row expanding under the cursor. Mirrors the outer slot's
+            // `show-artwork` ternary; same convention as `TrackListHeader`'s pin.
+            min-height: root.show-artwork ? Theme.row-h : Theme.row-h-compact;
+            max-height: root.show-artwork ? Theme.row-h : Theme.row-h-compact;
+        // Disk-only Browse rows dim; a drag source fades further so it reads as lifted
+        // out of position. The second arm is inert without `enable-drag`, since
+        // `drag-source` stays -1.
+        opacity: !root.enabled
+            ? 0.45
+            : ((root.enable-drag && root.drag-source == root.row-index) ? 0.4 : 1.0);
+        animate opacity { duration: Theme.dur-fast; easing: ease-in-out; }
+        // Selection is a faint accent overlay that brightens on hover; an unselected
+        // row hovers to `surface0`.
+        background: root.selected
+            ? (touch.has-hover
+                ? Theme.accent.with-alpha(0.14)
+                : Theme.accent.with-alpha(0.08))
+            : (touch.has-hover ? Theme.surface0 : transparent);
+        clip: true;
+
+        // `touch` **wraps** the cell layout so `cb-touch` and `fav-touch` are real
+        // descendants. Slint propagates `has-hover` up to a TouchArea's ancestors but
+        // not across cousins, so with the layout outside `touch`, moving onto `cb-touch`
+        // flipped `touch.has-hover` false, unmounted the checkbox mid-move and lost the
+        // click. Wrapping fixes hover and hit-testing at once: the deepest TouchArea
+        // wins, and plain Rectangles pass clicks through so empty cell area still drops
+        // filter focus.
+        touch := TouchArea {
+            // A disabled TouchArea processes nothing, so disk-only rows get no hover
+            // background, no checkbox swap-in and no double-click.
+            enabled: root.enabled;
+            // Grabbing only once a real drag is in flight; hover and idle press stay
+            // `default` so inner cell cursors aren't overridden when drag is off.
+            mouse-cursor:
+                root.enable-drag && self.pressed && root.drag-started
+                    ? grabbing
+                    : default;
+            double-clicked => { root.double-clicked-row(); }
+            // A row-body left-click is a no-op — only the # checkbox drives selection —
+            // but it still bumps the blur request, so clicking anywhere on a row drops
+            // filter focus. Drag press/up tracking shares this handler because `touch`
+            // is where Slint actually delivers those events.
+            pointer-event(ev) => {
+                if (ev.kind == PointerEventKind.up && ev.button == PointerEventButton.left) {
+                    root.request-blur-search();
+                }
+                if (ev.kind == PointerEventKind.down && ev.button == PointerEventButton.right && root.enabled) {
+                    // Records which row owns the open menu, so the popup's
+                    // `FocusLossWatcher` mounts on this row alone and focus-loss
+                    // dispatch stays O(1) however many rows are visible. **Both writes
+                    // must precede `show()`**, or the `if` gate inside the popup body
+                    // is still false when the watcher would mount.
+                    root.right-click-row-id = root.row-data.id;
+                    PopupHighlight.row-ctx-id = root.row-data.id;
+                    ctx-popup.show();
+                    root.request-blur-search();
+                }
+                // Drag-reorder tracking — opt-in via `enable-drag`.
+                if (root.enable-drag) {
+                    if (ev.kind == PointerEventKind.down && ev.button == PointerEventButton.left) {
+                        root.drag-press-abs-y = self.absolute-position.y + self.pressed-y;
+                        root.drag-started = false;
+                        root.drop-slot = -1;
+                    }
+                    if (ev.kind == PointerEventKind.up && ev.button == PointerEventButton.left) {
+                        // Slot → `to` index; removing the source shifts higher
+                        // indices down by one. `drag-source == row-index` ties the
+                        // commit to state nobody reset behind our back — that pair
+                        // lives on a global outliving this view, where `drag-started`
+                        // is per-row. `queue-row-item.slint` carries the same guard.
+                        if (root.drag-started
+                            && root.drag-source == root.row-index
+                            && root.drop-slot >= 0
+                            && root.drop-slot != root.row-index
+                            && root.drop-slot != root.row-index + 1) {
+                            root.drag-reorder(
+                                root.row-index,
+                                root.drop-slot <= root.row-index
+                                    ? root.drop-slot
+                                    : root.drop-slot - 1,
+                            );
+                        }
+                        root.drag-source = -1;
+                        root.drop-slot = -1;
+                        root.drag-started = false;
+                    }
+                    if (ev.kind == PointerEventKind.cancel) {
+                        root.drag-source = -1;
+                        root.drop-slot = -1;
+                        root.drag-started = false;
+                    }
+                }
+            }
+            moved => {
+                if (!root.enable-drag) {
+                    return;
+                }
+                if (self.pressed) {
+                    if (!root.drag-started
+                        && Math.abs((self.absolute-position.y + self.mouse-y) - root.drag-press-abs-y) > 4px) {
+                        root.drag-started = true;
+                        root.drag-source = root.row-index;
+                    }
+                    // Only the row holding `drag-source` drives `drop-slot` — the
+                    // `queue-row-item.slint` ownership rule.
+                    if (root.drag-started && root.drag-source == root.row-index) {
+                        root.drag-cur-abs-y = self.absolute-position.y + self.mouse-y;
+                        root.drop-slot = root.drag-computed-slot;
+                        // Edge auto-scroll — the 40 px band / 6 px nudge
+                        // `queue-row-item.slint` uses.
+                        if (root.list-height > 0px) {
+                            if ((self.absolute-position.y + self.mouse-y) - root.list-y0 < 40px) {
+                                root.request-scroll-by(-6px);
+                            } else if (((root.list-y0 + root.list-height)
+                                        - (self.absolute-position.y + self.mouse-y)) < 40px) {
+                                root.request-scroll-by(6px);
+                            }
+                        }
+                    }
+                }
+            }
+
+        HorizontalLayout {
+            padding-left: Theme.pad-sm;
+            padding-right: Theme.pad-sm;
+            spacing: Theme.pad-sm;
+
+            // A playing row flips every cell to accent and keeps the weight — no
+            // bold-on-play.
+
+            // `if` rather than `visible` so a hidden cell vacates its layout space,
+            // mirroring the header. The number swaps to a checkbox on hover or
+            // selection.
+            if root.show-number: Rectangle {
+                width: root.w-number;
+                clip: true;
+                VerticalLayout {
+                    alignment: center;
+                    if !touch.has-hover && !root.selected: Text {
+                        // `track_number` falls back to the row position when the tag
+                        // is missing; `index` counts down N..1 under a descending
+                        // sort so the column itself reads as sorted.
+                        text: root.number-mode == "track_number"
+                            ? (root.row-data.track_number > 0
+                                ? root.row-data.track_number
+                                : root.row-index + 1)
+                            : ((root.sort-field == "track_number" && root.sort-dir == "desc")
+                                ? root.row-count - root.row-index
+                                : root.row-index + 1);
+                        // Every cell is `Theme.text`, as is the header: rows are body
+                        // copy and hierarchy comes from size and weight, not
+                        // contrast. `DataCell` says what `subtext0` cost.
+                        color: root.playing ? Theme.accent : Theme.text;
+                        font-size: Theme.font-size-row;
+                        horizontal-alignment: left;
+                    }
+                    // Hollow on hover, filled accent when selected. Owns its own
+                    // TouchArea so the box drives selection independently of the row.
+                    if touch.has-hover || root.selected: Checkbox {
+                        checked: root.selected;
+
+                        cb-touch := TouchArea {
+                            mouse-cursor: pointer;
+                            // Plain click toggles this row in or out; shift
+                            // range-selects against the anchor. Ctrl is forced on
+                            // whenever shift isn't held, so the backend's "replace
+                            // selection" branch is unreachable from the checkbox and
+                            // clicking a selected row's box always deselects it.
+                            pointer-event(ev) => {
+                                if (ev.kind == PointerEventKind.up && ev.button == PointerEventButton.left && root.enabled) {
+                                    root.select-row(
+                                        root.row-index,
+                                        root.row-data.id,
+                                        ev.modifiers.shift,
+                                        !ev.modifiers.shift,
+                                    );
+                                    root.request-blur-search();
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Title cell: artwork, title, favourite, rating strip.
+            //
+            // `horizontal-stretch: 1` on the text column is what makes `overflow: elide`
+            // fire at all — without it, under `alignment: start` the column takes its
+            // intrinsic width (the full string) and the Text never learns it should
+            // elide, which RTL scripts make visible by overflowing left into the #
+            // column. The cell's `clip` guards whatever still escapes: RTL combining
+            // marks, oversized emoji.
+            Rectangle {
+                width: root.w-title;
+                clip: true;
+                HorizontalLayout {
+                    spacing: Theme.pad-sm;
+                    alignment: start;
+                    if root.show-artwork: VerticalLayout {
+                        alignment: center;
+                        ArtworkImage {
+                            artwork-path: root.row-data.artwork_path;
+                            // Lazy per-instantiated-row lookup, so only the visible
+                            // rows of a virtualized list reach the shared row-tier
+                            // LRU, decoding on a miss.
+                            cover: RowCovers.request(root.row-data.artwork_path);
+                            tile-size: 36px;
+                            tile-radius: Theme.radius-sm;
+                        }
+                    }
+                    VerticalLayout {
+                        horizontal-stretch: 1;
+                        alignment: center;
+                        Text {
+                            // The leading U+200E forces the string's BiDi base
+                            // direction to LTR. Without it a title starting in Arabic
+                            // or Hebrew takes an RTL base and Slint's elide drops the
+                            // `…` entirely, leaving a gap at the cell's left edge with
+                            // no truncation marker. Arabic substrings still render RTL
+                            // inline — only the base direction moves, so the indicator
+                            // anchors right for every row whatever the script.
+                            text: "‎" + root.row-data.title;
+                            color: root.playing ? Theme.accent : Theme.text;
+                            font-size: Theme.font-size-row;
+                            overflow: elide;
+                        }
+                    }
+                    if root.row-data.is_favorite: VerticalLayout {
+                        alignment: center;
+                        MaterialIcon {
+                            name: "favorite";
+                            icon-size: 18px;
+                            icon-color: Theme.red;
+                            filled: true;
+                        }
+                    }
+                    // Revealed on hover to the right of the title, which elides to make
+                    // room rather than being swapped out the way the Length cell's
+                    // duration is. Gated on `enabled` so disk-only Browse rows can't be
+                    // rated. The per-star TouchAreas descend from `touch`, so hovering a
+                    // star keeps the row hovered and this strip mounted.
+                    if touch.has-hover && root.enabled: VerticalLayout {
+                        alignment: center;
+                        StarRating {
+                            rating: root.row-data.rating;
+                            star-size: 16px;
+                            rated(n) => { root.set-row-rating([root.row-data.id], n); }
+                        }
+                    }
+                }
+            }
+
+            // Uniform elide-with-LRM cells. Year and length are structurally different
+            // and stay inline below.
+            if root.show-artist: DataCell {
+                cell-width: root.w-artist;
+                text-content: root.row-data.artist != "" ? root.row-data.artist : "Unknown Artist";
+                playing: root.playing;
+            }
+            if root.show-album: DataCell {
+                cell-width: root.w-album;
+                text-content: root.row-data.album != "" ? root.row-data.album : "Unknown Album";
+                playing: root.playing;
+            }
+            if root.show-genre: DataCell {
+                cell-width: root.w-genre;
+                text-content: root.row-data.genre;
+                playing: root.playing;
+            }
+
+            // Year — no LRM, no elide (4-digit value always fits).
+            if root.show-year: Rectangle {
+                width: root.w-year;
+                clip: true;
+                VerticalLayout {
+                    alignment: center;
+                    Text {
+                        text: root.row-data.year > 0 ? root.row-data.year : "";
+                        color: root.playing ? Theme.accent : Theme.text;
+                        font-size: Theme.font-size-row;
+                    }
+                }
+            }
+
+            // The duration is fully replaced by the favourite toggle on hover. The
+            // persistent "this is a favorite" indicator lives beside the title; this
+            // swap is only the action button.
+            Rectangle {
+                width: root.w-length;
+                clip: true;
+                HorizontalLayout {
+                    spacing: Theme.pad-xs;
+                    alignment: start;
+                    if !touch.has-hover: VerticalLayout {
+                        alignment: center;
+                        Text {
+                            // Precomputed in Rust at row build, so this binding doesn't
+                            // re-run a Slint pure function on every invalidation.
+                            text: root.row-data.display_duration;
+                            color: root.playing ? Theme.accent : Theme.text;
+                            font-size: Theme.font-size-row;
+                            horizontal-alignment: left;
+                        }
+                    }
+                    if touch.has-hover: Rectangle {
+                        width: 26px;
+                        height: 26px;
+                        y: (parent.height - self.height) / 2;
+                        border-radius: self.height / 2;
+                        background: fav-touch.has-hover ? Theme.surface1 : transparent;
+                        MaterialIcon {
+                            x: (parent.width - self.width) / 2;
+                            y: (parent.height - self.height) / 2;
+                            name: root.row-data.is_favorite ? "favorite" : "favorite_border";
+                            icon-size: 18px;
+                            icon-color: root.row-data.is_favorite ? Theme.red : Theme.subtext0;
+                            filled: root.row-data.is_favorite;
+                        }
+                        fav-touch := TouchArea {
+                            mouse-cursor: pointer;
+                            clicked => { if (root.enabled) { root.toggle-favorite(); } }
+                        }
+                    }
+                }
+            }
+        }
+        }
+
+        // One PopupWindow per row instance — the ListView only instantiates visible
+        // rows, so this stays a screenful of popups whatever the library size. Height
+        // is content-driven; Add-to-Playlist hands off to a picker dialog so the menu
+        // itself stays one row per action with no inline scrolling.
+        ctx-popup := PopupWindow {
+            x: touch.mouse-x;
+            y: touch.mouse-y;
+            width: 220px;
+            close-policy: close-on-click;
+
+            // This row alone in single mode, the whole view selection in multi.
+            // Computed once so every `clicked` handler reads the same list.
+            property <[int]> effective-ids:
+                root.multi-active ? root.view-selected-ids : [root.row-data.id];
+            // Gates the Add-to-Playlist entry. On Playlist Detail the current playlist
+            // is filtered out, since adding to itself is a no-op. It's assumed to be in
+            // `Playlists.rows`; if it isn't, this overcounts by one, harmlessly.
+            property <int> visible-playlist-count:
+                root.current-playlist-id > 0
+                    ? max(0, Playlists.rows.length - 1)
+                    : Playlists.rows.length;
+
+            // Live only on the row whose menu is open. The gate keys off the right-click
+            // *snapshot* rather than the live `row-data.id`, so a row recycle behind an
+            // open popup can't unmount the watcher mid-popup — which keeps this to one
+            // watcher per focus-loss event however many rows are visible.
+            if root.right-click-row-id != -1
+                && root.right-click-row-id == PopupHighlight.row-ctx-id: FocusLossWatcher {
+                close => {
+                    ctx-popup.close();
+                    PopupHighlight.row-ctx-id = -1;
+                    root.right-click-row-id = -1;
+                }
+            }
+
+            PopupSurface {
+                VerticalLayout {
+                    padding: Theme.pad-xs;
+                    spacing: 0;
+
+                    // Single-row mode keeps "Play", matching double-click. Over a
+                    // selection the verb is ambiguous — queue it, or replace the queue
+                    // with it — so it's dropped. Play Next and Add to Queue read the
+                    // same either way and stay.
+                    if !root.multi-active: MenuItem {
+                        label: @tr("Play");
+                        icon: "play_arrow";
+                        clicked => { root.play-row(root.row-data.id, root.row-index); }
+                    }
+                    MenuItem {
+                        label: root.multi-active
+                            ? @tr("Play {} Next", root.multi-count)
+                            : @tr("Play Next");
+                        icon: "queue_play_next";
+                        clicked => { root.play-next(ctx-popup.effective-ids); }
+                    }
+                    MenuItem {
+                        label: root.multi-active
+                            ? @tr("Add {} to Queue", root.multi-count)
+                            : @tr("Add to Queue");
+                        icon: "queue_music";
+                        clicked => { root.add-to-queue(ctx-popup.effective-ids); }
+                    }
+                    MenuSeparator {}
+
+                    // Unconditional — creating a playlist is useful with none.
+                    MenuItem {
+                        label: @tr("New Playlist…");
+                        icon: "add";
+                        clicked => {
+                            // Stash the ids and open the Create dialog inline, no Rust
+                            // round-trip. The dispatcher's create-playlist branch
+                            // reads `pending-track-ids` once the row exists and adds
+                            // the tracks in the same call.
+                            Dialog.title = @tr("New Playlist");
+                            Dialog.message = "";
+                            Dialog.confirm-label = @tr("Create");
+                            Dialog.cancel-label = @tr("Cancel");
+                            Dialog.destructive = false;
+                            Dialog.kind = "create-playlist";
+                            Dialog.target-id = -1;
+                            Dialog.input-text = "";
+                            Dialog.input-text-2 = "";
+                            Dialog.pending-track-ids = ctx-popup.effective-ids;
+                            Dialog.open = true;
+                        }
+                    }
+                    // Hidden when there is nothing to add to. The chrome is set here so
+                    // the `@tr` literals sit at the call site and a locale switch
+                    // re-resolves them on the next open; the rows arrive async.
+                    if ctx-popup.visible-playlist-count > 0: MenuItem {
+                        label: root.multi-active
+                            ? @tr("Add {} to Playlist", root.multi-count)
+                            : @tr("Add to Playlist");
+                        icon: "playlist_add";
+                        clicked => {
+                            Dialog.title = root.multi-active
+                                ? @tr("Add {} to Playlist", root.multi-count)
+                                : @tr("Add to Playlist");
+                            Dialog.message = "";
+                            Dialog.confirm-label = @tr("Add");
+                            Dialog.cancel-label = @tr("Cancel");
+                            Dialog.destructive = false;
+                            Dialog.kind = "add-to-playlist";
+                            Dialog.pending-track-ids = ctx-popup.effective-ids;
+                            Dialog.pick-total-tracks = ctx-popup.effective-ids.length;
+                            Playlists.request-add-to-playlist(
+                                ctx-popup.effective-ids,
+                                root.current-playlist-id,
+                            );
+                        }
+                    }
+
+                    MenuSeparator {}
+                    MenuItem {
+                        label: root.multi-active
+                            ? (root.row-data.is_favorite
+                                ? @tr("Remove {} from Favorites", root.multi-count)
+                                : @tr("Add {} to Favorites", root.multi-count))
+                            : (root.row-data.is_favorite
+                                ? @tr("Remove from Favorites")
+                                : @tr("Add to Favorites"));
+                        icon: root.row-data.is_favorite ? "heart_minus" : "favorite";
+                        clicked => {
+                            root.toggle-row-favorite(
+                                ctx-popup.effective-ids,
+                                !root.row-data.is_favorite,
+                            );
+                        }
+                    }
+
+                    // Opens the tag editor over the right-clicked row or the whole
+                    // selection — batch editing is the point. **Don't set
+                    // `Dialog.open` here**: `request-edit` fetches the rows, fills
+                    // `TagEditor` and flips it on a fresh tick, the recursion-guard hop
+                    // `SmartEditor.request-edit` also takes.
+                    MenuItem {
+                        label: root.multi-active
+                            ? @tr("Edit Tags for {}", root.multi-count)
+                            : @tr("Edit Tags…");
+                        icon: "edit";
+                        clicked => {
+                            Dialog.title = root.multi-active
+                                ? @tr("Edit {} Tracks", root.multi-count)
+                                : @tr("Edit Track Information");
+                            Dialog.message = "";
+                            Dialog.confirm-label = @tr("Save");
+                            Dialog.cancel-label = @tr("Cancel");
+                            Dialog.destructive = false;
+                            Dialog.kind = "edit-tags";
+                            TagEditor.request-edit(ctx-popup.effective-ids);
+                        }
+                    }
+
+                    // Single-target by nature, so hidden over a selection like the
+                    // cross-tab entries below. Straight to `Nav` — Rust resolves the
+                    // path — with the separator on the same gate so it never dangles.
+                    if !root.multi-active: MenuSeparator {}
+                    if !root.multi-active: MenuItem {
+                        label: @tr("Open Containing Folder");
+                        icon: "folder_open";
+                        clicked => { Nav.reveal-in-folder(root.row-data.id); }
+                    }
+
+                    // Hidden over a selection, which may span several albums, and on the
+                    // detail view already showing the target. The separator tracks
+                    // `any-cross-tab-visible` rather than the album entry alone, so it
+                    // neither appears by itself nor vanishes when a row is merely
+                    // missing its album linkage.
+                    if root.any-cross-tab-visible: MenuSeparator {}
+                    if root.show-go-to-album: MenuItem {
+                        label: @tr("Go to Album");
+                        icon: "album";
+                        clicked => { root.go-to-album(root.row-data.album_id); }
+                    }
+                    if root.show-go-to-artist: MenuItem {
+                        label: @tr("Go to Artist");
+                        icon: "person";
+                        clicked => { root.go-to-artist(root.row-data.artist_id); }
+                    }
+                    if root.show-go-to-genre: MenuItem {
+                        label: @tr("Go to Genre");
+                        icon: "music_note";
+                        clicked => { root.go-to-genre(root.row-data.genre_id); }
+                    }
+
+                    // Removes the row, or the whole selection, from the open playlist.
+                    if root.view-context == "playlist-detail": MenuSeparator {}
+                    if root.view-context == "playlist-detail": MenuItem {
+                        label: root.multi-active
+                            ? @tr("Remove {} from Playlist", root.multi-count)
+                            : @tr("Remove from Playlist");
+                        icon: "playlist_remove";
+                        clicked => {
+                            root.request-remove-from-playlist(ctx-popup.effective-ids);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    }
+
+}

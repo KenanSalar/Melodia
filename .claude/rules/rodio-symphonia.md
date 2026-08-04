@@ -1,3 +1,9 @@
+---
+paths:
+  - src/player/**/*.rs
+  - tests/**/*.rs
+---
+
 # Rodio + Symphonia Best Practices
 
 ## Rodio — Audio Playback

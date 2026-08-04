@@ -1,0 +1,101 @@
+import { Theme } from "../theme.slint";
+
+// The square artwork tile. A decoded `cover` renders; otherwise the fallback glyph
+// paints over `tile-bg`.
+//
+// **Where that image comes from is the host's business**, and the two kinds differ: a
+// repeated tile binds `cover` to a lazy per-path lookup, so only a mounted tile costs a
+// cache hit, while the singletons — the bar, the mini player, the detail heroes, the tag
+// editor — are handed one image Rust decoded eagerly.
+export component ArtworkImage inherits Rectangle {
+    in property <string> artwork-path;
+    in property <image> cover;
+    in property <length> tile-size: 56px;
+    in property <length> tile-radius: Theme.radius-md;
+    // Painted when no cover is present, as an SVG asset rather than a font glyph — see
+    // the branch below. Each entity view passes the name matching its own sidebar icon,
+    // so an empty tile reads as that kind of thing rather than as a stray note.
+    in property <string> fallback-icon: "music-note";
+    // Scales the cover *inside* the tile frame for the hover zoom; the tile's own clip
+    // crops it, so it can't escape the host's bounds.
+    in property <float> cover-scale: 1.0;
+    // **The animated mirror, and what the ease belongs on.** Easing this rather than the
+    // derived size means a tile *frame* resize — the grid reflowing as the sidebar
+    // collapses — tracks instantly while a hover toggle still eases; animating the size
+    // conflates the two inputs and produces a delayed zoom-bounce.
+    property <float> anim-scale: root.cover-scale;
+    animate anim-scale { duration: Theme.dur-fast; easing: ease-in-out; }
+    // The shared default: a faintly accent-tinted square with an accent-coloured glyph.
+    in property <brush> tile-bg: Theme.accent.with-alpha(0.15);
+    in property <brush> tile-icon-color: Theme.accent;
+
+    width: tile-size;
+    height: tile-size;
+    border-radius: tile-radius;
+    background: tile-bg;
+    clip: true;
+
+    if root.cover.width > 0: Image {
+        // Derived from the animating source, so size and centring track per frame with
+        // no phase lag.
+        width: parent.width * root.anim-scale;
+        height: parent.height * root.anim-scale;
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        source: root.cover;
+        image-fit: ImageFit.cover;
+    }
+
+    // **An SVG `Image`, not a Material Symbols glyph.** A glyph scales from its
+    // text-metrics origin and isn't centred within its advance box, so scaling
+    // `font-size` for the hover zoom drifts it sideways; an `Image` scales its *content*
+    // to fill the box, so it zooms from the true geometric centre.
+    //
+    // One `if` per name, because Slint can't compose an `@image-url` from a runtime
+    // string — resources are resolved at codegen.
+    if root.cover.width == 0 && root.fallback-icon == "music-note": Image {
+        source: @image-url("../assets/icons/music-note.svg");
+        colorize: root.tile-icon-color;
+        image-fit: ImageFit.contain;
+        width: parent.width * 0.55 * root.anim-scale;
+        height: parent.height * 0.55 * root.anim-scale;
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+    }
+    if root.cover.width == 0 && root.fallback-icon == "person": Image {
+        source: @image-url("../assets/icons/person.svg");
+        colorize: root.tile-icon-color;
+        image-fit: ImageFit.contain;
+        width: parent.width * 0.55 * root.anim-scale;
+        height: parent.height * 0.55 * root.anim-scale;
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+    }
+    if root.cover.width == 0 && root.fallback-icon == "playlist": Image {
+        source: @image-url("../assets/icons/playlist.svg");
+        colorize: root.tile-icon-color;
+        image-fit: ImageFit.contain;
+        width: parent.width * 0.55 * root.anim-scale;
+        height: parent.height * 0.55 * root.anim-scale;
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+    }
+    if root.cover.width == 0 && root.fallback-icon == "theater_comedy": Image {
+        source: @image-url("../assets/icons/theater-comedy.svg");
+        colorize: root.tile-icon-color;
+        image-fit: ImageFit.contain;
+        width: parent.width * 0.55 * root.anim-scale;
+        height: parent.height * 0.55 * root.anim-scale;
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+    }
+    if root.cover.width == 0 && root.fallback-icon == "album": Image {
+        source: @image-url("../assets/icons/album.svg");
+        colorize: root.tile-icon-color;
+        image-fit: ImageFit.contain;
+        width: parent.width * 0.55 * root.anim-scale;
+        height: parent.height * 0.55 * root.anim-scale;
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+    }
+}

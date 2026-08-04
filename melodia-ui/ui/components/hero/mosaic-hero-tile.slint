@@ -1,0 +1,79 @@
+import { Theme } from "../../theme.slint";
+import { HeroBackdrop } from "../../globals/hero-backdrop.slint";
+import { CoverMosaic } from "../grid/cover-mosaic.slint";
+import { MaterialIcon } from "../material-icon.slint";
+
+// The artwork square both mosaic heroes draw. The outer Rectangle owns the
+// chrome and `CoverMosaic` paints the tile layout inside it; an empty set gets a
+// single centred glyph instead.
+//
+// One component rather than two copies: the two views differ in exactly three
+// values plus the cover callback, which is a callback rather than a global read
+// because each owns its own mosaic tier.
+//
+// **Every brush here is a `HeroBackdrop` tier, and none may become a `Theme.*`
+// token.** The tile sits *on* the hero: with no mosaic that's the dark gradient
+// floor, where a light theme's accent lands dark-on-dark, and the populated fill
+// matters as much because the mosaic's placeholder slots are translucent —
+// whatever fills this rectangle is most of what their chrome composites against.
+// The edge had to follow the fill for the same reason: a theme hairline vanishes
+// under a dark variant and turns a hard bright ring under every light one, so it
+// takes the derived `tile-edge` tier.
+export component MosaicHeroTile inherits Rectangle {
+    // Tiles to draw, before the 4-slot cap. Zero means an empty *set*, not
+    // "entries with no artwork" — an entry lacking a cover still contributes a
+    // tile, which `CoverMosaic` paints as a placeholder.
+    in property <int> count;
+    in property <[string]> paths;
+    // Each view passes its own sidebar entry's glyph.
+    in property <string> empty-glyph;
+    in property <bool> empty-glyph-filled: false;
+
+    // `pure` because `CoverMosaic`'s is, and Slint won't call an impure
+    // callback from a pure one.
+    pure callback request-cover(string) -> image;
+
+    width: Theme.hero-artwork;
+    height: Theme.hero-artwork;
+    // The tinted empty fill mirrors the tracklist placeholder, so an empty hero
+    // reads as one giant placeholder tile rather than as a bare surface.
+    background: root.count == 0
+        ? HeroBackdrop.chrome.with-alpha(0.15)
+        : HeroBackdrop.floor-start;
+    border-radius: Theme.radius-lg;
+    border-width: 1px;
+    border-color: HeroBackdrop.tile-edge;
+    clip: true;
+
+    if root.count == 0: VerticalLayout {
+        alignment: center;
+        HorizontalLayout {
+            alignment: center;
+            MaterialIcon {
+                name: root.empty-glyph;
+                filled: root.empty-glyph-filled;
+                icon-size: 56px;
+                icon-color: HeroBackdrop.chrome;
+            }
+        }
+    }
+
+    if root.count > 0: CoverMosaic {
+        width: 100%;
+        height: 100%;
+        artwork-paths: root.paths;
+        tile-count: root.count > 4 ? 4 : root.count;
+        placeholder-icon: "music-note";
+        // Flush: the tiles butt edge-to-edge against the outer clip, so the
+        // square reads as one composited image rather than as a bordered grid.
+        gutter-size: 0px;
+        tile-radius: 0px;
+        // Slots past the distinct-artwork count paint straight onto the hero,
+        // so they take the solved chrome for the empty state's reason.
+        tile-bg: HeroBackdrop.chrome.with-alpha(0.15);
+        tile-icon-color: HeroBackdrop.chrome;
+        request-cover(p) => {
+            return root.request-cover(p);
+        }
+    }
+}

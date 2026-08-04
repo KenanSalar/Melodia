@@ -5,7 +5,7 @@
 //! runs. On verify failure the downloaded `.new` file is removed and
 //! the live binary is left untouched.
 //!
-//! Split by phase:
+//! Split by stage:
 //!
 //! * [`staging`] — staging-path selection + the partial-download
 //!   sidecar fingerprint.

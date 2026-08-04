@@ -54,50 +54,7 @@ pub async fn queue_add_tracks(state: &AppState, track_ids: Vec<i64>) -> Result<(
     Ok(())
 }
 
-/// Play a single track immediately while preserving the queue. If the
-/// track is already queued, skip-to its position; otherwise append it
-/// at the tail and skip-to the newly-added slot. Either way the queue
-/// keeps its existing contents (no flood) and the clicked track plays
-/// straight away — matches the universal "double-click plays this" UX
-/// without `player_play_tracks`'s wipe-and-reload.
-pub async fn queue_append_unique(state: &AppState, track_id: i64) -> Result<(), AppError> {
-    let summary = queries::track::get_track_summary_by_id(&state.db, track_id)
-        .await?
-        .ok_or_else(|| AppError::NotFound(format!("track {track_id}")))?;
-    let summary = Arc::new(summary);
-
-    emit_and_execute(&*state.rodio, &state.db, &state.player_state, &state.sinks, |s| {
-        let existing = s
-            .queue
-            .play_order
-            .iter()
-            .position(|&ti| s.queue.tracks.get(ti).is_some_and(|t| t.id == track_id));
-        let target_idx = existing.unwrap_or_else(|| {
-            s.queue.add_tracks(vec![summary]);
-            s.queue.play_order.len() - 1
-        });
-        let track = s.queue.skip_to_index(target_idx).cloned();
-        match track {
-            Some(t) => play_track_inner(s, t, None),
-            None => vec![],
-        }
-    });
-    Ok(())
-}
-
-pub async fn queue_play_next(state: &AppState, track_id: i64) -> Result<(), AppError> {
-    let summary = queries::track::get_track_summary_by_id(&state.db, track_id)
-        .await?
-        .ok_or_else(|| AppError::NotFound(format!("track {track_id}")))?;
-    let summary = Arc::new(summary);
-
-    with_state_emit(&state.player_state, &state.sinks, |s| {
-        s.queue.insert_next(summary);
-    });
-    Ok(())
-}
-
-/// Batch form of [`queue_play_next`]. Inserts every track in `track_ids`
+/// The context menu's "Play Next". Inserts every track in `track_ids`
 /// directly after `current_index`, preserving the input order so the
 /// user-visible queue ends up as `[current, id_0, id_1, …, id_n, …]`.
 /// One DB round-trip + one `with_state_emit` for the whole batch.
@@ -166,20 +123,13 @@ pub fn queue_skip_to_index(state: &AppState, index: usize) -> Result<(), AppErro
     Ok(())
 }
 
-pub async fn queue_direct_play(state: &AppState, track_id: i64) -> Result<(), AppError> {
-    let summary = queries::track::get_track_summary_by_id(&state.db, track_id)
-        .await?
-        .ok_or_else(|| AppError::NotFound(format!("track {track_id}")))?;
-    let summary = Arc::new(summary);
-
-    emit_and_execute(&*state.rodio, &state.db, &state.player_state, &state.sinks, |s| {
-        s.queue.set_direct_play(Arc::clone(&summary));
-        play_track_inner(s, summary, None)
-    });
-    Ok(())
-}
-
-/// FIX: Eliminates TOCTOU race — comparison + toggle under a single lock.
+/// Drive shuffle to `enabled`, doing nothing when it is already there.
+///
+/// The comparison and the flip sit inside one `with_state_emit` closure, so a
+/// caller that means "on" cannot be raced into "off" by the transport button
+/// landing between a read and a write. That is the whole reason to reach for
+/// this over a read-then-`queue_toggle_shuffle` pair — the toggle is the
+/// transport's own path, where flipping whatever is current *is* the intent.
 pub fn queue_set_shuffle(state: &AppState, enabled: bool) -> Result<(), AppError> {
     let new_shuffle = with_state_emit(&state.player_state, &state.sinks, |s| {
         if s.queue.shuffle_enabled == enabled {
@@ -253,12 +203,8 @@ fn persist_repeat(state: &AppState, mode: RepeatMode) {
     });
 }
 
-pub async fn queue_load(state: &AppState) -> Result<(), AppError> {
-    restore_persisted_queue(state).await
-}
-
-/// Shared helper used by both `queue_load` and the startup orchestration.
-/// Loads the persisted queue from disk and restores it into `PlayerState`.
+/// Startup restore: load the persisted queue from disk and put it back into
+/// `PlayerState`. Called once from `boot::tasks`.
 ///
 /// `repeat_mode` and `shuffle_enabled` are sourced from `settings.json`,
 /// not `queue.json`. When a non-empty queue is restored, `shuffle_enabled`

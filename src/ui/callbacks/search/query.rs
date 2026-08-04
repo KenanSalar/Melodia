@@ -8,7 +8,7 @@ use slint::ComponentHandle;
 
 use crate::state::AppState;
 use crate::ui::callbacks::macros::spawn_logged;
-use crate::ui::search::{self as search_ui_mod, SearchUi, fetch};
+use crate::ui::search::{self as search_ui_mod, SearchUi, apply, fetch};
 use crate::{AppWindow, Search};
 
 /// Wire the query / debounce / show-all callbacks.
@@ -39,7 +39,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, search_ui: &Arc<SearchUi>) 
                 ui.global::<Search>().set_show_all_tracks(false);
             }
             if text.trim().is_empty() {
-                fetch::clear_results_on_ui(&weak);
+                apply::clear_results_on_ui(&weak);
                 if let Some(ui) = weak.upgrade() {
                     search_ui_mod::clear_selection(&ui, &su);
                 }

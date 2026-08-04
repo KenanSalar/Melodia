@@ -3,7 +3,7 @@
 //! Two Slint globals are driven from here:
 //!
 //! * `Albums` — the responsive album-card grid. Rust owns a flat,
-//!   name-sorted `Vec<AlbumStats>` (plus pre-lowercased search/sort keys)
+//!   name-sorted `Vec<AlbumStats>` (plus pre-lowercased sort keys)
 //!   behind `AlbumsUi::grid.data` (fetched once from `album_stats`); the
 //!   grid model is rebuilt from it on every filter / sort / column-count
 //!   change *without* a DB hit. The grid is virtualized by row: Rust chunks
@@ -15,8 +15,8 @@
 //! * `AlbumDetail` — the full album detail view. `open_album` fetches the
 //!   header + track list; the cached `Vec<TrackListRow>` in
 //!   `AlbumsUi::detail.tracks` lets `play-row` / `select-row` /
-//!   `play-album` recover ids and re-sort in memory without round-tripping
-//!   the Slint model (mirrors `BrowseUi::last_files`).
+//!   `shuffle-album` recover ids and re-sort in memory without
+//!   round-tripping the Slint model (mirrors `BrowseUi::last_files`).
 //!
 //! Cross-thread layout mirrors `tracks.rs` / `browse.rs`: `AlbumsUi` is
 //! `Send + Sync`, cloned into callbacks / tokio tasks; Slint properties and
@@ -38,6 +38,7 @@ use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 use crate::entities::album::AlbumStats;
 use crate::media::cover_thumbs::CoverThumbs;
 use crate::ui::detail_artwork::DetailArtwork;
+use crate::ui::row_match::Needle;
 use crate::ui::section_state::SectionState;
 use crate::ui::util::clamp_i64_to_i32;
 use crate::{
@@ -50,7 +51,7 @@ use state::{
 };
 
 #[cfg(test)]
-use grid::{compute_album_cover_cap, compute_indices};
+use grid::compute_indices;
 #[cfg(test)]
 use state::GridIndexCache;
 
@@ -101,7 +102,7 @@ impl AlbumsUi {
                 all_tracks: Mutex::new(Vec::new()),
                 album_id: Mutex::new(-1),
                 applied_selection: Mutex::new(HashSet::new()),
-                filter: Mutex::new(String::new()),
+                filter: Mutex::new(Needle::default()),
             },
             cover_thumbs,
             grid_covers: Arc::new(CoverThumbs::with_config(
@@ -232,7 +233,7 @@ impl AlbumsUi {
 
     /// Track ids of the **displayed** detail list, in display order — the
     /// filter-applied subset when a search is active, otherwise the full
-    /// album. `play-album` / shuffle / add-to-queue pass these straight to
+    /// album. `play-row` / shuffle / add-to-queue pass these straight to
     /// `player_play_tracks`, so those actions operate on the visible rows.
     pub fn detail_track_ids(&self) -> Vec<i64> {
         self.detail.tracks.lock().iter().map(|r| r.id).collect()

@@ -9,11 +9,11 @@
 //!   polls a generation counter and only recomputes coefficients on change.
 //! - [`EqSource`]: a custom Rodio [`Source`] wrapping a decoder. Each sample
 //!   runs through a preamp gain then a cascade of ten `Type::PeakingEQ` biquads
-//!   — one [`DirectForm1`] per band, **per channel** (rodio's own `BltFilter`
-//!   keeps a single filter state across interleaved channels, which is part of
-//!   why it's "probably buggy"; we keep independent per-channel state). A
-//!   coupled soft-knee peak [`Limiter`] then catches any residual peaks so heavy
-//!   boosts compress instead of hard-clipping.
+//!   — one [`DirectForm1`] per band, **per channel**. Per-channel state is the
+//!   point: rodio's own `BltFilter` runs one filter state across interleaved
+//!   channels, which cross-contaminates them. A coupled soft-knee peak
+//!   [`Limiter`] then catches residual peaks so heavy boosts compress instead
+//!   of hard-clipping.
 //!
 //! `DirectForm1` is used (not `DirectForm2Transposed`) because its delay line
 //! holds past inputs/outputs that stay valid when coefficients change at
@@ -47,7 +47,7 @@ use rodio::source::SeekError;
 use rodio::{ChannelCount, Sample, SampleRate, Source};
 
 use super::crossfade::{self, FadeShared};
-use super::dsp::{Generation, db_to_linear};
+use super::dsp::{Generation, db_to_linear, linear_to_db};
 use super::replaygain::{self, ReplayGainShared, TrackReplayGain};
 
 /// Number of equalizer bands.
@@ -299,7 +299,7 @@ impl Limiter {
         if peak <= self.knee_low_linear {
             return 1.0;
         }
-        let peak_db = 20.0 * peak.log10();
+        let peak_db = linear_to_db(peak);
         let over = peak_db - LIMITER_THRESHOLD_DB;
         let half_knee = LIMITER_KNEE_DB / 2.0;
         let reduction_db = if over >= half_knee {

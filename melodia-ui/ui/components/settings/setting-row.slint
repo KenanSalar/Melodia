@@ -1,0 +1,82 @@
+import { Theme } from "../../theme.slint";
+import { SettingsPage } from "../../globals/settings-page.slint";
+import { MaterialIcon } from "../material-icon.slint";
+
+// The "icon · label · control" row inside a `SectionCard`; the host supplies the
+// control through `@children`.
+//
+// `disabled` dims the row *and* overlays a TouchArea that swallows the pointer,
+// because Slint propagates nothing across `@children` — the alternative is
+// threading a `disabled` through every consumer's control.
+export component SettingRow inherits Rectangle {
+    in property <string> icon;
+    in property <string> label;
+    in property <string> description;
+    in property <bool>   disabled: false;
+    // Caps the description, so a long single-line string wraps into a reading
+    // column instead of inflating the row's preferred width and stretching the
+    // whole card. The large default is a sentinel for "unbounded".
+    in property <length> description-max-width: 100000px;
+
+    background: transparent;
+    opacity: root.disabled ? 0.4 : 1.0;
+    animate opacity { duration: Theme.dur-fast; easing: ease-in-out; }
+
+    HorizontalLayout {
+        padding: Theme.pad-lg;
+        spacing: Theme.pad-lg;
+        alignment: stretch;
+
+        // Pinned, so the labels start at the same x however narrow a glyph is.
+        VerticalLayout {
+            alignment: center;
+            MaterialIcon {
+                name: root.icon;
+                icon-size: SettingsPage.row-icon-w;
+                icon-color: Theme.text;
+            }
+        }
+
+        VerticalLayout {
+            alignment: center;
+            spacing: Theme.pad-xs;
+            horizontal-stretch: 1;
+
+            // Wrapped, and that is what makes the whole card compressible: a
+            // no-wrap `Text` reports its full rendered width as its layout
+            // *minimum*, so every label was an incompressible term no narrowing
+            // could move, and the control ended up past the panel edge. Wrapped,
+            // the minimum is the longest single word.
+            Text {
+                text: root.label;
+                color: Theme.text;
+                font-size: Theme.font-size-md;
+                wrap: word-wrap;
+            }
+            if root.description != "": Text {
+                text: root.description;
+                color: Theme.subtext0;
+                font-size: Theme.font-size-sm;
+                wrap: word-wrap;
+                max-width: root.description-max-width;
+            }
+        }
+
+        // The consumer's element sizes itself; this only centres it.
+        VerticalLayout {
+            alignment: center;
+            spacing: Theme.pad-sm;
+            @children
+        }
+    }
+
+    // A handler-less TouchArea over the row, so the click stops here. Enabled,
+    // it's absent from the tree entirely.
+    if root.disabled: TouchArea {
+        x: 0;
+        y: 0;
+        width: 100%;
+        height: 100%;
+        mouse-cursor: default;
+    }
+}

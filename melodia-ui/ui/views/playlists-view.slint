@@ -1,0 +1,315 @@
+import { Theme } from "../theme.slint";
+import { SmartEditor } from "../globals/dialog-forms.slint";
+import { Dialog } from "../globals/dialog.slint";
+import { Playlists } from "../globals/playlists.slint";
+import { SearchBar } from "../components/search-bar.slint";
+import { ActionPill, PillButton, PillDivider } from "../components/action-pill.slint";
+import { PlaylistGrid } from "../components/grid/playlist-grid.slint";
+import { GridColumnsSync } from "../components/grid-columns-sync.slint";
+import { MaterialIcon } from "../components/material-icon.slint";
+import { OverlayScrollbar } from "../components/overlay-scrollbar.slint";
+import { Tooltip, TooltipSide } from "../components/tooltip.slint";
+import { FilterThrottle } from "../components/filter-throttle.slint";
+
+// The Playlists grid page, on `AlbumView`'s structure: header chrome over a
+// virtualized `PlaylistGrid` whose column count comes from `GridColumnsSync`.
+export component PlaylistsView inherits Rectangle {
+    // Bumped per keystroke; `FilterThrottle` collapses the burst into one filter.
+    property <int> filter-tick-pending: 0;
+    filter-throttle := FilterThrottle {
+        pending: root.filter-tick-pending;
+        fire() => { Playlists.apply-filter(Playlists.filter); }
+    }
+
+    // Responsive grid geometry.
+    property <length> min-card-w: 180px;
+    property <length> grid-gap: 20px;
+    property <length> card-text-h: 46px;
+    property <int> computed-cols:
+        max(1, Math.floor((grid.width - root.grid-gap) / (root.min-card-w + root.grid-gap)));
+    property <length> card-w:
+        max(0px, (grid.width - (root.computed-cols + 1) * root.grid-gap) / root.computed-cols);
+    property <length> card-h: root.card-w + root.card-text-h;
+    property <length> row-h: root.card-h + root.grid-gap;
+
+    GridColumnsSync {
+        computed-cols: root.computed-cols;
+        seed(c) => {
+            Playlists.columns = c;
+            Playlists.columns-changed(c);
+        }
+    }
+
+    TouchArea {
+        clicked => { Playlists.blur-search-tick += 1; }
+    }
+
+    VerticalLayout {
+        // Three sides — see `tracks-view.slint` for why the uniform form's
+        // bottom pad reads as a dead strip under the grid.
+        padding-left: Theme.pad-lg;
+        padding-right: Theme.pad-lg;
+        padding-top: Theme.pad-lg;
+        spacing: Theme.pad-md;
+
+        HorizontalLayout {
+            vertical-stretch: 0;
+            spacing: Theme.pad-md;
+            alignment: stretch;
+
+            VerticalLayout {
+                alignment: center;
+                spacing: 0;
+                Text {
+                    text: @tr("Playlists");
+                    color: Theme.page-title-color;
+                    font-size: Theme.page-title-size;
+                    font-weight: Theme.page-title-weight;
+                }
+                Text {
+                    text: @tr("{n} playlist" | "{n} playlists" % Playlists.total-count);
+                    color: Theme.subtext0;
+                    font-size: Theme.font-size-sm;
+                }
+            }
+
+            Rectangle { horizontal-stretch: 1; }
+
+            // Before the SearchBar, so the primary action stays next to the
+            // title chip. It fills the Dialog inline rather than hopping through
+            // Rust: a synchronous `set_open(true)` mid-click-handler trips
+            // Slint's recursion guard.
+            VerticalLayout {
+                alignment: center;
+                ActionPill {
+                    np := PillButton {
+                        icon: "add";
+                        text: @tr("New Playlist");
+                        tooltip-text: @tr("Create an empty playlist");
+                        // Drawn by the top-layer overlay below, out of the grid's
+                        // way.
+                        tooltip-overlay: true;
+                        clicked => {
+                            Dialog.title = @tr("New Playlist");
+                            Dialog.message = "";
+                            Dialog.confirm-label = @tr("Create");
+                            Dialog.cancel-label = @tr("Cancel");
+                            Dialog.destructive = false;
+                            Dialog.kind = "create-playlist";
+                            Dialog.target-id = -1;
+                            Dialog.input-text = "";
+                            Dialog.input-text-2 = "";
+                            Dialog.pending-track-ids = [];
+                            Dialog.open = true;
+                        }
+                    }
+
+                    PillDivider { }
+
+                    // Chrome inline so `@tr` applies; Rust resets the editor
+                    // state and opens from a fresh tick, the same hop as Export.
+                    sp := PillButton {
+                        icon: "auto_awesome";
+                        icon-filled: true;
+                        text: @tr("New Smart Playlist");
+                        tooltip-text: @tr("Create a playlist from rules");
+                        tooltip-overlay: true;
+                        clicked => {
+                            Dialog.title = @tr("New Smart Playlist");
+                            Dialog.message = "";
+                            Dialog.confirm-label = @tr("Create");
+                            Dialog.cancel-label = @tr("Cancel");
+                            Dialog.destructive = false;
+                            Dialog.kind = "smart-playlist-editor";
+                            Dialog.target-id = -1;
+                            SmartEditor.request-new();
+                        }
+                    }
+
+                    PillDivider { }
+
+                    // Portable `.m3u8`, so playlists survive a database wipe.
+                    // Both are pure Rust flows over native rfd dialogs.
+                    ip := PillButton {
+                        icon: "download";
+                        text: @tr("Import");
+                        tooltip-text: @tr("Import playlists from .m3u8 files");
+                        tooltip-overlay: true;
+                        clicked => { Playlists.import-playlists(); }
+                    }
+
+                    PillDivider { }
+
+                    ep := PillButton {
+                        icon: "upload";
+                        text: @tr("Export");
+                        tooltip-text: @tr("Export playlists to .m3u8 files");
+                        tooltip-overlay: true;
+                        clicked => {
+                            // Chrome inline so `@tr` applies; Rust fills the rows
+                            // and opens from a fresh tick.
+                            Dialog.title = @tr("Export Playlists");
+                            Dialog.message = @tr("Choose playlists to export, then pick a folder.");
+                            Dialog.confirm-label = @tr("Export");
+                            Dialog.cancel-label = @tr("Cancel");
+                            Dialog.destructive = false;
+                            Dialog.kind = "export-playlists";
+                            Playlists.request-export-playlists();
+                        }
+                    }
+                }
+            }
+
+            VerticalLayout {
+                alignment: center;
+                SearchBar {
+                    text <=> Playlists.filter;
+                    placeholder: @tr("Filter playlists…");
+                    blur-trigger: Playlists.blur-search-tick;
+                    edited(t) => { root.filter-tick-pending += 1; }
+                }
+            }
+        }
+
+        body := Rectangle {
+            horizontal-stretch: 1;
+            vertical-stretch: 1;
+
+            grid := PlaylistGrid {
+                width: 100%;
+                height: 100%;
+                rows: Playlists.grid-rows;
+                card-width: root.card-w;
+                card-height: root.card-h;
+                row-height: root.row-h;
+                gap: root.grid-gap;
+                open-playlist(id) => { Playlists.open-playlist(id); }
+                // Delete and rename fill the Dialog inline, as the detail view's
+                // pills do; edit-artwork routes to Rust, which has to fetch the
+                // track artwork pool and seed the preview before opening.
+                delete-playlist(id) => {
+                    Dialog.title = @tr("Delete playlist?");
+                    Dialog.message = @tr("The playlist and its track order will be removed. The tracks themselves stay in your library.");
+                    Dialog.confirm-label = @tr("Delete");
+                    Dialog.cancel-label = @tr("Cancel");
+                    Dialog.destructive = true;
+                    Dialog.kind = "delete-playlist";
+                    Dialog.target-id = id;
+                    Dialog.open = true;
+                }
+                edit-playlist-artwork(id) => {
+                    Playlists.request-edit-artwork-for(id);
+                }
+                rename-playlist(id) => {
+                    // The grid model carries no description, so both come off
+                    // the cached `PlaylistStats` list through Rust — no DB hop.
+                    Dialog.title = @tr("Rename Playlist");
+                    Dialog.message = "";
+                    Dialog.confirm-label = @tr("Save");
+                    Dialog.cancel-label = @tr("Cancel");
+                    Dialog.destructive = false;
+                    Dialog.kind = "rename-playlist";
+                    Dialog.target-id = id;
+                    Dialog.input-text = Playlists.row-name(id);
+                    Dialog.input-text-2 = Playlists.row-description(id);
+                    Dialog.open = true;
+                }
+                request-cover(p) => { Playlists.request-cover(p) }
+            }
+
+            // Opaque, as `AlbumView`'s is; its CTA points at the action above.
+            if Playlists.total-count == 0: Rectangle {
+                background: Theme.base;
+                VerticalLayout {
+                    alignment: center;
+                    spacing: Theme.pad-md;
+                    HorizontalLayout {
+                        alignment: center;
+                        MaterialIcon {
+                            name: "queue_music";
+                            icon-size: 64px;
+                            icon-color: Theme.overlay0;
+                        }
+                    }
+                    HorizontalLayout {
+                        alignment: center;
+                        Text {
+                            text: @tr("No playlists yet");
+                            color: Theme.text;
+                            font-size: Theme.font-size-lg;
+                            font-weight: 600;
+                        }
+                    }
+                    HorizontalLayout {
+                        alignment: center;
+                        Text {
+                            text: @tr("Click \"+ New Playlist\" to create one.");
+                            color: Theme.subtext0;
+                            font-size: Theme.font-size-sm;
+                            horizontal-alignment: center;
+                            wrap: word-wrap;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    OverlayScrollbar {
+        horizontal: false;
+        x: parent.width - self.width;
+        y: grid.absolute-position.y - root.absolute-position.y;
+        width: 10px;
+        height: grid.height;
+        visible-size: grid.v-visible-height;
+        content-size: grid.v-viewport-height;
+        offset: grid.v-offset;
+        scroll-to(o) => { grid.set-v-offset(o); }
+    }
+
+    // The header pills' tooltip, declared last because paint order is
+    // declaration order and a below-anchored tooltip on the pill itself lands
+    // under the grid. The frame tracks the hovered pill's window rect through
+    // `absolute-position` and the `Tooltip` anchors beneath it; a plain
+    // Rectangle captures no input, so the pill keeps its hover and can't
+    // flicker.
+    header-tip := Rectangle {
+        property <bool> any-hover: np.hovered || sp.hovered || ip.hovered || ep.hovered;
+        property <length> px: np.hovered ? np.absolute-position.x
+            : sp.hovered ? sp.absolute-position.x
+            : ip.hovered ? ip.absolute-position.x
+            : ep.hovered ? ep.absolute-position.x
+            : 0px;
+        property <length> py: np.hovered ? np.absolute-position.y
+            : sp.hovered ? sp.absolute-position.y
+            : ip.hovered ? ip.absolute-position.y
+            : ep.hovered ? ep.absolute-position.y
+            : 0px;
+        property <length> pw: np.hovered ? np.width
+            : sp.hovered ? sp.width
+            : ip.hovered ? ip.width
+            : ep.hovered ? ep.width
+            : 0px;
+        property <length> ph: np.hovered ? np.height
+            : sp.hovered ? sp.height
+            : ip.hovered ? ip.height
+            : ep.hovered ? ep.height
+            : 0px;
+        property <string> ptext: np.hovered ? np.tooltip-text
+            : sp.hovered ? sp.tooltip-text
+            : ip.hovered ? ip.tooltip-text
+            : ep.hovered ? ep.tooltip-text
+            : "";
+        x: self.px - root.absolute-position.x;
+        y: self.py - root.absolute-position.y;
+        width: self.pw;
+        height: self.ph;
+        Tooltip {
+            text: header-tip.ptext;
+            hovered: header-tip.any-hover;
+            side: TooltipSide.below;
+            host-width: header-tip.width;
+            host-height: header-tip.height;
+        }
+    }
+}

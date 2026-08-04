@@ -15,6 +15,7 @@ use super::decks::{Deck, Decks, DeferredOp, lock_decks};
 use super::equalizer::{self, EqShared, EqSource};
 use super::replaygain::{ReplayGainShared, RgMode, TrackReplayGain};
 use super::types::PersistableQueue;
+use super::visualizer::{VisualizerShared, VisualizerTap};
 
 /// Trait abstracting audio playback operations.
 /// Implemented by `RodioPlayer` for production and mock backends for testing.
@@ -189,6 +190,15 @@ pub struct RodioPlayer {
     // Lock-free crossfade settings, read by the control layer (this backend and
     // the playback monitor) — never by the audio thread, so no generation counter.
     xf: Arc<CrossfadeShared>,
+    // Lock-free sample rings for the audio visualizer, one per deck. Written by
+    // every source we append (see `build_source`) into the ring of the deck it
+    // lands on, and read by the UI as their sum — which is what makes a
+    // crossfade read as the mix rather than as two interleaved tracks. Unlike
+    // the cells above it is *not* seeded from `settings.json` at boot: it stays
+    // disarmed until the Now-Playing view is actually on screen (see
+    // `crate::ui::visualizer`), so the audio thread never fills a ring nobody
+    // reads. Disarmed it is a no-op.
+    viz: Arc<VisualizerShared>,
     // Used only to schedule the deferred half of a faded pause / stop.
     runtime: tokio::runtime::Handle,
 }
@@ -203,6 +213,7 @@ impl RodioPlayer {
             eq: EqShared::new(false, &[0.0; equalizer::NUM_BANDS]),
             rg: ReplayGainShared::new(),
             xf: CrossfadeShared::new(),
+            viz: VisualizerShared::new(false),
             runtime,
         }
     }
@@ -384,22 +395,33 @@ impl RodioPlayer {
     }
 
     /// Wrap a decoded track in the audio source the decks play: the graphic EQ,
-    /// this track's baked `ReplayGain`, and `deck`'s crossfade ramp cell.
+    /// this track's baked `ReplayGain`, and `deck`'s crossfade ramp cell — then
+    /// the visualizer tap, which reads the finished signal without altering it
+    /// and writes it into `deck`'s own ring.
     ///
     /// Always called with the deck the source is about to be appended to — see
     /// the module doc of [`super::decks`] for why the two can't be split.
+    ///
+    /// Building the tap also *claims* `deck`'s visualizer ring for as long as the
+    /// value lives, and stamps that ring's history away if the deck was idle. Both
+    /// are only correct for a source that is about to play, so don't build one
+    /// anywhere it might be held or discarded instead.
     fn build_source(
         &self,
         decoded: Decoder<BufReader<File>>,
         baked_rg: TrackReplayGain,
         deck: &Deck,
-    ) -> EqSource<Decoder<BufReader<File>>> {
-        EqSource::new(
-            decoded,
-            self.eq.clone(),
-            self.rg.clone(),
-            baked_rg,
-            deck.fade.clone(),
+    ) -> VisualizerTap<EqSource<Decoder<BufReader<File>>>> {
+        VisualizerTap::new(
+            EqSource::new(
+                decoded,
+                self.eq.clone(),
+                self.rg.clone(),
+                baked_rg,
+                deck.fade.clone(),
+            ),
+            &self.viz,
+            deck.viz_slot,
         )
     }
 
@@ -565,6 +587,10 @@ impl RodioPlayer {
         // Both decks must run at the same speed or a crossfade would drift, but
         // only the active one carries a position worth re-anchoring.
         decks.set_speed_all(speed);
+        // The visualizer taps the sources *under* rodio's speed stage, so its
+        // analyzer needs the factor to place band edges on the pitch you hear.
+        // This is that cell's only writer — see `VisualizerShared::set_speed`.
+        self.viz.set_speed(speed);
         // Re-anchor rodio's position tracker. Without this, `get_pos()` keeps
         // the output-time it accumulated at the old speed, and `query_position`'s
         // `get_pos() × new_speed` rescales that whole elapsed portion — so the
@@ -619,6 +645,24 @@ impl RodioPlayer {
     /// Enable / disable the static peak-based clip guard. Lock-free.
     pub fn set_replaygain_prevent_clipping(&self, on: bool) {
         self.rg.set_prevent_clipping(on);
+    }
+
+    /// Arm / disarm the visualizer's sample tap. Lock-free, like the EQ and
+    /// `ReplayGain` setters — while it is off the tap never touches the ring.
+    ///
+    /// This is the backend's spelling of [`VisualizerShared::set_enabled`], and
+    /// it is what the crossfade integration test arms the tap with. The UI does
+    /// not come through here: `crate::ui::visualizer` already holds the cell
+    /// (via [`Self::visualizer`], which it needs for snapshotting) and calls
+    /// `set_enabled` on it, from the three places that decide the arm state off
+    /// the Now-Playing view's visibility rather than off a persisted setting.
+    pub fn set_visualizer_enabled(&self, on: bool) {
+        self.viz.set_enabled(on);
+    }
+
+    /// The visualizer's sample ring, for the UI-side analyzer to snapshot.
+    pub fn visualizer(&self) -> Arc<VisualizerShared> {
+        self.viz.clone()
     }
 
     /// Whether a gapless source is currently staged behind the playing one.

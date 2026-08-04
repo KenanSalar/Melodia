@@ -1,0 +1,159 @@
+import { Theme } from "../../theme.slint";
+import { MaterialIcon } from "../material-icon.slint";
+import { Tooltip } from "../tooltip.slint";
+
+// The now-playing bar's play / pause button: its hover-scale disc, glyph, hit
+// area and tooltip, plus the optional Equalizer overlay.
+//
+// That overlay drives all four bars off one shared phase counter rather than an
+// `animate height` each. Slint re-evaluates every active `animate` per vsync
+// frame, so four concurrent height animations interpolate hundreds of times a
+// second; a parabolic `4 * p * (1 - p)` off the counter is one math binding per
+// bar per tick. While it runs the glyph is hidden so the bars stand in its
+// place, and a pause falls back to the glyph.
+export component PlayButton inherits Rectangle {
+    in property <bool>   is-playing;
+    in property <int>    animation-mode;        // 0 None | 1 Equalizer
+    in property <length> wrapper-d: 38px;
+    in property <length> icon-size: wrapper-d * 0.5;
+    // Defaults to the surface under the button, so the glyph reads as a hole
+    // punched in the disc rather than as a second colour. The now-playing bar
+    // overrides it with its own background expression, which is what carries
+    // the KDE unfocused tint through.
+    in property <brush>  icon-color: Theme.mantle;
+    callback clicked();
+
+    width: wrapper-d;
+    height: wrapper-d;
+    background: transparent;
+
+    // A press clamps to 100 ms; anything else runs the expressive overshoot at
+    // the standard medium duration.
+    property <length> disc-d: root.wrapper-d *
+        (pp-touch.pressed ? 0.9 : (pp-touch.has-hover ? 1.05 : 1.0));
+
+    property <bool> equalizer-active: root.is-playing && root.animation-mode == 1;
+
+    // One 30 fps Timer bumps four phase counters, each on its own period so the
+    // bars never march in step. The starting frames are staggered — low, peak,
+    // mid-climb, mid-descend — so the first paint isn't a flat line.
+    property <int> bar1-cycle: 22;
+    property <int> bar2-cycle: 17;
+    property <int> bar3-cycle: 25;
+    property <int> bar4-cycle: 19;
+    property <int> bar1-frame: 0;
+    property <int> bar2-frame: 8;
+    property <int> bar3-frame: 6;
+    property <int> bar4-frame: 14;
+
+    eq-timer := Timer {
+        interval: 33ms;
+        running: root.equalizer-active;
+        triggered => {
+            root.bar1-frame = root.bar1-frame + 1;
+            if (root.bar1-frame >= root.bar1-cycle) { root.bar1-frame = 0; }
+            root.bar2-frame = root.bar2-frame + 1;
+            if (root.bar2-frame >= root.bar2-cycle) { root.bar2-frame = 0; }
+            root.bar3-frame = root.bar3-frame + 1;
+            if (root.bar3-frame >= root.bar3-cycle) { root.bar3-frame = 0; }
+            root.bar4-frame = root.bar4-frame + 1;
+            if (root.bar4-frame >= root.bar4-cycle) { root.bar4-frame = 0; }
+        }
+    }
+
+    // Accent disc, then the glyph or the bars.
+    pp-disc := Rectangle {
+        width: root.disc-d;
+        height: root.disc-d;
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        border-radius: self.width / 2;
+        background: Theme.accent;
+        animate width, height {
+            duration: pp-touch.pressed ? 100ms : Theme.dur-med;
+            easing: cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+
+        // Hidden rather than unmounted: the bars below are a fixed-size overlay
+        // and claim no layout of their own either way.
+        HorizontalLayout {
+            alignment: center;
+            visible: !root.equalizer-active;
+            VerticalLayout {
+                alignment: center;
+                MaterialIcon {
+                    name: root.is-playing ? "pause" : "play_arrow";
+                    filled: true;
+                    icon-size: root.icon-size;
+                    icon-color: root.icon-color;
+                }
+            }
+        }
+
+        // Anchored to the disc's bottom edge, so the bars grow up from a
+        // baseline the way an analyzer's do.
+        if root.equalizer-active: Rectangle {
+            property <length> bar-area-w: 14px;
+            property <length> bar-area-h: root.icon-size;
+            width: bar-area-w;
+            height: bar-area-h;
+            x: (parent.width - self.width) / 2;
+            y: (parent.height - self.height) / 2;
+            background: transparent;
+
+            // The parabola peaks at p=0.5 and returns to 0 at either end — one
+            // multiply per bar per tick, and no `animate` engine involved.
+            Rectangle {
+                property <float> phase: 1.0 * root.bar1-frame / root.bar1-cycle;
+                property <float> wave: 4.0 * phase * (1.0 - phase);
+                x: 0;
+                width: 2px;
+                height: parent.bar-area-h * (0.2 + 0.8 * wave);
+                y: parent.bar-area-h - self.height;
+                background: root.icon-color;
+                border-radius: 1px;
+            }
+            Rectangle {
+                property <float> phase: 1.0 * root.bar2-frame / root.bar2-cycle;
+                property <float> wave: 4.0 * phase * (1.0 - phase);
+                x: 4px;
+                width: 2px;
+                height: parent.bar-area-h * (0.2 + 0.8 * wave);
+                y: parent.bar-area-h - self.height;
+                background: root.icon-color;
+                border-radius: 1px;
+            }
+            Rectangle {
+                property <float> phase: 1.0 * root.bar3-frame / root.bar3-cycle;
+                property <float> wave: 4.0 * phase * (1.0 - phase);
+                x: 8px;
+                width: 2px;
+                height: parent.bar-area-h * (0.2 + 0.8 * wave);
+                y: parent.bar-area-h - self.height;
+                background: root.icon-color;
+                border-radius: 1px;
+            }
+            Rectangle {
+                property <float> phase: 1.0 * root.bar4-frame / root.bar4-cycle;
+                property <float> wave: 4.0 * phase * (1.0 - phase);
+                x: 12px;
+                width: 2px;
+                height: parent.bar-area-h * (0.2 + 0.8 * wave);
+                y: parent.bar-area-h - self.height;
+                background: root.icon-color;
+                border-radius: 1px;
+            }
+        }
+    }
+
+    Tooltip {
+        text: root.is-playing ? @tr("Pause") : @tr("Play");
+        hovered: pp-touch.has-hover;
+        host-width: parent.width;
+    }
+
+    pp-touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}

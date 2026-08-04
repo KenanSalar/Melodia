@@ -7,9 +7,11 @@ arrow_drop_up
 artist
 auto_awesome
 balance
+bar_chart
 bedtime
 brush
 category
+chat
 check
 check_circle
 chevron_left
@@ -41,6 +43,7 @@ image
 info
 library_add
 library_music
+link
 minimize
 more_vert
 move_to_inbox
@@ -68,6 +71,7 @@ search
 search_off
 settings
 shield
+show_chart
 shuffle
 speed
 star

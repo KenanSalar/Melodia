@@ -1,0 +1,22 @@
+import { Theme } from "../../theme.slint";
+
+// The thin progress bar behind the scan status and the update download. The
+// fill is animated, so a stepped host value still reads as a slide.
+export component ProgressBar inherits Rectangle {
+    in property <float> value;
+
+    height: 4px;
+    border-radius: self.height / 2;
+    background: Theme.surface1;
+    clip: true;
+
+    Rectangle {
+        x: 0;
+        y: 0;
+        width: parent.width * clamp(root.value, 0, 1);
+        height: parent.height;
+        border-radius: self.height / 2;
+        background: Theme.accent;
+        animate width { duration: Theme.dur-fast; easing: ease-in-out; }
+    }
+}

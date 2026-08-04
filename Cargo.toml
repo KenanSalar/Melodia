@@ -1,16 +1,87 @@
 [package]
 name = "Melodia"
-version = "0.8.0"
-edition = "2024"
-# Kept in lockstep with `rust-toolchain.toml` and `clippy.toml`'s `msrv`.
-rust-version = "1.97"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
 description = "Cross-platform desktop music player (Slint + Rust)"
-license = "AGPL-3.0-or-later"
+license.workspace = true
 repository = "https://github.com/KenanSalar/Melodia"
 homepage = "https://github.com/KenanSalar/Melodia"
 authors = ["Kenan Salar <kenansalar@users.noreply.github.com>"]
 keywords = ["music", "player", "audio", "slint"]
 categories = ["multimedia::audio"]
+# Not publishable regardless — `melodia-ui` is `publish = false` and depended on
+# by path with no version — so say so rather than letting `cargo publish` find
+# out late. The metadata above is still worth keeping for the repo's own sake.
+publish = false
+
+# `melodia-ui` holds nothing but the Slint compiler's output. It is split off
+# because `cargo test` builds this package twice — once as the rlib the bin and
+# the integration tests link, once as the `--test` harness — and the generated
+# unit dwarfs everything else in the crate. As a dependency it is built once,
+# and only when a `.slint` file or a translation catalog changes.
+#
+# The vendored winit fork carries its own `[workspace]`, so it is already an
+# independent root; excluding it explicitly means a future upstream re-sync that
+# drops that table can't silently pull the fork in as a member.
+[workspace]
+members = ["melodia-ui"]
+exclude = ["winit"]
+
+[workspace.package]
+# The release version, inherited by both packages. `melodia-ui` is `publish =
+# false` and depended on by path, so its own number buys nothing — inheriting
+# means it can't drift from the app's. The three toolchain-less manifest
+# scrapes (`release.yml`, `build-rpm.sh`, `build-appimage.sh`) anchor on this
+# table by name, so this stanza can sit anywhere in the file.
+version = "0.9.0"
+edition = "2024"
+license = "AGPL-3.0-or-later"
+# Kept in lockstep with `rust-toolchain.toml` and `clippy.toml`'s `msrv`.
+rust-version = "1.97"
+
+# Declared once here rather than spelled out in both manifests. Cargo unifies
+# features across the two packages, so a drifted *version* is the real hazard:
+# two `slint` crates resolve, the types `melodia-ui` generates then implement a
+# different `slint::ComponentHandle` than the one every file in `src/ui/` names,
+# and the build dies in a wall of `expected slint::Weak, found slint::Weak`.
+#
+# The `raw-window-handle-06` feature makes `slint::Window::window_handle()`
+# return a `WindowHandle` that implements `raw_window_handle::HasWindowHandle`
+# + `HasDisplayHandle` (raw-window-handle 0.6). Used by `wire_library_settings`
+# to parent the rfd folder picker to the main window so the OS file dialog
+# z-orders correctly on Windows + macOS (Linux XDG portal handles parenting
+# OS-side regardless).
+#
+# `unstable-winit-030` exposes `slint::winit_030::WinitWindowAccessor` so the
+# custom titlebar can call winit's `drag_window()` for native OS-level window
+# moves (snap, multi-desktop, Wayland-correct) and subscribe to
+# `WindowEvent::Resized` to keep the maximize/restore icon in sync with
+# Win+↑ / window-tile shortcuts. Slint has no built-in `start_system_move`
+# in 1.16 (slint-ui#2521); manual `set_position` math is broken on Wayland
+# (slint-ui#6273) and `no-frame` windows (slint-ui#4817), so winit is the
+# only sane path. The feature is gated as "unstable" upstream and may be
+# renamed in 1.17+ — expected to be a one-line bump when that lands.
+#
+# Renderer: FemtoVG. Rounded `border-radius` clipping works end-to-end
+# (artwork tiles, custom titlebar, content panel) and idle/playback RSS
+# is flat with the `M_ARENA_MAX=2` cap in `main()`. The software
+# renderer was dropped — it can't clip to `border-radius` (slint#4176)
+# and its only draw, a lower idle RSS, no longer mattered once the
+# arena cap landed.
+[workspace.dependencies]
+slint = { version = "1.16.1", default-features = false, features = [
+    "std",
+    "backend-default",
+    "accessibility",
+    "compat-1-2",
+    "raw-window-handle-06",
+    "unstable-winit-030",
+    "renderer-femtovg",
+] }
+# Only `melodia-ui` builds with this, but it has to match the `slint` version
+# above — declaring the pair adjacently is the whole point of it being here.
+slint-build = "1.16.1"
 
 # Keep the library crate name lowercase so `use melodia::…` stays idiomatic
 # (matches `non_snake_case`) — the *package* name being capitalised drives
@@ -19,11 +90,14 @@ categories = ["multimedia::audio"]
 # `melodia`.
 [lib]
 name = "melodia"
+# Nothing consumes `melodia` as a library and every doc example is an
+# `ignore` fence, so this only bought a rustdoc build per `cargo test`.
+doctest = false
 
 # cargo-deb metadata — drives the `.deb` build in release CI. Ships the
 # binary, .desktop, icon, license, and the polkit helper + policy. The
-# helper + policy are what `src/services/updater/install.rs` looks for
-# at `/usr/libexec/melodia-update-helper` to surface a branded auth
+# helper + policy are what `src/services/updater/install/swap.rs` looks
+# for at `/usr/libexec/melodia-update-helper` to surface a branded auth
 # dialog on updates ("Install Melodia update" instead of raw
 # `dnf install ...`).
 #
@@ -77,45 +151,21 @@ assets = [
     ["target/release/Melodia", "usr/bin/melodia", "755"],
     ["scripts/Melodia.desktop", "usr/share/applications/com.github.kenansalar.melodia.desktop", "644"],
     ["packaging/com.github.kenansalar.melodia.metainfo.xml", "usr/share/metainfo/com.github.kenansalar.melodia.metainfo.xml", "644"],
-    ["ui/assets/icons/logo-with-background.svg", "usr/share/icons/hicolor/scalable/apps/melodia.svg", "644"],
+    ["assets/icons/logo-with-background.svg", "usr/share/icons/hicolor/scalable/apps/melodia.svg", "644"],
     ["LICENSE", "usr/share/doc/melodia/LICENSE", "644"],
     ["packaging/melodia-update-helper", "usr/libexec/melodia-update-helper", "755"],
     ["packaging/com.github.kenansalar.melodia.update.policy", "usr/share/polkit-1/actions/com.github.kenansalar.melodia.update.policy", "644"],
 ]
 
 [dependencies]
-# UI. The `raw-window-handle-06` feature makes `slint::Window::window_handle()`
-# return a `WindowHandle` that implements `raw_window_handle::HasWindowHandle`
-# + `HasDisplayHandle` (raw-window-handle 0.6). Used by `wire_library_settings`
-# to parent the rfd folder picker to the main window so the OS file dialog
-# z-orders correctly on Windows + macOS (Linux XDG portal handles parenting
-# OS-side regardless).
-#
-# `unstable-winit-030` exposes `slint::winit_030::WinitWindowAccessor` so the
-# custom titlebar can call winit's `drag_window()` for native OS-level window
-# moves (snap, multi-desktop, Wayland-correct) and subscribe to
-# `WindowEvent::Resized` to keep the maximize/restore icon in sync with
-# Win+↑ / window-tile shortcuts. Slint has no built-in `start_system_move`
-# in 1.16 (slint-ui#2521); manual `set_position` math is broken on Wayland
-# (slint-ui#6273) and `no-frame` windows (slint-ui#4817), so winit is the
-# only sane path. The feature is gated as "unstable" upstream and may be
-# renamed in 1.17+ — expected to be a one-line bump when that lands.
-#
-# Renderer: FemtoVG. Rounded `border-radius` clipping works end-to-end
-# (artwork tiles, custom titlebar, content panel) and idle/playback RSS
-# is flat with the `M_ARENA_MAX=2` cap in `main()`. The software
-# renderer was dropped — it can't clip to `border-radius` (slint#4176)
-# and its only draw, a lower idle RSS, no longer mattered once the
-# arena cap landed.
-slint = { version = "1.16.1", default-features = false, features = [
-    "std",
-    "backend-default",
-    "accessibility",
-    "compat-1-2",
-    "raw-window-handle-06",
-    "unstable-winit-030",
-    "renderer-femtovg",
-] }
+# The Slint compiler's output, re-exported wholesale by `src/lib.rs` so the
+# generated types stay reachable as `crate::AppWindow`, `crate::TrackRow`, ….
+melodia-ui = { path = "melodia-ui" }
+
+# UI. Version and features live in `[workspace.dependencies]`, along with the
+# rationale for each feature — `melodia-ui` takes the same line, and the two
+# must not drift.
+slint.workspace = true
 
 # Async runtime / utilities
 tokio = { version = "1.53.1", features = ["rt-multi-thread", "macros", "sync", "time", "fs", "process"] }
@@ -152,6 +202,12 @@ rodio = { version = "0.22.2", default-features = false, features = [
 # `DirectForm1` keeps past inputs/outputs in its delay line, so live
 # coefficient swaps (slider drags) don't inject transients.
 biquad = "0.6.0"
+# Real-to-complex FFT for the spectrum visualizer. Preferred over raw `rustfft`
+# (which it wraps): a real input yields N/2+1 bins from a half-length internal
+# complex FFT, so there's no manual complex packing and half the work. Its
+# planner caches twiddle factors and hands out reusable scratch buffers, which
+# is what lets the per-frame analysis allocate nothing.
+realfft = "3.5.0"
 lofty = "0.24.0"
 
 # Library indexing / file IO
@@ -162,6 +218,10 @@ notify-debouncer-full = "0.7"
 rayon = "1.12"
 blake3 = "1.8.5"
 natord = "1.0.9"
+# Accent folding for the in-memory filter boxes, so they narrow on the same
+# spellings `tracks_fts`'s `remove_diacritics 2` tokenizer does. Already in the
+# lock file transitively, so this line costs no extra build.
+unicode-normalization = "0.1.25"
 image = { version = "0.25.10", default-features = false, features = ["jpeg", "png", "webp"] }
 lru = "0.18.1"
 
@@ -240,20 +300,23 @@ zbus = "5.18.0"
 # `cfg(any(windows, macos))` block below and `src/services/tray/`.
 ksni = { version = "0.3.6", default-features = false, features = ["blocking", "async-io"] }
 
-# `libc::malloc_trim` (glibc-only extension) is called periodically by the
-# playback monitor to release free chunks the allocator is holding above its
-# internal threshold. The Slint 1.16 render path allocates short-lived
-# buffers per repaint while a track plays; glibc's arena retains those pages
-# even after the data is freed, producing a slow RSS climb that plateaus on
-# pause. Calling `malloc_trim(0)` once a minute lets the arena release them.
-# cfg-gated to glibc-only at the call site — musl's allocator doesn't expose
-# this. See `src/player/handlers.rs` for usage.
+# Two glibc-only malloc knobs, both cfg-gated at their call sites — musl's
+# allocator exposes neither.
+#
+#   * `mallopt` in `src/main.rs` caps the per-thread arenas and pins the mmap
+#     and trim thresholds. Long-lived threads otherwise get an arena each, and
+#     the committed slack across them is pure free-list overhead for a
+#     mostly-idle desktop player; the thresholds otherwise ratchet upward on
+#     every large free until nothing is returned to the kernel at all.
+#   * `malloc_trim` in `src/tasks/heap_trim.rs` hands retained free-list
+#     pages back to the kernel: once after the startup churn settles, then
+#     ad-hoc after a bulk free (a view-close cache release).
 libc = "0.2.189"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 # Used only by the auto-updater's atomic-swap fallback path
 # (`MoveFileExW(MOVEFILE_DELAY_UNTIL_REBOOT)` in
-# `src/services/updater/install.rs`). The common case is the early
+# `src/services/updater/install/swap.rs`). The common case is the early
 # `remove_file` of `Melodia.exe.old` at the top of `main()`, which clears
 # the stale rename ~99% of the time. The reboot-delay flag is the
 # fallback for the rare case where `.old` is still loaded — e.g. the
@@ -277,10 +340,7 @@ dunce = "1.0.5"
 # paths (libappindicator / X11 `xdotool`), and Linux uses `ksni` instead.
 # The tray icon is created on the UI/main thread and its menu events are
 # pumped from the winit event loop Slint owns. See `src/services/tray/`.
-tray-icon = { version = "0.24.1", default-features = false }
-
-[build-dependencies]
-slint-build = "1.16.1"
+tray-icon = { version = "0.24.2", default-features = false }
 
 # Windows-only: embed an `ICON` resource into the Melodia.exe binary so the
 # OS taskbar, titlebar, Alt-Tab thumbnail, and Explorer entry all render the
@@ -297,7 +357,13 @@ winresource = "0.1.31"
 [dev-dependencies]
 tokio = { version = "1.53.1", features = ["macros", "rt-multi-thread", "test-util"] }
 
-[lints.rust]
+# Defined at workspace level and inherited by both packages, so `melodia-ui`
+# can't quietly sit outside the gate. Its generated module carries its own
+# blanket `#[allow]` block, which already covers `unsafe_code`.
+[lints]
+workspace = true
+
+[workspace.lints.rust]
 unused = { level = "warn", priority = -1 }
 unsafe_code = "deny"
 rust_2024_compatibility = { level = "warn", priority = -1 }
@@ -307,7 +373,7 @@ rust_2024_compatibility = { level = "warn", priority = -1 }
 # as dead and flags the whole library API (670 hits — 0 on `--lib`, 0 on
 # `--bin`, all of them from the test targets).
 
-[lints.clippy]
+[workspace.lints.clippy]
 correctness = { level = "deny", priority = -1 }
 suspicious  = { level = "deny", priority = -1 }
 complexity  = { level = "warn", priority = -1 }
@@ -353,6 +419,14 @@ panic = "abort"
 # avoid `-Cstrip=symbols`.
 strip = "debuginfo"
 
+# Dependencies only. The `"*"` glob is documented as "all dependencies (but not
+# any workspace member)", so this does NOT reach `melodia-ui` — it never did,
+# back when the generated unit was part of this package either. Raising it for
+# that crate specifically is now possible (`[profile.dev.package.melodia-ui]`)
+# and is the one place where it would be nearly free, since the crate rebuilds
+# only when a `.slint` file or a catalog changes. Deliberately not done: that
+# crate is also the build-memory peak the CI `CARGO_BUILD_JOBS` cap exists to
+# hold down, so the trade needs measuring before anyone makes it.
 [profile.dev.package."*"]
 opt-level = 3
 

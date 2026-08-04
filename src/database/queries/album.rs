@@ -31,21 +31,6 @@ pub async fn get_albums_by_artist(db: &DbPool, artist_id: i64) -> Result<Vec<alb
     Ok(albums)
 }
 
-/// Albums that contain at least one favorited track, with favorite count.
-pub async fn get_favorite_albums(db: &DbPool) -> Result<Vec<album::FavoriteAlbum>, AppError> {
-    let albums = sqlx::query_as::<_, album::FavoriteAlbum>(
-        "SELECT a.id, a.name, a.artist_name, a.artwork_path, \
-                COUNT(t.id) AS favorite_count \
-         FROM album_stats a \
-         JOIN tracks t ON t.album_id = a.id AND t.is_favorite = TRUE \
-         GROUP BY a.id \
-         ORDER BY favorite_count DESC",
-    )
-    .fetch_all(db.read())
-    .await?;
-    Ok(albums)
-}
-
 /// Authoritatively set `artwork_path` for one or more albums by ID, within a
 /// caller-supplied transaction. Unlike `update_album_artwork_from_tracks`
 /// (which only backfills rows `WHERE artwork_path IS NULL OR = ''`), this

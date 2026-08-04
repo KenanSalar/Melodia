@@ -1,33 +1,40 @@
-//! `Favorites.*` All Songs list callbacks: row actions (play, queue,
-//! favorite toggle), the filter pass, sort, column visibility, and
-//! modifier-aware row selection. See [`super::wire_favorites`].
+//! `Favorites.*` Songs-tab callbacks: row actions (play, queue, favorite
+//! toggle), the filter pass, sort, column visibility, and modifier-aware
+//! row selection. See [`super::wire_favorites`].
 
 use std::sync::Arc;
 
 use slint::{ComponentHandle, Model, SharedString};
 
 use crate::library;
-use crate::services::settings::{SortDir, ViewSort};
 use crate::state::AppState;
-use crate::ui::callbacks::collect_track_ids;
+use crate::ui::callbacks::{collect_track_ids, next_sort, persist_view_sort, play_row_start};
 use crate::ui::callbacks::macros::{spawn_logged, wire_row_flag};
 use crate::ui::favorites::{self as favorites_ui_mod, FavoritesUi};
-use crate::ui::track_list_view::TrackListColumnState;
+use crate::ui::track_list_view::{TrackListColumnState, view_id};
 use crate::{AppWindow, Favorites};
 
-/// Wire the All Songs row / filter / sort / selection callbacks.
+/// Wire the Songs tab's row / filter / sort / selection callbacks.
 pub(super) fn wire(ui: &AppWindow, state: &AppState, fav_ui: &Arc<FavoritesUi>) {
     let g = ui.global::<Favorites>();
     let weak = ui.as_weak();
 
-    // --- All Songs row actions ------------------------------------
+    // --- Songs-tab row actions ------------------------------------
+    // play-row loads the filtered list into the queue and starts on the
+    // clicked track; the hero's Shuffle is the same call at index 0, plus
+    // a shuffle flip.
     {
         let s = state.clone();
-        g.on_play_row(move |track_id, _idx| {
+        let fu = fav_ui.clone();
+        g.on_play_row(move |track_id, idx| {
+            let ids = fu.filtered_track_ids();
+            if ids.is_empty() {
+                return;
+            }
+            let start = play_row_start(&ids, i64::from(track_id), idx);
             let s = s.clone();
-            let id = i64::from(track_id);
             spawn_logged!(s, "favorites::play_row",
-                library::queue::queue_append_unique(&s, id));
+                library::playback::player_play_tracks(&s.playback_ctx(), ids, start));
         });
     }
     {
@@ -87,18 +94,19 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, fav_ui: &Arc<FavoritesUi>) 
     }
 
     // --- Filter / sort --------------------------------------------
-    // Filter pass walks all three surfaces: All Songs tracklist
-    // (title+artist+album), Most Played (title+artist) and Favorite
-    // Artists (name). Each surface re-renders from its cached Rust
-    // Vec, so the keystroke cost is `O(rows)` in-memory work — no
-    // DB round-trip.
+    // The filter is shared across the tabs, so a keystroke re-walks the
+    // Songs cache (title+artist+album) and whichever grid is mounted —
+    // Most Played (title+artist) or Favorite Artists (name). Each
+    // re-renders from its cached Rust Vec, so the keystroke cost is
+    // `O(rows)` in-memory work — no DB round-trip.
     {
         let fu = fav_ui.clone();
         let weak = weak.clone();
         g.on_filter_changed(move |text| {
-            favorites_ui_mod::set_filter(&fu, text.to_string());
+            let Some(ui) = weak.upgrade() else { return };
+            favorites_ui_mod::set_filter(&fu, &text);
             favorites_ui_mod::apply_filtered_tracks(&fu, &weak);
-            favorites_ui_mod::apply_filtered_strips(&fu, &weak);
+            favorites_ui_mod::apply_filtered_grids_now(&ui, &fu);
         });
     }
     {
@@ -108,35 +116,12 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, fav_ui: &Arc<FavoritesUi>) 
         g.on_request_sort(move |field| {
             let Some(ui) = weak.upgrade() else { return };
             let g = ui.global::<Favorites>();
-            let cur_field = g.get_sort_field();
-            let cur_dir = g.get_sort_dir();
-            let (new_field, new_dir_s) = if cur_field.as_str() == field.as_str() {
-                let nd = if cur_dir.as_str() == "asc" { "desc" } else { "asc" };
-                (field.to_string(), nd.to_string())
-            } else {
-                (field.to_string(), "asc".to_string())
-            };
+            let (new_field, new_dir) =
+                next_sort(g.get_sort_field().as_str(), g.get_sort_dir().as_str(), &field);
             g.set_sort_field(SharedString::from(new_field.as_str()));
-            g.set_sort_dir(SharedString::from(new_dir_s.as_str()));
-            let new_dir = if new_dir_s == "desc" {
-                SortDir::Desc
-            } else {
-                SortDir::Asc
-            };
-            favorites_ui_mod::set_sort(&fu, new_field.clone(), new_dir.clone());
-
-            let s_disk = s.clone();
-            let sort = ViewSort {
-                field: new_field,
-                dir: new_dir,
-            };
-            s.runtime.spawn_blocking(move || {
-                if let Err(e) =
-                    library::settings::set_view_sort(&s_disk, "favorites".to_owned(), sort)
-                {
-                    log::warn!("favorites::set_view_sort: {e}");
-                }
-            });
+            g.set_sort_dir(SharedString::from(new_dir.as_str()));
+            favorites_ui_mod::set_sort(&fu, new_field.clone(), new_dir);
+            persist_view_sort(&s, view_id::FAVORITES, new_field, new_dir);
 
             let s_fetch = s.clone();
             let fu = fu.clone();

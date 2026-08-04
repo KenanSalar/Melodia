@@ -262,11 +262,11 @@ fn run_write_pass(
 /// Cache key for `run_commit`'s FK-resolution memo. Holds everything
 /// [`queries::scan::resolve_track_context`] derives its [`ResolvedIds`] from —
 /// folder (via the parent dir, since folder lookup is a path-prefix match),
-/// artist, album, `year` (album upsert's `COALESCE`-on-conflict input), and
-/// genre — so identical keys yield identical ids. Keeping `year` in the key
-/// preserves the per-track album-year semantics: tracks with differing years
-/// land in different buckets and each still upserts.
-type ResolveKey = (PathBuf, String, String, Option<i32>, String);
+/// artist, album, album-artist (the album's grouping key), `year` (album upsert's
+/// `COALESCE`-on-conflict input), and genre — so identical keys yield identical
+/// ids. Keeping `year` in the key preserves the per-track album-year semantics:
+/// tracks with differing years land in different buckets and each still upserts.
+type ResolveKey = (PathBuf, String, String, String, Option<i32>, String);
 
 /// Land the successful writes in one transaction: resolve ids, refresh each
 /// track row, and apply the artwork override the metadata UPDATE can't do.
@@ -309,6 +309,7 @@ async fn run_commit(
             path.parent().map(Path::to_path_buf).unwrap_or_default(),
             meta.artist.clone().unwrap_or_default(),
             meta.album.clone().unwrap_or_default(),
+            meta.album_artist.clone().unwrap_or_default(),
             meta.year,
             meta.genre.clone().unwrap_or_default(),
         );
@@ -372,6 +373,17 @@ async fn run_commit(
         }
         ArtworkEdit::Keep => {}
     }
+
+    // Backfill album covers from their tracks (null-only, never an overwrite), so
+    // retagging a track into a different album lets that album inherit the track's
+    // existing artwork — the scan/import/reconcile paths already do this, but the
+    // tag editor didn't, leaving a moved track's new album with a blank cover.
+    queries::scan::update_album_artwork_from_tracks(&mut tx).await?;
+
+    // Retagging a track into a different album or genre can strand its old album
+    // (and that album's artist) or old genre with zero tracks; nothing else deletes
+    // an emptied row, so sweep orphans here before committing.
+    queries::scan::prune_orphans(&mut tx).await?;
 
     tx.commit().await?;
     Ok(updated_ids)

@@ -27,7 +27,7 @@ pub fn accent_brushes(theme: &ThemeDef, variant_id: &str) -> Vec<Brush> {
 /// When `variant_id == SYSTEM_VARIANT_ID` and the theme opts in via
 /// `supports_system_mode`, the synthetic id is mapped to one of the
 /// theme's real variants based on `system.theme`. KDE Breeze additionally
-/// bypasses its static Light/Dark palette and re-sources the 22 brushes
+/// bypasses its static Light/Dark palette and re-sources every slot
 /// from the cached `kdeglobals` palette so the player matches Plasma's
 /// active colour scheme exactly. All other themes use their declared
 /// system pair palette unchanged — the OS only picks dark vs. light there.
@@ -123,12 +123,14 @@ fn parse_hex_color(s: &str) -> Option<u32> {
 
 /// Build a `Palette` from a parsed `kdeglobals` colour scheme. The 13 base /
 /// structure slots come directly from the `KdeColorPalette::colors` map
-/// (`get_kde_colors()` already synthesizes the entries we need). `red`
-/// comes from the dedicated `red` field. The six unused semantic slots
-/// (green / yellow / peach / mauve / pink / lavender) collapse to
-/// `overlay1` via `Palette::fallback_semantics` — same approach as every
-/// non-Catppuccin theme — so any component reading `Theme.green` etc.
-/// stays muted-but-on-palette instead of fluorescent.
+/// (`get_kde_colors()` already synthesizes the entries we need); the three
+/// semantic slots come from its dedicated `red` / `green` / `yellow` fields,
+/// which carry Plasma's own `[Colors:View]` status foregrounds.
+///
+/// The Breeze hexes below are a second line, not the policy —
+/// `kde_palette_from_sections` already substitutes the same defaults for a
+/// scheme that omits a status foreground, and always hands back a parseable
+/// `#rrggbb`. They only fire if that ever stops being true.
 #[cfg(target_os = "linux")]
 fn palette_from_kde(kde: &crate::services::system_theme::KdeColorPalette) -> Palette {
     let g = |key: &str| -> u32 {
@@ -153,7 +155,8 @@ fn palette_from_kde(kde: &crate::services::system_theme::KdeColorPalette) -> Pal
         subtext1: g("subtext1"),
         border: g("border"),
         red: parse_hex_color(&kde.red).unwrap_or(0x00da_4453),
-        ..Palette::fallback_semantics(overlay1)
+        green: parse_hex_color(&kde.green).unwrap_or(0x0027_ae60),
+        yellow: parse_hex_color(&kde.yellow).unwrap_or(0x00f6_7400),
     }
 }
 
@@ -182,18 +185,14 @@ fn write_palette(ui: &AppWindow, p: &Palette, accent_hex: u32, mantle_unfocused_
     g.set_red(brush(p.red));
     g.set_green(brush(p.green));
     g.set_yellow(brush(p.yellow));
-    g.set_peach(brush(p.peach));
-    g.set_mauve(brush(p.mauve));
-    g.set_pink(brush(p.pink));
-    g.set_lavender(brush(p.lavender));
 
     // Accent + on-accent text
     g.set_accent(brush(accent_hex));
     g.set_accent_text(brush(on_accent_hex(accent_hex)));
 
-    // `danger`, `danger-hover`, `danger-text` stay bound to red / peach /
-    // accent-text via the Slint declarative defaults — re-evaluated whenever
-    // the source brushes update, so we don't write them here.
+    // `danger` / `danger-text` stay bound to red / accent-text via the Slint
+    // declarative defaults — re-evaluated whenever the source brushes update,
+    // so we don't write them here.
 
     // Windows: paint the OS-drawn caption with the same mantle colour so
     // it blends into the chrome below, and flip the dark/light variant to
@@ -210,21 +209,77 @@ fn write_palette(ui: &AppWindow, p: &Palette, accent_hex: u32, mantle_unfocused_
 /// accent (extracted via `services::material_you::extract_source_argb_from_rgb8`)
 /// into a Slint brush property.
 pub(crate) fn brush(rgb: u32) -> Brush {
+    Brush::SolidColor(color(rgb))
+}
+
+/// Unpack a `0x00RRGGBB` value into an opaque `Color`. The `brush` sibling
+/// above wraps this; the Now Playing gradient floor needs the bare `Color`,
+/// because Slint's `.mix()` and gradient stops take `color`, not `brush`.
+pub(crate) fn color(rgb: u32) -> Color {
     let r = ((rgb >> 16) & 0xff) as u8;
     let g = ((rgb >> 8) & 0xff) as u8;
     let b = (rgb & 0xff) as u8;
-    Brush::SolidColor(Color::from_rgb_u8(r, g, b))
+    Color::from_rgb_u8(r, g, b)
 }
 
+/// Pack a `0x00RRGGBB` value plus a separate `alpha` into a translucent solid
+/// `Brush`. The two solved scrims are the callers — Now Playing's and the
+/// hero's — and their opacity is solved per artwork, so baking it into the
+/// brush keeps the Slint side a single `background: Player.np-scrim` instead of
+/// a colour plus a float the view would have to recombine.
+pub(crate) fn brush_with_alpha(rgb: u32, alpha: u8) -> Brush {
+    Brush::SolidColor(color(rgb).with_alpha(f32::from(alpha) / 255.0))
+}
+
+/// Unpack a solid `Brush` back to `0x00RRGGBB`, dropping alpha. Used to read a
+/// live `Theme` brush back out of the Slint global when a solved surface — Now
+/// Playing or a hero — needs the theme accent's *hue* as an artwork-less
+/// fallback. A gradient brush answers with its first stop, which is the right
+/// approximation here.
+pub(crate) fn brush_to_rgb(brush: &Brush) -> u32 {
+    color_to_rgb(brush.color())
+}
+
+/// Inverse of [`color`]. The Genre hero reads the hash-derived gradient stops
+/// off `GenreRow` — they arrive as `Color`, never as a `Brush` — and has to
+/// measure their lightness before it can solve a scrim against them.
+pub(crate) fn color_to_rgb(c: Color) -> u32 {
+    (u32::from(c.red()) << 16) | (u32::from(c.green()) << 8) | u32::from(c.blue())
+}
+
+/// sRGB luma weights, applied to the gamma-encoded channels rather than to
+/// linearized ones — cheap, and the threshold below is tuned for it. Not the
+/// relative luminance `ui::backdrop` solves scrims against; that one linearizes
+/// first. Named because `theme.slint`'s `ink-on` spells the same four numbers
+/// out and `themes::tests::theme_slint_ink_on_matches_on_accent_hex` builds its
+/// expected Slint expression from these, so a drift on either side fails.
+///
+/// A third copy lives in `services::dwm_titlebar::is_dark_from_rgb`, duplicated
+/// on purpose to keep that windows-only module off the cross-platform palette
+/// code. Nothing pins it and nothing can — it's `cfg(windows)`, so a test for it
+/// would never run in CI. Edit a weight here and edit that one by hand.
+pub(super) const LUMA_R: f64 = 0.2126;
+pub(super) const LUMA_G: f64 = 0.7152;
+pub(super) const LUMA_B: f64 = 0.0722;
+/// Above this, `fill` is light enough to take dark ink.
+pub(super) const LUMA_THRESHOLD: f64 = 0.5;
+
 /// Pick a contrast colour for text/icons rendered on top of `accent_hex`:
-/// dark `#1e1e2e` for light accents, white for dark accents. Uses the
-/// standard sRGB relative-luminance threshold of 0.5 — fast enough that we
-/// don't bother caching per accent. f64 keeps clippy happy on the
+/// dark `#1e1e2e` for light accents, white for dark accents. Fast enough that
+/// we don't bother caching per accent. f64 keeps clippy happy on the
 /// u8 → float lift (channel values are 0..=255, well inside f64's range).
+///
+/// `theme.slint`'s `Theme.ink-on(brush)` is the Slint-side twin, for the
+/// surfaces whose fill isn't the accent (`danger`, the traffic-light hues).
+/// Same weights, same threshold, same pair — keep them in step.
 pub(super) fn on_accent_hex(accent_hex: u32) -> u32 {
     let r = f64::from((accent_hex >> 16) & 0xff) / 255.0;
     let g = f64::from((accent_hex >> 8) & 0xff) / 255.0;
     let b = f64::from(accent_hex & 0xff) / 255.0;
-    let lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-    if lum > 0.5 { 0x001e_1e2e } else { 0x00ff_ffff }
+    let lum = LUMA_R * r + LUMA_G * g + LUMA_B * b;
+    if lum > LUMA_THRESHOLD { 0x001e_1e2e } else { 0x00ff_ffff }
 }
+
+#[cfg(all(test, target_os = "linux"))]
+#[path = "tests/apply_tests.rs"]
+mod tests;

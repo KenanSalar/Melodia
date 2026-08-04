@@ -36,6 +36,45 @@ pub async fn search_artist_image_url(
     Ok(body.data.first().and_then(|a| a.picture_medium.clone()))
 }
 
+#[derive(serde::Deserialize)]
+struct DeezerAlbumSearchResponse {
+    data: Vec<DeezerAlbum>,
+}
+
+#[derive(serde::Deserialize)]
+struct DeezerAlbum {
+    cover_big: Option<String>,
+}
+
+/// Searches the Deezer API for an album and returns the 500×500 `cover_big` URL
+/// if found. Used for Discord Rich Presence, which fetches the URL server-side,
+/// so this only passes the string along — no download, no disk cache.
+pub async fn search_album_cover(
+    client: &reqwest::Client,
+    artist: &str,
+    album: &str,
+) -> Result<Option<String>, AppError> {
+    // Deezer advanced-search syntax pins both fields, tighter than title alone.
+    let query = format!("artist:\"{artist}\" album:\"{album}\"");
+    let response: reqwest::Response = client
+        .get("https://api.deezer.com/search/album")
+        .query(&[("q", query.as_str()), ("limit", "1")])
+        .send()
+        .await
+        .map_err(|e| AppError::network("Deezer album search failed", e))?;
+
+    if !response.status().is_success() {
+        return Ok(None);
+    }
+
+    let body = response
+        .json::<DeezerAlbumSearchResponse>()
+        .await
+        .map_err(|e| AppError::network("Failed to parse Deezer album response", e))?;
+
+    Ok(body.data.first().and_then(|a| a.cover_big.clone()))
+}
+
 /// Maximum image download size (5 MB).
 const MAX_IMAGE_BYTES: u64 = 5 * 1024 * 1024;
 
@@ -110,3 +149,7 @@ pub async fn download_and_cache_artist_image(
 
     Ok(Some(file_path.to_string_lossy().into_owned()))
 }
+
+#[cfg(test)]
+#[path = "tests/deezer_tests.rs"]
+mod tests;

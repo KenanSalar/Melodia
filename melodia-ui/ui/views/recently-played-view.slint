@@ -1,0 +1,333 @@
+import { ScrollView } from "std-widgets.slint";
+import { Theme } from "../theme.slint";
+import { RecentlyPlayed } from "../globals/curated.slint";
+import { HeroBackdrop } from "../globals/hero-backdrop.slint";
+import { Player } from "../globals/player.slint";
+import { CompositeScroll } from "../globals/shell.slint";
+import { HeroChipStrip } from "../components/hero-chip-strip.slint";
+import { MosaicHeroTile } from "../components/hero/mosaic-hero-tile.slint";
+import { HorizontalCardStrip } from "../components/grid/horizontal-card-strip.slint";
+import { SearchBar } from "../components/search-bar.slint";
+import { ActionPill, PillLabel, PillButton, PillDivider } from "../components/action-pill.slint";
+import { ColumnTogglePopup } from "../components/track-list/column-toggle-popup.slint";
+import { TrackList } from "../components/track-list/track-list.slint";
+import { CompositeScrollbars } from "../components/composite-scrollbars.slint";
+import { FilterThrottle } from "../components/filter-throttle.slint";
+import { HeroBlurBackdrop } from "../components/hero-blur-backdrop.slint";
+
+// A hero over one unified below-hero scroll — a non-collapsible Most Played
+// strip, then the `TrackList` of the 200 most-recently-played tracks. That list
+// is mounted `sortable: false` so recency stays its only order, and the filter
+// re-walks the fixed set in memory without re-ordering it. Everything comes
+// through the `RecentlyPlayed` global.
+//
+// This is the shape Favorites had before it was tabbed, and the only page still
+// holding it. Converting it is the intended next step, and what would retire its
+// `CompositeScrollbars` mount.
+export component RecentlyPlayedView inherits Rectangle {
+    // Bumped per keystroke; `FilterThrottle` collapses the burst into one filter.
+    property <int> filter-tick-pending: 0;
+
+    filter-throttle := FilterThrottle {
+        pending: root.filter-tick-pending;
+        fire() => { RecentlyPlayed.filter-changed(RecentlyPlayed.filter); }
+    }
+
+    // Catches clicks no inner TouchArea consumes; the SearchBar blurs on the tick.
+    TouchArea {
+        clicked => { RecentlyPlayed.blur-search-tick += 1; }
+    }
+
+    // Derived for the reason `favorites-view.slint` gives, and it is what keeps
+    // this band level with the four detail heroes — none of them reserves a tab
+    // row either.
+    private property <length> hero-height: 2 * Theme.pad-lg + Theme.hero-artwork;
+
+    // The component owns the dual-slot crossfade, so a mosaic refresh can't
+    // flash. Its gradient floor shows through with nothing played yet.
+    HeroBlurBackdrop {
+        x: 0; y: 0;
+        width: 100%; height: root.hero-height;
+        blur-a: RecentlyPlayed.blur-img-a;
+        blur-b: RecentlyPlayed.blur-img-b;
+        use-a: RecentlyPlayed.blur-use-a;
+        has-blur: RecentlyPlayed.has-blur;
+    }
+
+    VerticalLayout {
+        // Hero.
+        Rectangle {
+            vertical-stretch: 0;
+            height: root.hero-height;
+
+            HorizontalLayout {
+                padding: Theme.pad-lg;
+                spacing: Theme.pad-lg;
+                alignment: stretch;
+
+                // The shared square both mosaic heroes draw; the glyph matches
+                // the sidebar entry.
+                VerticalLayout {
+                    alignment: start;
+                    horizontal-stretch: 0;
+
+                    MosaicHeroTile {
+                        count: RecentlyPlayed.track-count;
+                        paths: RecentlyPlayed.mosaic-paths;
+                        empty-glyph: "history";
+                        request-cover(p) => {
+                            return RecentlyPlayed.request-mosaic-cover(p);
+                        }
+                    }
+                }
+
+                VerticalLayout {
+                    horizontal-stretch: 1;
+                    alignment: stretch;
+                    spacing: Theme.pad-xs;
+
+                    HorizontalLayout {
+                        vertical-stretch: 0;
+                        spacing: Theme.pad-md;
+                        alignment: stretch;
+
+                        VerticalLayout {
+                            alignment: center;
+                            Text {
+                                // Leading LRM keeps the title left-anchored under RTL.
+                                text: "\u{200e}" + @tr("Recently Played");
+                                color: HeroBackdrop.on-backdrop;
+                                font-size: Theme.hero-title-size;
+                                font-weight: Theme.page-title-weight;
+                                horizontal-alignment: left;
+                            }
+                        }
+
+                        Rectangle { horizontal-stretch: 1; }
+
+                        VerticalLayout {
+                            alignment: center;
+                            SearchBar {
+                                text <=> RecentlyPlayed.filter;
+                                placeholder: @tr("Filter recently played…");
+                                blur-trigger: RecentlyPlayed.blur-search-tick;
+                                edited(t) => { root.filter-tick-pending += 1; }
+                            }
+                        }
+                    }
+
+                    // Nothing played yet publishes no chips at all, and the line
+                    // below takes over — the Favorites split, same reason.
+                    HeroChipStrip { }
+
+                    if RecentlyPlayed.track-count == 0: Text {
+                        vertical-stretch: 0;
+                        text: @tr("No recently played tracks");
+                        color: HeroBackdrop.on-backdrop-muted;
+                        font-size: Theme.font-size-md;
+                        horizontal-alignment: left;
+                    }
+
+                    Rectangle { vertical-stretch: 1; }
+
+                    // Only mounted when there's something to play; the selection
+                    // chip takes the trailing slot once rows are picked.
+                    if RecentlyPlayed.track-count > 0: HorizontalLayout {
+                        vertical-stretch: 0;
+                        spacing: Theme.pad-md;
+                        alignment: start;
+
+                        ActionPill {
+                            PillButton {
+                                icon: "shuffle";
+                                text: @tr("Shuffle");
+                                clicked => { RecentlyPlayed.shuffle-all(); }
+                            }
+                            PillDivider { }
+                            ColumnTogglePopup {
+                                show-number  <=> RecentlyPlayed.show-number;
+                                show-artwork <=> RecentlyPlayed.show-artwork;
+                                show-artist  <=> RecentlyPlayed.show-artist;
+                                show-album   <=> RecentlyPlayed.show-album;
+                                show-genre   <=> RecentlyPlayed.show-genre;
+                                show-year    <=> RecentlyPlayed.show-year;
+                                toggled(id) => { RecentlyPlayed.toggle-column(id); }
+                            }
+                            if RecentlyPlayed.selected-ids.length > 0: PillDivider { }
+                            if RecentlyPlayed.selected-ids.length > 0: PillLabel {
+                                text: @tr("{} selected", RecentlyPlayed.selected-ids.length);
+                            }
+                            if RecentlyPlayed.selected-ids.length > 0: PillButton {
+                                icon: "close";
+                                tooltip-text: @tr("Clear selection");
+                                clicked => {
+                                    RecentlyPlayed.clear-selection();
+                                    RecentlyPlayed.blur-search-tick += 1;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // The strip and the list share one outer ScrollView, so a single
+        // root-mounted scrollbar covers both — the composite-scroll shape, wheel
+        // sentinel included: an inner ListView swallows the wheel at its edge,
+        // so vertical wheel comes back through the winit filter and
+        // `CompositeScrollbars`' split.
+        below-hero := Rectangle {
+            vertical-stretch: 1;
+            clip: true;
+
+            // Hover sentinel for `CompositeScroll`. It forwards every event on
+            // to the ScrollView, so clicks, drags and native horizontal scroll
+            // are untouched and only its `has-hover` is read. Empty-space
+            // clicks land here, which is what reproduces the root backdrop's
+            // blur-on-click.
+            hover-catch := TouchArea {
+                width: 100%;
+                height: 100%;
+                changed has-hover => { CompositeScroll.hovered = self.has-hover; }
+                clicked => { RecentlyPlayed.blur-search-tick += 1; }
+
+            below-sv := ScrollView {
+                width: 100%;
+                height: 100%;
+                horizontal-scrollbar-policy: always-off;
+                vertical-scrollbar-policy:   always-off;
+                viewport-width: self.width;
+
+                VerticalLayout {
+                    spacing: 0;
+
+                    // Most Played strip, non-collapsible.
+                    if RecentlyPlayed.most-played-rows.length > 0: VerticalLayout {
+                        vertical-stretch: 0;
+                        padding-left: Theme.pad-lg;
+                        padding-right: Theme.pad-lg;
+                        padding-top: Theme.pad-md;
+                        padding-bottom: Theme.pad-lg;
+                        spacing: Theme.pad-sm;
+
+                        HorizontalLayout {
+                            alignment: start;
+                            Text {
+                                text: @tr("Most Played");
+                                color: Theme.text;
+                                font-size: Theme.font-size-lg;
+                                font-weight: 600;
+                            }
+                        }
+
+                        HorizontalCardStrip {
+                            heading: "";
+                            rows: RecentlyPlayed.most-played-rows;
+                            card-width: 160px;
+                            card-height: 206px;
+                            show-play-count: true;
+                            show-play-overlay: false;
+                            fallback-icon: "music-note";
+                            request-cover(p) => {
+                                return RecentlyPlayed.request-most-played-cover(p);
+                            }
+                            row-clicked(id) => { RecentlyPlayed.play-track(id); }
+                            play-clicked(id) => { RecentlyPlayed.play-track(id); }
+                        }
+
+                        Rectangle {
+                            height: 1px;
+                            background: Theme.surface2;
+                        }
+                    }
+
+                    HorizontalLayout {
+                        horizontal-stretch: 1;
+                        vertical-stretch: 0;
+                        padding-left: Theme.pad-lg;
+                        padding-right: Theme.pad-lg;
+                        // The strip's hairline supplies the gap above the header
+                        // when it's mounted; without it the table would butt
+                        // straight against the hero edge.
+                        padding-top: RecentlyPlayed.most-played-rows.length > 0
+                            ? 0px
+                            : Theme.pad-lg;
+
+                        tl := TrackList {
+                            horizontal-stretch: 1;
+                            vertical-stretch: 0;
+                            // Capped at the outer viewport, so a large list
+                            // leaves the inner ListView virtualizing.
+                            height: min(
+                                max(1, RecentlyPlayed.tracks.length)
+                                    * (RecentlyPlayed.show-artwork
+                                        ? Theme.row-h
+                                        : Theme.row-h-compact)
+                                    + 32px + Theme.pad-xs,
+                                below-sv.visible-height);
+
+                            rows: RecentlyPlayed.tracks;
+
+                            w-number <=> RecentlyPlayed.w-number;
+                            w-title <=> RecentlyPlayed.w-title;
+                            w-artist <=> RecentlyPlayed.w-artist;
+                            w-album <=> RecentlyPlayed.w-album;
+                            w-genre <=> RecentlyPlayed.w-genre;
+                            w-year <=> RecentlyPlayed.w-year;
+                            w-length <=> RecentlyPlayed.w-length;
+
+                            show-number <=> RecentlyPlayed.show-number;
+                            show-artwork <=> RecentlyPlayed.show-artwork;
+                            show-artist <=> RecentlyPlayed.show-artist;
+                            show-album <=> RecentlyPlayed.show-album;
+                            show-genre <=> RecentlyPlayed.show-genre;
+                            show-year <=> RecentlyPlayed.show-year;
+                            number-mode: "index";
+
+                            // Recency is the only order this page has. The
+                            // headers still resize and still toggle.
+                            sortable: false;
+                            playing-track-id: Player.vm.track.id;
+                            view-context: "recently_played";
+                            view-selected-ids: RecentlyPlayed.selected-ids;
+
+                            play-row(id, idx) => { RecentlyPlayed.play-row(id, idx); }
+                            play-next(ids) => { RecentlyPlayed.play-next(ids); }
+                            add-to-queue(ids) => { RecentlyPlayed.add-to-queue(ids); }
+                            toggle-row-favorite(ids, on) => { RecentlyPlayed.toggle-row-favorite(ids, on); }
+                            set-row-rating(ids, n) => { RecentlyPlayed.set-row-rating(ids, n); }
+                            select-row(idx, id, sh, ct) => { RecentlyPlayed.select-row(idx, id, sh, ct); }
+                            request-blur-search => { RecentlyPlayed.blur-search-tick += 1; }
+                            go-to-album(aid) => { RecentlyPlayed.go-to-album(aid); }
+                            go-to-artist(aid) => { RecentlyPlayed.go-to-artist(aid); }
+                            go-to-genre(gid) => { RecentlyPlayed.go-to-genre(gid); }
+                        }
+                    }
+                }
+            }
+            }
+        }
+    }
+
+    // Unified vbar + column-pan hbar + wheel routing, all owned by the shared
+    // component.
+    CompositeScrollbars {
+        x: 0; y: 0;
+        width: 100%; height: 100%;
+        outer-viewport-y <=> below-sv.viewport-y;
+        outer-viewport-height: below-sv.viewport-height;
+        outer-visible-height: below-sv.visible-height;
+        inner-offset: tl.v-offset;
+        inner-viewport-height: tl.v-viewport-height;
+        inner-visible-height: tl.v-visible-height;
+        set-inner-offset(o) => { tl.set-v-offset(o); }
+        h-offset: tl.h-offset;
+        h-viewport-width: tl.h-viewport-width;
+        h-visible-width: tl.h-visible-width;
+        set-h-offset(o) => { tl.set-h-offset(o); }
+        v-region-y: below-hero.absolute-position.y - root.absolute-position.y;
+        v-region-height: below-hero.height;
+        h-region-x: tl.absolute-position.x - root.absolute-position.x;
+        h-region-width: tl.width;
+    }
+}

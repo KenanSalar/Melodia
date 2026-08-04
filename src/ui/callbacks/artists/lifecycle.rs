@@ -44,6 +44,12 @@ pub(super) fn wire(
     // `ArtistDetail.artist-id >= 0`) runs after the grid fetch so the
     // user lands back where they were.
     artists_ui.set_section_active(ui.global::<Nav>().get_selected_index() == NAV_ARTISTS);
+    // See the matching seed in `albums/lifecycle.rs`: a boot pre-fetch for a
+    // section that isn't on screen can't publish the shared hero globals, so
+    // its first enter has to re-fetch rather than take the cheap path.
+    if !artists_ui.section_active() {
+        artists_ui.mark_dirty();
+    }
     {
         let au = artists_ui.clone();
         let albums = albums_ui.clone();
@@ -64,7 +70,7 @@ pub(super) fn wire(
                 }
 
                 let d = ui.global::<ArtistDetail>();
-                release_detail_hero_images!(d);
+                release_detail_hero_images!(ui, d);
                 let tm = d.get_tracks();
                 if let Some(vm) = tm.as_any().downcast_ref::<VecModel<UiTrackListRow>>() {
                     vm.set_vec(Vec::new());
@@ -112,7 +118,7 @@ pub(super) fn wire(
                             let _ = weak.upgrade_in_event_loop(|ui| {
                                 let g = ui.global::<ArtistDetail>();
                                 g.set_artist_id(-1);
-                                release_detail_hero_images!(g);
+                                release_detail_hero_images!(ui, g);
                             });
                         }
                     } else {

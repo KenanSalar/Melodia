@@ -8,49 +8,76 @@
 //! [`crate::ui::mosaic_blur`] atlas+blur recipe so both hero surfaces read
 //! identically.
 
-use std::collections::HashSet;
+use std::sync::Arc;
 
-use slint::{
-    ComponentHandle, Image, Model, Rgb8Pixel, SharedPixelBuffer, SharedString, VecModel, Weak,
-};
+use slint::{ComponentHandle, Model, SharedString, VecModel, Weak};
 
+use super::RecentlyPlayedUi;
 use crate::entities::track::TrackListRow as RsTrackListRow;
 use crate::state::AppState;
+use crate::ui::hero_chips::HeroFold;
 use crate::ui::mosaic_blur::compose_mosaic_blur;
-use crate::ui::now_playing::write_crossfade_slot;
-use crate::ui::tracks::format_duration_ms;
+use crate::ui::mosaic_hero::impl_mosaic_hero;
 use crate::{AppWindow, RecentlyPlayed};
+
+// The apply/clear pair is shared with the Favorites hero — same guard
+// placement, same cross-fade, different global. Overlapping composes are more
+// reachable here: `refresh_tracks` spawns the compose *detached*, so the
+// subscriber loop is free to come round again and re-read a guard nobody has
+// written, once per tick. Bounded in practice by the `get_recently_played` +
+// full-capacity cover prewarm every tick pays first.
+impl_mosaic_hero!(RecentlyPlayed, RecentlyPlayedUi);
 
 /// The up-to-`n` most-recently-played *distinct* cover paths, in recency
 /// order — the hero mosaic tiles. Skips empty/absent artwork.
+///
+/// The dedup is [`crate::ui::grid_prewarm::unique_artwork_paths`]', the same
+/// one every cover prewarm in the tree uses; only the `String` shape the
+/// Slint model wants is this function's own.
 pub fn mosaic_paths_from(rows: &[RsTrackListRow], n: usize) -> Vec<String> {
-    let mut seen: HashSet<&str> = HashSet::new();
-    let mut out: Vec<String> = Vec::with_capacity(n);
-    for r in rows {
-        let Some(p) = r.artwork_path.as_deref().filter(|s| !s.is_empty()) else {
-            continue;
-        };
-        if seen.insert(p) {
-            out.push(p.to_owned());
-            if out.len() == n {
-                break;
-            }
-        }
-    }
-    out
+    crate::ui::grid_prewarm::unique_artwork_paths(
+        rows.iter().map(|r| r.artwork_path.as_deref()),
+        n,
+    )
+    .into_iter()
+    .map(|p| p.to_string_lossy().into_owned())
+    .collect()
 }
 
-/// Push the hero count + total-duration text + mosaic-path list into the Slint
-/// global. Immediate (the blur composition is kicked separately).
-pub fn push_hero_stats(count: i32, total_ms: i64, mosaic_paths: &[String], weak: &Weak<AppWindow>) {
-    let duration = format_duration_ms(total_ms);
+/// Push the hero count + mosaic-path list into the Slint global, and the band's
+/// chips with them. Immediate (the blur composition is kicked separately).
+///
+/// The running time reaches the band as a chip rather than as a property: the
+/// caller has the millisecond total in hand, so routing it through Slint only
+/// to read it back would be a round trip for a string this crate formatted.
+pub fn push_hero_stats(
+    count: i32,
+    total_ms: i64,
+    fold: HeroFold,
+    mosaic_paths: &[String],
+    rp_ui: &Arc<RecentlyPlayedUi>,
+    weak: &Weak<AppWindow>,
+) {
     let paths = mosaic_paths.to_vec();
+    let rp_ui = rp_ui.clone();
     let weak = weak.clone();
     let _ = slint::invoke_from_event_loop(move || {
         let Some(ui) = weak.upgrade() else { return };
+        // The leave can land while this post is in flight, and it empties the
+        // mosaic-path model on its way out — the same guard, in the same place,
+        // as `tracks::apply_filtered_tracks`.
+        if !rp_ui.section_active() {
+            return;
+        }
         let g = ui.global::<RecentlyPlayed>();
         g.set_track_count(count);
-        g.set_duration_text(SharedString::from(duration.as_str()));
+        crate::ui::hero_chips::publish_recently_played(
+            &ui,
+            count,
+            total_ms,
+            fold,
+            rp_ui.section_active(),
+        );
         let model = g.get_mosaic_paths();
         let Some(vec) = model.as_any().downcast_ref::<VecModel<SharedString>>() else {
             log::warn!("RecentlyPlayed.mosaic-paths: VecModel<SharedString> downcast failed");
@@ -63,63 +90,30 @@ pub fn push_hero_stats(count: i32, total_ms: i64, mosaic_paths: &[String], weak:
 }
 
 /// Compose + apply the hero blur from `mosaic_paths` (or clear it when empty).
-/// CPU-bound composition runs on the blocking pool; the result lands on the UI
-/// thread. `animate` fades the cross-fade (true for live refreshes).
+/// The CPU-bound composition and colour measurement run on the blocking pool;
+/// the result lands on the UI thread. `animate` fades the cross-fade (true for
+/// live refreshes).
 pub async fn refresh_blur(
     state: &AppState,
+    rp_ui: &Arc<RecentlyPlayedUi>,
     mosaic_paths: Vec<String>,
     weak: &Weak<AppWindow>,
     animate: bool,
 ) {
     if mosaic_paths.is_empty() {
-        clear_hero_blur(weak);
+        clear_hero_blur(rp_ui, weak);
         return;
     }
-    let blur_buf = state
+    let compose_paths = mosaic_paths.clone();
+    let composed = state
         .runtime
-        .spawn_blocking(move || compose_mosaic_blur(&mosaic_paths))
+        .spawn_blocking(move || compose_mosaic_blur(&compose_paths))
         .await
         .ok()
         .flatten();
-    apply_hero_blur(weak, blur_buf, animate);
+    apply_hero_blur(rp_ui, weak, composed, animate, mosaic_paths);
 }
 
-/// Clear the hero blur (e.g. no covers) without wiping the previous slot, so an
-/// in-flight fade completes before the gradient floor takes over.
-pub fn clear_hero_blur(weak: &Weak<AppWindow>) {
-    let weak = weak.clone();
-    let _ = slint::invoke_from_event_loop(move || {
-        let Some(ui) = weak.upgrade() else { return };
-        let g = ui.global::<RecentlyPlayed>();
-        write_crossfade_slot(
-            None,
-            true,
-            g.get_blur_use_a(),
-            |img| g.set_blur_img_a(img),
-            |img| g.set_blur_img_b(img),
-            |v| g.set_blur_use_a(v),
-            |v| g.set_has_blur(v),
-        );
-    });
-}
-
-fn apply_hero_blur(weak: &Weak<AppWindow>, buf: Option<SharedPixelBuffer<Rgb8Pixel>>, animate: bool) {
-    let weak = weak.clone();
-    let _ = slint::invoke_from_event_loop(move || {
-        let Some(ui) = weak.upgrade() else { return };
-        let g = ui.global::<RecentlyPlayed>();
-        let img = buf.map(Image::from_rgb8);
-        write_crossfade_slot(
-            img,
-            animate,
-            g.get_blur_use_a(),
-            |i| g.set_blur_img_a(i),
-            |i| g.set_blur_img_b(i),
-            |v| g.set_blur_use_a(v),
-            |v| g.set_has_blur(v),
-        );
-    });
-}
-
-// The atlas composition itself lives in `crate::ui::mosaic_blur` — shared
-// with the Favorites hero so both surfaces read identically.
+// The atlas composition itself lives in `crate::ui::mosaic_blur`, and its
+// application in `crate::ui::mosaic_hero` — both shared with the Favorites
+// hero so the two surfaces read identically.

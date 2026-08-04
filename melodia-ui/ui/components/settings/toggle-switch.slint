@@ -1,0 +1,54 @@
+import { Theme } from "../../theme.slint";
+
+// M3-style switch: a pill track with a thumb that slides across it. The travel
+// is animated on a 0..1 float and the thumb's `x` derives from that — animating
+// the `x` itself would phase-lag the width-derived binding under it.
+export component ToggleSwitch inherits Rectangle {
+    in-out property <bool> checked;
+    in-out property <bool> enabled <=> touch.enabled;
+    // On, a click doesn't flip `checked` here — the parent owns the state and
+    // acts on `toggled` first. That's what the restart-gated rows need: they
+    // bind `checked` one-way to the persisted value, and a self-flip would
+    // orphan that binding. Off by default, so the `<=>`-bound mounts keep
+    // flipping themselves.
+    in property <bool> manual: false;
+
+    callback toggled(bool /* requested new value */);
+
+    width: 52px;
+    height: 32px;
+
+    // On the shared fast duration, so it lines up with the page's other
+    // control feedback.
+    track := Rectangle {
+        background: root.checked ? Theme.accent : Theme.surface1;
+        border-radius: root.height / 2;
+        animate background { duration: Theme.dur-fast; easing: ease-in-out; }
+    }
+
+    property <float> a: root.checked ? 1.0 : 0.0;
+    animate a { duration: Theme.dur-fast; easing: ease-in-out; }
+
+    Rectangle {
+        x: 4px + root.a * (root.width - root.height);
+        y: 4px;
+        width: root.height - 8px;
+        height: root.height - 8px;
+        border-radius: self.width / 2;
+        background: root.checked ? Theme.accent-text : Theme.text;
+        animate background { duration: Theme.dur-fast; easing: ease-in-out; }
+    }
+
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => {
+            if (root.manual) {
+                // Report the requested value; the parent decides.
+                root.toggled(!root.checked);
+            } else {
+                root.checked = !root.checked;
+                root.toggled(root.checked);
+            }
+        }
+    }
+}

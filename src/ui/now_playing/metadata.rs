@@ -2,8 +2,7 @@
 
 use crate::entities::track::TrackMeta;
 use crate::TrackMetaRow;
-use slint::{ModelRc, SharedString, VecModel};
-use std::rc::Rc;
+use slint::SharedString;
 
 /// Format the `TrackMeta` projection into the pre-formatted display
 /// strings the `TrackMetaRow` chip row reads. `""` for any absent field —
@@ -86,72 +85,5 @@ pub(super) fn visible_chip_texts(m: &TrackMetaRow) -> Vec<SharedString> {
     out
 }
 
-/// Estimated rendered chip width — Vazirmatn at `font-size-sm` with the
-/// `MetaChip`'s `pad-md` left+right padding. Approximate but stable;
-/// `HorizontalLayout`'s `alignment: center` absorbs minor over/under shoot
-/// and N-row wrap is forgiving in the wrap direction.
-fn estimated_chip_width(text: &str) -> f32 {
-    const CHAR_W: f32 = 6.5;
-    const PAD: f32 = 24.0;
-    // Chip texts are short (max a few dozen chars); saturating to `u16` is
-    // ample headroom and `f32::from(u16)` avoids the `cast_precision_loss`
-    // lint a direct `usize as f32` would trip.
-    let chars = u16::try_from(text.chars().count()).unwrap_or(u16::MAX);
-    f32::from(chars) * CHAR_W + PAD
-}
-
-/// Chunk visible chips into rows so each row's total width (chip widths +
-/// `pad-sm` spacing between chips) fits in `avail_width`. Always emits at
-/// least one chip per row (an oversized single chip gets its own row).
-pub(super) fn chunk_chips_to_rows(
-    chips: &[SharedString],
-    avail_width: f32,
-) -> Vec<Vec<SharedString>> {
-    const SPACING: f32 = 8.0;
-
-    if chips.is_empty() {
-        return Vec::new();
-    }
-    // `<= 0` means we haven't been laid out yet — collapse to one row; the
-    // mount Timer in the view fires a real width immediately after.
-    if avail_width <= 0.0 {
-        return vec![chips.to_vec()];
-    }
-
-    let mut rows: Vec<Vec<SharedString>> = Vec::with_capacity(2);
-    let mut current: Vec<SharedString> = Vec::with_capacity(chips.len());
-    let mut current_w = 0.0_f32;
-
-    for chip in chips {
-        let cw = estimated_chip_width(chip);
-        let candidate = if current.is_empty() {
-            cw
-        } else {
-            current_w + SPACING + cw
-        };
-        if !current.is_empty() && candidate > avail_width {
-            rows.push(std::mem::take(&mut current));
-            current.push(chip.clone());
-            current_w = cw;
-        } else {
-            current.push(chip.clone());
-            current_w = candidate;
-        }
-    }
-    if !current.is_empty() {
-        rows.push(current);
-    }
-    rows
-}
-
-/// `Vec<Vec<SharedString>>` → `ModelRc<ModelRc<SharedString>>` suitable for
-/// `Player::set_chip_rows`.
-pub(super) fn rows_to_model(
-    rows: Vec<Vec<SharedString>>,
-) -> ModelRc<ModelRc<SharedString>> {
-    let outer: Vec<ModelRc<SharedString>> = rows
-        .into_iter()
-        .map(|row| ModelRc::from(Rc::new(VecModel::from(row))))
-        .collect();
-    ModelRc::from(Rc::new(VecModel::from(outer)))
-}
+// The wrap itself lives in `crate::ui::chips` — shared with the hero bands, so
+// both strips break the same way and only the row cap differs.

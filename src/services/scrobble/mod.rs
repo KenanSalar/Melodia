@@ -4,8 +4,7 @@
 //! Owns the credential/enabled shadow and the durable offline queue (loaded at
 //! boot, persisted on change), the submitter-wake `Notify`, and the shared lazy
 //! `reqwest::Client`. `update_now_playing` / `enqueue_scrobble` / `submit_pending`
-//! are driven by the [`detector`] state machine and the `tasks::scrobble` loops;
-//! only the settings UI and love↔favorite sync wire in later phases.
+//! are driven by the [`detector`] state machine and the `tasks::scrobble` loops.
 
 pub mod credentials;
 pub mod detector;
@@ -230,9 +229,8 @@ impl ScrobbleService {
         queue.items.len() + queue.loves.len()
     }
 
-    /// Append a scrobble to the durable queue and persist it. The Phase 2
-    /// submitter's `enqueue_scrobble` enriches and wakes on top of this
-    /// primitive.
+    /// Append a scrobble to the durable queue and persist it. The submitter's
+    /// `enqueue_scrobble` enriches and wakes on top of this primitive.
     pub async fn push_scrobble(&self, item: QueuedItem) -> AppResult<()> {
         let snapshot = {
             let mut queue = self.queue.lock();
