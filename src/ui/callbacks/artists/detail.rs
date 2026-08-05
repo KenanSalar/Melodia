@@ -11,9 +11,7 @@ use crate::state::AppState;
 use crate::ui::albums::AlbumsUi;
 use crate::ui::artists::{self as artists_ui_mod, ArtistsUi};
 use crate::ui::callbacks::{collect_track_ids, play_row_start, spawn_play_then_shuffle};
-use crate::ui::callbacks::macros::{
-    release_detail_hero_images, spawn_logged, spawn_logged_sync, wire_row_flag,
-};
+use crate::ui::callbacks::macros::{spawn_logged, spawn_logged_sync, wire_row_flag};
 use crate::ui::my_library::restore_origin;
 use crate::ui::track_list_view::{TrackListColumnState, view_id};
 use crate::{AppWindow, ArtistDetail};
@@ -63,11 +61,12 @@ pub(super) fn wire(
             }
 
             g.set_artist_id(-1);
-            // Drop the hero Image properties so their `SharedPixelBuffer`s
-            // release the Arc the LRU is about to clear too. Without this,
-            // ~650 KiB of CPU buffer + ~1.5 MiB of mapped GPU texture stay
-            // pinned on the global until another detail page overwrites it.
-            release_detail_hero_images!(ui, g);
+            // The hero Images are *not* dropped here. This id is what the band's
+            // whole hero half is a ternary over, so releasing on the same tick
+            // leaves it collapsing a placeholder — `MyLibrary.hero-collapsed`
+            // owns that teardown now, and the band fires it once the morph is
+            // done. See `callbacks::my_library::release_collapsed_hero`.
+            //
             // Clear the SearchBar so the next open lands on the full
             // tracks + albums set, not a stale needle from the last
             // detail. `clear_detail` drops the Rust-side mirror too.

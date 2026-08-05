@@ -52,6 +52,36 @@ export component MyLibraryView inherits Rectangle {
     property <bool> detail-open:
         root.album-open || root.artist-open || root.genre-open || root.playlist-open;
 
+    // **The arm the band's *hero half* paints, held for the length of the collapse.** The
+    // four above flip on the frame the detail id clears, and that is the frame the exit
+    // morph starts — so every hero ternary below would fall through to whichever sibling
+    // global sits in its last arm and the band would spend 400 ms collapsing a placeholder
+    // tile, an empty title and `has-blur: false` instead of the banner it is collapsing
+    // *from*. These lag by exactly one close. Each is seeded by its binding and owned by
+    // its handler (`hero-t`'s idiom, and `LibraryTabBand` re-states why): the write orphans
+    // the binding, and the seed is what leaves a page entered straight onto a detail — a
+    // boot resuming one — already painting it.
+    //
+    // The guard is `detail-open` and not the arm's own value, which is what makes a
+    // cross-tab drill move them: Album → Artist keeps a detail open throughout, so both
+    // writes land, where a close leaves all four where they were.
+    property <bool> hero-album: root.album-open;
+    changed album-open => {
+        if (root.detail-open) { self.hero-album = root.album-open; }
+    }
+    property <bool> hero-artist: root.artist-open;
+    changed artist-open => {
+        if (root.detail-open) { self.hero-artist = root.artist-open; }
+    }
+    property <bool> hero-genre: root.genre-open;
+    changed genre-open => {
+        if (root.detail-open) { self.hero-genre = root.genre-open; }
+    }
+    property <bool> hero-playlist: root.playlist-open;
+    changed playlist-open => {
+        if (root.detail-open) { self.hero-playlist = root.playlist-open; }
+    }
+
     // **The scope the page's one filter box describes changed.** Rust reseats the box from
     // whichever surface is now mounted: a drill-in finds the detail's needle already
     // cleared, a back out finds the grid's own still there — so the box can't read empty
@@ -170,51 +200,58 @@ export component MyLibraryView inherits Rectangle {
             // appearing under it, so every fact below is a four-arm ternary over the
             // predicates above and none of the four bodies owns a title, a tile or a
             // chip strip any more.
+            //
+            // **The hero facts read `hero-*`, everything else reads `*-open`.** Which
+            // banner is painted has to survive the id clear or the collapse plays out over
+            // a placeholder; which body is mounted, which pills are shown and what the
+            // filter box now describes must not.
             detail-open: root.detail-open;
             back-clicked => { MyLibrary.back(); }
+            // The teardown the band's collapse defers — see its `hero-collapsed`.
+            hero-collapsed => { MyLibrary.hero-collapsed(); }
 
             title:
-                root.album-open ? AlbumDetail.album.name
-                : root.artist-open ? ArtistDetail.artist.name
-                : root.genre-open ? GenreDetail.genre.name
+                root.hero-album ? AlbumDetail.album.name
+                : root.hero-artist ? ArtistDetail.artist.name
+                : root.hero-genre ? GenreDetail.genre.name
                 : PlaylistDetail.playlist.name;
             // Album's artist and Playlist's description; the other two heroes state
             // nothing under the title and the band collapses the row on "".
             subtitle:
-                root.album-open ? AlbumDetail.album.artist_name
-                : root.playlist-open ? PlaylistDetail.playlist.description
+                root.hero-album ? AlbumDetail.album.artist_name
+                : root.hero-playlist ? PlaylistDetail.playlist.description
                 : "";
-            title-badge: root.playlist-open && PlaylistDetail.playlist.is_smart;
+            title-badge: root.hero-playlist && PlaylistDetail.playlist.is_smart;
 
             artwork-path:
-                root.album-open ? AlbumDetail.album.artwork_path
-                : root.artist-open ? ArtistDetail.artist.image_path
-                : root.playlist-open ? PlaylistDetail.playlist.artwork_path
+                root.hero-album ? AlbumDetail.album.artwork_path
+                : root.hero-artist ? ArtistDetail.artist.image_path
+                : root.hero-playlist ? PlaylistDetail.playlist.artwork_path
                 : "";
             // Genre Detail owns no cover, and Slint has no empty-`image` literal to fall
             // through to — so the band gates on `artwork-path` instead, which is `""` on
             // that arm. See its `has-cover`.
             cover:
-                root.album-open ? AlbumDetail.cover
-                : root.artist-open ? ArtistDetail.cover
+                root.hero-album ? AlbumDetail.cover
+                : root.hero-artist ? ArtistDetail.cover
                 : PlaylistDetail.cover;
-            circular-artwork: root.artist-open;
+            circular-artwork: root.hero-artist;
             fallback-icon:
-                root.album-open ? "album"
-                : root.artist-open ? "person"
-                : root.genre-open ? "theater_comedy"
+                root.hero-album ? "album"
+                : root.hero-artist ? "person"
+                : root.hero-genre ? "theater_comedy"
                 : "playlist";
             // Genres have no intrinsic image, so the tile paints from the two name-hashed
             // stops on the row and matches the grid card exactly — genre recognition
             // survives the drill-in. The wide backdrop is the *dimmer* pair, written into
             // `HeroBackdrop.floor-*` by Rust's `open_genre`, which measures it and solves
             // the scrim and foreground against it as an artwork-bearing detail does.
-            tile-bg: root.genre-open
+            tile-bg: root.hero-genre
                 ? @linear-gradient(135deg,
                     GenreDetail.genre.tile_color_1,
                     GenreDetail.genre.tile_color_2)
                 : HeroBackdrop.chrome.with-alpha(0.15);
-            tile-icon-color: root.genre-open
+            tile-icon-color: root.hero-genre
                 ? #ffffff.with-alpha(0.3)
                 : HeroBackdrop.chrome;
 
@@ -224,21 +261,21 @@ export component MyLibraryView inherits Rectangle {
             // only its gradient floor, which is exactly what a procedural backdrop wants.
             // Don't "fix" this by requiring the quartet of every detail.
             blur-a:
-                root.artist-open ? ArtistDetail.blur-img-a
-                : root.playlist-open ? PlaylistDetail.blur-img-a
+                root.hero-artist ? ArtistDetail.blur-img-a
+                : root.hero-playlist ? PlaylistDetail.blur-img-a
                 : AlbumDetail.blur-img-a;
             blur-b:
-                root.artist-open ? ArtistDetail.blur-img-b
-                : root.playlist-open ? PlaylistDetail.blur-img-b
+                root.hero-artist ? ArtistDetail.blur-img-b
+                : root.hero-playlist ? PlaylistDetail.blur-img-b
                 : AlbumDetail.blur-img-b;
             use-a:
-                root.artist-open ? ArtistDetail.blur-use-a
-                : root.playlist-open ? PlaylistDetail.blur-use-a
+                root.hero-artist ? ArtistDetail.blur-use-a
+                : root.hero-playlist ? PlaylistDetail.blur-use-a
                 : AlbumDetail.blur-use-a;
             has-blur:
-                root.album-open ? AlbumDetail.has-blur
-                : root.artist-open ? ArtistDetail.has-blur
-                : root.playlist-open ? PlaylistDetail.has-blur
+                root.hero-album ? AlbumDetail.has-blur
+                : root.hero-artist ? ArtistDetail.has-blur
+                : root.hero-playlist ? PlaylistDetail.has-blur
                 : false;
 
             // The band's `@children` slot, in one piece. See `tab-pills.slint` for why

@@ -80,6 +80,16 @@ export component LibraryTabBand inherits Rectangle {
     callback tab-selected(int);
     callback search-edited(string);
 
+    // Fires once the collapse has finished — the `Dialog.closed()` shape, and here for the
+    // same reason: **the hero's facts have to outlive the detail id.** Every one of them
+    // is a ternary over that id at the host, so a teardown run when the id clears leaves
+    // the band spending the whole 400 ms painting a fallback glyph over a reset backdrop —
+    // an exit morph *from* a placeholder rather than from the banner it is collapsing. The
+    // host releases the cover, the blur pair, the shared backdrop tiers and the chip row
+    // when this lands instead. Cancelled by a re-open, so a re-drill inside the window
+    // can't have the previous hero's teardown land on the new one.
+    callback hero-collapsed();
+
     // --- The morph ----------------------------------------------------------
     //
     // **Seeded by the binding, owned by the handler.** An animated *binding* restarts
@@ -92,10 +102,35 @@ export component LibraryTabBand inherits Rectangle {
     property <float> hero-t: root.detail-open ? 1.0 : 0.0;
     changed detail-open => {
         self.hero-t = self.detail-open ? 1.0 : 0.0;
+        collapse.running = !self.detail-open;
     }
     animate hero-t {
         duration: Theme.dur-spatial;
         easing: cubic-bezier(0.2, 0, 0, 1);
+    }
+
+    // **What may gate an `if` here is decided by whether the branch carries a `changed`
+    // handler, and the meta column below does.** A dropped repeater instance keeps its
+    // memory alive for weak refs, so the `ChangeTracker` sitting inside it stays
+    // registered — and `ChangeTracker::evaluate` upgrades its weak handle with an
+    // `unwrap`. Drop such a branch from *inside* `run_change_handlers` — which is what a
+    // handler that writes the condition does — and the next dirty tick of
+    // `MetaChipStrip`'s `changed watched-w`, inlined into the chip strip the meta column
+    // mounts, panics. So the columns keep the two predicates they shipped with: the
+    // chip-bearing one on `detail-open`, which only ever changes from a Rust write, and
+    // the artwork and back slot on `hero-t`, which carry no handler to strand.
+
+    // Armed by the handler above rather than gated on a bool, so a re-open genuinely
+    // *cancels* it: the same edge that restarts the morph writes `running` back to false
+    // and no stale teardown is left in flight. Starts idle — a page mounted with no detail
+    // never transitioned into that state and has nothing to hand back.
+    collapse := Timer {
+        interval: Theme.dur-spatial;
+        running: false;
+        triggered => {
+            self.running = false;
+            root.hero-collapsed();
+        }
     }
 
     // The bar's four brushes cross with the pane under them. Separate `animate` blocks
@@ -142,17 +177,19 @@ export component LibraryTabBand inherits Rectangle {
         }
     }
 
-    // The back button's slot, and the gap it opens beside the bar. Both collapse to zero
-    // in idle, so the seed above stays the *idle* floor — which is the state the page is
-    // in whenever a mount can surprise it. The slot's width eases with the morph because
-    // it really is that wide mid-way; its **spacing** steps, because the row gains a whole
-    // gap the instant the slot mounts and reserving that gradually leaves the bar briefly
-    // believing in room it doesn't have.
-    property <length> back-slot-w: (root.pill-h + Theme.pad-sm) * root.hero-t;
-    property <length> back-slot-gap: root.hero-t > 0 ? Theme.pad-md : 0px;
+    // The back button's slot, **with its trailing gap folded into its own width** — which
+    // is what lets the row below carry `spacing: 0` and the whole inset ease to zero.
+    // Spelled as an eased width beside a stepped gap it could not: the row loses a full
+    // `pad-md` of layout spacing on the frame the slot unmounts, and on the way *out* that
+    // frame is the last one, after the height and every brush have settled. A 12 px step
+    // there is the tab bar visibly jumping left. Opening, the same step lands on frame one
+    // and is buried under 400 ms of movement, which is why it only ever showed one way.
+    // It collapses to zero in idle, so the seed above stays the *idle* floor — the state
+    // the page is in whenever a mount can surprise it.
+    property <length> back-slot-w:
+        (root.pill-h + Theme.pad-sm + Theme.pad-md) * root.hero-t;
 
-    property <length> content-w:
-        root.page-w - 2 * Theme.pad-lg - root.back-slot-w - root.back-slot-gap;
+    property <length> content-w: root.page-w - 2 * Theme.pad-lg - root.back-slot-w;
 
     // **The filter yields before the tabs do**: tabs navigate, search only refines what a
     // tab already shows.
@@ -245,7 +282,11 @@ export component LibraryTabBand inherits Rectangle {
 
         HorizontalLayout {
             vertical-stretch: 0;
-            spacing: Theme.pad-md;
+            // **Every gap in this row belongs to a child, not to the layout**, because the
+            // back slot's has to be able to reach zero — see `back-slot-w`. The one left
+            // is the bar-to-input clearance, which the stretchy spacer carries as its own
+            // floor.
+            spacing: 0px;
 
             // Opens with the morph. Clipped rather than faded on width alone, since the
             // disc is incompressible and would otherwise draw over the first tab.
@@ -304,7 +345,12 @@ export component LibraryTabBand inherits Rectangle {
                 }
             }
 
-            Rectangle { horizontal-stretch: 1; }
+            // The two `pad-md`s the budget above reserves, held as this cell's own floor
+            // now that the layout hands out no spacing of its own.
+            Rectangle {
+                horizontal-stretch: 1;
+                min-width: 2 * Theme.pad-md;
+            }
 
             // Padded to the band the bar keeps clear for its divider, so the input
             // centres on the tab labels' line rather than on the row's.
@@ -355,26 +401,18 @@ export component LibraryTabBand inherits Rectangle {
                 }
             }
 
-            // **Two mutually exclusive columns rather than one column of ternaries.**
-            // The two states want different alignments — a single count line centres in
-            // its 40 px row, a hero block stretches so its trailing spacer pushes the
-            // chips up — and `alignment` is the one thing a ternary can't reach. Splitting
-            // also lets each title read one font size rather than a conditional pair.
-            if !root.detail-open: VerticalLayout {
-                horizontal-stretch: 1;
-                alignment: center;
-
-                Text {
-                    // Leading LRM keeps the line left-anchored under RTL.
-                    text: "\u{200e}" + root.count-text;
-                    color: Theme.text;
-                    font-size: Theme.page-title-size;
-                    font-weight: Theme.page-title-weight;
-                    horizontal-alignment: left;
-                    overflow: elide;
-                }
-            }
-
+            // **This one stays on `detail-open`, and it is the only column that may not
+            // move onto the morph** — it mounts `HeroChipStrip`, which is where the
+            // `changed watched-w` handler lives. See the note beside `hero-t`: a branch
+            // carrying a change tracker must be dropped by a Rust write and nothing else,
+            // or the tracker outlives it and `unwrap`s a dead weak handle. So the title
+            // block leaves on the frame the id clears while the artwork and the backdrop
+            // beside it fade out — which is what the latched arm and the deferred teardown
+            // are for: the tile it collapses is the entity's own cover, not a placeholder.
+            //
+            // The idle count line is not this column's opposite number any more and doesn't
+            // live here: it rides the band's lower edge with the pill row, which is the
+            // line it already shared.
             if root.detail-open: VerticalLayout {
                 horizontal-stretch: 1;
                 alignment: stretch;
@@ -431,20 +469,48 @@ export component LibraryTabBand inherits Rectangle {
         }
     }
 
-    // The per-tab action pills, and the per-detail ones once a detail is open. **A
-    // floating slot rather than a child of the meta column**, because Slint allows one
+    // The idle count line and the action pills — the tab's, or the open detail's. **A
+    // floating slot rather than children of the meta column**, because Slint allows one
     // `@children` and the two states need it in different places; the column reserves the
     // band above and this rides the root's own lower edge, which is the meta row's floor
     // in both states — so no anchor has to be interpolated and the slot simply follows the
     // height. A `HorizontalLayout` rather than a bare `Rectangle`: the pill rows are
     // `if`-conditional and a Rectangle reports 0×0 over conditional children.
+    //
+    // **The count is here because that is the line it was already drawn on**, and putting
+    // it in the meta column cost it the one thing this slot has: an anchor that follows
+    // the height. Centred in a row whose own floor is the 140 px artwork tile, it kept
+    // being laid out below the shrinking band and clipped away entirely, then snapped back
+    // into place the frame the tile unmounted — visible as the line vanishing mid-collapse
+    // and reappearing at the end.
+    //
+    // `space-between` rather than a stretchy spacer: `@children` is whatever the host
+    // hands over, and a spacer only pushes it right if nothing inside it stretches.
     HorizontalLayout {
         x: Theme.pad-lg;
         y: root.height - Theme.pad-lg - root.pill-h;
         width: root.page-w - 2 * Theme.pad-lg;
         height: root.pill-h;
-        spacing: Theme.pad-md;
-        alignment: end;
+        alignment: space-between;
+
+        // Faded rather than swapped, so it arrives with the band instead of on the frame
+        // the hero column unmounts. Mounted in both states besides: `space-between` over a
+        // single child packs it at the *start*, which would walk the pill row to the left
+        // edge for the length of every detail.
+        VerticalLayout {
+            alignment: center;
+            opacity: 1.0 - root.hero-t;
+
+            Text {
+                // Leading LRM keeps the line left-anchored under RTL.
+                text: "\u{200e}" + root.count-text;
+                color: Theme.text;
+                font-size: Theme.page-title-size;
+                font-weight: Theme.page-title-weight;
+                horizontal-alignment: left;
+                overflow: elide;
+            }
+        }
 
         @children
     }

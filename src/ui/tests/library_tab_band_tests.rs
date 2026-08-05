@@ -62,8 +62,10 @@ fn the_page_width_mirror_has_a_mount_seed() {
          child's size re-enters layout"
     );
 
+    // Anchored on the *anonymous* `Timer`, since the band has a second one now — the
+    // named `collapse :=` that defers the hero teardown.
     let timer = BAND
-        .split_once("Timer {")
+        .split_once("\n    Timer {")
         .and_then(|(_, rest)| rest.split_once("\n    }"))
         .map_or("", |(body, _)| body);
     assert!(
@@ -261,6 +263,160 @@ fn the_morph_progress_is_seeded_by_its_binding_and_written_by_its_handler() {
         handler.contains("self.hero-t ="),
         "`hero-t` must be written from `changed detail-open` — an animated binding restarts on \
          dependency dirtiness, not on a value change"
+    );
+}
+
+/// **The column that mounts `HeroChipStrip` is gated on `detail-open`, and moving
+/// it onto the morph is a panic rather than a glitch.**
+///
+/// A dropped Slint repeater instance keeps its memory alive for weak refs, so a
+/// `ChangeTracker` sitting inside it stays registered — and
+/// `ChangeTracker::evaluate` upgrades its weak handle with an `unwrap`. Whether
+/// that ever fires depends on what the tracker *watches*: `Tooltip`'s
+/// `changed hovered` reads a property driven from inside its own branch, so it can
+/// never go dirty once the branch is gone, which is why the back slot survives on
+/// `hero-t`. `MetaChipStrip`'s `changed watched-w` reads a **layout** property, and
+/// the surviving parent re-dirties it when it re-flows without the child. Gate that
+/// column on `hero-t` and every back out of a detail panics on the frame the morph
+/// lands. See `.claude/rules/slint-pitfalls.md`.
+#[test]
+fn the_chip_bearing_column_is_gated_on_the_detail_and_not_on_the_morph() {
+    let code = code();
+    let lines: Vec<&str> = code.lines().collect();
+    let mount = lines.iter().position(|line| line.contains("HeroChipStrip {"));
+    assert!(mount.is_some(), "the band no longer mounts `HeroChipStrip`");
+    let mount = mount.unwrap_or_default();
+
+    // The *enclosing* branch, not the nearest `if` — the strip has `if`-gated siblings
+    // (the subtitle) at its own depth, and those say nothing about its lifetime.
+    let indent = |line: &str| line.len() - line.trim_start().len();
+    let gate = lines[..mount]
+        .iter()
+        .rev()
+        .find(|line| line.trim_start().starts_with("if root.") && indent(line) < indent(lines[mount]))
+        .map_or(String::new(), |line| line.trim().to_owned());
+    assert!(
+        gate.starts_with("if root.detail-open:"),
+        "the column mounting `HeroChipStrip` must be gated on `detail-open`, which only a Rust \
+         write moves — found `{gate}`. On an animated predicate the branch is dropped from inside \
+         `run_change_handlers`, and the strip's `changed watched-w` tracker then unwraps a dead \
+         weak handle."
+    );
+
+    assert_eq!(
+        code.matches("if root.hero-t > 0:").count(),
+        2,
+        "the back slot and the artwork tile are the two branches that may ride the morph — \
+         neither carries a tracker the parent can re-dirty after the drop"
+    );
+}
+
+/// The hero's teardown rides the *end* of the collapse. Every fact the band paints
+/// is a ternary over the detail id at the mount sheet, so releasing the cover, the
+/// blur pair, the shared backdrop tiers and the chip row when that id clears left
+/// the band spending the whole morph collapsing a fallback glyph over a reset
+/// gradient — an exit *from* a placeholder. The `Dialog.closed()` shape, for the
+/// same reason it has it.
+#[test]
+fn the_collapse_defers_the_hero_teardown() {
+    let timer = BAND
+        .split_once("collapse := Timer {")
+        .and_then(|(_, rest)| rest.split_once("\n    }"))
+        .map_or("", |(body, _)| body);
+    assert!(!timer.is_empty(), "the band no longer declares its `collapse` timer");
+
+    assert!(
+        timer.contains("interval: Theme.dur-spatial;"),
+        "the collapse timer must run the morph's own duration — a shorter one tears the hero down \
+         mid-fade, a longer one holds its buffers past the point anyone can see them"
+    );
+    assert!(
+        timer.contains("root.hero-collapsed();"),
+        "the collapse timer is what fires `hero-collapsed` — nothing else knows the morph is done"
+    );
+    assert!(
+        timer.contains("running: false;"),
+        "the collapse timer must start idle: a page mounted with no detail never transitioned into \
+         one and has nothing to hand back"
+    );
+
+    let handler = BAND
+        .split_once("changed detail-open =>")
+        .and_then(|(_, rest)| rest.split_once("\n    }"))
+        .map_or("", |(body, _)| body);
+    assert!(
+        handler.contains("collapse.running = !self.detail-open;"),
+        "the same edge that drives the morph must arm *and* cancel the timer, so a re-drill inside \
+         the window can't have the previous hero's teardown land on the new one"
+    );
+
+    assert!(
+        SHEET.contains("hero-collapsed => { MyLibrary.hero-collapsed(); }"),
+        "the sheet must forward `hero-collapsed` — unforwarded, the band collapses correctly and \
+         the hero it was painting is never released"
+    );
+}
+
+/// The back slot's trailing gap is **its own width**, not the row's `spacing`. As
+/// layout spacing the row loses a whole `pad-md` on the frame the slot unmounts,
+/// and on the way out that frame is the last one — after the height and every
+/// brush have settled — so it reads as the tab bar jumping left. Opening, the same
+/// step lands on frame one under 400 ms of movement, which is why it only ever
+/// showed one way.
+#[test]
+fn the_back_slot_carries_its_own_gap() {
+    let code = code();
+
+    assert!(
+        binding(&code, "property <length> back-slot-w:").contains("Theme.pad-md"),
+        "the back slot must fold its trailing gap into its own eased width"
+    );
+    assert!(
+        !code.contains("back-slot-gap"),
+        "the stepped `back-slot-gap` must be gone — it *is* the jump, and a width that folds the \
+         gap in makes the whole inset continuous"
+    );
+    assert!(
+        code.contains("spacing: 0px;"),
+        "the header row must hand out no spacing of its own, or the slot's width can't reach zero"
+    );
+    assert!(
+        code.contains("min-width: 2 * Theme.pad-md;"),
+        "the bar-to-input clearance must survive as the spacer's own floor — it is the two \
+         `pad-md`s the `search-w` budget reserves"
+    );
+}
+
+/// The count line rides the band's lower edge, which is the meta row's floor in
+/// both states — so it follows the animated height with no anchor to interpolate,
+/// exactly as the pill row beside it does. Centred in the meta row instead, it was
+/// laid out against that row's own floor — the 140 px artwork tile — so the
+/// collapse put it below the shrinking band and clipped it away, then snapped it
+/// back the frame the tile unmounted.
+#[test]
+fn the_count_line_rides_the_bands_lower_edge() {
+    let code = code();
+    let floating = code
+        .split_once("alignment: space-between;")
+        .map_or(String::new(), |(_, rest)| rest.to_owned());
+    assert!(
+        !floating.is_empty(),
+        "the floating slot must keep `space-between`: `@children` is whatever the host hands over, \
+         and a stretchy spacer only pushes it right if nothing inside it stretches"
+    );
+
+    assert!(
+        floating.contains("root.count-text"),
+        "the count line must sit in the floating slot, beside the pills it already shares a line with"
+    );
+    assert_eq!(
+        code.matches("root.count-text").count(),
+        1,
+        "the count must be drawn once — a second reader is a second anchor to keep in step"
+    );
+    assert!(
+        floating.contains("opacity: 1.0 - root.hero-t"),
+        "the count must fade in with the collapse rather than appear on the frame the hero unmounts"
     );
 }
 

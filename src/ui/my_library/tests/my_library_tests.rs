@@ -418,6 +418,103 @@ fn the_pill_row_follows_the_body_router() {
     }
 }
 
+/// The four `on_close_detail` handlers, which used to own the hero teardown.
+const CLOSE_HANDLERS: [(&str, &str); 4] = [
+    ("album", include_str!("../../callbacks/albums/detail.rs")),
+    ("artist", include_str!("../../callbacks/artists/detail.rs")),
+    ("genre", include_str!("../../callbacks/genres/detail.rs")),
+    ("playlist", include_str!("../../callbacks/playlists/detail.rs")),
+];
+
+/// **The band's hero reads a latched arm; everything else reads the live one.**
+///
+/// The four `*-open` predicates flip on the frame the detail id clears, and that is the
+/// frame the exit morph *starts* — so a hero fact keyed on them falls through to whichever
+/// sibling global sits in its last ternary arm, and the band spends the whole collapse
+/// painting a fallback glyph, an empty title and `has-blur: false` instead of the banner it
+/// is collapsing out of. The latches lag by exactly one close. What must *not* lag is the
+/// body router, the pill row and the filter placeholder: which entity is painted is a
+/// question about the animation, which body is mounted is not.
+#[test]
+fn the_hero_reads_a_latched_arm_where_the_body_reads_the_live_one() {
+    let code = code(VIEW);
+    let view: String = code.split_whitespace().collect::<Vec<_>>().join(" ");
+
+    for arm in ["album", "artist", "genre", "playlist"] {
+        assert!(
+            view.contains(&format!("property <bool> hero-{arm}: root.{arm}-open;")),
+            "the sheet must latch `hero-{arm}` off `{arm}-open`, seeded by that binding — the seed \
+             is what leaves a page entered straight onto a detail already painting it",
+        );
+        assert!(
+            view.contains(&format!(
+                "changed {arm}-open => {{ if (root.detail-open) {{ \
+                 self.hero-{arm} = root.{arm}-open; }} }}"
+            )),
+            "`hero-{arm}` must be written only while some detail is open: that guard is what holds \
+             the arm across a close and still lets a cross-tab drill move it",
+        );
+    }
+
+    // Everything the band is handed between `detail-open` and its `@children`.
+    let hero_facts = code
+        .split_once("detail-open: root.detail-open;")
+        .map_or(String::new(), |(_, rest)| rest.to_owned());
+    let hero_facts = hero_facts
+        .split_once("pills := MyLibraryTabPills")
+        .map_or(String::new(), |(head, _)| head.to_owned());
+    assert!(
+        !hero_facts.is_empty(),
+        "the sheet no longer feeds the band's hero half between `detail-open` and the pill slot"
+    );
+    assert!(
+        !hero_facts.contains("-open"),
+        "every hero fact must read a `hero-*` latch — on a live `*-open` the whole banner empties \
+         the frame the id clears and the collapse plays out over a placeholder"
+    );
+}
+
+/// The hero teardown is **deferred to the end of the collapse** and lives in one place.
+///
+/// Left in the close handlers it runs on the same tick as the id clear, which is what the
+/// latches above exist to survive — holding the arm is worthless if the cover, the blur
+/// pair, the shared `HeroBackdrop` tiers and the `HeroChips` row are already gone. The
+/// backstop for a collapse the band doesn't live to finish is the per-tab section leave,
+/// which keeps its own release.
+#[test]
+fn no_close_detail_hands_the_hero_back() {
+    for (name, src) in CLOSE_HANDLERS {
+        let handler = code(src)
+            .split_once("on_close_detail(move ||")
+            .and_then(|(_, rest)| rest.split_once("\n        });"))
+            .map_or(String::new(), |(body, _)| body.to_owned());
+        assert!(!handler.is_empty(), "{name}/detail.rs no longer wires `on_close_detail`");
+
+        for banned in ["release_detail_hero_images!", "hero_backdrop::reset", "hero_chips::clear"] {
+            assert!(
+                !handler.contains(banned),
+                "{name}/detail.rs must not run `{banned}` on close: every hero fact is a ternary \
+                 over the id it clears one line earlier, so the band would collapse a placeholder. \
+                 `MyLibrary.hero-collapsed` owns this now.",
+            );
+        }
+    }
+
+    assert!(
+        CALLBACKS.contains("fn release_collapsed_hero"),
+        "the deferred teardown must live with the page's own callbacks"
+    );
+    assert!(
+        CALLBACKS.contains("g.on_hero_collapsed(move ||"),
+        "`hero-collapsed` must be wired — unwired, nothing releases the hero at all and the four \
+         handlers above have simply stopped doing it"
+    );
+    assert!(
+        GLOBAL.contains("callback hero-collapsed();"),
+        "`MyLibrary` must declare `hero-collapsed` — it is the seam the band fires through"
+    );
+}
+
 /// The arms of `{albums,artists,genres}/grid.rs`'s `sort_*_indices`, restated. `"name"`
 /// is the default arm rather than an explicit one, and belongs here regardless: a field
 /// added here and missing there falls through to a defined order, where a field asked for

@@ -61,13 +61,13 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, genres_ui: &Arc<GenresUi>) 
             }
 
             g.set_genre_id(-1);
-            // Genres have no hero images, so this teardown never reaches
-            // `release_detail_hero_images!` — hand the shared colour set and
-            // chip row back here instead, else the next hero paints this
-            // genre's hash-derived stops and its counts until its own decode
-            // and fetch land.
-            crate::ui::hero_backdrop::reset(&ui);
-            crate::ui::hero_chips::clear(&ui);
+            // The shared colour set and chip row are *not* handed back here.
+            // This id is what the band's whole hero half is a ternary over, so
+            // resetting on the same tick leaves it collapsing a placeholder over
+            // a gradient that is no longer this genre's —
+            // `MyLibrary.hero-collapsed` owns that teardown now, and the band
+            // fires it once the morph is done. See
+            // `callbacks::my_library::release_collapsed_hero`.
             genres_ui_mod::clear_detail(&gu);
 
             let gu_trim = gu.clone();

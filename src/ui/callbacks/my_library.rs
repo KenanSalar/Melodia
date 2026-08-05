@@ -10,8 +10,9 @@ use slint::{ComponentHandle, SharedString};
 
 use crate::library;
 use crate::state::AppState;
+use crate::ui::callbacks::macros::release_hero_slots;
 use crate::ui::my_library as my_library_mod;
-use crate::{AppWindow, MyLibrary};
+use crate::{AlbumDetail, AppWindow, ArtistDetail, MyLibrary, PlaylistDetail};
 
 /// Write the active tab to `views.json` on the blocking pool. The Slint property is
 /// already correct by the time any caller gets here, so this is pure catch-up.
@@ -22,6 +23,32 @@ fn persist_tab(state: &AppState, tab: i32) {
             log::warn!("my_library: set_my_library_tab({tab}): {e}");
         }
     });
+}
+
+/// Hand back everything the band's hero was holding, once its collapse has finished.
+///
+/// **Deferred out of the four `close-detail` handlers**, which is where it used to run.
+/// Every hero fact — the cover, the blur pair, the title, the chips, and through
+/// `HeroBackdrop` the tile fill and the text tiers — is a ternary over the detail id at
+/// the mount sheet, so tearing down when that id clears left the band collapsing a
+/// placeholder glyph over a reset gradient for the whole 400 ms instead of the banner it
+/// was collapsing out of. The sheet holds the *arm* across the same window; this holds the
+/// data behind it.
+///
+/// All three image-bearing globals rather than the one that closed, because the band can't
+/// say which and doesn't need to: a tab switch is a section switch on this page, so the
+/// departing tab's `lifecycle.rs` has already emptied whichever detail isn't the mounted
+/// one, and those writes land on an `Image::default()` that is already there.
+///
+/// Safe to run unguarded because `LibraryTabBand` cancels its timer on a re-open, so this
+/// can only land with no detail on screen. The backstop for a collapse the band doesn't
+/// live to finish — a nav away mid-morph — is that same section leave.
+fn release_collapsed_hero(ui: &AppWindow) {
+    release_hero_slots!(ui.global::<AlbumDetail>());
+    release_hero_slots!(ui.global::<ArtistDetail>());
+    release_hero_slots!(ui.global::<PlaylistDetail>());
+    crate::ui::hero_backdrop::reset(ui);
+    crate::ui::hero_chips::clear(ui);
 }
 
 /// Wire the My Library page's own callbacks. Call once, after `wire_all`.
@@ -82,9 +109,10 @@ pub fn wire_my_library(ui: &AppWindow, state: &AppState) {
     }
 
     // back: the band's back arrow. Routes to the mounted tab's own `close-detail`, so
-    // every teardown that button already triggers — hero images, cover tiers,
-    // `last_detail_ids`, the origin restore, the nav-history record — stays where it is.
-    // The dispatch itself is shared with `nav_history`'s Mouse-4 step out of a detail.
+    // every teardown that button already triggers — the cover tiers, `last_detail_ids`,
+    // the origin restore, the nav-history record — stays where it is. The one piece that
+    // moved is the hero, to `hero-collapsed` below. The dispatch itself is shared with
+    // `nav_history`'s Mouse-4 step out of a detail.
     {
         let weak = weak.clone();
         g.on_back(move || {
@@ -94,6 +122,16 @@ pub fn wire_my_library(ui: &AppWindow, state: &AppState) {
                 my_library_mod::tab_from_index(&g, g.get_tab_idx())
             };
             my_library_mod::close_open_detail(&ui, tab);
+        });
+    }
+
+    // hero-collapsed: the band is done shrinking, so the banner it was painting is finally
+    // nobody's. See `release_collapsed_hero`.
+    {
+        let weak = weak.clone();
+        g.on_hero_collapsed(move || {
+            let Some(ui) = weak.upgrade() else { return };
+            release_collapsed_hero(&ui);
         });
     }
 }

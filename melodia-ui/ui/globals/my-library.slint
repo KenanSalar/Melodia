@@ -61,4 +61,12 @@ export global MyLibrary {
     // leaves, and the other four are inactive by then. A page-level gate would have
     // nothing left to say.
     callback back();
+
+    // The band has finished collapsing out of a detail, so the hero it was painting can
+    // finally be handed back — the cover and blur slots, the shared `HeroBackdrop` tiers
+    // and the `HeroChips` row. Deferred to here rather than run in each `close-detail`
+    // because every hero fact is a ternary over the detail id, so a teardown on the id
+    // clear leaves the whole 400 ms morph collapsing a placeholder. `LibraryTabBand`
+    // cancels it on a re-open, so it can only ever land with no detail on screen.
+    callback hero-collapsed();
 }

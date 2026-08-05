@@ -142,12 +142,29 @@ macro_rules! wire_row_flag {
     }};
 }
 
-/// Reset a detail global's hero-Image properties (`cover` plus the
-/// dual-slot `blur-img-a` / `blur-img-b`) to `Image::default()` and clear
-/// `has-blur`, so the backing `SharedPixelBuffer` Arcs release and `FemtoVG`
-/// can reclaim the GPU textures on the next render. `$ui` is the `AppWindow`,
-/// `$g` a Slint detail-global handle (`AlbumDetail`, `ArtistDetail`,
-/// `PlaylistDetail`).
+/// Reset one detail global's hero-Image properties (`cover` plus the dual-slot
+/// `blur-img-a` / `blur-img-b`) to `Image::default()` and clear `has-blur`, so
+/// the backing `SharedPixelBuffer` Arcs release and `FemtoVG` can reclaim the
+/// GPU textures on the next render. `$g` is a Slint detail-global handle
+/// (`AlbumDetail`, `ArtistDetail`, `PlaylistDetail`).
+///
+/// A macro rather than a `fn` for the usual reason: the three are distinct
+/// generated types with no trait between them. Reach for
+/// [`release_detail_hero_images`] instead unless you are handing back several
+/// globals at once and want the two shared resets run once — My Library's
+/// deferred hero teardown is the only such caller.
+macro_rules! release_hero_slots {
+    ($g:expr) => {{
+        let detail = &$g;
+        detail.set_cover(::slint::Image::default());
+        detail.set_blur_img_a(::slint::Image::default());
+        detail.set_blur_img_b(::slint::Image::default());
+        detail.set_has_blur(false);
+    }};
+}
+
+/// [`release_hero_slots`] for one detail global, plus the two resets every hero
+/// teardown owes. `$ui` is the `AppWindow`.
 ///
 /// Also re-solves the shared `HeroBackdrop` set back to the gradient floor and
 /// drops the shared `HeroChips` row. Clearing `has-blur` makes that floor the
@@ -157,18 +174,14 @@ macro_rules! wire_row_flag {
 /// that one's own decode and fetch land.
 macro_rules! release_detail_hero_images {
     ($ui:expr, $g:expr) => {{
-        let detail = &$g;
-        detail.set_cover(::slint::Image::default());
-        detail.set_blur_img_a(::slint::Image::default());
-        detail.set_blur_img_b(::slint::Image::default());
-        detail.set_has_blur(false);
+        $crate::ui::callbacks::macros::release_hero_slots!($g);
         $crate::ui::hero_backdrop::reset(&$ui);
         $crate::ui::hero_chips::clear(&$ui);
     }};
 }
 
 pub(super) use {
-    release_detail_hero_images, spawn_logged, spawn_logged_sync, spawn_logged_toast, wire_pb,
-    wire_row_flag, wire_sync, wire_sync_pb,
+    release_detail_hero_images, release_hero_slots, spawn_logged, spawn_logged_sync,
+    spawn_logged_toast, wire_pb, wire_row_flag, wire_sync, wire_sync_pb,
 };
 
