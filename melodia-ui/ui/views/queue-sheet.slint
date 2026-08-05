@@ -133,9 +133,9 @@ export component QueueSheet inherits Rectangle {
                     spacing: 12px;
                     alignment: stretch;
 
-                    // The tracks-view page header, restacked. It keeps its own font
-                    // sizes: the page sizes are tuned for a full page, where this
-                    // header sits in a single short row.
+                    // A title over a count, the shape the My Library band states in its
+                    // idle row — restacked, and keeping its own font sizes: the band's
+                    // are tuned for a full page, where this sits in a single short row.
                     VerticalLayout {
                         alignment: center;
                         spacing: 0;
@@ -160,8 +160,8 @@ export component QueueSheet inherits Rectangle {
                     Rectangle { horizontal-stretch: 1; }
 
                     // Swaps between "Clear queue" and the selection actions. Same chrome
-                    // as the tracks-view header pill, and `if` rather than `visible:` so
-                    // the absent branch leaves no phantom layout slot.
+                    // as the Songs tab's selection pill, and `if` rather than `visible:`
+                    // so the absent branch leaves no phantom layout slot.
                     if root.has-selection: VerticalLayout {
                         alignment: center;
                         ActionPill {

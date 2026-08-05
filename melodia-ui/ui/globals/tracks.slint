@@ -60,10 +60,6 @@ export global Tracks {
     // Slint flips the matching `show-*` synchronously, then Rust persists the new
     // visible-column list.
     callback toggle-column(string /*column_id*/);
-
-    // Bumped by anything that should make the filter input give up the keyboard. A
-    // global can't bind a callback inline, so the SearchBar watches this counter.
-    in-out property <int> blur-search-tick: 0;
 }
 
 // The Browse view — the Slint-side surface of three Rust-owned models;

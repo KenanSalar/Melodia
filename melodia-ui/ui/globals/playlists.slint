@@ -14,7 +14,6 @@ export global Playlists {
     in-out property <string> filter;
     in-out property <string> sort-field: "updated"; // "name" | "track_count" | "updated"
     in-out property <string> sort-dir: "desc";
-    in-out property <int> blur-search-tick: 0;
 
     callback columns-changed(int);
     callback apply-filter(string);
@@ -82,7 +81,7 @@ export global Playlists {
         int /*exclude_playlist_id*/,
     );
 
-    // M3U8 import / export, the header pills on the Playlists view. Both are pure Rust
+    // M3U8 import / export, two of the Playlists tab's four action pills. Both are pure Rust
     // flows over native dialogs, so unlike create/rename they never write `Dialog.*`
     // synchronously from a click handler and don't risk the recursion guard.
 
@@ -121,11 +120,10 @@ export global PlaylistDetail {
     in-out property <PlaylistRow> playlist;
     in-out property <[TrackListRow]> tracks;
 
-    // The hero SearchBar's needle; drag-reorder is disabled while one is active. Cleared
-    // on a fresh open, but preserved across library-changed refreshes so a typed needle
-    // survives a scan finishing.
+    // What the band's search box means while this detail is open; drag-reorder is disabled
+    // while one is active. Cleared on a fresh open, but preserved across library-changed
+    // refreshes so a typed needle survives a scan finishing.
     in-out property <string> filter;
-    in-out property <int>    blur-search-tick: 0;
 
     // Per-column widths, edited by the resize handles.
     in-out property <length> w-number: 56px;
@@ -193,7 +191,7 @@ export global PlaylistDetail {
     // guard. Rename and Delete populate the dialog inline and need no callback.
     callback request-edit-artwork();
 
-    // The header pill reads `selected-ids`; the row context menu passes either the
+    // The band's pill row reads `selected-ids`; the row context menu passes either the
     // right-clicked row or the whole selection.
     callback remove-selected();
     callback remove-track([int] /*track_ids*/);

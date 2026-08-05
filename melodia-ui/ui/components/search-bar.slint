@@ -13,10 +13,10 @@ import { MaterialIcon } from "material-icon.slint";
 // is an inner Rectangle scaling from its own centre, so neighbours don't shift on focus.
 //
 //     SearchBar {
-//         text <=> Tracks.filter;
-//         placeholder: "Filter tracks…";
-//         blur-trigger: Tracks.blur-search-tick;
-//         edited(t) => { Tracks.apply-filter(t); }
+//         text <=> MyLibrary.filter;
+//         placeholder: @tr("Filter tracks…");
+//         blur-trigger: MyLibrary.blur-search-tick;
+//         edited(t) => { root.filter-tick-pending += 1; }   // settled by a FilterThrottle
 //     }
 //
 // A named instance exposes `clear-input-focus()` for a backdrop or pill to call

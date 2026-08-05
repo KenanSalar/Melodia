@@ -34,8 +34,9 @@ export global SettingsPage {
     in-out property <string> search-input;
     in-out property <string> search-query;
 
-    // Bumped to release keyboard focus from the SearchBar, the `Tracks.blur-search-tick`
-    // pattern, so a keystroke after nav-away can't land in a hidden field.
+    // Bumped to release keyboard focus from the SearchBar, the
+    // `MyLibrary.blur-search-tick` pattern, so a keystroke after nav-away can't land in a
+    // hidden field.
     in-out property <int> blur-search-tick: 0;
 
     // The two facts the view writes imperatively — a global can't be bound from a view,

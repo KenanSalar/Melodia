@@ -21,8 +21,6 @@ export global Albums {
     in-out property <string> filter;
     in-out property <string> sort-field: "name";   // "name" | "year" | "artist"
     in-out property <string> sort-dir: "asc";
-    // The `Tracks.blur-search-tick` pattern.
-    in-out property <int> blur-search-tick: 0;
 
     callback columns-changed(int);
     callback apply-filter(string);
@@ -46,10 +44,10 @@ export global AlbumDetail {
     in-out property <AlbumRow> album;
     in-out property <[TrackListRow]> tracks;
 
-    // The hero SearchBar's needle. Cleared on a fresh open, but preserved across
-    // library-changed refreshes so a typed needle survives a scan finishing.
+    // What the band's search box means while this detail is open. Cleared on a fresh
+    // open, but preserved across library-changed refreshes so a typed needle survives a
+    // scan finishing.
     in-out property <string> filter;
-    in-out property <int>    blur-search-tick: 0;
 
     in-out property <length> w-number: 56px;
     in-out property <length> w-title: 320px;

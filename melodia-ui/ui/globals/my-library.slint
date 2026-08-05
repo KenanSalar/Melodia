@@ -44,8 +44,10 @@ export global MyLibrary {
     // `ui::my_library::filter` routes a settled keystroke to whichever of the nine
     // surfaces is mounted.
     in-out property <string> filter;
-    // The `Tracks.blur-search-tick` pattern: bumped by anything that should make the
-    // filter input give up the keyboard.
+    // Bumped by anything that should make the filter input give up the keyboard — a
+    // backdrop click, a pill, a track row's `request-blur-search`. A global can't bind a
+    // callback inline, so the `SearchBar` watches this counter. `Tracks` used to hold the
+    // copy every other filterable view cited; nine of them became this one.
     in-out property <int> blur-search-tick: 0;
     callback filter-changed(string);
     // A detail opened or closed, so the box now describes a different surface. Rust reads

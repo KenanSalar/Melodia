@@ -28,13 +28,19 @@ const MULTILINE_INPUT: &str =
     include_str!("../../../melodia-ui/ui/components/multiline-input.slint");
 const TOOLTIP: &str = include_str!("../../../melodia-ui/ui/components/tooltip.slint");
 
-/// The two hosts that budget their header row and drive `input-width` outright:
-/// the Settings page, and the banner both mosaic pages wear.
-const BUDGETING_HOSTS: [(&str, &str); 2] = [
+/// Every host that budgets its header row and drives `input-width` outright: the
+/// Settings page, the banner both mosaic pages wear, and My Library's morphing
+/// band. The Search view is deliberately absent — its `input-width` is a literal,
+/// so it reserves nothing and has no floor to read.
+const BUDGETING_HOSTS: [(&str, &str); 3] = [
     ("settings-view.slint", include_str!("../../../melodia-ui/ui/views/settings-view.slint")),
     (
         "mosaic-tab-hero.slint",
         include_str!("../../../melodia-ui/ui/components/hero/mosaic-tab-hero.slint"),
+    ),
+    (
+        "library-tab-band.slint",
+        include_str!("../../../melodia-ui/ui/components/hero/library-tab-band.slint"),
     ),
 ];
 
@@ -129,8 +135,8 @@ fn the_search_bar_negotiates_its_width() {
     );
 }
 
-/// The floor is published, and the two hosts that budget their header row take
-/// it from the bar rather than restating it — the `TabBar.compact-w` contract.
+/// The floor is published, and every host that budgets its header row takes it
+/// from the bar rather than restating it — the `TabBar.compact-w` contract.
 /// Whatever a host stops handing over has to be what the bar stops asking for;
 /// a restated literal looks identical and silently decouples the two.
 #[test]

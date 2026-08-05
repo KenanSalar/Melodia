@@ -10,7 +10,6 @@ export global Artists {
     in-out property <string> filter;
     in-out property <string> sort-field: "name";   // "name" | "track_count" | "album_count"
     in-out property <string> sort-dir: "asc";
-    in-out property <int> blur-search-tick: 0;
 
     callback columns-changed(int);
     callback apply-filter(string);
@@ -62,10 +61,10 @@ export global ArtistDetail {
 
     in-out property <bool> albums-collapsed: false;
 
-    // The hero SearchBar's needle, filtering **both** the track list and the Albums
-    // sub-section. Cleared on a fresh open, preserved across library-changed refreshes.
+    // What the band's search box means while this detail is open, filtering **both** the
+    // track list and the Albums sub-section. Cleared on a fresh open, preserved across
+    // library-changed refreshes.
     in-out property <string> filter;
-    in-out property <int>    blur-search-tick: 0;
 
     // `AlbumDetail.origin-nav-index` / `-tab`, so cross-tab back-nav takes the same
     // atomic flip-Nav-then-clear-id path, and the same pair — see the argument there for
