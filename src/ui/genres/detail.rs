@@ -153,6 +153,10 @@ pub async fn open_genre(
         // `record_current` in `albums::detail::open_album_with` for
         // the rationale.
         crate::ui::nav_history::record_current(&state_for_history, &ui);
+        // Reseat the page's shared filter box, which the clear above
+        // doesn't reach — same reasoning, and same closure position, as
+        // `albums::detail::open_album_with`.
+        ui.global::<crate::MyLibrary>().invoke_detail_scope_changed();
     });
     Ok(())
 }

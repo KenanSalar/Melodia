@@ -188,6 +188,17 @@ where
         // and forward through these entries. No-op while a replay is
         // in flight (the replay's own writes set `suppress`).
         crate::ui::nav_history::record_current(&state_for_history, &ui);
+        // The filter clear above is only half a clear: the page's one box
+        // is `MyLibrary.filter`, and the sheet's `album-id` mirror can't
+        // announce a re-open that writes the *same* id. That is the
+        // section re-enter — a nav-away and back over an open detail
+        // re-runs this function, so the box would keep the needle the
+        // user typed over a list this call just unfiltered. Last in the
+        // closure because `sync_box` reads the mounted tab, which
+        // `on_applied` may have just moved for a cross-tab drill; on a
+        // fresh drill the id mirror reaches the same answer and this is
+        // idempotent. See `ui::my_library::filter::sync_box`.
+        ui.global::<crate::MyLibrary>().invoke_detail_scope_changed();
     });
     Ok(())
 }

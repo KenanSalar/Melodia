@@ -288,26 +288,33 @@ fn a_tab_pick_clears_the_filter_on_both_sides() {
     }
 }
 
-/// **A drill-in or a back reseats the box; it does not clear it.**
+/// **A drill-in, a back or a tab move reseats the box; none of them clears it.**
 ///
-/// The page has one filter box over nine surfaces, and only a tab pick clears it. The
-/// other way the surface under it changes is a detail id crossing zero, and there both
+/// The page has one filter box over nine surfaces, and only a tab *pick* clears it. Two
+/// other things move the surface under it. A detail id crossing zero, where both
 /// directions matter: on the way in the detail's own filter is already empty, so the box
 /// has to empty with it rather than show the grid's needle over a list it filters nothing
 /// of; on the way out the grid's needle is still there — untouched, and the rebuild is
 /// memoized on it — so the box has to say so rather than read empty over filtered cards.
+/// And a tab move that isn't a pick — a cross-tab drill, a Mouse-4/5 walk — which goes
+/// through `persist-tab-idx` precisely so it *doesn't* clear, leaving the entering tab's
+/// own needle in force with nothing having told the box.
 ///
 /// The mutation to check is dropping the close half. Nothing fails, the grid comes back
 /// correctly filtered, and the box simply lies about why.
 #[test]
-fn a_detail_open_or_close_reseats_the_shared_box() {
+fn a_drill_a_back_or_a_tab_move_reseats_the_shared_box() {
     // Mirrored rather than watched directly: `changed` rejects a path expression on a
-    // global. A missing mirror leaves exactly one of the four details lying.
-    const MIRRORS: [(&str, &str); 4] = [
+    // global. A missing mirror leaves exactly one surface lying. **The tab is the fifth**,
+    // and the one whose absence is hardest to see: a pick clears both sides itself, so only
+    // the moves that *aren't* picks — a cross-tab drill, a Mouse-4/5 walk — land on a tab
+    // whose own needle nothing touched, under a box that reads whatever the last tab left.
+    const MIRRORS: [(&str, &str); 5] = [
         ("watched-album-id", "AlbumDetail.album-id"),
         ("watched-artist-id", "ArtistDetail.artist-id"),
         ("watched-genre-id", "GenreDetail.genre-id"),
         ("watched-playlist-id", "PlaylistDetail.playlist-id"),
+        ("watched-tab-idx", "MyLibrary.tab-idx"),
     ];
     const FILTER: &str = include_str!("../filter.rs");
 
@@ -363,6 +370,53 @@ fn a_detail_open_or_close_reseats_the_shared_box() {
             sync.contains(&format!("ui.global::<{surface}>()")),
             "`sync_box` must reach `{surface}` — `dispatch` routes to all nine surfaces on the \
              way out and this owes all nine on the way back",
+        );
+    }
+}
+
+/// The four `open_*` functions and the id each one writes last.
+const OPEN_HANDLERS: [(&str, &str, &str); 4] = [
+    ("albums", "set_album_id(clamp_i64_to_i32(", include_str!("../../albums/detail.rs")),
+    ("artists", "set_artist_id(clamp_i64_to_i32(", include_str!("../../artists/detail.rs")),
+    ("genres", "set_genre_id(clamp_i64_to_i32(", include_str!("../../genres/detail.rs")),
+    (
+        "playlists",
+        "set_playlist_id(clamp_i64_to_i32(",
+        include_str!("../../playlists/detail.rs"),
+    ),
+];
+
+/// **A fresh open clears the detail's own filter, and only that one.**
+///
+/// The page's box is `MyLibrary.filter`, and the mirror that would announce the swap is
+/// the detail *id* — which `open_*` writes back at the value it already held whenever the
+/// call is a **section re-enter**, so there is no edge and nothing tells the box. Nav away
+/// from an open, filtered detail and back: the list comes up unfiltered under a box still
+/// holding the needle. The reseat rides the same `detail-scope-changed` seam.
+///
+/// **After the id write, not beside the clear**, which is the half a refactor loses: read
+/// earlier in the closure, `sync_box` answers for the grid the detail is still sitting over
+/// and writes *its* needle into the box, so a fresh drill would gain the bug the re-enter
+/// just lost.
+#[test]
+fn a_fresh_open_reseats_the_shared_box_after_it_writes_the_id() {
+    for (name, id_write, source) in OPEN_HANDLERS {
+        let src = code(source);
+        let reseat = src.find("invoke_detail_scope_changed()");
+        assert!(
+            reseat.is_some(),
+            "`{name}/detail.rs`'s open must reseat the page's box — its own `set_filter(\"\")` \
+             leaves `MyLibrary.filter` holding a needle the re-opened list no longer applies",
+        );
+        let id_written = src.find(id_write);
+        assert!(
+            id_written.is_some(),
+            "`{name}/detail.rs` no longer writes its id with `{id_write}` — pin is stale",
+        );
+        assert!(
+            reseat.unwrap_or_default() > id_written.unwrap_or_default(),
+            "`{name}/detail.rs` must reseat *after* `{id_write}`: `sync_box` picks the surface \
+             off the live id, so an earlier call reads the grid and puts its needle in the box",
         );
     }
 }
@@ -448,13 +502,42 @@ fn the_hero_reads_a_latched_arm_where_the_body_reads_the_live_one() {
         );
         assert!(
             view.contains(&format!(
-                "changed {arm}-open => {{ if (root.detail-open) {{ \
-                 self.hero-{arm} = root.{arm}-open; }} }}"
+                "changed {arm}-open => {{ if (root.detail-open) {{ root.latch-hero(); }} }}"
             )),
-            "`hero-{arm}` must be written only while some detail is open: that guard is what holds \
-             the arm across a close and still lets a cross-tab drill move it",
+            "`hero-{arm}` must be written only while some detail is open, and only through \
+             `latch-hero`: the guard is what holds the arm across a close and still lets a \
+             cross-tab drill move it, and the shared writer is what stops the other three \
+             going stale behind it",
+        );
+        assert!(
+            view.contains(&format!("self.hero-{arm} = root.{arm}-open;")),
+            "`latch-hero` must write `hero-{arm}` — a latch that moves only the arm whose \
+             predicate changed leaves the siblings holding the last drill's answer, and the \
+             hero ternaries test them in order, so the stale one wins",
         );
     }
+
+    let latch = view
+        .split_once("function latch-hero() {")
+        .and_then(|(_, rest)| rest.split_once('}'))
+        .map_or(String::new(), |(body, _)| body.to_owned());
+    assert_eq!(
+        latch.matches("self.hero-").count(),
+        4,
+        "`latch-hero` must write all four arms in one call: writing one is what let a \
+         `hero-album` left over from a closed album outrank the playlist opened after it"
+    );
+
+    // The seed has to be a write, not just the declaration above. Unwritten, the four are
+    // still *bound*, so the guard holds nothing and the first close after a mount that
+    // landed on an open detail collapses over the last ternary arm. Deleting this line
+    // leaves every other assertion here green, which is exactly why it is pinned.
+    assert!(
+        view.contains("init => { root.latch-hero(); }"),
+        "the sheet must latch once at mount: a view rebuilt straight onto a detail — a \
+         re-entry, or a boot resuming one — has never written the arms, so the bindings are \
+         live and the first back drops the banner instead of collapsing it",
+    );
 
     // Everything the band is handed between `detail-open` and its `@children`.
     let hero_facts = code

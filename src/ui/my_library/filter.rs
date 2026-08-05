@@ -94,15 +94,23 @@ pub fn dispatch(ui: &AppWindow, text: &str) {
 
 /// Reseat the page's box from whichever surface is now mounted.
 ///
-/// [`dispatch`] backwards, and the sheet calls it whenever a detail id crosses zero — the
-/// one event that swaps the surface under a box nobody typed in. Both directions matter
-/// and they are not the same rule as a tab pick's clear-both-sides: **a drill-in** finds
-/// the detail's own filter already cleared by `open_*`, so the box empties, where leaving
-/// it would show the grid's needle over a list it filters nothing of; **a back out** finds
-/// the grid's needle still there and untouched — the grid rebuild is memoized on it, so
-/// the cards come back filtered and the box has to say so. Clearing on the way out instead
-/// would drop the user's grid filter on every back, which is the one thing the retired
-/// per-view boxes never did.
+/// [`dispatch`] backwards. The sheet calls it for the two things that swap the surface
+/// under a box nobody typed in — a detail id crossing zero, and a tab move that isn't a
+/// pick — and neither is the tab pick's clear-both-sides rule.
+///
+/// On an **id**, both directions matter: **a drill-in** finds the detail's own filter
+/// already cleared by `open_*`, so the box empties, where leaving it would show the grid's
+/// needle over a list it filters nothing of; **a back out** finds the grid's needle still
+/// there and untouched — the grid rebuild is memoized on it, so the cards come back
+/// filtered and the box has to say so. Clearing on the way out instead would drop the
+/// user's grid filter on every back, which is the one thing the retired per-view boxes
+/// never did.
+///
+/// On a **tab**, the asymmetry in [`dispatch`] is what makes it necessary: a pick clears
+/// only the *entering* tab's needle, so the departing one keeps its own, and the two
+/// arrivals that aren't picks — a cross-tab drill, a Mouse-4/5 walk, both through
+/// `persist-tab-idx` — land on a tab still filtered by a needle nothing touched. A pick
+/// reaches here too and finds both sides already empty, so it bails below.
 pub fn sync_box(ui: &AppWindow) {
     let g = ui.global::<MyLibrary>();
     let mounted = match tab_from_index(&g, g.get_tab_idx()) {

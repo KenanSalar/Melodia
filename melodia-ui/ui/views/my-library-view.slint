@@ -66,20 +66,49 @@ export component MyLibraryView inherits Rectangle {
     // cross-tab drill move them: Album → Artist keeps a detail open throughout, so both
     // writes land, where a close leaves all four where they were.
     property <bool> hero-album: root.album-open;
-    changed album-open => {
-        if (root.detail-open) { self.hero-album = root.album-open; }
-    }
     property <bool> hero-artist: root.artist-open;
-    changed artist-open => {
-        if (root.detail-open) { self.hero-artist = root.artist-open; }
-    }
     property <bool> hero-genre: root.genre-open;
-    changed genre-open => {
-        if (root.detail-open) { self.hero-genre = root.genre-open; }
-    }
     property <bool> hero-playlist: root.playlist-open;
+
+    // **All four on every latch, never one.** Each is written only from here, so a handler
+    // touching its own arm alone leaves the other three holding whatever the last drill put
+    // there — and the ternaries below test them in order, so a stale `hero-album` outranks
+    // the arm that is actually open for the rest of the page mount. Open an album, leave the
+    // tab (the guard holds all four, correctly, because no detail is open on that frame),
+    // then open a playlist: only `hero-playlist` moved, and the band paints the album's
+    // title over the playlist's body. Latching the set is what makes "the arm the hero
+    // paints" a single answer rather than four that can disagree.
+    function latch-hero() {
+        self.hero-album = root.album-open;
+        self.hero-artist = root.artist-open;
+        self.hero-genre = root.genre-open;
+        self.hero-playlist = root.playlist-open;
+    }
+
+    // **The seed has to be a *write*, and that is what this line is for.** A declared
+    // binding is live until something assigns over it, and the only assignment is
+    // `latch-hero`, guarded on `detail-open` — which is false on exactly the frame a close
+    // needs the hold. So a view mounted with a detail *already* open has never written, and
+    // the first back follows `album-open` to false through the binding: the whole collapse
+    // plays out over the last ternary arm, which is the failure the latch exists to
+    // prevent. The band's own `hero-t` doesn't need this because its handler is unguarded
+    // and takes ownership on that same first close. Reachable on any re-entry, since the
+    // content-area `if` rebuilds this view and hands it fresh bindings — drill in, sidebar
+    // away, sidebar back, press back — and on a boot resuming a detail. `init` runs after
+    // the bindings resolve, so it writes the values they just produced and nothing moves.
+    init => { root.latch-hero(); }
+
+    changed album-open => {
+        if (root.detail-open) { root.latch-hero(); }
+    }
+    changed artist-open => {
+        if (root.detail-open) { root.latch-hero(); }
+    }
+    changed genre-open => {
+        if (root.detail-open) { root.latch-hero(); }
+    }
     changed playlist-open => {
-        if (root.detail-open) { self.hero-playlist = root.playlist-open; }
+        if (root.detail-open) { root.latch-hero(); }
     }
 
     // **The scope the page's one filter box describes changed.** Rust reseats the box from
@@ -95,6 +124,16 @@ export component MyLibraryView inherits Rectangle {
     changed watched-genre-id => { MyLibrary.detail-scope-changed(); }
     property <int> watched-playlist-id: PlaylistDetail.playlist-id;
     changed watched-playlist-id => { MyLibrary.detail-scope-changed(); }
+
+    // **A tab move is the other way the surface under the box changes.** The two paths that
+    // take it — a cross-tab drill and a Mouse-4/5 walk — go through `persist-tab-idx` rather
+    // than `tab-changed`, precisely so they don't clear a filter the user is walking back
+    // into; and a *pick* clears only the entering tab's needle, so the departing one keeps
+    // its own. Without a reseat here, walking back into a tab you had filtered re-fetches it
+    // through that untouched needle under an empty box. A pick is unaffected: it clears both
+    // sides before the change-tracker pass runs, so `sync_box` finds them equal and bails.
+    property <int> watched-tab-idx: MyLibrary.tab-idx;
+    changed watched-tab-idx => { MyLibrary.detail-scope-changed(); }
 
     // A click anywhere the band or a body doesn't claim gives the filter box up.
     TouchArea {

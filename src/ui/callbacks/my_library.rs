@@ -97,9 +97,10 @@ pub fn wire_my_library(ui: &AppWindow, state: &AppState) {
         });
     }
 
-    // detail-scope-changed: the same nine-way hand-off read backwards. A drill-in or a
-    // back swaps the surface the box describes without anyone typing, so the box takes
-    // that surface's own filter — see `ui::my_library::filter::sync_box`.
+    // detail-scope-changed: the same nine-way hand-off read backwards. A drill-in, a back
+    // or a tab move that isn't a pick swaps the surface the box describes without anyone
+    // typing, so the box takes that surface's own filter — see
+    // `ui::my_library::filter::sync_box`, which argues why each of the three needs it.
     {
         let weak = weak.clone();
         g.on_detail_scope_changed(move || {

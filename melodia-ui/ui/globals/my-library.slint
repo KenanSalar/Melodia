@@ -50,10 +50,11 @@ export global MyLibrary {
     // copy every other filterable view cited; nine of them became this one.
     in-out property <int> blur-search-tick: 0;
     callback filter-changed(string);
-    // A detail opened or closed, so the box now describes a different surface. Rust reads
-    // that surface's own filter back into `filter` — see `ui::my_library::filter::sync_box`
-    // for why this is a reseat rather than the clear a tab pick performs. Fired from the
-    // sheet's four id mirrors, `changed` rejecting a path expression on a global.
+    // The box now describes a different surface, with nobody having typed. Rust reads that
+    // surface's own filter back into `filter` — see `ui::my_library::filter::sync_box` for
+    // why this is a reseat rather than the clear a tab pick performs. Fired from **five**
+    // mirrors in the sheet, `changed` rejecting a path expression on a global: the four
+    // detail ids, plus `tab-idx` for the moves that reach a tab without being a pick.
     callback detail-scope-changed();
 
     // The band's back arrow. Routes to whichever detail the mounted tab has open.
