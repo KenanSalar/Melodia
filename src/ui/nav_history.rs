@@ -310,13 +310,8 @@ fn invoke_close_detail(ui: &AppWindow, section: i32, tab: i32) {
     if section != NAV_MY_LIBRARY {
         return;
     }
-    match tab_from_index(&ui.global::<MyLibrary>(), tab) {
-        MyLibraryTab::Songs => {}
-        MyLibraryTab::Albums => ui.global::<AlbumDetail>().invoke_close_detail(),
-        MyLibraryTab::Artists => ui.global::<ArtistDetail>().invoke_close_detail(),
-        MyLibraryTab::Genres => ui.global::<GenreDetail>().invoke_close_detail(),
-        MyLibraryTab::Playlists => ui.global::<PlaylistDetail>().invoke_close_detail(),
-    }
+    let tab = tab_from_index(&ui.global::<MyLibrary>(), tab);
+    crate::ui::my_library::close_open_detail(ui, tab);
 }
 
 /// Schedule the tab's `open_*` future and bail at the start if a

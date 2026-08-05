@@ -7,7 +7,9 @@
 
 use slint::ComponentHandle;
 
-use crate::{AppWindow, MyLibrary, Nav};
+use crate::{
+    AlbumDetail, AppWindow, ArtistDetail, GenreDetail, MyLibrary, Nav, PlaylistDetail,
+};
 
 /// Which My Library sub-view is mounted.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -49,6 +51,23 @@ pub fn tab_is_mounted(ui: &AppWindow, tab: MyLibraryTab) -> bool {
     }
     let g = ui.global::<MyLibrary>();
     tab_from_index(&g, g.get_tab_idx()) == tab
+}
+
+/// Close whatever detail `tab` has open, if any.
+///
+/// The band's one back arrow and a Mouse-4 step out of a detail are the same act, so they
+/// share the dispatch rather than each spelling the five arms: what each of the four
+/// `close-detail` handlers then does — the hero images, the cover tiers,
+/// `last_detail_ids`, the origin restore, the nav-history record — is unchanged and stays
+/// where it is. Songs has no detail, so it is the no-op arm.
+pub fn close_open_detail(ui: &AppWindow, tab: MyLibraryTab) {
+    match tab {
+        MyLibraryTab::Songs => {}
+        MyLibraryTab::Albums => ui.global::<AlbumDetail>().invoke_close_detail(),
+        MyLibraryTab::Artists => ui.global::<ArtistDetail>().invoke_close_detail(),
+        MyLibraryTab::Genres => ui.global::<GenreDetail>().invoke_close_detail(),
+        MyLibraryTab::Playlists => ui.global::<PlaylistDetail>().invoke_close_detail(),
+    }
 }
 
 /// Seed the active tab from `views.json`, clamped against the Slint-declared `tab-count`

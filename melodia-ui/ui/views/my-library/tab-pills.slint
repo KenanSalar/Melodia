@@ -1,15 +1,19 @@
 import { MyLibrary } from "../../globals/my-library.slint";
 import { Tracks } from "../../globals/tracks.slint";
-import { Albums } from "../../globals/albums.slint";
-import { Artists } from "../../globals/artists.slint";
-import { Genres } from "../../globals/genres.slint";
-import { Playlists } from "../../globals/playlists.slint";
+import { AlbumDetail, Albums } from "../../globals/albums.slint";
+import { ArtistDetail, Artists } from "../../globals/artists.slint";
+import { GenreDetail, Genres } from "../../globals/genres.slint";
+import { PlaylistDetail, Playlists } from "../../globals/playlists.slint";
 import { SmartEditor } from "../../globals/dialog-forms.slint";
 import { Dialog } from "../../globals/dialog.slint";
 import { ActionPill, PillLabel, PillButton, PillDivider } from "../../components/action-pill.slint";
 import { ColumnTogglePopup } from "../../components/track-list/column-toggle-popup.slint";
 
-// The per-tab action pills, handed to `LibraryTabBand` as its whole `@children`.
+// The per-tab and per-detail action pills, handed to `LibraryTabBand` as its whole
+// `@children`. Nine rows, mutually exclusive, matching the sheet's nine body branches —
+// which is why the four detail predicates arrive as `in` properties rather than being
+// re-derived here: spelled twice, the pills and the body could disagree about which
+// branch is up, and the band would carry one entity's actions over another's list.
 //
 // **A component rather than five rows written straight into the mount sheet, and the
 // Playlists row is the reason.** Its four pills carry `tooltip-overlay: true`, so the
@@ -23,6 +27,12 @@ import { ColumnTogglePopup } from "../../components/track-list/column-toggle-pop
 // spaces its cells, and a second always-mounted child would offset every other tab's row
 // from the band's right edge.
 export component MyLibraryTabPills inherits Rectangle {
+    // Which of the sheet's nine branches is mounted. See the file header.
+    in property <bool> album-open;
+    in property <bool> artist-open;
+    in property <bool> genre-open;
+    in property <bool> playlist-open;
+
     HorizontalLayout {
         alignment: end;
         // No spacing. The rows are mutually exclusive, and the Playlists slot below is a
@@ -60,7 +70,9 @@ export component MyLibraryTabPills inherits Rectangle {
         //
         // The active field carries the direction arrow. Clicking it flips the direction
         // and a new field starts ascending — both Rust's, through the shared `next_sort`.
-        if MyLibrary.tab-idx == MyLibrary.tab-albums: ActionPill {
+        // Each is gated **off** its detail as well as on its tab: a sort row over an open
+        // album sorts a grid nobody can see.
+        if MyLibrary.tab-idx == MyLibrary.tab-albums && !root.album-open: ActionPill {
             PillButton {
                 text: @tr("Name");
                 reserve-sort-slot: true;
@@ -86,7 +98,7 @@ export component MyLibraryTabPills inherits Rectangle {
             }
         }
 
-        if MyLibrary.tab-idx == MyLibrary.tab-artists: ActionPill {
+        if MyLibrary.tab-idx == MyLibrary.tab-artists && !root.artist-open: ActionPill {
             PillButton {
                 text: @tr("Name");
                 reserve-sort-slot: true;
@@ -112,7 +124,7 @@ export component MyLibraryTabPills inherits Rectangle {
             }
         }
 
-        if MyLibrary.tab-idx == MyLibrary.tab-genres: ActionPill {
+        if MyLibrary.tab-idx == MyLibrary.tab-genres && !root.genre-open: ActionPill {
             PillButton {
                 text: @tr("Name");
                 reserve-sort-slot: true;
@@ -138,6 +150,218 @@ export component MyLibraryTabPills inherits Rectangle {
             }
         }
 
+        // --- The four details ------------------------------------------------
+        //
+        // Each is the row that used to sit at the foot of that view's `DetailHeader`,
+        // unchanged: one pill holding Shuffle, whatever is particular to the entity, the
+        // column toggle with its own column locked off, then the selection slots. **The
+        // tooltips stay in-tree** — `Tooltip`'s default side is `above` and the band's
+        // slot rides its lower edge, so the pill lands inside the band, painted after
+        // everything the band owns and before the body. Only the Playlists row below needs
+        // the published-anchor treatment, and it needs it for a reason of its own.
+        if root.album-open: ActionPill {
+            PillButton {
+                icon: "shuffle";
+                text: @tr("Shuffle");
+                clicked => { AlbumDetail.shuffle-album(); }
+            }
+            PillDivider { }
+            ColumnTogglePopup {
+                show-number  <=> AlbumDetail.show-number;
+                show-artwork <=> AlbumDetail.show-artwork;
+                show-artist  <=> AlbumDetail.show-artist;
+                show-album   <=> AlbumDetail.show-album;
+                show-genre   <=> AlbumDetail.show-genre;
+                show-year    <=> AlbumDetail.show-year;
+                // Meaningless here: every row is the same album.
+                hide-album: true;
+                toggled(id) => { AlbumDetail.toggle-column(id); }
+            }
+            if AlbumDetail.selected-ids.length > 0: PillDivider { }
+            if AlbumDetail.selected-ids.length > 0: PillLabel {
+                text: @tr("{} selected", AlbumDetail.selected-ids.length);
+            }
+            if AlbumDetail.selected-ids.length > 0: PillButton {
+                icon: "close";
+                tooltip-text: @tr("Clear selection");
+                clicked => { AlbumDetail.clear-selection(); }
+            }
+        }
+
+        if root.artist-open: ActionPill {
+            PillButton {
+                icon: "shuffle";
+                text: @tr("Shuffle");
+                clicked => { ArtistDetail.shuffle-artist(); }
+            }
+            PillDivider { }
+            ColumnTogglePopup {
+                show-number  <=> ArtistDetail.show-number;
+                show-artwork <=> ArtistDetail.show-artwork;
+                show-artist  <=> ArtistDetail.show-artist;
+                show-album   <=> ArtistDetail.show-album;
+                show-genre   <=> ArtistDetail.show-genre;
+                show-year    <=> ArtistDetail.show-year;
+                // Meaningless here: every row is the same artist.
+                hide-artist: true;
+                toggled(id) => { ArtistDetail.toggle-column(id); }
+            }
+            if ArtistDetail.selected-ids.length > 0: PillDivider { }
+            if ArtistDetail.selected-ids.length > 0: PillLabel {
+                text: @tr("{} selected", ArtistDetail.selected-ids.length);
+            }
+            if ArtistDetail.selected-ids.length > 0: PillButton {
+                icon: "close";
+                tooltip-text: @tr("Clear selection");
+                clicked => { ArtistDetail.clear-selection(); }
+            }
+        }
+
+        if root.genre-open: ActionPill {
+            PillButton {
+                icon: "shuffle";
+                text: @tr("Shuffle");
+                clicked => { GenreDetail.shuffle-genre(); }
+            }
+            PillDivider { }
+            ColumnTogglePopup {
+                show-number  <=> GenreDetail.show-number;
+                show-artwork <=> GenreDetail.show-artwork;
+                show-artist  <=> GenreDetail.show-artist;
+                show-album   <=> GenreDetail.show-album;
+                show-genre   <=> GenreDetail.show-genre;
+                show-year    <=> GenreDetail.show-year;
+                // Meaningless here: every row is the same genre.
+                hide-genre: true;
+                toggled(id) => { GenreDetail.toggle-column(id); }
+            }
+            if GenreDetail.selected-ids.length > 0: PillDivider { }
+            if GenreDetail.selected-ids.length > 0: PillLabel {
+                text: @tr("{} selected", GenreDetail.selected-ids.length);
+            }
+            if GenreDetail.selected-ids.length > 0: PillButton {
+                icon: "close";
+                tooltip-text: @tr("Clear selection");
+                clicked => { GenreDetail.clear-selection(); }
+            }
+        }
+
+        if root.playlist-open: ActionPill {
+            PillButton {
+                icon: "shuffle";
+                text: @tr("Shuffle");
+                clicked => { PlaylistDetail.shuffle-all(); }
+            }
+            PillDivider { }
+            // Rust-side because the picker needs the playlist's track artworks first. It
+            // fills Dialog from a fresh event-loop tick, so the property-recursion guard
+            // doesn't trip.
+            PillButton {
+                icon: "image";
+                tooltip-text: @tr("Edit artwork");
+                clicked => { PlaylistDetail.request-edit-artwork(); }
+            }
+            PillDivider { }
+            // Rename / Delete fill Dialog inline — everything they need is already on
+            // `PlaylistDetail`, so no Rust hop and no recursion risk.
+            PillButton {
+                icon: "edit";
+                tooltip-text: @tr("Rename");
+                clicked => {
+                    Dialog.title = @tr("Rename Playlist");
+                    Dialog.message = "";
+                    Dialog.confirm-label = @tr("Save");
+                    Dialog.cancel-label = @tr("Cancel");
+                    Dialog.destructive = false;
+                    Dialog.kind = "rename-playlist";
+                    Dialog.target-id = PlaylistDetail.playlist-id;
+                    Dialog.input-text = PlaylistDetail.playlist.name;
+                    Dialog.input-text-2 = PlaylistDetail.playlist.description;
+                    Dialog.open = true;
+                }
+            }
+            // Chrome inline so `@tr` applies; Rust loads the criteria and opens the editor
+            // from a fresh tick.
+            if PlaylistDetail.playlist.is_smart: PillDivider { }
+            if PlaylistDetail.playlist.is_smart: PillButton {
+                icon: "tune";
+                tooltip-text: @tr("Edit rules");
+                clicked => {
+                    Dialog.title = @tr("Edit Rules");
+                    Dialog.message = "";
+                    Dialog.confirm-label = @tr("Save");
+                    Dialog.cancel-label = @tr("Cancel");
+                    Dialog.destructive = false;
+                    Dialog.kind = "smart-playlist-editor";
+                    Dialog.target-id = PlaylistDetail.playlist-id;
+                    SmartEditor.request-edit(PlaylistDetail.playlist-id);
+                }
+            }
+            PillDivider { }
+            PillButton {
+                icon: "delete";
+                danger: true;
+                tooltip-text: @tr("Delete playlist");
+                clicked => {
+                    Dialog.title = @tr("Delete playlist?");
+                    Dialog.message = @tr("The playlist and its track order will be removed. The tracks themselves stay in your library.");
+                    Dialog.confirm-label = @tr("Delete");
+                    Dialog.cancel-label = @tr("Cancel");
+                    Dialog.destructive = true;
+                    Dialog.kind = "delete-playlist";
+                    Dialog.target-id = PlaylistDetail.playlist-id;
+                    Dialog.open = true;
+                }
+            }
+            PillDivider { }
+            ColumnTogglePopup {
+                show-number  <=> PlaylistDetail.show-number;
+                show-artwork <=> PlaylistDetail.show-artwork;
+                show-artist  <=> PlaylistDetail.show-artist;
+                show-album   <=> PlaylistDetail.show-album;
+                show-genre   <=> PlaylistDetail.show-genre;
+                show-year    <=> PlaylistDetail.show-year;
+                toggled(id) => { PlaylistDetail.toggle-column(id); }
+            }
+            // Selection slots — appended when multi-select is active.
+            if PlaylistDetail.selected-ids.length > 0: PillDivider { }
+            if PlaylistDetail.selected-ids.length > 0: PillLabel {
+                text: @tr("{} selected", PlaylistDetail.selected-ids.length);
+            }
+            // A smart playlist's membership is derived — nothing to remove from.
+            if PlaylistDetail.selected-ids.length > 0
+                && !PlaylistDetail.playlist.is_smart: PillButton {
+                icon: "playlist_remove";
+                // Lighter glyph than its siblings — 16 px puts it back on the same
+                // optical row as their 14 px default.
+                icon-size: 16px;
+                danger: true;
+                tooltip-text: @tr("Remove from playlist");
+                clicked => {
+                    // Confirm even for one row — a stray click on the destructive chip
+                    // must not drop tracks silently.
+                    Dialog.title = @tr("Remove from playlist?");
+                    Dialog.message = @tr(
+                        "Remove {n} track from the playlist?"
+                            | "Remove {n} tracks from the playlist?"
+                            % PlaylistDetail.selected-ids.length
+                    );
+                    Dialog.confirm-label = @tr("Remove");
+                    Dialog.cancel-label = @tr("Cancel");
+                    Dialog.destructive = true;
+                    Dialog.kind = "remove-playlist-selected";
+                    Dialog.target-id = -1;
+                    Dialog.open = true;
+                }
+            }
+            if PlaylistDetail.selected-ids.length > 0: PillDivider { }
+            if PlaylistDetail.selected-ids.length > 0: PillButton {
+                icon: "close";
+                tooltip-text: @tr("Clear selection");
+                clicked => { PlaylistDetail.clear-selection(); }
+            }
+        }
+
         // --- Playlists: collapsed, never unmounted ----------------------------
         //
         // The one row that can't sit under an `if`, per the file header. It collapses to
@@ -150,9 +374,9 @@ export component MyLibraryTabPills inherits Rectangle {
             clip: true;
             min-width: 0px;
             preferred-width: MyLibrary.tab-idx == MyLibrary.tab-playlists
-                ? pl.preferred-width : 0px;
+                && !root.playlist-open ? pl.preferred-width : 0px;
             max-width: MyLibrary.tab-idx == MyLibrary.tab-playlists
-                ? pl.preferred-width : 0px;
+                && !root.playlist-open ? pl.preferred-width : 0px;
 
             pl := ActionPill {
                 // Fills the Dialog inline rather than hopping through Rust: a synchronous

@@ -17,7 +17,9 @@
 pub mod filter;
 mod tabs;
 
-pub use tabs::{MyLibraryTab, restore_origin, seed_tab, tab_from_index, tab_is_mounted};
+pub use tabs::{
+    MyLibraryTab, close_open_detail, restore_origin, seed_tab, tab_from_index, tab_is_mounted,
+};
 
 /// The page's `Nav.selected-index`. **The single definition** — five separate `const`s
 /// spelled 4/5/6/7 across `nav_history`, `cross_tab_nav` and `callbacks/artists` used to

@@ -125,9 +125,8 @@ export global Theme {
     // The artwork tile every hero band leads with — the detail views' cover, the
     // curated views' 2×2 mosaic. **One number rather than six**: the banners are the
     // same band under different content, and a tile changing size between them reads as
-    // the page shifting under a nav. `DetailHeader` takes it directly and exposes no
-    // size knob, so a detail hero can't diverge from the pair with no header component
-    // to route through.
+    // the page shifting under a nav. Both shared bands take it directly and neither
+    // exposes a size knob, so no hero can diverge from the other five.
     //
     // It sets each band's *height* too, being the tallest thing in all of them. Growing
     // it grows six banners at once; shrinking it costs the detail heroes first, whose

@@ -255,7 +255,7 @@ export component LibraryTabBand inherits Rectangle {
                     icon: "arrow_back";
                     icon-size: 20px;
                     diameter: root.pill-h;
-                    // The `MetaChip` pair. `DetailHeader`'s button took
+                    // The `MetaChip` pair. The retired `DetailHeader`'s button took
                     // `Theme.floating-chrome-bg`, which is right for a disc floating over
                     // a full-bleed hero and wrong for one sitting in the tab row beside
                     // labels that are already on hero tiers.
@@ -330,6 +330,13 @@ export component LibraryTabBand inherits Rectangle {
                 ArtworkImage {
                     artwork-path: root.artwork-path;
                     cover: root.cover;
+                    // **The host can't withhold `cover`, so it says so here instead.**
+                    // Slint has no empty-`image` literal, and the sheet picks one of four
+                    // globals' covers — Genre Detail owning none, its tile being a
+                    // name-hashed gradient. Without this the genre hero paints whichever
+                    // *other* detail happens to be open, which boot makes routine: a
+                    // detail id is restored per view whichever tab is resumed.
+                    has-cover: root.artwork-path != "";
                     tile-size: Theme.hero-artwork;
                     tile-radius: root.circular-artwork
                         ? Theme.hero-artwork / 2

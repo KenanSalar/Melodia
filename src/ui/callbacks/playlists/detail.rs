@@ -287,7 +287,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
     }
 
     // Rename / Delete dialog opens are populated inline in
-    // `playlist-detail-view.slint` (Slint-only — see the long comment
+    // `my-library/tab-pills.slint` (Slint-only — see the long comment
     // in `super::dialog`). No Rust handler needed here; the Accept-side
     // commit lives in the `rename-playlist` / `delete-playlist`
     // branches in `super::dialog`.

@@ -96,9 +96,9 @@ pub async fn open_artist(
 /// runs as the last statement on the UI thread, after every detail
 /// property is set, so a follow-on global write (e.g. flipping
 /// `Nav.selected-index` for cross-tab nav from Favorites) lands in
-/// the same frame — Slint paints `ArtistDetailView` directly with no
-/// `ArtistView` (grid) frame in between. Mirrors
-/// `albums::open_album_with` exactly.
+/// the same frame — Slint paints `ArtistDetailBody` directly with no
+/// Artists-grid frame in between. Mirrors `albums::open_album_with`
+/// exactly.
 ///
 /// `enter_from` chooses the `ViewTransition` enter direction; pass
 /// [`NavEnterFrom::Right`] for any user drill-in and

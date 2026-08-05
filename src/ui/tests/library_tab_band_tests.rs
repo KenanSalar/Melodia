@@ -3,15 +3,19 @@
 //! The My Library page's band. Six of the pins below are the header-row fixes it
 //! ports verbatim from `MosaicTabHero` — each one paid for once, invisible in
 //! review, and exactly what a copy loses — so they are worded the same way as
-//! their twins in `mosaic_tab_hero_tests.rs`. The remaining five are this band's
-//! own, and all five are about the morph: a band that changes height, colour and
-//! contents is a band with five new ways to be quietly wrong.
+//! their twins in `mosaic_tab_hero_tests.rs`. The rest are this band's own: five
+//! about the morph, because a band that changes height, colour and contents is a
+//! band with five new ways to be quietly wrong, and three about the **seam** with
+//! its mount sheet, because a band nobody drives passes all eight of the others.
 //!
 //! They live here rather than under a host for the `tab_bar_tests.rs` reason —
 //! no Rust module owns the file.
 
 const BAND: &str =
     include_str!("../../../melodia-ui/ui/components/hero/library-tab-band.slint");
+/// The band's only mount. Three of the pins below are about the seam rather than
+/// the component, and a band nobody feeds passes every check on its own source.
+const SHEET: &str = include_str!("../../../melodia-ui/ui/views/my-library-view.slint");
 
 /// The file with its comment lines dropped, so prose about a fix can neither
 /// satisfy a pin nor bound a region early. The `placeholder_tests.rs` helper.
@@ -317,4 +321,131 @@ fn the_band_states_no_string_of_its_own() {
         "the band must take every literal as a property — the five tabs differ in all of them, and \
          a msgid folded here can't follow the mounted tab"
     );
+}
+
+/// The morph runs off a derivation, never a literal.
+///
+/// It shipped as `detail-open: false` for one phase on purpose, so the hero half
+/// could compile and be pinned while the four detail views still drew their own
+/// `DetailHeader` — and the page would have worn two banners the moment it went
+/// true. Pinned now for the opposite reason: a literal `false` here silently
+/// retires the whole hero half, and everything else in this file goes on passing
+/// because the band's own source is still correct.
+///
+/// Which of the four ids is open decides the tab, not the other way round, so the
+/// derivation has to name all four. Naming three leaves one detail opening under
+/// an idle band, which reads as that one page failing rather than as a missing
+/// clause.
+#[test]
+fn the_morph_is_driven_by_the_sheets_own_derivation() {
+    let sheet: String = SHEET.split_whitespace().collect::<Vec<_>>().join(" ");
+
+    assert!(
+        sheet.contains("detail-open: root.detail-open;"),
+        "my-library-view.slint must hand the band its own derived `detail-open` — a literal is \
+         what held the hero half unreachable while the detail views still drew their own header"
+    );
+    let derived = sheet
+        .split_once("property <bool> detail-open:")
+        .and_then(|(_, rest)| rest.split_once(';'))
+        .map_or("", |(value, _)| value);
+    for open in ["album-open", "artist-open", "genre-open", "playlist-open"] {
+        assert!(
+            derived.contains(open),
+            "the sheet's `detail-open` must name `{open}` — a detail left out of it opens under \
+             an idle band, with its own body mounted below"
+        );
+    }
+}
+
+/// The hero tile shows a cover only when the open detail actually has one.
+///
+/// Slint has no empty-`image` literal, so the sheet's `cover` ternary has to bind *some*
+/// global's cover on the Genre arm, whose tile is a name-hashed gradient with no image
+/// behind it. `ArtworkImage` gates on `cover.width` alone, and more than one detail is
+/// open at a time as a matter of routine — `seed_detail_from_settings` restores one per
+/// view whichever tab boot resumes — so ungated, a genre hero paints whichever sibling
+/// detail happened to be restored. It looks like a decode landing in the wrong view.
+#[test]
+fn the_hero_tile_suppresses_a_cover_the_open_detail_does_not_own() {
+    let tile = code()
+        .split_once("ArtworkImage {")
+        .and_then(|(_, rest)| rest.split_once("tile-size:"))
+        .map_or(String::new(), |(body, _)| body.to_owned());
+    assert!(
+        !tile.is_empty(),
+        "the band must mount an `ArtworkImage` ahead of its `tile-size` binding"
+    );
+    assert!(
+        tile.contains("has-cover: root.artwork-path != \"\";"),
+        "the band's tile must gate its cover on `artwork-path` — the sheet cannot withhold \
+         `cover` on the arm that owns none, so this is where it says so"
+    );
+}
+
+/// The band draws the back arrow; the page owns what it means.
+///
+/// `MyLibrary.back()` routes to the mounted tab's own `close-detail`, so every
+/// teardown that button already triggers stays where it is. Unhandled, the arrow
+/// is drawn, hovers, and does nothing — which is exactly what it did for the two
+/// phases the band was mounted with the hero half switched off.
+#[test]
+fn the_back_arrow_routes_to_the_pages_own_close() {
+    assert!(
+        BAND.contains("clicked => { root.back-clicked(); }"),
+        "the band's back button must emit `back-clicked` — it states no route of its own"
+    );
+    let sheet: String = SHEET.split_whitespace().collect::<Vec<_>>().join(" ");
+    assert!(
+        sheet.contains("back-clicked => { MyLibrary.back(); }"),
+        "my-library-view.slint must route `back-clicked` to `MyLibrary.back()`, which is what \
+         reaches the mounted tab's `close-detail` and the teardown behind it"
+    );
+}
+
+/// Every hero fact the band declares is one the sheet feeds.
+///
+/// The band is data-agnostic — four detail globals with nothing between them — so
+/// each fact arrives as an `in property`, and a new one added here and not bound
+/// there simply sits at its default: an artwork tile that never fills, a badge
+/// that never shows. Nothing fails, and only the hero it belongs to looks wrong.
+#[test]
+fn every_hero_fact_the_band_declares_is_fed_by_the_sheet() {
+    const FACTS: [&str; 13] = [
+        "title",
+        "subtitle",
+        "title-badge",
+        "artwork-path",
+        "cover",
+        "circular-artwork",
+        "fallback-icon",
+        "tile-bg",
+        "tile-icon-color",
+        "blur-a",
+        "blur-b",
+        "use-a",
+        "has-blur",
+    ];
+
+    let sheet: String = SHEET.split_whitespace().collect::<Vec<_>>().join(" ");
+    let mount = sheet
+        .split_once("band := LibraryTabBand {")
+        .and_then(|(_, rest)| rest.split_once("MyLibraryTabPills"))
+        .map_or("", |(body, _)| body);
+    assert!(
+        !mount.is_empty(),
+        "my-library-view.slint no longer mounts the band ahead of its pill row"
+    );
+
+    for fact in FACTS {
+        assert!(
+            BAND.contains(&format!("{fact}:")) || BAND.contains(&format!("{fact};")),
+            "library-tab-band.slint no longer declares `{fact}`; drop it from this list too"
+        );
+        assert!(
+            mount.contains(&format!("{fact}:")),
+            "my-library-view.slint must bind the band's `{fact}` — left unbound it sits at the \
+             component's default, which is wrong for every detail and fails nothing"
+        );
+    }
 }

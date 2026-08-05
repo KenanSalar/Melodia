@@ -40,17 +40,21 @@ export global MyLibrary {
     // land on a tab and neither should clear the filter the way a pick does.
     callback persist-tab-idx(int);
 
-    // The page's single filter, replacing the five per-view search boxes. Declared here
-    // now and routed by `ui::my_library::filter` — the band that writes it arrives with
-    // the shared `SearchBar`, so until then each view's own box still owns its text.
+    // The page's single filter — the band's `SearchBar` is the only box on the page, and
+    // `ui::my_library::filter` routes a settled keystroke to whichever of the nine
+    // surfaces is mounted.
     in-out property <string> filter;
     // The `Tracks.blur-search-tick` pattern: bumped by anything that should make the
     // filter input give up the keyboard.
     in-out property <int> blur-search-tick: 0;
     callback filter-changed(string);
+    // A detail opened or closed, so the box now describes a different surface. Rust reads
+    // that surface's own filter back into `filter` — see `ui::my_library::filter::sync_box`
+    // for why this is a reseat rather than the clear a tab pick performs. Fired from the
+    // sheet's four id mirrors, `changed` rejecting a path expression on a global.
+    callback detail-scope-changed();
 
-    // The hero's back button, once the band owns it. Routes to whichever detail the
-    // mounted tab has open.
+    // The band's back arrow. Routes to whichever detail the mounted tab has open.
     //
     // **There is no page-level `section-active-changed` beside it**: the five per-tab
     // `SectionActiveGate` mounts already fire the mounted tab's leave when the page

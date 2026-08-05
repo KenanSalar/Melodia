@@ -6,8 +6,8 @@ import { HeroBackdrop } from "../globals/hero-backdrop.slint";
 // — the outgoing slot is never cleared, so a refresh fades A↔B without flashing,
 // and with no blur both fade to 0 and the floor shows through.
 //
-// Mounted by `DetailHeader` over its whole hero and by the two mosaic heroes
-// over their top band. The caller sizes it; the children fill it.
+// Mounted by both shared bands — `LibraryTabBand` over its whole morphing hero
+// and `MosaicTabHero` over its top band. The caller sizes it; the children fill it.
 //
 // **Every colour here comes from `HeroBackdrop`, solved per artwork, and none of
 // it may be a `Theme.*` brush.** Theme brushes flip polarity with the variant,

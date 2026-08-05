@@ -15,30 +15,20 @@ use slint::SharedString;
 const STRIP: &str = include_str!("../../../melodia-ui/ui/components/meta-chip-strip.slint");
 const HERO_CHIPS: &str = include_str!("../hero_chips.rs");
 
-/// Every source that *draws* a hero band. Five, not six: the two mosaic pages
-/// wear one shared banner, so `MosaicTabHero` stands for both, which is the
-/// stronger subject — one file to hold to the contract rather than two that can
-/// drift. Whether each page still wears it is [`MOSAIC_HOSTS`]' job.
-const HERO_VIEWS: [(&str, &str); 5] = [
-    (
-        include_str!("../../../melodia-ui/ui/views/album-detail-view.slint"),
-        "album-detail-view.slint",
-    ),
-    (
-        include_str!("../../../melodia-ui/ui/views/artist-detail-view.slint"),
-        "artist-detail-view.slint",
-    ),
-    (
-        include_str!("../../../melodia-ui/ui/views/genre-detail-view.slint"),
-        "genre-detail-view.slint",
-    ),
-    (
-        include_str!("../../../melodia-ui/ui/views/playlist-detail-view.slint"),
-        "playlist-detail-view.slint",
-    ),
+/// Every source that *draws* a hero band. **Two, for six banners** — the two
+/// mosaic pages wear one shared component and the four My Library details wear
+/// another, so each file stands for the pages under it, which is the stronger
+/// subject: one file to hold to the contract rather than six that can drift.
+/// Whether each page still wears its band is [`MOSAIC_HOSTS`]' and
+/// [`BAND_HOSTS`]' job.
+const HERO_VIEWS: [(&str, &str); 2] = [
     (
         include_str!("../../../melodia-ui/ui/components/hero/mosaic-tab-hero.slint"),
         "mosaic-tab-hero.slint",
+    ),
+    (
+        include_str!("../../../melodia-ui/ui/components/hero/library-tab-band.slint"),
+        "library-tab-band.slint",
     ),
 ];
 
@@ -53,6 +43,34 @@ const MOSAIC_HOSTS: [(&str, &str); 2] = [
     (
         include_str!("../../../melodia-ui/ui/views/recently-played-view.slint"),
         "recently-played-view.slint",
+    ),
+];
+
+/// [`MOSAIC_HOSTS`] for `LibraryTabBand`: the sheet that mounts it, and the four
+/// detail bodies that must mount **nothing** — the band morphs into each of their
+/// heroes, so a title, a chip strip or an artwork size reappearing in one of them
+/// is the page wearing two banners again. The bodies are the likelier regression
+/// of the two, which is why pinning the sheet alone would not be enough.
+const BAND_HOSTS: [(&str, &str); 5] = [
+    (
+        include_str!("../../../melodia-ui/ui/views/my-library-view.slint"),
+        "my-library-view.slint",
+    ),
+    (
+        include_str!("../../../melodia-ui/ui/views/my-library/album-detail.slint"),
+        "my-library/album-detail.slint",
+    ),
+    (
+        include_str!("../../../melodia-ui/ui/views/my-library/artist-detail.slint"),
+        "my-library/artist-detail.slint",
+    ),
+    (
+        include_str!("../../../melodia-ui/ui/views/my-library/genre-detail.slint"),
+        "my-library/genre-detail.slint",
+    ),
+    (
+        include_str!("../../../melodia-ui/ui/views/my-library/playlist-detail.slint"),
+        "my-library/playlist-detail.slint",
     ),
 ];
 
@@ -549,14 +567,14 @@ fn every_chip_strip_takes_its_brushes_from_its_backdrop() {
         );
     }
 
-    // The two mosaic pages get theirs through the shared band. A strip mounted
+    // The six pages get theirs through whichever band they wear. A strip mounted
     // beside it is a second chip row on the same banner, which the `HeroChips`
     // global has no way to feed twice.
-    for (src, name) in MOSAIC_HOSTS {
+    for (src, name) in MOSAIC_HOSTS.iter().chain(BAND_HOSTS.iter()) {
         for mount in ["HeroChipStrip {", "MetaChipStrip {"] {
             assert!(
                 !src.contains(mount),
-                "{name} mounts `{mount}` itself — its chip row belongs to `MosaicTabHero`"
+                "{name} mounts `{mount}` itself — its chip row belongs to its shared band"
             );
         }
     }
@@ -608,7 +626,11 @@ fn every_chip_strip_takes_its_brushes_from_its_backdrop() {
 /// then says the same thing twice.
 #[test]
 fn no_hero_view_still_declares_a_meta_line() {
-    for (src, name) in HERO_VIEWS.iter().chain(MOSAIC_HOSTS.iter()) {
+    for (src, name) in HERO_VIEWS
+        .iter()
+        .chain(MOSAIC_HOSTS.iter())
+        .chain(BAND_HOSTS.iter())
+    {
         for prop in ["meta-line", "stats-line", "stats-text"] {
             assert!(
                 !src.contains(&format!("property <string> {prop}")),
@@ -624,10 +646,10 @@ fn no_hero_view_still_declares_a_meta_line() {
 ///
 /// Pinned beside the chip tests because `HERO_MAX_ROWS` is measured against that
 /// tile: a view sizing its own artwork moves the slack the cap was picked for,
-/// and it moves the band's height with it. Neither family of hero spells a size
-/// any more — the four detail views route through `DetailHeader` and the two
-/// mosaic heroes through `MosaicHeroTile`, and neither component exposes a knob
-/// to override the token with.
+/// and it moves the band's height with it. No hero spells a size any more — the
+/// four My Library details route through `LibraryTabBand` and the two mosaic
+/// pages through `MosaicTabHero`, and neither exposes a knob to override the
+/// token with.
 ///
 /// The tile check has to name `MosaicHeroTile` rather than the two views: the
 /// square moved into it, and each view's surviving `Theme.hero-artwork` is now
@@ -636,7 +658,6 @@ fn no_hero_view_still_declares_a_meta_line() {
 #[test]
 fn no_hero_view_sizes_its_own_artwork_tile() {
     const THEME: &str = include_str!("../../../melodia-ui/ui/theme.slint");
-    const HEADER: &str = include_str!("../../../melodia-ui/ui/components/detail-header.slint");
     const MOSAIC_TILE: &str =
         include_str!("../../../melodia-ui/ui/components/hero/mosaic-hero-tile.slint");
 
@@ -644,16 +665,11 @@ fn no_hero_view_sizes_its_own_artwork_tile() {
         THEME.contains("out property <length> hero-artwork:"),
         "Theme must own the hero tile size — it is the only thing keeping the six bands aligned"
     );
-    assert!(
-        HEADER.contains("tile-size: Theme.hero-artwork;"),
-        "DetailHeader must size its tile from the token"
-    );
-    assert!(
-        !HEADER.contains("artwork-size"),
-        "DetailHeader must not reintroduce a per-view size knob — four of the six bands would \
-         then be free to drift from the two that have no header to route through"
-    );
-    for (src, name) in HERO_VIEWS.iter().chain(MOSAIC_HOSTS.iter()) {
+    for (src, name) in HERO_VIEWS
+        .iter()
+        .chain(MOSAIC_HOSTS.iter())
+        .chain(BAND_HOSTS.iter())
+    {
         assert!(
             !src.contains("artwork-size"),
             "{name} sizes its hero tile itself — it belongs on `Theme.hero-artwork`"
@@ -697,6 +713,36 @@ fn no_hero_view_sizes_its_own_artwork_tile() {
             src.contains("MosaicTabHero {"),
             "{name} must mount `MosaicTabHero` — a page drawing its own band is how the two \
              drifted apart before, and the shared file goes on passing its own pins"
+        );
+    }
+
+    // The My Library band draws the tile itself rather than through
+    // `MosaicHeroTile` — the mosaic square and an artwork tile are different
+    // things — so it owes the token directly.
+    let library_band = HERO_VIEWS
+        .iter()
+        .find(|(_, name)| *name == "library-tab-band.slint")
+        .map_or("", |(src, _)| *src);
+    assert!(
+        library_band.contains("tile-size: Theme.hero-artwork;"),
+        "library-tab-band.slint must size its artwork tile from the token"
+    );
+    assert!(
+        library_band.contains("Theme.hero-artwork"),
+        "library-tab-band.slint derives its hero height from the tile token, so it must read it"
+    );
+
+    // The sheet wears the band; the four bodies wear nothing. The bodies are the
+    // half worth pinning — a detail regrowing a header of its own is the shape
+    // this phase removed, and every check above still passes while it does.
+    for (src, name) in BAND_HOSTS {
+        let expected = name == "my-library-view.slint";
+        assert_eq!(
+            src.contains("LibraryTabBand {"),
+            expected,
+            "{name} must {} mount `LibraryTabBand` — the page wears exactly one banner, and the \
+             band morphs into each detail's hero rather than sitting above a second one",
+            if expected { "" } else { "not" }
         );
     }
 }
@@ -991,62 +1037,69 @@ fn the_strip_spaces_its_rows_tighter_than_its_chips() {
     );
 }
 
-/// Album and Playlist are the two heroes carrying a second text line, and both
-/// keep it *inside* the title row — under the title, beside the `SearchBar`.
+/// Album and Playlist are the two heroes carrying a second text line, and in
+/// `LibraryTabBand` it is **one** line the sheet feeds from either — a single
+/// `subtitle` row under the title, collapsing on `""` for the other two details
+/// and for idle.
 ///
-/// That placement is the whole of `HERO_MAX_ROWS`' headroom, not a styling
-/// choice. The title row is as tall as the `SearchBar` and `hero-title-size`
-/// leaves several of those pixels unused, so a line nested there is nearly
-/// free; on a row of its own it costs its full line box plus a `pad-xs` gap,
-/// which is about what a wrapped chip row needs. Promoted back out, the band
-/// still looks right and simply grows every time the chips wrap — which takes a
-/// narrow window or a long-plural locale to notice.
-///
-/// Pinned by position rather than by nesting depth: the line must come before
-/// the title row's `Rectangle { horizontal-stretch: 1; }`, the spacer that pins
-/// the `SearchBar` right. A subtitle promoted back to a direct child of
-/// `DetailHeader` lands after the entire row, and so after that spacer.
+/// It sits on a row of its own here, and that is forced rather than chosen: in
+/// the retired `DetailHeader` the line rode inside the title row because the
+/// `SearchBar` beside it had already claimed that height, and in the band the
+/// search box is up in the tab row. So the line costs its full box plus a
+/// `pad-xs` gap, out of a meta column bounded by `Theme.hero-artwork` less the
+/// pill band the column reserves. What that buys back is that there is exactly
+/// one of it. Two things therefore stay pinned: the size, because
+/// `HERO_MAX_ROWS`' slack is measured against what the title block spends; and
+/// that the line collapses when empty, because an always-mounted row would spend
+/// it on the four heroes that state nothing under the title.
 #[test]
-fn the_two_subtitled_heroes_keep_that_line_inside_the_title_row() {
-    const TITLE_ROW_SPACER: &str = "Rectangle { horizontal-stretch: 1; }";
-    const SUBTITLES: [(&str, &str); 2] = [
-        (
-            "album-detail-view.slint",
-            "if AlbumDetail.album.artist_name != \"\": Text {",
-        ),
-        (
-            "playlist-detail-view.slint",
-            "if PlaylistDetail.playlist.description != \"\": Text {",
-        ),
-    ];
+fn the_subtitled_heroes_share_one_collapsing_line() {
+    const SHEET: &str = include_str!("../../../melodia-ui/ui/views/my-library-view.slint");
+    const SUBTITLE: &str = "if root.subtitle != \"\": Text {";
 
-    for (name, subtitle) in SUBTITLES {
-        let src = HERO_VIEWS
-            .iter()
-            .find(|(_, view)| *view == name)
-            .map_or("", |(src, _)| *src);
-        let normalized: String = src.split_whitespace().collect::<Vec<_>>().join(" ");
+    let band = HERO_VIEWS
+        .iter()
+        .find(|(_, name)| *name == "library-tab-band.slint")
+        .map_or("", |(src, _)| *src);
+    let normalized: String = band.split_whitespace().collect::<Vec<_>>().join(" ");
 
-        let title_block = normalized
-            .split_once(TITLE_ROW_SPACER)
-            .map_or("", |(before, _)| before);
+    assert_eq!(
+        normalized.matches(SUBTITLE).count(),
+        1,
+        "library-tab-band.slint must carry exactly one collapsing subtitle row — an \
+         always-mounted one spends a wrapped chip row's worth of the tile on the four heroes \
+         that state nothing under the title. See `ui::hero_chips::HERO_MAX_ROWS`"
+    );
+
+    // Bounded on the chip strip rather than on a brace: the line's own `text`
+    // opens with a `\u{200e}` LRM escape, so the first `}` after it is inside a
+    // string literal. Bounding here pins the order too — the subtitle is above
+    // the chips, which is what leaves the wrap its slack.
+    let block = normalized
+        .split_once(SUBTITLE)
+        .and_then(|(_, rest)| rest.split_once("HeroChipStrip"))
+        .map_or("", |(block, _)| block);
+    assert!(
+        !block.is_empty(),
+        "library-tab-band.slint must declare its chip strip after the subtitle row"
+    );
+    assert!(
+        block.contains("font-size: Theme.font-size-md;"),
+        "the band's second line must stay at `font-size-md` — the meta column is bounded by the \
+         hero tile, and a larger line spends the slack `HERO_MAX_ROWS` is measured against"
+    );
+
+    // The two facts that reach it. The band is data-agnostic, so which entity
+    // owns a second line is the sheet's ternary and nowhere else.
+    let sheet: String = SHEET.split_whitespace().collect::<Vec<_>>().join(" ");
+    for fact in [
+        "AlbumDetail.album.artist_name",
+        "PlaylistDetail.playlist.description",
+    ] {
         assert!(
-            title_block.contains(subtitle),
-            "{name}'s second line must be declared before the title row's stretch spacer, i.e. \
-             inside the title block beside the SearchBar. After it, the line is back on a row of \
-             its own — which spends about a wrapped chip row's worth of the hero tile, so the \
-             band grows on every wrap. See `ui::hero_chips::HERO_MAX_ROWS`"
-        );
-
-        let block = normalized
-            .split_once(subtitle)
-            .and_then(|(_, rest)| rest.split_once('}'))
-            .map_or("", |(block, _)| block);
-        assert!(
-            block.contains("font-size: Theme.font-size-md;"),
-            "{name}'s second line must stay at `font-size-md` — the title row has only the \
-             SearchBar's leftover height to lend it, and `hero-title-size` plus a larger line \
-             spends the slack `HERO_MAX_ROWS` is measured against"
+            sheet.contains(&format!("? {fact}")),
+            "my-library-view.slint must feed `{fact}` into the band's `subtitle` — the band \
+             spells no entity of its own"
         );
     }
 }
@@ -1070,7 +1123,13 @@ fn every_hero_title_reads_the_same_token() {
     // the view still builds, still looks right on its own, and only diverges
     // from the other five.
     const WEIGHT: &str = "font-weight: Theme.page-title-weight;";
-    const TITLE: &str = "font-size: Theme.hero-title-size; font-weight: Theme.page-title-weight;";
+    const HERO_TITLE: &str =
+        "font-size: Theme.hero-title-size; font-weight: Theme.page-title-weight;";
+    // `LibraryTabBand`'s idle line, which is a *page* heading rather than a hero
+    // one — it names the mounted tab's count, not an entity — so it reads the
+    // page token. Admitted here so the literal check below stays exact.
+    const IDLE_TITLE: &str =
+        "font-size: Theme.page-title-size; font-weight: Theme.page-title-weight;";
 
     assert!(
         THEME.contains("out property <length> hero-title-size:"),
@@ -1079,24 +1138,27 @@ fn every_hero_title_reads_the_same_token() {
     );
     for (src, name) in HERO_VIEWS {
         let normalized: String = src.split_whitespace().collect::<Vec<_>>().join(" ");
-        let titles = normalized.matches(WEIGHT).count();
-        assert!(titles > 0, "{name} declares no hero title");
+        let headings = normalized.matches(WEIGHT).count();
+        assert!(
+            normalized.contains(HERO_TITLE),
+            "{name} declares no hero title"
+        );
         assert_eq!(
-            normalized.matches(TITLE).count(),
-            titles,
-            "{name} sizes a hero title with something other than `Theme.hero-title-size` — the \
-             six banners are one band under different content, and they had already drifted to \
-             two sizes once"
+            normalized.matches(HERO_TITLE).count() + normalized.matches(IDLE_TITLE).count(),
+            headings,
+            "{name} sizes a heading with something other than `Theme.hero-title-size` or \
+             `Theme.page-title-size` — the six banners are one band under different content, and \
+             they had already drifted to two sizes once"
         );
     }
 
-    // The two mosaic pages take their heading from the shared band, so a title
-    // reappearing in either is a second one — and the copy that would be free to
+    // The six pages take their heading from whichever band they wear, so a title
+    // reappearing in one is a second one — and the copy that would be free to
     // drift.
-    for (src, name) in MOSAIC_HOSTS {
+    for (src, name) in MOSAIC_HOSTS.iter().chain(BAND_HOSTS.iter()) {
         assert!(
             !src.contains(WEIGHT),
-            "{name} declares a hero title of its own; `MosaicTabHero` owns that heading"
+            "{name} declares a hero title of its own; its shared band owns that heading"
         );
     }
 }

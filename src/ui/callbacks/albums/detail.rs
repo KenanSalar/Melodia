@@ -50,7 +50,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, albums_ui: &Arc<AlbumsUi>) 
             // detail view without an Albums-grid frame.
             // `ArtistDetail.artist-id` was preserved through the cross-tab
             // episode, so `tab-idx == tab-artists && artist-id >= 0`
-            // mounts `ArtistDetailView` immediately. **The origin is a
+            // mounts `ArtistDetailBody` immediately. **The origin is a
             // pair**: five views share nav index 3, so restoring the index
             // alone would be a no-op leaving the Albums tab mounted.
             let origin = g.get_origin_nav_index();
@@ -72,7 +72,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, albums_ui: &Arc<AlbumsUi>) 
                 au_swap.release_detail_artwork();
                 // Skip the Albums-grid prewarm on the cross-tab back path:
                 // the grid isn't going to mount (Slint swings to
-                // `ArtistDetailView`), and `AlbumsUi.grid_covers` is
+                // `ArtistDetailBody`), and `AlbumsUi.grid_covers` is
                 // shared with the Artist Detail's Albums sub-section —
                 // prewarming would evict that sub-section's still-needed
                 // thumbnails in favor of grid covers the user won't see.

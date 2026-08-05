@@ -8,7 +8,7 @@ Working doc. Keep the phase markers current; delete this file when the feature s
 | 1 — `MyLibrary` global, nav plumbing, mount sheet | ☑ done |
 | 2 — `LibraryTabBand` | ☑ done |
 | 3 — The five tab bodies and the mount sheet | ☑ done |
-| 4 — The four details under the band | ☐ not started |
+| 4 — The four details under the band | ☑ done |
 | 5 — Cleanup, i18n, docs | ☐ not started |
 
 ## Context
@@ -707,7 +707,111 @@ Phase 5 with the four detail ones rather than piecemeal here.
   `CompositeScroll.reset()`; that is the **tenth** focus mirror and the **fifth** composite
   reset.
 
-### Phase 4 — The four details under the band
+### Phase 4 — The four details under the band ☑
+
+**What the phase actually landed**, and the five places the plan below was wrong or left
+something open:
+
+- **`MyLibrary.back()` was already wired; the gap was purely Slint.** `on_back` has
+  dispatched to the mounted tab's `invoke_close_detail()` since Phase 1 — the sheet simply
+  never handled `back-clicked`, and the button sat inside a `hero-t > 0` branch that
+  `detail-open: false` kept dead. So the plan's "Rust: `MyLibrary.back()` routes to…"
+  bullet cost one line in the sheet. **What it did buy was a dedup**: that handler was a
+  verbatim copy of `nav_history::invoke_close_detail`'s five-arm match, and the two are now
+  one `ui::my_library::close_open_detail(ui, tab)` — the band's arrow and a Mouse-4 step out
+  of a detail are the same act, and `nav_history` keeps only its `section != NAV_MY_LIBRARY`
+  guard on top.
+- **Removing the four detail search boxes broke the filter in two ways the plan didn't
+  name, and both had to be fixed here.** Phase 3 removed the five *grid* boxes; this phase
+  removed the four *detail* ones, and each box was carrying a fact nothing else did.
+  **`<Detail>.filter` stopped being written**, because `dispatch`'s detail arms pass the
+  needle by *argument* and the property was kept current by the box's `<=>`. Its live
+  reader is `playlist-detail.slint`'s `reorder-enabled`, which refuses a drag while the
+  list is filtered — so a filtered playlist would have stayed reorderable, with the
+  index → position mapping the drag depends on wrong. The four detail arms now `set_filter`
+  before invoking, and **all nine arms read alike**, which is the simpler shape besides.
+  And **the one box started lying whenever a detail opened or closed**: a drill-in finds
+  the detail's filter already cleared by `open_*` while the box still holds the grid's
+  needle, and a back out finds the grid's needle untouched (the rebuild is memoized on it)
+  while the box reads empty. `MyLibrary.detail-scope-changed()` — fired from four
+  `changed watched-*-id` mirrors on the sheet, since `changed` rejects a path expression on
+  a global — routes to **`filter::sync_box`**, `dispatch` read backwards: it takes the
+  mounted surface's own filter. **Not the tab pick's clear-both-sides rule**, which was
+  considered and rejected: clearing on the way out drops the user's grid filter on every
+  back, which the two-box arrangement never did.
+- **`ui::hero_chips::tests` had to move forward from Phase 5, and not as a test failure.**
+  `HERO_VIEWS` `include_str!`'d the four `*-detail-view.slint` files and `detail-header.slint`
+  itself, so deleting them is a **compile break**. `HERO_VIEWS` is now `[…; 2]` — the two
+  shared bands, `mosaic-tab-hero.slint` and `library-tab-band.slint`, each standing for the
+  pages under it — and the new **`BAND_HOSTS`** is `MOSAIC_HOSTS`' twin over the sheet plus
+  the four detail bodies, pinning that the sheet mounts the band and the bodies mount
+  nothing. The bodies are the half worth pinning: a detail regrowing a header of its own
+  passes every other check in the file.
+- **Two of that file's pins had to be re-authored rather than ported, and the second is a
+  real geometry change.** `no_hero_view_sizes_its_own_artwork_tile` moved off `DetailHeader`
+  onto the band. And `the_two_subtitled_heroes_keep_that_line_inside_the_title_row` became
+  **`the_subtitled_heroes_share_one_collapsing_line`**, because the shape it asserted is
+  gone: `ui-patterns.md` records that Album's artist and Playlist's description ride
+  *inside* the title row since the `SearchBar` beside them has already claimed that height,
+  and in the band the search box is up in the tab row. There is nothing to ride in, so
+  Phase 2 built the subtitle as a sibling row and it costs its full line box plus a
+  `pad-xs` gap. **The meta column is `Theme.hero-artwork` less the pill band it reserves —
+  140 − 36 = 104 px — and a subtitled hero at two chip rows lands right at that ceiling.**
+  What the band buys back is that there is exactly *one* subtitle row for four heroes, so
+  the pin now holds the count (one, collapsing on `""`), the size (`font-size-md`), the
+  order (above the chip strip) and that only the sheet names an entity. If a wrapped second
+  chip row clips on Album or Playlist, the fix is a per-hero max into
+  `hero_chips::write_rows`, not a taller band — the band clips, so the failure is bounded.
+- **The band's `fallback-icon: "music-note"` default is correct and was left alone.** The
+  plan called it a typo'd ligature inherited from `DetailHeader`; it is in fact a
+  **sentinel** — `artwork-image.slint:56` branches on that exact string to reach
+  `assets/icons/music-note.svg` rather than a Material Symbols glyph. Changing it to
+  `music_note` would have silently swapped the placeholder art.
+
+Five things beyond the written scope, all inside the blast radius:
+
+- **`ArtworkImage` gained `has-cover`, and without it the Genre hero paints another
+  detail's artwork.** The tile gates on `cover.width` alone, and the sheet's `cover`
+  ternary has to bind *some* global on the Genre arm — Slint has no empty-`image` literal
+  and `GenreDetail` owns no cover, its tile being a name-hashed gradient. The old
+  `DetailHeader` sidestepped this by having Genre Detail pass no `cover` at all, which a
+  ternary cannot do. **More than one detail is open as a matter of routine** —
+  `seed_detail_from_settings` restores one per view whichever tab boot resumes — so this is
+  reachable on a cold start, and it reads as a decode landing in the wrong view. The band
+  passes `has-cover: root.artwork-path != ""`; the input defaults `true`, so every other
+  mount is untouched, and the five fallback branches now read `!root.shows-cover` off one
+  derived predicate rather than each respelling `cover.width == 0 &&`. The blur quartet
+  needs no equivalent: `HeroBlurBackdrop` already gates both slots on `has-blur`, which the
+  sheet holds `false` on that arm.
+
+- **The four grid pill rows are now gated *off* their detail as well as on their tab**, and
+  the Playlists collapsed cell with them. The plan's `@children` bullet only added the four
+  detail rows; without the other half a sort row survives over an open album and sorts a
+  grid nobody can see. Both halves route on the **same four predicates the body router
+  uses**, derived once on the sheet and forwarded into `tab-pills.slint` as `in` properties
+  — respelled there, the pills and the body could drift by one clause and only one of the
+  nine states would show it.
+- **The detail pill rows keep their in-tree tooltips.** `Tooltip`'s default side is `above`
+  and the band's slot rides its lower edge, so the pill lands inside the band, painted after
+  everything the band owns and before the body. The Playlists row's four overlay pills are
+  *inherited* from the old page header, not required by the band, and were left exactly as
+  Phase 3 left them.
+- **Only Album and Genre collapsed their inset onto the root**, where the plan said all
+  four could. Artist keeps per-child because `below-hero` is the region
+  `CompositeScrollbars` measures and the `CompositeScroll` hover sentinel covers, so it has
+  to run full-bleed; Playlist keeps per-child because its empty state and drop banner
+  deliberately fill `body`. Artist Detail also **lost its root backdrop `TouchArea`** —
+  `hover-catch` now covers the whole body and already does that job.
+- Eight comments naming a component that no longer exists were fixed
+  (`hero-blur-backdrop`, `cover-mosaic`, `hero-backdrop`, `sidebar`, `theme`, plus
+  `AlbumView` / `ArtistView` references in `albums/detail.rs`, `artists/detail.rs` and
+  `callbacks/albums/detail.rs` that Phase 3 had already stranded).
+
+**What did *not* change**, and is again the whole premise: the five views' data layer.
+`release_detail_hero_images!`, `clear_detail`, `release_detail_artwork`, `restore_origin`,
+`set_last_detail_id`, `nav_history::record_current` and every `section_active()` publish
+gate on `hero_backdrop` / `hero_chips` are untouched. `PlaylistDetail` still carries no
+origin pair and still needs none.
 
 - **`views/my-library/{album,artist,genre,playlist}-detail.slint`** — the four detail
   views with `DetailHeader`, its `@children` column (title row, `SearchBar`,
@@ -764,13 +868,11 @@ Phase 5 with the four detail ones rather than piecemeal here.
 - **No icon work.** `library_music`, `music_note` and `arrow_back` are all already in
   `scripts/icons.txt`, so neither `subset-icon-fonts.sh` nor `check-icons.py` needs a run.
   (Stated because the omission is what produces tofu.)
-- `ui::hero_chips::tests`: `HERO_VIEWS` is `[(&str, &str); 5]` today (the four detail views
-  + `mosaic-tab-hero.slint`) and becomes `[…; 2]` — `mosaic-tab-hero.slint` +
-  `library-tab-band.slint`. `MOSAIC_HOSTS` is untouched. Add a `BAND_HOSTS` array in its
-  shape, covering `my-library-view.slint` **and the four detail bodies**, pinning that each
-  still *mounts* the band (or nothing) and has grown no title, chip strip or artwork size of
-  its own. Pinning the sheet alone would miss the likelier regression — a detail body
-  quietly regrowing a header.
+- ☑ `ui::hero_chips::tests` — landed in Phase 4 and had to: `HERO_VIEWS` `include_str!`'d
+  the four detail views and `detail-header.slint`, so deleting them was a **compile break**
+  rather than a test failure. `HERO_VIEWS` is `[…; 2]`, `BAND_HOSTS` is beside
+  `MOSAIC_HOSTS`, and two pins were re-authored — see that phase's write-up for the
+  subtitle one, which asserts a different shape rather than the same one moved.
 - `ui::placeholder_tests`: `BUDGETING_HOSTS` is `[(&str, &str); 2]` (settings-view +
   mosaic-tab-hero) and becomes **3**, gaining the band — it budgets its header row and
   drives `input-width` the same way. This is an addition, not a re-verification.
@@ -903,7 +1005,24 @@ Targeted test additions, all `include_str!` source pins in the house style:
   `the_section_gate_ignores_its_tab_predicate_when_a_section_has_none` (both new gate
   properties default `-1`, and the predicate keeps its negative short-circuit — a `0`
   default silently deactivates all nine sections).
-- `ui::hero_chips::tests` — `HERO_VIEWS` at 2, plus the new `BAND_HOSTS`.
+- ☑ `…::the_morph_is_driven_by_the_sheets_own_derivation`,
+  `…::the_back_arrow_routes_to_the_pages_own_close` and
+  `…::every_hero_fact_the_band_declares_is_fed_by_the_sheet` — the three seam pins in
+  `library_tab_band_tests.rs`, which now `include_str!`s the mount sheet beside the band. A
+  band nobody drives passes all eight of its own pins; the last of the three is the one that
+  catches a *new* fact added to the band and never bound, which sits at its default and
+  fails nothing.
+- ☑ `…::the_hero_tile_suppresses_a_cover_the_open_detail_does_not_own` — the band's
+  `has-cover` gate. The mutation to check is dropping it, which only shows on a boot that
+  restored a detail on some *other* tab.
+- ☑ `…::the_pill_row_follows_the_body_router` — the four predicates are derived on the
+  sheet, forwarded into the pills, and gate the grid rows *off* their detail as well as the
+  detail rows *on* it.
+- ☑ `…::a_detail_open_or_close_reseats_the_shared_box` — the four id mirrors, the callback,
+  and `filter::sync_box` reaching all nine surfaces. The mutation to check is dropping the
+  close half: the grid comes back correctly filtered and only the box lies.
+- ☑ `ui::hero_chips::tests` — `HERO_VIEWS` at 2, plus the new `BAND_HOSTS`. Landed in
+  Phase 4; see there for why it couldn't wait.
 - `ui::placeholder_tests` — `BUDGETING_HOSTS` at 3.
 
 Manual, after Phase 4:
@@ -916,7 +1035,18 @@ Manual, after Phase 4:
    Playlists tab's own action-pill tooltips still work.
 4. Open an album → the band grows into the hero, the back button appears left of the tabs,
    chips and pills land, the search box now filters the album's tracks. Back → it shrinks
-   back to the count row, with no backdrop pop at the seam.
+   back to the count row, with no backdrop pop at the seam. **Measure the morph here** —
+   the animated `preferred-height` re-runs the page's layout every frame for `dur-spatial`.
+   Fallbacks in decision 6; don't slow the body to hide it.
+4b. **A subtitled hero at a width that wraps the chips** — an album with an artist, or a
+   playlist with a description, narrowed until the strip takes a second row. The meta
+   column is `Theme.hero-artwork` less the pill band it reserves (140 − 36 = 104 px) and
+   that case lands right at the ceiling, because the band's subtitle sits on a row of its
+   own where `DetailHeader`'s rode inside the title row. If the second row clips, the fix
+   is a per-hero max into `hero_chips::write_rows` — one row when a subtitle is present —
+   not a taller band.
+4c. Filter the Albums grid, drill into an album, come back: the box and the grid agree at
+   every step. Same on a playlist, and confirm a *filtered* playlist refuses a drag.
 5. Right-click a track → Go to Artist from the Songs tab: lands on the Artists tab with
    the detail open; from there open one of its albums; back twice returns Artists → Songs.
 6. Mouse-4 / Mouse-5 walk the history across tabs and details.
@@ -925,6 +1055,7 @@ Manual, after Phase 4:
 8. Light theme (Latte) with a detail open: the tab bar's selected label and the back
    button read against the blur, and the idle pane's tab colours read against `mantle`.
 9. Genre Detail specifically: gradient backdrop, no blur, tile colours intact through the
-   morph in both directions.
+   morph in both directions — and check it **after a restart that resumed with an album or
+   playlist detail open on another tab**, which is the case `has-cover` exists for.
 10. `RUST_LOG=info MELODIA_RSS_SAMPLE=1` — the `view=` tag names the tab and the open
     detail, and idle RSS after walking all five tabs and back sits where it did before.

@@ -27,6 +27,31 @@ const TAB_BODIES: [(&str, &str); 5] = [
     ),
 ];
 
+/// The four detail bodies, each stripped of the `DetailHeader` it used to wear. They
+/// answer the same questions the tab bodies do — the page has one filter box and one
+/// banner — so most pins walk the two together.
+const DETAIL_BODIES: [(&str, &str); 4] = [
+    ("album", include_str!("../../../../melodia-ui/ui/views/my-library/album-detail.slint")),
+    (
+        "artist",
+        include_str!("../../../../melodia-ui/ui/views/my-library/artist-detail.slint"),
+    ),
+    ("genre", include_str!("../../../../melodia-ui/ui/views/my-library/genre-detail.slint")),
+    (
+        "playlist",
+        include_str!("../../../../melodia-ui/ui/views/my-library/playlist-detail.slint"),
+    ),
+];
+
+/// A `.slint` source with its comment lines dropped, so prose naming a component can't
+/// satisfy — or trip — a pin about mounting one. The `library_tab_band_tests.rs` helper.
+fn code(src: &str) -> String {
+    src.lines()
+        .filter(|line| !line.trim_start().starts_with("//"))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
 /// The `tab-*` constant names the `MyLibrary` global declares, `tab-count` excluded.
 fn declared_tabs() -> Vec<String> {
     GLOBAL
@@ -228,9 +253,9 @@ fn the_sidebar_offers_one_row_for_the_whole_page() {
 /// that model from cache ahead of the section gate's refetch, so the list is never blank
 /// either.
 ///
-/// The five bodies are checked for the boxes they used to own: a stray `SearchBar` down
-/// there would filter its tab through a global this dispatch doesn't reach, and the two
-/// boxes would disagree the moment either was typed into.
+/// All nine bodies are checked for the boxes they used to own: a stray `SearchBar` down
+/// there would filter its surface through a global this dispatch doesn't reach, and the
+/// two boxes would disagree the moment either was typed into.
 #[test]
 fn a_tab_pick_clears_the_filter_on_both_sides() {
     let handler = CALLBACKS
@@ -250,15 +275,146 @@ fn a_tab_pick_clears_the_filter_on_both_sides() {
         );
     }
 
-    for (label, source) in TAB_BODIES {
+    for (label, source) in TAB_BODIES.iter().chain(DETAIL_BODIES.iter()) {
+        let body = code(source);
         for owned_by_the_band in ["SearchBar", "FilterThrottle"] {
             assert!(
-                !source.contains(owned_by_the_band),
-                "the {label} tab must not mount its own `{owned_by_the_band}` — the page has \
+                !body.contains(owned_by_the_band),
+                "the {label} body must not mount its own `{owned_by_the_band}` — the page has \
                  one filter box, and a second would filter through a global the tab pick \
                  never clears",
             );
         }
+    }
+}
+
+/// **A drill-in or a back reseats the box; it does not clear it.**
+///
+/// The page has one filter box over nine surfaces, and only a tab pick clears it. The
+/// other way the surface under it changes is a detail id crossing zero, and there both
+/// directions matter: on the way in the detail's own filter is already empty, so the box
+/// has to empty with it rather than show the grid's needle over a list it filters nothing
+/// of; on the way out the grid's needle is still there — untouched, and the rebuild is
+/// memoized on it — so the box has to say so rather than read empty over filtered cards.
+///
+/// The mutation to check is dropping the close half. Nothing fails, the grid comes back
+/// correctly filtered, and the box simply lies about why.
+#[test]
+fn a_detail_open_or_close_reseats_the_shared_box() {
+    // Mirrored rather than watched directly: `changed` rejects a path expression on a
+    // global. A missing mirror leaves exactly one of the four details lying.
+    const MIRRORS: [(&str, &str); 4] = [
+        ("watched-album-id", "AlbumDetail.album-id"),
+        ("watched-artist-id", "ArtistDetail.artist-id"),
+        ("watched-genre-id", "GenreDetail.genre-id"),
+        ("watched-playlist-id", "PlaylistDetail.playlist-id"),
+    ];
+    const FILTER: &str = include_str!("../filter.rs");
+
+    assert!(
+        GLOBAL.contains("callback detail-scope-changed();"),
+        "`MyLibrary` must declare `detail-scope-changed` — the sheet has no other way to tell \
+         Rust the surface under the box moved",
+    );
+
+    let view: String = VIEW.split_whitespace().collect::<Vec<_>>().join(" ");
+    for (mirror, id) in MIRRORS {
+        assert!(
+            view.contains(&format!("property <int> {mirror}: {id};")),
+            "my-library-view.slint must mirror `{id}` as `{mirror}` — `changed` can't watch a \
+             global's property directly, and an unmirrored id reseats nothing",
+        );
+        assert!(
+            view.contains(&format!(
+                "changed {mirror} => {{ MyLibrary.detail-scope-changed(); }}"
+            )),
+            "`{mirror}` must fire `detail-scope-changed`",
+        );
+    }
+
+    let handler = CALLBACKS
+        .split_once("g.on_detail_scope_changed(")
+        .and_then(|(_, rest)| rest.split_once("g.on_back("))
+        .map_or("", |(body, _)| body);
+    assert!(
+        handler.contains("filter::sync_box(&ui)"),
+        "`on_detail_scope_changed` must route to `filter::sync_box` — the inverse of the \
+         dispatch, reading the mounted surface's own filter back into the box",
+    );
+
+    // Nine surfaces out, nine back. A missing read leaves that surface's needle
+    // unrepresented, which is the same lie one direction at a time.
+    let sync = FILTER
+        .split_once("pub fn sync_box(")
+        .map_or("", |(_, body)| body);
+    assert!(!sync.is_empty(), "`ui::my_library::filter` must expose `sync_box`");
+    for surface in [
+        "Tracks",
+        "AlbumDetail",
+        "Albums",
+        "ArtistDetail",
+        "Artists",
+        "GenreDetail",
+        "Genres",
+        "PlaylistDetail",
+        "Playlists",
+    ] {
+        assert!(
+            sync.contains(&format!("ui.global::<{surface}>()")),
+            "`sync_box` must reach `{surface}` — `dispatch` routes to all nine surfaces on the \
+             way out and this owes all nine on the way back",
+        );
+    }
+}
+
+/// **The pill row follows the body router, and reads the same predicate it does.**
+///
+/// The band's `@children` slot is one row per mounted branch, so a grid's sort pills
+/// surviving over an open detail sort a grid nobody can see, and a detail's Shuffle
+/// surviving over its grid shuffles an entity that isn't open. Both halves are the same
+/// predicate the sheet routes on, forwarded rather than respelled — spelled twice, the
+/// pills and the body can drift by one clause and only one of the nine states shows it.
+#[test]
+fn the_pill_row_follows_the_body_router() {
+    const OPEN: [&str; 4] = ["album-open", "artist-open", "genre-open", "playlist-open"];
+
+    let view: String = VIEW.split_whitespace().collect::<Vec<_>>().join(" ");
+    for open in OPEN {
+        assert!(
+            view.contains(&format!("property <bool> {open}:")),
+            "my-library-view.slint must derive `{open}` — it is what the body, the band and \
+             the pills all route on",
+        );
+        assert!(
+            view.contains(&format!("{open}: root.{open};")),
+            "the sheet must forward `{open}` to `MyLibraryTabPills` — respelled there, the \
+             pills and the body can disagree about which branch is up",
+        );
+        assert!(
+            PILLS.contains(&format!("in property <bool> {open};")),
+            "tab-pills.slint must take `{open}` as an input rather than deriving its own",
+        );
+    }
+
+    let pills: String = PILLS.split_whitespace().collect::<Vec<_>>().join(" ");
+    // The three sort rows and the Playlists cell are gated *off* their detail; the
+    // four detail rows *on* it. Songs is the one tab with no detail to gate against.
+    for (tab, open) in [
+        ("tab-albums", "album-open"),
+        ("tab-artists", "artist-open"),
+        ("tab-genres", "genre-open"),
+        ("tab-playlists", "playlist-open"),
+    ] {
+        assert!(
+            pills.contains(&format!("MyLibrary.tab-idx == MyLibrary.{tab} && !root.{open}")),
+            "the {tab} pill row must be gated off `{open}` as well as on its tab — over an \
+             open detail it acts on a grid nobody can see",
+        );
+        assert!(
+            pills.contains(&format!("if root.{open}: ActionPill {{")),
+            "the {open} detail must carry a pill row of its own — it had one at the foot of \
+             its `DetailHeader`, and the band's slot is where it moved",
+        );
     }
 }
 

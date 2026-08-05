@@ -10,10 +10,8 @@ use slint::{ComponentHandle, SharedString};
 
 use crate::library;
 use crate::state::AppState;
-use crate::ui::my_library::{self as my_library_mod, MyLibraryTab};
-use crate::{
-    AlbumDetail, AppWindow, ArtistDetail, GenreDetail, MyLibrary, PlaylistDetail,
-};
+use crate::ui::my_library as my_library_mod;
+use crate::{AppWindow, MyLibrary};
 
 /// Write the active tab to `views.json` on the blocking pool. The Slint property is
 /// already correct by the time any caller gets here, so this is pure catch-up.
@@ -72,23 +70,30 @@ pub fn wire_my_library(ui: &AppWindow, state: &AppState) {
         });
     }
 
-    // back: the band's back arrow, once it owns one. Routes to the mounted tab's own
-    // `close-detail`, so every teardown that button already triggers — hero images,
-    // cover tiers, `last_detail_ids`, the nav-history record — stays where it is.
+    // detail-scope-changed: the same nine-way hand-off read backwards. A drill-in or a
+    // back swaps the surface the box describes without anyone typing, so the box takes
+    // that surface's own filter — see `ui::my_library::filter::sync_box`.
+    {
+        let weak = weak.clone();
+        g.on_detail_scope_changed(move || {
+            let Some(ui) = weak.upgrade() else { return };
+            my_library_mod::filter::sync_box(&ui);
+        });
+    }
+
+    // back: the band's back arrow. Routes to the mounted tab's own `close-detail`, so
+    // every teardown that button already triggers — hero images, cover tiers,
+    // `last_detail_ids`, the origin restore, the nav-history record — stays where it is.
+    // The dispatch itself is shared with `nav_history`'s Mouse-4 step out of a detail.
     {
         let weak = weak.clone();
         g.on_back(move || {
             let Some(ui) = weak.upgrade() else { return };
-            let g = ui.global::<MyLibrary>();
-            match my_library_mod::tab_from_index(&g, g.get_tab_idx()) {
-                MyLibraryTab::Songs => {}
-                MyLibraryTab::Albums => ui.global::<AlbumDetail>().invoke_close_detail(),
-                MyLibraryTab::Artists => ui.global::<ArtistDetail>().invoke_close_detail(),
-                MyLibraryTab::Genres => ui.global::<GenreDetail>().invoke_close_detail(),
-                MyLibraryTab::Playlists => {
-                    ui.global::<PlaylistDetail>().invoke_close_detail();
-                }
-            }
+            let tab = {
+                let g = ui.global::<MyLibrary>();
+                my_library_mod::tab_from_index(&g, g.get_tab_idx())
+            };
+            my_library_mod::close_open_detail(&ui, tab);
         });
     }
 }

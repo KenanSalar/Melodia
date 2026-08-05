@@ -1,0 +1,192 @@
+import { Theme } from "../../theme.slint";
+import { MyLibrary } from "../../globals/my-library.slint";
+import { Player } from "../../globals/player.slint";
+import { PlaylistDetail } from "../../globals/playlists.slint";
+import { DraggableTrackList } from "../../components/track-list/draggable-track-list.slint";
+import { OverlayScrollbar } from "../../components/overlay-scrollbar.slint";
+import { MaterialIcon } from "../../components/material-icon.slint";
+
+// `AlbumDetailBody`'s shape over `DraggableTrackList` — the shared `TrackList` stays
+// drag-free for Tracks / Browse / the other three details — plus the empty state and the
+// OS file-drop banner, which is why this one keeps its inset per child: both fill `body`.
+export component PlaylistDetailBody inherits Rectangle {
+    // The `<=>`s below adopt whatever the globals held — a two-way link keeps the right
+    // side's value, and the globals outlive this view. Without the reset a drag
+    // interrupted by nav-away returns as a ghosted row under a stranded drop line. `init`
+    // runs after the links, so it wins.
+    init => {
+        PlaylistDetail.drag-source = -1;
+        PlaylistDetail.drop-slot = -1;
+    }
+
+    // Catches clicks no inner TouchArea consumes; the band's SearchBar blurs on the tick.
+    TouchArea {
+        clicked => { MyLibrary.blur-search-tick += 1; }
+    }
+
+    // The list is always mounted so `tl` stays in scope for the overlay scrollbars; the
+    // empty state paints on top of its bare header.
+    body := Rectangle {
+        width: 100%;
+        height: 100%;
+
+        HorizontalLayout {
+            padding-left: Theme.pad-lg;
+            padding-right: Theme.pad-lg;
+            // Band-to-header gap, matching the other detail bodies.
+            padding-top: Theme.pad-lg;
+
+            tl := DraggableTrackList {
+                horizontal-stretch: 1;
+                vertical-stretch: 1;
+
+                rows: PlaylistDetail.tracks;
+                // Reorder only in insertion order: any other sort makes it ambiguous, a
+                // filter breaks the index → position mapping, and a smart playlist has no
+                // curated order to reorder into. `filter` is the page's one needle,
+                // mirrored onto this global by `ui::my_library::filter::dispatch`.
+                reorder-enabled: PlaylistDetail.sort-field == "position"
+                    && PlaylistDetail.filter == ""
+                    && !PlaylistDetail.playlist.is_smart;
+                // On the global so Rust can abort an in-flight drag: refreshing `tracks`
+                // destroys the row holding the pointer grab, and a dead row never delivers
+                // the pointer-up that would clear these.
+                drag-source <=> PlaylistDetail.drag-source;
+                drop-slot <=> PlaylistDetail.drop-slot;
+
+                w-number <=> PlaylistDetail.w-number;
+                w-title <=> PlaylistDetail.w-title;
+                w-artist <=> PlaylistDetail.w-artist;
+                w-album <=> PlaylistDetail.w-album;
+                w-genre <=> PlaylistDetail.w-genre;
+                w-year <=> PlaylistDetail.w-year;
+                w-length <=> PlaylistDetail.w-length;
+
+                show-number <=> PlaylistDetail.show-number;
+                show-artwork <=> PlaylistDetail.show-artwork;
+                show-artist <=> PlaylistDetail.show-artist;
+                show-album <=> PlaylistDetail.show-album;
+                show-genre <=> PlaylistDetail.show-genre;
+                show-year <=> PlaylistDetail.show-year;
+                number-mode: "index";
+
+                sort-field: PlaylistDetail.sort-field;
+                sort-dir: PlaylistDetail.sort-dir;
+                playing-track-id: Player.vm.track.id;
+                view-context: "playlist-detail";
+                current-playlist-id: PlaylistDetail.playlist.id;
+                view-selected-ids: PlaylistDetail.selected-ids;
+
+                request-sort(f) => { PlaylistDetail.request-sort(f); }
+                play-row(id, idx) => { PlaylistDetail.play-row(id, idx); }
+                play-next(ids) => { PlaylistDetail.play-next(ids); }
+                add-to-queue(ids) => { PlaylistDetail.add-to-queue(ids); }
+                toggle-row-favorite(ids, on) => { PlaylistDetail.toggle-row-favorite(ids, on); }
+                set-row-rating(ids, n) => { PlaylistDetail.set-row-rating(ids, n); }
+                select-row(idx, id, sh, ct) => { PlaylistDetail.select-row(idx, id, sh, ct); }
+                // A click in the track list blurs the band's SearchBar.
+                request-blur-search => { MyLibrary.blur-search-tick += 1; }
+                reorder(from, to) => { PlaylistDetail.reorder(from, to); }
+                remove-from-playlist(ids) => { PlaylistDetail.remove-track(ids); }
+                go-to-album(aid) => { PlaylistDetail.go-to-album(aid); }
+                go-to-artist(aid) => { PlaylistDetail.go-to-artist(aid); }
+                go-to-genre(gid) => { PlaylistDetail.go-to-genre(gid); }
+            }
+        }
+
+        if PlaylistDetail.playlist.track_count == 0: Rectangle {
+            background: Theme.base;
+            VerticalLayout {
+                alignment: center;
+                spacing: Theme.pad-md;
+                HorizontalLayout {
+                    alignment: center;
+                    MaterialIcon {
+                        name: "music_note";
+                        icon-size: 64px;
+                        icon-color: Theme.overlay0;
+                    }
+                }
+                HorizontalLayout {
+                    alignment: center;
+                    Text {
+                        text: PlaylistDetail.playlist.is_smart
+                            ? @tr("No matching tracks")
+                            : @tr("No tracks yet");
+                        color: Theme.text;
+                        font-size: Theme.font-size-lg;
+                        font-weight: 600;
+                    }
+                }
+                HorizontalLayout {
+                    alignment: center;
+                    Text {
+                        text: PlaylistDetail.playlist.is_smart
+                            ? @tr("No tracks match these rules.")
+                            : @tr("Drag music files here, or add tracks via any track's overflow menu.");
+                        color: Theme.subtext0;
+                        font-size: Theme.font-size-sm;
+                        horizontal-alignment: center;
+                        wrap: word-wrap;
+                    }
+                }
+            }
+        }
+
+        // OS file-hover banner — routed here when the queue sheet is closed and this
+        // detail is open. Stacks above the empty state.
+        if PlaylistDetail.is-drop-hovered && PlaylistDetail.playlist-id >= 0
+            && !PlaylistDetail.playlist.is_smart: Rectangle {
+            background: Theme.accent.with-alpha(0.16);
+            border-radius: Theme.radius-md;
+            border-width: 2px;
+            border-color: Theme.accent;
+
+            VerticalLayout {
+                alignment: center;
+                spacing: Theme.pad-sm;
+                HorizontalLayout {
+                    alignment: center;
+                    MaterialIcon {
+                        name: "playlist_add";
+                        icon-size: 56px;
+                        icon-color: Theme.accent;
+                    }
+                }
+                HorizontalLayout {
+                    alignment: center;
+                    Text {
+                        text: @tr("Drop files to add to this playlist");
+                        color: Theme.text;
+                        font-size: Theme.font-size-lg;
+                        font-weight: 600;
+                    }
+                }
+            }
+        }
+    }
+
+    OverlayScrollbar {
+        horizontal: false;
+        x: parent.width - self.width;
+        y: tl.absolute-position.y - root.absolute-position.y + tl.body-y;
+        width: 10px;
+        height: tl.body-height;
+        visible-size: tl.v-visible-height;
+        content-size: tl.v-viewport-height;
+        offset: tl.v-offset;
+        scroll-to(o) => { tl.set-v-offset(o); }
+    }
+
+    OverlayScrollbar {
+        horizontal: true;
+        x: tl.absolute-position.x - root.absolute-position.x;
+        y: parent.height - self.height;
+        width: tl.width - 10px;
+        height: 10px;
+        visible-size: tl.h-visible-width;
+        content-size: tl.h-viewport-width;
+        offset: tl.h-offset;
+        scroll-to(o) => { tl.set-h-offset(o); }
+    }
+}

@@ -4,9 +4,9 @@
 //!
 //! Dialog *opens* (populating `Dialog.title` / `kind` / `target-id` /
 //! `input-text` / `pending-track-ids` / `open`) happen inline in Slint
-//! markup — the "+ New Playlist" pill (`my-library/tab-pills.slint`), the
-//! Rename / Delete pills (`playlist-detail-view.slint`), and the
-//! "New Playlist…" entry inside the row context menu
+//! markup — the "+ New Playlist" pill and the Rename / Delete pills (both now
+//! in `my-library/tab-pills.slint`, which holds every My Library pill row), and
+//! the "New Playlist…" entry inside the row context menu
 //! (`track-list-row.slint`). Crossing into Rust to write Dialog
 //! properties *synchronously* from a click handler trips Slint's
 //! "Recursion detected" property guard (`i_slint_core::properties`).

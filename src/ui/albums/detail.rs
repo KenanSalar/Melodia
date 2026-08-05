@@ -80,11 +80,11 @@ pub async fn open_album(
 /// as the last statement on the UI thread, after every detail property
 /// is set, so a follow-on global write (e.g. flipping `Nav.selected-index`
 /// for cross-tab nav from the Artist Detail) lands in the same frame —
-/// Slint paints `AlbumDetailView` directly with no `AlbumView` frame in
+/// Slint paints `AlbumDetailBody` directly with no Albums-grid frame in
 /// between.
 ///
 /// `enter_from` chooses the `ViewTransition` enter direction for the new
-/// `AlbumDetailView` mount; pass [`NavEnterFrom::Right`] for any user
+/// `AlbumDetailBody` mount; pass [`NavEnterFrom::Right`] for any user
 /// drill-in (same-tab or cross-tab), and [`NavEnterFrom::Below`] for the
 /// first-launch seed path so reopening a saved detail feels like a normal
 /// app start.

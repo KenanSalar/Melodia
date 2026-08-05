@@ -21,7 +21,7 @@ export global HeroBackdrop {
     in-out property <color> floor-end: #14101a;
 
     // The hue-carrying tier, solved to 3:1 against the composited backdrop. Read by the
-    // `DetailHeader` tile fallback, the smart-playlist badge, the chips' label, and both
+    // `LibraryTabBand` tile fallback, the smart-playlist badge, the chips' label, and both
     // mosaic heroes' empty state and placeholder slots.
     in-out property <brush> chrome: #cba6f7;
 
@@ -44,7 +44,7 @@ export global HeroBackdrop {
     in-out property <brush> on-backdrop-muted: #c9c5d3;
 
     // The mosaic heroes' artwork square, the only bordered hero surface —
-    // `DetailHeader`'s tile is borderless. A `Theme.border` hairline was a wash against
+    // `LibraryTabBand`'s tile is borderless. A `Theme.border` hairline was a wash against
     // the old `surface1` fill under either theme, but against a fill pinned dark it
     // vanishes under Mocha and turns a hard bright ring under every light theme, so the
     // edge is a hero token for the same reason the fill is.

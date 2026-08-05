@@ -100,8 +100,8 @@ component SidebarItem inherits Rectangle {
         mouse-cursor: pointer;
         // Closes Now Playing too — it sits over any section, so any nav click dismisses
         // it. **A detail id is not reset here**: it belongs to that tab's state, so
-        // leaving and returning restores the last open one, and the back button in
-        // `DetailHeader` is the only way out.
+        // leaving and returning restores the last open one, and the band's back arrow is
+        // the only way out.
         clicked => {
             // Sidebar nav is always lateral, so the direction is set **before** the
             // index write and the new branch fades up whatever the last one left behind.

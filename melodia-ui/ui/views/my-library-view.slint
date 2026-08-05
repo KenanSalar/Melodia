@@ -3,6 +3,7 @@ import { Nav } from "../globals/nav.slint";
 import { AlbumDetail, Albums } from "../globals/albums.slint";
 import { ArtistDetail, Artists } from "../globals/artists.slint";
 import { GenreDetail, Genres } from "../globals/genres.slint";
+import { HeroBackdrop } from "../globals/hero-backdrop.slint";
 import { PlaylistDetail, Playlists } from "../globals/playlists.slint";
 import { Tracks } from "../globals/tracks.slint";
 import { FilterThrottle } from "../components/filter-throttle.slint";
@@ -17,10 +18,10 @@ import { MyLibraryArtistsTab } from "my-library/artists-tab.slint";
 import { MyLibraryGenresTab } from "my-library/genres-tab.slint";
 import { MyLibraryPlaylistsTab } from "my-library/playlists-tab.slint";
 import { MyLibraryTabPills } from "my-library/tab-pills.slint";
-import { AlbumDetailView } from "album-detail-view.slint";
-import { ArtistDetailView } from "artist-detail-view.slint";
-import { GenreDetailView } from "genre-detail-view.slint";
-import { PlaylistDetailView } from "playlist-detail-view.slint";
+import { AlbumDetailBody } from "my-library/album-detail.slint";
+import { ArtistDetailBody } from "my-library/artist-detail.slint";
+import { GenreDetailBody } from "my-library/genre-detail.slint";
+import { PlaylistDetailBody } from "my-library/playlist-detail.slint";
 
 // My Library: five tabs over the views that used to be five sidebar entries. This file is
 // the mount sheet — the band, the grid geometry the four card tabs share, which body is on
@@ -34,6 +35,36 @@ export component MyLibraryView inherits Rectangle {
     // the cost being debounced is a model rebuild in Rust rather than Slint's own
     // re-evaluation.
     property <int> filter-tick-pending;
+
+    // **Which of the nine branches is mounted, spelled once.** The body router, the band's
+    // hero facts and the pill rows all read these, because a divergence between any two of
+    // them paints one entity's banner over another's list. Private here rather than on
+    // `MyLibrary`: a binding belongs to the scope it is written in, so deriving it on the
+    // global would make `my-library.slint` the second globals file to import siblings.
+    property <bool> album-open:
+        MyLibrary.tab-idx == MyLibrary.tab-albums && AlbumDetail.album-id >= 0;
+    property <bool> artist-open:
+        MyLibrary.tab-idx == MyLibrary.tab-artists && ArtistDetail.artist-id >= 0;
+    property <bool> genre-open:
+        MyLibrary.tab-idx == MyLibrary.tab-genres && GenreDetail.genre-id >= 0;
+    property <bool> playlist-open:
+        MyLibrary.tab-idx == MyLibrary.tab-playlists && PlaylistDetail.playlist-id >= 0;
+    property <bool> detail-open:
+        root.album-open || root.artist-open || root.genre-open || root.playlist-open;
+
+    // **The scope the page's one filter box describes changed.** Rust reseats the box from
+    // whichever surface is now mounted: a drill-in finds the detail's needle already
+    // cleared, a back out finds the grid's own still there — so the box can't read empty
+    // over a grid that is still filtered, or hold a grid needle over an unfiltered detail.
+    // Mirrors rather than `changed AlbumDetail.album-id`, which Slint rejects on a global.
+    property <int> watched-album-id: AlbumDetail.album-id;
+    changed watched-album-id => { MyLibrary.detail-scope-changed(); }
+    property <int> watched-artist-id: ArtistDetail.artist-id;
+    changed watched-artist-id => { MyLibrary.detail-scope-changed(); }
+    property <int> watched-genre-id: GenreDetail.genre-id;
+    changed watched-genre-id => { MyLibrary.detail-scope-changed(); }
+    property <int> watched-playlist-id: PlaylistDetail.playlist-id;
+    changed watched-playlist-id => { MyLibrary.detail-scope-changed(); }
 
     // A click anywhere the band or a body doesn't claim gives the filter box up.
     TouchArea {
@@ -122,21 +153,104 @@ export component MyLibraryView inherits Rectangle {
                 : (Playlists.total-count >= 0
                     ? @tr("{n} playlist" | "{n} playlists" % Playlists.total-count) : "");
 
+            // A detail's own list comes first, so the drill-in states what the box now
+            // filters. Artist Detail is the one that filters two things at once.
             filter-placeholder:
-                MyLibrary.tab-idx == MyLibrary.tab-songs ? @tr("Filter tracks…")
+                root.artist-open ? @tr("Filter tracks & albums…")
+                : root.detail-open ? @tr("Filter tracks…")
+                : MyLibrary.tab-idx == MyLibrary.tab-songs ? @tr("Filter tracks…")
                 : MyLibrary.tab-idx == MyLibrary.tab-albums ? @tr("Filter albums…")
                 : MyLibrary.tab-idx == MyLibrary.tab-artists ? @tr("Filter artists…")
                 : MyLibrary.tab-idx == MyLibrary.tab-genres ? @tr("Filter genres…")
                 : @tr("Filter playlists…");
 
-            // Held false until the four detail views come out from under their own
-            // `DetailHeader`. The hero half is built and compiled; nothing may reach it
-            // while a detail still draws a banner of its own, or the page wears two.
-            detail-open: false;
+            // --- The hero half -----------------------------------------------
+            //
+            // The band morphs into the open detail's banner rather than a second one
+            // appearing under it, so every fact below is a four-arm ternary over the
+            // predicates above and none of the four bodies owns a title, a tile or a
+            // chip strip any more.
+            detail-open: root.detail-open;
+            back-clicked => { MyLibrary.back(); }
+
+            title:
+                root.album-open ? AlbumDetail.album.name
+                : root.artist-open ? ArtistDetail.artist.name
+                : root.genre-open ? GenreDetail.genre.name
+                : PlaylistDetail.playlist.name;
+            // Album's artist and Playlist's description; the other two heroes state
+            // nothing under the title and the band collapses the row on "".
+            subtitle:
+                root.album-open ? AlbumDetail.album.artist_name
+                : root.playlist-open ? PlaylistDetail.playlist.description
+                : "";
+            title-badge: root.playlist-open && PlaylistDetail.playlist.is_smart;
+
+            artwork-path:
+                root.album-open ? AlbumDetail.album.artwork_path
+                : root.artist-open ? ArtistDetail.artist.image_path
+                : root.playlist-open ? PlaylistDetail.playlist.artwork_path
+                : "";
+            // Genre Detail owns no cover, and Slint has no empty-`image` literal to fall
+            // through to — so the band gates on `artwork-path` instead, which is `""` on
+            // that arm. See its `has-cover`.
+            cover:
+                root.album-open ? AlbumDetail.cover
+                : root.artist-open ? ArtistDetail.cover
+                : PlaylistDetail.cover;
+            circular-artwork: root.artist-open;
+            fallback-icon:
+                root.album-open ? "album"
+                : root.artist-open ? "person"
+                : root.genre-open ? "theater_comedy"
+                : "playlist";
+            // Genres have no intrinsic image, so the tile paints from the two name-hashed
+            // stops on the row and matches the grid card exactly — genre recognition
+            // survives the drill-in. The wide backdrop is the *dimmer* pair, written into
+            // `HeroBackdrop.floor-*` by Rust's `open_genre`, which measures it and solves
+            // the scrim and foreground against it as an artwork-bearing detail does.
+            tile-bg: root.genre-open
+                ? @linear-gradient(135deg,
+                    GenreDetail.genre.tile_color_1,
+                    GenreDetail.genre.tile_color_2)
+                : HeroBackdrop.chrome.with-alpha(0.15);
+            tile-icon-color: root.genre-open
+                ? #ffffff.with-alpha(0.3)
+                : HeroBackdrop.chrome;
+
+            // **`has-blur` is the gate, not the slot.** `GenreDetail` declares no blur
+            // quartet at all, and Slint has no empty-`image` literal to fall through to —
+            // so the Genre arm lands on a sibling's slot and `HeroBlurBackdrop` paints
+            // only its gradient floor, which is exactly what a procedural backdrop wants.
+            // Don't "fix" this by requiring the quartet of every detail.
+            blur-a:
+                root.artist-open ? ArtistDetail.blur-img-a
+                : root.playlist-open ? PlaylistDetail.blur-img-a
+                : AlbumDetail.blur-img-a;
+            blur-b:
+                root.artist-open ? ArtistDetail.blur-img-b
+                : root.playlist-open ? PlaylistDetail.blur-img-b
+                : AlbumDetail.blur-img-b;
+            use-a:
+                root.artist-open ? ArtistDetail.blur-use-a
+                : root.playlist-open ? PlaylistDetail.blur-use-a
+                : AlbumDetail.blur-use-a;
+            has-blur:
+                root.album-open ? AlbumDetail.has-blur
+                : root.artist-open ? ArtistDetail.has-blur
+                : root.playlist-open ? PlaylistDetail.has-blur
+                : false;
 
             // The band's `@children` slot, in one piece. See `tab-pills.slint` for why
-            // the five rows are a component instead of five `if`s written here.
-            pills := MyLibraryTabPills { }
+            // the nine rows are a component instead of nine `if`s written here; the
+            // predicates come from this sheet so the pills and the body can't disagree
+            // about which branch is up.
+            pills := MyLibraryTabPills {
+                album-open: root.album-open;
+                artist-open: root.artist-open;
+                genre-open: root.genre-open;
+                playlist-open: root.playlist-open;
+            }
         }
 
         body := Rectangle {
@@ -153,10 +267,10 @@ export component MyLibraryView inherits Rectangle {
                 enabled: band.tab-anim-armed;
                 MyLibrarySongsTab { width: 100%; height: 100%; }
             }
-            // Each grid tab swaps grid ↔ detail on its own `*-id`, -1 being the grid —
-            // the same split these four had while they were separate sidebar sections.
-            if MyLibrary.tab-idx == MyLibrary.tab-albums
-                && AlbumDetail.album-id < 0: ViewTransition {
+            // Each grid tab swaps grid ↔ detail on the predicate above, -1 being the
+            // grid — the same split these four had while they were separate sidebar
+            // sections, now stated once so the band and the pills follow it too.
+            if MyLibrary.tab-idx == MyLibrary.tab-albums && !root.album-open: ViewTransition {
                 width: parent.width;
                 height: parent.height;
                 enter-from: Nav.pending-enter-from;
@@ -170,15 +284,13 @@ export component MyLibraryView inherits Rectangle {
                     gap: root.grid-gap;
                 }
             }
-            if MyLibrary.tab-idx == MyLibrary.tab-albums
-                && AlbumDetail.album-id >= 0: ViewTransition {
+            if root.album-open: ViewTransition {
                 width: parent.width;
                 height: parent.height;
                 enter-from: Nav.pending-enter-from;
-                AlbumDetailView { width: 100%; height: 100%; }
+                AlbumDetailBody { width: 100%; height: 100%; }
             }
-            if MyLibrary.tab-idx == MyLibrary.tab-artists
-                && ArtistDetail.artist-id < 0: ViewTransition {
+            if MyLibrary.tab-idx == MyLibrary.tab-artists && !root.artist-open: ViewTransition {
                 width: parent.width;
                 height: parent.height;
                 enter-from: Nav.pending-enter-from;
@@ -192,15 +304,13 @@ export component MyLibraryView inherits Rectangle {
                     gap: root.grid-gap;
                 }
             }
-            if MyLibrary.tab-idx == MyLibrary.tab-artists
-                && ArtistDetail.artist-id >= 0: ViewTransition {
+            if root.artist-open: ViewTransition {
                 width: parent.width;
                 height: parent.height;
                 enter-from: Nav.pending-enter-from;
-                ArtistDetailView { width: 100%; height: 100%; }
+                ArtistDetailBody { width: 100%; height: 100%; }
             }
-            if MyLibrary.tab-idx == MyLibrary.tab-genres
-                && GenreDetail.genre-id < 0: ViewTransition {
+            if MyLibrary.tab-idx == MyLibrary.tab-genres && !root.genre-open: ViewTransition {
                 width: parent.width;
                 height: parent.height;
                 enter-from: Nav.pending-enter-from;
@@ -214,15 +324,13 @@ export component MyLibraryView inherits Rectangle {
                     gap: root.grid-gap;
                 }
             }
-            if MyLibrary.tab-idx == MyLibrary.tab-genres
-                && GenreDetail.genre-id >= 0: ViewTransition {
+            if root.genre-open: ViewTransition {
                 width: parent.width;
                 height: parent.height;
                 enter-from: Nav.pending-enter-from;
-                GenreDetailView { width: 100%; height: 100%; }
+                GenreDetailBody { width: 100%; height: 100%; }
             }
-            if MyLibrary.tab-idx == MyLibrary.tab-playlists
-                && PlaylistDetail.playlist-id < 0: ViewTransition {
+            if MyLibrary.tab-idx == MyLibrary.tab-playlists && !root.playlist-open: ViewTransition {
                 width: parent.width;
                 height: parent.height;
                 enter-from: Nav.pending-enter-from;
@@ -236,12 +344,11 @@ export component MyLibraryView inherits Rectangle {
                     gap: root.grid-gap;
                 }
             }
-            if MyLibrary.tab-idx == MyLibrary.tab-playlists
-                && PlaylistDetail.playlist-id >= 0: ViewTransition {
+            if root.playlist-open: ViewTransition {
                 width: parent.width;
                 height: parent.height;
                 enter-from: Nav.pending-enter-from;
-                PlaylistDetailView { width: 100%; height: 100%; }
+                PlaylistDetailBody { width: 100%; height: 100%; }
             }
         }
     }
