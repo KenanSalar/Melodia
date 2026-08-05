@@ -59,8 +59,11 @@ pub mod util;
 pub mod window_chrome;
 
 // Source pins for shared components with no Rust module of their own — the
-// three faked-placeholder inputs and the tooltip pill, and the banner both
-// mosaic pages wear.
+// three faked-placeholder inputs and the tooltip pill, and the two pinned bands:
+// the one both mosaic pages wear and My Library's own.
+#[cfg(test)]
+#[path = "tests/library_tab_band_tests.rs"]
+mod library_tab_band_tests;
 #[cfg(test)]
 #[path = "tests/mosaic_tab_hero_tests.rs"]
 mod mosaic_tab_hero_tests;

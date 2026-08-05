@@ -6,7 +6,7 @@ Working doc. Keep the phase markers current; delete this file when the feature s
 |---|---|
 | 0 — Prep | ☑ done |
 | 1 — `MyLibrary` global, nav plumbing, mount sheet | ☑ done |
-| 2 — `LibraryTabBand` | ☐ not started |
+| 2 — `LibraryTabBand` | ☑ done |
 | 3 — The five tab bodies and the mount sheet | ☐ not started |
 | 4 — The four details under the band | ☐ not started |
 | 5 — Cleanup, i18n, docs | ☐ not started |
@@ -124,28 +124,32 @@ and `compute_indices` reads `<Global>.get_filter()` itself, memoized against
 `filter-changed(text)` and Rust **uses** the argument, folding it into the
 `Mutex<Needle>` on `*DetailState::filter`.
 
-So the sheet binds each view's filter one-way — `Tracks.filter: MyLibrary.filter;` and the
-four grid twins — which keeps the property the input `rebuild_grid` / `compute_indices`
-already read, and makes "clear the filter on a tab pick" one write instead of six.
-`src/ui/my_library/filter.rs` then only *routes*: on (active tab, open detail id) it
-invokes the mounted tab's existing rebuild, and for an open detail also calls that view's
-existing `set_filter`. Nine `if` branches in one Rust function beats nine branches in a
-Slint callback body, and Rust already holds both facts.
+**This decision originally said the sheet binds each view's filter one-way —
+`Tracks.filter: MyLibrary.filter;` and the four grid twins — and that is not spellable.**
+A `.slint` binding belongs to the element or global in whose scope it is written, so an
+element cannot declare one on another global's property; there are zero such bindings
+anywhere in the tree, which is what made the omission easy to miss on paper. The only
+binding form that would work is one declared inside `globals/tracks.slint` itself, which
+would make five globals import `MyLibrary` — the edge decision 1 exists to avoid, in the
+other direction.
 
-**The constraint that rides along: once `<Global>.filter` carries a binding, Rust must
-never write it** — a one-way binding and a `set_filter` on the same property is a silent
-one-way loss, since the write orphans the binding on first evaluation.
+So the hand-off from the page's one box to the five views is a **write**, and
+`src/ui/my_library/filter.rs` does it: each grid/list arm sets the target global's
+`filter` and then invokes its existing `apply-filter`, since the rebuild reads that
+property back rather than taking the argument. The four detail arms are unchanged — they
+pass the needle by argument, which is what decision 3's two-contract split was already
+describing. Nine `if` branches in one Rust function beats nine branches in a Slint
+callback body, and Rust already holds both facts.
 
-Nothing writes the **five grid/list** globals' `filter`; their write side is the per-view
-`SearchBar`'s `<=>`, which goes away with the headers, so those five can take the binding
-safely. **The four `*Detail.filter`s are a different case and the plan originally missed
-it:** Rust clears each to `""` on a fresh detail open (`albums/detail.rs`,
-`artists/detail.rs`, `genres/detail.rs`, `playlists/detail.rs`) and `callbacks/artists/detail.rs`
-clears it again on close — five writes, all of which work today only because `<=>`'s
-`link_two_way` survives a self-write where a one-way binding would not. So the four detail
-globals stay *unbound*: they keep taking `filter-changed(text)`, and the shared box clears
-`MyLibrary.filter` on detail open/close instead. That asymmetry is what decision 3's
-two-contract split was already describing; it just now has a second reason.
+**What the correction retires is the constraint that rode along.** "Once `<Global>.filter`
+carries a binding, Rust must never write it" was true of a shape that cannot exist; with
+no binding to orphan, the write is simply the mechanism. The `<=>` on each per-view
+`SearchBar` survives external writes (`link_two_way` does), so while those boxes are still
+up they mirror the shared one rather than fighting it — which is what makes Phase 2's
+duplicate-box state work at all. The four `*Detail.filter`s stay as they are: Rust clears
+each to `""` on a fresh detail open (`albums/detail.rs`, `artists/detail.rs`,
+`genres/detail.rs`, `playlists/detail.rs`) and `callbacks/artists/detail.rs` clears it
+again on close, and nothing about that has to change.
 
 The nine `blur-search-tick` properties go too, with one `MyLibrary.blur-search-tick` in
 their place; their *writers* are rewired, not deleted (see Phase 4). **All nine writers are
@@ -180,8 +184,9 @@ and the hero content would otherwise paint past the compact band into the body).
 
 *Cost:* an animated `preferred-height` re-runs the page's layout every frame for
 `dur-spatial`. Bounded — the bodies are virtualized `ListView`s, so the relayout touches
-visible rows only. Measure once at Phase 2; if it janks, drop to `dur-med` or snap the
-height and animate only the contents. Do not slow the body to hide it.
+visible rows only. Measure once at Phase 4, which is where the morph first runs; if it
+janks, drop to `dur-med` or snap the height and animate only the contents. Do not slow the
+body to hide it.
 
 **7. `hero-t` is written, not bound.** Seed it with the binding (`detail-open ? 1 : 0`)
 so mount lands in `NotAnimating`, and own it from `changed detail-open => { self.hero-t = … }`.
@@ -440,7 +445,66 @@ views' data layer. Same globals, models, `*Ui` handles, cover tiers, `view_id` k
   and router branches are gone as of this phase; what Phase 3 deletes is the five *view
   files*, once the tab bodies replace them.
 
-### Phase 2 — `LibraryTabBand`
+### Phase 2 — `LibraryTabBand` ☑
+
+**What the phase actually landed**, and the six places the plan below was wrong or made a
+choice it hadn't seen yet:
+
+- **The band is *mounted* from this phase, not from Phase 3, and that isn't a scope
+  decision — it is what makes the phase gate mean anything.** `melodia-ui/build.rs`
+  compiles only `ui/app-window.slint`'s import graph, so a band written and left unmounted
+  is a 300-line file that is never parsed, never type-checked, and covered by nothing but
+  `include_str!` text pins; "the phase ends compiling" would be vacuously true and Phase 3
+  would eat every error at once. So the sheet's temporary `TabBar` is gone and
+  `band := LibraryTabBand` is in its place.
+- **It mounts with `detail-open: false` as a literal.** The hero half is written,
+  compiled and pinned — it simply never evaluates true, because the four detail views
+  still carry their own `DetailHeader` and deriving `detail-open` now would grow a blank
+  232 px hero above a real one. Phase 4 swaps the literal for the private derivation of
+  decision 1. Two things follow: **the morph cannot be exercised yet**, so "measure the
+  morph once, here" moved to Phase 4's manual list, and the band's tab-bar brushes sit on
+  their idle (`Theme.*`) arm for the whole phase.
+- **Three of Phase 3's sheet items came forward, because the band cannot be mounted
+  without them**: the `count-text` ternary, the `filter-placeholder` ternary and the
+  filter wiring (`filter <=> MyLibrary.filter`, the `FilterThrottle`, the root blur
+  `TouchArea`). Each reuses msgids the five view headers already registered, so no
+  catalogue moved. The five per-view search boxes and count lines are still up, so the
+  page duplicates both for one phase — the Phase 1 "five stacked headers" trade, one step
+  smaller.
+- **The shared box is wired to work rather than left inert, and the write is `set_filter`,
+  not a binding — see the decision-3 correction above.** One known transitional oddity:
+  `on_tab_changed` clears `MyLibrary.filter` but not the five view globals', so a tab you
+  filtered through *its own* box and then left keeps that filter while the shared box
+  reads empty. Not a regression (nothing cleared them before either), and it goes with
+  the per-view boxes in Phase 3, where
+  `a_tab_pick_clears_the_filter_on_both_sides` pins it.
+- **The pill slot needed no interpolation, and decision 4's two anchors collapsed to
+  one.** The idle meta row's floor and the hero band's floor are the *same* line —
+  `root.height - pad-lg - pill-h` in both states — so the slot is a fixed
+  `alignment: end` row that simply rides the animated height. What pays for it is a
+  `padding-bottom: pill-h + pad-xs` on the hero text column, reserving exactly the band
+  the pill row used to occupy as a child of that column, so `HERO_MAX_ROWS`' two-row slack
+  is arithmetically unchanged. No `preferred-width` self-read, no `alignment` ternary, and
+  the fallback in decision 4 is unneeded.
+- **The meta block is two mutually exclusive columns, not one column of ternaries.** The
+  two states want different `alignment`s — a lone count line centres in its 40 px row, a
+  hero block stretches so its trailing spacer pushes the chips up — and `alignment` is the
+  one thing a ternary can't reach. Splitting also lets each title read a single font size
+  instead of a conditional pair, which is the shape `ui::hero_chips::tests` wants in
+  Phase 5.
+
+Three smaller deviations, all recorded rather than silent:
+
+- **`HeroChipStrip` is gated on `detail-open`** rather than relying on "publishes nothing
+  in idle". `HeroChips.rows` is one global six heroes share and it outlives whichever
+  filled it; this page publishes none of its own, so it would have nothing to clear if a
+  stale set arrived.
+- **No `out property <length> band-height`.** Nothing reads it — the band is a
+  `VerticalLayout` child and sizes itself. Add it when a reader appears.
+- **`meta-row-h` and the back-button slot are derived from `pill-h`, not spelled.**
+  `meta-row-h = pill-h + 2·pad-xs` (40 px) and the slot is `pill-h + pad-sm` wide, so the
+  compact band's height and the back button's clearance both follow the one number that
+  says how tall an `ActionPill` is.
 
 **`melodia-ui/ui/components/hero/library-tab-band.slint`.** Sibling of `MosaicTabHero`,
 not a fork of it: the two share `TabBar` / `SearchBar` / `HeroBlurBackdrop` /
@@ -513,15 +577,22 @@ Morph mechanics, in one place:
 the sidebar item carries the word, the same trade the Settings page made. The count is the
 prominent line instead.
 
-**Measure the morph once, here.** The animated `preferred-height` re-runs the page's layout
-every frame for `dur-spatial`; it should be invisible because the bodies are virtualized,
-but the number to check is this phase's, not Phase 4's. Fallbacks in decision 6.
+**Measuring the morph belongs to Phase 4, not here** — with `detail-open` a literal
+`false` there is nothing to measure. The concern stands: the animated `preferred-height`
+re-runs the page's layout every frame for `dur-spatial`, and it should be invisible
+because the bodies are virtualized. Fallbacks in decision 6.
 
-**Tests** — `src/ui/tests/library_tab_band_tests.rs`, mirroring `mosaic_tab_hero_tests.rs`
-(the five ported fixes) plus: the height min/preferred/max split and the root `clip`; that
-`hero-t` is written from `changed detail-open` and not left bound; that the back button
-takes both brushes from `HeroBackdrop`; that the band publishes its tooltip anchor rather
-than drawing one.
+**Tests** — ☑ `src/ui/tests/library_tab_band_tests.rs`, eleven pins. Six mirror
+`mosaic_tab_hero_tests.rs` (the five ported fixes plus the published tooltip anchor); the
+other five are the morph's: the height min/preferred/max split and the root `clip`, that
+`hero-t` is *both* seeded by its binding and written from `changed detail-open`, that the
+back button takes both brushes from `HeroBackdrop`, that the idle pane folds its alpha
+into the brush rather than reaching for `opacity`, and that the band spells no `@tr`
+literal of its own.
+
+The tab-bar-brush pin is the one that had to be reworded rather than ported: here each
+brush is a *pair*, so it asserts a `HeroBackdrop.` arm **and** a `Theme.` arm, since
+dropping either half is a bug visible in only one of the two states.
 
 ### Phase 3 — The five tab bodies and the mount sheet
 
@@ -531,33 +602,36 @@ than drawing one.
   `in card-w / card-h / row-h / gap` from the sheet (the `favorites/most-played-tab.slint`
   contract) and keep **their own** `OverlayScrollbar`s — Slint can't read an id declared
   inside an `if` from outside it.
-- **`views/my-library-view.slint`** — the mount sheet, which **already exists**: Phase 1
-  built it around the temporary `TabBar` and the nine branches (five tab bodies + four
-  details, still the current view components). Phase 3 swaps the bar for the band and the
-  five bodies for the tab files above; the branch chain, the `page-w` mirror and its mount
-  `Timer` stay. What it gains:
-  - the private `detail-open` derivation (decision 1) and one `GridGeometry` off
-    `body.width`, plus one `GridColumnsSync` whose `seed(c)` writes `columns` to **all
-    four** grid globals and invokes `columns-changed` only on the mounted one. Writing all
-    four is what stops an unmounted grid re-chunking on entry at a stale column count.
-  - the five one-way filter bindings of decision 3 (`Tracks.filter: MyLibrary.filter;` …),
-    `FilterThrottle { fire() => { MyLibrary.filter-changed(MyLibrary.filter); } }`, and the
-    root backdrop `TouchArea { clicked => { MyLibrary.blur-search-tick += 1; } }`.
-  - the `count-text` ternary — inline `@tr("{n} album" | "{n} albums" % Albums.total-count)`
-    literals guarded on `>= 0`; a Rust-seeded `[string]` would render untranslated.
-  - `band := LibraryTabBand { … }` with the per-tab pill rows as `@children`:
-    Songs → selection chip + `ColumnTogglePopup`; Albums/Artists/Genres → their existing
-    sort `ActionPill`s; Playlists → its four action buttons (New / Smart / Import / Export).
+- **`views/my-library-view.slint`** — the mount sheet, which **already exists**: Phase 2
+  put `band := LibraryTabBand` where Phase 1's temporary `TabBar` was, and with it the
+  `count-text` and `filter-placeholder` ternaries, the `FilterThrottle`, the root backdrop
+  `TouchArea { clicked => { MyLibrary.blur-search-tick += 1; } }` and the `tab-tip` frame —
+  all of them things the band cannot be mounted without. The `page-w` mirror and its mount
+  `Timer` moved **into** the band and are gone from the sheet. Phase 3 swaps the five
+  bodies for the tab files above; the branch chain stays. What it gains:
+  - one `GridGeometry` off `body.width`, plus one `GridColumnsSync` whose `seed(c)` writes
+    `columns` to **all four** grid globals and invokes `columns-changed` only on the
+    mounted one. Writing all four is what stops an unmounted grid re-chunking on entry at
+    a stale column count.
+  - the per-tab pill rows, handed to the band as `@children`: Songs → selection chip +
+    `ColumnTogglePopup`; Albums/Artists/Genres → their existing sort `ActionPill`s;
+    Playlists → its four action buttons (New / Smart / Import / Export). The band's slot is
+    already there and empty.
+  - **the five per-view `SearchBar`s and count lines go**, which is what makes the shared
+    box the only one — and with them the "shared box empty, per-view box still filtering"
+    state Phase 2 left behind. `on_tab_changed` gains the clear of the entering tab's own
+    filter, which is what `a_tab_pick_clears_the_filter_on_both_sides` pins.
   - `body := Rectangle { clip: true; … }` with one `ViewTransition` per branch, **and the
     two kinds take different `enter-from` sources**: the four tab branches read
     `band.tab-enter-from` under `enabled: band.tab-anim-armed` (the Favorites
     disarm-at-mount rule, so the page's own fade-up isn't compounded into a diagonal),
     while the four detail branches keep `Nav.pending-enter-from` — that is what
     `nav_transition::mark` writes, and it is what makes a cross-tab drill and a Mouse-4/5
-    step slide the right way.
-  - **two** tooltip frames, declared after the body: the `tab-tip`, and the Playlists tab's
-    own `header-tip` — its four action pills mount `tooltip-overlay: true` and the current
-    `playlists-view.slint` declares a five-property ternary chain for them.
+    step slide the right way. **The band publishes both today and nothing reads them**;
+    all nine branches are still on `Nav.pending-enter-from`.
+  - a **second** tooltip frame beside the `tab-tip` the band already anchors: the Playlists
+    tab's own `header-tip` — its four action pills mount `tooltip-overlay: true` and the
+    current `playlists-view.slint` declares a five-property ternary chain for them.
 - Delete `views/{tracks,album,artist,genres,playlists}-view.slint` once the five tab files
   replace them. The sidebar items and the router branches went in Phase 1.
 - ☑ `app-window.slint`'s `watched-my-library-tab: MyLibrary.tab-idx` mirror — landed in
@@ -581,10 +655,17 @@ than drawing one.
   forwards `request-blur-search`. All of them now write `MyLibrary.blur-search-tick`. The
   nine per-view `blur-search-tick` *properties* are what go dead (Phase 5); their writers
   outlive them.
+- **The sheet's `detail-open: false` literal becomes the private derivation of decision 1**
+  — the phase's first edit, and the one that makes every other item here visible. Nothing
+  may flip it before `DetailHeader` is gone from all four detail views, or the page wears
+  two banners at once.
 - The sheet resolves the band's hero facts per open detail (title / subtitle / artwork /
   blur quartet / badge / Genre's `tile-bg` gradient) as private `property` ternaries, and
   the four detail branches join the body router (nine branches total, split on
   `*Detail.*-id`, exactly as the current chain is).
+- **Measure the morph here** — it is the first phase in which it runs. The animated
+  `preferred-height` re-runs the page's layout every frame for `dur-spatial`; it should be
+  invisible because the bodies are virtualized. Fallbacks in decision 6.
 - The four detail pill rows join the `@children` `if` chain, keyed on
   `MyLibrary.tab-idx == tab-X && <X>Detail.<x>-id >= 0`.
 - **`components/detail-header.slint` is retired** once nothing mounts it. Its
@@ -656,12 +737,13 @@ Things this codebase has already paid for once, which this change is positioned 
   `ui::my_library::tab_is_mounted`, not from the nav index alone. Getting this wrong leaves
   one section wrongly active all session and re-fetches the whole library per song. Pinned
   by `ui::my_library::tests::every_section_seed_reads_the_mounted_tab`.
-- **The filter has two contracts, not one.** `apply-filter` ignores its argument and Rust
-  reads `<Global>.filter`; `filter-changed` uses its argument and Rust folds it into a
-  `Mutex<Needle>`. Once the sheet binds `<Global>.filter`, **Rust must never write it** —
-  a binding and a `set_filter` on the same property is a silent one-way loss. Only the
-  **five grid/list** globals may take that binding; the four `*Detail.filter`s are Rust-
-  written on detail open (and, on Artist Detail, on close) and stay unbound. See decision 3.
+- ☑ **The filter has two contracts, not one.** `apply-filter` ignores its argument and
+  Rust reads `<Global>.filter`; `filter-changed` uses its argument and Rust folds it into
+  a `Mutex<Needle>`. The grid/list arms therefore **write** `<Global>.filter` before
+  invoking the rebuild — the one-way binding this checklist used to forbid writing over
+  turned out not to be spellable in Slint at all (decision 3). The four `*Detail.filter`s
+  keep taking the argument and stay Rust-written on detail open (and, on Artist Detail, on
+  close).
 - ☑ **A drill's origin is a pair.** `origin-nav-index` alone cannot tell one My Library tab
   from another, and one `origin-tab` cannot hold two simultaneously open details. Per
   detail global, written in the same synchronous stretch as `origin-nav-index` — and the
@@ -730,7 +812,7 @@ Targeted test additions, all `include_str!` source pins in the house style:
   whose Slint side can be cleared.
 - `…::every_sort_pill_asks_for_a_field_the_comparator_knows` — the Albums / Artists /
   Genres rows finally get the pin the Favorites Artists row already has.
-- `ui::library_tab_band_tests` — as listed in Phase 2.
+- ☑ `ui::library_tab_band_tests` — as listed in Phase 2.
 - ☑ `ui::tab_bar::tests` extended, on a `LIBRARY_PAGES` array beside `CURATED_PAGES`:
   `every_library_count_starts_at_the_unfetched_sentinel` (declaration **and** the `>= 0`
   guard), `every_library_leave_rewinds_the_count_it_numbered`, and

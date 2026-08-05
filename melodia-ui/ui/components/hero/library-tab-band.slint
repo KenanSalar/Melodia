@@ -1,0 +1,436 @@
+import { Theme } from "../../theme.slint";
+import { HeroBackdrop } from "../../globals/hero-backdrop.slint";
+import { NavEnterFrom } from "../../globals/nav.slint";
+import { ArtworkImage } from "../artwork-image.slint";
+import { HeroBlurBackdrop } from "../hero-blur-backdrop.slint";
+import { HeroChipStrip } from "../hero-chip-strip.slint";
+import { IconButton } from "../icon-button.slint";
+import { MaterialIcon } from "../material-icon.slint";
+import { SearchBar } from "../search-bar.slint";
+import { TabBar } from "../tab-bar.slint";
+
+// The My Library page's pinned band, in two states. Idle it is a flat pane carrying the
+// tab bar, the shared filter box and the mounted tab's count; with a detail open it
+// **morphs** into that entity's hero — blur backdrop, artwork tile, title, chips — with
+// the tabs still in it and a back button to their left.
+//
+// **A sibling of `MosaicTabHero`, not a fork of it.** The two share `TabBar` /
+// `SearchBar` / `HeroBlurBackdrop` / `HeroChipStrip` and the header-row arithmetic, and
+// differ in everything below it: a mosaic square against an artwork tile, a fixed height
+// against a morph. Slint has no way to parameterise one component over both, so the five
+// fixes the header row *is* are ported verbatim — the `page-w` mirror and its mount
+// Timer, the floor seed, the budget against two published floors, the direction off
+// `previous-index`, and the published tooltip anchor. Each was paid for once and is
+// invisible in review, which is what `ui::library_tab_band_tests` exists to hold.
+//
+// Data-agnostic for the same reason `MosaicTabHero` is: `Tracks` / `Albums` / … and the
+// four `*Detail` globals are distinct generated types with nothing between them, so every
+// fact arrives as a property and every write leaves as a callback. **No string is spelled
+// here** — `@tr` folds literals at codegen, and the host is where the literals belong.
+export component LibraryTabBand inherits Rectangle {
+    // Inline `[@tr("…"), …]` literals at the call site; an array populated from Rust
+    // renders untranslated. Forwarding one through here is fine — the literal still sits
+    // in a `.slint` file.
+    in property <[string]> tab-labels;
+    in property <[string]> tab-icons;
+    // Two-way, per the "a component writing its own `in-out` orphans a one-way binding"
+    // pitfall — the bar writes this on every pick.
+    in-out property <int> tab-idx;
+
+    in-out property <string> filter;
+    in property <string> filter-placeholder;
+    in property <int> blur-tick;
+
+    // --- Idle ---------------------------------------------------------------
+    //
+    // The prominent line, in place of a page title: the tabs name the page and the
+    // sidebar item carries the word, the trade the Settings page already made. Empty
+    // while the mounted tab's count is still the unfetched sentinel — the host owns that
+    // guard, since a bare `-1` interpolates into a plural as "-1 albums".
+    in property <string> count-text;
+
+    // --- Hero ---------------------------------------------------------------
+    in property <bool> detail-open;
+    in property <string> title;
+    // Album Detail's artist, Playlist Detail's description. Both ride *inside* the title
+    // block rather than on a row of their own, which is what leaves the band slack for a
+    // wrapped second chip row.
+    in property <string> subtitle;
+    in property <bool> title-badge;
+
+    in property <string> artwork-path;
+    in property <image> cover;
+    in property <bool> circular-artwork: false;
+    in property <string> fallback-icon: "music-note";
+    // Genre Detail's name-hashed gradient overrides both. The defaults take the solved
+    // `HeroBackdrop.chrome` and not `Theme.accent`: this tile sits *on* the hero, where a
+    // light theme's accent lands dark-on-dark.
+    in property <brush> tile-bg: HeroBackdrop.chrome.with-alpha(0.15);
+    in property <brush> tile-icon-color: HeroBackdrop.chrome;
+
+    in property <image> blur-a;
+    in property <image> blur-b;
+    in property <bool> use-a;
+    in property <bool> has-blur;
+
+    callback back-clicked();
+    // Fires *after* the direction and the arming below have been settled, so a host
+    // handler that clears its filter and calls into Rust can't be sequenced ahead of
+    // them. The bar has already written `tab-idx`.
+    callback tab-selected(int);
+    callback search-edited(string);
+
+    // --- The morph ----------------------------------------------------------
+    //
+    // **Seeded by the binding, owned by the handler.** An animated *binding* restarts
+    // whenever a dependency is marked dirty rather than when its value changes, so left
+    // bound this would re-base every time a detail id moved under it. Writing routes
+    // through `set_animated_value` and replaces the binding outright; keeping it as the
+    // seed is what leaves mount in `NotAnimating`, so a page entered with a detail
+    // already open comes up at hero height instead of growing into it.
+    // `tab-bar.slint`'s `compact-t` is the same shape.
+    property <float> hero-t: root.detail-open ? 1.0 : 0.0;
+    changed detail-open => {
+        self.hero-t = self.detail-open ? 1.0 : 0.0;
+    }
+    animate hero-t {
+        duration: Theme.dur-spatial;
+        easing: cubic-bezier(0.2, 0, 0, 1);
+    }
+
+    // The bar's four brushes cross with the pane under them. Separate `animate` blocks
+    // rather than a lerp off `hero-t`, since `.mix()` takes `color` operands and these
+    // are brushes; keyed on `detail-open` rather than on `hero-t` so a re-solve landing
+    // mid-morph (a fresh artwork arriving) eases the colour on its own timeline instead
+    // of snapping to whatever the height happens to be at.
+    property <brush> label-brush:
+        root.detail-open ? HeroBackdrop.on-backdrop : Theme.text;
+    property <brush> active-brush:
+        root.detail-open ? HeroBackdrop.chrome : Theme.accent;
+    property <brush> hover-brush:
+        root.detail-open ? HeroBackdrop.on-backdrop.with-alpha(0.12) : Theme.surface0;
+    property <brush> divider-brush:
+        root.detail-open ? HeroBackdrop.tile-edge : Theme.surface1;
+    animate label-brush, active-brush, hover-brush, divider-brush {
+        duration: Theme.dur-spatial;
+        easing: cubic-bezier(0.2, 0, 0, 1);
+    }
+
+    // --- The header width budget --------------------------------------------
+    //
+    // `page-w` is a **mirror**, written imperatively because a live `root.width` read
+    // feeding a child's size re-enters layout, and seeded at this row's own **floor**:
+    // seeded wide, the bar believes it can afford full-width tabs and draws them into a
+    // panel that can't seat them, which is exactly what a miniplayer → full swap
+    // produces. The mount Timer beside it is mandatory — `changed` doesn't fire when the
+    // first layout settles directly on the final value, and a window opened at its final
+    // size is that case.
+    property <length> search-w-max: 220px;
+    // Off the bar's and the input's own published floors, never restated, so neither end
+    // can drift from the component it budgets for.
+    property <length> search-w-min: search.min-w;
+
+    property <length> page-w:
+        2 * Theme.pad-lg + bar.compact-w + 2 * Theme.pad-md + root.search-w-max;
+    changed width => { self.page-w = self.width; }
+
+    Timer {
+        interval: 1ms;
+        triggered => {
+            root.page-w = root.width;
+            self.running = false;
+        }
+    }
+
+    // The back button's slot, and the gap it opens beside the bar. Both collapse to zero
+    // in idle, so the seed above stays the *idle* floor — which is the state the page is
+    // in whenever a mount can surprise it. The slot's width eases with the morph because
+    // it really is that wide mid-way; its **spacing** steps, because the row gains a whole
+    // gap the instant the slot mounts and reserving that gradually leaves the bar briefly
+    // believing in room it doesn't have.
+    property <length> back-slot-w: (root.pill-h + Theme.pad-sm) * root.hero-t;
+    property <length> back-slot-gap: root.hero-t > 0 ? Theme.pad-md : 0px;
+
+    property <length> content-w:
+        root.page-w - 2 * Theme.pad-lg - root.back-slot-w - root.back-slot-gap;
+
+    // **The filter yields before the tabs do**: tabs navigate, search only refines what a
+    // tab already shows.
+    property <length> search-w: clamp(
+        root.content-w - bar.compact-w - 2 * Theme.pad-md,
+        root.search-w-min, root.search-w-max);
+
+    // --- Height -------------------------------------------------------------
+    //
+    // The bar's own height, restated so the band can reserve its row.
+    property <length> tab-row-h: 48px;
+    // The idle meta row: one `ActionPill` with `pad-xs` of air either side.
+    property <length> pill-h: 32px;
+    property <length> meta-row-h: root.pill-h + 2 * Theme.pad-xs;
+
+    property <length> compact-h:
+        2 * Theme.pad-lg + root.tab-row-h + Theme.pad-md + root.meta-row-h;
+    // `MosaicTabHero`'s formula unchanged, so the two bands agree on what a hero is —
+    // derived rather than a literal, so growing the artwork or the bar can't leave either
+    // one cropping its own contents.
+    property <length> hero-h:
+        2 * Theme.pad-lg + root.tab-row-h + Theme.pad-md + Theme.hero-artwork;
+
+    // **Never a bound `height`.** Slint reports a component root's bound dimension as
+    // both `min` and `max`, so an animated one would ease the *window's* own minimum
+    // height — `tab-bar.slint`'s width bug, one axis over. The split buys that freedom by
+    // letting the element be drawn shorter than it asked for, which is what the clip is
+    // for: on the shrink leg the hero content would otherwise paint out of the compact
+    // band and into the body underneath.
+    min-height: root.compact-h;
+    preferred-height: root.compact-h + (root.hero-h - root.compact-h) * root.hero-t;
+    max-height: root.hero-h;
+    clip: true;
+    vertical-stretch: 0;
+
+    // --- What the host's tab bodies read ------------------------------------
+    //
+    // Which way a body enters is `bar.previous-index`'s job, and it has to be: the page
+    // can be re-entered on any tab, and everything else in reach already reads the tab
+    // just picked, the bar writing `selected-index` before it emits `selected`. Arming
+    // starts `false` so the page's own fade-up isn't compounded with a horizontal slide —
+    // the two together read as a diagonal — and it re-disarms for free, the page being
+    // rebuilt on every entry.
+    out property <NavEnterFrom> tab-enter-from: NavEnterFrom.right;
+    out property <bool> tab-anim-armed: false;
+
+    // --- The compact-mode tooltip's anchor -----------------------------------
+    //
+    // Published rather than drawn here: the pill has to be declared *after* the scroll
+    // body, and Slint paints in declaration order, so anything this band owns is covered
+    // by the content below it. Equal-width cells are what let the rect come from the
+    // *index*, so a tab that moves under a parked pointer keeps its tooltip anchored —
+    // and since `tab-w` eases, the frame morphs with it.
+    out property <length> tip-x:
+        bar.absolute-position.x - root.absolute-position.x + bar.tab-w * bar.hovered-idx;
+    out property <length> tip-y: bar.absolute-position.y - root.absolute-position.y;
+    out property <length> tip-w: bar.tab-w;
+    out property <length> tip-h: bar.height;
+    out property <string> tip-label: bar.hovered-label;
+    out property <bool> tip-visible: bar.hovered-idx >= 0 && bar.compact;
+
+    // Behind everything else. The shared component owns the dual-slot crossfade contract;
+    // the gradient floor shows through when there is no blur image, which is what Genre
+    // Detail's procedural backdrop relies on.
+    HeroBlurBackdrop {
+        x: 0; y: 0;
+        width: 100%; height: 100%;
+        blur-a: root.blur-a;
+        blur-b: root.blur-b;
+        use-a: root.use-a;
+        has-blur: root.has-blur;
+    }
+
+    // The idle pane, over the backdrop rather than instead of it. **The alpha is folded
+    // into the brush** — `opacity` on an element costs a layer, and this one is full-bleed
+    // and animating for the whole morph. `mantle` rather than `base`: the band reads as
+    // chrome pinned above the panel, one step off it under every theme.
+    idle-pane := Rectangle {
+        x: 0; y: 0;
+        width: 100%; height: 100%;
+        background: Theme.mantle.with-alpha(1.0 - root.hero-t);
+    }
+
+    VerticalLayout {
+        padding: Theme.pad-lg;
+        spacing: Theme.pad-md;
+
+        HorizontalLayout {
+            vertical-stretch: 0;
+            spacing: Theme.pad-md;
+
+            // Opens with the morph. Clipped rather than faded on width alone, since the
+            // disc is incompressible and would otherwise draw over the first tab.
+            if root.hero-t > 0: Rectangle {
+                width: root.back-slot-w;
+                clip: true;
+                IconButton {
+                    x: 0;
+                    y: (parent.height - self.height) / 2;
+                    icon: "arrow_back";
+                    icon-size: 20px;
+                    diameter: root.pill-h;
+                    // The `MetaChip` pair. `DetailHeader`'s button took
+                    // `Theme.floating-chrome-bg`, which is right for a disc floating over
+                    // a full-bleed hero and wrong for one sitting in the tab row beside
+                    // labels that are already on hero tiers.
+                    idle-bg: HeroBackdrop.chip-fill;
+                    idle-fg: HeroBackdrop.chrome;
+                    opacity: root.hero-t;
+                    clicked => { root.back-clicked(); }
+                }
+            }
+
+            bar := TabBar {
+                labels: root.tab-labels;
+                icons: root.tab-icons;
+                avail-width: root.content-w - root.search-w - 2 * Theme.pad-md;
+                selected-index <=> root.tab-idx;
+                // **All four cross from a theme token to a solved hero tier**, because
+                // the band paints on `Theme.mantle` in one state and on the entity's own
+                // blur in the other, and neither answer is right for both. `active-color`
+                // is the one that matters most — it drives the selected label, its FILL=1
+                // icon and the underline from one input, and `Theme.accent` carries no
+                // contrast floor against a blur (Latte's mauve lands near 1.7:1, under
+                // even the 3:1 non-text bar) where `chrome` is solved to clear it.
+                label-color: root.label-brush;
+                active-color: root.active-brush;
+                hover-fill: root.hover-brush;
+                divider-color: root.divider-brush;
+                selected(i) => {
+                    // Direction first, in the same handler that moved the index: the bar
+                    // has already written `tab-idx`, but Slint re-evaluates the host's
+                    // `if` branches next frame, so this still lands before the new body
+                    // mounts — the ordering rule `nav_transition.rs` follows for the
+                    // page-level one.
+                    root.tab-enter-from = i > bar.previous-index
+                        ? NavEnterFrom.right
+                        : NavEnterFrom.left;
+                    root.tab-anim-armed = true;
+                    root.tab-selected(i);
+                }
+            }
+
+            Rectangle { horizontal-stretch: 1; }
+
+            // Padded to the band the bar keeps clear for its divider, so the input
+            // centres on the tab labels' line rather than on the row's.
+            VerticalLayout {
+                alignment: center;
+                padding-bottom: Theme.pad-sm;
+                search := SearchBar {
+                    input-width: root.search-w;
+                    text <=> root.filter;
+                    placeholder: root.filter-placeholder;
+                    blur-trigger: root.blur-tick;
+                    edited(t) => { root.search-edited(t); }
+                }
+            }
+        }
+
+        HorizontalLayout {
+            vertical-stretch: 1;
+            spacing: Theme.pad-lg;
+
+            if root.hero-t > 0: VerticalLayout {
+                alignment: start;
+                horizontal-stretch: 0;
+                // Acceptable *here*, unlike the idle pane: it settles at 1.0, so there is
+                // no layer at rest and the cost is bounded by the morph.
+                opacity: root.hero-t;
+
+                // Sized straight off `Theme.hero-artwork` rather than through an `in`
+                // property: the heroes are one band, and a per-view knob is how they
+                // drifted apart before.
+                ArtworkImage {
+                    artwork-path: root.artwork-path;
+                    cover: root.cover;
+                    tile-size: Theme.hero-artwork;
+                    tile-radius: root.circular-artwork
+                        ? Theme.hero-artwork / 2
+                        : Theme.radius-lg;
+                    fallback-icon: root.fallback-icon;
+                    tile-bg: root.tile-bg;
+                    tile-icon-color: root.tile-icon-color;
+                }
+            }
+
+            // **Two mutually exclusive columns rather than one column of ternaries.**
+            // The two states want different alignments — a single count line centres in
+            // its 40 px row, a hero block stretches so its trailing spacer pushes the
+            // chips up — and `alignment` is the one thing a ternary can't reach. Splitting
+            // also lets each title read one font size rather than a conditional pair.
+            if !root.detail-open: VerticalLayout {
+                horizontal-stretch: 1;
+                alignment: center;
+
+                Text {
+                    // Leading LRM keeps the line left-anchored under RTL.
+                    text: "\u{200e}" + root.count-text;
+                    color: Theme.text;
+                    font-size: Theme.page-title-size;
+                    font-weight: Theme.page-title-weight;
+                    horizontal-alignment: left;
+                    overflow: elide;
+                }
+            }
+
+            if root.detail-open: VerticalLayout {
+                horizontal-stretch: 1;
+                alignment: stretch;
+                spacing: Theme.pad-xs;
+                // The band the floating pill row occupies. Reserved here rather than
+                // measured, so the chip strip's own two-row slack is exactly what it was
+                // when the pill row was a child of this column.
+                padding-bottom: root.pill-h + Theme.pad-xs;
+
+                HorizontalLayout {
+                    vertical-stretch: 0;
+                    spacing: Theme.pad-sm;
+                    alignment: start;
+
+                    // Playlist Detail's smart badge, matching the grid card's corner.
+                    if root.title-badge: VerticalLayout {
+                        alignment: center;
+                        MaterialIcon {
+                            name: "auto_awesome";
+                            icon-size: 22px;
+                            icon-color: HeroBackdrop.chrome;
+                            filled: true;
+                        }
+                    }
+
+                    Text {
+                        text: "\u{200e}" + root.title;
+                        color: HeroBackdrop.on-backdrop;
+                        font-size: Theme.hero-title-size;
+                        font-weight: Theme.page-title-weight;
+                        horizontal-alignment: left;
+                        overflow: elide;
+                    }
+                }
+
+                if root.subtitle != "": Text {
+                    vertical-stretch: 0;
+                    text: "\u{200e}" + root.subtitle;
+                    color: HeroBackdrop.on-backdrop;
+                    font-size: Theme.font-size-md;
+                    horizontal-alignment: left;
+                    overflow: elide;
+                }
+
+                // Built by `ui::hero_chips` off the stats the fetch already returned.
+                // **Gated on the detail rather than left to publish nothing**: the rows
+                // live on a global six heroes share and outlive whichever filled them,
+                // and this page publishes none of its own in idle, so it would have
+                // nothing to clear if a stale set arrived.
+                HeroChipStrip { }
+
+                Rectangle { vertical-stretch: 1; }
+            }
+        }
+    }
+
+    // The per-tab action pills, and the per-detail ones once a detail is open. **A
+    // floating slot rather than a child of the meta column**, because Slint allows one
+    // `@children` and the two states need it in different places; the column reserves the
+    // band above and this rides the root's own lower edge, which is the meta row's floor
+    // in both states — so no anchor has to be interpolated and the slot simply follows the
+    // height. A `HorizontalLayout` rather than a bare `Rectangle`: the pill rows are
+    // `if`-conditional and a Rectangle reports 0×0 over conditional children.
+    HorizontalLayout {
+        x: Theme.pad-lg;
+        y: root.height - Theme.pad-lg - root.pill-h;
+        width: root.page-w - 2 * Theme.pad-lg;
+        height: root.pill-h;
+        spacing: Theme.pad-md;
+        alignment: end;
+
+        @children
+    }
+}

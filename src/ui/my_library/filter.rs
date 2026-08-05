@@ -10,9 +10,11 @@
 //! than reaching for its `*Ui` handle — which is what keeps this function's whole input
 //! an `&AppWindow`.
 //!
-//! Nothing writes `MyLibrary.filter` yet: the five views still carry their own search
-//! boxes until the band replaces them. The routing lands here now because the band is
-//! what supplies the writer, not what decides where the text goes.
+//! **A grid or list arm sets the text before it invokes the rebuild**, because the
+//! rebuild reads it back off the global rather than taking it. The band's box is the only
+//! writer of `MyLibrary.filter`, and no `.slint` element can declare a binding on another
+//! global's property — bindings belong to the scope they are written in — so the hand-off
+//! from the page's one box to the five views is this write.
 
 use slint::{ComponentHandle, SharedString};
 
@@ -29,13 +31,19 @@ pub fn dispatch(ui: &AppWindow, text: &str) {
 
     match tab_from_index(&g, g.get_tab_idx()) {
         // Songs has no detail view; its list is the only surface.
-        MyLibraryTab::Songs => ui.global::<Tracks>().invoke_apply_filter(needle),
+        MyLibraryTab::Songs => {
+            let tracks = ui.global::<Tracks>();
+            tracks.set_filter(needle.clone());
+            tracks.invoke_apply_filter(needle);
+        }
         MyLibraryTab::Albums => {
             let detail = ui.global::<AlbumDetail>();
             if detail.get_album_id() >= 0 {
                 detail.invoke_filter_changed(needle);
             } else {
-                ui.global::<Albums>().invoke_apply_filter(needle);
+                let grid = ui.global::<Albums>();
+                grid.set_filter(needle.clone());
+                grid.invoke_apply_filter(needle);
             }
         }
         MyLibraryTab::Artists => {
@@ -43,7 +51,9 @@ pub fn dispatch(ui: &AppWindow, text: &str) {
             if detail.get_artist_id() >= 0 {
                 detail.invoke_filter_changed(needle);
             } else {
-                ui.global::<Artists>().invoke_apply_filter(needle);
+                let grid = ui.global::<Artists>();
+                grid.set_filter(needle.clone());
+                grid.invoke_apply_filter(needle);
             }
         }
         MyLibraryTab::Genres => {
@@ -51,7 +61,9 @@ pub fn dispatch(ui: &AppWindow, text: &str) {
             if detail.get_genre_id() >= 0 {
                 detail.invoke_filter_changed(needle);
             } else {
-                ui.global::<Genres>().invoke_apply_filter(needle);
+                let grid = ui.global::<Genres>();
+                grid.set_filter(needle.clone());
+                grid.invoke_apply_filter(needle);
             }
         }
         MyLibraryTab::Playlists => {
@@ -59,7 +71,9 @@ pub fn dispatch(ui: &AppWindow, text: &str) {
             if detail.get_playlist_id() >= 0 {
                 detail.invoke_filter_changed(needle);
             } else {
-                ui.global::<Playlists>().invoke_apply_filter(needle);
+                let grid = ui.global::<Playlists>();
+                grid.set_filter(needle.clone());
+                grid.invoke_apply_filter(needle);
             }
         }
     }

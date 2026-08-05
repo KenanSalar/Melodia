@@ -1,11 +1,13 @@
-import { Theme } from "../theme.slint";
 import { MyLibrary } from "../globals/my-library.slint";
 import { Nav } from "../globals/nav.slint";
-import { AlbumDetail } from "../globals/albums.slint";
-import { ArtistDetail } from "../globals/artists.slint";
-import { GenreDetail } from "../globals/genres.slint";
-import { PlaylistDetail } from "../globals/playlists.slint";
-import { TabBar } from "../components/tab-bar.slint";
+import { AlbumDetail, Albums } from "../globals/albums.slint";
+import { ArtistDetail, Artists } from "../globals/artists.slint";
+import { GenreDetail, Genres } from "../globals/genres.slint";
+import { PlaylistDetail, Playlists } from "../globals/playlists.slint";
+import { Tracks } from "../globals/tracks.slint";
+import { FilterThrottle } from "../components/filter-throttle.slint";
+import { LibraryTabBand } from "../components/hero/library-tab-band.slint";
+import { Tooltip, TooltipSide } from "../components/tooltip.slint";
 import { ViewTransition } from "../components/view-transition.slint";
 import { TracksView } from "tracks-view.slint";
 import { AlbumView } from "album-view.slint";
@@ -18,51 +20,71 @@ import { PlaylistsView } from "playlists-view.slint";
 import { PlaylistDetailView } from "playlist-detail-view.slint";
 
 // My Library: five tabs over the views that used to be five sidebar entries. This file is
-// the mount sheet — which body is on screen and nothing else. Each tab's grid, list,
-// header and filter box still lives in the view it always did.
+// the mount sheet — the band, which body is on screen, and nothing else. Each tab's grid,
+// list, header and filter box still lives in the view it always did.
 //
 // **The tab index is what routes, not the detail id.** `seed_detail_from_settings` runs
 // for all four detail views at boot whichever section is restored, so more than one
 // `*Detail.*-id` can be `>= 0` at once; splitting on the id alone would mount two.
 export component MyLibraryView inherits Rectangle {
-    // The bar decides for itself how much room it has, so it needs a **mirrored** width —
-    // a live `root.width` read feeding a child's size re-enters layout. Seeded at the
-    // row's own floor: seeded wide the bar believes it can afford five full-width cells
-    // and draws them into a panel that can't seat them.
-    property <length> page-w: 2 * Theme.pad-lg + bar.compact-w;
-    changed width => { self.page-w = self.width; }
+    // Bumped by the band's `SearchBar`, settled 130 ms later — the list-view shape, where
+    // the cost being debounced is a model rebuild in Rust rather than Slint's own
+    // re-evaluation.
+    property <int> filter-tick-pending;
 
-    // `changed` doesn't fire when the first layout settles directly on the final value,
-    // and a window opened at its final size is exactly that — without this the seed above
-    // is never corrected and a roomy window draws icon-only tabs forever.
-    Timer {
-        interval: 1ms;
-        triggered => {
-            root.page-w = root.width;
-            self.running = false;
-        }
+    // A click anywhere the band or a body doesn't claim gives the filter box up.
+    TouchArea {
+        clicked => { MyLibrary.blur-search-tick += 1; }
+    }
+
+    FilterThrottle {
+        pending: root.filter-tick-pending;
+        fire() => { MyLibrary.filter-changed(MyLibrary.filter); }
     }
 
     VerticalLayout {
-        // Temporary page chrome. The band that replaces it carries this bar plus the
-        // shared filter box, the count line, the per-tab pill rows and the hero the four
-        // details morph into; until then the five views keep their own headers.
-        HorizontalLayout {
-            padding-left: Theme.pad-lg;
-            padding-right: Theme.pad-lg;
-            padding-top: Theme.pad-lg;
+        band := LibraryTabBand {
+            // Inline literals: `@tr` folds msgids at codegen, so a Rust-seeded `[string]`
+            // renders untranslated. Order matches `MyLibrary.tab-*`.
+            tab-labels: [@tr("Songs"), @tr("Albums"), @tr("Artists"), @tr("Genres"), @tr("Playlists")];
+            tab-icons: ["music_note", "album", "person", "theater_comedy", "playlist_play"];
+            tab-idx <=> MyLibrary.tab-idx;
+            tab-selected(i) => { MyLibrary.tab-changed(i); }
 
-            bar := TabBar {
-                labels: [@tr("Songs"), @tr("Albums"), @tr("Artists"), @tr("Genres"), @tr("Playlists")];
-                icons: ["music_note", "album", "person", "theater_comedy", "playlist_play"];
-                avail-width: root.page-w - 2 * Theme.pad-lg;
-                selected-index <=> MyLibrary.tab-idx;
-                selected(i) => {
-                    MyLibrary.tab-changed(i);
-                }
-            }
+            filter <=> MyLibrary.filter;
+            blur-tick: MyLibrary.blur-search-tick;
+            search-edited(t) => { root.filter-tick-pending += 1; }
 
-            Rectangle { horizontal-stretch: 1; }
+            // **Every count is `>= 0`-guarded**, and that is not optional: all five hold
+            // `ui::tab_bar::UNFETCHED_COUNT` until fetched and again after a tab leave,
+            // and a bare `-1` interpolates into the plural as "-1 albums".
+            count-text:
+                MyLibrary.tab-idx == MyLibrary.tab-songs
+                    ? (Tracks.total-count >= 0
+                        ? @tr("{n} song" | "{n} songs" % Tracks.total-count) : "")
+                : MyLibrary.tab-idx == MyLibrary.tab-albums
+                    ? (Albums.total-count >= 0
+                        ? @tr("{n} album" | "{n} albums" % Albums.total-count) : "")
+                : MyLibrary.tab-idx == MyLibrary.tab-artists
+                    ? (Artists.total-count >= 0
+                        ? @tr("{n} artist" | "{n} artists" % Artists.total-count) : "")
+                : MyLibrary.tab-idx == MyLibrary.tab-genres
+                    ? (Genres.total-count >= 0
+                        ? @tr("{n} genre" | "{n} genres" % Genres.total-count) : "")
+                : (Playlists.total-count >= 0
+                    ? @tr("{n} playlist" | "{n} playlists" % Playlists.total-count) : "");
+
+            filter-placeholder:
+                MyLibrary.tab-idx == MyLibrary.tab-songs ? @tr("Filter tracks…")
+                : MyLibrary.tab-idx == MyLibrary.tab-albums ? @tr("Filter albums…")
+                : MyLibrary.tab-idx == MyLibrary.tab-artists ? @tr("Filter artists…")
+                : MyLibrary.tab-idx == MyLibrary.tab-genres ? @tr("Filter genres…")
+                : @tr("Filter playlists…");
+
+            // Held false until the four detail views come out from under their own
+            // `DetailHeader`. The hero half is built and compiled; nothing may reach it
+            // while a detail still draws a banner of its own, or the page wears two.
+            detail-open: false;
         }
 
         body := Rectangle {
@@ -133,6 +155,24 @@ export component MyLibraryView inherits Rectangle {
                 enter-from: Nav.pending-enter-from;
                 PlaylistDetailView { width: 100%; height: 100%; }
             }
+        }
+    }
+
+    // On a layer of its own. It can't hang off the tab: the bar sits in the band, and
+    // Slint paints in declaration order, so anything the band owns is covered by the body
+    // underneath. The band publishes the rect it derives from the hovered *index*, so a
+    // tab that moves under a parked pointer keeps its tooltip anchored.
+    tab-tip := Rectangle {
+        x: band.absolute-position.x - root.absolute-position.x + band.tip-x;
+        y: band.absolute-position.y - root.absolute-position.y + band.tip-y;
+        width: band.tip-w;
+        height: band.tip-h;
+        Tooltip {
+            text: band.tip-label;
+            hovered: band.tip-visible;
+            host-width: tab-tip.width;
+            host-height: tab-tip.height;
+            side: TooltipSide.below;
         }
     }
 }
