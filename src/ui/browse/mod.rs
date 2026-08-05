@@ -65,8 +65,7 @@ use crate::{
 };
 
 pub use cards::{
-    BrowseViewMode, first_screenful_paths, mode_from_index, mode_index, rebuild_cards,
-    tune_cache_for_display,
+    BrowseViewMode, mode_from_index, mode_index, rebuild_cards, tune_cache_for_display,
 };
 pub use fetch::{apply_row_favorite, apply_row_rating, fetch_and_apply, resort_and_apply};
 pub use selection::{clear_selection, handle_select_row};

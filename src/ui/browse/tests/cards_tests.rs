@@ -99,3 +99,50 @@ fn the_prewarm_cap_fits_inside_the_cache_it_fills() {
     // decoded — the same floor every other grid tier keeps.
     assert!(GRID_PREWARM_AHEAD <= DEFAULT_GRID_COVER_CAP.get());
 }
+
+const GLOBAL: &str = include_str!("../../../../melodia-ui/ui/globals/tracks.slint");
+const VIEW: &str = include_str!("../../../../melodia-ui/ui/views/browse-view.slint");
+
+/// Every `out property <int> mode-<name>: N;` on the `Browse` global, as its `N`.
+fn declared_mode_values() -> Vec<i32> {
+    GLOBAL
+        .lines()
+        .map(str::trim_start)
+        .filter_map(|line| line.strip_prefix("out property <int> mode-"))
+        .filter_map(|rest| rest.split_once(':'))
+        .filter_map(|(_, value)| value.trim().trim_end_matches(';').parse().ok())
+        .collect()
+}
+
+/// `Browse.view-mode-count` is the sole definition of how many presentations exist —
+/// [`super::super::seed_from_settings`] clamps the persisted `browse_view_mode` against
+/// it rather than carrying a Rust const. Two ways that drifts without the build
+/// noticing, and the second is the quiet one: a count that undershoots makes a mode
+/// unrestorable from `views.json`, and a `mode-*` value outside `0..count` can never
+/// survive the clamp at all, so that presentation becomes unreachable while every
+/// constant still reads correctly on its own line.
+#[test]
+fn the_mode_constants_are_exactly_the_range_the_clamp_admits() {
+    let count: i32 = GLOBAL
+        .split_once("out property <int> view-mode-count:")
+        .and_then(|(_, rest)| rest.split_once(';'))
+        .and_then(|(digits, _)| digits.trim().parse().ok())
+        .unwrap_or_default();
+    assert!(count > 0, "tracks.slint must declare `out property <int> view-mode-count: N;`");
+
+    let mut values = declared_mode_values();
+    values.sort_unstable();
+    assert_eq!(
+        values,
+        (0..count).collect::<Vec<_>>(),
+        "Browse's `mode-*` constants must be exactly 0..view-mode-count — \
+         `ui::tab_bar::clamp_tab` can't produce an index outside that range"
+    );
+
+    // The other end of the pair: the view has to *read* the card constant, else the
+    // mode is stored, clamped and persisted while both bodies stay on the list.
+    assert!(
+        VIEW.contains("Browse.view-mode == Browse.mode-card"),
+        "browse-view.slint must derive `card-mode` from `Browse.mode-card`"
+    );
+}

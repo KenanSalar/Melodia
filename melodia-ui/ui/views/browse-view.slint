@@ -140,13 +140,6 @@ export component BrowseView inherits Rectangle {
     // No background of its own — the parent panel owns the rounded fill, and a
     // transparent root lets it show through at the corner cells.
 
-    property <int> watched-nav: Nav.selected-index;
-    changed watched-nav => {
-        if (root.watched-nav == 1) {
-            Browse.refresh();
-        }
-    }
-
     // Read by both bodies and by the scrollbar mirrors; named once so the comparison
     // isn't spelled out at each of them.
     property <bool> card-mode: Browse.view-mode == Browse.mode-card;
@@ -264,8 +257,12 @@ export component BrowseView inherits Rectangle {
                         tooltip-overlay: true;
                         clicked => { Browse.toggle-view-mode(); }
                     }
-                    PillDivider { }
-                    ColumnTogglePopup {
+                    // Both gated on the list being up: the popup configures the
+                    // `TrackList`'s columns, which the card grid doesn't have, so in
+                    // card mode it is a control over nothing. Safe behind an `if` —
+                    // nothing at the view root reads into either.
+                    if !root.card-mode: PillDivider { }
+                    if !root.card-mode: ColumnTogglePopup {
                         show-number <=> Browse.show-number;
                         show-artwork <=> Browse.show-artwork;
                         show-artist <=> Browse.show-artist;

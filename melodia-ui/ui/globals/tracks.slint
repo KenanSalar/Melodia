@@ -145,7 +145,6 @@ export global Browse {
     callback clear-selection();
     callback request-sort(string /*field*/);
     callback toggle-column(string /*column_id*/);
-    callback refresh();
     // The pill flips nothing itself — Rust negates, rebuilds the card model and
     // persists, so there is one place that knows which surface is mounted.
     callback toggle-view-mode();

@@ -39,14 +39,16 @@ impl SectionState {
     /// A fresh state: not on screen, not dirty. `dirty` starts `false` so a
     /// boot pre-fetch wins the first section-enter without re-fetching.
     ///
-    /// **That only holds for a section with nothing shared to publish.** The
-    /// four detail sections seed `dirty` themselves when the boot doesn't land
-    /// on them (`if !section_active() { mark_dirty() }`, in each
+    /// **That only holds for a section whose pre-fetch fills everything it
+    /// needs.** The four detail sections seed `dirty` themselves when the boot
+    /// doesn't land on them (`if !section_active() { mark_dirty() }`, in each
     /// `callbacks/*/lifecycle.rs`), because their pre-fetch runs off-screen and
     /// a hero may only write `HeroBackdrop` / `HeroChips` while it is the one
     /// mounted — so the pre-fetch fills that section's own state but not the
-    /// band, and something has to re-fetch once it is visible. Tracks and
-    /// Browse take the cheap path as written: neither has a hero.
+    /// band, and something has to re-fetch once it is visible. **Browse takes
+    /// the same seed for the card view's cover tier**, which an off-screen
+    /// prewarm releases rather than keeps. Tracks is the one left on the cheap
+    /// path: it publishes nothing shared and caches nothing a leave drops.
     pub fn new() -> Self {
         Self {
             active: AtomicBool::new(false),

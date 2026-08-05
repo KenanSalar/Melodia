@@ -41,6 +41,16 @@ pub fn wire_browse(ui: &AppWindow, state: &AppState, browse_ui: &Arc<BrowseUi>) 
     // late — after boot has already read this shadow. See the
     // `SectionActiveGate` bullet in `.claude/rules/ui-patterns.md`.
     browse_ui.set_section_active(ui.global::<crate::Nav>().get_selected_index() == 1);
+    // `browse::seed_from_settings` fetches whatever section the launch lands on,
+    // and off screen that fetch *releases* what it warmed — `warm_card_tier`
+    // hands its buffers back and reports `false`, so the card tier stays cold
+    // and nothing bumps the generation. Seeding the flag here costs one
+    // re-fetch on the first visit to a Browse the boot didn't land on, and
+    // nothing at all on the one it did. Same shape, same reason, as the four
+    // detail lifecycles'.
+    if !browse_ui.section_active() {
+        browse_ui.mark_dirty();
+    }
     {
         let s = state.clone();
         let bu = browse_ui.clone();
@@ -51,8 +61,15 @@ pub fn wire_browse(ui: &AppWindow, state: &AppState, browse_ui: &Arc<BrowseUi>) 
                 // The card tier is Browse's only cache, and it is worth a
                 // section's release: at 448 px a full LRU is tens of megabytes.
                 // The generation rewinds beside it so `0` keeps meaning "cold"
-                // rather than "first toggle of the session" — the re-enter fetch
-                // re-warms and bumps it again.
+                // rather than "first toggle of the session".
+                //
+                // **The release is only honest beside the `mark_dirty`** — the
+                // `callbacks/tracks.rs` rule, and Browse is the other view with
+                // no enter-time fetch of its own, so without it the re-enter
+                // paints every card on its placeholder. Landed synchronously,
+                // *before* the release task is spawned, so a re-enter can never
+                // read `false` off a tier the spawn is about to empty.
+                bu.mark_dirty();
                 if let Some(ui) = weak.upgrade() {
                     ui.global::<Browse>().set_covers_generation(0);
                 }
@@ -304,24 +321,6 @@ pub fn wire_browse(ui: &AppWindow, state: &AppState, browse_ui: &Arc<BrowseUi>) 
             let s = s.clone();
             spawn_logged_sync!(s, "browse::toggle_column",
                 library::settings::update_view_columns(&s, "browse".to_string(), columns));
-        });
-    }
-
-    // refresh: re-fetch the current path, no history change, no persist.
-    // Fired by the BrowseView when nav lands on it (so a fresh activation
-    // surfaces watcher-driven additions even when nothing else triggers a
-    // refresh), and by the library-changed subscriber below.
-    {
-        let s = state.clone();
-        let bu = browse_ui.clone();
-        let weak = weak.clone();
-        g.on_refresh(move || {
-            let path = bu.current_path();
-            let s = s.clone();
-            let bu = bu.clone();
-            let weak = weak.clone();
-            spawn_logged!(s, "browse::refresh",
-                browse_ui_mod::fetch_and_apply(&s, &bu, weak, path));
         });
     }
 
