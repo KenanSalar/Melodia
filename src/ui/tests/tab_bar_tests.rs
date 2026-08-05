@@ -203,56 +203,54 @@ fn both_mosaic_mounts_clamp_the_unfetched_sentinel() {
     }
 }
 
-/// One library-list page's count and the three files that have to agree about
-/// it. A second array rather than a widened [`CuratedPage`]: these five declare
-/// one count each in five separate files, and their header guard below has no
-/// counterpart on the curated pages.
+/// The mount sheet all five library counts now render through. They had a header
+/// line each, in five view files; the tabbed page states one, in a `count-text`
+/// ternary that has to carry all five guards.
+const MY_LIBRARY_VIEW: &str = include_str!("../../../melodia-ui/ui/views/my-library-view.slint");
+
+/// One library-list page's count and the two files that have to agree about it. A
+/// second array rather than a widened [`CuratedPage`]: these five declare one count
+/// each in five separate globals, and the sheet guard below has no counterpart on
+/// the curated pages.
 struct LibraryPage {
-    /// The page's `-view.slint` basename, and how a failure names it.
+    /// The tab the count belongs to, and how a failure names it.
     label: &'static str,
     /// The Slint global declaring the count, and the file declaring the global.
     global: &'static str,
     source: &'static str,
-    /// The view whose header line renders the count.
-    view: &'static str,
     /// The Rust handler owning the section leave.
     lifecycle: &'static str,
 }
 
 const LIBRARY_PAGES: [LibraryPage; 5] = [
     LibraryPage {
-        label: "tracks",
+        label: "songs",
         global: "Tracks",
         source: include_str!("../../../melodia-ui/ui/globals/tracks.slint"),
-        view: include_str!("../../../melodia-ui/ui/views/tracks-view.slint"),
         lifecycle: include_str!("../callbacks/tracks.rs"),
     },
     LibraryPage {
-        label: "album",
+        label: "albums",
         global: "Albums",
         source: include_str!("../../../melodia-ui/ui/globals/albums.slint"),
-        view: include_str!("../../../melodia-ui/ui/views/album-view.slint"),
         lifecycle: include_str!("../callbacks/albums/lifecycle.rs"),
     },
     LibraryPage {
-        label: "artist",
+        label: "artists",
         global: "Artists",
         source: include_str!("../../../melodia-ui/ui/globals/artists.slint"),
-        view: include_str!("../../../melodia-ui/ui/views/artist-view.slint"),
         lifecycle: include_str!("../callbacks/artists/lifecycle.rs"),
     },
     LibraryPage {
         label: "genres",
         global: "Genres",
         source: include_str!("../../../melodia-ui/ui/globals/genres.slint"),
-        view: include_str!("../../../melodia-ui/ui/views/genres-view.slint"),
         lifecycle: include_str!("../callbacks/genres/lifecycle.rs"),
     },
     LibraryPage {
         label: "playlists",
         global: "Playlists",
         source: include_str!("../../../melodia-ui/ui/globals/playlists.slint"),
-        view: include_str!("../../../melodia-ui/ui/views/playlists-view.slint"),
         lifecycle: include_str!("../callbacks/playlists/lifecycle.rs"),
     },
 ];
@@ -263,9 +261,13 @@ const LIBRARY_PAGES: [LibraryPage; 5] = [
 /// The guard is the half with no counterpart on the curated pages, and the half
 /// that ships something visibly wrong rather than merely absent: all five counts
 /// are interpolated into a gettext plural, so an unguarded `@tr` spells the
-/// sentinel out and the header reads "-1 albums" for the length of every
-/// re-fetch. The curated counts only ever gate `== 0` / `> 0`, which the sentinel
-/// satisfies by missing both.
+/// sentinel out and the band reads "-1 albums" for the length of every re-fetch.
+/// The curated counts only ever gate `== 0` / `> 0`, which the sentinel satisfies
+/// by missing both.
+///
+/// It is one file's business now rather than five: the five headers became one
+/// `count-text` ternary on the band, so a guard dropped from any arm is a guard
+/// dropped from the only line that renders that count.
 #[test]
 fn every_library_count_starts_at_the_unfetched_sentinel() {
     for page in LIBRARY_PAGES {
@@ -283,9 +285,9 @@ fn every_library_count_starts_at_the_unfetched_sentinel() {
             page.global
         );
         assert!(
-            page.view.contains(&format!("{}.total-count >= 0", page.global)),
-            "{}-view.slint must guard its count line on `{}.total-count >= 0` — the plural \
-             interpolates the count, so an unguarded `@tr` renders the sentinel verbatim",
+            MY_LIBRARY_VIEW.contains(&format!("{}.total-count >= 0", page.global)),
+            "the band's `count-text` must guard its {} arm on `{}.total-count >= 0` — the \
+             plural interpolates the count, so an unguarded `@tr` renders the sentinel verbatim",
             page.label,
             page.global
         );

@@ -12,6 +12,20 @@ const GLOBAL: &str = include_str!("../../../../melodia-ui/ui/globals/my-library.
 const VIEW: &str = include_str!("../../../../melodia-ui/ui/views/my-library-view.slint");
 const APP_WINDOW: &str = include_str!("../../../../melodia-ui/ui/app-window.slint");
 const SIDEBAR: &str = include_str!("../../../../melodia-ui/ui/layout/sidebar.slint");
+const PILLS: &str = include_str!("../../../../melodia-ui/ui/views/my-library/tab-pills.slint");
+const CALLBACKS: &str = include_str!("../../callbacks/my_library.rs");
+
+/// The five tab bodies, each stripped of the header its predecessor carried.
+const TAB_BODIES: [(&str, &str); 5] = [
+    ("songs", include_str!("../../../../melodia-ui/ui/views/my-library/songs-tab.slint")),
+    ("albums", include_str!("../../../../melodia-ui/ui/views/my-library/albums-tab.slint")),
+    ("artists", include_str!("../../../../melodia-ui/ui/views/my-library/artists-tab.slint")),
+    ("genres", include_str!("../../../../melodia-ui/ui/views/my-library/genres-tab.slint")),
+    (
+        "playlists",
+        include_str!("../../../../melodia-ui/ui/views/my-library/playlists-tab.slint"),
+    ),
+];
 
 /// The `tab-*` constant names the `MyLibrary` global declares, `tab-count` excluded.
 fn declared_tabs() -> Vec<String> {
@@ -203,6 +217,137 @@ fn the_sidebar_offers_one_row_for_the_whole_page() {
         1,
         "expected exactly one My Library sidebar row",
     );
+}
+
+/// **A pick clears the filter on both sides, and the second side is the entering tab's.**
+///
+/// The band's box and the property Rust filters by are different things: clearing only
+/// the box leaves the tab the pick lands on filtered by a needle nothing on screen shows,
+/// and the cards it hides look like a library that lost rows. Dispatching the empty
+/// needle through the page's own hand-off is what clears the other side — and rebuilds
+/// that model from cache ahead of the section gate's refetch, so the list is never blank
+/// either.
+///
+/// The five bodies are checked for the boxes they used to own: a stray `SearchBar` down
+/// there would filter its tab through a global this dispatch doesn't reach, and the two
+/// boxes would disagree the moment either was typed into.
+#[test]
+fn a_tab_pick_clears_the_filter_on_both_sides() {
+    let handler = CALLBACKS
+        .split_once("g.on_tab_changed(")
+        .and_then(|(_, rest)| rest.split_once("g.on_persist_tab_idx("))
+        .map_or("", |(body, _)| body);
+    assert!(
+        !handler.is_empty(),
+        "`wire_my_library` must still register `on_tab_changed` before `on_persist_tab_idx` \
+         — this pin bounds the handler between the two",
+    );
+    for clear in ["g.set_filter(SharedString::from(\"\"))", "filter::dispatch(&ui, \"\")"] {
+        assert!(
+            handler.contains(clear),
+            "`on_tab_changed` must spell `{clear}` — the band's box and the entering tab's \
+             own filter are cleared separately",
+        );
+    }
+
+    for (label, source) in TAB_BODIES {
+        for owned_by_the_band in ["SearchBar", "FilterThrottle"] {
+            assert!(
+                !source.contains(owned_by_the_band),
+                "the {label} tab must not mount its own `{owned_by_the_band}` — the page has \
+                 one filter box, and a second would filter through a global the tab pick \
+                 never clears",
+            );
+        }
+    }
+}
+
+/// The arms of `{albums,artists,genres}/grid.rs`'s `sort_*_indices`, restated. `"name"`
+/// is the default arm rather than an explicit one, and belongs here regardless: a field
+/// added here and missing there falls through to a defined order, where a field asked for
+/// in Slint and unknown to the comparator is the failure this catches.
+const SORT_ROWS: [(&str, [&str; 3]); 3] = [
+    ("Albums", ["name", "year", "artist"]),
+    ("Artists", ["name", "track_count", "album_count"]),
+    ("Genres", ["name", "track_count", "duration"]),
+];
+
+/// Every field a sort pill can ask for has to be one the comparator handles.
+///
+/// The token is a bare string on both sides — `request-sort("year")` in the Slint, a
+/// `match` arm in Rust — so a typo or a rename on either side compiles, and the pill just
+/// quietly sorts by the default arm while painting its arrow as though it had worked.
+/// These three rows went unpinned for as long as they lived in three separate view files;
+/// one file holding all three is what makes the pin cheap.
+#[test]
+fn every_sort_pill_asks_for_a_field_the_comparator_knows() {
+    for (global, fields) in SORT_ROWS {
+        let asked: Vec<&str> = PILLS
+            .match_indices(&format!("{global}.request-sort(\""))
+            .filter_map(|(i, m)| PILLS[i + m.len()..].split_once('"').map(|(f, _)| f))
+            .collect();
+        assert_eq!(
+            asked.len(),
+            fields.len(),
+            "the {global} sort row must mount one pill per field it sorts on, found {asked:?}",
+        );
+        for field in asked {
+            assert!(
+                fields.contains(&field),
+                "`{global}.request-sort(\"{field}\")` names a field the comparator has no arm \
+                 for",
+            );
+        }
+
+        // Counted against the pills rather than asserted once: a row where only the first
+        // pill reserves the slot has its labels jump sideways as the active field moves.
+        assert_eq!(
+            PILLS.matches(&format!("sort-direction: {global}.sort-field ==")).count(),
+            fields.len(),
+            "every {global} sort pill must bind `sort-direction` to the active field",
+        );
+    }
+    let rows: usize = SORT_ROWS.iter().map(|(_, fields)| fields.len()).sum();
+    assert_eq!(
+        PILLS.matches("reserve-sort-slot: true;").count(),
+        rows,
+        "every sort pill on the page must reserve the arrow slot",
+    );
+}
+
+/// **The Playlists pills publish their tooltip's anchor; the sheet draws it.**
+///
+/// Anchored on the pill itself it would be drawn by the band, which the body paints over
+/// and which clips besides — four tooltips that are simply never seen. The frame has to
+/// be the sheet's, declared after the scroll body, and it reaches the pills through the
+/// six anchors below. That is also what forces the row to sit at the pill component's
+/// root rather than under an `if` like its four siblings.
+#[test]
+fn the_playlist_action_tooltip_is_published_rather_than_drawn() {
+    assert_eq!(
+        PILLS.matches("tooltip-overlay: true;").count(),
+        4,
+        "all four Playlists action pills must suppress their in-tree tooltip",
+    );
+    for anchor in ["tip-x", "tip-y", "tip-w", "tip-h", "tip-label", "tip-visible"] {
+        assert!(
+            PILLS.contains(&format!("out property <{}> {anchor}", type_of(anchor))),
+            "`tab-pills.slint` must publish `{anchor}` for the sheet's frame to read",
+        );
+        assert!(
+            VIEW.contains(&format!("pills.{anchor}")),
+            "the sheet's `header-tip` frame must read `pills.{anchor}`",
+        );
+    }
+}
+
+/// The declared type of a published tooltip anchor.
+fn type_of(anchor: &str) -> &'static str {
+    match anchor {
+        "tip-label" => "string",
+        "tip-visible" => "bool",
+        _ => "length",
+    }
 }
 
 /// A `views.json` written by a released build still holds 4–7. They route nowhere now,

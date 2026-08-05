@@ -4,7 +4,7 @@
 //!
 //! Dialog *opens* (populating `Dialog.title` / `kind` / `target-id` /
 //! `input-text` / `pending-track-ids` / `open`) happen inline in Slint
-//! markup — the "+ New Playlist" pill (`playlists-view.slint`), the
+//! markup — the "+ New Playlist" pill (`my-library/tab-pills.slint`), the
 //! Rename / Delete pills (`playlist-detail-view.slint`), and the
 //! "New Playlist…" entry inside the row context menu
 //! (`track-list-row.slint`). Crossing into Rust to write Dialog

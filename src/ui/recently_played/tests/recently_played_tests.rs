@@ -44,7 +44,7 @@ fn recently_played_global() -> Option<&'static str> {
 ///
 /// The nine mounts of that component are fifty lines of near-identical
 /// bindings routinely copied between views; pasting the sort block back in
-/// from `tracks-view.slint` compiles, looks right, and silently restores a
+/// from `my-library/songs-tab.slint` compiles, looks right, and silently restores a
 /// column order the user can never get out of (`"recency"` is synthetic — no
 /// header cell owns it, so nothing clicks back to it).
 #[test]

@@ -1,0 +1,273 @@
+import { MyLibrary } from "../../globals/my-library.slint";
+import { Tracks } from "../../globals/tracks.slint";
+import { Albums } from "../../globals/albums.slint";
+import { Artists } from "../../globals/artists.slint";
+import { Genres } from "../../globals/genres.slint";
+import { Playlists } from "../../globals/playlists.slint";
+import { SmartEditor } from "../../globals/dialog-forms.slint";
+import { Dialog } from "../../globals/dialog.slint";
+import { ActionPill, PillLabel, PillButton, PillDivider } from "../../components/action-pill.slint";
+import { ColumnTogglePopup } from "../../components/track-list/column-toggle-popup.slint";
+
+// The per-tab action pills, handed to `LibraryTabBand` as its whole `@children`.
+//
+// **A component rather than five rows written straight into the mount sheet, and the
+// Playlists row is the reason.** Its four pills carry `tooltip-overlay: true`, so the
+// tooltip is drawn by a frame the host declares *after* the scroll body — Slint paints in
+// declaration order, and a `below` tooltip on a pill sitting in the band lands under the
+// grid (the band clips besides). That frame reaches the pills by id, and an id declared
+// inside an `if` can't be read from outside it. So the ids live at a root the host can
+// see, and this file publishes their rect the way `MosaicTabHero` publishes the tab bar's.
+//
+// One component holding all five rows rather than four inline plus one: the band's slot
+// spaces its cells, and a second always-mounted child would offset every other tab's row
+// from the band's right edge.
+export component MyLibraryTabPills inherits Rectangle {
+    HorizontalLayout {
+        alignment: end;
+        // No spacing. The rows are mutually exclusive, and the Playlists slot below is a
+        // real cell even while collapsed, so any gap here would show up as a permanent
+        // inset on the other four tabs.
+        spacing: 0px;
+
+        // --- Songs: the selection chip, then the column toggle ----------------
+        //
+        // The chip leads so its group reads to the left of the toggle.
+        if MyLibrary.tab-idx == MyLibrary.tab-songs: ActionPill {
+            if Tracks.selected-ids.length > 0: PillLabel {
+                text: @tr("{} selected", Tracks.selected-ids.length);
+            }
+            if Tracks.selected-ids.length > 0: PillButton {
+                icon: "close";
+                clicked => {
+                    Tracks.clear-selection();
+                    MyLibrary.blur-search-tick += 1;
+                }
+            }
+            if Tracks.selected-ids.length > 0: PillDivider { }
+            ColumnTogglePopup {
+                show-number <=> Tracks.show-number;
+                show-artwork <=> Tracks.show-artwork;
+                show-artist <=> Tracks.show-artist;
+                show-album <=> Tracks.show-album;
+                show-genre <=> Tracks.show-genre;
+                show-year <=> Tracks.show-year;
+                toggled(id) => { Tracks.toggle-column(id); }
+            }
+        }
+
+        // --- Albums / Artists / Genres: one sort row each ---------------------
+        //
+        // The active field carries the direction arrow. Clicking it flips the direction
+        // and a new field starts ascending — both Rust's, through the shared `next_sort`.
+        if MyLibrary.tab-idx == MyLibrary.tab-albums: ActionPill {
+            PillButton {
+                text: @tr("Name");
+                reserve-sort-slot: true;
+                sort-direction: Albums.sort-field == "name" ? Albums.sort-dir : "";
+                active: Albums.sort-field == "name";
+                clicked => { Albums.request-sort("name"); }
+            }
+            PillDivider { }
+            PillButton {
+                text: @tr("Year");
+                reserve-sort-slot: true;
+                sort-direction: Albums.sort-field == "year" ? Albums.sort-dir : "";
+                active: Albums.sort-field == "year";
+                clicked => { Albums.request-sort("year"); }
+            }
+            PillDivider { }
+            PillButton {
+                text: @tr("Artist");
+                reserve-sort-slot: true;
+                sort-direction: Albums.sort-field == "artist" ? Albums.sort-dir : "";
+                active: Albums.sort-field == "artist";
+                clicked => { Albums.request-sort("artist"); }
+            }
+        }
+
+        if MyLibrary.tab-idx == MyLibrary.tab-artists: ActionPill {
+            PillButton {
+                text: @tr("Name");
+                reserve-sort-slot: true;
+                sort-direction: Artists.sort-field == "name" ? Artists.sort-dir : "";
+                active: Artists.sort-field == "name";
+                clicked => { Artists.request-sort("name"); }
+            }
+            PillDivider { }
+            PillButton {
+                text: @tr("Tracks");
+                reserve-sort-slot: true;
+                sort-direction: Artists.sort-field == "track_count" ? Artists.sort-dir : "";
+                active: Artists.sort-field == "track_count";
+                clicked => { Artists.request-sort("track_count"); }
+            }
+            PillDivider { }
+            PillButton {
+                text: @tr("Albums");
+                reserve-sort-slot: true;
+                sort-direction: Artists.sort-field == "album_count" ? Artists.sort-dir : "";
+                active: Artists.sort-field == "album_count";
+                clicked => { Artists.request-sort("album_count"); }
+            }
+        }
+
+        if MyLibrary.tab-idx == MyLibrary.tab-genres: ActionPill {
+            PillButton {
+                text: @tr("Name");
+                reserve-sort-slot: true;
+                sort-direction: Genres.sort-field == "name" ? Genres.sort-dir : "";
+                active: Genres.sort-field == "name";
+                clicked => { Genres.request-sort("name"); }
+            }
+            PillDivider { }
+            PillButton {
+                text: @tr("Tracks");
+                reserve-sort-slot: true;
+                sort-direction: Genres.sort-field == "track_count" ? Genres.sort-dir : "";
+                active: Genres.sort-field == "track_count";
+                clicked => { Genres.request-sort("track_count"); }
+            }
+            PillDivider { }
+            PillButton {
+                text: @tr("Duration");
+                reserve-sort-slot: true;
+                sort-direction: Genres.sort-field == "duration" ? Genres.sort-dir : "";
+                active: Genres.sort-field == "duration";
+                clicked => { Genres.request-sort("duration"); }
+            }
+        }
+
+        // --- Playlists: collapsed, never unmounted ----------------------------
+        //
+        // The one row that can't sit under an `if`, per the file header. It collapses to
+        // a zero-width clipped cell instead: nothing paints, and `Clip` swallows every
+        // event outside its empty rect, so the four pills are as unreachable as an
+        // unmounted branch while their ids stay readable from this root. The three width
+        // constraints are spelled out because an explicit `min-width` is what *replaces*
+        // the constraint the pill's own bound width would otherwise merge in.
+        Rectangle {
+            clip: true;
+            min-width: 0px;
+            preferred-width: MyLibrary.tab-idx == MyLibrary.tab-playlists
+                ? pl.preferred-width : 0px;
+            max-width: MyLibrary.tab-idx == MyLibrary.tab-playlists
+                ? pl.preferred-width : 0px;
+
+            pl := ActionPill {
+                // Fills the Dialog inline rather than hopping through Rust: a synchronous
+                // `set_open(true)` mid-click-handler trips Slint's recursion guard.
+                np := PillButton {
+                    icon: "add";
+                    text: @tr("New Playlist");
+                    tooltip-text: @tr("Create an empty playlist");
+                    // Drawn by the host's top-layer frame, out of the grid's way.
+                    tooltip-overlay: true;
+                    clicked => {
+                        Dialog.title = @tr("New Playlist");
+                        Dialog.message = "";
+                        Dialog.confirm-label = @tr("Create");
+                        Dialog.cancel-label = @tr("Cancel");
+                        Dialog.destructive = false;
+                        Dialog.kind = "create-playlist";
+                        Dialog.target-id = -1;
+                        Dialog.input-text = "";
+                        Dialog.input-text-2 = "";
+                        Dialog.pending-track-ids = [];
+                        Dialog.open = true;
+                    }
+                }
+
+                PillDivider { }
+
+                // Chrome inline so `@tr` applies; Rust resets the editor state and opens
+                // from a fresh tick, the same hop as Export.
+                sp := PillButton {
+                    icon: "auto_awesome";
+                    icon-filled: true;
+                    text: @tr("New Smart Playlist");
+                    tooltip-text: @tr("Create a playlist from rules");
+                    tooltip-overlay: true;
+                    clicked => {
+                        Dialog.title = @tr("New Smart Playlist");
+                        Dialog.message = "";
+                        Dialog.confirm-label = @tr("Create");
+                        Dialog.cancel-label = @tr("Cancel");
+                        Dialog.destructive = false;
+                        Dialog.kind = "smart-playlist-editor";
+                        Dialog.target-id = -1;
+                        SmartEditor.request-new();
+                    }
+                }
+
+                PillDivider { }
+
+                // Portable `.m3u8`, so playlists survive a database wipe. Both are pure
+                // Rust flows over native rfd dialogs.
+                ip := PillButton {
+                    icon: "download";
+                    text: @tr("Import");
+                    tooltip-text: @tr("Import playlists from .m3u8 files");
+                    tooltip-overlay: true;
+                    clicked => { Playlists.import-playlists(); }
+                }
+
+                PillDivider { }
+
+                ep := PillButton {
+                    icon: "upload";
+                    text: @tr("Export");
+                    tooltip-text: @tr("Export playlists to .m3u8 files");
+                    tooltip-overlay: true;
+                    clicked => {
+                        // Chrome inline so `@tr` applies; Rust fills the rows and opens
+                        // from a fresh tick.
+                        Dialog.title = @tr("Export Playlists");
+                        Dialog.message = @tr("Choose playlists to export, then pick a folder.");
+                        Dialog.confirm-label = @tr("Export");
+                        Dialog.cancel-label = @tr("Cancel");
+                        Dialog.destructive = false;
+                        Dialog.kind = "export-playlists";
+                        Playlists.request-export-playlists();
+                    }
+                }
+            }
+        }
+    }
+
+    // --- The Playlists pills' tooltip anchor ---------------------------------
+    //
+    // Published, never drawn: see the file header. The window rect comes off the hovered
+    // pill live rather than being snapshotted on the hover edge, so a pill that moves
+    // under a parked pointer — a resize, Ctrl+B — keeps its tooltip anchored.
+    property <length> px: np.hovered ? np.absolute-position.x
+        : sp.hovered ? sp.absolute-position.x
+        : ip.hovered ? ip.absolute-position.x
+        : ep.hovered ? ep.absolute-position.x
+        : 0px;
+    property <length> py: np.hovered ? np.absolute-position.y
+        : sp.hovered ? sp.absolute-position.y
+        : ip.hovered ? ip.absolute-position.y
+        : ep.hovered ? ep.absolute-position.y
+        : 0px;
+
+    out property <length> tip-x: root.px - root.absolute-position.x;
+    out property <length> tip-y: root.py - root.absolute-position.y;
+    out property <length> tip-w: np.hovered ? np.width
+        : sp.hovered ? sp.width
+        : ip.hovered ? ip.width
+        : ep.hovered ? ep.width
+        : 0px;
+    out property <length> tip-h: np.hovered ? np.height
+        : sp.hovered ? sp.height
+        : ip.hovered ? ip.height
+        : ep.hovered ? ep.height
+        : 0px;
+    out property <string> tip-label: np.hovered ? np.tooltip-text
+        : sp.hovered ? sp.tooltip-text
+        : ip.hovered ? ip.tooltip-text
+        : ep.hovered ? ep.tooltip-text
+        : "";
+    out property <bool> tip-visible:
+        np.hovered || sp.hovered || ip.hovered || ep.hovered;
+}

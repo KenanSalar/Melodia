@@ -7,7 +7,7 @@ Working doc. Keep the phase markers current; delete this file when the feature s
 | 0 — Prep | ☑ done |
 | 1 — `MyLibrary` global, nav plumbing, mount sheet | ☑ done |
 | 2 — `LibraryTabBand` | ☑ done |
-| 3 — The five tab bodies and the mount sheet | ☐ not started |
+| 3 — The five tab bodies and the mount sheet | ☑ done |
 | 4 — The four details under the band | ☐ not started |
 | 5 — Cleanup, i18n, docs | ☐ not started |
 
@@ -594,7 +594,74 @@ The tab-bar-brush pin is the one that had to be reworded rather than ported: her
 brush is a *pair*, so it asserts a `HeroBackdrop.` arm **and** a `Theme.` arm, since
 dropping either half is a bug visible in only one of the two states.
 
-### Phase 3 — The five tab bodies and the mount sheet
+### Phase 3 — The five tab bodies and the mount sheet ☑
+
+**What the phase actually landed**, and the six places the plan below was wrong or made a
+choice it hadn't seen yet:
+
+- **The pill rows are one component, `views/my-library/tab-pills.slint`, and the Playlists
+  row inside it is *collapsed* rather than `if`-gated.** The plan has the five rows handed
+  to the band as five `if`-gated `@children`, the Favorites shape. Four of them can be;
+  Playlists can't, and the reason is the constraint this page keeps running into from a new
+  direction. Its four action pills carry `tooltip-overlay: true`, so the tooltip is a
+  top-layer frame the host declares *after* the scroll body — anchored on the pill it would
+  be drawn by the band, which the body paints over and which clips besides. That frame
+  reaches the pills **by id**, and an id declared inside an `if` can't be read from outside
+  it. Today those pills are unconditional in a page header, which is exactly why the frame
+  works and why tab-gating them is what breaks it. So the ids sit at a component root the
+  sheet can see, and the file publishes `tip-x/-y/-w/-h/-label/-visible` the way
+  `MosaicTabHero` publishes the bar's — the same answer one boundary down. The row itself
+  hides by collapsing to a zero-width `clip: true` cell (`min-width: 0px` spelled out, since
+  an explicit min is what *replaces* the constraint the pill's own bound width would
+  otherwise merge in; `preferred`/`max` carry the ternary): nothing paints, and `Clip`
+  swallows every event outside its empty rect, so the pills are as unreachable as an
+  unmounted branch. **One component holding all five rows** rather than four inline plus
+  one, because the band's slot spaces its cells and a second always-mounted child would
+  offset every other tab's row from the band's right edge. Re-`if`-gating the row is a
+  compile error, not a silent regression — the `tip-*` bindings stop resolving — which is
+  why the pin that matters is `the_playlist_action_tooltip_is_published_rather_than_drawn`,
+  covering the *other* half: that the sheet still draws the frame.
+- **A tab pick's direction goes through `Nav.pending-enter-from`, not straight from
+  `band.tab-enter-from`.** The plan binds the tab branches to the band's published
+  direction, which is right for Favorites and wrong here for a reason Favorites can't have:
+  it has no details. A back out of a detail mounts a *grid* branch with
+  `Nav.pending-enter-from` already set to `left` by `nav_transition::mark`; bound to the
+  band, that branch would slide in from whichever way the last **tab pick** went. So the
+  sheet's `tab-selected` handler writes the band's answer into `Nav.pending-enter-from` and
+  all nine branches keep reading it — one channel for a tab pick, a drill, a back and a
+  Mouse-4/5 step. The band settles `tab-enter-from` before it emits `tab-selected`, so the
+  read is already the new one. `enabled: band.tab-anim-armed` still gates the five tab
+  branches and still doesn't gate the four detail ones.
+- **Phase 0's open question — whether Songs also empties its model on leave — is answered
+  *no*, by moving the fix to the other end.** `on_tab_changed` now dispatches the empty
+  needle through `filter::dispatch` after clearing the band's box, so the **entering** tab's
+  own `filter` is cleared and its model rebuilt from the cache Rust already holds,
+  synchronously, ahead of the section gate's re-fetch. That closes the window the model
+  clear was for — a tab painting rows built from a needle nothing on screen shows — without
+  buying a blank list across the app's slowest query on every return to Songs. It also
+  spells the nine-way hand-off once instead of twice.
+- **The four grids now sit flush, and that is what makes the sheet's one `GridGeometry`
+  honest.** Each grid tab mounts its grid at `y: Theme.pad-md; width: 100%` — the
+  `favorites/most-played-tab.slint` contract verbatim — so `avail-width: body.width` is the
+  width the cards actually get. The cards' inset drops from `pad-lg + gap` to the grid's own
+  `gap`, which also lines them up closer to the band's own padding. The alternative was the
+  sheet restating the tab body's inset, where a mismatch silently over-counts columns and
+  overflows the cards. **The Songs tab keeps its `pad-lg`** — same split Favorites has, and
+  for the same reason: the geometry doesn't reach it.
+- **`GridColumnsSync.seed` gates on the tab, not on the detail id.** It writes `columns` to
+  all four grid globals (an unmounted grid's *fetch* reads the property, so the write is
+  what stops it entering at a stale count) and invokes `columns-changed` only on the mounted
+  tab. Gating that invoke on the detail id as well would have looked tighter and left a
+  detail closing onto a grid chunked for a window size that is gone.
+- **`ui::tab_bar::tests`' `LibraryPage` lost its `view` field**, which `include_str!`'d the
+  five deleted files — a compile break, not a test failure. The five
+  `total-count >= 0` guards are one `count-text` ternary now, so they are pinned against the
+  sheet through a single `MY_LIBRARY_VIEW` const.
+
+The five per-view `blur-search-tick` properties are dead as of this phase (`Tracks`,
+`Albums`, `Artists`, `Genres`, `Playlists`) — their last writers went with the headers, and
+the Songs tab's `request-blur-search` was re-pointed at `MyLibrary`'s. They are deleted in
+Phase 5 with the four detail ones rather than piecemeal here.
 
 - **`views/my-library/{songs,albums,artists,genres,playlists}-tab.slint`** — the five
   current view bodies with header, `SearchBar`, pill rows, `FilterThrottle`, backdrop
@@ -650,11 +717,11 @@ dropping either half is a bug visible in only one of the two states.
   `OverlayScrollbar`s each, except Artist Detail, which keeps `CompositeScrollbars`.
   Their root can now pad uniformly on three sides like a grid page — the reason they
   couldn't (`DetailHeader` is full-bleed) has moved into the band.
-- **The backdrop `TouchArea`s are rewired, not deleted.** Each of the four has one, Artist
-  Detail has a **second** inside its `hover-catch`, and the Songs tab's `TrackList`
-  forwards `request-blur-search`. All of them now write `MyLibrary.blur-search-tick`. The
-  nine per-view `blur-search-tick` *properties* are what go dead (Phase 5); their writers
-  outlive them.
+- **The backdrop `TouchArea`s are rewired, not deleted.** Each of the four has one and
+  Artist Detail has a **second** inside its `hover-catch`; all of them now write
+  `MyLibrary.blur-search-tick`. (The Songs tab's `request-blur-search` forward was rewired
+  in Phase 3, with the header it belonged to.) The nine per-view `blur-search-tick`
+  *properties* are what go dead (Phase 5); their writers outlive them.
 - **The sheet's `detail-open: false` literal becomes the private derivation of decision 1**
   — the phase's first edit, and the one that makes every other item here visible. Nothing
   may flip it before `DetailHeader` is gone from all four detail views, or the page wears
@@ -712,11 +779,16 @@ dropping either half is a bug visible in only one of the two states.
 - Docs: root `CLAUDE.md` (a My Library bullet in the module map pointing at the Favorites
   bullet as the reference contract, the nav index table, the retired 4–7),
   `.claude/rules/ui-patterns.md` (the band beside `MosaicTabHero`; the tab-scoped
-  `SectionActiveGate`; the "a tab switch is a section switch" rule; **and the two claims
+  `SectionActiveGate`; the "a tab switch is a section switch" rule; **the two claims
   Phase 0 already falsified** — line 31's "the four older grid views still carry
   hand-copied versions" and line 45's "the four older entity grids deliberately keep the
   older shape", the latter also owing the `>= 0` guard rule and what Tracks' leave arm
-  cost),
+  cost, and both now naming files that no longer exist; **and the top-layer tooltip list**,
+  whose three mounts are `my-library-view.slint`'s two — `tab-tip` and the `header-tip`
+  that moved off `playlists-view.slint` — plus `settings-view.slint`'s and the sidebar
+  rail's. `tab-pills.slint` is worth a line of its own there: it is the third answer to
+  "publish the anchor, let the host draw it", and the first where the boundary crossed is
+  an `if` rather than a component),
   `.claude/rules/slint-pitfalls.md` (the animated-root-**height** twin of the width entry),
   `README.md` feature blurb.
 - Delete this file.
@@ -757,11 +829,15 @@ Things this codebase has already paid for once, which this change is positioned 
   `tab-changed` reaches Rust. Anything needing the outgoing tab reads `previous-index`.
 - ☑ **`CompositeScroll.reset()`** — five call sites now, not four.
 - ☑ **Focus regrab** — ten mirrors now, not nine.
-- **`ViewTransition` disarm** — `tab-anim-armed` starts `false` and is armed in the bar's
-  `selected` handler, never from a mount `Timer`. Detail branches don't use it at all;
-  they keep `Nav.pending-enter-from`.
-- **Bottom padding** — the tab bodies inset left/right/top only; a root `padding-bottom`
-  over a scroller reads as a dead strip.
+- ☑ **`ViewTransition` disarm** — `tab-anim-armed` starts `false` and is armed in the bar's
+  `selected` handler, never from a mount `Timer`. It gates the five tab branches and not
+  the four detail ones. **The *direction* is a separate question and all nine share one
+  answer**, `Nav.pending-enter-from`, which the sheet writes on a tab pick — binding the
+  tab branches to the band instead leaves a back out of a detail sliding whichever way the
+  last tab pick went.
+- ☑ **Bottom padding** — never a root `padding-bottom` over a scroller; it reads as a dead
+  strip. The four grid tabs inset nothing (the grid runs flush and takes its own `gap`,
+  the Favorites contract); Songs insets left/right/top.
 - ☑ **The retired indices leave three maps behind** — `view-title()`,
   `rss_sampler::format_view` and the persisted-index range check. Each named 4–7 and each
   failed differently: an untranslated "Melodia" heading, a diagnostic that stops
@@ -808,10 +884,18 @@ Targeted test additions, all `include_str!` source pins in the house style:
 - ☑ `…::the_retired_indices_fold_onto_the_page_that_absorbed_them` and
   `…::the_sidebar_offers_one_row_for_the_whole_page`.
 - ☑ `ui::nav_history::tests::a_tab_switch_is_not_a_duplicate_of_the_tab_it_left`.
-- `…::a_tab_pick_clears_the_filter_on_both_sides` — Phase 3, once there is a shared box
-  whose Slint side can be cleared.
-- `…::every_sort_pill_asks_for_a_field_the_comparator_knows` — the Albums / Artists /
-  Genres rows finally get the pin the Favorites Artists row already has.
+- ☑ `…::a_tab_pick_clears_the_filter_on_both_sides` — the band's box *and* the entering
+  tab's own filter, plus that no tab body kept a `SearchBar` or a `FilterThrottle` of its
+  own. The mutation to check is dropping the dispatch: the box then reads empty over a tab
+  still filtered by the needle it was left with.
+- ☑ `…::every_sort_pill_asks_for_a_field_the_comparator_knows` — the Albums / Artists /
+  Genres rows finally get the pin the Favorites Artists row already has, and one file
+  holding all three is what made it cheap. The Favorites copy's "nothing pins this for the
+  Albums / Artists / Genres rows" line is gone with it.
+- ☑ `…::the_playlist_action_tooltip_is_published_rather_than_drawn` — the four pills
+  suppress their in-tree tooltip, `tab-pills.slint` publishes all six anchors, and the
+  sheet's `header-tip` reads them. Anchored on the pill instead, all four are simply never
+  seen.
 - ☑ `ui::library_tab_band_tests` — as listed in Phase 2.
 - ☑ `ui::tab_bar::tests` extended, on a `LIBRARY_PAGES` array beside `CURATED_PAGES`:
   `every_library_count_starts_at_the_unfetched_sentinel` (declaration **and** the `>= 0`

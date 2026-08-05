@@ -6,22 +6,25 @@ import { GenreDetail, Genres } from "../globals/genres.slint";
 import { PlaylistDetail, Playlists } from "../globals/playlists.slint";
 import { Tracks } from "../globals/tracks.slint";
 import { FilterThrottle } from "../components/filter-throttle.slint";
+import { GridColumnsSync } from "../components/grid-columns-sync.slint";
+import { GridGeometry } from "../components/grid-geometry.slint";
 import { LibraryTabBand } from "../components/hero/library-tab-band.slint";
 import { Tooltip, TooltipSide } from "../components/tooltip.slint";
 import { ViewTransition } from "../components/view-transition.slint";
-import { TracksView } from "tracks-view.slint";
-import { AlbumView } from "album-view.slint";
+import { MyLibrarySongsTab } from "my-library/songs-tab.slint";
+import { MyLibraryAlbumsTab } from "my-library/albums-tab.slint";
+import { MyLibraryArtistsTab } from "my-library/artists-tab.slint";
+import { MyLibraryGenresTab } from "my-library/genres-tab.slint";
+import { MyLibraryPlaylistsTab } from "my-library/playlists-tab.slint";
+import { MyLibraryTabPills } from "my-library/tab-pills.slint";
 import { AlbumDetailView } from "album-detail-view.slint";
-import { ArtistView } from "artist-view.slint";
 import { ArtistDetailView } from "artist-detail-view.slint";
-import { GenresView } from "genres-view.slint";
 import { GenreDetailView } from "genre-detail-view.slint";
-import { PlaylistsView } from "playlists-view.slint";
 import { PlaylistDetailView } from "playlist-detail-view.slint";
 
 // My Library: five tabs over the views that used to be five sidebar entries. This file is
-// the mount sheet — the band, which body is on screen, and nothing else. Each tab's grid,
-// list, header and filter box still lives in the view it always did.
+// the mount sheet — the band, the grid geometry the four card tabs share, which body is on
+// screen, and the two tooltip frames the band and the pills publish anchors for.
 //
 // **The tab index is what routes, not the detail id.** `seed_detail_from_settings` runs
 // for all four detail views at boot whichever section is restored, so more than one
@@ -42,6 +45,41 @@ export component MyLibraryView inherits Rectangle {
         fire() => { MyLibrary.filter-changed(MyLibrary.filter); }
     }
 
+    // Shared by all four card tabs — mutually exclusive, same card shape, so one
+    // derivation covers them. Measured off the body, whose width the layout fixes
+    // independently of the cards inside it.
+    //
+    // The gutter is the host's choice, so it lives here and is handed to both the
+    // geometry and the grids — an `in` property isn't readable back from outside the
+    // component declaring it.
+    property <length> grid-gap: 20px;
+
+    geom := GridGeometry {
+        avail-width: body.width;
+        gap: root.grid-gap;
+    }
+
+    // **The count goes to all four, the re-chunk only to the tab on screen.** Writing all
+    // four is what stops an unmounted grid entering at a stale column count — its fetch
+    // reads the property, not the callback. Invoking only the mounted one is what stops a
+    // resize rebuilding three models nobody is looking at. The gate is the tab and not
+    // the detail id: a detail closing has to find its grid already chunked to fit.
+    GridColumnsSync {
+        computed-cols: geom.cols;
+        seed(c) => {
+            Albums.columns = c;
+            Artists.columns = c;
+            Genres.columns = c;
+            Playlists.columns = c;
+            if (MyLibrary.tab-idx == MyLibrary.tab-albums) { Albums.columns-changed(c); }
+            if (MyLibrary.tab-idx == MyLibrary.tab-artists) { Artists.columns-changed(c); }
+            if (MyLibrary.tab-idx == MyLibrary.tab-genres) { Genres.columns-changed(c); }
+            if (MyLibrary.tab-idx == MyLibrary.tab-playlists) {
+                Playlists.columns-changed(c);
+            }
+        }
+    }
+
     VerticalLayout {
         band := LibraryTabBand {
             // Inline literals: `@tr` folds msgids at codegen, so a Rust-seeded `[string]`
@@ -49,7 +87,17 @@ export component MyLibraryView inherits Rectangle {
             tab-labels: [@tr("Songs"), @tr("Albums"), @tr("Artists"), @tr("Genres"), @tr("Playlists")];
             tab-icons: ["music_note", "album", "person", "theater_comedy", "playlist_play"];
             tab-idx <=> MyLibrary.tab-idx;
-            tab-selected(i) => { MyLibrary.tab-changed(i); }
+            tab-selected(i) => {
+                // **The direction goes through `Nav`, not straight from the band.** The
+                // band has already settled `tab-enter-from` by the time this fires, but
+                // binding the bodies to it would leave the *other* two ways a body
+                // mounts — a drill in, a back out — sliding whichever way the last tab
+                // pick went. `Nav.pending-enter-from` is what `nav_transition::mark`
+                // writes for those, so routing the pick through it keeps one source of
+                // truth for all nine branches.
+                Nav.pending-enter-from = band.tab-enter-from;
+                MyLibrary.tab-changed(i);
+            }
 
             filter <=> MyLibrary.filter;
             blur-tick: MyLibrary.blur-search-tick;
@@ -85,17 +133,25 @@ export component MyLibraryView inherits Rectangle {
             // `DetailHeader`. The hero half is built and compiled; nothing may reach it
             // while a detail still draws a banner of its own, or the page wears two.
             detail-open: false;
+
+            // The band's `@children` slot, in one piece. See `tab-pills.slint` for why
+            // the five rows are a component instead of five `if`s written here.
+            pills := MyLibraryTabPills { }
         }
 
         body := Rectangle {
             vertical-stretch: 1;
             clip: true;
 
+            // **A tab body slides, a detail body doesn't gate.** `tab-anim-armed` starts
+            // false and only a bar pick arms it, so the page's own fade-up isn't
+            // compounded with a horizontal slide — the two together read as a diagonal.
             if MyLibrary.tab-idx == MyLibrary.tab-songs: ViewTransition {
                 width: parent.width;
                 height: parent.height;
                 enter-from: Nav.pending-enter-from;
-                TracksView { width: 100%; height: 100%; }
+                enabled: band.tab-anim-armed;
+                MyLibrarySongsTab { width: 100%; height: 100%; }
             }
             // Each grid tab swaps grid ↔ detail on its own `*-id`, -1 being the grid —
             // the same split these four had while they were separate sidebar sections.
@@ -104,7 +160,15 @@ export component MyLibraryView inherits Rectangle {
                 width: parent.width;
                 height: parent.height;
                 enter-from: Nav.pending-enter-from;
-                AlbumView { width: 100%; height: 100%; }
+                enabled: band.tab-anim-armed;
+                MyLibraryAlbumsTab {
+                    width: 100%;
+                    height: 100%;
+                    card-w: geom.card-w;
+                    card-h: geom.card-h;
+                    row-h: geom.row-h;
+                    gap: root.grid-gap;
+                }
             }
             if MyLibrary.tab-idx == MyLibrary.tab-albums
                 && AlbumDetail.album-id >= 0: ViewTransition {
@@ -118,7 +182,15 @@ export component MyLibraryView inherits Rectangle {
                 width: parent.width;
                 height: parent.height;
                 enter-from: Nav.pending-enter-from;
-                ArtistView { width: 100%; height: 100%; }
+                enabled: band.tab-anim-armed;
+                MyLibraryArtistsTab {
+                    width: 100%;
+                    height: 100%;
+                    card-w: geom.card-w;
+                    card-h: geom.card-h;
+                    row-h: geom.row-h;
+                    gap: root.grid-gap;
+                }
             }
             if MyLibrary.tab-idx == MyLibrary.tab-artists
                 && ArtistDetail.artist-id >= 0: ViewTransition {
@@ -132,7 +204,15 @@ export component MyLibraryView inherits Rectangle {
                 width: parent.width;
                 height: parent.height;
                 enter-from: Nav.pending-enter-from;
-                GenresView { width: 100%; height: 100%; }
+                enabled: band.tab-anim-armed;
+                MyLibraryGenresTab {
+                    width: 100%;
+                    height: 100%;
+                    card-w: geom.card-w;
+                    card-h: geom.card-h;
+                    row-h: geom.row-h;
+                    gap: root.grid-gap;
+                }
             }
             if MyLibrary.tab-idx == MyLibrary.tab-genres
                 && GenreDetail.genre-id >= 0: ViewTransition {
@@ -146,7 +226,15 @@ export component MyLibraryView inherits Rectangle {
                 width: parent.width;
                 height: parent.height;
                 enter-from: Nav.pending-enter-from;
-                PlaylistsView { width: 100%; height: 100%; }
+                enabled: band.tab-anim-armed;
+                MyLibraryPlaylistsTab {
+                    width: 100%;
+                    height: 100%;
+                    card-w: geom.card-w;
+                    card-h: geom.card-h;
+                    row-h: geom.row-h;
+                    gap: root.grid-gap;
+                }
             }
             if MyLibrary.tab-idx == MyLibrary.tab-playlists
                 && PlaylistDetail.playlist-id >= 0: ViewTransition {
@@ -158,10 +246,10 @@ export component MyLibraryView inherits Rectangle {
         }
     }
 
-    // On a layer of its own. It can't hang off the tab: the bar sits in the band, and
-    // Slint paints in declaration order, so anything the band owns is covered by the body
-    // underneath. The band publishes the rect it derives from the hovered *index*, so a
-    // tab that moves under a parked pointer keeps its tooltip anchored.
+    // Both frames are on a layer of their own, and for one reason: their hosts sit in the
+    // band, and Slint paints in declaration order, so anything the band owns is covered by
+    // the body underneath. Each publishes the rect it derives from the hovered element, so
+    // a tab or a pill that moves under a parked pointer keeps its tooltip anchored.
     tab-tip := Rectangle {
         x: band.absolute-position.x - root.absolute-position.x + band.tip-x;
         y: band.absolute-position.y - root.absolute-position.y + band.tip-y;
@@ -172,6 +260,20 @@ export component MyLibraryView inherits Rectangle {
             hovered: band.tip-visible;
             host-width: tab-tip.width;
             host-height: tab-tip.height;
+            side: TooltipSide.below;
+        }
+    }
+
+    header-tip := Rectangle {
+        x: pills.absolute-position.x - root.absolute-position.x + pills.tip-x;
+        y: pills.absolute-position.y - root.absolute-position.y + pills.tip-y;
+        width: pills.tip-w;
+        height: pills.tip-h;
+        Tooltip {
+            text: pills.tip-label;
+            hovered: pills.tip-visible;
+            host-width: header-tip.width;
+            host-height: header-tip.height;
             side: TooltipSide.below;
         }
     }

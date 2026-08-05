@@ -35,6 +35,13 @@ pub fn wire_my_library(ui: &AppWindow, state: &AppState) {
     // gate has fired too, so its own lifecycle is already re-fetching; all the page owes
     // is dropping the filter (a Songs needle carried into the Albums grid would silently
     // hide cards) and remembering the pick.
+    //
+    // **Both sides, and the second one is the entering tab's.** Clearing the band's box
+    // leaves the view Rust filters by untouched, so the tab the pick lands on would come
+    // up filtered under an empty box. Dispatching the empty needle through the same
+    // nine-way hand-off the box uses clears it *and* rebuilds that model from the cache
+    // Rust already holds — synchronously, ahead of the section gate's re-fetch, so the
+    // list is never blank and never stale.
     {
         let s = state.clone();
         let weak = weak.clone();
@@ -43,6 +50,7 @@ pub fn wire_my_library(ui: &AppWindow, state: &AppState) {
                 let g = ui.global::<MyLibrary>();
                 g.set_filter(SharedString::from(""));
                 g.set_blur_search_tick(g.get_blur_search_tick() + 1);
+                my_library_mod::filter::dispatch(&ui, "");
             }
             persist_tab(&s, tab);
         });

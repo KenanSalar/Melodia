@@ -1,0 +1,44 @@
+import { Theme } from "../../theme.slint";
+import { Artists } from "../../globals/artists.slint";
+import { ArtistGrid } from "../../components/grid/artist-grid.slint";
+import { GridEmptyState } from "../../components/grid/grid-empty-state.slint";
+import { OverlayScrollbar } from "../../components/overlay-scrollbar.slint";
+
+// The Artists tab, `MyLibraryAlbumsTab`'s shape over the `Artists` global.
+export component MyLibraryArtistsTab inherits Rectangle {
+    in property <length> card-w;
+    in property <length> card-h;
+    in property <length> row-h;
+    in property <length> gap;
+
+    grid := ArtistGrid {
+        y: Theme.pad-md;
+        width: 100%;
+        height: parent.height - Theme.pad-md;
+        rows: Artists.grid-rows;
+        card-width: root.card-w;
+        card-height: root.card-h;
+        row-height: root.row-h;
+        gap: root.gap;
+        open-artist(id) => { Artists.open-artist(id); }
+        request-cover(p) => { Artists.request-cover(p) }
+    }
+
+    if Artists.total-count == 0: GridEmptyState {
+        icon: "person";
+        title: @tr("No artists yet");
+        body: @tr("Add a music folder in Settings to start building your library.");
+    }
+
+    OverlayScrollbar {
+        horizontal: false;
+        x: parent.width - self.width;
+        y: Theme.pad-md;
+        width: 10px;
+        height: parent.height - Theme.pad-md;
+        visible-size: grid.v-visible-height;
+        content-size: grid.v-viewport-height;
+        offset: grid.v-offset;
+        scroll-to(o) => { grid.set-v-offset(o); }
+    }
+}

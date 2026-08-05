@@ -1,0 +1,89 @@
+import { Theme } from "../../theme.slint";
+import { MyLibrary } from "../../globals/my-library.slint";
+import { Player } from "../../globals/player.slint";
+import { Tracks } from "../../globals/tracks.slint";
+import { OverlayScrollbar } from "../../components/overlay-scrollbar.slint";
+import { TrackList } from "../../components/track-list/track-list.slint";
+
+// The Songs tab: the whole library as a `TrackList`, with its own overlay scrollbars.
+// No inputs — everything it reads is on a global. The scrollbars live here rather than
+// at the mount site because Slint can't read an id declared inside an `if` from outside
+// it, which is also what makes a per-tab file the natural boundary.
+export component MyLibrarySongsTab inherits Rectangle {
+    HorizontalLayout {
+        // Left and right only. A bottom pad sits outside the list's viewport and reads
+        // as a dead strip of page background above the panel border, with the last row
+        // clipped against the viewport edge rather than scrolling clear of it.
+        padding-left: Theme.pad-lg;
+        padding-right: Theme.pad-lg;
+        padding-top: Theme.pad-md;
+
+        tl := TrackList {
+            horizontal-stretch: 1;
+            vertical-stretch: 1;
+
+            rows: Tracks.rows;
+
+            w-number <=> Tracks.w-number;
+            w-title <=> Tracks.w-title;
+            w-artist <=> Tracks.w-artist;
+            w-album <=> Tracks.w-album;
+            w-genre <=> Tracks.w-genre;
+            w-year <=> Tracks.w-year;
+            w-length <=> Tracks.w-length;
+
+            show-number <=> Tracks.show-number;
+            show-artwork <=> Tracks.show-artwork;
+            show-artist <=> Tracks.show-artist;
+            show-album <=> Tracks.show-album;
+            show-genre <=> Tracks.show-genre;
+            show-year <=> Tracks.show-year;
+            number-mode: "index";
+
+            sort-field: Tracks.sort-field;
+            sort-dir: Tracks.sort-dir;
+            playing-track-id: Player.vm.track.id;
+            view-context: "tracks";
+            view-selected-ids: Tracks.selected-ids;
+
+            request-sort(f) => { Tracks.request-sort(f); }
+            play-row(id, idx) => { Tracks.play-row(id, idx); }
+            play-next(ids) => { Tracks.play-next(ids); }
+            add-to-queue(ids) => { Tracks.add-to-queue(ids); }
+            toggle-row-favorite(ids, on) => { Tracks.toggle-row-favorite(ids, on); }
+            set-row-rating(ids, n) => { Tracks.set-row-rating(ids, n); }
+            select-row(idx, id, sh, ct) => { Tracks.select-row(idx, id, sh, ct); }
+            // The page's one filter box, not this view's retired own.
+            request-blur-search => { MyLibrary.blur-search-tick += 1; }
+            go-to-album(aid) => { Tracks.go-to-album(aid); }
+            go-to-artist(aid) => { Tracks.go-to-artist(aid); }
+            go-to-genre(gid) => { Tracks.go-to-genre(gid); }
+        }
+    }
+
+    OverlayScrollbar {
+        horizontal: false;
+        x: parent.width - self.width;
+        // Aligned with the inner ListView, so the bar stays out of the column header
+        // band. `body-y` carries that offset; the list's own y makes it root-relative.
+        y: tl.y + tl.body-y;
+        width: 10px;
+        height: tl.body-height;
+        visible-size: tl.v-visible-height;
+        content-size: tl.v-viewport-height;
+        offset: tl.v-offset;
+        scroll-to(o) => { tl.set-v-offset(o); }
+    }
+
+    OverlayScrollbar {
+        horizontal: true;
+        x: tl.x;
+        y: parent.height - self.height;
+        width: tl.width - 10px;
+        height: 10px;
+        visible-size: tl.h-visible-width;
+        content-size: tl.h-viewport-width;
+        offset: tl.h-offset;
+        scroll-to(o) => { tl.set-h-offset(o); }
+    }
+}

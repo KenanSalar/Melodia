@@ -192,8 +192,8 @@ fn a_tab_pick_clears_the_filter_on_both_sides() {
 /// The token is a bare string on both sides — `request-artist-sort("name")` in
 /// the Slint, a `match` arm in `grids::sort::sort_artists` — so a typo or a rename
 /// on either side compiles, and the pill just quietly sorts by the default arm
-/// while painting its arrow as though it had worked. Nothing pins this for the
-/// Albums / Artists / Genres rows, which is exactly why it's worth pinning here.
+/// while painting its arrow as though it had worked. My Library's three rows are
+/// pinned the same way, by `ui::my_library::tests`.
 ///
 /// Also asserts the pills carry `reserve-sort-slot`, without which there is no
 /// arrow slot and the active field is indicated by colour alone.

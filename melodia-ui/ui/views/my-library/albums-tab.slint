@@ -1,0 +1,48 @@
+import { Theme } from "../../theme.slint";
+import { Albums } from "../../globals/albums.slint";
+import { AlbumGrid } from "../../components/grid/album-grid.slint";
+import { GridEmptyState } from "../../components/grid/grid-empty-state.slint";
+import { OverlayScrollbar } from "../../components/overlay-scrollbar.slint";
+
+// The Albums tab: the virtualized `AlbumGrid` and nothing else. Title, count, filter
+// box and sort row sit in the page's band; the geometry comes from the sheet's one
+// `GridGeometry`, since all four grid tabs draw the same card at the same size.
+export component MyLibraryAlbumsTab inherits Rectangle {
+    in property <length> card-w;
+    in property <length> card-h;
+    in property <length> row-h;
+    in property <length> gap;
+
+    grid := AlbumGrid {
+        // Positioned rather than wrapped, so the scrollbar below reuses the same two
+        // numbers instead of chasing a layout's padding.
+        y: Theme.pad-md;
+        width: 100%;
+        height: parent.height - Theme.pad-md;
+        rows: Albums.grid-rows;
+        card-width: root.card-w;
+        card-height: root.card-h;
+        row-height: root.row-h;
+        gap: root.gap;
+        open-album(id) => { Albums.open-album(id); }
+        request-cover(p) => { Albums.request-cover(p) }
+    }
+
+    if Albums.total-count == 0: GridEmptyState {
+        icon: "album";
+        title: @tr("No albums yet");
+        body: @tr("Add a music folder in Settings to start building your library.");
+    }
+
+    OverlayScrollbar {
+        horizontal: false;
+        x: parent.width - self.width;
+        y: Theme.pad-md;
+        width: 10px;
+        height: parent.height - Theme.pad-md;
+        visible-size: grid.v-visible-height;
+        content-size: grid.v-viewport-height;
+        offset: grid.v-offset;
+        scroll-to(o) => { grid.set-v-offset(o); }
+    }
+}
