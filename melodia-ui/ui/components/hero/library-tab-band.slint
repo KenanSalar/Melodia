@@ -343,8 +343,22 @@ export component LibraryTabBand inherits Rectangle {
                     x: 0;
                     y: (parent.height - self.height) / 2;
                     icon: "arrow_back";
-                    icon-size: 20px;
-                    diameter: root.pill-h;
+                    // **The disc scales with its slot rather than sitting at full size
+                    // inside it.** The slot eases to `pill-h + pad-sm + pad-md` and the
+                    // disc wants `pill-h` of that, so pinned at its final size it does not
+                    // fit until the morph is some 60 % through — and until then the clip
+                    // below cuts a straight edge down the middle of a circle. That reads as
+                    // broken where the artwork tile beside it, cropped by the growing band
+                    // on the very same schedule, reads as a photograph. Both dimensions
+                    // take the same `hero-t`, so every frame is a *uniform scale* of the
+                    // settled row: the disc keeps its exact share of the slot and of the
+                    // trailing gap throughout, which leaves nothing to clip at any
+                    // progress and for any value of the three tokens. The clip stays as
+                    // the guard it always was — it is what stops an incompressible disc
+                    // drawing over the first tab — and this is what stops it ever having
+                    // to do that job.
+                    icon-size: 20px * root.hero-t;
+                    diameter: root.pill-h * root.hero-t;
                     // The `MetaChip` pair, and `AccentDiscButton`'s ladder for the hover —
                     // the Now Playing back button is this same control on the other
                     // backdrop. `hover-bg` has to be named beside `idle-bg`: the component
@@ -356,7 +370,18 @@ export component LibraryTabBand inherits Rectangle {
                     idle-bg: HeroBackdrop.chip-fill;
                     hover-bg: HeroBackdrop.disc-hover;
                     idle-fg: HeroBackdrop.chrome;
-                    opacity: root.hero-t;
+                    // **A bias off the morph, not the morph itself** — the `tab-bar.slint`
+                    // idiom, and the count line's, for a reason particular to this one
+                    // element: it is the only piece of the hero whose *size* also rides
+                    // `hero-t`, so a plain alpha multiplied into a scaling disc left its
+                    // presence going as `hero-t` **squared**. Half size at half alpha is a
+                    // quarter of a button, at the point where the emphasized curve has the
+                    // band all but finished growing — so an entry that animates throughout
+                    // read as one that pops at the end. Leaving is immune to the same
+                    // arithmetic, opening at full presence and receding, which is why only
+                    // one direction ever looked wrong. Doubling the alpha lets the scale
+                    // carry the motion and leaves the fade to lead it in.
+                    opacity: clamp(root.hero-t * 2.0, 0.0, 1.0);
                     clicked => { root.back-clicked(); }
                 }
             }

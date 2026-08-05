@@ -411,10 +411,22 @@ fn the_hero_fades_on_the_morph_at_both_ends() {
         .filter(|branch| branch.contains("opacity: root.hero-t;"))
         .count();
     assert_eq!(
-        fades, 3,
-        "the back slot, the artwork tile and the title block each fade on `hero-t` — it is the \
-         morph's only clock, so a second animation would need keeping in step and the reversal \
-         would stop being free"
+        fades, 2,
+        "the artwork tile and the title block fade on `hero-t` itself — it is the morph's only \
+         clock, so a second animation would need keeping in step and the reversal would stop \
+         being free"
+    );
+
+    // The third fade is the back disc's, and it is a *bias* off that same clock rather
+    // than the clock — see the band. Whitespace-normalized: how the call wraps is
+    // formatting, not contract.
+    let flat = code.split_whitespace().collect::<Vec<_>>().join(" ");
+    assert!(
+        flat.contains("opacity: clamp(root.hero-t * 2.0, 0.0, 1.0);"),
+        "the back disc's alpha must lead the morph rather than track it. It is the one piece of \
+         the hero whose size rides `hero-t` too, so a plain `opacity: root.hero-t` multiplies \
+         into the scale and its presence goes as the square — half size at half alpha is a \
+         quarter of a button, which is an entry that animates but reads as one that pops"
     );
 
     assert!(
@@ -506,6 +518,45 @@ fn the_back_slot_carries_its_own_gap() {
         code.contains("min-width: 2 * Theme.pad-md;"),
         "the bar-to-input clearance must survive as the spacer's own floor — it is the two \
          `pad-md`s the `search-w` budget reserves"
+    );
+}
+
+/// **The disc inside that slot is a uniform scale of its settled self**, and
+/// pinning it at full size is the mistake that looks like a rounding error and
+/// isn't. The slot eases to `pill-h + pad-sm + pad-md` while the disc wants
+/// `pill-h` of it, so a fixed `diameter` does not fit until `hero-t` passes
+/// `32 / 52` — and the slot's `clip` spends the first ~60 % of every entry cutting
+/// a straight edge down the middle of a circle. Scaling both dimensions by the
+/// same factor the slot uses keeps the disc's share of the slot, and of the
+/// trailing gap, constant at every frame, so nothing is ever clipped at any
+/// progress or for any value of the three tokens.
+///
+/// Fading it instead is *not* the same fix and shouldn't be mistaken for one: it
+/// would only hide the frames where the geometry is wrong, and it leaves the disc
+/// exceeding its slot for anyone who changes a token or lengthens the morph.
+#[test]
+fn the_back_disc_scales_with_the_slot_it_sits_in() {
+    let code = code();
+    let slot = code
+        .split_once("if root.hero-shown: Rectangle {")
+        .and_then(|(_, rest)| rest.split_once("clicked =>"))
+        .map_or("", |(body, _)| body);
+    assert!(!slot.is_empty(), "the band no longer mounts its back slot");
+
+    assert!(
+        slot.contains("diameter: root.pill-h * root.hero-t;"),
+        "the disc's diameter must scale on the morph — pinned at `pill-h` it is wider than the \
+         slot for the first ~60 % of every entry, and the slot clips it into a half circle"
+    );
+    assert!(
+        slot.contains("icon-size: 20px * root.hero-t;"),
+        "the glyph must take the same factor as the disc around it — scaling only the disc \
+         overruns it with a full-size arrow, which is the same clip one element in"
+    );
+    assert!(
+        slot.contains("clip: true;"),
+        "the slot keeps its clip: it is what stops an incompressible disc drawing over the first \
+         tab, and the scale above is what stops it ever having to"
     );
 }
 
