@@ -5,7 +5,7 @@ Working doc. Keep the phase markers current; delete this file when the feature s
 | phase | status |
 |---|---|
 | 0 — Prep | ☑ done |
-| 1 — `MyLibrary` global, nav plumbing, empty page | ☐ not started |
+| 1 — `MyLibrary` global, nav plumbing, mount sheet | ☑ done |
 | 2 — `LibraryTabBand` | ☐ not started |
 | 3 — The five tab bodies and the mount sheet | ☐ not started |
 | 4 — The four details under the band | ☐ not started |
@@ -133,10 +133,23 @@ existing `set_filter`. Nine `if` branches in one Rust function beats nine branch
 Slint callback body, and Rust already holds both facts.
 
 **The constraint that rides along: once `<Global>.filter` carries a binding, Rust must
-never write it.** Nothing does today — the write side is the per-view `SearchBar`'s `<=>`,
-which goes away with the headers. The nine `blur-search-tick` properties go too, with one
-`MyLibrary.blur-search-tick` in their place; their *writers* are rewired, not deleted (see
-Phase 4).
+never write it** — a one-way binding and a `set_filter` on the same property is a silent
+one-way loss, since the write orphans the binding on first evaluation.
+
+Nothing writes the **five grid/list** globals' `filter`; their write side is the per-view
+`SearchBar`'s `<=>`, which goes away with the headers, so those five can take the binding
+safely. **The four `*Detail.filter`s are a different case and the plan originally missed
+it:** Rust clears each to `""` on a fresh detail open (`albums/detail.rs`,
+`artists/detail.rs`, `genres/detail.rs`, `playlists/detail.rs`) and `callbacks/artists/detail.rs`
+clears it again on close — five writes, all of which work today only because `<=>`'s
+`link_two_way` survives a self-write where a one-way binding would not. So the four detail
+globals stay *unbound*: they keep taking `filter-changed(text)`, and the shared box clears
+`MyLibrary.filter` on detail open/close instead. That asymmetry is what decision 3's
+two-contract split was already describing; it just now has a second reason.
+
+The nine `blur-search-tick` properties go too, with one `MyLibrary.blur-search-tick` in
+their place; their *writers* are rewired, not deleted (see Phase 4). **All nine writers are
+Slint-side — there are zero Rust writers** — so that consolidation costs no Rust at all.
 
 **4. The pill row is `@children` in an absolutely-positioned slot.** Slint allows one
 `@children`, and the pills need two homes — right of the count in idle, bottom-left under
@@ -213,8 +226,10 @@ and half those origins (Browse, Favorites, Recently Played, Search) sit outside 
 ## Phases
 
 Each phase ends compiling and passing `cargo clippy --all-targets --locked -- -D warnings`
-and `cargo test --locked`. Phases 1–2 leave the running app unchanged; Phase 0 has exactly
-one visible change, recorded below.
+and `cargo test --locked`. Phase 0 has exactly one visible change, recorded below; **Phase 1
+is where the page appears**, since retiring nav 4–7 is not something that can be done
+invisibly — see its own section for what "Phases 1–2 leave the running app unchanged" was
+trying to say and why it couldn't hold.
 
 ---
 
@@ -290,7 +305,63 @@ versions" and "the four older entity grids deliberately keep the older shape".
 - Confirm `IconButton` needs nothing: it already exposes `idle-bg` / `idle-fg`, so the
   chip-coloured back button is `idle-bg: HeroBackdrop.chip-fill; idle-fg: HeroBackdrop.chrome;`.
 
-### Phase 1 — `MyLibrary` global, nav plumbing, empty page
+### Phase 1 — `MyLibrary` global, nav plumbing, mount sheet ☑
+
+**What the phase actually landed**, and the five places the plan below was wrong or made a
+choice it hadn't seen yet:
+
+- **The page is visible from this phase on, and "Phases 1–2 leave the running app
+  unchanged" could never have held.** Retiring 4–7 is what forces it: the moment five views
+  share nav index 3, every seed, guard and map that identifies one by its index stops
+  discriminating, and none of that can be staged. So the sheet mounts the **existing** view
+  bodies rather than being an empty stub — the five view files and the four detail views are
+  moved out of `app-window.slint`'s router into `views/my-library-view.slint` unchanged,
+  under a temporary `TabBar`. Every page still works; each just carries its own header and
+  search box until Phase 3 strips them, so the page reads as five stacked headers under a
+  bare bar. The alternative — an empty placeholder — would have left the whole library
+  unreachable for two phases and left this phase's real risk (the tab-scoped gates, the
+  origin pair, the third replay arm) untested until Phase 3.
+- **There is no `MyLibraryUi` handle, and the boot-ordering argument survives without
+  one.** The plan gave it an `AtomicU8` tab shadow and split seeding into
+  `seed_tab_property` / `seed_tab_shadow` to match Favorites. Nothing needs it: the five
+  views each keep their own `section_active` shadow, which the per-tab gate now makes mean
+  "My Library is up *and* my tab is mounted", and every other reader of the tab
+  (`format_view`, `nav_history`, `cross_tab_nav`, the filter dispatcher) already holds an
+  `&AppWindow`. So it is one stateless `ui::my_library::seed_tab(app, persisted)` in the
+  `ui::settings_page::seed_tab` shape, called at step 5a — and the load-bearing half, that
+  the seed precedes `wire_all`, is unchanged and pinned.
+- **The five section seeds go through one predicate, not five spellings.**
+  `ui::my_library::tab_is_mounted(ui, MyLibraryTab::X)` replaces the five
+  `get_selected_index() == <literal>` reads, four of which were bare magic numbers. Pinned
+  by `every_section_seed_reads_the_mounted_tab`; the mutation to check is dropping the tab
+  half, which leaves four views wrongly active for a session.
+- **A tab move that isn't a user's pick needs its own callback.** `MyLibrary.tab-changed`
+  clears the filter, which is right for a tab bar click and wrong for a cross-tab drill or a
+  Mouse-4/5 walk — so `persist-tab-idx(int)` sits beside it, the `Nav.persist-selected-index`
+  shape one level down, and `cross_tab_nav` / `nav_history` reach for that.
+- **`artists/cross_tab.rs`'s `open-album` was a hand-rolled copy of
+  `cross_tab_nav::open_album_cross_tab` with its origin hardcoded to the Artists tab**, and
+  it is now one call to the shared helper with `Origin::read`. That is where the origin pair
+  and the mid-fetch guard get to exist once rather than twice — and re-inlining it is what
+  `every_detail_records_the_tab_it_was_opened_from` catches. `Origin` is the small
+  `{ nav, tab }` type that carries the pair; `Origin::section(n)` is the tabless form
+  Favorites and Search hand over.
+- **The `@tr("My Library")` msgid landed here, not in Phase 5.** It has to:
+  `ui::locale::tests::every_translated_literal_has_a_msgid_in_every_catalogue` is part of
+  the phase gate, so the six catalogues move with the string that needs them.
+
+Two things the plan asked for that were dropped as inert, both re-addable in three lines:
+
+- **No page-level `SectionActiveGate` and no `MyLibrary.section-active-changed`.** The five
+  per-tab gates already fire the mounted tab's leave when the page leaves, and the other
+  four are inactive by then, so a sixth gate would have nothing to say and no Rust handler
+  to say it to.
+- **No `detail-open` property on the sheet yet.** Decision 1's argument for where it lives
+  stands; it arrives in Phase 2 with the band that reads it.
+
+**What did *not* change**, and is worth stating because it is the whole premise: the five
+views' data layer. Same globals, models, `*Ui` handles, cover tiers, `view_id` keys,
+`view_sort` / `view_columns` / `last_detail_ids` entries. `shutdown.rs` prunes nothing.
 
 - **`melodia-ui/ui/globals/my-library.slint`** (the 20th globals file; add its import +
   re-export to `app-window.slint`'s flat `export { }` block):
@@ -362,10 +433,12 @@ versions" and "the four older entity grids deliberately keep the older shape".
   persists it, calls `nav_transition::mark`, then opens/closes the *target tab's* detail.
   `src/ui/tests/nav_history_tests.rs` needs the new field.
 - **Router** — one `if !Nav.now-playing-open && Nav.selected-index == 3: ViewTransition { MyLibraryView … }`
-  branch replacing the nine; `MyLibraryView` is a stub in this phase. One
-  `SectionActiveGate { index: 3; … MyLibrary.section-active-changed(active) }` plus the
-  five tab-scoped ones. The old five sidebar items and nine branches are deleted last, in
-  Phases 3/4.
+  branch replacing the nine, which move **into** `MyLibraryView` rather than being deleted:
+  keyed on `MyLibrary.tab-idx` plus each detail's own id, since boot restores a detail id
+  per view and more than one can be `>= 0` at a time. The five tab-scoped
+  `SectionActiveGate`s go here too. Nothing waits for Phases 3/4 — the old sidebar items
+  and router branches are gone as of this phase; what Phase 3 deletes is the five *view
+  files*, once the tab bodies replace them.
 
 ### Phase 2 — `LibraryTabBand`
 
@@ -458,7 +531,11 @@ than drawing one.
   `in card-w / card-h / row-h / gap` from the sheet (the `favorites/most-played-tab.slint`
   contract) and keep **their own** `OverlayScrollbar`s — Slint can't read an id declared
   inside an `if` from outside it.
-- **`views/my-library-view.slint`** — the mount sheet:
+- **`views/my-library-view.slint`** — the mount sheet, which **already exists**: Phase 1
+  built it around the temporary `TabBar` and the nine branches (five tab bodies + four
+  details, still the current view components). Phase 3 swaps the bar for the band and the
+  five bodies for the tab files above; the branch chain, the `page-w` mirror and its mount
+  `Timer` stay. What it gains:
   - the private `detail-open` derivation (decision 1) and one `GridGeometry` off
     `body.width`, plus one `GridColumnsSync` whose `seed(c)` writes `columns` to **all
     four** grid globals and invokes `columns-changed` only on the mounted one. Writing all
@@ -481,14 +558,13 @@ than drawing one.
   - **two** tooltip frames, declared after the body: the `tab-tip`, and the Playlists tab's
     own `header-tip` — its four action pills mount `tooltip-overlay: true` and the current
     `playlists-view.slint` declares a five-property ternary chain for them.
-- Delete `views/{tracks,album,artist,genres,playlists}-view.slint`, the five sidebar
-  items and the five main-view router branches.
-- `app-window.slint`: a `watched-my-library-tab: MyLibrary.tab-idx` mirror whose `changed`
-  handler calls **both** `shortcut-scope.grab-focus()` (a tab body unmounts with focus
-  inside it — the filter box now lives in the always-mounted band, so this covers the
-  `TrackList` case) and `CompositeScroll.reset()` (Artist Detail is composite and a tab
-  pick unmounts it with no unmount hook). That is a **tenth** focus mirror and a **fifth**
-  composite reset.
+- Delete `views/{tracks,album,artist,genres,playlists}-view.slint` once the five tab files
+  replace them. The sidebar items and the router branches went in Phase 1.
+- ☑ `app-window.slint`'s `watched-my-library-tab: MyLibrary.tab-idx` mirror — landed in
+  Phase 1, since a tab pick could unmount Artist Detail from the moment the page existed.
+  Its `changed` handler calls **both** `shortcut-scope.grab-focus()` and
+  `CompositeScroll.reset()`; that is the **tenth** focus mirror and the **fifth** composite
+  reset.
 
 ### Phase 4 — The four details under the band
 
@@ -531,11 +607,12 @@ than drawing one.
 ### Phase 5 — Cleanup, i18n, docs
 
 - Delete the nine now-dead `blur-search-tick` properties (their writers were rewired in
-  Phase 4).
-- `melodia-ui/translations/*/LC_MESSAGES/melodia-ui.po` × 6: new msgids (`My Library`,
-  the count plurals if their wording changed). The five tab labels reuse the msgids the
-  page titles already registered, so nothing is orphaned there. The gate is
-  `ui::locale::tests::every_translated_literal_has_a_msgid_in_every_catalogue`.
+  Phase 4). **No Rust moves with them** — every one of the nine writers is Slint-side.
+- ☑ `My Library` msgid — landed in Phase 1 with the sidebar row, since
+  `ui::locale::tests::every_translated_literal_has_a_msgid_in_every_catalogue` is part of
+  every phase's gate. What may still be owed here is the count plurals, **if** the band's
+  `count-text` reworded any of them; the five tab labels reuse the msgids the page titles
+  already registered, so nothing is orphaned there.
 - **No icon work.** `library_music`, `music_note` and `arrow_back` are all already in
   `scripts/icons.txt`, so neither `subset-icon-fonts.sh` nor `check-icons.py` needs a run.
   (Stated because the omission is what produces tofu.)
@@ -567,41 +644,49 @@ than drawing one.
 
 Things this codebase has already paid for once, which this change is positioned to break:
 
-- **Boot ordering, and it is not the Favorites ordering.** `install_views` keeps hydrating
-  `Nav.selected-index` before `wire_all` — *and* `seed_tab_property` runs there too, beside
-  it. Only `seed_tab_shadow` waits for the handle. Seeding the tab after the five `wire_*`
-  calls (the Favorites shape) leaves all five `section_active` shadows answering for
-  `tab-idx == 0`: Songs wrongly active, the persisted tab wrongly inactive, one wasted
-  full-library query per launch.
-- **`ChangeTracker` baselining** — the tab-scoped gates baseline silently inside
-  `AppWindow::new()`, so each of the five `wire_*` must seed its `section_active` shadow
-  from `Nav.selected-index == 3 && MyLibrary.tab-idx == <its tab>`, not from the nav index
-  alone. Getting this wrong leaves one section wrongly active all session and re-fetches
-  the whole library per song.
+- ☑ **Boot ordering, and it is not the Favorites ordering.** `install_views` keeps
+  hydrating `Nav.selected-index` before `wire_all` — *and* `ui::my_library::seed_tab` runs
+  there too, beside it. There is no second half waiting for a handle, because there is no
+  handle. Seeding the tab after the five `wire_*` calls (the Favorites shape) leaves all
+  five `section_active` shadows answering for `tab-idx == 0`: Songs wrongly active, the
+  persisted tab wrongly inactive, one wasted full-library query per launch. Pinned by
+  `boot::ui_setup::tests::the_persisted_my_library_tab_is_seeded_before_any_view_is_wired`.
+- ☑ **`ChangeTracker` baselining** — the tab-scoped gates baseline silently inside
+  `AppWindow::new()`, so each of the five `wire_*` seeds its `section_active` shadow through
+  `ui::my_library::tab_is_mounted`, not from the nav index alone. Getting this wrong leaves
+  one section wrongly active all session and re-fetches the whole library per song. Pinned
+  by `ui::my_library::tests::every_section_seed_reads_the_mounted_tab`.
 - **The filter has two contracts, not one.** `apply-filter` ignores its argument and Rust
   reads `<Global>.filter`; `filter-changed` uses its argument and Rust folds it into a
   `Mutex<Needle>`. Once the sheet binds `<Global>.filter`, **Rust must never write it** —
-  a binding and a `set_filter` on the same property is a silent one-way loss.
-- **A drill's origin is a pair.** `origin-nav-index` alone cannot tell one My Library tab
+  a binding and a `set_filter` on the same property is a silent one-way loss. Only the
+  **five grid/list** globals may take that binding; the four `*Detail.filter`s are Rust-
+  written on detail open (and, on Artist Detail, on close) and stay unbound. See decision 3.
+- ☑ **A drill's origin is a pair.** `origin-nav-index` alone cannot tell one My Library tab
   from another, and one `origin-tab` cannot hold two simultaneously open details. Per
-  detail global, written in the same synchronous stretch as `origin-nav-index`.
-- **`nav_history` replay has three arms.** Cross-section, cross-tab, same-tab. The middle
-  one does not exist today and is the one a `(section, tab)` comparison alone leaves
-  unhandled.
+  detail global, written in the same synchronous stretch as `origin-nav-index` — and the
+  reading half is one type, `cross_tab_nav::Origin`, so the mid-fetch guard is spelled once.
+- ☑ **`nav_history` replay has three arms.** Cross-section, cross-tab, same-tab. The middle
+  one is the one a `(section, tab)` comparison alone leaves unhandled. **Recording is the
+  other half**: without `NavEntry.tab`, two tabs of one page are the same snapshot and
+  `record`'s dedup swallows the second, so Mouse-4 cannot walk back across a tab switch
+  (`nav_history_tests::a_tab_switch_is_not_a_duplicate_of_the_tab_it_left`).
 - **`TabBar` write-before-emit** — `selected-index` is already the new tab when
   `tab-changed` reaches Rust. Anything needing the outgoing tab reads `previous-index`.
-- **`CompositeScroll.reset()`** — five call sites now, not four.
-- **Focus regrab** — ten mirrors now, not nine.
+- ☑ **`CompositeScroll.reset()`** — five call sites now, not four.
+- ☑ **Focus regrab** — ten mirrors now, not nine.
 - **`ViewTransition` disarm** — `tab-anim-armed` starts `false` and is armed in the bar's
   `selected` handler, never from a mount `Timer`. Detail branches don't use it at all;
   they keep `Nav.pending-enter-from`.
 - **Bottom padding** — the tab bodies inset left/right/top only; a root `padding-bottom`
   over a scroller reads as a dead strip.
-- **The retired indices leave three maps behind** — `view-title()`, `rss_sampler::format_view`
-  and the persisted-index range check. Each names 4–7 today and each fails differently:
-  an untranslated "Melodia" heading, a diagnostic that stops distinguishing the page, and
-  a released user booting onto `PlaceholderView`.
-- **`views.json` compatibility** — the app is publicly released. Dropping
+- ☑ **The retired indices leave three maps behind** — `view-title()`,
+  `rss_sampler::format_view` and the persisted-index range check. Each named 4–7 and each
+  failed differently: an untranslated "Melodia" heading, a diagnostic that stops
+  distinguishing the page, and a released user booting onto `PlaceholderView`. The third is
+  `ui::my_library::fold_retired_nav_index`, a pure fn so the compatibility path is testable
+  without a window. `format_view` also gained the `PlaylistDetail` arm it never had.
+- ☑ **`views.json` compatibility** — the app is publicly released. Dropping
   `favorites_*_collapsed` is the precedent that removal is safe (serde ignores unknown
   keys); `my_library_tab` inherits `#[serde(default)]` from the struct-level attribute, and
   a persisted `last_nav_index` of 4–7 must clamp rather than land on nothing.
@@ -624,18 +709,25 @@ cargo test --locked
 
 Targeted test additions, all `include_str!` source pins in the house style:
 
-- `ui::my_library::tests::tab_count_matches_the_tabs_slint_declares` — parses
-  `MyLibrary.tab-count`, counts the `tab-*` constants scoped to that global's body, the
-  sheet's `if MyLibrary.tab-idx == … : ViewTransition` branches, and the `@tr(` entries in
-  the inline `labels` array.
-- `…::the_persisted_tab_is_seeded_before_any_view_is_wired` — the byte-offset shape of
-  `boot/tests/ui_setup_tests.rs`'s existing nav pin, extended to `seed_tab_property`.
-  The mutation to check is moving the call down beside `seed_tab_shadow`.
-- `…::a_tab_pick_clears_the_filter_on_both_sides`.
-- `…::every_tab_carries_its_own_section_gate` — five `SectionActiveGate` mounts at
-  `index: 3` with five distinct `tab-index:` values.
-- `…::every_detail_records_the_tab_it_was_opened_from` — the three detail globals declare
-  `origin-tab`, and every site writing `origin-nav-index` writes it too.
+- ☑ `ui::my_library::tests::tab_count_matches_the_tabs_slint_declares` — parses
+  `MyLibrary.tab-count`, counts the `tab-*` constants scoped to that global's body, and
+  checks the bar's two inline arrays plus the sheet routing a body per declared tab.
+- ☑ `boot::ui_setup::tests::the_persisted_my_library_tab_is_seeded_before_any_view_is_wired`
+  — the byte-offset shape of the existing nav pin. The mutation to check is moving the call
+  down beside the `5c2h` seeds, which is where a tab seed looks like it belongs.
+- ☑ `…::every_tab_carries_its_own_section_gate` — five `SectionActiveGate` mounts at
+  `index: 3` with five distinct `tab-index:` values, each carrying `current-tab` (without
+  it `tab-index` compares against the gate's own `-1` and the section never activates).
+- ☑ `…::every_section_seed_reads_the_mounted_tab` — the five `section_active` seeds go
+  through `tab_is_mounted`, not the nav index.
+- ☑ `…::every_detail_records_the_tab_it_was_opened_from` — the three detail globals declare
+  `origin-tab`, every site writing `origin-nav-index` writes it too, and
+  `artists/cross_tab` stays routed through the shared hand-off rather than re-inlining it.
+- ☑ `…::the_retired_indices_fold_onto_the_page_that_absorbed_them` and
+  `…::the_sidebar_offers_one_row_for_the_whole_page`.
+- ☑ `ui::nav_history::tests::a_tab_switch_is_not_a_duplicate_of_the_tab_it_left`.
+- `…::a_tab_pick_clears_the_filter_on_both_sides` — Phase 3, once there is a shared box
+  whose Slint side can be cleared.
 - `…::every_sort_pill_asks_for_a_field_the_comparator_knows` — the Albums / Artists /
   Genres rows finally get the pin the Favorites Artists row already has.
 - `ui::library_tab_band_tests` — as listed in Phase 2.

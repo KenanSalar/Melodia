@@ -80,6 +80,14 @@ export global AlbumDetail {
     // In-memory only — the per-tab `last_detail_ids` persistence already restores both
     // pages independently on the next launch.
     in-out property <int> origin-nav-index: -1;
+    // The My Library tab the detail was opened from, or -1 when the origin was some other
+    // section. **An origin is a pair now**: five views share nav index 3, so the index
+    // alone can't tell a Songs drill from an Artists one, and the back path's
+    // `selected-index` restore would be a no-op that leaves the wrong tab mounted. It
+    // lives per detail global rather than once on `MyLibrary` because two details can be
+    // open at once — Songs → Go to Artist → open one of its albums — and one slot would
+    // be clobbered by the second drill.
+    in-out property <int> origin-tab: -1;
 
     // Decoded **once** per album into a `(cover, blur)` pair by `ui::artwork_cache`.
     in-out property <image> cover;

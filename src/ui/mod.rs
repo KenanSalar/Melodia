@@ -32,6 +32,7 @@ pub mod model_diff;
 pub mod model_patch;
 pub mod mosaic_blur;
 pub mod mosaic_hero;
+pub mod my_library;
 pub mod nav_history;
 pub mod nav_transition;
 pub mod notifications;

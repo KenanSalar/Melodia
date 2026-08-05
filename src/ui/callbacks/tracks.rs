@@ -9,6 +9,7 @@ use super::{collect_track_ids, next_sort};
 use super::macros::{spawn_logged, spawn_logged_sync, wire_row_flag};
 use crate::library;
 use crate::state::AppState;
+use crate::ui::my_library::{MyLibraryTab, tab_is_mounted};
 use crate::ui::tab_bar::UNFETCHED_COUNT;
 use crate::ui::track_list_view::{TrackListColumnState, view_id};
 use crate::ui::tracks::{self as tracks_ui_mod, TracksUi};
@@ -33,14 +34,14 @@ pub fn wire_tracks(ui: &AppWindow, state: &AppState, tracks_ui: &Arc<TracksUi>) 
     // `library_changed` bump arriving while the section was hidden (the
     // refresher marks instead of re-fetching a view the user can't see), and
     // the leave itself, which rewinds the count and so owes the fetch that
-    // answers it. Seed the shadow from the current nav state (sidebar index 3):
-    // the gate's
-    // `ChangeTracker` baselines inside `AppWindow::new()` and fires only on
-    // a later difference, so a section the boot doesn't land on gets no edge
-    // at all, and the one it does land on gets its edge a frame late — after
-    // boot has already read this shadow. See the `SectionActiveGate` bullet
-    // in `.claude/rules/ui-patterns.md`.
-    tracks_ui.set_section_active(ui.global::<crate::Nav>().get_selected_index() == 3);
+    // answers it. **A tab leave is one of those leaves now** — the Songs tab has
+    // its own `SectionActiveGate` — so seed the shadow from the mounted tab, not
+    // from the nav index: the gate's `ChangeTracker` baselines inside
+    // `AppWindow::new()` and fires only on a later difference, so a view the boot
+    // doesn't land on gets no edge at all, and the one it does land on gets its
+    // edge a frame late — after boot has already read this shadow. See the
+    // `SectionActiveGate` bullet in `.claude/rules/ui-patterns.md`.
+    tracks_ui.set_section_active(tab_is_mounted(ui, MyLibraryTab::Songs));
     {
         let tu = tracks_ui.clone();
         let weak = weak.clone();

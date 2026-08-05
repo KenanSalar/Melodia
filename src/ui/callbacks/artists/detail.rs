@@ -14,8 +14,9 @@ use crate::ui::callbacks::{collect_track_ids, play_row_start, spawn_play_then_sh
 use crate::ui::callbacks::macros::{
     release_detail_hero_images, spawn_logged, spawn_logged_sync, wire_row_flag,
 };
+use crate::ui::my_library::restore_origin;
 use crate::ui::track_list_view::{TrackListColumnState, view_id};
-use crate::{AppWindow, ArtistDetail, Nav};
+use crate::{AppWindow, ArtistDetail};
 
 /// Wire the `ArtistDetail` callbacks. See [`super::wire_artists`].
 pub(super) fn wire(
@@ -51,13 +52,14 @@ pub(super) fn wire(
             // write further down. One up-front set covers both.
             crate::ui::nav_transition::mark_drill_back(&ui);
 
+            // **The origin is a pair** — see `albums/detail.rs`'s note: nav index
+            // and, inside My Library, the tab, restored together.
             let origin = g.get_origin_nav_index();
             let origin_was_cross_tab = origin >= 0;
             if origin_was_cross_tab {
-                let nav = ui.global::<Nav>();
-                nav.set_selected_index(origin);
-                nav.invoke_persist_selected_index(origin);
+                restore_origin(&ui, origin, g.get_origin_tab());
                 g.set_origin_nav_index(-1);
+                g.set_origin_tab(-1);
             }
 
             g.set_artist_id(-1);

@@ -10,10 +10,11 @@ use slint::ComponentHandle;
 use crate::state::AppState;
 use crate::ui::callbacks::macros::{release_detail_hero_images, spawn_logged};
 use crate::ui::model_diff::clear_vec_model;
+use crate::ui::my_library::{MyLibraryTab, tab_is_mounted};
 use crate::ui::playlists::{self as playlists_ui_mod, PlaylistsUi};
 use crate::ui::tab_bar::UNFETCHED_COUNT;
 use crate::{
-    AppWindow, Nav, PlaylistDetail, PlaylistGridRow as UiPlaylistGridRow, Playlists,
+    AppWindow, PlaylistDetail, PlaylistGridRow as UiPlaylistGridRow, Playlists,
     TrackListRow as UiTrackListRow,
 };
 
@@ -27,7 +28,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
     // on leave, wipe the Slint models (UI thread) then release the
     // Rust-side caches off-thread; on return, full re-fetch if dirty
     // else just prewarm visible covers.
-    playlists_ui.set_section_active(ui.global::<Nav>().get_selected_index() == 7);
+    playlists_ui.set_section_active(tab_is_mounted(ui, MyLibraryTab::Playlists));
     // See the matching seed in `albums/lifecycle.rs`: a boot pre-fetch for a
     // section that isn't on screen can't publish the shared hero globals, so
     // its first enter has to re-fetch rather than take the cheap path.

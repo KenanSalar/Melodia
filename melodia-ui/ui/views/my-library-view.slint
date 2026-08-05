@@ -1,0 +1,138 @@
+import { Theme } from "../theme.slint";
+import { MyLibrary } from "../globals/my-library.slint";
+import { Nav } from "../globals/nav.slint";
+import { AlbumDetail } from "../globals/albums.slint";
+import { ArtistDetail } from "../globals/artists.slint";
+import { GenreDetail } from "../globals/genres.slint";
+import { PlaylistDetail } from "../globals/playlists.slint";
+import { TabBar } from "../components/tab-bar.slint";
+import { ViewTransition } from "../components/view-transition.slint";
+import { TracksView } from "tracks-view.slint";
+import { AlbumView } from "album-view.slint";
+import { AlbumDetailView } from "album-detail-view.slint";
+import { ArtistView } from "artist-view.slint";
+import { ArtistDetailView } from "artist-detail-view.slint";
+import { GenresView } from "genres-view.slint";
+import { GenreDetailView } from "genre-detail-view.slint";
+import { PlaylistsView } from "playlists-view.slint";
+import { PlaylistDetailView } from "playlist-detail-view.slint";
+
+// My Library: five tabs over the views that used to be five sidebar entries. This file is
+// the mount sheet — which body is on screen and nothing else. Each tab's grid, list,
+// header and filter box still lives in the view it always did.
+//
+// **The tab index is what routes, not the detail id.** `seed_detail_from_settings` runs
+// for all four detail views at boot whichever section is restored, so more than one
+// `*Detail.*-id` can be `>= 0` at once; splitting on the id alone would mount two.
+export component MyLibraryView inherits Rectangle {
+    // The bar decides for itself how much room it has, so it needs a **mirrored** width —
+    // a live `root.width` read feeding a child's size re-enters layout. Seeded at the
+    // row's own floor: seeded wide the bar believes it can afford five full-width cells
+    // and draws them into a panel that can't seat them.
+    property <length> page-w: 2 * Theme.pad-lg + bar.compact-w;
+    changed width => { self.page-w = self.width; }
+
+    // `changed` doesn't fire when the first layout settles directly on the final value,
+    // and a window opened at its final size is exactly that — without this the seed above
+    // is never corrected and a roomy window draws icon-only tabs forever.
+    Timer {
+        interval: 1ms;
+        triggered => {
+            root.page-w = root.width;
+            self.running = false;
+        }
+    }
+
+    VerticalLayout {
+        // Temporary page chrome. The band that replaces it carries this bar plus the
+        // shared filter box, the count line, the per-tab pill rows and the hero the four
+        // details morph into; until then the five views keep their own headers.
+        HorizontalLayout {
+            padding-left: Theme.pad-lg;
+            padding-right: Theme.pad-lg;
+            padding-top: Theme.pad-lg;
+
+            bar := TabBar {
+                labels: [@tr("Songs"), @tr("Albums"), @tr("Artists"), @tr("Genres"), @tr("Playlists")];
+                icons: ["music_note", "album", "person", "theater_comedy", "playlist_play"];
+                avail-width: root.page-w - 2 * Theme.pad-lg;
+                selected-index <=> MyLibrary.tab-idx;
+                selected(i) => {
+                    MyLibrary.tab-changed(i);
+                }
+            }
+
+            Rectangle { horizontal-stretch: 1; }
+        }
+
+        body := Rectangle {
+            vertical-stretch: 1;
+            clip: true;
+
+            if MyLibrary.tab-idx == MyLibrary.tab-songs: ViewTransition {
+                width: parent.width;
+                height: parent.height;
+                enter-from: Nav.pending-enter-from;
+                TracksView { width: 100%; height: 100%; }
+            }
+            // Each grid tab swaps grid ↔ detail on its own `*-id`, -1 being the grid —
+            // the same split these four had while they were separate sidebar sections.
+            if MyLibrary.tab-idx == MyLibrary.tab-albums
+                && AlbumDetail.album-id < 0: ViewTransition {
+                width: parent.width;
+                height: parent.height;
+                enter-from: Nav.pending-enter-from;
+                AlbumView { width: 100%; height: 100%; }
+            }
+            if MyLibrary.tab-idx == MyLibrary.tab-albums
+                && AlbumDetail.album-id >= 0: ViewTransition {
+                width: parent.width;
+                height: parent.height;
+                enter-from: Nav.pending-enter-from;
+                AlbumDetailView { width: 100%; height: 100%; }
+            }
+            if MyLibrary.tab-idx == MyLibrary.tab-artists
+                && ArtistDetail.artist-id < 0: ViewTransition {
+                width: parent.width;
+                height: parent.height;
+                enter-from: Nav.pending-enter-from;
+                ArtistView { width: 100%; height: 100%; }
+            }
+            if MyLibrary.tab-idx == MyLibrary.tab-artists
+                && ArtistDetail.artist-id >= 0: ViewTransition {
+                width: parent.width;
+                height: parent.height;
+                enter-from: Nav.pending-enter-from;
+                ArtistDetailView { width: 100%; height: 100%; }
+            }
+            if MyLibrary.tab-idx == MyLibrary.tab-genres
+                && GenreDetail.genre-id < 0: ViewTransition {
+                width: parent.width;
+                height: parent.height;
+                enter-from: Nav.pending-enter-from;
+                GenresView { width: 100%; height: 100%; }
+            }
+            if MyLibrary.tab-idx == MyLibrary.tab-genres
+                && GenreDetail.genre-id >= 0: ViewTransition {
+                width: parent.width;
+                height: parent.height;
+                enter-from: Nav.pending-enter-from;
+                GenreDetailView { width: 100%; height: 100%; }
+            }
+            if MyLibrary.tab-idx == MyLibrary.tab-playlists
+                && PlaylistDetail.playlist-id < 0: ViewTransition {
+                width: parent.width;
+                height: parent.height;
+                enter-from: Nav.pending-enter-from;
+                PlaylistsView { width: 100%; height: 100%; }
+            }
+            if MyLibrary.tab-idx == MyLibrary.tab-playlists
+                && PlaylistDetail.playlist-id >= 0: ViewTransition {
+                width: parent.width;
+                height: parent.height;
+                enter-from: Nav.pending-enter-from;
+                PlaylistDetailView { width: 100%; height: 100%; }
+            }
+        }
+    }
+}

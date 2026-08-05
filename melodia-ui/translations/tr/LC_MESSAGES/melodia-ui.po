@@ -24,6 +24,11 @@ msgstr "Gözat"
 msgid "Favorites"
 msgstr "Favoriler"
 
+# The sidebar row, and the window title, for the page carrying the Songs / Albums /
+# Artists / Genres / Playlists tabs. Each tab reuses its own msgid below.
+msgid "My Library"
+msgstr "Kitaplığım"
+
 msgid "Tracks"
 msgstr "Parçalar"
 

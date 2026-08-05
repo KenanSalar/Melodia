@@ -63,9 +63,9 @@ pub use updates::{
 };
 pub use view::{
     get_view_sort, set_artist_albums_collapsed, set_browse_path, set_favorites_tab,
-    set_last_detail_id, set_last_nav_index, set_locale, set_overflow_button,
-    set_recently_played_tab, set_settings_tab, set_view_sort, snap_to_preset,
-    update_view_columns,
+    set_last_detail_id, set_last_nav_index, set_locale, set_my_library_tab,
+    set_overflow_button, set_recently_played_tab, set_settings_tab, set_view_sort,
+    snap_to_preset, update_view_columns,
 };
 pub use visualizer::{set_visualizer_enabled, set_visualizer_style};
 

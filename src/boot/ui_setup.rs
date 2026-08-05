@@ -78,14 +78,27 @@ pub fn install_views(
     //
     // The Favorites *tab* still seeds down at `seed_tab` beside the detail
     // views: it needs the `favorites_ui` handle, which doesn't exist yet here.
+    //
+    // **My Library's tab seeds right here instead**, for exactly the reason the nav
+    // index does: its five sub-views each seed `section_active` from
+    // `Nav.selected-index == 3 && MyLibrary.tab-idx == <its tab>`, so a seed running
+    // after `wire_all` leaves all five answering for the global's declared `0` — Songs
+    // wrongly active, the restored tab wrongly inactive, and one wasted full-library
+    // query per launch. It needs no handle, so nothing holds it back.
     if let Some(vs) = startup_view_state {
-        let idx = vs.last_nav_index;
+        // 4–7 were Albums / Artists / Genres / Playlists; a `views.json` written by a
+        // released build still holds them, and they route nowhere now.
+        let idx = ui::my_library::fold_retired_nav_index(vs.last_nav_index);
         if (0..=9).contains(&idx) {
             app.global::<Nav>().set_selected_index(idx);
         }
+        ui::my_library::seed_tab(app, vs.my_library_tab);
     }
 
     ui::callbacks::wire_all(app, state);
+    // The page's own three callbacks — the tab pick, the shared filter, the back
+    // arrow. None takes a view handle, so it wires here rather than after the five.
+    ui::callbacks::wire_my_library(app, state);
 
     // 5b. Tracks view.
     ui::tracks::install_tracks_model(app);

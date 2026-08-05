@@ -45,7 +45,7 @@ pub(super) fn wire(
                 &au,
                 &weak,
                 i64::from(album_id),
-                NAV_SEARCH,
+                cross_tab_nav::Origin::section(NAV_SEARCH),
                 "search::open_album",
             );
         });
@@ -62,7 +62,7 @@ pub(super) fn wire(
                 &aru,
                 &weak,
                 i64::from(artist_id),
-                NAV_SEARCH,
+                cross_tab_nav::Origin::section(NAV_SEARCH),
                 "search::open_artist",
             );
         });

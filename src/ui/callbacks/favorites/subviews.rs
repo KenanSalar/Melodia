@@ -66,7 +66,7 @@ pub(super) fn wire(
                 &aru,
                 &weak,
                 i64::from(artist_id),
-                NAV_FAVORITES,
+                cross_tab_nav::Origin::section(NAV_FAVORITES),
                 "favorites::open_artist",
             );
         });

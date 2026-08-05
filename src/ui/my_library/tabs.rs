@@ -1,0 +1,89 @@
+//! Which My Library sub-view is mounted, and how that answer is seeded.
+//!
+//! The indices themselves live in `my-library.slint`'s `tab-*` constants — no Rust file
+//! restates them. [`tab_from_index`] resolves one on the UI thread, which is the only
+//! place the global is reachable and, unlike the two curated pages, the only place any
+//! caller needs it: the five views each carry their own `section_active` shadow.
+
+use slint::ComponentHandle;
+
+use crate::{AppWindow, MyLibrary, Nav};
+
+/// Which My Library sub-view is mounted.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum MyLibraryTab {
+    Songs,
+    Albums,
+    Artists,
+    Genres,
+    Playlists,
+}
+
+/// Resolve a `MyLibrary.tab-idx` value against the global's own `tab-*` constants. UI
+/// thread only — that's where the global is reachable.
+pub fn tab_from_index(g: &MyLibrary<'_>, idx: i32) -> MyLibraryTab {
+    if idx == g.get_tab_albums() {
+        MyLibraryTab::Albums
+    } else if idx == g.get_tab_artists() {
+        MyLibraryTab::Artists
+    } else if idx == g.get_tab_genres() {
+        MyLibraryTab::Genres
+    } else if idx == g.get_tab_playlists() {
+        MyLibraryTab::Playlists
+    } else {
+        MyLibraryTab::Songs
+    }
+}
+
+/// Whether `tab` is the sub-view on screen right now.
+///
+/// **The wire-time seed for all five views' `section_active` shadows**, written once
+/// here rather than five times: `SectionActiveGate` fires on transitions only and its
+/// `ChangeTracker` baselines silently inside `AppWindow::new()`, so a shadow seeded
+/// against the nav index alone answers `true` for every tab and the four that aren't
+/// mounted never get an edge to correct them. What that costs is in
+/// `.claude/rules/ui-patterns.md`'s `SectionActiveGate` bullet.
+pub fn tab_is_mounted(ui: &AppWindow, tab: MyLibraryTab) -> bool {
+    if ui.global::<Nav>().get_selected_index() != super::NAV_MY_LIBRARY {
+        return false;
+    }
+    let g = ui.global::<MyLibrary>();
+    tab_from_index(&g, g.get_tab_idx()) == tab
+}
+
+/// Seed the active tab from `views.json`, clamped against the Slint-declared `tab-count`
+/// (see [`crate::ui::tab_bar::clamp_tab`]).
+///
+/// **Called from `install_views` before `wire_all`, beside the nav-index hydration**, and
+/// that ordering is the whole point: each of the five views seeds its `section_active`
+/// shadow at wire time from `Nav.selected-index == 3 && MyLibrary.tab-idx == <its tab>`.
+/// Seed afterwards and every one of them answers for the global's declared `0`, so Songs
+/// comes up active and the persisted tab inactive — and `SectionActiveGate`'s
+/// `ChangeTracker` baselines silently inside `AppWindow::new()`, so there is no edge left
+/// to correct it. The visible cost is a full Tracks query on every launch that resumes on
+/// another tab, with the real tab's fetch landing late behind it.
+///
+/// Stateless, unlike the two curated pages' `seed_tab` — there is no handle to seed. See
+/// the module docs.
+pub fn seed_tab(ui: &AppWindow, persisted_tab: i32) {
+    let g = ui.global::<MyLibrary>();
+    g.set_tab_idx(crate::ui::tab_bar::clamp_tab(persisted_tab, g.get_tab_count()));
+}
+
+/// Return to the view a drill started from: the `origin-nav-index` / `origin-tab` pair
+/// a detail global carries, restored together.
+///
+/// Called from each detail's `on_close_detail`, **before** it clears its own id, so
+/// Slint reroutes straight to the origin in one frame rather than flashing the grid
+/// this detail sits over. Restoring the nav index alone used to be the whole job; with
+/// five views sharing index 3 it is a no-op that leaves the wrong tab mounted.
+pub fn restore_origin(ui: &AppWindow, origin_nav: i32, origin_tab: i32) {
+    if origin_nav == super::NAV_MY_LIBRARY && origin_tab >= 0 {
+        let g = ui.global::<MyLibrary>();
+        g.set_tab_idx(origin_tab);
+        g.invoke_persist_tab_idx(origin_tab);
+    }
+    let nav = ui.global::<Nav>();
+    nav.set_selected_index(origin_nav);
+    nav.invoke_persist_selected_index(origin_nav);
+}

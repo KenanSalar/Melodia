@@ -23,6 +23,7 @@ import { Genres, GenreDetail } from "globals/genres.slint";
 import { HeroBackdrop } from "globals/hero-backdrop.slint";
 import { HeroChips } from "globals/hero-chips.slint";
 import { LibrarySettings } from "globals/library-settings.slint";
+import { MyLibrary } from "globals/my-library.slint";
 import { Nav, NavEnterFrom } from "globals/nav.slint";
 import { Player } from "globals/player.slint";
 import { Playlists, PlaylistDetail } from "globals/playlists.slint";
@@ -42,18 +43,10 @@ import { NowPlayingBar } from "layout/now-playing-bar.slint";
 import { ResizeRing } from "layout/resize-ring.slint";
 import { ShortcutScope } from "layout/shortcut-scope.slint";
 import { PlaceholderView } from "views/placeholder-view.slint";
-import { TracksView } from "views/tracks-view.slint";
+import { MyLibraryView } from "views/my-library-view.slint";
 import { FavoritesView } from "views/favorites-view.slint";
 import { RecentlyPlayedView } from "views/recently-played-view.slint";
 import { BrowseView } from "views/browse-view.slint";
-import { AlbumView } from "views/album-view.slint";
-import { AlbumDetailView } from "views/album-detail-view.slint";
-import { ArtistView } from "views/artist-view.slint";
-import { ArtistDetailView } from "views/artist-detail-view.slint";
-import { GenresView } from "views/genres-view.slint";
-import { GenreDetailView } from "views/genre-detail-view.slint";
-import { PlaylistsView } from "views/playlists-view.slint";
-import { PlaylistDetailView } from "views/playlist-detail-view.slint";
 import { SearchView } from "views/search-view.slint";
 import { SettingsView } from "views/settings-view.slint";
 import { NowPlayingView } from "views/now-playing-view.slint";
@@ -69,7 +62,7 @@ import { ViewTransition } from "components/view-transition.slint";
 
 // Re-export so Rust can mention these from `slint::include_modules!`.
 export {
-    Theme, Settings, SettingsPage, Player, HeroBackdrop, HeroChips, Equalizer, ReplayGain, Visualizer, ScrobbleUi, SmartEditor, TagEditor, Nav, CompositeScroll, MiniPlayer, Tracks, Browse, LibrarySettings, Dialog, WindowChrome, Queue, Notifications, NowPlaying, Favorites, RecentlyPlayed, Albums, AlbumDetail, Artists, ArtistDetail, Genres, GenreDetail, Playlists, PlaylistDetail, PopupHighlight, Search, MelodiaUpdater, RowCovers,
+    Theme, Settings, SettingsPage, Player, HeroBackdrop, HeroChips, Equalizer, ReplayGain, Visualizer, ScrobbleUi, SmartEditor, TagEditor, Nav, CompositeScroll, MiniPlayer, MyLibrary, Tracks, Browse, LibrarySettings, Dialog, WindowChrome, Queue, Notifications, NowPlaying, Favorites, RecentlyPlayed, Albums, AlbumDetail, Artists, ArtistDetail, Genres, GenreDetail, Playlists, PlaylistDetail, PopupHighlight, Search, MelodiaUpdater, RowCovers,
     TrackSummaryRow, TrackListRow, PlayerVm, QueueVm, QueueRow, FolderListRow,
     BrowseFolderRow, BreadcrumbRow, NotificationRow, TrackMetaRow,
     AlbumRow, AlbumGridRow, ArtistRow, ArtistGridRow,
@@ -122,11 +115,8 @@ export component AppWindow inherits Window {
         if (idx == 0) { return @tr("Search"); }
         if (idx == 1) { return @tr("Browse"); }
         if (idx == 2) { return @tr("Favorites"); }
-        if (idx == 3) { return @tr("Tracks"); }
-        if (idx == 4) { return @tr("Albums"); }
-        if (idx == 5) { return @tr("Artists"); }
-        if (idx == 6) { return @tr("Genres"); }
-        if (idx == 7) { return @tr("Playlists"); }
+        // 4–7 were Albums / Artists / Genres / Playlists; they are tabs of this page now.
+        if (idx == 3) { return @tr("My Library"); }
         if (idx == 8) { return @tr("Recently Played"); }
         if (idx == 9) { return @tr("Settings"); }
         // App name (proper noun) — never translated.
@@ -153,6 +143,15 @@ export component AppWindow inherits Window {
         // Slint doesn't hand focus back to an ancestor FocusScope when that happens —
         // shortcuts would stay dead until the next click. Synchronous, so SearchView's
         // 1 ms autofocus Timer still wins when entering Search.
+        shortcut-scope.grab-focus();
+    }
+
+    // A My Library tab pick swaps the mounted body without moving `Nav.selected-index`,
+    // so the mirror above never sees it. Artist Detail is one of the bodies it unmounts
+    // and it is composite, so this owes the reset as well as the regrab.
+    property <int> watched-my-library-tab: MyLibrary.tab-idx;
+    changed watched-my-library-tab => {
+        CompositeScroll.reset();
         shortcut-scope.grab-focus();
     }
 
@@ -246,10 +245,11 @@ export component AppWindow inherits Window {
         host-height: root.height;
     }
 
-    // One gate per sidebar section, in nav-index order. `SectionActiveGate` owns the
-    // predicate and the `changed` watcher (its header says why the watcher can't live
-    // inside each view); all that differs per section is which Rust hook the transition
-    // drives and what that hook does — which is what the comments below record.
+    // One gate per section, in nav-index order — and, for a section built out of tabs,
+    // one more per tab. `SectionActiveGate` owns the predicate and the `changed` watcher
+    // (its header says why the watcher can't live inside each view); all that differs per
+    // mount is which Rust hook the transition drives and what that hook does — which is
+    // what the comments below record.
 
     // Search. Query-driven, so no library-changed refresh, but Rust still releases the
     // per-strip album + artist cover LRUs on `false` (clearing the result models on the
@@ -278,27 +278,40 @@ export component AppWindow inherits Window {
         active-changed(active) => { Favorites.section-active-changed(active); }
     }
 
-    // Tracks. Unlike Albums, the view keeps its row model warm across nav-aways, so
+    // My Library. Five gates on one index, one per tab, and no page-level one: **a tab
+    // leave has to be the same event as a section leave** — it tears the same models
+    // down and re-fetches the same way — so each of the five keeps the hook it had as a
+    // sidebar section and the gate's `tab-index` / `current-tab` pair supplies the second
+    // half of the predicate. Leaving the page is then just the mounted tab's leave, the
+    // other four already being inactive. A drill-in doesn't move `tab-idx`, so it stays
+    // `true` inside a tab exactly as it used to inside a section.
+
+    // Songs. Unlike the four grids, the view keeps its row model warm across leaves, so
     // this only gates the `library_changed` refresher: hidden ⇒ mark dirty and skip the
     // full-library re-fetch, re-enter ⇒ one deferred refresh.
     SectionActiveGate {
         index: 3;
+        tab-index: MyLibrary.tab-songs;
+        current-tab: MyLibrary.tab-idx;
         mini-active: mini-switch.active;
         active-changed(active) => { Tracks.section-active-changed(active); }
     }
 
-    // Albums. Rust releases the album-tier cover cache on `false` (nav away, or opening
-    // Now Playing *from* Albums) and re-warms on `true`. Grid and detail are both in
-    // this branch, so a drill-in stays `true` — as it does for Artists/Genres/Playlists.
+    // Albums. Rust releases the album-tier cover cache on `false` (tab away, nav away, or
+    // opening Now Playing *from* the tab) and re-warms on `true`.
     SectionActiveGate {
-        index: 4;
+        index: 3;
+        tab-index: MyLibrary.tab-albums;
+        current-tab: MyLibrary.tab-idx;
         mini-active: mini-switch.active;
         active-changed(active) => { Albums.section-active-changed(active); }
     }
 
     // Artists.
     SectionActiveGate {
-        index: 5;
+        index: 3;
+        tab-index: MyLibrary.tab-artists;
+        current-tab: MyLibrary.tab-idx;
         mini-active: mini-switch.active;
         active-changed(active) => { Artists.section-active-changed(active); }
     }
@@ -306,14 +319,18 @@ export component AppWindow inherits Window {
     // Genres. The hook has no cache to release — genres have no artwork — but stays
     // wired for symmetry with Albums / Artists.
     SectionActiveGate {
-        index: 6;
+        index: 3;
+        tab-index: MyLibrary.tab-genres;
+        current-tab: MyLibrary.tab-idx;
         mini-active: mini-switch.active;
         active-changed(active) => { Genres.section-active-changed(active); }
     }
 
     // Playlists. Mirrors the Albums hook over the playlist-tier cover cache.
     SectionActiveGate {
-        index: 7;
+        index: 3;
+        tab-index: MyLibrary.tab-playlists;
+        current-tab: MyLibrary.tab-idx;
         mini-active: mini-switch.active;
         active-changed(active) => { Playlists.section-active-changed(active); }
     }
@@ -442,70 +459,15 @@ export component AppWindow inherits Window {
                             enter-from: Nav.pending-enter-from;
                             FavoritesView { width: 100%; height: 100%; }
                         }
+                        // My Library — five tabs over the views that used to be nav 3–7,
+                        // with each tab's grid ↔ detail swap inside the page rather than
+                        // out here. That is why one branch replaces nine: which body is
+                        // mounted is `MyLibrary.tab-idx`'s business now, not this chain's.
                         if !Nav.now-playing-open && Nav.selected-index == 3: ViewTransition {
                             width: parent.width;
                             height: parent.height;
                             enter-from: Nav.pending-enter-from;
-                            TracksView { width: 100%; height: 100%; }
-                        }
-                        // Albums swaps grid ↔ detail on `AlbumDetail.album-id`, -1 being
-                        // the grid. Artists, Genres and Playlists below are the same
-                        // shape on their own id.
-                        if !Nav.now-playing-open && Nav.selected-index == 4
-                            && AlbumDetail.album-id < 0: ViewTransition {
-                            width: parent.width;
-                            height: parent.height;
-                            enter-from: Nav.pending-enter-from;
-                            AlbumView { width: 100%; height: 100%; }
-                        }
-                        if !Nav.now-playing-open && Nav.selected-index == 4
-                            && AlbumDetail.album-id >= 0: ViewTransition {
-                            width: parent.width;
-                            height: parent.height;
-                            enter-from: Nav.pending-enter-from;
-                            AlbumDetailView { width: 100%; height: 100%; }
-                        }
-                        if !Nav.now-playing-open && Nav.selected-index == 5
-                            && ArtistDetail.artist-id < 0: ViewTransition {
-                            width: parent.width;
-                            height: parent.height;
-                            enter-from: Nav.pending-enter-from;
-                            ArtistView { width: 100%; height: 100%; }
-                        }
-                        if !Nav.now-playing-open && Nav.selected-index == 5
-                            && ArtistDetail.artist-id >= 0: ViewTransition {
-                            width: parent.width;
-                            height: parent.height;
-                            enter-from: Nav.pending-enter-from;
-                            ArtistDetailView { width: 100%; height: 100%; }
-                        }
-                        if !Nav.now-playing-open && Nav.selected-index == 6
-                            && GenreDetail.genre-id < 0: ViewTransition {
-                            width: parent.width;
-                            height: parent.height;
-                            enter-from: Nav.pending-enter-from;
-                            GenresView { width: 100%; height: 100%; }
-                        }
-                        if !Nav.now-playing-open && Nav.selected-index == 6
-                            && GenreDetail.genre-id >= 0: ViewTransition {
-                            width: parent.width;
-                            height: parent.height;
-                            enter-from: Nav.pending-enter-from;
-                            GenreDetailView { width: 100%; height: 100%; }
-                        }
-                        if !Nav.now-playing-open && Nav.selected-index == 7
-                            && PlaylistDetail.playlist-id < 0: ViewTransition {
-                            width: parent.width;
-                            height: parent.height;
-                            enter-from: Nav.pending-enter-from;
-                            PlaylistsView { width: 100%; height: 100%; }
-                        }
-                        if !Nav.now-playing-open && Nav.selected-index == 7
-                            && PlaylistDetail.playlist-id >= 0: ViewTransition {
-                            width: parent.width;
-                            height: parent.height;
-                            enter-from: Nav.pending-enter-from;
-                            PlaylistDetailView { width: 100%; height: 100%; }
+                            MyLibraryView { width: 100%; height: 100%; }
                         }
                         if !Nav.now-playing-open && Nav.selected-index == 8: ViewTransition {
                             width: parent.width;
@@ -524,10 +486,6 @@ export component AppWindow inherits Window {
                             && Nav.selected-index != 1
                             && Nav.selected-index != 2
                             && Nav.selected-index != 3
-                            && Nav.selected-index != 4
-                            && Nav.selected-index != 5
-                            && Nav.selected-index != 6
-                            && Nav.selected-index != 7
                             && Nav.selected-index != 8
                             && Nav.selected-index != 9: ViewTransition {
                             width: parent.width;

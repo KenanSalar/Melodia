@@ -16,10 +16,10 @@ use crate::state::AppState;
 use crate::ui::callbacks::macros::spawn_logged;
 use crate::ui::genres::{self as genres_ui_mod, GenresUi};
 use crate::ui::model_diff::clear_vec_model;
+use crate::ui::my_library::{MyLibraryTab, tab_is_mounted};
 use crate::ui::tab_bar::UNFETCHED_COUNT;
 use crate::{
-    AppWindow, GenreDetail, GenreGridRow as UiGenreGridRow, Genres, Nav,
-    TrackListRow as UiTrackListRow,
+    AppWindow, GenreDetail, GenreGridRow as UiGenreGridRow, Genres, TrackListRow as UiTrackListRow,
 };
 
 /// Wire the Genres section-lifecycle callbacks. See [`super::wire_genres`].
@@ -40,7 +40,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, genres_ui: &Arc<GenresUi>) 
     // (initial enter after boot's pre-fetch — no covers to prewarm).
     // The detail re-fetch (if `GenreDetail.genre-id >= 0`) runs after
     // the grid fetch.
-    genres_ui.set_section_active(ui.global::<Nav>().get_selected_index() == 6);
+    genres_ui.set_section_active(tab_is_mounted(ui, MyLibraryTab::Genres));
     // See the matching seed in `albums/lifecycle.rs`: a boot pre-fetch for a
     // section that isn't on screen can't publish the shared hero globals, so
     // its first enter has to re-fetch rather than take the cheap path.

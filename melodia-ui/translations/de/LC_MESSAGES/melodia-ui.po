@@ -24,6 +24,11 @@ msgstr "Durchsuchen"
 msgid "Favorites"
 msgstr "Favoriten"
 
+# The sidebar row, and the window title, for the page carrying the Songs / Albums /
+# Artists / Genres / Playlists tabs. Each tab reuses its own msgid below.
+msgid "My Library"
+msgstr "Meine Bibliothek"
+
 msgid "Tracks"
 msgstr "Lieder"
 

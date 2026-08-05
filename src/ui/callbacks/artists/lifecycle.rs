@@ -12,13 +12,12 @@ use crate::ui::albums::AlbumsUi;
 use crate::ui::artists::{self as artists_ui_mod, ArtistsUi};
 use crate::ui::callbacks::macros::{release_detail_hero_images, spawn_logged};
 use crate::ui::model_diff::clear_vec_model;
+use crate::ui::my_library::{MyLibraryTab, tab_is_mounted};
 use crate::ui::tab_bar::UNFETCHED_COUNT;
 use crate::{
     AlbumRow as UiAlbumRow, AppWindow, ArtistDetail, ArtistGridRow as UiArtistGridRow, Artists,
-    Nav, TrackListRow as UiTrackListRow,
+    TrackListRow as UiTrackListRow,
 };
-
-use super::NAV_ARTISTS;
 
 /// Wire the Artists section-lifecycle callbacks. See [`super::wire_artists`].
 pub(super) fn wire(
@@ -45,7 +44,7 @@ pub(super) fn wire(
     // (initial enter after boot's pre-fetch). The detail re-fetch (if
     // `ArtistDetail.artist-id >= 0`) runs after the grid fetch so the
     // user lands back where they were.
-    artists_ui.set_section_active(ui.global::<Nav>().get_selected_index() == NAV_ARTISTS);
+    artists_ui.set_section_active(tab_is_mounted(ui, MyLibraryTab::Artists));
     // See the matching seed in `albums/lifecycle.rs`: a boot pre-fetch for a
     // section that isn't on screen can't publish the shared hero globals, so
     // its first enter has to re-fetch rather than take the cheap path.

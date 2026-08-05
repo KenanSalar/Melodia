@@ -1,0 +1,60 @@
+// The My Library page: five tabs — Songs, Albums, Artists, Genres, Playlists — over the
+// five views that used to be five sidebar entries at nav indices 3–7. The page keeps nav
+// index 3; 4–7 are retired.
+//
+// **Nothing about the five views' data layer lives here.** `Tracks` / `Albums` /
+// `Artists` / `Genres` / `Playlists` and the four `*Detail` globals keep their own models,
+// counts, sorts and cover callbacks; this global holds only what the *page* owns — which
+// tab is mounted, the one filter that will replace the five search boxes, and the two
+// signals the shell drives.
+//
+// **A tab switch is a section switch.** `SectionActiveGate` is mounted once per tab at
+// `index: 3` with this global's `tab-idx` as its `current-tab`, so leaving a tab fires the
+// departing view's existing `section-active-changed(false)` and entering one fires the
+// arriving view's `true`. Every lifecycle hook — cover release, model clear, `mark_dirty()`
+// → re-fetch — therefore works untouched, and the page needs no `covers-generation`
+// machinery: the entering tab's own fetch prewarms its first screenful before it writes rows.
+//
+// **There is no `detail-open` here.** A global's property is bound in the global's own
+// file, so deriving it from the four `*Detail.*-id`s would make this the second globals
+// file to import siblings (`globals/dialog.slint` is the only one, and that edge set is
+// deliberately shallow). `views/my-library-view.slint` already imports all four and derives
+// it privately; Rust reads the four ids directly.
+export global MyLibrary {
+    // **`tab-count` is the sole definition of how many there are** — Rust clamps the
+    // persisted index against it rather than carrying its own const, so a build with
+    // fewer tabs can't restore onto a branch that mounts nothing.
+    out property <int> tab-songs: 0;
+    out property <int> tab-albums: 1;
+    out property <int> tab-artists: 2;
+    out property <int> tab-genres: 3;
+    out property <int> tab-playlists: 4;
+    out property <int> tab-count: 5;
+
+    in-out property <int> tab-idx: 0;
+    // **Fires after the bar has already moved `tab-idx`.** Rust clears the filter and
+    // persists the pick; the cover tiers ride the per-tab section gates instead.
+    callback tab-changed(int);
+    // `Nav.persist-selected-index`'s twin, for the paths that move the tab *without*
+    // it being a user's pick — a cross-tab drill and a Mouse-4/5 history walk both
+    // land on a tab and neither should clear the filter the way a pick does.
+    callback persist-tab-idx(int);
+
+    // The page's single filter, replacing the five per-view search boxes. Declared here
+    // now and routed by `ui::my_library::filter` — the band that writes it arrives with
+    // the shared `SearchBar`, so until then each view's own box still owns its text.
+    in-out property <string> filter;
+    // The `Tracks.blur-search-tick` pattern: bumped by anything that should make the
+    // filter input give up the keyboard.
+    in-out property <int> blur-search-tick: 0;
+    callback filter-changed(string);
+
+    // The hero's back button, once the band owns it. Routes to whichever detail the
+    // mounted tab has open.
+    //
+    // **There is no page-level `section-active-changed` beside it**: the five per-tab
+    // `SectionActiveGate` mounts already fire the mounted tab's leave when the page
+    // leaves, and the other four are inactive by then. A page-level gate would have
+    // nothing left to say.
+    callback back();
+}

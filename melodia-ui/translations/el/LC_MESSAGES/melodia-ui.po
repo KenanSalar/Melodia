@@ -24,6 +24,11 @@ msgstr "Περιήγηση"
 msgid "Favorites"
 msgstr "Αγαπημένα"
 
+# The sidebar row, and the window title, for the page carrying the Songs / Albums /
+# Artists / Genres / Playlists tabs. Each tab reuses its own msgid below.
+msgid "My Library"
+msgstr "Η βιβλιοθήκη μου"
+
 msgid "Tracks"
 msgstr "Κομμάτια"
 

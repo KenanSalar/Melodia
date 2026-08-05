@@ -24,6 +24,11 @@ msgstr "Esplora"
 msgid "Favorites"
 msgstr "Preferiti"
 
+# The sidebar row, and the window title, for the page carrying the Songs / Albums /
+# Artists / Genres / Playlists tabs. Each tab reuses its own msgid below.
+msgid "My Library"
+msgstr "La mia libreria"
+
 msgid "Tracks"
 msgstr "Brani"
 

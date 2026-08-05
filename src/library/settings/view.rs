@@ -154,6 +154,14 @@ pub fn set_recently_played_tab(state: &AppState, tab: i32) -> Result<(), AppErro
     })
 }
 
+/// Persist the My Library page's active tab. Same contract again —
+/// `MyLibrary.tab-idx` is two-way bound to its tab bar.
+pub fn set_my_library_tab(state: &AppState, tab: i32) -> Result<(), AppError> {
+    services::view_state::mutate_view_state(&state.paths, move |s| {
+        s.my_library_tab = tab;
+    })
+}
+
 /// Persist the visible-column list for `view_id` (e.g. "tracks") into
 /// `views.json`'s `view_columns`. Full file rewrite, matching how the Tauri
 /// app handled this. `columns` is the list of CURRENTLY VISIBLE column

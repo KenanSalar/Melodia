@@ -37,9 +37,11 @@ export global GenreDetail {
     in-out property <string> filter;
     in-out property <int>    blur-search-tick: 0;
 
-    // `AlbumDetail.origin-nav-index`, so cross-tab back-nav takes the same atomic
-    // flip-Nav-then-clear-id path.
+    // `AlbumDetail.origin-nav-index` / `-tab`, so cross-tab back-nav takes the same
+    // atomic flip-Nav-then-clear-id path, and the same pair — see the argument there for
+    // why the tab half can't live once on `MyLibrary`.
     in-out property <int> origin-nav-index: -1;
+    in-out property <int> origin-tab: -1;
 
     in-out property <length> w-number: 56px;
     in-out property <length> w-title: 320px;

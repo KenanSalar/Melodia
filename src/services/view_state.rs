@@ -42,8 +42,10 @@ pub struct ViewStateData {
     pub browse_path: Option<String>,
     /// Sidebar tab active at last shutdown. Hydrated into
     /// `Nav.selected-index` at startup. Indices follow the `Nav` global
-    /// comment (0=search, 1=browse, 2=favorites, 3=tracks, 4=albums,
-    /// 5=artists, 6=genres, 7=playlists, 8=recently-played, 9=settings).
+    /// comment (0=search, 1=browse, 2=favorites, 3=my-library,
+    /// 8=recently-played, 9=settings). A file written before the five library
+    /// views became one page can hold 4–7; `ui::my_library::fold_retired_nav_index`
+    /// maps those onto 3 on the way in.
     pub last_nav_index: i32,
     /// Detail-view ids open at last shutdown, keyed by view-id string.
     /// Entry present ⇒ that view's detail page is hydrated at startup;
@@ -70,6 +72,13 @@ pub struct ViewStateData {
     /// Recently-Played page tab showing at last shutdown (Songs / Most Played).
     /// Same contract again, clamped against `RecentlyPlayed.tab-count`.
     pub recently_played_tab: i32,
+    /// My Library page tab showing at last shutdown (Songs / Albums / Artists /
+    /// Genres / Playlists). Same contract again, clamped against
+    /// `MyLibrary.tab-count`.
+    ///
+    /// An `i32` for the reason [`Self::favorites_tab`] gives, not because the bool
+    /// count is close: a persisted view flag is an int / string / map.
+    pub my_library_tab: i32,
 }
 
 impl Default for ViewStateData {
@@ -85,13 +94,14 @@ impl Default for ViewStateData {
             settings_tab: 0,
             favorites_tab: 0,
             recently_played_tab: 0,
+            my_library_tab: 0,
         }
     }
 }
 
 /// Matches the `Nav.selected-index` default in `melodia-ui/ui/globals/nav.slint`
-/// (3 = Tracks). Fresh installs without a `views.json` land on the
-/// Tracks view.
+/// (3 = My Library). Fresh installs without a `views.json` land on that page's
+/// first tab.
 fn default_last_nav_index() -> i32 {
     3
 }
