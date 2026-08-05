@@ -8,7 +8,8 @@ export global Playlists {
     // The flat list behind the Add-to-Playlist submenu, kept in step with `grid-rows`
     // so the submenu always lists every playlist in display order.
     in-out property <[PlaylistRow]> rows;
-    in-out property <int> total-count;          // pre-filter playlist count
+    // `-1` until fetched; see `Albums.total-count`.
+    in-out property <int> total-count: -1;      // pre-filter playlist count
     in-out property <int> columns: 4;           // view-computed; always >= 1
     in-out property <string> filter;
     in-out property <string> sort-field: "updated"; // "name" | "track_count" | "updated"

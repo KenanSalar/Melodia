@@ -5,12 +5,14 @@
 use std::sync::Arc;
 
 use async_compat::Compat;
-use slint::{ComponentHandle, Model, VecModel};
+use slint::ComponentHandle;
 
 use crate::state::AppState;
 use crate::ui::albums::AlbumsUi;
 use crate::ui::artists::{self as artists_ui_mod, ArtistsUi};
 use crate::ui::callbacks::macros::{release_detail_hero_images, spawn_logged};
+use crate::ui::model_diff::clear_vec_model;
+use crate::ui::tab_bar::UNFETCHED_COUNT;
 use crate::{
     AlbumRow as UiAlbumRow, AppWindow, ArtistDetail, ArtistGridRow as UiArtistGridRow, Artists,
     Nav, TrackListRow as UiTrackListRow,
@@ -64,25 +66,16 @@ pub(super) fn wire(
             }
             if !active && let Some(ui) = weak.upgrade() {
                 let g = ui.global::<Artists>();
-                let m = g.get_grid_rows();
-                if let Some(vm) = m.as_any().downcast_ref::<VecModel<UiArtistGridRow>>() {
-                    vm.set_vec(Vec::new());
-                }
+                // Rewound on the same tick as the model it numbers;
+                // `Albums.total-count`'s declaration argues the sentinel.
+                g.set_total_count(UNFETCHED_COUNT);
+                clear_vec_model::<UiArtistGridRow>(&g.get_grid_rows(), "artists: clear grid");
 
                 let d = ui.global::<ArtistDetail>();
                 release_detail_hero_images!(ui, d);
-                let tm = d.get_tracks();
-                if let Some(vm) = tm.as_any().downcast_ref::<VecModel<UiTrackListRow>>() {
-                    vm.set_vec(Vec::new());
-                }
-                let am = d.get_albums();
-                if let Some(vm) = am.as_any().downcast_ref::<VecModel<UiAlbumRow>>() {
-                    vm.set_vec(Vec::new());
-                }
-                let sm = d.get_selected_ids();
-                if let Some(vm) = sm.as_any().downcast_ref::<VecModel<i32>>() {
-                    vm.set_vec(Vec::new());
-                }
+                clear_vec_model::<UiTrackListRow>(&d.get_tracks(), "artists: clear detail tracks");
+                clear_vec_model::<UiAlbumRow>(&d.get_albums(), "artists: clear detail albums");
+                clear_vec_model::<i32>(&d.get_selected_ids(), "artists: clear detail selection");
                 d.set_selection_anchor(-1);
             }
             let au = au.clone();

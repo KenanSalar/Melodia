@@ -203,6 +203,140 @@ fn both_mosaic_mounts_clamp_the_unfetched_sentinel() {
     }
 }
 
+/// One library-list page's count and the three files that have to agree about
+/// it. A second array rather than a widened [`CuratedPage`]: these five declare
+/// one count each in five separate files, and their header guard below has no
+/// counterpart on the curated pages.
+struct LibraryPage {
+    /// The page's `-view.slint` basename, and how a failure names it.
+    label: &'static str,
+    /// The Slint global declaring the count, and the file declaring the global.
+    global: &'static str,
+    source: &'static str,
+    /// The view whose header line renders the count.
+    view: &'static str,
+    /// The Rust handler owning the section leave.
+    lifecycle: &'static str,
+}
+
+const LIBRARY_PAGES: [LibraryPage; 5] = [
+    LibraryPage {
+        label: "tracks",
+        global: "Tracks",
+        source: include_str!("../../../melodia-ui/ui/globals/tracks.slint"),
+        view: include_str!("../../../melodia-ui/ui/views/tracks-view.slint"),
+        lifecycle: include_str!("../callbacks/tracks.rs"),
+    },
+    LibraryPage {
+        label: "album",
+        global: "Albums",
+        source: include_str!("../../../melodia-ui/ui/globals/albums.slint"),
+        view: include_str!("../../../melodia-ui/ui/views/album-view.slint"),
+        lifecycle: include_str!("../callbacks/albums/lifecycle.rs"),
+    },
+    LibraryPage {
+        label: "artist",
+        global: "Artists",
+        source: include_str!("../../../melodia-ui/ui/globals/artists.slint"),
+        view: include_str!("../../../melodia-ui/ui/views/artist-view.slint"),
+        lifecycle: include_str!("../callbacks/artists/lifecycle.rs"),
+    },
+    LibraryPage {
+        label: "genres",
+        global: "Genres",
+        source: include_str!("../../../melodia-ui/ui/globals/genres.slint"),
+        view: include_str!("../../../melodia-ui/ui/views/genres-view.slint"),
+        lifecycle: include_str!("../callbacks/genres/lifecycle.rs"),
+    },
+    LibraryPage {
+        label: "playlists",
+        global: "Playlists",
+        source: include_str!("../../../melodia-ui/ui/globals/playlists.slint"),
+        view: include_str!("../../../melodia-ui/ui/views/playlists-view.slint"),
+        lifecycle: include_str!("../callbacks/playlists/lifecycle.rs"),
+    },
+];
+
+/// Every library count starts at the sentinel, and the line it feeds says nothing
+/// until there is an answer.
+///
+/// The guard is the half with no counterpart on the curated pages, and the half
+/// that ships something visibly wrong rather than merely absent: all five counts
+/// are interpolated into a gettext plural, so an unguarded `@tr` spells the
+/// sentinel out and the header reads "-1 albums" for the length of every
+/// re-fetch. The curated counts only ever gate `== 0` / `> 0`, which the sentinel
+/// satisfies by missing both.
+#[test]
+fn every_library_count_starts_at_the_unfetched_sentinel() {
+    for page in LIBRARY_PAGES {
+        let declarations = global_body(page.source, page.global);
+        assert!(
+            !declarations.is_empty(),
+            "the {} global must be declared as `export global {}`",
+            page.label,
+            page.global
+        );
+        assert!(
+            declarations.contains(&format!("total-count: {UNFETCHED_COUNT};")),
+            "{} must declare `total-count` at the unfetched sentinel, else its header states \
+             a total before the first fetch has run",
+            page.global
+        );
+        assert!(
+            page.view.contains(&format!("{}.total-count >= 0", page.global)),
+            "{}-view.slint must guard its count line on `{}.total-count >= 0` — the plural \
+             interpolates the count, so an unguarded `@tr` renders the sentinel verbatim",
+            page.label,
+            page.global
+        );
+    }
+}
+
+/// A section leave rewinds the count on the same tick it stops standing for
+/// anything.
+///
+/// Tracks earns its place here on a leave arm added for it, and is the one whose
+/// rewind isn't free: its model survives a leave, so the rewind is honest only
+/// beside the `mark_dirty()` that guarantees a fetch is coming. Drop that and the
+/// header states nothing over rows that are still on screen, permanently.
+#[test]
+fn every_library_leave_rewinds_the_count_it_numbered() {
+    for page in LIBRARY_PAGES {
+        assert!(
+            page.lifecycle.contains("set_total_count(UNFETCHED_COUNT)"),
+            "{}'s section leave must rewind `total-count` on the same tick it drops the rows \
+             that count numbered",
+            page.label
+        );
+    }
+}
+
+const SECTION_GATE: &str =
+    include_str!("../../../melodia-ui/ui/components/section-active-gate.slint");
+
+/// The gate's tab sub-predicate is opt-in, and `-1` is what opts out.
+///
+/// A tabless mount passes neither property, so the two defaults are the whole of
+/// what keeps nine sections working. A `0` default — or a predicate spelling the
+/// tab comparison without the negative escape — makes `tab-index == current-tab`
+/// the answer for all of them, and every section but whichever one happens to sit
+/// at tab 0 goes inactive for the length of the session.
+#[test]
+fn the_section_gate_ignores_its_tab_predicate_when_a_section_has_none() {
+    for prop in ["tab-index", "current-tab"] {
+        assert!(
+            SECTION_GATE.contains(&format!("in property <int> {prop}: -1;")),
+            "`{prop}` must default to -1 — a tabless mount passes neither, so the default is \
+             what decides whether its section is ever active"
+        );
+    }
+    assert!(
+        SECTION_GATE.contains("root.tab-index < 0 || root.tab-index == root.current-tab"),
+        "the gate's predicate must short-circuit on a negative `tab-index`, else every tabless \
+         section is gated on a tab it does not have"
+    );
+}
+
 const TAB_BAR: &str = include_str!("../../../melodia-ui/ui/components/tab-bar.slint");
 
 /// The compact morph has to be *written*, not left to the binding that seeds

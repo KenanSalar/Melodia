@@ -4,7 +4,7 @@ Working doc. Keep the phase markers current; delete this file when the feature s
 
 | phase | status |
 |---|---|
-| 0 — Prep, no behaviour change | ☐ not started |
+| 0 — Prep | ☑ done |
 | 1 — `MyLibrary` global, nav plumbing, empty page | ☐ not started |
 | 2 — `LibraryTabBand` | ☐ not started |
 | 3 — The five tab bodies and the mount sheet | ☐ not started |
@@ -213,14 +213,58 @@ and half those origins (Browse, Favorites, Recently Played, Search) sit outside 
 ## Phases
 
 Each phase ends compiling and passing `cargo clippy --all-targets --locked -- -D warnings`
-and `cargo test --locked`. Phases 0–2 leave the running app unchanged.
+and `cargo test --locked`. Phases 1–2 leave the running app unchanged; Phase 0 has exactly
+one visible change, recorded below.
 
 ---
 
-### Phase 0 — Prep, no behaviour change
+### Phase 0 — Prep ☑
 
 Pure de-duplication, done first so the tab bodies inherit it instead of the diff carrying
 both shapes.
+
+**What the phase actually landed**, including the four things the plan above got wrong or
+left open:
+
+- **The per-view `lifecycle.rs` files are under `src/ui/callbacks/<view>/`, not
+  `src/ui/<view>/`** — the latter holds the fetch/state half (`mod.rs`, `grid.rs`,
+  `detail.rs`, …). Phases 3 and 4 name these files; read the path from here.
+- **The sentinel forces a guard the curated pages never needed, and this is the one thing
+  from Phase 0 that Phase 3 must carry.** All five `total-count`s are interpolated into a
+  gettext plural, so a bare `-1` renders **"-1 albums"** — the curated counts only ever
+  gated `== 0` / `> 0`, which the sentinel satisfies by missing both. Every count line is
+  now `<Global>.total-count >= 0 ? @tr(…) : ""`, a ternary rather than an `if` so the
+  `Text` keeps its slot in the `spacing: 0` title column and nothing jumps. **The band's
+  `count-text` ternary inherits this**, and it is not optional there either.
+- **Tracks took the full leave arm** (`mark_dirty()` + the rewind), so "a tab switch *is* a
+  section leave" already holds for Songs and decision 2 needs no special case for it. A
+  rewind alone would have been a bug: nothing else re-fetches that list, so the header
+  would have stated `""` over rows still on screen, permanently. **This is the phase's one
+  behaviour change** — re-entering Tracks now re-queries where it used to be instant,
+  which is what the other four already did. Its *model* is still not cleared on leave; the
+  stale rows are what the list paints during the deferred re-fetch, and whether Songs also
+  empties is Phase 3's call.
+- **`IconButton` needs nothing** — `idle-bg` (`components/icon-button.slint:18`) and
+  `idle-fg` (`:25`) are already defaulted `in` properties. Phase 2 can mount the
+  chip-coloured back button as written; don't re-check.
+- **`body:` as a property name does not collide with a `body :=` element id.** All four
+  grid views mount `GridEmptyState { body: @tr(…); }` *inside* their `body := Rectangle`
+  and compile clean, and `GridGeometry { avail-width: body.width; }` forward-references it
+  from above. Phase 3's mount sheet reuses both shapes.
+
+Two things went beyond the written scope, both inside the blast radius:
+
+- The four `lifecycle.rs` leave arms hand-rolled `downcast_ref::<VecModel<…>>()` +
+  `set_vec(Vec::new())` where `ui::model_diff::clear_vec_model` already existed (and logs
+  on a failed downcast, where the hand-rolls swallowed it). Fifteen blocks became fifteen
+  lines, and `Model` / `VecModel` left all four files' imports.
+- `melodia-ui/ui/components/material-icon.slint` is no longer imported by any of the four
+  views — the empty state was its only consumer in each.
+
+Docs are deliberately **not** updated yet: `.claude/rules/ui-patterns.md` (lines 31 and 45)
+and root `CLAUDE.md` describe the pre-fold world and are Phase 5's, per the list there. The
+two stale claims to fix then are "the four older grid views still carry hand-copied
+versions" and "the four older entity grids deliberately keep the older shape".
 
 - `views/{album,artist,genres,playlists}-view.slint`: replace the four hand-copied
   `min-card-w`/`computed-cols`/`card-w`/`card-h`/`row-h` blocks with
@@ -510,7 +554,11 @@ than drawing one.
 - Docs: root `CLAUDE.md` (a My Library bullet in the module map pointing at the Favorites
   bullet as the reference contract, the nav index table, the retired 4–7),
   `.claude/rules/ui-patterns.md` (the band beside `MosaicTabHero`; the tab-scoped
-  `SectionActiveGate`; the "a tab switch is a section switch" rule),
+  `SectionActiveGate`; the "a tab switch is a section switch" rule; **and the two claims
+  Phase 0 already falsified** — line 31's "the four older grid views still carry
+  hand-copied versions" and line 45's "the four older entity grids deliberately keep the
+  older shape", the latter also owing the `>= 0` guard rule and what Tracks' leave arm
+  cost),
   `.claude/rules/slint-pitfalls.md` (the animated-root-**height** twin of the width entry),
   `README.md` feature blurb.
 - Delete this file.
@@ -591,7 +639,12 @@ Targeted test additions, all `include_str!` source pins in the house style:
 - `…::every_sort_pill_asks_for_a_field_the_comparator_knows` — the Albums / Artists /
   Genres rows finally get the pin the Favorites Artists row already has.
 - `ui::library_tab_band_tests` — as listed in Phase 2.
-- `ui::tab_bar::tests` extended to the five new counts' sentinel + leave-rewind.
+- ☑ `ui::tab_bar::tests` extended, on a `LIBRARY_PAGES` array beside `CURATED_PAGES`:
+  `every_library_count_starts_at_the_unfetched_sentinel` (declaration **and** the `>= 0`
+  guard), `every_library_leave_rewinds_the_count_it_numbered`, and
+  `the_section_gate_ignores_its_tab_predicate_when_a_section_has_none` (both new gate
+  properties default `-1`, and the predicate keeps its negative short-circuit — a `0`
+  default silently deactivates all nine sections).
 - `ui::hero_chips::tests` — `HERO_VIEWS` at 2, plus the new `BAND_HOSTS`.
 - `ui::placeholder_tests` — `BUDGETING_HOSTS` at 3.
 

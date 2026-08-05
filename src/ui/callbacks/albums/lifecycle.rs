@@ -5,11 +5,13 @@
 use std::sync::Arc;
 
 use async_compat::Compat;
-use slint::{ComponentHandle, Model, VecModel};
+use slint::ComponentHandle;
 
 use crate::state::AppState;
 use crate::ui::albums::{self as albums_ui_mod, AlbumsUi};
 use crate::ui::callbacks::macros::{release_detail_hero_images, spawn_logged};
+use crate::ui::model_diff::clear_vec_model;
+use crate::ui::tab_bar::UNFETCHED_COUNT;
 use crate::{
     AlbumDetail, AlbumGridRow as UiAlbumGridRow, Albums, AppWindow, Nav,
     TrackListRow as UiTrackListRow,
@@ -74,21 +76,15 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, albums_ui: &Arc<AlbumsUi>) 
                 // were. Mirrors the per-property teardown in
                 // `on_close_detail`.
                 let g = ui.global::<Albums>();
-                let m = g.get_grid_rows();
-                if let Some(vm) = m.as_any().downcast_ref::<VecModel<UiAlbumGridRow>>() {
-                    vm.set_vec(Vec::new());
-                }
+                // Rewound on the same tick as the model it numbers;
+                // `Albums.total-count`'s declaration argues the sentinel.
+                g.set_total_count(UNFETCHED_COUNT);
+                clear_vec_model::<UiAlbumGridRow>(&g.get_grid_rows(), "albums: clear grid");
 
                 let d = ui.global::<AlbumDetail>();
                 release_detail_hero_images!(ui, d);
-                let tm = d.get_tracks();
-                if let Some(vm) = tm.as_any().downcast_ref::<VecModel<UiTrackListRow>>() {
-                    vm.set_vec(Vec::new());
-                }
-                let sm = d.get_selected_ids();
-                if let Some(vm) = sm.as_any().downcast_ref::<VecModel<i32>>() {
-                    vm.set_vec(Vec::new());
-                }
+                clear_vec_model::<UiTrackListRow>(&d.get_tracks(), "albums: clear detail tracks");
+                clear_vec_model::<i32>(&d.get_selected_ids(), "albums: clear detail selection");
                 d.set_selection_anchor(-1);
             }
             let au = au.clone();

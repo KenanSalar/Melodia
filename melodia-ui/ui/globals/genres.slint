@@ -8,7 +8,8 @@ import { GenreRow, GenreGridRow, TrackListRow } from "../models.slint";
 // plumbing — and makes `section-active-changed` a no-op today, kept for symmetry.
 export global Genres {
     in-out property <[GenreGridRow]> grid-rows;
-    in-out property <int> total-count;
+    // `-1` until fetched; see `Albums.total-count`.
+    in-out property <int> total-count: -1;
     in-out property <int> columns: 4;
     in-out property <string> filter;
     in-out property <string> sort-field: "name";   // "name" | "track_count" | "duration"

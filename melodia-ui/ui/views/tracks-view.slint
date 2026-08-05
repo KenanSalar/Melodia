@@ -61,7 +61,11 @@ export component TracksView inherits Rectangle {
                 }
                 Text {
                     // Plural form: singular/plural picked by count via gettext.
-                    text: @tr("{n} song" | "{n} songs" % Tracks.total-count);
+                    // Says nothing until there is an answer; see
+                    // `album-view.slint` for why the guard is needed.
+                    text: Tracks.total-count >= 0
+                        ? @tr("{n} song" | "{n} songs" % Tracks.total-count)
+                        : "";
                     color: Theme.subtext0;
                     font-size: Theme.font-size-sm;
                 }

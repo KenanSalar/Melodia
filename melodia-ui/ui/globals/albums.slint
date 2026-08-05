@@ -9,7 +9,14 @@ import { AlbumRow, AlbumGridRow, TrackListRow } from "../models.slint";
 // re-chunks the flat list into rows of N cards and the `ListView` virtualizes by row.
 export global Albums {
     in-out property <[AlbumGridRow]> grid-rows;
-    in-out property <int> total-count;          // pre-filter album count
+    // `-1` is "not fetched yet" (`ui::tab_bar::UNFETCHED_COUNT`) — the sentinel
+    // `curated.slint` argues at `Favorites.track-count`. A section leave empties
+    // `grid-rows`, so a count left at its last real value suppresses the empty
+    // state over a model that really is empty, while rewinding to `0` instead
+    // asserts "No albums yet" for the whole length of the re-fetch. One thing is
+    // new here: the header line interpolates this into a plural, and `@tr` would
+    // spell the sentinel out, so that `Text` guards on `>= 0`.
+    in-out property <int> total-count: -1;      // pre-filter album count
     in-out property <int> columns: 4;           // view-computed; always >= 1
     in-out property <string> filter;
     in-out property <string> sort-field: "name";   // "name" | "year" | "artist"

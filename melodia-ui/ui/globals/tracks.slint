@@ -7,7 +7,8 @@ import { TrackListRow, BrowseFolderRow, BreadcrumbRow } from "../models.slint";
 // `apply-filter` re-derives `rows` in memory, `request-sort` re-queries.
 export global Tracks {
     in-out property <[TrackListRow]> rows;
-    in-out property <int> total-count;       // pre-filter count
+    // `-1` until fetched; see `Albums.total-count`.
+    in-out property <int> total-count: -1;   // pre-filter count
     in-out property <string> filter;
     in-out property <string> sort-field: "title";
     in-out property <string> sort-dir: "asc";

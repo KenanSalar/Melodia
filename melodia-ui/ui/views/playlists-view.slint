@@ -5,8 +5,9 @@ import { Playlists } from "../globals/playlists.slint";
 import { SearchBar } from "../components/search-bar.slint";
 import { ActionPill, PillButton, PillDivider } from "../components/action-pill.slint";
 import { PlaylistGrid } from "../components/grid/playlist-grid.slint";
+import { GridEmptyState } from "../components/grid/grid-empty-state.slint";
 import { GridColumnsSync } from "../components/grid-columns-sync.slint";
-import { MaterialIcon } from "../components/material-icon.slint";
+import { GridGeometry } from "../components/grid-geometry.slint";
 import { OverlayScrollbar } from "../components/overlay-scrollbar.slint";
 import { Tooltip, TooltipSide } from "../components/tooltip.slint";
 import { FilterThrottle } from "../components/filter-throttle.slint";
@@ -21,19 +22,16 @@ export component PlaylistsView inherits Rectangle {
         fire() => { Playlists.apply-filter(Playlists.filter); }
     }
 
-    // Responsive grid geometry.
-    property <length> min-card-w: 180px;
+    // The gutter is the host's, since the grid takes it too; the rest of the
+    // geometry comes off the body's width.
     property <length> grid-gap: 20px;
-    property <length> card-text-h: 46px;
-    property <int> computed-cols:
-        max(1, Math.floor((grid.width - root.grid-gap) / (root.min-card-w + root.grid-gap)));
-    property <length> card-w:
-        max(0px, (grid.width - (root.computed-cols + 1) * root.grid-gap) / root.computed-cols);
-    property <length> card-h: root.card-w + root.card-text-h;
-    property <length> row-h: root.card-h + root.grid-gap;
+    geom := GridGeometry {
+        avail-width: body.width;
+        gap: root.grid-gap;
+    }
 
     GridColumnsSync {
-        computed-cols: root.computed-cols;
+        computed-cols: geom.cols;
         seed(c) => {
             Playlists.columns = c;
             Playlists.columns-changed(c);
@@ -67,7 +65,11 @@ export component PlaylistsView inherits Rectangle {
                     font-weight: Theme.page-title-weight;
                 }
                 Text {
-                    text: @tr("{n} playlist" | "{n} playlists" % Playlists.total-count);
+                    // Says nothing until there is an answer; see
+                    // `album-view.slint` for why the guard is needed.
+                    text: Playlists.total-count >= 0
+                        ? @tr("{n} playlist" | "{n} playlists" % Playlists.total-count)
+                        : "";
                     color: Theme.subtext0;
                     font-size: Theme.font-size-sm;
                 }
@@ -179,9 +181,9 @@ export component PlaylistsView inherits Rectangle {
                 width: 100%;
                 height: 100%;
                 rows: Playlists.grid-rows;
-                card-width: root.card-w;
-                card-height: root.card-h;
-                row-height: root.row-h;
+                card-width: geom.card-w;
+                card-height: geom.card-h;
+                row-height: geom.row-h;
                 gap: root.grid-gap;
                 open-playlist(id) => { Playlists.open-playlist(id); }
                 // Delete and rename fill the Dialog inline, as the detail view's
@@ -217,40 +219,11 @@ export component PlaylistsView inherits Rectangle {
                 request-cover(p) => { Playlists.request-cover(p) }
             }
 
-            // Opaque, as `AlbumView`'s is; its CTA points at the action above.
-            if Playlists.total-count == 0: Rectangle {
-                background: Theme.base;
-                VerticalLayout {
-                    alignment: center;
-                    spacing: Theme.pad-md;
-                    HorizontalLayout {
-                        alignment: center;
-                        MaterialIcon {
-                            name: "queue_music";
-                            icon-size: 64px;
-                            icon-color: Theme.overlay0;
-                        }
-                    }
-                    HorizontalLayout {
-                        alignment: center;
-                        Text {
-                            text: @tr("No playlists yet");
-                            color: Theme.text;
-                            font-size: Theme.font-size-lg;
-                            font-weight: 600;
-                        }
-                    }
-                    HorizontalLayout {
-                        alignment: center;
-                        Text {
-                            text: @tr("Click \"+ New Playlist\" to create one.");
-                            color: Theme.subtext0;
-                            font-size: Theme.font-size-sm;
-                            horizontal-alignment: center;
-                            wrap: word-wrap;
-                        }
-                    }
-                }
+            // Its copy points at the action in the header above.
+            if Playlists.total-count == 0: GridEmptyState {
+                icon: "queue_music";
+                title: @tr("No playlists yet");
+                body: @tr("Click \"+ New Playlist\" to create one.");
             }
         }
     }

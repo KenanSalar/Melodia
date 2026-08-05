@@ -9,6 +9,7 @@ use super::{collect_track_ids, next_sort};
 use super::macros::{spawn_logged, spawn_logged_sync, wire_row_flag};
 use crate::library;
 use crate::state::AppState;
+use crate::ui::tab_bar::UNFETCHED_COUNT;
 use crate::ui::track_list_view::{TrackListColumnState, view_id};
 use crate::ui::tracks::{self as tracks_ui_mod, TracksUi};
 use crate::{AppWindow, Tracks};
@@ -27,11 +28,13 @@ pub fn wire_tracks(ui: &AppWindow, state: &AppState, tracks_ui: &Arc<TracksUi>) 
         tracks.set_sort_dir(SharedString::from(dir));
     }
 
-    // section-active-changed: mirror visibility into the synchronous shadow
-    // and, on re-enter, run the deferred refresh if a `library_changed` bump
-    // arrived while the section was hidden (the refresher marks dirty
-    // instead of re-fetching a view the user can't see). Seed the shadow
-    // from the current nav state (sidebar index 3): the gate's
+    // section-active-changed: mirror visibility into the synchronous shadow,
+    // and on re-enter run the deferred refresh. Two things mark dirty — a
+    // `library_changed` bump arriving while the section was hidden (the
+    // refresher marks instead of re-fetching a view the user can't see), and
+    // the leave itself, which rewinds the count and so owes the fetch that
+    // answers it. Seed the shadow from the current nav state (sidebar index 3):
+    // the gate's
     // `ChangeTracker` baselines inside `AppWindow::new()` and fires only on
     // a later difference, so a section the boot doesn't land on gets no edge
     // at all, and the one it does land on gets its edge a frame late — after
@@ -43,7 +46,19 @@ pub fn wire_tracks(ui: &AppWindow, state: &AppState, tracks_ui: &Arc<TracksUi>) 
         let weak = weak.clone();
         tracks.on_section_active_changed(move |active| {
             tu.set_section_active(active);
-            if active && tu.take_dirty() {
+            if !active {
+                // The rewind is only honest beside the `mark_dirty`: nothing
+                // else re-fetches this list, so a count left at the sentinel
+                // with no fetch coming would state "" over the rows the model
+                // still holds. `Albums.total-count`'s declaration argues the
+                // sentinel itself.
+                tu.mark_dirty();
+                if let Some(ui) = weak.upgrade() {
+                    ui.global::<Tracks>().set_total_count(UNFETCHED_COUNT);
+                }
+                return;
+            }
+            if tu.take_dirty() {
                 let Some(ui) = weak.upgrade() else { return };
                 // Reuse the request-refresh path so the deferred fetch
                 // picks up the current sort + filter.
