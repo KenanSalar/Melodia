@@ -3,11 +3,8 @@
 # writing isn't lost to that: `task.md` is a Markdown template, so it pre-fills
 # a skeleton the author can rewrite or delete outright — which is the blank
 # issue, minus the blank page.
-#
-# There is nowhere to send general questions yet. Enable Discussions in the
-# repository settings and uncomment the block below to give them a door.
 blank_issues_enabled: false
-# contact_links:
-#   - name: Question or general discussion
-#     url: https://github.com/KenanSalar/Melodia/discussions
-#     about: Ask about usage, share a setup, or float an idea before filing it.
+contact_links:
+  - name: Question or usage help
+    url: https://github.com/KenanSalar/Melodia/discussions/categories/q-a
+    about: Ask how something works, or check whether it has already been answered.

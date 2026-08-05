@@ -33,11 +33,13 @@ body:
         - Playback, audio, equalizer, visualizer
         - Library, scanning, metadata, playlists
         - Interface, views, theming
+        - Window chrome, tray, media keys, OS integration
         - Last.fm / ListenBrainz / Discord
         - Packaging or installation
         - Updates
         - Translations
         - Not sure
+
   - type: textarea
     id: alternatives
     attributes:

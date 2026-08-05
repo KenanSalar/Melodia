@@ -183,7 +183,7 @@ Download the latest release for your platform from the
 |--------|---------|
 | `.rpm` (Fedora/RHEL) | `sudo dnf install ./melodia-*.rpm` |
 | `.deb` (Debian/Ubuntu) | `sudo apt install ./melodia-*.deb` |
-| AppImage | `chmod +x Melodia-*.AppImage && ./Melodia-*.AppImage` |
+| AppImage | `chmod +x melodia-*.AppImage && ./melodia-*.AppImage` |
 | Tarball | Extract, then run `./install-linux.sh` (no `sudo` — installs into `~/.local/share/Melodia`) |
 
 The tarball install is fully user-local, so the in-app updater works without a polkit prompt.
@@ -358,18 +358,22 @@ Melodia stores its data under the OS application-data directory
 
 Contributions are welcome. Before opening a pull request:
 
-- Run `cargo clippy --all-targets -- -D warnings` — the lint configuration is
-  strict and `unwrap()` is denied in non-test code.
-- Run `cargo test` and keep it green.
+- Run `cargo clippy --all-targets --locked -- -D warnings` — the lint
+  configuration is strict and `unwrap()` is denied in non-test code.
+- Run `cargo test --locked` and keep it green.
 - Follow the existing [Conventional Commits](https://www.conventionalcommits.org/)
   style used in the git history.
 - Open pull requests against the `dev` branch. (`main` only accepts merges from
   `dev` or a `hotfix/*` branch.)
+- Fill in the pull request template. Link the issue from the PR's Development
+  sidebar rather than with `Fixes #N` — GitHub ignores closing keywords on a PR
+  that doesn't target the default branch.
 
-Every pull request runs the **PR Validation** workflow — `clippy` (with
-`-D warnings`) and the full test suite — and the `pr-validation` check must pass
-before merging. Documentation-only changes skip both jobs. Coverage is measured
-separately on each merge to `dev` and published to GitHub Pages at
+Every pull request runs the **PR Validation** workflow — a `cargo audit`
+advisory scan, `clippy` (with `-D warnings`) and the full test suite — and the
+`pr-validation` check must pass before merging. Documentation-only changes skip
+all three. Coverage is a separate manual run
+(**Actions → Deploy Coverage → Run workflow**) published to GitHub Pages at
 [kenansalar.github.io/Melodia](https://kenansalar.github.io/Melodia/).
 
 ## License

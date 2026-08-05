@@ -14,7 +14,9 @@ body:
     id: version
     attributes:
       label: Melodia version
-      description: Settings → About, or run `Melodia --version`.
+      description: >-
+        Settings → About. From a terminal it's `melodia --version` —
+        `Melodia.exe --version` on Windows, `./melodia-*.AppImage --version` for the AppImage.
       placeholder: "0.10.0"
     validations:
       required: true
@@ -35,6 +37,7 @@ body:
     attributes:
       label: Distribution / OS version
       placeholder: "Fedora 44, Windows 11 24H2, …"
+
   - type: dropdown
     id: install-method
     attributes:
@@ -58,6 +61,7 @@ body:
         - x86_64
         - aarch64
         - Not sure
+
   - type: dropdown
     id: session
     attributes:
@@ -68,6 +72,7 @@ body:
         - X11
         - Not applicable (Windows)
         - Not sure
+
   - type: textarea
     id: what-happened
     attributes:
@@ -92,9 +97,11 @@ body:
     attributes:
       label: Log output
       description: |
-        Run `RUST_LOG=info Melodia` from a terminal and paste anything relevant.
+        Linux: run `RUST_LOG=info melodia` from a terminal (`RUST_LOG=info ./melodia-*.AppImage` for the AppImage) and paste anything relevant.
+        Windows release builds run without a console, so skip this unless you built from source.
         This is automatically formatted as code — no backticks needed.
       render: shell
+
   - type: textarea
     id: context
     attributes:
