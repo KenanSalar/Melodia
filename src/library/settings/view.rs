@@ -78,6 +78,15 @@ pub fn set_browse_path(state: &AppState, path: Option<String>) -> Result<(), App
     })
 }
 
+/// Persist the Browse view's list-versus-cards presentation. Same no-kick
+/// shape as [`set_browse_path`]: the toggle callback has already written
+/// `Browse.view-mode` and rebuilt the models by the time this runs.
+pub fn set_browse_view_mode(state: &AppState, mode: i32) -> Result<(), AppError> {
+    services::view_state::mutate_view_state(&state.paths, move |s| {
+        s.browse_view_mode = mode;
+    })
+}
+
 /// Persist the active sidebar tab so the next launch reopens on the same
 /// section. Indices follow the `Nav` global comment in `melodia-ui/ui/globals/nav.slint`.
 /// Out-of-range writes (negative / > 9) are clamped to the valid range so a

@@ -109,4 +109,15 @@ export component ArtworkImage inherits Rectangle {
         x: (parent.width - self.width) / 2;
         y: (parent.height - self.height) / 2;
     }
+    // Browse's card view, whose grid mixes subfolders and files — a folder card has no
+    // cover to have, so this is its resting state rather than a missing-artwork one.
+    if !root.shows-cover && root.fallback-icon == "folder": Image {
+        source: @image-url("../assets/icons/folder.svg");
+        colorize: root.tile-icon-color;
+        image-fit: ImageFit.contain;
+        width: parent.width * 0.55 * root.anim-scale;
+        height: parent.height * 0.55 * root.anim-scale;
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+    }
 }

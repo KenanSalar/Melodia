@@ -233,6 +233,15 @@ msgstr "Filtrar pistas…"
 msgid "Columns"
 msgstr "Columnas"
 
+msgid "Card view"
+msgstr "Vista de tarjetas"
+
+msgid "List view"
+msgstr "Vista de lista"
+
+msgid "Folder"
+msgstr "Carpeta"
+
 # ---- Track table column headers ---------------------------------------------
 
 msgid "Title"

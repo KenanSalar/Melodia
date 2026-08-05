@@ -41,26 +41,33 @@
 //! result.
 
 mod breadcrumbs;
+mod cards;
 mod fetch;
 mod models;
 mod selection;
 
+use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::Arc;
-use std::sync::atomic::AtomicU64;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
 use parking_lot::Mutex;
 use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 
-use crate::entities::browse::BrowseFile;
+use crate::entities::browse::{BrowseFile, BrowseFolder};
 use crate::media::cover_thumbs::CoverThumbs;
 use crate::services::view_state;
 use crate::ui::section_state::SectionState;
 use crate::state::AppState;
 use crate::{
-    AppWindow, Browse, BrowseFolderRow as UiBrowseFolderRow, TrackListRow as UiTrackListRow,
+    AppWindow, Browse, BrowseCardGridRow as UiBrowseCardGridRow,
+    BrowseFolderRow as UiBrowseFolderRow, TrackListRow as UiTrackListRow,
 };
 
+pub use cards::{
+    BrowseViewMode, first_screenful_paths, mode_from_index, mode_index, rebuild_cards,
+    tune_cache_for_display,
+};
 pub use fetch::{apply_row_favorite, apply_row_rating, fetch_and_apply, resort_and_apply};
 pub use selection::{clear_selection, handle_select_row};
 
@@ -79,6 +86,10 @@ pub struct BrowseUi {
     /// selection helpers, and the favourite toggle to recover full row
     /// data without round-tripping through the Slint model.
     pub(super) last_files: Mutex<Vec<BrowseFile>>,
+    /// Last fetched subfolders, in the order they are published. Cached
+    /// beside `last_files` because the card view draws both in one grid
+    /// and a mode toggle rebuilds it with no fetch to take them from.
+    pub(super) last_folders: Mutex<Vec<BrowseFolder>>,
     /// In-memory sort state. Browse can't push an `ORDER BY` to the DB
     /// (it mixes disk-only + DB files), so it re-sorts `last_files`.
     sort_field: Mutex<String>,
@@ -86,6 +97,16 @@ pub struct BrowseUi {
     /// Shared with Tracks/now-playing-bar so cached thumbnails are
     /// reused across views.
     pub(super) cover_thumbs: Arc<CoverThumbs>,
+    /// The card view's own 448 px tier — private, so releasing it can't
+    /// yank the row thumbnails the shared tier above is still serving.
+    /// Released on section-leave and whenever the view goes back to the
+    /// list. See `cards.rs`.
+    pub(super) grid_covers: Arc<CoverThumbs>,
+    /// Synchronous shadow of `Browse.view-mode`, as a bool because the
+    /// index lives only in Slint (`cards::mode_from_index`). The fetch
+    /// reads it off a tokio worker, which is why it isn't read back off
+    /// the global.
+    card_mode: AtomicBool,
     /// Stale-fetch guard. See module-level comment.
     pub(super) fetch_token: AtomicU64,
     /// Visibility and staleness bookkeeping (`section-active-changed`
@@ -102,9 +123,15 @@ impl BrowseUi {
             current_path: Mutex::new(String::new()),
             history: Mutex::new(Vec::new()),
             last_files: Mutex::new(Vec::new()),
+            last_folders: Mutex::new(Vec::new()),
             sort_field: Mutex::new("title".to_owned()),
             sort_dir: Mutex::new("asc".to_owned()),
             cover_thumbs,
+            grid_covers: Arc::new(CoverThumbs::with_config(
+                cards::GRID_COVER_SIZE,
+                cards::DEFAULT_GRID_COVER_CAP,
+            )),
+            card_mode: AtomicBool::new(false),
             fetch_token: AtomicU64::new(0),
             section: SectionState::new(),
         }
@@ -131,6 +158,76 @@ impl BrowseUi {
     /// directory must be re-fetched.
     pub fn take_dirty(&self) -> bool {
         self.section.take_dirty()
+    }
+
+    /// Which presentation is mounted.
+    pub fn view_mode(&self) -> BrowseViewMode {
+        if self.card_mode.load(Ordering::Relaxed) {
+            BrowseViewMode::Card
+        } else {
+            BrowseViewMode::List
+        }
+    }
+
+    /// Mirror `Browse.view-mode` into the synchronous shadow.
+    pub fn set_view_mode(&self, mode: BrowseViewMode) {
+        self.card_mode
+            .store(mode == BrowseViewMode::Card, Ordering::Relaxed);
+    }
+
+    /// Resolve one card's cover against the card tier, decoding only once the
+    /// tier is known warm — `generation == 0` means "just toggled or just
+    /// re-entered", so answer from the cache and let the card paint its
+    /// placeholder rather than putting a 448 px decode per visible card on the
+    /// UI thread.
+    pub fn grid_cover(&self, artwork_path: &str, generation: i32) -> slint::Image {
+        crate::ui::grid_prewarm::grid_cover(&self.grid_covers, artwork_path, generation)
+    }
+
+    /// Decode `paths` into the card tier. Blocking — call from `spawn_blocking`.
+    ///
+    /// Returns whether the tier is warm **and still holds what was decoded**: the
+    /// answer a caller's `covers-generation` bump is gated on. `false` when a
+    /// section leave or a toggle back to the list landed inside the decode, and
+    /// there the buffers are handed straight back — announcing a tier the leave
+    /// has already released puts the next cards on the decoding path. The two
+    /// warm sites (a fetch, a mode toggle) differ only in where the paths come
+    /// from, so the re-check lives here rather than at each of them.
+    ///
+    /// An empty `paths` is still a warm tier: a directory of nothing but
+    /// subfolders has no cover to wait for, and its files may load on demand.
+    pub fn warm_card_tier(&self, paths: &[PathBuf]) -> bool {
+        if !paths.is_empty() {
+            self.grid_covers.prewarm(paths);
+        }
+        // Re-checked *after* the decode — before it, the leave hasn't happened yet.
+        if self.section_active() && self.view_mode() == BrowseViewMode::Card {
+            return true;
+        }
+        self.release_grid_covers();
+        false
+    }
+
+    /// [`Self::warm_card_tier`] over the cached listing — the mode toggle's path,
+    /// which has no fetch to take a fresh file list from.
+    pub fn prewarm_card_covers(&self) -> bool {
+        if self.view_mode() != BrowseViewMode::Card {
+            return false;
+        }
+        let unique = {
+            let files = self.last_files.lock();
+            cards::first_screenful_paths(&files)
+        };
+        self.warm_card_tier(&unique)
+    }
+
+    /// Drop every card cover. Paired with a `covers-generation` rewind by the
+    /// caller, so `0` keeps meaning "this tier is cold" rather than "first toggle
+    /// of the session". Called off the UI thread on a section-leave and whenever
+    /// the view goes back to the list.
+    pub fn release_grid_covers(&self) {
+        self.grid_covers.clear();
+        crate::tasks::heap_trim::trim();
     }
 
     pub fn current_path(&self) -> String {
@@ -221,18 +318,20 @@ impl BrowseUi {
     }
 }
 
-/// Build empty `VecModel`s for `folders`, `rows`, and `breadcrumbs` and
-/// hand them to the Slint `Browse` global as `ModelRc`s. Subsequent
-/// updates locate them by downcasting back to `VecModel<T>` and mutating
-/// in place.
+/// Build empty `VecModel`s for `folders`, `rows`, `breadcrumbs` and the card
+/// grid's `card-rows`, and hand them to the Slint `Browse` global as `ModelRc`s.
+/// Subsequent updates locate them by downcasting back to `VecModel<T>` and
+/// mutating in place.
 pub fn install_browse_models(ui: &AppWindow) {
     let g = ui.global::<Browse>();
     let folders: Rc<VecModel<UiBrowseFolderRow>> = Rc::new(VecModel::default());
     let rows: Rc<VecModel<UiTrackListRow>> = Rc::new(VecModel::default());
     let crumbs: Rc<VecModel<UiBreadcrumbRow>> = Rc::new(VecModel::default());
+    let cards: Rc<VecModel<UiBrowseCardGridRow>> = Rc::new(VecModel::default());
     g.set_folders(ModelRc::from(folders));
     g.set_rows(ModelRc::from(rows));
     g.set_breadcrumbs(ModelRc::from(crumbs));
+    g.set_card_rows(ModelRc::from(cards));
 }
 
 /// Install a persistent `VecModel<i32>` for `Browse.selected-ids` so
@@ -244,16 +343,28 @@ pub fn install_browse_selection_model(ui: &AppWindow) {
     ui.global::<Browse>().set_selected_ids(ModelRc::from(model));
 }
 
-/// Seed `Browse.current-path` from `views.json`'s `browse_path` at startup
-/// and kick the initial fetch. Missing / unreadable file leaves
-/// `current-path` empty (root) and the fetch lands at the root view.
+/// Seed `Browse.current-path` and `Browse.view-mode` from `views.json` at
+/// startup and kick the initial fetch. Missing / unreadable file leaves
+/// `current-path` empty (root) and the mode on the list, and the fetch lands at
+/// the root view.
 pub fn seed_from_settings(ui: &AppWindow, state: &AppState, browse_ui: &Arc<BrowseUi>) {
-    let initial_path = view_state::read_view_state(&state.paths)
-        .ok()
-        .and_then(|s| s.browse_path)
+    let persisted = view_state::read_view_state(&state.paths).ok();
+    let initial_path = persisted
+        .as_ref()
+        .and_then(|s| s.browse_path.clone())
         .unwrap_or_default();
+    let persisted_mode = persisted.map_or(0, |s| s.browse_view_mode);
+
     browse_ui.set_path(initial_path.clone());
-    ui.global::<Browse>().set_current_path(SharedString::from(initial_path.as_str()));
+    let g = ui.global::<Browse>();
+    g.set_current_path(SharedString::from(initial_path.as_str()));
+
+    // Clamped against the Slint-declared count, the `tab-count` contract: a file
+    // written by a build with more presentations would otherwise select a branch
+    // that mounts nothing.
+    let mode_idx = crate::ui::tab_bar::clamp_tab(persisted_mode, g.get_view_mode_count());
+    g.set_view_mode(mode_idx);
+    browse_ui.set_view_mode(mode_from_index(&g, mode_idx));
 
     let weak = ui.as_weak();
     let state_clone = state.clone();

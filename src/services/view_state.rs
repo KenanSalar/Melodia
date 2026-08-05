@@ -40,6 +40,15 @@ pub struct ViewStateData {
     /// Browse view's current folder path, so the next launch reopens at
     /// the same location. `None` ⇒ land at the library-folder root.
     pub browse_path: Option<String>,
+    /// Browse view's presentation: 0 = the folder/track list, 1 = the card
+    /// grid. Clamped on read against `Browse.view-mode-count` (via
+    /// `ui::tab_bar::clamp_tab`, the same guard the four tab indices take), so
+    /// a value written by a build with more modes can't select a branch that
+    /// mounts nothing.
+    ///
+    /// An `i32` rather than a bool for the reason [`Self::favorites_tab`]
+    /// gives: a persisted view flag is an int / string / map.
+    pub browse_view_mode: i32,
     /// Sidebar tab active at last shutdown. Hydrated into
     /// `Nav.selected-index` at startup. Indices follow the `Nav` global
     /// comment (0=search, 1=browse, 2=favorites, 3=my-library,
@@ -88,6 +97,7 @@ impl Default for ViewStateData {
             view_column_widths: HashMap::new(),
             view_sort: HashMap::new(),
             browse_path: None,
+            browse_view_mode: 0,
             last_nav_index: default_last_nav_index(),
             last_detail_ids: HashMap::new(),
             artist_albums_collapsed: false,

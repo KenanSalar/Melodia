@@ -235,6 +235,15 @@ msgstr "Φιλτράρισμα κομματιών…"
 msgid "Columns"
 msgstr "Στήλες"
 
+msgid "Card view"
+msgstr "Προβολή καρτών"
+
+msgid "List view"
+msgstr "Προβολή λίστας"
+
+msgid "Folder"
+msgstr "Φάκελος"
+
 # ---- Track table column headers ---------------------------------------------
 
 msgid "Title"

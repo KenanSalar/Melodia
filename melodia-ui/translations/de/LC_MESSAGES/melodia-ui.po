@@ -233,6 +233,15 @@ msgstr "Lieder filtern…"
 msgid "Columns"
 msgstr "Spalten"
 
+msgid "Card view"
+msgstr "Kartenansicht"
+
+msgid "List view"
+msgstr "Listenansicht"
+
+msgid "Folder"
+msgstr "Ordner"
+
 # ---- Track table column headers ---------------------------------------------
 
 msgid "Title"

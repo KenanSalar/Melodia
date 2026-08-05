@@ -248,6 +248,7 @@ pub fn install_views(
     ui::playlists::tune_cache_for_display(app, &playlists_ui);
     ui::favorites::tune_cache_for_display(app, &favorites_ui);
     ui::recently_played::tune_cache_for_display(app, &recently_played_ui);
+    ui::browse::tune_cache_for_display(app, &browse_ui);
 
     // `browse_ui` / `favorites_ui` / `search_ui` are deliberately dropped here:
     // their `wire_*` closures each hold a strong `Arc` clone, so the objects

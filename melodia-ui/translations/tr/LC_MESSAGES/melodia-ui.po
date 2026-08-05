@@ -238,6 +238,15 @@ msgstr "Parçaları filtrele…"
 msgid "Columns"
 msgstr "Sütunlar"
 
+msgid "Card view"
+msgstr "Kart görünümü"
+
+msgid "List view"
+msgstr "Liste görünümü"
+
+msgid "Folder"
+msgstr "Klasör"
+
 # ---- Track table column headers ---------------------------------------------
 
 msgid "Title"

@@ -233,6 +233,15 @@ msgstr "Filtra brani…"
 msgid "Columns"
 msgstr "Colonne"
 
+msgid "Card view"
+msgstr "Vista a schede"
+
+msgid "List view"
+msgstr "Vista a elenco"
+
+msgid "Folder"
+msgstr "Cartella"
+
 # ---- Track table column headers ---------------------------------------------
 
 msgid "Title"

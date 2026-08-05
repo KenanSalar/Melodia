@@ -17,6 +17,7 @@ fn test_view_state_default() {
     assert!(vs.view_column_widths.is_empty());
     assert!(vs.view_sort.is_empty());
     assert!(vs.browse_path.is_none());
+    assert_eq!(vs.browse_view_mode, 0);
     assert!(vs.last_detail_ids.is_empty());
     assert!(!vs.artist_albums_collapsed);
     assert_eq!(vs.settings_tab, 0);
@@ -33,7 +34,9 @@ fn test_view_state_missing_fields_default() -> Result<(), AppError> {
     assert_eq!(vs.last_nav_index, 3);
     assert!(vs.view_sort.is_empty());
     // Written before either page had tabs — must read back as the first tab,
-    // not fail the whole file.
+    // not fail the whole file. Browse's presentation is the same story: a file
+    // predating the card view lands on the list.
+    assert_eq!(vs.browse_view_mode, 0);
     assert_eq!(vs.settings_tab, 0);
     assert_eq!(vs.favorites_tab, 0);
     assert_eq!(vs.recently_played_tab, 0);
@@ -62,6 +65,7 @@ fn test_view_state_ignores_the_retired_collapse_flags() -> Result<(), AppError> 
 fn test_view_state_roundtrip() -> Result<(), AppError> {
     let vs = ViewStateData {
         browse_path: Some("/music/rock".to_owned()),
+        browse_view_mode: 1,
         last_nav_index: 5,
         artist_albums_collapsed: true,
         last_detail_ids: HashMap::from([("album_detail".to_owned(), 42)]),
@@ -73,6 +77,7 @@ fn test_view_state_roundtrip() -> Result<(), AppError> {
     let json = serde_json::to_string(&vs).map_err(|e| json_err(&e))?;
     let back: ViewStateData = serde_json::from_str(&json).map_err(|e| json_err(&e))?;
     assert_eq!(back.browse_path.as_deref(), Some("/music/rock"));
+    assert_eq!(back.browse_view_mode, 1);
     assert_eq!(back.last_nav_index, 5);
     assert!(back.artist_albums_collapsed);
     assert_eq!(back.last_detail_ids.get("album_detail").copied(), Some(42));
