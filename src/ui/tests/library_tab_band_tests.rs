@@ -90,7 +90,7 @@ fn the_header_budget_reserves_against_published_floors() {
     );
 }
 
-/// Unlike the mosaic band, this bar sits on two different surfaces: `Theme.mantle`
+/// Unlike the mosaic band, this bar sits on two different surfaces: `Theme.base`
 /// idle, the entity's solved blur with a detail open. So each of its four brushes
 /// is a *pair*, and dropping either half is a bug that only shows in one state —
 /// a theme token left on the hero arm washes out over a cover, and a hero tier
@@ -269,15 +269,25 @@ fn the_morph_progress_is_seeded_by_its_binding_and_written_by_its_handler() {
 /// did. So it takes the `MetaChip` pair and not `Theme.floating-chrome-bg`: that
 /// token answers a question about the theme's own surface ladder, which is not
 /// what this glyph contrasts against.
+///
+/// `hover-bg` is the half that fails silently, and the reason this covers three
+/// brushes rather than two: `IconButton` defaults it to an opaque
+/// `Theme.surface0`, so an omission builds, reads correctly at rest, and paints
+/// the theme's grey over the entity's blur the moment the pointer lands.
+/// `AccentDiscButton` carries the same override for the same reason.
 #[test]
-fn the_back_button_takes_both_brushes_from_the_backdrop() {
+fn the_back_button_takes_every_brush_from_the_backdrop() {
     let button = code()
         .split_once("icon: \"arrow_back\";")
         .and_then(|(_, rest)| rest.split_once("clicked =>"))
         .map_or(String::new(), |(body, _)| body.to_owned());
     assert!(!button.is_empty(), "the band no longer mounts a back button ahead of its click handler");
 
-    for (prop, tier) in [("idle-bg", "HeroBackdrop.chip-fill"), ("idle-fg", "HeroBackdrop.chrome")] {
+    for (prop, tier) in [
+        ("idle-bg", "HeroBackdrop.chip-fill"),
+        ("hover-bg", "HeroBackdrop.disc-hover"),
+        ("idle-fg", "HeroBackdrop.chrome"),
+    ] {
         assert!(
             button.contains(&format!("{prop}: {tier};")),
             "the back button must take `{prop}` from `{tier}` — it paints on the solved band, and \
@@ -300,7 +310,7 @@ fn the_idle_pane_folds_its_alpha_into_the_brush() {
     assert!(!pane.is_empty(), "the band no longer declares `idle-pane`");
 
     assert!(
-        pane.contains("background: Theme.mantle.with-alpha(1.0 - root.hero-t);"),
+        pane.contains("background: Theme.base.with-alpha(1.0 - root.hero-t);"),
         "the idle pane must fade by alpha inside its brush"
     );
     assert!(

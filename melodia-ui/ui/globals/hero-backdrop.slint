@@ -30,6 +30,13 @@ export global HeroBackdrop {
     // Now Playing ones being the same component.
     out property <brush> chip-fill: root.chrome.with-alpha(0.16);
 
+    // The band's back button on hover, at `np-accent-disc-hover`'s weight — the two discs
+    // are the same control on two backdrops, so they climb the same ladder. Named for the
+    // reason that one is, despite the single reader: `IconButton` defaults `hover-bg` to
+    // an opaque `Theme.surface0`, so a mount that forgets it flashes the theme's grey over
+    // the blur, and a tier is harder to forget than an alpha.
+    out property <brush> disc-hover: root.chrome.with-alpha(0.3);
+
     // The title and its secondary line, and the meta line under them. Solved per artwork
     // exactly as `np-*` is — same call, same 4.5:1 and 3:1 targets against the
     // *composited* band, same chroma caps — so a hero reads as near-white carrying a

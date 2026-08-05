@@ -228,12 +228,15 @@ export component LibraryTabBand inherits Rectangle {
 
     // The idle pane, over the backdrop rather than instead of it. **The alpha is folded
     // into the brush** — `opacity` on an element costs a layer, and this one is full-bleed
-    // and animating for the whole morph. `mantle` rather than `base`: the band reads as
-    // chrome pinned above the panel, one step off it under every theme.
+    // and animating for the whole morph. `base` rather than `mantle`: the band is the top
+    // of the page and not chrome pinned above it, so it takes the content panel's own
+    // fill and the tabs sit *in* the view. A step darker read as a separate slab, since
+    // nothing separates the two — no border, no gap, and the grid starts immediately
+    // under it.
     idle-pane := Rectangle {
         x: 0; y: 0;
         width: 100%; height: 100%;
-        background: Theme.mantle.with-alpha(1.0 - root.hero-t);
+        background: Theme.base.with-alpha(1.0 - root.hero-t);
     }
 
     VerticalLayout {
@@ -255,11 +258,16 @@ export component LibraryTabBand inherits Rectangle {
                     icon: "arrow_back";
                     icon-size: 20px;
                     diameter: root.pill-h;
-                    // The `MetaChip` pair. The retired `DetailHeader`'s button took
-                    // `Theme.floating-chrome-bg`, which is right for a disc floating over
-                    // a full-bleed hero and wrong for one sitting in the tab row beside
-                    // labels that are already on hero tiers.
+                    // The `MetaChip` pair, and `AccentDiscButton`'s ladder for the hover —
+                    // the Now Playing back button is this same control on the other
+                    // backdrop. `hover-bg` has to be named beside `idle-bg`: the component
+                    // defaults it to an opaque `Theme.surface0`, which paints the theme's
+                    // grey over the blur the moment the pointer lands. The retired
+                    // `DetailHeader`'s button took `Theme.floating-chrome-bg`, which is
+                    // right for a disc floating over a full-bleed hero and wrong for one
+                    // sitting in the tab row beside labels that are already on hero tiers.
                     idle-bg: HeroBackdrop.chip-fill;
+                    hover-bg: HeroBackdrop.disc-hover;
                     idle-fg: HeroBackdrop.chrome;
                     opacity: root.hero-t;
                     clicked => { root.back-clicked(); }
