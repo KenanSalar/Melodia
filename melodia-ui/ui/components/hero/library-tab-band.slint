@@ -109,17 +109,6 @@ export component LibraryTabBand inherits Rectangle {
         easing: cubic-bezier(0.2, 0, 0, 1);
     }
 
-    // **What may gate an `if` here is decided by whether the branch carries a `changed`
-    // handler, and the meta column below does.** A dropped repeater instance keeps its
-    // memory alive for weak refs, so the `ChangeTracker` sitting inside it stays
-    // registered — and `ChangeTracker::evaluate` upgrades its weak handle with an
-    // `unwrap`. Drop such a branch from *inside* `run_change_handlers` — which is what a
-    // handler that writes the condition does — and the next dirty tick of
-    // `MetaChipStrip`'s `changed watched-w`, inlined into the chip strip the meta column
-    // mounts, panics. So the columns keep the two predicates they shipped with: the
-    // chip-bearing one on `detail-open`, which only ever changes from a Rust write, and
-    // the artwork and back slot on `hero-t`, which carry no handler to strand.
-
     // Armed by the handler above rather than gated on a bool, so a re-open genuinely
     // *cancels* it: the same edge that restarts the morph writes `running` back to false
     // and no stale teardown is left in flight. Starts idle — a page mounted with no detail
@@ -133,23 +122,80 @@ export component LibraryTabBand inherits Rectangle {
         }
     }
 
-    // The bar's four brushes cross with the pane under them. Separate `animate` blocks
-    // rather than a lerp off `hero-t`, since `.mix()` takes `color` operands and these
-    // are brushes; keyed on `detail-open` rather than on `hero-t` so a re-solve landing
-    // mid-morph (a fresh artwork arriving) eases the colour on its own timeline instead
-    // of snapping to whatever the height happens to be at.
-    property <brush> label-brush:
-        root.detail-open ? HeroBackdrop.on-backdrop : Theme.text;
-    property <brush> active-brush:
-        root.detail-open ? HeroBackdrop.chrome : Theme.accent;
-    property <brush> hover-brush:
-        root.detail-open ? HeroBackdrop.on-backdrop.with-alpha(0.12) : Theme.surface0;
-    property <brush> divider-brush:
-        root.detail-open ? HeroBackdrop.tile-edge : Theme.surface1;
-    animate label-brush, active-brush, hover-brush, divider-brush {
-        duration: Theme.dur-spatial;
-        easing: cubic-bezier(0.2, 0, 0, 1);
+    // **Is any of the hero on screen** — true from the frame the detail id lands until the
+    // morph has finished collapsing, which is one frame longer at *each* end than
+    // `detail-open` and one frame longer at the start than `hero-t > 0`. Both ends were
+    // bugs. The handler above *writes* `hero-t`, so the morph genuinely starts at 0 and a
+    // branch gated on the detail mounted a frame before one gated on the morph: for that
+    // frame the title block laid out as its row's only child, hard left, under the count
+    // line that paints over it, then jumped a tile's width right. And gated on the detail
+    // alone it left on the frame the id cleared, while the tile beside it faded on for the
+    // full 400 ms.
+    //
+    // **What may hang off it is decided by the chip strip's change tracker, and the strip
+    // is why the meta column below has no `if` at all.** A dropped repeater instance keeps
+    // its memory alive for weak refs, so a `ChangeTracker` inside it stays registered, and
+    // `ChangeTracker::evaluate` upgrades its weak handle with an `unwrap`. `MetaChipStrip`'s
+    // `changed watched-w` watches a *layout* property, so the surviving parent re-dirties
+    // it whenever it re-flows — which during a morph is every single frame, the easing back
+    // slot moving the column's width under it. Drop that branch on the frame the ease ends
+    // and the queued tracker fires against a dead handle: `Option::unwrap()` on `None`,
+    // 400 ms after a back click. A timer's `triggered` is no safer than an animated
+    // predicate here, and neither is a Rust write — the queue is what matters, not the
+    // writer. So the strip is mounted for the life of the band and fades by **brush alpha**
+    // instead, and only the tracker-free pieces ride this. See
+    // `.claude/rules/slint-pitfalls.md`.
+    property <bool> hero-shown: root.detail-open || root.hero-t > 0;
+
+    // --- The bar's palette ---------------------------------------------------
+    //
+    // Four brushes that cross with the pane under them: `Theme.*` tokens on the flat idle
+    // band, solved `HeroBackdrop` tiers over the entity's blur. Separate brushes rather
+    // than one lerp off `hero-t`, since `.mix()` takes `color` operands and every token on
+    // both sides is a `brush`.
+    //
+    // **A state transition, not four `animate` blocks, because the hero half of each pair
+    // arrives late.** The solve rides the artwork decode, so it lands well into the morph —
+    // and an animated *binding* restarts whenever a dependency is marked dirty rather than
+    // when its value changes, so each `animate` was torn down at that moment and re-based,
+    // finishing a full `dur-spatial` after the decode instead of with the height it was
+    // meant to move with. A transition takes its start time from the **state change**
+    // (`change_time`, the optional start `set_animated_binding` carries for exactly this),
+    // so the crossing begins and ends with the morph however often the target moves
+    // underneath it.
+    property <brush> label-brush: Theme.text;
+    property <brush> active-brush: Theme.accent;
+    property <brush> hover-brush: Theme.surface0;
+    property <brush> divider-brush: Theme.surface1;
+
+    // The hero half, mirrored locally so a late solve *moves* rather than steps. The
+    // emphasized curve spends most of its travel in the first quarter, so by the time a
+    // decode lands the crossing above is nearly settled and would adopt the new tier in one
+    // frame. These carry the re-tint instead, on a curve short enough to finish inside the
+    // morph when the decode is quick and to stay smooth when it isn't.
+    property <brush> hero-label: HeroBackdrop.on-backdrop;
+    property <brush> hero-active: HeroBackdrop.chrome;
+    property <brush> hero-hover: HeroBackdrop.on-backdrop.with-alpha(0.12);
+    property <brush> hero-divider: HeroBackdrop.tile-edge;
+    animate hero-label, hero-active, hero-hover, hero-divider {
+        duration: Theme.dur-med;
+        easing: ease-in-out;
     }
+
+    states [
+        hero when root.detail-open: {
+            label-brush: root.hero-label;
+            active-brush: root.hero-active;
+            hover-brush: root.hero-hover;
+            divider-brush: root.hero-divider;
+            in-out {
+                animate label-brush, active-brush, hover-brush, divider-brush {
+                    duration: Theme.dur-spatial;
+                    easing: cubic-bezier(0.2, 0, 0, 1);
+                }
+            }
+        }
+    ]
 
     // --- The header width budget --------------------------------------------
     //
@@ -290,7 +336,7 @@ export component LibraryTabBand inherits Rectangle {
 
             // Opens with the morph. Clipped rather than faded on width alone, since the
             // disc is incompressible and would otherwise draw over the first tab.
-            if root.hero-t > 0: Rectangle {
+            if root.hero-shown: Rectangle {
                 width: root.back-slot-w;
                 clip: true;
                 IconButton {
@@ -371,7 +417,7 @@ export component LibraryTabBand inherits Rectangle {
             vertical-stretch: 1;
             spacing: Theme.pad-lg;
 
-            if root.hero-t > 0: VerticalLayout {
+            if root.hero-shown: VerticalLayout {
                 alignment: start;
                 horizontal-stretch: 0;
                 // Acceptable *here*, unlike the idle pane: it settles at 1.0, so there is
@@ -401,19 +447,16 @@ export component LibraryTabBand inherits Rectangle {
                 }
             }
 
-            // **This one stays on `detail-open`, and it is the only column that may not
-            // move onto the morph** — it mounts `HeroChipStrip`, which is where the
-            // `changed watched-w` handler lives. See the note beside `hero-t`: a branch
-            // carrying a change tracker must be dropped by a Rust write and nothing else,
-            // or the tracker outlives it and `unwrap`s a dead weak handle. So the title
-            // block leaves on the frame the id clears while the artwork and the backdrop
-            // beside it fade out — which is what the latched arm and the deferred teardown
-            // are for: the tile it collapses is the entity's own cover, not a placeholder.
+            // **The one column with no `if` on it**, because the chip strip at the bottom
+            // carries the change tracker and nothing may drop it — see the note beside
+            // `hero-shown`. In idle it is an empty strip and a spacer inside a clipped
+            // 40 px row: no layer, no glyph, and the rows `hero_chips::clear` emptied at
+            // the end of the last collapse are what make it draw nothing at all.
             //
             // The idle count line is not this column's opposite number any more and doesn't
             // live here: it rides the band's lower edge with the pill row, which is the
             // line it already shared.
-            if root.detail-open: VerticalLayout {
+            VerticalLayout {
                 horizontal-stretch: 1;
                 alignment: stretch;
                 spacing: Theme.pad-xs;
@@ -422,96 +465,120 @@ export component LibraryTabBand inherits Rectangle {
                 // when the pill row was a child of this column.
                 padding-bottom: root.pill-h + Theme.pad-xs;
 
-                HorizontalLayout {
+                // The text half *may* ride the morph — no tracker anywhere under it — so it
+                // takes the cheaper fade of the two. `opacity` is free at rest here because
+                // rest is `hero-t == 1`, where `Opacity::need_layer` bails before it counts
+                // children, and idle unmounts the branch outright.
+                if root.hero-shown: VerticalLayout {
                     vertical-stretch: 0;
-                    spacing: Theme.pad-sm;
-                    alignment: start;
+                    spacing: Theme.pad-xs;
+                    opacity: root.hero-t;
 
-                    // Playlist Detail's smart badge, matching the grid card's corner.
-                    if root.title-badge: VerticalLayout {
-                        alignment: center;
-                        MaterialIcon {
-                            name: "auto_awesome";
-                            icon-size: 22px;
-                            icon-color: HeroBackdrop.chrome;
-                            filled: true;
+                    HorizontalLayout {
+                        vertical-stretch: 0;
+                        spacing: Theme.pad-sm;
+                        alignment: start;
+
+                        // Playlist Detail's smart badge, matching the grid card's corner.
+                        if root.title-badge: VerticalLayout {
+                            alignment: center;
+                            MaterialIcon {
+                                name: "auto_awesome";
+                                icon-size: 22px;
+                                icon-color: HeroBackdrop.chrome;
+                                filled: true;
+                            }
+                        }
+
+                        Text {
+                            text: "\u{200e}" + root.title;
+                            color: HeroBackdrop.on-backdrop;
+                            font-size: Theme.hero-title-size;
+                            font-weight: Theme.page-title-weight;
+                            horizontal-alignment: left;
+                            overflow: elide;
                         }
                     }
 
-                    Text {
-                        text: "\u{200e}" + root.title;
+                    if root.subtitle != "": Text {
+                        vertical-stretch: 0;
+                        text: "\u{200e}" + root.subtitle;
                         color: HeroBackdrop.on-backdrop;
-                        font-size: Theme.hero-title-size;
-                        font-weight: Theme.page-title-weight;
+                        font-size: Theme.font-size-md;
                         horizontal-alignment: left;
                         overflow: elide;
                     }
                 }
 
-                if root.subtitle != "": Text {
-                    vertical-stretch: 0;
-                    text: "\u{200e}" + root.subtitle;
-                    color: HeroBackdrop.on-backdrop;
-                    font-size: Theme.font-size-md;
-                    horizontal-alignment: left;
-                    overflow: elide;
-                }
-
-                // Built by `ui::hero_chips` off the stats the fetch already returned.
-                // **Gated on the detail rather than left to publish nothing**: the rows
-                // live on a global six heroes share and outlive whichever filled them,
-                // and this page publishes none of its own in idle, so it would have
-                // nothing to clear if a stale set arrived.
-                HeroChipStrip { }
+                // Built by `ui::hero_chips` off the stats the fetch already returned. The
+                // rows live on a global six heroes share and outlive whichever filled them;
+                // this page publishes none of its own in idle, so what empties the strip is
+                // the collapse's own teardown rather than an `if` here — which it could not
+                // be anyway, this being the tracker's home.
+                HeroChipStrip { fade: root.hero-t; }
 
                 Rectangle { vertical-stretch: 1; }
             }
         }
     }
 
-    // The idle count line and the action pills — the tab's, or the open detail's. **A
-    // floating slot rather than children of the meta column**, because Slint allows one
-    // `@children` and the two states need it in different places; the column reserves the
-    // band above and this rides the root's own lower edge, which is the meta row's floor
-    // in both states — so no anchor has to be interpolated and the slot simply follows the
-    // height. A `HorizontalLayout` rather than a bare `Rectangle`: the pill rows are
-    // `if`-conditional and a Rectangle reports 0×0 over conditional children.
+    // The idle count line. **Anchored to the *compact* band's floor, not to the root's** —
+    // which is the whole difference between it and the pill row below. A detail's pills
+    // belong on whichever floor is current, so they follow the height; this sentence
+    // belongs where it already sits, and riding the height dragged it down out of the page
+    // and shoved it back in. So it holds still vertically and leaves sideways instead:
+    // fading out to the left as the hero opens, sliding back in from the left as the band
+    // collapses. `count-slide` is `ViewTransition`'s own axis travel, so the line leaves
+    // the way a view does.
     //
-    // **The count is here because that is the line it was already drawn on**, and putting
-    // it in the meta column cost it the one thing this slot has: an anchor that follows
-    // the height. Centred in a row whose own floor is the 140 px artwork tile, it kept
-    // being laid out below the shrinking band and clipped away entirely, then snapped back
-    // into place the frame the tile unmounted — visible as the line vanishing mid-collapse
-    // and reappearing at the end.
+    // Both ends ride `hero-t`, which is the morph's clock — no second animation to keep in
+    // step, and the reversal is free. The alpha is a *bias* off the same source rather than
+    // its plain complement, the `tab-bar.slint` idiom: the artwork tile fading in behind it
+    // takes that curve too, and at equal weights the two read over each other for the first
+    // frames. Folded into the brush, never `opacity`, which would cost a layer for the
+    // whole length of every detail.
     //
-    // `space-between` rather than a stretchy spacer: `@children` is whatever the host
-    // hands over, and a spacer only pushes it right if nothing inside it stretches.
+    // A bare `Text` with a bound width, per the faked-placeholder pitfall: elide alone
+    // doesn't hold a Text inside a non-layout parent, since its `preferred-width` stays the
+    // untruncated string. The width stops short of the pills so a long count can't paint
+    // through them — `space-between` used to negotiate that, and squeezed the pills to do it.
+    property <length> count-slide: 32px;
+
+    Text {
+        x: Theme.pad-lg - root.count-slide * root.hero-t;
+        y: root.compact-h - Theme.pad-lg - root.pill-h;
+        width: root.page-w - 2 * Theme.pad-lg - pills.width - Theme.pad-md;
+        height: root.pill-h;
+        // Leading LRM keeps the line left-anchored under RTL.
+        text: "\u{200e}" + root.count-text;
+        color: Theme.text.with-alpha(clamp(1.0 - root.hero-t * 2.0, 0.0, 1.0));
+        font-size: Theme.page-title-size;
+        font-weight: Theme.page-title-weight;
+        horizontal-alignment: left;
+        vertical-alignment: center;
+        overflow: elide;
+    }
+
+    // The action pills — the tab's, or the open detail's. **A floating slot rather than
+    // children of the meta column**, because Slint allows one `@children` and the two
+    // states need it in different places; the column reserves the band above and this rides
+    // the root's own lower edge, which is the meta row's floor in both states — so no
+    // anchor has to be interpolated and the slot simply follows the height. A
+    // `HorizontalLayout` rather than a bare `Rectangle`: the pill rows are `if`-conditional
+    // and a Rectangle reports 0×0 over conditional children.
+    //
+    // `pills` is a cell of its own so the count line can reserve against it: under
+    // `alignment: end` it is handed exactly the width the host's row asks for, and nothing
+    // in that width reads back the count's.
     HorizontalLayout {
         x: Theme.pad-lg;
         y: root.height - Theme.pad-lg - root.pill-h;
         width: root.page-w - 2 * Theme.pad-lg;
         height: root.pill-h;
-        alignment: space-between;
+        alignment: end;
 
-        // Faded rather than swapped, so it arrives with the band instead of on the frame
-        // the hero column unmounts. Mounted in both states besides: `space-between` over a
-        // single child packs it at the *start*, which would walk the pill row to the left
-        // edge for the length of every detail.
-        VerticalLayout {
-            alignment: center;
-            opacity: 1.0 - root.hero-t;
-
-            Text {
-                // Leading LRM keeps the line left-anchored under RTL.
-                text: "\u{200e}" + root.count-text;
-                color: Theme.text;
-                font-size: Theme.page-title-size;
-                font-weight: Theme.page-title-weight;
-                horizontal-alignment: left;
-                overflow: elide;
-            }
+        pills := HorizontalLayout {
+            @children
         }
-
-        @children
     }
 }

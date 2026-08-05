@@ -428,6 +428,49 @@ fn every_painted_brush_is_an_input() {
     );
 }
 
+/// **A cell may not ease a colour its host is already easing**, and the icon is
+/// the one that tried.
+///
+/// It carried a `dur-fast` `animate icon-color`, which bought nothing on a pick —
+/// the label beside it snaps and `filled` swaps font face in a single frame — and
+/// cost the bar every crossing a host paints. `LibraryTabBand` hands these four
+/// brushes over *animating* for the length of its 400 ms morph, so the binding's
+/// dependency was re-dirtied every frame; an animated binding restarts on
+/// dirtiness rather than on a value change, so it re-based from the current
+/// colour with its clock back at zero and the glyph sat still until the source
+/// stopped, then caught up in one late rush. That is the whole "the tab colours
+/// change at the end of the morph" symptom, in both directions, and a cell has no
+/// way to tell an eased input from a stepped one — so the fix is to not ease
+/// here at all.
+///
+/// The hover fill keeps its `animate` on purpose: its binding reads `hover-fill`
+/// only on the hovered arm, so a morph with no pointer on the bar never dirties
+/// it, and the fade is the whole of what a state layer is.
+#[test]
+fn the_cell_eases_no_colour_its_host_may_be_easing() {
+    // Comments dropped, so the prose above each of these can neither satisfy a
+    // pin nor trip one — the file argues the absence at length.
+    let cell: String = TAB_BAR
+        .split_once("component TabBarCell")
+        .and_then(|(_, body)| body.split_once("export component TabBar"))
+        .map(|(body, _)| body)
+        .unwrap_or_default()
+        .lines()
+        .filter(|line| !line.trim_start().starts_with("//"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(cell.contains("icon-color:"), "the cell no longer paints its icon");
+
+    for prop in ["icon-color", "label-color", "color"] {
+        assert!(
+            !cell.contains(&format!("animate {prop}")),
+            "`TabBarCell` must not `animate {prop}` — a host on a hero band feeds these brushes \
+             from its own crossing, and an animated binding fed a moving source restarts every \
+             frame and stalls until that source settles"
+        );
+    }
+}
+
 /// A cell writes `selected-index` before it emits `selected`, and it has to —
 /// the `<=>` on that property is what carries the pick out to the host. So by
 /// the time a host's handler runs, `selected-index` and anything two-way bound
