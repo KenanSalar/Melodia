@@ -4,8 +4,7 @@ import { NavEnterFrom } from "../../globals/nav.slint";
 import { HeroBlurBackdrop } from "../hero-blur-backdrop.slint";
 import { HeroChipStrip } from "../hero-chip-strip.slint";
 import { MosaicHeroTile } from "mosaic-hero-tile.slint";
-import { SearchBar } from "../search-bar.slint";
-import { TabBar } from "../tab-bar.slint";
+import { TabSearchHeader } from "tab-search-header.slint";
 
 // The pinned banner both tabbed mosaic pages wear: a header row carrying the tab
 // bar and the filter, over the artwork square, the title and the chip band.
@@ -16,10 +15,14 @@ import { TabBar } from "../tab-bar.slint";
 // global, and `Favorites` / `RecentlyPlayed` are distinct generated types with
 // nothing between them — so every fact arrives as a property and every write
 // leaves as a callback. That is the same wall `impl_mosaic_hero!` works around on
-// the Rust side, and the reason this is a component rather than a third copy: the
-// arithmetic below is five separately paid-for fixes, and a copy is where one of
-// them silently goes missing. The Settings page keeps its own header row — no
-// hero, no mosaic, no title, and its bar takes the `Theme.*` defaults.
+// the Rust side, and the reason this is a component rather than a third copy.
+//
+// **The header row is no longer among what this file owns.** It was five
+// separately paid-for fixes spelled here, again in `library-tab-band.slint`, and a
+// third time in `settings-view.slint` — a copy being exactly where one of them
+// silently goes missing. `TabSearchHeader` is that row; the Settings page mounts
+// the same one and simply takes its `Theme.*` brush defaults, having no blur to
+// paint on. What is left below is the mosaic square, the title and the chip band.
 export component MosaicTabHero inherits Rectangle {
     // **Inline `[@tr("…"), …]` literals at the call site.** `@tr` registers
     // msgids at codegen, so an array populated from Rust renders untranslated —
@@ -63,19 +66,12 @@ export component MosaicTabHero inherits Rectangle {
     // --- The header width budget ------------------------------------------
     //
     // `page-w` is a **mirror**, written imperatively because a live `root.width`
-    // read feeding a child's size re-enters layout, and seeded at this row's own
-    // **floor**: seeded wide, the bar believes it can afford full-width tabs and
-    // draws them into a panel that can't seat them, which is exactly what a
-    // miniplayer → full swap produces. The mount Timer beside it is mandatory —
-    // `changed` doesn't fire when the first layout settles directly on the final
-    // value, and a window opened at its final size is that case.
-    property <length> search-w-max: 220px;
-    // Off the bar's and the input's own published floors, never restated, so
-    // neither end can drift from the component it budgets for.
-    property <length> search-w-min: search.min-w;
-
-    property <length> page-w:
-        2 * Theme.pad-lg + bar.compact-w + 2 * Theme.pad-md + root.search-w-max;
+    // read feeding a child's size re-enters layout, and seeded at the header
+    // row's own **floor**, which that component publishes rather than this one
+    // restating. The mount Timer beside it is mandatory — `changed` doesn't fire
+    // when the first layout settles directly on the final value, and a window
+    // opened at its final size is that case.
+    property <length> page-w: 2 * Theme.pad-lg + header.row-floor;
     changed width => { self.page-w = self.width; }
 
     Timer {
@@ -86,46 +82,28 @@ export component MosaicTabHero inherits Rectangle {
         }
     }
 
-    property <length> content-w: root.page-w - 2 * Theme.pad-lg;
-
-    // **The filter yields before the tabs do**: tabs navigate, search only
-    // refines what a tab already shows.
-    property <length> search-w: clamp(
-        root.content-w - bar.compact-w - 2 * Theme.pad-md,
-        root.search-w-min, root.search-w-max);
-
-    // The bar's own height, restated so the band can reserve its row.
-    property <length> tab-row-h: 48px;
     // Derived rather than a literal, so growing the artwork or the bar can't
-    // leave the banner cropping its own contents.
+    // leave the banner cropping its own contents. The row's height comes off the
+    // bar itself, through the header.
     out property <length> hero-height:
-        2 * Theme.pad-lg + root.tab-row-h + Theme.pad-md + Theme.hero-artwork;
+        2 * Theme.pad-lg + header.row-h + Theme.pad-md + Theme.hero-artwork;
 
-    // --- What the host's tab bodies read ----------------------------------
+    // --- Forwarded from the shared header ---------------------------------
     //
-    // Which way a body enters is `bar.previous-index`'s job, and it has to be:
-    // the page can be re-entered on any tab, and everything else in reach already
-    // reads the tab just picked, the bar writing `selected-index` before it emits
-    // `selected`. Arming starts `false` so the page's own fade-up isn't compounded
-    // with a horizontal slide — the two together read as a diagonal — and it
-    // re-disarms for free, the page being rebuilt on every entry.
-    out property <NavEnterFrom> tab-enter-from: NavEnterFrom.right;
-    out property <bool> tab-anim-armed: false;
+    // Re-published under the names the two curated pages already read, so the
+    // extraction is invisible to them. What each one is for is argued in
+    // `tab-search-header.slint`.
+    out property <NavEnterFrom> tab-enter-from <=> header.tab-enter-from;
+    out property <bool> tab-anim-armed <=> header.tab-anim-armed;
 
-    // --- The compact-mode tooltip's anchor --------------------------------
-    //
-    // Published rather than drawn here: the pill has to be declared *after* the
-    // scroll body, and Slint paints in declaration order, so anything this band
-    // owns is covered by the content below it. Equal-width cells are what let the
-    // rect come from the *index*, so a tab that moves under a parked pointer keeps
-    // its tooltip anchored — and since `tab-w` eases, the frame morphs with it.
     out property <length> tip-x:
-        bar.absolute-position.x - root.absolute-position.x + bar.tab-w * bar.hovered-idx;
-    out property <length> tip-y: bar.absolute-position.y - root.absolute-position.y;
-    out property <length> tip-w: bar.tab-w;
-    out property <length> tip-h: bar.height;
-    out property <string> tip-label: bar.hovered-label;
-    out property <bool> tip-visible: bar.hovered-idx >= 0 && bar.compact;
+        header.absolute-position.x - root.absolute-position.x + header.tip-x;
+    out property <length> tip-y:
+        header.absolute-position.y - root.absolute-position.y + header.tip-y;
+    out property <length> tip-w <=> header.tip-w;
+    out property <length> tip-h <=> header.tip-h;
+    out property <string> tip-label <=> header.tip-label;
+    out property <bool> tip-visible <=> header.tip-visible;
 
     vertical-stretch: 0;
     height: root.hero-height;
@@ -145,60 +123,35 @@ export component MosaicTabHero inherits Rectangle {
         padding: Theme.pad-lg;
         spacing: Theme.pad-md;
 
-        // The Settings header row, on a banner. Both paint on the blur, so the
-        // bar takes `HeroBackdrop` tiers rather than its `Theme.*` defaults;
-        // `SearchBar` is the documented exception and keeps its own chrome.
-        HorizontalLayout {
-            vertical-stretch: 0;
-            spacing: Theme.pad-md;
+        // The Settings header row, on a banner — the same component, which is why
+        // it takes brushes at all. Both paint on the blur, so the bar takes
+        // `HeroBackdrop` tiers rather than its `Theme.*` defaults; `SearchBar` is
+        // the documented exception and keeps its own chrome.
+        header := TabSearchHeader {
+            tab-labels: root.tab-labels;
+            tab-icons: root.tab-icons;
+            tab-idx <=> root.tab-idx;
+            avail-w: root.page-w - 2 * Theme.pad-lg;
 
-            bar := TabBar {
-                labels: root.tab-labels;
-                icons: root.tab-icons;
-                avail-width: root.content-w - root.search-w - 2 * Theme.pad-md;
-                selected-index <=> root.tab-idx;
-                label-color: HeroBackdrop.on-backdrop;
-                // One input for the selected label, its FILL=1 icon and the
-                // underline, so it has to be a hero token like the other three.
-                // The band takes its hue from the mosaic, so a theme value is
-                // unrelated to what it sits on — and `Theme.accent` carries no
-                // contrast floor here, Latte's mauve landing near 1.7:1 on the
-                // pinned band where `chrome` is solved to clear 3:1 whatever the
-                // cover. The cost: the selected label sits a tier below the idle
-                // ones. Splitting label from indicator means a second input on
-                // `TabBar`, which Settings would inherit too.
-                active-color: HeroBackdrop.chrome;
-                hover-fill: HeroBackdrop.on-backdrop.with-alpha(0.12);
-                divider-color: HeroBackdrop.tile-edge;
-                selected(i) => {
-                    // Direction first, in the same handler that moved the index:
-                    // the bar has already written `tab-idx`, but Slint
-                    // re-evaluates the host's `if` branches next frame, so this
-                    // still lands before the new body mounts — the ordering rule
-                    // `nav_transition.rs` follows for the page-level one.
-                    root.tab-enter-from = i > bar.previous-index
-                        ? NavEnterFrom.right
-                        : NavEnterFrom.left;
-                    root.tab-anim-armed = true;
-                    root.tab-selected(i);
-                }
-            }
+            filter <=> root.filter;
+            filter-placeholder: root.filter-placeholder;
+            blur-tick: root.blur-tick;
 
-            Rectangle { horizontal-stretch: 1; }
+            label-color: HeroBackdrop.on-backdrop;
+            // One input for the selected label, its FILL=1 icon and the underline,
+            // so it has to be a hero token like the other three. The band takes its
+            // hue from the mosaic, so a theme value is unrelated to what it sits on
+            // — and `Theme.accent` carries no contrast floor here, Latte's mauve
+            // landing near 1.7:1 on the pinned band where `chrome` is solved to
+            // clear 3:1 whatever the cover. The cost: the selected label sits a
+            // tier below the idle ones. Splitting label from indicator means a
+            // second input on `TabBar`, which Settings would inherit too.
+            active-color: HeroBackdrop.chrome;
+            hover-fill: HeroBackdrop.on-backdrop.with-alpha(0.12);
+            divider-color: HeroBackdrop.tile-edge;
 
-            // Padded to the band the bar keeps clear for its divider, so the
-            // input centres on the tab labels' line rather than on the row's.
-            VerticalLayout {
-                alignment: center;
-                padding-bottom: Theme.pad-sm;
-                search := SearchBar {
-                    input-width: root.search-w;
-                    text <=> root.filter;
-                    placeholder: root.filter-placeholder;
-                    blur-trigger: root.blur-tick;
-                    edited(t) => { root.search-edited(t); }
-                }
-            }
+            tab-selected(i) => { root.tab-selected(i); }
+            search-edited(t) => { root.search-edited(t); }
         }
 
         // Mosaic tile + title block.

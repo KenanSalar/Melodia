@@ -1,7 +1,8 @@
 import { Theme } from "../../theme.slint";
 import { Player } from "../../globals/player.slint";
 import { Search } from "../../globals/search.slint";
-import { ActionPill, PillLabel, PillButton, PillDivider } from "../../components/action-pill.slint";
+import { ActionPill } from "../../components/action-pill.slint";
+import { SelectionPills } from "../../components/selection-pills.slint";
 import { ColumnTogglePopup } from "../../components/track-list/column-toggle-popup.slint";
 import { TrackList } from "../../components/track-list/track-list.slint";
 import { OverlayScrollbar } from "../../components/overlay-scrollbar.slint";
@@ -43,14 +44,9 @@ export component SongsSection inherits VerticalLayout {
                 show-year    <=> Search.show-year;
                 toggled(id) => { Search.toggle-column(id); }
             }
-            if Search.selected-ids.length > 0: PillDivider { }
-            if Search.selected-ids.length > 0: PillLabel {
-                text: @tr("{} selected", Search.selected-ids.length);
-            }
-            if Search.selected-ids.length > 0: PillButton {
-                icon: "close";
-                tooltip-text: @tr("Clear selection");
-                clicked => {
+            if Search.selected-ids.length > 0: SelectionPills {
+                count: Search.selected-ids.length;
+                cleared => {
                     Search.clear-selection();
                     Search.blur-search-tick += 1;
                 }

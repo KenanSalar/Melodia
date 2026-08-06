@@ -139,7 +139,7 @@ where
 
     // The album list is the artist's own discography, so its year span is what
     // "active 1957–1963" means here; folded on the worker that fetched it.
-    let years = crate::ui::hero_chips::year_span(&albums);
+    let years = crate::ui::hero_folds::year_span(&albums);
 
     *artists_ui.detail.artist_id.lock() = artist_id;
 
@@ -220,7 +220,7 @@ pub async fn refresh_detail(
     )
     .await;
 
-    let years = crate::ui::hero_chips::year_span(&albums);
+    let years = crate::ui::hero_folds::year_span(&albums);
 
     let weak_for_filter = weak.clone();
     let artists_ui_clone = artists_ui.clone();

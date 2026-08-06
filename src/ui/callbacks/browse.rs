@@ -7,10 +7,11 @@ use async_compat::Compat;
 use slint::{ComponentHandle, Model, SharedString};
 
 use super::{collect_nonzero_track_ids, next_sort, play_row_start};
-use super::macros::{spawn_logged, spawn_logged_sync, wire_row_flag};
+use super::macros::{spawn_blocking_logged, spawn_logged, wire_row_flag};
 use crate::library;
 use crate::state::AppState;
 use crate::ui::browse::{self as browse_ui_mod, BrowseUi};
+use crate::ui::tab_bar::should_announce_warm;
 use crate::ui::track_list_view::{TrackListColumnState, view_id};
 use crate::{AppWindow, Browse};
 
@@ -319,7 +320,7 @@ pub fn wire_browse(ui: &AppWindow, state: &AppState, browse_ui: &Arc<BrowseUi>) 
             let Some(ui) = weak.upgrade() else { return };
             let columns = ui.global::<Browse>().snapshot_visible();
             let s = s.clone();
-            spawn_logged_sync!(s, "browse::toggle_column",
+            spawn_blocking_logged!(s, "browse::toggle_column",
                 library::settings::update_view_columns(&s, "browse".to_string(), columns));
         });
     }
@@ -354,18 +355,24 @@ pub fn wire_browse(ui: &AppWindow, state: &AppState, browse_ui: &Arc<BrowseUi>) 
                     let bu_prewarm = bu_work.clone();
                     // A `JoinError` is the same "we don't know" as a prewarm that
                     // handed its buffers back.
-                    let warmed =
-                        tokio::task::spawn_blocking(move || bu_prewarm.prewarm_card_covers())
-                            .await
-                            .unwrap_or(false);
+                    // `Some(Card)` is "we decoded for the card tier and still hold
+                    // it" — the shape `should_announce_warm` takes, with the mode
+                    // standing in for the tab a grid page would pass.
+                    let warmed = tokio::task::spawn_blocking(move || {
+                        bu_prewarm.prewarm_card_covers()
+                    })
+                    .await
+                    .unwrap_or(false)
+                    .then_some(browse_ui_mod::BrowseViewMode::Card);
                     let _ = weak_bump.upgrade_in_event_loop(move |ui| {
                         // Both shadows are written on this thread, so this is the
                         // same re-check the prewarm made, against anything that
                         // landed after it returned.
-                        if warmed
-                            && bu_work.section_active()
-                            && bu_work.view_mode() == browse_ui_mod::BrowseViewMode::Card
-                        {
+                        if should_announce_warm(
+                            warmed,
+                            bu_work.section_active(),
+                            bu_work.view_mode(),
+                        ) {
                             let g = ui.global::<Browse>();
                             g.set_covers_generation(g.get_covers_generation() + 1);
                         }
@@ -378,7 +385,7 @@ pub fn wire_browse(ui: &AppWindow, state: &AppState, browse_ui: &Arc<BrowseUi>) 
             }
 
             let s_disk = s.clone();
-            spawn_logged_sync!(s_disk, "browse::set_view_mode",
+            spawn_blocking_logged!(s_disk, "browse::set_view_mode",
                 library::settings::set_browse_view_mode(&s_disk, mode_idx));
         });
     }

@@ -24,6 +24,7 @@ pub mod grid_prewarm;
 pub mod grid_rows;
 pub mod hero_backdrop;
 pub mod hero_chips;
+pub mod hero_folds;
 pub mod library_settings;
 pub mod list_selection;
 pub mod locale;
@@ -59,8 +60,9 @@ pub mod util;
 pub mod window_chrome;
 
 // Source pins for shared components with no Rust module of their own — the
-// three faked-placeholder inputs and the tooltip pill, and the two pinned bands:
-// the one both mosaic pages wear and My Library's own.
+// three faked-placeholder inputs and the tooltip pill, the two pinned bands (the one
+// both mosaic pages wear and My Library's own), and the header row all three of those
+// plus the Settings page share.
 #[cfg(test)]
 #[path = "tests/library_tab_band_tests.rs"]
 mod library_tab_band_tests;
@@ -70,3 +72,6 @@ mod mosaic_tab_hero_tests;
 #[cfg(test)]
 #[path = "tests/placeholder_tests.rs"]
 mod placeholder_tests;
+#[cfg(test)]
+#[path = "tests/tab_search_header_tests.rs"]
+mod tab_search_header_tests;

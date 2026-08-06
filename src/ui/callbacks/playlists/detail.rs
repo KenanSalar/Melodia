@@ -9,7 +9,7 @@ use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel};
 use crate::library;
 use crate::state::AppState;
 use crate::ui::callbacks::{collect_track_ids, play_row_start, spawn_play_then_shuffle};
-use crate::ui::callbacks::macros::{spawn_logged, wire_row_flag};
+use crate::ui::callbacks::macros::{spawn_blocking_logged, spawn_logged, wire_row_flag};
 use crate::ui::playlists::{self as playlists_ui_mod, PlaylistsUi};
 use crate::ui::track_list_view::{TrackListColumnState, view_id};
 use crate::{AppWindow, Dialog, PlaylistDetail};
@@ -182,15 +182,9 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
             let Some(ui) = weak.upgrade() else { return };
             let columns = ui.global::<PlaylistDetail>().snapshot_visible();
             let s_disk = s.clone();
-            s.runtime.spawn_blocking(move || {
-                if let Err(e) = library::settings::update_view_columns(
-                    &s_disk,
-                    "playlist_detail".to_owned(),
-                    columns,
-                ) {
-                    log::warn!("playlists::toggle_column: {e}");
-                }
-            });
+            spawn_blocking_logged!(s, "playlists::toggle_column",
+                library::settings::update_view_columns(
+                    &s_disk, "playlist_detail".to_owned(), columns));
         });
     }
 

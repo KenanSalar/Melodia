@@ -39,7 +39,7 @@ use crate::state::AppState;
 use crate::ui::albums::{self as albums_ui_mod, AlbumsUi};
 use crate::ui::artists::{self as artists_ui_mod, ArtistsUi};
 use crate::ui::genres::{self as genres_ui_mod, GenresUi};
-use crate::ui::my_library::NAV_MY_LIBRARY;
+use crate::ui::my_library::{NAV_MY_LIBRARY, NO_TAB, tab_of_section};
 use crate::ui::nav_transition;
 use crate::ui::track_list_view::view_id;
 use crate::{
@@ -57,9 +57,6 @@ pub(super) struct Origin {
     tab: i32,
 }
 
-/// [`Origin::tab`] for an origin outside My Library.
-const NO_TAB: i32 = -1;
-
 impl Origin {
     /// A section that has no tabs — Favorites, Search and the rest.
     pub(super) fn section(nav: i32) -> Self {
@@ -69,12 +66,7 @@ impl Origin {
     /// Read the current position off the globals. UI thread only.
     pub(super) fn read(ui: &AppWindow) -> Self {
         let nav = ui.global::<Nav>().get_selected_index();
-        let tab = if nav == NAV_MY_LIBRARY {
-            ui.global::<MyLibrary>().get_tab_idx()
-        } else {
-            NO_TAB
-        };
-        Self { nav, tab }
+        Self { nav, tab: tab_of_section(ui, nav) }
     }
 
     /// Whether the user is still where the drill started. Guards the destination flip
@@ -91,13 +83,12 @@ impl Origin {
 /// Move to a My Library tab and persist both halves of the destination, the way a
 /// sidebar click and a tab pick each persist their own. The tab is written **before**
 /// the nav index so the page mounts on the body it is meant to show.
+///
+/// The same write [`restore_origin`] performs on the way back out, which is why it is
+/// that function rather than a second copy of it: a drill and its own back arrow have
+/// to agree about the order, and they were two spellings that happened to.
 fn go_to_tab(ui: &AppWindow, tab: i32) {
-    let g = ui.global::<MyLibrary>();
-    g.set_tab_idx(tab);
-    g.invoke_persist_tab_idx(tab);
-    let nav = ui.global::<Nav>();
-    nav.set_selected_index(NAV_MY_LIBRARY);
-    nav.invoke_persist_selected_index(NAV_MY_LIBRARY);
+    crate::ui::my_library::restore_origin(ui, NAV_MY_LIBRARY, tab);
 }
 
 /// Wire every `*.go-to-album` / `*.go-to-artist` / `*.go-to-genre`

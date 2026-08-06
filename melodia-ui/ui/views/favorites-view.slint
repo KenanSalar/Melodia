@@ -5,7 +5,9 @@ import { GridGeometry } from "../components/grid-geometry.slint";
 import { MosaicTabHero } from "../components/hero/mosaic-tab-hero.slint";
 import { Tooltip, TooltipSide } from "../components/tooltip.slint";
 import { ViewTransition } from "../components/view-transition.slint";
-import { ActionPill, PillLabel, PillButton, PillDivider } from "../components/action-pill.slint";
+import { ActionPill, PillButton, PillDivider } from "../components/action-pill.slint";
+import { SelectionPills } from "../components/selection-pills.slint";
+import { SortPillRow } from "../components/sort-pill-row.slint";
 import { ColumnTogglePopup } from "../components/track-list/column-toggle-popup.slint";
 import { FilterThrottle } from "../components/filter-throttle.slint";
 import { FavoritesArtistsTab } from "favorites/artists-tab.slint";
@@ -141,14 +143,9 @@ export component FavoritesView inherits Rectangle {
                         show-year    <=> Favorites.show-year;
                         toggled(id) => { Favorites.toggle-column(id); }
                     }
-                    if Favorites.selected-ids.length > 0: PillDivider { }
-                    if Favorites.selected-ids.length > 0: PillLabel {
-                        text: @tr("{} selected", Favorites.selected-ids.length);
-                    }
-                    if Favorites.selected-ids.length > 0: PillButton {
-                        icon: "close";
-                        tooltip-text: @tr("Clear selection");
-                        clicked => {
+                    if Favorites.selected-ids.length > 0: SelectionPills {
+                        count: Favorites.selected-ids.length;
+                        cleared => {
                             Favorites.clear-selection();
                             Favorites.blur-search-tick += 1;
                         }
@@ -179,24 +176,12 @@ export component FavoritesView inherits Rectangle {
                 vertical-stretch: 0;
                 alignment: start;
 
-                ActionPill {
-                    PillButton {
-                        text: @tr("Name");
-                        reserve-sort-slot: true;
-                        sort-direction: Favorites.artist-sort-field == "name"
-                            ? Favorites.artist-sort-dir : "";
-                        active: Favorites.artist-sort-field == "name";
-                        clicked => { Favorites.request-artist-sort("name"); }
-                    }
-                    PillDivider { }
-                    PillButton {
-                        text: @tr("Favorites");
-                        reserve-sort-slot: true;
-                        sort-direction: Favorites.artist-sort-field == "favorite_count"
-                            ? Favorites.artist-sort-dir : "";
-                        active: Favorites.artist-sort-field == "favorite_count";
-                        clicked => { Favorites.request-artist-sort("favorite_count"); }
-                    }
+                SortPillRow {
+                    labels: [@tr("Name"), @tr("Favorites")];
+                    fields: ["name", "favorite_count"];
+                    sort-field: Favorites.artist-sort-field;
+                    sort-dir: Favorites.artist-sort-dir;
+                    request-sort(f) => { Favorites.request-artist-sort(f); }
                 }
             }
         }

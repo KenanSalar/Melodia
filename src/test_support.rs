@@ -9,6 +9,32 @@ use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use crate::config::Paths;
 
+/// The `labels` and `fields` arrays of the one `SortPillRow` mount in `src` whose
+/// `sort-field` reads `field_property`, as raw comma-separated element lists.
+///
+/// `field_property` is the whole property path the mount binds — `Albums.sort-field`,
+/// or `Favorites.artist-sort-field` where one global sorts more than one thing. It is
+/// the only binding naming both the component and the global, so it locates the mount;
+/// the two arrays are then read backwards from it, both being declared above. Returns
+/// `None` when no such mount exists, which is itself the failure a caller reports.
+///
+/// Shared because both sort-pill pins ask the same question of two different view
+/// files, and a parser copied into each is a parser that can disagree with itself
+/// about what a mount looks like.
+pub(crate) fn sort_pill_row_arrays<'a>(
+    src: &'a str,
+    field_property: &str,
+) -> Option<(&'a str, &'a str)> {
+    let anchor = src.find(&format!("sort-field: {field_property};"))?;
+    let head = &src[..anchor];
+    let array_after = |start: usize| -> Option<&'a str> {
+        let open = src[start..].find('[')? + start + 1;
+        let close = src[open..].find(']')? + open;
+        Some(&src[open..close])
+    };
+    Some((array_after(head.rfind("labels:")?)?, array_after(head.rfind("fields:")?)?))
+}
+
 /// A solid-colour `side` × `side` PNG in a fresh temp dir. The dir is returned
 /// alongside the path so the caller can keep it alive — dropping it deletes the
 /// file, which is the failure mode to watch for when adopting this.

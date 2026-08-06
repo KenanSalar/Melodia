@@ -189,14 +189,15 @@ fn a_tab_pick_clears_the_filter_on_both_sides() {
 
 /// Every field a sort pill can ask for has to be one the comparator handles.
 ///
-/// The token is a bare string on both sides — `request-artist-sort("name")` in
-/// the Slint, a `match` arm in `grids::sort::sort_artists` — so a typo or a rename
-/// on either side compiles, and the pill just quietly sorts by the default arm
-/// while painting its arrow as though it had worked. My Library's three rows are
-/// pinned the same way, by `ui::my_library::tests`.
+/// The token is a bare string on both sides — an element of the mount's `fields`
+/// array in the Slint, a `match` arm in `grids::sort::sort_artists` — so a typo or
+/// a rename on either side compiles, and the pill just quietly sorts by the default
+/// arm while painting its arrow as though it had worked. My Library's three rows are
+/// pinned the same way, by `ui::my_library::tests`, through the same parser.
 ///
-/// Also asserts the pills carry `reserve-sort-slot`, without which there is no
-/// arrow slot and the active field is indicated by colour alone.
+/// The per-pill contracts this used to count — `reserve-sort-slot`, and
+/// `sort-direction` bound to the active field — moved into `SortPillRow` with the
+/// row itself, and `ui::my_library::tests` pins them there once for all four rows.
 #[test]
 fn every_sort_pill_asks_for_a_field_the_comparator_knows() {
     // The arms of `grids::sort::sort_artists`, restated. A field dropped there and
@@ -205,35 +206,42 @@ fn every_sort_pill_asks_for_a_field_the_comparator_knows() {
     // the default is a defined order, not a no-op.
     const FIELDS: [&str; 2] = ["name", "favorite_count"];
 
-    let asked: Vec<&str> = VIEW
-        .match_indices("Favorites.request-artist-sort(\"")
-        .filter_map(|(i, m)| VIEW[i + m.len()..].split_once('"').map(|(field, _)| field))
-        .collect();
+    let arrays =
+        crate::test_support::sort_pill_row_arrays(VIEW, "Favorites.artist-sort-field");
+    assert!(
+        arrays.is_some(),
+        "favorites-view.slint must mount a `SortPillRow` bound to \
+         Favorites.artist-sort-field"
+    );
+    // Unreachable past the assert; spelled this way because the crate denies
+    // `unwrap`, `expect` and `panic!` in tests as well as in production code.
+    let Some((labels, asked)) = arrays else { return };
+    let asked: Vec<&str> = asked.split(',').map(|f| f.trim().trim_matches('"')).collect();
 
     assert_eq!(
         asked.len(),
         FIELDS.len(),
-        "favorites-view.slint must mount one sort pill per field the Artists tab sorts on"
+        "favorites-view.slint must name one field per pill the Artists tab sorts on"
     );
-    for field in asked {
+    for field in &asked {
         assert!(
-            FIELDS.contains(&field),
-            "`request-artist-sort(\"{field}\")` names a field `sort_artists` has no arm for"
+            FIELDS.contains(field),
+            "the Artists sort row asks for `{field}`, a field `sort_artists` has no arm for"
         );
     }
 
-    // Counted against the pills rather than asserted once: a row where only the
-    // first pill reserves the slot has its labels jump sideways as the active
-    // field moves.
+    // The two arrays are indexed against each other, so a label without a field
+    // reads past the end and sorts by the empty string — a pill that looks live and
+    // does nothing.
     assert_eq!(
-        VIEW.matches("sort-direction: Favorites.artist-sort-field ==").count(),
+        labels.matches("@tr(").count(),
         FIELDS.len(),
-        "every Artists-tab sort pill must bind `sort-direction` to the active field"
+        "the Artists sort row must carry one `@tr` label per field"
     );
-    assert_eq!(
-        VIEW.matches("reserve-sort-slot: true;").count(),
-        FIELDS.len(),
-        "every Artists-tab sort pill must reserve the arrow slot"
+
+    assert!(
+        VIEW.contains("request-sort(f) => { Favorites.request-artist-sort(f); }"),
+        "the Artists sort row must forward its pick to Favorites.request-artist-sort"
     );
 }
 

@@ -2,9 +2,8 @@ import { ScrollView } from "std-widgets.slint";
 import { Theme } from "../theme.slint";
 import { SettingsPage } from "../globals/settings-page.slint";
 import { OverlayScrollbar } from "../components/overlay-scrollbar.slint";
-import { SearchBar } from "../components/search-bar.slint";
 import { Tooltip, TooltipSide } from "../components/tooltip.slint";
-import { TabBar } from "../components/tab-bar.slint";
+import { TabSearchHeader } from "../components/hero/tab-search-header.slint";
 import { FilterThrottle } from "../components/filter-throttle.slint";
 import { SettingsTabs } from "settings/settings-tabs.slint";
 
@@ -60,8 +59,10 @@ export component SettingsView inherits Rectangle {
     // The floor is the narrowest page still seating the bar at `compact-w` *and* the
     // input at `search-w-max`, so at the widths Settings is normally opened at, neither
     // pops a frame later.
-    property <length> page-w:
-        2 * Theme.pad-lg + bar.compact-w + 2 * Theme.pad-md + root.search-w-max;
+    // The floor comes off the header row itself rather than being respelled here: the
+    // narrowest page still seating the bar at `compact-w` *and* the input at its resting
+    // width. (The forward reference is fine — ids scope to the whole component.)
+    property <length> page-w: 2 * Theme.pad-lg + header.row-floor;
     changed width => {
         self.page-w = self.width;
         SettingsPage.page-w = self.width;
@@ -133,27 +134,6 @@ export component SettingsView inherits Rectangle {
         sv.viewport-y = 0px;
     }
 
-    // The bar's resting width, restated because this page drives the property rather
-    // than taking its default.
-    property <length> search-w-max: 220px;
-    // The floor, taken from the bar's own published one rather than restated, so the
-    // width this page stops handing over is the width the bar stops asking for. It is a
-    // budget, not a taste call: Settings only exists above the miniplayer cutover, so the
-    // narrowest panel it can be drawn in is that less the sidebar at its own floor, the
-    // shell's right margin and this page's padding — and the row still has to seat
-    // `compact-w` plus two gaps inside what's left.
-    property <length> search-w-min: search.min-w;
-
-    // **The filter yields before the tabs do.** They share a row, and tabs are
-    // navigation where search only refines what a tab already shows, so a short row
-    // narrows the input and leaves all five targets standing. Reserved against the bar's
-    // own `compact-w` so the two can't drift: what this leaves behind is exactly what
-    // the bar shrinks to, and the row's minimum is a sum rather than a guess. (The
-    // forward reference is fine — ids scope to the whole component.)
-    property <length> search-w: clamp(
-        root.content-w - bar.compact-w - 2 * Theme.pad-md,
-        root.search-w-min, root.search-w-max);
-
     // A fresh tab, or entering or leaving search, starts at the top — otherwise
     // switching from a tall tab to a short one leaves the viewport parked past the new
     // content. Mirrored into locals because `changed` rejects path expressions on
@@ -186,46 +166,36 @@ export component SettingsView inherits Rectangle {
         // and window title still carry it. Reclaiming the row is what puts the bar at
         // the top of the page instead of pushing the body down.
         //
-        // The bar decides for itself when to go icon-only by measuring its own labels;
-        // all it wants from here is how much room it has, which sharing the row makes
-        // interesting — the page less its padding, the two gaps, and whatever the input
-        // is taking. **The label array must stay an inline literal** so `@tr` registers
-        // the msgids at codegen, and its order has to match the `tab-*` indices. It stays
-        // mounted while searching: hiding it would shift the body on the first
-        // keystroke, and leaving it live is the obvious way out of a search, since
-        // picking a tab clears the query.
-        HorizontalLayout {
-            spacing: Theme.pad-md;
-
-            bar := TabBar {
-                labels: [@tr("Library"), @tr("Playback"), @tr("Interface"),
+        // **The same row the two hero bands wear**, on a flat page — so this is the mount
+        // taking its `Theme.*` brush defaults, there being no blur under it. It owns the
+        // division of the row between the tabs and the input; all it wants from here is
+        // the settled width. The page hands it no leading slot and reads back none of its
+        // animation outputs — there is no sub-view slide to arm — only the width floor
+        // and the tooltip anchor.
+        //
+        // **The label array must stay an inline literal** so `@tr` registers the msgids at
+        // codegen, and its order has to match the `tab-*` indices. The bar stays mounted
+        // while searching: hiding it would shift the body on the first keystroke, and
+        // leaving it live is the obvious way out of a search, since picking a tab clears
+        // the query.
+        header := TabSearchHeader {
+            tab-labels: [@tr("Library"), @tr("Playback"), @tr("Interface"),
                          @tr("Services"), @tr("About")];
-                icons: ["library_music", "play_circle", "palette", "link", "info"];
-                avail-width: root.content-w - root.search-w - 2 * Theme.pad-md;
-                selected-index <=> SettingsPage.tab-idx;
-                selected(i) => {
-                    SettingsPage.search-input = "";
-                    SettingsPage.search-query = "";
-                    SettingsPage.blur-search-tick += 1;
-                    SettingsPage.tab-changed(i);
-                }
-            }
+            tab-icons: ["library_music", "play_circle", "palette", "link", "info"];
+            tab-idx <=> SettingsPage.tab-idx;
+            avail-w: root.content-w;
 
-            Rectangle { horizontal-stretch: 1; }
+            filter <=> SettingsPage.search-input;
+            filter-placeholder: @tr("Search settings…");
+            blur-tick: SettingsPage.blur-search-tick;
 
-            // Padded to the same band the bar keeps clear for its divider, so the input
-            // centres on the tab labels' line rather than on the row's.
-            VerticalLayout {
-                alignment: center;
-                padding-bottom: Theme.pad-sm;
-                search := SearchBar {
-                    input-width: root.search-w;
-                    text <=> SettingsPage.search-input;
-                    placeholder: @tr("Search settings…");
-                    blur-trigger: SettingsPage.blur-search-tick;
-                    edited => { root.filter-tick-pending += 1; }
-                }
+            tab-selected(i) => {
+                SettingsPage.search-input = "";
+                SettingsPage.search-query = "";
+                SettingsPage.blur-search-tick += 1;
+                SettingsPage.tab-changed(i);
             }
+            search-edited => { root.filter-tick-pending += 1; }
         }
 
         // The body is centred between elastic spacers and capped at one card column, or
@@ -309,14 +279,13 @@ export component SettingsView inherits Rectangle {
     // bar — which the equal-width cells are what make possible — so a tab that moves
     // under a parked pointer keeps its tooltip anchored to it.
     tab-tip := Rectangle {
-        x: bar.absolute-position.x - root.absolute-position.x
-            + bar.tab-w * bar.hovered-idx;
-        y: bar.absolute-position.y - root.absolute-position.y;
-        width: bar.tab-w;
-        height: bar.height;
+        x: header.absolute-position.x - root.absolute-position.x + header.tip-x;
+        y: header.absolute-position.y - root.absolute-position.y + header.tip-y;
+        width: header.tip-w;
+        height: header.tip-h;
         Tooltip {
-            text: bar.hovered-label;
-            hovered: bar.hovered-idx >= 0 && bar.compact;
+            text: header.tip-label;
+            hovered: header.tip-visible;
             host-width: tab-tip.width;
             host-height: tab-tip.height;
             side: TooltipSide.below;

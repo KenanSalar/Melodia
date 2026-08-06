@@ -32,17 +32,13 @@ const TOOLTIP: &str = include_str!("../../../melodia-ui/ui/components/tooltip.sl
 /// Settings page, the banner both mosaic pages wear, and My Library's morphing
 /// band. The Search view is deliberately absent — its `input-width` is a literal,
 /// so it reserves nothing and has no floor to read.
-const BUDGETING_HOSTS: [(&str, &str); 3] = [
-    ("settings-view.slint", include_str!("../../../melodia-ui/ui/views/settings-view.slint")),
-    (
-        "mosaic-tab-hero.slint",
-        include_str!("../../../melodia-ui/ui/components/hero/mosaic-tab-hero.slint"),
-    ),
-    (
-        "library-tab-band.slint",
-        include_str!("../../../melodia-ui/ui/components/hero/library-tab-band.slint"),
-    ),
-];
+/// The one row that budgets against the bar's floor. It was three — Settings and the
+/// two hero bands each spelled the same clamp — and they are one component now, which
+/// is the point of pinning it here rather than at each mount.
+const BUDGETING_HOST: (&str, &str) = (
+    "tab-search-header.slint",
+    include_str!("../../../melodia-ui/ui/components/hero/tab-search-header.slint"),
+);
 
 /// Collapses runs of whitespace so a pin reads a token sequence rather than one
 /// file's indentation.
@@ -135,22 +131,21 @@ fn the_search_bar_negotiates_its_width() {
     );
 }
 
-/// The floor is published, and every host that budgets its header row takes it
-/// from the bar rather than restating it — the `TabBar.compact-w` contract.
-/// Whatever a host stops handing over has to be what the bar stops asking for;
-/// a restated literal looks identical and silently decouples the two.
+/// The floor is published, and the row that budgets around it takes it from the bar
+/// rather than restating it — the `TabBar.compact-w` contract. Whatever the row stops
+/// handing over has to be what the bar stops asking for; a restated literal looks
+/// identical and silently decouples the two.
 #[test]
 fn the_search_bar_publishes_the_floor_its_hosts_budget_against() {
     assert!(
         normalized(SEARCH_BAR).contains("out property <length> min-w: 140px;"),
         "search-bar.slint no longer publishes its floor"
     );
-    for (name, src) in BUDGETING_HOSTS {
-        assert!(
-            normalized(src).contains("property <length> search-w-min: search.min-w;"),
-            "{name} restates the search bar's floor instead of reading `min-w` off it"
-        );
-    }
+    let (name, src) = BUDGETING_HOST;
+    assert!(
+        normalized(src).contains("property <length> search-w-min: search.min-w;"),
+        "{name} restates the search bar's floor instead of reading `min-w` off it"
+    );
 }
 
 /// The slot's natural width is measured off the Text the bar draws, so the

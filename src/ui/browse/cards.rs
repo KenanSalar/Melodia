@@ -16,12 +16,12 @@
 use std::num::NonZeroUsize;
 use std::path::PathBuf;
 
-use slint::{ComponentHandle, Model, SharedString, VecModel};
+use slint::{ComponentHandle, SharedString};
 
 use super::BrowseUi;
 use crate::entities::browse::{BrowseFile, BrowseFolder};
 use crate::ui::grid_prewarm;
-use crate::ui::grid_rows::chunk_rows;
+use crate::ui::grid_rows::{chunk_rows, write_grid};
 use crate::ui::util::{clamp_i64_to_i32, len_as_i32};
 use crate::{
     AppWindow, Browse, BrowseCardGridRow as UiBrowseCardGridRow,
@@ -135,7 +135,7 @@ pub fn to_browse_card_rows(
 pub fn rebuild_cards(ui: &AppWindow, browse_ui: &BrowseUi) {
     let g = ui.global::<Browse>();
     if browse_ui.view_mode() != BrowseViewMode::Card {
-        write_card_rows(&g, Vec::new());
+        write_grid(&g.get_card_rows(), Vec::new(), "browse::cards");
         return;
     }
     let cards = {
@@ -146,18 +146,7 @@ pub fn rebuild_cards(ui: &AppWindow, browse_ui: &BrowseUi) {
     let rows = chunk_rows(&cards, g.get_columns(), Clone::clone, |cards| {
         UiBrowseCardGridRow { cards }
     });
-    write_card_rows(&g, rows);
-}
-
-/// Swap the card grid's rows in, or log and leave the model alone if the downcast
-/// fails. The `ui::grid_rows::write_grid` shape over Browse's own row type.
-fn write_card_rows(g: &Browse<'_>, rows: Vec<UiBrowseCardGridRow>) {
-    let model = g.get_card_rows();
-    let Some(vec) = model.as_any().downcast_ref::<VecModel<UiBrowseCardGridRow>>() else {
-        log::warn!("browse::cards: VecModel<BrowseCardGridRow> downcast failed");
-        return;
-    };
-    vec.set_vec(rows);
+    write_grid(&g.get_card_rows(), rows, "browse::cards");
 }
 
 /// Artwork paths for roughly the first screenful of cards, in display order.

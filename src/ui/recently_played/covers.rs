@@ -15,7 +15,7 @@ use super::state::{GRID_PREWARM_AHEAD, GRID_THUMB_CAP};
 use super::{RecentlyPlayedTab, RecentlyPlayedUi};
 use crate::AppWindow;
 use crate::media::cover_thumbs::CoverThumbs;
-use crate::ui::grid_prewarm::grid_cover;
+use crate::ui::grid_prewarm::{grid_cover, nonempty_artwork_path};
 
 impl RecentlyPlayedUi {
     /// First-screenful cover paths for the Most Played tab, in display order.
@@ -109,7 +109,7 @@ impl RecentlyPlayedUi {
     /// `RecentlyPlayed.request-mosaic-cover`.
     pub fn mosaic_cover(&self, artwork_path: &str) -> Image {
         self.mosaic_thumbs
-            .get_or_load_opt(Some(artwork_path).filter(|s| !s.is_empty()))
+            .get_or_load_opt(nonempty_artwork_path(artwork_path))
     }
 
     /// Lazy cover lookup for the Most Played grid cards. Routed via

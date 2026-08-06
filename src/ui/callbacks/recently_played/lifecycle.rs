@@ -10,6 +10,7 @@ use slint::{ComponentHandle, Image, SharedString};
 
 use super::NAV_RECENTLY_PLAYED;
 use crate::state::AppState;
+use crate::ui::callbacks::macros::release_shared_hero;
 use crate::ui::model_diff::clear_vec_model;
 use crate::ui::recently_played::{self as recently_played_ui_mod, RecentlyPlayedUi};
 use crate::ui::tab_bar::UNFETCHED_COUNT;
@@ -61,8 +62,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, rp_ui: &Arc<RecentlyPlayedU
                 // Six heroes share one colour set and one chip row, so hand
                 // both back rather than leaving this mosaic's solve and this
                 // view's counts for the next hero to paint under.
-                crate::ui::hero_backdrop::reset(&ui);
-                crate::ui::hero_chips::clear(&ui);
+                release_shared_hero!(ui);
                 // The grid tier goes with `release_section_state` below, so
                 // rewind the counter that means "cold" — else the next enter
                 // reads a leftover bump as a warm tier and decodes on mount.

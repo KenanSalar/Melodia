@@ -6,22 +6,25 @@ import { HeroBlurBackdrop } from "../hero-blur-backdrop.slint";
 import { HeroChipStrip } from "../hero-chip-strip.slint";
 import { IconButton } from "../icon-button.slint";
 import { MaterialIcon } from "../material-icon.slint";
-import { SearchBar } from "../search-bar.slint";
-import { TabBar } from "../tab-bar.slint";
+import { TabSearchHeader } from "tab-search-header.slint";
 
 // The My Library page's pinned band, in two states. Idle it is a flat pane carrying the
 // tab bar, the shared filter box and the mounted tab's count; with a detail open it
 // **morphs** into that entity's hero — blur backdrop, artwork tile, title, chips — with
 // the tabs still in it and a back button to their left.
 //
-// **A sibling of `MosaicTabHero`, not a fork of it.** The two share `TabBar` /
-// `SearchBar` / `HeroBlurBackdrop` / `HeroChipStrip` and the header-row arithmetic, and
-// differ in everything below it: a mosaic square against an artwork tile, a fixed height
-// against a morph. Slint has no way to parameterise one component over both, so the five
-// fixes the header row *is* are ported verbatim — the `page-w` mirror and its mount
-// Timer, the floor seed, the budget against two published floors, the direction off
-// `previous-index`, and the published tooltip anchor. Each was paid for once and is
-// invisible in review, which is what `ui::library_tab_band_tests` exists to hold.
+// **A sibling of `MosaicTabHero`, not a fork of it.** The two share `HeroBlurBackdrop` /
+// `HeroChipStrip` and — since the header row became `TabSearchHeader` — the whole top of
+// the band, and differ in everything below it: a mosaic square against an artwork tile, a
+// fixed height against a morph.
+//
+// That row used to be *ported verbatim* between them, and this comment used to say so:
+// five separately paid-for fixes (the floor seed, the budget against two published
+// floors, the row's own zero spacing, the direction off `previous-index`, the published
+// tooltip anchor), each invisible in review, each duplicated a third time in
+// `settings-view.slint`. They are one component now, pinned once by
+// `ui::tab_search_header_tests`; what stays here is the band's own — the morph, the
+// palette crossing it drives, and the back slot it hands the row as `lead-w`.
 //
 // Data-agnostic for the same reason `MosaicTabHero` is: `Tracks` / `Albums` / … and the
 // four `*Detail` globals are distinct generated types with nothing between them, so every
@@ -200,19 +203,14 @@ export component LibraryTabBand inherits Rectangle {
     // --- The header width budget --------------------------------------------
     //
     // `page-w` is a **mirror**, written imperatively because a live `root.width` read
-    // feeding a child's size re-enters layout, and seeded at this row's own **floor**:
-    // seeded wide, the bar believes it can afford full-width tabs and draws them into a
-    // panel that can't seat them, which is exactly what a miniplayer → full swap
-    // produces. The mount Timer beside it is mandatory — `changed` doesn't fire when the
-    // first layout settles directly on the final value, and a window opened at its final
-    // size is that case.
-    property <length> search-w-max: 220px;
-    // Off the bar's and the input's own published floors, never restated, so neither end
-    // can drift from the component it budgets for.
-    property <length> search-w-min: search.min-w;
-
-    property <length> page-w:
-        2 * Theme.pad-lg + bar.compact-w + 2 * Theme.pad-md + root.search-w-max;
+    // feeding a child's size re-enters layout, and seeded at the header row's own
+    // **floor**, which that component publishes rather than this one restating: seeded
+    // wide, the bar believes it can afford full-width tabs and draws them into a panel
+    // that can't seat them, which is exactly what a miniplayer → full swap produces. The
+    // mount Timer beside it is mandatory — `changed` doesn't fire when the first layout
+    // settles directly on the final value, and a window opened at its final size is that
+    // case.
+    property <length> page-w: 2 * Theme.pad-lg + header.row-floor;
     changed width => { self.page-w = self.width; }
 
     Timer {
@@ -224,7 +222,7 @@ export component LibraryTabBand inherits Rectangle {
     }
 
     // The back button's slot, **with its trailing gap folded into its own width** — which
-    // is what lets the row below carry `spacing: 0` and the whole inset ease to zero.
+    // is what lets the header row carry `spacing: 0` and the whole inset ease to zero.
     // Spelled as an eased width beside a stepped gap it could not: the row loses a full
     // `pad-md` of layout spacing on the frame the slot unmounts, and on the way *out* that
     // frame is the last one, after the height and every brush have settled. A 12 px step
@@ -235,29 +233,19 @@ export component LibraryTabBand inherits Rectangle {
     property <length> back-slot-w:
         (root.pill-h + Theme.pad-sm + Theme.pad-md) * root.hero-t;
 
-    property <length> content-w: root.page-w - 2 * Theme.pad-lg - root.back-slot-w;
-
-    // **The filter yields before the tabs do**: tabs navigate, search only refines what a
-    // tab already shows.
-    property <length> search-w: clamp(
-        root.content-w - bar.compact-w - 2 * Theme.pad-md,
-        root.search-w-min, root.search-w-max);
-
     // --- Height -------------------------------------------------------------
     //
-    // The bar's own height, restated so the band can reserve its row.
-    property <length> tab-row-h: 48px;
     // The idle meta row: one `ActionPill` with `pad-xs` of air either side.
     property <length> pill-h: 32px;
     property <length> meta-row-h: root.pill-h + 2 * Theme.pad-xs;
 
     property <length> compact-h:
-        2 * Theme.pad-lg + root.tab-row-h + Theme.pad-md + root.meta-row-h;
+        2 * Theme.pad-lg + header.row-h + Theme.pad-md + root.meta-row-h;
     // `MosaicTabHero`'s formula unchanged, so the two bands agree on what a hero is —
     // derived rather than a literal, so growing the artwork or the bar can't leave either
     // one cropping its own contents.
     property <length> hero-h:
-        2 * Theme.pad-lg + root.tab-row-h + Theme.pad-md + Theme.hero-artwork;
+        2 * Theme.pad-lg + header.row-h + Theme.pad-md + Theme.hero-artwork;
 
     // **Never a bound `height`.** Slint reports a component root's bound dimension as
     // both `min` and `max`, so an animated one would ease the *window's* own minimum
@@ -271,31 +259,22 @@ export component LibraryTabBand inherits Rectangle {
     clip: true;
     vertical-stretch: 0;
 
-    // --- What the host's tab bodies read ------------------------------------
+    // --- Forwarded from the shared header ------------------------------------
     //
-    // Which way a body enters is `bar.previous-index`'s job, and it has to be: the page
-    // can be re-entered on any tab, and everything else in reach already reads the tab
-    // just picked, the bar writing `selected-index` before it emits `selected`. Arming
-    // starts `false` so the page's own fade-up isn't compounded with a horizontal slide —
-    // the two together read as a diagonal — and it re-disarms for free, the page being
-    // rebuilt on every entry.
-    out property <NavEnterFrom> tab-enter-from: NavEnterFrom.right;
-    out property <bool> tab-anim-armed: false;
+    // Re-published under the names `my-library-view.slint` already reads, so the
+    // extraction is invisible to it. What each one is for is argued in
+    // `tab-search-header.slint`.
+    out property <NavEnterFrom> tab-enter-from <=> header.tab-enter-from;
+    out property <bool> tab-anim-armed <=> header.tab-anim-armed;
 
-    // --- The compact-mode tooltip's anchor -----------------------------------
-    //
-    // Published rather than drawn here: the pill has to be declared *after* the scroll
-    // body, and Slint paints in declaration order, so anything this band owns is covered
-    // by the content below it. Equal-width cells are what let the rect come from the
-    // *index*, so a tab that moves under a parked pointer keeps its tooltip anchored —
-    // and since `tab-w` eases, the frame morphs with it.
     out property <length> tip-x:
-        bar.absolute-position.x - root.absolute-position.x + bar.tab-w * bar.hovered-idx;
-    out property <length> tip-y: bar.absolute-position.y - root.absolute-position.y;
-    out property <length> tip-w: bar.tab-w;
-    out property <length> tip-h: bar.height;
-    out property <string> tip-label: bar.hovered-label;
-    out property <bool> tip-visible: bar.hovered-idx >= 0 && bar.compact;
+        header.absolute-position.x - root.absolute-position.x + header.tip-x;
+    out property <length> tip-y:
+        header.absolute-position.y - root.absolute-position.y + header.tip-y;
+    out property <length> tip-w <=> header.tip-w;
+    out property <length> tip-h <=> header.tip-h;
+    out property <string> tip-label <=> header.tip-label;
+    out property <bool> tip-visible <=> header.tip-visible;
 
     // Behind everything else. The shared component owns the dual-slot crossfade contract;
     // the gradient floor shows through when there is no blur image, which is what Genre
@@ -326,13 +305,35 @@ export component LibraryTabBand inherits Rectangle {
         padding: Theme.pad-lg;
         spacing: Theme.pad-md;
 
-        HorizontalLayout {
-            vertical-stretch: 0;
-            // **Every gap in this row belongs to a child, not to the layout**, because the
-            // back slot's has to be able to reach zero — see `back-slot-w`. The one left
-            // is the bar-to-input clearance, which the stretchy spacer carries as its own
-            // floor.
-            spacing: 0px;
+        // The band is the only host handing this row a leading slot, and the only one
+        // whose palette crosses — hence the four brush mirrors and `lead-w`, which takes
+        // the back slot out of the bar's budget without the row having to know what is
+        // in it.
+        header := TabSearchHeader {
+            tab-labels: root.tab-labels;
+            tab-icons: root.tab-icons;
+            tab-idx <=> root.tab-idx;
+            avail-w: root.page-w - 2 * Theme.pad-lg;
+            lead-w: root.back-slot-w;
+
+            filter <=> root.filter;
+            filter-placeholder: root.filter-placeholder;
+            blur-tick: root.blur-tick;
+
+            // **All four cross from a theme token to a solved hero tier**, because the
+            // band paints on `Theme.base` in one state and on the entity's own blur in
+            // the other, and neither answer is right for both. `active-color` is the one
+            // that matters most — it drives the selected label, its FILL=1 icon and the
+            // underline from one input, and `Theme.accent` carries no contrast floor
+            // against a blur (Latte's mauve lands near 1.7:1, under even the 3:1 non-text
+            // bar) where `chrome` is solved to clear it.
+            label-color: root.label-brush;
+            active-color: root.active-brush;
+            hover-fill: root.hover-brush;
+            divider-color: root.divider-brush;
+
+            tab-selected(i) => { root.tab-selected(i); }
+            search-edited(t) => { root.search-edited(t); }
 
             // Opens with the morph. Clipped rather than faded on width alone, since the
             // disc is incompressible and would otherwise draw over the first tab.
@@ -383,57 +384,6 @@ export component LibraryTabBand inherits Rectangle {
                     // carry the motion and leaves the fade to lead it in.
                     opacity: clamp(root.hero-t * 2.0, 0.0, 1.0);
                     clicked => { root.back-clicked(); }
-                }
-            }
-
-            bar := TabBar {
-                labels: root.tab-labels;
-                icons: root.tab-icons;
-                avail-width: root.content-w - root.search-w - 2 * Theme.pad-md;
-                selected-index <=> root.tab-idx;
-                // **All four cross from a theme token to a solved hero tier**, because
-                // the band paints on `Theme.mantle` in one state and on the entity's own
-                // blur in the other, and neither answer is right for both. `active-color`
-                // is the one that matters most — it drives the selected label, its FILL=1
-                // icon and the underline from one input, and `Theme.accent` carries no
-                // contrast floor against a blur (Latte's mauve lands near 1.7:1, under
-                // even the 3:1 non-text bar) where `chrome` is solved to clear it.
-                label-color: root.label-brush;
-                active-color: root.active-brush;
-                hover-fill: root.hover-brush;
-                divider-color: root.divider-brush;
-                selected(i) => {
-                    // Direction first, in the same handler that moved the index: the bar
-                    // has already written `tab-idx`, but Slint re-evaluates the host's
-                    // `if` branches next frame, so this still lands before the new body
-                    // mounts — the ordering rule `nav_transition.rs` follows for the
-                    // page-level one.
-                    root.tab-enter-from = i > bar.previous-index
-                        ? NavEnterFrom.right
-                        : NavEnterFrom.left;
-                    root.tab-anim-armed = true;
-                    root.tab-selected(i);
-                }
-            }
-
-            // The two `pad-md`s the budget above reserves, held as this cell's own floor
-            // now that the layout hands out no spacing of its own.
-            Rectangle {
-                horizontal-stretch: 1;
-                min-width: 2 * Theme.pad-md;
-            }
-
-            // Padded to the band the bar keeps clear for its divider, so the input
-            // centres on the tab labels' line rather than on the row's.
-            VerticalLayout {
-                alignment: center;
-                padding-bottom: Theme.pad-sm;
-                search := SearchBar {
-                    input-width: root.search-w;
-                    text <=> root.filter;
-                    placeholder: root.filter-placeholder;
-                    blur-trigger: root.blur-tick;
-                    edited(t) => { root.search-edited(t); }
                 }
             }
         }

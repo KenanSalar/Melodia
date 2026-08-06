@@ -13,6 +13,8 @@ const VIEW: &str = include_str!("../../../../melodia-ui/ui/views/my-library-view
 const APP_WINDOW: &str = include_str!("../../../../melodia-ui/ui/app-window.slint");
 const SIDEBAR: &str = include_str!("../../../../melodia-ui/ui/layout/sidebar.slint");
 const PILLS: &str = include_str!("../../../../melodia-ui/ui/views/my-library/tab-pills.slint");
+const SORT_ROW: &str =
+    include_str!("../../../../melodia-ui/ui/components/sort-pill-row.slint");
 const CALLBACKS: &str = include_str!("../../callbacks/my_library.rs");
 
 /// The five tab bodies, each stripped of the header its predecessor carried.
@@ -610,45 +612,79 @@ const SORT_ROWS: [(&str, [&str; 3]); 3] = [
 
 /// Every field a sort pill can ask for has to be one the comparator handles.
 ///
-/// The token is a bare string on both sides — `request-sort("year")` in the Slint, a
-/// `match` arm in Rust — so a typo or a rename on either side compiles, and the pill just
-/// quietly sorts by the default arm while painting its arrow as though it had worked.
-/// These three rows went unpinned for as long as they lived in three separate view files;
-/// one file holding all three is what makes the pin cheap.
+/// The token is a bare string on both sides — an element of the mount's `fields` array in
+/// the Slint, a `match` arm in Rust — so a typo or a rename on either side compiles, and
+/// the pill just quietly sorts by the default arm while painting its arrow as though it
+/// had worked. These three rows went unpinned for as long as they lived in three separate
+/// view files; one file holding all three is what makes the pin cheap.
+///
+/// The per-pill contracts this used to count — `reserve-sort-slot`, and `sort-direction`
+/// bound to the active field — are `SortPillRow`'s now and unspellable at a mount, so they
+/// are pinned once, against the component, by [`the_sort_row_holds_every_per_pill_contract`].
 #[test]
 fn every_sort_pill_asks_for_a_field_the_comparator_knows() {
     for (global, fields) in SORT_ROWS {
-        let asked: Vec<&str> = PILLS
-            .match_indices(&format!("{global}.request-sort(\""))
-            .filter_map(|(i, m)| PILLS[i + m.len()..].split_once('"').map(|(f, _)| f))
-            .collect();
+        let arrays =
+            crate::test_support::sort_pill_row_arrays(PILLS, &format!("{global}.sort-field"));
+        assert!(
+            arrays.is_some(),
+            "`tab-pills.slint` must mount a `SortPillRow` bound to {global}.sort-field",
+        );
+        // Unreachable past the assert; spelled this way because the crate denies
+        // `unwrap`, `expect` and `panic!` in tests as well as in production code.
+        let Some((labels, asked)) = arrays else { continue };
+        let asked: Vec<&str> = asked.split(',').map(|f| f.trim().trim_matches('"')).collect();
+
         assert_eq!(
             asked.len(),
             fields.len(),
-            "the {global} sort row must mount one pill per field it sorts on, found {asked:?}",
+            "the {global} sort row must name one field per pill it sorts on, found {asked:?}",
         );
-        for field in asked {
+        for field in &asked {
             assert!(
-                fields.contains(&field),
-                "`{global}.request-sort(\"{field}\")` names a field the comparator has no arm \
-                 for",
+                fields.contains(field),
+                "the {global} sort row asks for `{field}`, a field the comparator has no arm for",
             );
         }
 
-        // Counted against the pills rather than asserted once: a row where only the first
-        // pill reserves the slot has its labels jump sideways as the active field moves.
+        // **The two arrays are indexed against each other**, so a row that grows a label
+        // without a field reads `fields[i]` past the end and sorts by the empty string —
+        // a pill that looks live and does nothing. Length is the whole check.
         assert_eq!(
-            PILLS.matches(&format!("sort-direction: {global}.sort-field ==")).count(),
+            labels.matches("@tr(").count(),
             fields.len(),
-            "every {global} sort pill must bind `sort-direction` to the active field",
+            "the {global} sort row must carry one `@tr` label per field",
+        );
+
+        assert!(
+            PILLS.contains(&format!("request-sort(f) => {{ {global}.request-sort(f); }}")),
+            "the {global} sort row must forward its pick to {global}.request-sort",
         );
     }
-    let rows: usize = SORT_ROWS.iter().map(|(_, fields)| fields.len()).sum();
-    assert_eq!(
-        PILLS.matches("reserve-sort-slot: true;").count(),
-        rows,
-        "every sort pill on the page must reserve the arrow slot",
-    );
+}
+
+/// The three things every sort pill owes, now owned by the component rather than restated
+/// at each of eleven mounts.
+///
+/// `reserve-sort-slot` holds the arrow's width whether or not this pill is the active one,
+/// so the labels don't jump sideways as the sort moves; `sort-direction` and `active` both
+/// have to compare against **this pill's** field rather than the row's first. Spelled per
+/// pill, any of the three could go missing at one site and the row would look right until
+/// the sort moved. There is one copy to get right now, and this is it.
+#[test]
+fn the_sort_row_holds_every_per_pill_contract() {
+    for binding in [
+        "reserve-sort-slot: true;",
+        "sort-direction: root.sort-field == root.fields[i] ? root.sort-dir : \"\";",
+        "active: root.sort-field == root.fields[i];",
+        "clicked => { root.request-sort(root.fields[i]); }",
+    ] {
+        assert!(
+            SORT_ROW.contains(binding),
+            "`sort-pill-row.slint` must carry `{binding}` — it is what the mounts stopped \
+             spelling out",
+        );
+    }
 }
 
 /// **The Playlists pills publish their tooltip's anchor; the sheet draws it.**

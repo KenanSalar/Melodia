@@ -40,7 +40,7 @@ pub async fn refresh_grid(
     // of the gate, for the reason it gives too — the walk isn't a store, and the
     // wipe queues behind whatever the gate is held across.
     let most_played =
-        most_played.map(|rows| (crate::ui::hero_chips::fold_most_played(&rows), rows));
+        most_played.map(|rows| (crate::ui::hero_folds::fold_most_played(&rows), rows));
 
     // Serialize the store against `release_section_state`'s wipe through the
     // section gate: without it a fast leave → re-enter can let the wipe land

@@ -11,13 +11,13 @@
 
 use std::sync::Arc;
 
-use slint::{ComponentHandle, Model};
+use slint::ComponentHandle;
 
 use super::VIEW_ID;
 use crate::library;
 use crate::state::AppState;
 use crate::ui::callbacks::{collect_track_ids, play_row_start, spawn_play_then_shuffle};
-use crate::ui::callbacks::macros::{spawn_logged, wire_row_flag};
+use crate::ui::callbacks::macros::{spawn_blocking_logged, spawn_logged, wire_row_flag};
 use crate::ui::recently_played::{self as recently_played_ui_mod, RecentlyPlayedUi};
 use crate::ui::track_list_view::TrackListColumnState;
 use crate::{AppWindow, RecentlyPlayed};
@@ -57,7 +57,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, rp_ui: &Arc<RecentlyPlayedU
     {
         let s = state.clone();
         g.on_add_to_queue(move |ids| {
-            let id_vec: Vec<i64> = ids.iter().map(i64::from).collect();
+            let id_vec = collect_track_ids(&ids);
             let s = s.clone();
             spawn_logged!(s, "recently_played::add_to_queue",
                 library::queue::queue_add_tracks(&s, id_vec));
@@ -121,15 +121,9 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, rp_ui: &Arc<RecentlyPlayedU
             let Some(ui) = weak.upgrade() else { return };
             let columns = ui.global::<RecentlyPlayed>().snapshot_visible();
             let s_disk = s.clone();
-            s.runtime.spawn_blocking(move || {
-                if let Err(e) = library::settings::update_view_columns(
-                    &s_disk,
-                    VIEW_ID.to_owned(),
-                    columns,
-                ) {
-                    log::warn!("recently_played::toggle_column: {e}");
-                }
-            });
+            spawn_blocking_logged!(s, "recently_played::toggle_column",
+                library::settings::update_view_columns(
+                    &s_disk, VIEW_ID.to_owned(), columns));
         });
     }
 

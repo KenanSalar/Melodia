@@ -42,7 +42,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicU8, Ordering};
 
 use crate::media::cover_thumbs::CoverThumbs;
-use crate::ui::hero_chips::{HeroFold, MostPlayedTotals};
+use crate::ui::hero_folds::{HeroFold, MostPlayedTotals};
 use crate::ui::section_state::SectionState;
 
 use state::{

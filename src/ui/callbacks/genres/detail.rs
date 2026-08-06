@@ -5,12 +5,12 @@
 
 use std::sync::Arc;
 
-use slint::{ComponentHandle, Model, SharedString};
+use slint::{ComponentHandle, SharedString};
 
 use crate::library;
 use crate::state::AppState;
 use crate::ui::callbacks::{collect_track_ids, play_row_start, spawn_play_then_shuffle};
-use crate::ui::callbacks::macros::{spawn_logged, spawn_logged_sync, wire_row_flag};
+use crate::ui::callbacks::macros::{spawn_blocking_logged, spawn_logged, wire_row_flag};
 use crate::ui::callbacks::{next_sort, persist_view_sort};
 use crate::ui::genres::{self as genres_ui_mod, GenresUi};
 use crate::ui::my_library::restore_origin;
@@ -129,7 +129,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, genres_ui: &Arc<GenresUi>) 
     {
         let s = state.clone();
         detail.on_add_to_queue(move |ids| {
-            let id_vec: Vec<i64> = ids.iter().map(i64::from).collect();
+            let id_vec = collect_track_ids(&ids);
             let s = s.clone();
             spawn_logged!(s, "genres::add_to_queue", library::queue::queue_add_tracks(&s, id_vec));
         });
@@ -214,7 +214,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, genres_ui: &Arc<GenresUi>) 
             let Some(ui) = weak.upgrade() else { return };
             let columns = ui.global::<GenreDetail>().snapshot_visible();
             let s = s.clone();
-            spawn_logged_sync!(s, "genres::toggle_column",
+            spawn_blocking_logged!(s, "genres::toggle_column",
                 library::settings::update_view_columns(&s, "genre_detail".to_string(), columns));
         });
     }

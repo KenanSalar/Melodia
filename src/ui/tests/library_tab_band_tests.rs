@@ -33,27 +33,15 @@ fn binding(src: &str, name: &str) -> String {
         .map_or(String::new(), |(value, _)| value.to_owned())
 }
 
-/// The header row is drawn from `page-w` for one frame before the first layout
-/// reports the truth, and that seed has to be the row's own floor rather than a
-/// plausible page width. Seeded wide, the bar believes it can afford full-width
-/// tabs, draws them into a panel that can't seat them, and they spill under the
-/// search bar — which is what a miniplayer → full swap reliably produces.
-#[test]
-fn the_page_width_seed_is_the_rows_floor() {
-    let seed = binding(BAND, "property <length> page-w:");
-
-    assert!(
-        seed.contains("compact-w"),
-        "the band's `page-w` seed must be the header row's floor, derived from the bar's own \
-         `compact-w` — not a plausible page width"
-    );
-}
-
 /// A mirrored width only reaches the bar through `changed width`, and `changed`
 /// doesn't fire when the first layout settles directly on the final value —
 /// which is every window opened at its size. Without the mount timer the seed
-/// above is never corrected, and a roomy window draws icon-only tabs until
-/// something resizes it.
+/// is never corrected, and a roomy window draws icon-only tabs until something
+/// resizes it.
+///
+/// The mirror is the band's; **what it is seeded to** is
+/// `TabSearchHeader.row-floor`, pinned once for all three hosts by
+/// `tab_search_header_tests::every_tabbed_page_mounts_the_shared_row`.
 #[test]
 fn the_page_width_mirror_has_a_mount_seed() {
     assert!(
@@ -72,23 +60,6 @@ fn the_page_width_mirror_has_a_mount_seed() {
         timer.contains("root.page-w = root.width"),
         "the band's mount Timer must re-run the `page-w` mirror — `changed` never fires for a \
          window born at its final size"
-    );
-}
-
-/// The two ends of the header budget read published floors rather than restating
-/// them, so whatever a component stops asking for is what the row stops handing
-/// over. A literal on either side looks identical and silently decouples the two.
-#[test]
-fn the_header_budget_reserves_against_published_floors() {
-    assert!(
-        BAND.contains("property <length> search-w-min: search.min-w;"),
-        "the band must take the input's floor off `SearchBar.min-w`"
-    );
-    let budget = binding(BAND, "property <length> search-w: clamp(");
-    assert!(
-        budget.contains("bar.compact-w"),
-        "the search slot must be budgeted against the bar's own `compact-w` — the tabs are what \
-         it has to leave room for, and a restated `5 * 48px` drifts the moment a tab is added"
     );
 }
 
@@ -208,66 +179,32 @@ fn the_palette_crossing_is_anchored_to_the_morph() {
     );
 }
 
-/// The tab bodies sit inside the page's own enter transition, so theirs has to
-/// stay off until the user actually switches — a horizontal slide composed with
-/// the page's fade-up reads as a diagonal on every arrival from the sidebar.
-/// `tab-anim-armed` starts `false` and is written by the pick handler; the page
-/// is destroyed and rebuilt on every entry, so it re-disarms for free.
+/// The band forwards everything the shared header publishes, under the names its
+/// mount sheet already reads.
+///
+/// The row itself is pinned by `tab_search_header_tests`; what only this file can
+/// check is that the forwards exist, because a band that mounts the header and
+/// drops them compiles, paints correctly, and silently loses the tab slide's
+/// direction and every compact tooltip. Two-way aliases rather than one-way
+/// bindings, so nothing here can be orphaned by a write.
 #[test]
-fn the_sub_view_slide_is_disarmed_until_the_first_switch() {
-    assert!(
-        BAND.contains("out property <bool> tab-anim-armed: false;"),
-        "the band's `tab-anim-armed` must start false — the page's own entrance is the only thing \
-         that should move when it arrives"
-    );
-
-    let handler = BAND
-        .split_once("selected(i) =>")
-        .and_then(|(_, rest)| rest.split_once("root.tab-selected(i);"))
-        .map_or("", |(body, _)| body);
-    assert!(
-        handler.contains("root.tab-anim-armed = true;"),
-        "the tab bar's `selected` handler must arm the slide — nothing else can tell a real switch \
-         from the page mounting"
-    );
-    // Pinned down to the operand: the direction has to come off the bar's own
-    // `previous-index`, since `tab-idx` and everything bound to it already read
-    // the tab just picked. A local mirror reintroduced here would compare `i`
-    // against `i` and enter from the left every time.
-    assert!(
-        handler.contains("root.tab-enter-from = i > bar.previous-index"),
-        "the tab bar's `selected` handler must set the direction from `bar.previous-index`, and \
-         *before* it hands the pick out — the same ordering `nav_transition.rs` follows for the \
-         page-level transition"
-    );
-}
-
-/// The compact-mode tooltip is anchored by the *host*, after its scroll body,
-/// because Slint paints in declaration order and anything this band owns is
-/// covered by the content below it. So the band publishes the rect instead —
-/// derived from the hovered index rather than snapshotted, which is what keeps a
-/// tab that moves under a parked pointer (Ctrl+B, F11) anchored to its tooltip.
-#[test]
-fn the_band_publishes_its_tooltip_anchor_rather_than_drawing_one() {
-    assert!(
-        !BAND.contains("Tooltip {"),
-        "the band must not mount the tooltip itself — the host's body paints over anything \
-         declared here"
-    );
-    for prop in ["tip-x", "tip-y", "tip-w", "tip-h", "tip-label", "tip-visible"] {
+fn the_band_forwards_what_the_shared_row_publishes() {
+    for prop in ["tab-enter-from", "tab-anim-armed", "tip-w", "tip-h", "tip-label", "tip-visible"]
+    {
         assert!(
-            BAND.contains(&format!("out property <length> {prop}:"))
-                || BAND.contains(&format!("out property <string> {prop}:"))
-                || BAND.contains(&format!("out property <bool> {prop}:")),
-            "the band must publish `{prop}` for its host's tooltip frame"
+            BAND.contains(&format!("{prop} <=> header.{prop};")),
+            "the band must re-publish `{prop}` off the shared header — its sheet reads that name"
         );
     }
-    let tip_x = binding(BAND, "out property <length> tip-x:");
-    assert!(
-        tip_x.contains("bar.tab-w * bar.hovered-idx"),
-        "`tip-x` must be derived from the hovered *index* — equal-width cells are what make that \
-         possible, and a snapshotted rect goes stale the moment anything resizes the bar"
-    );
+    // The two positional anchors can't be plain aliases: they are relative to the
+    // header, and the sheet's frame is relative to the band.
+    for prop in ["tip-x", "tip-y"] {
+        assert!(
+            binding(BAND, &format!("out property <length> {prop}:"))
+                .contains(&format!("header.{prop}")),
+            "the band's `{prop}` must offset the header's own by their `absolute-position` delta"
+        );
+    }
 }
 
 /// **The one that costs most to get wrong.** Slint reports a component root's
@@ -510,14 +447,14 @@ fn the_back_slot_carries_its_own_gap() {
         "the stepped `back-slot-gap` must be gone — it *is* the jump, and a width that folds the \
          gap in makes the whole inset continuous"
     );
+    // The slot has to be *handed* to the row as `lead-w` as well as drawn into it,
+    // or the bar budgets against a width the back button is already occupying and
+    // the tabs draw under it. The row's own half — that it hands out no spacing, so
+    // this width can reach zero — is `tab_search_header_tests`'.
     assert!(
-        code.contains("spacing: 0px;"),
-        "the header row must hand out no spacing of its own, or the slot's width can't reach zero"
-    );
-    assert!(
-        code.contains("min-width: 2 * Theme.pad-md;"),
-        "the bar-to-input clearance must survive as the spacer's own floor — it is the two \
-         `pad-md`s the `search-w` budget reserves"
+        code.contains("lead-w: root.back-slot-w;"),
+        "the band must hand the slot's width to the header as `lead-w`, or the bar's budget \
+         double-counts the space the back button is standing in"
     );
 }
 

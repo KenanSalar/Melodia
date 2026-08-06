@@ -18,7 +18,8 @@ pub mod filter;
 mod tabs;
 
 pub use tabs::{
-    MyLibraryTab, close_open_detail, restore_origin, seed_tab, tab_from_index, tab_is_mounted,
+    MyLibraryTab, NO_TAB, close_open_detail, persist_tab, restore_origin, seed_tab,
+    tab_from_index, tab_is_mounted, tab_of_section,
 };
 
 /// The page's `Nav.selected-index`. **The single definition** — five separate `const`s

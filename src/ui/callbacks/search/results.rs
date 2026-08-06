@@ -14,7 +14,7 @@ use crate::state::AppState;
 use crate::ui::albums::AlbumsUi;
 use crate::ui::artists::ArtistsUi;
 use crate::ui::callbacks::cross_tab_nav;
-use crate::ui::callbacks::macros::spawn_logged;
+use crate::ui::callbacks::macros::{spawn_blocking_logged, spawn_logged};
 use crate::ui::callbacks::{
     collect_track_ids, model_track_ids, next_sort, persist_view_sort, play_row_start,
 };
@@ -200,15 +200,8 @@ pub(super) fn wire(
             let Some(ui) = weak.upgrade() else { return };
             let columns = ui.global::<Search>().snapshot_visible();
             let s_disk = s.clone();
-            s.runtime.spawn_blocking(move || {
-                if let Err(e) = library::settings::update_view_columns(
-                    &s_disk,
-                    "search".to_owned(),
-                    columns,
-                ) {
-                    log::warn!("search::toggle_column: {e}");
-                }
-            });
+            spawn_blocking_logged!(s, "search::toggle_column",
+                library::settings::update_view_columns(&s_disk, "search".to_owned(), columns));
         });
     }
     {

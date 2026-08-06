@@ -130,7 +130,7 @@ where
     // Folded here rather than inside the `upgrade_in_event_loop` below — this
     // is the worker that already has the rows, and the UI thread has no reason
     // to walk a long album's track list a second time.
-    let genre = crate::ui::hero_chips::dominant_genre(&tracks);
+    let genre = crate::ui::hero_folds::dominant_genre(&tracks);
 
     *albums_ui.detail.album_id.lock() = album_id;
 
@@ -231,7 +231,7 @@ pub async fn refresh_detail(
     )
     .await;
 
-    let genre = crate::ui::hero_chips::dominant_genre(&tracks);
+    let genre = crate::ui::hero_folds::dominant_genre(&tracks);
 
     let albums_ui = albums_ui.clone();
     let _ = weak.upgrade_in_event_loop(move |ui| {

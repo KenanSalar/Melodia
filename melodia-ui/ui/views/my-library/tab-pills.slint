@@ -7,6 +7,8 @@ import { PlaylistDetail, Playlists } from "../../globals/playlists.slint";
 import { SmartEditor } from "../../globals/dialog-forms.slint";
 import { Dialog } from "../../globals/dialog.slint";
 import { ActionPill, PillLabel, PillButton, PillDivider } from "../../components/action-pill.slint";
+import { SelectionPills } from "../../components/selection-pills.slint";
+import { SortPillRow } from "../../components/sort-pill-row.slint";
 import { ColumnTogglePopup } from "../../components/track-list/column-toggle-popup.slint";
 
 // The per-tab and per-detail action pills, handed to `LibraryTabBand` as its whole
@@ -44,17 +46,14 @@ export component MyLibraryTabPills inherits Rectangle {
         //
         // The chip leads so its group reads to the left of the toggle.
         if MyLibrary.tab-idx == MyLibrary.tab-songs: ActionPill {
-            if Tracks.selected-ids.length > 0: PillLabel {
-                text: @tr("{} selected", Tracks.selected-ids.length);
-            }
-            if Tracks.selected-ids.length > 0: PillButton {
-                icon: "close";
-                clicked => {
+            if Tracks.selected-ids.length > 0: SelectionPills {
+                count: Tracks.selected-ids.length;
+                divider-trails: true;
+                cleared => {
                     Tracks.clear-selection();
                     MyLibrary.blur-search-tick += 1;
                 }
             }
-            if Tracks.selected-ids.length > 0: PillDivider { }
             ColumnTogglePopup {
                 show-number <=> Tracks.show-number;
                 show-artwork <=> Tracks.show-artwork;
@@ -72,82 +71,32 @@ export component MyLibraryTabPills inherits Rectangle {
         // and a new field starts ascending — both Rust's, through the shared `next_sort`.
         // Each is gated **off** its detail as well as on its tab: a sort row over an open
         // album sorts a grid nobody can see.
-        if MyLibrary.tab-idx == MyLibrary.tab-albums && !root.album-open: ActionPill {
-            PillButton {
-                text: @tr("Name");
-                reserve-sort-slot: true;
-                sort-direction: Albums.sort-field == "name" ? Albums.sort-dir : "";
-                active: Albums.sort-field == "name";
-                clicked => { Albums.request-sort("name"); }
-            }
-            PillDivider { }
-            PillButton {
-                text: @tr("Year");
-                reserve-sort-slot: true;
-                sort-direction: Albums.sort-field == "year" ? Albums.sort-dir : "";
-                active: Albums.sort-field == "year";
-                clicked => { Albums.request-sort("year"); }
-            }
-            PillDivider { }
-            PillButton {
-                text: @tr("Artist");
-                reserve-sort-slot: true;
-                sort-direction: Albums.sort-field == "artist" ? Albums.sort-dir : "";
-                active: Albums.sort-field == "artist";
-                clicked => { Albums.request-sort("artist"); }
-            }
+        //
+        // `labels` stays an inline literal at each mount — `@tr` folds msgids at codegen,
+        // so a Rust-seeded array renders untranslated — and `fields` is the parallel list
+        // of tokens the comparator matches on.
+        if MyLibrary.tab-idx == MyLibrary.tab-albums && !root.album-open: SortPillRow {
+            labels: [@tr("Name"), @tr("Year"), @tr("Artist")];
+            fields: ["name", "year", "artist"];
+            sort-field: Albums.sort-field;
+            sort-dir: Albums.sort-dir;
+            request-sort(f) => { Albums.request-sort(f); }
         }
 
-        if MyLibrary.tab-idx == MyLibrary.tab-artists && !root.artist-open: ActionPill {
-            PillButton {
-                text: @tr("Name");
-                reserve-sort-slot: true;
-                sort-direction: Artists.sort-field == "name" ? Artists.sort-dir : "";
-                active: Artists.sort-field == "name";
-                clicked => { Artists.request-sort("name"); }
-            }
-            PillDivider { }
-            PillButton {
-                text: @tr("Tracks");
-                reserve-sort-slot: true;
-                sort-direction: Artists.sort-field == "track_count" ? Artists.sort-dir : "";
-                active: Artists.sort-field == "track_count";
-                clicked => { Artists.request-sort("track_count"); }
-            }
-            PillDivider { }
-            PillButton {
-                text: @tr("Albums");
-                reserve-sort-slot: true;
-                sort-direction: Artists.sort-field == "album_count" ? Artists.sort-dir : "";
-                active: Artists.sort-field == "album_count";
-                clicked => { Artists.request-sort("album_count"); }
-            }
+        if MyLibrary.tab-idx == MyLibrary.tab-artists && !root.artist-open: SortPillRow {
+            labels: [@tr("Name"), @tr("Tracks"), @tr("Albums")];
+            fields: ["name", "track_count", "album_count"];
+            sort-field: Artists.sort-field;
+            sort-dir: Artists.sort-dir;
+            request-sort(f) => { Artists.request-sort(f); }
         }
 
-        if MyLibrary.tab-idx == MyLibrary.tab-genres && !root.genre-open: ActionPill {
-            PillButton {
-                text: @tr("Name");
-                reserve-sort-slot: true;
-                sort-direction: Genres.sort-field == "name" ? Genres.sort-dir : "";
-                active: Genres.sort-field == "name";
-                clicked => { Genres.request-sort("name"); }
-            }
-            PillDivider { }
-            PillButton {
-                text: @tr("Tracks");
-                reserve-sort-slot: true;
-                sort-direction: Genres.sort-field == "track_count" ? Genres.sort-dir : "";
-                active: Genres.sort-field == "track_count";
-                clicked => { Genres.request-sort("track_count"); }
-            }
-            PillDivider { }
-            PillButton {
-                text: @tr("Duration");
-                reserve-sort-slot: true;
-                sort-direction: Genres.sort-field == "duration" ? Genres.sort-dir : "";
-                active: Genres.sort-field == "duration";
-                clicked => { Genres.request-sort("duration"); }
-            }
+        if MyLibrary.tab-idx == MyLibrary.tab-genres && !root.genre-open: SortPillRow {
+            labels: [@tr("Name"), @tr("Tracks"), @tr("Duration")];
+            fields: ["name", "track_count", "duration"];
+            sort-field: Genres.sort-field;
+            sort-dir: Genres.sort-dir;
+            request-sort(f) => { Genres.request-sort(f); }
         }
 
         // --- The four details ------------------------------------------------
@@ -177,14 +126,9 @@ export component MyLibraryTabPills inherits Rectangle {
                 hide-album: true;
                 toggled(id) => { AlbumDetail.toggle-column(id); }
             }
-            if AlbumDetail.selected-ids.length > 0: PillDivider { }
-            if AlbumDetail.selected-ids.length > 0: PillLabel {
-                text: @tr("{} selected", AlbumDetail.selected-ids.length);
-            }
-            if AlbumDetail.selected-ids.length > 0: PillButton {
-                icon: "close";
-                tooltip-text: @tr("Clear selection");
-                clicked => { AlbumDetail.clear-selection(); }
+            if AlbumDetail.selected-ids.length > 0: SelectionPills {
+                count: AlbumDetail.selected-ids.length;
+                cleared => { AlbumDetail.clear-selection(); }
             }
         }
 
@@ -206,14 +150,9 @@ export component MyLibraryTabPills inherits Rectangle {
                 hide-artist: true;
                 toggled(id) => { ArtistDetail.toggle-column(id); }
             }
-            if ArtistDetail.selected-ids.length > 0: PillDivider { }
-            if ArtistDetail.selected-ids.length > 0: PillLabel {
-                text: @tr("{} selected", ArtistDetail.selected-ids.length);
-            }
-            if ArtistDetail.selected-ids.length > 0: PillButton {
-                icon: "close";
-                tooltip-text: @tr("Clear selection");
-                clicked => { ArtistDetail.clear-selection(); }
+            if ArtistDetail.selected-ids.length > 0: SelectionPills {
+                count: ArtistDetail.selected-ids.length;
+                cleared => { ArtistDetail.clear-selection(); }
             }
         }
 
@@ -235,14 +174,9 @@ export component MyLibraryTabPills inherits Rectangle {
                 hide-genre: true;
                 toggled(id) => { GenreDetail.toggle-column(id); }
             }
-            if GenreDetail.selected-ids.length > 0: PillDivider { }
-            if GenreDetail.selected-ids.length > 0: PillLabel {
-                text: @tr("{} selected", GenreDetail.selected-ids.length);
-            }
-            if GenreDetail.selected-ids.length > 0: PillButton {
-                icon: "close";
-                tooltip-text: @tr("Clear selection");
-                clicked => { GenreDetail.clear-selection(); }
+            if GenreDetail.selected-ids.length > 0: SelectionPills {
+                count: GenreDetail.selected-ids.length;
+                cleared => { GenreDetail.clear-selection(); }
             }
         }
 

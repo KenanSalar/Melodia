@@ -12,6 +12,7 @@ use crate::ui::callbacks::macros::spawn_logged;
 use crate::ui::callbacks::spawn_play_then_shuffle;
 use crate::ui::model_diff::clear_vec_model;
 use crate::ui::recently_played::{self as recently_played_ui_mod, RecentlyPlayedUi};
+use crate::ui::tab_bar::should_announce_warm;
 use crate::{AppWindow, RecentlyPlayed, TrackListRow as UiTrackListRow};
 
 /// Wire the card-action and sub-view-routing callbacks.
@@ -107,16 +108,20 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, rp_ui: &Arc<RecentlyPlayedU
                 if let Err(e) = library::settings::set_recently_played_tab(&s_disk, tab) {
                     log::warn!("recently_played::set_recently_played_tab: {e}");
                 }
-                let warm = ru_covers.swap_tab_covers(entering);
-                // Two ways this task can end up with nothing to announce, and
-                // they need separate checks. `warm` is the decode's own verdict —
-                // a section leave landing inside it handed the buffers back. The
-                // tab re-check is on the UI thread, where the shadow is written: a
-                // pick made while the decodes ran owns a different tier entirely,
-                // and announcing either puts the next surface's cards straight
-                // back on the decoding path.
+                // `warm` is the decode's own verdict — a section leave landing
+                // inside it handed the buffers back — so `Some(entering)` is
+                // exactly "we decoded for this tab and still hold it", which is
+                // what `should_announce_warm` takes. The other two terms are read
+                // on the UI thread, where both shadows are written: a pick made
+                // while the decodes ran owns a different tier, and a leave that
+                // landed after the prewarm returned owns none.
+                let warmed = ru_covers.swap_tab_covers(entering).then_some(entering);
                 let _ = weak_warm.upgrade_in_event_loop(move |ui| {
-                    if warm && ru_covers.active_tab() == entering {
+                    if should_announce_warm(
+                        warmed,
+                        ru_covers.section_active(),
+                        ru_covers.active_tab(),
+                    ) {
                         recently_played_ui_mod::mark_covers_warm(&ui);
                     }
                 });

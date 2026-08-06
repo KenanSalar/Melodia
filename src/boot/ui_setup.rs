@@ -428,69 +428,60 @@ pub fn spawn_initial_tracks_fetch(
     });
 }
 
-/// Kick off initial Albums grid fetch so the card grid is populated by the
-/// time the user navigates to it.
-pub fn spawn_initial_albums_fetch(
-    state: &AppState,
-    albums_ui: &Arc<ui::albums::AlbumsUi>,
-    weak: slint::Weak<AppWindow>,
-) {
-    let s = state.clone();
-    let au = albums_ui.clone();
-    state.runtime.spawn(async move {
-        if let Err(e) = ui::albums::fetch_grid(&s, &au, weak).await {
-            log::warn!("initial albums fetch: {e}");
+/// Kick off an entity grid's initial fetch so its cards are populated by the time
+/// the user navigates to it.
+///
+/// One generator for the four grids rather than four bodies differing only in a
+/// module path and a log tag. A macro rather than a generic `fn` for the reason
+/// `impl_mosaic_hero!` and `impl_detail_view_helpers` are macros: `AlbumsUi` /
+/// `ArtistsUi` / `GenresUi` / `PlaylistsUi` are distinct types with no trait between
+/// them, and each `fetch_grid` is a free function in its own module.
+///
+/// Tracks is deliberately not among them — it resolves a persisted sort first and
+/// calls `fetch_and_apply`, not `fetch_grid`.
+macro_rules! initial_grid_fetch {
+    ($(#[$doc:meta])* $name:ident, $module:ident, $handle:ty, $label:literal) => {
+        $(#[$doc])*
+        pub fn $name(state: &AppState, handle: &Arc<$handle>, weak: slint::Weak<AppWindow>) {
+            let s = state.clone();
+            let h = handle.clone();
+            state.runtime.spawn(async move {
+                if let Err(e) = ui::$module::fetch_grid(&s, &h, weak).await {
+                    log::warn!("initial {} fetch: {e}", $label);
+                }
+            });
         }
-    });
+    };
 }
 
-/// Kick off initial Artists grid fetch so the card grid is populated by
-/// the time the user navigates to it.
-pub fn spawn_initial_artists_fetch(
-    state: &AppState,
-    artists_ui: &Arc<ui::artists::ArtistsUi>,
-    weak: slint::Weak<AppWindow>,
-) {
-    let s = state.clone();
-    let au = artists_ui.clone();
-    state.runtime.spawn(async move {
-        if let Err(e) = ui::artists::fetch_grid(&s, &au, weak).await {
-            log::warn!("initial artists fetch: {e}");
-        }
-    });
-}
-
-/// Kick off initial Genres grid fetch so the card grid is populated by
-/// the time the user navigates to it.
-pub fn spawn_initial_genres_fetch(
-    state: &AppState,
-    genres_ui: &Arc<ui::genres::GenresUi>,
-    weak: slint::Weak<AppWindow>,
-) {
-    let s = state.clone();
-    let gu = genres_ui.clone();
-    state.runtime.spawn(async move {
-        if let Err(e) = ui::genres::fetch_grid(&s, &gu, weak).await {
-            log::warn!("initial genres fetch: {e}");
-        }
-    });
-}
-
-/// Kick off initial Playlists grid fetch so the card grid is populated
-/// by the time the user navigates to it.
-pub fn spawn_initial_playlists_fetch(
-    state: &AppState,
-    playlists_ui: &Arc<ui::playlists::PlaylistsUi>,
-    weak: slint::Weak<AppWindow>,
-) {
-    let s = state.clone();
-    let pu = playlists_ui.clone();
-    state.runtime.spawn(async move {
-        if let Err(e) = ui::playlists::fetch_grid(&s, &pu, weak).await {
-            log::warn!("initial playlists fetch: {e}");
-        }
-    });
-}
+initial_grid_fetch!(
+    /// Kick off the initial Albums grid fetch.
+    spawn_initial_albums_fetch,
+    albums,
+    ui::albums::AlbumsUi,
+    "albums"
+);
+initial_grid_fetch!(
+    /// Kick off the initial Artists grid fetch.
+    spawn_initial_artists_fetch,
+    artists,
+    ui::artists::ArtistsUi,
+    "artists"
+);
+initial_grid_fetch!(
+    /// Kick off the initial Genres grid fetch.
+    spawn_initial_genres_fetch,
+    genres,
+    ui::genres::GenresUi,
+    "genres"
+);
+initial_grid_fetch!(
+    /// Kick off the initial Playlists grid fetch.
+    spawn_initial_playlists_fetch,
+    playlists,
+    ui::playlists::PlaylistsUi,
+    "playlists"
+);
 
 /// Subscribe to `library_changed_tx` and bump `Tracks.invoke_request_refresh`
 /// on every mutation so the Tracks view stays in sync with scans / watcher

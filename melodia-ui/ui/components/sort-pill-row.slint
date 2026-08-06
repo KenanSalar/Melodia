@@ -1,0 +1,49 @@
+import { Theme } from "../theme.slint";
+import { ActionPill, PillButton, PillDivider } from "action-pill.slint";
+
+// A row of sort pills: one per field, dividers between, the active field carrying the
+// direction arrow.
+//
+// **The `TabBar` shape** — parallel `labels` / `fields` arrays plus one callback carrying
+// the pick — and for the same reason `TabBar` has it: `Albums` / `Artists` / `Genres` /
+// `Favorites` are distinct generated globals with nothing between them, so a component
+// cannot be parameterised over which one it sorts. Every fact arrives as a property and
+// the pick leaves as a callback.
+//
+// **Keep `labels` an inline `[@tr("Name"), …]` literal at the mount.** `@tr` folds msgids
+// at codegen, so an array populated from Rust renders untranslated; forwarding one through
+// here is fine, the literal still sitting in a `.slint` file.
+//
+// What this makes unspellable is the point of it existing. Every pill reserves the arrow
+// slot and binds `sort-direction` to the active field — spelled out per pill, either could
+// go missing at one of eleven sites and the row would look right until the sort moved,
+// with only the labels jumping sideways to show it. There is now one copy to get right.
+export component SortPillRow inherits ActionPill {
+    in property <[string]> labels;
+    // Parallel to `labels`. These are the bare tokens Rust's comparator matches on, so a
+    // typo here sorts by the default arm while the arrow paints as though it worked —
+    // which is what `ui::my_library::tests` and its favorites twin pin against.
+    in property <[string]> fields;
+
+    in property <string> sort-field;
+    in property <string> sort-dir;
+
+    callback request-sort(string);
+
+    for label[i] in root.labels: HorizontalLayout {
+        spacing: Theme.pad-xs;
+        alignment: center;
+
+        // Interleaved rather than trailing, so the row neither opens nor closes on a
+        // divider — the `browse/breadcrumb-bar.slint` idiom.
+        if i > 0: PillDivider { }
+
+        PillButton {
+            text: label;
+            reserve-sort-slot: true;
+            sort-direction: root.sort-field == root.fields[i] ? root.sort-dir : "";
+            active: root.sort-field == root.fields[i];
+            clicked => { root.request-sort(root.fields[i]); }
+        }
+    }
+}

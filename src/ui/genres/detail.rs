@@ -115,7 +115,7 @@ pub async fn open_genre(
 
     // How far the genre spreads — folded on the worker that fetched the rows,
     // since a broad genre's track list is the longest in the app.
-    let fold = crate::ui::hero_chips::fold_tracks(&tracks);
+    let fold = crate::ui::hero_folds::fold_tracks(&tracks);
 
     *genres_ui.detail.genre_id.lock() = genre_id;
 
@@ -172,7 +172,7 @@ pub async fn refresh_detail(
 ) -> AppResult<()> {
     let (detail, mut tracks) = fetch_genre_detail(state, genres_ui, genre_id).await?;
 
-    let fold = crate::ui::hero_chips::fold_tracks(&tracks);
+    let fold = crate::ui::hero_folds::fold_tracks(&tracks);
 
     let genres_ui = genres_ui.clone();
     let _ = weak.upgrade_in_event_loop(move |ui| {

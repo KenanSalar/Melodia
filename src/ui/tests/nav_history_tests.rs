@@ -1,4 +1,4 @@
-use crate::ui::my_library::NAV_MY_LIBRARY;
+use crate::ui::my_library::{NAV_MY_LIBRARY, NO_TAB};
 use crate::ui::nav_history::{NavEntry, NavHistory};
 
 // `MyLibrary`'s `tab-*` values, restated here because a unit test has no `AppWindow` to
@@ -11,7 +11,6 @@ const PLAYLISTS: i32 = 4;
 // Sections that carry no tabs, so no detail either.
 const FAVORITES: i32 = 2;
 const BROWSE: i32 = 1;
-const NO_TAB: i32 = -1;
 
 fn tab(tab: i32, detail: Option<i64>) -> NavEntry {
     NavEntry { section: NAV_MY_LIBRARY, tab, detail_id: detail }

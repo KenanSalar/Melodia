@@ -3,6 +3,7 @@ import { MyLibrary } from "../../globals/my-library.slint";
 import { Player } from "../../globals/player.slint";
 import { PlaylistDetail } from "../../globals/playlists.slint";
 import { DraggableTrackList } from "../../components/track-list/draggable-track-list.slint";
+import { GridEmptyState } from "../../components/grid/grid-empty-state.slint";
 import { OverlayScrollbar } from "../../components/overlay-scrollbar.slint";
 import { MaterialIcon } from "../../components/material-icon.slint";
 
@@ -94,43 +95,14 @@ export component PlaylistDetailBody inherits Rectangle {
             }
         }
 
-        if PlaylistDetail.playlist.track_count == 0: Rectangle {
-            background: Theme.base;
-            VerticalLayout {
-                alignment: center;
-                spacing: Theme.pad-md;
-                HorizontalLayout {
-                    alignment: center;
-                    MaterialIcon {
-                        name: "music_note";
-                        icon-size: 64px;
-                        icon-color: Theme.overlay0;
-                    }
-                }
-                HorizontalLayout {
-                    alignment: center;
-                    Text {
-                        text: PlaylistDetail.playlist.is_smart
-                            ? @tr("No matching tracks")
-                            : @tr("No tracks yet");
-                        color: Theme.text;
-                        font-size: Theme.font-size-lg;
-                        font-weight: 600;
-                    }
-                }
-                HorizontalLayout {
-                    alignment: center;
-                    Text {
-                        text: PlaylistDetail.playlist.is_smart
-                            ? @tr("No tracks match these rules.")
-                            : @tr("Drag music files here, or add tracks via any track's overflow menu.");
-                        color: Theme.subtext0;
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        wrap: word-wrap;
-                    }
-                }
-            }
+        if PlaylistDetail.playlist.track_count == 0: GridEmptyState {
+            icon: "music_note";
+            title: PlaylistDetail.playlist.is_smart
+                ? @tr("No matching tracks")
+                : @tr("No tracks yet");
+            body: PlaylistDetail.playlist.is_smart
+                ? @tr("No tracks match these rules.")
+                : @tr("Drag music files here, or add tracks via any track's overflow menu.");
         }
 
         // OS file-hover banner — routed here when the queue sheet is closed and this

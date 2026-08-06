@@ -1,0 +1,86 @@
+import { Theme } from "../../theme.slint";
+import { BreadcrumbRow } from "../../models.slint";
+import { MaterialIcon } from "../../components/material-icon.slint";
+
+// One breadcrumb segment. The chevron separator lives outside it — the bar's loop
+// interleaves one before every segment after the first.
+component BreadcrumbPill inherits Rectangle {
+    in property <string> label;
+    in property <bool> is-current;
+    callback clicked();
+
+    height: 28px;
+    width: layout.preferred-width;
+    border-radius: self.height / 2;
+    background: touch.has-hover ? Theme.surface0 : transparent;
+    animate background { duration: Theme.dur-fast; easing: ease-in-out; }
+
+    layout := HorizontalLayout {
+        padding-left: 8px;
+        padding-right: 8px;
+        alignment: center;
+        VerticalLayout {
+            alignment: center;
+            Text {
+                text: root.label;
+                color: root.is-current ? Theme.accent : Theme.subtext0;
+                font-size: Theme.font-size-sm;
+                font-weight: 500;
+            }
+        }
+    }
+
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+// The whole breadcrumb trail, chevrons included, in its clipping container.
+//
+// **The clip is what keeps a deep path from shoving the header's action pill off screen**
+// — the segments carry bound (incompressible) widths, so a trail wider than the slot
+// spills rather than eliding, and the container cuts it.
+//
+// It cuts at the **right**, i.e. the current folder is what a deep path loses first:
+// `alignment: start` packs from the left edge. Hiding the *head* instead — which is the
+// less useful end — means `alignment: end`, and that also right-aligns every short trail,
+// so it is a look to choose rather than a one-line correction. This comment used to claim
+// the left, and was wrong about it for as long as the trail lived inline in
+// `browse-view.slint`.
+//
+// The segment and the loop that interleaves its separators are one file because the pill
+// has no other consumer — splitting them would put a component and its only call site in
+// two places for nothing.
+export component BreadcrumbBar inherits Rectangle {
+    in property <[BreadcrumbRow]> segments;
+    callback segment-clicked(string);
+
+    clip: true;
+
+    VerticalLayout {
+        alignment: center;
+        HorizontalLayout {
+            alignment: start;
+            spacing: 2px;
+
+            for seg[i] in root.segments: HorizontalLayout {
+                spacing: 2px;
+                alignment: center;
+                if i > 0: VerticalLayout {
+                    alignment: center;
+                    MaterialIcon {
+                        name: "chevron_right";
+                        icon-size: 14px;
+                        icon-color: Theme.overlay0;
+                    }
+                }
+                BreadcrumbPill {
+                    label: seg.label;
+                    is-current: i == root.segments.length - 1;
+                    clicked => { root.segment-clicked(seg.path); }
+                }
+            }
+        }
+    }
+}

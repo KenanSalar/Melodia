@@ -3,13 +3,13 @@
 
 use std::sync::Arc;
 
-use slint::{ComponentHandle, Model, SharedString};
+use slint::{ComponentHandle, SharedString};
 
 use crate::library;
 use crate::state::AppState;
 use crate::ui::albums::{self as albums_ui_mod, AlbumsUi};
 use crate::ui::callbacks::{collect_track_ids, play_row_start, spawn_play_then_shuffle};
-use crate::ui::callbacks::macros::{spawn_logged, spawn_logged_sync, wire_row_flag};
+use crate::ui::callbacks::macros::{spawn_blocking_logged, spawn_logged, wire_row_flag};
 use crate::ui::my_library::restore_origin;
 use crate::ui::track_list_view::{TrackListColumnState, view_id};
 use crate::{AlbumDetail, AppWindow};
@@ -140,7 +140,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, albums_ui: &Arc<AlbumsUi>) 
     {
         let s = state.clone();
         detail.on_add_to_queue(move |ids| {
-            let id_vec: Vec<i64> = ids.iter().map(i64::from).collect();
+            let id_vec = collect_track_ids(&ids);
             let s = s.clone();
             spawn_logged!(s, "albums::add_to_queue", library::queue::queue_add_tracks(&s, id_vec));
         });
@@ -232,7 +232,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, albums_ui: &Arc<AlbumsUi>) 
             let Some(ui) = weak.upgrade() else { return };
             let columns = ui.global::<AlbumDetail>().snapshot_visible();
             let s = s.clone();
-            spawn_logged_sync!(s, "albums::toggle_column",
+            spawn_blocking_logged!(s, "albums::toggle_column",
                 library::settings::update_view_columns(&s, "album_detail".to_string(), columns));
         });
     }

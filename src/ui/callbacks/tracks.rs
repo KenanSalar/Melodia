@@ -6,7 +6,7 @@ use std::sync::Arc;
 use slint::{ComponentHandle, Model, SharedString};
 
 use super::{collect_track_ids, next_sort};
-use super::macros::{spawn_logged, spawn_logged_sync, wire_row_flag};
+use super::macros::{spawn_blocking_logged, spawn_logged, wire_row_flag};
 use crate::library;
 use crate::state::AppState;
 use crate::ui::my_library::{MyLibraryTab, tab_is_mounted};
@@ -219,7 +219,7 @@ pub fn wire_tracks(ui: &AppWindow, state: &AppState, tracks_ui: &Arc<TracksUi>) 
             let Some(ui) = weak.upgrade() else { return };
             let columns = ui.global::<Tracks>().snapshot_visible();
             let s = s.clone();
-            spawn_logged_sync!(s, "tracks::toggle_column",
+            spawn_blocking_logged!(s, "tracks::toggle_column",
                 library::settings::update_view_columns(&s, "tracks".to_string(), columns));
         });
     }

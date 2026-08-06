@@ -144,12 +144,23 @@ pub fn cover_cap_for_window(app: &AppWindow, fallback: NonZeroUsize) -> NonZeroU
 /// the counter differ, the rule doesn't, and a copy that grew a decoding `else`
 /// arm would look right and quietly retire the whole mechanism.
 pub fn grid_cover(thumbs: &CoverThumbs, artwork_path: &str, generation: i32) -> Image {
-    let path = Some(artwork_path).filter(|s| !s.is_empty());
+    let path = nonempty_artwork_path(artwork_path);
     if generation == 0 {
         thumbs.get_cached_opt(path)
     } else {
         thumbs.get_or_load_opt(path)
     }
+}
+
+/// The `""` → `None` normalization every cover lookup owes its tier.
+///
+/// Slint has no null string, so a row with no artwork carries an empty one, and
+/// the `*_opt` lookups take an `Option` precisely so that case never reaches the
+/// decoder. Named rather than inlined because the two mosaic lookups — which
+/// don't go through [`grid_cover`], their tier being warmed by a fetch rather
+/// than a tab — spelled the filter out themselves.
+pub fn nonempty_artwork_path(artwork_path: &str) -> Option<&str> {
+    Some(artwork_path).filter(|s| !s.is_empty())
 }
 
 #[cfg(test)]

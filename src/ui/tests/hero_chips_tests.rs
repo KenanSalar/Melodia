@@ -1,13 +1,12 @@
 use super::{
-    ChipLabels, FavoritesFacts, HeroFold, MostPlayedTotals, RecentlyPlayedFacts, album_chips,
-    artist_chips, dominant_genre, favorites_chips, fold_most_played, fold_tracks, genre_chips,
-    playlist_chips, recently_played_chips, year_span,
+    ChipLabels, FavoritesFacts, RecentlyPlayedFacts, album_chips, artist_chips, favorites_chips,
+    genre_chips, playlist_chips, recently_played_chips,
 };
+use crate::ui::hero_folds::{HeroFold, MostPlayedTotals};
 use crate::entities::album::AlbumStats;
 use crate::entities::artist::ArtistStats;
 use crate::entities::genre::GenreStats;
 use crate::entities::playlist::PlaylistStats;
-use crate::entities::track::{MostPlayedFavorite, TrackListRow};
 use crate::ui::favorites::FavoritesTab;
 use crate::ui::recently_played::RecentlyPlayedTab;
 use slint::SharedString;
@@ -100,47 +99,6 @@ impl ChipLabels for EnglishLabels {
     }
     fn compilation(&self) -> SharedString {
         SharedString::from("Compilation")
-    }
-}
-
-/// Only the four fields the folds and the genre tally read.
-fn track(artist_id: Option<i64>, album_id: Option<i64>, genre: Option<&str>) -> TrackListRow {
-    TrackListRow {
-        id: 0,
-        file_path: String::new(),
-        file_name: String::new(),
-        title: String::new(),
-        artist: None,
-        album_artist: None,
-        album: None,
-        genre: genre.map(str::to_owned),
-        track_number: None,
-        disc_number: None,
-        year: None,
-        duration_ms: 0,
-        artwork_path: None,
-        is_favorite: false,
-        rating: 0,
-        album_id,
-        artist_id,
-        genre_id: None,
-        date_added: String::new(),
-        sort_key: None,
-    }
-}
-
-fn played(duration_ms: i64, play_count: i32) -> MostPlayedFavorite {
-    MostPlayedFavorite {
-        id: 0,
-        title: String::new(),
-        artist: None,
-        album_artist: None,
-        album: None,
-        genre: None,
-        year: None,
-        artwork_path: None,
-        play_count,
-        duration_ms,
     }
 }
 
@@ -473,72 +431,6 @@ fn recently_playeds_most_played_sums_itself_too() {
     );
 }
 
-#[test]
-fn the_fold_counts_distinct_ids_and_skips_the_untagged() {
-    // A track with no album belongs to none, so it is skipped rather than
-    // pooled into an "unknown" bucket that would read as one more album.
-    let rows = [
-        track(Some(1), Some(10), None),
-        track(Some(1), Some(10), None),
-        track(Some(2), Some(11), None),
-        track(None, None, None),
-    ];
-    assert_eq!(fold_tracks(&rows), HeroFold { artists: 2, albums: 2 });
-    assert_eq!(fold_tracks(&[]), HeroFold::default());
-}
-
-#[test]
-fn most_played_totals_sum_duration_and_plays() {
-    let rows = [played(180_000, 12), played(240_000, 30)];
-    assert_eq!(
-        fold_most_played(&rows),
-        MostPlayedTotals {
-            tracks: 2,
-            duration_ms: 420_000,
-            plays: 42,
-        }
-    );
-}
-
-#[test]
-fn a_genre_is_named_only_when_it_actually_dominates() {
-    let mostly_jazz = [
-        track(None, None, Some("Jazz")),
-        track(None, None, Some("Jazz")),
-        track(None, None, Some("Blues")),
-    ];
-    assert_eq!(dominant_genre(&mostly_jazz).as_deref(), Some("Jazz"));
-
-    // An even split has no majority — naming either would misrepresent the
-    // other half, so a genuinely mixed compilation gets no chip.
-    let split = [
-        track(None, None, Some("Jazz")),
-        track(None, None, Some("Blues")),
-    ];
-    assert_eq!(dominant_genre(&split), None);
-
-    // Untagged tracks don't count toward the total, so one tagged track among
-    // three still dominates the tracks that have a genre at all.
-    let sparse = [
-        track(None, None, Some("Jazz")),
-        track(None, None, None),
-        track(None, None, Some("")),
-    ];
-    assert_eq!(dominant_genre(&sparse).as_deref(), Some("Jazz"));
-    assert_eq!(dominant_genre(&[]), None);
-}
-
-#[test]
-fn the_year_span_ignores_albums_with_no_year() {
-    let dated = |year: Option<i32>| AlbumStats { year, ..album(None, None, false) };
-    assert_eq!(
-        year_span(&[dated(Some(1963)), dated(None), dated(Some(1957))]),
-        Some((1957, 1963))
-    );
-    assert_eq!(year_span(&[dated(Some(0)), dated(None)]), None);
-    assert_eq!(year_span(&[]), None);
-}
-
 /// `MetaChipStrip`'s brushes default to `Theme.*`, which is correct nowhere and
 /// wrong invisibly: a chip painting a theme token on a band whose colours are
 /// solved per artwork looks plausible under Mocha and washes out under every
@@ -768,14 +660,14 @@ fn each_favorites_fetch_folds_and_republishes_what_it_feeds() {
             include_str!("../favorites/songs.rs"),
             "favorites/songs.rs",
             "pub async fn refresh_tracks(",
-            "crate::ui::hero_chips::fold_tracks(&rows)",
+            "crate::ui::hero_folds::fold_tracks(&rows)",
             "songs_fold.lock() =",
         ),
         (
             include_str!("../favorites/grids/fetch.rs"),
             "favorites/grids/fetch.rs",
             "pub async fn refresh_grids(",
-            "crate::ui::hero_chips::fold_most_played(&rows)",
+            "crate::ui::hero_folds::fold_most_played(&rows)",
             "most_played_totals.lock() =",
         ),
     ];

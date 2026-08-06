@@ -1,0 +1,163 @@
+import { Theme } from "../../theme.slint";
+import { NavEnterFrom } from "../../globals/nav.slint";
+import { SearchBar } from "../search-bar.slint";
+import { TabBar } from "../tab-bar.slint";
+
+// The tab bar and the filter box sharing one row, plus the width budget that decides how
+// they divide it and the tooltip anchor the host has to draw for them.
+//
+// **Three pages spelled this out, and the source said so.** `library-tab-band.slint`
+// carried a note that the row's fixes were "ported verbatim" from `mosaic-tab-hero.slint`
+// — "five separately paid-for fixes, and a copy is where one of them silently goes
+// missing" — and `settings-view.slint` was a third copy of the arithmetic nobody had
+// counted. Each of the five is preserved below, once:
+//
+//  1. **The floor is published, not restated.** `row-floor` is the narrowest row that
+//     still seats the bar at `compact-w` *and* the input at `search-w-max`; a host seeds
+//     its own width mirror off it rather than respelling the sum. Seeded wide, the bar
+//     believes it can afford full-width tabs and draws them into a panel that can't seat
+//     them — which is exactly what a miniplayer → full swap produces.
+//  2. **The budget reserves against two *published* floors**, `bar.compact-w` and
+//     `search.min-w`, so neither end can drift from the component it budgets for.
+//  3. **The filter yields before the tabs do**: tabs navigate, search only refines what a
+//     tab already shows, so a short row narrows the input and leaves every target
+//     standing.
+//  4. **The slide direction comes off `bar.previous-index`**, never a mirror of
+//     `selected-index`: the cell writes that property *before* it emits `selected`, so a
+//     host reading it back sees the tab just picked. A page can also be re-entered on any
+//     tab, which is what makes a seeded mirror wrong rather than merely redundant.
+//  5. **The tooltip anchor is published rather than drawn.** The pill has to be declared
+//     after the scroll body — Slint paints in declaration order — so anything this row
+//     owns is covered by the content below it. Equal-width cells are what let the rect
+//     come from the *index*, so a tab moving under a parked pointer stays anchored.
+//
+// Data-agnostic for the reason its hosts are: `MyLibrary` / `Favorites` / `SettingsPage`
+// are distinct generated globals with nothing between them, so every fact arrives as a
+// property and every write leaves as a callback. **No string is spelled here** — `@tr`
+// folds literals at codegen, and the host is where the literals belong.
+export component TabSearchHeader inherits HorizontalLayout {
+    // Inline `[@tr("…"), …]` literals at the call site; an array populated from Rust
+    // renders untranslated. Forwarding one through here is fine — the literal still sits
+    // in a `.slint` file.
+    in property <[string]> tab-labels;
+    in property <[string]> tab-icons;
+    // Two-way, per the "a component writing its own `in-out` orphans a one-way binding"
+    // pitfall — the bar writes this on every pick.
+    in-out property <int> tab-idx;
+
+    in-out property <string> filter;
+    in property <string> filter-placeholder;
+    in property <int> blur-tick;
+
+    // The whole row's width, from the host's own mirror. Taken rather than measured: a
+    // live `root.width` read feeding a child's size re-enters layout, so the host owns the
+    // mirror — it needs one for its own geometry besides — and hands the settled number
+    // down.
+    in property <length> avail-w;
+    // The leading slot's width, its trailing gap folded in, so the row can carry
+    // `spacing: 0` and the whole inset can ease to zero. Only `LibraryTabBand` uses it,
+    // for the back button its hero morph grows.
+    in property <length> lead-w: 0px;
+
+    // Every brush the row paints with, defaulted to the theme. Settings takes the
+    // defaults; the two hero bands hand over solved `HeroBackdrop` tiers, because neither
+    // answer is right for both a flat pane and an entity's blur.
+    in property <brush> label-color: Theme.text;
+    in property <brush> active-color: Theme.accent;
+    in property <brush> hover-fill: Theme.surface0;
+    in property <brush> divider-color: Theme.surface1;
+
+    // Fires *after* the direction and the arming below have settled, so a host handler
+    // that clears its filter and calls into Rust can't be sequenced ahead of them. The bar
+    // has already written `tab-idx`.
+    callback tab-selected(int);
+    callback search-edited(string);
+
+    // --- The width budget ---------------------------------------------------
+    property <length> search-w-max: 220px;
+    property <length> search-w-min: search.min-w;
+    property <length> content-w: root.avail-w - root.lead-w;
+
+    out property <length> row-floor:
+        bar.compact-w + 2 * Theme.pad-md + root.search-w-max;
+    out property <length> search-w: clamp(
+        root.content-w - bar.compact-w - 2 * Theme.pad-md,
+        root.search-w-min, root.search-w-max);
+    // The bar's own height, published so a host can reserve its row without restating it.
+    out property <length> row-h: bar.height;
+
+    // --- What a host's sub-view bodies read ---------------------------------
+    out property <NavEnterFrom> tab-enter-from: NavEnterFrom.right;
+    // Starts `false` so a page's own entry animation isn't compounded with a horizontal
+    // slide — the two together read as a diagonal — and it re-disarms for free, the page
+    // being rebuilt on every entry.
+    out property <bool> tab-anim-armed: false;
+
+    // --- The compact-mode tooltip's anchor ----------------------------------
+    //
+    // Relative to this row; the host adds its own `absolute-position` delta. **Both
+    // axes carry the bar's own offset inside the row**, because that is the one part a
+    // host can't reach — with a leading slot the bar starts a whole `lead-w` in, and a
+    // rect anchored from the row's edge lands a back button's width left of the tab it
+    // names. The two hosts with no leading slot put the bar at `x == 0`, which is what
+    // makes dropping the term invisible everywhere except the one place it matters.
+    out property <length> tip-x:
+        bar.absolute-position.x - root.absolute-position.x + bar.tab-w * bar.hovered-idx;
+    out property <length> tip-y: bar.absolute-position.y - root.absolute-position.y;
+    out property <length> tip-w: bar.tab-w;
+    out property <length> tip-h: bar.height;
+    out property <string> tip-label: bar.hovered-label;
+    out property <bool> tip-visible: bar.hovered-idx >= 0 && bar.compact;
+
+    vertical-stretch: 0;
+    // **Every gap in this row belongs to a child, not to the layout**, because the leading
+    // slot's has to be able to reach zero. The one left is the bar-to-input clearance,
+    // which the stretchy spacer carries as its own floor — arithmetically the same
+    // `2 * pad-md` a `spacing: Theme.pad-md` between three cells would have given.
+    spacing: 0px;
+
+    @children
+
+    bar := TabBar {
+        labels: root.tab-labels;
+        icons: root.tab-icons;
+        avail-width: root.content-w - root.search-w - 2 * Theme.pad-md;
+        selected-index <=> root.tab-idx;
+        label-color: root.label-color;
+        active-color: root.active-color;
+        hover-fill: root.hover-fill;
+        divider-color: root.divider-color;
+        selected(i) => {
+            // Direction first, in the same handler that moved the index: the bar has
+            // already written `tab-idx`, but Slint re-evaluates a host's `if` branches
+            // next frame, so this still lands before the new body mounts — the ordering
+            // rule `nav_transition.rs` follows for the page-level one.
+            root.tab-enter-from = i > bar.previous-index
+                ? NavEnterFrom.right
+                : NavEnterFrom.left;
+            root.tab-anim-armed = true;
+            root.tab-selected(i);
+        }
+    }
+
+    // The two `pad-md`s the budget reserves, held as this cell's own floor now that the
+    // layout hands out no spacing of its own.
+    Rectangle {
+        horizontal-stretch: 1;
+        min-width: 2 * Theme.pad-md;
+    }
+
+    // Padded to the band the bar keeps clear for its divider, so the input centres on the
+    // tab labels' line rather than on the row's.
+    VerticalLayout {
+        alignment: center;
+        padding-bottom: Theme.pad-sm;
+        search := SearchBar {
+            input-width: root.search-w;
+            text <=> root.filter;
+            placeholder: root.filter-placeholder;
+            blur-trigger: root.blur-tick;
+            edited(t) => { root.search-edited(t); }
+        }
+    }
+}

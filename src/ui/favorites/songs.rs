@@ -108,7 +108,7 @@ pub async fn refresh_tracks(
     // either side of `release_section_state`'s wipe is the pair of *stores*, so
     // the walk that produces the fold has no business holding a lock the wipe
     // and both sibling fetches queue behind.
-    let fold = crate::ui::hero_chips::fold_tracks(&rows);
+    let fold = crate::ui::hero_folds::fold_tracks(&rows);
     {
         let _gate = fav_ui.gate();
         *fav_ui.state().songs_fold.lock() = fold;

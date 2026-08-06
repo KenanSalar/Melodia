@@ -86,7 +86,7 @@ pub async fn refresh_tracks(
         tracks: len_as_i32(rows.len()),
         duration_ms: rows.iter().map(|r| r.duration_ms).sum(),
     };
-    let fold = crate::ui::hero_chips::fold_tracks(&rows);
+    let fold = crate::ui::hero_folds::fold_tracks(&rows);
     let mosaic_paths = super::hero::mosaic_paths_from(&rows, 4);
 
     // Under the section gate so the stores can't interleave with

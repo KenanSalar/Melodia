@@ -33,7 +33,9 @@ use parking_lot::Mutex;
 use slint::{ComponentHandle, Weak};
 
 use crate::state::AppState;
-use crate::ui::my_library::{MyLibraryTab, NAV_MY_LIBRARY, tab_from_index};
+use crate::ui::my_library::{
+    MyLibraryTab, NAV_MY_LIBRARY, persist_tab, tab_from_index, tab_of_section,
+};
 use crate::{
     AlbumDetail, AppWindow, ArtistDetail, Dialog, GenreDetail, MyLibrary, Nav, NavEnterFrom,
     PlaylistDetail, Queue,
@@ -41,17 +43,14 @@ use crate::{
 
 const HISTORY_CAP: usize = 24;
 
-/// [`NavEntry::tab`] for a section that has no tabs. Only My Library does, and only
-/// its four grid tabs carry a detail view.
-const NO_TAB: i32 = -1;
-
 /// One snapshot of the visible state. `detail_id == None` means the
 /// section's grid/list is showing; `Some(id)` means the section's detail
 /// view is open on that id.
 ///
 /// **A section alone stopped identifying a view when the five library pages became
 /// tabs of one.** `tab` is the second half: `MyLibrary.tab-idx` inside section 3,
-/// [`NO_TAB`] everywhere else. Without it a Songs → Albums move is a duplicate of the
+/// [`crate::ui::my_library::NO_TAB`] everywhere else. Without it a Songs → Albums move
+/// is a duplicate of the
 /// entry it followed, which `record`'s dedup drops on the floor.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct NavEntry {
@@ -153,15 +152,6 @@ impl Default for NavHistory {
     }
 }
 
-/// The tab `section` currently has mounted, or [`NO_TAB`] for a section without tabs.
-fn current_tab(ui: &AppWindow, section: i32) -> i32 {
-    if section == NAV_MY_LIBRARY {
-        ui.global::<MyLibrary>().get_tab_idx()
-    } else {
-        NO_TAB
-    }
-}
-
 /// Read the current visible detail id for `(section, tab)` from the per-view
 /// Slint globals, or `None` if that view has no detail concept or its detail
 /// is closed.
@@ -205,7 +195,7 @@ pub fn record(state: &AppState, entry: NavEntry) {
 /// globals by the time the callback fires.
 pub fn record_current(state: &AppState, ui: &AppWindow) {
     let section = ui.global::<Nav>().get_selected_index();
-    let tab = current_tab(ui, section);
+    let tab = tab_of_section(ui, section);
     let detail_id = current_detail_id_for(ui, section, tab);
     state.nav_history.lock().record(NavEntry { section, tab, detail_id });
 }
@@ -226,7 +216,7 @@ pub fn replay(state: &AppState, ui: &AppWindow, going_back: bool) {
     };
 
     let current_section = ui.global::<Nav>().get_selected_index();
-    let current_tab = current_tab(ui, current_section);
+    let current_tab = tab_of_section(ui, current_section);
     let current_detail = current_detail_id_for(ui, current_section, current_tab);
     let direction = if going_back { NavEnterFrom::Left } else { NavEnterFrom::Right };
 
@@ -242,33 +232,25 @@ pub fn replay(state: &AppState, ui: &AppWindow, going_back: bool) {
             target.detail_id,
             direction,
         );
-    } else if target.section == current_section {
-        // Same section, different tab — a My Library move. Neither arm below covers
-        // it: the same-view one only opens or closes a detail, and the cross-section
-        // one flips `Nav.selected-index`, which here would be a no-op. Tear down what
-        // the leaving tab has open, move the tab, then open the *target tab's* detail.
-        if current_detail.is_some() {
-            invoke_close_detail(ui, current_section, current_tab);
-        }
-        crate::ui::nav_transition::mark(ui, direction);
-        apply_tab(ui, target.tab);
-        if let Some(id) = target.detail_id {
-            spawn_open_detail(state, ui, target.section, target.tab, id, direction);
-        }
     } else {
-        // Cross-section: tear down the current detail (if any) first so
-        // its release/persist side-effects run, then flip section, then
-        // re-open the target detail (if any).
+        // The target is a different *view* — a My Library tab move, a section switch,
+        // or both. All of them tear down whatever the leaving view has open so its
+        // release/persist side-effects run, mark the direction, land on the target
+        // tab, and re-open that tab's detail. Only the section flip is conditional,
+        // and a same-section move is precisely the case where it would be a no-op
+        // followed by a redundant persist.
         if current_detail.is_some() {
             invoke_close_detail(ui, current_section, current_tab);
         }
         crate::ui::nav_transition::mark(ui, direction);
         // Before the section flip, so the page mounts on the tab it is meant to be on
         // rather than on whichever one it was left at.
-        apply_tab(ui, target.tab);
-        let nav = ui.global::<Nav>();
-        nav.set_selected_index(target.section);
-        nav.invoke_persist_selected_index(target.section);
+        persist_tab(ui, target.tab);
+        if target.section != current_section {
+            let nav = ui.global::<Nav>();
+            nav.set_selected_index(target.section);
+            nav.invoke_persist_selected_index(target.section);
+        }
         if let Some(id) = target.detail_id {
             spawn_open_detail(state, ui, target.section, target.tab, id, direction);
         }
@@ -291,19 +273,6 @@ fn apply_same_view(
         (_, Some(id)) => spawn_open_detail(state, ui, section, tab, id, direction),
         (None, None) => crate::ui::nav_transition::mark(ui, direction),
     }
-}
-
-/// Move the My Library tab and remember it — the `Nav.selected-index` /
-/// `persist-selected-index` pair one level down, and deliberately not `tab-changed`,
-/// which is a *pick* and clears the filter. A no-op for [`NO_TAB`], i.e. for every
-/// section that has no tabs.
-fn apply_tab(ui: &AppWindow, tab: i32) {
-    if tab < 0 {
-        return;
-    }
-    let g = ui.global::<MyLibrary>();
-    g.set_tab_idx(tab);
-    g.invoke_persist_tab_idx(tab);
 }
 
 fn invoke_close_detail(ui: &AppWindow, section: i32, tab: i32) {

@@ -11,6 +11,43 @@ use crate::{
     AlbumDetail, AppWindow, ArtistDetail, GenreDetail, MyLibrary, Nav, PlaylistDetail,
 };
 
+/// The tab index a section without tabs answers with. Only My Library has any.
+///
+/// Lives here rather than beside either reader: `nav_history` and
+/// `callbacks::cross_tab_nav` each declared their own `-1` with the same meaning, and
+/// the two are compared against each other every time a history entry is replayed.
+pub const NO_TAB: i32 = -1;
+
+/// The tab `section` currently has mounted, or [`NO_TAB`] for a section without tabs.
+///
+/// The one place the "is this the tabbed page, and if so which tab" question is
+/// answered. `nav_history` asks it about a recorded entry's section and
+/// `cross_tab_nav::Origin::read` about the live one; spelled twice, the two could
+/// disagree about what a tabless section reports and a replay would then never match
+/// its own recording.
+pub fn tab_of_section(ui: &AppWindow, section: i32) -> i32 {
+    if section == super::NAV_MY_LIBRARY {
+        ui.global::<MyLibrary>().get_tab_idx()
+    } else {
+        NO_TAB
+    }
+}
+
+/// Move the My Library tab and remember it.
+///
+/// The `Nav.selected-index` / `persist-selected-index` pair one level down, and
+/// deliberately **not** `tab-changed`, which is a *pick* and clears the shared filter
+/// box. A no-op for [`NO_TAB`], i.e. for every section that has no tabs — which is what
+/// lets a caller hand it a recorded entry's tab without testing the section first.
+pub fn persist_tab(ui: &AppWindow, tab: i32) {
+    if tab < 0 {
+        return;
+    }
+    let g = ui.global::<MyLibrary>();
+    g.set_tab_idx(tab);
+    g.invoke_persist_tab_idx(tab);
+}
+
 /// Which My Library sub-view is mounted.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum MyLibraryTab {
@@ -97,10 +134,8 @@ pub fn seed_tab(ui: &AppWindow, persisted_tab: i32) {
 /// this detail sits over. Restoring the nav index alone used to be the whole job; with
 /// five views sharing index 3 it is a no-op that leaves the wrong tab mounted.
 pub fn restore_origin(ui: &AppWindow, origin_nav: i32, origin_tab: i32) {
-    if origin_nav == super::NAV_MY_LIBRARY && origin_tab >= 0 {
-        let g = ui.global::<MyLibrary>();
-        g.set_tab_idx(origin_tab);
-        g.invoke_persist_tab_idx(origin_tab);
+    if origin_nav == super::NAV_MY_LIBRARY {
+        persist_tab(ui, origin_tab);
     }
     let nav = ui.global::<Nav>();
     nav.set_selected_index(origin_nav);

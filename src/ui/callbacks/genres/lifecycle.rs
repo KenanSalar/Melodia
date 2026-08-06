@@ -13,7 +13,7 @@ use async_compat::Compat;
 use slint::ComponentHandle;
 
 use crate::state::AppState;
-use crate::ui::callbacks::macros::spawn_logged;
+use crate::ui::callbacks::macros::{release_shared_hero, spawn_logged};
 use crate::ui::genres::{self as genres_ui_mod, GenresUi};
 use crate::ui::model_diff::clear_vec_model;
 use crate::ui::my_library::{MyLibraryTab, tab_is_mounted};
@@ -69,11 +69,10 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, genres_ui: &Arc<GenresUi>) 
                 clear_vec_model::<UiTrackListRow>(&d.get_tracks(), "genres: clear detail tracks");
                 clear_vec_model::<i32>(&d.get_selected_ids(), "genres: clear detail selection");
                 d.set_selection_anchor(-1);
-                // Six heroes share one colour set and one chip row, and this
-                // one has no images to release — so what rides in
-                // `release_detail_hero_images!` elsewhere is explicit here.
-                crate::ui::hero_backdrop::reset(&ui);
-                crate::ui::hero_chips::clear(&ui);
+                // Six heroes share one colour set and one chip row; this one has
+                // no images to release, so it takes the shared pair alone rather
+                // than the full `release_detail_hero_images!`.
+                release_shared_hero!(ui);
             }
             let gu = gu.clone();
             let s = s.clone();
@@ -109,8 +108,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, genres_ui: &Arc<GenresUi>) 
                             genres_ui_mod::clear_detail(&gu);
                             let _ = weak.upgrade_in_event_loop(|ui| {
                                 ui.global::<GenreDetail>().set_genre_id(-1);
-                                crate::ui::hero_backdrop::reset(&ui);
-                                crate::ui::hero_chips::clear(&ui);
+                                release_shared_hero!(ui);
                             });
                         }
                     }

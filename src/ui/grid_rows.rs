@@ -51,12 +51,17 @@ pub fn chunk_entity_rows(rows: &[UiEntityStripRow], columns: i32) -> Vec<UiEntit
 }
 
 /// Swap a grid's rows in, or log and leave the model alone if the downcast
-/// fails. `label` names the model in that log line — the two grid tabs and the
-/// one Recently Played has share this, and a bare "downcast failed" wouldn't say
-/// which.
-pub fn write_grid(model: &ModelRc<UiEntityGridRow>, rows: Vec<UiEntityGridRow>, label: &str) {
-    let Some(vec) = model.as_any().downcast_ref::<VecModel<UiEntityGridRow>>() else {
-        log::warn!("{label}: VecModel<EntityGridRow> downcast failed");
+/// fails. `label` names the model in that log line — the two grid tabs, the one
+/// Recently Played has and Browse's card grid share this, and a bare "downcast
+/// failed" wouldn't say which.
+///
+/// Generic over the row type because Browse's grid holds `BrowseCardGridRow`
+/// rather than `EntityGridRow`, and had grown a byte-for-byte copy of this
+/// saying so in a comment. The `'static` bound is what `downcast_ref` needs; the
+/// row structs Slint generates are all plain data and satisfy it.
+pub fn write_grid<R: Clone + 'static>(model: &ModelRc<R>, rows: Vec<R>, label: &str) {
+    let Some(vec) = model.as_any().downcast_ref::<VecModel<R>>() else {
+        log::warn!("{label}: VecModel<{}> downcast failed", std::any::type_name::<R>());
         return;
     };
     vec.set_vec(rows);

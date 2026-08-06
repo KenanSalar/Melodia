@@ -5,7 +5,8 @@ import { GridGeometry } from "../components/grid-geometry.slint";
 import { MosaicTabHero } from "../components/hero/mosaic-tab-hero.slint";
 import { Tooltip, TooltipSide } from "../components/tooltip.slint";
 import { ViewTransition } from "../components/view-transition.slint";
-import { ActionPill, PillLabel, PillButton, PillDivider } from "../components/action-pill.slint";
+import { ActionPill, PillButton, PillDivider } from "../components/action-pill.slint";
+import { SelectionPills } from "../components/selection-pills.slint";
 import { ColumnTogglePopup } from "../components/track-list/column-toggle-popup.slint";
 import { FilterThrottle } from "../components/filter-throttle.slint";
 import { RecentlyPlayedMostPlayedTab } from "recently-played/most-played-tab.slint";
@@ -131,14 +132,9 @@ export component RecentlyPlayedView inherits Rectangle {
                         show-year    <=> RecentlyPlayed.show-year;
                         toggled(id) => { RecentlyPlayed.toggle-column(id); }
                     }
-                    if RecentlyPlayed.selected-ids.length > 0: PillDivider { }
-                    if RecentlyPlayed.selected-ids.length > 0: PillLabel {
-                        text: @tr("{} selected", RecentlyPlayed.selected-ids.length);
-                    }
-                    if RecentlyPlayed.selected-ids.length > 0: PillButton {
-                        icon: "close";
-                        tooltip-text: @tr("Clear selection");
-                        clicked => {
+                    if RecentlyPlayed.selected-ids.length > 0: SelectionPills {
+                        count: RecentlyPlayed.selected-ids.length;
+                        cleared => {
                             RecentlyPlayed.clear-selection();
                             RecentlyPlayed.blur-search-tick += 1;
                         }

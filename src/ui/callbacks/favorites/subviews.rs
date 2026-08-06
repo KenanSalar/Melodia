@@ -14,6 +14,7 @@ use crate::ui::callbacks::macros::spawn_logged;
 use crate::ui::callbacks::{cross_tab_nav, next_sort, persist_view_sort};
 use crate::ui::favorites::{self as favorites_ui_mod, FavoritesUi};
 use crate::ui::model_diff::clear_vec_model;
+use crate::ui::tab_bar::should_announce_warm;
 use crate::ui::track_list_view::view_id;
 use crate::{AppWindow, Favorites, TrackListRow as UiTrackListRow};
 
@@ -129,16 +130,20 @@ pub(super) fn wire(
                 if let Err(e) = library::settings::set_favorites_tab(&s_disk, tab) {
                     log::warn!("favorites::set_favorites_tab: {e}");
                 }
-                let warm = fu_covers.swap_tab_covers(entering);
-                // Two ways this task can end up with nothing to announce, and
-                // they need separate checks. `warm` is the decode's own verdict
-                // — a section leave landing inside it handed the buffers back.
-                // The tab re-check is on the UI thread, where the shadow is
-                // written: a pick made while the decodes ran owns a different
-                // tier entirely, and announcing either puts the next surface's
-                // cards straight back on the decoding path.
+                // `warm` is the decode's own verdict — a section leave landing
+                // inside it handed the buffers back — so `Some(entering)` is
+                // exactly "we decoded for this tab and still hold it", which is
+                // what `should_announce_warm` takes. The other two terms are read
+                // on the UI thread, where both shadows are written: a pick made
+                // while the decodes ran owns a different tier, and a leave that
+                // landed after the prewarm returned owns none.
+                let warmed = fu_covers.swap_tab_covers(entering).then_some(entering);
                 let _ = weak_warm.upgrade_in_event_loop(move |ui| {
-                    if warm && fu_covers.active_tab() == entering {
+                    if should_announce_warm(
+                        warmed,
+                        fu_covers.section_active(),
+                        fu_covers.active_tab(),
+                    ) {
                         favorites_ui_mod::mark_covers_warm(&ui);
                     }
                 });
