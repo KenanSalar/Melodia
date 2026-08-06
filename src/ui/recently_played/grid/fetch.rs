@@ -26,11 +26,21 @@ pub async fn refresh_grid(
         .inspect_err(|e| log::warn!("recently_played::refresh_grid most_played: {e}"))
         .ok();
 
+    // **A run that stores nothing owes the tick back.** The tab pick consumes the
+    // flag *before* spawning this, so a failed query would otherwise strand the
+    // grid at `UNFETCHED_COUNT` over an empty cache with nothing scheduled to
+    // answer it, until some unrelated `stats_changed` tick happened along.
+    if most_played.is_none() {
+        rp_ui.mark_grid_dirty();
+    }
+
     // A leave that landed while the query was in flight has already cleared this
     // cache (and emptied the model), so storing now would undo the teardown
-    // behind a view nobody can see. Nothing is lost by dropping the result: every
-    // leave sets `mark_dirty`, so the next enter re-fetches.
+    // behind a view nobody can see. Nothing is lost by dropping the result: the
+    // leave re-arms both flags, and a leave whose wipe bailed because the user was
+    // already back re-arms nothing — hence the same mark here.
     if !rp_ui.section_active() {
+        rp_ui.mark_grid_dirty();
         return;
     }
 

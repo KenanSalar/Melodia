@@ -271,3 +271,79 @@ fn the_grid_mount_forwards_the_covers_generation() {
          one-argument form decodes on miss whatever the tier's state"
     );
 }
+
+/// **The pick that mounts the grid asks whether it owes a fetch *before* it applies,
+/// and says so with the sentinel.**
+///
+/// `kick_full_refresh` runs `get_most_played` only while its tab is mounted, so a page
+/// entered on Songs leaves that cache empty. The pick's own `apply_filtered_grid_now` then
+/// walks it and writes `0` — the one value meaning "there is nothing here" — and
+/// `most-played-tab.slint` mounts "Nothing played yet" over a library that has plenty, for
+/// an uncapped query *plus* the cover prewarm it awaits. `UNFETCHED_COUNT` matches neither
+/// `== 0` nor `> 0`, so the panel and the Shuffle pill both stay quiet until the fetch lands.
+///
+/// Two orderings are pinned because both are load-bearing and neither shows up in a still
+/// frame. `take_grid_dirty` has to be consumed **above** the apply, since its answer is what
+/// decides whether the count that apply writes stands for anything; and the fetch has to be
+/// spawned **below** it, so whatever the cache does hold paints on this tick.
+#[test]
+fn the_grid_pick_rewinds_the_count_it_could_not_answer() {
+    let handler = block_body(SUBVIEWS, "g.on_tab_changed(", "\n    }")
+        .unwrap_or_default();
+    assert!(!handler.is_empty(), "`subviews.rs` must still register `on_tab_changed`");
+
+    let (before_apply, after_apply) = handler
+        .split_once("apply_filtered_grid_now(&ui, &ru)")
+        .unwrap_or_default();
+    assert!(
+        before_apply.contains("ru.take_grid_dirty()"),
+        "`on_tab_changed` must consume `take_grid_dirty` before the apply — the apply's count \
+         is only honest if it already knows a fetch is coming"
+    );
+    assert!(
+        after_apply.contains("set_most_played_count(UNFETCHED_COUNT)"),
+        "a pick that spawns the grid fetch must rewind the count the apply just wrote — \
+         otherwise the empty state asserts an empty library for the length of the query"
+    );
+    assert!(
+        after_apply.contains("refresh_grid(&s_fetch, &ru_fetch, &weak_fetch)"),
+        "the fetch must be spawned after the apply, so a warm cache still paints on this tick"
+    );
+}
+
+/// The flag is armed wherever the cache it guards is emptied, and disarmed wherever it is
+/// filled — both stated locally rather than left to the caller that happens to do it today.
+///
+/// Three sites, each a bug on the way in: the lifecycle fetch consumes the tick it is
+/// paying (seeded `true`, so a boot onto this tab otherwise fetches twice), the section wipe
+/// re-arms it beside the cache it just cleared, and `refresh_grid` re-arms it on either way
+/// of storing nothing — a failed query, or a leave landing mid-flight — since the pick
+/// consumes it *before* the spawn and would otherwise leave the sentinel with no answer coming.
+#[test]
+fn the_grid_dirty_flag_is_maintained_beside_the_cache_it_guards() {
+    const LIFECYCLE: &str = include_str!("../../callbacks/recently_played/lifecycle.rs");
+    const HANDLE: &str = include_str!("../mod.rs");
+    const FETCH: &str = include_str!("../grid/fetch.rs");
+
+    let kick = block_body(LIFECYCLE, "async fn kick_full_refresh(", "\n}").unwrap_or_default();
+    assert!(
+        kick.contains("rp_ui.take_grid_dirty();"),
+        "`kick_full_refresh`'s fetching branch must consume the flag — it *is* the fetch the \
+         flag schedules, and leaving it set makes the next pick re-query a cache this filled"
+    );
+
+    let release = block_body(HANDLE, "pub fn release_section_state(", "\n    }")
+        .unwrap_or_default();
+    assert!(
+        release.contains("self.mark_grid_dirty();"),
+        "`release_section_state` must re-arm the flag beside the cache it wipes — leaving it \
+         to the leave's own `mark_dirty` is a coupling two files apart"
+    );
+
+    assert_eq!(
+        FETCH.matches("mark_grid_dirty()").count(),
+        2,
+        "`refresh_grid` must re-arm on both ways of storing nothing — a failed query and a \
+         leave landing mid-flight"
+    );
+}

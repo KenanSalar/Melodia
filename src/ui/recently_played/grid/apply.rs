@@ -26,16 +26,16 @@ pub(super) struct PreparedGrid {
     tab: RecentlyPlayedTab,
     /// Empty unless [`Self::tab`] is `MostPlayed`.
     pub(super) most_played: Vec<UiEntityStripRow>,
-    /// The filtered count, published on **either** tab, unlike the rows. It
-    /// gates the `GridEmptyState` and feeds the hero band, so the tab that isn't
-    /// mounted still has to publish one — and counting costs nothing extra, the
-    /// walk that hashes runs either way.
+    /// The filtered count that gates the grid's `GridEmptyState`. `0` on the
+    /// Songs tab, where nothing reads it: both readers of
+    /// `RecentlyPlayed.most-played-count` sit inside the Most Played branch, and
+    /// the band takes its facts from `RecentlyPlayedUiState::most_played_totals`
+    /// rather than from here.
     pub(super) most_played_count: usize,
     /// Hash of everything that reaches a card, taken from the **source**
-    /// entities rather than the built rows — which is what lets the rows above
-    /// be built for one tab while the signature stays answerable for both.
-    /// `#[derive(Hash)]` keeps it complete when a field is added, where a
-    /// hand-listed set would quietly go stale.
+    /// entities rather than the built rows. `#[derive(Hash)]` keeps it complete
+    /// when a field is added, where a hand-listed set would quietly go stale.
+    /// `0` on the Songs tab, matching what [`mounted_content`] answers there.
     pub(super) most_played_content: u64,
 }
 
@@ -43,33 +43,46 @@ pub(super) struct PreparedGrid {
 /// `RecentlyPlayed.filter`, hashing and counting the survivors as they go. Runs
 /// entirely in memory and touches no Slint state, so either thread can call it.
 ///
-/// **The cache is walked on both tabs; the rows are built only on the mounted
-/// one.** The two sub-views are mutually exclusive `if`s, so a row built for the
-/// other reaches a grid nothing can scroll and is dropped by
-/// [`write_filtered_grid`] anyway. What makes the split possible is that the hash
-/// comes off the *source* entities rather than the built rows, so the walk still
-/// answers the signature for the tab it didn't build. Which tab that is comes off
-/// the [`RecentlyPlayedUi`] shadow, the only form of the answer a worker can read.
+/// **Nothing is walked on the Songs tab**, which is the same mounted-tab-only
+/// rule `songs::build_filtered_tracks` holds from the other side. The two
+/// sub-views are mutually exclusive `if`s, so
+/// neither the rows nor the count reaches anything there — and the walk is not
+/// free: the query behind this cache is uncapped and library-wide, and
+/// [`apply_filtered_grid_now`] calls this **on the UI thread** from
+/// `on_filter_changed` and `on_columns_changed`, so a settled keystroke was
+/// folding a needle against every played track and pushing each one's six
+/// strings through a hasher for a grid nobody can see. The bail is safe because
+/// [`mounted_content`] already collapses the Songs arm to a constant `0`: the
+/// signature never depended on this hash there, and the tab pick itself runs
+/// `apply_filtered_grid_now` on the way in, so the count is rebuilt before the
+/// grid it gates can mount.
+///
+/// Which tab is mounted comes off the [`RecentlyPlayedUi`] shadow, the only form
+/// of the answer a worker can read.
 pub(super) fn build_filtered_grid(rp_ui: &RecentlyPlayedUi) -> PreparedGrid {
-    let needle = rp_ui.state().filter.lock().clone();
     let tab = rp_ui.active_tab();
+    if tab != RecentlyPlayedTab::MostPlayed {
+        return PreparedGrid {
+            tab,
+            most_played: Vec::new(),
+            most_played_count: 0,
+            most_played_content: 0,
+        };
+    }
+
+    let needle = rp_ui.state().filter.lock().clone();
     let mut hasher = DefaultHasher::new();
+    let most_played: Vec<UiEntityStripRow> = rp_ui
+        .state()
+        .most_played
+        .lock()
+        .iter()
+        .filter(|t| most_played_matches(t, &needle))
+        .inspect(|t| t.hash(&mut hasher))
+        .map(to_slint_most_played_row)
+        .collect();
 
-    let (most_played, most_played_count) = {
-        let cache = rp_ui.state().most_played.lock();
-        let matching = cache
-            .iter()
-            .filter(|t| most_played_matches(t, &needle))
-            .inspect(|t| t.hash(&mut hasher));
-        if tab == RecentlyPlayedTab::MostPlayed {
-            let rows: Vec<UiEntityStripRow> = matching.map(to_slint_most_played_row).collect();
-            let count = rows.len();
-            (rows, count)
-        } else {
-            (Vec::new(), matching.count())
-        }
-    };
-
+    let most_played_count = most_played.len();
     PreparedGrid {
         tab,
         most_played,
@@ -82,11 +95,14 @@ pub(super) fn build_filtered_grid(rp_ui: &RecentlyPlayedUi) -> PreparedGrid {
 /// thread only.
 ///
 /// The count is published unchunked beside the model: `rows.length` is a row
-/// count where the hero's band and the empty-state gate want cards. It rides
-/// along with the model rather than being written unconditionally, which is safe
-/// only because every reader of it is inside the Most Played branch or gated on
-/// `tab-idx` — so a count left stale under the skip below is one nothing can
-/// render, and picking the tab is itself a signature change that refreshes it.
+/// count where the `GridEmptyState` wants cards. It is written on either tab, but
+/// only stands for something on Most Played — [`build_filtered_grid`] walks
+/// nothing on Songs, so there it is a constant `0`. That is safe for the same
+/// reason the skip below is: every reader of it sits inside the Most Played branch
+/// or under a `tab-idx` gate, so a count nothing walked is one nothing can render,
+/// and picking that tab is itself a signature change that recomputes it. **What
+/// the pick then owes is the sentinel**, when the cache it recomputed against is
+/// one a skipped tick left empty — `callbacks::recently_played::subviews` argues it.
 ///
 /// Three things short-circuit it. A hidden section is never written to — the
 /// leave teardown emptied this model deliberately, and refilling it behind that

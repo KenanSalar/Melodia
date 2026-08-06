@@ -63,8 +63,11 @@ export global Favorites {
     // fills only the mounted tab's model**, so the hidden one costs nothing.
     in-out property <[EntityGridRow]> most-played-rows;
     in-out property <[EntityGridRow]> artist-rows;
-    // Pre-chunk counts for the hero band and the empty-state gates — `rows.length` is a
-    // row count, not a card count. `-1` until fetched; see `track-count` above.
+    // Pre-chunk counts gating the two `GridEmptyState`s — `rows.length` is a row count,
+    // not a card count. Not the band's: it takes its facts from the folds on
+    // `FavoritesUiState`, and both readers of each of these sit inside that count's own
+    // tab branch. So the unmounted tab's reads `0`, Rust walking only the mounted one.
+    // `-1` until fetched; see `track-count` above.
     in-out property <int> most-played-count: -1;
     in-out property <int> artist-count: -1;
 
@@ -201,9 +204,13 @@ export global RecentlyPlayed {
     // Library-wide tracks by play count, chunked into grid rows. **Rust fills this only
     // while Most Played is the mounted tab**, so the hidden one costs nothing.
     in-out property <[EntityGridRow]> most-played-rows;
-    // Pre-chunk card count for the hero band and the empty-state gate — `rows.length` is
-    // a row count, not a card count. Published on both tabs, since the band reads it.
-    // `-1` until fetched; see `Favorites.track-count` for why that sentinel exists.
+    // Pre-chunk card count gating the `GridEmptyState` — `rows.length` is a row count, not
+    // a card count. Not the band's: it takes its facts from `most_played_totals`, and both
+    // readers of this sit inside the Most Played branch. So the Songs tab reads `0`, Rust
+    // walking nothing there.
+    // `-1` until fetched; see `Favorites.track-count` for why that sentinel exists. It is
+    // also what a tab pick writes back when the cache it just walked is one a skipped
+    // refresh tick left empty — the fetch that pick spawns is what answers it.
     in-out property <int> most-played-count: -1;
 
     // The post-filter view Rust writes, always in fetch (recency) order. **There is no

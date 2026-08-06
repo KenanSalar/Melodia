@@ -16,6 +16,7 @@ const PILLS: &str = include_str!("../../../../melodia-ui/ui/views/my-library/tab
 const SORT_ROW: &str =
     include_str!("../../../../melodia-ui/ui/components/sort-pill-row.slint");
 const CALLBACKS: &str = include_str!("../../callbacks/my_library.rs");
+const FILTER: &str = include_str!("../filter.rs");
 
 /// The five tab bodies, each stripped of the header its predecessor carried.
 const TAB_BODIES: [(&str, &str); 5] = [
@@ -250,10 +251,11 @@ fn the_sidebar_offers_one_row_for_the_whole_page() {
 ///
 /// The band's box and the property Rust filters by are different things: clearing only
 /// the box leaves the tab the pick lands on filtered by a needle nothing on screen shows,
-/// and the cards it hides look like a library that lost rows. Dispatching the empty
-/// needle through the page's own hand-off is what clears the other side — and rebuilds
-/// that model from cache ahead of the section gate's refetch, so the list is never blank
-/// either.
+/// and the cards it hides look like a library that lost rows. `filter::clear_mounted` is
+/// what clears the other side, dispatching the empty needle through the page's own
+/// hand-off — and only into a tab that has one; see
+/// [`a_tab_pick_dispatches_only_into_a_tab_that_is_filtered`] for why the guard is not
+/// optional.
 ///
 /// All nine bodies are checked for the boxes they used to own: a stray `SearchBar` down
 /// there would filter its surface through a global this dispatch doesn't reach, and the
@@ -269,7 +271,7 @@ fn a_tab_pick_clears_the_filter_on_both_sides() {
         "`wire_my_library` must still register `on_tab_changed` before `on_persist_tab_idx` \
          — this pin bounds the handler between the two",
     );
-    for clear in ["g.set_filter(SharedString::from(\"\"))", "filter::dispatch(&ui, \"\")"] {
+    for clear in ["g.set_filter(SharedString::from(\"\"))", "filter::clear_mounted(&ui)"] {
         assert!(
             handler.contains(clear),
             "`on_tab_changed` must spell `{clear}` — the band's box and the entering tab's \
@@ -318,7 +320,6 @@ fn a_drill_a_back_or_a_tab_move_reseats_the_shared_box() {
         ("watched-playlist-id", "PlaylistDetail.playlist-id"),
         ("watched-tab-idx", "MyLibrary.tab-idx"),
     ];
-    const FILTER: &str = include_str!("../filter.rs");
 
     assert!(
         GLOBAL.contains("callback detail-scope-changed();"),
@@ -352,11 +353,17 @@ fn a_drill_a_back_or_a_tab_move_reseats_the_shared_box() {
     );
 
     // Nine surfaces out, nine back. A missing read leaves that surface's needle
-    // unrepresented, which is the same lie one direction at a time.
+    // unrepresented, which is the same lie one direction at a time. Both readers —
+    // `sync_box` and `clear_mounted`'s guard — go through `mounted_filter`, so this is
+    // the one place the return leg is spelled.
     let sync = FILTER
-        .split_once("pub fn sync_box(")
-        .map_or("", |(_, body)| body);
-    assert!(!sync.is_empty(), "`ui::my_library::filter` must expose `sync_box`");
+        .split_once("fn mounted_filter(")
+        .and_then(|(_, rest)| rest.split_once("pub fn clear_mounted("))
+        .map_or("", |(body, _)| body);
+    assert!(
+        !sync.is_empty(),
+        "`ui::my_library::filter` must expose `mounted_filter` above `clear_mounted`",
+    );
     for surface in [
         "Tracks",
         "AlbumDetail",
@@ -370,10 +377,81 @@ fn a_drill_a_back_or_a_tab_move_reseats_the_shared_box() {
     ] {
         assert!(
             sync.contains(&format!("ui.global::<{surface}>()")),
-            "`sync_box` must reach `{surface}` — `dispatch` routes to all nine surfaces on the \
-             way out and this owes all nine on the way back",
+            "`mounted_filter` must reach `{surface}` — `dispatch` routes to all nine surfaces \
+             on the way out and this owes all nine on the way back",
         );
     }
+}
+
+/// **A tab pick clears the entering tab's needle only if it has one.**
+///
+/// The pick runs ahead of the section gate, so the surface it dispatches into has already
+/// had its Rust cache wiped by its own leave. Dispatching unconditionally therefore
+/// rebuilds each of the four grid tabs from nothing — `total-count = 0` and an empty model,
+/// which is precisely the pair `GridEmptyState` mounts on, overwriting the
+/// `UNFETCHED_COUNT` sentinel the leave wrote to keep that panel quiet until the fetch
+/// answers. What the user saw was "No albums yet" on every pick into a grid tab, for the
+/// length of the query. Songs pays the same write without the lie: a second full-library
+/// row build on the event loop, on top of the one its fetch is already going to do.
+///
+/// **And where it does dispatch, it puts the sentinel back.** The guard removes the common
+/// case and not the rare one: a tab left *filtered* is still cleared, still through the
+/// rebuild, so the `0` still lands. `rewind_grid_count` is what makes that honest — the
+/// leave already marked the view dirty, so the gate's re-fetch is on its way and all the
+/// pick owes is not to have said "there is nothing here" in the meantime. Songs is excluded
+/// because its model survives the leave and `refilter` re-derives a true count off it; the
+/// four details because a detail arm writes no grid count at all.
+///
+/// The mutation to check is reinstating the bare `dispatch(&ui, "")`, which
+/// [`a_tab_pick_clears_the_filter_on_both_sides`] passes on just as happily — the box
+/// still clears, the routing is still nine-way, and the surface still ends up
+/// unfiltered. Only the frames in between are wrong, which is why the guard needs a pin
+/// of its own.
+#[test]
+fn a_tab_pick_dispatches_only_into_a_tab_that_is_filtered() {
+    let clear = FILTER
+        .split_once("pub fn clear_mounted(")
+        .and_then(|(_, rest)| rest.split_once("\n}"))
+        .map_or("", |(body, _)| body);
+    assert!(!clear.is_empty(), "`ui::my_library::filter` must expose `clear_mounted`");
+    assert!(
+        clear.contains("mounted_filter(ui).is_empty()") && clear.contains("return;"),
+        "`clear_mounted` must bail on an already-empty needle before it dispatches — the \
+         dispatch is what writes the empty-state pair into a tab whose cache its leave wiped",
+    );
+    assert!(
+        clear.contains("rewind_grid_count(ui)"),
+        "`clear_mounted` must put the sentinel back after a dispatch it did make — the \
+         rebuild writes `0` over it either way",
+    );
+
+    let rewind = FILTER
+        .split_once("fn rewind_grid_count(")
+        .and_then(|(_, rest)| rest.split_once("\n}\n"))
+        .map_or("", |(body, _)| body);
+    assert!(!rewind.is_empty(), "`ui::my_library::filter` must expose `rewind_grid_count`");
+    for grid in ["Albums", "Artists", "Genres", "Playlists"] {
+        assert!(
+            rewind.contains(&format!("ui.global::<{grid}>().set_total_count(UNFETCHED_COUNT)")),
+            "`rewind_grid_count` must rewind `{grid}` — every grid tab's cache is wiped by \
+             its own leave, so every one of them takes the same `0` from the rebuild",
+        );
+    }
+    assert!(
+        !rewind.contains("ui.global::<Tracks>()"),
+        "`rewind_grid_count` must leave Songs alone — its model survives the leave, so \
+         `refilter` re-derives a true count off a warm cache and there is nothing to take back",
+    );
+
+    let handler = CALLBACKS
+        .split_once("g.on_tab_changed(")
+        .and_then(|(_, rest)| rest.split_once("g.on_persist_tab_idx("))
+        .map_or("", |(body, _)| body);
+    assert!(
+        !handler.contains("filter::dispatch("),
+        "`on_tab_changed` must not reach `dispatch` directly — that is the unguarded call \
+         `clear_mounted` exists to replace",
+    );
 }
 
 /// The four `open_*` functions and the id each one writes last.

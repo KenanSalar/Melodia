@@ -55,53 +55,66 @@ fn only_the_mounted_tabs_rows_are_built() {
     );
 }
 
-/// The count is the half that *is* owed on both tabs: it gates the
-/// `GridEmptyState` and feeds the hero band, and counting costs nothing extra
-/// because the walk that hashes runs either way.
+/// **The cache isn't walked at all while the Songs tab is mounted.**
+///
+/// It used to be, for the count — which does gate the grid's `GridEmptyState`,
+/// but only from inside the Most Played branch, and the band takes its facts
+/// from `most_played_totals` rather than from here. So the walk answered nobody,
+/// and it is not a cheap nobody: `get_most_played` is uncapped and library-wide,
+/// and `apply_filtered_grid_now` reaches this **on the UI thread** from
+/// `on_filter_changed` and `on_columns_changed` — a settled keystroke on the
+/// Songs tab folding a needle against every played track and pushing six strings
+/// each through a hasher.
+///
+/// The mutation to catch is restoring the both-tabs walk. Nothing observable
+/// breaks — the count it computes is simply never rendered — so only the cost
+/// comes back.
 #[test]
-fn the_count_is_published_whichever_tab_is_mounted() {
-    for tab in [RecentlyPlayedTab::Songs, RecentlyPlayedTab::MostPlayed] {
-        assert_eq!(
-            build_filtered_grid(&seeded(tab, 3)).most_played_count,
-            1,
-            "{tab:?} must still publish the filtered card count"
-        );
-    }
+fn nothing_is_walked_while_the_grid_is_unmounted() {
+    let prepared = build_filtered_grid(&seeded(RecentlyPlayedTab::Songs, 3));
+    assert_eq!(
+        prepared.most_played_count, 0,
+        "the Songs tab must not count a cache no mounted surface reads"
+    );
+    assert_eq!(
+        prepared.most_played_content, 0,
+        "the Songs tab must not hash it either — `mounted_content` already answers `0` there, \
+         so the signature never depended on this walk"
+    );
 }
 
-/// The hash comes off the *source* entities rather than the built rows, which is
-/// what lets the rows be built for one tab while the signature stays answerable
-/// for both. Take it off the rows and the Songs tab reports a constant hash, so
-/// a play-count flush arriving there is indistinguishable from nothing having
-/// moved — and the first apply after switching back skips.
+/// The mounted tab still publishes both, and a play-count flush still moves the
+/// hash — the guard against a bail that swallowed the tab it was meant to serve.
 #[test]
-fn the_content_hash_survives_the_tab_that_built_no_rows() {
-    let on_grid = build_filtered_grid(&seeded(RecentlyPlayedTab::MostPlayed, 3));
-    let on_songs = build_filtered_grid(&seeded(RecentlyPlayedTab::Songs, 3));
-    assert_eq!(
-        on_grid.most_played_content, on_songs.most_played_content,
-        "the content hash must be tab-independent — `grid_signature` already folds the tab in \
-         separately, so hashing it twice would make a pick indistinguishable from a data change"
-    );
+fn the_mounted_grid_publishes_its_count_and_hash() {
+    let prepared = build_filtered_grid(&seeded(RecentlyPlayedTab::MostPlayed, 3));
+    assert_eq!(prepared.most_played_count, 1);
 
-    let bumped = build_filtered_grid(&seeded(RecentlyPlayedTab::Songs, 4));
+    let bumped = build_filtered_grid(&seeded(RecentlyPlayedTab::MostPlayed, 4));
     assert_ne!(
-        on_songs.most_played_content, bumped.most_played_content,
-        "a play-count flush must move the hash even while the grid is unmounted"
+        prepared.most_played_content, bumped.most_played_content,
+        "a play-count flush must move the hash, else the apply that repaints the cards skips"
     );
 }
 
 /// The Songs tab mounts no grid, so nothing the grid could rebuild is on screen
 /// there. A constant `0` is what stops a `stats_changed` tick — which reaches
-/// both tabs — forcing a `set_vec` reset nobody can see.
+/// both tabs — forcing a `set_vec` reset nobody can see. It is also what makes
+/// the bail above safe: the signature was never reading this hash on Songs.
 #[test]
 fn the_songs_tab_contributes_no_mounted_content() {
-    let prepared = build_filtered_grid(&seeded(RecentlyPlayedTab::Songs, 3));
-    assert_eq!(mounted_content(RecentlyPlayedTab::Songs, &prepared), 0);
+    let on_songs = build_filtered_grid(&seeded(RecentlyPlayedTab::Songs, 3));
+    assert_eq!(mounted_content(RecentlyPlayedTab::Songs, &on_songs), 0);
+
+    let on_grid = build_filtered_grid(&seeded(RecentlyPlayedTab::MostPlayed, 3));
     assert_eq!(
-        mounted_content(RecentlyPlayedTab::MostPlayed, &prepared),
-        prepared.most_played_content,
+        mounted_content(RecentlyPlayedTab::MostPlayed, &on_grid),
+        on_grid.most_played_content,
         "the mounted grid must contribute its own hash"
+    );
+    assert_ne!(
+        on_grid.most_played_content, 0,
+        "…and that hash must be a real one, else this test passes on a grid that built nothing"
     );
 }
 

@@ -39,7 +39,7 @@ mod state;
 mod tabs;
 
 use std::sync::Arc;
-use std::sync::atomic::{AtomicU8, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 
 use crate::media::cover_thumbs::CoverThumbs;
 use crate::ui::hero_folds::{HeroFold, MostPlayedTotals};
@@ -83,6 +83,19 @@ pub struct RecentlyPlayedUi {
     /// mounted, so doing both is twice the work and twice the resident buffers
     /// for a surface nobody can scroll.
     active_tab: AtomicU8,
+    /// [`SectionState`]'s dirty flag one level down, for the Most Played tab
+    /// alone.
+    ///
+    /// **The section flag can't answer this, because the page has one
+    /// `SectionActiveGate` where My Library has one per tab.** Both fetches used
+    /// to run on every `stats_changed` tick — one per finished track — so the
+    /// Songs tab paid a full library-wide `get_most_played`, a fold over every
+    /// played row and a store of the lot, for a grid the user cannot see and may
+    /// never open. Gating the fetch on the mounted tab is what makes that
+    /// nothing; this is where the tick it skipped is remembered, so the pick
+    /// that mounts the grid knows to fetch. Seeded `true`, the first pick
+    /// therefore always fetching.
+    grid_dirty: AtomicBool,
 }
 
 impl RecentlyPlayedUi {
@@ -100,6 +113,7 @@ impl RecentlyPlayedUi {
             )),
             section: SectionState::new(),
             active_tab: AtomicU8::new(RecentlyPlayedTab::Songs.as_code()),
+            grid_dirty: AtomicBool::new(true),
         }
     }
 
@@ -129,6 +143,18 @@ impl RecentlyPlayedUi {
     /// Atomically read-and-clear the dirty flag.
     pub fn take_dirty(&self) -> bool {
         self.section.take_dirty()
+    }
+
+    /// Remember that a refresh tick reached the page while the Most Played tab
+    /// was not the one mounted. See [`Self::grid_dirty`].
+    pub fn mark_grid_dirty(&self) {
+        self.grid_dirty.store(true, Ordering::Release);
+    }
+
+    /// Atomically read-and-clear it — `true` iff the Most Played cache has
+    /// missed a tick since the last fetch.
+    pub fn take_grid_dirty(&self) -> bool {
+        self.grid_dirty.swap(false, Ordering::AcqRel)
     }
 
     /// Serialize a bulk-state wipe against a data write. Held only around
@@ -191,6 +217,11 @@ impl RecentlyPlayedUi {
             *self.inner.most_played_totals.lock() = MostPlayedTotals::default();
             self.inner.applied_selection.lock().clear();
         }
+        // Stated where the wipe is rather than left to the caller: this empties the
+        // very cache the flag guards, and the leave's own `mark_dirty` re-arming it
+        // through `kick_full_refresh` is a coupling two files apart that a fifth
+        // caller of this function would not know to honour.
+        self.mark_grid_dirty();
         crate::tasks::heap_trim::trim();
     }
 

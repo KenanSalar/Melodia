@@ -32,19 +32,19 @@ pub(super) struct PreparedGrids {
     /// translated "{n} favorite[s]" line only runs on the UI thread, so these
     /// are finished inside `invoke_from_event_loop` rather than here.
     pub(super) artists: Vec<FavoriteArtist>,
-    /// Filtered counts for **both** tabs, unlike the rows. They gate the two
-    /// `GridEmptyState`s and feed the hero's stats line, so the tab that isn't
-    /// mounted still has to publish one — and counting costs nothing extra, the
-    /// walk that hashes runs either way.
+    /// Filtered counts gating the two `GridEmptyState`s. `0` on a tab that
+    /// wasn't walked, where nothing reads them: each count's two readers sit
+    /// inside its own tab's branch, and the band takes its facts from
+    /// `FavoritesUiState`'s folds rather than from here.
     pub(super) most_played_count: usize,
     pub(super) artists_count: usize,
     /// Per-tab hash of everything that reaches a card, taken from the **source**
-    /// entities rather than the built rows — which is what lets the rows above
-    /// be built for one tab while the signature stays answerable for both.
-    /// `#[derive(Hash)]` keeps it complete when a field is added, where a
-    /// hand-listed set would quietly go stale. One per tab, not one for both — a
-    /// play-count flush changes Most Played's and must not force the Artists
-    /// grid, which nothing about it affects, to rebuild too.
+    /// entities rather than the built rows. `#[derive(Hash)]` keeps it complete
+    /// when a field is added, where a hand-listed set would quietly go stale.
+    /// One per tab, not one for both — a play-count flush changes Most Played's
+    /// and must not force the Artists grid, which nothing about it affects, to
+    /// rebuild too. `0` on a tab that wasn't walked, matching what
+    /// [`mounted_content`] answers for it.
     pub(super) most_played_content: u64,
     pub(super) artists_content: u64,
 }
@@ -56,75 +56,79 @@ pub(super) struct PreparedGrids {
 /// (Artists). Runs entirely in memory and touches no Slint state, so either
 /// thread can call it.
 ///
-/// **Both tabs are walked; only the mounted one's rows are built.** The two are
-/// mutually exclusive `if`s, so a row built for the other reaches a grid nothing
-/// can scroll and is dropped by [`write_filtered_grids`] — and on the Songs tab
-/// that was true of both, since `mounted_content` is a constant `0` there. What
-/// makes the split possible is that the hashes come off the *source* entities
-/// rather than the built rows, so the walk still answers the signature for the
-/// tab it didn't build. Which tab that is comes off the `FavoritesUi` shadow,
-/// the only form of the answer a worker can read.
+/// **Only the mounted tab's cache is walked at all.** The three sub-views are
+/// mutually exclusive `if`s, so neither an unmounted grid's rows nor its count
+/// nor its hash reaches anything — `mounted_content` already answers a constant
+/// `0` for the two tabs that aren't up, so the signature never read those
+/// hashes, and each count's readers sit inside its own tab's branch. Walking
+/// both anyway cost a fold of the needle against every cached entity and a
+/// string-heavy `Hash` of each survivor, and `apply_filtered_grids_now` reaches
+/// this **on the UI thread** from the tab pick and the column-count push. Which
+/// tab is mounted comes off the `FavoritesUi` shadow, the only form of the
+/// answer a worker can read.
 pub(super) fn build_filtered_grids(fav_ui: &FavoritesUi) -> PreparedGrids {
     let needle = fav_ui.state().filter.lock().clone();
     let tab = fav_ui.active_tab();
-    let mut most_played_hasher = DefaultHasher::new();
-    let mut artists_hasher = DefaultHasher::new();
 
-    let (most_played, most_played_count) = {
-        let cache = fav_ui.state().most_played.lock();
-        let matching = cache
+    let (most_played, most_played_content) = if tab == FavoritesTab::MostPlayed {
+        let mut hasher = DefaultHasher::new();
+        let rows: Vec<UiEntityStripRow> = fav_ui
+            .state()
+            .most_played
+            .lock()
             .iter()
             .filter(|t| most_played_matches(t, &needle))
-            .inspect(|t| t.hash(&mut most_played_hasher));
-        if tab == FavoritesTab::MostPlayed {
-            let rows: Vec<UiEntityStripRow> = matching.map(to_slint_most_played_row).collect();
-            let count = rows.len();
-            (rows, count)
-        } else {
-            (Vec::new(), matching.count())
-        }
+            .inspect(|t| t.hash(&mut hasher))
+            .map(to_slint_most_played_row)
+            .collect();
+        (rows, hasher.finish())
+    } else {
+        (Vec::new(), 0)
     };
 
     // Artist rows can't be finished here — the subtitle is a translated
     // plural ("{n} favorite[s]") that only `Favorites.artist-favorite-subtitle`
     // resolves, and that is a UI-thread callback. Clone the filtered slice so
     // the source Mutex isn't held past this function.
-    let (artists, artists_count) = {
-        let cache = fav_ui.state().fav_artists.lock();
-        let matching = cache
+    let (artists, artists_content) = if tab == FavoritesTab::Artists {
+        let mut hasher = DefaultHasher::new();
+        let rows: Vec<FavoriteArtist> = fav_ui
+            .state()
+            .fav_artists
+            .lock()
             .iter()
             .filter(|a| needle.contains(&a.name))
-            .inspect(|a| a.hash(&mut artists_hasher));
-        if tab == FavoritesTab::Artists {
-            let rows: Vec<FavoriteArtist> = matching.cloned().collect();
-            let count = rows.len();
-            (rows, count)
-        } else {
-            (Vec::new(), matching.count())
-        }
+            .inspect(|a| a.hash(&mut hasher))
+            .cloned()
+            .collect();
+        (rows, hasher.finish())
+    } else {
+        (Vec::new(), 0)
     };
 
+    let most_played_count = most_played.len();
+    let artists_count = artists.len();
     PreparedGrids {
         tab,
         most_played,
         artists,
         most_played_count,
         artists_count,
-        most_played_content: most_played_hasher.finish(),
-        artists_content: artists_hasher.finish(),
+        most_played_content,
+        artists_content,
     }
 }
 
 /// Chunk the prepared rows into cards and push them into the mounted tab's
 /// model, emptying the other. UI thread only.
 ///
-/// The counts are published unchunked beside the models, for *both* tabs:
-/// `rows.length` is a row count where the hero's stats line and the
-/// empty-state gate want cards. They ride along with the models rather than
-/// being written unconditionally, which is safe only because every reader of a
-/// count is inside that tab's own branch or gated on `tab-idx` — so a count
-/// left stale under the skip below is one nothing can render, and picking the
-/// tab is itself a signature change that refreshes it.
+/// The counts are published unchunked beside the models: `rows.length` is a row
+/// count where the two `GridEmptyState`s want cards. Both are written, but only
+/// the mounted tab's stands for anything — [`build_filtered_grids`] walks that
+/// tab alone, so the other's is a constant `0`. That is safe for the same reason
+/// the skip below is: every reader of a count sits inside its own tab's branch or
+/// under a `tab-idx` gate, so a count nothing walked is one nothing can render,
+/// and picking that tab is itself a signature change that recomputes it.
 ///
 /// Three things short-circuit it. A hidden section is never written to — the
 /// leave teardown emptied these models deliberately, and refilling them behind

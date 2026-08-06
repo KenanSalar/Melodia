@@ -12,7 +12,7 @@ use crate::ui::callbacks::macros::spawn_logged;
 use crate::ui::callbacks::spawn_play_then_shuffle;
 use crate::ui::model_diff::clear_vec_model;
 use crate::ui::recently_played::{self as recently_played_ui_mod, RecentlyPlayedUi};
-use crate::ui::tab_bar::should_announce_warm;
+use crate::ui::tab_bar::{UNFETCHED_COUNT, should_announce_warm};
 use crate::{AppWindow, RecentlyPlayed, TrackListRow as UiTrackListRow};
 
 /// Wire the card-action and sub-view-routing callbacks.
@@ -73,6 +73,12 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, rp_ui: &Arc<RecentlyPlayedU
             ru.set_active_tab(entering);
             recently_played_ui_mod::set_filter(&ru, "");
 
+            // Asked *before* the apply below, because the apply is what has to know:
+            // the answer decides whether the count it writes stands for anything.
+            let needs_grid_fetch =
+                entering == recently_played_ui_mod::RecentlyPlayedTab::MostPlayed
+                    && ru.take_grid_dirty();
+
             // The entering tier was cleared when its tab was last left, so the
             // cards mount cold: hold the lookups at cache-only until the prewarm
             // below reports back, or each visible card drags a 448 px decode onto
@@ -99,6 +105,32 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, rp_ui: &Arc<RecentlyPlayedU
                     &g.get_tracks(),
                     "recently_played: leave songs tab",
                 );
+            }
+
+            // The grid's query only runs while its tab is mounted, so entering
+            // it is where a tick skipped on the Songs tab gets paid for. Spawned
+            // *after* the synchronous apply above, so whatever the cache already
+            // holds paints on this tick and the fetch refreshes behind it; the
+            // dirty flag is what keeps a pick back and forth from re-querying a
+            // cache nothing has invalidated. See `lifecycle::kick_full_refresh`.
+            //
+            // **And the apply's count has to be taken back, because the cache it
+            // walked is the one this fetch is about to fill.** A `0` there is the
+            // one value that means "there is nothing here" — it mounts
+            // `GridEmptyState`'s "Nothing played yet" over a library that has
+            // plenty, for a full uncapped `get_most_played` plus the cover-decode
+            // burst it awaits. `UNFETCHED_COUNT` matches neither `== 0` nor `> 0`,
+            // so the panel and the Shuffle pill both stay quiet until the fetch
+            // answers; the band's chips go with them, `most_played_chips` publishing
+            // none at a zero total, which is the shape an empty hero already has.
+            if needs_grid_fetch {
+                g.set_most_played_count(UNFETCHED_COUNT);
+                let s_fetch = s.clone();
+                let ru_fetch = ru.clone();
+                let weak_fetch = weak.clone();
+                s.runtime.spawn(async move {
+                    recently_played_ui_mod::refresh_grid(&s_fetch, &ru_fetch, &weak_fetch).await;
+                });
             }
 
             let ru_covers = ru.clone();

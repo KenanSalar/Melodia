@@ -63,10 +63,11 @@ pub fn wire_my_library(ui: &AppWindow, state: &AppState) {
     //
     // **Both sides, and the second one is the entering tab's.** Clearing the band's box
     // leaves the view Rust filters by untouched, so the tab the pick lands on would come
-    // up filtered under an empty box. Dispatching the empty needle through the same
-    // nine-way hand-off the box uses clears it *and* rebuilds that model from the cache
-    // Rust already holds — synchronously, ahead of the section gate's re-fetch, so the
-    // list is never blank and never stale.
+    // up filtered under an empty box — `filter::clear_mounted` drops that needle through
+    // the same nine-way hand-off the box uses. It clears *only* a tab that has one: the
+    // entering surface's cache was wiped by its own section leave, so a dispatch into an
+    // unfiltered tab rebuilds from nothing and hands the four grids the empty-state pair
+    // their leave had deliberately withheld. That argument lives on `clear_mounted`.
     {
         let s = state.clone();
         let weak = weak.clone();
@@ -75,7 +76,7 @@ pub fn wire_my_library(ui: &AppWindow, state: &AppState) {
                 let g = ui.global::<MyLibrary>();
                 g.set_filter(SharedString::from(""));
                 g.set_blur_search_tick(g.get_blur_search_tick() + 1);
-                my_library_mod::filter::dispatch(&ui, "");
+                my_library_mod::filter::clear_mounted(&ui);
             }
             persist_tab(&s, tab);
         });

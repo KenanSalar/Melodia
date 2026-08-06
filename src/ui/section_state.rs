@@ -26,7 +26,7 @@ use parking_lot::{Mutex, MutexGuard};
 /// * [`gate`](Self::gate) — serializes a section's bulk-state wipe against
 ///   the fetch that stores into the same caches (`fetch_grid` on the four
 ///   entity grids, `favorites::{hero,songs,grids}` and
-///   `recently_played::{strip,tracks}` on the two curated pages) so the two
+///   `recently_played::{grid,songs}` on the two curated pages) so the two
 ///   can't interleave and leave the visible state inconsistent. Held only
 ///   around the write/wipe — never across an `.await` (`parking_lot` guard).
 pub struct SectionState {

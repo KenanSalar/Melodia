@@ -220,6 +220,10 @@ struct LibraryPage {
     source: &'static str,
     /// The Rust handler owning the section leave.
     lifecycle: &'static str,
+    /// Whether that leave owes the sentinel rewind. True for the four that empty
+    /// their models on the way out; see [`every_library_leave_rewinds_the_count_it_numbered`]
+    /// for why Tracks is the exception.
+    rewinds_on_leave: bool,
 }
 
 const LIBRARY_PAGES: [LibraryPage; 5] = [
@@ -228,30 +232,35 @@ const LIBRARY_PAGES: [LibraryPage; 5] = [
         global: "Tracks",
         source: include_str!("../../../melodia-ui/ui/globals/tracks.slint"),
         lifecycle: include_str!("../callbacks/tracks.rs"),
+        rewinds_on_leave: false,
     },
     LibraryPage {
         label: "albums",
         global: "Albums",
         source: include_str!("../../../melodia-ui/ui/globals/albums.slint"),
         lifecycle: include_str!("../callbacks/albums/lifecycle.rs"),
+        rewinds_on_leave: true,
     },
     LibraryPage {
         label: "artists",
         global: "Artists",
         source: include_str!("../../../melodia-ui/ui/globals/artists.slint"),
         lifecycle: include_str!("../callbacks/artists/lifecycle.rs"),
+        rewinds_on_leave: true,
     },
     LibraryPage {
         label: "genres",
         global: "Genres",
         source: include_str!("../../../melodia-ui/ui/globals/genres.slint"),
         lifecycle: include_str!("../callbacks/genres/lifecycle.rs"),
+        rewinds_on_leave: true,
     },
     LibraryPage {
         label: "playlists",
         global: "Playlists",
         source: include_str!("../../../melodia-ui/ui/globals/playlists.slint"),
         lifecycle: include_str!("../callbacks/playlists/lifecycle.rs"),
+        rewinds_on_leave: true,
     },
 ];
 
@@ -295,19 +304,31 @@ fn every_library_count_starts_at_the_unfetched_sentinel() {
 }
 
 /// A section leave rewinds the count on the same tick it stops standing for
-/// anything.
+/// anything — and Tracks is the one leave with nothing to rewind.
 ///
-/// Tracks earns its place here on a leave arm added for it, and is the one whose
-/// rewind isn't free: its model survives a leave, so the rewind is honest only
-/// beside the `mark_dirty()` that guarantees a fetch is coming. Drop that and the
-/// header states nothing over rows that are still on screen, permanently.
+/// The rule is about a *derived value outliving its source*, so what decides it is
+/// whether the leave drops the rows. The four grid tabs empty their models, so a
+/// count left at its last real value would suppress an empty state over nothing.
+/// Tracks doesn't: `TracksUi` has no `release_section_state` and the Songs leave
+/// touches neither `Tracks.rows` nor the cached `full` Vec, so its count stays
+/// true for as long as the rows it numbers are there.
+///
+/// It did rewind once, and that is what makes the exception worth stating rather
+/// than merely allowing. A rewind is only honest beside a `mark_dirty()` — nothing
+/// else re-fetches this list — and marking dirty on a *tab* leave turned every
+/// return to Songs into a full `get_tracks` plus a library-sized row build on the
+/// event loop. Both went together, because neither was load-bearing without the
+/// other. So the mutation this guards is a rewind reappearing in `tracks.rs`
+/// without the model clear that would justify it.
 #[test]
 fn every_library_leave_rewinds_the_count_it_numbered() {
     for page in LIBRARY_PAGES {
-        assert!(
+        assert_eq!(
             page.lifecycle.contains("set_total_count(UNFETCHED_COUNT)"),
+            page.rewinds_on_leave,
             "{}'s section leave must rewind `total-count` on the same tick it drops the rows \
-             that count numbered",
+             that count numbered — and must not rewind at all if it keeps them, since the \
+             rewind then owes a re-fetch nothing needs",
             page.label
         );
     }

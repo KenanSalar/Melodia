@@ -74,11 +74,20 @@ pub fn fold_tracks(rows: &[TrackListRow]) -> HeroFold {
 }
 
 /// Sum the Most Played tab's own totals off its cached rows.
+///
+/// One walk rather than two: Recently Played's copy of this list is uncapped and
+/// library-wide, and a row is mostly `String`, so a `sum` per field is a second
+/// pass over more memory than fits a cache to reach two `Copy` fields inside it.
 pub fn fold_most_played(rows: &[MostPlayedFavorite]) -> MostPlayedTotals {
+    let (duration_ms, plays) = rows
+        .iter()
+        .fold((0i64, 0i32), |(duration_ms, plays), row| {
+            (duration_ms + row.duration_ms, plays + row.play_count)
+        });
     MostPlayedTotals {
         tracks: len_as_i32(rows.len()),
-        duration_ms: rows.iter().map(|r| r.duration_ms).sum(),
-        plays: rows.iter().map(|r| r.play_count).sum(),
+        duration_ms,
+        plays,
     }
 }
 

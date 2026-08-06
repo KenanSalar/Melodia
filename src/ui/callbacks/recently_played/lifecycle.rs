@@ -12,7 +12,9 @@ use super::NAV_RECENTLY_PLAYED;
 use crate::state::AppState;
 use crate::ui::callbacks::macros::release_shared_hero;
 use crate::ui::model_diff::clear_vec_model;
-use crate::ui::recently_played::{self as recently_played_ui_mod, RecentlyPlayedUi};
+use crate::ui::recently_played::{
+    self as recently_played_ui_mod, RecentlyPlayedTab, RecentlyPlayedUi,
+};
 use crate::ui::tab_bar::UNFETCHED_COUNT;
 use crate::{
     AppWindow, EntityGridRow as UiEntityGridRow, Nav, RecentlyPlayed,
@@ -165,18 +167,41 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, rp_ui: &Arc<RecentlyPlayedU
     }
 }
 
-/// Fetch the Most Played grid + the recency list and apply each as it lands.
-/// Concurrent — `tokio::join!` runs both in parallel. `refresh_grid` logs its
-/// own error (returns `()`); `refresh_tracks` returns `AppResult<()>`.
+/// Fetch the recency list, and the Most Played grid only when its tab is the one
+/// mounted. Concurrent when both run — `tokio::join!` runs them in parallel.
+/// `refresh_grid` logs its own error (returns `()`); `refresh_tracks` returns
+/// `AppResult<()>`.
+///
+/// **The grid's query is the one that has to be asked for.** `get_most_played`
+/// is uncapped and library-wide by design — the tab is a virtualized grid, and a
+/// cap there is a ceiling the user can scroll into — so every call materializes
+/// a row per played track, folds the lot and stores it. This runs on each
+/// `stats_changed` tick, i.e. once per finished track, for the whole time the
+/// page is on screen; on the Songs tab all of it reaches a grid that isn't
+/// mounted. My Library answers this with a `SectionActiveGate` per tab, so the
+/// entering tab's own fetch is what warms it; this page has one gate for both
+/// tabs, so the tick that was skipped is remembered on
+/// [`RecentlyPlayedUi::mark_grid_dirty`] and the pick that mounts the grid
+/// fetches instead.
 async fn kick_full_refresh(
     state: &AppState,
     rp_ui: &Arc<RecentlyPlayedUi>,
     weak: &slint::Weak<AppWindow>,
 ) {
-    let (_grid, t) = tokio::join!(
-        recently_played_ui_mod::refresh_grid(state, rp_ui, weak),
-        recently_played_ui_mod::refresh_tracks(state, rp_ui, weak),
-    );
+    let t = if rp_ui.active_tab() == RecentlyPlayedTab::MostPlayed {
+        // This *is* the fetch the flag schedules, so it settles it here rather than
+        // leaving the next pick to re-query a cache this tick just filled. Seeded
+        // `true`, so without it a boot onto this tab pays for its own fetch twice.
+        rp_ui.take_grid_dirty();
+        let (_grid, t) = tokio::join!(
+            recently_played_ui_mod::refresh_grid(state, rp_ui, weak),
+            recently_played_ui_mod::refresh_tracks(state, rp_ui, weak),
+        );
+        t
+    } else {
+        rp_ui.mark_grid_dirty();
+        recently_played_ui_mod::refresh_tracks(state, rp_ui, weak).await
+    };
     if let Err(e) = t {
         log::warn!("recently_played::refresh_tracks: {e}");
     }
