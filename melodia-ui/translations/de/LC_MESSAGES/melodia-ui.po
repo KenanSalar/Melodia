@@ -963,6 +963,50 @@ msgstr "Die heruntergeladene Aktualisierung konnte nicht auf der Festplatte gesp
 msgid "Update failed. See logs for details."
 msgstr "Aktualisierung fehlgeschlagen. Details siehe Protokoll."
 
+# ---- Settings → About → Diagnostics -----------------------------------------
+
+msgid "Diagnostics"
+msgstr "Diagnose"
+
+msgid "Logs"
+msgstr "Protokolle"
+
+msgid "Where Melodia writes its log files and crash reports."
+msgstr "Wo Melodia seine Protokolldateien und Absturzberichte ablegt."
+
+# Shared with the crash-report toast's action button, which opens the same folder.
+msgid "Open Folder"
+msgstr "Ordner öffnen"
+
+msgid "Diagnostics report"
+msgstr "Diagnosebericht"
+
+msgid "One text file with your system details, settings and recent logs, for attaching to a bug report."
+msgstr ""
+"Eine Textdatei mit deinen Systemdaten, Einstellungen und den letzten "
+"Protokollen — zum Anhängen an einen Fehlerbericht."
+
+msgid "Save…"
+msgstr "Speichern…"
+
+msgid "Diagnostics report saved"
+msgstr "Diagnosebericht gespeichert"
+
+msgid "Couldn't save the diagnostics report"
+msgstr "Diagnosebericht konnte nicht gespeichert werden"
+
+msgid "See the log for details."
+msgstr "Details siehe Protokoll."
+
+# Pushed once on the launch after a panic.
+msgid "Melodia crashed last time"
+msgstr "Melodia ist beim letzten Mal abgestürzt"
+
+msgid "A crash report was written. Open the log folder to find it."
+msgstr ""
+"Es wurde ein Absturzbericht geschrieben. Öffne den Protokollordner, um ihn "
+"zu finden."
+
 msgid "Close to Tray"
 msgstr "In den Systembereich schließen"
 

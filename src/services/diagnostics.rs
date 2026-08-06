@@ -18,11 +18,12 @@ use std::io::{Read, Seek, SeekFrom};
 use std::path::Path;
 use std::sync::Arc;
 
-use chrono::Local;
+use chrono::{DateTime, Local};
 
 use crate::config::Paths;
 use crate::database::queries;
 use crate::error::{AppError, AppResult};
+use crate::services::crash_report::FILE_TS_FORMAT;
 use crate::services::settings::read_settings;
 use crate::services::{crash_report, logging, redact_home};
 use crate::state::AppState;
@@ -38,6 +39,13 @@ const MAX_CRASH_REPORT_BYTES: u64 = 16 * 1024;
 /// Total cap across all log files. Enough to hold the session that failed plus
 /// the tail of the one before it, and small enough to attach to an issue.
 const MAX_LOG_TAIL_BYTES: u64 = 256 * 1024;
+
+/// What to pre-fill the save dialog with. Stamped local, like a crash report's
+/// name and for the same reason — a reporter matching a file against "it broke
+/// around 2pm" shouldn't have to apply an offset.
+pub fn suggested_file_name(now: DateTime<Local>) -> String {
+    format!("melodia-diagnostics-{}.txt", now.format(FILE_TS_FORMAT))
+}
 
 /// Build the report. Returns the text; the caller owns where it lands.
 pub async fn build_report(state: &AppState) -> AppResult<String> {

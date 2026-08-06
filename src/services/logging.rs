@@ -35,13 +35,23 @@ use crate::error::{AppError, AppResult};
 /// symphonia, zbus, notify, reqwest — whose volume is decided by their choices
 /// against our rotation budget. Both tokens are real targets: `melodia` is the
 /// lib (all of `src/`), `Melodia` the bin (`main.rs`). `RUST_LOG` overrides it.
-const DEFAULT_LOG_SPEC: &str = "warn, melodia=info, Melodia=info";
+///
+/// `layer3` is muted because its bit-reservoir underflow warns once per *frame*
+/// on any stream not opened at byte zero — every seek and every gapless preload
+/// — while the decoder compensates and plays it fine. Safe to scope by module:
+/// that is the only `warn!` in it, and the demuxer's all still land. Directives
+/// match longest-name-first, so this outranks the floor.
+const DEFAULT_LOG_SPEC: &str =
+    "warn, melodia=info, Melodia=info, symphonia_bundle_mp3::layer3=error";
 
-/// Rotate at 2 MiB, keep 5 — a ≤ 10 MiB ceiling in the data directory. Enough
-/// to hold the session that crashed plus the few before it, which is the whole
-/// window anyone reads back.
+/// Rotate at 2 MiB or at the turn of the day; `Cleanup` never counts the live
+/// file, so the ceiling is 8 files, 16 MiB.
+///
+/// Counted rather than dated (`Cleanup::KeepForDays`): that variant drops the
+/// byte bound, and its startup sweep wipes an occasional user's whole history
+/// before they can report anything.
 const MAX_LOG_BYTES: u64 = 2 * 1024 * 1024;
-const KEEP_LOG_FILES: usize = 5;
+const KEEP_LOG_FILES: usize = 7;
 
 /// Keeps the logger alive for the process. `flexi_logger` shuts its writers down
 /// when the handle drops, and `main` ends in `process::exit(0)` — so a local
@@ -100,12 +110,20 @@ pub fn log_files() -> Vec<PathBuf> {
     let Some(handle) = HANDLE.get() else {
         return Vec::new();
     };
-    // The default selector omits `rCURRENT` — i.e. the live file, the one a
-    // reporter actually needs.
-    let selector = LogfileSelector::default().with_r_current();
-    let mut files = handle.existing_log_files(&selector).unwrap_or_default();
-    // Sorted ascending by name, and `Naming::Numbers` counts up from the oldest
-    // with `rCURRENT` last, so this is oldest-first.
-    files.reverse();
+    // Two calls: asked for together, the rotated files come back newest-first
+    // but the live one is *appended* after them, so the list is neither
+    // chronological nor reverse-chronological and no sort of it is either.
+    let mut files = handle
+        .existing_log_files(&LogfileSelector::none().with_r_current())
+        .unwrap_or_default();
+    files.extend(
+        handle
+            .existing_log_files(&LogfileSelector::default())
+            .unwrap_or_default(),
+    );
     files
 }
+
+#[cfg(test)]
+#[path = "tests/logging_tests.rs"]
+mod tests;

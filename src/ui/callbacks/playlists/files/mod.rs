@@ -33,10 +33,6 @@ use crate::ui::notifications::NotificationsUi;
 use crate::ui::playlists::PlaylistsUi;
 use crate::{AppWindow, Dialog};
 
-/// Transient import/export confirmation toasts auto-dismiss after this long.
-/// Error toasts stay sticky so a failure isn't missed.
-const TOAST_AUTO_DISMISS_MS: u32 = 3000;
-
 /// Wire the `Playlists.*` import/export callbacks. Call once after both the
 /// `playlists_ui` handle and the notifications stack exist.
 pub fn wire(

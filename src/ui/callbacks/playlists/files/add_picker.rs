@@ -9,12 +9,11 @@ use async_compat::Compat;
 use slint::{ComponentHandle, Model, SharedString};
 
 use super::{
-    TOAST_AUTO_DISMISS_MS, add_pick_disabled, clamp_usize, refresh_add_selection_meta,
-    set_all_picks, toggle_pick,
+    add_pick_disabled, clamp_usize, refresh_add_selection_meta, set_all_picks, toggle_pick,
 };
 use crate::library;
 use crate::state::AppState;
-use crate::ui::notifications::{NotificationParams, NotificationsUi};
+use crate::ui::notifications::{NotificationParams, NotificationsUi, TOAST_AUTO_DISMISS_MS};
 use crate::ui::playlists::{self as playlists_ui_mod, PlaylistsUi};
 use crate::{AppWindow, Dialog, PlaylistPickRow as UiPlaylistPickRow, Playlists, Settings};
 

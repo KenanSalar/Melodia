@@ -39,10 +39,22 @@ const MAX_CRASH_REPORTS: usize = 10;
 const PREFIX: &str = "crash-";
 const SUFFIX: &str = ".txt";
 
-/// The timestamp format inside a report's file name. Sortable, path-safe, and
-/// second-resolution — the process aborts on the first panic, so two reports
-/// can only collide across concurrent instances.
-const FILE_TS_FORMAT: &str = "%Y%m%d-%H%M%S";
+/// High-water mark of the newest report the user has already been shown, so a
+/// crash is announced once rather than on every launch after it.
+///
+/// It shares the logs directory with the things it tracks and is retired by
+/// neither sweep: it carries neither [`PREFIX`] nor [`SUFFIX`], so
+/// [`timestamp_of`] rejects it, and `flexi_logger`'s own cleanup matches its
+/// `melodia` basename and `log` suffix. Two independent gates.
+const LAST_SEEN_FILE: &str = "last-seen-crash.json";
+
+/// The timestamp format inside an artifact's file name. Sortable, path-safe,
+/// and second-resolution — the process aborts on the first panic, so two
+/// reports can only collide across concurrent instances.
+///
+/// Shared with `services::diagnostics`, whose saved bundle is stamped the same
+/// way: the two are read side by side, so they had better agree.
+pub(crate) const FILE_TS_FORMAT: &str = "%Y%m%d-%H%M%S";
 
 /// Set for the lifetime of the first panic, so a panic raised *inside* the hook
 /// can't recurse into it. std has its own panic-in-hook abort, but it triggers
@@ -58,7 +70,12 @@ fn file_name(now: DateTime<Local>) -> String {
 /// Pruning is gated on this, so it is the whole of what keeps the sweep off a
 /// file that isn't ours — `melodia_rCURRENT.log` shares the directory.
 fn timestamp_of(name: &str) -> Option<NaiveDateTime> {
-    let stamp = name.strip_prefix(PREFIX)?.strip_suffix(SUFFIX)?;
+    parse_stamp(name.strip_prefix(PREFIX)?.strip_suffix(SUFFIX)?)
+}
+
+/// Read a bare [`FILE_TS_FORMAT`] stamp — the half [`timestamp_of`] and the
+/// last-seen marker share.
+fn parse_stamp(stamp: &str) -> Option<NaiveDateTime> {
     NaiveDateTime::parse_from_str(stamp, FILE_TS_FORMAT).ok()
 }
 
@@ -167,6 +184,41 @@ pub(crate) fn system_facts(now: DateTime<Local>) -> String {
         // unknown there, not absent.
         install = crate::services::updater::target::current_target_key().unwrap_or("unknown"),
     )
+}
+
+/// The newest report the user hasn't been told about, marking it seen.
+///
+/// Returns `None` on the second call and on every later launch, so the boot
+/// toast fires once per crash. There are no false positives by construction:
+/// a report exists only because the hook above wrote one.
+pub fn take_unseen(logs_dir: &Path) -> Option<PathBuf> {
+    // `existing_reports` is oldest first.
+    let (newest, path) = existing_reports(logs_dir).pop()?;
+
+    let marker = logs_dir.join(LAST_SEEN_FILE);
+    let seen: LastSeen = crate::services::load_json_or_default_sync(&marker).unwrap_or_default();
+    if seen.newest.as_deref().and_then(parse_stamp) >= Some(newest) {
+        return None;
+    }
+
+    let record = LastSeen {
+        newest: Some(newest.format(FILE_TS_FORMAT).to_string()),
+    };
+    if let Err(e) = crate::services::write_json_atomic_sync(&marker, &record) {
+        // Hand the report over anyway. The hook wrote into this same directory
+        // moments before, so a failure here is close to impossible — and a
+        // notice that repeats beats one that never arrives.
+        log::warn!("crash report marker: {e}");
+    }
+    Some(path)
+}
+
+/// What [`take_unseen`] persists. A [`FILE_TS_FORMAT`] string rather than a
+/// `NaiveDateTime` because chrono is pulled without its `serde` feature.
+#[derive(Default, serde::Serialize, serde::Deserialize)]
+struct LastSeen {
+    #[serde(default)]
+    newest: Option<String>,
 }
 
 /// Reports newest first, at most `limit`.

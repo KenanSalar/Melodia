@@ -1,6 +1,8 @@
 use std::path::Path;
 
-use super::{crash_block, settings_block, tail_of};
+use chrono::{Local, TimeZone};
+
+use super::{crash_block, settings_block, suggested_file_name, tail_of};
 use crate::error::AppError;
 use crate::test_support::{paths_in, reading_env, with_env_var};
 
@@ -120,4 +122,17 @@ fn the_settings_block_is_an_allowlist() -> Result<(), AppError> {
         );
     }
     Ok(())
+}
+
+/// The bundle sits in a downloads folder next to whatever else the reporter has
+/// saved, so the suggested name has to say what it is *and* when — stamped the
+/// same way a crash report's name is, since the two get read together.
+#[test]
+fn the_suggested_name_carries_a_sortable_local_stamp() {
+    let now = Local
+        .with_ymd_and_hms(2026, 8, 6, 14, 30, 5)
+        .single()
+        .unwrap_or_else(Local::now);
+
+    assert_eq!(suggested_file_name(now), "melodia-diagnostics-20260806-143005.txt");
 }

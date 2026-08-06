@@ -30,6 +30,7 @@ use crate::services::scrobble::{
 use crate::services::settings::ScrobbleFlags;
 use crate::services::toast::{self, ToastKind};
 use crate::state::AppState;
+use crate::ui::launcher;
 use crate::{AppWindow, Dialog, ScrobbleUi, Settings};
 
 /// Paint the per-service connection/enabled props from a status snapshot. The
@@ -325,11 +326,7 @@ fn wire_login_flows(ui: &AppWindow, state: &AppState) {
                     Ok(token) => {
                         let url =
                             format!("https://www.last.fm/api/auth/?api_key={api_key}&token={token}");
-                        match tokio::task::spawn_blocking(move || open::that(url)).await {
-                            Ok(Ok(())) => {}
-                            Ok(Err(e)) => log::warn!("Last.fm auth: open browser failed: {e}"),
-                            Err(e) => log::warn!("Last.fm auth: open task join failed: {e}"),
-                        }
+                        launcher::open_target(url, "Last.fm auth").await;
                         let _ = weak.upgrade_in_event_loop(move |ui| {
                             let su = ui.global::<ScrobbleUi>();
                             su.set_lastfm_token(token.into());

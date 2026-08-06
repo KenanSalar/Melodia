@@ -963,6 +963,48 @@ msgstr "İndirilen güncelleme diske yazılamadı."
 msgid "Update failed. See logs for details."
 msgstr "Güncelleme başarısız. Ayrıntılar için günlüklere bakın."
 
+# ---- Settings → About → Diagnostics -----------------------------------------
+
+msgid "Diagnostics"
+msgstr "Tanılama"
+
+msgid "Logs"
+msgstr "Günlükler"
+
+msgid "Where Melodia writes its log files and crash reports."
+msgstr "Melodia'nın günlük dosyalarını ve çökme raporlarını yazdığı yer."
+
+# Shared with the crash-report toast's action button, which opens the same folder.
+msgid "Open Folder"
+msgstr "Klasörü Aç"
+
+msgid "Diagnostics report"
+msgstr "Tanılama raporu"
+
+msgid "One text file with your system details, settings and recent logs, for attaching to a bug report."
+msgstr ""
+"Sistem bilgilerinizi, ayarlarınızı ve son günlükleri içeren tek bir metin "
+"dosyası — hata bildirimine eklemek için."
+
+msgid "Save…"
+msgstr "Kaydet…"
+
+msgid "Diagnostics report saved"
+msgstr "Tanılama raporu kaydedildi"
+
+msgid "Couldn't save the diagnostics report"
+msgstr "Tanılama raporu kaydedilemedi"
+
+msgid "See the log for details."
+msgstr "Ayrıntılar için günlüğe bakın."
+
+# Pushed once on the launch after a panic.
+msgid "Melodia crashed last time"
+msgstr "Melodia geçen sefer çöktü"
+
+msgid "A crash report was written. Open the log folder to find it."
+msgstr "Bir çökme raporu yazıldı. Bulmak için günlük klasörünü açın."
+
 msgid "Close to Tray"
 msgstr "Sistem Tepsisine Kapat"
 

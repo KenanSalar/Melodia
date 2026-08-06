@@ -10,6 +10,7 @@ balance
 bar_chart
 bedtime
 brush
+bug_report
 category
 chat
 check
@@ -22,6 +23,7 @@ colorize
 create_new_folder
 crop_square
 delete
+description
 dock_to_left
 dock_to_right
 download

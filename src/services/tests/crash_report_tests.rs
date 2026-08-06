@@ -2,7 +2,10 @@ use std::path::Path;
 
 use chrono::{Local, TimeZone};
 
-use super::{MAX_CRASH_REPORTS, file_name, format_report, prune, recent, timestamp_of};
+use super::{
+    LAST_SEEN_FILE, MAX_CRASH_REPORTS, file_name, format_report, prune, recent, take_unseen,
+    timestamp_of,
+};
 use crate::error::AppError;
 use crate::test_support::{reading_env, with_env_var};
 
@@ -135,6 +138,9 @@ fn prune_never_touches_a_name_it_did_not_write() -> Result<(), AppError> {
         "crash-NOPE.txt",
         "crash-20260806-143000.log",
         "notes.txt",
+        // This module's own marker, which lives in the same directory and is
+        // deliberately spelled outside the scheme so the sweep can't reach it.
+        LAST_SEEN_FILE,
     ];
     for name in decoys {
         std::fs::write(tmp.path().join(name), b"x")?;
@@ -177,6 +183,76 @@ fn an_empty_folder_yields_nothing() -> Result<(), AppError> {
     let tmp = tempfile::tempdir()?;
     assert!(recent(tmp.path(), 5).is_empty());
     assert!(recent(&tmp.path().join("missing"), 5).is_empty());
+    assert_eq!(take_unseen(tmp.path()), None);
+    assert_eq!(take_unseen(&tmp.path().join("missing")), None);
     prune(&tmp.path().join("missing"));
+    Ok(())
+}
+
+/// The boot toast fires once per crash, so the second ask has to come back
+/// empty — otherwise every launch after a panic re-announces it forever.
+#[test]
+fn take_unseen_hands_a_report_over_exactly_once() -> Result<(), AppError> {
+    let tmp = tempfile::tempdir()?;
+    for offset in 0..3 {
+        std::fs::write(tmp.path().join(file_name(stamp(offset))), b"x")?;
+    }
+
+    let first = take_unseen(tmp.path());
+    assert_eq!(
+        first.as_ref().and_then(|p| p.file_name()?.to_str()),
+        Some(file_name(stamp(2)).as_str()),
+        "the newest report is the one worth announcing"
+    );
+    assert_eq!(take_unseen(tmp.path()), None);
+    Ok(())
+}
+
+/// A *newer* crash after an acknowledged one is a new crash. The mutation this
+/// catches is the marker being written but never compared against — which
+/// silences every crash after the first.
+#[test]
+fn take_unseen_announces_a_crash_newer_than_the_marker() -> Result<(), AppError> {
+    let tmp = tempfile::tempdir()?;
+    std::fs::write(tmp.path().join(file_name(stamp(0))), b"x")?;
+    assert!(take_unseen(tmp.path()).is_some());
+
+    std::fs::write(tmp.path().join(file_name(stamp(60))), b"x")?;
+
+    assert_eq!(
+        take_unseen(tmp.path()).as_ref().and_then(|p| p.file_name()?.to_str()),
+        Some(file_name(stamp(60)).as_str())
+    );
+    Ok(())
+}
+
+/// Reports older than the high-water mark stay silent even when the newer one
+/// they were superseded by has since been pruned away — a `>` slipped to `>=`
+/// (or a comparison against the wrong end of the list) shows up here.
+#[test]
+fn take_unseen_stays_quiet_for_a_report_the_marker_covers() -> Result<(), AppError> {
+    let tmp = tempfile::tempdir()?;
+    let newest = tmp.path().join(file_name(stamp(60)));
+    std::fs::write(&newest, b"x")?;
+    assert!(take_unseen(tmp.path()).is_some());
+
+    std::fs::remove_file(&newest)?;
+    std::fs::write(tmp.path().join(file_name(stamp(0))), b"x")?;
+
+    assert_eq!(take_unseen(tmp.path()), None);
+    Ok(())
+}
+
+/// The marker shares the directory with the reports, so it must not be one:
+/// counted as a report it would be the newest name in there half the time.
+#[test]
+fn the_marker_is_not_itself_a_report() -> Result<(), AppError> {
+    let tmp = tempfile::tempdir()?;
+    std::fs::write(tmp.path().join(file_name(stamp(0))), b"x")?;
+    assert!(take_unseen(tmp.path()).is_some());
+
+    assert!(tmp.path().join(LAST_SEEN_FILE).exists(), "no marker was written");
+    assert_eq!(timestamp_of(LAST_SEEN_FILE), None);
+    assert!(recent(tmp.path(), 10).iter().all(|p| p.file_name() != Some(LAST_SEEN_FILE.as_ref())));
     Ok(())
 }

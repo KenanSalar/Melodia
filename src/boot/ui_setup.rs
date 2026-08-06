@@ -286,6 +286,9 @@ pub fn install_library_settings_and_friends(
     ui::file_watching::install(app, state, &notifications);
     ui::updater_settings::install(app, state);
     ui::about::install(app, state);
+    // Takes the stack because it both toasts and, on the launch after a panic,
+    // pushes the "crashed last time" notice itself.
+    ui::diagnostics::install(app, state, &notifications);
     ui::settings_page::install(app, state);
     ui::hero_chips::install(app);
     Ok(notifications)

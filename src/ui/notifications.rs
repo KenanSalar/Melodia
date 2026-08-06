@@ -29,6 +29,11 @@ use crate::{AppWindow, NotificationRow, Notifications};
 /// without ever pushing cards past the viewport edge.
 const MAX_VISIBLE: usize = 5;
 
+/// How long a transient confirmation toast stays up. Errors stay sticky
+/// instead — a failure nobody was looking at is a failure nobody heard about —
+/// so this is only ever passed to [`NotificationsUi::show_auto_dismiss`].
+pub const TOAST_AUTO_DISMISS_MS: u32 = 3000;
+
 /// One notification's worth of data. `variant` is one of the strings the
 /// `NotificationCard` Slint component dispatches on: `"info"`, `"success"`,
 /// `"warning"`, `"error"`. Unknown variants fall through to the "info"

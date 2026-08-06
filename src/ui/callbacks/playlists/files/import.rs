@@ -7,10 +7,10 @@ use std::sync::Arc;
 use async_compat::Compat;
 use slint::{ComponentHandle, SharedString};
 
-use super::{TOAST_AUTO_DISMISS_MS, clamp_u32};
+use super::clamp_u32;
 use crate::library;
 use crate::state::AppState;
-use crate::ui::notifications::{NotificationParams, NotificationsUi};
+use crate::ui::notifications::{NotificationParams, NotificationsUi, TOAST_AUTO_DISMISS_MS};
 use crate::ui::playlists::{self as playlists_ui_mod, PlaylistsUi};
 use crate::{AppWindow, Playlists, Settings};
 
