@@ -26,6 +26,14 @@ const SCROLLERS: [&str; 2] = ["ScrollView", "ListView"];
 const AXES: [&str; 2] = ["horizontal", "vertical"];
 const OPT_OUT: &str = "always-off";
 
+/// Everything under this directory is mounted inside the dialog card, so its
+/// scrollbars sit on `surface0` rather than on the page. `multiline-input.slint`
+/// is named beside it because it is only ever mounted there — the Lyrics tab and
+/// the playlist description — despite living a directory up.
+const DIALOG_DIR: &str = "/components/dialog/";
+const DIALOG_STRAYS: [&str; 1] = ["multiline-input.slint"];
+const CARD_TRACK: &str = "track-color: Theme.scrollbar-track-on-card;";
+
 /// The whole tree, comment-stripped, paired with the file it came from.
 fn sources() -> Vec<(String, String)> {
     let (paths, mut unreadable) = slint_sources();
@@ -42,6 +50,12 @@ fn sources() -> Vec<(String, String)> {
     }
     assert!(unreadable.is_empty(), "unreadable Slint paths: {unreadable:?}");
     out
+}
+
+/// Collapses runs of whitespace, so a pin reads a token sequence rather than one
+/// mount's indentation.
+fn normalized(src: &str) -> String {
+    src.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
 /// The first index at or after `from` holding a non-whitespace byte.
@@ -163,6 +177,49 @@ fn every_scroller_opts_out_of_the_stock_scrollbar() {
         offenders.is_empty(),
         "every ScrollView/ListView must turn both stock scrollbars off and mount an \
          OverlayScrollbar instead (CLAUDE.md, Slint Conventions):\n{}",
+        offenders.join("\n")
+    );
+}
+
+/// A bar on a dialog card takes a track colour of its own.
+///
+/// The default is `surface0` at half alpha, which over a `surface0` card
+/// composites to exactly `surface0` — zero contrast, so the thumb floats with
+/// nothing saying how far the list runs. It is the failure mode that *looks* like
+/// a missing feature rather than a wrong colour, and a new dialog scrollbar
+/// inherits it by writing nothing at all, which is why it is worth a pin.
+#[test]
+fn every_dialog_scrollbar_takes_the_track_that_reads_on_a_card() {
+    let sources = sources();
+    let mut bars = 0usize;
+    let mut offenders = Vec::new();
+
+    for (path, src) in &sources {
+        let in_dialog = path.contains(DIALOG_DIR)
+            || DIALOG_STRAYS.iter().any(|stray| path.ends_with(stray));
+        if !in_dialog {
+            continue;
+        }
+        let mut from = 0;
+        while let Some(at) = src[from..].find("OverlayScrollbar").map(|rel| rel + from) {
+            from = at + "OverlayScrollbar".len();
+            let Some(open) = next_non_ws(src.as_bytes(), from) else { continue };
+            if src.as_bytes()[open] != b'{' {
+                continue;
+            }
+            let Some(body) = block_body(src, open) else { continue };
+            bars += 1;
+            if !normalized(body).contains(CARD_TRACK) {
+                offenders.push(format!("{path}: OverlayScrollbar does not set {CARD_TRACK}"));
+            }
+        }
+    }
+
+    assert!(bars >= 5, "only {bars} dialog scrollbars found — the walk is broken");
+    assert!(
+        offenders.is_empty(),
+        "an OverlayScrollbar on a dialog card composites the default track into the \
+         card exactly, leaving only the thumb visible:\n{}",
         offenders.join("\n")
     );
 }

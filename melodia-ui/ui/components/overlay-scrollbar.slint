@@ -24,10 +24,14 @@ export component OverlayScrollbar inherits Rectangle {
     in property <length> bar-radius: 4px;
     in property <length> min-thumb: 28px;
 
-    // The neutral treatment every list view takes; the one override is Now Playing's Up
-    // Next, tinted with the per-artwork accent to match the visualizer. Passing the same
-    // brush for both thumb states drops its hover shift — the track's own ramp below
-    // still reports hover.
+    // The neutral treatment every list view takes, and it is tuned for a bar on the
+    // **page**: `surface0` at half alpha is a step up from `base`. Two override
+    // families. Now Playing's Up Next tints all three with the per-artwork accent to
+    // match the visualizer. And every dialog scrollbar passes
+    // `Theme.scrollbar-track-on-card`, because a bar on a `surface0` card composites
+    // this default into the card exactly — see that token for the arithmetic. Passing
+    // the same brush for both thumb states drops its hover shift; the track's own ramp
+    // below still reports hover.
     in property <brush> track-color: Theme.surface0;
     in property <brush> thumb-color: Theme.surface2;
     in property <brush> thumb-active-color: Theme.accent;

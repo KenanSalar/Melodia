@@ -192,7 +192,9 @@ export component PlaylistMosaicPicker inherits Rectangle {
             background: Theme.surface0;
             border-radius: Theme.radius-md;
             border-width: 1px;
-            border-color: Theme.border;
+            // `surface2`, for `PickerListCard`'s reason: `Theme.border` is `surface0`
+            // on Catppuccin, so this card had no edge against the dialog behind it.
+            border-color: Theme.surface2;
             clip: true;
 
             cand-sv := ScrollView {
@@ -303,6 +305,7 @@ export component PlaylistMosaicPicker inherits Rectangle {
             // at a fixed six-column stride, so it needs no gutter reserved for it.
             OverlayScrollbar {
                 horizontal: false;
+                track-color: Theme.scrollbar-track-on-card;
                 x: parent.width - self.width - 2px;
                 y: 2px;
                 width: 10px;

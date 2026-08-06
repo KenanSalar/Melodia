@@ -37,7 +37,10 @@ component NotificationCard inherits Rectangle {
 
     height: layout.preferred-height;
     background: Theme.surface0;
-    border-color: Theme.border;
+    // The third `surface0` card that floats over the app and so has to state its
+    // own edge — `Tooltip` and the dialog being the other two. `Theme.border` is
+    // `surface0` on Catppuccin, so this one was painting its own fill.
+    border-color: Theme.surface2;
     border-width: 1px;
     border-radius: Theme.radius-md;
     opacity: root.shown ? 1.0 : 0.0;
