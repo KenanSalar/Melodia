@@ -4,10 +4,82 @@
 //! into production binaries.
 
 use std::cell::Cell;
+use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use crate::config::Paths;
+
+/// The root of the Slint tree, for the pins that walk it rather than naming files.
+pub(crate) const UI_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/melodia-ui/ui");
+
+/// Every `.slint` file under [`UI_DIR`], sorted, alongside the directories that
+/// wouldn't list.
+///
+/// The unreadable paths come back rather than being skipped: a dropped subtree
+/// lowers whatever a caller counts and its pin goes quiet, and the source-count
+/// floors those pins carry are far too loose to notice one missing folder. Every
+/// caller asserts the second list is empty.
+///
+/// Shared because two pins now walk this tree for unrelated reasons — the
+/// translation-coverage check and the scrollbar-convention check — and a
+/// traversal copied into each is one that can disagree with itself about what
+/// the tree contains.
+pub(crate) fn slint_sources() -> (Vec<PathBuf>, Vec<PathBuf>) {
+    fn walk(dir: &Path, out: &mut Vec<PathBuf>, unreadable: &mut Vec<PathBuf>) {
+        let Ok(entries) = fs::read_dir(dir) else {
+            unreadable.push(dir.to_path_buf());
+            return;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                walk(&path, out, unreadable);
+            } else if path.extension().is_some_and(|ext| ext == "slint") {
+                out.push(path);
+            }
+        }
+    }
+
+    let (mut sources, mut unreadable) = (Vec::new(), Vec::new());
+    walk(Path::new(UI_DIR), &mut sources, &mut unreadable);
+    sources.sort();
+    (sources, unreadable)
+}
+
+/// `src` with everything after an unquoted `//` dropped on each line, keeping the
+/// line structure.
+///
+/// Shared because prose about the code reads exactly like the code to any pin
+/// that greps for a construct, and the two that walk the whole tree both trip on
+/// it. The translation pin would collect a msgid off the ellipsis placeholders
+/// `tab-bar.slint` and `overflow-menu-section.slint` spell inside comments
+/// (`@tr("…")`); the scrollbar pin's brace walk would be thrown by any comment
+/// quoting an unbalanced `{`.
+pub(crate) fn strip_line_comments(src: &str) -> String {
+    let mut out = String::with_capacity(src.len());
+    for line in src.lines() {
+        let bytes = line.as_bytes();
+        let mut cut = line.len();
+        let mut in_string = false;
+        let mut i = 0;
+        while i < bytes.len() {
+            match bytes[i] {
+                b'\\' if in_string => i += 1,
+                b'"' => in_string = !in_string,
+                b'/' if !in_string && bytes.get(i + 1) == Some(&b'/') => {
+                    cut = i;
+                    break;
+                }
+                _ => {}
+            }
+            i += 1;
+        }
+        out.push_str(&line[..cut]);
+        out.push('\n');
+    }
+    out
+}
 
 /// The `labels` and `fields` arrays of the one `SortPillRow` mount in `src` whose
 /// `sort-field` reads `field_property`, as raw comma-separated element lists.

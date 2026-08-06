@@ -7,6 +7,7 @@ import { CompositeScroll } from "../../globals/shell.slint";
 import { EntityCard } from "../../components/grid/entity-card.slint";
 import { TrackList } from "../../components/track-list/track-list.slint";
 import { CompositeScrollbars } from "../../components/composite-scrollbars.slint";
+import { OverlayScrollbar } from "../../components/overlay-scrollbar.slint";
 import { CollapsibleSectionHeader } from "../../components/collapsible-section-header.slint";
 
 // `AlbumDetailBody` with an optional Albums sub-section above the list, whose card click
@@ -21,6 +22,9 @@ export component ArtistDetailBody inherits Rectangle {
     // dominating the page vertically.
     property <length> album-card-w: 140px;
     property <length> album-card-h: 184px;
+    // The band the strip's own scrollbar runs in, reserved below the cards rather than
+    // overlaid on them — `HorizontalCardStrip` does the same.
+    property <length> albums-bar-h: 8px;
 
     // Wraps the Albums sub-section and the list in one outer `ScrollView`, so a single
     // scrollbar covers both. The list is capped at the outer viewport height, so its inner
@@ -76,31 +80,54 @@ export component ArtistDetailBody inherits Rectangle {
                             }
                         }
 
-                        // A plain horizontal `ScrollView`: an artist's album count is small
-                        // enough not to need virtualizing. `if` rather than
-                        // `visible: false`, so collapsing it really frees the space.
-                        if !ArtistDetail.albums-collapsed: ScrollView {
-                            height: root.album-card-h + 2 * Theme.pad-xs;
-                            vertical-scrollbar-policy: always-off;
-                            horizontal-scrollbar-policy: as-needed;
+                        // A plain horizontal `ScrollView` under its own bar: an artist's
+                        // album count is small enough not to need virtualizing. `if`
+                        // rather than `visible: false`, so collapsing it really frees the
+                        // space — and the bar has to sit inside that branch too, Slint
+                        // being unable to read an id declared inside an `if` from
+                        // outside it.
+                        if !ArtistDetail.albums-collapsed: Rectangle {
+                            height: root.album-card-h + 2 * Theme.pad-xs + root.albums-bar-h;
 
-                            HorizontalLayout {
-                                spacing: Theme.pad-md;
-                                padding-top: Theme.pad-xs;
-                                padding-bottom: Theme.pad-xs;
-                                alignment: start;
+                            albums-sv := ScrollView {
+                                width: 100%;
+                                height: 100%;
+                                vertical-scrollbar-policy: always-off;
+                                horizontal-scrollbar-policy: always-off;
+                                viewport-height: self.height;
 
-                                for album in ArtistDetail.albums: EntityCard {
-                                    card-width: root.album-card-w;
-                                    card-height: root.album-card-h;
-                                    artwork-path: album.artwork_path;
-                                    cover: ArtistDetail.request-album-cover(album.artwork_path);
-                                    fallback-icon: "album";
-                                    cover-scale-hover: album.artwork_path == "" ? 1.15 : 1.04;
-                                    title: album.name;
-                                    subtitle: album.year > 0 ? "\{album.year}" : "";
-                                    clicked => { ArtistDetail.open-album(album.id); }
+                                HorizontalLayout {
+                                    spacing: Theme.pad-md;
+                                    padding-top: Theme.pad-xs;
+                                    // Clears the bar's band, so the cards keep their full
+                                    // height and nothing paints under the thumb.
+                                    padding-bottom: Theme.pad-xs + root.albums-bar-h;
+                                    alignment: start;
+
+                                    for album in ArtistDetail.albums: EntityCard {
+                                        card-width: root.album-card-w;
+                                        card-height: root.album-card-h;
+                                        artwork-path: album.artwork_path;
+                                        cover: ArtistDetail.request-album-cover(album.artwork_path);
+                                        fallback-icon: "album";
+                                        cover-scale-hover: album.artwork_path == "" ? 1.15 : 1.04;
+                                        title: album.name;
+                                        subtitle: album.year > 0 ? "\{album.year}" : "";
+                                        clicked => { ArtistDetail.open-album(album.id); }
+                                    }
                                 }
+                            }
+
+                            OverlayScrollbar {
+                                horizontal: true;
+                                x: 0;
+                                y: parent.height - self.height;
+                                width: parent.width;
+                                height: root.albums-bar-h;
+                                visible-size: albums-sv.visible-width;
+                                content-size: albums-sv.viewport-width;
+                                offset: -albums-sv.viewport-x;
+                                scroll-to(o) => { albums-sv.viewport-x = -o; }
                             }
                         }
 

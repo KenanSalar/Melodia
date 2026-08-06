@@ -1,6 +1,7 @@
 //! Source pins for the faked-placeholder inputs and the tooltip pill — the four
 //! shared components that paint text nobody sized, and the one that sizes itself
-//! to text.
+//! to text, plus the two hosts that reach for that one rather than drawing a pill
+//! of their own.
 //!
 //! Slint has no `placeholder-text` on a raw `TextInput`, so all four inputs fake
 //! one: a sibling `Text` gated on the field being empty. In a non-layout parent
@@ -28,6 +29,21 @@ const MULTILINE_INPUT: &str =
     include_str!("../../../melodia-ui/ui/components/multiline-input.slint");
 const TOOLTIP: &str = include_str!("../../../melodia-ui/ui/components/tooltip.slint");
 
+/// The two hosts that read a value out of a live drag, and the only ones in the
+/// tree that ever hand-rolled a pill of their own.
+const VOLUME_READOUTS: [(&str, &str); 2] = [
+    (
+        "volume-popup.slint",
+        include_str!("../../../melodia-ui/ui/components/now-playing/volume-popup.slint"),
+    ),
+    (
+        "volume-popup-horizontal.slint",
+        include_str!(
+            "../../../melodia-ui/ui/components/now-playing/volume-popup-horizontal.slint"
+        ),
+    ),
+];
+
 /// Every host that budgets its header row and drives `input-width` outright: the
 /// Settings page, the banner both mosaic pages wear, and My Library's morphing
 /// band. The Search view is deliberately absent — its `input-width` is a literal,
@@ -46,16 +62,18 @@ fn normalized(src: &str) -> String {
     src.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
+/// `src` with its comment lines dropped, so prose about a fix can neither satisfy
+/// a pin nor end a region early. Every file here documents its own invariants at
+/// length, which is exactly the text a `contains` would otherwise match.
+fn code(src: &str) -> String {
+    src.lines().filter(|line| !line.trim_start().starts_with("//")).collect::<Vec<_>>().join("\n")
+}
+
 /// The declaration between two anchors. Bounding a region on the element that
 /// follows it rather than on a closing brace keeps this out of the business of
-/// counting braces inside comments; comment lines are dropped first, so prose
-/// about the fix can neither satisfy a pin nor end the region early.
+/// counting braces inside comments.
 fn code_between(src: &str, from: &str, to: &str) -> String {
-    let code = src
-        .lines()
-        .filter(|line| !line.trim_start().starts_with("//"))
-        .collect::<Vec<_>>()
-        .join("\n");
+    let code = code(src);
     let Some((_, after)) = code.split_once(from) else { return String::new() };
     normalized(after.split_once(to).map_or(after, |(block, _)| block))
 }
@@ -186,4 +204,49 @@ fn the_tooltip_pill_is_capped() {
         src.contains("width: root.width - 16px; wrap: word-wrap;"),
         "tooltip.slint's label is no longer bounded and wrapped, so the cap would clip it"
     );
+}
+
+/// All four sides, and the `x` arm that makes the fourth one mean anything.
+///
+/// A variant with no arm falls through to the centred branch, so the pill lands
+/// *on* the host instead of beside it — for the volume readout, directly over the
+/// slider it is reading out. The mount still compiles and still fades in, which is
+/// why the arm is worth pinning separately from the variant.
+#[test]
+fn the_tooltip_clears_its_host_on_all_four_sides() {
+    let src = normalized(TOOLTIP);
+    assert!(
+        src.contains("export enum TooltipSide { above, below, left, right }"),
+        "tooltip.slint no longer declares all four sides"
+    );
+    assert!(
+        src.contains("root.side == TooltipSide.left ? (-self.width - root.gap)"),
+        "TooltipSide.left has no `x` arm of its own, so it falls through to the centred one"
+    );
+}
+
+/// Both volume popups read their percentage out through the shared pill.
+///
+/// Each used to hand-roll one — a fixed 42×22 `Theme.surface2` rectangle, no
+/// border, a bigger label and a bouncier fade — diverging from every other tooltip
+/// in the app, and from the *same string* the trigger disc a few lines above
+/// already renders through `Tooltip` on the keyboard-HUD path. Two readouts per
+/// file is the whole count: the disc's and the slider's.
+#[test]
+fn the_volume_readouts_are_the_shared_tooltip() {
+    for (name, src) in VOLUME_READOUTS {
+        let src = normalized(&code(src));
+        assert!(src.contains("Tooltip {"), "{name} no longer mounts the shared Tooltip");
+        assert!(
+            src.contains("force-shown:"),
+            "{name}'s readout must bypass the reveal delay — it has to be up on the frame \
+             the drag starts, not half a second later"
+        );
+        assert_eq!(
+            src.matches("round(Player.vm.volume) + \"%\"").count(),
+            2,
+            "{name} should read the percentage out exactly twice — once on the disc's \
+             tooltip, once on the slider's"
+        );
+    }
 }
