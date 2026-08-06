@@ -243,13 +243,16 @@ reqwest = { version = "0.13.4", default-features = false, features = ["form", "j
 # not used for anything security-sensitive.
 md5 = "0.8.1"
 
-# Logging. env_logger's default `regex` feature is the *only* thing in the
-# dependency graph pulling `regex` (+ `regex-automata`, `regex-syntax`,
-# `aho-corasick`) — and we never use regex matching inside a `RUST_LOG`
-# directive. Dropping it keeps plain directive filtering, `humantime`
-# timestamps, and `auto-color` output.
+# Logging. `flexi_logger` replaced `env_logger` when logs had to reach a file —
+# it is the only candidate with size *and* age rotation in one criterion, and
+# retention that needs no background thread. `services::logging` argues the rest.
+#
+# `textfilter` is its `regex` feature and stays off — the same trap the
+# env_logger line was written to dodge, since we never match a regex inside a
+# `RUST_LOG` directive. `colors` pulls `nu-ansi-term`, the only crate the swap
+# adds; it retires thirteen, so don't "restore" env_logger for dependency weight.
 log = "0.4.33"
-env_logger = { version = "0.11.11", default-features = false, features = ["auto-color", "humantime"] }
+flexi_logger = { version = "0.31.9", default-features = false, features = ["colors"] }
 
 # Errors
 thiserror = "2.0.19"

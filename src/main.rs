@@ -89,7 +89,7 @@ fn main() -> AppResult<()> {
     // per-thread free-list overhead. Capping forces threads to share, trading
     // it for malloc contention under heavy parallel allocation — which an
     // idle-most-of-the-time desktop player doesn't have. Must run before any
-    // thread does its first malloc; `env_logger::init()` and the tokio
+    // thread does its first malloc; `services::logging::install` and the tokio
     // runtime builder both allocate, so staying first in `main()` covers it.
     //
     // The other two calls freeze the mmap and trim thresholds, which glibc
@@ -141,7 +141,13 @@ fn main() -> AppResult<()> {
         );
     }
 
-    env_logger::init();
+    // Ahead of the logger because the file sink needs somewhere to write. A
+    // failure here has no logger to reach and never will — it means no user
+    // data directory at all.
+    let paths = Paths::resolve()?;
+    services::logging::install(&paths)?;
+    // Before the runtime and before Slint, so boot panics are covered too.
+    services::crash_report::install_hook(&paths.logs_dir);
     log::info!("Melodia starting");
 
     // Cap worker threads at 2. Melodia's async work is event-driven (DB
@@ -161,7 +167,6 @@ fn main() -> AppResult<()> {
     // so the guard has to stay alive for the entire `app.run()` window.
     let runtime_guard = runtime.enter();
 
-    let paths = Paths::resolve()?;
     let (state, channels) =
         runtime.block_on(AppState::init(paths, runtime.handle().clone()))?;
 
@@ -561,6 +566,11 @@ fn main() -> AppResult<()> {
     drop(runtime_guard);
 
     shutdown::drop_runtime_in_background(runtime);
+
+    // Before `respawn_if_requested`, which `exec`s and never returns on Unix,
+    // and before the `process::exit(0)` below — neither runs a destructor.
+    services::logging::flush();
+
     shutdown::respawn_if_requested();
 
     // Force-terminate. Returning normally from `main()` would let the

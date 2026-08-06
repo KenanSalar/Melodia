@@ -137,7 +137,8 @@ pub(crate) fn paths_in(dir: &Path) -> Paths {
     let artwork_dir = dir.join("artwork");
     let artists_dir = dir.join("artists");
     let backups_dir = dir.join("backups");
-    for sub in [&artwork_dir, &artists_dir, &backups_dir] {
+    let logs_dir = dir.join("logs");
+    for sub in [&artwork_dir, &artists_dir, &backups_dir, &logs_dir] {
         let _ = std::fs::create_dir_all(sub);
     }
 
@@ -154,6 +155,7 @@ pub(crate) fn paths_in(dir: &Path) -> Paths {
         artwork_dir,
         artists_dir,
         backups_dir,
+        logs_dir,
     }
 }
 

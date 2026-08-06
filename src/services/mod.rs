@@ -1,10 +1,13 @@
 pub mod always_on_top;
 pub mod artist_images;
+pub mod crash_report;
 #[cfg(target_os = "linux")]
 pub mod desktop_integration;
+pub mod diagnostics;
 pub mod discord;
 #[cfg(target_os = "windows")]
 pub mod dwm_titlebar;
+pub mod logging;
 pub mod material_you;
 pub mod media_controls;
 pub mod scrobble;
@@ -17,6 +20,7 @@ pub mod tray;
 pub mod updater;
 pub mod view_state;
 
+use std::borrow::Cow;
 use std::io::{BufWriter, Write};
 use std::path::Path;
 
@@ -124,4 +128,20 @@ pub fn write_text_atomic_sync(path: &Path, text: &str) -> AppResult<()> {
     }
     tmp.persist(path).map_err(|e| AppError::Io(e.error))?;
     Ok(())
+}
+
+/// Replace the user's home directory with `~` throughout `text`.
+///
+/// Everything a crash report or diagnostics bundle carries goes through this
+/// before reaching a file the user is asked to attach to a public issue — a
+/// home directory usually holds a real name. Borrows when there is nothing to
+/// replace, which is the common case.
+pub fn redact_home(text: &str) -> Cow<'_, str> {
+    let Ok(home) = std::env::var("HOME") else {
+        return Cow::Borrowed(text);
+    };
+    if home.is_empty() || !text.contains(&home) {
+        return Cow::Borrowed(text);
+    }
+    Cow::Owned(text.replace(&home, "~"))
 }
