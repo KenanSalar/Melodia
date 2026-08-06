@@ -1,5 +1,5 @@
-//! Recently-Played track list: fetch (recency order), in-memory filter, header
-//! stats, and model apply.
+//! Songs tab: fetch (recency order), in-memory filter, hero stats, and model
+//! apply.
 //!
 //! Unlike Favorites (which re-queries with a DB `ORDER BY` on every sort), the
 //! recency set is fetched once and both its membership and its order are fixed
@@ -11,7 +11,8 @@ use std::sync::Arc;
 
 use slint::{ComponentHandle, Model, VecModel, Weak};
 
-use super::RecentlyPlayedUi;
+use super::state::SongsTotals;
+use super::{RecentlyPlayedTab, RecentlyPlayedUi};
 use crate::error::AppResult;
 use crate::library;
 use crate::state::AppState;
@@ -26,15 +27,15 @@ pub fn current_filter(rp_ui: &RecentlyPlayedUi) -> Needle {
     rp_ui.state().filter.lock().clone()
 }
 
-/// Update the cached filter needle. Folded on the way in, so the list and
-/// the Most Played strip beside it share one needle.
+/// Update the cached filter needle. Folded on the way in, so the list and the
+/// Most Played grid beside it share one needle.
 pub fn set_filter(rp_ui: &RecentlyPlayedUi, filter: &str) {
     *rp_ui.state().filter.lock() = row_match::fold_needle(filter);
 }
 
-/// Fetch the 200 most-recently-played tracks, cache them, push the header
-/// stats, then apply the in-memory filter into the Slint model. Runs on a
-/// tokio worker; the model write hops to the UI thread.
+/// Fetch the 200 most-recently-played tracks, cache them, push the hero stats,
+/// then apply the in-memory filter into the Slint model. Runs on a tokio worker;
+/// the model write hops to the UI thread.
 pub async fn refresh_tracks(
     state: &AppState,
     rp_ui: &Arc<RecentlyPlayedUi>,
@@ -46,9 +47,8 @@ pub async fn refresh_tracks(
     // `tracks_all` and emptied the model, so everything below would undo that
     // teardown behind a view nobody can see — the cover prewarm and the hero
     // recompose included. The leave set `mark_dirty`, so the next enter
-    // re-fetches. Same guard, same placement, as `strip::refresh_strips` and
-    // `favorites::grids::fetch::refresh_grids`: after the slow part, because
-    // before it the leave hasn't happened yet.
+    // re-fetches. Same guard, same placement, as `grid::fetch::refresh_grid`:
+    // after the slow part, because before it the leave hasn't happened yet.
     if !rp_ui.section_active() {
         return Ok(());
     }
@@ -78,14 +78,30 @@ pub async fn refresh_tracks(
     }
 
     // Hero: count + total duration over the full (unfiltered) recency set, and
-    // the up-to-4 most-recently-played distinct covers for the mosaic. Stats +
-    // mosaic paths push immediately; the CPU-bound blur composition is kicked
-    // off-thread so it never delays the track-list paint.
-    let count = len_as_i32(rows.len());
-    let total_ms: i64 = rows.iter().map(|r| r.duration_ms).sum();
-    let fold = crate::ui::hero_chips::fold_tracks(&rows);
+    // the up-to-4 most-recently-played distinct covers for the mosaic. All three
+    // are folded here, on the worker that holds the rows — the band is per-tab
+    // now, so a publish triggered from the *grid* has to be able to state them
+    // too, which means they outlive this function and can't be arguments.
+    let totals = SongsTotals {
+        tracks: len_as_i32(rows.len()),
+        duration_ms: rows.iter().map(|r| r.duration_ms).sum(),
+    };
+    let fold = crate::ui::hero_folds::fold_tracks(&rows);
     let mosaic_paths = super::hero::mosaic_paths_from(&rows, 4);
-    super::hero::push_hero_stats(count, total_ms, fold, &mosaic_paths, rp_ui, weak);
+
+    // Under the section gate so the stores can't interleave with
+    // `release_section_state`'s wipe and leave half of each on screen — the same
+    // pairing `grid::fetch::refresh_grid` makes for `most_played`. Held across
+    // the synchronous stores only, never across an `.await`, and taken *before*
+    // the push below so the band can't publish a fold this hasn't landed yet.
+    {
+        let _gate = rp_ui.gate();
+        *rp_ui.state().songs_totals.lock() = totals;
+        *rp_ui.state().songs_fold.lock() = fold;
+        *rp_ui.state().tracks_all.lock() = rows;
+    }
+
+    super::hero::push_hero_stats(totals.tracks, &mosaic_paths, rp_ui, weak);
     // Only recompose the hero blur when the mosaic covers differ from the ones
     // on screen. A played-track refresh (or an in-view favorite/rating toggle,
     // which also bumps a subscribed channel) usually yields the same top-4
@@ -105,15 +121,6 @@ pub async fn refresh_tracks(
         });
     }
 
-    // Under the section gate so the store can't interleave with
-    // `release_section_state`'s wipe and leave half of each on screen — the
-    // same pairing `strip::refresh_strips` makes for `most_played`. Held across
-    // the synchronous store only, never across an `.await`.
-    {
-        let _gate = rp_ui.gate();
-        *rp_ui.state().tracks_all.lock() = rows;
-    }
-
     apply_filtered_tracks(rp_ui, weak);
     Ok(())
 }
@@ -123,38 +130,89 @@ pub async fn refresh_tracks(
 /// entirely in memory. Existing selection is re-stamped so a filter change
 /// doesn't visually drop the user's selection.
 ///
-/// A hidden section is never written to, for the reason
-/// [`super::strip::apply_filtered_strips`] gives — and the check sits inside
-/// the closure because the leave can land while the post is in flight.
+/// A hidden section is never written to, the way
+/// `grid::apply::write_filtered_grid` refuses to — and the check sits in
+/// [`write_filtered_tracks`] rather than out here, because the leave can land
+/// while the post is in flight.
+///
+/// **An unmounted tab is refused for the same reason, and asked about twice for
+/// the reason every `section_active()` bail is.** `RecentlyPlayed.tracks` feeds
+/// one element — `views/recently-played/songs-tab.slint`'s `TrackList`, under
+/// `if tab-idx == tab-songs` — so on the Most Played tab every prepared row here
+/// reaches nothing. [`build_filtered_tracks`]' check is what skips the cost, on
+/// the two paths that reach here without going through a tab pick (the throttled
+/// keystroke and the `library_changed` / `stats_changed` refresh, which are the
+/// frequent ones); [`write_filtered_tracks`]' is what stops a pick landing
+/// mid-post from leaving a row per track pinned behind a tab the user just left.
 pub fn apply_filtered_tracks(rp_ui: &Arc<RecentlyPlayedUi>, weak: &Weak<AppWindow>) {
-    let needle = current_filter(rp_ui);
-
-    let prepared: Vec<PreparedTrackRow> = {
-        let all = rp_ui.state().tracks_all.lock();
-        all.iter()
-            .filter(|r| row_match::track_matches(r, &needle))
-            .map(crate::ui::tracks::prepare_track_list_row)
-            .collect()
+    let Some(prepared) = build_filtered_tracks(rp_ui) else {
+        return;
     };
 
     let rp_ui = rp_ui.clone();
     let weak = weak.clone();
     let _ = slint::invoke_from_event_loop(move || {
         let Some(ui) = weak.upgrade() else { return };
-        if !rp_ui.section_active() {
-            return;
-        }
-        let g = ui.global::<RecentlyPlayed>();
-        let model = g.get_tracks();
-        let Some(vec) = model.as_any().downcast_ref::<VecModel<UiTrackListRow>>() else {
-            log::warn!("RecentlyPlayed.tracks: VecModel<TrackListRow> downcast failed");
-            return;
-        };
-        let mut rendered: Vec<UiTrackListRow> =
-            prepared.into_iter().map(finish_track_list_row).collect();
-        super::selection::restamp_rows(&g, &mut rendered);
-        crate::ui::model_diff::apply_rows_keyed(vec, rendered, |r| r.id);
+        write_filtered_tracks(&ui, &rp_ui, prepared);
     });
+}
+
+/// Apply from the UI thread, with no event-loop hop — the rows land in the model
+/// before Slint re-evaluates the `if` that mounts the entering tab.
+///
+/// The twin of `grid::apply::apply_filtered_grid_now`, and here for the same
+/// reason: `slint::invoke_from_event_loop` posts even when it is called *from*
+/// the UI thread, so a redraw can win the race. The tab-leave empties this model,
+/// so what a lost race paints is a `TrackList` of headers over nothing.
+pub fn apply_filtered_tracks_now(ui: &AppWindow, rp_ui: &RecentlyPlayedUi) {
+    if let Some(prepared) = build_filtered_tracks(rp_ui) {
+        write_filtered_tracks(ui, rp_ui, prepared);
+    }
+}
+
+/// Walk the cached `tracks_all` through the active filter, or `None` when Songs
+/// isn't the mounted tab and the walk would feed nothing.
+///
+/// Filters and prepares the `Send` row halves on the calling thread, borrowing
+/// the cache in place — the `!Send` cover lookup is what `finish_track_list_row`
+/// adds on the UI thread.
+fn build_filtered_tracks(rp_ui: &RecentlyPlayedUi) -> Option<Vec<PreparedTrackRow>> {
+    if rp_ui.active_tab() != RecentlyPlayedTab::Songs {
+        return None;
+    }
+    let needle = current_filter(rp_ui);
+    let all = rp_ui.state().tracks_all.lock();
+    Some(
+        all.iter()
+            .filter(|r| row_match::track_matches(r, &needle))
+            .map(crate::ui::tracks::prepare_track_list_row)
+            .collect(),
+    )
+}
+
+/// Finish the rows and push them into `RecentlyPlayed.tracks`. UI thread only.
+///
+/// Both gates are re-asked here rather than trusted from the build: on the
+/// posting path a section leave or a tab pick can land while the closure is in
+/// flight, and either one has already emptied this model on purpose.
+fn write_filtered_tracks(
+    ui: &AppWindow,
+    rp_ui: &RecentlyPlayedUi,
+    prepared: Vec<PreparedTrackRow>,
+) {
+    if !rp_ui.section_active() || rp_ui.active_tab() != RecentlyPlayedTab::Songs {
+        return;
+    }
+    let g = ui.global::<RecentlyPlayed>();
+    let model = g.get_tracks();
+    let Some(vec) = model.as_any().downcast_ref::<VecModel<UiTrackListRow>>() else {
+        log::warn!("RecentlyPlayed.tracks: VecModel<TrackListRow> downcast failed");
+        return;
+    };
+    let mut rendered: Vec<UiTrackListRow> =
+        prepared.into_iter().map(finish_track_list_row).collect();
+    super::selection::restamp_rows(&g, &mut rendered);
+    crate::ui::model_diff::apply_rows_keyed(vec, rendered, |r| r.id);
 }
 
 /// Flip `is_favorite` on a single row in the Slint `VecModel`. Only touches the

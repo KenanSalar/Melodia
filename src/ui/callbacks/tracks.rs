@@ -6,9 +6,10 @@ use std::sync::Arc;
 use slint::{ComponentHandle, Model, SharedString};
 
 use super::{collect_track_ids, next_sort};
-use super::macros::{spawn_logged, spawn_logged_sync, wire_row_flag};
+use super::macros::{spawn_blocking_logged, spawn_logged, wire_row_flag};
 use crate::library;
 use crate::state::AppState;
+use crate::ui::my_library::{MyLibraryTab, tab_is_mounted};
 use crate::ui::track_list_view::{TrackListColumnState, view_id};
 use crate::ui::tracks::{self as tracks_ui_mod, TracksUi};
 use crate::{AppWindow, Tracks};
@@ -27,23 +28,37 @@ pub fn wire_tracks(ui: &AppWindow, state: &AppState, tracks_ui: &Arc<TracksUi>) 
         tracks.set_sort_dir(SharedString::from(dir));
     }
 
-    // section-active-changed: mirror visibility into the synchronous shadow
-    // and, on re-enter, run the deferred refresh if a `library_changed` bump
-    // arrived while the section was hidden (the refresher marks dirty
-    // instead of re-fetching a view the user can't see). Seed the shadow
-    // from the current nav state (sidebar index 3): the gate's
-    // `ChangeTracker` baselines inside `AppWindow::new()` and fires only on
-    // a later difference, so a section the boot doesn't land on gets no edge
-    // at all, and the one it does land on gets its edge a frame late — after
-    // boot has already read this shadow. See the `SectionActiveGate` bullet
-    // in `.claude/rules/ui-patterns.md`.
-    tracks_ui.set_section_active(ui.global::<crate::Nav>().get_selected_index() == 3);
+    // section-active-changed: mirror visibility into the synchronous shadow,
+    // and on re-enter run the deferred refresh. **A tab leave is one of those
+    // leaves now** — the Songs tab has its own `SectionActiveGate` — so seed the
+    // shadow from the mounted tab, not from the nav index: the gate's
+    // `ChangeTracker` baselines inside `AppWindow::new()` and fires only on a
+    // later difference, so a view the boot doesn't land on gets no edge at all,
+    // and the one it does land on gets its edge a frame late — after boot has
+    // already read this shadow. See the `SectionActiveGate` bullet in
+    // `.claude/rules/ui-patterns.md`.
+    tracks_ui.set_section_active(tab_is_mounted(ui, MyLibraryTab::Songs));
     {
         let tu = tracks_ui.clone();
         let weak = weak.clone();
         tracks.on_section_active_changed(move |active| {
             tu.set_section_active(active);
-            if active && tu.take_dirty() {
+            // **The leave does nothing else, and Tracks is the one library view
+            // that can say that.** Its four siblings empty their models on the
+            // way out, so each owes the `UNFETCHED_COUNT` rewind that stops a
+            // count outliving the rows it numbers — and, having rewound, owes
+            // the `mark_dirty` that answers it. This model *survives* the leave,
+            // so the count is never stale over an empty list and there is
+            // nothing to answer. Marking dirty anyway made a tab pick a full
+            // `get_tracks` plus a library-sized row build on the event loop,
+            // every time the user came back to Songs. Freshness is unaffected:
+            // `boot::ui_setup::install_library_changed_refresher` already folds
+            // every bump arriving while this tab is unmounted into the same
+            // flag.
+            if !active {
+                return;
+            }
+            if tu.take_dirty() {
                 let Some(ui) = weak.upgrade() else { return };
                 // Reuse the request-refresh path so the deferred fetch
                 // picks up the current sort + filter.
@@ -203,7 +218,7 @@ pub fn wire_tracks(ui: &AppWindow, state: &AppState, tracks_ui: &Arc<TracksUi>) 
             let Some(ui) = weak.upgrade() else { return };
             let columns = ui.global::<Tracks>().snapshot_visible();
             let s = s.clone();
-            spawn_logged_sync!(s, "tracks::toggle_column",
+            spawn_blocking_logged!(s, "tracks::toggle_column",
                 library::settings::update_view_columns(&s, "tracks".to_string(), columns));
         });
     }

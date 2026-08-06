@@ -150,6 +150,7 @@ export component TrackList inherits Rectangle {
             inner-list := ListView {
                 vertical-stretch: 1;
                 vertical-scrollbar-policy: always-off;
+                horizontal-scrollbar-policy: always-off;
                 width: root.total-w;
                 for r[idx] in root.rows: TrackListRowItem {
                     row-data: r;

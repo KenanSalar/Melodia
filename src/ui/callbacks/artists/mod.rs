@@ -19,19 +19,9 @@ use crate::state::AppState;
 use crate::ui::albums::AlbumsUi;
 use crate::ui::artists::ArtistsUi;
 
-/// Nav-sidebar index of the Albums tab. Used for cross-tab nav from the
-/// Artist Detail Albums sub-section. Kept as a `const` here (next to the
-/// only consumers) rather than in `Nav`'s Slint definition because Slint
-/// globals can't expose `const`s that Rust reads ergonomically.
-pub(super) const NAV_ALBUMS: i32 = 4;
-
-/// Nav-sidebar index of the Artists tab. Mirrors the comment block in
-/// `globals/nav.slint::Nav`.
-pub(super) const NAV_ARTISTS: i32 = 5;
-
 /// Wire every `Artists.*` / `ArtistDetail.*` callback. Mirrors `wire_albums`,
-/// plus an `ArtistDetail.open-album` that flips `Nav.selected-index` to the
-/// Albums tab and opens that album's detail.
+/// plus an `ArtistDetail.open-album` that moves to the Albums tab and opens
+/// that album's detail.
 pub fn wire_artists(
     ui: &AppWindow,
     state: &AppState,

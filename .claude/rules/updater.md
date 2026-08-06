@@ -10,6 +10,7 @@ paths:
   - scripts/build-rpm.sh
   - scripts/install-linux.sh
   - .github/workflows/release.yml
+  - .github/workflows/refresh-manifest.yml
 ---
 
 # In-app updater, packaging and release
@@ -36,6 +37,7 @@ break it from `main.rs` without ever opening this file.
 ## Manifest
 
 - **`latest.json` minisign-signed; client verifies before parse.** Same key as per-artifact sigs (`assets/updater-pubkey.b64`). `fetch_latest_manifest` fetches `latest.json.minisig` and calls `minisign::verify_manifest_bytes` — `manifest=true` trusted comment is a **domain-separation tag**. Fail-closed: missing/invalid sig → `AppError::Validation`. CI: `minisign -SHm latest.json -t "version=$VERSION manifest=true"`.
+- **The manifest is built twice, and the second build is the one users read.** `release.yml` builds `latest.json` while the release is still a draft, so its `notes_short` is GitHub's `--generate-notes` text; `refresh-manifest.yml` fires on draft→published, re-reads the now-final (author-edited) body, and rebuilds + re-signs + re-uploads the manifest and `SHA256SUMS.txt`. `version` / `manifest_schema_version` / `critical` / `pub_date` are carried over from the published manifest verbatim, so a refresh changes the notes and nothing else — `pub_date` in particular must not bump. **`workflow_dispatch` with a `tag` input refreshes retroactively**, which is the recovery path when the job fails: the release keeps the draft-time manifest, which is complete and correctly signed, merely stale in its notes. **Both callers hand `build-latest-json.py` an `--artifacts` directory holding installable artifacts and their `.minisig` siblings and nothing else** — the script aborts on anything it can't classify (see below), and a rebuild's non-artifact inputs are staged in `$RUNNER_TEMP` for exactly that reason. Staging the published `latest.json` in `artifacts/` alongside them is what broke v0.9.0's refresh on the first publish after that guard landed.
 - **Manifest schema gate + critical-release flag** (`src/services/updater/manifest.rs`). `manifest_schema_version: u32` (default 1) — `check.rs` returns `CheckOutcome::UnsupportedSchema` when `> SUPPORTED_MANIFEST_SCHEMA`, treated like `NoAssetForTarget`. Bumping requires bumping `build-latest-json.py`'s `--manifest-schema-version` + CI invocation. `critical: bool` (default false) hides "Skip this version" and bypasses `skipped_release` filter. Set via `--critical` in `scripts/build-latest-json.py`.
 
 ## Release matrix

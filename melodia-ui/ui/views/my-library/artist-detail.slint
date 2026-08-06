@@ -1,0 +1,236 @@
+import { ScrollView } from "std-widgets.slint";
+import { Theme } from "../../theme.slint";
+import { ArtistDetail } from "../../globals/artists.slint";
+import { MyLibrary } from "../../globals/my-library.slint";
+import { Player } from "../../globals/player.slint";
+import { CompositeScroll } from "../../globals/shell.slint";
+import { EntityCard } from "../../components/grid/entity-card.slint";
+import { TrackList } from "../../components/track-list/track-list.slint";
+import { CompositeScrollbars } from "../../components/composite-scrollbars.slint";
+import { OverlayScrollbar } from "../../components/overlay-scrollbar.slint";
+import { CollapsibleSectionHeader } from "../../components/collapsible-section-header.slint";
+
+// `AlbumDetailBody` with an optional Albums sub-section above the list, whose card click
+// hands off to the Albums tab, and the artist column locked off, every row being the same
+// artist. The banner is `LibraryTabBand`'s and the action pills `tab-pills.slint`'s.
+//
+// **This is the one detail body that keeps its insets per child**: `below-hero` is the
+// region `CompositeScrollbars` measures and the `CompositeScroll` hover sentinel covers,
+// so it has to run full-bleed to the panel edge.
+export component ArtistDetailBody inherits Rectangle {
+    // Smaller than the grid view's cards, so several albums fit at once without
+    // dominating the page vertically.
+    property <length> album-card-w: 140px;
+    property <length> album-card-h: 184px;
+    // The band the strip's own scrollbar runs in, reserved below the cards rather than
+    // overlaid on them — `HorizontalCardStrip` does the same.
+    property <length> albums-bar-h: 8px;
+
+    // Wraps the Albums sub-section and the list in one outer `ScrollView`, so a single
+    // scrollbar covers both. The list is capped at the outer viewport height, so its inner
+    // `ListView` keeps virtualizing; the outer travel covers the Albums strip, and the
+    // mounted `CompositeScrollbars` composes the two. **The wheel doesn't hand off
+    // natively** — the inner list swallows it at its edge — so `hover-catch` reports region
+    // hover to the winit filter, which routes vertical wheel through that same split.
+    below-hero := Rectangle {
+        width: 100%;
+        height: 100%;
+        clip: true;
+
+        // The `CompositeScroll` hover sentinel. It forwards every event through, so
+        // clicks, drags and native horizontal scroll are unaffected and only `has-hover`
+        // is read; empty-space clicks land here and give the band's SearchBar up. It fills
+        // the body, so there is no root-level backdrop TouchArea beside it.
+        hover-catch := TouchArea {
+            width: 100%;
+            height: 100%;
+            changed has-hover => { CompositeScroll.hovered = self.has-hover; }
+            clicked => { MyLibrary.blur-search-tick += 1; }
+
+            below-sv := ScrollView {
+                width: 100%;
+                height: 100%;
+                horizontal-scrollbar-policy: always-off;
+                vertical-scrollbar-policy:   always-off;
+                viewport-width: self.width;
+
+                VerticalLayout {
+                    spacing: 0;
+
+                    // Hidden entirely when the artist has no album credits. Its header
+                    // toggles the persisted collapse flag, handing the scroller's vertical
+                    // space to the list.
+                    if ArtistDetail.albums.length > 0: VerticalLayout {
+                        vertical-stretch: 0;
+                        padding-left: Theme.pad-lg;
+                        padding-right: Theme.pad-lg;
+                        padding-top: Theme.pad-md;
+                        // The outer column has no `spacing`, so without this the divider
+                        // butts straight against the list header below.
+                        padding-bottom: Theme.pad-lg;
+                        spacing: Theme.pad-sm;
+
+                        HorizontalLayout {
+                            alignment: start;
+
+                            CollapsibleSectionHeader {
+                                label: @tr("Albums");
+                                collapsed: ArtistDetail.albums-collapsed;
+                                toggled => { ArtistDetail.toggle-albums-collapsed(); }
+                            }
+                        }
+
+                        // A plain horizontal `ScrollView` under its own bar: an artist's
+                        // album count is small enough not to need virtualizing. `if`
+                        // rather than `visible: false`, so collapsing it really frees the
+                        // space — and the bar has to sit inside that branch too, Slint
+                        // being unable to read an id declared inside an `if` from
+                        // outside it.
+                        if !ArtistDetail.albums-collapsed: Rectangle {
+                            height: root.album-card-h + 2 * Theme.pad-xs + root.albums-bar-h;
+
+                            albums-sv := ScrollView {
+                                width: 100%;
+                                height: 100%;
+                                vertical-scrollbar-policy: always-off;
+                                horizontal-scrollbar-policy: always-off;
+                                viewport-height: self.height;
+
+                                HorizontalLayout {
+                                    spacing: Theme.pad-md;
+                                    padding-top: Theme.pad-xs;
+                                    // Clears the bar's band, so the cards keep their full
+                                    // height and nothing paints under the thumb.
+                                    padding-bottom: Theme.pad-xs + root.albums-bar-h;
+                                    alignment: start;
+
+                                    for album in ArtistDetail.albums: EntityCard {
+                                        card-width: root.album-card-w;
+                                        card-height: root.album-card-h;
+                                        artwork-path: album.artwork_path;
+                                        cover: ArtistDetail.request-album-cover(album.artwork_path);
+                                        fallback-icon: "album";
+                                        cover-scale-hover: album.artwork_path == "" ? 1.15 : 1.04;
+                                        title: album.name;
+                                        subtitle: album.year > 0 ? "\{album.year}" : "";
+                                        clicked => { ArtistDetail.open-album(album.id); }
+                                    }
+                                }
+                            }
+
+                            OverlayScrollbar {
+                                horizontal: true;
+                                x: 0;
+                                y: parent.height - self.height;
+                                width: parent.width;
+                                height: root.albums-bar-h;
+                                visible-size: albums-sv.visible-width;
+                                content-size: albums-sv.viewport-width;
+                                offset: -albums-sv.viewport-x;
+                                scroll-to(o) => { albums-sv.viewport-x = -o; }
+                            }
+                        }
+
+                        // **Outside the collapse `if`**, so it survives the collapse and
+                        // gives the hidden sub-section a clear lower edge against the list.
+                        Rectangle {
+                            height: 1px;
+                            background: Theme.surface2;
+                            opacity: 0.5;
+                        }
+                    }
+
+                    // Inset per child rather than on the root, so `below-hero` stays
+                    // full-bleed for the composite scroll region while the list's edges
+                    // still match the Tracks and Browse views.
+                    HorizontalLayout {
+                        horizontal-stretch: 1;
+                        vertical-stretch: 0;
+                        padding-left: Theme.pad-lg;
+                        padding-right: Theme.pad-lg;
+                        // Only contributed **when the sub-section is absent** — the user
+                        // having filtered every album out, say. It supplies its own bottom
+                        // padding when mounted, and doubling the gap disconnects the table
+                        // from its header.
+                        padding-top: ArtistDetail.albums.length > 0 ? 0px : Theme.pad-lg;
+
+                        tl := TrackList {
+                            horizontal-stretch: 1;
+                            vertical-stretch: 0;
+                            // **Capped at the outer viewport**: a small list keeps the
+                            // content-tall layout, a large one pins to the visible region
+                            // so the inner list virtualizes instead of instantiating every
+                            // row.
+                            height: min(
+                                max(1, ArtistDetail.tracks.length)
+                                    * (ArtistDetail.show-artwork
+                                        ? Theme.row-h
+                                        : Theme.row-h-compact)
+                                    + 32px + Theme.pad-xs,
+                                below-sv.visible-height);
+
+                            rows: ArtistDetail.tracks;
+
+                            w-number <=> ArtistDetail.w-number;
+                            w-title <=> ArtistDetail.w-title;
+                            w-artist <=> ArtistDetail.w-artist;
+                            w-album <=> ArtistDetail.w-album;
+                            w-genre <=> ArtistDetail.w-genre;
+                            w-year <=> ArtistDetail.w-year;
+                            w-length <=> ArtistDetail.w-length;
+
+                            show-number <=> ArtistDetail.show-number;
+                            show-artwork <=> ArtistDetail.show-artwork;
+                            show-artist <=> ArtistDetail.show-artist;
+                            show-album <=> ArtistDetail.show-album;
+                            show-genre <=> ArtistDetail.show-genre;
+                            show-year <=> ArtistDetail.show-year;
+                            number-mode: "index";
+
+                            sort-field: ArtistDetail.sort-field;
+                            sort-dir: ArtistDetail.sort-dir;
+                            playing-track-id: Player.vm.track.id;
+                            view-context: "artist-detail";
+                            view-selected-ids: ArtistDetail.selected-ids;
+
+                            request-sort(f) => { ArtistDetail.request-sort(f); }
+                            play-row(id, idx) => { ArtistDetail.play-row(id, idx); }
+                            play-next(ids) => { ArtistDetail.play-next(ids); }
+                            add-to-queue(ids) => { ArtistDetail.add-to-queue(ids); }
+                            toggle-row-favorite(ids, on) => { ArtistDetail.toggle-row-favorite(ids, on); }
+                            set-row-rating(ids, n) => { ArtistDetail.set-row-rating(ids, n); }
+                            select-row(idx, id, sh, ct) => { ArtistDetail.select-row(idx, id, sh, ct); }
+                            // A click in the track list blurs the band's SearchBar.
+                            request-blur-search => { MyLibrary.blur-search-tick += 1; }
+                            go-to-album(aid) => { ArtistDetail.go-to-album(aid); }
+                            go-to-artist(aid) => { ArtistDetail.go-to-artist(aid); }
+                            go-to-genre(gid) => { ArtistDetail.go-to-genre(gid); }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // The unified vbar over the sub-section and the list, the column-pan hbar and the
+    // wheel routing, all owned by the shared component.
+    CompositeScrollbars {
+        x: 0; y: 0;
+        width: 100%; height: 100%;
+        outer-viewport-y <=> below-sv.viewport-y;
+        outer-viewport-height: below-sv.viewport-height;
+        outer-visible-height: below-sv.visible-height;
+        inner-offset: tl.v-offset;
+        inner-viewport-height: tl.v-viewport-height;
+        inner-visible-height: tl.v-visible-height;
+        set-inner-offset(o) => { tl.set-v-offset(o); }
+        h-offset: tl.h-offset;
+        h-viewport-width: tl.h-viewport-width;
+        h-visible-width: tl.h-visible-width;
+        set-h-offset(o) => { tl.set-h-offset(o); }
+        v-region-y: below-hero.absolute-position.y - root.absolute-position.y;
+        v-region-height: below-hero.height;
+        h-region-x: tl.absolute-position.x - root.absolute-position.x;
+        h-region-width: tl.width;
+    }
+}

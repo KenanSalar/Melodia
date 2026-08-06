@@ -24,6 +24,7 @@ pub mod grid_prewarm;
 pub mod grid_rows;
 pub mod hero_backdrop;
 pub mod hero_chips;
+pub mod hero_folds;
 pub mod library_settings;
 pub mod list_selection;
 pub mod locale;
@@ -32,6 +33,7 @@ pub mod model_diff;
 pub mod model_patch;
 pub mod mosaic_blur;
 pub mod mosaic_hero;
+pub mod my_library;
 pub mod nav_history;
 pub mod nav_transition;
 pub mod notifications;
@@ -58,7 +60,22 @@ pub mod util;
 pub mod window_chrome;
 
 // Source pins for shared components with no Rust module of their own — the
-// three faked-placeholder inputs and the tooltip pill.
+// three faked-placeholder inputs and the tooltip pill, the two pinned bands (the one
+// both mosaic pages wear and My Library's own), and the header row all three of those
+// plus the Settings page share. `scrollbar_tests` is the odd one out: it pins a
+// *convention* across the whole tree rather than one component's contract.
+#[cfg(test)]
+#[path = "tests/library_tab_band_tests.rs"]
+mod library_tab_band_tests;
+#[cfg(test)]
+#[path = "tests/mosaic_tab_hero_tests.rs"]
+mod mosaic_tab_hero_tests;
 #[cfg(test)]
 #[path = "tests/placeholder_tests.rs"]
 mod placeholder_tests;
+#[cfg(test)]
+#[path = "tests/scrollbar_tests.rs"]
+mod scrollbar_tests;
+#[cfg(test)]
+#[path = "tests/tab_search_header_tests.rs"]
+mod tab_search_header_tests;

@@ -1,4 +1,4 @@
-import { TrackListRow, BrowseFolderRow, BreadcrumbRow } from "../models.slint";
+import { TrackListRow, BrowseFolderRow, BrowseCardGridRow, BreadcrumbRow } from "../models.slint";
 
 // The two flat track-list views, plus the shared row-cover lookup that every
 // `TrackListRow` consumer in the tree resolves its thumbnail through.
@@ -7,7 +7,8 @@ import { TrackListRow, BrowseFolderRow, BreadcrumbRow } from "../models.slint";
 // `apply-filter` re-derives `rows` in memory, `request-sort` re-queries.
 export global Tracks {
     in-out property <[TrackListRow]> rows;
-    in-out property <int> total-count;       // pre-filter count
+    // `-1` until fetched; see `Albums.total-count`.
+    in-out property <int> total-count: -1;   // pre-filter count
     in-out property <string> filter;
     in-out property <string> sort-field: "title";
     in-out property <string> sort-dir: "asc";
@@ -59,10 +60,6 @@ export global Tracks {
     // Slint flips the matching `show-*` synchronously, then Rust persists the new
     // visible-column list.
     callback toggle-column(string /*column_id*/);
-
-    // Bumped by anything that should make the filter input give up the keyboard. A
-    // global can't bind a callback inline, so the SearchBar watches this counter.
-    in-out property <int> blur-search-tick: 0;
 }
 
 // The Browse view — the Slint-side surface of three Rust-owned models;
@@ -76,6 +73,11 @@ export global Tracks {
 // rows, and `has-library-folders` going false is what paints the CTA instead. `loading`
 // gates the empty state so a stale "Empty folder" can't flash mid-drill-down, and a
 // non-empty `error-message` replaces the rows outright.
+//
+// The view has **two presentations over the same three models** — the list, and a
+// virtualized card grid whose rows are `card-rows`. `folders` and `rows` stay populated
+// in both, so the three empty states count what they always counted; only `card-rows` is
+// mode-gated, since building the unmounted surface's rows reaches nothing.
 export global Browse {
     in-out property <string> current-path;             // "" = root (library list)
     in-out property <[BrowseFolderRow]> folders;
@@ -113,6 +115,24 @@ export global Browse {
     in-out property <[int]> selected-ids;
     in-out property <int> selection-anchor: -1;
 
+    // Which presentation is up. Persisted as `views.json`'s `browse_view_mode`; Rust
+    // clamps the persisted value against `view-mode-count`, which is the sole definition
+    // of how many presentations there are — the `tab-count` contract, through the same
+    // `ui::tab_bar::clamp_tab`.
+    in-out property <int> view-mode: 0;
+    out property <int> mode-list: 0;
+    out property <int> mode-card: 1;
+    out property <int> view-mode-count: 2;
+
+    // The card grid's model, chunked by Rust into rows of `columns` so the grid's
+    // `ListView` virtualizes by row. `columns` is written by `GridColumnsSync`.
+    in-out property <[BrowseCardGridRow]> card-rows;
+    in-out property <int> columns: 1;
+    // Bumped once the card tier behind `request-card-cover` is warm. A mode toggle has
+    // no fetch to await before the grid mounts, so the cards ask cache-only until then —
+    // see the "Covers" section of `.claude/rules/ui-patterns.md`.
+    in-out property <int> covers-generation: 0;
+
     callback open-folder(string /*path*/);
     callback go-back();
     callback navigate-to(string /*absolute-path*/);    // breadcrumb segment click
@@ -125,7 +145,13 @@ export global Browse {
     callback clear-selection();
     callback request-sort(string /*field*/);
     callback toggle-column(string /*column_id*/);
-    callback refresh();
+    // The pill flips nothing itself — Rust negates, rebuilds the card model and
+    // persists, so there is one place that knows which surface is mounted.
+    callback toggle-view-mode();
+    callback columns-changed(int /*columns*/);
+    // As `RowCovers.request`, but against Browse's own 448 px card tier and gated on the
+    // generation above. `pure` so a card binding can call it.
+    pure callback request-card-cover(string /*artwork_path*/, int /*generation*/) -> image;
     // As `Tracks.section-active-changed` — skip refreshes while hidden, one deferred
     // re-fetch on re-enter.
     callback section-active-changed(bool);

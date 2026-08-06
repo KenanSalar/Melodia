@@ -4,12 +4,12 @@ import { ArtistRow, ArtistGridRow, AlbumRow, TrackListRow } from "../models.slin
 // neither the filter nor the sort hits the DB.
 export global Artists {
     in-out property <[ArtistGridRow]> grid-rows;
-    in-out property <int> total-count;
+    // `-1` until fetched; see `Albums.total-count`.
+    in-out property <int> total-count: -1;
     in-out property <int> columns: 4;
     in-out property <string> filter;
     in-out property <string> sort-field: "name";   // "name" | "track_count" | "album_count"
     in-out property <string> sort-dir: "asc";
-    in-out property <int> blur-search-tick: 0;
 
     callback columns-changed(int);
     callback apply-filter(string);
@@ -61,14 +61,16 @@ export global ArtistDetail {
 
     in-out property <bool> albums-collapsed: false;
 
-    // The hero SearchBar's needle, filtering **both** the track list and the Albums
-    // sub-section. Cleared on a fresh open, preserved across library-changed refreshes.
+    // What the band's search box means while this detail is open, filtering **both** the
+    // track list and the Albums sub-section. Cleared on a fresh open, preserved across
+    // library-changed refreshes.
     in-out property <string> filter;
-    in-out property <int>    blur-search-tick: 0;
 
-    // `AlbumDetail.origin-nav-index`, so cross-tab back-nav takes the same atomic
-    // flip-Nav-then-clear-id path.
+    // `AlbumDetail.origin-nav-index` / `-tab`, so cross-tab back-nav takes the same
+    // atomic flip-Nav-then-clear-id path, and the same pair — see the argument there for
+    // why the tab half can't live once on `MyLibrary`.
     in-out property <int> origin-nav-index: -1;
+    in-out property <int> origin-tab: -1;
 
     callback close-detail();
     callback shuffle-artist();

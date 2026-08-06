@@ -114,7 +114,7 @@ pub async fn open_playlist(
     });
 
     // How far the playlist spreads — folded on the worker that fetched it.
-    let fold = crate::ui::hero_chips::fold_tracks(&tracks);
+    let fold = crate::ui::hero_folds::fold_tracks(&tracks);
 
     let playlists_ui = playlists_ui.clone();
     let state_for_history = state.clone();
@@ -154,6 +154,10 @@ pub async fn open_playlist(
         // `record_current` in `albums::detail::open_album_with` for
         // the rationale.
         crate::ui::nav_history::record_current(&state_for_history, &ui);
+        // Reseat the page's shared filter box, which the clear above
+        // doesn't reach — same reasoning, and same closure position, as
+        // `albums::detail::open_album_with`.
+        ui.global::<crate::MyLibrary>().invoke_detail_scope_changed();
     });
     Ok(())
 }
@@ -182,7 +186,7 @@ pub async fn refresh_detail(
     // before we permute `tracks` to the user's chosen sort.
     let position_order_snapshot: Vec<i64> = tracks.iter().map(|t| t.id).collect();
 
-    let fold = crate::ui::hero_chips::fold_tracks(&tracks);
+    let fold = crate::ui::hero_folds::fold_tracks(&tracks);
 
     let playlists_ui = playlists_ui.clone();
     let _ = weak.upgrade_in_event_loop(move |ui| {

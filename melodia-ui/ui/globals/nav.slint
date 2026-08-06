@@ -5,8 +5,11 @@ export enum NavEnterFrom { below, right, left }
 
 // Which content view the shell shows. Rust persists the index and drives cross-tab
 // navigation off it:
-//   0=search, 1=browse, 2=favorites, 3=tracks, 4=albums, 5=artists,
-//   6=genres, 7=playlists, 8=recently-played, 9=settings
+//   0=search, 1=browse, 2=favorites, 3=my-library, 8=recently-played, 9=settings
+// **4–7 are retired.** They were Albums / Artists / Genres / Playlists, and with Tracks
+// they are the five tabs of My Library at index 3 — `MyLibrary.tab-idx` is what tells
+// them apart, and `boot::ui_setup` folds a persisted 4–7 onto 3. The gaps stay rather
+// than renumbering: 8 and 9 are in `views.json` on every install already.
 // **Sidebar order is source order, not index order** — Recently Played renders under
 // Favorites while keeping index 8.
 export global Nav {

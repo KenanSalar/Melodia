@@ -1,0 +1,94 @@
+import { Theme } from "../../theme.slint";
+import { GenreDetail } from "../../globals/genres.slint";
+import { MyLibrary } from "../../globals/my-library.slint";
+import { Player } from "../../globals/player.slint";
+import { TrackList } from "../../components/track-list/track-list.slint";
+import { OverlayScrollbar } from "../../components/overlay-scrollbar.slint";
+
+// The genre's track list under the shared band, on Album Detail's shape exactly. What is
+// particular to genres lives elsewhere now: the name-hashed tile gradient is a ternary on
+// the mount sheet, and the backdrop pair is written into `HeroBackdrop.floor-*` by Rust's
+// `open_genre`, which measures it and solves the scrim against it. `show-genre` is forced
+// off for the reason each sibling forces its own column off.
+export component GenreDetailBody inherits Rectangle {
+    // Catches any click no inner TouchArea consumes and gives the band's box up.
+    TouchArea {
+        clicked => { MyLibrary.blur-search-tick += 1; }
+    }
+
+    // Left/right/top only — a root bottom pad sits outside the list's viewport and reads
+    // as a dead strip.
+    VerticalLayout {
+        padding-left: Theme.pad-lg;
+        padding-right: Theme.pad-lg;
+        padding-top: Theme.pad-lg;
+
+        tl := TrackList {
+            horizontal-stretch: 1;
+            vertical-stretch: 1;
+
+            rows: GenreDetail.tracks;
+
+            w-number <=> GenreDetail.w-number;
+            w-title <=> GenreDetail.w-title;
+            w-artist <=> GenreDetail.w-artist;
+            w-album <=> GenreDetail.w-album;
+            w-genre <=> GenreDetail.w-genre;
+            w-year <=> GenreDetail.w-year;
+            w-length <=> GenreDetail.w-length;
+
+            show-number <=> GenreDetail.show-number;
+            show-artwork <=> GenreDetail.show-artwork;
+            show-artist <=> GenreDetail.show-artist;
+            show-album <=> GenreDetail.show-album;
+            show-genre <=> GenreDetail.show-genre;
+            show-year <=> GenreDetail.show-year;
+            number-mode: "index";
+
+            sort-field: GenreDetail.sort-field;
+            sort-dir: GenreDetail.sort-dir;
+            playing-track-id: Player.vm.track.id;
+            view-context: "genre-detail";
+            view-selected-ids: GenreDetail.selected-ids;
+
+            request-sort(f) => { GenreDetail.request-sort(f); }
+            play-row(id, idx) => { GenreDetail.play-row(id, idx); }
+            play-next(ids) => { GenreDetail.play-next(ids); }
+            add-to-queue(ids) => { GenreDetail.add-to-queue(ids); }
+            toggle-row-favorite(ids, on) => { GenreDetail.toggle-row-favorite(ids, on); }
+            set-row-rating(ids, n) => { GenreDetail.set-row-rating(ids, n); }
+            select-row(idx, id, sh, ct) => { GenreDetail.select-row(idx, id, sh, ct); }
+            // A click in the track list blurs the band's SearchBar.
+            request-blur-search => { MyLibrary.blur-search-tick += 1; }
+            go-to-album(aid) => { GenreDetail.go-to-album(aid); }
+            go-to-artist(aid) => { GenreDetail.go-to-artist(aid); }
+            go-to-genre(gid) => { GenreDetail.go-to-genre(gid); }
+        }
+    }
+
+    // At the view root, flush with the content panel's rounded edges. `tl` is nested, so
+    // its position comes through `absolute-position`.
+    OverlayScrollbar {
+        horizontal: false;
+        x: parent.width - self.width;
+        y: tl.absolute-position.y - root.absolute-position.y + tl.body-y;
+        width: 10px;
+        height: tl.body-height;
+        visible-size: tl.v-visible-height;
+        content-size: tl.v-viewport-height;
+        offset: tl.v-offset;
+        scroll-to(o) => { tl.set-v-offset(o); }
+    }
+
+    OverlayScrollbar {
+        horizontal: true;
+        x: tl.absolute-position.x - root.absolute-position.x;
+        y: parent.height - self.height;
+        width: tl.width - 10px;
+        height: 10px;
+        visible-size: tl.h-visible-width;
+        content-size: tl.h-viewport-width;
+        offset: tl.h-offset;
+        scroll-to(o) => { tl.set-h-offset(o); }
+    }
+}

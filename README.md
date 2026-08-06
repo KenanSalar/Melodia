@@ -31,7 +31,7 @@ Melodia is a Slint rewrite of a former Tauri + SolidJS application — moving of
 <table>
   <tr>
     <td width="50%"><img src="assets/screenshots/favorites.png" alt="Favorites view"><br><sub><b>Favorites</b> — an artwork mosaic hero over tabs for songs, most played, and favorite artists.</sub></td>
-    <td width="50%"><img src="assets/screenshots/recently_played.png" alt="Recently Played view"><br><sub><b>Recently Played</b> — newest first, updating live as you listen.</sub></td>
+    <td width="50%"><img src="assets/screenshots/recently_played.png" alt="Recently Played view"><br><sub><b>Recently Played</b> — newest first, updating live as you listen, with a most-played tab beside it.</sub></td>
   </tr>
   <tr>
     <td><img src="assets/screenshots/playlists.png" alt="Playlists view"><br><sub><b>Playlists</b> — manual and smart playlists, with M3U8 import and export.</sub></td>
@@ -71,12 +71,12 @@ Shrink the window past a threshold and the full UI collapses into a compact mini
 - Real-time folder watching with debounced re-scanning and incremental updates
 - Content-hash-based moved-file detection (BLAKE3) that preserves play counts, favorites, and queue state when files are renamed or relocated
 - Search across tracks, albums, artists, and genres, with a top-result card, entity rows, and persistent recent search history. Tracks are full-text indexed (SQLite FTS5) on title, artist, album artist, album, genre, composer, year, and file name, so a genre or a year finds everything tagged with it and a partial year ("199") finds the decade. The album and artist rows match by name *and* through their own tracks, so searching a song title, a year or a genre surfaces the albums and artists behind it — and a genre can itself be the top result. That index ignores accents on both sides, so "bjork" finds Björk and "be" finds Bế Tắc — and because the album and artist rows match through it too, an unaccented query still surfaces them. Results are ranked by relevance: a match in the title outranks one in the artist, and a filename that merely echoes the tags beside it ranks below the tags it repeats
-- Every view's own filter box searches the same fields and ignores accents at least as readily — so a genre, an album artist, a year or a decade narrows the Tracks list, an album / artist / genre / playlist page, Favorites or Recently Played much as it narrows the Search view. Years are the one place a filter box is looser on purpose: it matches them anywhere, so "98" finds 1998 and the 1980s alike. The Albums grid takes a year too, and the Settings page's search reaches the accented labels in the translated catalogues
-- Browse by albums, artists, genres, or the file system
-- Dedicated detail pages for albums, artists, genres, and playlists
+- Filter boxes search the same fields and ignore accents at least as readily — so a genre, an album artist, a year or a decade narrows the songs list, an album / artist / genre / playlist, Favorites or Recently Played much as it narrows the Search view. Years are the one place a filter box is looser on purpose: it matches them anywhere, so "98" finds 1998 and the 1980s alike. The Albums grid takes a year too, and the Settings page's search reaches the accented labels in the translated catalogues
+- **My Library** gathers your whole collection into one page with five tabs — Songs, Albums, Artists, Genres and Playlists — under a band that carries the tabs, the count and that tab's own actions. One search box serves all of them and always means whatever is currently on screen; switching tabs clears it. Opening an album, artist, genre or playlist doesn't take you to another page: the band **grows into that entity's banner** — its artwork, its title, a live summary of it — with the tabs still in place and a back arrow beside them, and the same box now filters what's inside. The page reopens on the tab you left it on
+- Browse by albums, artists, genres, or the file system — the folder browser draws either as a detailed list or as a grid of cards mixing subfolders and cover art, and reopens the way you left it
 - Deezer-backed artist image fetching with local caching
 - Favorites view built around a hero banner — artwork mosaic, live counts, and a tab bar sharing that row with the filter — over three sub-views: every favorite as a sortable track list, your most-played favorites as a browsable card grid, and your favorite artists as another. Favorite artists sort by name or by how many of their tracks you've favorited, either direction; the filter narrows whichever tab you're on, and the page reopens on the tab — and the sort — you left it on
-- Recently-Played view listing the tracks you last listened to (newest first), with a most-played strip and a filterable track list that updates live as you play
+- Recently-Played view built the same way, over two sub-views: the tracks you last listened to (newest first, updating live as you play) and your most-played tracks as a browsable card grid. The filter narrows whichever tab you're on, and the page reopens on the tab you left it on. The recency list is deliberately unsortable — recency is what it's for
 - Play-count and skip-count tracking per track
 - Per-track star ratings (0–5), set inline via a hover-revealed star control in any track list and from the Now Playing view
 - Edit track information (title, artist, album, album artist, genre, year, track/disc number, composer, comment, BPM, lyrics, and cover art) for one or many selected tracks at once, written straight back to the files — batch edits leave differing fields untouched and save only the fields you change
@@ -94,7 +94,7 @@ Shrink the window past a threshold and the full UI collapses into a compact mini
 - Audio crossfade (1–12 s) that overlaps the end of one track with the start of the next, running the two on separate mixer decks with a sample-accurate complementary ramp so the sum can never clip; optionally skips same-album transitions to keep continuous mixes gapless, extends to manual track changes, and fades out on pause and stop
 - Queue management with shuffle and repeat modes (Off, All, One)
 - Playing a track from any list — an album, a playlist, a folder in Files, search results, Favorites — loads that whole list into the queue and starts on the track you picked, so the rest of the album or playlist follows on its own. With shuffle already on, the remaining tracks are shuffled behind your pick rather than played in order. **Play Next** and **Add to Queue** in the right-click menu still add to the existing queue without replacing it
-- A **Shuffle** pill on Favorites, Recently Played and the album, artist, genre and playlist pages loads whatever that view is currently showing — filter it first and only the matches are queued — and opens on a random track rather than the top of the list
+- A **Shuffle** pill on Favorites, Recently Played (two on each — one per tab that has a list to shuffle) and on every open album, artist, genre and playlist loads whatever is currently showing — filter it first and only the matches are queued — and opens on a random track rather than the top of the list
 - Full-screen Now Playing view with track details, an up-next list, and album-art cross-fade transitions
 - Audio visualizer under the Now Playing artwork, tapped off the post-DSP audio and tinted to the album's own accent colour, in three styles switchable from the view itself or from Settings — a 64-band spectrum analyzer, the same bands mirrored about a centre line, or a live waveform trace; bands are logarithmic across 50 Hz – 16 kHz (the equalizer's own range) so every bar covers the same musical interval, and the whole thing decays to rest on pause or can be switched off entirely
 - 10-band graphic equalizer (31 Hz – 16 kHz) with adjustable preamp, nine built-in presets plus hand-tuned custom curves, and a soft-knee clip-protection limiter so boosts compress instead of clipping
@@ -183,7 +183,7 @@ Download the latest release for your platform from the
 |--------|---------|
 | `.rpm` (Fedora/RHEL) | `sudo dnf install ./melodia-*.rpm` |
 | `.deb` (Debian/Ubuntu) | `sudo apt install ./melodia-*.deb` |
-| AppImage | `chmod +x Melodia-*.AppImage && ./Melodia-*.AppImage` |
+| AppImage | `chmod +x melodia-*.AppImage && ./melodia-*.AppImage` |
 | Tarball | Extract, then run `./install-linux.sh` (no `sudo` — installs into `~/.local/share/Melodia`) |
 
 The tarball install is fully user-local, so the in-app updater works without a polkit prompt.
@@ -347,7 +347,7 @@ Melodia stores its data under the OS application-data directory
 |---------------|---------|
 | `melodia.db` | SQLite music library (WAL + FTS5) |
 | `settings.json` | App/user preferences (theme, locale, playback, window geometry) |
-| `views.json` | Per-view UI state (column widths, sort, browse path, open detail) |
+| `views.json` | Per-view UI state (column widths, sort, browse path and view mode, open detail, active tab) |
 | `queue.json` | Persisted play queue |
 | `search_history.json` | Recent search terms (capped at 10) |
 | `scrobble_credentials.json` | Last.fm session key + ListenBrainz token (`0600` on Unix) |
@@ -358,18 +358,22 @@ Melodia stores its data under the OS application-data directory
 
 Contributions are welcome. Before opening a pull request:
 
-- Run `cargo clippy --all-targets -- -D warnings` — the lint configuration is
-  strict and `unwrap()` is denied in non-test code.
-- Run `cargo test` and keep it green.
+- Run `cargo clippy --all-targets --locked -- -D warnings` — the lint
+  configuration is strict and `unwrap()` is denied in non-test code.
+- Run `cargo test --locked` and keep it green.
 - Follow the existing [Conventional Commits](https://www.conventionalcommits.org/)
   style used in the git history.
 - Open pull requests against the `dev` branch. (`main` only accepts merges from
   `dev` or a `hotfix/*` branch.)
+- Fill in the pull request template. Link the issue from the PR's Development
+  sidebar rather than with `Fixes #N` — GitHub ignores closing keywords on a PR
+  that doesn't target the default branch.
 
-Every pull request runs the **PR Validation** workflow — `clippy` (with
-`-D warnings`) and the full test suite — and the `pr-validation` check must pass
-before merging. Documentation-only changes skip both jobs. Coverage is measured
-separately on each merge to `dev` and published to GitHub Pages at
+Every pull request runs the **PR Validation** workflow — a `cargo audit`
+advisory scan, `clippy` (with `-D warnings`) and the full test suite — and the
+`pr-validation` check must pass before merging. Documentation-only changes skip
+all three. Coverage is a separate manual run
+(**Actions → Deploy Coverage → Run workflow**) published to GitHub Pages at
 [kenansalar.github.io/Melodia](https://kenansalar.github.io/Melodia/).
 
 ## License

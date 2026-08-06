@@ -34,20 +34,20 @@ const CALLERS: [(&str, &str, &[&str]); 6] = [
         "playlists/detail.rs",
         &["apply_detail_artwork(", "publish_playlist("],
     ),
-    // `publish_favorites` is the one publisher that takes the section's
-    // *handle* rather than a flag, and derives the gate from it — so its call
-    // sites carry nothing to check and the assertion moves into the seams test
-    // below. That is the stronger shape, not an exemption: there is no way to
-    // hand it another section's answer.
+    // The two tabbed pages' publishers take the section's *handle* rather than a
+    // flag, and derive the gate from it — so their call sites carry nothing to
+    // check and the assertion moves into the seams test below. That is the
+    // stronger shape, not an exemption: there is no way to hand either one
+    // another section's answer.
     (
         include_str!("../favorites/grids/apply.rs"),
         "favorites/grids/apply.rs",
         &[],
     ),
     (
-        include_str!("../recently_played/hero.rs"),
-        "recently_played/hero.rs",
-        &["publish_recently_played("],
+        include_str!("../recently_played/grid/apply.rs"),
+        "recently_played/grid/apply.rs",
+        &[],
     ),
 ];
 
@@ -187,15 +187,20 @@ fn the_two_seams_gate_the_shared_write_and_only_that() {
          inactive by definition"
     );
 
-    // The one publisher that derives its gate instead of being handed one.
+    // The two publishers that derive their gate instead of being handed one.
     // (Kept in this test so both halves of the gate's contract sit together.)
-    let favorites = HERO_CHIPS
-        .split_once("pub fn publish_favorites(")
-        .and_then(|(_, rest)| rest.split_once("\n}"))
-        .map_or("", |(body, _)| body);
-    assert!(
-        favorites.contains("fav_ui.section_active()"),
-        "publish_favorites takes the section handle rather than a flag, so it owes the \
-         `section_active()` read itself — otherwise nothing gates it at all"
-    );
+    for (opener, handle) in [
+        ("pub fn publish_favorites(", "fav_ui.section_active()"),
+        ("pub fn publish_recently_played(", "rp_ui.section_active()"),
+    ] {
+        let body = HERO_CHIPS
+            .split_once(opener)
+            .and_then(|(_, rest)| rest.split_once("\n}"))
+            .map_or("", |(body, _)| body);
+        assert!(
+            body.contains(handle),
+            "`{opener}…` takes the section handle rather than a flag, so it owes the \
+             `section_active()` read itself — otherwise nothing gates it at all"
+        );
+    }
 }

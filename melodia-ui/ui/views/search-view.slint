@@ -1,20 +1,26 @@
 import { ScrollView } from "std-widgets.slint";
 import { Theme } from "../theme.slint";
-import { Player } from "../globals/player.slint";
 import { Search } from "../globals/search.slint";
 import { SearchBar } from "../components/search-bar.slint";
 import { HorizontalCardStrip } from "../components/grid/horizontal-card-strip.slint";
-import { ActionPill, PillLabel, PillButton, PillDivider } from "../components/action-pill.slint";
-import { ColumnTogglePopup } from "../components/track-list/column-toggle-popup.slint";
-import { ArtworkImage } from "../components/artwork-image.slint";
-import { MaterialIcon } from "../components/material-icon.slint";
-import { TrackList } from "../components/track-list/track-list.slint";
 import { OverlayScrollbar } from "../components/overlay-scrollbar.slint";
+import { RecentSearches } from "search/recent-searches.slint";
+import { NoResults } from "search/no-results.slint";
+import { TopResultCard } from "search/top-result-card.slint";
+import { SongsSection } from "search/songs-section.slint";
 
-// A compact hero — an autofocused `SearchBar` and no page title — over one scroll
-// container holding every state branch: the recent-searches chips on an empty query, a
-// loading line, an empty-results block, the Top Result and Songs two-column section, and
-// the Albums and Artists strips.
+// One full-height scroll container holding every state branch, with an autofocused
+// `SearchBar` floating over it and no page title. **A mount sheet**: this file owns the
+// timers, the branch conditions and the two scroll chromes, and `views/search/*.slint`
+// own the bodies — the `views/settings/pages/` and `views/favorites/` precedent. Each
+// section reads `Search` directly and takes no inputs, so a branch here is one line.
+//
+// **The bar is not a band.** It used to head a 96 px row inside the view's column, which
+// clipped the scroller at that row's floor: the panel's own `Theme.base` showed through
+// above it and the first card and list header were cut off behind an opaque-reading
+// strip. Out of the flow it costs nothing but the inset the body reserves, the results
+// pass behind it, and — since the row carries no `TouchArea` of its own — everything
+// beside the pill stays clickable.
 //
 // Both strips match through their own tracks as well as by name, so a query reaching
 // only track metadata still fills them — and with them the Top Result, which ranks over
@@ -54,569 +60,151 @@ export component SearchView inherits Rectangle {
         clicked => { Search.blur-search-tick += 1; }
     }
 
-    private property <length> hero-height: 96px;
+    // What the scroll body insets its content by, and the height of the floating row:
+    // the bar's own 32 px with `pad-md` of clearance above and below. Nothing starts
+    // underneath the pill, and everything scrolls behind it from there.
+    private property <length> bar-inset: 56px;
 
-    VerticalLayout {
-        // --- Hero -------------------------------------------------------
-        Rectangle {
-            vertical-stretch: 0;
-            height: root.hero-height;
+    body := Rectangle {
+        width: 100%;
+        height: 100%;
+        clip: true;
 
-            HorizontalLayout {
-                padding: Theme.pad-lg;
-                alignment: center;
+        below-sv := ScrollView {
+            width: 100%;
+            height: 100%;
+            horizontal-scrollbar-policy: always-off;
+            vertical-scrollbar-policy:   always-off;
+            viewport-width: self.width;
 
-                VerticalLayout {
+            VerticalLayout {
+                padding-top: root.bar-inset;
+                padding-left: Theme.pad-lg;
+                padding-right: Theme.pad-lg;
+                padding-bottom: Theme.pad-lg;
+                spacing: Theme.pad-lg;
+
+                if Search.query == "" && Search.recent-rows.length > 0: RecentSearches { }
+
+                if Search.loading && Search.query != "": HorizontalLayout {
+                    vertical-stretch: 0;
                     alignment: center;
-                    search-bar := SearchBar {
-                        text <=> Search.query;
-                        placeholder: @tr("Search your library…");
-                        blur-trigger: Search.blur-search-tick;
-                        input-width: 420px;
-                        edited(t) => {
-                            Search.debounce-tick-pending += 1;
-                            Search.query-changed(t);
-                        }
-                        // Enter commits immediately, and aligning the ticks cancels the
-                        // pending fire so the query isn't committed twice. **This is
-                        // what lets a preserved query be re-run**: tab-leave released
-                        // the results and cleared the models but kept `Search.query`,
-                        // so no editing is needed — just focus and Enter.
-                        accepted => {
-                            Search.debounce-tick-applied = Search.debounce-tick-pending;
-                            Search.commit-search(Search.query);
-                        }
+                    padding-top: Theme.pad-lg;
+                    Text {
+                        text: @tr("Searching…");
+                        color: Theme.subtext0;
+                        font-size: Theme.font-size-md;
                     }
                 }
-            }
-        }
 
-        // --- Below-hero scroll container --------------------------------
-        below-hero := Rectangle {
-            vertical-stretch: 1;
-            clip: true;
+                if !Search.loading && Search.query != ""
+                    && Search.tracks.length == 0
+                    && Search.album-rows.length == 0
+                    && Search.artist-rows.length == 0
+                    && Search.top-kind == "": NoResults { }
 
-            below-sv := ScrollView {
-                width: 100%;
-                height: 100%;
-                horizontal-scrollbar-policy: always-off;
-                vertical-scrollbar-policy:   always-off;
-                viewport-width: self.width;
-
-                VerticalLayout {
-                    padding-left: Theme.pad-lg;
-                    padding-right: Theme.pad-lg;
-                    padding-bottom: Theme.pad-lg;
+                // The Top Result subtree unmounts entirely with no top result, so the
+                // Songs column claims the full width naturally.
+                if Search.top-kind != "" || Search.tracks.length > 0: HorizontalLayout {
+                    vertical-stretch: 0;
                     spacing: Theme.pad-lg;
+                    alignment: stretch;
 
-                    // Only on an empty query with saved history.
-                    if Search.query == "" && Search.recent-rows.length > 0: VerticalLayout {
-                        vertical-stretch: 0;
-                        spacing: Theme.pad-sm;
+                    if Search.top-kind != "": TopResultCard { }
 
-                        HorizontalLayout {
-                            alignment: space-between;
-                            VerticalLayout {
-                                alignment: center;
-                                Text {
-                                    text: @tr("Recent");
-                                    color: Theme.text;
-                                    font-size: Theme.font-size-md;
-                                    font-weight: 700;
-                                    letter-spacing: 0.4px;
-                                }
-                            }
-                            VerticalLayout {
-                                alignment: center;
-                                clear-target := Rectangle {
-                                    width: clear-label.preferred-width + 16px;
-                                    height: 24px;
-                                    border-radius: self.height / 2;
-                                    background: clear-touch.has-hover
-                                        ? Theme.surface1
-                                        : transparent;
-                                    animate background { duration: Theme.dur-fast; easing: ease-in-out; }
-                                    clear-label := Text {
-                                        x: 8px;
-                                        y: (parent.height - self.height) / 2;
-                                        text: @tr("Clear all");
-                                        color: Theme.subtext0;
-                                        font-size: Theme.font-size-sm;
-                                    }
-                                    clear-touch := TouchArea {
-                                        mouse-cursor: pointer;
-                                        clicked => { Search.recent-clear(); }
-                                    }
-                                }
-                            }
-                        }
-
-                        // Slint 1.16 has no wrapping `HorizontalLayout`, so this is a
-                        // plain one and overflow sits outside the visible area. The
-                        // history is capped and chip widths are bounded, so at any
-                        // sensible window size every chip fits — the
-                        // `SettingsPage.chunk-indices` wrap is what a real fix looks
-                        // like, if this ever stops being true.
-                        HorizontalLayout {
-                            spacing: Theme.pad-sm;
-                            alignment: start;
-                            for term in Search.recent-rows: chip-host := Rectangle {
-                                height: 28px;
-                                width: term-text.preferred-width + close-cell.width + 18px;
-                                border-radius: self.height / 2;
-                                background: chip-touch.has-hover
-                                    ? Theme.surface1
-                                    : Theme.surface0;
-                                border-width: 1px;
-                                border-color: Theme.surface2;
-                                animate background { duration: Theme.dur-fast; easing: ease-in-out; }
-
-                                term-text := Text {
-                                    x: 10px;
-                                    y: (parent.height - self.height) / 2;
-                                    text: term;
-                                    color: Theme.text;
-                                    font-size: Theme.font-size-sm;
-                                }
-
-                                // Declared **before** the close cell, so that cell's
-                                // nested TouchArea wins dispatch on the X: Slint
-                                // dispatches to the last-declared overlapping one.
-                                chip-touch := TouchArea {
-                                    mouse-cursor: pointer;
-                                    clicked => { Search.recent-pick(term); }
-                                }
-
-                                close-cell := Rectangle {
-                                    x: parent.width - self.width - 4px;
-                                    y: (parent.height - self.height) / 2;
-                                    width: 20px;
-                                    height: 20px;
-                                    border-radius: 10px;
-                                    background: close-touch.has-hover
-                                        ? Theme.surface2
-                                        : transparent;
-                                    animate background { duration: Theme.dur-fast; easing: ease-in-out; }
-                                    MaterialIcon {
-                                        name: "close";
-                                        icon-size: 14px;
-                                        icon-color: Theme.subtext0;
-                                    }
-                                    close-touch := TouchArea {
-                                        mouse-cursor: pointer;
-                                        // Declared after the chip's own, so this sits
-                                        // on top and wins dispatch here.
-                                        clicked => { Search.recent-remove(term); }
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    // (b) Loading ------------------------------------
-                    if Search.loading && Search.query != "": HorizontalLayout {
-                        vertical-stretch: 0;
-                        alignment: center;
-                        padding-top: Theme.pad-lg;
-                        Text {
-                            text: @tr("Searching…");
-                            color: Theme.subtext0;
-                            font-size: Theme.font-size-md;
-                        }
-                    }
-
-                    // (c) Empty results ------------------------------
-                    if !Search.loading && Search.query != ""
-                        && Search.tracks.length == 0
-                        && Search.album-rows.length == 0
-                        && Search.artist-rows.length == 0
-                        && Search.top-kind == "": VerticalLayout {
-                        vertical-stretch: 0;
-                        alignment: center;
-                        padding-top: 48px;
-                        spacing: Theme.pad-sm;
-
-                        HorizontalLayout {
-                            alignment: center;
-                            Rectangle {
-                                width: 48px;
-                                height: 48px;
-                                Text {
-                                    text: "search_off";
-                                    color: Theme.subtext0;
-                                    font-family: "Material Symbols Rounded";
-                                    font-size: 42px;
-                                    horizontal-alignment: center;
-                                    vertical-alignment: center;
-                                }
-                            }
-                        }
-                        HorizontalLayout {
-                            alignment: center;
-                            Text {
-                                text: @tr("No results found");
-                                color: Theme.text;
-                                font-size: Theme.font-size-lg;
-                                font-weight: 600;
-                            }
-                        }
-                        HorizontalLayout {
-                            alignment: center;
-                            Text {
-                                text: @tr("Try a different search term");
-                                color: Theme.subtext0;
-                                font-size: Theme.font-size-sm;
-                            }
-                        }
-                    }
-
-                    // The Top Result subtree unmounts entirely with no top result, so
-                    // the Songs column claims the full width naturally.
-                    if Search.top-kind != "" || Search.tracks.length > 0: HorizontalLayout {
-                        vertical-stretch: 0;
-                        spacing: Theme.pad-lg;
-                        alignment: stretch;
-
-                        // Top Result featured card.
-                        if Search.top-kind != "": VerticalLayout {
-                            horizontal-stretch: 0;
-                            alignment: start;
-                            spacing: Theme.pad-sm;
-
-                            // Pinned to the same height as the Songs heading, which its
-                            // `ActionPill` stretches. That keeps the two headings
-                            // aligned *and* the spacing below them equal, so the card
-                            // and the list header start at the same y.
-                            HorizontalLayout {
-                                height: 32px;
-                                alignment: start;
-                                VerticalLayout {
-                                    alignment: center;
-                                    Text {
-                                        text: @tr("Top Result");
-                                        color: Theme.text;
-                                        font-size: Theme.font-size-md;
-                                        font-weight: 700;
-                                        letter-spacing: 0.4px;
-                                    }
-                                }
-                            }
-
-                            top-card := Rectangle {
-                                width: 240px;
-                                height: 320px;
-                                background: top-touch.has-hover
-                                    ? Theme.surface1
-                                    : Theme.surface0;
-                                border-radius: Theme.radius-lg;
-                                border-width: 1px;
-                                border-color: Theme.surface2;
-                                animate background { duration: Theme.dur-fast; easing: ease-in-out; }
-                                clip: true;
-
-                                VerticalLayout {
-                                    padding: Theme.pad-md;
-                                    spacing: Theme.pad-sm;
-
-                                    // **The shared `ArtworkImage`, not a hand-rolled
-                                    // square**: a coverless result here has to look
-                                    // like the same entity does in the strip below and
-                                    // in every track row, and this card spent a while
-                                    // painting its own placeholder matching neither.
-                                    // Circular for an artist, per the strip's own
-                                    // convention.
-                                    ArtworkImage {
-                                        tile-size: 216px;
-                                        tile-radius: Search.top-kind == "artist"
-                                            ? self.tile-size / 2
-                                            : Theme.radius-md;
-                                        cover: Search.request-top-result-cover(Search.top-artwork-path);
-                                        fallback-icon: Search.top-kind == "artist"
-                                            ? "person"
-                                            : Search.top-kind == "genre"
-                                                ? "theater_comedy"
-                                                : "album";
-                                        // A genre is the one kind with no cover to ever
-                                        // replace the fill, so it takes the name-hashed
-                                        // gradient `GenreGrid` paints and the two read
-                                        // as one genre. The other arms restate
-                                        // `ArtworkImage`'s own default, a ternary
-                                        // having no way to fall through to it.
-                                        tile-bg: Search.top-kind == "genre"
-                                            ? @linear-gradient(135deg,
-                                                Search.top-tile-color-1,
-                                                Search.top-tile-color-2)
-                                            : Theme.accent.with-alpha(0.15);
-                                        tile-icon-color: Search.top-kind == "genre"
-                                            ? #ffffff.with-alpha(0.3)
-                                            : Theme.accent;
-                                    }
-
-                                    // Localised inline: a Rust-pushed string can't
-                                    // `@tr`, so the extractor needs literals here.
-                                    Text {
-                                        text: Search.top-kind == "album"
-                                            ? @tr("Album")
-                                            : Search.top-kind == "artist"
-                                                ? @tr("Artist")
-                                                : @tr("Genre");
-                                        color: Theme.accent;
-                                        font-size: Theme.font-size-sm;
-                                        font-weight: 600;
-                                        letter-spacing: 0.4px;
-                                    }
-                                    Text {
-                                        text: Search.top-title;
-                                        color: Theme.text;
-                                        font-size: Theme.font-size-md;
-                                        font-weight: 700;
-                                        overflow: elide;
-                                    }
-                                    Text {
-                                        text: Search.top-subtitle;
-                                        color: Theme.subtext0;
-                                        font-size: Theme.font-size-sm;
-                                        overflow: elide;
-                                    }
-                                }
-
-                                top-touch := TouchArea {
-                                    mouse-cursor: pointer;
-                                    clicked => {
-                                        Search.blur-search-tick += 1;
-                                        Search.open-top-result();
-                                    }
-                                }
-                            }
-                        }
-
-                        // Songs column.
-                        VerticalLayout {
-                            horizontal-stretch: 1;
-                            spacing: Theme.pad-sm;
-
-                            // Pinned so the baseline matches the Top Result heading
-                            // whether or not the pill is mounted — it renders only with
-                            // rows, and the row height has to hold either way.
-                            HorizontalLayout {
-                                height: 32px;
-                                alignment: space-between;
-                                VerticalLayout {
-                                    alignment: center;
-                                    Text {
-                                        text: @tr("Songs");
-                                        color: Theme.text;
-                                        font-size: Theme.font-size-md;
-                                        font-weight: 700;
-                                        letter-spacing: 0.4px;
-                                    }
-                                }
-
-                                // **No Shuffle pill here**: Search has no single "all of
-                                // these tracks" the way Favorites does — the user
-                                // picked a query, so play expectations are per-row.
-                                if Search.tracks.length > 0: ActionPill {
-                                    ColumnTogglePopup {
-                                        show-number  <=> Search.show-number;
-                                        show-artwork <=> Search.show-artwork;
-                                        show-artist  <=> Search.show-artist;
-                                        show-album   <=> Search.show-album;
-                                        show-genre   <=> Search.show-genre;
-                                        show-year    <=> Search.show-year;
-                                        toggled(id) => { Search.toggle-column(id); }
-                                    }
-                                    if Search.selected-ids.length > 0: PillDivider { }
-                                    if Search.selected-ids.length > 0: PillLabel {
-                                        text: @tr("{} selected", Search.selected-ids.length);
-                                    }
-                                    if Search.selected-ids.length > 0: PillButton {
-                                        icon: "close";
-                                        tooltip-text: @tr("Clear selection");
-                                        clicked => {
-                                            Search.clear-selection();
-                                            Search.blur-search-tick += 1;
-                                        }
-                                    }
-                                }
-                            }
-
-                            tl := TrackList {
-                                horizontal-stretch: 1;
-                                vertical-stretch: 0;
-                                // Sized to the row count so the outer scroller drives
-                                // the strips and the list together; the floor keeps the
-                                // column header rendering with zero rows.
-                                //
-                                // **Uncapped, unlike the composite views**, which pin
-                                // this to the viewport so their inner list keeps
-                                // virtualizing. Here the *backend* is the cap — the
-                                // query returns at most a screenful or two — so
-                                // instantiating them all is affordable, and it buys
-                                // back native wheel scrolling: a capped list gains
-                                // inner travel, and a nested `ListView` swallows the
-                                // wheel at its scroll edge rather than bubbling, which
-                                // is why those views need `CompositeScrollbars` and
-                                // this one doesn't. **Raising that SQL limit is what
-                                // would make the trade wrong.**
-                                height: max(1, Search.tracks.length)
-                                    * (Search.show-artwork
-                                        ? Theme.row-h
-                                        : Theme.row-h-compact)
-                                    + 32px + Theme.pad-xs;
-
-                                rows: Search.tracks;
-
-                                w-number <=> Search.w-number;
-                                w-title  <=> Search.w-title;
-                                w-artist <=> Search.w-artist;
-                                w-album  <=> Search.w-album;
-                                w-genre  <=> Search.w-genre;
-                                w-year   <=> Search.w-year;
-                                w-length <=> Search.w-length;
-
-                                show-number  <=> Search.show-number;
-                                show-artwork <=> Search.show-artwork;
-                                show-artist  <=> Search.show-artist;
-                                show-album   <=> Search.show-album;
-                                show-genre   <=> Search.show-genre;
-                                show-year    <=> Search.show-year;
-                                number-mode: "index";
-
-                                sort-field: Search.sort-field;
-                                sort-dir:   Search.sort-dir;
-                                playing-track-id: Player.vm.track.id;
-                                view-context: "search";
-                                view-selected-ids: Search.selected-ids;
-
-                                request-sort(f)        => { Search.request-sort(f); }
-                                play-row(id, idx)      => { Search.play-row(id, idx); }
-                                play-next(ids)         => { Search.play-next(ids); }
-                                add-to-queue(ids)      => { Search.add-to-queue(ids); }
-                                toggle-row-favorite(ids, on) => { Search.toggle-row-favorite(ids, on); }
-                                set-row-rating(ids, n) => { Search.set-row-rating(ids, n); }
-                                select-row(idx, id, sh, ct) => { Search.select-row(idx, id, sh, ct); }
-                                request-blur-search => { Search.blur-search-tick += 1; }
-                                // Reuses the card-click callbacks, so cross-tab nav
-                                // means the same thing from either surface.
-                                go-to-album(aid) => { Search.open-album(aid); }
-                                go-to-artist(aid) => { Search.open-artist(aid); }
-                                go-to-genre(gid) => { Search.go-to-genre(gid); }
-                            }
-
-                            // Mounted **inside** the songs column rather than at the
-                            // view root, because the list is declared inside a
-                            // conditional and Slint scopes ids to their enclosing one.
-                            //
-                            // **Always mounted, with a fixed slot.** Gating its `if` on
-                            // the overflow would close a binding loop — the `if`
-                            // affects layout, which changes the list's width, which
-                            // changes the visible width, which re-evaluates the `if`.
-                            // The bar's own visibility gate already hides the thumb
-                            // with nothing to scroll, leaving a transparent slot: a
-                            // small visual cost for always-correct overflow access.
-                            OverlayScrollbar {
-                                horizontal: true;
-                                height: 10px;
-                                visible-size: tl.h-visible-width;
-                                content-size: tl.h-viewport-width;
-                                offset: tl.h-offset;
-                                scroll-to(o) => { tl.set-h-offset(o); }
-                            }
-
-                            // Mounted only when the backend returned more than the
-                            // compact cap; Rust re-derives the visible slice from its
-                            // cache with no DB hit.
-                            if Search.tracks-total > 5: HorizontalLayout {
-                                alignment: center;
-                                padding-top: Theme.pad-xs;
-                                show-more-target := Rectangle {
-                                    width: show-more-label.preferred-width + 24px;
-                                    height: 28px;
-                                    border-radius: self.height / 2;
-                                    background: show-more-touch.has-hover
-                                        ? Theme.surface1
-                                        : transparent;
-                                    border-width: 1px;
-                                    border-color: Theme.surface2;
-                                    animate background { duration: Theme.dur-fast; easing: ease-in-out; }
-                                    show-more-label := Text {
-                                        x: (parent.width - self.width) / 2;
-                                        y: (parent.height - self.height) / 2;
-                                        text: Search.show-all-tracks
-                                            ? @tr("Show less")
-                                            : @tr("Show all {} songs", Search.tracks-total);
-                                        color: Theme.text;
-                                        font-size: Theme.font-size-sm;
-                                        font-weight: 600;
-                                    }
-                                    show-more-touch := TouchArea {
-                                        mouse-cursor: pointer;
-                                        clicked => { Search.toggle-show-all-tracks(); }
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    // (e) Albums strip --------------------------------
-                    if Search.album-rows.length > 0: HorizontalCardStrip {
-                        heading: @tr("Albums");
-                        rows: Search.album-rows;
-                        card-width: 160px;
-                        card-height: 206px;
-                        show-play-overlay: false;
-                        fallback-icon: "album";
-                        request-cover(p) => {
-                            return Search.request-album-strip-cover(p);
-                        }
-                        row-clicked(id) => {
-                            Search.blur-search-tick += 1;
-                            Search.open-album(id);
-                        }
-                        // play-clicked unused (no play-overlay).
-                    }
-
-                    // (f) Artists strip -------------------------------
-                    if Search.artist-rows.length > 0: HorizontalCardStrip {
-                        heading: @tr("Artists");
-                        rows: Search.artist-rows;
-                        card-width: 160px;
-                        card-height: 206px;
-                        circular: true;
-                        show-play-overlay: false;
-                        fallback-icon: "person";
-                        request-cover(p) => {
-                            return Search.request-artist-strip-cover(p);
-                        }
-                        row-clicked(id) => {
-                            Search.blur-search-tick += 1;
-                            Search.open-artist(id);
-                        }
-                    }
-
-                    // **Collects the surplus.** A column whose children are all
-                    // `vertical-stretch: 0` divides spare height equally among them,
-                    // which on the empty-query state — where only the Recent section is
-                    // mounted — pushed its heading to the top and its chips to the
-                    // bottom with a yawning gap between.
-                    Rectangle { vertical-stretch: 1; }
+                    SongsSection { }
                 }
+
+                if Search.album-rows.length > 0: HorizontalCardStrip {
+                    heading: @tr("Albums");
+                    rows: Search.album-rows;
+                    card-width: 160px;
+                    card-height: 206px;
+                    show-play-overlay: false;
+                    fallback-icon: "album";
+                    request-cover(p) => {
+                        return Search.request-album-strip-cover(p);
+                    }
+                    row-clicked(id) => {
+                        Search.blur-search-tick += 1;
+                        Search.open-album(id);
+                    }
+                    // play-clicked unused (no play-overlay).
+                }
+
+                if Search.artist-rows.length > 0: HorizontalCardStrip {
+                    heading: @tr("Artists");
+                    rows: Search.artist-rows;
+                    card-width: 160px;
+                    card-height: 206px;
+                    circular: true;
+                    show-play-overlay: false;
+                    fallback-icon: "person";
+                    request-cover(p) => {
+                        return Search.request-artist-strip-cover(p);
+                    }
+                    row-clicked(id) => {
+                        Search.blur-search-tick += 1;
+                        Search.open-artist(id);
+                    }
+                }
+
+                // **Collects the surplus.** A column whose children are all
+                // `vertical-stretch: 0` divides spare height equally among them, which on
+                // the empty-query state — where only the Recent section is mounted —
+                // pushed its heading to the top and its chips to the bottom with a
+                // yawning gap between.
+                Rectangle { vertical-stretch: 1; }
             }
         }
     }
 
-    // Covers the Top Result, Songs and both strips together, pinned to the right edge of
-    // the below-hero region so it starts under the banner.
+    // Covers the whole view, since the results now run its full height.
     OverlayScrollbar {
         horizontal: false;
         x: parent.width - self.width;
-        y: below-hero.absolute-position.y - root.absolute-position.y;
+        y: 0;
         width: 10px;
-        height: below-hero.height;
+        height: parent.height;
         visible-size: below-sv.visible-height;
         content-size: below-sv.viewport-height;
         offset: -below-sv.viewport-y;
         scroll-to(o) => { below-sv.viewport-y = -o; }
     }
 
+    // Declared last so it paints over both the results and the scrollbar — Slint paints
+    // in declaration order. The height has to be pinned: as a layout child of a plain
+    // Rectangle it would otherwise fill the view and centre the pill down the middle of
+    // it. `pad-lg` on both sides keeps the bar clear of the scrollbar's 10 px track at
+    // any width, since it compresses toward its own `min-w` rather than overrunning.
+    HorizontalLayout {
+        y: 0;
+        height: root.bar-inset;
+        padding-left: Theme.pad-lg;
+        padding-right: Theme.pad-lg;
+        alignment: center;
+
+        VerticalLayout {
+            alignment: center;
+            search-bar := SearchBar {
+                text <=> Search.query;
+                placeholder: @tr("Search your library…");
+                blur-trigger: Search.blur-search-tick;
+                input-width: 420px;
+                edited(t) => {
+                    Search.debounce-tick-pending += 1;
+                    Search.query-changed(t);
+                }
+                // Enter commits immediately, and aligning the ticks cancels the pending
+                // fire so the query isn't committed twice. **This is what lets a
+                // preserved query be re-run**: tab-leave released the results and cleared
+                // the models but kept `Search.query`, so no editing is needed — just
+                // focus and Enter.
+                accepted => {
+                    Search.debounce-tick-applied = Search.debounce-tick-pending;
+                    Search.commit-search(Search.query);
+                }
+            }
+        }
+    }
 }

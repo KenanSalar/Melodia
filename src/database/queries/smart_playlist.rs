@@ -42,7 +42,7 @@ pub async fn get_smart_playlist_tracks(
 }
 
 /// `(track_count, total_duration_ms)` for a smart playlist without projecting
-/// any track rows — backs the grid card and detail-header stats, which can't
+/// any track rows — backs the grid card and the hero's chips, which can't
 /// rely on the `playlist_items` triggers (a smart playlist has no junction
 /// rows). Respects the limit so a "top 25" playlist reports 25, not the full
 /// match count.

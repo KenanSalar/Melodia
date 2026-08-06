@@ -9,8 +9,10 @@ use slint::{ComponentHandle, Image, SharedString};
 
 use super::NAV_FAVORITES;
 use crate::state::AppState;
+use crate::ui::callbacks::macros::release_shared_hero;
 use crate::ui::favorites::{self as favorites_ui_mod, FavoritesUi};
 use crate::ui::model_diff::clear_vec_model;
+use crate::ui::tab_bar::UNFETCHED_COUNT;
 use crate::{
     AppWindow, EntityGridRow as UiEntityGridRow, Favorites, Nav, TrackListRow as UiTrackListRow,
 };
@@ -71,12 +73,22 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, fav_ui: &Arc<FavoritesUi>) 
                 // Six heroes share one colour set and one chip row, so hand
                 // both back rather than leaving this mosaic's solve and this
                 // tab's counts for the next hero to paint under.
-                crate::ui::hero_backdrop::reset(&ui);
-                crate::ui::hero_chips::clear(&ui);
+                release_shared_hero!(ui);
                 // Both grid tiers go with `release_section_state` below, so
                 // rewind the counter that means "cold" — else the next enter
                 // reads a leftover bump as a warm tier and decodes on mount.
                 g.set_covers_generation(0);
+                // And rewind all three counts to "not fetched yet" on the same
+                // tick as the models they number, for the reason the folds are
+                // reset beside their caches: a count that outlives its model is
+                // the one thing these surfaces can state that is *wrong* rather
+                // than merely absent. `track-count` is the visible one — the
+                // hero square reads it, so a stale non-zero drew four
+                // placeholder mosaic slots over an emptied `mosaic-paths` until
+                // the re-enter fetch landed.
+                g.set_track_count(UNFETCHED_COUNT);
+                g.set_most_played_count(UNFETCHED_COUNT);
+                g.set_artist_count(UNFETCHED_COUNT);
                 clear_vec_model::<UiTrackListRow>(&g.get_tracks(), "favorites: clear tracks");
                 clear_vec_model::<UiEntityGridRow>(
                     &g.get_most_played_rows(),

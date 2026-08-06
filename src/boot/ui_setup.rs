@@ -78,14 +78,27 @@ pub fn install_views(
     //
     // The Favorites *tab* still seeds down at `seed_tab` beside the detail
     // views: it needs the `favorites_ui` handle, which doesn't exist yet here.
+    //
+    // **My Library's tab seeds right here instead**, for exactly the reason the nav
+    // index does: its five sub-views each seed `section_active` from
+    // `Nav.selected-index == 3 && MyLibrary.tab-idx == <its tab>`, so a seed running
+    // after `wire_all` leaves all five answering for the global's declared `0` — Songs
+    // wrongly active, the restored tab wrongly inactive, and one wasted full-library
+    // query per launch. It needs no handle, so nothing holds it back.
     if let Some(vs) = startup_view_state {
-        let idx = vs.last_nav_index;
+        // 4–7 were Albums / Artists / Genres / Playlists; a `views.json` written by a
+        // released build still holds them, and they route nowhere now.
+        let idx = ui::my_library::fold_retired_nav_index(vs.last_nav_index);
         if (0..=9).contains(&idx) {
             app.global::<Nav>().set_selected_index(idx);
         }
+        ui::my_library::seed_tab(app, vs.my_library_tab);
     }
 
     ui::callbacks::wire_all(app, state);
+    // The page's own three callbacks — the tab pick, the shared filter, the back
+    // arrow. None takes a view handle, so it wires here rather than after the five.
+    ui::callbacks::wire_my_library(app, state);
 
     // 5b. Tracks view.
     ui::tracks::install_tracks_model(app);
@@ -156,9 +169,10 @@ pub fn install_views(
     ui::callbacks::wire_favorites(app, state, &favorites_ui, &artists_ui);
 
     // 5c2e-bis. Recently-Played view (sidebar index 8). A trimmed Favorites —
-    // the shared row-tier `cover_thumbs` serves the list; the handle allocates
-    // its own Most Played strip LRU (released on tab-leave). Its row-menu
-    // "Go to …" entries are wired centrally by `wire_cross_tab_nav` below.
+    // the shared row-tier `cover_thumbs` serves the Songs list; the handle
+    // allocates its own mosaic and Most Played LRUs (the latter released on
+    // tab-leave as well as on section-leave). Its row-menu "Go to …" entries are
+    // wired centrally by `wire_cross_tab_nav` below.
     ui::recently_played::install_recently_played_models(app);
     let recently_played_ui =
         Arc::new(ui::recently_played::RecentlyPlayedUi::new(cover_thumbs.clone()));
@@ -190,15 +204,16 @@ pub fn install_views(
     *state.ui_handles.genres.lock() = Some(genres_ui.clone());
     *state.ui_handles.playlists.lock() = Some(playlists_ui.clone());
 
-    // 5c2h. The Favorites tab seeds here rather than in
-    // `hydrate_ui_from_settings` with its siblings, because it seeds two
-    // things: the Slint property *and* `FavoritesUi`'s synchronous shadow,
-    // which the off-thread fetchers read to decide which cover tier to warm.
-    // That handle is in scope here and deliberately dropped by the time
-    // hydration runs. (The nav index itself is hydrated at the top of this
-    // function — see the note there.)
+    // 5c2h. The two tabbed pages seed here rather than in
+    // `hydrate_ui_from_settings` with their siblings, because each seeds two
+    // things: the Slint property *and* its handle's synchronous shadow, which
+    // the off-thread fetchers read to decide which model to fill and which cover
+    // tier to warm. Those handles are in scope here and deliberately dropped by
+    // the time hydration runs. (The nav index itself is hydrated at the top of
+    // this function — see the note there.)
     if let Some(vs) = startup_view_state {
         ui::favorites::seed_tab(app, &favorites_ui, vs.favorites_tab);
+        ui::recently_played::seed_tab(app, &recently_played_ui, vs.recently_played_tab);
     }
     ui::albums::seed_detail_from_settings(app, state, &albums_ui);
     ui::artists::seed_detail_from_settings(app, state, &artists_ui);
@@ -232,6 +247,8 @@ pub fn install_views(
     ui::artists::tune_cache_for_display(app, &artists_ui);
     ui::playlists::tune_cache_for_display(app, &playlists_ui);
     ui::favorites::tune_cache_for_display(app, &favorites_ui);
+    ui::recently_played::tune_cache_for_display(app, &recently_played_ui);
+    ui::browse::tune_cache_for_display(app, &browse_ui);
 
     // `browse_ui` / `favorites_ui` / `search_ui` are deliberately dropped here:
     // their `wire_*` closures each hold a strong `Arc` clone, so the objects
@@ -411,69 +428,60 @@ pub fn spawn_initial_tracks_fetch(
     });
 }
 
-/// Kick off initial Albums grid fetch so the card grid is populated by the
-/// time the user navigates to it.
-pub fn spawn_initial_albums_fetch(
-    state: &AppState,
-    albums_ui: &Arc<ui::albums::AlbumsUi>,
-    weak: slint::Weak<AppWindow>,
-) {
-    let s = state.clone();
-    let au = albums_ui.clone();
-    state.runtime.spawn(async move {
-        if let Err(e) = ui::albums::fetch_grid(&s, &au, weak).await {
-            log::warn!("initial albums fetch: {e}");
+/// Kick off an entity grid's initial fetch so its cards are populated by the time
+/// the user navigates to it.
+///
+/// One generator for the four grids rather than four bodies differing only in a
+/// module path and a log tag. A macro rather than a generic `fn` for the reason
+/// `impl_mosaic_hero!` and `impl_detail_view_helpers` are macros: `AlbumsUi` /
+/// `ArtistsUi` / `GenresUi` / `PlaylistsUi` are distinct types with no trait between
+/// them, and each `fetch_grid` is a free function in its own module.
+///
+/// Tracks is deliberately not among them — it resolves a persisted sort first and
+/// calls `fetch_and_apply`, not `fetch_grid`.
+macro_rules! initial_grid_fetch {
+    ($(#[$doc:meta])* $name:ident, $module:ident, $handle:ty, $label:literal) => {
+        $(#[$doc])*
+        pub fn $name(state: &AppState, handle: &Arc<$handle>, weak: slint::Weak<AppWindow>) {
+            let s = state.clone();
+            let h = handle.clone();
+            state.runtime.spawn(async move {
+                if let Err(e) = ui::$module::fetch_grid(&s, &h, weak).await {
+                    log::warn!("initial {} fetch: {e}", $label);
+                }
+            });
         }
-    });
+    };
 }
 
-/// Kick off initial Artists grid fetch so the card grid is populated by
-/// the time the user navigates to it.
-pub fn spawn_initial_artists_fetch(
-    state: &AppState,
-    artists_ui: &Arc<ui::artists::ArtistsUi>,
-    weak: slint::Weak<AppWindow>,
-) {
-    let s = state.clone();
-    let au = artists_ui.clone();
-    state.runtime.spawn(async move {
-        if let Err(e) = ui::artists::fetch_grid(&s, &au, weak).await {
-            log::warn!("initial artists fetch: {e}");
-        }
-    });
-}
-
-/// Kick off initial Genres grid fetch so the card grid is populated by
-/// the time the user navigates to it.
-pub fn spawn_initial_genres_fetch(
-    state: &AppState,
-    genres_ui: &Arc<ui::genres::GenresUi>,
-    weak: slint::Weak<AppWindow>,
-) {
-    let s = state.clone();
-    let gu = genres_ui.clone();
-    state.runtime.spawn(async move {
-        if let Err(e) = ui::genres::fetch_grid(&s, &gu, weak).await {
-            log::warn!("initial genres fetch: {e}");
-        }
-    });
-}
-
-/// Kick off initial Playlists grid fetch so the card grid is populated
-/// by the time the user navigates to it.
-pub fn spawn_initial_playlists_fetch(
-    state: &AppState,
-    playlists_ui: &Arc<ui::playlists::PlaylistsUi>,
-    weak: slint::Weak<AppWindow>,
-) {
-    let s = state.clone();
-    let pu = playlists_ui.clone();
-    state.runtime.spawn(async move {
-        if let Err(e) = ui::playlists::fetch_grid(&s, &pu, weak).await {
-            log::warn!("initial playlists fetch: {e}");
-        }
-    });
-}
+initial_grid_fetch!(
+    /// Kick off the initial Albums grid fetch.
+    spawn_initial_albums_fetch,
+    albums,
+    ui::albums::AlbumsUi,
+    "albums"
+);
+initial_grid_fetch!(
+    /// Kick off the initial Artists grid fetch.
+    spawn_initial_artists_fetch,
+    artists,
+    ui::artists::ArtistsUi,
+    "artists"
+);
+initial_grid_fetch!(
+    /// Kick off the initial Genres grid fetch.
+    spawn_initial_genres_fetch,
+    genres,
+    ui::genres::GenresUi,
+    "genres"
+);
+initial_grid_fetch!(
+    /// Kick off the initial Playlists grid fetch.
+    spawn_initial_playlists_fetch,
+    playlists,
+    ui::playlists::PlaylistsUi,
+    "playlists"
+);
 
 /// Subscribe to `library_changed_tx` and bump `Tracks.invoke_request_refresh`
 /// on every mutation so the Tracks view stays in sync with scans / watcher

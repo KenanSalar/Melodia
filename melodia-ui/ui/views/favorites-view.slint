@@ -1,35 +1,32 @@
 import { Theme } from "../theme.slint";
 import { Favorites } from "../globals/curated.slint";
-import { HeroBackdrop } from "../globals/hero-backdrop.slint";
-import { HeroChipStrip } from "../components/hero-chip-strip.slint";
-import { MosaicHeroTile } from "../components/hero/mosaic-hero-tile.slint";
 import { GridColumnsSync } from "../components/grid-columns-sync.slint";
 import { GridGeometry } from "../components/grid-geometry.slint";
-import { SearchBar } from "../components/search-bar.slint";
-import { TabBar } from "../components/tab-bar.slint";
+import { MosaicTabHero } from "../components/hero/mosaic-tab-hero.slint";
 import { Tooltip, TooltipSide } from "../components/tooltip.slint";
 import { ViewTransition } from "../components/view-transition.slint";
-import { NavEnterFrom } from "../globals/nav.slint";
-import { ActionPill, PillLabel, PillButton, PillDivider } from "../components/action-pill.slint";
+import { ActionPill, PillButton, PillDivider } from "../components/action-pill.slint";
+import { SelectionPills } from "../components/selection-pills.slint";
+import { SortPillRow } from "../components/sort-pill-row.slint";
 import { ColumnTogglePopup } from "../components/track-list/column-toggle-popup.slint";
 import { FilterThrottle } from "../components/filter-throttle.slint";
-import { HeroBlurBackdrop } from "../components/hero-blur-backdrop.slint";
 import { FavoritesArtistsTab } from "favorites/artists-tab.slint";
 import { FavoritesMostPlayedTab } from "favorites/most-played-tab.slint";
 import { FavoritesSongsTab } from "favorites/songs-tab.slint";
 
-// A **pinned** hero banner — its top row carrying the `TabBar` and the filter
-// `SearchBar` over the mosaic, title, stats and action pill — above three mutually
-// exclusive sub-views: the Songs `TrackList`, and the Most Played and Favorite Artists
-// card grids. Only the body scrolls, so the tabs stay reachable. Albums are deliberately
-// absent, being reachable through the Albums tab.
+// A **pinned** hero banner — the shared `MosaicTabHero`, carrying the `TabBar`
+// and the filter `SearchBar` over the mosaic, title and chips — above three
+// mutually exclusive sub-views: the Songs `TrackList`, and the Most Played and
+// Favorite Artists card grids. Only the body scrolls, so the tabs stay reachable.
+// Albums are deliberately absent, being reachable through the Albums tab.
 //
 // **Each tab owns exactly one scroller**, which is why this view mounts plain
-// `OverlayScrollbar`s rather than `CompositeScrollbars`. The strips used to sit in an
-// outer `ScrollView` above a height-capped `TrackList`, and a nested `ListView` swallows
-// the wheel at its own edge instead of bubbling; one scroller per tab retires that whole
-// problem, along with the hover sentinel and the two-way `viewport-y` binding that
-// opted out of Slint's own out-of-bounds correction.
+// `OverlayScrollbar`s rather than `CompositeScrollbars`. The strips used to sit
+// in an outer `ScrollView` above a height-capped `TrackList`, and a nested
+// `ListView` swallows the wheel at its own edge instead of bubbling; one
+// scroller per tab retires that whole problem, along with the hover sentinel and
+// the two-way `viewport-y` binding that opted out of Slint's own out-of-bounds
+// correction.
 export component FavoritesView inherits Rectangle {
     property <int> filter-tick-pending: 0;
 
@@ -43,46 +40,6 @@ export component FavoritesView inherits Rectangle {
     TouchArea {
         clicked => { Favorites.blur-search-tick += 1; }
     }
-
-    // The header width budget, the arrangement `settings-view.slint` carries the
-    // long-form rationale for. In brief: `page-w` is a **mirror**, written imperatively
-    // because a live `root.width` read feeding a child's size re-enters layout, and it
-    // is seeded at this row's own **floor** — seeded wide, the bar believes it can
-    // afford full-width tabs and draws them into a panel that can't seat them, which is
-    // exactly what a miniplayer → full swap produces. The mount Timer beside it is
-    // mandatory, `changed` not firing when the first layout settles directly on the
-    // final value.
-    property <length> search-w-max: 220px;
-    // Off the bar's own published floor, not restated — see `search-w` below.
-    property <length> search-w-min: search.min-w;
-
-    property <length> page-w:
-        2 * Theme.pad-lg + bar.compact-w + 2 * Theme.pad-md + root.search-w-max;
-    changed width => { self.page-w = self.width; }
-
-    Timer {
-        interval: 1ms;
-        triggered => {
-            root.page-w = root.width;
-            self.running = false;
-        }
-    }
-
-    property <length> content-w: root.page-w - 2 * Theme.pad-lg;
-
-    // **The filter yields before the tabs do**: tabs navigate, search only refines what
-    // a tab already shows. Both ends reserve against a published floor rather than a
-    // restated number, so neither can drift from the component it budgets for.
-    property <length> search-w: clamp(
-        root.content-w - bar.compact-w - 2 * Theme.pad-md,
-        root.search-w-min, root.search-w-max);
-
-    // The bar's own height, restated so the hero can reserve its row.
-    property <length> tab-row-h: 48px;
-    // Derived rather than a literal, so growing the artwork or the bar can't leave the
-    // banner cropping its own contents.
-    property <length> hero-height:
-        2 * Theme.pad-lg + root.tab-row-h + Theme.pad-md + Theme.hero-artwork;
 
     // Shared by both grid tabs — mutually exclusive, same card shape, so one derivation
     // and one `columns` push covers both. Measured off the body, whose width the layout
@@ -106,17 +63,6 @@ export component FavoritesView inherits Rectangle {
         }
     }
 
-    // Tab bodies enter sideways, in the direction the pick moved. **The page's own
-    // entrance is the sidebar's fade-up, and the two must not compound** — a horizontal
-    // slide over a vertical one reads as a diagonal — so the inner transition stays
-    // disabled until the first real switch. The page is rebuilt on every entry, so this
-    // re-disarms for free.
-    property <bool> tab-anim-armed: false;
-    // Which way is `bar.previous-index`'s job, and it has to be: the page can be
-    // re-entered on any tab, and everything else in reach already reads the tab just
-    // picked, the bar writing `selected-index` before it emits `selected`.
-    property <NavEnterFrom> tab-enter-from: NavEnterFrom.right;
-
     property <string> filter-placeholder:
         Favorites.tab-idx == Favorites.tab-most-played
             ? @tr("Filter most played…")
@@ -124,227 +70,118 @@ export component FavoritesView inherits Rectangle {
                 ? @tr("Filter artists…")
                 : @tr("Filter favorites…");
 
-    // Behind everything else. The shared component owns the dual-slot crossfade
-    // contract; the gradient floor shows through when there is no blur image.
-    HeroBlurBackdrop {
-        x: 0; y: 0;
-        width: 100%; height: root.hero-height;
-        blur-a: Favorites.blur-img-a;
-        blur-b: Favorites.blur-img-b;
-        use-a: Favorites.blur-use-a;
-        has-blur: Favorites.has-blur;
-    }
-
     VerticalLayout {
-        Rectangle {
-            vertical-stretch: 0;
-            height: root.hero-height;
+        hero := MosaicTabHero {
+            tab-labels: [@tr("Songs"), @tr("Most Played"), @tr("Favorite Artists")];
+            tab-icons: ["music_note", "bar_chart", "person"];
+            tab-idx <=> Favorites.tab-idx;
 
-            VerticalLayout {
-                padding: Theme.pad-lg;
+            title: @tr("Favorites");
+            filter-placeholder: root.filter-placeholder;
+            // Only the Songs tab states its emptiness as a sentence — the two
+            // grids each paint a `GridEmptyState`, which says it better.
+            show-empty-copy: Favorites.tab-idx == Favorites.tab-songs
+                && Favorites.track-count == 0;
+            empty-copy: @tr("No favorites yet");
+
+            // Clamped, unlike every other reader of this count: `MosaicHeroTile` splits
+            // on `== 0` and `> 0`, so the not-yet-fetched `-1` would satisfy neither and
+            // the square would paint nothing at all. Folding it onto 0 draws the empty
+            // glyph, which is what a section re-enter should show while `mosaic-paths` —
+            // cleared on the same tick this count is — is still empty.
+            mosaic-count: max(Favorites.track-count, 0);
+            mosaic-paths: Favorites.mosaic-paths;
+            empty-glyph: "favorite";
+            empty-glyph-filled: true;
+
+            blur-a: Favorites.blur-img-a;
+            blur-b: Favorites.blur-img-b;
+            use-a: Favorites.blur-use-a;
+            has-blur: Favorites.has-blur;
+
+            filter <=> Favorites.filter;
+            blur-tick: Favorites.blur-search-tick;
+
+            request-cover(p) => {
+                return Favorites.request-mosaic-cover(p);
+            }
+            search-edited(t) => { root.filter-tick-pending += 1; }
+            tab-selected(i) => {
+                // A Songs filter carried into the Artists grid would silently
+                // hide cards. Rust drops its own shadow in `tab-changed`; this
+                // only moves the Slint side.
+                Favorites.filter = "";
+                Favorites.blur-search-tick += 1;
+                Favorites.tab-changed(i);
+            }
+
+            // Songs gets the full pill — Shuffle, column toggle, selection chip;
+            // Most Played a Shuffle scoped to what its grid shows. Favorite
+            // Artists gets neither, since shuffling and track columns mean
+            // nothing over a list of artists, and carries the entity grids' sort
+            // row instead. **Most Played has no sort row on purpose**: its title
+            // names its own ordering.
+            if Favorites.tab-idx == Favorites.tab-songs
+                && Favorites.track-count > 0: HorizontalLayout {
+                vertical-stretch: 0;
                 spacing: Theme.pad-md;
+                alignment: start;
 
-                // The Settings header row, on a banner. Both paint on the blur, so the
-                // bar takes `HeroBackdrop` tiers rather than its `Theme.*` defaults;
-                // `SearchBar` is the documented exception and keeps its own chrome.
-                HorizontalLayout {
-                    vertical-stretch: 0;
-                    spacing: Theme.pad-md;
-
-                    bar := TabBar {
-                        labels: [@tr("Songs"), @tr("Most Played"), @tr("Favorite Artists")];
-                        icons: ["music_note", "bar_chart", "person"];
-                        avail-width: root.content-w - root.search-w - 2 * Theme.pad-md;
-                        selected-index <=> Favorites.tab-idx;
-                        label-color: HeroBackdrop.on-backdrop;
-                        // One input for the selected label, its FILL=1 icon and the
-                        // underline, so it has to be a hero token like the other three.
-                        // The band takes its hue from the mosaic, so a theme value is
-                        // unrelated to what it sits on — and `Theme.accent` carries no
-                        // contrast floor here, Latte's mauve landing near 1.7:1 on the
-                        // pinned band where `chrome` is solved to clear 3:1 whatever the
-                        // cover. The cost: the selected label sits a tier below the idle
-                        // ones. Splitting label from indicator means a second input on
-                        // `TabBar`, which Settings would inherit too.
-                        active-color: HeroBackdrop.chrome;
-                        hover-fill: HeroBackdrop.on-backdrop.with-alpha(0.12);
-                        divider-color: HeroBackdrop.tile-edge;
-                        selected(i) => {
-                            // Direction first, in the same handler that moved the index:
-                            // the bar has already written `tab-idx`, but Slint
-                            // re-evaluates the `if` branches next frame, so this still
-                            // lands before the new body mounts — the ordering rule
-                            // `nav_transition.rs` follows for the page-level one.
-                            root.tab-enter-from = i > bar.previous-index
-                                ? NavEnterFrom.right
-                                : NavEnterFrom.left;
-                            root.tab-anim-armed = true;
-                            // A Songs filter carried into the Artists grid would
-                            // silently hide cards. Rust drops its own shadow in
-                            // `tab-changed`; this only moves the Slint side.
-                            Favorites.filter = "";
-                            Favorites.blur-search-tick += 1;
-                            Favorites.tab-changed(i);
-                        }
+                ActionPill {
+                    PillButton {
+                        icon: "shuffle";
+                        text: @tr("Shuffle");
+                        clicked => { Favorites.shuffle-all(); }
                     }
-
-                    Rectangle { horizontal-stretch: 1; }
-
-                    // Padded to the band the bar keeps clear for its divider, so the
-                    // input centres on the tab labels' line rather than on the row's.
-                    VerticalLayout {
-                        alignment: center;
-                        padding-bottom: Theme.pad-sm;
-                        search := SearchBar {
-                            input-width: root.search-w;
-                            text <=> Favorites.filter;
-                            placeholder: root.filter-placeholder;
-                            blur-trigger: Favorites.blur-search-tick;
-                            edited(t) => { root.filter-tick-pending += 1; }
+                    PillDivider { }
+                    ColumnTogglePopup {
+                        show-number  <=> Favorites.show-number;
+                        show-artwork <=> Favorites.show-artwork;
+                        show-artist  <=> Favorites.show-artist;
+                        show-album   <=> Favorites.show-album;
+                        show-genre   <=> Favorites.show-genre;
+                        show-year    <=> Favorites.show-year;
+                        toggled(id) => { Favorites.toggle-column(id); }
+                    }
+                    if Favorites.selected-ids.length > 0: SelectionPills {
+                        count: Favorites.selected-ids.length;
+                        cleared => {
+                            Favorites.clear-selection();
+                            Favorites.blur-search-tick += 1;
                         }
                     }
                 }
+            }
 
-                // Mosaic tile + title block.
-                HorizontalLayout {
-                    vertical-stretch: 1;
-                    spacing: Theme.pad-lg;
+            if Favorites.tab-idx == Favorites.tab-most-played
+                && Favorites.most-played-count > 0: HorizontalLayout {
+                vertical-stretch: 0;
+                alignment: start;
 
-                    // The shared square both mosaic heroes draw.
-                    VerticalLayout {
-                        alignment: start;
-                        horizontal-stretch: 0;
-
-                        MosaicHeroTile {
-                            count: Favorites.track-count;
-                            paths: Favorites.mosaic-paths;
-                            empty-glyph: "favorite";
-                            empty-glyph-filled: true;
-                            request-cover(p) => {
-                                return Favorites.request-mosaic-cover(p);
-                            }
-                        }
+                ActionPill {
+                    PillButton {
+                        icon: "shuffle";
+                        text: @tr("Shuffle");
+                        clicked => { Favorites.shuffle-most-played(); }
                     }
+                }
+            }
 
-                    // Title, stats, and the per-tab action pill.
-                    VerticalLayout {
-                        horizontal-stretch: 1;
-                        alignment: stretch;
-                        spacing: Theme.pad-xs;
+            // The two fields are exactly what a card shows — its title and its
+            // subtitle — so an ordering is always visibly justified. The
+            // flip-or-reset is Rust's, through the shared helper every sort row
+            // uses.
+            if Favorites.tab-idx == Favorites.tab-artists
+                && Favorites.artist-count > 0: HorizontalLayout {
+                vertical-stretch: 0;
+                alignment: start;
 
-                        Text {
-                            vertical-stretch: 0;
-                            text: "\u{200e}" + @tr("Favorites");
-                            color: HeroBackdrop.on-backdrop;
-                            font-size: Theme.hero-title-size;
-                            font-weight: Theme.page-title-weight;
-                            horizontal-alignment: left;
-                        }
-
-                        // Which chips the band shows follows the tab, decided in
-                        // `ui::hero_chips`. **An empty Songs tab publishes none** and
-                        // the line below takes over — a lone "0 favorites" chip states
-                        // the same thing far more bleakly than a sentence does.
-                        HeroChipStrip { }
-
-                        if Favorites.tab-idx == Favorites.tab-songs
-                            && Favorites.track-count == 0: Text {
-                            vertical-stretch: 0;
-                            text: @tr("No favorites yet");
-                            color: HeroBackdrop.on-backdrop-muted;
-                            font-size: Theme.font-size-md;
-                            horizontal-alignment: left;
-                        }
-
-                        Rectangle { vertical-stretch: 1; }
-
-                        // Songs gets the full pill — Shuffle, column toggle, selection
-                        // chip; Most Played a Shuffle scoped to what its grid shows.
-                        // Favorite Artists gets neither, since shuffling and track
-                        // columns mean nothing over a list of artists, and carries the
-                        // entity grids' sort row instead. **Most Played has no sort row
-                        // on purpose**: its title names its own ordering.
-                        if Favorites.tab-idx == Favorites.tab-songs
-                            && Favorites.track-count > 0: HorizontalLayout {
-                            vertical-stretch: 0;
-                            spacing: Theme.pad-md;
-                            alignment: start;
-
-                            ActionPill {
-                                PillButton {
-                                    icon: "shuffle";
-                                    text: @tr("Shuffle");
-                                    clicked => { Favorites.shuffle-all(); }
-                                }
-                                PillDivider { }
-                                ColumnTogglePopup {
-                                    show-number  <=> Favorites.show-number;
-                                    show-artwork <=> Favorites.show-artwork;
-                                    show-artist  <=> Favorites.show-artist;
-                                    show-album   <=> Favorites.show-album;
-                                    show-genre   <=> Favorites.show-genre;
-                                    show-year    <=> Favorites.show-year;
-                                    toggled(id) => { Favorites.toggle-column(id); }
-                                }
-                                if Favorites.selected-ids.length > 0: PillDivider { }
-                                if Favorites.selected-ids.length > 0: PillLabel {
-                                    text: @tr("{} selected", Favorites.selected-ids.length);
-                                }
-                                if Favorites.selected-ids.length > 0: PillButton {
-                                    icon: "close";
-                                    tooltip-text: @tr("Clear selection");
-                                    clicked => {
-                                        Favorites.clear-selection();
-                                        Favorites.blur-search-tick += 1;
-                                    }
-                                }
-                            }
-                        }
-
-                        if Favorites.tab-idx == Favorites.tab-most-played
-                            && Favorites.most-played-count > 0: HorizontalLayout {
-                            vertical-stretch: 0;
-                            alignment: start;
-
-                            ActionPill {
-                                PillButton {
-                                    icon: "shuffle";
-                                    text: @tr("Shuffle");
-                                    clicked => { Favorites.shuffle-most-played(); }
-                                }
-                            }
-                        }
-
-                        // The two fields are exactly what a card shows — its title and
-                        // its subtitle — so an ordering is always visibly justified.
-                        // The flip-or-reset is Rust's, through the shared helper every
-                        // sort row uses.
-                        if Favorites.tab-idx == Favorites.tab-artists
-                            && Favorites.artist-count > 0: HorizontalLayout {
-                            vertical-stretch: 0;
-                            alignment: start;
-
-                            ActionPill {
-                                PillButton {
-                                    text: @tr("Name");
-                                    reserve-sort-slot: true;
-                                    sort-direction: Favorites.artist-sort-field == "name"
-                                        ? Favorites.artist-sort-dir : "";
-                                    active: Favorites.artist-sort-field == "name";
-                                    clicked => { Favorites.request-artist-sort("name"); }
-                                }
-                                PillDivider { }
-                                PillButton {
-                                    text: @tr("Favorites");
-                                    reserve-sort-slot: true;
-                                    sort-direction: Favorites.artist-sort-field == "favorite_count"
-                                        ? Favorites.artist-sort-dir : "";
-                                    active: Favorites.artist-sort-field == "favorite_count";
-                                    clicked => { Favorites.request-artist-sort("favorite_count"); }
-                                }
-                            }
-                        }
-                    }
+                SortPillRow {
+                    labels: [@tr("Name"), @tr("Favorites")];
+                    fields: ["name", "favorite_count"];
+                    sort-field: Favorites.artist-sort-field;
+                    sort-dir: Favorites.artist-sort-dir;
+                    request-sort(f) => { Favorites.request-artist-sort(f); }
                 }
             }
         }
@@ -363,8 +200,8 @@ export component FavoritesView inherits Rectangle {
             if Favorites.tab-idx == Favorites.tab-songs: ViewTransition {
                 width: parent.width;
                 height: parent.height;
-                enter-from: root.tab-enter-from;
-                enabled: root.tab-anim-armed;
+                enter-from: hero.tab-enter-from;
+                enabled: hero.tab-anim-armed;
 
                 FavoritesSongsTab {
                     width: 100%;
@@ -376,8 +213,8 @@ export component FavoritesView inherits Rectangle {
             if Favorites.tab-idx == Favorites.tab-most-played: ViewTransition {
                 width: parent.width;
                 height: parent.height;
-                enter-from: root.tab-enter-from;
-                enabled: root.tab-anim-armed;
+                enter-from: hero.tab-enter-from;
+                enabled: hero.tab-anim-armed;
 
                 FavoritesMostPlayedTab {
                     width: 100%;
@@ -393,8 +230,8 @@ export component FavoritesView inherits Rectangle {
             if Favorites.tab-idx == Favorites.tab-artists: ViewTransition {
                 width: parent.width;
                 height: parent.height;
-                enter-from: root.tab-enter-from;
-                enabled: root.tab-anim-armed;
+                enter-from: hero.tab-enter-from;
+                enabled: hero.tab-anim-armed;
 
                 FavoritesArtistsTab {
                     width: 100%;
@@ -410,18 +247,16 @@ export component FavoritesView inherits Rectangle {
 
     // On a layer of its own. It can't hang off the tab: the bar sits in the hero, and
     // Slint paints in declaration order, so anything the hero owns is covered by the
-    // body underneath. Equal-width cells let the rect come from the *index*, so a tab
-    // that moves under a parked pointer keeps its tooltip anchored — and since `tab-w`
-    // eases, the frame morphs with the cell for free.
+    // body underneath. The band publishes the rect it derives from the hovered *index*,
+    // so a tab that moves under a parked pointer keeps its tooltip anchored.
     tab-tip := Rectangle {
-        x: bar.absolute-position.x - root.absolute-position.x
-            + bar.tab-w * bar.hovered-idx;
-        y: bar.absolute-position.y - root.absolute-position.y;
-        width: bar.tab-w;
-        height: bar.height;
+        x: hero.absolute-position.x - root.absolute-position.x + hero.tip-x;
+        y: hero.absolute-position.y - root.absolute-position.y + hero.tip-y;
+        width: hero.tip-w;
+        height: hero.tip-h;
         Tooltip {
-            text: bar.hovered-label;
-            hovered: bar.hovered-idx >= 0 && bar.compact;
+            text: hero.tip-label;
+            hovered: hero.tip-visible;
             host-width: tab-tip.width;
             host-height: tab-tip.height;
             side: TooltipSide.below;

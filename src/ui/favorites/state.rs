@@ -10,7 +10,7 @@ use parking_lot::Mutex;
 use crate::entities::artist::FavoriteArtist;
 use crate::entities::track::{FavoriteStats, MostPlayedFavorite, TrackListRow as RsTrackListRow};
 use crate::services::settings::{SortDir, ViewSort};
-use crate::ui::hero_chips::{HeroFold, MostPlayedTotals};
+use crate::ui::hero_folds::{HeroFold, MostPlayedTotals};
 use crate::ui::row_match::Needle;
 
 /// Per-section cached snapshots — every fetch lands here so callbacks

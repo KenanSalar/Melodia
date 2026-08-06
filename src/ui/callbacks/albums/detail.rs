@@ -3,17 +3,16 @@
 
 use std::sync::Arc;
 
-use slint::{ComponentHandle, Model, SharedString};
+use slint::{ComponentHandle, SharedString};
 
 use crate::library;
 use crate::state::AppState;
 use crate::ui::albums::{self as albums_ui_mod, AlbumsUi};
 use crate::ui::callbacks::{collect_track_ids, play_row_start, spawn_play_then_shuffle};
-use crate::ui::callbacks::macros::{
-    release_detail_hero_images, spawn_logged, spawn_logged_sync, wire_row_flag,
-};
+use crate::ui::callbacks::macros::{spawn_blocking_logged, spawn_logged, wire_row_flag};
+use crate::ui::my_library::restore_origin;
 use crate::ui::track_list_view::{TrackListColumnState, view_id};
-use crate::{AlbumDetail, AppWindow, Nav};
+use crate::{AlbumDetail, AppWindow};
 
 /// Wire the `AlbumDetail` callbacks. See [`super::wire_albums`].
 pub(super) fn wire(ui: &AppWindow, state: &AppState, albums_ui: &Arc<AlbumsUi>) {
@@ -43,26 +42,29 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, albums_ui: &Arc<AlbumsUi>) 
             crate::ui::nav_transition::mark_drill_back(&ui);
 
             // If cross-tab nav opened this detail (currently only
-            // `wire_artists::on_open_album`), restore the originating
-            // sidebar selection in the same UI-thread tick as the
-            // `album-id` reset so the Slint conditional reroutes
-            // straight to the origin tab's detail view without an
-            // Albums-grid frame. `ArtistDetail.artist-id` was preserved
-            // through the cross-tab episode, so `selected-index == 5 &&
-            // artist-id >= 0` mounts `ArtistDetailView` immediately.
+            // `wire_artists::on_open_album`), restore where the user came
+            // from in the same UI-thread tick as the `album-id` reset so
+            // the Slint conditional reroutes straight to the origin's
+            // detail view without an Albums-grid frame.
+            // `ArtistDetail.artist-id` was preserved through the cross-tab
+            // episode, so `tab-idx == tab-artists && artist-id >= 0`
+            // mounts `ArtistDetailBody` immediately. **The origin is a
+            // pair**: five views share nav index 3, so restoring the index
+            // alone would be a no-op leaving the Albums tab mounted.
             let origin = g.get_origin_nav_index();
             let origin_was_cross_tab = origin >= 0;
             if origin_was_cross_tab {
-                let nav = ui.global::<Nav>();
-                nav.set_selected_index(origin);
-                nav.invoke_persist_selected_index(origin);
+                restore_origin(&ui, origin, g.get_origin_tab());
                 g.set_origin_nav_index(-1);
+                g.set_origin_tab(-1);
             }
 
             g.set_album_id(-1);
-            // Drop the hero Image properties so their `SharedPixelBuffer`s
-            // release the Arc the LRU is about to clear too.
-            release_detail_hero_images!(ui, g);
+            // The hero Images are *not* dropped here. This id is what the band's
+            // whole hero half is a ternary over, so releasing on the same tick
+            // leaves it collapsing a placeholder — `MyLibrary.hero-collapsed`
+            // owns that teardown now, and the band fires it once the morph is
+            // done. See `callbacks::my_library::release_collapsed_hero`.
             albums_ui_mod::clear_detail(&au);
 
             let au_swap = au.clone();
@@ -70,7 +72,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, albums_ui: &Arc<AlbumsUi>) 
                 au_swap.release_detail_artwork();
                 // Skip the Albums-grid prewarm on the cross-tab back path:
                 // the grid isn't going to mount (Slint swings to
-                // `ArtistDetailView`), and `AlbumsUi.grid_covers` is
+                // `ArtistDetailBody`), and `AlbumsUi.grid_covers` is
                 // shared with the Artist Detail's Albums sub-section —
                 // prewarming would evict that sub-section's still-needed
                 // thumbnails in favor of grid covers the user won't see.
@@ -138,7 +140,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, albums_ui: &Arc<AlbumsUi>) 
     {
         let s = state.clone();
         detail.on_add_to_queue(move |ids| {
-            let id_vec: Vec<i64> = ids.iter().map(i64::from).collect();
+            let id_vec = collect_track_ids(&ids);
             let s = s.clone();
             spawn_logged!(s, "albums::add_to_queue", library::queue::queue_add_tracks(&s, id_vec));
         });
@@ -230,7 +232,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, albums_ui: &Arc<AlbumsUi>) 
             let Some(ui) = weak.upgrade() else { return };
             let columns = ui.global::<AlbumDetail>().snapshot_visible();
             let s = s.clone();
-            spawn_logged_sync!(s, "albums::toggle_column",
+            spawn_blocking_logged!(s, "albums::toggle_column",
                 library::settings::update_view_columns(&s, "album_detail".to_string(), columns));
         });
     }

@@ -96,9 +96,9 @@ pub async fn open_artist(
 /// runs as the last statement on the UI thread, after every detail
 /// property is set, so a follow-on global write (e.g. flipping
 /// `Nav.selected-index` for cross-tab nav from Favorites) lands in
-/// the same frame — Slint paints `ArtistDetailView` directly with no
-/// `ArtistView` (grid) frame in between. Mirrors
-/// `albums::open_album_with` exactly.
+/// the same frame — Slint paints `ArtistDetailBody` directly with no
+/// Artists-grid frame in between. Mirrors `albums::open_album_with`
+/// exactly.
 ///
 /// `enter_from` chooses the `ViewTransition` enter direction; pass
 /// [`NavEnterFrom::Right`] for any user drill-in and
@@ -139,7 +139,7 @@ where
 
     // The album list is the artist's own discography, so its year span is what
     // "active 1957–1963" means here; folded on the worker that fetched it.
-    let years = crate::ui::hero_chips::year_span(&albums);
+    let years = crate::ui::hero_folds::year_span(&albums);
 
     *artists_ui.detail.artist_id.lock() = artist_id;
 
@@ -194,6 +194,10 @@ where
         // `record_current` in `albums::detail::open_album_with` for
         // the rationale.
         crate::ui::nav_history::record_current(&state_for_history, &ui);
+        // Reseat the page's shared filter box, which the clear above
+        // doesn't reach — same reasoning, and same closure position, as
+        // `albums::detail::open_album_with`.
+        ui.global::<crate::MyLibrary>().invoke_detail_scope_changed();
     });
     Ok(())
 }
@@ -216,7 +220,7 @@ pub async fn refresh_detail(
     )
     .await;
 
-    let years = crate::ui::hero_chips::year_span(&albums);
+    let years = crate::ui::hero_folds::year_span(&albums);
 
     let weak_for_filter = weak.clone();
     let artists_ui_clone = artists_ui.clone();

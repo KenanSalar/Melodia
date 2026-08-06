@@ -24,6 +24,11 @@ msgstr "Gözat"
 msgid "Favorites"
 msgstr "Favoriler"
 
+# The sidebar row, and the window title, for the page carrying the Songs / Albums /
+# Artists / Genres / Playlists tabs. Each tab reuses its own msgid below.
+msgid "My Library"
+msgstr "Kitaplığım"
+
 msgid "Tracks"
 msgstr "Parçalar"
 
@@ -232,6 +237,15 @@ msgstr "Parçaları filtrele…"
 
 msgid "Columns"
 msgstr "Sütunlar"
+
+msgid "Card view"
+msgstr "Kart görünümü"
+
+msgid "List view"
+msgstr "Liste görünümü"
+
+msgid "Folder"
+msgstr "Klasör"
 
 # ---- Track table column headers ---------------------------------------------
 
@@ -819,6 +833,9 @@ msgstr "Henüz hiçbir şey çalınmadı"
 
 msgid "Play one of your favorites and it will show up here."
 msgstr "Favorilerinden birini çal, burada görünsün."
+
+msgid "Play something and it will show up here."
+msgstr "Bir şey çal, burada görünsün."
 
 msgid "No favorite artists yet"
 msgstr "Henüz favori sanatçı yok"

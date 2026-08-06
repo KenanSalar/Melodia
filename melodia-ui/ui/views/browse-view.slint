@@ -4,114 +4,29 @@ import { Nav } from "../globals/nav.slint";
 import { Player } from "../globals/player.slint";
 import { CompositeScroll } from "../globals/shell.slint";
 import { Browse } from "../globals/tracks.slint";
-import { MaterialIcon } from "../components/material-icon.slint";
 import { IconButton } from "../components/icon-button.slint";
-import { ActionPill, PillLabel, PillButton, PillDivider } from "../components/action-pill.slint";
+import { Tooltip, TooltipSide } from "../components/tooltip.slint";
+import { ActionPill, PillButton, PillDivider } from "../components/action-pill.slint";
+import { SelectionPills } from "../components/selection-pills.slint";
 import { ColumnTogglePopup } from "../components/track-list/column-toggle-popup.slint";
 import { TrackList } from "../components/track-list/track-list.slint";
 import { CompositeScrollbars } from "../components/composite-scrollbars.slint";
-
-// One folder row: icon, name, chevron.
-//
-// **The label's `min-width` tracks its own natural width**, so a narrowing window pans
-// the body's horizontal scrollbar rather than compressing and eliding the row — a folder
-// name never truncates.
-component BrowseFolderRowItem inherits Rectangle {
-    in property <string> name;
-    in property <string> path;
-
-    // Chrome plus a gap slot: a `ListView` lays rows back-to-back with no `spacing`, so
-    // the gap is baked into the row itself — and the host's height cap counts on it.
-    height: 50px;
-
-    inner := Rectangle {
-        y: 0;
-        width: 100%;
-        height: 48px;
-        border-radius: Theme.radius-md;
-        background: touch.has-hover ? Theme.surface0 : transparent;
-
-        HorizontalLayout {
-            padding-left: Theme.pad-sm;
-            padding-right: Theme.pad-sm;
-            spacing: Theme.pad-md;
-            alignment: stretch;
-
-            VerticalLayout {
-                alignment: center;
-                MaterialIcon {
-                    name: "folder";
-                    icon-size: 24px;
-                    icon-color: Theme.accent;
-                }
-            }
-
-            VerticalLayout {
-                alignment: center;
-                horizontal-stretch: 1;
-                Text {
-                    text: root.name;
-                    color: Theme.text;
-                    font-size: Theme.font-size-md;
-                    font-weight: 500;
-                    min-width: self.preferred-width;
-                }
-            }
-
-            VerticalLayout {
-                alignment: center;
-                MaterialIcon {
-                    name: "chevron_right";
-                    icon-size: 20px;
-                    icon-color: Theme.overlay0;
-                }
-            }
-        }
-
-        touch := TouchArea {
-            mouse-cursor: pointer;
-            clicked => { Browse.open-folder(root.path); }
-        }
-    }
-}
-
-// One breadcrumb segment. The chevron separator lives outside it — the host's loop
-// interleaves one before every segment after the first.
-component BreadcrumbSegment inherits Rectangle {
-    in property <string> label;
-    in property <string> path;
-    in property <bool> is-current;
-
-    height: 28px;
-    width: layout.preferred-width;
-    border-radius: self.height / 2;
-    background: touch.has-hover ? Theme.surface0 : transparent;
-    animate background { duration: Theme.dur-fast; easing: ease-in-out; }
-
-    layout := HorizontalLayout {
-        padding-left: 8px;
-        padding-right: 8px;
-        alignment: center;
-        VerticalLayout {
-            alignment: center;
-            Text {
-                text: root.label;
-                color: root.is-current ? Theme.accent : Theme.subtext0;
-                font-size: Theme.font-size-sm;
-                font-weight: 500;
-            }
-        }
-    }
-
-    touch := TouchArea {
-        mouse-cursor: pointer;
-        clicked => { Browse.navigate-to(root.path); }
-    }
-}
+import { BrowseCardGrid } from "../components/grid/browse-card-grid.slint";
+import { GridEmptyState } from "../components/grid/grid-empty-state.slint";
+import { GridGeometry } from "../components/grid-geometry.slint";
+import { GridColumnsSync } from "../components/grid-columns-sync.slint";
+import { BreadcrumbBar } from "browse/breadcrumb-bar.slint";
+import { BrowseFolderRowItem } from "browse/folder-row.slint";
 
 // A header strip — back, home, breadcrumb, one action pill — over a body stacking a
-// folder section above the shared `TrackList`, with one of three empty states replacing
-// it depending on the path, the configured folders and any error.
+// folder section above the shared `TrackList`, with one of three `GridEmptyState`s
+// replacing it depending on the path, the configured folders and any error.
+//
+// **A mount sheet**, the `views/search/` and `views/settings/pages/` precedent: the rows
+// and the breadcrumb trail are `views/browse/*.slint` and this file owns the branch
+// conditions, the scroll chrome and the tooltip frame. What can't leave is anything the
+// scrollbars reach *by id* — `below-sv`, `tl`, `grid`, `view-toggle` — since Slint has no
+// way to read an id across a component boundary.
 //
 // **A composite view**: the folder section and the list live inside one outer
 // `ScrollView`, so a single vertical bar scrolls folders then tracks continuously. The
@@ -123,20 +38,44 @@ component BreadcrumbSegment inherits Rectangle {
 //
 // The folder `ListView` stays sized to its row count rather than virtualizing: folder
 // rows are light and a directory listing is bounded.
+//
+// **The card view is a second body inside that same scroller, and it is mounted
+// unconditionally rather than behind an `if`.** `CompositeScrollbars` sits at the view
+// root and reads `below-sv`, `tl` and `grid` by id, and Slint cannot read an id declared
+// inside an `if` from outside it — so both bodies take the shape `tl` already had for the
+// root view: a `visible:` gate plus a `0px` arm on the height, which is what actually
+// removes them from the layout. In card mode the folders are cards in the same grid, so
+// the outer scroller has no travel and the composite degenerates to the grid's own bar;
+// the wheel route is unchanged either way.
 export component BrowseView inherits Rectangle {
     // No background of its own — the parent panel owns the rounded fill, and a
     // transparent root lets it show through at the corner cells.
 
-    property <int> watched-nav: Nav.selected-index;
-    changed watched-nav => {
-        if (root.watched-nav == 1) {
-            Browse.refresh();
+    // Read by both bodies and by the scrollbar mirrors; named once so the comparison
+    // isn't spelled out at each of them.
+    property <bool> card-mode: Browse.view-mode == Browse.mode-card;
+
+    // The gutter between cards and at both outer edges. It lives on the view rather than
+    // inside `GridGeometry` because an `in` property isn't readable back from outside the
+    // component declaring it, and the grid needs the same number.
+    property <length> grid-gap: 20px;
+
+    geom := GridGeometry {
+        avail-width: body.width;
+        gap: root.grid-gap;
+    }
+
+    GridColumnsSync {
+        computed-cols: geom.cols;
+        seed(c) => {
+            Browse.columns = c;
+            Browse.columns-changed(c);
         }
     }
 
     vl := VerticalLayout {
-        // Three sides only — `tracks-view.slint` says why a bottom pad here reads as a
-        // dead strip under the list.
+        // Three sides only — `my-library/songs-tab.slint` says why a bottom pad here
+        // reads as a dead strip under the list.
         padding-left: Theme.pad-lg;
         padding-right: Theme.pad-lg;
         padding-top: Theme.pad-lg;
@@ -172,38 +111,10 @@ export component BrowseView inherits Rectangle {
                 }
             }
 
-            // A clipping container, so a deep path doesn't push the action pill off
-            // screen. **Overflow hides at the left**, the rightmost segment being the
-            // current folder and the leftmost the least useful.
-            Rectangle {
+            BreadcrumbBar {
                 horizontal-stretch: 1;
-                clip: true;
-
-                VerticalLayout {
-                    alignment: center;
-                    HorizontalLayout {
-                        alignment: start;
-                        spacing: 2px;
-
-                        for seg[i] in Browse.breadcrumbs : HorizontalLayout {
-                            spacing: 2px;
-                            alignment: center;
-                            if i > 0: VerticalLayout {
-                                alignment: center;
-                                MaterialIcon {
-                                    name: "chevron_right";
-                                    icon-size: 14px;
-                                    icon-color: Theme.overlay0;
-                                }
-                            }
-                            BreadcrumbSegment {
-                                label: seg.label;
-                                path: seg.path;
-                                is-current: i == Browse.breadcrumbs.length - 1;
-                            }
-                        }
-                    }
-                }
+                segments: Browse.breadcrumbs;
+                segment-clicked(p) => { Browse.navigate-to(p); }
             }
 
             // The selection chip leads, so its group reads to the left of the column
@@ -211,16 +122,26 @@ export component BrowseView inherits Rectangle {
             VerticalLayout {
                 alignment: center;
                 ActionPill {
-                    if Browse.selected-ids.length > 0: PillLabel {
-                        text: @tr("{} selected", Browse.selected-ids.length);
+                    if Browse.selected-ids.length > 0: SelectionPills {
+                        count: Browse.selected-ids.length;
+                        divider-trails: true;
+                        cleared => { Browse.clear-selection(); }
                     }
-                    if Browse.selected-ids.length > 0: PillButton {
-                        icon: "close";
-                        tooltip-text: @tr("Clear selection");
-                        clicked => { Browse.clear-selection(); }
+                    // Shows the presentation you'd switch *to*, so the glyph names the
+                    // action rather than the state. Its tooltip hangs **below**, and so
+                    // has to be painted on a higher layer — see the frame at the view
+                    // root.
+                    view-toggle := PillButton {
+                        icon: root.card-mode ? "view_list" : "grid_view";
+                        tooltip-overlay: true;
+                        clicked => { Browse.toggle-view-mode(); }
                     }
-                    if Browse.selected-ids.length > 0: PillDivider { }
-                    ColumnTogglePopup {
+                    // Both gated on the list being up: the popup configures the
+                    // `TrackList`'s columns, which the card grid doesn't have, so in
+                    // card mode it is a control over nothing. Safe behind an `if` —
+                    // nothing at the view root reads into either.
+                    if !root.card-mode: PillDivider { }
+                    if !root.card-mode: ColumnTogglePopup {
                         show-number <=> Browse.show-number;
                         show-artwork <=> Browse.show-artwork;
                         show-artist <=> Browse.show-artist;
@@ -248,194 +169,158 @@ export component BrowseView inherits Rectangle {
                 height: 100%;
                 changed has-hover => { CompositeScroll.hovered = self.has-hover; }
 
-            below-sv := ScrollView {
-                width: 100%;
-                height: 100%;
-                horizontal-scrollbar-policy: always-off;
-                vertical-scrollbar-policy: always-off;
-                viewport-width: self.width;
+                below-sv := ScrollView {
+                    width: 100%;
+                    height: 100%;
+                    horizontal-scrollbar-policy: always-off;
+                    vertical-scrollbar-policy: always-off;
+                    viewport-width: self.width;
 
-                VerticalLayout {
-                    // **No spacing**: the folder section bakes its own gap in and
-                    // unmounts entirely when there are no subfolders, so an
-                    // unconditional one would leave a dangling gap above the list.
-                    spacing: 0;
+                    VerticalLayout {
+                        // **No spacing**: the folder section bakes its own gap in and
+                        // unmounts entirely when there are no subfolders, so an
+                        // unconditional one would leave a dangling gap above the list.
+                        spacing: 0;
 
-                    // Mounted only when the directory has subfolders, and sized to its
-                    // **full** row count, so every folder renders into the outer
-                    // scroller's flow rather than scrolling on its own. The bottom gap
-                    // is added only when drilled in — the root view lists no songs
-                    // below it.
-                    if Browse.folders.length > 0: Rectangle {
-                        vertical-stretch: 0;
-                        height: Browse.folders.length * 50px
-                            + (Browse.current-path == "" ? 0px : Theme.pad-md);
+                        // Mounted only when the directory has subfolders, and sized to
+                        // its **full** row count, so every folder renders into the outer
+                        // scroller's flow rather than scrolling on its own. The bottom
+                        // gap is added only when drilled in — the root view lists no
+                        // songs below it. An `if` is safe here where it isn't for its two
+                        // siblings: nothing at the view root reads into this branch.
+                        if Browse.folders.length > 0 && !root.card-mode: Rectangle {
+                            vertical-stretch: 0;
+                            height: Browse.folders.length * 50px
+                                + (Browse.current-path == "" ? 0px : Theme.pad-md);
 
-                        ListView {
-                            x: 0;
-                            y: 0;
-                            width: parent.width;
-                            height: Browse.folders.length * 50px;
-                            vertical-scrollbar-policy: always-off;
-                            horizontal-scrollbar-policy: always-off;
+                            ListView {
+                                x: 0;
+                                y: 0;
+                                width: parent.width;
+                                height: Browse.folders.length * 50px;
+                                vertical-scrollbar-policy: always-off;
+                                horizontal-scrollbar-policy: always-off;
 
-                            for folder[fi] in Browse.folders : BrowseFolderRowItem {
-                                name: folder.name;
-                                path: folder.path;
+                                for folder in Browse.folders : BrowseFolderRowItem {
+                                    name: folder.name;
+                                    clicked => { Browse.open-folder(folder.path); }
+                                }
                             }
                         }
+
+                        // Hidden at the root view, which lists only library folders —
+                        // otherwise it paints an empty column header there, and in card
+                        // mode, where the grid below draws the same files. Its height is
+                        // the content, **capped at the outer viewport**: a small
+                        // directory keeps the content-tall layout, a large one pins to
+                        // the visible region so the inner list virtualizes instead of
+                        // instantiating every row.
+                        //
+                        // The `0px` arm is what takes it out of the layout —
+                        // `visible: false` alone still claims its slot — and it stays out
+                        // of an `if` because `CompositeScrollbars` reads this id from the
+                        // view root.
+                        tl := TrackList {
+                            visible: !root.card-mode && Browse.current-path != "";
+                            horizontal-stretch: 1;
+                            vertical-stretch: 0;
+                            height: (root.card-mode || Browse.current-path == "")
+                                ? 0px
+                                : min(
+                                    max(1, Browse.rows.length)
+                                        * (Browse.show-artwork
+                                            ? Theme.row-h
+                                            : Theme.row-h-compact)
+                                        + 32px + Theme.pad-xs,
+                                    below-sv.visible-height);
+
+                            rows: Browse.rows;
+
+                            w-number <=> Browse.w-number;
+                            w-title <=> Browse.w-title;
+                            w-artist <=> Browse.w-artist;
+                            w-album <=> Browse.w-album;
+                            w-genre <=> Browse.w-genre;
+                            w-year <=> Browse.w-year;
+                            w-length <=> Browse.w-length;
+
+                            show-number <=> Browse.show-number;
+                            show-artwork <=> Browse.show-artwork;
+                            show-artist <=> Browse.show-artist;
+                            show-album <=> Browse.show-album;
+                            show-genre <=> Browse.show-genre;
+                            show-year <=> Browse.show-year;
+                            number-mode: "index";
+
+                            sort-field: Browse.sort-field;
+                            sort-dir: Browse.sort-dir;
+                            playing-track-id: Player.vm.track.id;
+                            view-context: "browse";
+                            view-selected-ids: Browse.selected-ids;
+
+                            request-sort(f) => { Browse.request-sort(f); }
+                            play-row(id, idx) => { Browse.play-row(id, idx); }
+                            play-next(ids) => { Browse.play-next(ids); }
+                            add-to-queue(ids) => { Browse.add-to-queue(ids); }
+                            toggle-row-favorite(ids, on) => { Browse.toggle-row-favorite(ids, on); }
+                            set-row-rating(ids, n) => { Browse.set-row-rating(ids, n); }
+                            select-row(idx, id, sh, ct) => { Browse.select-row(idx, id, sh, ct); }
+                            // Browse has no filter input — nothing to blur.
+                            request-blur-search => { }
+                            go-to-album(aid) => { Browse.go-to-album(aid); }
+                            go-to-artist(aid) => { Browse.go-to-artist(aid); }
+                            go-to-genre(gid) => { Browse.go-to-genre(gid); }
+                        }
+
+                        // The card view. Same mounted-with-a-`0px`-arm shape as `tl`
+                        // above and for the same reason, and pinned to the outer viewport
+                        // so its own `ListView` virtualizes rather than instantiating
+                        // every card.
+                        grid := BrowseCardGrid {
+                            visible: root.card-mode;
+                            horizontal-stretch: 1;
+                            vertical-stretch: 0;
+                            height: root.card-mode ? below-sv.visible-height : 0px;
+
+                            rows: Browse.card-rows;
+                            card-width: geom.card-w;
+                            card-height: geom.card-h;
+                            row-height: geom.row-h;
+                            gap: root.grid-gap;
+                            covers-generation: Browse.covers-generation;
+
+                            request-cover(p, gen) => { Browse.request-card-cover(p, gen) }
+                            folder-clicked(path) => { Browse.open-folder(path); }
+                            track-clicked(id, idx) => { Browse.play-row(id, idx); }
+                        }
                     }
-
-                // Hidden at the root view, which lists only library folders — otherwise
-                // it paints an empty column header there. Its height is the content,
-                // **capped at the outer viewport**: a small directory keeps the
-                // content-tall layout, a large one pins to the visible region so the
-                // inner list virtualizes instead of instantiating every row.
-                tl := TrackList {
-                    visible: Browse.current-path != "";
-                    horizontal-stretch: 1;
-                    vertical-stretch: 0;
-                    height: Browse.current-path == ""
-                        ? 0px
-                        : min(
-                            max(1, Browse.rows.length)
-                                * (Browse.show-artwork
-                                    ? Theme.row-h
-                                    : Theme.row-h-compact)
-                                + 32px + Theme.pad-xs,
-                            below-sv.visible-height);
-
-                    rows: Browse.rows;
-
-                    w-number <=> Browse.w-number;
-                    w-title <=> Browse.w-title;
-                    w-artist <=> Browse.w-artist;
-                    w-album <=> Browse.w-album;
-                    w-genre <=> Browse.w-genre;
-                    w-year <=> Browse.w-year;
-                    w-length <=> Browse.w-length;
-
-                    show-number <=> Browse.show-number;
-                    show-artwork <=> Browse.show-artwork;
-                    show-artist <=> Browse.show-artist;
-                    show-album <=> Browse.show-album;
-                    show-genre <=> Browse.show-genre;
-                    show-year <=> Browse.show-year;
-                    number-mode: "index";
-
-                    sort-field: Browse.sort-field;
-                    sort-dir: Browse.sort-dir;
-                    playing-track-id: Player.vm.track.id;
-                    view-context: "browse";
-                    view-selected-ids: Browse.selected-ids;
-
-                    request-sort(f) => { Browse.request-sort(f); }
-                    play-row(id, idx) => { Browse.play-row(id, idx); }
-                    play-next(ids) => { Browse.play-next(ids); }
-                    add-to-queue(ids) => { Browse.add-to-queue(ids); }
-                    toggle-row-favorite(ids, on) => { Browse.toggle-row-favorite(ids, on); }
-                    set-row-rating(ids, n) => { Browse.set-row-rating(ids, n); }
-                    select-row(idx, id, sh, ct) => { Browse.select-row(idx, id, sh, ct); }
-                    // Browse has no filter input — nothing to blur.
-                    request-blur-search => { }
-                    go-to-album(aid) => { Browse.go-to-album(aid); }
-                    go-to-artist(aid) => { Browse.go-to-artist(aid); }
-                    go-to-genre(gid) => { Browse.go-to-genre(gid); }
                 }
-                }
-            }
             }
 
             // Root view, no library folders configured.
-            if Browse.current-path == "" && !Browse.has-library-folders: Rectangle {
-                background: Theme.base;
-                VerticalLayout {
-                alignment: center;
-                spacing: Theme.pad-md;
-                HorizontalLayout {
-                    alignment: center;
-                    MaterialIcon {
-                        name: "folder_off";
-                        icon-size: 64px;
-                        icon-color: Theme.overlay0;
-                    }
-                }
-                HorizontalLayout {
-                    alignment: center;
-                    Text {
-                        text: @tr("No library folders configured");
-                        color: Theme.text;
-                        font-size: Theme.font-size-lg;
-                        font-weight: 600;
-                    }
-                }
-                HorizontalLayout {
-                    alignment: center;
-                    Text {
-                        text: @tr("Open Settings to add a folder");
-                        color: Theme.subtext0;
-                        font-size: Theme.font-size-sm;
-                    }
-                }
-                HorizontalLayout {
-                    alignment: center;
-                    PillButton {
-                        icon: "settings";
-                        text: @tr("Open Settings");
-                        // Persisted like every other nav entry, so the tab sticks.
-                        clicked => {
-                            Nav.selected-index = 9;
-                            Nav.persist-selected-index(9);
-                        }
-                    }
-                }
+            if Browse.current-path == "" && !Browse.has-library-folders: GridEmptyState {
+                icon: "folder_off";
+                title: @tr("No library folders configured");
+                body: @tr("Open Settings to add a folder");
+                action-icon: "settings";
+                action-label: @tr("Open Settings");
+                // Persisted like every other nav entry, so the tab sticks.
+                action-clicked => {
+                    Nav.selected-index = 9;
+                    Nav.persist-selected-index(9);
                 }
             }
 
             // Error state. **Its Back navigates to root rather than going back**: the
             // user may have landed here from the persisted-path seed with an empty
             // history stack, where `go-back` is a no-op.
-            if Browse.error-message != "": Rectangle {
-                background: Theme.base;
-                VerticalLayout {
-                alignment: center;
-                spacing: Theme.pad-md;
-                HorizontalLayout {
-                    alignment: center;
-                    MaterialIcon {
-                        name: "error";
-                        icon-size: 64px;
-                        icon-color: Theme.overlay0;
-                    }
-                }
-                HorizontalLayout {
-                    alignment: center;
-                    Text {
-                        text: @tr("Could not load folder");
-                        color: Theme.text;
-                        font-size: Theme.font-size-lg;
-                        font-weight: 600;
-                    }
-                }
-                HorizontalLayout {
-                    alignment: center;
-                    Text {
-                        text: Browse.error-message;
-                        color: Theme.subtext0;
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        wrap: word-wrap;
-                    }
-                }
-                HorizontalLayout {
-                    alignment: center;
-                    PillButton {
-                        icon: "arrow_back";
-                        text: @tr("Back");
-                        clicked => { Browse.navigate-to(""); }
-                    }
-                }
-                }
+            if Browse.error-message != "": GridEmptyState {
+                icon: "error";
+                title: @tr("Could not load folder");
+                body: Browse.error-message;
+                action-icon: "arrow_back";
+                action-label: @tr("Back");
+                action-clicked => { Browse.navigate-to(""); }
             }
 
             // Empty folder.
@@ -443,55 +328,68 @@ export component BrowseView inherits Rectangle {
                 && Browse.error-message == ""
                 && !Browse.loading
                 && Browse.folders.length == 0
-                && Browse.rows.length == 0: Rectangle {
-                background: Theme.base;
-                VerticalLayout {
-                alignment: center;
-                spacing: Theme.pad-md;
-                HorizontalLayout {
-                    alignment: center;
-                    MaterialIcon {
-                        name: "folder_open";
-                        icon-size: 64px;
-                        icon-color: Theme.overlay0;
-                    }
-                }
-                HorizontalLayout {
-                    alignment: center;
-                    Text {
-                        text: @tr("Empty folder");
-                        color: Theme.text;
-                        font-size: Theme.font-size-lg;
-                        font-weight: 600;
-                    }
-                }
-                }
+                && Browse.rows.length == 0: GridEmptyState {
+                icon: "folder_open";
+                title: @tr("Empty folder");
             }
         }
     }
 
     // At the view root, outside the padded layout, so the bars sit flush with the
-    // content panel's rounded edges. `body` and `tl` are nested, so their positions come
-    // through `absolute-position` rather than plain `.x` / `.y`. **The vbar band anchors
-    // to `body`** — there is no hero here, so the bar spans the whole
+    // content panel's rounded edges. `body`, `tl` and `grid` are nested, so their
+    // positions come through `absolute-position` rather than plain `.x` / `.y`. **The
+    // vbar band anchors to `body`** — there is no hero here, so the bar spans the whole
     // below-breadcrumbs region.
+    //
+    // **The inner half follows the mounted body.** In card mode the outer scroller has
+    // no travel, so the composite is the grid's own bar and nothing else; the horizontal
+    // viewport is forced to zero there because the hidden `TrackList` still reports the
+    // sum of its column widths, which would keep the hbar on screen over the grid.
     CompositeScrollbars {
         x: 0; y: 0;
         width: 100%; height: 100%;
         outer-viewport-y <=> below-sv.viewport-y;
         outer-viewport-height: below-sv.viewport-height;
         outer-visible-height: below-sv.visible-height;
-        inner-offset: tl.v-offset;
-        inner-viewport-height: tl.v-viewport-height;
-        inner-visible-height: tl.v-visible-height;
-        set-inner-offset(o) => { tl.set-v-offset(o); }
+        inner-offset: root.card-mode ? grid.v-offset : tl.v-offset;
+        inner-viewport-height: root.card-mode ? grid.v-viewport-height : tl.v-viewport-height;
+        inner-visible-height: root.card-mode ? grid.v-visible-height : tl.v-visible-height;
+        set-inner-offset(o) => {
+            if (root.card-mode) {
+                grid.set-v-offset(o);
+            } else {
+                tl.set-v-offset(o);
+            }
+        }
         h-offset: tl.h-offset;
-        h-viewport-width: tl.h-viewport-width;
+        h-viewport-width: root.card-mode ? 0px : tl.h-viewport-width;
         h-visible-width: tl.h-visible-width;
         set-h-offset(o) => { tl.set-h-offset(o); }
         v-region-y: body.absolute-position.y - root.absolute-position.y;
         v-region-height: body.height;
         h-region-x: tl.absolute-position.x - root.absolute-position.x;
         h-region-width: tl.width;
+    }
+
+    // The view-toggle's tooltip, on the top layer. It hangs **below** its pill —
+    // the pill sits in the header strip, where an above-tooltip would clear the
+    // panel edge — and everything below the header is declared after it, so an
+    // in-tree pill would be painted over by the body. A frame tracking the host's
+    // rect through `absolute-position` is the tree's answer to that; it is
+    // declared last, after the scrollbars, because Slint paints in declaration
+    // order. Same shape as `my-library-view.slint`'s `header-tip`.
+    Rectangle {
+        x: view-toggle.absolute-position.x - root.absolute-position.x;
+        y: view-toggle.absolute-position.y - root.absolute-position.y;
+        width: view-toggle.width;
+        height: view-toggle.height;
+
+        Tooltip {
+            text: root.card-mode ? @tr("List view") : @tr("Card view");
+            hovered: view-toggle.hovered;
+            host-width: parent.width;
+            host-height: parent.height;
+            side: TooltipSide.below;
+        }
     }
 }

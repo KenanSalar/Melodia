@@ -37,11 +37,43 @@ macro_rules! spawn_logged_toast {
 }
 
 /// Sync variant of `spawn_logged!` for `library::*` functions that are not
-/// `async`. Spawns the call onto the runtime so the UI thread isn't blocked
-/// (the body still acquires a `parking_lot::Mutex` and calls Rodio).
+/// `async` **and do no file I/O** — the transport calls, whose bodies acquire a
+/// `parking_lot::Mutex` and reach Rodio. Spawns onto the runtime so the UI
+/// thread isn't blocked.
+///
+/// A `views.json` / `settings.json` write wants [`spawn_blocking_logged!`]
+/// instead; the two are not interchangeable, and this one used to carry both.
 macro_rules! spawn_logged_sync {
     ($state:ident, $label:literal, $expr:expr) => {{
         $state.runtime.clone().spawn(async move {
+            if let Err(e) = $expr {
+                log::warn!("{}: {e}", $label);
+            }
+        });
+    }};
+}
+
+/// The persist-and-forget shape: a synchronous `library::settings::*` write on
+/// the **blocking** pool, warning on failure.
+///
+/// Separate from `spawn_logged_sync!` because the pool is the whole difference.
+/// These bodies open, rewrite and fsync a JSON file, which is exactly what
+/// `spawn_blocking` exists for and exactly what an async worker must not be
+/// parked on (`.claude/rules/tokio.md`). Twelve call sites spelled this out for
+/// themselves, split by nothing more than which file they were written in — the
+/// nine column toggles alone were five on the runtime through
+/// `spawn_logged_sync!` and four hand-rolled here on the blocking pool, for one
+/// write with one label.
+///
+/// **The label is a literal, which is the one reason a site legitimately stays
+/// hand-rolled**: `Nav.persist-selected-index` interpolates the index it failed
+/// to store, and a warning that doesn't name it says almost nothing.
+macro_rules! spawn_blocking_logged {
+    ($state:ident, $label:literal, $expr:expr) => {{
+        // `.clone()` on the runtime handle first, the `spawn_logged_sync!` shape:
+        // `$expr` usually moves the state it borrows `runtime` from, and a bare
+        // `$state.runtime.spawn_blocking(…)` holds that borrow across the move.
+        $state.runtime.clone().spawn_blocking(move || {
             if let Err(e) = $expr {
                 log::warn!("{}: {e}", $label);
             }
@@ -142,33 +174,58 @@ macro_rules! wire_row_flag {
     }};
 }
 
-/// Reset a detail global's hero-Image properties (`cover` plus the
-/// dual-slot `blur-img-a` / `blur-img-b`) to `Image::default()` and clear
-/// `has-blur`, so the backing `SharedPixelBuffer` Arcs release and `FemtoVG`
-/// can reclaim the GPU textures on the next render. `$ui` is the `AppWindow`,
-/// `$g` a Slint detail-global handle (`AlbumDetail`, `ArtistDetail`,
-/// `PlaylistDetail`).
+/// Reset one detail global's hero-Image properties (`cover` plus the dual-slot
+/// `blur-img-a` / `blur-img-b`) to `Image::default()` and clear `has-blur`, so
+/// the backing `SharedPixelBuffer` Arcs release and `FemtoVG` can reclaim the
+/// GPU textures on the next render. `$g` is a Slint detail-global handle
+/// (`AlbumDetail`, `ArtistDetail`, `PlaylistDetail`).
 ///
-/// Also re-solves the shared `HeroBackdrop` set back to the gradient floor and
-/// drops the shared `HeroChips` row. Clearing `has-blur` makes that floor the
-/// whole backdrop, and the six heroes share both globals — so without this,
-/// backing out of (say) a Genre detail leaves its hash-derived stops painted
-/// and its counts spelled out under the *next* hero, for the frames before
-/// that one's own decode and fetch land.
-macro_rules! release_detail_hero_images {
-    ($ui:expr, $g:expr) => {{
+/// A macro rather than a `fn` for the usual reason: the three are distinct
+/// generated types with no trait between them. Reach for
+/// [`release_detail_hero_images`] instead unless you are handing back several
+/// globals at once and want the two shared resets run once — My Library's
+/// deferred hero teardown is the only such caller.
+macro_rules! release_hero_slots {
+    ($g:expr) => {{
         let detail = &$g;
         detail.set_cover(::slint::Image::default());
         detail.set_blur_img_a(::slint::Image::default());
         detail.set_blur_img_b(::slint::Image::default());
         detail.set_has_blur(false);
+    }};
+}
+
+/// The two shared resets every hero teardown owes, on their own. `$ui` is the
+/// `AppWindow`.
+///
+/// Six heroes share one `HeroBackdrop` solve and one `HeroChips` row, so a
+/// teardown that leaves either behind paints the departing hero's colours and
+/// counts under the *next* one, for the frames before its own decode and fetch
+/// land. [`release_detail_hero_images`] is this plus the image slots, and is
+/// what a detail with a cover wants; this bare pair is for the heroes with no
+/// images to hand back — Genre Detail, whose tile is a hashed gradient, and the
+/// two mosaic pages, whose tiles belong to their own tier. Four sites spelled
+/// the pair out, each with its own paragraph saying it was the macro minus the
+/// slots.
+macro_rules! release_shared_hero {
+    ($ui:expr) => {{
         $crate::ui::hero_backdrop::reset(&$ui);
         $crate::ui::hero_chips::clear(&$ui);
     }};
 }
 
+/// [`release_hero_slots`] for one detail global, plus [`release_shared_hero`].
+/// `$ui` is the `AppWindow`.
+macro_rules! release_detail_hero_images {
+    ($ui:expr, $g:expr) => {{
+        $crate::ui::callbacks::macros::release_hero_slots!($g);
+        $crate::ui::callbacks::macros::release_shared_hero!($ui);
+    }};
+}
+
 pub(super) use {
-    release_detail_hero_images, spawn_logged, spawn_logged_sync, spawn_logged_toast, wire_pb,
-    wire_row_flag, wire_sync, wire_sync_pb,
+    release_detail_hero_images, release_hero_slots, release_shared_hero, spawn_blocking_logged,
+    spawn_logged, spawn_logged_sync, spawn_logged_toast, wire_pb, wire_row_flag, wire_sync,
+    wire_sync_pb,
 };
 

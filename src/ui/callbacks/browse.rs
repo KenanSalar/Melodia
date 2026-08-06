@@ -7,10 +7,11 @@ use async_compat::Compat;
 use slint::{ComponentHandle, Model, SharedString};
 
 use super::{collect_nonzero_track_ids, next_sort, play_row_start};
-use super::macros::{spawn_logged, spawn_logged_sync, wire_row_flag};
+use super::macros::{spawn_blocking_logged, spawn_logged, wire_row_flag};
 use crate::library;
 use crate::state::AppState;
 use crate::ui::browse::{self as browse_ui_mod, BrowseUi};
+use crate::ui::tab_bar::should_announce_warm;
 use crate::ui::track_list_view::{TrackListColumnState, view_id};
 use crate::{AppWindow, Browse};
 
@@ -41,13 +42,43 @@ pub fn wire_browse(ui: &AppWindow, state: &AppState, browse_ui: &Arc<BrowseUi>) 
     // late — after boot has already read this shadow. See the
     // `SectionActiveGate` bullet in `.claude/rules/ui-patterns.md`.
     browse_ui.set_section_active(ui.global::<crate::Nav>().get_selected_index() == 1);
+    // `browse::seed_from_settings` fetches whatever section the launch lands on,
+    // and off screen that fetch *releases* what it warmed — `warm_card_tier`
+    // hands its buffers back and reports `false`, so the card tier stays cold
+    // and nothing bumps the generation. Seeding the flag here costs one
+    // re-fetch on the first visit to a Browse the boot didn't land on, and
+    // nothing at all on the one it did. Same shape, same reason, as the four
+    // detail lifecycles'.
+    if !browse_ui.section_active() {
+        browse_ui.mark_dirty();
+    }
     {
         let s = state.clone();
         let bu = browse_ui.clone();
         let weak = weak.clone();
         g.on_section_active_changed(move |active| {
             bu.set_section_active(active);
-            if active && bu.take_dirty() {
+            if !active {
+                // The card tier is Browse's only cache, and it is worth a
+                // section's release: at 448 px a full LRU is tens of megabytes.
+                // The generation rewinds beside it so `0` keeps meaning "cold"
+                // rather than "first toggle of the session".
+                //
+                // **The release is only honest beside the `mark_dirty`** — the
+                // `callbacks/tracks.rs` rule, and Browse is the other view with
+                // no enter-time fetch of its own, so without it the re-enter
+                // paints every card on its placeholder. Landed synchronously,
+                // *before* the release task is spawned, so a re-enter can never
+                // read `false` off a tier the spawn is about to empty.
+                bu.mark_dirty();
+                if let Some(ui) = weak.upgrade() {
+                    ui.global::<Browse>().set_covers_generation(0);
+                }
+                let bu = bu.clone();
+                s.runtime.spawn_blocking(move || bu.release_grid_covers());
+                return;
+            }
+            if bu.take_dirty() {
                 let path = bu.current_path();
                 let s = s.clone();
                 let bu = bu.clone();
@@ -289,27 +320,93 @@ pub fn wire_browse(ui: &AppWindow, state: &AppState, browse_ui: &Arc<BrowseUi>) 
             let Some(ui) = weak.upgrade() else { return };
             let columns = ui.global::<Browse>().snapshot_visible();
             let s = s.clone();
-            spawn_logged_sync!(s, "browse::toggle_column",
+            spawn_blocking_logged!(s, "browse::toggle_column",
                 library::settings::update_view_columns(&s, "browse".to_string(), columns));
         });
     }
 
-    // refresh: re-fetch the current path, no history change, no persist.
-    // Fired by the BrowseView when nav lands on it (so a fresh activation
-    // surfaces watcher-driven additions even when nothing else triggers a
-    // refresh), and by the library-changed subscriber below.
+    // toggle-view-mode: the pill means "switch", so Rust negates. The card model
+    // is rebuilt from the cached listing rather than re-fetched, and **without
+    // hopping the event loop** — `invoke_from_event_loop` posts even when called
+    // from the UI thread, and a redraw winning that race paints an empty grid.
+    //
+    // A toggle is the one path with no fetch to await before the grid mounts, so
+    // it takes the `covers-generation` pair: rewind to 0 so the mounting cards
+    // ask the tier cache-only, warm a screenful off-thread, then bump — gated on
+    // the view still being where the prewarm left it.
     {
         let s = state.clone();
         let bu = browse_ui.clone();
         let weak = weak.clone();
-        g.on_refresh(move || {
-            let path = bu.current_path();
-            let s = s.clone();
-            let bu = bu.clone();
-            let weak = weak.clone();
-            spawn_logged!(s, "browse::refresh",
-                browse_ui_mod::fetch_and_apply(&s, &bu, weak, path));
+        g.on_toggle_view_mode(move || {
+            let Some(ui) = weak.upgrade() else { return };
+            let g = ui.global::<Browse>();
+            let mode = bu.view_mode().toggled();
+            let mode_idx = browse_ui_mod::mode_index(&g, mode);
+            bu.set_view_mode(mode);
+            g.set_view_mode(mode_idx);
+            g.set_covers_generation(0);
+            browse_ui_mod::rebuild_cards(&ui, &bu);
+
+            let bu_work = bu.clone();
+            let weak_bump = weak.clone();
+            if mode == browse_ui_mod::BrowseViewMode::Card {
+                s.runtime.spawn(async move {
+                    let bu_prewarm = bu_work.clone();
+                    // A `JoinError` is the same "we don't know" as a prewarm that
+                    // handed its buffers back.
+                    // `Some(Card)` is "we decoded for the card tier and still hold
+                    // it" — the shape `should_announce_warm` takes, with the mode
+                    // standing in for the tab a grid page would pass.
+                    let warmed = tokio::task::spawn_blocking(move || {
+                        bu_prewarm.prewarm_card_covers()
+                    })
+                    .await
+                    .unwrap_or(false)
+                    .then_some(browse_ui_mod::BrowseViewMode::Card);
+                    let _ = weak_bump.upgrade_in_event_loop(move |ui| {
+                        // Both shadows are written on this thread, so this is the
+                        // same re-check the prewarm made, against anything that
+                        // landed after it returned.
+                        if should_announce_warm(
+                            warmed,
+                            bu_work.section_active(),
+                            bu_work.view_mode(),
+                        ) {
+                            let g = ui.global::<Browse>();
+                            g.set_covers_generation(g.get_covers_generation() + 1);
+                        }
+                    });
+                });
+            } else {
+                let bu_release = bu.clone();
+                s.runtime
+                    .spawn_blocking(move || bu_release.release_grid_covers());
+            }
+
+            let s_disk = s.clone();
+            spawn_blocking_logged!(s_disk, "browse::set_view_mode",
+                library::settings::set_browse_view_mode(&s_disk, mode_idx));
         });
+    }
+
+    // columns-changed: the grid re-flowed, so re-chunk the same cards into rows
+    // of the new width. No fetch, no DB — and a no-op while the list is mounted,
+    // `GridColumnsSync` firing at mount regardless of which body is up.
+    {
+        let bu = browse_ui.clone();
+        let weak = weak.clone();
+        g.on_columns_changed(move |_cols| {
+            let Some(ui) = weak.upgrade() else { return };
+            browse_ui_mod::rebuild_cards(&ui, &bu);
+        });
+    }
+
+    // request-card-cover: one card's thumbnail off Browse's own 448 px tier,
+    // decoded only once `covers-generation` says the tier is warm.
+    {
+        let bu = browse_ui.clone();
+        g.on_request_card_cover(move |path, generation| bu.grid_cover(&path, generation));
     }
 
     // library_changed subscriber: watcher / scan completion / folder

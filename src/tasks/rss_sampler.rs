@@ -42,8 +42,12 @@ use slint::ComponentHandle;
 #[cfg(target_os = "linux")]
 use slint::Weak;
 
+// `tasks/` imports no `ui::*` — this module is the documented, env-gated exception,
+// since a memory tag naming the view has to read the view's own globals.
 #[cfg(target_os = "linux")]
-use crate::{AlbumDetail, AppWindow, ArtistDetail, GenreDetail, Nav};
+use crate::ui::my_library::{MyLibraryTab, NAV_MY_LIBRARY, tab_from_index};
+#[cfg(target_os = "linux")]
+use crate::{AlbumDetail, AppWindow, ArtistDetail, GenreDetail, MyLibrary, Nav, PlaylistDetail};
 
 #[cfg(target_os = "linux")]
 const SAMPLE_INTERVAL: Duration = Duration::from_millis(500);
@@ -101,33 +105,54 @@ async fn run(weak: Weak<AppWindow>) {
     }
 }
 
+/// The My Library half of [`format_view`] — which tab, and the detail it has open.
+///
+/// Without the tab this whole page would log as one name, and the diagnostic exists to
+/// distinguish exactly the surfaces that share it. **Only the mounted tab's id is read**:
+/// boot restores a detail id per view regardless of section, so more than one can be
+/// `>= 0` at a time.
+#[cfg(target_os = "linux")]
+fn my_library_tag(ui: &AppWindow) -> String {
+    let g = ui.global::<MyLibrary>();
+    match tab_from_index(&g, g.get_tab_idx()) {
+        MyLibraryTab::Songs => "MyLibrary/Songs".to_owned(),
+        MyLibraryTab::Albums => match i64::from(ui.global::<AlbumDetail>().get_album_id()) {
+            id if id >= 0 => format!("MyLibrary/AlbumDetail({id})"),
+            _ => "MyLibrary/Albums".to_owned(),
+        },
+        MyLibraryTab::Artists => match i64::from(ui.global::<ArtistDetail>().get_artist_id()) {
+            id if id >= 0 => format!("MyLibrary/ArtistDetail({id})"),
+            _ => "MyLibrary/Artists".to_owned(),
+        },
+        MyLibraryTab::Genres => match i64::from(ui.global::<GenreDetail>().get_genre_id()) {
+            id if id >= 0 => format!("MyLibrary/GenreDetail({id})"),
+            _ => "MyLibrary/Genres".to_owned(),
+        },
+        MyLibraryTab::Playlists => {
+            match i64::from(ui.global::<PlaylistDetail>().get_playlist_id()) {
+                id if id >= 0 => format!("MyLibrary/PlaylistDetail({id})"),
+                _ => "MyLibrary/Playlists".to_owned(),
+            }
+        }
+    }
+}
+
 /// Format the current view as a compact tag. Reads the `Nav` selected
-/// index + per-section detail-id globals + overlay flags. Index mapping
-/// matches `melodia-ui/ui/globals/nav.slint::Nav` (`0=search 1=browse 2=favorites
-/// 3=tracks 4=albums 5=artists 6=genres 7=playlists 8=recently-played
-/// 9=settings`).
+/// index + overlay flags, and for My Library the mounted tab and its detail id.
+/// Index mapping matches `melodia-ui/ui/globals/nav.slint::Nav` (`0=search 1=browse
+/// 2=favorites 3=my-library 8=recently-played 9=settings`; 4–7 retired).
 #[cfg(target_os = "linux")]
 fn format_view(ui: &AppWindow) -> String {
     let nav = ui.global::<Nav>();
     let nav_idx = nav.get_selected_index();
     let np_open = nav.get_now_playing_open();
     let qs_open = crate::ui::window_chrome::is_queue_sheet_open();
-    let album_id = i64::from(ui.global::<AlbumDetail>().get_album_id());
-    let artist_id = i64::from(ui.global::<ArtistDetail>().get_artist_id());
-    let genre_id = i64::from(ui.global::<GenreDetail>().get_genre_id());
 
     let base = match nav_idx {
         0 => "Search".to_owned(),
         1 => "Browse".to_owned(),
         2 => "Favorites".to_owned(),
-        3 => "Tracks".to_owned(),
-        4 if album_id >= 0 => format!("AlbumDetail({album_id})"),
-        4 => "Albums".to_owned(),
-        5 if artist_id >= 0 => format!("ArtistDetail({artist_id})"),
-        5 => "Artists".to_owned(),
-        6 if genre_id >= 0 => format!("GenreDetail({genre_id})"),
-        6 => "Genres".to_owned(),
-        7 => "Playlists".to_owned(),
+        NAV_MY_LIBRARY => my_library_tag(ui),
         8 => "RecentlyPlayed".to_owned(),
         9 => "Settings".to_owned(),
         n => format!("Nav({n})"),

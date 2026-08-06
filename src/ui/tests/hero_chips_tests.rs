@@ -1,38 +1,40 @@
 use super::{
-    ChipLabels, FavoritesFacts, HeroFold, MostPlayedTotals, album_chips, artist_chips,
-    dominant_genre, favorites_chips, fold_most_played, fold_tracks, genre_chips, playlist_chips,
-    recently_played_chips, year_span,
+    ChipLabels, FavoritesFacts, RecentlyPlayedFacts, album_chips, artist_chips, favorites_chips,
+    genre_chips, playlist_chips, recently_played_chips,
 };
+use crate::ui::hero_folds::{HeroFold, MostPlayedTotals};
 use crate::entities::album::AlbumStats;
 use crate::entities::artist::ArtistStats;
 use crate::entities::genre::GenreStats;
 use crate::entities::playlist::PlaylistStats;
-use crate::entities::track::{MostPlayedFavorite, TrackListRow};
 use crate::ui::favorites::FavoritesTab;
+use crate::ui::recently_played::RecentlyPlayedTab;
 use slint::SharedString;
 
 const STRIP: &str = include_str!("../../../melodia-ui/ui/components/meta-chip-strip.slint");
 const HERO_CHIPS: &str = include_str!("../hero_chips.rs");
 
-/// Every view that mounts a chip strip on a hero band, and the name of the
-/// meta-line property it replaced. Both halves matter — see the two pins below.
-const HERO_VIEWS: [(&str, &str); 6] = [
+/// Every source that *draws* a hero band. **Two, for six banners** — the two
+/// mosaic pages wear one shared component and the four My Library details wear
+/// another, so each file stands for the pages under it, which is the stronger
+/// subject: one file to hold to the contract rather than six that can drift.
+/// Whether each page still wears its band is [`MOSAIC_HOSTS`]' and
+/// [`BAND_HOSTS`]' job.
+const HERO_VIEWS: [(&str, &str); 2] = [
     (
-        include_str!("../../../melodia-ui/ui/views/album-detail-view.slint"),
-        "album-detail-view.slint",
+        include_str!("../../../melodia-ui/ui/components/hero/mosaic-tab-hero.slint"),
+        "mosaic-tab-hero.slint",
     ),
     (
-        include_str!("../../../melodia-ui/ui/views/artist-detail-view.slint"),
-        "artist-detail-view.slint",
+        include_str!("../../../melodia-ui/ui/components/hero/library-tab-band.slint"),
+        "library-tab-band.slint",
     ),
-    (
-        include_str!("../../../melodia-ui/ui/views/genre-detail-view.slint"),
-        "genre-detail-view.slint",
-    ),
-    (
-        include_str!("../../../melodia-ui/ui/views/playlist-detail-view.slint"),
-        "playlist-detail-view.slint",
-    ),
+];
+
+/// The two pages wearing the shared mosaic banner. They own no band of their own
+/// — a title, a chip strip or an artwork size appearing in either is the
+/// extraction coming undone one binding at a time.
+const MOSAIC_HOSTS: [(&str, &str); 2] = [
     (
         include_str!("../../../melodia-ui/ui/views/favorites-view.slint"),
         "favorites-view.slint",
@@ -40,6 +42,34 @@ const HERO_VIEWS: [(&str, &str); 6] = [
     (
         include_str!("../../../melodia-ui/ui/views/recently-played-view.slint"),
         "recently-played-view.slint",
+    ),
+];
+
+/// [`MOSAIC_HOSTS`] for `LibraryTabBand`: the sheet that mounts it, and the four
+/// detail bodies that must mount **nothing** — the band morphs into each of their
+/// heroes, so a title, a chip strip or an artwork size reappearing in one of them
+/// is the page wearing two banners again. The bodies are the likelier regression
+/// of the two, which is why pinning the sheet alone would not be enough.
+const BAND_HOSTS: [(&str, &str); 5] = [
+    (
+        include_str!("../../../melodia-ui/ui/views/my-library-view.slint"),
+        "my-library-view.slint",
+    ),
+    (
+        include_str!("../../../melodia-ui/ui/views/my-library/album-detail.slint"),
+        "my-library/album-detail.slint",
+    ),
+    (
+        include_str!("../../../melodia-ui/ui/views/my-library/artist-detail.slint"),
+        "my-library/artist-detail.slint",
+    ),
+    (
+        include_str!("../../../melodia-ui/ui/views/my-library/genre-detail.slint"),
+        "my-library/genre-detail.slint",
+    ),
+    (
+        include_str!("../../../melodia-ui/ui/views/my-library/playlist-detail.slint"),
+        "my-library/playlist-detail.slint",
     ),
 ];
 
@@ -69,47 +99,6 @@ impl ChipLabels for EnglishLabels {
     }
     fn compilation(&self) -> SharedString {
         SharedString::from("Compilation")
-    }
-}
-
-/// Only the four fields the folds and the genre tally read.
-fn track(artist_id: Option<i64>, album_id: Option<i64>, genre: Option<&str>) -> TrackListRow {
-    TrackListRow {
-        id: 0,
-        file_path: String::new(),
-        file_name: String::new(),
-        title: String::new(),
-        artist: None,
-        album_artist: None,
-        album: None,
-        genre: genre.map(str::to_owned),
-        track_number: None,
-        disc_number: None,
-        year: None,
-        duration_ms: 0,
-        artwork_path: None,
-        is_favorite: false,
-        rating: 0,
-        album_id,
-        artist_id,
-        genre_id: None,
-        date_added: String::new(),
-        sort_key: None,
-    }
-}
-
-fn played(duration_ms: i64, play_count: i32) -> MostPlayedFavorite {
-    MostPlayedFavorite {
-        id: 0,
-        title: String::new(),
-        artist: None,
-        album_artist: None,
-        album: None,
-        genre: None,
-        year: None,
-        artwork_path: None,
-        play_count,
-        duration_ms,
     }
 }
 
@@ -302,6 +291,23 @@ fn favorites_facts(tab: FavoritesTab) -> FavoritesFacts {
     }
 }
 
+/// The same for Recently Played. Its Most Played tab is the whole library where
+/// its Songs tab is the last 200 played, so the two totals are unrelated on
+/// purpose — the sums-itself pin below reads them apart.
+fn recently_played_facts(tab: RecentlyPlayedTab) -> RecentlyPlayedFacts {
+    RecentlyPlayedFacts {
+        tab,
+        tracks: 200,
+        duration_ms: 43_451_000, // 12:04:11
+        songs: HeroFold { artists: 44, albums: 60 },
+        most_played: MostPlayedTotals {
+            tracks: 512,
+            duration_ms: 118_800_000, // 33:00:00
+            plays: 4096,
+        },
+    }
+}
+
 #[test]
 fn the_favorites_chips_follow_the_tab() {
     assert_eq!(
@@ -357,9 +363,9 @@ fn a_never_played_most_played_tab_states_no_plays() {
     );
 }
 
-/// Every empty band leaves the copy to the view — a sentence on the Songs and
-/// Recently Played heroes, a `GridEmptyState` on the two Favorites grids. A lone
-/// "0 …" chip beside one of those is redundant at best.
+/// Every empty band leaves the copy to the view — a sentence on the two Songs
+/// heroes, a `GridEmptyState` on the three grids. A lone "0 …" chip beside one of
+/// those is redundant at best.
 #[test]
 fn an_empty_hero_leaves_its_empty_state_to_the_view() {
     let empty = FavoritesFacts {
@@ -382,7 +388,21 @@ fn an_empty_hero_leaves_its_empty_state_to_the_view() {
              says so, and says it better"
         );
     }
-    assert!(recently_played_chips(&EnglishLabels, 0, 0, HeroFold::default()).is_empty());
+
+    let empty = RecentlyPlayedFacts {
+        tracks: 0,
+        duration_ms: 0,
+        songs: HeroFold::default(),
+        most_played: MostPlayedTotals::default(),
+        ..recently_played_facts(RecentlyPlayedTab::Songs)
+    };
+    for tab in [RecentlyPlayedTab::Songs, RecentlyPlayedTab::MostPlayed] {
+        let facts = RecentlyPlayedFacts { tab, ..empty };
+        assert!(
+            recently_played_chips(&EnglishLabels, &facts).is_empty(),
+            "the {tab:?} tab states a count over an empty list"
+        );
+    }
 }
 
 #[test]
@@ -390,78 +410,25 @@ fn recently_played_states_its_count_running_time_and_spread() {
     assert_eq!(
         texts(&recently_played_chips(
             &EnglishLabels,
-            200,
-            43_451_000, // 12:04:11
-            HeroFold { artists: 44, albums: 60 }
+            &recently_played_facts(RecentlyPlayedTab::Songs)
         )),
         vec!["200 tracks", "12:04:11", "44 artists", "60 albums"]
     );
 }
 
+/// The Most Played tab on this page is the *whole library*, where its Songs tab
+/// is the last 200 played — so borrowing the Songs totals would understate it,
+/// where on Favorites the same mistake overstates. Two different directions of
+/// wrong, one rule: the tab sums itself.
 #[test]
-fn the_fold_counts_distinct_ids_and_skips_the_untagged() {
-    // A track with no album belongs to none, so it is skipped rather than
-    // pooled into an "unknown" bucket that would read as one more album.
-    let rows = [
-        track(Some(1), Some(10), None),
-        track(Some(1), Some(10), None),
-        track(Some(2), Some(11), None),
-        track(None, None, None),
-    ];
-    assert_eq!(fold_tracks(&rows), HeroFold { artists: 2, albums: 2 });
-    assert_eq!(fold_tracks(&[]), HeroFold::default());
-}
-
-#[test]
-fn most_played_totals_sum_duration_and_plays() {
-    let rows = [played(180_000, 12), played(240_000, 30)];
+fn recently_playeds_most_played_sums_itself_too() {
     assert_eq!(
-        fold_most_played(&rows),
-        MostPlayedTotals {
-            tracks: 2,
-            duration_ms: 420_000,
-            plays: 42,
-        }
+        texts(&recently_played_chips(
+            &EnglishLabels,
+            &recently_played_facts(RecentlyPlayedTab::MostPlayed)
+        )),
+        vec!["512 tracks", "33:00:00", "4096 plays"]
     );
-}
-
-#[test]
-fn a_genre_is_named_only_when_it_actually_dominates() {
-    let mostly_jazz = [
-        track(None, None, Some("Jazz")),
-        track(None, None, Some("Jazz")),
-        track(None, None, Some("Blues")),
-    ];
-    assert_eq!(dominant_genre(&mostly_jazz).as_deref(), Some("Jazz"));
-
-    // An even split has no majority — naming either would misrepresent the
-    // other half, so a genuinely mixed compilation gets no chip.
-    let split = [
-        track(None, None, Some("Jazz")),
-        track(None, None, Some("Blues")),
-    ];
-    assert_eq!(dominant_genre(&split), None);
-
-    // Untagged tracks don't count toward the total, so one tagged track among
-    // three still dominates the tracks that have a genre at all.
-    let sparse = [
-        track(None, None, Some("Jazz")),
-        track(None, None, None),
-        track(None, None, Some("")),
-    ];
-    assert_eq!(dominant_genre(&sparse).as_deref(), Some("Jazz"));
-    assert_eq!(dominant_genre(&[]), None);
-}
-
-#[test]
-fn the_year_span_ignores_albums_with_no_year() {
-    let dated = |year: Option<i32>| AlbumStats { year, ..album(None, None, false) };
-    assert_eq!(
-        year_span(&[dated(Some(1963)), dated(None), dated(Some(1957))]),
-        Some((1957, 1963))
-    );
-    assert_eq!(year_span(&[dated(Some(0)), dated(None)]), None);
-    assert_eq!(year_span(&[]), None);
 }
 
 /// `MetaChipStrip`'s brushes default to `Theme.*`, which is correct nowhere and
@@ -490,6 +457,18 @@ fn every_chip_strip_takes_its_brushes_from_its_backdrop() {
             !src.contains("MetaChipStrip {"),
             "{name} still mounts a raw `MetaChipStrip`; the hero wrapper is what fixes the brushes"
         );
+    }
+
+    // The six pages get theirs through whichever band they wear. A strip mounted
+    // beside it is a second chip row on the same banner, which the `HeroChips`
+    // global has no way to feed twice.
+    for (src, name) in MOSAIC_HOSTS.iter().chain(BAND_HOSTS.iter()) {
+        for mount in ["HeroChipStrip {", "MetaChipStrip {"] {
+            assert!(
+                !src.contains(mount),
+                "{name} mounts `{mount}` itself — its chip row belongs to its shared band"
+            );
+        }
     }
 
     // Bounded by the `measured` handler rather than by a brace, so the
@@ -539,7 +518,11 @@ fn every_chip_strip_takes_its_brushes_from_its_backdrop() {
 /// then says the same thing twice.
 #[test]
 fn no_hero_view_still_declares_a_meta_line() {
-    for (src, name) in HERO_VIEWS {
+    for (src, name) in HERO_VIEWS
+        .iter()
+        .chain(MOSAIC_HOSTS.iter())
+        .chain(BAND_HOSTS.iter())
+    {
         for prop in ["meta-line", "stats-line", "stats-text"] {
             assert!(
                 !src.contains(&format!("property <string> {prop}")),
@@ -555,10 +538,10 @@ fn no_hero_view_still_declares_a_meta_line() {
 ///
 /// Pinned beside the chip tests because `HERO_MAX_ROWS` is measured against that
 /// tile: a view sizing its own artwork moves the slack the cap was picked for,
-/// and it moves the band's height with it. Neither family of hero spells a size
-/// any more — the four detail views route through `DetailHeader` and the two
-/// mosaic heroes through `MosaicHeroTile`, and neither component exposes a knob
-/// to override the token with.
+/// and it moves the band's height with it. No hero spells a size any more — the
+/// four My Library details route through `LibraryTabBand` and the two mosaic
+/// pages through `MosaicTabHero`, and neither exposes a knob to override the
+/// token with.
 ///
 /// The tile check has to name `MosaicHeroTile` rather than the two views: the
 /// square moved into it, and each view's surviving `Theme.hero-artwork` is now
@@ -567,7 +550,6 @@ fn no_hero_view_still_declares_a_meta_line() {
 #[test]
 fn no_hero_view_sizes_its_own_artwork_tile() {
     const THEME: &str = include_str!("../../../melodia-ui/ui/theme.slint");
-    const HEADER: &str = include_str!("../../../melodia-ui/ui/components/detail-header.slint");
     const MOSAIC_TILE: &str =
         include_str!("../../../melodia-ui/ui/components/hero/mosaic-hero-tile.slint");
 
@@ -575,16 +557,11 @@ fn no_hero_view_sizes_its_own_artwork_tile() {
         THEME.contains("out property <length> hero-artwork:"),
         "Theme must own the hero tile size — it is the only thing keeping the six bands aligned"
     );
-    assert!(
-        HEADER.contains("tile-size: Theme.hero-artwork;"),
-        "DetailHeader must size its tile from the token"
-    );
-    assert!(
-        !HEADER.contains("artwork-size"),
-        "DetailHeader must not reintroduce a per-view size knob — four of the six bands would \
-         then be free to drift from the two that have no header to route through"
-    );
-    for (src, name) in HERO_VIEWS {
+    for (src, name) in HERO_VIEWS
+        .iter()
+        .chain(MOSAIC_HOSTS.iter())
+        .chain(BAND_HOSTS.iter())
+    {
         assert!(
             !src.contains("artwork-size"),
             "{name} sizes its hero tile itself — it belongs on `Theme.hero-artwork`"
@@ -604,23 +581,62 @@ fn no_hero_view_sizes_its_own_artwork_tile() {
         );
     }
 
-    let mosaic = HERO_VIEWS
+    // The banner the two mosaic pages share. It mounts the square rather than
+    // drawing it — inline is what put the same chrome in two files once — and
+    // derives its own band height from the same token.
+    let band = HERO_VIEWS
         .iter()
-        .filter(|(_, name)| matches!(*name, "favorites-view.slint" | "recently-played-view.slint"));
-    let mut checked = 0;
-    for (src, name) in mosaic {
+        .find(|(_, name)| *name == "mosaic-tab-hero.slint")
+        .map_or("", |(src, _)| *src);
+    assert!(
+        band.contains("MosaicHeroTile {"),
+        "mosaic-tab-hero.slint must mount `MosaicHeroTile`"
+    );
+    assert!(
+        band.contains("Theme.hero-artwork"),
+        "mosaic-tab-hero.slint derives its band height from the tile token, so it must read it"
+    );
+
+    // And that both pages still wear it. Asserted here rather than left implicit:
+    // a page that reinlines its own band passes every check above, because the
+    // shared file it stopped using is still correct.
+    for (src, name) in MOSAIC_HOSTS {
         assert!(
-            src.contains("MosaicHeroTile {"),
-            "{name} must mount `MosaicHeroTile` — drawing the square inline is what put the same \
-             chrome in two files and let the two drift"
+            src.contains("MosaicTabHero {"),
+            "{name} must mount `MosaicTabHero` — a page drawing its own band is how the two \
+             drifted apart before, and the shared file goes on passing its own pins"
         );
-        assert!(
-            src.contains("Theme.hero-artwork"),
-            "{name} derives its hero band height from the tile token, so it must still read it"
-        );
-        checked += 1;
     }
-    assert_eq!(checked, 2, "both mosaic heroes must still be in HERO_VIEWS");
+
+    // The My Library band draws the tile itself rather than through
+    // `MosaicHeroTile` — the mosaic square and an artwork tile are different
+    // things — so it owes the token directly.
+    let library_band = HERO_VIEWS
+        .iter()
+        .find(|(_, name)| *name == "library-tab-band.slint")
+        .map_or("", |(src, _)| *src);
+    assert!(
+        library_band.contains("tile-size: Theme.hero-artwork;"),
+        "library-tab-band.slint must size its artwork tile from the token"
+    );
+    assert!(
+        library_band.contains("Theme.hero-artwork"),
+        "library-tab-band.slint derives its hero height from the tile token, so it must read it"
+    );
+
+    // The sheet wears the band; the four bodies wear nothing. The bodies are the
+    // half worth pinning — a detail regrowing a header of its own is the shape
+    // this phase removed, and every check above still passes while it does.
+    for (src, name) in BAND_HOSTS {
+        let expected = name == "my-library-view.slint";
+        assert_eq!(
+            src.contains("LibraryTabBand {"),
+            expected,
+            "{name} must {} mount `LibraryTabBand` — the page wears exactly one banner, and the \
+             band morphs into each detail's hero rather than sitting above a second one",
+            if expected { "" } else { "not" }
+        );
+    }
 }
 
 /// Favorites is the one hero assembled from three fetches rather than one, and
@@ -644,14 +660,14 @@ fn each_favorites_fetch_folds_and_republishes_what_it_feeds() {
             include_str!("../favorites/songs.rs"),
             "favorites/songs.rs",
             "pub async fn refresh_tracks(",
-            "crate::ui::hero_chips::fold_tracks(&rows)",
+            "crate::ui::hero_folds::fold_tracks(&rows)",
             "songs_fold.lock() =",
         ),
         (
             include_str!("../favorites/grids/fetch.rs"),
             "favorites/grids/fetch.rs",
             "pub async fn refresh_grids(",
-            "crate::ui::hero_chips::fold_most_played(&rows)",
+            "crate::ui::hero_folds::fold_most_played(&rows)",
             "most_played_totals.lock() =",
         ),
     ];
@@ -734,14 +750,18 @@ fn the_section_leave_drops_the_folds_with_the_caches_they_summarise() {
 /// away.
 #[test]
 fn no_hero_folds_out_of_a_shared_cache() {
-    const FOLDERS: [(&str, &str); 6] = [
+    const FOLDERS: [(&str, &str); 7] = [
         (include_str!("../albums/detail.rs"), "albums/detail.rs"),
         (include_str!("../artists/detail.rs"), "artists/detail.rs"),
         (include_str!("../genres/detail.rs"), "genres/detail.rs"),
         (include_str!("../playlists/detail.rs"), "playlists/detail.rs"),
         (
-            include_str!("../recently_played/tracks.rs"),
-            "recently_played/tracks.rs",
+            include_str!("../recently_played/songs.rs"),
+            "recently_played/songs.rs",
+        ),
+        (
+            include_str!("../recently_played/grid/fetch.rs"),
+            "recently_played/grid/fetch.rs",
         ),
         (HERO_CHIPS, "hero_chips.rs"),
     ];
@@ -909,67 +929,74 @@ fn the_strip_spaces_its_rows_tighter_than_its_chips() {
     );
 }
 
-/// Album and Playlist are the two heroes carrying a second text line, and both
-/// keep it *inside* the title row — under the title, beside the `SearchBar`.
+/// Album and Playlist are the two heroes carrying a second text line, and in
+/// `LibraryTabBand` it is **one** line the sheet feeds from either — a single
+/// `subtitle` row under the title, collapsing on `""` for the other two details
+/// and for idle.
 ///
-/// That placement is the whole of `HERO_MAX_ROWS`' headroom, not a styling
-/// choice. The title row is as tall as the `SearchBar` and `hero-title-size`
-/// leaves several of those pixels unused, so a line nested there is nearly
-/// free; on a row of its own it costs its full line box plus a `pad-xs` gap,
-/// which is about what a wrapped chip row needs. Promoted back out, the band
-/// still looks right and simply grows every time the chips wrap — which takes a
-/// narrow window or a long-plural locale to notice.
-///
-/// Pinned by position rather than by nesting depth: the line must come before
-/// the title row's `Rectangle { horizontal-stretch: 1; }`, the spacer that pins
-/// the `SearchBar` right. A subtitle promoted back to a direct child of
-/// `DetailHeader` lands after the entire row, and so after that spacer.
+/// It sits on a row of its own here, and that is forced rather than chosen: in
+/// the retired `DetailHeader` the line rode inside the title row because the
+/// `SearchBar` beside it had already claimed that height, and in the band the
+/// search box is up in the tab row. So the line costs its full box plus a
+/// `pad-xs` gap, out of a meta column bounded by `Theme.hero-artwork` less the
+/// pill band the column reserves. What that buys back is that there is exactly
+/// one of it. Two things therefore stay pinned: the size, because
+/// `HERO_MAX_ROWS`' slack is measured against what the title block spends; and
+/// that the line collapses when empty, because an always-mounted row would spend
+/// it on the four heroes that state nothing under the title.
 #[test]
-fn the_two_subtitled_heroes_keep_that_line_inside_the_title_row() {
-    const TITLE_ROW_SPACER: &str = "Rectangle { horizontal-stretch: 1; }";
-    const SUBTITLES: [(&str, &str); 2] = [
-        (
-            "album-detail-view.slint",
-            "if AlbumDetail.album.artist_name != \"\": Text {",
-        ),
-        (
-            "playlist-detail-view.slint",
-            "if PlaylistDetail.playlist.description != \"\": Text {",
-        ),
-    ];
+fn the_subtitled_heroes_share_one_collapsing_line() {
+    const SHEET: &str = include_str!("../../../melodia-ui/ui/views/my-library-view.slint");
+    const SUBTITLE: &str = "if root.subtitle != \"\": Text {";
 
-    for (name, subtitle) in SUBTITLES {
-        let src = HERO_VIEWS
-            .iter()
-            .find(|(_, view)| *view == name)
-            .map_or("", |(src, _)| *src);
-        let normalized: String = src.split_whitespace().collect::<Vec<_>>().join(" ");
+    let band = HERO_VIEWS
+        .iter()
+        .find(|(_, name)| *name == "library-tab-band.slint")
+        .map_or("", |(src, _)| *src);
+    let normalized: String = band.split_whitespace().collect::<Vec<_>>().join(" ");
 
-        let title_block = normalized
-            .split_once(TITLE_ROW_SPACER)
-            .map_or("", |(before, _)| before);
+    assert_eq!(
+        normalized.matches(SUBTITLE).count(),
+        1,
+        "library-tab-band.slint must carry exactly one collapsing subtitle row — an \
+         always-mounted one spends a wrapped chip row's worth of the tile on the four heroes \
+         that state nothing under the title. See `ui::hero_chips::HERO_MAX_ROWS`"
+    );
+
+    // Bounded on the chip strip rather than on a brace: the line's own `text`
+    // opens with a `\u{200e}` LRM escape, so the first `}` after it is inside a
+    // string literal. Bounding here pins the order too — the subtitle is above
+    // the chips, which is what leaves the wrap its slack.
+    let block = normalized
+        .split_once(SUBTITLE)
+        .and_then(|(_, rest)| rest.split_once("HeroChipStrip"))
+        .map_or("", |(block, _)| block);
+    assert!(
+        !block.is_empty(),
+        "library-tab-band.slint must declare its chip strip after the subtitle row"
+    );
+    assert!(
+        block.contains("font-size: Theme.font-size-md;"),
+        "the band's second line must stay at `font-size-md` — the meta column is bounded by the \
+         hero tile, and a larger line spends the slack `HERO_MAX_ROWS` is measured against"
+    );
+
+    // The two facts that reach it. The band is data-agnostic, so which entity
+    // owns a second line is the sheet's ternary and nowhere else.
+    let sheet: String = SHEET.split_whitespace().collect::<Vec<_>>().join(" ");
+    for fact in [
+        "AlbumDetail.album.artist_name",
+        "PlaylistDetail.playlist.description",
+    ] {
         assert!(
-            title_block.contains(subtitle),
-            "{name}'s second line must be declared before the title row's stretch spacer, i.e. \
-             inside the title block beside the SearchBar. After it, the line is back on a row of \
-             its own — which spends about a wrapped chip row's worth of the hero tile, so the \
-             band grows on every wrap. See `ui::hero_chips::HERO_MAX_ROWS`"
-        );
-
-        let block = normalized
-            .split_once(subtitle)
-            .and_then(|(_, rest)| rest.split_once('}'))
-            .map_or("", |(block, _)| block);
-        assert!(
-            block.contains("font-size: Theme.font-size-md;"),
-            "{name}'s second line must stay at `font-size-md` — the title row has only the \
-             SearchBar's leftover height to lend it, and `hero-title-size` plus a larger line \
-             spends the slack `HERO_MAX_ROWS` is measured against"
+            sheet.contains(&format!("? {fact}")),
+            "my-library-view.slint must feed `{fact}` into the band's `subtitle` — the band \
+             spells no entity of its own"
         );
     }
 }
 
-/// All six hero titles are one number, and it lives on `Theme`.
+/// Every hero title is one number, and it lives on `Theme`.
 ///
 /// The same argument `hero-artwork` makes: the banners are the same band under
 /// different content, so a title that changes size between them reads as the
@@ -988,7 +1015,13 @@ fn every_hero_title_reads_the_same_token() {
     // the view still builds, still looks right on its own, and only diverges
     // from the other five.
     const WEIGHT: &str = "font-weight: Theme.page-title-weight;";
-    const TITLE: &str = "font-size: Theme.hero-title-size; font-weight: Theme.page-title-weight;";
+    const HERO_TITLE: &str =
+        "font-size: Theme.hero-title-size; font-weight: Theme.page-title-weight;";
+    // `LibraryTabBand`'s idle line, which is a *page* heading rather than a hero
+    // one — it names the mounted tab's count, not an entity — so it reads the
+    // page token. Admitted here so the literal check below stays exact.
+    const IDLE_TITLE: &str =
+        "font-size: Theme.page-title-size; font-weight: Theme.page-title-weight;";
 
     assert!(
         THEME.contains("out property <length> hero-title-size:"),
@@ -997,14 +1030,27 @@ fn every_hero_title_reads_the_same_token() {
     );
     for (src, name) in HERO_VIEWS {
         let normalized: String = src.split_whitespace().collect::<Vec<_>>().join(" ");
-        let titles = normalized.matches(WEIGHT).count();
-        assert!(titles > 0, "{name} declares no hero title");
+        let headings = normalized.matches(WEIGHT).count();
+        assert!(
+            normalized.contains(HERO_TITLE),
+            "{name} declares no hero title"
+        );
         assert_eq!(
-            normalized.matches(TITLE).count(),
-            titles,
-            "{name} sizes a hero title with something other than `Theme.hero-title-size` — the \
-             six banners are one band under different content, and they had already drifted to \
-             two sizes once"
+            normalized.matches(HERO_TITLE).count() + normalized.matches(IDLE_TITLE).count(),
+            headings,
+            "{name} sizes a heading with something other than `Theme.hero-title-size` or \
+             `Theme.page-title-size` — the six banners are one band under different content, and \
+             they had already drifted to two sizes once"
+        );
+    }
+
+    // The six pages take their heading from whichever band they wear, so a title
+    // reappearing in one is a second one — and the copy that would be free to
+    // drift.
+    for (src, name) in MOSAIC_HOSTS.iter().chain(BAND_HOSTS.iter()) {
+        assert!(
+            !src.contains(WEIGHT),
+            "{name} declares a hero title of its own; its shared band owns that heading"
         );
     }
 }

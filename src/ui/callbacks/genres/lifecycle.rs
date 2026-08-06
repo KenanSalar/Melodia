@@ -10,14 +10,16 @@
 use std::sync::Arc;
 
 use async_compat::Compat;
-use slint::{ComponentHandle, Model, VecModel};
+use slint::ComponentHandle;
 
 use crate::state::AppState;
-use crate::ui::callbacks::macros::spawn_logged;
+use crate::ui::callbacks::macros::{release_shared_hero, spawn_logged};
 use crate::ui::genres::{self as genres_ui_mod, GenresUi};
+use crate::ui::model_diff::clear_vec_model;
+use crate::ui::my_library::{MyLibraryTab, tab_is_mounted};
+use crate::ui::tab_bar::UNFETCHED_COUNT;
 use crate::{
-    AppWindow, GenreDetail, GenreGridRow as UiGenreGridRow, Genres, Nav,
-    TrackListRow as UiTrackListRow,
+    AppWindow, GenreDetail, GenreGridRow as UiGenreGridRow, Genres, TrackListRow as UiTrackListRow,
 };
 
 /// Wire the Genres section-lifecycle callbacks. See [`super::wire_genres`].
@@ -38,7 +40,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, genres_ui: &Arc<GenresUi>) 
     // (initial enter after boot's pre-fetch — no covers to prewarm).
     // The detail re-fetch (if `GenreDetail.genre-id >= 0`) runs after
     // the grid fetch.
-    genres_ui.set_section_active(ui.global::<Nav>().get_selected_index() == 6);
+    genres_ui.set_section_active(tab_is_mounted(ui, MyLibraryTab::Genres));
     // See the matching seed in `albums/lifecycle.rs`: a boot pre-fetch for a
     // section that isn't on screen can't publish the shared hero globals, so
     // its first enter has to re-fetch rather than take the cheap path.
@@ -58,26 +60,19 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, genres_ui: &Arc<GenresUi>) 
             }
             if !active && let Some(ui) = weak.upgrade() {
                 let g = ui.global::<Genres>();
-                let m = g.get_grid_rows();
-                if let Some(vm) = m.as_any().downcast_ref::<VecModel<UiGenreGridRow>>() {
-                    vm.set_vec(Vec::new());
-                }
+                // Rewound on the same tick as the model it numbers;
+                // `Albums.total-count`'s declaration argues the sentinel.
+                g.set_total_count(UNFETCHED_COUNT);
+                clear_vec_model::<UiGenreGridRow>(&g.get_grid_rows(), "genres: clear grid");
 
                 let d = ui.global::<GenreDetail>();
-                let tm = d.get_tracks();
-                if let Some(vm) = tm.as_any().downcast_ref::<VecModel<UiTrackListRow>>() {
-                    vm.set_vec(Vec::new());
-                }
-                let sm = d.get_selected_ids();
-                if let Some(vm) = sm.as_any().downcast_ref::<VecModel<i32>>() {
-                    vm.set_vec(Vec::new());
-                }
+                clear_vec_model::<UiTrackListRow>(&d.get_tracks(), "genres: clear detail tracks");
+                clear_vec_model::<i32>(&d.get_selected_ids(), "genres: clear detail selection");
                 d.set_selection_anchor(-1);
-                // Six heroes share one colour set and one chip row, and this
-                // one has no images to release — so what rides in
-                // `release_detail_hero_images!` elsewhere is explicit here.
-                crate::ui::hero_backdrop::reset(&ui);
-                crate::ui::hero_chips::clear(&ui);
+                // Six heroes share one colour set and one chip row; this one has
+                // no images to release, so it takes the shared pair alone rather
+                // than the full `release_detail_hero_images!`.
+                release_shared_hero!(ui);
             }
             let gu = gu.clone();
             let s = s.clone();
@@ -113,8 +108,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, genres_ui: &Arc<GenresUi>) 
                             genres_ui_mod::clear_detail(&gu);
                             let _ = weak.upgrade_in_event_loop(|ui| {
                                 ui.global::<GenreDetail>().set_genre_id(-1);
-                                crate::ui::hero_backdrop::reset(&ui);
-                                crate::ui::hero_chips::clear(&ui);
+                                release_shared_hero!(ui);
                             });
                         }
                     }

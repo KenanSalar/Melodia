@@ -16,6 +16,7 @@ mod cross_tab_nav;
 mod favorites;
 mod genres;
 mod library_settings;
+mod my_library;
 mod now_playing;
 mod playlists;
 mod recently_played;
@@ -32,7 +33,7 @@ use crate::services::settings::{SortDir, ViewSort};
 use crate::state::AppState;
 use crate::{AppWindow, Nav, Player};
 
-use macros::{spawn_logged_sync, wire_pb, wire_sync, wire_sync_pb};
+use macros::{spawn_blocking_logged, spawn_logged_sync, wire_pb, wire_sync, wire_sync_pb};
 
 #[allow(unused_imports)]
 use macros::spawn_logged;
@@ -44,6 +45,7 @@ pub use cross_tab_nav::wire_cross_tab_nav;
 pub use favorites::wire_favorites;
 pub use genres::wire_genres;
 pub use library_settings::wire_library_settings;
+pub use my_library::wire_my_library;
 pub use now_playing::{wire_now_playing_favorite, wire_now_playing_rating};
 pub use playlists::{wire_playlist_files, wire_playlists};
 pub use recently_played::wire_recently_played;
@@ -232,11 +234,8 @@ pub fn wire_all(ui: &AppWindow, state: &AppState) {
                 library::playback::player_set_playback_speed(&s_apply.playback_ctx(), speed)
             );
             let s_disk = s.clone();
-            s.runtime.spawn_blocking(move || {
-                if let Err(e) = library::settings::set_playback_speed(&s_disk, speed) {
-                    log::warn!("persist playback_speed: {e}");
-                }
-            });
+            spawn_blocking_logged!(s, "persist playback_speed",
+                library::settings::set_playback_speed(&s_disk, speed));
         });
     }
 
@@ -260,6 +259,9 @@ pub fn wire_all(ui: &AppWindow, state: &AppState) {
             if let Some(ui) = ui_weak.upgrade() {
                 crate::ui::nav_history::record_current(&s, &ui);
             }
+            // Spelled out rather than through `spawn_blocking_logged!`, which takes a
+            // string *literal*: the index is what makes this line worth reading, and a
+            // failure that doesn't say which section it dropped says almost nothing.
             let s_disk = s.clone();
             s.runtime.spawn_blocking(move || {
                 if let Err(e) = library::settings::set_last_nav_index(&s_disk, idx) {

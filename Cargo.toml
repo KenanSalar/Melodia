@@ -34,7 +34,7 @@ exclude = ["winit"]
 # means it can't drift from the app's. The three toolchain-less manifest
 # scrapes (`release.yml`, `build-rpm.sh`, `build-appimage.sh`) anchor on this
 # table by name, so this stanza can sit anywhere in the file.
-version = "0.9.0"
+version = "0.10.0"
 edition = "2024"
 license = "AGPL-3.0-or-later"
 # Kept in lockstep with `rust-toolchain.toml` and `clippy.toml`'s `msrv`.

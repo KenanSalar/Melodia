@@ -44,3 +44,33 @@ fn the_persisted_nav_index_is_hydrated_before_any_view_is_wired() {
          section's `section_active` shadow seeds off `Nav.selected-index`"
     );
 }
+
+/// The My Library tab has to reach `MyLibrary.tab-idx` before any `wire_*` runs, for
+/// the same reason and with a sharper failure.
+///
+/// Five sub-views share nav index 3, so each seeds its `section_active` shadow from
+/// `Nav.selected-index == 3 && MyLibrary.tab-idx == <its tab>`. Seed the tab afterwards
+/// and every one of them reads the global's declared `0`: Songs comes up active and the
+/// tab actually being restored comes up inactive, with no gate edge left to correct
+/// either (see the test above for why). The visible cost is a full Tracks query on every
+/// launch that resumes anywhere but Songs, and the restored tab's own fetch landing late
+/// behind it.
+///
+/// The mutation this catches is moving the call down beside `favorites::seed_tab` and
+/// `recently_played::seed_tab`, which is where a tab seed looks like it belongs — those
+/// two wait because they also seed a handle's shadow, and this one has no handle.
+#[test]
+fn the_persisted_my_library_tab_is_seeded_before_any_view_is_wired() {
+    let seeds = UI_SETUP.matches("ui::my_library::seed_tab(").count();
+    assert_eq!(seeds, 1, "expected exactly one My Library tab seed in `install_views`");
+    let wire_alls = UI_SETUP.matches("ui::callbacks::wire_all(").count();
+    assert_eq!(wire_alls, 1, "boot no longer calls `wire_all`");
+
+    let seed = UI_SETUP.find("ui::my_library::seed_tab(").unwrap_or(usize::MAX);
+    let wire_all = UI_SETUP.find("ui::callbacks::wire_all(").unwrap_or(0);
+    assert!(
+        seed < wire_all,
+        "the persisted My Library tab must be written before `wire_all`: all five of \
+         that page's sections seed `section_active` from it"
+    );
+}

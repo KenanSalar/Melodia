@@ -49,7 +49,7 @@ pub async fn refresh_grids(state: &AppState, fav_ui: &Arc<FavoritesUi>, weak: &W
     // business summing a play history inside an `upgrade_in_event_loop`. Ahead
     // of the gate, for the reason it gives too — the walk isn't a store, and the
     // wipe queues behind whatever the gate is held across.
-    let most_played = most_played.map(|rows| (crate::ui::hero_chips::fold_most_played(&rows), rows));
+    let most_played = most_played.map(|rows| (crate::ui::hero_folds::fold_most_played(&rows), rows));
 
     // Serialize the stores against `release_section_state`'s wipe through the
     // section gate, the way `albums::grid::fetch_grid` does: without it a fast

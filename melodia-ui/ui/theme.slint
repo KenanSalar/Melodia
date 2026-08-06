@@ -71,6 +71,18 @@ export global Theme {
     // `IconButton`'s hover swap to solid `surface0` legible as a transition.
     out property <brush> floating-chrome-bg: root.surface0.with-alpha(0.75);
 
+    // `OverlayScrollbar`'s track for a bar mounted on a **card** rather than on the
+    // page. The default track is `surface0` at half alpha, which is a step *up* from
+    // `base` and reads as a groove there — but over a `surface0` dialog it composites
+    // to exactly `surface0`, i.e. zero contrast, so only the thumb was visible and
+    // nothing said how far the list ran. The step has to go the other way on a card,
+    // and `crust` is the token that is "further from the content" under every palette:
+    // darker than `surface0` on the dark ones, lighter on the light ones, a recess
+    // either way. An alias rather than a bare `Theme.crust` at each mount, for the
+    // reason `danger` is one — five dialog scrollbars take it, and the argument for
+    // *why* belongs in one place rather than in five comments.
+    out property <brush> scrollbar-track-on-card: root.crust;
+
     // Layout
     out property <length> sidebar-collapsed-w: 46px;
     out property <length> sidebar-default-w: 180px;
@@ -125,9 +137,8 @@ export global Theme {
     // The artwork tile every hero band leads with — the detail views' cover, the
     // curated views' 2×2 mosaic. **One number rather than six**: the banners are the
     // same band under different content, and a tile changing size between them reads as
-    // the page shifting under a nav. `DetailHeader` takes it directly and exposes no
-    // size knob, so a detail hero can't diverge from the pair with no header component
-    // to route through.
+    // the page shifting under a nav. Both shared bands take it directly and neither
+    // exposes a size knob, so no hero can diverge from the other five.
     //
     // It sets each band's *height* too, being the tallest thing in all of them. Growing
     // it grows six banners at once; shrinking it costs the detail heroes first, whose

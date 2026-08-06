@@ -657,7 +657,7 @@ async fn get_most_played_orders_by_count_and_excludes_zero() -> Result<(), AppEr
         .execute(db.write())
         .await?;
 
-    let rows = queries::track::get_most_played(&db, 200).await?;
+    let rows = queries::track::get_most_played(&db).await?;
     let titles: Vec<&str> = rows.iter().map(|r| r.title.as_str()).collect();
     assert_eq!(
         titles,
@@ -668,19 +668,34 @@ async fn get_most_played_orders_by_count_and_excludes_zero() -> Result<(), AppEr
     Ok(())
 }
 
+/// The tab this feeds is a virtualized grid, so it takes the whole set — the
+/// `LIMIT 10` it carried was sized for the ten-card carousel it replaced, and
+/// re-adding one is a ceiling the user can scroll into with nothing saying why
+/// the list stops. Seeded past that old cap so a reintroduced `LIMIT` fails here
+/// rather than only on a library large enough to notice.
 #[tokio::test]
-async fn get_most_played_respects_limit() -> Result<(), AppError> {
-    let db = seed_db().await?;
-    sqlx::query("UPDATE tracks SET play_count = 3 WHERE title = 'Alpha'")
-        .execute(db.write())
-        .await?;
-    sqlx::query("UPDATE tracks SET play_count = 9 WHERE title = 'Beta'")
-        .execute(db.write())
-        .await?;
+async fn get_most_played_is_not_capped() -> Result<(), AppError> {
+    const PLAYED: i64 = 12;
 
-    let rows = queries::track::get_most_played(&db, 1).await?;
-    assert_eq!(rows.len(), 1);
-    assert_eq!(rows[0].title, "Beta");
+    let db = seed_db().await?;
+    for n in 0..PLAYED {
+        let path = format!("/music/played-{n}.mp3");
+        insert_test_track(&db, &path, &format!("Played {n}"), "Zeta Artist", "B Album", "Pop")
+            .await?;
+        sqlx::query("UPDATE tracks SET play_count = ? WHERE file_path = ?")
+            .bind(n + 1)
+            .bind(&path)
+            .execute(db.write())
+            .await?;
+    }
+
+    let rows = queries::track::get_most_played(&db).await?;
+    assert_eq!(
+        i64::try_from(rows.len()).unwrap_or(-1),
+        PLAYED,
+        "every played track must come back — the seeded set is `play_count > 0` and the three \
+         `seed_db` rows are left at zero"
+    );
     Ok(())
 }
 
@@ -700,7 +715,7 @@ async fn both_most_played_queries_project_what_the_filter_searches() -> Result<(
     .await?;
 
     let favorites = queries::track::get_most_played_favorites(&db).await?;
-    let all = queries::track::get_most_played(&db, 200).await?;
+    let all = queries::track::get_most_played(&db).await?;
 
     for (label, rows) in [("favorites", favorites), ("all", all)] {
         let card = rows.iter().find(|t| t.title == "Alpha");

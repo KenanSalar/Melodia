@@ -1,6 +1,6 @@
-//! Playlist import/export (Extended-M3U8) callbacks — the Import / Export
-//! header pills on the Playlists view — plus the Add-to-Playlist picker's
-//! multi-select toggles + commit, split by concern:
+//! Playlist import/export (Extended-M3U8) callbacks — two of the Playlists
+//! tab's four action pills — plus the Add-to-Playlist picker's multi-select
+//! toggles + commit, split by concern:
 //!
 //! * [`import`] — the Import pill (native multi-file picker → per-file
 //!   import aggregation → grid refresh → summary toast).

@@ -6,7 +6,8 @@
 //! Two-tier model:
 //!
 //! * [`NavEntry`] is a snapshot of the *visible state*: a sidebar
-//!   section + optional detail id within that section.
+//!   section, the tab within it for a section built out of tabs, and the
+//!   optional detail id open there.
 //! * [`NavHistory`] is a linear stack with a cursor; user-initiated
 //!   navigation truncates the forward portion (standard HTML5 History
 //!   API semantics).
@@ -32,27 +33,29 @@ use parking_lot::Mutex;
 use slint::{ComponentHandle, Weak};
 
 use crate::state::AppState;
+use crate::ui::my_library::{
+    MyLibraryTab, NAV_MY_LIBRARY, persist_tab, tab_from_index, tab_of_section,
+};
 use crate::{
-    AlbumDetail, AppWindow, ArtistDetail, Dialog, GenreDetail, Nav, NavEnterFrom, PlaylistDetail,
-    Queue,
+    AlbumDetail, AppWindow, ArtistDetail, Dialog, GenreDetail, MyLibrary, Nav, NavEnterFrom,
+    PlaylistDetail, Queue,
 };
 
 const HISTORY_CAP: usize = 24;
 
-// Sidebar indices (kept local — mirrors `melodia-ui/ui/layout/sidebar.slint` and the
-// constants in `callbacks/cross_tab_nav.rs`). Only the four sections that
-// carry a detail view need names.
-const NAV_ALBUMS: i32 = 4;
-const NAV_ARTISTS: i32 = 5;
-const NAV_GENRES: i32 = 6;
-const NAV_PLAYLISTS: i32 = 7;
-
 /// One snapshot of the visible state. `detail_id == None` means the
 /// section's grid/list is showing; `Some(id)` means the section's detail
 /// view is open on that id.
+///
+/// **A section alone stopped identifying a view when the five library pages became
+/// tabs of one.** `tab` is the second half: `MyLibrary.tab-idx` inside section 3,
+/// [`crate::ui::my_library::NO_TAB`] everywhere else. Without it a Songs → Albums move
+/// is a duplicate of the
+/// entry it followed, which `record`'s dedup drops on the floor.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct NavEntry {
     pub section: i32,
+    pub tab: i32,
     pub detail_id: Option<i64>,
 }
 
@@ -149,28 +152,35 @@ impl Default for NavHistory {
     }
 }
 
-/// Read the current visible detail id for `section` from the per-section
-/// Slint globals, or `None` if `section` has no detail concept or the
-/// section's detail is closed.
-fn current_detail_id_for_section(ui: &AppWindow, section: i32) -> Option<i64> {
-    match section {
-        NAV_ALBUMS => {
+/// Read the current visible detail id for `(section, tab)` from the per-view
+/// Slint globals, or `None` if that view has no detail concept or its detail
+/// is closed.
+///
+/// **The tab is what discriminates, not the id.** `seed_detail_from_settings` runs
+/// for all four detail views at boot whichever section is restored, so more than one
+/// `*Detail.*-id` can be `>= 0` at a time.
+fn current_detail_id_for(ui: &AppWindow, section: i32, tab: i32) -> Option<i64> {
+    if section != NAV_MY_LIBRARY {
+        return None;
+    }
+    match tab_from_index(&ui.global::<MyLibrary>(), tab) {
+        MyLibraryTab::Songs => None,
+        MyLibraryTab::Albums => {
             let id = i64::from(ui.global::<AlbumDetail>().get_album_id());
             (id >= 0).then_some(id)
         }
-        NAV_ARTISTS => {
+        MyLibraryTab::Artists => {
             let id = i64::from(ui.global::<ArtistDetail>().get_artist_id());
             (id >= 0).then_some(id)
         }
-        NAV_GENRES => {
+        MyLibraryTab::Genres => {
             let id = i64::from(ui.global::<GenreDetail>().get_genre_id());
             (id >= 0).then_some(id)
         }
-        NAV_PLAYLISTS => {
+        MyLibraryTab::Playlists => {
             let id = i64::from(ui.global::<PlaylistDetail>().get_playlist_id());
             (id >= 0).then_some(id)
         }
-        _ => None,
     }
 }
 
@@ -185,8 +195,9 @@ pub fn record(state: &AppState, entry: NavEntry) {
 /// globals by the time the callback fires.
 pub fn record_current(state: &AppState, ui: &AppWindow) {
     let section = ui.global::<Nav>().get_selected_index();
-    let detail_id = current_detail_id_for_section(ui, section);
-    state.nav_history.lock().record(NavEntry { section, detail_id });
+    let tab = tab_of_section(ui, section);
+    let detail_id = current_detail_id_for(ui, section, tab);
+    state.nav_history.lock().record(NavEntry { section, tab, detail_id });
 }
 
 /// Walk one step back or forward and drive the UI into the new state.
@@ -205,58 +216,74 @@ pub fn replay(state: &AppState, ui: &AppWindow, going_back: bool) {
     };
 
     let current_section = ui.global::<Nav>().get_selected_index();
-    let current_detail = current_detail_id_for_section(ui, current_section);
+    let current_tab = tab_of_section(ui, current_section);
+    let current_detail = current_detail_id_for(ui, current_section, current_tab);
     let direction = if going_back { NavEnterFrom::Left } else { NavEnterFrom::Right };
 
     state.nav_history.lock().set_suppress(true);
 
-    if target.section == current_section {
-        apply_same_section(state, ui, target.section, current_detail, target.detail_id, direction);
+    if target.section == current_section && target.tab == current_tab {
+        apply_same_view(
+            state,
+            ui,
+            target.section,
+            target.tab,
+            current_detail,
+            target.detail_id,
+            direction,
+        );
     } else {
-        // Cross-section: tear down the current detail (if any) first so
-        // its release/persist side-effects run, then flip section, then
-        // re-open the target detail (if any).
+        // The target is a different *view* — a My Library tab move, a section switch,
+        // or both. All of them tear down whatever the leaving view has open so its
+        // release/persist side-effects run, mark the direction, land on the target
+        // tab, and re-open that tab's detail. Only the section flip is conditional,
+        // and a same-section move is precisely the case where it would be a no-op
+        // followed by a redundant persist.
         if current_detail.is_some() {
-            invoke_close_detail(ui, current_section);
+            invoke_close_detail(ui, current_section, current_tab);
         }
         crate::ui::nav_transition::mark(ui, direction);
-        let nav = ui.global::<Nav>();
-        nav.set_selected_index(target.section);
-        nav.invoke_persist_selected_index(target.section);
+        // Before the section flip, so the page mounts on the tab it is meant to be on
+        // rather than on whichever one it was left at.
+        persist_tab(ui, target.tab);
+        if target.section != current_section {
+            let nav = ui.global::<Nav>();
+            nav.set_selected_index(target.section);
+            nav.invoke_persist_selected_index(target.section);
+        }
         if let Some(id) = target.detail_id {
-            spawn_open_detail(state, ui, target.section, id, direction);
+            spawn_open_detail(state, ui, target.section, target.tab, id, direction);
         }
     }
 
     state.nav_history.lock().set_suppress(false);
 }
 
-fn apply_same_section(
+fn apply_same_view(
     state: &AppState,
     ui: &AppWindow,
     section: i32,
+    tab: i32,
     current: Option<i64>,
     target: Option<i64>,
     direction: NavEnterFrom,
 ) {
     match (current, target) {
-        (Some(_), None) => invoke_close_detail(ui, section),
-        (_, Some(id)) => spawn_open_detail(state, ui, section, id, direction),
+        (Some(_), None) => invoke_close_detail(ui, section, tab),
+        (_, Some(id)) => spawn_open_detail(state, ui, section, tab, id, direction),
         (None, None) => crate::ui::nav_transition::mark(ui, direction),
     }
 }
 
-fn invoke_close_detail(ui: &AppWindow, section: i32) {
-    match section {
-        NAV_ALBUMS => ui.global::<AlbumDetail>().invoke_close_detail(),
-        NAV_ARTISTS => ui.global::<ArtistDetail>().invoke_close_detail(),
-        NAV_GENRES => ui.global::<GenreDetail>().invoke_close_detail(),
-        NAV_PLAYLISTS => ui.global::<PlaylistDetail>().invoke_close_detail(),
-        _ => {}
+fn invoke_close_detail(ui: &AppWindow, section: i32, tab: i32) {
+    if section != NAV_MY_LIBRARY {
+        return;
     }
+    let tab = tab_from_index(&ui.global::<MyLibrary>(), tab);
+    crate::ui::my_library::close_open_detail(ui, tab);
 }
 
-/// Schedule the section's `open_*` future and bail at the start if a
+/// Schedule the tab's `open_*` future and bail at the start if a
 /// newer replay has already advanced the cursor past `expected`.
 ///
 /// The bail closes the spam-click window where Mouse-4/Mouse-5 pressed
@@ -271,14 +298,19 @@ fn spawn_open_detail(
     state: &AppState,
     ui: &AppWindow,
     section: i32,
+    tab: i32,
     id: i64,
     direction: NavEnterFrom,
 ) {
+    if section != NAV_MY_LIBRARY {
+        return;
+    }
     let weak: Weak<AppWindow> = ui.as_weak();
     let s = state.clone();
-    let expected = NavEntry { section, detail_id: Some(id) };
-    match section {
-        NAV_ALBUMS => {
+    let expected = NavEntry { section, tab, detail_id: Some(id) };
+    match tab_from_index(&ui.global::<MyLibrary>(), tab) {
+        MyLibraryTab::Songs => {}
+        MyLibraryTab::Albums => {
             let Some(au) = state.ui_handles.albums.lock().clone() else { return };
             state.runtime.clone().spawn(async move {
                 if s.nav_history.lock().current() != Some(expected) {
@@ -291,7 +323,7 @@ fn spawn_open_detail(
                 }
             });
         }
-        NAV_ARTISTS => {
+        MyLibraryTab::Artists => {
             let Some(au) = state.ui_handles.artists.lock().clone() else { return };
             state.runtime.clone().spawn(async move {
                 if s.nav_history.lock().current() != Some(expected) {
@@ -304,7 +336,7 @@ fn spawn_open_detail(
                 }
             });
         }
-        NAV_GENRES => {
+        MyLibraryTab::Genres => {
             let Some(gu) = state.ui_handles.genres.lock().clone() else { return };
             state.runtime.clone().spawn(async move {
                 if s.nav_history.lock().current() != Some(expected) {
@@ -317,7 +349,7 @@ fn spawn_open_detail(
                 }
             });
         }
-        NAV_PLAYLISTS => {
+        MyLibraryTab::Playlists => {
             let Some(pu) = state.ui_handles.playlists.lock().clone() else { return };
             state.runtime.clone().spawn(async move {
                 if s.nav_history.lock().current() != Some(expected) {
@@ -330,7 +362,6 @@ fn spawn_open_detail(
                 }
             });
         }
-        _ => {}
     }
 }
 

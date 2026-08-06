@@ -12,11 +12,11 @@
 
 use std::collections::BTreeSet;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use crate::services::settings::SUPPORTED_LOCALES;
+use crate::test_support::{UI_DIR, slint_sources, strip_line_comments};
 
-const UI_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/melodia-ui/ui");
 const TRANSLATIONS_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/melodia-ui/translations");
 
 /// The gettext ids one source — a `.slint` file or a `.po` — declares.
@@ -25,56 +25,6 @@ struct Msgids {
     singular: BTreeSet<String>,
     /// `(msgid, msgid_plural)` for the `@tr("one" | "many" % n)` form.
     plural: BTreeSet<(String, String)>,
-}
-
-/// A directory that won't list is handed back for the same reason an unreadable
-/// file is: dropping a subtree silently lowers the msgid count and the pin goes
-/// quiet, and the source-count floor below is too loose to notice one folder.
-fn slint_sources(dir: &Path, out: &mut Vec<PathBuf>, unreadable: &mut Vec<PathBuf>) {
-    let Ok(entries) = fs::read_dir(dir) else {
-        unreadable.push(dir.to_path_buf());
-        return;
-    };
-    for entry in entries.flatten() {
-        let path = entry.path();
-        if path.is_dir() {
-            slint_sources(&path, out, unreadable);
-        } else if path.extension().is_some_and(|ext| ext == "slint") {
-            out.push(path);
-        }
-    }
-}
-
-/// Drops everything after an unquoted `//` on each line, keeping the line
-/// structure. A `@tr(` inside a comment is prose about the macro rather than a
-/// string to translate, and ten files have one. Most write it argument-less
-/// (`@tr(...)`), which reads as no literal anyway; `tab-bar.slint` and
-/// `overflow-menu-section.slint` are the two that spell an ellipsis placeholder
-/// (`@tr("…")`, `@tr("...")`), so without this they'd contribute a msgid no
-/// catalogue can have.
-fn strip_line_comments(src: &str) -> String {
-    let mut out = String::with_capacity(src.len());
-    for line in src.lines() {
-        let bytes = line.as_bytes();
-        let mut cut = line.len();
-        let mut in_string = false;
-        let mut i = 0;
-        while i < bytes.len() {
-            match bytes[i] {
-                b'\\' if in_string => i += 1,
-                b'"' => in_string = !in_string,
-                b'/' if !in_string && bytes.get(i + 1) == Some(&b'/') => {
-                    cut = i;
-                    break;
-                }
-                _ => {}
-            }
-            i += 1;
-        }
-        out.push_str(&line[..cut]);
-        out.push('\n');
-    }
-    out
 }
 
 /// Reads the double-quoted literal at or after `from`, skipping leading
@@ -172,10 +122,7 @@ fn collect_from_catalogue(po: &str) -> Msgids {
 /// readable ones declare. Unreadable paths are handed back rather than skipped:
 /// silently dropping one lowers the msgid count and the pin goes quiet.
 fn slint_tree_msgids() -> (Vec<PathBuf>, Vec<PathBuf>, Msgids) {
-    let mut sources = Vec::new();
-    let mut unreadable = Vec::new();
-    slint_sources(Path::new(UI_DIR), &mut sources, &mut unreadable);
-    sources.sort();
+    let (sources, mut unreadable) = slint_sources();
 
     let mut ids = Msgids::default();
     for path in &sources {

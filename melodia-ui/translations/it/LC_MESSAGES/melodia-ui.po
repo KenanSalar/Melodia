@@ -24,6 +24,11 @@ msgstr "Esplora"
 msgid "Favorites"
 msgstr "Preferiti"
 
+# The sidebar row, and the window title, for the page carrying the Songs / Albums /
+# Artists / Genres / Playlists tabs. Each tab reuses its own msgid below.
+msgid "My Library"
+msgstr "La mia libreria"
+
 msgid "Tracks"
 msgstr "Brani"
 
@@ -227,6 +232,15 @@ msgstr "Filtra brani…"
 
 msgid "Columns"
 msgstr "Colonne"
+
+msgid "Card view"
+msgstr "Vista a schede"
+
+msgid "List view"
+msgstr "Vista a elenco"
+
+msgid "Folder"
+msgstr "Cartella"
 
 # ---- Track table column headers ---------------------------------------------
 
@@ -814,6 +828,9 @@ msgstr "Ancora nessun ascolto"
 
 msgid "Play one of your favorites and it will show up here."
 msgstr "Ascolta uno dei tuoi preferiti e comparirà qui."
+
+msgid "Play something and it will show up here."
+msgstr "Ascolta qualcosa e comparirà qui."
 
 msgid "No favorite artists yet"
 msgstr "Ancora nessun artista preferito"

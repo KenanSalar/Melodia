@@ -8,9 +8,11 @@ use std::sync::atomic::Ordering;
 use slint::{ComponentHandle, SharedString, Weak};
 
 use super::breadcrumbs::{build_breadcrumbs, folder_basename, sort_browse_files};
+use super::cards::{self, BrowseViewMode};
 use super::models::{replace_breadcrumb_model, replace_folder_model, replace_rows_model};
 use super::selection::{apply_selection_to_rows, reset_selection};
 use super::{BrowseUi, to_slint_browse_track_row};
+use crate::entities::browse::BrowseFolder;
 use crate::error::AppResult;
 use crate::library;
 use crate::state::AppState;
@@ -56,17 +58,22 @@ pub async fn fetch_and_apply(
             return Ok(());
         }
 
-        let ui_folders: Vec<UiBrowseFolderRow> = folders
+        // One folder list feeding both models — the Slint rows for the list view
+        // and the cache the card view rebuilds from.
+        let browse_folders: Vec<BrowseFolder> = folders
             .iter()
             .filter(|f| f.is_enabled)
-            .map(|f| UiBrowseFolderRow {
-                name: SharedString::from(folder_basename(&f.path)),
-                path: SharedString::from(f.path.as_str()),
+            .map(|f| BrowseFolder {
+                name: folder_basename(&f.path),
+                path: f.path.clone(),
             })
             .collect();
-        let has_library_folders = !ui_folders.is_empty();
+        let has_library_folders = !browse_folders.is_empty();
+        let ui_folders = to_ui_folder_rows(&browse_folders);
 
         *browse_ui.last_files.lock() = Vec::new();
+        *browse_ui.last_folders.lock() = browse_folders;
+        let browse_ui = browse_ui.clone();
         let _ = weak.upgrade_in_event_loop(move |ui| {
             let g = ui.global::<Browse>();
             replace_folder_model(&g, ui_folders);
@@ -78,6 +85,7 @@ pub async fn fetch_and_apply(
             g.set_can_go_back(false);
             g.set_error_message(SharedString::from(""));
             g.set_loading(false);
+            cards::rebuild_cards(&ui, &browse_ui);
         });
         return Ok(());
     }
@@ -137,14 +145,30 @@ pub async fn fetch_and_apply(
             let mut files = res.files;
             sort_browse_files(&mut files, &sort_field, &sort_dir);
 
-            let ui_folders: Vec<UiBrowseFolderRow> = res
-                .folders
-                .iter()
-                .map(|f| UiBrowseFolderRow {
-                    name: SharedString::from(f.name.as_str()),
-                    path: SharedString::from(f.path.as_str()),
-                })
-                .collect();
+            // The card tier, warmed **after** the sort — unlike the row-tier
+            // prewarm above, this one is capped at a screenful, so the prefix
+            // that survives the cap has to be the prefix that paints. Awaited
+            // before the rows land (the Albums prewarm-then-write ordering), so
+            // the first screenful of cards is a cache hit. `warm_card_tier`
+            // owns the "does this tier still hold what it decoded" re-check; a
+            // `JoinError` is the same "we don't know" as a handed-back prewarm.
+            let warmed = if browse_ui.view_mode() == BrowseViewMode::Card {
+                let unique = cards::first_screenful_paths(&files);
+                let bu = browse_ui.clone();
+                tokio::task::spawn_blocking(move || bu.warm_card_tier(&unique))
+                    .await
+                    .unwrap_or(false)
+            } else {
+                false
+            };
+
+            let token = browse_ui.fetch_token.load(Ordering::Relaxed);
+            if token != my_token {
+                return Ok(());
+            }
+
+            let ui_folders = to_ui_folder_rows(&res.folders);
+            let browse_folders = res.folders;
             let breadcrumbs = build_breadcrumbs(&res.path, &library_folders);
             let can_go_back = !browse_ui.history.lock().is_empty();
             let current_path = res.path.clone();
@@ -171,10 +195,23 @@ pub async fn fetch_and_apply(
                 g.set_error_message(SharedString::from(""));
                 g.set_loading(false);
                 *browse_ui.last_files.lock() = files;
+                *browse_ui.last_folders.lock() = browse_folders;
+                cards::rebuild_cards(&ui, &browse_ui);
+                // Announce only if the prewarm still holds its buffers *and* the
+                // view is still the surface it warmed for. Both shadows are
+                // written on this thread, so this re-check covers anything that
+                // landed after `warm_card_tier` made its own.
+                if warmed
+                    && browse_ui.section_active()
+                    && browse_ui.view_mode() == BrowseViewMode::Card
+                {
+                    g.set_covers_generation(g.get_covers_generation() + 1);
+                }
             });
         }
         Err(e) => {
             *browse_ui.last_files.lock() = Vec::new();
+            *browse_ui.last_folders.lock() = Vec::new();
             let msg = e.to_string();
             let can_go_back = !browse_ui.history.lock().is_empty();
             let path_for_ui = path;
@@ -182,6 +219,7 @@ pub async fn fetch_and_apply(
             // doesn't need to borrow `library_folders` across the
             // 'static event-loop boundary.
             let breadcrumbs = build_breadcrumbs(&path_for_ui, &library_folders);
+            let browse_ui = browse_ui.clone();
             let _ = weak.upgrade_in_event_loop(move |ui| {
                 let g = ui.global::<Browse>();
                 replace_folder_model(&g, Vec::new());
@@ -195,6 +233,7 @@ pub async fn fetch_and_apply(
                 g.set_can_go_back(can_go_back);
                 g.set_error_message(SharedString::from(msg));
                 g.set_loading(false);
+                cards::rebuild_cards(&ui, &browse_ui);
             });
         }
     }
@@ -202,11 +241,29 @@ pub async fn fetch_and_apply(
     Ok(())
 }
 
+/// Project the cached folder list into the Slint rows the list view draws.
+/// Both fetch arms build their `Vec<BrowseFolder>` first and derive these from
+/// it, so the folder list has one source and the card view's cache can't drift
+/// from what the list is showing.
+fn to_ui_folder_rows(folders: &[BrowseFolder]) -> Vec<UiBrowseFolderRow> {
+    folders
+        .iter()
+        .map(|f| UiBrowseFolderRow {
+            name: SharedString::from(f.name.as_str()),
+            path: SharedString::from(f.path.as_str()),
+        })
+        .collect()
+}
+
 /// Re-sort the cached `last_files` to the current `BrowseUi` sort state
 /// and rebuild the `Browse.rows` model in place. No DB hit. Runs on the
 /// UI thread (called directly from the `request-sort` callback).
 /// Selection is preserved — track ids are stable across a re-sort, only
 /// the row order changes.
+///
+/// The card model needs no write here: `request-sort` comes from a `TrackList`
+/// column header, which only exists while the list is mounted, and the toggle
+/// rebuilds the cards from this same re-ordered `last_files`.
 pub fn resort_and_apply(ui: &AppWindow, browse_ui: &Arc<BrowseUi>) {
     let sort_field = browse_ui.sort_field();
     let sort_dir = browse_ui.sort_dir();

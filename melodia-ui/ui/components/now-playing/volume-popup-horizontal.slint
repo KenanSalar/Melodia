@@ -4,12 +4,13 @@ import { PopupHighlight } from "../../globals/shell.slint";
 import { IconButton } from "../icon-button.slint";
 import { PopupSurface } from "../popup-surface.slint";
 import { SliderTrack } from "../slider-track.slint";
+import { Tooltip, TooltipSide } from "../tooltip.slint";
 import { FocusLossWatcher } from "../focus-loss-watcher.slint";
 
 // `VolumePopup` rotated 90°, for the rectangle miniplayer, whose wide-short
 // window clips the vertical one. Same `SliderTrack` in the same `PopupSurface`
-// chrome, laid along the bottom with the percentage badge floating above the
-// thumb.
+// chrome, laid along the bottom with the shared `Tooltip` pill reading the
+// percentage out above the thumb.
 //
 // It flies out to the *left* of the trigger disc, into the title area, centred
 // on it: that miniplayer is always wide enough, and vertical room is the whole
@@ -135,24 +136,25 @@ export component VolumePopupHorizontal inherits Rectangle {
             }
         }
 
-        // Reads `SliderTrack.thumb-cx` straight, so it follows the live thumb
-        // through a drag preview without re-deriving the centring.
+        // A zero-size anchor on the chrome's top edge, level with the thumb:
+        // `Tooltip` positions itself against a host *box*, and what this pill
+        // hangs off is a *point*. Reads `SliderTrack.thumb-cx` straight, so it
+        // follows the live thumb through a drag preview.
         Rectangle {
-            width: 42px;
-            height: 22px;
-            x: chrome.x + slider.x + slider.thumb-cx - self.width / 2;
-            y: chrome.y - 10px - self.height;
-            background: Theme.surface2;
-            border-radius: Theme.radius-sm;
-            opacity: slider.dragging || slider.has-hover ? 1.0 : 0.0;
-            animate opacity { duration: 150ms; easing: cubic-bezier(0.34, 1.56, 0.64, 1); }
+            x: chrome.x + slider.x + slider.thumb-cx;
+            y: chrome.y;
+            width: 0px;
+            height: 0px;
 
-            Text {
+            Tooltip {
                 text: round(Player.vm.volume) + "%";
-                color: Theme.text;
-                font-size: Theme.font-size-sm;
-                horizontal-alignment: center;
-                vertical-alignment: center;
+                host-width: 0px;
+                host-height: 0px;
+                side: TooltipSide.above;
+                gap: 10px;
+                // No reveal delay — the readout has to be up on the frame the
+                // drag starts. Same hook the keyboard HUD above takes.
+                force-shown: slider.dragging || slider.has-hover;
             }
         }
     }

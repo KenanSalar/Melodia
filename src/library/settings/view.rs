@@ -78,6 +78,15 @@ pub fn set_browse_path(state: &AppState, path: Option<String>) -> Result<(), App
     })
 }
 
+/// Persist the Browse view's list-versus-cards presentation. Same no-kick
+/// shape as [`set_browse_path`]: the toggle callback has already written
+/// `Browse.view-mode` and rebuilt the models by the time this runs.
+pub fn set_browse_view_mode(state: &AppState, mode: i32) -> Result<(), AppError> {
+    services::view_state::mutate_view_state(&state.paths, move |s| {
+        s.browse_view_mode = mode;
+    })
+}
+
 /// Persist the active sidebar tab so the next launch reopens on the same
 /// section. Indices follow the `Nav` global comment in `melodia-ui/ui/globals/nav.slint`.
 /// Out-of-range writes (negative / > 9) are clamped to the valid range so a
@@ -143,6 +152,22 @@ pub fn set_settings_tab(state: &AppState, tab: i32) -> Result<(), AppError> {
 pub fn set_favorites_tab(state: &AppState, tab: i32) -> Result<(), AppError> {
     services::view_state::mutate_view_state(&state.paths, move |s| {
         s.favorites_tab = tab;
+    })
+}
+
+/// Persist the Recently-Played page's active tab. Same contract again —
+/// `RecentlyPlayed.tab-idx` is two-way bound to its tab bar.
+pub fn set_recently_played_tab(state: &AppState, tab: i32) -> Result<(), AppError> {
+    services::view_state::mutate_view_state(&state.paths, move |s| {
+        s.recently_played_tab = tab;
+    })
+}
+
+/// Persist the My Library page's active tab. Same contract again —
+/// `MyLibrary.tab-idx` is two-way bound to its tab bar.
+pub fn set_my_library_tab(state: &AppState, tab: i32) -> Result<(), AppError> {
+    services::view_state::mutate_view_state(&state.paths, move |s| {
+        s.my_library_tab = tab;
     })
 }
 

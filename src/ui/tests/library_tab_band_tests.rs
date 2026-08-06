@@ -1,0 +1,771 @@
+//! Source-level pins on `melodia-ui/ui/components/hero/library-tab-band.slint`.
+//!
+//! The My Library page's band. Six of the pins below are the header-row fixes it
+//! ports verbatim from `MosaicTabHero` — each one paid for once, invisible in
+//! review, and exactly what a copy loses — so they are worded the same way as
+//! their twins in `mosaic_tab_hero_tests.rs`. The rest are this band's own: five
+//! about the morph, because a band that changes height, colour and contents is a
+//! band with five new ways to be quietly wrong, and three about the **seam** with
+//! its mount sheet, because a band nobody drives passes all eight of the others.
+//!
+//! They live here rather than under a host for the `tab_bar_tests.rs` reason —
+//! no Rust module owns the file.
+
+const BAND: &str =
+    include_str!("../../../melodia-ui/ui/components/hero/library-tab-band.slint");
+/// The band's only mount. Three of the pins below are about the seam rather than
+/// the component, and a band nobody feeds passes every check on its own source.
+const SHEET: &str = include_str!("../../../melodia-ui/ui/views/my-library-view.slint");
+
+/// The file with its comment lines dropped, so prose about a fix can neither
+/// satisfy a pin nor bound a region early. The `placeholder_tests.rs` helper.
+fn code() -> String {
+    BAND.lines()
+        .filter(|line| !line.trim_start().starts_with("//"))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// The value of a `name:` binding, up to its terminating `;`.
+fn binding(src: &str, name: &str) -> String {
+    src.split_once(name)
+        .and_then(|(_, rest)| rest.split_once(';'))
+        .map_or(String::new(), |(value, _)| value.to_owned())
+}
+
+/// A mirrored width only reaches the bar through `changed width`, and `changed`
+/// doesn't fire when the first layout settles directly on the final value —
+/// which is every window opened at its size. Without the mount timer the seed
+/// is never corrected, and a roomy window draws icon-only tabs until something
+/// resizes it.
+///
+/// The mirror is the band's; **what it is seeded to** is
+/// `TabSearchHeader.row-floor`, pinned once for all three hosts by
+/// `tab_search_header_tests::every_tabbed_page_mounts_the_shared_row`.
+#[test]
+fn the_page_width_mirror_has_a_mount_seed() {
+    assert!(
+        BAND.contains("changed width => { self.page-w = self.width; }"),
+        "the band must mirror its width imperatively — a live `root.width` read feeding a \
+         child's size re-enters layout"
+    );
+
+    // Anchored on the *anonymous* `Timer`, since the band has a second one now — the
+    // named `collapse :=` that defers the hero teardown.
+    let timer = BAND
+        .split_once("\n    Timer {")
+        .and_then(|(_, rest)| rest.split_once("\n    }"))
+        .map_or("", |(body, _)| body);
+    assert!(
+        timer.contains("root.page-w = root.width"),
+        "the band's mount Timer must re-run the `page-w` mirror — `changed` never fires for a \
+         window born at its final size"
+    );
+}
+
+/// Unlike the mosaic band, this bar sits on two different surfaces: `Theme.base`
+/// idle, the entity's solved blur with a detail open. So each of its four brushes
+/// is a *pair*, and dropping either half is a bug that only shows in one state —
+/// a theme token left on the hero arm washes out over a cover, and a hero tier
+/// left on the idle arm paints the previous entity's colours onto a flat pane.
+///
+/// `active-color` is the one this exists for: it drives the selected label, its
+/// FILL=1 icon and the underline from one input, so an omission is three
+/// surfaces at once, and `Theme.accent` carries no contrast floor against a blur
+/// (Latte's mauve lands near 1.7:1, under even the 3:1 non-text bar) where
+/// `HeroBackdrop.chrome` is solved to clear it.
+///
+/// Asserted as "reads *some* `HeroBackdrop` tier" rather than pinning which one:
+/// the tier a brush should take is a design call that may move, but reaching for
+/// `Theme.*` on the hero side is a bug at any tier.
+#[test]
+fn every_tab_bar_brush_crosses_from_a_theme_token_to_a_backdrop_tier() {
+    let code = code();
+    let hero_state = code
+        .split_once("hero when root.detail-open: {")
+        .and_then(|(_, rest)| rest.split_once("in-out {"))
+        .map_or(String::new(), |(body, _)| body.to_owned());
+    assert!(!hero_state.is_empty(), "the band no longer declares its `hero` state");
+
+    for (prop, input, mirror) in [
+        ("label-color", "label-brush", "hero-label"),
+        ("active-color", "active-brush", "hero-active"),
+        ("hover-fill", "hover-brush", "hero-hover"),
+        ("divider-color", "divider-brush", "hero-divider"),
+    ] {
+        let idle = binding(&code, &format!("property <brush> {input}:"));
+        assert!(
+            !idle.is_empty(),
+            "the band no longer declares `{input}` — the bar would fall back to the component's \
+             `Theme.*` default on both surfaces"
+        );
+        assert!(
+            idle.contains("Theme."),
+            "`{input}` must default to a `Theme.*` token — that default *is* the idle arm, the \
+             band being a flat pane there, and a solved hero tier is the previous entity's colour"
+        );
+        assert!(
+            hero_state.contains(&format!("{input}: root.{mirror};")),
+            "the `hero` state must cross `{input}` to `{mirror}` — a pair with no hero arm leaves \
+             the bar painting theme values over a cover"
+        );
+        assert!(
+            binding(&code, &format!("property <brush> {mirror}:")).contains("HeroBackdrop."),
+            "`{mirror}` must take a `HeroBackdrop` tier — a theme value answers a question about \
+             the *page* background, and under a hero there isn't one"
+        );
+        assert!(
+            code.contains(&format!("{prop}: root.{input};")),
+            "the band's TabBar must pass `{prop}` the `{input}` pair rather than a token directly"
+        );
+    }
+}
+
+/// **The palette crosses on a state transition, and nothing else will do.**
+///
+/// The hero half of every pair arrives late — `HeroBackdrop` is solved from the
+/// measurement the artwork decode takes off the blur, so it lands well into the
+/// morph. An animated *binding* restarts whenever a dependency is marked dirty
+/// rather than when its value changes, so four plain `animate` blocks were torn
+/// down and re-based at that moment and finished a full `dur-spatial` after the
+/// decode, long past the height they were meant to move with. A transition's
+/// start time is the **state change** (`change_time`, the optional start
+/// `set_animated_binding` carries), so the crossing begins and ends with the
+/// morph however often the target moves underneath it.
+///
+/// The mirrors are the other half: with the emphasized curve spending most of
+/// its travel in the first quarter, a decode landing mid-morph would otherwise be
+/// adopted in a single frame. Easing them is what turns that step into a move,
+/// and it is also the only thing left covering a decode that lands *after* the
+/// morph, where the transition's own progress is already 1.
+#[test]
+fn the_palette_crossing_is_anchored_to_the_morph() {
+    let code = code();
+    let declarations = code
+        .split_once("states [")
+        .map_or(String::new(), |(before, _)| before.to_owned());
+    assert!(!declarations.is_empty(), "the band no longer declares a `states` block");
+
+    for input in ["label-brush", "active-brush", "hover-brush", "divider-brush"] {
+        assert!(
+            !declarations.contains(&format!("animate {input}")),
+            "`{input}` must cross inside the state's `in-out` transition, never on an `animate` of \
+             its own — a binding animation restarts on every dependency tick, and the hero tier it \
+             reads is written from a decode that lands mid-morph"
+        );
+    }
+
+    let transition = code
+        .split_once("in-out {")
+        .and_then(|(_, rest)| rest.split_once('}'))
+        .map_or(String::new(), |(body, _)| body.to_owned());
+    for input in ["label-brush", "active-brush", "hover-brush", "divider-brush"] {
+        assert!(
+            transition.contains(input),
+            "the `hero` state's transition must animate `{input}` — left out, that brush steps on \
+             the frame the detail opens while its three siblings cross"
+        );
+    }
+    assert!(
+        transition.contains("duration: Theme.dur-spatial;"),
+        "the crossing must run the morph's own duration — it is the same gesture, and a second \
+         number here is one that can drift from `hero-t` and the collapse timer"
+    );
+
+    assert!(
+        code.contains("animate hero-label, hero-active, hero-hover, hero-divider {"),
+        "the four hero mirrors must ease together — unanimated they hand the transition a step, \
+         which lands whole once the morph is past its first quarter and entirely once it is over"
+    );
+}
+
+/// The band forwards everything the shared header publishes, under the names its
+/// mount sheet already reads.
+///
+/// The row itself is pinned by `tab_search_header_tests`; what only this file can
+/// check is that the forwards exist, because a band that mounts the header and
+/// drops them compiles, paints correctly, and silently loses the tab slide's
+/// direction and every compact tooltip. Two-way aliases rather than one-way
+/// bindings, so nothing here can be orphaned by a write.
+#[test]
+fn the_band_forwards_what_the_shared_row_publishes() {
+    for prop in ["tab-enter-from", "tab-anim-armed", "tip-w", "tip-h", "tip-label", "tip-visible"]
+    {
+        assert!(
+            BAND.contains(&format!("{prop} <=> header.{prop};")),
+            "the band must re-publish `{prop}` off the shared header — its sheet reads that name"
+        );
+    }
+    // The two positional anchors can't be plain aliases: they are relative to the
+    // header, and the sheet's frame is relative to the band.
+    for prop in ["tip-x", "tip-y"] {
+        assert!(
+            binding(BAND, &format!("out property <length> {prop}:"))
+                .contains(&format!("header.{prop}")),
+            "the band's `{prop}` must offset the header's own by their `absolute-position` delta"
+        );
+    }
+}
+
+/// **The one that costs most to get wrong.** Slint reports a component root's
+/// bound dimension as both `min` and `max`, so an animated `height` here would
+/// put the *window's* own minimum height on the morph: dragging the bottom edge
+/// inward chases a floor that is itself still easing, and it stutters. That is
+/// `tab-bar.slint`'s width bug, one axis over, and it looks identical in source.
+///
+/// The split buys that freedom by letting the element be drawn shorter than it
+/// asked for, so the clip is not decoration either: on the shrink leg the hero
+/// contents are still full height while the band is already compact, and without
+/// it they paint out of the band and into the body underneath.
+#[test]
+fn the_band_negotiates_its_height() {
+    let code = code();
+
+    for constraint in [
+        "min-height: root.compact-h;",
+        "preferred-height: root.compact-h + (root.hero-h - root.compact-h) * root.hero-t;",
+        "max-height: root.hero-h;",
+    ] {
+        assert!(
+            code.contains(constraint),
+            "the band's root must spell `{constraint}` — the three-way split is what keeps an \
+             animated height off the window's own resize floor"
+        );
+    }
+    assert!(
+        !code.contains("\n    height:"),
+        "the band's root must not bind `height` — Slint reports a bound root dimension as both \
+         `min` and `max`, so the window's minimum height would ease with the morph"
+    );
+    assert!(
+        code.contains("\n    clip: true;"),
+        "the band's root must clip — the min/preferred/max split lets it be drawn shorter than it \
+         asked for, and the hero contents would paint into the body below"
+    );
+}
+
+/// `hero-t` is **seeded** by its binding and **owned** by the `changed` handler.
+/// Both halves are load-bearing and each fails differently. An animated *binding*
+/// restarts whenever a dependency is marked dirty rather than when its value
+/// changes, so left bound the morph would re-base every time a detail id moved
+/// under it. Dropping the seed and writing from a mount `Timer` instead is the
+/// other failure: a page re-entered with a detail already open would grow into
+/// the hero on every arrival, because the first evaluation no longer lands in
+/// `NotAnimating`.
+#[test]
+fn the_morph_progress_is_seeded_by_its_binding_and_written_by_its_handler() {
+    assert!(
+        BAND.contains("property <float> hero-t: root.detail-open ? 1.0 : 0.0;"),
+        "`hero-t` must keep its binding as the seed — without it the first evaluation animates and \
+         a page entered on an open detail grows into the hero every time"
+    );
+
+    let handler = BAND
+        .split_once("changed detail-open =>")
+        .and_then(|(_, rest)| rest.split_once('}'))
+        .map_or("", |(body, _)| body);
+    assert!(
+        handler.contains("self.hero-t ="),
+        "`hero-t` must be written from `changed detail-open` — an animated binding restarts on \
+         dependency dirtiness, not on a value change"
+    );
+}
+
+/// **The column that mounts `HeroChipStrip` carries no `if`, and every other piece
+/// of the hero mounts on `detail-open || hero-t > 0`.** Two failures meet here, and
+/// the pin has to hold both.
+///
+/// The morph is *written*, so it genuinely starts at 0, and a branch gated on
+/// `detail-open` therefore mounted a frame before one gated on `hero-t > 0`: the
+/// title block spent that frame laid out as its row's only child, hard left under
+/// the count line, then jumped a tile's width right. `hero-shown` is true at both
+/// ends, so the tile and the text arrive and leave together.
+///
+/// The strip is the part that may not be dropped **at all**. A dropped Slint
+/// repeater instance keeps its memory alive for weak refs, so a `ChangeTracker`
+/// inside it stays registered while `ChangeTracker::evaluate` upgrades its weak
+/// handle with an `unwrap`. `MetaChipStrip`'s `changed watched-w` watches a
+/// **layout** property, which the surviving parent re-dirties on every frame of a
+/// morph — the easing back slot moves the column's width — so the tracker is queued
+/// on the very frame the ease ends. Dropping it there panics, whoever writes the
+/// condition: an animated predicate, a `changed` handler and a timer's `triggered`
+/// all lose the same race. Hence a permanent mount and a brush fade.
+/// See `.claude/rules/slint-pitfalls.md`.
+#[test]
+fn the_chip_strip_outlives_every_morph_it_is_painted_in() {
+    let code = code();
+
+    assert!(
+        code.contains("property <bool> hero-shown: root.detail-open || root.hero-t > 0;"),
+        "the hero's gate must be the detail *or* a running morph. On `detail-open` alone it leaves \
+         on the frame the id clears, while the tile beside it fades for the full duration; on \
+         `hero-t > 0` alone it arrives a frame late, laid out where the tile is not yet"
+    );
+
+    let lines: Vec<&str> = code.lines().collect();
+    let mount = lines.iter().position(|line| line.contains("HeroChipStrip {"));
+    assert!(mount.is_some(), "the band no longer mounts `HeroChipStrip`");
+    let mount = mount.unwrap_or_default();
+
+    // The strip's real ancestors, by brace depth rather than by indent — the band has
+    // `if`-gated *siblings* at shallower depths (the artwork column) and an indent walk
+    // reads those as parents. Net per line, so the `"\u{200e}"` escapes balance out.
+    let mut ancestors: Vec<&str> = Vec::new();
+    for line in &lines[..mount] {
+        let opens = line.matches('{').count();
+        let closes = line.matches('}').count();
+        for _ in closes..opens {
+            ancestors.push(line.trim());
+        }
+        for _ in opens..closes {
+            ancestors.pop();
+        }
+    }
+    let enclosing = ancestors.iter().find(|line| line.starts_with("if "));
+    assert!(
+        enclosing.is_none(),
+        "no `if` may enclose `HeroChipStrip` — found `{}`. The strip's `changed watched-w` tracker \
+         is queued by every frame of the morph, so whatever drops the branch drops it with a live \
+         entry in `run_change_handlers`' taken list and the next evaluation unwraps a dead weak \
+         handle",
+        enclosing.map_or("", |line| line)
+    );
+}
+
+/// One hero, one clock — and **two fades, because one of them may not cost a
+/// layer.** The text half is `if`-gated and takes `opacity`, which is free at its
+/// resting `1.0` (`Opacity::need_layer` bails before it counts children) and gone
+/// entirely in idle. The chip strip is mounted for the life of the band, where an
+/// `opacity` under 1 would allocate and blend an offscreen layer on every frame
+/// forever, so it fades through its brushes instead. Losing either leaves that half
+/// of the hero snapping while the other half fades.
+#[test]
+fn the_hero_fades_on_the_morph_at_both_ends() {
+    let code = code();
+    let fades = code
+        .split("if root.hero-shown:")
+        .skip(1)
+        .filter(|branch| branch.contains("opacity: root.hero-t;"))
+        .count();
+    assert_eq!(
+        fades, 2,
+        "the artwork tile and the title block fade on `hero-t` itself — it is the morph's only \
+         clock, so a second animation would need keeping in step and the reversal would stop \
+         being free"
+    );
+
+    // The third fade is the back disc's, and it is a *bias* off that same clock rather
+    // than the clock — see the band. Whitespace-normalized: how the call wraps is
+    // formatting, not contract.
+    let flat = code.split_whitespace().collect::<Vec<_>>().join(" ");
+    assert!(
+        flat.contains("opacity: clamp(root.hero-t * 2.0, 0.0, 1.0);"),
+        "the back disc's alpha must lead the morph rather than track it. It is the one piece of \
+         the hero whose size rides `hero-t` too, so a plain `opacity: root.hero-t` multiplies \
+         into the scale and its presence goes as the square — half size at half alpha is a \
+         quarter of a button, which is an entry that animates but reads as one that pops"
+    );
+
+    assert!(
+        code.contains("HeroChipStrip { fade: root.hero-t; }"),
+        "the chip strip fades through its own `fade` input, on the same clock — it cannot take an \
+         `opacity` and it cannot be unmounted, so this is the only way it leaves with the title \
+         above it"
+    );
+    let strip = include_str!("../../../melodia-ui/ui/components/hero-chip-strip.slint");
+    assert!(
+        strip.contains("chip-fill: HeroBackdrop.chip-fill-at(root.fade);")
+            && strip.contains("chip-label-color: HeroBackdrop.chrome.with-alpha(root.fade);"),
+        "both of the strip's brushes must carry the fade, and the pill must go through the \
+         global's own function — `with-alpha` *sets* alpha rather than multiplying it, so a local \
+         spelling would have to restate the tier's weight"
+    );
+}
+
+/// The hero's teardown rides the *end* of the collapse. Every fact the band paints
+/// is a ternary over the detail id at the mount sheet, so releasing the cover, the
+/// blur pair, the shared backdrop tiers and the chip row when that id clears left
+/// the band spending the whole morph collapsing a fallback glyph over a reset
+/// gradient — an exit *from* a placeholder. The `Dialog.closed()` shape, for the
+/// same reason it has it.
+#[test]
+fn the_collapse_defers_the_hero_teardown() {
+    let timer = BAND
+        .split_once("collapse := Timer {")
+        .and_then(|(_, rest)| rest.split_once("\n    }"))
+        .map_or("", |(body, _)| body);
+    assert!(!timer.is_empty(), "the band no longer declares its `collapse` timer");
+
+    assert!(
+        timer.contains("interval: Theme.dur-spatial;"),
+        "the collapse timer must run the morph's own duration — a shorter one tears the hero down \
+         mid-fade, a longer one holds its buffers past the point anyone can see them"
+    );
+    assert!(
+        timer.contains("root.hero-collapsed();"),
+        "the collapse timer is what fires `hero-collapsed` — nothing else knows the morph is done"
+    );
+    assert!(
+        timer.contains("running: false;"),
+        "the collapse timer must start idle: a page mounted with no detail never transitioned into \
+         one and has nothing to hand back"
+    );
+
+    let handler = BAND
+        .split_once("changed detail-open =>")
+        .and_then(|(_, rest)| rest.split_once("\n    }"))
+        .map_or("", |(body, _)| body);
+    assert!(
+        handler.contains("collapse.running = !self.detail-open;"),
+        "the same edge that drives the morph must arm *and* cancel the timer, so a re-drill inside \
+         the window can't have the previous hero's teardown land on the new one"
+    );
+
+    assert!(
+        SHEET.contains("hero-collapsed => { MyLibrary.hero-collapsed(); }"),
+        "the sheet must forward `hero-collapsed` — unforwarded, the band collapses correctly and \
+         the hero it was painting is never released"
+    );
+}
+
+/// The back slot's trailing gap is **its own width**, not the row's `spacing`. As
+/// layout spacing the row loses a whole `pad-md` on the frame the slot unmounts,
+/// and on the way out that frame is the last one — after the height and every
+/// brush have settled — so it reads as the tab bar jumping left. Opening, the same
+/// step lands on frame one under 400 ms of movement, which is why it only ever
+/// showed one way.
+#[test]
+fn the_back_slot_carries_its_own_gap() {
+    let code = code();
+
+    assert!(
+        binding(&code, "property <length> back-slot-w:").contains("Theme.pad-md"),
+        "the back slot must fold its trailing gap into its own eased width"
+    );
+    assert!(
+        !code.contains("back-slot-gap"),
+        "the stepped `back-slot-gap` must be gone — it *is* the jump, and a width that folds the \
+         gap in makes the whole inset continuous"
+    );
+    // The slot has to be *handed* to the row as `lead-w` as well as drawn into it,
+    // or the bar budgets against a width the back button is already occupying and
+    // the tabs draw under it. The row's own half — that it hands out no spacing, so
+    // this width can reach zero — is `tab_search_header_tests`'.
+    assert!(
+        code.contains("lead-w: root.back-slot-w;"),
+        "the band must hand the slot's width to the header as `lead-w`, or the bar's budget \
+         double-counts the space the back button is standing in"
+    );
+}
+
+/// **The disc inside that slot is a uniform scale of its settled self**, and
+/// pinning it at full size is the mistake that looks like a rounding error and
+/// isn't. The slot eases to `pill-h + pad-sm + pad-md` while the disc wants
+/// `pill-h` of it, so a fixed `diameter` does not fit until `hero-t` passes
+/// `32 / 52` — and the slot's `clip` spends the first ~60 % of every entry cutting
+/// a straight edge down the middle of a circle. Scaling both dimensions by the
+/// same factor the slot uses keeps the disc's share of the slot, and of the
+/// trailing gap, constant at every frame, so nothing is ever clipped at any
+/// progress or for any value of the three tokens.
+///
+/// Fading it instead is *not* the same fix and shouldn't be mistaken for one: it
+/// would only hide the frames where the geometry is wrong, and it leaves the disc
+/// exceeding its slot for anyone who changes a token or lengthens the morph.
+#[test]
+fn the_back_disc_scales_with_the_slot_it_sits_in() {
+    let code = code();
+    let slot = code
+        .split_once("if root.hero-shown: Rectangle {")
+        .and_then(|(_, rest)| rest.split_once("clicked =>"))
+        .map_or("", |(body, _)| body);
+    assert!(!slot.is_empty(), "the band no longer mounts its back slot");
+
+    assert!(
+        slot.contains("diameter: root.pill-h * root.hero-t;"),
+        "the disc's diameter must scale on the morph — pinned at `pill-h` it is wider than the \
+         slot for the first ~60 % of every entry, and the slot clips it into a half circle"
+    );
+    assert!(
+        slot.contains("icon-size: 20px * root.hero-t;"),
+        "the glyph must take the same factor as the disc around it — scaling only the disc \
+         overruns it with a full-size arrow, which is the same clip one element in"
+    );
+    assert!(
+        slot.contains("clip: true;"),
+        "the slot keeps its clip: it is what stops an incompressible disc drawing over the first \
+         tab, and the scale above is what stops it ever having to"
+    );
+}
+
+/// **The count line and the pill row take opposite anchors, and that is the
+/// point.** A detail's pills belong on whichever floor is current, so they ride
+/// `root.height` and follow the morph. The count sentence belongs where it
+/// already sits: anchored to the *compact* floor it holds still and leaves
+/// sideways, where riding the height dragged it down out of the page and shoved
+/// it back in — the movement this replaced.
+///
+/// Both ends of the slide read `hero-t`, so the travel is the morph's own clock
+/// and the reversal is free; the alpha is a bias off the same source, folded into
+/// the brush rather than spent on an `opacity` layer that would stand for the
+/// whole length of every detail.
+#[test]
+fn the_count_line_slides_out_of_a_fixed_anchor() {
+    let code = code();
+    let count = code
+        .split_once("\n    Text {")
+        .and_then(|(_, rest)| rest.split_once("\n    }"))
+        .map_or(String::new(), |(body, _)| body.to_owned());
+    assert!(
+        count.contains("root.count-text"),
+        "the band's first root-level `Text` must be the count line — the pins below all bound \
+         against it"
+    );
+    assert_eq!(
+        code.matches("root.count-text").count(),
+        1,
+        "the count must be drawn once — a second reader is a second anchor to keep in step"
+    );
+
+    assert!(
+        count.contains("y: root.compact-h - Theme.pad-lg - root.pill-h;"),
+        "the count must anchor to the *compact* band's floor — off `root.height` it rides the \
+         morph, which is the vertical travel it exists to not have"
+    );
+    assert!(
+        count.contains("x: Theme.pad-lg - root.count-slide * root.hero-t;"),
+        "the count must leave sideways off `hero-t` — a slide on a clock of its own drifts from \
+         the band it is leaving"
+    );
+    assert!(
+        count.contains("color: Theme.text.with-alpha(clamp(1.0 - root.hero-t * 2.0, 0.0, 1.0));"),
+        "the count must fade by alpha inside its brush, biased ahead of the morph so the artwork \
+         tile crossing behind it is never legible through the sentence"
+    );
+    assert!(
+        !count.contains("opacity:"),
+        "the count must not use `opacity` — it settles at 0 with a detail open, so the layer would \
+         stand for the whole length of every detail rather than for the morph"
+    );
+    assert!(
+        count.contains("width: root.page-w - 2 * Theme.pad-lg - pills.width"),
+        "the count's width must be bound and must reserve the pill row — a `Text` in a non-layout \
+         parent reports the untruncated string as its preferred width, so elide alone lets a long \
+         count paint straight through the pills"
+    );
+
+    let pill_row = code
+        .split_once("pills := HorizontalLayout {")
+        .and_then(|(before, _)| before.rsplit_once("\n    HorizontalLayout {"))
+        .map_or(String::new(), |(_, slot)| slot.to_owned());
+    assert!(
+        !pill_row.is_empty(),
+        "the pill slot must stay a root-level `HorizontalLayout` wrapping `pills` — a bare \
+         Rectangle reports 0×0 over the `if`-conditional rows the host hands down"
+    );
+    assert!(
+        pill_row.contains("y: root.height - Theme.pad-lg - root.pill-h;"),
+        "the pill row must keep riding `root.height` — a detail's actions sit on the hero's floor, \
+         which is the anchor the count gave up"
+    );
+    assert!(
+        pill_row.contains("alignment: end;"),
+        "the pill row must pack right now that it is `@children` alone — `space-between` over a \
+         single child packs it at the *start*"
+    );
+}
+
+/// The back button sits *in the tab row*, beside labels already painted in hero
+/// tiers, rather than floating over a full-bleed hero the way `DetailHeader`'s
+/// did. So it takes the `MetaChip` pair and not `Theme.floating-chrome-bg`: that
+/// token answers a question about the theme's own surface ladder, which is not
+/// what this glyph contrasts against.
+///
+/// `hover-bg` is the half that fails silently, and the reason this covers three
+/// brushes rather than two: `IconButton` defaults it to an opaque
+/// `Theme.surface0`, so an omission builds, reads correctly at rest, and paints
+/// the theme's grey over the entity's blur the moment the pointer lands.
+/// `AccentDiscButton` carries the same override for the same reason.
+#[test]
+fn the_back_button_takes_every_brush_from_the_backdrop() {
+    let button = code()
+        .split_once("icon: \"arrow_back\";")
+        .and_then(|(_, rest)| rest.split_once("clicked =>"))
+        .map_or(String::new(), |(body, _)| body.to_owned());
+    assert!(!button.is_empty(), "the band no longer mounts a back button ahead of its click handler");
+
+    for (prop, tier) in [
+        ("idle-bg", "HeroBackdrop.chip-fill"),
+        ("hover-bg", "HeroBackdrop.disc-hover"),
+        ("idle-fg", "HeroBackdrop.chrome"),
+    ] {
+        assert!(
+            button.contains(&format!("{prop}: {tier};")),
+            "the back button must take `{prop}` from `{tier}` — it paints on the solved band, and \
+             a theme token has no contrast floor there"
+        );
+    }
+}
+
+/// The idle pane is full-bleed and animating for the whole morph, which is
+/// exactly the shape that must not use `opacity`: an element with a non-unit
+/// opacity renders to an offscreen layer, so this one would cost a
+/// window-width layer every frame of every drill-in. Folding the alpha into the
+/// brush is one blend instead.
+#[test]
+fn the_idle_pane_folds_its_alpha_into_the_brush() {
+    let pane = code()
+        .split_once("idle-pane := Rectangle {")
+        .and_then(|(_, rest)| rest.split_once('}'))
+        .map_or(String::new(), |(body, _)| body.to_owned());
+    assert!(!pane.is_empty(), "the band no longer declares `idle-pane`");
+
+    assert!(
+        pane.contains("background: Theme.base.with-alpha(1.0 - root.hero-t);"),
+        "the idle pane must fade by alpha inside its brush"
+    );
+    assert!(
+        !pane.contains("opacity:"),
+        "the idle pane must not use `opacity` — a full-bleed element with a non-unit opacity costs \
+         an offscreen layer for the length of the morph"
+    );
+}
+
+/// Data-agnostic, the `MosaicTabHero` contract: `@tr` folds msgids at codegen, so
+/// a string spelled here is one the host can no longer vary per tab — and the
+/// five tabs differ in every one of them. It is also what keeps the catalogue
+/// surface at the host, where `ui::locale::tests` already walks it.
+#[test]
+fn the_band_states_no_string_of_its_own() {
+    assert!(
+        !code().contains("@tr("),
+        "the band must take every literal as a property — the five tabs differ in all of them, and \
+         a msgid folded here can't follow the mounted tab"
+    );
+}
+
+/// The morph runs off a derivation, never a literal.
+///
+/// It shipped as `detail-open: false` for one phase on purpose, so the hero half
+/// could compile and be pinned while the four detail views still drew their own
+/// `DetailHeader` — and the page would have worn two banners the moment it went
+/// true. Pinned now for the opposite reason: a literal `false` here silently
+/// retires the whole hero half, and everything else in this file goes on passing
+/// because the band's own source is still correct.
+///
+/// Which of the four ids is open decides the tab, not the other way round, so the
+/// derivation has to name all four. Naming three leaves one detail opening under
+/// an idle band, which reads as that one page failing rather than as a missing
+/// clause.
+#[test]
+fn the_morph_is_driven_by_the_sheets_own_derivation() {
+    let sheet: String = SHEET.split_whitespace().collect::<Vec<_>>().join(" ");
+
+    assert!(
+        sheet.contains("detail-open: root.detail-open;"),
+        "my-library-view.slint must hand the band its own derived `detail-open` — a literal is \
+         what held the hero half unreachable while the detail views still drew their own header"
+    );
+    let derived = sheet
+        .split_once("property <bool> detail-open:")
+        .and_then(|(_, rest)| rest.split_once(';'))
+        .map_or("", |(value, _)| value);
+    for open in ["album-open", "artist-open", "genre-open", "playlist-open"] {
+        assert!(
+            derived.contains(open),
+            "the sheet's `detail-open` must name `{open}` — a detail left out of it opens under \
+             an idle band, with its own body mounted below"
+        );
+    }
+}
+
+/// The hero tile shows a cover only when the open detail actually has one.
+///
+/// Slint has no empty-`image` literal, so the sheet's `cover` ternary has to bind *some*
+/// global's cover on the Genre arm, whose tile is a name-hashed gradient with no image
+/// behind it. `ArtworkImage` gates on `cover.width` alone, and more than one detail is
+/// open at a time as a matter of routine — `seed_detail_from_settings` restores one per
+/// view whichever tab boot resumes — so ungated, a genre hero paints whichever sibling
+/// detail happened to be restored. It looks like a decode landing in the wrong view.
+#[test]
+fn the_hero_tile_suppresses_a_cover_the_open_detail_does_not_own() {
+    let tile = code()
+        .split_once("ArtworkImage {")
+        .and_then(|(_, rest)| rest.split_once("tile-size:"))
+        .map_or(String::new(), |(body, _)| body.to_owned());
+    assert!(
+        !tile.is_empty(),
+        "the band must mount an `ArtworkImage` ahead of its `tile-size` binding"
+    );
+    assert!(
+        tile.contains("has-cover: root.artwork-path != \"\";"),
+        "the band's tile must gate its cover on `artwork-path` — the sheet cannot withhold \
+         `cover` on the arm that owns none, so this is where it says so"
+    );
+}
+
+/// The band draws the back arrow; the page owns what it means.
+///
+/// `MyLibrary.back()` routes to the mounted tab's own `close-detail`, so every
+/// teardown that button already triggers stays where it is. Unhandled, the arrow
+/// is drawn, hovers, and does nothing — which is exactly what it did for the two
+/// phases the band was mounted with the hero half switched off.
+#[test]
+fn the_back_arrow_routes_to_the_pages_own_close() {
+    assert!(
+        BAND.contains("clicked => { root.back-clicked(); }"),
+        "the band's back button must emit `back-clicked` — it states no route of its own"
+    );
+    let sheet: String = SHEET.split_whitespace().collect::<Vec<_>>().join(" ");
+    assert!(
+        sheet.contains("back-clicked => { MyLibrary.back(); }"),
+        "my-library-view.slint must route `back-clicked` to `MyLibrary.back()`, which is what \
+         reaches the mounted tab's `close-detail` and the teardown behind it"
+    );
+}
+
+/// Every hero fact the band declares is one the sheet feeds.
+///
+/// The band is data-agnostic — four detail globals with nothing between them — so
+/// each fact arrives as an `in property`, and a new one added here and not bound
+/// there simply sits at its default: an artwork tile that never fills, a badge
+/// that never shows. Nothing fails, and only the hero it belongs to looks wrong.
+#[test]
+fn every_hero_fact_the_band_declares_is_fed_by_the_sheet() {
+    const FACTS: [&str; 13] = [
+        "title",
+        "subtitle",
+        "title-badge",
+        "artwork-path",
+        "cover",
+        "circular-artwork",
+        "fallback-icon",
+        "tile-bg",
+        "tile-icon-color",
+        "blur-a",
+        "blur-b",
+        "use-a",
+        "has-blur",
+    ];
+
+    let sheet: String = SHEET.split_whitespace().collect::<Vec<_>>().join(" ");
+    let mount = sheet
+        .split_once("band := LibraryTabBand {")
+        .and_then(|(_, rest)| rest.split_once("MyLibraryTabPills"))
+        .map_or("", |(body, _)| body);
+    assert!(
+        !mount.is_empty(),
+        "my-library-view.slint no longer mounts the band ahead of its pill row"
+    );
+
+    for fact in FACTS {
+        assert!(
+            BAND.contains(&format!("{fact}:")) || BAND.contains(&format!("{fact};")),
+            "library-tab-band.slint no longer declares `{fact}`; drop it from this list too"
+        );
+        assert!(
+            mount.contains(&format!("{fact}:")),
+            "my-library-view.slint must bind the band's `{fact}` — left unbound it sits at the \
+             component's default, which is wrong for every detail and fails nothing"
+        );
+    }
+}

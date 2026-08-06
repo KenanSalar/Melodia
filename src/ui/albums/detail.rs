@@ -80,11 +80,11 @@ pub async fn open_album(
 /// as the last statement on the UI thread, after every detail property
 /// is set, so a follow-on global write (e.g. flipping `Nav.selected-index`
 /// for cross-tab nav from the Artist Detail) lands in the same frame —
-/// Slint paints `AlbumDetailView` directly with no `AlbumView` frame in
+/// Slint paints `AlbumDetailBody` directly with no Albums-grid frame in
 /// between.
 ///
 /// `enter_from` chooses the `ViewTransition` enter direction for the new
-/// `AlbumDetailView` mount; pass [`NavEnterFrom::Right`] for any user
+/// `AlbumDetailBody` mount; pass [`NavEnterFrom::Right`] for any user
 /// drill-in (same-tab or cross-tab), and [`NavEnterFrom::Below`] for the
 /// first-launch seed path so reopening a saved detail feels like a normal
 /// app start.
@@ -130,7 +130,7 @@ where
     // Folded here rather than inside the `upgrade_in_event_loop` below — this
     // is the worker that already has the rows, and the UI thread has no reason
     // to walk a long album's track list a second time.
-    let genre = crate::ui::hero_chips::dominant_genre(&tracks);
+    let genre = crate::ui::hero_folds::dominant_genre(&tracks);
 
     *albums_ui.detail.album_id.lock() = album_id;
 
@@ -188,6 +188,17 @@ where
         // and forward through these entries. No-op while a replay is
         // in flight (the replay's own writes set `suppress`).
         crate::ui::nav_history::record_current(&state_for_history, &ui);
+        // The filter clear above is only half a clear: the page's one box
+        // is `MyLibrary.filter`, and the sheet's `album-id` mirror can't
+        // announce a re-open that writes the *same* id. That is the
+        // section re-enter — a nav-away and back over an open detail
+        // re-runs this function, so the box would keep the needle the
+        // user typed over a list this call just unfiltered. Last in the
+        // closure because `sync_box` reads the mounted tab, which
+        // `on_applied` may have just moved for a cross-tab drill; on a
+        // fresh drill the id mirror reaches the same answer and this is
+        // idempotent. See `ui::my_library::filter::sync_box`.
+        ui.global::<crate::MyLibrary>().invoke_detail_scope_changed();
     });
     Ok(())
 }
@@ -220,7 +231,7 @@ pub async fn refresh_detail(
     )
     .await;
 
-    let genre = crate::ui::hero_chips::dominant_genre(&tracks);
+    let genre = crate::ui::hero_folds::dominant_genre(&tracks);
 
     let albums_ui = albums_ui.clone();
     let _ = weak.upgrade_in_event_loop(move |ui| {

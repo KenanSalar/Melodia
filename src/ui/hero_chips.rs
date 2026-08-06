@@ -11,8 +11,10 @@
 //! worker*, so a 20 000-track genre never hashes its track list inside an
 //! `upgrade_in_event_loop`. `AlbumStats::disc_count` and `is_compilation` are
 //! the clearest case of the first: both fetched today and dropped on the floor
-//! by `to_slint_album_row`, because nothing painted them. [`fold_tracks`] is
-//! the second — defined here, called from there.
+//! by `to_slint_album_row`, because nothing painted them. The second is what
+//! [`crate::ui::hero_folds`] is: the pure `&[T] -> Copy` folds each fetch runs
+//! beside itself, split off here so the channel below owns only the record of
+//! what is on screen.
 //!
 //! A publisher also reads no Slint property it doesn't own. Two of them used
 //! to, and the cost was an ordering constraint the call site had to honour and
@@ -31,7 +33,6 @@
 //! looking for first, so a narrow window loses the least.
 
 use std::cell::RefCell;
-use std::collections::HashSet;
 
 use slint::{ComponentHandle, SharedString};
 
@@ -39,9 +40,10 @@ use crate::entities::album::AlbumStats;
 use crate::entities::artist::ArtistStats;
 use crate::entities::genre::GenreStats;
 use crate::entities::playlist::PlaylistStats;
-use crate::entities::track::{MostPlayedFavorite, TrackListRow};
 use crate::ui::chips;
 use crate::ui::favorites::{FavoritesTab, FavoritesUi};
+use crate::ui::hero_folds::{HeroFold, MostPlayedTotals};
+use crate::ui::recently_played::{RecentlyPlayedTab, RecentlyPlayedUi};
 use crate::ui::tracks::format_duration_ms;
 use crate::ui::util::len_as_i32;
 use crate::{AppWindow, HeroChips};
@@ -110,30 +112,6 @@ impl ChipLabels for HeroChips<'_> {
     }
 }
 
-/// How many distinct artists and albums a track list spans.
-///
-/// The two facts a list-shaped hero can state that its stats row can't: a genre
-/// or a playlist knows how many *tracks* it holds and nothing about their
-/// spread. `Copy` and two words wide, so it crosses an `upgrade_in_event_loop`
-/// for free.
-#[derive(Clone, Copy, Default, PartialEq, Eq, Debug)]
-pub struct HeroFold {
-    pub artists: i32,
-    pub albums: i32,
-}
-
-/// What the Most Played tab sums to.
-///
-/// Its own totals, never the Songs tab's: the query behind it is
-/// `is_favorite = TRUE AND play_count > 0`, a strict subset, so borrowing the
-/// Songs duration would overstate it by every favourite never played.
-#[derive(Clone, Copy, Default, PartialEq, Eq, Debug)]
-pub struct MostPlayedTotals {
-    pub tracks: i32,
-    pub duration_ms: i64,
-    pub plays: i32,
-}
-
 /// Everything the Favorites band can state, across its three tabs. Which fields
 /// are read follows the tab — the band describes whatever the body below it is
 /// listing.
@@ -147,73 +125,14 @@ struct FavoritesFacts {
     pub artists: i32,
 }
 
-/// Count the distinct artists and albums a track list spans.
-///
-/// Keyed on the ids rather than the names: an `i64` hashes far cheaper than a
-/// `String` over a list this size, and a track with no album genuinely belongs
-/// to none, so `None` is skipped rather than pooled into an "unknown" bucket
-/// that would read as one more album.
-///
-/// Belongs on the worker that fetched the rows, never inside an
-/// `upgrade_in_event_loop`.
-pub fn fold_tracks(rows: &[TrackListRow]) -> HeroFold {
-    let mut artists: HashSet<i64> = HashSet::new();
-    let mut albums: HashSet<i64> = HashSet::new();
-    for row in rows {
-        if let Some(id) = row.artist_id {
-            artists.insert(id);
-        }
-        if let Some(id) = row.album_id {
-            albums.insert(id);
-        }
-    }
-    HeroFold {
-        artists: len_as_i32(artists.len()),
-        albums: len_as_i32(albums.len()),
-    }
-}
-
-/// Sum the Most Played tab's own totals off its cached rows.
-pub fn fold_most_played(rows: &[MostPlayedFavorite]) -> MostPlayedTotals {
-    MostPlayedTotals {
-        tracks: len_as_i32(rows.len()),
-        duration_ms: rows.iter().map(|r| r.duration_ms).sum(),
-        plays: rows.iter().map(|r| r.play_count).sum(),
-    }
-}
-
-/// The genre most of a track list is tagged with, or `None` when it is split
-/// evenly enough that naming one would misrepresent the rest.
-///
-/// An album is usually single-genre, so this reads as "the album's genre"
-/// there; a compilation that genuinely spans several gets no chip rather than
-/// whichever one happened to win by a track.
-pub fn dominant_genre(rows: &[TrackListRow]) -> Option<String> {
-    /// Share of the tracks the winner has to hold to be worth stating.
-    const MAJORITY: usize = 2;
-
-    let mut tally: Vec<(&str, usize)> = Vec::new();
-    let mut tagged = 0usize;
-    for genre in rows.iter().filter_map(|r| r.genre.as_deref()) {
-        if genre.is_empty() {
-            continue;
-        }
-        tagged += 1;
-        match tally.iter_mut().find(|(name, _)| *name == genre) {
-            Some((_, count)) => *count += 1,
-            None => tally.push((genre, 1)),
-        }
-    }
-    let (name, count) = tally.into_iter().max_by_key(|&(_, count)| count)?;
-    (count * MAJORITY > tagged).then(|| name.to_owned())
-}
-
-/// The span of release years across an artist's albums, or `None` when no album
-/// carries one. A single year answers `(y, y)` and is rendered without a dash.
-pub fn year_span(albums: &[AlbumStats]) -> Option<(i32, i32)> {
-    let mut years = albums.iter().filter_map(|a| a.year).filter(|y| *y > 0);
-    let first = years.next()?;
-    Some(years.fold((first, first), |(lo, hi), y| (lo.min(y), hi.max(y))))
+/// The same, for Recently Played's two tabs.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+struct RecentlyPlayedFacts {
+    pub tab: RecentlyPlayedTab,
+    pub tracks: i32,
+    pub duration_ms: i64,
+    pub songs: HeroFold,
+    pub most_played: MostPlayedTotals,
 }
 
 /// The published chips plus the width they were chunked against.
@@ -385,20 +304,33 @@ pub fn publish_favorites(ui: &AppWindow, fav_ui: &FavoritesUi) {
     publish(ui, chips, fav_ui.section_active());
 }
 
-pub fn publish_recently_played(
-    ui: &AppWindow,
-    track_count: i32,
-    total_duration_ms: i64,
-    fold: HeroFold,
-    section_active: bool,
-) {
-    let chips = recently_played_chips(
-        &ui.global::<HeroChips>(),
-        track_count,
-        total_duration_ms,
-        fold,
-    );
-    publish(ui, chips, section_active);
+/// Recently Played is the second hero assembled from more than one fetch — the
+/// recency list and the Most Played grid land independently — so like Favorites
+/// it takes the handle and gathers rather than being handed a struct. Every
+/// field is a finished value the fetch that owns it already folded on its own
+/// worker (`RecentlyPlayedUiState::songs_totals`, `::songs_fold`,
+/// `::most_played_totals`), which is what keeps this cheap enough to call from
+/// wherever an input lands.
+///
+/// Nothing here is read back off a Slint property, and nothing walks a `Vec`.
+pub fn publish_recently_played(ui: &AppWindow, rp_ui: &RecentlyPlayedUi) {
+    let state = rp_ui.state();
+    // Taken and released one at a time, the `publish_favorites` reason: these
+    // are sibling locks with no ordering anyone has argued, and a struct literal
+    // would hold every guard it built until the statement ended.
+    let songs_totals = *state.songs_totals.lock();
+    let songs = *state.songs_fold.lock();
+    let most_played = *state.most_played_totals.lock();
+
+    let facts = RecentlyPlayedFacts {
+        tab: rp_ui.active_tab(),
+        tracks: songs_totals.tracks,
+        duration_ms: songs_totals.duration_ms,
+        songs,
+        most_played,
+    };
+    let chips = recently_played_chips(&ui.global::<HeroChips>(), &facts);
+    publish(ui, chips, rp_ui.section_active());
 }
 
 // --- Builders -----------------------------------------------------------
@@ -501,16 +433,7 @@ fn playlist_chips(
 /// everywhere else here: the empty states are the surfaces that follow a filter.
 fn favorites_chips(labels: &impl ChipLabels, facts: &FavoritesFacts) -> Vec<SharedString> {
     match facts.tab {
-        FavoritesTab::MostPlayed if facts.most_played.tracks > 0 => {
-            let mut out = Vec::with_capacity(3);
-            out.push(labels.tracks(facts.most_played.tracks));
-            push_duration(&mut out, facts.most_played.duration_ms);
-            // The tab ranks by this and states it nowhere else.
-            if facts.most_played.plays > 0 {
-                out.push(labels.plays(facts.most_played.plays));
-            }
-            out
-        }
+        FavoritesTab::MostPlayed => most_played_chips(labels, facts.most_played),
         FavoritesTab::Artists if facts.artists > 0 => vec![labels.artists(facts.artists)],
         FavoritesTab::Songs if facts.tracks > 0 => list_chips(
             labels,
@@ -522,17 +445,45 @@ fn favorites_chips(labels: &impl ChipLabels, facts: &FavoritesFacts) -> Vec<Shar
     }
 }
 
-/// Same empty-state split as Favorites, for the same reason.
+/// Same empty-state split as Favorites, for the same reason, over two tabs
+/// instead of three. The Songs count is `tracks`, not `favorites` — the noun is
+/// the one chip whose wording follows the page.
 fn recently_played_chips(
     labels: &impl ChipLabels,
-    track_count: i32,
-    total_duration_ms: i64,
-    fold: HeroFold,
+    facts: &RecentlyPlayedFacts,
 ) -> Vec<SharedString> {
-    if track_count == 0 {
+    match facts.tab {
+        RecentlyPlayedTab::MostPlayed => most_played_chips(labels, facts.most_played),
+        RecentlyPlayedTab::Songs if facts.tracks > 0 => list_chips(
+            labels,
+            labels.tracks(facts.tracks),
+            facts.duration_ms,
+            facts.songs,
+        ),
+        RecentlyPlayedTab::Songs => Vec::new(),
+    }
+}
+
+/// What a Most Played tab states about itself. Shared by the two pages that have
+/// one — the tab is the same list under a different predicate, so it says the
+/// same three things.
+///
+/// **It sums itself.** Favorites' query is `is_favorite = TRUE AND play_count > 0`,
+/// a strict subset of its Songs tab, and Recently Played's is the whole library
+/// where its Songs tab is the last 200 played — so on both pages borrowing the
+/// Songs duration would be a different set's total.
+fn most_played_chips(labels: &impl ChipLabels, totals: MostPlayedTotals) -> Vec<SharedString> {
+    if totals.tracks == 0 {
         return Vec::new();
     }
-    list_chips(labels, labels.tracks(track_count), total_duration_ms, fold)
+    let mut out = Vec::with_capacity(3);
+    out.push(labels.tracks(totals.tracks));
+    push_duration(&mut out, totals.duration_ms);
+    // The tab ranks by this and states it nowhere else.
+    if totals.plays > 0 {
+        out.push(labels.plays(totals.plays));
+    }
+    out
 }
 
 /// `1994` for a single year, `1994–2003` for a span — an en dash, the range

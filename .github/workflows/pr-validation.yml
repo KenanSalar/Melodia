@@ -53,7 +53,9 @@ jobs:
       #
       # `.github/` is split the same way, and deliberately NOT excluded
       # wholesale. The four workflows named below compile nothing and are never
-      # exercised here, so a build proves nothing about them. The two
+      # exercised here, so a build proves nothing about them; the issue forms
+      # are the same case — GitHub parses them, nothing in this repo builds
+      # them, and the PR template already rides the `*.md` line. The two
       # composites are the opposite case: `clippy` and `test` both `uses:`
       # linux-system-deps and `audit` uses cargo-audit, so an edit there is
       # precisely when those jobs need to run — skip them and a broken
@@ -78,6 +80,7 @@ jobs:
               - '!.github/workflows/deploy-coverage.yml'
               - '!.github/workflows/enforce-pr-source.yml'
               - '!.github/workflows/refresh-manifest.yml'
+              - '!.github/ISSUE_TEMPLATE/**'
               - '!assets/screenshots/**'
               - '!LICENSE'
               - '!.gitignore'

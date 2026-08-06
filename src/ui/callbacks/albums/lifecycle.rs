@@ -5,14 +5,16 @@
 use std::sync::Arc;
 
 use async_compat::Compat;
-use slint::{ComponentHandle, Model, VecModel};
+use slint::ComponentHandle;
 
 use crate::state::AppState;
 use crate::ui::albums::{self as albums_ui_mod, AlbumsUi};
 use crate::ui::callbacks::macros::{release_detail_hero_images, spawn_logged};
+use crate::ui::model_diff::clear_vec_model;
+use crate::ui::my_library::{MyLibraryTab, tab_is_mounted};
+use crate::ui::tab_bar::UNFETCHED_COUNT;
 use crate::{
-    AlbumDetail, AlbumGridRow as UiAlbumGridRow, Albums, AppWindow, Nav,
-    TrackListRow as UiTrackListRow,
+    AlbumDetail, AlbumGridRow as UiAlbumGridRow, Albums, AppWindow, TrackListRow as UiTrackListRow,
 };
 
 /// Wire the Albums section-lifecycle callbacks. See [`super::wire_albums`].
@@ -37,7 +39,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, albums_ui: &Arc<AlbumsUi>) 
     // boot's pre-fetch). The detail re-fetch (if `AlbumDetail.album-id >=
     // 0`) runs after the grid fetch so the user lands back where they
     // were.
-    albums_ui.set_section_active(ui.global::<Nav>().get_selected_index() == 4);
+    albums_ui.set_section_active(tab_is_mounted(ui, MyLibraryTab::Albums));
     // `seed_detail_from_settings` runs for every persisted detail id whichever
     // section the boot lands on, but it can only publish the two shared hero
     // globals for the one that is *on screen* — so off-screen its band and its
@@ -74,21 +76,15 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, albums_ui: &Arc<AlbumsUi>) 
                 // were. Mirrors the per-property teardown in
                 // `on_close_detail`.
                 let g = ui.global::<Albums>();
-                let m = g.get_grid_rows();
-                if let Some(vm) = m.as_any().downcast_ref::<VecModel<UiAlbumGridRow>>() {
-                    vm.set_vec(Vec::new());
-                }
+                // Rewound on the same tick as the model it numbers;
+                // `Albums.total-count`'s declaration argues the sentinel.
+                g.set_total_count(UNFETCHED_COUNT);
+                clear_vec_model::<UiAlbumGridRow>(&g.get_grid_rows(), "albums: clear grid");
 
                 let d = ui.global::<AlbumDetail>();
                 release_detail_hero_images!(ui, d);
-                let tm = d.get_tracks();
-                if let Some(vm) = tm.as_any().downcast_ref::<VecModel<UiTrackListRow>>() {
-                    vm.set_vec(Vec::new());
-                }
-                let sm = d.get_selected_ids();
-                if let Some(vm) = sm.as_any().downcast_ref::<VecModel<i32>>() {
-                    vm.set_vec(Vec::new());
-                }
+                clear_vec_model::<UiTrackListRow>(&d.get_tracks(), "albums: clear detail tracks");
+                clear_vec_model::<i32>(&d.get_selected_ids(), "albums: clear detail selection");
                 d.set_selection_anchor(-1);
             }
             let au = au.clone();

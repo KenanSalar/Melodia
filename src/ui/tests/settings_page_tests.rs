@@ -137,6 +137,10 @@ fn tab_count_matches_the_tabs_slint_declares() {
 /// under the search bar — which is what a miniplayer → full swap reliably
 /// produced. Seeded at the floor it draws icons and widens once. A literal reads
 /// as harmless to anyone who hasn't seen it fail, so pin that it's derived.
+///
+/// The floor itself is `TabSearchHeader.row-floor`'s to compute, and
+/// `tab_search_header_tests` holds it to the sum. What this page owes is reading it
+/// rather than re-deriving one, which is what it and both hero bands used to do.
 #[test]
 fn the_page_width_seed_is_the_rows_floor() {
     let seed = VIEW
@@ -146,9 +150,9 @@ fn the_page_width_seed_is_the_rows_floor() {
         .unwrap_or_default();
 
     assert!(
-        seed.contains("compact-w"),
-        "settings-view.slint must seed `page-w` from the tab bar's own `compact-w` floor, not \
-         from a guessed page width: {seed:?}"
+        seed.contains("header.row-floor"),
+        "settings-view.slint must seed `page-w` from the shared header row's published floor, \
+         not from a guessed page width: {seed:?}"
     );
 }
 

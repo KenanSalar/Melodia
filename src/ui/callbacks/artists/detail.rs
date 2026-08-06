@@ -4,18 +4,17 @@
 
 use std::sync::Arc;
 
-use slint::{ComponentHandle, Model, SharedString};
+use slint::{ComponentHandle, SharedString};
 
 use crate::library;
 use crate::state::AppState;
 use crate::ui::albums::AlbumsUi;
 use crate::ui::artists::{self as artists_ui_mod, ArtistsUi};
 use crate::ui::callbacks::{collect_track_ids, play_row_start, spawn_play_then_shuffle};
-use crate::ui::callbacks::macros::{
-    release_detail_hero_images, spawn_logged, spawn_logged_sync, wire_row_flag,
-};
+use crate::ui::callbacks::macros::{spawn_blocking_logged, spawn_logged, wire_row_flag};
+use crate::ui::my_library::restore_origin;
 use crate::ui::track_list_view::{TrackListColumnState, view_id};
-use crate::{AppWindow, ArtistDetail, Nav};
+use crate::{AppWindow, ArtistDetail};
 
 /// Wire the `ArtistDetail` callbacks. See [`super::wire_artists`].
 pub(super) fn wire(
@@ -51,21 +50,23 @@ pub(super) fn wire(
             // write further down. One up-front set covers both.
             crate::ui::nav_transition::mark_drill_back(&ui);
 
+            // **The origin is a pair** — see `albums/detail.rs`'s note: nav index
+            // and, inside My Library, the tab, restored together.
             let origin = g.get_origin_nav_index();
             let origin_was_cross_tab = origin >= 0;
             if origin_was_cross_tab {
-                let nav = ui.global::<Nav>();
-                nav.set_selected_index(origin);
-                nav.invoke_persist_selected_index(origin);
+                restore_origin(&ui, origin, g.get_origin_tab());
                 g.set_origin_nav_index(-1);
+                g.set_origin_tab(-1);
             }
 
             g.set_artist_id(-1);
-            // Drop the hero Image properties so their `SharedPixelBuffer`s
-            // release the Arc the LRU is about to clear too. Without this,
-            // ~650 KiB of CPU buffer + ~1.5 MiB of mapped GPU texture stay
-            // pinned on the global until another detail page overwrites it.
-            release_detail_hero_images!(ui, g);
+            // The hero Images are *not* dropped here. This id is what the band's
+            // whole hero half is a ternary over, so releasing on the same tick
+            // leaves it collapsing a placeholder — `MyLibrary.hero-collapsed`
+            // owns that teardown now, and the band fires it once the morph is
+            // done. See `callbacks::my_library::release_collapsed_hero`.
+            //
             // Clear the SearchBar so the next open lands on the full
             // tracks + albums set, not a stale needle from the last
             // detail. `clear_detail` drops the Rust-side mirror too.
@@ -146,7 +147,7 @@ pub(super) fn wire(
     {
         let s = state.clone();
         detail.on_add_to_queue(move |ids| {
-            let id_vec: Vec<i64> = ids.iter().map(i64::from).collect();
+            let id_vec = collect_track_ids(&ids);
             let s = s.clone();
             spawn_logged!(s, "artists::add_to_queue", library::queue::queue_add_tracks(&s, id_vec));
         });
@@ -229,7 +230,7 @@ pub(super) fn wire(
             let Some(ui) = weak.upgrade() else { return };
             let columns = ui.global::<ArtistDetail>().snapshot_visible();
             let s = s.clone();
-            spawn_logged_sync!(s, "artists::toggle_column",
+            spawn_blocking_logged!(s, "artists::toggle_column",
                 library::settings::update_view_columns(&s, "artist_detail".to_string(), columns));
         });
     }
@@ -272,7 +273,7 @@ pub(super) fn wire(
                 s.runtime.spawn_blocking(move || au_albums.release_grid_covers());
             }
             let s = s.clone();
-            spawn_logged_sync!(s, "artists::set_albums_collapsed",
+            spawn_blocking_logged!(s, "artists::set_albums_collapsed",
                 library::settings::set_artist_albums_collapsed(&s, new_state));
         });
     }

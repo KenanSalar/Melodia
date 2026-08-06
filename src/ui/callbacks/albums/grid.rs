@@ -92,15 +92,17 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, albums_ui: &Arc<AlbumsUi>) 
         albums.on_open_album(move |album_id| {
             let id = i64::from(album_id);
 
-            // Same-tab open: defensively zero any stale cross-tab origin.
-            // `wire_artists::on_open_album` sets this to `NAV_ARTISTS`; if
-            // the user reached the Albums grid via some path that didn't
-            // close the prior detail (currently no such path exists, but
-            // belt + suspenders), make sure the next back-button press
-            // lands on the grid rather than trying to restore a stale
-            // origin tab.
+            // Same-tab open: defensively zero any stale cross-tab origin —
+            // both halves of it. `wire_artists::on_open_album` sets the pair
+            // to the Artists tab; if the user reached the Albums grid via
+            // some path that didn't close the prior detail (currently no
+            // such path exists, but belt + suspenders), make sure the next
+            // back-button press lands on the grid rather than trying to
+            // restore a stale origin.
             if let Some(ui) = weak.upgrade() {
-                ui.global::<AlbumDetail>().set_origin_nav_index(-1);
+                let d = ui.global::<AlbumDetail>();
+                d.set_origin_nav_index(-1);
+                d.set_origin_tab(-1);
             }
 
             let s_fetch = s.clone();

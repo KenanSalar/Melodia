@@ -1,0 +1,559 @@
+import { Theme } from "../../theme.slint";
+import { HeroBackdrop } from "../../globals/hero-backdrop.slint";
+import { NavEnterFrom } from "../../globals/nav.slint";
+import { ArtworkImage } from "../artwork-image.slint";
+import { HeroBlurBackdrop } from "../hero-blur-backdrop.slint";
+import { HeroChipStrip } from "../hero-chip-strip.slint";
+import { IconButton } from "../icon-button.slint";
+import { MaterialIcon } from "../material-icon.slint";
+import { TabSearchHeader } from "tab-search-header.slint";
+
+// The My Library page's pinned band, in two states. Idle it is a flat pane carrying the
+// tab bar, the shared filter box and the mounted tab's count; with a detail open it
+// **morphs** into that entity's hero — blur backdrop, artwork tile, title, chips — with
+// the tabs still in it and a back button to their left.
+//
+// **A sibling of `MosaicTabHero`, not a fork of it.** The two share `HeroBlurBackdrop` /
+// `HeroChipStrip` and — since the header row became `TabSearchHeader` — the whole top of
+// the band, and differ in everything below it: a mosaic square against an artwork tile, a
+// fixed height against a morph.
+//
+// That row used to be *ported verbatim* between them, and this comment used to say so:
+// five separately paid-for fixes (the floor seed, the budget against two published
+// floors, the row's own zero spacing, the direction off `previous-index`, the published
+// tooltip anchor), each invisible in review, each duplicated a third time in
+// `settings-view.slint`. They are one component now, pinned once by
+// `ui::tab_search_header_tests`; what stays here is the band's own — the morph, the
+// palette crossing it drives, and the back slot it hands the row as `lead-w`.
+//
+// Data-agnostic for the same reason `MosaicTabHero` is: `Tracks` / `Albums` / … and the
+// four `*Detail` globals are distinct generated types with nothing between them, so every
+// fact arrives as a property and every write leaves as a callback. **No string is spelled
+// here** — `@tr` folds literals at codegen, and the host is where the literals belong.
+export component LibraryTabBand inherits Rectangle {
+    // Inline `[@tr("…"), …]` literals at the call site; an array populated from Rust
+    // renders untranslated. Forwarding one through here is fine — the literal still sits
+    // in a `.slint` file.
+    in property <[string]> tab-labels;
+    in property <[string]> tab-icons;
+    // Two-way, per the "a component writing its own `in-out` orphans a one-way binding"
+    // pitfall — the bar writes this on every pick.
+    in-out property <int> tab-idx;
+
+    in-out property <string> filter;
+    in property <string> filter-placeholder;
+    in property <int> blur-tick;
+
+    // --- Idle ---------------------------------------------------------------
+    //
+    // The prominent line, in place of a page title: the tabs name the page and the
+    // sidebar item carries the word, the trade the Settings page already made. Empty
+    // while the mounted tab's count is still the unfetched sentinel — the host owns that
+    // guard, since a bare `-1` interpolates into a plural as "-1 albums".
+    in property <string> count-text;
+
+    // --- Hero ---------------------------------------------------------------
+    in property <bool> detail-open;
+    in property <string> title;
+    // Album Detail's artist, Playlist Detail's description. Both ride *inside* the title
+    // block rather than on a row of their own, which is what leaves the band slack for a
+    // wrapped second chip row.
+    in property <string> subtitle;
+    in property <bool> title-badge;
+
+    in property <string> artwork-path;
+    in property <image> cover;
+    in property <bool> circular-artwork: false;
+    in property <string> fallback-icon: "music-note";
+    // Genre Detail's name-hashed gradient overrides both. The defaults take the solved
+    // `HeroBackdrop.chrome` and not `Theme.accent`: this tile sits *on* the hero, where a
+    // light theme's accent lands dark-on-dark.
+    in property <brush> tile-bg: HeroBackdrop.chrome.with-alpha(0.15);
+    in property <brush> tile-icon-color: HeroBackdrop.chrome;
+
+    in property <image> blur-a;
+    in property <image> blur-b;
+    in property <bool> use-a;
+    in property <bool> has-blur;
+
+    callback back-clicked();
+    // Fires *after* the direction and the arming below have been settled, so a host
+    // handler that clears its filter and calls into Rust can't be sequenced ahead of
+    // them. The bar has already written `tab-idx`.
+    callback tab-selected(int);
+    callback search-edited(string);
+
+    // Fires once the collapse has finished — the `Dialog.closed()` shape, and here for the
+    // same reason: **the hero's facts have to outlive the detail id.** Every one of them
+    // is a ternary over that id at the host, so a teardown run when the id clears leaves
+    // the band spending the whole 400 ms painting a fallback glyph over a reset backdrop —
+    // an exit morph *from* a placeholder rather than from the banner it is collapsing. The
+    // host releases the cover, the blur pair, the shared backdrop tiers and the chip row
+    // when this lands instead. Cancelled by a re-open, so a re-drill inside the window
+    // can't have the previous hero's teardown land on the new one.
+    callback hero-collapsed();
+
+    // --- The morph ----------------------------------------------------------
+    //
+    // **Seeded by the binding, owned by the handler.** An animated *binding* restarts
+    // whenever a dependency is marked dirty rather than when its value changes, so left
+    // bound this would re-base every time a detail id moved under it. Writing routes
+    // through `set_animated_value` and replaces the binding outright; keeping it as the
+    // seed is what leaves mount in `NotAnimating`, so a page entered with a detail
+    // already open comes up at hero height instead of growing into it.
+    // `tab-bar.slint`'s `compact-t` is the same shape.
+    property <float> hero-t: root.detail-open ? 1.0 : 0.0;
+    changed detail-open => {
+        self.hero-t = self.detail-open ? 1.0 : 0.0;
+        collapse.running = !self.detail-open;
+    }
+    animate hero-t {
+        duration: Theme.dur-spatial;
+        easing: cubic-bezier(0.2, 0, 0, 1);
+    }
+
+    // Armed by the handler above rather than gated on a bool, so a re-open genuinely
+    // *cancels* it: the same edge that restarts the morph writes `running` back to false
+    // and no stale teardown is left in flight. Starts idle — a page mounted with no detail
+    // never transitioned into that state and has nothing to hand back.
+    collapse := Timer {
+        interval: Theme.dur-spatial;
+        running: false;
+        triggered => {
+            self.running = false;
+            root.hero-collapsed();
+        }
+    }
+
+    // **Is any of the hero on screen** — true from the frame the detail id lands until the
+    // morph has finished collapsing, which is one frame longer at *each* end than
+    // `detail-open` and one frame longer at the start than `hero-t > 0`. Both ends were
+    // bugs. The handler above *writes* `hero-t`, so the morph genuinely starts at 0 and a
+    // branch gated on the detail mounted a frame before one gated on the morph: for that
+    // frame the title block laid out as its row's only child, hard left, under the count
+    // line that paints over it, then jumped a tile's width right. And gated on the detail
+    // alone it left on the frame the id cleared, while the tile beside it faded on for the
+    // full 400 ms.
+    //
+    // **What may hang off it is decided by the chip strip's change tracker, and the strip
+    // is why the meta column below has no `if` at all.** A dropped repeater instance keeps
+    // its memory alive for weak refs, so a `ChangeTracker` inside it stays registered, and
+    // `ChangeTracker::evaluate` upgrades its weak handle with an `unwrap`. `MetaChipStrip`'s
+    // `changed watched-w` watches a *layout* property, so the surviving parent re-dirties
+    // it whenever it re-flows — which during a morph is every single frame, the easing back
+    // slot moving the column's width under it. Drop that branch on the frame the ease ends
+    // and the queued tracker fires against a dead handle: `Option::unwrap()` on `None`,
+    // 400 ms after a back click. A timer's `triggered` is no safer than an animated
+    // predicate here, and neither is a Rust write — the queue is what matters, not the
+    // writer. So the strip is mounted for the life of the band and fades by **brush alpha**
+    // instead, and only the tracker-free pieces ride this. See
+    // `.claude/rules/slint-pitfalls.md`.
+    property <bool> hero-shown: root.detail-open || root.hero-t > 0;
+
+    // --- The bar's palette ---------------------------------------------------
+    //
+    // Four brushes that cross with the pane under them: `Theme.*` tokens on the flat idle
+    // band, solved `HeroBackdrop` tiers over the entity's blur. Separate brushes rather
+    // than one lerp off `hero-t`, since `.mix()` takes `color` operands and every token on
+    // both sides is a `brush`.
+    //
+    // **A state transition, not four `animate` blocks, because the hero half of each pair
+    // arrives late.** The solve rides the artwork decode, so it lands well into the morph —
+    // and an animated *binding* restarts whenever a dependency is marked dirty rather than
+    // when its value changes, so each `animate` was torn down at that moment and re-based,
+    // finishing a full `dur-spatial` after the decode instead of with the height it was
+    // meant to move with. A transition takes its start time from the **state change**
+    // (`change_time`, the optional start `set_animated_binding` carries for exactly this),
+    // so the crossing begins and ends with the morph however often the target moves
+    // underneath it.
+    property <brush> label-brush: Theme.text;
+    property <brush> active-brush: Theme.accent;
+    property <brush> hover-brush: Theme.surface0;
+    property <brush> divider-brush: Theme.surface1;
+
+    // The hero half, mirrored locally so a late solve *moves* rather than steps. The
+    // emphasized curve spends most of its travel in the first quarter, so by the time a
+    // decode lands the crossing above is nearly settled and would adopt the new tier in one
+    // frame. These carry the re-tint instead, on a curve short enough to finish inside the
+    // morph when the decode is quick and to stay smooth when it isn't.
+    property <brush> hero-label: HeroBackdrop.on-backdrop;
+    property <brush> hero-active: HeroBackdrop.chrome;
+    property <brush> hero-hover: HeroBackdrop.on-backdrop.with-alpha(0.12);
+    property <brush> hero-divider: HeroBackdrop.tile-edge;
+    animate hero-label, hero-active, hero-hover, hero-divider {
+        duration: Theme.dur-med;
+        easing: ease-in-out;
+    }
+
+    states [
+        hero when root.detail-open: {
+            label-brush: root.hero-label;
+            active-brush: root.hero-active;
+            hover-brush: root.hero-hover;
+            divider-brush: root.hero-divider;
+            in-out {
+                animate label-brush, active-brush, hover-brush, divider-brush {
+                    duration: Theme.dur-spatial;
+                    easing: cubic-bezier(0.2, 0, 0, 1);
+                }
+            }
+        }
+    ]
+
+    // --- The header width budget --------------------------------------------
+    //
+    // `page-w` is a **mirror**, written imperatively because a live `root.width` read
+    // feeding a child's size re-enters layout, and seeded at the header row's own
+    // **floor**, which that component publishes rather than this one restating: seeded
+    // wide, the bar believes it can afford full-width tabs and draws them into a panel
+    // that can't seat them, which is exactly what a miniplayer → full swap produces. The
+    // mount Timer beside it is mandatory — `changed` doesn't fire when the first layout
+    // settles directly on the final value, and a window opened at its final size is that
+    // case.
+    property <length> page-w: 2 * Theme.pad-lg + header.row-floor;
+    changed width => { self.page-w = self.width; }
+
+    Timer {
+        interval: 1ms;
+        triggered => {
+            root.page-w = root.width;
+            self.running = false;
+        }
+    }
+
+    // The back button's slot, **with its trailing gap folded into its own width** — which
+    // is what lets the header row carry `spacing: 0` and the whole inset ease to zero.
+    // Spelled as an eased width beside a stepped gap it could not: the row loses a full
+    // `pad-md` of layout spacing on the frame the slot unmounts, and on the way *out* that
+    // frame is the last one, after the height and every brush have settled. A 12 px step
+    // there is the tab bar visibly jumping left. Opening, the same step lands on frame one
+    // and is buried under 400 ms of movement, which is why it only ever showed one way.
+    // It collapses to zero in idle, so the seed above stays the *idle* floor — the state
+    // the page is in whenever a mount can surprise it.
+    property <length> back-slot-w:
+        (root.pill-h + Theme.pad-sm + Theme.pad-md) * root.hero-t;
+
+    // --- Height -------------------------------------------------------------
+    //
+    // The idle meta row: one `ActionPill` with `pad-xs` of air either side.
+    property <length> pill-h: 32px;
+    property <length> meta-row-h: root.pill-h + 2 * Theme.pad-xs;
+
+    property <length> compact-h:
+        2 * Theme.pad-lg + header.row-h + Theme.pad-md + root.meta-row-h;
+    // `MosaicTabHero`'s formula unchanged, so the two bands agree on what a hero is —
+    // derived rather than a literal, so growing the artwork or the bar can't leave either
+    // one cropping its own contents.
+    property <length> hero-h:
+        2 * Theme.pad-lg + header.row-h + Theme.pad-md + Theme.hero-artwork;
+
+    // **Never a bound `height`.** Slint reports a component root's bound dimension as
+    // both `min` and `max`, so an animated one would ease the *window's* own minimum
+    // height — `tab-bar.slint`'s width bug, one axis over. The split buys that freedom by
+    // letting the element be drawn shorter than it asked for, which is what the clip is
+    // for: on the shrink leg the hero content would otherwise paint out of the compact
+    // band and into the body underneath.
+    min-height: root.compact-h;
+    preferred-height: root.compact-h + (root.hero-h - root.compact-h) * root.hero-t;
+    max-height: root.hero-h;
+    clip: true;
+    vertical-stretch: 0;
+
+    // --- Forwarded from the shared header ------------------------------------
+    //
+    // Re-published under the names `my-library-view.slint` already reads, so the
+    // extraction is invisible to it. What each one is for is argued in
+    // `tab-search-header.slint`.
+    out property <NavEnterFrom> tab-enter-from <=> header.tab-enter-from;
+    out property <bool> tab-anim-armed <=> header.tab-anim-armed;
+
+    out property <length> tip-x:
+        header.absolute-position.x - root.absolute-position.x + header.tip-x;
+    out property <length> tip-y:
+        header.absolute-position.y - root.absolute-position.y + header.tip-y;
+    out property <length> tip-w <=> header.tip-w;
+    out property <length> tip-h <=> header.tip-h;
+    out property <string> tip-label <=> header.tip-label;
+    out property <bool> tip-visible <=> header.tip-visible;
+
+    // Behind everything else. The shared component owns the dual-slot crossfade contract;
+    // the gradient floor shows through when there is no blur image, which is what Genre
+    // Detail's procedural backdrop relies on.
+    HeroBlurBackdrop {
+        x: 0; y: 0;
+        width: 100%; height: 100%;
+        blur-a: root.blur-a;
+        blur-b: root.blur-b;
+        use-a: root.use-a;
+        has-blur: root.has-blur;
+    }
+
+    // The idle pane, over the backdrop rather than instead of it. **The alpha is folded
+    // into the brush** — `opacity` on an element costs a layer, and this one is full-bleed
+    // and animating for the whole morph. `base` rather than `mantle`: the band is the top
+    // of the page and not chrome pinned above it, so it takes the content panel's own
+    // fill and the tabs sit *in* the view. A step darker read as a separate slab, since
+    // nothing separates the two — no border, no gap, and the grid starts immediately
+    // under it.
+    idle-pane := Rectangle {
+        x: 0; y: 0;
+        width: 100%; height: 100%;
+        background: Theme.base.with-alpha(1.0 - root.hero-t);
+    }
+
+    VerticalLayout {
+        padding: Theme.pad-lg;
+        spacing: Theme.pad-md;
+
+        // The band is the only host handing this row a leading slot, and the only one
+        // whose palette crosses — hence the four brush mirrors and `lead-w`, which takes
+        // the back slot out of the bar's budget without the row having to know what is
+        // in it.
+        header := TabSearchHeader {
+            tab-labels: root.tab-labels;
+            tab-icons: root.tab-icons;
+            tab-idx <=> root.tab-idx;
+            avail-w: root.page-w - 2 * Theme.pad-lg;
+            lead-w: root.back-slot-w;
+
+            filter <=> root.filter;
+            filter-placeholder: root.filter-placeholder;
+            blur-tick: root.blur-tick;
+
+            // **All four cross from a theme token to a solved hero tier**, because the
+            // band paints on `Theme.base` in one state and on the entity's own blur in
+            // the other, and neither answer is right for both. `active-color` is the one
+            // that matters most — it drives the selected label, its FILL=1 icon and the
+            // underline from one input, and `Theme.accent` carries no contrast floor
+            // against a blur (Latte's mauve lands near 1.7:1, under even the 3:1 non-text
+            // bar) where `chrome` is solved to clear it.
+            label-color: root.label-brush;
+            active-color: root.active-brush;
+            hover-fill: root.hover-brush;
+            divider-color: root.divider-brush;
+
+            tab-selected(i) => { root.tab-selected(i); }
+            search-edited(t) => { root.search-edited(t); }
+
+            // Opens with the morph. Clipped rather than faded on width alone, since the
+            // disc is incompressible and would otherwise draw over the first tab.
+            if root.hero-shown: Rectangle {
+                width: root.back-slot-w;
+                clip: true;
+                IconButton {
+                    x: 0;
+                    y: (parent.height - self.height) / 2;
+                    icon: "arrow_back";
+                    // **The disc scales with its slot rather than sitting at full size
+                    // inside it.** The slot eases to `pill-h + pad-sm + pad-md` and the
+                    // disc wants `pill-h` of that, so pinned at its final size it does not
+                    // fit until the morph is some 60 % through — and until then the clip
+                    // below cuts a straight edge down the middle of a circle. That reads as
+                    // broken where the artwork tile beside it, cropped by the growing band
+                    // on the very same schedule, reads as a photograph. Both dimensions
+                    // take the same `hero-t`, so every frame is a *uniform scale* of the
+                    // settled row: the disc keeps its exact share of the slot and of the
+                    // trailing gap throughout, which leaves nothing to clip at any
+                    // progress and for any value of the three tokens. The clip stays as
+                    // the guard it always was — it is what stops an incompressible disc
+                    // drawing over the first tab — and this is what stops it ever having
+                    // to do that job.
+                    icon-size: 20px * root.hero-t;
+                    diameter: root.pill-h * root.hero-t;
+                    // The `MetaChip` pair, and `AccentDiscButton`'s ladder for the hover —
+                    // the Now Playing back button is this same control on the other
+                    // backdrop. `hover-bg` has to be named beside `idle-bg`: the component
+                    // defaults it to an opaque `Theme.surface0`, which paints the theme's
+                    // grey over the blur the moment the pointer lands. The retired
+                    // `DetailHeader`'s button took `Theme.floating-chrome-bg`, which is
+                    // right for a disc floating over a full-bleed hero and wrong for one
+                    // sitting in the tab row beside labels that are already on hero tiers.
+                    idle-bg: HeroBackdrop.chip-fill;
+                    hover-bg: HeroBackdrop.disc-hover;
+                    idle-fg: HeroBackdrop.chrome;
+                    // **A bias off the morph, not the morph itself** — the `tab-bar.slint`
+                    // idiom, and the count line's, for a reason particular to this one
+                    // element: it is the only piece of the hero whose *size* also rides
+                    // `hero-t`, so a plain alpha multiplied into a scaling disc left its
+                    // presence going as `hero-t` **squared**. Half size at half alpha is a
+                    // quarter of a button, at the point where the emphasized curve has the
+                    // band all but finished growing — so an entry that animates throughout
+                    // read as one that pops at the end. Leaving is immune to the same
+                    // arithmetic, opening at full presence and receding, which is why only
+                    // one direction ever looked wrong. Doubling the alpha lets the scale
+                    // carry the motion and leaves the fade to lead it in.
+                    opacity: clamp(root.hero-t * 2.0, 0.0, 1.0);
+                    clicked => { root.back-clicked(); }
+                }
+            }
+        }
+
+        HorizontalLayout {
+            vertical-stretch: 1;
+            spacing: Theme.pad-lg;
+
+            if root.hero-shown: VerticalLayout {
+                alignment: start;
+                horizontal-stretch: 0;
+                // Acceptable *here*, unlike the idle pane: it settles at 1.0, so there is
+                // no layer at rest and the cost is bounded by the morph.
+                opacity: root.hero-t;
+
+                // Sized straight off `Theme.hero-artwork` rather than through an `in`
+                // property: the heroes are one band, and a per-view knob is how they
+                // drifted apart before.
+                ArtworkImage {
+                    artwork-path: root.artwork-path;
+                    cover: root.cover;
+                    // **The host can't withhold `cover`, so it says so here instead.**
+                    // Slint has no empty-`image` literal, and the sheet picks one of four
+                    // globals' covers — Genre Detail owning none, its tile being a
+                    // name-hashed gradient. Without this the genre hero paints whichever
+                    // *other* detail happens to be open, which boot makes routine: a
+                    // detail id is restored per view whichever tab is resumed.
+                    has-cover: root.artwork-path != "";
+                    tile-size: Theme.hero-artwork;
+                    tile-radius: root.circular-artwork
+                        ? Theme.hero-artwork / 2
+                        : Theme.radius-lg;
+                    fallback-icon: root.fallback-icon;
+                    tile-bg: root.tile-bg;
+                    tile-icon-color: root.tile-icon-color;
+                }
+            }
+
+            // **The one column with no `if` on it**, because the chip strip at the bottom
+            // carries the change tracker and nothing may drop it — see the note beside
+            // `hero-shown`. In idle it is an empty strip and a spacer inside a clipped
+            // 40 px row: no layer, no glyph, and the rows `hero_chips::clear` emptied at
+            // the end of the last collapse are what make it draw nothing at all.
+            //
+            // The idle count line is not this column's opposite number any more and doesn't
+            // live here: it rides the band's lower edge with the pill row, which is the
+            // line it already shared.
+            VerticalLayout {
+                horizontal-stretch: 1;
+                alignment: stretch;
+                spacing: Theme.pad-xs;
+                // The band the floating pill row occupies. Reserved here rather than
+                // measured, so the chip strip's own two-row slack is exactly what it was
+                // when the pill row was a child of this column.
+                padding-bottom: root.pill-h + Theme.pad-xs;
+
+                // The text half *may* ride the morph — no tracker anywhere under it — so it
+                // takes the cheaper fade of the two. `opacity` is free at rest here because
+                // rest is `hero-t == 1`, where `Opacity::need_layer` bails before it counts
+                // children, and idle unmounts the branch outright.
+                if root.hero-shown: VerticalLayout {
+                    vertical-stretch: 0;
+                    spacing: Theme.pad-xs;
+                    opacity: root.hero-t;
+
+                    HorizontalLayout {
+                        vertical-stretch: 0;
+                        spacing: Theme.pad-sm;
+                        alignment: start;
+
+                        // Playlist Detail's smart badge, matching the grid card's corner.
+                        if root.title-badge: VerticalLayout {
+                            alignment: center;
+                            MaterialIcon {
+                                name: "auto_awesome";
+                                icon-size: 22px;
+                                icon-color: HeroBackdrop.chrome;
+                                filled: true;
+                            }
+                        }
+
+                        Text {
+                            text: "\u{200e}" + root.title;
+                            color: HeroBackdrop.on-backdrop;
+                            font-size: Theme.hero-title-size;
+                            font-weight: Theme.page-title-weight;
+                            horizontal-alignment: left;
+                            overflow: elide;
+                        }
+                    }
+
+                    if root.subtitle != "": Text {
+                        vertical-stretch: 0;
+                        text: "\u{200e}" + root.subtitle;
+                        color: HeroBackdrop.on-backdrop;
+                        font-size: Theme.font-size-md;
+                        horizontal-alignment: left;
+                        overflow: elide;
+                    }
+                }
+
+                // Built by `ui::hero_chips` off the stats the fetch already returned. The
+                // rows live on a global six heroes share and outlive whichever filled them;
+                // this page publishes none of its own in idle, so what empties the strip is
+                // the collapse's own teardown rather than an `if` here — which it could not
+                // be anyway, this being the tracker's home.
+                HeroChipStrip { fade: root.hero-t; }
+
+                Rectangle { vertical-stretch: 1; }
+            }
+        }
+    }
+
+    // The idle count line. **Anchored to the *compact* band's floor, not to the root's** —
+    // which is the whole difference between it and the pill row below. A detail's pills
+    // belong on whichever floor is current, so they follow the height; this sentence
+    // belongs where it already sits, and riding the height dragged it down out of the page
+    // and shoved it back in. So it holds still vertically and leaves sideways instead:
+    // fading out to the left as the hero opens, sliding back in from the left as the band
+    // collapses. `count-slide` is `ViewTransition`'s own axis travel, so the line leaves
+    // the way a view does.
+    //
+    // Both ends ride `hero-t`, which is the morph's clock — no second animation to keep in
+    // step, and the reversal is free. The alpha is a *bias* off the same source rather than
+    // its plain complement, the `tab-bar.slint` idiom: the artwork tile fading in behind it
+    // takes that curve too, and at equal weights the two read over each other for the first
+    // frames. Folded into the brush, never `opacity`, which would cost a layer for the
+    // whole length of every detail.
+    //
+    // A bare `Text` with a bound width, per the faked-placeholder pitfall: elide alone
+    // doesn't hold a Text inside a non-layout parent, since its `preferred-width` stays the
+    // untruncated string. The width stops short of the pills so a long count can't paint
+    // through them — `space-between` used to negotiate that, and squeezed the pills to do it.
+    property <length> count-slide: 32px;
+
+    Text {
+        x: Theme.pad-lg - root.count-slide * root.hero-t;
+        y: root.compact-h - Theme.pad-lg - root.pill-h;
+        width: root.page-w - 2 * Theme.pad-lg - pills.width - Theme.pad-md;
+        height: root.pill-h;
+        // Leading LRM keeps the line left-anchored under RTL.
+        text: "\u{200e}" + root.count-text;
+        color: Theme.text.with-alpha(clamp(1.0 - root.hero-t * 2.0, 0.0, 1.0));
+        font-size: Theme.page-title-size;
+        font-weight: Theme.page-title-weight;
+        horizontal-alignment: left;
+        vertical-alignment: center;
+        overflow: elide;
+    }
+
+    // The action pills — the tab's, or the open detail's. **A floating slot rather than
+    // children of the meta column**, because Slint allows one `@children` and the two
+    // states need it in different places; the column reserves the band above and this rides
+    // the root's own lower edge, which is the meta row's floor in both states — so no
+    // anchor has to be interpolated and the slot simply follows the height. A
+    // `HorizontalLayout` rather than a bare `Rectangle`: the pill rows are `if`-conditional
+    // and a Rectangle reports 0×0 over conditional children.
+    //
+    // `pills` is a cell of its own so the count line can reserve against it: under
+    // `alignment: end` it is handed exactly the width the host's row asks for, and nothing
+    // in that width reads back the count's.
+    HorizontalLayout {
+        x: Theme.pad-lg;
+        y: root.height - Theme.pad-lg - root.pill-h;
+        width: root.page-w - 2 * Theme.pad-lg;
+        height: root.pill-h;
+        alignment: end;
+
+        pills := HorizontalLayout {
+            @children
+        }
+    }
+}

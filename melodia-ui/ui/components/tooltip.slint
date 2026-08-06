@@ -2,8 +2,9 @@ import { Theme } from "../theme.slint";
 
 // Which side the pill clears. `below` is for hosts pinned near the top, where an
 // above-tooltip clips off-screen; `right` is for the collapsed sidebar rail, where the
-// hidden label sat to the icon's right anyway.
-export enum TooltipSide { above, below, right }
+// hidden label sat to the icon's right anyway; `left` is the volume popup's percentage,
+// which reads out beside a vertical slider with only the empty strip to its left free.
+export enum TooltipSide { above, below, left, right }
 
 // A pill anchored on one side of its parent, fading in on hover — Slint has no native
 // tooltip. Place it inside the element it annotates, set `text`, and feed `hovered` from
@@ -33,10 +34,10 @@ export component Tooltip inherits Rectangle {
 
     width: min(tip-text.preferred-width + 16px, root.max-pill-width);
     height: tip-text.preferred-height + 8px;
-    // `right` clears the host horizontally and centres on it vertically; the
-    // two vertical sides do the mirror of that.
-    x: root.side == TooltipSide.right
-        ? (root.host-width + root.gap)
+    // The two horizontal sides clear the host horizontally and centre on it vertically;
+    // the two vertical sides do the mirror of that.
+    x: root.side == TooltipSide.right ? (root.host-width + root.gap)
+        : root.side == TooltipSide.left ? (-self.width - root.gap)
         : (root.host-width - self.width) / 2;
     y: root.side == TooltipSide.above ? (-self.height - root.gap)
         : root.side == TooltipSide.below ? (root.host-height + root.gap)

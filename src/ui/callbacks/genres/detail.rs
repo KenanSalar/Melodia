@@ -5,16 +5,17 @@
 
 use std::sync::Arc;
 
-use slint::{ComponentHandle, Model, SharedString};
+use slint::{ComponentHandle, SharedString};
 
 use crate::library;
 use crate::state::AppState;
 use crate::ui::callbacks::{collect_track_ids, play_row_start, spawn_play_then_shuffle};
-use crate::ui::callbacks::macros::{spawn_logged, spawn_logged_sync, wire_row_flag};
+use crate::ui::callbacks::macros::{spawn_blocking_logged, spawn_logged, wire_row_flag};
 use crate::ui::callbacks::{next_sort, persist_view_sort};
 use crate::ui::genres::{self as genres_ui_mod, GenresUi};
+use crate::ui::my_library::restore_origin;
 use crate::ui::track_list_view::{TrackListColumnState, view_id};
-use crate::{AppWindow, GenreDetail, Nav};
+use crate::{AppWindow, GenreDetail};
 
 /// Wire the `GenreDetail` callbacks. See [`super::wire_genres`].
 pub(super) fn wire(ui: &AppWindow, state: &AppState, genres_ui: &Arc<GenresUi>) {
@@ -50,22 +51,23 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, genres_ui: &Arc<GenresUi>) 
             // originating sidebar selection in the same UI-thread tick
             // as the `genre-id` reset so Slint reroutes straight to
             // the origin tab.
+            // **The origin is a pair** — see `albums/detail.rs`'s note: nav index
+            // and, inside My Library, the tab, restored together.
             let origin = g.get_origin_nav_index();
             if origin >= 0 {
-                let nav = ui.global::<Nav>();
-                nav.set_selected_index(origin);
-                nav.invoke_persist_selected_index(origin);
+                restore_origin(&ui, origin, g.get_origin_tab());
                 g.set_origin_nav_index(-1);
+                g.set_origin_tab(-1);
             }
 
             g.set_genre_id(-1);
-            // Genres have no hero images, so this teardown never reaches
-            // `release_detail_hero_images!` — hand the shared colour set and
-            // chip row back here instead, else the next hero paints this
-            // genre's hash-derived stops and its counts until its own decode
-            // and fetch land.
-            crate::ui::hero_backdrop::reset(&ui);
-            crate::ui::hero_chips::clear(&ui);
+            // The shared colour set and chip row are *not* handed back here.
+            // This id is what the band's whole hero half is a ternary over, so
+            // resetting on the same tick leaves it collapsing a placeholder over
+            // a gradient that is no longer this genre's —
+            // `MyLibrary.hero-collapsed` owns that teardown now, and the band
+            // fires it once the morph is done. See
+            // `callbacks::my_library::release_collapsed_hero`.
             genres_ui_mod::clear_detail(&gu);
 
             let gu_trim = gu.clone();
@@ -127,7 +129,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, genres_ui: &Arc<GenresUi>) 
     {
         let s = state.clone();
         detail.on_add_to_queue(move |ids| {
-            let id_vec: Vec<i64> = ids.iter().map(i64::from).collect();
+            let id_vec = collect_track_ids(&ids);
             let s = s.clone();
             spawn_logged!(s, "genres::add_to_queue", library::queue::queue_add_tracks(&s, id_vec));
         });
@@ -212,7 +214,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, genres_ui: &Arc<GenresUi>) 
             let Some(ui) = weak.upgrade() else { return };
             let columns = ui.global::<GenreDetail>().snapshot_visible();
             let s = s.clone();
-            spawn_logged_sync!(s, "genres::toggle_column",
+            spawn_blocking_logged!(s, "genres::toggle_column",
                 library::settings::update_view_columns(&s, "genre_detail".to_string(), columns));
         });
     }

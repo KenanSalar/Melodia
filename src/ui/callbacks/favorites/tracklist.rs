@@ -4,12 +4,12 @@
 
 use std::sync::Arc;
 
-use slint::{ComponentHandle, Model, SharedString};
+use slint::{ComponentHandle, SharedString};
 
 use crate::library;
 use crate::state::AppState;
 use crate::ui::callbacks::{collect_track_ids, next_sort, persist_view_sort, play_row_start};
-use crate::ui::callbacks::macros::{spawn_logged, wire_row_flag};
+use crate::ui::callbacks::macros::{spawn_blocking_logged, spawn_logged, wire_row_flag};
 use crate::ui::favorites::{self as favorites_ui_mod, FavoritesUi};
 use crate::ui::track_list_view::{TrackListColumnState, view_id};
 use crate::{AppWindow, Favorites};
@@ -49,7 +49,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, fav_ui: &Arc<FavoritesUi>) 
     {
         let s = state.clone();
         g.on_add_to_queue(move |ids| {
-            let id_vec: Vec<i64> = ids.iter().map(i64::from).collect();
+            let id_vec = collect_track_ids(&ids);
             let s = s.clone();
             spawn_logged!(s, "favorites::add_to_queue",
                 library::queue::queue_add_tracks(&s, id_vec));
@@ -137,15 +137,9 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, fav_ui: &Arc<FavoritesUi>) 
             let Some(ui) = weak.upgrade() else { return };
             let columns = ui.global::<Favorites>().snapshot_visible();
             let s_disk = s.clone();
-            s.runtime.spawn_blocking(move || {
-                if let Err(e) = library::settings::update_view_columns(
-                    &s_disk,
-                    "favorites".to_owned(),
-                    columns,
-                ) {
-                    log::warn!("favorites::toggle_column: {e}");
-                }
-            });
+            spawn_blocking_logged!(s, "favorites::toggle_column",
+                library::settings::update_view_columns(
+                    &s_disk, "favorites".to_owned(), columns));
         });
     }
     // select-row / clear-selection — modifier-aware selection with

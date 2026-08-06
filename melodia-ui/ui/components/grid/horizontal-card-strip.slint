@@ -5,18 +5,20 @@ import { EntityCard } from "entity-card.slint";
 import { OverlayScrollbar } from "../overlay-scrollbar.slint";
 
 // A horizontally-scrolling row of `EntityCard`s under a section heading, over
-// one `EntityStripRow` shape with a boolean per flavour. Mounted by Recently
-// Played's Most Played strip and by the Search view's two result strips;
-// Favorites drove the original three and now takes the vertical
-// `EntityCardGrid` instead.
+// one `EntityStripRow` shape with a boolean per flavour. Two mounts left, both
+// on the Search view; the two curated pages drove the original three and now
+// take the vertical `EntityCardGrid` instead, a tab each.
+//
+// A strip stays the right answer where the row is a *capped* carousel beside
+// other content — every card is built and every cover requested, which is what
+// makes it affordable there and not on a page of its own.
 //
 // Scrolling is the usual pattern: stock scrollbars off, a sibling
 // `OverlayScrollbar` along the bottom edge reading `viewport-x`, and the bar
 // hides itself with no overflow — so no consumer needs a visibility gate.
 //
-// The hover play overlay is opt-in. Most Played suppresses it, since clicking
-// the card there already plays the track; the result strips show it so a whole
-// album or artist can be played without leaving the page.
+// The hover play overlay is opt-in: the result strips show it so a whole album
+// or artist can be played without leaving the page.
 export component HorizontalCardStrip inherits Rectangle {
     in property <string>             heading;
     in property <[EntityStripRow]>   rows;

@@ -234,9 +234,9 @@ fn the_default_needle_is_the_one_folding_an_empty_string_gives() {
 
 // --- most_played_matches ---
 //
-// The card predicate is load-bearing twice over on both surfaces that use it:
-// the model build (`favorites::grids::apply::build_filtered_grids`,
-// `recently_played::strip::apply_filtered_strips`) and the
+// The card predicate is load-bearing twice over on both Most Played tabs: the
+// model build (`favorites::grids::apply::build_filtered_grids`,
+// `recently_played::grid::apply::build_filtered_grid`) and the
 // `most_played_track_ids` walk that resolves the ids `play-track` enqueues. A
 // drift between the two hands `player_play_tracks` a list the cards aren't
 // showing.

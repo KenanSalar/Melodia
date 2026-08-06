@@ -24,6 +24,11 @@ msgstr "Περιήγηση"
 msgid "Favorites"
 msgstr "Αγαπημένα"
 
+# The sidebar row, and the window title, for the page carrying the Songs / Albums /
+# Artists / Genres / Playlists tabs. Each tab reuses its own msgid below.
+msgid "My Library"
+msgstr "Η βιβλιοθήκη μου"
+
 msgid "Tracks"
 msgstr "Κομμάτια"
 
@@ -229,6 +234,15 @@ msgstr "Φιλτράρισμα κομματιών…"
 
 msgid "Columns"
 msgstr "Στήλες"
+
+msgid "Card view"
+msgstr "Προβολή καρτών"
+
+msgid "List view"
+msgstr "Προβολή λίστας"
+
+msgid "Folder"
+msgstr "Φάκελος"
 
 # ---- Track table column headers ---------------------------------------------
 
@@ -816,6 +830,9 @@ msgstr "Δεν έχει παίξει τίποτα ακόμη"
 
 msgid "Play one of your favorites and it will show up here."
 msgstr "Παίξε ένα από τα αγαπημένα σου και θα εμφανιστεί εδώ."
+
+msgid "Play something and it will show up here."
+msgstr "Παίξε κάτι και θα εμφανιστεί εδώ."
 
 msgid "No favorite artists yet"
 msgstr "Δεν υπάρχουν αγαπημένοι καλλιτέχνες ακόμη"

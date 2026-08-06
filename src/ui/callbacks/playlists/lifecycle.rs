@@ -5,13 +5,16 @@
 use std::sync::Arc;
 
 use async_compat::Compat;
-use slint::{ComponentHandle, Model, VecModel};
+use slint::ComponentHandle;
 
 use crate::state::AppState;
 use crate::ui::callbacks::macros::{release_detail_hero_images, spawn_logged};
+use crate::ui::model_diff::clear_vec_model;
+use crate::ui::my_library::{MyLibraryTab, tab_is_mounted};
 use crate::ui::playlists::{self as playlists_ui_mod, PlaylistsUi};
+use crate::ui::tab_bar::UNFETCHED_COUNT;
 use crate::{
-    AppWindow, Nav, PlaylistDetail, PlaylistGridRow as UiPlaylistGridRow, Playlists,
+    AppWindow, PlaylistDetail, PlaylistGridRow as UiPlaylistGridRow, Playlists,
     TrackListRow as UiTrackListRow,
 };
 
@@ -25,7 +28,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
     // on leave, wipe the Slint models (UI thread) then release the
     // Rust-side caches off-thread; on return, full re-fetch if dirty
     // else just prewarm visible covers.
-    playlists_ui.set_section_active(ui.global::<Nav>().get_selected_index() == 7);
+    playlists_ui.set_section_active(tab_is_mounted(ui, MyLibraryTab::Playlists));
     // See the matching seed in `albums/lifecycle.rs`: a boot pre-fetch for a
     // section that isn't on screen can't publish the shared hero globals, so
     // its first enter has to re-fetch rather than take the cheap path.
@@ -43,21 +46,15 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
             }
             if !active && let Some(ui) = weak.upgrade() {
                 let g = ui.global::<Playlists>();
-                let m = g.get_grid_rows();
-                if let Some(vm) = m.as_any().downcast_ref::<VecModel<UiPlaylistGridRow>>() {
-                    vm.set_vec(Vec::new());
-                }
+                // Rewound on the same tick as the model it numbers;
+                // `Albums.total-count`'s declaration argues the sentinel.
+                g.set_total_count(UNFETCHED_COUNT);
+                clear_vec_model::<UiPlaylistGridRow>(&g.get_grid_rows(), "playlists: clear grid");
 
                 let d = ui.global::<PlaylistDetail>();
                 release_detail_hero_images!(ui, d);
-                let tm = d.get_tracks();
-                if let Some(vm) = tm.as_any().downcast_ref::<VecModel<UiTrackListRow>>() {
-                    vm.set_vec(Vec::new());
-                }
-                let sm = d.get_selected_ids();
-                if let Some(vm) = sm.as_any().downcast_ref::<VecModel<i32>>() {
-                    vm.set_vec(Vec::new());
-                }
+                clear_vec_model::<UiTrackListRow>(&d.get_tracks(), "playlists: clear detail tracks");
+                clear_vec_model::<i32>(&d.get_selected_ids(), "playlists: clear detail selection");
                 d.set_selection_anchor(-1);
             }
             let pu = pu.clone();

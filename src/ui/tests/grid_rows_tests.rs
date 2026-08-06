@@ -1,5 +1,4 @@
 use super::*;
-use slint::Model as _;
 
 /// Read a chunked result back as plain nested `Vec`s.
 fn shape(rows: &[ModelRc<i32>]) -> Vec<Vec<i32>> {

@@ -36,6 +36,13 @@ export component EntityCard inherits Rectangle {
     // per-card overflow menu. Off everywhere else.
     in property <bool> show-overlay-actions: false;
 
+    // Browse's card view draws disk-only files — present inside a library folder but
+    // not in the DB — and dims them inert, the same 0.45 the disabled `TrackListRow`
+    // takes. Defaulted `true`, so every other mount is unaffected; `touch` is gated on
+    // it, which drops the hover fill, the zoom and the pointer cursor together rather
+    // than leaving a card that looks live and does nothing.
+    in property <bool> enabled: true;
+
     // A Material Symbols ligature, marking a smart playlist. Empty means no badge.
     in property <string> badge-icon: "";
 
@@ -62,6 +69,8 @@ export component EntityCard inherits Rectangle {
 
     width: card-width;
     height: card-height;
+    opacity: root.enabled ? 1.0 : 0.45;
+    animate opacity { duration: Theme.dur-fast; easing: ease-in-out; }
 
     inner := Rectangle {
         width: 100%;
@@ -113,6 +122,9 @@ export component EntityCard inherits Rectangle {
     }
 
     touch := TouchArea {
+        // A disabled TouchArea processes nothing, so a dimmed card gets no hover
+        // background, no cover zoom and no click — the `TrackListRowItem` contract.
+        enabled: root.enabled;
         mouse-cursor: pointer;
         clicked => { root.clicked(); }
     }

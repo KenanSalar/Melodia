@@ -9,7 +9,7 @@ use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel};
 use crate::library;
 use crate::state::AppState;
 use crate::ui::callbacks::{collect_track_ids, play_row_start, spawn_play_then_shuffle};
-use crate::ui::callbacks::macros::{release_detail_hero_images, spawn_logged, wire_row_flag};
+use crate::ui::callbacks::macros::{spawn_blocking_logged, spawn_logged, wire_row_flag};
 use crate::ui::playlists::{self as playlists_ui_mod, PlaylistsUi};
 use crate::ui::track_list_view::{TrackListColumnState, view_id};
 use crate::{AppWindow, Dialog, PlaylistDetail};
@@ -31,7 +31,11 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
             // Set before the `playlist-id` write that flips the `if` branch.
             crate::ui::nav_transition::mark_drill_back(&ui);
             g.set_playlist_id(-1);
-            release_detail_hero_images!(ui, g);
+            // The hero Images are *not* dropped here. This id is what the band's
+            // whole hero half is a ternary over, so releasing on the same tick
+            // leaves it collapsing a placeholder — `MyLibrary.hero-collapsed`
+            // owns that teardown now, and the band fires it once the morph is
+            // done. See `callbacks::my_library::release_collapsed_hero`.
             playlists_ui_mod::clear_detail(&pu);
 
             let pu_swap = pu.clone();
@@ -178,15 +182,9 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
             let Some(ui) = weak.upgrade() else { return };
             let columns = ui.global::<PlaylistDetail>().snapshot_visible();
             let s_disk = s.clone();
-            s.runtime.spawn_blocking(move || {
-                if let Err(e) = library::settings::update_view_columns(
-                    &s_disk,
-                    "playlist_detail".to_owned(),
-                    columns,
-                ) {
-                    log::warn!("playlists::toggle_column: {e}");
-                }
-            });
+            spawn_blocking_logged!(s, "playlists::toggle_column",
+                library::settings::update_view_columns(
+                    &s_disk, "playlist_detail".to_owned(), columns));
         });
     }
 
@@ -287,7 +285,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
     }
 
     // Rename / Delete dialog opens are populated inline in
-    // `playlist-detail-view.slint` (Slint-only — see the long comment
+    // `my-library/tab-pills.slint` (Slint-only — see the long comment
     // in `super::dialog`). No Rust handler needed here; the Accept-side
     // commit lives in the `rename-playlist` / `delete-playlist`
     // branches in `super::dialog`.

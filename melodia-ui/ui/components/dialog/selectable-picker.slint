@@ -225,14 +225,18 @@ export component PickerListCard inherits Rectangle {
 
     // Childless, so it strokes directly rather than compositing a layer; and
     // with no TouchArea it intercepts neither the rows' clicks nor the wheel.
+    // `surface2` rather than `Theme.border` — the card is `surface0` on a
+    // `surface0` dialog, and on Catppuccin that token *is* `surface0`, so the
+    // list had no visible edge at all and its rows floated on the dialog.
     Rectangle {
         border-radius: Theme.radius-md;
         border-width: 1px;
-        border-color: Theme.border;
+        border-color: Theme.surface2;
     }
 
     OverlayScrollbar {
         horizontal: false;
+        track-color: Theme.scrollbar-track-on-card;
         x: parent.width - self.width - 2px;
         y: 2px;
         width: 10px;

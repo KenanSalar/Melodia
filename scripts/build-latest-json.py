@@ -235,6 +235,14 @@ def build_manifest(
             # artifacts and their .minisig siblings and nothing else, so an
             # unclassifiable file means a rename landed upstream of this table —
             # louder than a platform quietly dropping out of the manifest.
+            #
+            # That "nothing else" is an obligation on the CALLER, and
+            # refresh-manifest.yml broke it first: it staged the published
+            # `latest.json` in the same directory to read its carry-over fields
+            # from, and every publish then died here. A rebuild's inputs that
+            # aren't artifacts belong somewhere the walk can't reach — do not
+            # answer this by whitelisting a filename, which is how the guard
+            # goes quiet again one name at a time.
             raise SystemExit(
                 f"{path.name} matches no PLATFORM_PATTERNS entry. Something in "
                 "release.yml's packaging steps renamed an artifact out from "

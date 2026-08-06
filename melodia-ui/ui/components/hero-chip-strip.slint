@@ -15,11 +15,21 @@ import { MetaChipStrip } from "meta-chip-strip.slint";
 // this wrapper knows about the hero tiers. `ui::hero_chips::tests` pins that the
 // six heroes take it rather than reaching past it.
 export component HeroChipStrip inherits MetaChipStrip {
+    // How much of the hero is on screen, for a band that morphs into one. Both
+    // brushes are multiplied by it, which is the *only* way this strip can fade:
+    // it carries `MetaChipStrip`'s `changed watched-w` tracker, so a band that
+    // wants a fade-out has to keep it mounted rather than drop it mid-animation
+    // — and an `opacity` under 1 on a mounted subtree with children costs an
+    // offscreen layer on every frame, forever. Five of the six heroes are fixed
+    // and take the default.
+    in property <float> fade: 1.0;
+
     rows: HeroChips.rows;
     // `chrome` is the 3:1 tier, solved against the composited band — see the
-    // hero-backdrop rule in `.claude/rules/ui-patterns.md`.
-    chip-fill: HeroBackdrop.chip-fill;
-    chip-label-color: HeroBackdrop.chrome;
+    // hero-backdrop rule in `.claude/rules/ui-patterns.md`. The pill goes through
+    // the global's own function so its weight stays stated once.
+    chip-fill: HeroBackdrop.chip-fill-at(root.fade);
+    chip-label-color: HeroBackdrop.chrome.with-alpha(root.fade);
     vertical-stretch: 0;
 
     measured(w) => {

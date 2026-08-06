@@ -4,10 +4,125 @@
 //! into production binaries.
 
 use std::cell::Cell;
-use std::path::Path;
+use std::fs;
+use std::path::{Path, PathBuf};
 use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use crate::config::Paths;
+
+/// The root of the Slint tree, for the pins that walk it rather than naming files.
+pub(crate) const UI_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/melodia-ui/ui");
+
+/// Every `.slint` file under [`UI_DIR`], sorted, alongside the directories that
+/// wouldn't list.
+///
+/// The unreadable paths come back rather than being skipped: a dropped subtree
+/// lowers whatever a caller counts and its pin goes quiet, and the source-count
+/// floors those pins carry are far too loose to notice one missing folder. Every
+/// caller asserts the second list is empty.
+///
+/// Shared because two pins now walk this tree for unrelated reasons — the
+/// translation-coverage check and the scrollbar-convention check — and a
+/// traversal copied into each is one that can disagree with itself about what
+/// the tree contains.
+pub(crate) fn slint_sources() -> (Vec<PathBuf>, Vec<PathBuf>) {
+    fn walk(dir: &Path, out: &mut Vec<PathBuf>, unreadable: &mut Vec<PathBuf>) {
+        let Ok(entries) = fs::read_dir(dir) else {
+            unreadable.push(dir.to_path_buf());
+            return;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                walk(&path, out, unreadable);
+            } else if path.extension().is_some_and(|ext| ext == "slint") {
+                out.push(path);
+            }
+        }
+    }
+
+    let (mut sources, mut unreadable) = (Vec::new(), Vec::new());
+    walk(Path::new(UI_DIR), &mut sources, &mut unreadable);
+    sources.sort();
+    (sources, unreadable)
+}
+
+/// `src` with everything after an unquoted `//` dropped on each line, keeping the
+/// line structure.
+///
+/// Shared because prose about the code reads exactly like the code to any pin
+/// that greps for a construct, and the two that walk the whole tree both trip on
+/// it. The translation pin would collect a msgid off the ellipsis placeholders
+/// `tab-bar.slint` and `overflow-menu-section.slint` spell inside comments
+/// (`@tr("…")`); the scrollbar pin's brace walk would be thrown by any comment
+/// quoting an unbalanced `{`.
+pub(crate) fn strip_line_comments(src: &str) -> String {
+    let mut out = String::with_capacity(src.len());
+    for line in src.lines() {
+        let bytes = line.as_bytes();
+        let mut cut = line.len();
+        let mut in_string = false;
+        let mut i = 0;
+        while i < bytes.len() {
+            match bytes[i] {
+                b'\\' if in_string => i += 1,
+                b'"' => in_string = !in_string,
+                b'/' if !in_string && bytes.get(i + 1) == Some(&b'/') => {
+                    cut = i;
+                    break;
+                }
+                _ => {}
+            }
+            i += 1;
+        }
+        out.push_str(&line[..cut]);
+        out.push('\n');
+    }
+    out
+}
+
+/// The `labels` and `fields` arrays of the one `SortPillRow` mount in `src` whose
+/// `sort-field` reads `field_property`, as raw comma-separated element lists.
+///
+/// `field_property` is the whole property path the mount binds — `Albums.sort-field`,
+/// or `Favorites.artist-sort-field` where one global sorts more than one thing. It is
+/// the only binding naming both the component and the global, so it locates the mount;
+/// the two arrays are then read backwards from it, both being declared above. Returns
+/// `None` when no such mount exists, which is itself the failure a caller reports.
+///
+/// Shared because both sort-pill pins ask the same question of two different view
+/// files, and a parser copied into each is a parser that can disagree with itself
+/// about what a mount looks like.
+pub(crate) fn sort_pill_row_arrays<'a>(
+    src: &'a str,
+    field_property: &str,
+) -> Option<(&'a str, &'a str)> {
+    let anchor = src.find(&format!("sort-field: {field_property};"))?;
+    let head = &src[..anchor];
+    let array_after = |start: usize| -> Option<&'a str> {
+        let open = src[start..].find('[')? + start + 1;
+        let close = src[open..].find(']')? + open;
+        Some(&src[open..close])
+    };
+    Some((array_after(head.rfind("labels:")?)?, array_after(head.rfind("fields:")?)?))
+}
+
+/// A solid-colour `side` × `side` PNG in a fresh temp dir. The dir is returned
+/// alongside the path so the caller can keep it alive — dropping it deletes the
+/// file, which is the failure mode to watch for when adopting this.
+///
+/// Shared because every cover-cache test needs a real decodable image and the
+/// two that did each wrote their own; the tier tests want a large source to
+/// downscale from and the lookup tests only want *an* image, so the size is the
+/// one thing worth parameterising.
+pub(crate) fn write_test_png(
+    side: u32,
+) -> Result<(tempfile::TempDir, PathBuf), Box<dyn std::error::Error>> {
+    let tmp = tempfile::tempdir()?;
+    let path = tmp.path().join("cover.png");
+    image::RgbImage::from_pixel(side, side, image::Rgb([120, 60, 200])).save(&path)?;
+    Ok((tmp, path))
+}
 
 /// A [`Paths`] rooted in a throwaway directory, with the same subdirectories
 /// [`Paths::resolve`] creates already in place — so a test that writes into one

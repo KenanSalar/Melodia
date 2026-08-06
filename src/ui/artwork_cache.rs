@@ -5,7 +5,7 @@
 //! so each decodes it **once** and produces both buffers from that single
 //! `DynamicImage`, held as an [`ArtworkPair`] in a small LRU keyed by artwork
 //! path. [`crate::ui::now_playing_artwork`] is the full-screen Now Playing
-//! tier and [`crate::ui::detail_artwork`] the detail-header one; they differ
+//! tier and [`crate::ui::detail_artwork`] the hero-band one; they differ
 //! only in capacity and in the [`BlurSpec`] below, which is why the machinery
 //! lives here and each of them is a newtype over it.
 //!

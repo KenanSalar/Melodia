@@ -1,0 +1,10 @@
+# Blank issues are off so bug reports carry the version, install method and
+# platform the release matrix makes necessary to reproduce anything. Free-form
+# writing isn't lost to that: `task.md` is a Markdown template, so it pre-fills
+# a skeleton the author can rewrite or delete outright — which is the blank
+# issue, minus the blank page.
+blank_issues_enabled: false
+contact_links:
+  - name: Question or usage help
+    url: https://github.com/KenanSalar/Melodia/discussions/categories/q-a
+    about: Ask how something works, or check whether it has already been answered.

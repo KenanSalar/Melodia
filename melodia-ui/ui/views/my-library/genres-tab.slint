@@ -1,0 +1,44 @@
+import { Theme } from "../../theme.slint";
+import { Genres } from "../../globals/genres.slint";
+import { GenreGrid } from "../../components/grid/genre-grid.slint";
+import { GridEmptyState } from "../../components/grid/grid-empty-state.slint";
+import { OverlayScrollbar } from "../../components/overlay-scrollbar.slint";
+
+// The Genres tab, `MyLibraryAlbumsTab`'s shape over the `Genres` global. No
+// `request-cover` — a genre card paints a name-hashed gradient, not artwork.
+export component MyLibraryGenresTab inherits Rectangle {
+    in property <length> card-w;
+    in property <length> card-h;
+    in property <length> row-h;
+    in property <length> gap;
+
+    grid := GenreGrid {
+        y: Theme.pad-md;
+        width: 100%;
+        height: parent.height - Theme.pad-md;
+        rows: Genres.grid-rows;
+        card-width: root.card-w;
+        card-height: root.card-h;
+        row-height: root.row-h;
+        gap: root.gap;
+        open-genre(id) => { Genres.open-genre(id); }
+    }
+
+    if Genres.total-count == 0: GridEmptyState {
+        icon: "theater_comedy";
+        title: @tr("No genres yet");
+        body: @tr("Add a music folder in Settings to start building your library.");
+    }
+
+    OverlayScrollbar {
+        horizontal: false;
+        x: parent.width - self.width;
+        y: Theme.pad-md;
+        width: 10px;
+        height: parent.height - Theme.pad-md;
+        visible-size: grid.v-visible-height;
+        content-size: grid.v-viewport-height;
+        offset: grid.v-offset;
+        scroll-to(o) => { grid.set-v-offset(o); }
+    }
+}

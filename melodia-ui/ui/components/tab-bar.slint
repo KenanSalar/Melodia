@@ -96,9 +96,20 @@ component TabBarCell inherits Rectangle {
                     // compact mode — where the icon *is* the tab — the press would
                     // otherwise read as inert.
                     icon-size: 22px * root.press-scale;
+                    // **No `animate` here, and that is the one thing in this cell worth
+                    // stating twice.** It carried a `dur-fast` ease, which bought nothing
+                    // on a pick — the label beside it snaps and `filled` swaps font face in
+                    // one frame — and cost the bar every crossing its host paints. A host
+                    // on a hero hands these brushes over *animating*: this binding's
+                    // dependency was then re-dirtied every frame, and an animated binding
+                    // restarts on dirtiness rather than on a value change, so it re-based
+                    // from the current colour with the clock back at zero and the glyph
+                    // barely moved until the source stopped — then caught up in one late
+                    // 200 ms rush. That is the whole "the colour changes at the end of the
+                    // morph" symptom, and it can only be fixed by not easing here: the
+                    // source is already eased, and this cell has no way to know it.
                     icon-color: root.selected ? root.active-color : root.label-color-idle;
                     filled: root.selected;
-                    animate icon-color { duration: Theme.dur-fast; easing: ease-in-out; }
                 }
             }
 
@@ -145,7 +156,8 @@ component TabBarCell inherits Rectangle {
 
 // Material 3 tab bar. Data-agnostic — parallel label/icon arrays in, picked index out,
 // the `ChipGroup` / `Dropdown` / `ColorDotGrid` shape — and it knows nothing about which
-// tabs exist. Two hosts: the Settings page header and the Favorites hero.
+// tabs exist. Two hosts: the Settings page header and the shared mosaic hero band, which
+// Favorites and Recently Played both wear.
 //
 // **`labels` must arrive as an inline `[@tr("…"), …]` literal at the call site.** `@tr`
 // registers msgids at codegen, so an array populated from Rust renders untranslated.
