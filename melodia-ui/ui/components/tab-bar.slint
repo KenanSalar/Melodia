@@ -38,7 +38,28 @@ component TabBarCell inherits Rectangle {
     // word. Biased off the same source rather than given an `animate`, which would
     // phase-lag it.
     property <float> label-alpha: clamp(1.0 - root.compact-t * 2.0, 0.0, 1.0);
-    property <brush> label-color: root.selected ? root.active-color : root.label-color-idle;
+
+    // **The cell eases floats and never a brush**, and the two below are the whole of it.
+    // Every colour it paints is a brush its host hands down, and a host on a hero band
+    // crosses those for the length of a morph — an animated binding restarts on
+    // *dirtiness* rather than on a value change, so a leaf easing one re-bases every frame
+    // and sits still until the source settles. The icon lost its `animate` to that; these
+    // two carry the motion the cell is entitled to.
+    //
+    // How far into the hover this cell is. The fill used to be an `animate background`
+    // over `has-hover ? hover-fill : transparent`, exempted on the grounds that the
+    // unhovered arm reads no input so a morph with no pointer on the bar never dirties it
+    // — true, and beside the point: the tab you are *pointing at* while you click it is
+    // the hovered arm, and it read the crossing brush every frame. So the fill parked on
+    // whatever it held when the crossing began (the theme's own `surface0` on the way into
+    // a hero) and snapped at the end.
+    property <float> hover-t: touch.has-hover ? 1.0 : 0.0;
+    animate hover-t { duration: Theme.dur-fast; easing: ease-in-out; }
+
+    // Which side of the pick this cell is on, eased on the underline's own duration and
+    // curve so the label and glyph reach the accent as the pill arrives beneath them.
+    property <float> sel-t: root.selected ? 1.0 : 0.0;
+    animate sel-t { duration: Theme.dur-med; easing: ease-in-out; }
 
     horizontal-stretch: 0;
 
@@ -74,9 +95,12 @@ component TabBarCell inherits Rectangle {
         x: (parent.width - self.width) / 2;
         y: (parent.height - self.height) / 2;
 
-        background: touch.has-hover ? root.hover-fill : transparent;
+        // The state layer, faded by `hover-t` and coloured by whatever the host is
+        // currently handing over. **`transparentize` and not `with-alpha`**: it
+        // *multiplies* alpha where `with-alpha` sets it, so a hero band's translucent
+        // tier keeps its own 0.12 weight at full hover instead of being forced opaque.
+        background: root.hover-fill.transparentize(1.0 - root.hover-t);
         border-radius: Theme.radius-md;
-        animate background { duration: Theme.dur-fast; easing: ease-in-out; }
 
         // Padding and spacing close with the label rather than switching, so the centred
         // row collapses to just the icon and the icon glides to the cell's middle with
@@ -87,29 +111,44 @@ component TabBarCell inherits Rectangle {
             spacing: Theme.pad-sm * root.open;
             alignment: center;
 
+            // **Two glyphs rather than one eased brush.** `mix()` takes `color` operands
+            // and both of these are `brush`, and the cell may not `animate` either — so a
+            // blend between them is a stack, and `sel-t` decides how much of the top shows.
+            //
+            // The idle one paints at **full alpha underneath** and the selected one fades
+            // in over it, which is what keeps the ink constant in both directions: two
+            // layers at `t` and `1 - t` composite to three quarters coverage at the
+            // midpoint and the glyph visibly thins. A full bottom also reverses for free —
+            // deselecting simply uncovers it.
+            //
+            // Both take the same `filled`, so this crossfades colour only and the FILL=1
+            // face swap stays the single frame it always was. Divergence between the two
+            // mounts in anything but colour is a ghost, so they are kept identical.
+            //
+            // The wrapper needs its own geometry: `MaterialIcon` binds `width`/`height`, so
+            // a container merges nothing from it and would report 0×0.
             VerticalLayout {
                 alignment: center;
-                MaterialIcon {
-                    name: root.icon;
-                    // Scaled directly for the `SidebarItem` reason: a container
-                    // shrinking 3% moves the glyph a pixel and nothing else, so in
-                    // compact mode — where the icon *is* the tab — the press would
-                    // otherwise read as inert.
-                    icon-size: 22px * root.press-scale;
-                    // **No `animate` here, and that is the one thing in this cell worth
-                    // stating twice.** It carried a `dur-fast` ease, which bought nothing
-                    // on a pick — the label beside it snaps and `filled` swaps font face in
-                    // one frame — and cost the bar every crossing its host paints. A host
-                    // on a hero hands these brushes over *animating*: this binding's
-                    // dependency was then re-dirtied every frame, and an animated binding
-                    // restarts on dirtiness rather than on a value change, so it re-based
-                    // from the current colour with the clock back at zero and the glyph
-                    // barely moved until the source stopped — then caught up in one late
-                    // 200 ms rush. That is the whole "the colour changes at the end of the
-                    // morph" symptom, and it can only be fixed by not easing here: the
-                    // source is already eased, and this cell has no way to know it.
-                    icon-color: root.selected ? root.active-color : root.label-color-idle;
-                    filled: root.selected;
+                Rectangle {
+                    // Scaled directly for the `SidebarItem` reason: a container shrinking
+                    // 3% moves the glyph a pixel and nothing else, so in compact mode —
+                    // where the icon *is* the tab — the press would otherwise read as inert.
+                    width: 22px * root.press-scale;
+                    height: self.width;
+
+                    MaterialIcon {
+                        name: root.icon;
+                        icon-size: parent.width;
+                        icon-color: root.label-color-idle;
+                        filled: root.selected;
+                    }
+
+                    MaterialIcon {
+                        name: root.icon;
+                        icon-size: parent.width;
+                        icon-color: root.active-color.transparentize(1.0 - root.sel-t);
+                        filled: root.selected;
+                    }
                 }
             }
 
@@ -124,11 +163,16 @@ component TabBarCell inherits Rectangle {
                 horizontal-stretch: 0;
                 width: root.label-w * root.open;
 
+                // The pair the glyph above is, for the same reasons — idle underneath at
+                // full alpha, selected fading in over it. Everything but the colour is
+                // identical between the two, and has to be: a divergent size or weight
+                // reads as a ghost for the length of the crossing.
+                //
+                // Alpha on the brush throughout, never `opacity` on the element: `opacity`
+                // costs a layer, and there are two per tab now.
                 lbl := Text {
                     text: root.label;
-                    // Alpha on the brush, not `opacity` on the element: `opacity`
-                    // costs a layer, and there is one per tab.
-                    color: root.label-color.with-alpha(root.label-alpha);
+                    color: root.label-color-idle.transparentize(1.0 - root.label-alpha);
                     // Text doesn't scale with its container, so the press factor has to
                     // reach it directly. `label-w` follows for free, being this Text's
                     // own `preferred-width`, so the slot closes with the word.
@@ -137,6 +181,19 @@ component TabBarCell inherits Rectangle {
                     // measured maximum, so a heavier selected label could overflow the
                     // cell it was measured for and switching tabs would reflow the row.
                     // Colour carries it instead, which is what M3 does anyway.
+                    font-weight: 500;
+                    horizontal-alignment: left;
+                    vertical-alignment: center;
+                }
+
+                Text {
+                    text: root.label;
+                    // Both fades multiply, which is what `transparentize` does and
+                    // `with-alpha` does not: the compact close still takes the word away
+                    // whichever tab is selected.
+                    color: root.active-color
+                        .transparentize(1.0 - root.label-alpha * root.sel-t);
+                    font-size: Theme.font-size-md * root.press-scale;
                     font-weight: 500;
                     horizontal-alignment: left;
                     vertical-alignment: center;

@@ -88,6 +88,28 @@ export component MosaicTabHero inherits Rectangle {
     out property <length> hero-height:
         2 * Theme.pad-lg + header.row-h + Theme.pad-md + Theme.hero-artwork;
 
+    // --- The bar's palette --------------------------------------------------
+    //
+    // The four brushes the header row paints with, mirrored so a late solve *moves*
+    // rather than steps. `LibraryTabBand`'s argument, and it applies harder here: this
+    // page's solve rides the *mosaic*, and `apply_hero_blur` posts an
+    // `invoke_from_event_loop` of its own after the atlas compose — so the title, the
+    // tile and the chips are already on screen by the time the colours land, where a
+    // detail hero publishes them in the same tick as its id.
+    //
+    // A plain `animate` and no `states` block: this band never morphs, so there is no
+    // crossing to anchor a transition to and nothing for a `change_time` to buy. The bar
+    // itself must not ease these — a leaf fed a moving brush restarts every frame; see
+    // `tab-bar.slint`'s two floats.
+    property <brush> hero-label: HeroBackdrop.on-backdrop;
+    property <brush> hero-active: HeroBackdrop.chrome;
+    property <brush> hero-hover: HeroBackdrop.on-backdrop.with-alpha(0.12);
+    property <brush> hero-divider: HeroBackdrop.tile-edge;
+    animate hero-label, hero-active, hero-hover, hero-divider {
+        duration: Theme.dur-med;
+        easing: ease-in-out;
+    }
+
     // --- Forwarded from the shared header ---------------------------------
     //
     // Re-published under the names the two curated pages already read, so the
@@ -137,7 +159,8 @@ export component MosaicTabHero inherits Rectangle {
             filter-placeholder: root.filter-placeholder;
             blur-tick: root.blur-tick;
 
-            label-color: HeroBackdrop.on-backdrop;
+            // All four through the eased mirrors above, never the tiers directly.
+            label-color: root.hero-label;
             // One input for the selected label, its FILL=1 icon and the underline,
             // so it has to be a hero token like the other three. The band takes its
             // hue from the mosaic, so a theme value is unrelated to what it sits on
@@ -146,9 +169,9 @@ export component MosaicTabHero inherits Rectangle {
             // clear 3:1 whatever the cover. The cost: the selected label sits a
             // tier below the idle ones. Splitting label from indicator means a
             // second input on `TabBar`, which Settings would inherit too.
-            active-color: HeroBackdrop.chrome;
-            hover-fill: HeroBackdrop.on-backdrop.with-alpha(0.12);
-            divider-color: HeroBackdrop.tile-edge;
+            active-color: root.hero-active;
+            hover-fill: root.hero-hover;
+            divider-color: root.hero-divider;
 
             tab-selected(i) => { root.tab-selected(i); }
             search-edited(t) => { root.search-edited(t); }

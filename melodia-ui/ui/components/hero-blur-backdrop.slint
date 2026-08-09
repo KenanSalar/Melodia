@@ -24,7 +24,15 @@ export component HeroBlurBackdrop inherits Rectangle {
     in property <bool> use-a;
     in property <bool> has-blur;
 
+    // **The floor eases on the slots' own duration**, like the scrim below it — it was the
+    // one layer here that hard-cut, and it is the layer that *is* the backdrop whenever
+    // there is no blur image: an artwork-less hero, Genre Detail's name-hashed stops, and
+    // the window between a hero opening and its decode landing. `Brush::interpolate`
+    // handles gradient↔gradient stop-for-stop and both sides here are two stops at 135deg.
+    // Safe to `animate` where a tab-bar brush is not: Rust writes these two discretely and
+    // nothing eases them, so the binding can't be restarted by a moving source.
     background: @linear-gradient(135deg, HeroBackdrop.floor-start, HeroBackdrop.floor-end);
+    animate background { duration: Theme.dur-med; easing: ease-in-out; }
 
     Image {
         x: 0;

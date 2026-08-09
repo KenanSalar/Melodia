@@ -204,3 +204,55 @@ fn the_two_seams_gate_the_shared_write_and_only_that() {
         );
     }
 }
+
+/// **The teardown has a gate too, and it covers the colour set alone.**
+///
+/// A section leave is not a teardown on a tabbed page. Switch from Genre Detail
+/// to a Playlists tab that already has a detail open and `detail-open` never goes
+/// false, so the band holds still by design — while the departing tab's leave
+/// handed the shared set back and the entering tab's re-fetch republished it a DB
+/// query and a cover decode later. The band spent that gap easing to the
+/// accent-seeded floor solve and back, which is the "the colours swing through
+/// something neutral" symptom.
+///
+/// The chips are deliberately **not** under the same gate, and swapping that is
+/// the mutation this exists to catch: a colour held across the gap is the
+/// outgoing hero's tone, which is a hand-off, where a count held across it is the
+/// outgoing hero's *facts* under the incoming one's title. An empty strip states
+/// nothing, which is what a hero with no answer yet should say.
+#[test]
+fn the_shared_teardown_holds_the_colours_for_a_hero_taking_over() {
+    const MACROS: &str = include_str!("../callbacks/macros.rs");
+
+    let body = MACROS
+        .split_once("macro_rules! release_shared_hero {")
+        .and_then(|(_, rest)| rest.split_once("\n}"))
+        .map_or("", |(body, _)| body);
+    assert!(!body.is_empty(), "`release_shared_hero!` is gone or no longer a macro");
+
+    assert!(
+        body.contains("if !$crate::ui::my_library::a_detail_hero_is_mounted(&$ui) {"),
+        "`release_shared_hero!` must skip `hero_backdrop::reset` while another detail's hero is \
+         taking the band over — the publish side has been gated on `section_active` all along, \
+         and this is the same question asked on the way out"
+    );
+
+    let guarded = body
+        .split_once("a_detail_hero_is_mounted(&$ui) {")
+        .and_then(|(_, rest)| rest.split_once('}'))
+        .map_or("", |(inside, _)| inside);
+    assert!(
+        guarded.contains("hero_backdrop::reset"),
+        "the guard must be the one over `hero_backdrop::reset`"
+    );
+    assert!(
+        !guarded.contains("hero_chips::clear"),
+        "`hero_chips::clear` must stay outside the guard — a chip held across the hand-off states \
+         the outgoing entity's facts under the incoming one's title, where a colour held across \
+         it is just the hand-off"
+    );
+    assert!(
+        body.contains("$crate::ui::hero_chips::clear(&$ui);"),
+        "`release_shared_hero!` must still clear the chip row unconditionally"
+    );
+}

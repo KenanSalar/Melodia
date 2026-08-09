@@ -207,9 +207,25 @@ macro_rules! release_hero_slots {
 /// two mosaic pages, whose tiles belong to their own tier. Four sites spelled
 /// the pair out, each with its own paragraph saying it was the macro minus the
 /// slots.
+///
+/// **The colour set is handed back only when nothing is taking it over, and the
+/// chip row always is.** On a tabbed page a section leave is not a teardown:
+/// switching from Genre Detail to a Playlists tab that already has a detail open
+/// keeps `detail-open` true throughout, so the band deliberately doesn't morph —
+/// and resetting here made it ease to the accent-seeded floor solve and back
+/// while the entering tab's re-fetch and cover decode ran. That is the gate the
+/// *publish* side has always had (`apply_detail_artwork` writes the set only when
+/// its own section is active); [`crate::ui::my_library::a_detail_hero_is_mounted`]
+/// is the same question asked on the way out. The chips are not gated with it,
+/// because the two say different kinds of thing: a colour held across the gap is
+/// the outgoing hero's *tone*, which is a hand-off, where a count held across it
+/// is the outgoing hero's *facts* under the incoming one's title. An empty strip
+/// states nothing, which is what a hero with no answer yet should say.
 macro_rules! release_shared_hero {
     ($ui:expr) => {{
-        $crate::ui::hero_backdrop::reset(&$ui);
+        if !$crate::ui::my_library::a_detail_hero_is_mounted(&$ui) {
+            $crate::ui::hero_backdrop::reset(&$ui);
+        }
         $crate::ui::hero_chips::clear(&$ui);
     }};
 }

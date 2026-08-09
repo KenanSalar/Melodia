@@ -90,6 +90,57 @@ pub fn tab_is_mounted(ui: &AppWindow, tab: MyLibraryTab) -> bool {
     tab_from_index(&g, g.get_tab_idx()) == tab
 }
 
+/// Does `tab` have a detail open, given the four live ids?
+///
+/// The pure half of [`a_detail_hero_is_mounted`], split out for the reason
+/// [`super::fold_retired_nav_index`] is: the answer is worth testing and a window is not
+/// worth building to test it. Songs is the arm with no detail.
+pub fn detail_open_on(
+    tab: MyLibraryTab,
+    album_id: i32,
+    artist_id: i32,
+    genre_id: i32,
+    playlist_id: i32,
+) -> bool {
+    match tab {
+        MyLibraryTab::Songs => false,
+        MyLibraryTab::Albums => album_id >= 0,
+        MyLibraryTab::Artists => artist_id >= 0,
+        MyLibraryTab::Genres => genre_id >= 0,
+        MyLibraryTab::Playlists => playlist_id >= 0,
+    }
+}
+
+/// Whether a My Library detail hero owns the shared `HeroBackdrop` set right now.
+///
+/// **The teardown side of the gate the publish side has always had.** Six heroes share
+/// one solve, so `apply_detail_artwork` writes it only when its own section is active —
+/// but `release_shared_hero!` reset it from whichever section was *leaving*, and on a
+/// tabbed page a leave is not a teardown. Switch from Genre Detail to a Playlists tab
+/// that already has a detail open and `detail-open` never goes false: the band holds
+/// still, correctly, while the departing tab hands the colour set back and the entering
+/// tab's re-fetch republishes it a DB query and a cover decode later. The band spent that
+/// gap easing to the accent-seeded floor solve and back.
+///
+/// Mirrors `my-library-view.slint`'s private `detail-open`, which is why
+/// `globals/my-library.slint` doesn't declare one — Rust reads the four ids directly.
+/// Reads `MyLibrary.tab-idx`, which the `<=>` chain out of the tab bar has already moved
+/// before any handler runs, so the answer doesn't depend on whether the entering tab's
+/// gate fired before the departing one's. UI thread only.
+pub fn a_detail_hero_is_mounted(ui: &AppWindow) -> bool {
+    if ui.global::<Nav>().get_selected_index() != super::NAV_MY_LIBRARY {
+        return false;
+    }
+    let g = ui.global::<MyLibrary>();
+    detail_open_on(
+        tab_from_index(&g, g.get_tab_idx()),
+        ui.global::<AlbumDetail>().get_album_id(),
+        ui.global::<ArtistDetail>().get_artist_id(),
+        ui.global::<GenreDetail>().get_genre_id(),
+        ui.global::<PlaylistDetail>().get_playlist_id(),
+    )
+}
+
 /// Close whatever detail `tab` has open, if any.
 ///
 /// The band's one back arrow and a Mouse-4 step out of a detail are the same act, so they

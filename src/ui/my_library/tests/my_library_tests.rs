@@ -814,3 +814,42 @@ fn the_retired_indices_fold_onto_the_page_that_absorbed_them() {
     assert_eq!(fold_retired_nav_index(-1), -1);
     assert_eq!(fold_retired_nav_index(42), 42);
 }
+
+/// Which tab's id decides whether a hero owns the shared colour set.
+///
+/// The pure half of `a_detail_hero_is_mounted`, and the arm worth the test is
+/// **Songs**: it is the one tab with no detail, so a `match` that folded it in with the
+/// rest would read whichever id happened to sit in the default arm and hold the previous
+/// entity's colours over a plain track list. The `-1` cases are the other half — every
+/// close and every failed re-fetch clears its id first, and that is what keeps the
+/// teardown gate from being a leak.
+#[test]
+fn only_the_mounted_tabs_own_id_decides_whether_a_hero_is_up() {
+    use super::MyLibraryTab::{Albums, Artists, Genres, Playlists, Songs};
+
+    // One id set at a time, so a tab reading a sibling's is a failure rather than a
+    // coincidence — the shape a `match` arm gets wrong.
+    for (tab, ids) in [
+        (Albums, [7, -1, -1, -1]),
+        (Artists, [-1, 7, -1, -1]),
+        (Genres, [-1, -1, 7, -1]),
+        (Playlists, [-1, -1, -1, 7]),
+    ] {
+        let [album, artist, genre, playlist] = ids;
+        assert!(
+            super::detail_open_on(tab, album, artist, genre, playlist),
+            "{tab:?} must see its own id"
+        );
+        assert!(
+            !super::detail_open_on(tab, -1, -1, -1, -1),
+            "{tab:?} must report closed once its id is cleared"
+        );
+        assert!(
+            !super::detail_open_on(Songs, album, artist, genre, playlist),
+            "Songs has no detail — it must not answer for {tab:?}'s id"
+        );
+    }
+
+    // `0` is a real row id, so the boundary is `>= 0` and not `> 0`.
+    assert!(super::detail_open_on(Albums, 0, -1, -1, -1));
+}
