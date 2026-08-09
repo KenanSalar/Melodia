@@ -110,7 +110,7 @@ fn every_tab_bar_brush_crosses_from_a_theme_token_to_a_backdrop_tier() {
     let code = code();
     let hero_state = code
         .split_once("hero when root.detail-open: {")
-        .and_then(|(_, rest)| rest.split_once("in-out {"))
+        .and_then(|(_, rest)| rest.split_once("\n            in {"))
         .map_or(String::new(), |(body, _)| body.to_owned());
     assert!(!hero_state.is_empty(), "the band no longer declares its `hero` state");
 
@@ -160,11 +160,17 @@ fn every_tab_bar_brush_crosses_from_a_theme_token_to_a_backdrop_tier() {
 /// `set_animated_binding` carries), so the crossing begins and ends with the
 /// morph however often the target moves underneath it.
 ///
-/// The mirrors are the other half: with the emphasized curve spending most of
-/// its travel in the first quarter, a decode landing mid-morph would otherwise be
-/// adopted in a single frame. Easing them is what turns that step into a move,
-/// and it is also the only thing left covering a decode that lands *after* the
-/// morph, where the transition's own progress is already 1.
+/// The mirrors are the other half: with the entry curve spending most of its
+/// travel early, a decode landing mid-morph would otherwise be adopted in a
+/// single frame. Easing them is what turns that step into a move, and it is also
+/// the only thing left covering a decode that lands *after* the morph, where the
+/// transition's own progress is already 1.
+///
+/// **It is split `in` / `out` to take the morph's two curves**, so each arm is
+/// pinned against the arm of `animate hero-t` it belongs to. `Theme` cannot carry
+/// an easing, so those curves are spelled at both sites and this is the only thing
+/// holding the copies together: change one and the colour stops crossing on the
+/// shape of the geometry, which is the whole reason the crossing is a transition.
 #[test]
 fn the_palette_crossing_is_anchored_to_the_morph() {
     let code = code();
@@ -176,28 +182,62 @@ fn the_palette_crossing_is_anchored_to_the_morph() {
     for input in ["label-brush", "active-brush", "hover-brush", "divider-brush"] {
         assert!(
             !declarations.contains(&format!("animate {input}")),
-            "`{input}` must cross inside the state's `in-out` transition, never on an `animate` of \
-             its own — a binding animation restarts on every dependency tick, and the hero tier it \
-             reads is written from a decode that lands mid-morph"
+            "`{input}` must cross inside the state's transition, never on an `animate` of its own \
+             — a binding animation restarts on every dependency tick, and the hero tier it reads \
+             is written from a decode that lands mid-morph"
         );
     }
 
-    let transition = code
-        .split_once("in-out {")
-        .and_then(|(_, rest)| rest.split_once('}'))
-        .map_or(String::new(), |(body, _)| body.to_owned());
-    for input in ["label-brush", "active-brush", "hover-brush", "divider-brush"] {
+    // The morph's own two arms, taken off the `animate` block so the transition is
+    // checked against the geometry rather than against a second copy of the numbers.
+    let morph = binding(&code, "easing: root.detail-open");
+    let (entry, exit) = morph
+        .split_once(':')
+        .map_or_else(Default::default, |(a, b)| (a.replace('?', ""), b.to_owned()));
+    let entry = entry.trim().to_owned();
+    let exit = exit.trim().to_owned();
+    assert!(
+        entry.starts_with("cubic-bezier(") && exit.starts_with("cubic-bezier("),
+        "`hero-t` must ease on a per-direction ternary of two curves — the entry is gentler than \
+         the collapse because only the collapse has a tail (the count line arriving over its \
+         second half), so one curve reads as a snap going in; got entry {entry:?}, exit {exit:?}"
+    );
+    assert_ne!(
+        entry, exit,
+        "the two arms must be different curves — collapsed to one, the entry goes back to \
+         spending most of its travel in the first quarter and the fix is silently undone"
+    );
+
+    for (direction, curve) in [("in", &entry), ("out", &exit)] {
+        let transition = code
+            .split_once(&format!("\n            {direction} {{"))
+            .and_then(|(_, rest)| rest.split_once("\n            }"))
+            .map_or(String::new(), |(body, _)| body.to_owned());
         assert!(
-            transition.contains(input),
-            "the `hero` state's transition must animate `{input}` — left out, that brush steps on \
-             the frame the detail opens while its three siblings cross"
+            !transition.is_empty(),
+            "the `hero` state must declare an `{direction}` transition — an `in-out` block can \
+             only carry one curve, and the morph now has two"
+        );
+        for input in ["label-brush", "active-brush", "hover-brush", "divider-brush"] {
+            assert!(
+                transition.contains(input),
+                "the `hero` state's `{direction}` transition must animate `{input}` — left out, \
+                 that brush steps on the frame the detail opens while its three siblings cross"
+            );
+        }
+        assert!(
+            transition.contains("duration: Theme.dur-spatial;"),
+            "the `{direction}` crossing must run the morph's own duration — it is the same \
+             gesture, and a second number here is one that can drift from `hero-t`, the collapse \
+             timer and the body's own `ViewTransition`"
+        );
+        assert!(
+            transition.contains(&format!("easing: {curve};")),
+            "the `{direction}` crossing must ease on {curve}, the arm of `animate hero-t` it \
+             belongs to — a transition anchored to the morph's start time but running a different \
+             shape drifts from the geometry in the middle, which is where the whole crossing is"
         );
     }
-    assert!(
-        transition.contains("duration: Theme.dur-spatial;"),
-        "the crossing must run the morph's own duration — it is the same gesture, and a second \
-         number here is one that can drift from `hero-t` and the collapse timer"
-    );
 
     assert!(
         code.contains("animate hero-label, hero-active, hero-hover, hero-divider {"),
