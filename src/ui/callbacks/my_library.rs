@@ -1,10 +1,19 @@
-//! `MyLibrary.*` callbacks: the tab pick, the shared filter, the hero back button.
+//! `MyLibrary.*` callbacks: the tab pick, the shared filter, the hero back button, and the
+//! two teardowns the hero rides.
 //!
 //! Everything a *tab* does on entry and exit — release its cover tier, clear its models,
 //! mark itself dirty, re-fetch — stays in that view's own lifecycle, driven by its
-//! per-tab `SectionActiveGate`. What is left here is the page's own three handlers, none
-//! of which needs a view handle, which is why this is wired straight after `wire_all`
-//! rather than after the five `wire_*` calls.
+//! per-tab `SectionActiveGate`. What is left here is the page's own handlers, none of
+//! which needs a view handle, which is why this is wired straight after `wire_all` rather
+//! than after the five `wire_*` calls.
+//!
+//! **The hero is the page's, not a tab's**, and that is what the last two handlers are for.
+//! A tab leave holds it — `release_shared_hero!` and `release_detail_hero_images!` gate on
+//! `my_library::the_band_is_up` — because nothing on this page clears a detail id on a tab
+//! switch, so the banner is still what the band is collapsing out of and still what it
+//! morphs back into on the next pick. Handing it back is split between `hero-collapsed`
+//! (per id, once the morph has finished) and `page-active-changed` (all of it, once the
+//! page is gone).
 
 use slint::{ComponentHandle, SharedString};
 
@@ -25,7 +34,7 @@ fn persist_tab(state: &AppState, tab: i32) {
     });
 }
 
-/// Hand back everything the band's hero was holding, once its collapse has finished.
+/// Hand back what the band's hero was holding, once its collapse has finished.
 ///
 /// **Deferred out of the four `close-detail` handlers**, which is where it used to run.
 /// Every hero fact — the cover, the blur pair, the title, the chips, and through
@@ -35,15 +44,48 @@ fn persist_tab(state: &AppState, tab: i32) {
 /// was collapsing out of. The sheet holds the *arm* across the same window; this holds the
 /// data behind it.
 ///
-/// All three image-bearing globals rather than the one that closed, because the band can't
-/// say which and doesn't need to: a tab switch is a section switch on this page, so the
-/// departing tab's `lifecycle.rs` has already emptied whichever detail isn't the mounted
-/// one, and those writes land on an `Image::default()` that is already there.
+/// **Which slots that is comes off the ids, because the band collapses for two different
+/// reasons.** A close cleared one and the banner behind it is nobody's; a tab switch out of
+/// a still-open detail cleared nothing, and picking that tab again morphs the same banner
+/// straight back open — ahead of the re-fetch the pick kicks. All three globals are asked
+/// rather than the one that closed, because the band can't say which and doesn't need to:
+/// a `-1` id whose slots are already `Image::default()` costs three writes that land on
+/// what is there.
+///
+/// The colour set is *not* handed back here for the same reason, and its teardown is the
+/// page's — [`release_page_hero`]. The chip row is, and that asymmetry is
+/// `release_shared_hero!`'s: an unkeyed row of counts can't tell the hero returning to it
+/// from a different one taking the band over.
 ///
 /// Safe to run unguarded because `LibraryTabBand` cancels its timer on a re-open, so this
-/// can only land with no detail on screen. The backstop for a collapse the band doesn't
-/// live to finish — a nav away mid-morph — is that same section leave.
+/// can only land with no detail on screen.
 fn release_collapsed_hero(ui: &AppWindow) {
+    let album = ui.global::<AlbumDetail>();
+    if album.get_album_id() < 0 {
+        release_hero_slots!(album);
+    }
+    let artist = ui.global::<ArtistDetail>();
+    if artist.get_artist_id() < 0 {
+        release_hero_slots!(artist);
+    }
+    let playlist = ui.global::<PlaylistDetail>();
+    if playlist.get_playlist_id() < 0 {
+        release_hero_slots!(playlist);
+    }
+    crate::ui::hero_chips::clear(ui);
+}
+
+/// Hand back every hero global the page owns, once the page itself is left.
+///
+/// **The one place the shared colour set is reset from My Library, and the only reach a
+/// detail held on a tab you are not standing on has.** A tab leave keeps its hero — that is
+/// what stops a collapse painting a fallback glyph and a re-entered tab morphing open onto
+/// one — and the per-tab gates only fire for the *mounted* tab, so on a page leave the
+/// other four have no edge left to deliver. Hence the page's own `SectionActiveGate`.
+///
+/// Unconditional, unlike [`release_collapsed_hero`]: past this point no id can bring a
+/// banner back without a fetch that republishes all of it.
+fn release_page_hero(ui: &AppWindow) {
     release_hero_slots!(ui.global::<AlbumDetail>());
     release_hero_slots!(ui.global::<ArtistDetail>());
     release_hero_slots!(ui.global::<PlaylistDetail>());
@@ -128,12 +170,33 @@ pub fn wire_my_library(ui: &AppWindow, state: &AppState) {
     }
 
     // hero-collapsed: the band is done shrinking, so the banner it was painting is finally
-    // nobody's. See `release_collapsed_hero`.
+    // nobody's — for whichever details actually closed. See `release_collapsed_hero`.
     {
         let weak = weak.clone();
         g.on_hero_collapsed(move || {
             let Some(ui) = weak.upgrade() else { return };
             release_collapsed_hero(&ui);
+        });
+    }
+
+    // page-active-changed: the page's own gate, the one the five per-tab mounts can't stand
+    // in for — on a page leave only the mounted tab's fires. See `release_page_hero`.
+    //
+    // The nav index is re-read rather than trusted from the argument: the gate also goes
+    // false when Now Playing or the miniplayer covers the band, and covering it is not
+    // leaving it — the same detail is still open underneath and its banner has to be there
+    // when the cover lifts.
+    {
+        let weak = weak.clone();
+        g.on_page_active_changed(move |active| {
+            if active {
+                return;
+            }
+            let Some(ui) = weak.upgrade() else { return };
+            if my_library_mod::the_band_is_up(&ui) {
+                return;
+            }
+            release_page_hero(&ui);
         });
     }
 }

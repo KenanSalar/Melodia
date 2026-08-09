@@ -26,6 +26,7 @@ use slint::{ComponentHandle, Image, Model, ModelRc, SharedString, VecModel};
 use crate::library;
 use crate::state::AppState;
 use crate::ui::callbacks::macros::release_detail_hero_images;
+use crate::ui::my_library::MyLibraryTab;
 use crate::ui::playlists::{self as playlists_ui_mod, PlaylistsUi};
 use crate::{
     AppWindow, Dialog, PlaylistDetail, PlaylistPickRow as UiPlaylistPickRow, Playlists, TagEditor,
@@ -213,7 +214,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
             if was_open && let Some(ui) = weak.upgrade() {
                 let d = ui.global::<PlaylistDetail>();
                 d.set_playlist_id(-1);
-                release_detail_hero_images!(ui, d);
+                release_detail_hero_images!(ui, d, Some(MyLibraryTab::Playlists));
                 playlists_ui_mod::clear_detail(&pu);
             }
             let s = s.clone();

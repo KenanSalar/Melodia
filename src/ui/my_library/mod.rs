@@ -20,6 +20,7 @@ mod tabs;
 pub use tabs::{
     MyLibraryTab, NO_TAB, a_detail_hero_is_mounted, close_open_detail, detail_open_on,
     persist_tab, restore_origin, seed_tab, tab_from_index, tab_is_mounted, tab_of_section,
+    the_band_is_up, the_chips_still_belong_to_the_band,
 };
 
 /// The page's `Nav.selected-index`. **The single definition** — five separate `const`s

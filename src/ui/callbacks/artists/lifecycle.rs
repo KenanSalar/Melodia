@@ -71,7 +71,7 @@ pub(super) fn wire(
                 clear_vec_model::<UiArtistGridRow>(&g.get_grid_rows(), "artists: clear grid");
 
                 let d = ui.global::<ArtistDetail>();
-                release_detail_hero_images!(ui, d);
+                release_detail_hero_images!(ui, d, Some(MyLibraryTab::Artists));
                 clear_vec_model::<UiTrackListRow>(&d.get_tracks(), "artists: clear detail tracks");
                 clear_vec_model::<UiAlbumRow>(&d.get_albums(), "artists: clear detail albums");
                 clear_vec_model::<i32>(&d.get_selected_ids(), "artists: clear detail selection");
@@ -110,7 +110,7 @@ pub(super) fn wire(
                             let _ = weak.upgrade_in_event_loop(|ui| {
                                 let g = ui.global::<ArtistDetail>();
                                 g.set_artist_id(-1);
-                                release_detail_hero_images!(ui, g);
+                                release_detail_hero_images!(ui, g, Some(MyLibraryTab::Artists));
                             });
                         }
                     } else {

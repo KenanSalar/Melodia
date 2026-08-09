@@ -374,11 +374,45 @@ fn the_hero_fades_on_the_morph_at_both_ends() {
     );
     let strip = include_str!("../../../melodia-ui/ui/components/hero-chip-strip.slint");
     assert!(
-        strip.contains("chip-fill: HeroBackdrop.chip-fill-at(root.fade);")
-            && strip.contains("chip-label-color: HeroBackdrop.chrome.with-alpha(root.fade);"),
+        strip.contains("chip-fill: HeroBackdrop.chip-fill-at(root.fade * root.arrive-t);")
+            && strip.contains(
+                "chip-label-color: HeroBackdrop.chrome.with-alpha(root.fade * root.arrive-t);"
+            ),
         "both of the strip's brushes must carry the fade, and the pill must go through the \
          global's own function — `with-alpha` *sets* alpha rather than multiplying it, so a local \
          spelling would have to restate the tier's weight"
+    );
+}
+
+/// **The chips fade in on their own clock, because they are the one hero fact that can
+/// arrive after the banner.** A tab re-entered onto an open detail morphs open on artwork
+/// and colours held for it while these are still behind the re-fetch that folds them, so
+/// stepping them in reads as a glitch beside a band that has already settled.
+///
+/// The mutation to catch is multiplying only one of the two brushes: the pill fades while
+/// its label steps, which reads as a rendering bug rather than as a missing factor.
+#[test]
+fn the_chip_row_fades_in_when_it_lands() {
+    let strip = include_str!("../../../melodia-ui/ui/components/hero-chip-strip.slint");
+    let flat = strip.split_whitespace().collect::<Vec<_>>().join(" ");
+
+    assert!(
+        flat.contains("property <float> arrive-t: root.rows.length > 0 ? 1.0 : 0.0;"),
+        "the arrival fade must ride the row model's own emptiness — nothing else knows when \
+         the chips have landed, and a host-driven flag would need one per hero"
+    );
+    assert!(
+        flat.contains("animate arrive-t { duration: Theme.dur-fast; easing: ease-in-out; }"),
+        "`arrive-t` must ease on `dur-fast`: the whole point of a chip is that the number is \
+         there, so this leads the eye rather than making it wait"
+    );
+    assert_eq!(
+        flat.matches("root.fade * root.arrive-t").count(),
+        2,
+        "both brushes must carry both factors. A float multiplied into the brushes, never an \
+         `opacity`: this strip carries `MetaChipStrip`'s change tracker so it cannot be \
+         unmounted, and `Opacity::need_layer` bails only at exactly 1.0 — a permanently \
+         mounted subtree under one blends an offscreen layer on every frame forever"
     );
 }
 

@@ -72,7 +72,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, genres_ui: &Arc<GenresUi>) 
                 // Six heroes share one colour set and one chip row; this one has
                 // no images to release, so it takes the shared pair alone rather
                 // than the full `release_detail_hero_images!`.
-                release_shared_hero!(ui);
+                release_shared_hero!(ui, Some(MyLibraryTab::Genres));
             }
             let gu = gu.clone();
             let s = s.clone();
@@ -108,7 +108,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, genres_ui: &Arc<GenresUi>) 
                             genres_ui_mod::clear_detail(&gu);
                             let _ = weak.upgrade_in_event_loop(|ui| {
                                 ui.global::<GenreDetail>().set_genre_id(-1);
-                                release_shared_hero!(ui);
+                                release_shared_hero!(ui, Some(MyLibraryTab::Genres));
                             });
                         }
                     }

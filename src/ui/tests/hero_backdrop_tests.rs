@@ -9,6 +9,8 @@
 //! restored, so up to four detail views publish while a different hero owns the
 //! band, and the last to finish wins.
 
+use crate::test_support::strip_line_comments;
+
 const DETAIL_VIEW: &str = include_str!("../detail_view.rs");
 const HERO_CHIPS: &str = include_str!("../hero_chips.rs");
 
@@ -205,23 +207,27 @@ fn the_two_seams_gate_the_shared_write_and_only_that() {
     }
 }
 
-/// **The teardown has a gate too, and it covers the colour set alone.**
+/// **The teardown has a gate too, and its two halves stop at different points.**
 ///
-/// A section leave is not a teardown on a tabbed page. Switch from Genre Detail
-/// to a Playlists tab that already has a detail open and `detail-open` never goes
-/// false, so the band holds still by design — while the departing tab's leave
-/// handed the shared set back and the entering tab's re-fetch republished it a DB
-/// query and a cover decode later. The band spent that gap easing to the
-/// accent-seeded floor solve and back, which is the "the colours swing through
-/// something neutral" symptom.
+/// A section leave is not a teardown on a tabbed page, and there are three ways
+/// that bites. Switch from Genre Detail to a Playlists tab that already has a
+/// detail open and `detail-open` never goes false, so the band holds still by
+/// design — while the departing tab's leave hands the colours back and the
+/// entering tab republishes them a query and a decode later. Switch to a tab with
+/// *no* detail and the band collapses over the banner instead, for 400 ms, on
+/// globals the same leave just emptied. Pick that first tab again and its detail
+/// id has never been cleared, so the band morphs straight back open onto them.
+/// All three are the colour set belonging to the *page*, which is what
+/// `the_band_is_up` says and what `a_detail_hero_is_mounted` only approximated.
 ///
-/// The chips are deliberately **not** under the same gate, and swapping that is
-/// the mutation this exists to catch: a colour held across the gap is the
-/// outgoing hero's tone, which is a hand-off, where a count held across it is the
-/// outgoing hero's *facts* under the incoming one's title. An empty strip states
-/// nothing, which is what a hero with no answer yet should say.
+/// The chips stop one step earlier, at `a_hero_is_collapsing`, and swapping the
+/// two gates is the mutation this exists to catch: a colour held across a
+/// **hand-off** is the outgoing hero's tone, where a count held across it is the
+/// outgoing hero's *facts* under the incoming one's title. A **collapse** is not
+/// a hand-off — there is no incoming title, only the outgoing banner shrinking —
+/// so the counts stay put for the length of the morph.
 #[test]
-fn the_shared_teardown_holds_the_colours_for_a_hero_taking_over() {
+fn the_shared_teardown_holds_what_the_band_can_still_reach() {
     const MACROS: &str = include_str!("../callbacks/macros.rs");
 
     let body = MACROS
@@ -230,29 +236,226 @@ fn the_shared_teardown_holds_the_colours_for_a_hero_taking_over() {
         .map_or("", |(body, _)| body);
     assert!(!body.is_empty(), "`release_shared_hero!` is gone or no longer a macro");
 
+    let guarded = |call: &str| {
+        body.split_once(&format!("if !$crate::ui::my_library::{call} {{"))
+            .and_then(|(_, rest)| rest.split_once('}'))
+            .map_or(String::new(), |(inside, _)| inside.to_owned())
+    };
+
+    let colours = guarded("the_band_is_up(&$ui)");
     assert!(
-        body.contains("if !$crate::ui::my_library::a_detail_hero_is_mounted(&$ui) {"),
-        "`release_shared_hero!` must skip `hero_backdrop::reset` while another detail's hero is \
-         taking the band over — the publish side has been gated on `section_active` all along, \
-         and this is the same question asked on the way out"
+        colours.contains("hero_backdrop::reset"),
+        "`hero_backdrop::reset` must sit behind `the_band_is_up` — the colour set is the page's, \
+         so a tab leave may not hand it back while a collapse is still painting it and the next \
+         pick can morph it straight back open"
+    );
+    assert!(
+        !colours.contains("hero_chips::clear"),
+        "`hero_chips::clear` must not share the colour guard: held across a hand-off it states \
+         the outgoing entity's facts under the incoming one's title, where a colour held across \
+         one is just the hand-off"
     );
 
+    let chips = guarded("the_chips_still_belong_to_the_band(&$ui, $departing)");
+    assert!(
+        chips.contains("hero_chips::clear"),
+        "`hero_chips::clear` must sit behind `the_chips_still_belong_to_the_band` — a leave and \
+         the band's `changed detail-open` land in the same change-handler drain, so an unguarded \
+         clear empties the strip on frame one of the 400 ms collapse it is being painted in"
+    );
+    assert!(
+        !chips.contains("hero_backdrop::reset"),
+        "the two must not be folded into one guard — a hand-off is exactly the case where they \
+         disagree"
+    );
+
+    // The tabless arm is what keeps a curated page's leave out of the hold. Its answer has
+    // to come from the *caller*, not from anything the band publishes: a mirror of the
+    // band's own state outlives the sheet — Slint destroys a view with no unmount hook — so
+    // Favorites leaving *into* My Library would read a `true` from the last visit and hold
+    // its own counts into this band, which is the bug the chip clear exists to prevent.
+    assert!(
+        body.contains("release_shared_hero!($ui, None)"),
+        "the one-argument form must forward `None` — Favorites and Recently Played have no tab \
+         to be leaving and can never be inside this band's morph"
+    );
+}
+
+/// **The image slots ride the page-level gate too, for the reason the detail id gives.**
+///
+/// Nothing on this page clears an id on a tab leave, so `AlbumDetail.album-id >= 0` still
+/// means "this banner is in the globals" and picking that tab again morphs it back open
+/// ahead of the re-fetch. Emptying `cover` at the leave is what dropped `ArtworkImage` to
+/// its fallback glyph — during the collapse on the way out, and again on the way back in.
+#[test]
+fn a_tab_leave_holds_the_slots_the_band_can_still_paint() {
+    const MACROS: &str = include_str!("../callbacks/macros.rs");
+
+    let body = MACROS
+        .split_once("macro_rules! release_detail_hero_images {")
+        .and_then(|(_, rest)| rest.split_once("\n}"))
+        .map_or("", |(body, _)| body);
+    assert!(!body.is_empty(), "`release_detail_hero_images!` is gone or no longer a macro");
+
     let guarded = body
-        .split_once("a_detail_hero_is_mounted(&$ui) {")
+        .split_once("if !$crate::ui::my_library::the_band_is_up(&$ui) {")
         .and_then(|(_, rest)| rest.split_once('}'))
         .map_or("", |(inside, _)| inside);
     assert!(
-        guarded.contains("hero_backdrop::reset"),
-        "the guard must be the one over `hero_backdrop::reset`"
+        guarded.contains("release_hero_slots!"),
+        "`release_hero_slots!` must sit behind `the_band_is_up` — unguarded it hands back the \
+         cover and blur pair of a detail that is still open, which the band is either \
+         collapsing out of or one tab pick away from painting again"
+    );
+}
+
+/// The deferred teardown splits on the ids, because the band collapses for two reasons.
+///
+/// A close cleared one and the banner behind it is nobody's; a **tab switch** out of a
+/// still-open detail cleared nothing, and picking that tab again morphs the same banner
+/// straight back open. Releasing all three unconditionally is what made the round trip
+/// flash a placeholder even once the leave itself had stopped.
+#[test]
+fn the_collapsed_teardown_hands_back_only_what_closed() {
+    const CALLBACKS: &str = include_str!("../callbacks/my_library.rs");
+
+    let body = CALLBACKS
+        .split_once("fn release_collapsed_hero(ui: &AppWindow) {")
+        .and_then(|(_, rest)| rest.split_once("\n}"))
+        .map_or("", |(body, _)| body);
+    assert!(!body.is_empty(), "`release_collapsed_hero` is gone");
+
+    for (id, global) in [
+        ("get_album_id", "AlbumDetail"),
+        ("get_artist_id", "ArtistDetail"),
+        ("get_playlist_id", "PlaylistDetail"),
+    ] {
+        assert!(
+            body.contains(&format!("{id}() < 0")),
+            "`{global}`'s slots must be handed back on its own id: a tab switch collapses the \
+             band without closing anything, and that detail's banner has to survive it"
+        );
+    }
+    assert!(
+        !body.contains("hero_backdrop::reset"),
+        "the colour set outlives the collapse — it is reset by `release_page_hero` alone, so a \
+         tab re-entered onto a held detail morphs open on that detail's own tone rather than \
+         easing up through the accent-seeded floor"
     );
     assert!(
-        !guarded.contains("hero_chips::clear"),
-        "`hero_chips::clear` must stay outside the guard — a chip held across the hand-off states \
-         the outgoing entity's facts under the incoming one's title, where a colour held across \
-         it is just the hand-off"
+        body.contains("hero_chips::clear"),
+        "the chip row is still handed back here — an unkeyed row of counts can't tell the hero \
+         returning to it from a different one taking the band over"
+    );
+
+    let page = CALLBACKS
+        .split_once("fn release_page_hero(ui: &AppWindow) {")
+        .and_then(|(_, rest)| rest.split_once("\n}"))
+        .map_or("", |(body, _)| body);
+    assert_eq!(
+        page.matches("release_hero_slots!").count(),
+        3,
+        "`release_page_hero` must hand back all three image globals unconditionally — the \
+         per-tab gates only fire for the *mounted* tab, so a detail held on another one is \
+         reachable from nowhere else"
     );
     assert!(
-        body.contains("$crate::ui::hero_chips::clear(&$ui);"),
-        "`release_shared_hero!` must still clear the chip row unconditionally"
+        page.contains("hero_backdrop::reset") && page.contains("hero_chips::clear"),
+        "the page leave is the one place the shared pair is reset from My Library"
     );
+}
+
+/// The page's own gate, and the re-check that keeps it from firing on a *cover*.
+///
+/// `SectionActiveGate` goes false for three different reasons — the nav index moved, Now
+/// Playing opened, the miniplayer took over — and only the first is leaving the page. The
+/// other two put the band back with the same detail open, so tearing its banner down
+/// behind them is the reported flash with a different trigger.
+#[test]
+fn the_page_leave_is_gated_on_the_nav_index_rather_than_on_the_gate() {
+    const APP: &str = include_str!("../../../melodia-ui/ui/app-window.slint");
+    const GLOBAL: &str = include_str!("../../../melodia-ui/ui/globals/my-library.slint");
+    const CALLBACKS: &str = include_str!("../callbacks/my_library.rs");
+
+    assert!(
+        GLOBAL.contains("callback page-active-changed(bool);"),
+        "`MyLibrary` must declare the page's own gate callback"
+    );
+    assert!(
+        APP.contains("active-changed(active) => { MyLibrary.page-active-changed(active); }"),
+        "the page gate must be mounted in `app-window.slint` — the five per-tab mounts cannot \
+         stand in for it, since only the mounted tab's fires on a page leave"
+    );
+
+    let handler = CALLBACKS
+        .split_once("g.on_page_active_changed(move |active| {")
+        .and_then(|(_, rest)| rest.split_once("\n        });"))
+        .map_or("", |(body, _)| body);
+    assert!(!handler.is_empty(), "`page-active-changed` is not wired");
+    assert!(
+        handler.contains("if my_library_mod::the_band_is_up(&ui) {"),
+        "the handler must re-read the nav index: the gate also goes false when Now Playing or \
+         the miniplayer *covers* the page, and covering it is not leaving it"
+    );
+    assert!(
+        handler.contains("release_page_hero(&ui);"),
+        "the handler must run the page teardown — unwired, every hero a tab leave now holds is \
+         held for the rest of the session"
+    );
+}
+
+/// **Every My Library leave names the tab it is leaving, and no curated one does.**
+///
+/// That argument is what decides whether the chip row is held, and a site that forgets it
+/// fails to compile rather than silently clearing — which is the point of spelling the
+/// tabless case as its own macro arm instead of defaulting to it. The mutation this catches
+/// is the reverse: a My Library site reaching for the one-argument form, which reads as the
+/// tidier call and puts the chips back on frame one of the collapse.
+#[test]
+fn every_my_library_leave_names_the_tab_it_is_leaving() {
+    const SITES: [(&str, &str, &str); 4] = [
+        ("albums", include_str!("../callbacks/albums/lifecycle.rs"), "MyLibraryTab::Albums"),
+        ("artists", include_str!("../callbacks/artists/lifecycle.rs"), "MyLibraryTab::Artists"),
+        ("genres", include_str!("../callbacks/genres/lifecycle.rs"), "MyLibraryTab::Genres"),
+        (
+            "playlists",
+            include_str!("../callbacks/playlists/lifecycle.rs"),
+            "MyLibraryTab::Playlists",
+        ),
+    ];
+
+    for (name, src, tab) in SITES {
+        let code = strip_line_comments(src);
+        let calls = code.matches("release_shared_hero!").count()
+            + code.matches("release_detail_hero_images!").count();
+        assert_eq!(
+            calls, 2,
+            "{name}/lifecycle.rs should hand the hero back twice — the section leave and the \
+             failed re-fetch that drops back to the grid"
+        );
+        assert_eq!(
+            code.matches(&format!("Some({tab})")).count(),
+            calls,
+            "every hero teardown in {name}/lifecycle.rs must name `{tab}`: the departing tab's \
+             own id is what says whether a collapse follows, and an unnamed one falls through \
+             to the tabless arm and clears the chips on frame one of that collapse"
+        );
+    }
+
+    for (name, src) in [
+        ("favorites", include_str!("../callbacks/favorites/lifecycle.rs")),
+        ("recently_played", include_str!("../callbacks/recently_played/lifecycle.rs")),
+    ] {
+        let code = strip_line_comments(src);
+        assert!(
+            code.contains("release_shared_hero!(ui);"),
+            "{name}/lifecycle.rs must take the tabless form — a curated page has no tab to be \
+             leaving and its leave can never land inside this band's morph"
+        );
+        assert!(
+            !code.contains("MyLibraryTab"),
+            "{name}/lifecycle.rs must not name a My Library tab: holding its chips into this \
+             band is the stale-facts bug the clear exists to prevent"
+        );
+    }
 }

@@ -612,8 +612,12 @@ fn the_hero_reads_a_latched_arm_where_the_body_reads_the_live_one() {
     // still *bound*, so the guard holds nothing and the first close after a mount that
     // landed on an open detail collapses over the last ternary arm. Deleting this line
     // leaves every other assertion here green, which is exactly why it is pinned.
+    let init = view
+        .split_once("init => {")
+        .and_then(|(_, rest)| rest.split_once('}'))
+        .map_or("", |(body, _)| body);
     assert!(
-        view.contains("init => { root.latch-hero(); }"),
+        init.contains("root.latch-hero();"),
         "the sheet must latch once at mount: a view rebuilt straight onto a detail — a \
          re-entry, or a boot resuming one — has never written the arms, so the bindings are \
          live and the first back drops the banner instead of collapsing it",

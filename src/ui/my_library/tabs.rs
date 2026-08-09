@@ -111,16 +111,21 @@ pub fn detail_open_on(
     }
 }
 
-/// Whether a My Library detail hero owns the shared `HeroBackdrop` set right now.
+/// Whether a My Library detail hero owns the band right now.
 ///
-/// **The teardown side of the gate the publish side has always had.** Six heroes share
-/// one solve, so `apply_detail_artwork` writes it only when its own section is active —
-/// but `release_shared_hero!` reset it from whichever section was *leaving*, and on a
-/// tabbed page a leave is not a teardown. Switch from Genre Detail to a Playlists tab
-/// that already has a detail open and `detail-open` never goes false: the band holds
-/// still, correctly, while the departing tab hands the colour set back and the entering
-/// tab's re-fetch republishes it a DB query and a cover decode later. The band spent that
-/// gap easing to the accent-seeded floor solve and back.
+/// **The teardown side of the gate the publish side has always had.** Six heroes share one
+/// solve, so `apply_detail_artwork` writes it only when its own section is active — where
+/// `release_shared_hero!` used to reset it from whichever section was *leaving*, and on a
+/// tabbed page a leave is not a teardown. Switch from Genre Detail to a Playlists tab that
+/// already has a detail open and `detail-open` never goes false: the band holds still,
+/// correctly, while the departing tab hands the colour set back and the entering tab's
+/// re-fetch republishes it a DB query and a cover decode later.
+///
+/// That hand-off is the narrowest of the three ways a leave lands on a hero somebody still
+/// wants, so the colour set and the image slots are gated on the wider [`the_band_is_up`]
+/// now. What still asks *this* question is
+/// [`the_chips_still_belong_to_the_band`] — the chip row is the one hero fact a hand-off
+/// must not keep.
 ///
 /// Mirrors `my-library-view.slint`'s private `detail-open`, which is why
 /// `globals/my-library.slint` doesn't declare one — Rust reads the four ids directly.
@@ -139,6 +144,73 @@ pub fn a_detail_hero_is_mounted(ui: &AppWindow) -> bool {
         ui.global::<GenreDetail>().get_genre_id(),
         ui.global::<PlaylistDetail>().get_playlist_id(),
     )
+}
+
+/// Whether the band is on screen at all.
+///
+/// **The window inside which a hero global is still reachable without a fetch.** Every tab
+/// is one pick away and a tab leave clears no detail id, so a detail left behind on another
+/// tab morphs its banner back open the moment that tab is picked — before the re-fetch that
+/// pick kicks has landed. A teardown inside this window therefore hands nothing back, and
+/// what does is [`crate::ui::callbacks::my_library`]'s pair: `hero-collapsed` for a genuine
+/// close, the page's own gate for the leave.
+///
+/// Deliberately *not* the section gate's predicate, which also goes false when Now Playing
+/// or the miniplayer covers the band. Covering it is not leaving it — the same detail is
+/// still open underneath. UI thread only.
+pub fn the_band_is_up(ui: &AppWindow) -> bool {
+    ui.global::<Nav>().get_selected_index() == super::NAV_MY_LIBRARY
+}
+
+/// Whether the chip row a leave from `departing` would clear still describes what the band
+/// is painting.
+///
+/// **The chip row is the only caller, and it is the one hero fact a hand-off must not
+/// keep.** A colour held across a hand-off is the outgoing hero's *tone*; a count held
+/// across it is the outgoing hero's *facts* under the incoming one's title. So this asks
+/// the narrow question the guard actually wants — is the banner on screen still the
+/// departing tab's — and there are exactly two ways it is.
+///
+/// **The band never moved.** `MyLibrary.tab-idx` is written by the `<=>` chain out of the
+/// tab bar before any handler runs, so a leave whose departing tab is still the mounted one
+/// isn't a tab switch at all: it is Now Playing or the miniplayer *covering* the page. The
+/// same hero comes back underneath, and blinking its counts out and back is a flicker on
+/// every press of `F`.
+///
+/// **Or the band is collapsing it.** A tab leave and the band's own `changed detail-open`
+/// land in the same change-handler drain, so an unguarded clear empties the strip on frame
+/// one of a 400 ms morph that is still painting the banner those counts belong to.
+/// `MyLibrary.hero-collapsed` clears them at the end of it instead.
+///
+/// **The departing tab's own id is the exact signal, and nothing the band publishes is.**
+/// Nothing on this page clears an id on a tab leave, so `X.id >= 0` for the tab being left
+/// means its detail was mounted a moment ago, which means the band was painting it. Reading
+/// the band instead would mean mirroring an `out` property onto the global for Rust to
+/// reach, and that mirror outlives the sheet — Slint destroys a view with no unmount hook —
+/// so a curated page's leave *into* My Library would read a `true` left behind by the last
+/// visit and hold its own counts into this band. Hence [`None`] for a page with no tabs.
+pub fn the_chips_still_belong_to_the_band(
+    ui: &AppWindow,
+    departing: Option<MyLibraryTab>,
+) -> bool {
+    let Some(departing) = departing else {
+        return false;
+    };
+    if !the_band_is_up(ui) {
+        return false;
+    }
+    let g = ui.global::<MyLibrary>();
+    if tab_from_index(&g, g.get_tab_idx()) == departing {
+        return true;
+    }
+    let departing_was_open = detail_open_on(
+        departing,
+        ui.global::<AlbumDetail>().get_album_id(),
+        ui.global::<ArtistDetail>().get_artist_id(),
+        ui.global::<GenreDetail>().get_genre_id(),
+        ui.global::<PlaylistDetail>().get_playlist_id(),
+    );
+    departing_was_open && !a_detail_hero_is_mounted(ui)
 }
 
 /// Close whatever detail `tab` has open, if any.
