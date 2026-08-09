@@ -179,6 +179,60 @@ fn the_palette_crossing_is_anchored_to_the_morph() {
     );
 }
 
+/// **Nothing may ease *from* a `HeroBackdrop` value the band was not painting**, and on a
+/// tabbed page that is a live hazard rather than a theoretical one: a tab leave clears no
+/// detail id, so the colour set is deliberately held for the pick that morphs that banner
+/// back open — which means it routinely describes a hero this band stopped painting several
+/// tabs ago.
+///
+/// Bound to the tiers unconditionally the four mirrors settle on exactly that, and the
+/// transition then crosses out of it. Leave a genre for a detail-less tab and open a playlist
+/// there: the bar spends the first quarter of a 400 ms emphasized curve — most of its travel
+/// — rushing toward a mirror still two thirds of the way through its own ease off the genre's
+/// pink. The gate is what makes the mirror's resting value the one the bar is already
+/// painting; it also stops a write to the global dirtying these at all while the band is
+/// flat, Slint subscribing to a dependency only on the arm it evaluates.
+///
+/// The floor is the same rule one layer down and is pinned by
+/// `hero_blur_backdrop_tests::the_floors_hero_gate_defaults_to_shown`; the mount that joins
+/// them is asserted here, since the shared component defaults to ungated and a band that
+/// stops passing it looks right in both files.
+#[test]
+fn no_hero_tier_outlives_the_banner_it_was_solved_for() {
+    let code = code();
+
+    for (mirror, idle) in [
+        ("hero-label", "Theme.text"),
+        ("hero-active", "Theme.accent"),
+        ("hero-hover", "Theme.surface0"),
+        ("hero-divider", "Theme.surface1"),
+    ] {
+        let value = binding(&code, &format!("property <brush> {mirror}:"));
+        assert!(
+            value.contains("root.detail-open ?"),
+            "`{mirror}` must fall back to its idle half while no detail is open — held across a \
+             tab leave, the tier it reads is the last banner's and the transition crosses out of \
+             it on the next open"
+        );
+        assert!(
+            value.contains(idle),
+            "`{mirror}`'s idle arm must be `{idle}`, the same token its own pair takes on the flat \
+             band — a third value here is a colour the bar crosses through on every morph"
+        );
+    }
+
+    let mount = code
+        .split_once("HeroBlurBackdrop {")
+        .and_then(|(_, rest)| rest.split_once('}'))
+        .map_or(String::new(), |(body, _)| body.to_owned());
+    assert!(
+        mount.contains("hero-open: root.detail-open;"),
+        "the band must gate the shared floor on the same predicate — it defaults to ungated for \
+         the two mosaic bands, which never stop painting a hero, and an ungated floor here is the \
+         whole backdrop of an artwork-less detail easing out of the previous tab's stops"
+    );
+}
+
 /// The band forwards everything the shared header publishes, under the names its
 /// mount sheet already reads.
 ///

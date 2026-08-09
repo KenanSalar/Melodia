@@ -180,10 +180,27 @@ export component LibraryTabBand inherits Rectangle {
     // decode lands the crossing above is nearly settled and would adopt the new tier in one
     // frame. These carry the re-tint instead, on a curve short enough to finish inside the
     // morph when the decode is quick and to stay smooth when it isn't.
-    property <brush> hero-label: HeroBackdrop.on-backdrop;
-    property <brush> hero-active: HeroBackdrop.chrome;
-    property <brush> hero-hover: HeroBackdrop.on-backdrop.with-alpha(0.12);
-    property <brush> hero-divider: HeroBackdrop.tile-edge;
+    //
+    // **Each falls back to its own idle half while no detail is open, and that is what makes
+    // the mirror safe on a *tabbed* page.** `HeroBackdrop` is held across a tab leave — the
+    // detail id is never cleared, so the band is one pick away from morphing that banner back
+    // open — which means the globals routinely describe a hero this band stopped painting
+    // several tabs ago. Bound to them unconditionally these settle on it, and the transition
+    // below then crosses *from* the departed entity's tone: leave a genre for a detail-less
+    // tab, open a playlist there, and the bar spends the first quarter of the morph rushing
+    // toward a mirror still most of the way through its own ease off the genre's pink.
+    // Reading the tier only on the arm that paints it is also what keeps a write to the
+    // global from dirtying these at all while the band is flat — Slint registers a dependency
+    // as it is *evaluated*, so the untaken arm never subscribes.
+    //
+    // `detail-open` and not `hero-shown`: gated on the latter they would drain toward the
+    // token for `dur-med` *after* the collapse ends, so a detail opened in that window would
+    // start from a part-stale value — the same bug, smaller and harder to see.
+    property <brush> hero-label: root.detail-open ? HeroBackdrop.on-backdrop : Theme.text;
+    property <brush> hero-active: root.detail-open ? HeroBackdrop.chrome : Theme.accent;
+    property <brush> hero-hover:
+        root.detail-open ? HeroBackdrop.on-backdrop.with-alpha(0.12) : Theme.surface0;
+    property <brush> hero-divider: root.detail-open ? HeroBackdrop.tile-edge : Theme.surface1;
     animate hero-label, hero-active, hero-hover, hero-divider {
         duration: Theme.dur-med;
         easing: ease-in-out;
@@ -283,6 +300,10 @@ export component LibraryTabBand inherits Rectangle {
     // Behind everything else. The shared component owns the dual-slot crossfade contract;
     // the gradient floor shows through when there is no blur image, which is what Genre
     // Detail's procedural backdrop relies on.
+    //
+    // `hero-open` is this band's alone — the two mosaic heroes never stop painting one. It
+    // is the floor's half of the rule the four palette mirrors above follow: nothing eases
+    // *from* a `HeroBackdrop` value the band was not painting.
     HeroBlurBackdrop {
         x: 0; y: 0;
         width: 100%; height: 100%;
@@ -290,6 +311,7 @@ export component LibraryTabBand inherits Rectangle {
         blur-b: root.blur-b;
         use-a: root.use-a;
         has-blur: root.has-blur;
+        hero-open: root.detail-open;
     }
 
     // The idle pane, over the backdrop rather than instead of it. **The alpha is folded
