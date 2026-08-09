@@ -534,32 +534,62 @@ export component LibraryTabBand inherits Rectangle {
     // which is the whole difference between it and the pill row below. A detail's pills
     // belong on whichever floor is current, so they follow the height; this sentence
     // belongs where it already sits, and riding the height dragged it down out of the page
-    // and shoved it back in. So it holds still vertically and leaves sideways instead:
-    // fading out to the left as the hero opens, sliding back in from the left as the band
-    // collapses. `count-slide` is `ViewTransition`'s own axis travel, so the line leaves
-    // the way a view does.
+    // and shoved it back in. So the anchor holds still and the travel is an *offset* off
+    // it: `root.height` moves 100 px over a morph, `count-drop` moves twelve.
     //
-    // Both ends ride `hero-t`, which is the morph's clock — no second animation to keep in
-    // step, and the reversal is free. The alpha is a *bias* off the same source rather than
-    // its plain complement, the `tab-bar.slint` idiom: the artwork tile fading in behind it
-    // takes that curve too, and at equal weights the two read over each other for the first
-    // frames. Folded into the brush, never `opacity`, which would cost a layer for the
-    // whole length of every detail.
+    // **It does not leave the way it comes back, and `detail-open` is what tells the two
+    // apart** — it flips on the edge, where `hero-t` only knows how far along the morph is.
+    // Out is *down*; back is the slide in from the left, unchanged. The sideways exit that
+    // shape replaced crossed the back button on its way out: the slot beside it eases open
+    // from zero to `pill-h + pad-sm + pad-md` on the same clock, so two things travelled in
+    // opposite directions through the same sixteen pixels for the whole time the sentence
+    // was still legible. Down is the one axis with nothing arriving on it.
+    //
+    // Both directions still ride `hero-t`, the morph's own clock — no second animation to
+    // keep in step, and no `states` entry, which would animate on its *first* evaluation
+    // and flash the count on a page mounted straight into a detail. The alpha is a *bias*
+    // off that clock rather than its plain complement, the `tab-bar.slint` idiom: the
+    // artwork tile fading in behind it takes the same curve, and at equal weights the two
+    // read over each other for the first frames. `count-t` is that bias named, since the
+    // drop takes it too. Folded into the brush, never `opacity`, which would cost a layer
+    // for the whole length of every detail.
+    //
+    // **The drop is squared, and that is what stops it reading as a flick.** `hero-t` is on
+    // an emphasized-decelerate curve, which spends most of its speed in the first quarter,
+    // so a travel read linearly off it is all but over before the eye has found it — the
+    // 32 px slide had spent every pixel it would ever show inside 80 ms, and only ever
+    // showed sixteen of them, the line being gone by the time `hero-t` reached 0.5. And a
+    // shorter travel alone would not have fixed it, only made the flick smaller. Squaring
+    // hands those frames back: the line sits still, then falls away as it goes, which is the
+    // motion a departure has. Twelve pixels because the compact floor leaves sixteen under
+    // this box, so the whole drop fits inside the band it started in and never depends on
+    // the band having grown to stay unclipped. Deliberately not `ViewTransition`'s 32 px —
+    // that token is a page changing, this is a sentence leaving a 132 px band.
+    //
+    // The one seam left is a detail re-opened *inside* a collapse: the axis flips
+    // mid-flight, so the line steps back to its anchor rather than gliding there. It lands
+    // at no more than the return's own alpha and the exit takes it to zero within a few
+    // frames — and the alternative is a second animated float carrying the axis, which is
+    // the second clock everything above is written to avoid.
     //
     // A bare `Text` with a bound width, per the faked-placeholder pitfall: elide alone
     // doesn't hold a Text inside a non-layout parent, since its `preferred-width` stays the
     // untruncated string. The width stops short of the pills so a long count can't paint
     // through them — `space-between` used to negotiate that, and squeezed the pills to do it.
     property <length> count-slide: 32px;
+    property <length> count-drop: 12px;
+    property <float> count-t: clamp(root.hero-t * 2.0, 0.0, 1.0);
+    property <length> count-dy:
+        root.detail-open ? root.count-drop * root.count-t * root.count-t : 0px;
 
     Text {
-        x: Theme.pad-lg - root.count-slide * root.hero-t;
-        y: root.compact-h - Theme.pad-lg - root.pill-h;
+        x: Theme.pad-lg - (root.detail-open ? 0px : root.count-slide * root.hero-t);
+        y: root.compact-h - Theme.pad-lg - root.pill-h + root.count-dy;
         width: root.page-w - 2 * Theme.pad-lg - pills.width - Theme.pad-md;
         height: root.pill-h;
         // Leading LRM keeps the line left-anchored under RTL.
         text: "\u{200e}" + root.count-text;
-        color: Theme.text.with-alpha(clamp(1.0 - root.hero-t * 2.0, 0.0, 1.0));
+        color: Theme.text.with-alpha(1.0 - root.count-t);
         font-size: Theme.page-title-size;
         font-weight: Theme.page-title-weight;
         horizontal-alignment: left;

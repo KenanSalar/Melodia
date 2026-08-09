@@ -678,16 +678,22 @@ fn the_back_disc_scales_with_the_slot_it_sits_in() {
 /// **The count line and the pill row take opposite anchors, and that is the
 /// point.** A detail's pills belong on whichever floor is current, so they ride
 /// `root.height` and follow the morph. The count sentence belongs where it
-/// already sits: anchored to the *compact* floor it holds still and leaves
-/// sideways, where riding the height dragged it down out of the page and shoved
-/// it back in — the movement this replaced.
+/// already sits: anchored to the *compact* floor, its travel an offset off that
+/// anchor rather than a ride on the height, which dragged it down out of the page
+/// and shoved it back in — the movement this replaced.
 ///
-/// Both ends of the slide read `hero-t`, so the travel is the morph's own clock
-/// and the reversal is free; the alpha is a bias off the same source, folded into
-/// the brush rather than spent on an `opacity` layer that would stand for the
-/// whole length of every detail.
+/// **It leaves down and comes back from the left, and `detail-open` is the only
+/// thing in scope that can tell those apart** — `hero-t` knows how far along the
+/// morph is and not which way it is going. Down because the back slot eases open
+/// on the same clock, so a sideways exit crossed an arriving button through the
+/// same sixteen pixels for the whole time the sentence was still legible.
+///
+/// Both directions still read `hero-t`, so the travel is the morph's own clock and
+/// there is no second animation to keep in step; the alpha is a bias off that
+/// clock, folded into the brush rather than spent on an `opacity` layer that would
+/// stand for the whole length of every detail.
 #[test]
-fn the_count_line_slides_out_of_a_fixed_anchor() {
+fn the_count_line_drops_out_of_a_fixed_anchor_and_returns_from_the_left() {
     let code = code();
     let count = code
         .split_once("\n    Text {")
@@ -705,19 +711,34 @@ fn the_count_line_slides_out_of_a_fixed_anchor() {
     );
 
     assert!(
-        count.contains("y: root.compact-h - Theme.pad-lg - root.pill-h;"),
-        "the count must anchor to the *compact* band's floor — off `root.height` it rides the \
-         morph, which is the vertical travel it exists to not have"
+        count.contains("y: root.compact-h - Theme.pad-lg - root.pill-h + root.count-dy;"),
+        "the count must anchor to the *compact* band's floor and take its drop as an offset off \
+         it — off `root.height` it rides the morph, which is the vertical travel it exists to \
+         not have"
+    );
+    let drop = binding(&code, "property <length> count-dy:");
+    assert_eq!(
+        drop.split_whitespace().collect::<Vec<_>>().join(" "),
+        "root.detail-open ? root.count-drop * root.count-t * root.count-t : 0px",
+        "the drop must be gated on `detail-open` and squared: ungated it also fires on the way \
+         back, where the line is sliding in from the left, and read linearly off an \
+         emphasized-decelerate curve it realises most of its travel in the first two frames and \
+         reads as a flick rather than as a departure"
     );
     assert!(
-        count.contains("x: Theme.pad-lg - root.count-slide * root.hero-t;"),
-        "the count must leave sideways off `hero-t` — a slide on a clock of its own drifts from \
-         the band it is leaving"
+        count.contains(
+            "x: Theme.pad-lg - (root.detail-open ? 0px : root.count-slide * root.hero-t);"
+        ),
+        "the *return* must keep its leftward slide and the exit must take none — one axis per \
+         direction is the whole shape, and a slide left on the way in is what crossed the back \
+         button"
     );
     assert!(
-        count.contains("color: Theme.text.with-alpha(clamp(1.0 - root.hero-t * 2.0, 0.0, 1.0));"),
-        "the count must fade by alpha inside its brush, biased ahead of the morph so the artwork \
-         tile crossing behind it is never legible through the sentence"
+        count.contains("color: Theme.text.with-alpha(1.0 - root.count-t);")
+            && code.contains("property <float> count-t: clamp(root.hero-t * 2.0, 0.0, 1.0);"),
+        "the count must fade by alpha inside its brush, on a bias biased ahead of the morph so \
+         the artwork tile crossing behind it is never legible through the sentence — pinned at \
+         both ends so the window can't drift alone, the drop reading the same float"
     );
     assert!(
         !count.contains("opacity:"),
