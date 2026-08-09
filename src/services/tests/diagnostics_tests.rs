@@ -2,7 +2,10 @@ use std::path::Path;
 
 use chrono::{Local, TimeZone};
 
-use super::{crash_block, settings_block, suggested_file_name, tail_of};
+use super::{
+    FolderCounts, LibraryFacts, crash_block, head_of, library_block, log_section, settings_block,
+    suggested_file_name, tail_of,
+};
 use crate::error::AppError;
 use crate::test_support::{paths_in, reading_env, with_env_var};
 
@@ -88,6 +91,153 @@ fn an_install_that_never_crashed_still_reports() -> Result<(), AppError> {
     let block = reading_env(|| crash_block(tmp.path()));
     assert!(block.contains("<none>"));
     Ok(())
+}
+
+/// A crash report opens with what a reporter is asked for and *ends* with the
+/// backtrace, so an over-budget one is cut from the far end. Trimmed like a log
+/// file it would keep the deepest frames and drop the version, the location and
+/// the panic message — the report reads complete and says nothing.
+#[test]
+fn an_over_budget_crash_report_keeps_its_header() -> Result<(), AppError> {
+    let tmp = tempfile::tempdir()?;
+    let path = tmp.path().join("crash-20260806-143000.txt");
+    let frames = "  0: melodia::some::deeply::nested::frame\n".repeat(500);
+    std::fs::write(&path, format!("Melodia crash report\npanic     : boom\n{frames}"))?;
+
+    let head = reading_env(|| head_of(&path, 512)).unwrap_or_default();
+
+    assert!(head.contains("Melodia crash report"), "lost the header: {head}");
+    assert!(head.contains("panic     : boom"), "lost the panic message");
+    assert!(head.len() <= 512, "head blew its budget: {}", head.len());
+    Ok(())
+}
+
+/// The budget cuts mid-line as readily as a tail does, and half a frame reads
+/// like a whole one.
+#[test]
+fn a_head_ends_on_a_line_boundary() -> Result<(), AppError> {
+    let tmp = tempfile::tempdir()?;
+    let path = tmp.path().join("crash-20260806-143000.txt");
+    write_numbered(&path, 1000)?;
+
+    // 25 bytes lands inside a record, never on its boundary.
+    let head = reading_env(|| head_of(&path, 25)).unwrap_or_default();
+
+    for line in head.lines() {
+        assert!(line.starts_with("line "), "head kept a partial record: {line:?}");
+    }
+    assert!(head.contains("line 0000"), "head lost the first line");
+    Ok(())
+}
+
+/// A file inside the budget is returned whole — the boundary trim must not eat
+/// its last line, which is the mirror of the tail's first-line case.
+#[test]
+fn a_short_file_keeps_its_last_line() -> Result<(), AppError> {
+    let tmp = tempfile::tempdir()?;
+    let path = tmp.path().join("small.txt");
+    std::fs::write(&path, b"first\nlast without a newline")?;
+
+    let head = reading_env(|| head_of(&path, 64 * 1024)).unwrap_or_default();
+
+    assert_eq!(head, "first\nlast without a newline\n");
+    Ok(())
+}
+
+/// Which end `crash_block` cuts from is the contract, and the two tests above
+/// pin only the helpers. Today a swap back to `tail_of` is caught by `head_of`
+/// going unused, but that gate disappears the moment it has a second caller —
+/// and what a silent swap costs is the version, the location and the panic
+/// message on every over-budget report in the bundle.
+#[test]
+fn the_crash_block_cuts_a_report_from_the_backtrace_end() -> Result<(), AppError> {
+    let tmp = tempfile::tempdir()?;
+    let frames = "  0: melodia::some::deeply::nested::frame\n".repeat(1000);
+    std::fs::write(
+        tmp.path().join("crash-20260806-143000.txt"),
+        format!("Melodia crash report\npanic     : boom\n{frames}"),
+    )?;
+
+    let block = reading_env(|| crash_block(tmp.path()));
+
+    assert!(
+        block.contains("panic     : boom"),
+        "the report was cut from the wrong end: {block}"
+    );
+    Ok(())
+}
+
+/// A locked or corrupt database is a plausible thing to be filing a bug about,
+/// and the logs and crash reports beside it are still worth handing over — so
+/// the library block degrades the way every other block here does rather than
+/// taking the bundle down with it.
+///
+/// The mixed case is the one worth having: a lock is released between two
+/// queries as readily as it is held across both, and a track count is worth
+/// handing over without the folder list.
+#[test]
+fn each_library_line_degrades_on_its_own() {
+    let both = library_block(&LibraryFacts {
+        tracks: Some(4211),
+        folders: Some(FolderCounts {
+            total: 3,
+            enabled: 2,
+        }),
+    });
+    assert!(both.contains("4211"), "lost the track count: {both}");
+    assert!(both.contains("3 (2 enabled)"), "lost the folder counts: {both}");
+
+    let counted_tracks_only = library_block(&LibraryFacts {
+        tracks: Some(4211),
+        folders: None,
+    });
+    assert!(
+        counted_tracks_only.contains("4211"),
+        "a failed folder query took the track count with it: {counted_tracks_only}"
+    );
+    assert!(counted_tracks_only.contains("<unavailable>"));
+
+    let neither = library_block(&LibraryFacts {
+        tracks: None,
+        folders: None,
+    });
+    assert_eq!(neither.matches("<unavailable>").count(), 2);
+}
+
+/// The two kinds of empty are the reason `unavailable_reason` exists at all: an
+/// install that simply hasn't written a log yet wants a different answer from a
+/// sink that couldn't open its file, and from an empty section they look alike.
+#[test]
+fn the_two_kinds_of_empty_logs_read_differently() {
+    let never_started = reading_env(|| {
+        log_section(
+            Some("Log cannot be written: Permission denied (os error 13)"),
+            Vec::new(),
+        )
+    });
+    assert!(never_started.contains("<unavailable"));
+    assert!(
+        never_started.contains("Permission denied"),
+        "the reason is the whole value of the branch: {never_started}"
+    );
+
+    let nothing_yet = reading_env(|| log_section(None, Vec::new()));
+    assert!(nothing_yet.contains("<none>"), "{nothing_yet}");
+}
+
+/// The reason comes from `flexi_logger` rather than from this module, so it is
+/// the one string here that could grow a path without anyone editing this file.
+#[test]
+fn the_unavailable_reason_is_redacted_like_everything_else() {
+    let block = with_env_var("HOME", Some("/home/testuser"), || {
+        log_section(
+            Some("cannot open /home/testuser/.local/share/Melodia/logs"),
+            Vec::new(),
+        )
+    });
+
+    assert!(!block.contains("/home/testuser"), "home leaked: {block}");
+    assert!(block.contains("~/.local/share/Melodia/logs"));
 }
 
 /// The whole point of the allowlist: the block names the fields it was written

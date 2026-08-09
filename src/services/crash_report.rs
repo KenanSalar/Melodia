@@ -56,10 +56,30 @@ const LAST_SEEN_FILE: &str = "last-seen-crash.json";
 /// way: the two are read side by side, so they had better agree.
 pub(crate) const FILE_TS_FORMAT: &str = "%Y%m%d-%H%M%S";
 
-/// Set for the lifetime of the first panic, so a panic raised *inside* the hook
-/// can't recurse into it. std has its own panic-in-hook abort, but it triggers
-/// after this one would already have re-entered.
+/// Held for one trip through the hook, so two threads panicking at once don't
+/// interleave a report write, a prune and a `log::error!`.
+///
+/// **Not a recursion guard, though it reads like one.** A panic raised *inside*
+/// this closure never reaches it a second time: `panic_count::increase` sets a
+/// thread-local in-hook flag and `rust_panic_with_hook` aborts on it *before*
+/// dispatching, so the only way to lose the exchange is a concurrent panic on
+/// another thread. That is why the loser still calls `previous` — one report per
+/// crash is plenty, one stderr message per panic is not.
+///
+/// Cleared on the way out rather than latched for the process: release builds
+/// abort on the first panic, but `[profile.dev]` unwinds and a panicking tokio
+/// task is swallowed by its `JoinHandle`, so a latch made every panic after the
+/// first invisible.
 static IN_HOOK: AtomicBool = AtomicBool::new(false);
+
+/// Clears [`IN_HOOK`] when the hook body returns.
+struct HookGuard;
+
+impl Drop for HookGuard {
+    fn drop(&mut self) {
+        IN_HOOK.store(false, Ordering::SeqCst);
+    }
+}
 
 /// The one definition of the naming scheme; [`timestamp_of`] is its inverse.
 fn file_name(now: DateTime<Local>) -> String {
@@ -94,8 +114,10 @@ pub fn install_hook(logs_dir: &Path) {
             .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
             .is_err()
         {
+            previous(info);
             return;
         }
+        let _guard = HookGuard;
 
         let now = Local::now();
         let thread = std::thread::current();

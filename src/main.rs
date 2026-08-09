@@ -67,6 +67,27 @@ fn main() -> AppResult<()> {
         return Ok(());
     }
 
+    // `--logs` prints the directory holding the rolling log and any crash
+    // reports, then returns. The rest of the diagnostics feature lives behind
+    // Settings → About → Diagnostics, which is unreachable when the thing being
+    // reported is that Melodia won't open — so the one fact a reporter needs in
+    // that case has a route that touches neither the database nor Slint. Same
+    // shape as the branch above, and deliberately beside it: both are CLI
+    // contracts that must stay ahead of anything that can fail.
+    //
+    // Linux and macOS only, and not by choice: `windows_subsystem = "windows"`
+    // above leaves a release build with no console attached, so `GetStdHandle`
+    // hands back nothing and this `writeln!` is swallowed. The branch above
+    // escapes that only because the updater spawns it with `Stdio::piped()`.
+    // Debug builds are console-subsystem, so the gap never shows up locally —
+    // `README.md` and the issue template point Windows at `%APPDATA%\Melodia\logs\`.
+    if std::env::args().nth(1).as_deref() == Some("--logs") {
+        use std::io::Write;
+        let paths = Paths::resolve()?;
+        let _ = writeln!(std::io::stdout().lock(), "{}", paths.logs_dir.display());
+        return Ok(());
+    }
+
     // Reap `<install_target>.old` — the previous-binary snapshot left by
     // [`services::updater::install::swap_in_place`] on AppImage / tarball
     // installs (`Melodia.old` / `<AppImage-basename>.old`). The
@@ -145,7 +166,9 @@ fn main() -> AppResult<()> {
     // failure here has no logger to reach and never will — it means no user
     // data directory at all.
     let paths = Paths::resolve()?;
-    services::logging::install(&paths)?;
+    // Infallible: a log file that can't be opened degrades to stderr rather
+    // than stopping the boot. See `services::logging::install`.
+    services::logging::install(&paths);
     // Before the runtime and before Slint, so boot panics are covered too.
     services::crash_report::install_hook(&paths.logs_dir);
     log::info!("Melodia starting");

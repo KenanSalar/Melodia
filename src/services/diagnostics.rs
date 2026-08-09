@@ -15,7 +15,7 @@
 //! holds a real name.
 
 use std::io::{Read, Seek, SeekFrom};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use chrono::{DateTime, Local};
@@ -33,7 +33,9 @@ use crate::state::AppState;
 /// has already updated away from.
 const CRASH_REPORTS_IN_BUNDLE: usize = 3;
 
-/// Per-report cap. A backtrace this long has already said what it knows.
+/// Per-report cap, spent from the *front* ([`head_of`]) — a backtrace this long
+/// has already said what it knows, and everything a reporter is asked for sits
+/// above it.
 const MAX_CRASH_REPORT_BYTES: u64 = 16 * 1024;
 
 /// Total cap across all log files. Enough to hold the session that failed plus
@@ -49,37 +51,76 @@ pub fn suggested_file_name(now: DateTime<Local>) -> String {
 
 /// Build the report. Returns the text; the caller owns where it lands.
 pub async fn build_report(state: &AppState) -> AppResult<String> {
-    let track_count = queries::track::count_tracks(&state.db).await?;
-    let folders = queries::folder::get_all_folders(&state.db).await?;
-    let enabled_folders = folders.iter().filter(|folder| folder.is_enabled).count();
+    let library = library_facts(state).await;
     let paths = Arc::clone(&state.paths);
 
     // The rest is file I/O — settings, crash reports, and up to a quarter
     // megabyte of log tail.
-    tokio::task::spawn_blocking(move || {
-        assemble(&paths, track_count, folders.len(), enabled_folders)
-    })
-    .await
-    .map_err(AppError::io_source)
+    tokio::task::spawn_blocking(move || assemble(&paths, &library))
+        .await
+        .map_err(AppError::io_source)
 }
 
-fn assemble(
-    paths: &Paths,
-    track_count: i64,
-    folder_count: usize,
-    enabled_folders: usize,
-) -> String {
+/// What the library looks like, as far as the database could answer.
+///
+/// Each line degrades on its own, and that is the point: a locked or corrupt
+/// database is a plausible thing to be filing a bug *about*, and it is exactly
+/// the case where one query wins and the next loses. It used to take the whole
+/// bundle down with it — leaving the reporter with no file at all while the logs
+/// and crash reports sat there readable.
+struct LibraryFacts {
+    tracks: Option<i64>,
+    folders: Option<FolderCounts>,
+}
+
+/// How many library folders there are, and how many of them are enabled.
+struct FolderCounts {
+    total: usize,
+    enabled: usize,
+}
+
+async fn library_facts(state: &AppState) -> LibraryFacts {
+    LibraryFacts {
+        tracks: queries::track::count_tracks(&state.db)
+            .await
+            .inspect_err(|e| log::warn!("diagnostics: track count unavailable: {e}"))
+            .ok(),
+        folders: queries::folder::get_all_folders(&state.db)
+            .await
+            .inspect_err(|e| log::warn!("diagnostics: folder list unavailable: {e}"))
+            .ok()
+            .map(|folders| FolderCounts {
+                total: folders.len(),
+                enabled: folders.iter().filter(|folder| folder.is_enabled).count(),
+            }),
+    }
+}
+
+fn assemble(paths: &Paths, library: &LibraryFacts) -> String {
     format!(
         "Melodia diagnostics report\n\
          {facts}\
-         \nlibrary\n\
-         tracks    : {track_count}\n\
-         folders   : {folder_count} ({enabled_folders} enabled)\n\
-         {settings}{crashes}{logs}",
+         {library}{settings}{crashes}{logs}",
         facts = crash_report::system_facts(Local::now()),
+        library = library_block(library),
         settings = settings_block(paths),
         crashes = crash_block(&paths.logs_dir),
         logs = log_block(),
+    )
+}
+
+fn library_block(facts: &LibraryFacts) -> String {
+    format!(
+        "\nlibrary\n\
+         tracks    : {tracks}\n\
+         folders   : {folders}\n",
+        tracks = facts
+            .tracks
+            .map_or_else(|| "<unavailable>".to_owned(), |count| count.to_string()),
+        folders = facts.folders.as_ref().map_or_else(
+            || "<unavailable>".to_owned(),
+            |counts| format!("{} ({} enabled)", counts.total, counts.enabled),
+        ),
     )
 }
 
@@ -126,7 +167,7 @@ fn crash_block(logs_dir: &Path) -> String {
     let bodies: Vec<String> = reports
         .iter()
         .map(|path| {
-            let body = tail_of(path, MAX_CRASH_REPORT_BYTES)
+            let body = head_of(path, MAX_CRASH_REPORT_BYTES)
                 .unwrap_or_else(|| "<unreadable>\n".to_owned());
             format!("\n--- {} ---\n{body}", display_path(path))
         })
@@ -135,7 +176,21 @@ fn crash_block(logs_dir: &Path) -> String {
 }
 
 fn log_block() -> String {
-    let files = logging::log_files();
+    log_section(logging::unavailable_reason(), logging::log_files())
+}
+
+/// The logs section over an already-resolved sink state. Split from [`log_block`]
+/// so both kinds of empty are reachable without a live logger, and because the
+/// reason is the one string in this file that comes from outside it — it goes
+/// through [`redact_home`] like everything else.
+fn log_section(unavailable: Option<&str>, files: Vec<PathBuf>) -> String {
+    if let Some(reason) = unavailable {
+        // Distinguishes "this install never wrote a log" from "the file sink
+        // couldn't start", which look identical from an empty section and want
+        // different answers from whoever reads the bundle.
+        return format!("\nlogs\n<unavailable: {}>\n", redact_home(reason));
+    }
+
     if files.is_empty() {
         return "\nlogs\n<none>\n".to_owned();
     }
@@ -175,11 +230,45 @@ fn tail_of(path: &Path, max_bytes: u64) -> Option<String> {
         text.as_ref()
     };
 
-    let mut owned = redact_home(trimmed).into_owned();
+    Some(redacted_lines(trimmed))
+}
+
+/// The first `max_bytes` of `path`, ending at a line boundary.
+///
+/// The opposite end from [`tail_of`], and the one call site is why both exist:
+/// a crash report *opens* with what a reporter is asked for — version,
+/// timestamp, thread, location, panic message — and it is the backtrace that
+/// runs long. Cut from the other end, an over-budget report keeps its deepest
+/// frames and loses the identity of the crash. A log file is the reverse, so it
+/// keeps [`tail_of`].
+fn head_of(path: &Path, max_bytes: u64) -> Option<String> {
+    let mut file = std::fs::File::open(path).ok()?;
+    let len = file.metadata().ok()?.len();
+
+    let mut buf = Vec::with_capacity(usize::try_from(len.min(max_bytes)).unwrap_or(0));
+    file.by_ref().take(max_bytes).read_to_end(&mut buf).ok()?;
+    let text = String::from_utf8_lossy(&buf);
+
+    // Only when the budget actually cut something — a whole file that happens
+    // to end without a newline must keep its last line.
+    let trimmed = if len > max_bytes {
+        text.rfind('\n').map_or("", |i| &text[..=i])
+    } else {
+        text.as_ref()
+    };
+
+    Some(redacted_lines(trimmed))
+}
+
+/// The shared exit of both readers: nothing leaves here holding a home
+/// directory, and every section ends on a newline so the next one's header
+/// starts its own line.
+fn redacted_lines(text: &str) -> String {
+    let mut owned = redact_home(text).into_owned();
     if !owned.ends_with('\n') {
         owned.push('\n');
     }
-    Some(owned)
+    owned
 }
 
 fn display_path(path: &Path) -> String {

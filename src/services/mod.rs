@@ -134,14 +134,46 @@ pub fn write_text_atomic_sync(path: &Path, text: &str) -> AppResult<()> {
 ///
 /// Everything a crash report or diagnostics bundle carries goes through this
 /// before reaching a file the user is asked to attach to a public issue — a
-/// home directory usually holds a real name. Borrows when there is nothing to
-/// replace, which is the common case.
+/// home directory usually holds a real name.
+///
+/// The home directory comes from [`dirs::home_dir`], **not** from `$HOME`:
+/// that variable is a Unix convention and is normally unset on Windows, which
+/// is exactly where this feature earns its keep (a GUI-subsystem build has no
+/// console to have read the paths from instead). The crate answers with
+/// `FOLDERID_Profile` there and reads `$HOME` on Unix, so the Unix behaviour is
+/// unchanged and the Windows one starts existing.
+///
+/// Resolved per call rather than cached, and that is a trade rather than a free
+/// choice — four tests across three files drive this through `$HOME`, so a
+/// process-wide cache would put the answer out of their reach. The cost isn't
+/// uniform either: Unix reads the variable (falling back to `getpwuid_r`, which
+/// behind a networked NSS module can do real I/O), Windows calls
+/// `SHGetKnownFolderPath`. A bundle makes on the order of twenty of these and a
+/// crash report two, so it stays per call; anything hotter wants the answer
+/// passed in rather than a cache the tests can't reset.
 pub fn redact_home(text: &str) -> Cow<'_, str> {
-    let Ok(home) = std::env::var("HOME") else {
+    let Some(home) = home_dir_string() else {
         return Cow::Borrowed(text);
     };
-    if home.is_empty() || !text.contains(&home) {
+    redact_prefix(text, &home)
+}
+
+/// The home directory as a string, or `None` when there isn't one to redact.
+fn home_dir_string() -> Option<String> {
+    let home = dirs::home_dir()?;
+    let home = home.to_str()?;
+    (!home.is_empty()).then(|| home.to_owned())
+}
+
+/// The pure half of [`redact_home`]. Borrows when there is nothing to replace,
+/// which is the common case.
+fn redact_prefix<'a>(text: &'a str, home: &str) -> Cow<'a, str> {
+    if !text.contains(home) {
         return Cow::Borrowed(text);
     }
-    Cow::Owned(text.replace(&home, "~"))
+    Cow::Owned(text.replace(home, "~"))
 }
+
+#[cfg(test)]
+#[path = "tests/mod_tests.rs"]
+mod tests;

@@ -366,10 +366,13 @@ needed — and if it ever panics it leaves a crash report beside it. Both live i
 - **Linux** — `~/.local/share/Melodia/logs/`
 - **Windows** — `%APPDATA%\Melodia\logs\`
 
-The current log is `melodia_rCURRENT.log`; it rotates at 2 MiB and at the turn of
-the day, keeping the 7 most recent rotated files, so the folder stays under about
-16 MiB. Rotation happens once per day you actually run Melodia, so that is roughly
-a week of daily listening — and proportionally longer if you use it less often.
+The current log is `melodia_rCURRENT.log`; it rotates at 2 MiB, keeping the 7 most
+recent rotated files, so the folder stays under about 16 MiB. On Linux and macOS
+it also rotates at the turn of each day you actually run Melodia, which makes that
+roughly a week of daily listening — and proportionally longer if you use it less
+often. Windows doesn't report a file's creation date reliably, so there the daily
+rotation only applies to a session running across midnight; a log carried over from
+an earlier day rotates on size alone, and the same 16 MiB covers a longer stretch.
 Crash reports are
 `crash-<date>-<time>.txt` and hold the panic message, the thread and location, a
 backtrace, and what Melodia knows about your system.
@@ -388,6 +391,12 @@ backtrace, and what Melodia knows about your system.
 
 If Melodia crashed the last time you ran it, the next launch says so and offers to
 open the folder.
+
+If Melodia won't start at all — the one case where none of the above is reachable —
+`melodia --logs` prints that directory and exits. The log and any crash report from
+the failed launch are already in it. On Linux and macOS only: a Windows build runs
+without a console attached, so it can't print to the terminal you launched it from
+— use the `%APPDATA%\Melodia\logs\` path above instead.
 
 For more detail than the default, set `RUST_LOG` — for example
 `RUST_LOG=debug melodia`. It overrides the built-in filter for both the log file

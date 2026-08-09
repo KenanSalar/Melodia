@@ -22,12 +22,11 @@ use std::path::PathBuf;
 use std::sync::OnceLock;
 
 use flexi_logger::{
-    AdaptiveFormat, Age, Cleanup, Criterion, Duplicate, FileSpec, LogfileSelector, Logger,
-    LoggerHandle, Naming, WriteMode, detailed_format,
+    AdaptiveFormat, Age, Cleanup, Criterion, Duplicate, FileSpec, FlexiLoggerError, LogSpecification,
+    LogfileSelector, Logger, LoggerHandle, Naming, WriteMode, detailed_format,
 };
 
 use crate::config::Paths;
-use crate::error::{AppError, AppResult};
 
 /// Dependency warnings, our own narrative, and nothing else.
 ///
@@ -58,10 +57,59 @@ const KEEP_LOG_FILES: usize = 7;
 /// binding would work but be unreachable from [`flush`] and [`log_files`].
 static HANDLE: OnceLock<LoggerHandle> = OnceLock::new();
 
-/// Start file logging. Call once, as early in `main` as a [`Paths`] exists.
-pub fn install(paths: &Paths) -> AppResult<()> {
-    let handle = Logger::try_with_env_or_str(DEFAULT_LOG_SPEC)
-        .map_err(AppError::io_source)?
+/// Why the file sink isn't running, on the runs where it isn't. Read back by
+/// [`unavailable_reason`] so a diagnostics bundle says *why* it carries no logs
+/// rather than looking like an install that never wrote any.
+static FILE_SINK_ERROR: OnceLock<String> = OnceLock::new();
+
+/// Start logging. Call once, as early in `main` as a [`Paths`] exists.
+///
+/// **Infallible on purpose.** Opening the file can fail for reasons that have
+/// nothing to do with the app — a `melodia_rCURRENT.log` left root-owned by one
+/// `sudo melodia`, a full disk, exhausted descriptors — and a `?` here refused
+/// to start Melodia over it, printing why to the stderr that a `.desktop` launch
+/// discards. That is the failure this whole module exists to stop happening, so
+/// it degrades to stderr-only instead. The panic hook writes through plain `fs`
+/// and doesn't touch the logger, so crash reports survive either way.
+pub fn install(paths: &Paths) {
+    let error = match start_to_file(paths) {
+        Ok(handle) => {
+            let _ = HANDLE.set(handle);
+            return;
+        }
+        Err(e) => describe(&e),
+    };
+
+    if let Ok(handle) = base_logger().start() {
+        let _ = HANDLE.set(handle);
+    }
+    let _ = FILE_SINK_ERROR.set(error);
+    // After the fallback logger is up, so it lands somewhere rather than
+    // vanishing into an uninitialized `log` facade.
+    log::error!(
+        "file logging unavailable, continuing on stderr only: {}",
+        unavailable_reason().unwrap_or("unknown")
+    );
+}
+
+/// The spec, the levels and the stderr half — everything the fallback keeps.
+fn base_logger() -> Logger {
+    // `try_with_env_or_str` falls back to the given spec when `RUST_LOG` is
+    // malformed, so the only way this errors is a broken `DEFAULT_LOG_SPEC` —
+    // which `tests::the_default_spec_parses_into_the_directives_it_spells`
+    // pins. An unparseable literal then degrades to the `warn` floor that
+    // spec's first directive sets, minus the app's own narrative, rather than
+    // costing the process its logger. Not `LogSpecification::default()`, which
+    // is `off()`.
+    Logger::try_with_env_or_str(DEFAULT_LOG_SPEC)
+        .unwrap_or_else(|_| Logger::with(LogSpecification::warn()))
+        // Adaptive, not plain coloured: env_logger's `auto-color` suppressed
+        // ANSI off a tty and piping the app somewhere shouldn't regress.
+        .adaptive_format_for_stderr(AdaptiveFormat::Default)
+}
+
+fn start_to_file(paths: &Paths) -> Result<LoggerHandle, FlexiLoggerError> {
+    base_logger()
         .log_to_file(
             FileSpec::default()
                 .directory(&paths.logs_dir)
@@ -84,14 +132,29 @@ pub fn install(paths: &Paths) -> AppResult<()> {
         .write_mode(WriteMode::Direct)
         .duplicate_to_stderr(Duplicate::All)
         .format_for_files(detailed_format)
-        // Adaptive, not plain coloured: env_logger's `auto-color` suppressed
-        // ANSI off a tty and piping the app somewhere shouldn't regress.
-        .adaptive_format_for_stderr(AdaptiveFormat::Default)
         .start()
-        .map_err(AppError::io_source)?;
+}
 
-    let _ = HANDLE.set(handle);
-    Ok(())
+/// Flatten an error and its causes onto one line.
+///
+/// `FlexiLoggerError`'s `Display` arms are static sentences — `OutputIo` holds the
+/// `io::Error` on `.source()` and never interpolates it — so "permission denied"
+/// and "no space left on device" exist only in the chain, and the chain is the
+/// whole reason the reason is recorded at all.
+fn describe(error: &dyn std::error::Error) -> String {
+    let mut text = error.to_string();
+    let mut cause = error.source();
+    while let Some(source) = cause {
+        text.push_str(": ");
+        text.push_str(&source.to_string());
+        cause = source.source();
+    }
+    text
+}
+
+/// Why there are no log files, or `None` when the file sink is running.
+pub fn unavailable_reason() -> Option<&'static str> {
+    FILE_SINK_ERROR.get().map(String::as_str)
 }
 
 /// Flush before an exit path that runs no destructors. A no-op under
@@ -110,17 +173,33 @@ pub fn log_files() -> Vec<PathBuf> {
     let Some(handle) = HANDLE.get() else {
         return Vec::new();
     };
-    // Two calls: asked for together, the rotated files come back newest-first
-    // but the live one is *appended* after them, so the list is neither
-    // chronological nor reverse-chronological and no sort of it is either.
-    let mut files = handle
+    // Two calls, because asked for together the live file is *appended* after
+    // the rotated ones and no single ordering of that list is meaningful.
+    let current = handle
         .existing_log_files(&LogfileSelector::none().with_r_current())
         .unwrap_or_default();
-    files.extend(
-        handle
-            .existing_log_files(&LogfileSelector::default())
-            .unwrap_or_default(),
-    );
+    let rotated = handle
+        .existing_log_files(&LogfileSelector::default())
+        .unwrap_or_default();
+    newest_first(current, rotated)
+}
+
+/// Join the live file and the rotated ones into one newest-first list.
+///
+/// The reversal is the whole of it, and it is not what reading `FileSpec`
+/// suggests: that sorts ascending and then *reverses*, but `LoggerHandle`'s own
+/// `existing_log_files` ends with a plain `sort()` which undoes it — so the
+/// public API hands back ascending names, and under `Naming::Numbers` a higher
+/// index is the newer file. Left alone, the byte budget in
+/// `services::diagnostics` is spent on the *oldest* rotated log the moment the
+/// live one is short, which is exactly the launch after a rotation.
+///
+/// Split out so the ordering is testable without a live logger; it has been
+/// wrong twice with nothing to catch it.
+fn newest_first(current: Vec<PathBuf>, mut rotated: Vec<PathBuf>) -> Vec<PathBuf> {
+    rotated.reverse();
+    let mut files = current;
+    files.extend(rotated);
     files
 }
 
