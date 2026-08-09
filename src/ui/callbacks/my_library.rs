@@ -9,11 +9,11 @@
 //!
 //! **The hero is the page's, not a tab's**, and that is what the last two handlers are for.
 //! A tab leave holds it — `release_shared_hero!` and `release_detail_hero_images!` gate on
-//! `my_library::the_band_is_up` — because nothing on this page clears a detail id on a tab
-//! switch, so the banner is still what the band is collapsing out of and still what it
-//! morphs back into on the next pick. Handing it back is split between `hero-collapsed`
-//! (per id, once the morph has finished) and `page-active-changed` (all of it, once the
-//! page is gone).
+//! `my_library::the_band_is_up`, and the chip row on its own owner — because nothing on this
+//! page clears a detail id on a tab switch, so the banner is still what the band is
+//! collapsing out of and still what it morphs back into on the next pick. Handing it back is
+//! split between `hero-collapsed` (per id, once the morph has finished) and
+//! `page-active-changed` (all of it, once the page is gone).
 
 use std::cell::Cell;
 
@@ -55,9 +55,10 @@ fn persist_tab(state: &AppState, tab: i32) {
 /// what is there.
 ///
 /// The colour set is *not* handed back here for the same reason, and its teardown is the
-/// page's — [`release_page_hero`]. The chip row is, and that asymmetry is
-/// `release_shared_hero!`'s: an unkeyed row of counts can't tell the hero returning to it
-/// from a different one taking the band over.
+/// page's — [`release_page_hero`]. The chip row asks the same question the ids answer, one
+/// layer down: [`crate::ui::hero_chips::clear_if_stale`] holds a row whose owner is still
+/// open, so a tab switch that collapsed the band keeps counts that are still true and the
+/// re-pick morphs back open with them already there.
 ///
 /// Safe to run unguarded because `LibraryTabBand` cancels its timer on a re-open, so this
 /// can only land with no detail on screen.
@@ -74,7 +75,7 @@ fn release_collapsed_hero(ui: &AppWindow) {
     if playlist.get_playlist_id() < 0 {
         release_hero_slots!(playlist);
     }
-    crate::ui::hero_chips::clear(ui);
+    crate::ui::hero_chips::clear_if_stale(ui);
 }
 
 /// Hand back every hero global the page owns, once the page itself is left.
@@ -114,6 +115,13 @@ pub fn wire_my_library(ui: &AppWindow, state: &AppState) {
     // entering surface's cache was wiped by its own section leave, so a dispatch into an
     // unfiltered tab rebuilds from nothing and hands the four grids the empty-state pair
     // their leave had deliberately withheld. That argument lives on `clear_mounted`.
+    //
+    // **A pick is also the one tab move that belongs in the back/forward history**, and
+    // it is the only one that records: the moves made on the user's behalf — a cross-tab
+    // drill, a Mouse-4/5 step — go through `persist-tab-idx` below, and a replay is
+    // suppressed besides. `NavEntry.tab` has always existed to tell two tabs of this page
+    // apart; without this call nothing ever pushed one, so Mouse-4 walked straight past
+    // every grid the user reached by picking a tab.
     {
         let s = state.clone();
         let weak = weak.clone();
@@ -123,6 +131,7 @@ pub fn wire_my_library(ui: &AppWindow, state: &AppState) {
                 g.set_filter(SharedString::from(""));
                 g.set_blur_search_tick(g.get_blur_search_tick() + 1);
                 my_library_mod::filter::clear_mounted(&ui);
+                crate::ui::nav_history::record_current(&s, &ui);
             }
             persist_tab(&s, tab);
         });

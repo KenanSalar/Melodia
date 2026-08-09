@@ -402,9 +402,10 @@ fn the_chip_row_fades_in_when_it_lands() {
          the chips have landed, and a host-driven flag would need one per hero"
     );
     assert!(
-        flat.contains("animate arrive-t { duration: Theme.dur-fast; easing: ease-in-out; }"),
-        "`arrive-t` must ease on `dur-fast`: the whole point of a chip is that the number is \
-         there, so this leads the eye rather than making it wait"
+        flat.contains("animate arrive-t { duration: Theme.dur-med; easing: ease-in-out; }"),
+        "`arrive-t` must ease on `dur-med` — the weight the blur crossfade and the palette \
+         mirrors either side of it already use, so the band settles as one thing rather than \
+         gaining a part that snaps"
     );
     assert_eq!(
         flat.matches("root.fade * root.arrive-t").count(),

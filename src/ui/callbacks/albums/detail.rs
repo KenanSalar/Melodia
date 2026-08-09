@@ -10,7 +10,7 @@ use crate::state::AppState;
 use crate::ui::albums::{self as albums_ui_mod, AlbumsUi};
 use crate::ui::callbacks::{collect_track_ids, play_row_start, spawn_play_then_shuffle};
 use crate::ui::callbacks::macros::{spawn_blocking_logged, spawn_logged, wire_row_flag};
-use crate::ui::my_library::restore_origin;
+use crate::ui::my_library::return_to_section;
 use crate::ui::track_list_view::{TrackListColumnState, view_id};
 use crate::{AlbumDetail, AppWindow};
 
@@ -41,22 +41,18 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, albums_ui: &Arc<AlbumsUi>) 
             // write a few lines down. One up-front set covers both.
             crate::ui::nav_transition::mark_drill_back(&ui);
 
-            // If cross-tab nav opened this detail (currently only
-            // `wire_artists::on_open_album`), restore where the user came
-            // from in the same UI-thread tick as the `album-id` reset so
-            // the Slint conditional reroutes straight to the origin's
-            // detail view without an Albums-grid frame.
-            // `ArtistDetail.artist-id` was preserved through the cross-tab
-            // episode, so `tab-idx == tab-artists && artist-id >= 0`
-            // mounts `ArtistDetailBody` immediately. **The origin is a
-            // pair**: five views share nav index 3, so restoring the index
-            // alone would be a no-op leaving the Albums tab mounted.
+            // If another *section* opened this detail (Favorites, Search, …),
+            // return to it in the same UI-thread tick as the `album-id` reset so
+            // the Slint conditional reroutes straight there without an
+            // Albums-grid frame. A drill from a sibling tab records no origin at
+            // all — the tab bar has said Albums for the whole visit, so the arrow
+            // closes into the Albums grid it has been pointing at. See
+            // `cross_tab_nav::origin_stamp`.
             let origin = g.get_origin_nav_index();
-            let origin_was_cross_tab = origin >= 0;
-            if origin_was_cross_tab {
-                restore_origin(&ui, origin, g.get_origin_tab());
+            let origin_was_cross_section = origin >= 0;
+            if origin_was_cross_section {
+                return_to_section(&ui, origin);
                 g.set_origin_nav_index(-1);
-                g.set_origin_tab(-1);
             }
 
             g.set_album_id(-1);
@@ -70,13 +66,13 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, albums_ui: &Arc<AlbumsUi>) 
             let au_swap = au.clone();
             s.runtime.spawn_blocking(move || {
                 au_swap.release_detail_artwork();
-                // Skip the Albums-grid prewarm on the cross-tab back path:
-                // the grid isn't going to mount (Slint swings to
-                // `ArtistDetailBody`), and `AlbumsUi.grid_covers` is
-                // shared with the Artist Detail's Albums sub-section —
-                // prewarming would evict that sub-section's still-needed
-                // thumbnails in favor of grid covers the user won't see.
-                if !origin_was_cross_tab {
+                // Skip the Albums-grid prewarm when the close is routing to
+                // another section: the grid isn't going to mount, and
+                // `AlbumsUi.grid_covers` is shared with the Artist Detail's
+                // Albums sub-section — prewarming would evict that
+                // sub-section's still-needed thumbnails in favor of grid
+                // covers the user won't see.
+                if !origin_was_cross_section {
                     au_swap.prewarm_visible_covers();
                 }
             });

@@ -225,32 +225,22 @@ macro_rules! release_hero_slots {
 /// detail whose banner has to come back with it.
 ///
 /// The *chip row* stops one step earlier, at
-/// [`crate::ui::my_library::the_chips_still_belong_to_the_band`], and that
-/// asymmetry is the point: a colour held across a **hand-off** is the outgoing
-/// hero's *tone*, where a count held across it is the outgoing hero's *facts*
-/// under the incoming one's title. An empty strip states nothing, which is what a
-/// hero with no answer yet should say. What that predicate adds is the two leaves
-/// that aren't hand-offs — the band collapsing the departing tab's banner, and
-/// Now Playing or the miniplayer merely covering a page whose hero comes back
-/// underneath — where the counts stay put and `hero-collapsed` clears them at the
-/// end of the morph instead.
-///
-/// **The second argument names the tab being left**, since that is what the
-/// predicate compares against; see it for why the departing tab's own id is the
-/// signal rather than anything the band publishes. The one-argument form is for
-/// the pages that have no tabs, Favorites and Recently Played, whose leave can
-/// never be either of those two cases.
+/// [`crate::ui::hero_chips::clear_if_stale`], and that asymmetry is the point: a
+/// colour held across a **hand-off** is the outgoing hero's *tone*, where a count
+/// held across it is the outgoing hero's *facts* under the incoming one's title.
+/// An empty strip states nothing, which is what a hero with no answer yet should
+/// say — but a strip the *incoming* hero has already filled states the right
+/// thing, and every cross-tab drill fills it in the tick that moves the tab. So the
+/// question is the record's rather than the departing view's, and the leave hands
+/// over no tab at all: the two cases where the counts stay put — the band
+/// collapsing the departing banner, and Now Playing merely covering a page whose
+/// hero comes back underneath — are both readable off the ids.
 macro_rules! release_shared_hero {
     ($ui:expr) => {{
-        $crate::ui::callbacks::macros::release_shared_hero!($ui, None)
-    }};
-    ($ui:expr, $departing:expr) => {{
         if !$crate::ui::my_library::the_band_is_up(&$ui) {
             $crate::ui::hero_backdrop::reset(&$ui);
         }
-        if !$crate::ui::my_library::the_chips_still_belong_to_the_band(&$ui, $departing) {
-            $crate::ui::hero_chips::clear(&$ui);
-        }
+        $crate::ui::hero_chips::clear_if_stale(&$ui);
     }};
 }
 
@@ -266,16 +256,12 @@ macro_rules! release_shared_hero {
 /// the same. Every path that genuinely closes a detail writes `-1` first, and
 /// `release_collapsed_hero` hands the slots back on that id once the band has
 /// finished shrinking.
-///
-/// `$departing` is the tab whose leave this is, forwarded to
-/// [`release_shared_hero`]; every caller is one of My Library's five, so there is
-/// no tabless form here.
 macro_rules! release_detail_hero_images {
-    ($ui:expr, $g:expr, $departing:expr) => {{
+    ($ui:expr, $g:expr) => {{
         if !$crate::ui::my_library::the_band_is_up(&$ui) {
             $crate::ui::callbacks::macros::release_hero_slots!($g);
         }
-        $crate::ui::callbacks::macros::release_shared_hero!($ui, $departing);
+        $crate::ui::callbacks::macros::release_shared_hero!($ui);
     }};
 }
 

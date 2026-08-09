@@ -34,14 +34,6 @@ use crate::ui::favorites::{self as favorites_ui_mod, FavoritesUi};
 use crate::ui::track_list_view::view_id;
 use crate::{AppWindow, Favorites};
 
-/// Nav-sidebar index of the Favorites tab. Used by the cross-tab
-/// open-artist hand-off to stamp `ArtistDetail.origin-nav-index` so the
-/// back arrow returns here, and by the lifecycle module to seed the
-/// section-active shadow. Mirrors the `NAV_*` consts in
-/// `callbacks/cross_tab_nav.rs` — same convention: kept local because
-/// Slint globals can't expose `const`s that Rust reads ergonomically.
-pub(super) const NAV_FAVORITES: i32 = 2;
-
 /// Wire every `Favorites.*` callback. Call once after
 /// `favorites::install_favorites_models` and after the Artists UI handle
 /// exists (the sub-view module borrows it for the cross-tab open-artist

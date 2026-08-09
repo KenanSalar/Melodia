@@ -52,7 +52,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
                 clear_vec_model::<UiPlaylistGridRow>(&g.get_grid_rows(), "playlists: clear grid");
 
                 let d = ui.global::<PlaylistDetail>();
-                release_detail_hero_images!(ui, d, Some(MyLibraryTab::Playlists));
+                release_detail_hero_images!(ui, d);
                 clear_vec_model::<UiTrackListRow>(&d.get_tracks(), "playlists: clear detail tracks");
                 clear_vec_model::<i32>(&d.get_selected_ids(), "playlists: clear detail selection");
                 d.set_selection_anchor(-1);
@@ -87,7 +87,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
                             let _ = weak.upgrade_in_event_loop(|ui| {
                                 let g = ui.global::<PlaylistDetail>();
                                 g.set_playlist_id(-1);
-                                release_detail_hero_images!(ui, g, Some(MyLibraryTab::Playlists));
+                                release_detail_hero_images!(ui, g);
                             });
                         }
                     } else {

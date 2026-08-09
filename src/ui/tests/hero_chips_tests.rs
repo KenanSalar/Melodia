@@ -1,6 +1,6 @@
 use super::{
-    ChipLabels, FavoritesFacts, RecentlyPlayedFacts, album_chips, artist_chips, favorites_chips,
-    genre_chips, playlist_chips, recently_played_chips,
+    ChipLabels, ChipOwner, FavoritesFacts, RecentlyPlayedFacts, album_chips, artist_chips,
+    favorites_chips, genre_chips, playlist_chips, recently_played_chips, should_clear,
 };
 use crate::ui::hero_folds::{HeroFold, MostPlayedTotals};
 use crate::entities::album::AlbumStats;
@@ -805,7 +805,7 @@ fn no_publisher_reads_its_facts_back_off_a_slint_global() {
         // Anchored on the call every publisher ends with, so a window that
         // truncated early would fail here rather than pass by holding nothing.
         assert!(
-            body.contains("publish(ui, chips,"),
+            body.contains("publish(ui, ChipOwner::"),
             "hero_chips.rs no longer defines `{publisher}` as a body ending in `publish(...)` — \
              move this pin with it, or the checks below hold over an empty window"
         );
@@ -1053,4 +1053,91 @@ fn every_hero_title_reads_the_same_token() {
             "{name} declares a hero title of its own; its shared band owns that heading"
         );
     }
+}
+
+/// **A teardown clears only chips it owns**, and the four cases are the four
+/// things a leave can be. The record answers all of them; the departing view — which
+/// is what used to be asked — can answer none.
+///
+/// The two `false` arms are the bugs this shape exists to stop, and they pull in
+/// opposite directions, which is why neither a bare clear nor a bare hold works.
+#[test]
+fn a_teardown_clears_only_a_row_the_band_has_stopped_painting() {
+    let album = ChipOwner::Album(7);
+    let artist = ChipOwner::Artist(3);
+
+    assert!(
+        !should_clear(album, Some(album), true),
+        "the band is still painting this row — Now Playing merely *covering* a page lands \
+         here, and blinking its counts out and back is a flicker on every press of `F`"
+    );
+    assert!(
+        !should_clear(album, None, true),
+        "nothing took over and the owner's own id survives: the band is 400 ms into \
+         collapsing over this banner, and `hero-collapsed` asks again at the end of it"
+    );
+    assert!(
+        should_clear(album, None, false),
+        "the detail really closed, so its counts are nobody's"
+    );
+    assert!(
+        should_clear(album, Some(artist), true),
+        "another hero owns the band and has not published yet — holding here states the \
+         outgoing entity's facts under the incoming one's title"
+    );
+
+    // The case the drill fix created, and the one a `$departing`-shaped guard got
+    // wrong: the destination published in the very tick that moved the tab, so the
+    // leave that follows in the same change-handler drain must leave it alone.
+    assert!(
+        !should_clear(artist, Some(artist), false),
+        "a cross-tab drill publishes before the departing tab's leave fires, so the row \
+         the leave sees already belongs to the hero that took over"
+    );
+}
+
+/// Which tab's id decides whose chips the band is painting.
+///
+/// The arm worth the test is **Songs**: it is the one tab with no detail, so a `match`
+/// that folded it in with the rest would read whichever id happened to sit in the
+/// default arm and hold the previous entity's counts over a plain track list. The
+/// `-1` cases are the other half — every close and every failed re-fetch clears its id
+/// first, and that is what keeps the teardown from being a leak.
+#[test]
+fn only_the_mounted_tabs_own_id_names_the_hero() {
+    use crate::ui::my_library::MyLibraryTab::{Albums, Artists, Genres, Playlists, Songs};
+
+    // One id set at a time, so a tab reading a sibling's is a failure rather than a
+    // coincidence — the shape a `match` arm gets wrong. Boot makes that reachable
+    // rather than theoretical: `seed_detail_from_settings` restores one detail per
+    // view whichever tab is resumed, so several ids are `>= 0` at once.
+    for (tab, ids, owner) in [
+        (Albums, [7, -1, -1, -1], ChipOwner::Album(7)),
+        (Artists, [-1, 7, -1, -1], ChipOwner::Artist(7)),
+        (Genres, [-1, -1, 7, -1], ChipOwner::Genre(7)),
+        (Playlists, [-1, -1, -1, 7], ChipOwner::Playlist(7)),
+    ] {
+        let [album, artist, genre, playlist] = ids;
+        assert_eq!(
+            super::my_library_owner(tab, album, artist, genre, playlist),
+            Some(owner),
+            "{tab:?} must name its own detail"
+        );
+        assert_eq!(
+            super::my_library_owner(tab, -1, -1, -1, -1),
+            None,
+            "{tab:?} must report nothing once its id is cleared"
+        );
+        assert_eq!(
+            super::my_library_owner(Songs, album, artist, genre, playlist),
+            None,
+            "Songs has no detail — it must not answer for {tab:?}'s id"
+        );
+    }
+
+    // `0` is a real row id, so the boundary is `>= 0` and not `> 0`.
+    assert_eq!(
+        super::my_library_owner(Albums, 0, -1, -1, -1),
+        Some(ChipOwner::Album(0))
+    );
 }

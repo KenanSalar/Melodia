@@ -12,44 +12,38 @@
 const DETAIL_VIEW: &str = include_str!("../detail_view.rs");
 const HERO_CHIPS: &str = include_str!("../hero_chips.rs");
 
-/// The publishing modules, and the helpers in each that must carry the gate.
-const CALLERS: [(&str, &str, &[&str]); 6] = [
+/// The four detail modules, the tab each one's gate has to name, and the helpers
+/// in each that must carry that gate.
+const DETAILS: [(&str, &str, &str, &[&str]); 4] = [
     (
         include_str!("../albums/detail.rs"),
         "albums/detail.rs",
+        "MyLibraryTab::Albums",
         &["apply_detail_artwork(", "publish_album("],
     ),
     (
         include_str!("../artists/detail.rs"),
         "artists/detail.rs",
+        "MyLibraryTab::Artists",
         &["apply_detail_artwork(", "publish_artist("],
     ),
     (
         include_str!("../genres/detail.rs"),
         "genres/detail.rs",
+        "MyLibraryTab::Genres",
         &["apply_genre_hero(", "publish_genre("],
     ),
     (
         include_str!("../playlists/detail.rs"),
         "playlists/detail.rs",
+        "MyLibraryTab::Playlists",
         &["apply_detail_artwork(", "publish_playlist("],
     ),
-    // The two tabbed pages' publishers take the section's *handle* rather than a
-    // flag, and derive the gate from it — so their call sites carry nothing to
-    // check and the assertion moves into the seams test below. That is the
-    // stronger shape, not an exemption: there is no way to hand either one
-    // another section's answer.
-    (
-        include_str!("../favorites/grids/apply.rs"),
-        "favorites/grids/apply.rs",
-        &[],
-    ),
-    (
-        include_str!("../recently_played/grid/apply.rs"),
-        "recently_played/grid/apply.rs",
-        &[],
-    ),
 ];
+
+/// The name every detail binds its gate to, so the pins below can look for one
+/// token rather than re-deriving the `tab_is_mounted` call at each site.
+const GATE: &str = "on_screen";
 
 /// Call sites of `name` in `src`, paired with whether the gate reaches them.
 ///
@@ -65,21 +59,27 @@ fn call_sites(src: &str, name: &str) -> Vec<bool> {
         .map(|(i, m)| {
             let tail = &src[i + m.len()..];
             let args = tail.find(");").map_or(tail, |end| &tail[..end]);
-            args.contains("section_active()")
+            args.contains(GATE)
         })
         .collect()
 }
 
-/// Every publish into a shared hero global takes its gate from the section's
-/// own shadow, never from a literal.
+/// Every publish into a shared hero global takes its gate from a live read of
+/// the mounted tab, never from a literal.
 ///
 /// A hardcoded `true` is the whole failure mode: it compiles, it is correct on
 /// the path the author was looking at (the user clicked into this view), and it
 /// is wrong on every path where something else fetches this view in the
-/// background.
+/// background — a cold boot's four `seed_detail_from_settings` calls above all.
+///
+/// The two curated pages are absent on purpose: their publishers take the
+/// section's *handle* rather than a flag and derive the gate from it, so their
+/// call sites carry nothing to check and the assertion lives in the seams test
+/// below. That is the stronger shape, not an exemption — there is no way to hand
+/// either one another section's answer.
 #[test]
 fn every_shared_hero_publish_is_gated_on_its_own_section() {
-    for (src, name, helpers) in CALLERS {
+    for (src, name, _, helpers) in DETAILS {
         for helper in helpers {
             let sites = call_sites(src, helper);
             assert!(
@@ -88,11 +88,57 @@ fn every_shared_hero_publish_is_gated_on_its_own_section() {
             );
             assert!(
                 sites.iter().all(|gated| *gated),
-                "{name} calls `{helper}` without passing `section_active()` — a hero that \
-                 publishes while hidden paints its colours under whichever hero is on screen, \
-                 and only a leave-and-return clears it"
+                "{name} calls `{helper}` without passing `{GATE}` — a hero that publishes while \
+                 hidden paints its colours under whichever hero is on screen, and only a \
+                 leave-and-return clears it"
             );
         }
+    }
+}
+
+/// **The gate is the live tab, and it is read after the drill has landed.**
+///
+/// It used to be the view's own `section_active()` shadow, which the
+/// `SectionActiveGate` only updates on the *next* frame — so a cross-section
+/// drill, which moves the tab from inside this very closure, read the answer for
+/// the tab the user was *leaving* and dropped both the chips and the solved
+/// backdrop. They then reappeared only once the section-enter had re-run
+/// `fetch_grid` plus this whole fetch again, which is a visible beat with the
+/// previous hero's counts sitting under the new title.
+///
+/// Two mutations reintroduce that and neither changes what the code looks like
+/// at a glance: swapping `tab_is_mounted` back for the shadow, and hoisting the
+/// binding above `on_applied` — which is the hook that moves the tab.
+#[test]
+fn the_detail_gate_is_the_live_tab_read_after_the_drill_lands() {
+    for (src, name, tab, _) in DETAILS {
+        let bind = format!("let {GATE} = tab_is_mounted(&ui, {tab});");
+        assert!(
+            src.contains(&bind),
+            "{name} must bind its gate as `{bind}` — the `section_active` shadow answers for \
+             the frame before the drill moved the tab"
+        );
+        assert!(
+            !src.contains("section_active()"),
+            "{name} still reads the `section_active()` shadow for a hero write; the live tab is \
+             the only answer a drill's own closure can trust"
+        );
+
+        // Playlist Detail is the one of the four nothing drills into from another
+        // section, so it has no `open_*_with` and no hook to be after; the live
+        // read is the shadow's own answer there and it takes it for consistency.
+        let Some((before, after)) = src.split_once("on_applied(&ui);") else {
+            assert_eq!(
+                name, "playlists/detail.rs",
+                "{name} gained a cross-section drill hook — pin the gate's position against it"
+            );
+            continue;
+        };
+        assert!(
+            !before.contains(&bind) && after.contains(&bind),
+            "{name} binds `{GATE}` before `on_applied(&ui)`, so a cross-section drill still \
+             gates the hero on the tab it is leaving"
+        );
     }
 }
 
@@ -176,15 +222,17 @@ fn the_two_seams_gate_the_shared_write_and_only_that() {
     // takes the gate and holds it, which is true of `publish` whether it is
     // `pub`, `pub(crate)` or private to its module.
     assert!(
-        HERO_CHIPS.contains("fn publish(ui: &AppWindow, chips: Vec<SharedString>, section_active: bool)")
-            && HERO_CHIPS.contains("if !section_active {"),
+        HERO_CHIPS.contains(
+            "fn publish(ui: &AppWindow, owner: ChipOwner, chips: Vec<SharedString>, \
+             section_active: bool)"
+        ) && HERO_CHIPS.contains("if !section_active {"),
         "hero_chips::publish is the single seam every chip publisher shares, and it must hold \
          the gate — a per-caller guard is one a new caller can forget"
     );
     assert!(
         !HERO_CHIPS.contains("fn clear(ui: &AppWindow, section_active"),
-        "hero_chips::clear must stay ungated — it runs on teardown, when the section is already \
-         inactive by definition"
+        "hero_chips::clear must stay ungated — it is the page-level teardown, run when the \
+         section is already inactive by definition"
     );
 
     // The two publishers that derive their gate instead of being handed one.
@@ -216,14 +264,14 @@ fn the_two_seams_gate_the_shared_write_and_only_that() {
 /// globals the same leave just emptied. Pick that first tab again and its detail
 /// id has never been cleared, so the band morphs straight back open onto them.
 /// All three are the colour set belonging to the *page*, which is what
-/// `the_band_is_up` says and what `a_detail_hero_is_mounted` only approximated.
+/// `the_band_is_up` says and what a hand-off-shaped guard only approximated.
 ///
-/// The chips stop one step earlier, at `the_chips_still_belong_to_the_band`, and
-/// swapping the two predicates is the mutation this exists to catch: a colour held across a
+/// The chips stop one step earlier, at `hero_chips::clear_if_stale`, and folding the two
+/// into one guard is the mutation this exists to catch: a colour held across a
 /// **hand-off** is the outgoing hero's tone, where a count held across it is the
-/// outgoing hero's *facts* under the incoming one's title. A **collapse** is not
-/// a hand-off — there is no incoming title, only the outgoing banner shrinking —
-/// so the counts stay put for the length of the morph.
+/// outgoing hero's *facts* under the incoming one's title — unless the incoming
+/// hero has already published, which is now every cross-tab drill. Only the record
+/// itself can tell those apart, which is why the leave hands over no tab.
 #[test]
 fn the_shared_teardown_holds_what_the_band_can_still_reach() {
     const MACROS: &str = include_str!("../callbacks/macros.rs");
@@ -234,13 +282,10 @@ fn the_shared_teardown_holds_what_the_band_can_still_reach() {
         .map_or("", |(body, _)| body);
     assert!(!body.is_empty(), "`release_shared_hero!` is gone or no longer a macro");
 
-    let guarded = |call: &str| {
-        body.split_once(&format!("if !$crate::ui::my_library::{call} {{"))
-            .and_then(|(_, rest)| rest.split_once('}'))
-            .map_or(String::new(), |(inside, _)| inside.to_owned())
-    };
-
-    let colours = guarded("the_band_is_up(&$ui)");
+    let colours = body
+        .split_once("if !$crate::ui::my_library::the_band_is_up(&$ui) {")
+        .and_then(|(_, rest)| rest.split_once('}'))
+        .map_or("", |(inside, _)| inside);
     assert!(
         colours.contains("hero_backdrop::reset"),
         "`hero_backdrop::reset` must sit behind `the_band_is_up` — the colour set is the page's, \
@@ -249,33 +294,24 @@ fn the_shared_teardown_holds_what_the_band_can_still_reach() {
     );
     assert!(
         !colours.contains("hero_chips::clear"),
-        "`hero_chips::clear` must not share the colour guard: held across a hand-off it states \
-         the outgoing entity's facts under the incoming one's title, where a colour held across \
-         one is just the hand-off"
+        "`hero_chips::clear_if_stale` must not share the colour guard: the two disagree on a \
+         hand-off, which is the case each is shaped around"
+    );
+    assert!(
+        body.contains("$crate::ui::hero_chips::clear_if_stale(&$ui);"),
+        "the chip half must route through `clear_if_stale` — an unconditional clear empties the \
+         strip on frame one of the 400 ms collapse it is being painted in, and a *conditional* \
+         one written here cannot see whether the incoming hero has already published"
     );
 
-    let chips = guarded("the_chips_still_belong_to_the_band(&$ui, $departing)");
+    // A leave that names the tab it is leaving is the shape this replaced, and it is the
+    // one a later edit is likeliest to reach for: it cannot tell a hand-off whose
+    // destination has already filled the strip from one still waiting on a fetch, because
+    // the departing tab says nothing about either.
     assert!(
-        chips.contains("hero_chips::clear"),
-        "`hero_chips::clear` must sit behind `the_chips_still_belong_to_the_band` — a leave and \
-         the band's `changed detail-open` land in the same change-handler drain, so an unguarded \
-         clear empties the strip on frame one of the 400 ms collapse it is being painted in"
-    );
-    assert!(
-        !chips.contains("hero_backdrop::reset"),
-        "the two must not be folded into one guard — a hand-off is exactly the case where they \
-         disagree"
-    );
-
-    // The tabless arm is what keeps a curated page's leave out of the hold. Its answer has
-    // to come from the *caller*, not from anything the band publishes: a mirror of the
-    // band's own state outlives the sheet — Slint destroys a view with no unmount hook — so
-    // Favorites leaving *into* My Library would read a `true` from the last visit and hold
-    // its own counts into this band, which is the bug the chip clear exists to prevent.
-    assert!(
-        body.contains("release_shared_hero!($ui, None)"),
-        "the one-argument form must forward `None` — Favorites and Recently Played have no tab \
-         to be leaving and can never be inside this band's morph"
+        !body.contains("$departing"),
+        "`release_shared_hero!` must take the `AppWindow` alone — whose chips are on the band \
+         is the record's question, not the departing view's"
     );
 }
 
@@ -341,9 +377,10 @@ fn the_collapsed_teardown_hands_back_only_what_closed() {
          easing up through the accent-seeded floor"
     );
     assert!(
-        body.contains("hero_chips::clear"),
-        "the chip row is still handed back here — an unkeyed row of counts can't tell the hero \
-         returning to it from a different one taking the band over"
+        body.contains("hero_chips::clear_if_stale"),
+        "the chip row is handed back here **on its owner**, like the slots above it: the band \
+         collapses for two reasons, and a tab switch out of a still-open detail is the one \
+         whose counts are still true when it morphs back open"
     );
 
     let page = CALLBACKS
@@ -434,27 +471,20 @@ fn the_page_leave_is_gated_on_the_nav_index_rather_than_on_the_gate() {
     );
 }
 
-/// **Every My Library leave names the tab it is leaving, and no curated one does.**
+/// **No leave decides for itself whether the chips are stale.**
 ///
-/// That argument is what decides whether the chip row is held, and the mutation to catch is
-/// a My Library site reaching for the one-argument form — which reads as the tidier call and
-/// puts the chips back on frame one of the collapse.
+/// The macro pair is the only way a hero teardown may be spelled, and the mutation to catch
+/// is a site reaching past it for a bare `hero_chips::clear` — which reads as the direct
+/// call and wipes a row the *incoming* hero has already filled, or one the band is 400 ms
+/// into collapsing over. Both of those are invisible in review at the site, because the site
+/// is the one place with no way to tell which case it is in.
 ///
 /// **It walks `callbacks/` rather than listing the sites**, for the reason
 /// `ui::file_dialog::tests` does: a list is a list of the sites someone remembered, and the
 /// one that gets this wrong is the one nobody has written yet. A fixed four already missed
-/// `playlists/dialog.rs`, the fifth. Each file is classified by its directory, so a new tab
-/// is covered by its callbacks landing in a directory named after it, and a new *curated*
-/// page by landing in one that isn't.
+/// `playlists/dialog.rs`, the fifth.
 #[test]
-fn every_my_library_leave_names_the_tab_it_is_leaving() {
-    const TABS: [(&str, &str); 4] = [
-        ("albums/", "MyLibraryTab::Albums"),
-        ("artists/", "MyLibraryTab::Artists"),
-        ("genres/", "MyLibraryTab::Genres"),
-        ("playlists/", "MyLibraryTab::Playlists"),
-    ];
-
+fn no_leave_clears_the_chips_behind_the_macro() {
     /// A floor, so a walk that silently found nothing can't pass vacuously.
     const MIN_SOURCES: usize = 20;
     /// Two per detail lifecycle — the section leave and the failed re-fetch that drops
@@ -466,9 +496,11 @@ fn every_my_library_leave_names_the_tab_it_is_leaving() {
     for (rel, code) in
         crate::test_support::stripped_sources(crate::test_support::CALLBACKS_DIR, "rs", MIN_SOURCES)
     {
-        // Skipped rather than classified: `macros.rs` *defines* both needles, so it names
-        // them without being a site and would otherwise read as a curated page owing the
-        // tabless form. The assert is what stops the skip outliving its reason.
+        // Skipped rather than checked: `macros.rs` *defines* the needles, and
+        // `my_library.rs` owns the page's two deliberate teardowns — the unconditional
+        // `clear` once the page is gone, and the collapse's `clear_if_stale`. Both are
+        // pinned by their own tests below. The asserts are what stop each skip outliving
+        // its reason.
         if rel == "macros.rs" {
             assert!(
                 code.contains("macro_rules! release_shared_hero")
@@ -478,35 +510,24 @@ fn every_my_library_leave_names_the_tab_it_is_leaving() {
             );
             continue;
         }
-        let calls = code.matches("release_shared_hero!").count()
-            + code.matches("release_detail_hero_images!").count();
-        if calls == 0 {
+        if rel == "my_library.rs" {
+            assert!(
+                code.contains("fn release_page_hero(") && code.contains("fn release_collapsed_hero("),
+                "`my_library.rs` no longer owns the page's two teardowns, so the skip above is \
+                 exempting a file nothing is checking"
+            );
             continue;
         }
-        total += calls;
 
-        let Some((_, tab)) = TABS.iter().find(|(dir, _)| rel.starts_with(dir)) else {
-            assert_eq!(
-                code.matches("release_shared_hero!(ui);").count(),
-                calls,
-                "{rel} is not one of My Library's tabs, so every teardown in it must take the \
-                 tabless form — a curated page has no tab to be leaving and its leave can never \
-                 land inside this band's morph"
-            );
-            assert!(
-                !code.contains("MyLibraryTab"),
-                "{rel} must not name a My Library tab: holding its chips into this band is the \
-                 stale-facts bug the clear exists to prevent"
-            );
-            continue;
-        };
-        assert_eq!(
-            code.matches(&format!("Some({tab})")).count(),
-            calls,
-            "every hero teardown in {rel} must name `{tab}`: the departing tab's own id is what \
-             says whether a collapse follows, and a site naming another tab's — or none — \
-             clears the chips on frame one of that collapse"
+        assert!(
+            !code.contains("hero_chips::clear"),
+            "{rel} must hand its chips back through `release_shared_hero!` — a leave has no way \
+             to tell a hand-off whose destination already published from one still fetching, and \
+             clearing on the first is the stale-empty band this rule exists to prevent"
         );
+
+        total += code.matches("release_shared_hero!").count()
+            + code.matches("release_detail_hero_images!").count();
     }
     assert!(
         total >= MIN_TEARDOWNS,

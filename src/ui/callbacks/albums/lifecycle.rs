@@ -82,7 +82,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, albums_ui: &Arc<AlbumsUi>) 
                 clear_vec_model::<UiAlbumGridRow>(&g.get_grid_rows(), "albums: clear grid");
 
                 let d = ui.global::<AlbumDetail>();
-                release_detail_hero_images!(ui, d, Some(MyLibraryTab::Albums));
+                release_detail_hero_images!(ui, d);
                 clear_vec_model::<UiTrackListRow>(&d.get_tracks(), "albums: clear detail tracks");
                 clear_vec_model::<i32>(&d.get_selected_ids(), "albums: clear detail selection");
                 d.set_selection_anchor(-1);
@@ -136,7 +136,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, albums_ui: &Arc<AlbumsUi>) 
                             let _ = weak.upgrade_in_event_loop(|ui| {
                                 let g = ui.global::<AlbumDetail>();
                                 g.set_album_id(-1);
-                                release_detail_hero_images!(ui, g, Some(MyLibraryTab::Albums));
+                                release_detail_hero_images!(ui, g);
                             });
                         }
                     } else {

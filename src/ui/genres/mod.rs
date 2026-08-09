@@ -66,7 +66,7 @@ use state::GridIndexCache;
 pub use color::{GenreAccent, genre_accent};
 pub use detail::{
     apply_detail_row_favorite, apply_detail_row_rating, apply_filtered_detail, clear_detail,
-    open_genre, refresh_detail,
+    open_genre, open_genre_with, refresh_detail,
     resort_detail, seed_detail_from_settings, set_filter,
 };
 pub use grid::{fetch_grid, rebuild_grid};

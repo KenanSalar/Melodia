@@ -71,21 +71,17 @@ export global AlbumDetail {
     in-out property <[int]> selected-ids;
     in-out property <int> selection-anchor: -1;
 
-    // The sidebar index the detail was opened from, or -1 for a same-tab open. Set
-    // synchronously by the cross-tab handler and read by `on_close_detail` to flip
-    // `Nav.selected-index` back **before** clearing `album-id`, so the conditional
-    // reroutes to the originating detail in the same frame with no grid flash.
-    // In-memory only — the per-tab `last_detail_ids` persistence already restores both
-    // pages independently on the next launch.
+    // The **section** the detail was opened from, or -1 for a drill that started inside
+    // My Library. Set synchronously by the cross-tab handler and read by `on_close_detail`
+    // to flip `Nav.selected-index` back **before** clearing `album-id`, so the conditional
+    // reroutes to the originating view in the same frame with no grid flash.
+    //
+    // A drill from a *sibling tab* deliberately records nothing: the band's back arrow
+    // means "close this detail", and the tab bar already says Albums for the whole visit,
+    // so restoring the Artists tab would contradict it. Mouse-4/5 is the control with
+    // history semantics. In-memory only — the per-tab `last_detail_ids` persistence
+    // already restores each page independently on the next launch.
     in-out property <int> origin-nav-index: -1;
-    // The My Library tab the detail was opened from, or -1 when the origin was some other
-    // section. **An origin is a pair now**: five views share nav index 3, so the index
-    // alone can't tell a Songs drill from an Artists one, and the back path's
-    // `selected-index` restore would be a no-op that leaves the wrong tab mounted. It
-    // lives per detail global rather than once on `MyLibrary` because two details can be
-    // open at once — Songs → Go to Artist → open one of its albums — and one slot would
-    // be clobbered by the second drill.
-    in-out property <int> origin-tab: -1;
 
     // Decoded **once** per album into a `(cover, blur)` pair by `ui::artwork_cache`.
     in-out property <image> cover;

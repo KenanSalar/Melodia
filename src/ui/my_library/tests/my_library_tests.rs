@@ -153,9 +153,13 @@ fn every_tab_carries_its_own_section_gate() {
     );
 }
 
-const ORIGIN_WRITERS: [(&str, &str); 5] = [
-    ("cross_tab_nav", include_str!("../../callbacks/cross_tab_nav.rs")),
+const CROSS_TAB: &str = include_str!("../../callbacks/cross_tab_nav.rs");
+
+const ORIGIN_WRITERS: [(&str, &str); 7] = [
+    ("cross_tab_nav", CROSS_TAB),
     ("albums/grid", include_str!("../../callbacks/albums/grid.rs")),
+    ("artists/grid", include_str!("../../callbacks/artists/grid.rs")),
+    ("genres/grid", include_str!("../../callbacks/genres/grid.rs")),
     ("albums/detail", include_str!("../../callbacks/albums/detail.rs")),
     ("artists/detail", include_str!("../../callbacks/artists/detail.rs")),
     ("genres/detail", include_str!("../../callbacks/genres/detail.rs")),
@@ -169,39 +173,79 @@ const DETAIL_GLOBALS: [(&str, &str); 3] = [
     ("GenreDetail", include_str!("../../../../melodia-ui/ui/globals/genres.slint")),
 ];
 
-/// **A drill's origin is a pair.** With five views on nav index 3, `origin-nav-index`
-/// alone can't tell one tab from another: the guard that stops a mid-fetch nav from
-/// yanking the user becomes `3 == 3`, and the back path's restore becomes a no-op that
-/// leaves the wrong tab mounted. Both halves are written and cleared together.
+/// **A drill's origin is a section, and a drill inside the page has none.**
+///
+/// The four destinations are all tabs of one page, so a drill starting there ends there:
+/// the tab bar names the detail's own tab for the whole visit, and a back arrow restoring
+/// the tab it came from contradicts the bar beside it. Mouse-4/5 is the control with
+/// history semantics, and it still steps back into the detail the drill came from.
+///
+/// The mutation to catch is `origin-tab` coming back — either as a property or as a second
+/// write beside the nav index — since that is the shape the arrow's tab-jump had.
 #[test]
-fn every_detail_records_the_tab_it_was_opened_from() {
+fn a_drill_inside_the_page_records_no_origin() {
     for (name, source) in DETAIL_GLOBALS {
         assert!(
-            source.contains("in-out property <int> origin-tab: -1;"),
-            "`{name}` no longer declares `origin-tab`",
+            !source.contains("origin-tab"),
+            "`{name}` declares `origin-tab` again — an origin restores a *section*, and \
+             restoring a sibling tab is what made the back arrow jump the tab bar",
         );
     }
     for (name, source) in ORIGIN_WRITERS {
-        let nav = source.matches("set_origin_nav_index(").count();
-        let tab = source.matches("set_origin_tab(").count();
-        assert!(nav > 0, "`{name}` no longer writes `origin-nav-index` — pin is stale");
-        assert_eq!(
-            nav, tab,
-            "`{name}` writes `origin-nav-index` {nav}× but `origin-tab` {tab}×; the two \
-             halves have to move together",
+        assert!(
+            source.contains("set_origin_nav_index("),
+            "`{name}` no longer writes `origin-nav-index` — pin is stale",
+        );
+        assert!(
+            !source.contains("set_origin_tab("),
+            "`{name}` writes an `origin-tab` again",
         );
     }
 
+    // Every stamp goes through `Origin::stamp`, which is where the `-1` lives. A site
+    // spelling `origin.nav` compiles and is right for the cross-section drills the author
+    // was looking at — and wrong for exactly the one this rule is about.
+    let stamps = CROSS_TAB.matches("set_origin_nav_index(origin.stamp())").count();
+    assert_eq!(
+        CROSS_TAB.matches("set_origin_nav_index(").count(),
+        stamps,
+        "every drill in `cross_tab_nav` must stamp through `Origin::stamp` — reading \
+         `origin.nav` straight records the page itself as an origin and restores a sibling tab",
+    );
+    assert!(stamps >= 3, "only {stamps} origin stamps found — the walk or the pin is stale");
+
     // Artist Detail → Album Detail is the one drill that used to stamp the origin
     // itself, with the source tab hardcoded. It goes through the shared hand-off now,
-    // so the pair and the mid-fetch guard are spelled once; re-inlining it is what
+    // so the stamp and the mid-fetch guard are spelled once; re-inlining it is what
     // this catches.
     assert!(
         ARTIST_CROSS_TAB.contains("cross_tab_nav::open_album_cross_tab(")
             && !ARTIST_CROSS_TAB.contains("set_origin_nav_index("),
         "`artists/cross_tab` must route through `cross_tab_nav::open_album_cross_tab` \
-         rather than stamping the origin pair itself",
+         rather than stamping the origin itself",
     );
+}
+
+/// **A same-tab grid open zeroes whatever origin is left over.**
+///
+/// A "Go to Album" from Favorites stamps one and only `close-detail` clears it, so reaching
+/// that grid by any path that left the detail open sends the next back press to Favorites.
+/// Albums carried this line for years and its two siblings did not, which is the shape of
+/// the bug: correct at the site someone looked at, absent at the two they didn't.
+#[test]
+fn every_grid_open_zeroes_a_stale_origin() {
+    const GRIDS: [(&str, &str, &str); 3] = [
+        ("albums/grid", include_str!("../../callbacks/albums/grid.rs"), "AlbumDetail"),
+        ("artists/grid", include_str!("../../callbacks/artists/grid.rs"), "ArtistDetail"),
+        ("genres/grid", include_str!("../../callbacks/genres/grid.rs"), "GenreDetail"),
+    ];
+    for (name, source, global) in GRIDS {
+        assert!(
+            source.contains(&format!("ui.global::<{global}>().set_origin_nav_index(-1);")),
+            "`{name}`'s same-tab open must zero `{global}.origin-nav-index` — otherwise a \
+             cross-section origin nobody closed sends this detail's back arrow to that section",
+        );
+    }
 }
 
 const SECTION_SEEDS: [(&str, &str, &str); 5] = [
@@ -820,41 +864,43 @@ fn the_retired_indices_fold_onto_the_page_that_absorbed_them() {
     assert_eq!(fold_retired_nav_index(42), 42);
 }
 
-/// Which tab's id decides whether a hero owns the shared colour set.
+/// **A tab pick is the one tab move that enters the back/forward history**, and it is
+/// the only one that records.
 ///
-/// The pure half of `a_detail_hero_is_mounted`, and the arm worth the test is
-/// **Songs**: it is the one tab with no detail, so a `match` that folded it in with the
-/// rest would read whichever id happened to sit in the default arm and hold the previous
-/// entity's colours over a plain track list. The `-1` cases are the other half — every
-/// close and every failed re-fetch clears its id first, and that is what keeps the
-/// teardown gate from being a leak.
+/// `NavEntry.tab` has always existed to tell two tabs of this page apart — without it
+/// `record`'s dedup swallows a same-section move — but no call site ever pushed one, so
+/// Mouse-4 walked straight past every grid the user reached by picking a tab. The moves
+/// made on the user's *behalf* (a cross-tab drill, a Mouse-4/5 step) go through
+/// `persist-tab-idx` instead and must stay silent: the first is followed by the drill's
+/// own `record_current`, and the second is a replay, which is suppressed anyway.
 #[test]
-fn only_the_mounted_tabs_own_id_decides_whether_a_hero_is_up() {
-    use super::MyLibraryTab::{Albums, Artists, Genres, Playlists, Songs};
+fn only_a_tab_pick_records_a_history_entry() {
+    let pick = CALLBACKS
+        .split_once("g.on_tab_changed(")
+        .and_then(|(_, rest)| rest.split_once("g.on_persist_tab_idx("))
+        .map_or("", |(body, _)| body);
+    assert!(
+        !pick.is_empty(),
+        "`wire_my_library` must still register `on_tab_changed` before `on_persist_tab_idx` \
+         — this pin bounds the handler between the two",
+    );
+    assert!(
+        pick.contains("nav_history::record_current(&s, &ui)"),
+        "`on_tab_changed` must record the tab it lands on, or Mouse-4 skips every grid \
+         reached by a pick",
+    );
 
-    // One id set at a time, so a tab reading a sibling's is a failure rather than a
-    // coincidence — the shape a `match` arm gets wrong.
-    for (tab, ids) in [
-        (Albums, [7, -1, -1, -1]),
-        (Artists, [-1, 7, -1, -1]),
-        (Genres, [-1, -1, 7, -1]),
-        (Playlists, [-1, -1, -1, 7]),
-    ] {
-        let [album, artist, genre, playlist] = ids;
-        assert!(
-            super::detail_open_on(tab, album, artist, genre, playlist),
-            "{tab:?} must see its own id"
-        );
-        assert!(
-            !super::detail_open_on(tab, -1, -1, -1, -1),
-            "{tab:?} must report closed once its id is cleared"
-        );
-        assert!(
-            !super::detail_open_on(Songs, album, artist, genre, playlist),
-            "Songs has no detail — it must not answer for {tab:?}'s id"
-        );
-    }
-
-    // `0` is a real row id, so the boundary is `>= 0` and not `> 0`.
-    assert!(super::detail_open_on(Albums, 0, -1, -1, -1));
+    let behalf = CALLBACKS
+        .split_once("g.on_persist_tab_idx(")
+        .and_then(|(_, rest)| rest.split_once("g.on_filter_changed("))
+        .map_or("", |(body, _)| body);
+    assert!(
+        !behalf.is_empty(),
+        "`on_persist_tab_idx` must still sit between `on_tab_changed` and `on_filter_changed`",
+    );
+    assert!(
+        !behalf.contains("nav_history::"),
+        "`on_persist_tab_idx` must not record — a cross-tab drill records its own destination \
+         a moment later, and a history walk would push the entry it just walked to",
+    );
 }

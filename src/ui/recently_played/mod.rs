@@ -50,6 +50,9 @@ use state::{
     RecentlyPlayedUiState, SongsTotals,
 };
 
+/// This page's `Nav.selected-index` — see [`crate::ui::favorites::NAV_FAVORITES`].
+pub const NAV_RECENTLY_PLAYED: i32 = 8;
+
 pub use covers::tune_cache_for_display;
 pub use grid::{apply_filtered_grid_now, mark_covers_warm, refresh_grid};
 pub use rows::{install_recently_played_models, to_slint_most_played_row};

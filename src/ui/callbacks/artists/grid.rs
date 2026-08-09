@@ -11,7 +11,7 @@ use crate::ui::artists::{self as artists_ui_mod, ArtistsUi};
 use crate::ui::callbacks::macros::spawn_logged;
 use crate::ui::callbacks::{next_sort, persist_view_sort, persisted_sort};
 use crate::ui::track_list_view::view_id;
-use crate::{AppWindow, Artists};
+use crate::{AppWindow, ArtistDetail, Artists};
 
 /// Wire the `Artists` grid callbacks. See [`super::wire_artists`].
 pub(super) fn wire(ui: &AppWindow, state: &AppState, artists_ui: &Arc<ArtistsUi>) {
@@ -74,6 +74,12 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, artists_ui: &Arc<ArtistsUi>
         let weak = weak.clone();
         artists.on_open_artist(move |artist_id| {
             let id = i64::from(artist_id);
+
+            // Same-tab open: defensively zero any stale cross-section origin —
+            // see `albums::grid`'s copy for the path it guards against.
+            if let Some(ui) = weak.upgrade() {
+                ui.global::<ArtistDetail>().set_origin_nav_index(-1);
+            }
 
             let s_fetch = s.clone();
             let au_fetch = au.clone();

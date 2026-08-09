@@ -20,6 +20,7 @@ use crate::ui::detail_artwork::decode_detail_pair;
 use crate::ui::detail_filter::FilterRefs;
 use crate::ui::detail_view::{impl_detail_view_helpers, resolve_view_sort};
 use crate::ui::model_patch;
+use crate::ui::my_library::{MyLibraryTab, tab_is_mounted};
 use crate::ui::track_list_view::view_id;
 use crate::ui::track_sort::sort_track_rows_by;
 use crate::ui::tracks::PreparedTrackRow;
@@ -126,13 +127,14 @@ pub async fn open_playlist(
             .collect();
         let header = to_slint_playlist_row(&detail);
         g.set_playlist(header);
-        crate::ui::hero_chips::publish_playlist(
-            &ui,
-            &detail,
-            fold,
-            playlists_ui.section_active(),
-        );
-        apply_detail_artwork(&ui, &g, pair, /* animate */ true, playlists_ui.section_active());
+        // The gate is the **live** tab, not the `section_active` shadow the
+        // `SectionActiveGate` only updates next frame — see
+        // `albums::detail::open_album_with`. Playlists has no cross-tab drill of
+        // its own, so this is the shadow's answer today; asking the globals keeps
+        // the four details spelling one question.
+        let on_screen = tab_is_mounted(&ui, MyLibraryTab::Playlists);
+        crate::ui::hero_chips::publish_playlist(&ui, &detail, fold, on_screen);
+        apply_detail_artwork(&ui, &g, pair, /* animate */ true, on_screen);
         replace_tracks_model(&g, ui_tracks);
         reset_detail_selection(&g, &playlists_ui);
         // Fresh open clears the filter so the user lands on the full
@@ -200,13 +202,9 @@ pub async fn refresh_detail(
         sort_playlist_tracks(&mut tracks, &position_order_snapshot, &field, &dir);
 
         g.set_playlist(to_slint_playlist_row(&detail));
-        crate::ui::hero_chips::publish_playlist(
-            &ui,
-            &detail,
-            fold,
-            playlists_ui.section_active(),
-        );
-        apply_detail_artwork(&ui, &g, pair, /* animate */ false, playlists_ui.section_active());
+        let on_screen = tab_is_mounted(&ui, MyLibraryTab::Playlists);
+        crate::ui::hero_chips::publish_playlist(&ui, &detail, fold, on_screen);
+        apply_detail_artwork(&ui, &g, pair, /* animate */ false, on_screen);
 
         // With an active filter the displayed model is a subset, so the
         // id-slice fast path below (which assumes an unfiltered model)

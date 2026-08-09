@@ -13,7 +13,7 @@ use crate::ui::callbacks::{collect_track_ids, play_row_start, spawn_play_then_sh
 use crate::ui::callbacks::macros::{spawn_blocking_logged, spawn_logged, wire_row_flag};
 use crate::ui::callbacks::{next_sort, persist_view_sort};
 use crate::ui::genres::{self as genres_ui_mod, GenresUi};
-use crate::ui::my_library::restore_origin;
+use crate::ui::my_library::return_to_section;
 use crate::ui::track_list_view::{TrackListColumnState, view_id};
 use crate::{AppWindow, GenreDetail};
 
@@ -46,18 +46,14 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, genres_ui: &Arc<GenresUi>) 
             // write a few lines down. One up-front set covers both.
             crate::ui::nav_transition::mark_drill_back(&ui);
 
-            // If cross-tab nav opened this detail (currently only
-            // `cross_tab_nav::make_go_to_genre`), restore the
-            // originating sidebar selection in the same UI-thread tick
-            // as the `genre-id` reset so Slint reroutes straight to
-            // the origin tab.
-            // **The origin is a pair** — see `albums/detail.rs`'s note: nav index
-            // and, inside My Library, the tab, restored together.
+            // If another *section* opened this detail, return to it in the same
+            // UI-thread tick as the `genre-id` reset so Slint reroutes straight
+            // there. A drill from a sibling tab records no origin — see
+            // `albums/detail.rs`'s note and `cross_tab_nav::origin_stamp`.
             let origin = g.get_origin_nav_index();
             if origin >= 0 {
-                restore_origin(&ui, origin, g.get_origin_tab());
+                return_to_section(&ui, origin);
                 g.set_origin_nav_index(-1);
-                g.set_origin_tab(-1);
             }
 
             g.set_genre_id(-1);

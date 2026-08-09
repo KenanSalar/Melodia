@@ -18,6 +18,7 @@ use crate::ui::detail_artwork::decode_detail_pair;
 use crate::ui::detail_filter::FilterRefs;
 use crate::ui::detail_view::{impl_detail_view_helpers, resolve_view_sort};
 use crate::ui::model_patch;
+use crate::ui::my_library::{MyLibraryTab, tab_is_mounted};
 use crate::ui::track_list_view::view_id;
 use crate::ui::track_sort::sort_track_list_rows;
 use crate::ui::tracks::PreparedTrackRow;
@@ -145,18 +146,6 @@ where
             .collect();
         let header = to_slint_album_row(&detail);
         g.set_album(header);
-        // Off `detail` rather than the row above it — `disc_count` and
-        // `is_compilation` are fetched but never reach `AlbumRow`.
-        crate::ui::hero_chips::publish_album(
-            &ui,
-            &detail,
-            genre.as_deref(),
-            albums_ui.section_active(),
-        );
-        // Hero blur cross-fades from the previous album; the cover slot
-        // is written directly (no fade — the artwork tile itself is
-        // covered by the next album's tile in one frame).
-        apply_detail_artwork(&ui, &g, pair, /* animate */ true, albums_ui.section_active());
         replace_tracks_model(&g, ui_tracks);
         reset_detail_selection(&g, &albums_ui);
         // Fresh open clears the filter so the user lands on the full
@@ -182,6 +171,20 @@ where
         // performs (Nav.selected-index for cross-tab nav, …) land in
         // the same UI-thread tick as the detail flip.
         on_applied(&ui);
+        // The two globals six heroes share, written last because their gate is
+        // the **live** tab rather than the `section_active` shadow, which the
+        // `SectionActiveGate` only updates next frame. A cross-section drill is
+        // what forced it: read before the hook above, the gate answers for the
+        // tab the user *left*, so both were dropped and only reappeared once the
+        // section-enter re-ran `fetch_grid` plus this whole fetch again.
+        let on_screen = tab_is_mounted(&ui, MyLibraryTab::Albums);
+        // Off `detail` rather than the `AlbumRow` above — `disc_count` and
+        // `is_compilation` are fetched but never reach the row.
+        crate::ui::hero_chips::publish_album(&ui, &detail, genre.as_deref(), on_screen);
+        // Hero blur cross-fades from the previous album; the cover slot
+        // is written directly (no fade — the artwork tile itself is
+        // covered by the next album's tile in one frame).
+        apply_detail_artwork(&ui, &g, pair, /* animate */ true, on_screen);
         // Record a browser-style history entry. Cross-tab `on_applied`
         // may have already flipped `Nav.selected-index`, so reading it
         // here gives the post-flip section. Mouse-4/Mouse-5 walks back
@@ -250,16 +253,12 @@ pub async fn refresh_detail(
         // Header is one row — always refresh it (artwork / counts may
         // have changed).
         g.set_album(to_slint_album_row(&detail));
-        crate::ui::hero_chips::publish_album(
-            &ui,
-            &detail,
-            genre.as_deref(),
-            albums_ui.section_active(),
-        );
+        let on_screen = tab_is_mounted(&ui, MyLibraryTab::Albums);
+        crate::ui::hero_chips::publish_album(&ui, &detail, genre.as_deref(), on_screen);
         // No fade on the refresh path — this is the same album, the
         // user did not navigate. Either it's a cache hit (no change) or
         // the cover/blur is being replaced in place.
-        apply_detail_artwork(&ui, &g, pair, /* animate */ false, albums_ui.section_active());
+        apply_detail_artwork(&ui, &g, pair, /* animate */ false, on_screen);
 
         // With an active filter the displayed model is a subset, so the
         // id-slice fast path below (which assumes an unfiltered model)

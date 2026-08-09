@@ -12,7 +12,7 @@ use crate::ui::callbacks::macros::spawn_logged;
 use crate::ui::callbacks::{next_sort, persist_view_sort, persisted_sort};
 use crate::ui::genres::{self as genres_ui_mod, GenresUi};
 use crate::ui::track_list_view::view_id;
-use crate::{AppWindow, Genres};
+use crate::{AppWindow, GenreDetail, Genres};
 
 /// Wire the `Genres` grid callbacks. See [`super::wire_genres`].
 pub(super) fn wire(ui: &AppWindow, state: &AppState, genres_ui: &Arc<GenresUi>) {
@@ -78,6 +78,12 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, genres_ui: &Arc<GenresUi>) 
         let weak = weak.clone();
         genres.on_open_genre(move |genre_id| {
             let id = i64::from(genre_id);
+
+            // Same-tab open: defensively zero any stale cross-section origin —
+            // see `albums::grid`'s copy for the path it guards against.
+            if let Some(ui) = weak.upgrade() {
+                ui.global::<GenreDetail>().set_origin_nav_index(-1);
+            }
 
             let s_fetch = s.clone();
             let gu_fetch = gu.clone();

@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 use slint::{ComponentHandle, SharedString};
 
-use super::NAV_FAVORITES;
+use crate::ui::favorites::NAV_FAVORITES;
 use crate::library;
 use crate::state::AppState;
 use crate::ui::artists::ArtistsUi;

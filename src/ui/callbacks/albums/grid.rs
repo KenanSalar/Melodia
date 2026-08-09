@@ -92,17 +92,13 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, albums_ui: &Arc<AlbumsUi>) 
         albums.on_open_album(move |album_id| {
             let id = i64::from(album_id);
 
-            // Same-tab open: defensively zero any stale cross-tab origin —
-            // both halves of it. `wire_artists::on_open_album` sets the pair
-            // to the Artists tab; if the user reached the Albums grid via
-            // some path that didn't close the prior detail (currently no
-            // such path exists, but belt + suspenders), make sure the next
-            // back-button press lands on the grid rather than trying to
-            // restore a stale origin.
+            // Same-tab open: defensively zero any stale cross-section origin. A
+            // "Go to Album" from Favorites stamps one and only `close-detail`
+            // clears it, so reaching this grid by any path that left that detail
+            // open would otherwise send the next back press to Favorites. The two
+            // sibling grids carry the same line.
             if let Some(ui) = weak.upgrade() {
-                let d = ui.global::<AlbumDetail>();
-                d.set_origin_nav_index(-1);
-                d.set_origin_tab(-1);
+                ui.global::<AlbumDetail>().set_origin_nav_index(-1);
             }
 
             let s_fetch = s.clone();

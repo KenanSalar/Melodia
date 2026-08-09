@@ -12,7 +12,7 @@ use crate::ui::albums::AlbumsUi;
 use crate::ui::artists::{self as artists_ui_mod, ArtistsUi};
 use crate::ui::callbacks::{collect_track_ids, play_row_start, spawn_play_then_shuffle};
 use crate::ui::callbacks::macros::{spawn_blocking_logged, spawn_logged, wire_row_flag};
-use crate::ui::my_library::restore_origin;
+use crate::ui::my_library::return_to_section;
 use crate::ui::track_list_view::{TrackListColumnState, view_id};
 use crate::{AppWindow, ArtistDetail};
 
@@ -50,14 +50,14 @@ pub(super) fn wire(
             // write further down. One up-front set covers both.
             crate::ui::nav_transition::mark_drill_back(&ui);
 
-            // **The origin is a pair** — see `albums/detail.rs`'s note: nav index
-            // and, inside My Library, the tab, restored together.
+            // **An origin is a section** — see `albums/detail.rs`'s note: a drill
+            // from a sibling tab records none, so the arrow closes into the
+            // Artists grid the tab bar has been naming all along.
             let origin = g.get_origin_nav_index();
-            let origin_was_cross_tab = origin >= 0;
-            if origin_was_cross_tab {
-                restore_origin(&ui, origin, g.get_origin_tab());
+            let origin_was_cross_section = origin >= 0;
+            if origin_was_cross_section {
+                return_to_section(&ui, origin);
                 g.set_origin_nav_index(-1);
-                g.set_origin_tab(-1);
             }
 
             g.set_artist_id(-1);
@@ -77,12 +77,11 @@ pub(super) fn wire(
             let albums_swap = au_albums.clone();
             s.runtime.spawn_blocking(move || {
                 au_swap.release_detail_artwork();
-                // Skip the Artists-grid prewarm on the cross-tab back
-                // path: the grid isn't going to mount (Slint swings to
-                // the origin tab's view), and warming Artists covers
-                // the user won't see wastes cache pressure on tiles
-                // the destination tab may actually need.
-                if !origin_was_cross_tab {
+                // Skip the Artists-grid prewarm when the close routes to
+                // another section: the grid isn't going to mount, and
+                // warming Artists covers the user won't see wastes cache
+                // pressure on tiles the destination may actually need.
+                if !origin_was_cross_section {
                     au_swap.prewarm_visible_covers();
                 }
                 // Free the Albums sub-section's cover thumbnails (they

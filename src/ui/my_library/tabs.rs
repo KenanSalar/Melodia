@@ -90,63 +90,6 @@ pub fn tab_is_mounted(ui: &AppWindow, tab: MyLibraryTab) -> bool {
     tab_from_index(&g, g.get_tab_idx()) == tab
 }
 
-/// Does `tab` have a detail open, given the four live ids?
-///
-/// The pure half of [`a_detail_hero_is_mounted`], split out for the reason
-/// [`super::fold_retired_nav_index`] is: the answer is worth testing and a window is not
-/// worth building to test it. Songs is the arm with no detail.
-pub fn detail_open_on(
-    tab: MyLibraryTab,
-    album_id: i32,
-    artist_id: i32,
-    genre_id: i32,
-    playlist_id: i32,
-) -> bool {
-    match tab {
-        MyLibraryTab::Songs => false,
-        MyLibraryTab::Albums => album_id >= 0,
-        MyLibraryTab::Artists => artist_id >= 0,
-        MyLibraryTab::Genres => genre_id >= 0,
-        MyLibraryTab::Playlists => playlist_id >= 0,
-    }
-}
-
-/// Whether a My Library detail hero owns the band right now.
-///
-/// **The teardown side of the gate the publish side has always had.** Six heroes share one
-/// solve, so `apply_detail_artwork` writes it only when its own section is active — where
-/// `release_shared_hero!` used to reset it from whichever section was *leaving*, and on a
-/// tabbed page a leave is not a teardown. Switch from Genre Detail to a Playlists tab that
-/// already has a detail open and `detail-open` never goes false: the band holds still,
-/// correctly, while the departing tab hands the colour set back and the entering tab's
-/// re-fetch republishes it a DB query and a cover decode later.
-///
-/// That hand-off is the narrowest of the three ways a leave lands on a hero somebody still
-/// wants, so the colour set and the image slots are gated on the wider [`the_band_is_up`]
-/// now. What still asks *this* question is [`the_chips_still_belong_to_the_band`], its only
-/// caller — the chip row is the one hero fact a hand-off must not keep, so this stays
-/// unexported rather than being folded into it: the question is worth a name and a doc, and
-/// the two answer different halves of one guard.
-///
-/// Mirrors `my-library-view.slint`'s private `detail-open`, which is why
-/// `globals/my-library.slint` doesn't declare one — Rust reads the four ids directly.
-/// Reads `MyLibrary.tab-idx`, which the `<=>` chain out of the tab bar has already moved
-/// before any handler runs, so the answer doesn't depend on whether the entering tab's
-/// gate fired before the departing one's. UI thread only.
-pub fn a_detail_hero_is_mounted(ui: &AppWindow) -> bool {
-    if ui.global::<Nav>().get_selected_index() != super::NAV_MY_LIBRARY {
-        return false;
-    }
-    let g = ui.global::<MyLibrary>();
-    detail_open_on(
-        tab_from_index(&g, g.get_tab_idx()),
-        ui.global::<AlbumDetail>().get_album_id(),
-        ui.global::<ArtistDetail>().get_artist_id(),
-        ui.global::<GenreDetail>().get_genre_id(),
-        ui.global::<PlaylistDetail>().get_playlist_id(),
-    )
-}
-
 /// Whether the band is on screen at all.
 ///
 /// **The window inside which a hero global is still reachable without a fetch.** Every tab
@@ -161,57 +104,6 @@ pub fn a_detail_hero_is_mounted(ui: &AppWindow) -> bool {
 /// still open underneath. UI thread only.
 pub fn the_band_is_up(ui: &AppWindow) -> bool {
     ui.global::<Nav>().get_selected_index() == super::NAV_MY_LIBRARY
-}
-
-/// Whether the chip row a leave from `departing` would clear still describes what the band
-/// is painting.
-///
-/// **The chip row is the only caller, and it is the one hero fact a hand-off must not
-/// keep.** A colour held across a hand-off is the outgoing hero's *tone*; a count held
-/// across it is the outgoing hero's *facts* under the incoming one's title. So this asks
-/// the narrow question the guard actually wants — is the banner on screen still the
-/// departing tab's — and there are exactly two ways it is.
-///
-/// **The band never moved.** `MyLibrary.tab-idx` is written by the `<=>` chain out of the
-/// tab bar before any handler runs, so a leave whose departing tab is still the mounted one
-/// isn't a tab switch at all: it is Now Playing or the miniplayer *covering* the page. The
-/// same hero comes back underneath, and blinking its counts out and back is a flicker on
-/// every press of `F`.
-///
-/// **Or the band is collapsing it.** A tab leave and the band's own `changed detail-open`
-/// land in the same change-handler drain, so an unguarded clear empties the strip on frame
-/// one of a 400 ms morph that is still painting the banner those counts belong to.
-/// `MyLibrary.hero-collapsed` clears them at the end of it instead.
-///
-/// **The departing tab's own id is the exact signal, and nothing the band publishes is.**
-/// Nothing on this page clears an id on a tab leave, so `X.id >= 0` for the tab being left
-/// means its detail was mounted a moment ago, which means the band was painting it. Reading
-/// the band instead would mean mirroring an `out` property onto the global for Rust to
-/// reach, and that mirror outlives the sheet — Slint destroys a view with no unmount hook —
-/// so a curated page's leave *into* My Library would read a `true` left behind by the last
-/// visit and hold its own counts into this band. Hence [`None`] for a page with no tabs.
-pub fn the_chips_still_belong_to_the_band(
-    ui: &AppWindow,
-    departing: Option<MyLibraryTab>,
-) -> bool {
-    let Some(departing) = departing else {
-        return false;
-    };
-    if !the_band_is_up(ui) {
-        return false;
-    }
-    let g = ui.global::<MyLibrary>();
-    if tab_from_index(&g, g.get_tab_idx()) == departing {
-        return true;
-    }
-    let departing_was_open = detail_open_on(
-        departing,
-        ui.global::<AlbumDetail>().get_album_id(),
-        ui.global::<ArtistDetail>().get_artist_id(),
-        ui.global::<GenreDetail>().get_genre_id(),
-        ui.global::<PlaylistDetail>().get_playlist_id(),
-    );
-    departing_was_open && !a_detail_hero_is_mounted(ui)
 }
 
 /// Close whatever detail `tab` has open, if any.
@@ -250,17 +142,31 @@ pub fn seed_tab(ui: &AppWindow, persisted_tab: i32) {
     g.set_tab_idx(crate::ui::tab_bar::clamp_tab(persisted_tab, g.get_tab_count()));
 }
 
-/// Return to the view a drill started from: the `origin-nav-index` / `origin-tab` pair
-/// a detail global carries, restored together.
+/// Land on a My Library tab from outside the tab bar: the destination half of a
+/// cross-section drill, which has to move the nav index as well as the tab.
 ///
-/// Called from each detail's `on_close_detail`, **before** it clears its own id, so
-/// Slint reroutes straight to the origin in one frame rather than flashing the grid
-/// this detail sits over. Restoring the nav index alone used to be the whole job; with
-/// five views sharing index 3 it is a no-op that leaves the wrong tab mounted.
-pub fn restore_origin(ui: &AppWindow, origin_nav: i32, origin_tab: i32) {
-    if origin_nav == super::NAV_MY_LIBRARY {
-        persist_tab(ui, origin_tab);
-    }
+/// [`persist_tab`] rather than `tab-changed` for the reason that function gives — a drill
+/// is not a pick and must not clear the shared filter box. The tab is written first so the
+/// page mounts on the body it is meant to show.
+pub fn go_to_tab(ui: &AppWindow, tab: i32) {
+    persist_tab(ui, tab);
+    let nav = ui.global::<Nav>();
+    nav.set_selected_index(super::NAV_MY_LIBRARY);
+    nav.invoke_persist_selected_index(super::NAV_MY_LIBRARY);
+}
+
+/// Return to the section a drill started from, recorded as `origin-nav-index`.
+///
+/// Called from each detail's `on_close_detail`, **before** it clears its own id, so Slint
+/// reroutes straight to the origin in one frame rather than flashing the grid this detail
+/// sits over.
+///
+/// **Only a drill from another section records one.** The band's back arrow means "close
+/// this detail", and the tab bar names the detail's own tab for the whole visit — so a
+/// drill between two tabs of this page restores nothing and the arrow lands on the grid
+/// the bar has been pointing at all along. Mouse-4/5 is the control that walks the real
+/// history, and it still steps back into the detail the drill came from.
+pub fn return_to_section(ui: &AppWindow, origin_nav: i32) {
     let nav = ui.global::<Nav>();
     nav.set_selected_index(origin_nav);
     nav.invoke_persist_selected_index(origin_nav);

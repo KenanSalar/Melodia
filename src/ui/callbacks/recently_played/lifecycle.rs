@@ -8,7 +8,7 @@ use std::sync::Arc;
 use async_compat::Compat;
 use slint::{ComponentHandle, Image, SharedString};
 
-use super::NAV_RECENTLY_PLAYED;
+use crate::ui::recently_played::NAV_RECENTLY_PLAYED;
 use crate::state::AppState;
 use crate::ui::callbacks::macros::release_shared_hero;
 use crate::ui::model_diff::clear_vec_model;

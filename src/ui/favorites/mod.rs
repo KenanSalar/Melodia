@@ -59,6 +59,12 @@ use state::{
     MOST_PLAYED_THUMB_SIZE,
 };
 
+/// This page's `Nav.selected-index`. **The single definition**, beside the view it
+/// names, the way [`crate::ui::my_library::NAV_MY_LIBRARY`] sits beside its page —
+/// the cross-tab hand-off stamps it as an origin, the lifecycle seeds the
+/// section-active shadow from it, and `hero_chips` asks which band is up.
+pub const NAV_FAVORITES: i32 = 2;
+
 pub use covers::tune_cache_for_display;
 pub use grids::{apply_filtered_grids_now, mark_covers_warm, refresh_grids, set_artist_sort};
 pub use hero::refresh_hero;

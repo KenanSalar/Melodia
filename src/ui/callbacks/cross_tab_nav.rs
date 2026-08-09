@@ -9,21 +9,22 @@
 //! (`callbacks/artists.rs::on_open_album`, `callbacks/favorites.rs::
 //! on_open_artist`):
 //!
-//! 1. Stamp `*Detail.origin-nav-index` + `origin-tab` from where the user is
-//!    standing, synchronously, so the back arrow returns there.
+//! 1. Stamp `*Detail.origin-nav-index` from where the user is standing,
+//!    synchronously, so the back arrow returns there — see [`origin_stamp`] for
+//!    the drills that deliberately record nothing.
 //! 2. Mark `Nav.pending-enter-from = Right` (drill-in slide).
-//! 3. Spawn `open_*` / `open_*_with`; move `Nav.selected-index` and
-//!    `MyLibrary.tab-idx` to the target inside the `upgrade_in_event_loop`
-//!    closure.
+//! 3. Spawn `open_*_with`; move `Nav.selected-index` and `MyLibrary.tab-idx` to
+//!    the target inside the `upgrade_in_event_loop` closure.
 //! 4. Persist `views.json`'s `last_detail_ids[target_view]` so a restart
 //!    reopens the same detail.
 //!
-//! **An origin is a pair, not an index.** The four destinations are all tabs of My
-//! Library now, so a drill starting *inside* that page stamps `origin-nav-index = 3`
-//! and then navigates to 3 — which makes the "did the user navigate away mid-fetch"
-//! guard trivially true and the back path's `selected-index` restore a no-op that
-//! leaves the wrong tab mounted. `origin-tab` is the discriminator, and it lives per
-//! detail global because two details can be open at once.
+//! **An origin is a section, not a position.** The four destinations are all tabs of My
+//! Library, so a drill starting *inside* that page ends inside it: the tab bar names the
+//! detail's own tab for the whole visit, and an arrow restoring the tab the drill came
+//! from contradicts the bar beside it. Such a drill stamps `-1` and the arrow closes into
+//! its own grid. The **`tab` half of [`Origin`] survives** for the other question it
+//! answers — "did the user navigate away mid-fetch", which the nav index alone stopped
+//! being able to tell once the four destinations became tabs of one page.
 //!
 //! Search-view exception: the Slint side rewires its row context menu
 //! to call the existing `Search.open-album` / `Search.open-artist`
@@ -39,7 +40,7 @@ use crate::state::AppState;
 use crate::ui::albums::{self as albums_ui_mod, AlbumsUi};
 use crate::ui::artists::{self as artists_ui_mod, ArtistsUi};
 use crate::ui::genres::{self as genres_ui_mod, GenresUi};
-use crate::ui::my_library::{NAV_MY_LIBRARY, NO_TAB, tab_of_section};
+use crate::ui::my_library::{NAV_MY_LIBRARY, NO_TAB, go_to_tab, tab_of_section};
 use crate::ui::nav_transition;
 use crate::ui::track_list_view::view_id;
 use crate::{
@@ -49,8 +50,8 @@ use crate::{
 
 /// Where the user is standing when a "Go to …" fires: the nav index, plus the My
 /// Library tab when that index *is* My Library ([`NO_TAB`] otherwise). Both halves are
-/// read synchronously, before any await, and stamped onto the destination's detail
-/// global so its back arrow can restore the pair.
+/// read synchronously, before any await; the tab half guards the mid-fetch flip, and
+/// [`Origin::stamp`] decides what the destination's back arrow records.
 #[derive(Clone, Copy)]
 pub(super) struct Origin {
     nav: i32,
@@ -69,6 +70,11 @@ impl Origin {
         Self { nav, tab: tab_of_section(ui, nav) }
     }
 
+    /// What the destination stamps as its `origin-nav-index`. See [`origin_stamp`].
+    fn stamp(self) -> i32 {
+        origin_stamp(self.nav)
+    }
+
     /// Whether the user is still where the drill started. Guards the destination flip
     /// inside the fetch's completion closure — moving them after they navigated away
     /// mid-fetch is exactly what this exists to prevent, and the nav index alone stopped
@@ -80,15 +86,19 @@ impl Origin {
     }
 }
 
-/// Move to a My Library tab and persist both halves of the destination, the way a
-/// sidebar click and a tab pick each persist their own. The tab is written **before**
-/// the nav index so the page mounts on the body it is meant to show.
+/// The `origin-nav-index` a drill starting at section `nav` records: `-1` when that
+/// section *is* My Library, the index itself otherwise.
 ///
-/// The same write [`restore_origin`] performs on the way back out, which is why it is
-/// that function rather than a second copy of it: a drill and its own back arrow have
-/// to agree about the order, and they were two spellings that happened to.
-fn go_to_tab(ui: &AppWindow, tab: i32) {
-    crate::ui::my_library::restore_origin(ui, NAV_MY_LIBRARY, tab);
+/// **An origin means "another section".** The four destinations are all tabs of one page,
+/// so a drill that starts there ends there — the tab bar names the detail's own tab for
+/// the whole visit, and a back arrow restoring the tab it came from contradicts the bar it
+/// sits next to. The arrow means "close this detail"; Mouse-4/5 walks the real history and
+/// still steps back into the detail the drill came from.
+///
+/// A free fn rather than only a method so the rule is testable without an `AppWindow`, the
+/// [`crate::ui::my_library::fold_retired_nav_index`] precedent.
+pub(super) fn origin_stamp(nav: i32) -> i32 {
+    if nav == NAV_MY_LIBRARY { -1 } else { nav }
 }
 
 /// Wire every `*.go-to-album` / `*.go-to-artist` / `*.go-to-genre`
@@ -197,8 +207,9 @@ fn make_go_to_artist(
 /// used by every track-list "Go to Album" menu item and the Search-result
 /// album card:
 ///
-/// 1. Stamp `AlbumDetail.origin-nav-index` + `origin-tab` from `origin` so the back
-///    arrow returns to where the user came from.
+/// 1. Stamp `AlbumDetail.origin-nav-index` from `origin` so the back arrow returns to
+///    the section the user came from — `-1`, and no restore at all, when that section
+///    was My Library itself (see [`origin_stamp`]).
 /// 2. Spawn `open_album_with`, moving to the Albums tab inside its
 ///    `upgrade_in_event_loop` closure (guarded so a nav or tab switch mid-fetch
 ///    doesn't yank the user away).
@@ -219,9 +230,7 @@ pub(super) fn open_album_cross_tab(
     log_tag: &'static str,
 ) {
     let Some(ui) = weak.upgrade() else { return };
-    let detail = ui.global::<AlbumDetail>();
-    detail.set_origin_nav_index(origin.nav);
-    detail.set_origin_tab(origin.tab);
+    ui.global::<AlbumDetail>().set_origin_nav_index(origin.stamp());
     let target_tab = ui.global::<MyLibrary>().get_tab_albums();
 
     let s_fetch = state.clone();
@@ -268,9 +277,7 @@ pub(super) fn open_artist_cross_tab(
     log_tag: &'static str,
 ) {
     let Some(ui) = weak.upgrade() else { return };
-    let detail = ui.global::<ArtistDetail>();
-    detail.set_origin_nav_index(origin.nav);
-    detail.set_origin_tab(origin.tab);
+    ui.global::<ArtistDetail>().set_origin_nav_index(origin.stamp());
     let target_tab = ui.global::<MyLibrary>().get_tab_artists();
 
     let s_fetch = state.clone();
@@ -317,13 +324,10 @@ fn make_go_to_genre(
         let Some(ui) = weak.upgrade() else { return };
 
         let origin = Origin::read(&ui);
-        // Stamp the origin synchronously so `genres::on_close_detail`
-        // can restore the originating view on back-press. Without this,
-        // the back arrow resets to the Genres grid instead of the
-        // user's previous view.
-        let detail = ui.global::<GenreDetail>();
-        detail.set_origin_nav_index(origin.nav);
-        detail.set_origin_tab(origin.tab);
+        // Stamp the origin synchronously so `genres::on_close_detail` can restore
+        // the originating *section* on back-press — `-1`, and no restore at all,
+        // for a drill that started on another tab of this same page.
+        ui.global::<GenreDetail>().set_origin_nav_index(origin.stamp());
         let target_tab = ui.global::<MyLibrary>().get_tab_genres();
         nav_transition::mark(&ui, NavEnterFrom::Right);
 
@@ -331,23 +335,22 @@ fn make_go_to_genre(
         let gu_fetch = gu.clone();
         let weak_fetch = weak.clone();
         s.runtime.clone().spawn(async move {
-            if let Err(e) = genres_ui_mod::open_genre(
+            if let Err(e) = genres_ui_mod::open_genre_with(
                 &s_fetch,
                 &gu_fetch,
-                weak_fetch.clone(),
+                weak_fetch,
                 id,
                 NavEnterFrom::Right,
+                move |ui: &AppWindow| {
+                    if origin.still_current(ui) {
+                        go_to_tab(ui, target_tab);
+                    }
+                },
             )
             .await
             {
                 log::warn!("cross_tab_nav::go_to_genre({id}): {e}");
-                return;
             }
-            let _ = weak_fetch.upgrade_in_event_loop(move |ui| {
-                if origin.still_current(&ui) {
-                    go_to_tab(&ui, target_tab);
-                }
-            });
         });
 
         let s_disk = s.clone();
@@ -360,3 +363,7 @@ fn make_go_to_genre(
         });
     }
 }
+
+#[cfg(test)]
+#[path = "tests/cross_tab_nav_tests.rs"]
+mod tests;

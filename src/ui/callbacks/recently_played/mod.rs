@@ -19,12 +19,6 @@ use crate::AppWindow;
 use crate::state::AppState;
 use crate::ui::recently_played::RecentlyPlayedUi;
 
-/// Nav-sidebar index of the Recently-Played tab. Used by the lifecycle module
-/// to seed the section-active shadow. Mirrors the `NAV_*` convention in
-/// `callbacks/cross_tab_nav.rs` — kept local because Slint globals can't expose
-/// `const`s that Rust reads ergonomically.
-pub(super) const NAV_RECENTLY_PLAYED: i32 = 8;
-
 /// The settings view-id under which this view's column state persists. Unlike
 /// its sortable siblings there is no `view_sort` entry — the Songs list is
 /// mounted non-sortable, so recency is the only order it has, and the Most

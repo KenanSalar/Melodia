@@ -66,11 +66,10 @@ export global ArtistDetail {
     // library-changed refreshes.
     in-out property <string> filter;
 
-    // `AlbumDetail.origin-nav-index` / `-tab`, so cross-tab back-nav takes the same
-    // atomic flip-Nav-then-clear-id path, and the same pair — see the argument there for
-    // why the tab half can't live once on `MyLibrary`.
+    // `AlbumDetail.origin-nav-index`, so cross-section back-nav takes the same atomic
+    // flip-Nav-then-clear-id path — see the argument there for why a drill from a sibling
+    // tab records nothing at all.
     in-out property <int> origin-nav-index: -1;
-    in-out property <int> origin-tab: -1;
 
     callback close-detail();
     callback shuffle-artist();

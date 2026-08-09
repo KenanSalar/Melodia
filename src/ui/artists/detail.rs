@@ -22,6 +22,7 @@ use crate::ui::detail_artwork::decode_detail_pair;
 use crate::ui::detail_filter::restamp_selection;
 use crate::ui::detail_view::{impl_detail_view_helpers, resolve_view_sort};
 use crate::ui::model_patch;
+use crate::ui::my_library::{MyLibraryTab, tab_is_mounted};
 use crate::ui::row_match::{self, track_matches};
 use crate::ui::track_list_view::view_id;
 use crate::ui::track_sort::sort_track_list_rows;
@@ -155,7 +156,6 @@ where
 
         let header = to_slint_artist_row(&detail);
         g.set_artist(header);
-        crate::ui::hero_chips::publish_artist(&ui, &detail, years, artists_ui.section_active());
 
         // Albums sub-section model — small grid above the track list.
         let album_rows: Vec<UiAlbumRow> = albums
@@ -164,7 +164,6 @@ where
             .collect();
         write_albums_model(&g, album_rows);
 
-        apply_detail_artwork(&ui, &g, pair, /* animate */ true, artists_ui.section_active());
         replace_tracks_model(&g, ui_tracks);
         reset_detail_selection(&g, &artists_ui);
         // Fresh open clears the filter so the user lands on the full
@@ -190,6 +189,12 @@ where
         // performs (Nav.selected-index for cross-tab nav, …) land in
         // the same UI-thread tick as the detail flip.
         on_applied(&ui);
+        // The two globals six heroes share, written last because their gate is
+        // the **live** tab rather than the `section_active` shadow — see
+        // `albums::detail::open_album_with` for the drill this exists to fix.
+        let on_screen = tab_is_mounted(&ui, MyLibraryTab::Artists);
+        crate::ui::hero_chips::publish_artist(&ui, &detail, years, on_screen);
+        apply_detail_artwork(&ui, &g, pair, /* animate */ true, on_screen);
         // Record a browser-style history entry — see the matching
         // `record_current` in `albums::detail::open_album_with` for
         // the rationale.
@@ -236,8 +241,9 @@ pub async fn refresh_detail(
         sort_track_list_rows(&mut tracks, &field, &dir);
 
         g.set_artist(to_slint_artist_row(&detail));
-        crate::ui::hero_chips::publish_artist(&ui, &detail, years, artists_ui.section_active());
-        apply_detail_artwork(&ui, &g, pair, /* animate */ false, artists_ui.section_active());
+        let on_screen = tab_is_mounted(&ui, MyLibraryTab::Artists);
+        crate::ui::hero_chips::publish_artist(&ui, &detail, years, on_screen);
+        apply_detail_artwork(&ui, &g, pair, /* animate */ false, on_screen);
 
         // Refresh the canonical Rust caches (all_tracks + albums) with
         // the freshly-fetched data. The displayed `tracks` cache + the
