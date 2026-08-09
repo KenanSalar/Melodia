@@ -31,35 +31,28 @@ use crate::{AppWindow, Settings};
 const CRASH_TOAST_KIND: &str = "crash-report";
 
 pub fn install(ui: &AppWindow, state: &AppState, notifications: &Rc<NotificationsUi>) {
-    let settings = ui.global::<Settings>();
-
-    wire_open_log_folder(&settings, state);
-    wire_save_report(&settings, ui, state, notifications);
+    wire_open_log_folder(ui, state);
+    wire_save_report(ui, state, notifications);
     notify_previous_crash(ui, state, notifications);
 }
 
 /// Hand the logs directory to the desktop's file manager. The same callback the
 /// crash toast's action button reaches, hence the two buttons and one handler.
-fn wire_open_log_folder(settings: &Settings, state: &AppState) {
+fn wire_open_log_folder(ui: &AppWindow, state: &AppState) {
     let runtime = state.runtime.clone();
     let logs_dir = state.paths.logs_dir.clone();
-    settings.on_open_log_folder(move || {
+    ui.global::<Settings>().on_open_log_folder(move || {
         runtime.spawn(launcher::open_target(logs_dir.clone(), "open-log-folder"));
     });
 }
 
 /// On the UI thread throughout: the picker has to be, and `Rc<NotificationsUi>`
 /// is `!Send`. `Compat` supplies the tokio reactor the awaited halves need.
-fn wire_save_report(
-    settings: &Settings,
-    ui: &AppWindow,
-    state: &AppState,
-    notifications: &Rc<NotificationsUi>,
-) {
+fn wire_save_report(ui: &AppWindow, state: &AppState, notifications: &Rc<NotificationsUi>) {
     let state = state.clone();
     let weak = ui.as_weak();
     let notifications = notifications.clone();
-    settings.on_save_diagnostics_report(move || {
+    ui.global::<Settings>().on_save_diagnostics_report(move || {
         let state = state.clone();
         let weak = weak.clone();
         let notifications = notifications.clone();

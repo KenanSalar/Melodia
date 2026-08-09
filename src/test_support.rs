@@ -13,20 +13,21 @@ use crate::config::Paths;
 /// The root of the Slint tree, for the pins that walk it rather than naming files.
 pub(crate) const UI_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/melodia-ui/ui");
 
-/// Every `.slint` file under [`UI_DIR`], sorted, alongside the directories that
-/// wouldn't list.
+/// The root of the Rust tree, for the pins that have to answer "does anything in
+/// the tree do X" rather than "do these named files do X" — the native-dialog
+/// check being the first, since what it guards against is a *new* call site
+/// rather than an edit to a known one.
+pub(crate) const SRC_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/src");
+
+/// Every file under `root` with extension `ext`, sorted, alongside the
+/// directories that wouldn't list.
 ///
 /// The unreadable paths come back rather than being skipped: a dropped subtree
 /// lowers whatever a caller counts and its pin goes quiet, and the source-count
 /// floors those pins carry are far too loose to notice one missing folder. Every
 /// caller asserts the second list is empty.
-///
-/// Shared because two pins now walk this tree for unrelated reasons — the
-/// translation-coverage check and the scrollbar-convention check — and a
-/// traversal copied into each is one that can disagree with itself about what
-/// the tree contains.
-pub(crate) fn slint_sources() -> (Vec<PathBuf>, Vec<PathBuf>) {
-    fn walk(dir: &Path, out: &mut Vec<PathBuf>, unreadable: &mut Vec<PathBuf>) {
+fn sources_under(root: &str, ext: &str) -> (Vec<PathBuf>, Vec<PathBuf>) {
+    fn walk(dir: &Path, ext: &str, out: &mut Vec<PathBuf>, unreadable: &mut Vec<PathBuf>) {
         let Ok(entries) = fs::read_dir(dir) else {
             unreadable.push(dir.to_path_buf());
             return;
@@ -34,17 +35,61 @@ pub(crate) fn slint_sources() -> (Vec<PathBuf>, Vec<PathBuf>) {
         for entry in entries.flatten() {
             let path = entry.path();
             if path.is_dir() {
-                walk(&path, out, unreadable);
-            } else if path.extension().is_some_and(|ext| ext == "slint") {
+                walk(&path, ext, out, unreadable);
+            } else if path.extension().is_some_and(|found| found == ext) {
                 out.push(path);
             }
         }
     }
 
     let (mut sources, mut unreadable) = (Vec::new(), Vec::new());
-    walk(Path::new(UI_DIR), &mut sources, &mut unreadable);
+    walk(Path::new(root), ext, &mut sources, &mut unreadable);
     sources.sort();
     (sources, unreadable)
+}
+
+/// Every `.slint` file under [`UI_DIR`], as paths.
+///
+/// The raw form, for the one pin that reports on the walk itself — the
+/// translation check counts the sources it found and names the ones it couldn't
+/// read. Anything that only wants the file *contents* wants
+/// [`stripped_sources`] instead.
+pub(crate) fn slint_sources() -> (Vec<PathBuf>, Vec<PathBuf>) {
+    sources_under(UI_DIR, "slint")
+}
+
+/// Every source under `root` with extension `ext`, comment-stripped and paired
+/// with its `root`-relative path, forward-slashed so a pin can compare against a
+/// literal on either platform.
+///
+/// Shared for the reason [`sources_under`] is, one layer up: both tree-walking
+/// pins need this same loop over a different tree, and a copy in each is a copy
+/// that can disagree about what "the sources" are.
+///
+/// # Panics
+///
+/// If fewer than `floor` files turn up, or any path won't read. The floor is a
+/// vacuity guard — a traversal that silently found nothing otherwise passes every
+/// pin over it.
+pub(crate) fn stripped_sources(root: &str, ext: &str, floor: usize) -> Vec<(String, String)> {
+    let (paths, mut unreadable) = sources_under(root, ext);
+    assert!(paths.len() >= floor, "only {} .{ext} files found under {root}", paths.len());
+
+    let mut out = Vec::with_capacity(paths.len());
+    for path in &paths {
+        let rel = path
+            .strip_prefix(root)
+            .unwrap_or(path)
+            .display()
+            .to_string()
+            .replace('\\', "/");
+        match fs::read_to_string(path) {
+            Ok(src) => out.push((rel, strip_line_comments(&src))),
+            Err(_) => unreadable.push(path.clone()),
+        }
+    }
+    assert!(unreadable.is_empty(), "unreadable paths under {root}: {unreadable:?}");
+    out
 }
 
 /// `src` with everything after an unquoted `//` dropped on each line, keeping the

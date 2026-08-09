@@ -5,7 +5,11 @@
 //! regardless of what we hand it. On Windows and macOS the same dialog opens
 //! *behind* Melodia. So the parenting is invisible on the platform every one of
 //! these is written and reviewed on, which is why it lives here rather than at
-//! five call sites; [`tests`] pins that it stays that way.
+//! five call sites. `ui::file_dialog::tests::every_native_dialog_is_built_by_the_shared_helper`
+//! pins that it stays that way, by walking the tree rather than by naming those
+//! five — the site that would get it wrong is the one nobody has written yet — and
+//! holds this file to still making the `set_parent` call, since deleting it here
+//! unparents all five at once and looks like a simplification.
 
 use slint::ComponentHandle;
 

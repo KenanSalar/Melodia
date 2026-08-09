@@ -1,47 +1,106 @@
-/// Every native dialog in the tree, and the source it is built from.
-///
-/// A dialog is a handful of builder calls, so the temptation at a sixth site is
-/// to spell `AsyncFileDialog::new()` inline and be done — which works, and is
-/// wrong in a way no review on this machine can see.
-const CALLERS: [(&str, &str); 5] = [
-    (
-        "callbacks/library_settings.rs",
-        include_str!("../callbacks/library_settings.rs"),
-    ),
-    (
-        "callbacks/playlists/files/import.rs",
-        include_str!("../callbacks/playlists/files/import.rs"),
-    ),
-    (
-        "callbacks/playlists/files/export.rs",
-        include_str!("../callbacks/playlists/files/export.rs"),
-    ),
-    ("callbacks/tags.rs", include_str!("../callbacks/tags.rs")),
-    ("diagnostics.rs", include_str!("../diagnostics.rs")),
-];
+//! Native-dialog pin: nothing in the tree builds an `rfd` dialog for itself.
+//!
+//! It walks the Rust sources rather than naming the five call sites, because
+//! what it guards against is a *sixth* one: a dialog is a handful of builder
+//! calls, so the temptation is to spell the constructor inline and be done —
+//! which works, and is wrong in a way no review on this machine can see. A pin
+//! over a fixed list is exactly the pin that new site walks past.
+//!
+//! `src/` is the whole reach it needs: `melodia-ui` depends on `slint` alone, so
+//! the other package has no `rfd` to build a dialog with.
 
-/// The parenting is what stops the OS picker opening *behind* Melodia on
-/// Windows and macOS, and it is unobservable on Linux — the XDG portal parents
-/// OS-side whatever we hand it. So a call site that builds its own dialog is
-/// correct on the platform it is written and reviewed on, and wrong on the two
-/// it is not. Reaching for the helper is the whole guarantee; this is the check
-/// that it was reached for.
+use crate::test_support::{SRC_DIR, stripped_sources};
+
+/// The two names nothing outside the helper may spell: the crate the dialogs come
+/// from, and the parenting call that is the point of the helper.
+///
+/// The crate rather than `AsyncFileDialog`, because the blocking `rfd::FileDialog`
+/// ships unparented just as readily and would otherwise need a needle of its own —
+/// where naming *any* rfd type has to name the crate, in a path or in a `use`.
+const RAW_CRATE: &str = "rfd";
+const RAW_PARENT: &str = "set_parent";
+
+/// What a call site says instead. Module-qualified, which is how all five spell
+/// it — a `use …::parented` renaming it into scope reads as one caller fewer here.
+const HELPER: &str = "file_dialog::parented(";
+
+/// The two files that may name the raw calls, and the name each must **still**
+/// spell. Paths are relative to [`SRC_DIR`].
+///
+/// The helper owes `set_parent`: that one call is the whole module, it is the half
+/// no review on this machine can see missing, and nothing else in the tree is
+/// positioned to notice it go. This pin owes the crate name, being the needle.
+const EXEMPT: [(&str, &str); 2] =
+    [("ui/file_dialog.rs", RAW_PARENT), ("ui/tests/file_dialog_tests.rs", RAW_CRATE)];
+
+/// Add Folder, playlist import, playlist export, the tag editor's cover pick and
+/// the diagnostics bundle. A floor rather than an equality so a genuine sixth
+/// dialog needs no edit here — but a caller that stops opening one, or a walk
+/// that silently found nothing, still trips it.
+const MIN_CALLERS: usize = 5;
+
+/// A floor, so a walk that silently found nothing can't pass vacuously.
+const MIN_SOURCES: usize = 200;
+
+/// The whole Rust tree, comment-stripped and paired with the path it came from.
+///
+/// Stripped because prose about the rule reads exactly like a violation of it —
+/// this file's own header would otherwise be the first hit.
+fn sources() -> Vec<(String, String)> {
+    stripped_sources(SRC_DIR, "rs", MIN_SOURCES)
+}
+
+/// The parenting is what stops the OS picker opening *behind* Melodia on Windows
+/// and macOS, and it is unobservable on Linux — the XDG portal parents OS-side
+/// whatever we hand it. So a call site that builds its own dialog is correct on
+/// the platform it is written and reviewed on, and wrong on the two it is not.
+/// Reaching for the helper is the whole guarantee; this is the check that it was
+/// reached for.
 #[test]
 fn every_native_dialog_is_built_by_the_shared_helper() {
-    for (name, source) in CALLERS {
-        assert!(
-            !source.contains("AsyncFileDialog::new()"),
-            "{name} builds its own dialog — use `ui::file_dialog::parented`, \
-             which is what parents it to the main window"
-        );
-        assert!(
-            !source.contains("set_parent"),
-            "{name} parents a dialog by hand; the helper owns that call"
-        );
-        assert!(
-            source.contains("file_dialog::parented("),
-            "{name} is listed as a native-dialog caller but no longer opens one — \
-             drop it from CALLERS"
-        );
+    let mut callers = Vec::new();
+    let mut inline = Vec::new();
+    let mut exempt_seen = Vec::new();
+
+    for (path, src) in sources() {
+        // Skipped outright rather than merely forgiven the raw calls, and for a
+        // different reason each: this pin spells `HELPER` as the needle it greps
+        // for, so counting it would inflate the floor past a caller that genuinely
+        // stopped opening a dialog, while the helper is the one site that owns the
+        // calls. What each still owes is `EXEMPT`'s second column.
+        if let Some((_, owed)) = EXEMPT.iter().find(|(exempt, _)| *exempt == path) {
+            assert!(
+                src.contains(owed),
+                "{path} no longer names `{owed}`, so nothing is checking it any more"
+            );
+            exempt_seen.push(path);
+            continue;
+        }
+
+        if src.contains(HELPER) {
+            callers.push(path.clone());
+        }
+        if src.contains(RAW_CRATE) || src.contains(RAW_PARENT) {
+            inline.push(path);
+        }
     }
+
+    assert!(
+        inline.is_empty(),
+        "{inline:?} build a native dialog by hand — use `ui::file_dialog::parented`, \
+         which is what parents it to the main window"
+    );
+    assert!(
+        callers.len() >= MIN_CALLERS,
+        "only {} native-dialog caller(s) found ({callers:?}); expected at least \
+         {MIN_CALLERS} — one stopped opening a dialog, one stopped spelling \
+         `{HELPER}…)` for it, or the walk is broken",
+        callers.len()
+    );
+    assert_eq!(
+        exempt_seen.len(),
+        EXEMPT.len(),
+        "EXEMPT names {EXEMPT:?} but the walk only reached {exempt_seen:?} — a moved or \
+         renamed entry pre-authorises whatever takes its path next"
+    );
 }
