@@ -29,6 +29,11 @@ use crate::{AppWindow, NotificationRow, Notifications};
 /// without ever pushing cards past the viewport edge.
 const MAX_VISIBLE: usize = 5;
 
+/// How long a transient confirmation toast stays up. Errors stay sticky
+/// instead — a failure nobody was looking at is a failure nobody heard about —
+/// so this is only ever passed to [`NotificationsUi::show_auto_dismiss`].
+pub const TOAST_AUTO_DISMISS_MS: u32 = 3000;
+
 /// One notification's worth of data. `variant` is one of the strings the
 /// `NotificationCard` Slint component dispatches on: `"info"`, `"success"`,
 /// `"warning"`, `"error"`. Unknown variants fall through to the "info"
@@ -45,6 +50,23 @@ pub struct NotificationParams {
     /// plus used by [`NotificationsUi::dismiss_by_kind`] to clear lingering
     /// rows for a given category (e.g. `"watcher-disabled"`).
     pub action_kind: SharedString,
+}
+
+impl NotificationParams {
+    /// A toast with no action button and nothing to dismiss it by — most of
+    /// them. Anything carrying an `action_kind` builds the struct literal
+    /// instead: that field routes the action button *and* groups rows for
+    /// [`NotificationsUi::dismiss_by_kind`], and a constructor hiding it would
+    /// make those two roles harder to tell apart rather than easier.
+    pub fn plain(variant: &str, title: SharedString, message: SharedString) -> Self {
+        Self {
+            variant: variant.into(),
+            title,
+            message,
+            action_label: SharedString::default(),
+            action_kind: SharedString::default(),
+        }
+    }
 }
 
 pub struct NotificationsUi {

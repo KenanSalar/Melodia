@@ -959,6 +959,51 @@ msgstr "Δεν ήταν δυνατή η εγγραφή της ενημέρωση
 msgid "Update failed. See logs for details."
 msgstr "Η ενημέρωση απέτυχε. Δείτε τα αρχεία καταγραφής για λεπτομέρειες."
 
+# ---- Settings → About → Diagnostics -----------------------------------------
+
+msgid "Diagnostics"
+msgstr "Διαγνωστικά"
+
+msgid "Logs"
+msgstr "Αρχεία καταγραφής"
+
+msgid "Where Melodia writes its log files and crash reports."
+msgstr ""
+"Εκεί όπου το Melodia γράφει τα αρχεία καταγραφής και τις αναφορές κατάρρευσης."
+
+# Shared with the crash-report toast's action button, which opens the same folder.
+msgid "Open Folder"
+msgstr "Άνοιγμα φακέλου"
+
+msgid "Diagnostics report"
+msgstr "Αναφορά διαγνωστικών"
+
+msgid "One text file with your system details, settings and recent logs, for attaching to a bug report."
+msgstr ""
+"Ένα αρχείο κειμένου με τα στοιχεία του συστήματός σας, τις ρυθμίσεις και τα "
+"πρόσφατα αρχεία καταγραφής, για επισύναψη σε αναφορά σφάλματος."
+
+msgid "Save…"
+msgstr "Αποθήκευση…"
+
+msgid "Diagnostics report saved"
+msgstr "Η αναφορά διαγνωστικών αποθηκεύτηκε"
+
+msgid "Couldn't save the diagnostics report"
+msgstr "Δεν ήταν δυνατή η αποθήκευση της αναφοράς διαγνωστικών"
+
+msgid "See the log for details."
+msgstr "Δείτε το αρχείο καταγραφής για λεπτομέρειες."
+
+# Pushed once on the launch after a panic.
+msgid "Melodia crashed last time"
+msgstr "Το Melodia κατέρρευσε την προηγούμενη φορά"
+
+msgid "A crash report was written. Open the log folder to find it."
+msgstr ""
+"Γράφτηκε μια αναφορά κατάρρευσης. Ανοίξτε τον φάκελο καταγραφής για να τη "
+"βρείτε."
+
 msgid "Close to Tray"
 msgstr "Κλείσιμο στην περιοχή ειδοποιήσεων"
 

@@ -97,9 +97,9 @@ body:
     attributes:
       label: Log output
       description: |
-        Linux: run `RUST_LOG=info melodia` from a terminal (`RUST_LOG=info ./melodia-*.AppImage` for the AppImage) and paste anything relevant.
-        Windows release builds run without a console, so skip this unless you built from source.
-        This is automatically formatted as code — no backticks needed.
+        Go to **Settings → About → Diagnostics → Save…** and attach the file to this issue. It gathers your system details, a short list of settings, any recent crash reports and the tail of the log — paths are shortened to `~`, and no credentials or tokens are included.
+        Melodia logs to a file on every run, so there's no need to reproduce the problem from a terminal. **Open Folder** on the same card shows you where they live. If Melodia won't start far enough to reach Settings, `melodia --logs` prints the same path on Linux and macOS; on Windows the folder is `%APPDATA%\Melodia\logs\`.
+        If you'd rather paste than attach, this box is automatically formatted as code — no backticks needed.
       render: shell
 
   - type: textarea

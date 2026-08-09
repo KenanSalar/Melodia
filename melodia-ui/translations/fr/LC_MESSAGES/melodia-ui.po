@@ -957,6 +957,50 @@ msgstr "Impossible d'écrire la mise à jour téléchargée sur le disque."
 msgid "Update failed. See logs for details."
 msgstr "Échec de la mise à jour. Consultez les journaux pour plus de détails."
 
+# ---- Settings → About → Diagnostics -----------------------------------------
+
+msgid "Diagnostics"
+msgstr "Diagnostic"
+
+msgid "Logs"
+msgstr "Journaux"
+
+msgid "Where Melodia writes its log files and crash reports."
+msgstr "Où Melodia écrit ses fichiers journaux et ses rapports de plantage."
+
+# Shared with the crash-report toast's action button, which opens the same folder.
+msgid "Open Folder"
+msgstr "Ouvrir le dossier"
+
+msgid "Diagnostics report"
+msgstr "Rapport de diagnostic"
+
+msgid "One text file with your system details, settings and recent logs, for attaching to a bug report."
+msgstr ""
+"Un fichier texte contenant les détails de votre système, vos réglages et les "
+"journaux récents, à joindre à un rapport de bogue."
+
+msgid "Save…"
+msgstr "Enregistrer…"
+
+msgid "Diagnostics report saved"
+msgstr "Rapport de diagnostic enregistré"
+
+msgid "Couldn't save the diagnostics report"
+msgstr "Impossible d'enregistrer le rapport de diagnostic"
+
+msgid "See the log for details."
+msgstr "Consultez le journal pour plus de détails."
+
+# Pushed once on the launch after a panic.
+msgid "Melodia crashed last time"
+msgstr "Melodia a planté la dernière fois"
+
+msgid "A crash report was written. Open the log folder to find it."
+msgstr ""
+"Un rapport de plantage a été écrit. Ouvrez le dossier des journaux pour le "
+"retrouver."
+
 msgid "Close to Tray"
 msgstr "Fermer dans la zone de notification"
 

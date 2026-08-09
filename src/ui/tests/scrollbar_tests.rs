@@ -16,9 +16,7 @@
 //! borrow the opt-out of the `TrackList` nested inside it, which is exactly the
 //! arrangement every composite view has.
 
-use std::fs;
-
-use crate::test_support::{UI_DIR, slint_sources, strip_line_comments};
+use crate::test_support::{UI_DIR, stripped_sources};
 
 /// The elements that own a scrollbar-policy pair. `Flickable` is deliberately
 /// absent: it has no scrollbars to turn off.
@@ -30,26 +28,16 @@ const OPT_OUT: &str = "always-off";
 /// scrollbars sit on `surface0` rather than on the page. `multiline-input.slint`
 /// is named beside it because it is only ever mounted there — the Lyrics tab and
 /// the playlist description — despite living a directory up.
-const DIALOG_DIR: &str = "/components/dialog/";
+const DIALOG_DIR: &str = "components/dialog/";
 const DIALOG_STRAYS: [&str; 1] = ["multiline-input.slint"];
 const CARD_TRACK: &str = "track-color: Theme.scrollbar-track-on-card;";
 
+/// A floor, so a walk that silently found nothing can't pass vacuously.
+const MIN_SOURCES: usize = 100;
+
 /// The whole tree, comment-stripped, paired with the file it came from.
 fn sources() -> Vec<(String, String)> {
-    let (paths, mut unreadable) = slint_sources();
-
-    // A floor, so a walk that silently found nothing can't pass vacuously.
-    assert!(paths.len() > 100, "only {} .slint files found under {UI_DIR}", paths.len());
-
-    let mut out = Vec::with_capacity(paths.len());
-    for path in &paths {
-        match fs::read_to_string(path) {
-            Ok(src) => out.push((path.display().to_string(), strip_line_comments(&src))),
-            Err(_) => unreadable.push(path.clone()),
-        }
-    }
-    assert!(unreadable.is_empty(), "unreadable Slint paths: {unreadable:?}");
-    out
+    stripped_sources(UI_DIR, "slint", MIN_SOURCES)
 }
 
 /// Collapses runs of whitespace, so a pin reads a token sequence rather than one

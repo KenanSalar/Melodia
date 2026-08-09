@@ -198,6 +198,12 @@ export global Settings {
     // Opens `CARGO_PKG_REPOSITORY` in the system browser. No Slint-side handler.
     callback open-repository();
 
+    // The Diagnostics card's two actions, both handled in `src/ui/diagnostics.rs`.
+    // `open-log-folder` is also what the "crashed last run" toast's action button
+    // routes to, via the `Notifications.action` dispatcher.
+    callback open-log-folder();
+    callback save-diagnostics-report();
+
     // Everything below is a `pure callback` wrapping an `@tr` literal, because Slint
     // 1.16 exposes no Rust-callable `tr(...)`: Rust invokes these at push time so each
     // string resolves in the locale selected right then, rather than the one that was
@@ -271,6 +277,40 @@ export global Settings {
             return @tr("Couldn't write the downloaded update to disk.");
         }
         return @tr("Update failed. See logs for details.");
+    }
+
+    // Saving a diagnostics bundle from the Diagnostics card.
+    pure callback diagnostics-saved-title() -> string;
+    diagnostics-saved-title => {
+        return @tr("Diagnostics report saved");
+    }
+    pure callback diagnostics-saved-message(string /*path*/) -> string;
+    diagnostics-saved-message(path) => {
+        return @tr("Saved to {}", path);
+    }
+    pure callback diagnostics-failed-title() -> string;
+    diagnostics-failed-title => {
+        return @tr("Couldn't save the diagnostics report");
+    }
+    pure callback diagnostics-failed-message() -> string;
+    diagnostics-failed-message => {
+        return @tr("See the log for details.");
+    }
+
+    // Pushed once on the launch after a panic, by `crash_report::take_unseen`.
+    // The action label deliberately repeats the Diagnostics card's button, both
+    // because it goes to the same place and so the two share one msgid.
+    pure callback crash-report-title() -> string;
+    crash-report-title => {
+        return @tr("Melodia crashed last time");
+    }
+    pure callback crash-report-message() -> string;
+    crash-report-message => {
+        return @tr("A crash report was written. Open the log folder to find it.");
+    }
+    pure callback crash-report-action-label() -> string;
+    crash-report-action-label => {
+        return @tr("Open Folder");
     }
 
     // The import/export header pills on the Playlists view.

@@ -5,10 +5,9 @@
 //! (Cargo populates it from the `repository` field in `Cargo.toml`), so
 //! the link tracks the canonical repo with no hardcoded magic string.
 //!
-//! `open::that` spawns and waits on a child process (`xdg-open` / `open`
-//! / `explorer`), so the launch runs on the blocking pool off the UI
-//! thread — the same shape `library::tracks::reveal_in_file_manager`
-//! uses for the "Open Containing Folder" action.
+//! The launch itself goes through [`crate::ui::launcher::open_target`], which
+//! owns the hop off the UI thread — `open::that` blocks until the child
+//! launcher is spawned.
 //!
 //! The version shown in the About card is *not* set here — it rides on
 //! `MelodiaUpdater.current-version`, seeded by [`crate::ui::updater_settings`].
@@ -16,6 +15,7 @@
 use slint::ComponentHandle;
 
 use crate::state::AppState;
+use crate::ui::launcher;
 use crate::{AppWindow, Settings};
 
 /// Source-repository URL, taken from Cargo's `repository` manifest field
@@ -30,15 +30,6 @@ pub fn install(ui: &AppWindow, state: &AppState) {
             log::warn!("open-repository: CARGO_PKG_REPOSITORY is empty");
             return;
         }
-        // Off the UI thread: `open::that` blocks until the child launcher
-        // is spawned. Reuse the tokio runtime's blocking pool rather than
-        // stalling the event loop.
-        runtime.spawn(async {
-            match tokio::task::spawn_blocking(|| open::that(REPOSITORY_URL)).await {
-                Ok(Ok(())) => {}
-                Ok(Err(e)) => log::warn!("open-repository: open::that failed: {e}"),
-                Err(e) => log::warn!("open-repository: launch task join failed: {e}"),
-            }
-        });
+        runtime.spawn(launcher::open_target(REPOSITORY_URL, "open-repository"));
     });
 }

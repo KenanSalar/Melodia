@@ -1,0 +1,70 @@
+import { Settings } from "../../settings.slint";
+import { SettingsPage } from "../../globals/settings-page.slint";
+import { SectionCard } from "../../components/settings/section-card.slint";
+import { SectionDivider } from "../../components/settings/section-divider.slint";
+import { SettingRow } from "../../components/settings/setting-row.slint";
+import { SectionButton } from "../../components/settings/section-button.slint";
+
+// What to hand over when something goes wrong. Both rows reach the same folder
+// — log files and crash reports share one directory so a reporter opens it once
+// — and both callbacks live in `src/ui/diagnostics.rs`.
+//
+// Neither row is gated by backend state; only the search filter can hide one.
+// Structure follows `about-section.slint`, which this sits under.
+export component DiagnosticsSection inherits Rectangle {
+    background: transparent;
+    horizontal-stretch: 1;
+    vertical-stretch: 0;
+
+    in property <string> tab-name;
+
+    pure function row-visible(label: string, desc: string) -> bool {
+        return SettingsPage.row-visible(root.tab-name, @tr("Diagnostics"),
+                                        label + " " + desc,
+                                        SettingsPage.search-query);
+    }
+
+    property <bool> show-logs:
+        row-visible(@tr("Logs"), @tr("Where Melodia writes its log files and crash reports."));
+    property <bool> show-report:
+        row-visible(@tr("Diagnostics report"),
+                    @tr("One text file with your system details, settings and recent logs, for attaching to a bug report."));
+
+    out property <bool> has-matches: show-logs || show-report;
+
+    // Wrapper so the root's preferred-height tracks the card's natural height —
+    // see `language-section.slint`.
+    VerticalLayout {
+        if has-matches: SectionCard {
+            title: @tr("Diagnostics");
+
+            if root.show-logs: SettingRow {
+                icon: "description";
+                label: @tr("Logs");
+                description: @tr("Where Melodia writes its log files and crash reports.");
+                SectionButton {
+                    label: @tr("Open Folder");
+                    icon: "";
+                    primary: false;
+                    clicked => { Settings.open-log-folder(); }
+                }
+            }
+
+            // Two rows, so this reads as "both neighbours" — a third would need
+            // the cumulative form `(show-logs || show-report) && show-new`, per
+            // the second divider in `about-section.slint`.
+            if root.show-logs && root.show-report: SectionDivider {}
+            if root.show-report: SettingRow {
+                icon: "bug_report";
+                label: @tr("Diagnostics report");
+                description: @tr("One text file with your system details, settings and recent logs, for attaching to a bug report.");
+                SectionButton {
+                    label: @tr("Save…");
+                    icon: "";
+                    primary: false;
+                    clicked => { Settings.save-diagnostics-report(); }
+                }
+            }
+        }
+    }
+}

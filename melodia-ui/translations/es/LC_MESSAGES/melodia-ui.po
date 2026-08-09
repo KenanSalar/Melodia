@@ -957,6 +957,50 @@ msgstr "No se pudo escribir la actualización descargada en el disco."
 msgid "Update failed. See logs for details."
 msgstr "La actualización falló. Consulta los registros para más detalles."
 
+# ---- Settings → About → Diagnostics -----------------------------------------
+
+msgid "Diagnostics"
+msgstr "Diagnóstico"
+
+msgid "Logs"
+msgstr "Registros"
+
+msgid "Where Melodia writes its log files and crash reports."
+msgstr "Donde Melodia escribe sus archivos de registro e informes de fallos."
+
+# Shared with the crash-report toast's action button, which opens the same folder.
+msgid "Open Folder"
+msgstr "Abrir carpeta"
+
+msgid "Diagnostics report"
+msgstr "Informe de diagnóstico"
+
+msgid "One text file with your system details, settings and recent logs, for attaching to a bug report."
+msgstr ""
+"Un archivo de texto con los datos de tu sistema, los ajustes y los registros "
+"recientes, para adjuntar a un informe de error."
+
+msgid "Save…"
+msgstr "Guardar…"
+
+msgid "Diagnostics report saved"
+msgstr "Informe de diagnóstico guardado"
+
+msgid "Couldn't save the diagnostics report"
+msgstr "No se pudo guardar el informe de diagnóstico"
+
+msgid "See the log for details."
+msgstr "Consulta el registro para más detalles."
+
+# Pushed once on the launch after a panic.
+msgid "Melodia crashed last time"
+msgstr "Melodia falló la última vez"
+
+msgid "A crash report was written. Open the log folder to find it."
+msgstr ""
+"Se escribió un informe de fallo. Abre la carpeta de registros para "
+"encontrarlo."
+
 msgid "Close to Tray"
 msgstr "Cerrar en la bandeja del sistema"
 

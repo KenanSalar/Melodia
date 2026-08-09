@@ -22,6 +22,11 @@ pub struct Paths {
     /// `database::backup`. Its own directory so the retention sweep runs
     /// somewhere the live database and its `-wal`/`-shm` sidecars aren't.
     pub backups_dir: PathBuf,
+    /// The rolling log files `services::logging` writes and the crash reports
+    /// `services::crash_report` drops beside them. One directory rather than
+    /// two, so "Open log folder" shows a reporter everything at once — the two
+    /// naming schemes don't overlap and each sweep is gated on its own.
+    pub logs_dir: PathBuf,
 }
 
 impl Paths {
@@ -34,9 +39,11 @@ impl Paths {
         let artwork_dir = data_dir.join("artwork");
         let artists_dir = data_dir.join("artists");
         let backups_dir = data_dir.join("backups");
+        let logs_dir = data_dir.join("logs");
         std::fs::create_dir_all(&artwork_dir)?;
         std::fs::create_dir_all(&artists_dir)?;
         std::fs::create_dir_all(&backups_dir)?;
+        std::fs::create_dir_all(&logs_dir)?;
 
         Ok(Self {
             db_path: data_dir.join("melodia.db"),
@@ -50,6 +57,7 @@ impl Paths {
             artwork_dir,
             artists_dir,
             backups_dir,
+            logs_dir,
             data_dir,
         })
     }

@@ -209,6 +209,15 @@ pub async fn get_track_file_path(db: &DbPool, id: i64) -> Result<Option<String>,
     Ok(path)
 }
 
+/// How many tracks the library holds. The diagnostics bundle reports it as
+/// library shape — a bug that only shows up at scale is a different bug.
+pub async fn count_tracks(db: &DbPool) -> Result<i64, AppError> {
+    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM tracks")
+        .fetch_one(db.read())
+        .await?;
+    Ok(count)
+}
+
 /// Fetch `TrackSummary` projections by IDs, preserving the input order.
 /// Reads only the 12 columns the queue / now-playing / playback paths
 /// actually consume — vs `get_tracks_by_ids` which reads all 41. Callers

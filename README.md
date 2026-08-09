@@ -352,7 +352,55 @@ Melodia stores its data under the OS application-data directory
 | `search_history.json` | Recent search terms (capped at 10) |
 | `scrobble_credentials.json` | Last.fm session key + ListenBrainz token (`0600` on Unix) |
 | `scrobble_queue.json` | Durable offline scrobble/love queue |
+| `scrobble_mbid_attempted.json` | Tracks already looked up for a MusicBrainz ID, so they aren't re-queried |
+| `logs/` | Rolling log files and crash reports (see [Troubleshooting](#troubleshooting)) |
+| `backups/` | Database copies taken before each schema migration |
 | `artwork/`, `artists/` | Cached album and artist images |
+
+## Troubleshooting
+
+Melodia writes a log file on every run — no environment variable, no terminal
+needed — and if it ever panics it leaves a crash report beside it. Both live in
+`logs/` under the data directory above:
+
+- **Linux** — `~/.local/share/Melodia/logs/`
+- **Windows** — `%APPDATA%\Melodia\logs\`
+
+The current log is `melodia_rCURRENT.log`; it rotates at 2 MiB, keeping the 7 most
+recent rotated files, so the folder stays under about 16 MiB. On Linux and macOS
+it also rotates at the turn of each day you actually run Melodia, which makes that
+roughly a week of daily listening — and proportionally longer if you use it less
+often. Windows doesn't report a file's creation date reliably, so there the daily
+rotation only applies to a session running across midnight; a log carried over from
+an earlier day rotates on size alone, and the same 16 MiB covers a longer stretch.
+Crash reports are
+`crash-<date>-<time>.txt` and hold the panic message, the thread and location, a
+backtrace, and what Melodia knows about your system.
+
+**Settings → About → Diagnostics** has the two buttons worth knowing about:
+
+- **Open Folder** opens that directory.
+- **Save…** writes a single `melodia-diagnostics-*.txt` — the file to attach to a
+  bug report. It contains your Melodia version, OS, desktop session and install
+  method; how many tracks and folders your library has; a short, fixed list of
+  settings (theme, language, titlebar, tray, crossfade, EQ, ReplayGain,
+  auto-update); the most recent crash reports; and the tail of the logs. Home
+  directory paths are shortened to `~`, and **no credentials, tokens or session
+  keys are ever included** — those live in a separate file this report doesn't
+  read.
+
+If Melodia crashed the last time you ran it, the next launch says so and offers to
+open the folder.
+
+If Melodia won't start at all — the one case where none of the above is reachable —
+`melodia --logs` prints that directory and exits. The log and any crash report from
+the failed launch are already in it. On Linux and macOS only: a Windows build runs
+without a console attached, so it can't print to the terminal you launched it from
+— use the `%APPDATA%\Melodia\logs\` path above instead.
+
+For more detail than the default, set `RUST_LOG` — for example
+`RUST_LOG=debug melodia`. It overrides the built-in filter for both the log file
+and the terminal.
 
 ## Contributing
 
