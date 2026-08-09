@@ -208,14 +208,31 @@ fn no_hero_tier_outlives_the_banner_it_was_solved_for() {
         ("hero-divider", "Theme.surface1"),
     ] {
         let value = binding(&code, &format!("property <brush> {mirror}:"));
+        // Anchored at the head of the value rather than searched: a negated `!root.detail-open ?`
+        // is a substring match, so it would fall through to the arm assert below and be
+        // reported as an inversion — which it is, spelled the other way round. `trim_start`
+        // because `binding` cuts right after the name, and `hero-hover`'s value wraps.
         assert!(
-            value.contains("root.detail-open ?"),
+            value.trim_start().starts_with("root.detail-open ?"),
             "`{mirror}` must fall back to its idle half while no detail is open — held across a \
              tab leave, the tier it reads is the last banner's and the transition crosses out of \
              it on the next open"
         );
+
+        // Each arm on its own, not the value as a whole: an *inverted* ternary carries both
+        // tokens too, reads correctly at a glance, and paints the theme's grey over every
+        // open hero while the flat band wears the last entity's tone. No arm here holds a
+        // `?` or a `:` of its own — `with-alpha(0.12)` is the busiest of the eight — so the
+        // two splits land exactly on the halves.
+        let (open_arm, idle_arm) =
+            value.split_once('?').and_then(|(_, rest)| rest.split_once(':')).unwrap_or(("", ""));
         assert!(
-            value.contains(idle),
+            open_arm.contains("HeroBackdrop."),
+            "`{mirror}`'s open arm must be the solved tier — the other way round the bar takes \
+             `{idle}` for the whole of every detail and the entity's tone for the flat band"
+        );
+        assert!(
+            idle_arm.contains(idle),
             "`{mirror}`'s idle arm must be `{idle}`, the same token its own pair takes on the flat \
              band — a third value here is a colour the bar crosses through on every morph"
         );

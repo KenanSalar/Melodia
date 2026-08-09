@@ -17,6 +17,19 @@
 const HERO_BLUR: &str = include_str!("../../../melodia-ui/ui/components/hero-blur-backdrop.slint");
 const NOW_PLAYING: &str = include_str!("../../../melodia-ui/ui/views/now-playing-view.slint");
 
+/// The file with its comment lines dropped, so prose about a fix can neither satisfy a pin
+/// nor bound a region early. The `library_tab_band_tests.rs` helper, and needed here for a
+/// reason particular to this file: every anchor below is a gradient literal, and the comment
+/// block sitting directly above the floor's own binding argues about gradients and stop
+/// counts. One line spelling the literal would re-anchor both pins ahead of the code.
+fn code(source: &str) -> String {
+    source
+        .lines()
+        .filter(|line| !line.trim_start().starts_with("//"))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
 /// Both floors ease, on the same token the layers above them take.
 ///
 /// Anchored on the binding rather than searched loosely: `now-playing-view.slint` carries
@@ -40,6 +53,7 @@ fn both_backdrop_floors_ease_with_the_layers_above_them() {
         // transparent pair while its host paints no hero, so that binding now spans three
         // lines. What this pin is about is the `animate` sitting directly under it, which
         // both spellings still have to.
+        let source = code(source);
         let after = source
             .split_once("@linear-gradient(135deg,")
             .and_then(|(_, rest)| rest.split_once(";\n"))
@@ -59,10 +73,14 @@ fn both_backdrop_floors_ease_with_the_layers_above_them() {
 /// counted rather than located: two slot opacities, the scrim, and the floor. A layer
 /// given a curve of its own is what makes a cover swap and its scrim land a beat apart,
 /// which reads as a flicker rather than as a wrong duration.
+///
+/// Counted over `code` for the reason that helper exists, and a count is the shape prose
+/// inflates most easily: one comment line quoting the animate block reads as a fifth layer
+/// and fails this for something that is not a regression.
 #[test]
 fn the_shared_backdrop_rides_one_duration() {
     assert_eq!(
-        HERO_BLUR.matches("duration: Theme.dur-med").count(),
+        code(HERO_BLUR).matches("duration: Theme.dur-med").count(),
         4,
         "`HeroBlurBackdrop` is four animations on one token — both blur slots, the scrim \
          and the gradient floor"
@@ -76,18 +94,40 @@ fn the_shared_backdrop_rides_one_duration() {
 ///
 /// Defaulted the other way every hero would come up on a transparent floor and stay there,
 /// which on the one backdrop with no blur over it — Genre Detail's — is the whole banner.
+/// **The two arms are checked one at a time, and that is the point rather than pedantry**:
+/// an inverted ternary is the same failure as an inverted default, it reads correctly at a
+/// glance, and a window holding both arms cannot tell the two spellings apart.
 #[test]
 fn the_floors_hero_gate_defaults_to_shown() {
+    let code = code(HERO_BLUR);
+
     assert!(
-        HERO_BLUR.contains("in property <bool> hero-open: true;"),
+        code.contains("in property <bool> hero-open: true;"),
         "`HeroBlurBackdrop.hero-open` must default to `true` — the two mosaic bands pass no \
          value and always have a hero up, so the default is their whole answer"
     );
 
-    let idle_arm = HERO_BLUR
-        .split_once("root.hero-open")
+    // Split at the ternary's own separators: neither arm is anything but a two-stop
+    // `@linear-gradient(135deg, …)`, so neither carries a `?` or a `:` of its own and this
+    // lands exactly on the two halves.
+    let arms = code
+        .split_once("background: root.hero-open")
         .and_then(|(_, rest)| rest.split_once(";\n"))
         .map_or("", |(arms, _)| arms);
+    assert!(
+        !arms.is_empty(),
+        "the shared floor no longer gates its gradient on `hero-open` — both pins below bound \
+         against that ternary, and with nothing to split they report an inversion instead"
+    );
+    let (shown_arm, idle_arm) =
+        arms.split_once('?').and_then(|(_, rest)| rest.split_once(':')).unwrap_or(("", ""));
+
+    assert!(
+        shown_arm.contains("HeroBackdrop.floor-start")
+            && shown_arm.contains("HeroBackdrop.floor-end"),
+        "the gated arm must be the solved floor — the other way round every hero comes up on \
+         a transparent backdrop and stays there, which on Genre Detail is the whole banner"
+    );
     assert!(
         idle_arm.contains("@linear-gradient(135deg, transparent, transparent)"),
         "the ungated arm must be a second two-stop gradient, not a bare colour — \
@@ -96,7 +136,7 @@ fn the_floors_hero_gate_defaults_to_shown() {
     );
 
     assert!(
-        HERO_BLUR.contains("background: HeroBackdrop.scrim;"),
+        code.contains("background: HeroBackdrop.scrim;"),
         "the scrim stays ungated — it is solved to a tone that carries almost no chroma, so \
          it has nothing to flash, and draining it would brighten the artwork for the length \
          of every collapse"
