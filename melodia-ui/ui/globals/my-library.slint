@@ -60,16 +60,19 @@ export global MyLibrary {
     // The band's back arrow. Routes to whichever detail the mounted tab has open.
     callback back();
 
-    // **The page stopped being visible.** A sixth `SectionActiveGate` sits at index 3 with
-    // no tab predicate, because the five per-tab mounts genuinely cannot answer this: on a
-    // page leave only the *mounted* tab's gate fires, and the hero a detail left open on
+    // **The nav index left the page.** The five per-tab `SectionActiveGate` mounts cannot
+    // answer this: on a page leave only the *mounted* tab's fires, and a hero left open on
     // another tab is reachable from nowhere else. That matters now that a tab leave holds
     // the hero rather than handing it back — `ui::my_library::the_band_is_up` is the gate,
     // and `release_page_hero` is what lands here.
     //
-    // Fires on all three ways the page stops being drawn, so Rust re-checks the nav index:
-    // Now Playing or the miniplayer covering the band is not leaving it, and the band comes
-    // back with the same detail open.
+    // **A sixth gate cannot stand in either**, which is why this rides `app-window.slint`'s
+    // `changed watched-nav-idx` instead: a gate's predicate is already false while Now
+    // Playing covers the band, and the sidebar clears `now-playing-open` and writes the new
+    // index in one handler — so the leave that matters most goes false → false and delivers
+    // no edge at all. Watching the index directly is also what makes "covered" and "left"
+    // different events for free: Now Playing and the miniplayer never move it, and the band
+    // comes back under them with the same detail open.
     callback page-active-changed(bool);
 
     // The band has finished collapsing out of a detail, so the hero it was painting is

@@ -88,9 +88,13 @@ export component LibraryTabBand inherits Rectangle {
     // is a ternary over that id at the host, so a teardown run when the id clears leaves
     // the band spending the whole 400 ms painting a fallback glyph over a reset backdrop —
     // an exit morph *from* a placeholder rather than from the banner it is collapsing. The
-    // host releases the cover, the blur pair, the shared backdrop tiers and the chip row
-    // when this lands instead. Cancelled by a re-open, so a re-drill inside the window
-    // can't have the previous hero's teardown land on the new one.
+    // host clears the chip row when this lands instead, plus the cover and blur pair of
+    // whichever details actually *closed* — the band also collapses when a tab switch takes
+    // a still-open detail off screen, and picking that tab again morphs the same banner
+    // straight back open, so it splits on the ids. The shared backdrop tiers are not in
+    // reach here at all: the colour set belongs to the page and is reset when the page is
+    // left. Cancelled by a re-open, so a re-drill inside the window can't have the previous
+    // hero's teardown land on the new one.
     callback hero-collapsed();
 
     // --- The morph ----------------------------------------------------------

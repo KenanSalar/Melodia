@@ -646,8 +646,9 @@ fn the_hero_reads_a_latched_arm_where_the_body_reads_the_live_one() {
 /// Left in the close handlers it runs on the same tick as the id clear, which is what the
 /// latches above exist to survive — holding the arm is worthless if the cover, the blur
 /// pair, the shared `HeroBackdrop` tiers and the `HeroChips` row are already gone. The
-/// backstop for a collapse the band doesn't live to finish is the per-tab section leave,
-/// which keeps its own release.
+/// backstop for a collapse the band doesn't live to finish is the page's own teardown off
+/// `MyLibrary.page-active-changed` — not the per-tab section leave, which now holds the
+/// hero instead of handing it back.
 #[test]
 fn no_close_detail_hands_the_hero_back() {
     for (name, src) in CLOSE_HANDLERS {

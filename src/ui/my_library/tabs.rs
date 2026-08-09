@@ -123,9 +123,10 @@ pub fn detail_open_on(
 ///
 /// That hand-off is the narrowest of the three ways a leave lands on a hero somebody still
 /// wants, so the colour set and the image slots are gated on the wider [`the_band_is_up`]
-/// now. What still asks *this* question is
-/// [`the_chips_still_belong_to_the_band`] — the chip row is the one hero fact a hand-off
-/// must not keep.
+/// now. What still asks *this* question is [`the_chips_still_belong_to_the_band`], its only
+/// caller — the chip row is the one hero fact a hand-off must not keep, so this stays
+/// unexported rather than being folded into it: the question is worth a name and a doc, and
+/// the two answer different halves of one guard.
 ///
 /// Mirrors `my-library-view.slint`'s private `detail-open`, which is why
 /// `globals/my-library.slint` doesn't declare one — Rust reads the four ids directly.
@@ -153,7 +154,7 @@ pub fn a_detail_hero_is_mounted(ui: &AppWindow) -> bool {
 /// tab morphs its banner back open the moment that tab is picked — before the re-fetch that
 /// pick kicks has landed. A teardown inside this window therefore hands nothing back, and
 /// what does is [`crate::ui::callbacks::my_library`]'s pair: `hero-collapsed` for a genuine
-/// close, the page's own gate for the leave.
+/// close, the page's own teardown for the leave.
 ///
 /// Deliberately *not* the section gate's predicate, which also goes false when Now Playing
 /// or the miniplayer covers the band. Covering it is not leaving it — the same detail is

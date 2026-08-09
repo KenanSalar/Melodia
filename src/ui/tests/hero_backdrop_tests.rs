@@ -9,8 +9,6 @@
 //! restored, so up to four detail views publish while a different hero owns the
 //! band, and the last to finish wins.
 
-use crate::test_support::strip_line_comments;
-
 const DETAIL_VIEW: &str = include_str!("../detail_view.rs");
 const HERO_CHIPS: &str = include_str!("../hero_chips.rs");
 
@@ -220,8 +218,8 @@ fn the_two_seams_gate_the_shared_write_and_only_that() {
 /// All three are the colour set belonging to the *page*, which is what
 /// `the_band_is_up` says and what `a_detail_hero_is_mounted` only approximated.
 ///
-/// The chips stop one step earlier, at `a_hero_is_collapsing`, and swapping the
-/// two gates is the mutation this exists to catch: a colour held across a
+/// The chips stop one step earlier, at `the_chips_still_belong_to_the_band`, and
+/// swapping the two predicates is the mutation this exists to catch: a colour held across a
 /// **hand-off** is the outgoing hero's tone, where a count held across it is the
 /// outgoing hero's *facts* under the incoming one's title. A **collapse** is not
 /// a hand-off — there is no incoming title, only the outgoing banner shrinking —
@@ -365,12 +363,17 @@ fn the_collapsed_teardown_hands_back_only_what_closed() {
     );
 }
 
-/// The page's own gate, and the re-check that keeps it from firing on a *cover*.
+/// The page teardown watches the **nav index**, and a `SectionActiveGate` cannot.
 ///
-/// `SectionActiveGate` goes false for three different reasons — the nav index moved, Now
-/// Playing opened, the miniplayer took over — and only the first is leaving the page. The
-/// other two put the band back with the same detail open, so tearing its banner down
-/// behind them is the reported flash with a different trigger.
+/// A gate goes false for three reasons — the nav index moved, Now Playing opened, the
+/// miniplayer took over — and only the first is leaving the page; the other two put the
+/// band back with the same detail open. But the mutation worth catching is subtler than
+/// picking the wrong one of the three, because a sixth gate reads as the obvious home for
+/// this and *compiles*: `sidebar.slint` clears `now-playing-open` and writes the new index
+/// in **one** handler, so leaving the page from behind Now Playing takes that gate false →
+/// false and delivers no edge at all. The hero then stays pinned for the session and the
+/// next page's band paints the departing detail's chips under its own title — which is the
+/// stale-facts failure the whole chip asymmetry exists to prevent.
 #[test]
 fn the_page_leave_is_gated_on_the_nav_index_rather_than_on_the_gate() {
     const APP: &str = include_str!("../../../melodia-ui/ui/app-window.slint");
@@ -379,12 +382,24 @@ fn the_page_leave_is_gated_on_the_nav_index_rather_than_on_the_gate() {
 
     assert!(
         GLOBAL.contains("callback page-active-changed(bool);"),
-        "`MyLibrary` must declare the page's own gate callback"
+        "`MyLibrary` must declare the page's own teardown callback"
+    );
+
+    let mirror = APP
+        .split_once("changed watched-nav-idx => {")
+        .and_then(|(_, rest)| rest.split_once("\n    }"))
+        .map_or("", |(body, _)| body);
+    assert!(!mirror.is_empty(), "`app-window.slint` no longer mirrors the nav index");
+    assert!(
+        mirror.contains("MyLibrary.page-active-changed("),
+        "the page teardown must ride the nav-index mirror: a `SectionActiveGate` is already \
+         false while Now Playing covers the band, so the sidebar click that clears \
+         `now-playing-open` and moves the index in one handler gives it no edge to deliver"
     );
     assert!(
-        APP.contains("active-changed(active) => { MyLibrary.page-active-changed(active); }"),
-        "the page gate must be mounted in `app-window.slint` — the five per-tab mounts cannot \
-         stand in for it, since only the mounted tab's fires on a page leave"
+        !APP.contains("MyLibrary.page-active-changed(active)"),
+        "the page teardown must not be re-homed onto a `SectionActiveGate` — it reads as the \
+         tidier mount and silently stops firing for the one leave that matters",
     );
 
     let handler = CALLBACKS
@@ -394,8 +409,9 @@ fn the_page_leave_is_gated_on_the_nav_index_rather_than_on_the_gate() {
     assert!(!handler.is_empty(), "`page-active-changed` is not wired");
     assert!(
         handler.contains("if my_library_mod::the_band_is_up(&ui) {"),
-        "the handler must re-read the nav index: the gate also goes false when Now Playing or \
-         the miniplayer *covers* the page, and covering it is not leaving it"
+        "the handler must re-read the nav index rather than trust its argument — cheap, and it \
+         is what keeps a second seam from tearing the hero down over a page that is merely \
+         *covered* by Now Playing or the miniplayer"
     );
     assert!(
         handler.contains("release_page_hero(&ui);"),
@@ -406,56 +422,60 @@ fn the_page_leave_is_gated_on_the_nav_index_rather_than_on_the_gate() {
 
 /// **Every My Library leave names the tab it is leaving, and no curated one does.**
 ///
-/// That argument is what decides whether the chip row is held, and a site that forgets it
-/// fails to compile rather than silently clearing — which is the point of spelling the
-/// tabless case as its own macro arm instead of defaulting to it. The mutation this catches
-/// is the reverse: a My Library site reaching for the one-argument form, which reads as the
-/// tidier call and puts the chips back on frame one of the collapse.
+/// That argument is what decides whether the chip row is held, and the mutation to catch is
+/// a My Library site reaching for the one-argument form — which reads as the tidier call and
+/// puts the chips back on frame one of the collapse.
+///
+/// **It walks `callbacks/` rather than listing the sites**, for the reason
+/// `ui::file_dialog::tests` does: a list is a list of the sites someone remembered, and the
+/// one that gets this wrong is the one nobody has written yet. A fixed four already missed
+/// `playlists/dialog.rs`, the fifth. Each file is classified by its directory, so a new tab
+/// is covered by its callbacks landing in a directory named after it, and a new *curated*
+/// page by landing in one that isn't.
 #[test]
 fn every_my_library_leave_names_the_tab_it_is_leaving() {
-    const SITES: [(&str, &str, &str); 4] = [
-        ("albums", include_str!("../callbacks/albums/lifecycle.rs"), "MyLibraryTab::Albums"),
-        ("artists", include_str!("../callbacks/artists/lifecycle.rs"), "MyLibraryTab::Artists"),
-        ("genres", include_str!("../callbacks/genres/lifecycle.rs"), "MyLibraryTab::Genres"),
-        (
-            "playlists",
-            include_str!("../callbacks/playlists/lifecycle.rs"),
-            "MyLibraryTab::Playlists",
-        ),
+    const TABS: [(&str, &str); 4] = [
+        ("albums/", "MyLibraryTab::Albums"),
+        ("artists/", "MyLibraryTab::Artists"),
+        ("genres/", "MyLibraryTab::Genres"),
+        ("playlists/", "MyLibraryTab::Playlists"),
     ];
 
-    for (name, src, tab) in SITES {
-        let code = strip_line_comments(src);
+    let mut total = 0;
+    for (rel, code) in crate::test_support::stripped_sources("src/ui/callbacks", "rs", 20) {
+        // The one file that *defines* the two macros, so it names both without being a site.
+        if rel == "macros.rs" {
+            continue;
+        }
         let calls = code.matches("release_shared_hero!").count()
             + code.matches("release_detail_hero_images!").count();
-        assert_eq!(
-            calls, 2,
-            "{name}/lifecycle.rs should hand the hero back twice — the section leave and the \
-             failed re-fetch that drops back to the grid"
-        );
+        if calls == 0 {
+            continue;
+        }
+        total += calls;
+
+        let Some((_, tab)) = TABS.iter().find(|(dir, _)| rel.starts_with(dir)) else {
+            assert_eq!(
+                code.matches("release_shared_hero!(ui);").count(),
+                calls,
+                "{rel} is not one of My Library's tabs, so every teardown in it must take the \
+                 tabless form — a curated page has no tab to be leaving and its leave can never \
+                 land inside this band's morph"
+            );
+            assert!(
+                !code.contains("MyLibraryTab"),
+                "{rel} must not name a My Library tab: holding its chips into this band is the \
+                 stale-facts bug the clear exists to prevent"
+            );
+            continue;
+        };
         assert_eq!(
             code.matches(&format!("Some({tab})")).count(),
             calls,
-            "every hero teardown in {name}/lifecycle.rs must name `{tab}`: the departing tab's \
-             own id is what says whether a collapse follows, and an unnamed one falls through \
-             to the tabless arm and clears the chips on frame one of that collapse"
+            "every hero teardown in {rel} must name `{tab}`: the departing tab's own id is what \
+             says whether a collapse follows, and a site naming another tab's — or none — \
+             clears the chips on frame one of that collapse"
         );
     }
-
-    for (name, src) in [
-        ("favorites", include_str!("../callbacks/favorites/lifecycle.rs")),
-        ("recently_played", include_str!("../callbacks/recently_played/lifecycle.rs")),
-    ] {
-        let code = strip_line_comments(src);
-        assert!(
-            code.contains("release_shared_hero!(ui);"),
-            "{name}/lifecycle.rs must take the tabless form — a curated page has no tab to be \
-             leaving and its leave can never land inside this band's morph"
-        );
-        assert!(
-            !code.contains("MyLibraryTab"),
-            "{name}/lifecycle.rs must not name a My Library tab: holding its chips into this \
-             band is the stale-facts bug the clear exists to prevent"
-        );
-    }
+    assert!(total >= 11, "only {total} hero teardowns found under `callbacks/` — the walk broke");
 }

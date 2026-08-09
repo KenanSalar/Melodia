@@ -81,7 +81,9 @@ fn release_collapsed_hero(ui: &AppWindow) {
 /// detail held on a tab you are not standing on has.** A tab leave keeps its hero — that is
 /// what stops a collapse painting a fallback glyph and a re-entered tab morphing open onto
 /// one — and the per-tab gates only fire for the *mounted* tab, so on a page leave the
-/// other four have no edge left to deliver. Hence the page's own `SectionActiveGate`.
+/// other four have no edge left to deliver. Hence a seam of the page's own, driven by the
+/// nav index rather than by a `SectionActiveGate`; `globals/my-library.slint` says why a
+/// sixth gate cannot deliver that edge either.
 ///
 /// Unconditional, unlike [`release_collapsed_hero`]: past this point no id can bring a
 /// banner back without a fetch that republishes all of it.
@@ -179,13 +181,13 @@ pub fn wire_my_library(ui: &AppWindow, state: &AppState) {
         });
     }
 
-    // page-active-changed: the page's own gate, the one the five per-tab mounts can't stand
-    // in for — on a page leave only the mounted tab's fires. See `release_page_hero`.
+    // page-active-changed: the nav index left the page, which the five per-tab gates can't
+    // report — on a page leave only the mounted tab's fires. See `release_page_hero`.
     //
-    // The nav index is re-read rather than trusted from the argument: the gate also goes
-    // false when Now Playing or the miniplayer covers the band, and covering it is not
-    // leaving it — the same detail is still open underneath and its banner has to be there
-    // when the cover lifts.
+    // The index is re-read rather than trusted from the argument. Cheap, and it keeps the
+    // handler honest about the one thing that must not fire a teardown: Now Playing or the
+    // miniplayer *covering* the band is not leaving it, and the same detail is still open
+    // underneath when the cover lifts.
     {
         let weak = weak.clone();
         g.on_page_active_changed(move |active| {

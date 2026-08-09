@@ -139,6 +139,15 @@ export component AppWindow inherits Window {
             SettingsPage.search-query = "";
             SettingsPage.blur-search-tick += 1;
         }
+        // My Library's band holds its hero across a tab leave, so a *nav* change is the
+        // only thing that can hand it back — and it has to be watched here rather than
+        // through a `SectionActiveGate`, which cannot see this edge at all. The sidebar
+        // clears `now-playing-open` and writes the index in one handler, so a gate that
+        // was already false behind Now Playing goes false → false and delivers nothing:
+        // the hero would stay pinned, and the next page's band would paint the departing
+        // detail's chips under its own title. Rust re-reads the index, so it stays
+        // correct whichever seam calls it.
+        MyLibrary.page-active-changed(self.watched-nav-idx == 3);
         // The outgoing view may hold focus in a TextInput about to be destroyed, and
         // Slint doesn't hand focus back to an ancestor FocusScope when that happens —
         // shortcuts would stay dead until the next click. Synchronous, so SearchView's
@@ -278,20 +287,16 @@ export component AppWindow inherits Window {
         active-changed(active) => { Favorites.section-active-changed(active); }
     }
 
-    // My Library. Six gates on one index: one per tab, plus the page's own. **A tab leave
-    // has to be the same event as a section leave** — it tears the same models down and
-    // re-fetches the same way — so each of the five keeps the hook it had as a sidebar
-    // section and the gate's `tab-index` / `current-tab` pair supplies the second half of
-    // the predicate. A drill-in doesn't move `tab-idx`, so it stays `true` inside a tab
-    // exactly as it used to inside a section.
+    // My Library. Five gates on one index, one per tab. **A tab leave has to be the same
+    // event as a section leave** — it tears the same models down and re-fetches the same
+    // way — so each of the five keeps the hook it had as a sidebar section and the gate's
+    // `tab-index` / `current-tab` pair supplies the second half of the predicate. A
+    // drill-in doesn't move `tab-idx`, so it stays `true` inside a tab exactly as it used
+    // to inside a section.
     //
-    // **The sixth is the page's, and the five cannot stand in for it.** On a page leave
-    // only the *mounted* tab's gate fires; the other four went inactive on whichever tab
-    // pick came earlier and have no edge left to deliver. That was harmless while a tab
-    // leave handed its hero back — it no longer does, precisely so a collapse and a
-    // re-entered tab keep painting their banner — so a detail left open on another tab is
-    // reachable from nowhere else. `tab-index` / `current-tab` default to `-1` and the
-    // gate's predicate short-circuits on them, which is what "no tabs" is spelled as.
+    // **The page's own teardown is not a sixth gate**, and can't be: it has to fire when
+    // the *nav index* leaves 3, which a gate whose predicate is already false behind Now
+    // Playing never reports. It rides `changed watched-nav-idx` above.
 
     // Songs. Unlike the four grids, the view keeps its row model warm across leaves, so
     // this only gates the `library_changed` refresher: hidden ⇒ mark dirty and skip the
@@ -340,15 +345,6 @@ export component AppWindow inherits Window {
         current-tab: MyLibrary.tab-idx;
         mini-active: mini-switch.active;
         active-changed(active) => { Playlists.section-active-changed(active); }
-    }
-
-    // The page itself. Fires on all three ways it stops being drawn, so Rust re-checks the
-    // nav index: Now Playing or the miniplayer covering the band is not leaving it, and the
-    // band comes back with the same detail open.
-    SectionActiveGate {
-        index: 3;
-        mini-active: mini-switch.active;
-        active-changed(active) => { MyLibrary.page-active-changed(active); }
     }
 
     // Recently Played. Like Favorites: release the cover cache on `false`, re-fetch on
