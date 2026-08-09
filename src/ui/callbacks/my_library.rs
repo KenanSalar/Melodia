@@ -15,6 +15,8 @@
 //! (per id, once the morph has finished) and `page-active-changed` (all of it, once the
 //! page is gone).
 
+use std::cell::Cell;
+
 use slint::{ComponentHandle, SharedString};
 
 use crate::library;
@@ -188,17 +190,24 @@ pub fn wire_my_library(ui: &AppWindow, state: &AppState) {
     // handler honest about the one thing that must not fire a teardown: Now Playing or the
     // miniplayer *covering* the band is not leaving it, and the same detail is still open
     // underneath when the cover lifts.
+    //
+    // **And the edge is latched, because the seam it rides fires on every nav change.** A
+    // `changed` handler cannot ask which index it moved *from*, so an unlatched teardown
+    // runs on Search → Browse too — and `seed_detail_from_settings` writes each detail's
+    // cover and blur pair at boot precisely *because* the page is hidden, so that the first
+    // visit paints instead of waiting on a re-fetch. One lateral nav would hand all of that
+    // back and leave the band morphing open on `ArtworkImage`'s fallback glyph. Seeded from
+    // the same question the handler asks, which is sound because `install_views` hydrates
+    // the nav index before this runs.
     {
         let weak = weak.clone();
-        g.on_page_active_changed(move |active| {
-            if active {
-                return;
-            }
+        let was_up = Cell::new(my_library_mod::the_band_is_up(ui));
+        g.on_page_active_changed(move |_active| {
             let Some(ui) = weak.upgrade() else { return };
-            if my_library_mod::the_band_is_up(&ui) {
-                return;
+            let up = my_library_mod::the_band_is_up(&ui);
+            if was_up.replace(up) && !up {
+                release_page_hero(&ui);
             }
-            release_page_hero(&ui);
         });
     }
 }

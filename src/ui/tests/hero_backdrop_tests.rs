@@ -374,6 +374,14 @@ fn the_collapsed_teardown_hands_back_only_what_closed() {
 /// false and delivers no edge at all. The hero then stays pinned for the session and the
 /// next page's band paints the departing detail's chips under its own title — which is the
 /// stale-facts failure the whole chip asymmetry exists to prevent.
+///
+/// **What the mirror costs is that it fires on every nav change, so the handler owes a
+/// latch**, and that is the second mutation. A `changed` handler cannot ask which index it
+/// moved *from*, so an unlatched teardown also runs on Search → Browse — where the ids are
+/// untouched and the slots hold what `seed_detail_from_settings` wrote at boot *because* the
+/// page was hidden, so that the first visit paints rather than waiting on a re-fetch. It
+/// reads as a page-leave hook either way and the flash it leaves lands on a page nobody was
+/// looking at when it fired.
 #[test]
 fn the_page_leave_is_gated_on_the_nav_index_rather_than_on_the_gate() {
     const APP: &str = include_str!("../../../melodia-ui/ui/app-window.slint");
@@ -403,15 +411,21 @@ fn the_page_leave_is_gated_on_the_nav_index_rather_than_on_the_gate() {
     );
 
     let handler = CALLBACKS
-        .split_once("g.on_page_active_changed(move |active| {")
+        .split_once("g.on_page_active_changed(move |_active| {")
         .and_then(|(_, rest)| rest.split_once("\n        });"))
         .map_or("", |(body, _)| body);
     assert!(!handler.is_empty(), "`page-active-changed` is not wired");
     assert!(
-        handler.contains("if my_library_mod::the_band_is_up(&ui) {"),
+        handler.contains("my_library_mod::the_band_is_up(&ui)"),
         "the handler must re-read the nav index rather than trust its argument — cheap, and it \
          is what keeps a second seam from tearing the hero down over a page that is merely \
          *covered* by Now Playing or the miniplayer"
+    );
+    assert!(
+        handler.contains("was_up.replace("),
+        "the handler must latch the edge: the mirror it rides fires on every nav change, so an \
+         unlatched teardown hands back the boot-seeded detail artwork on a step between two \
+         pages that were never this one"
     );
     assert!(
         handler.contains("release_page_hero(&ui);"),
@@ -441,10 +455,29 @@ fn every_my_library_leave_names_the_tab_it_is_leaving() {
         ("playlists/", "MyLibraryTab::Playlists"),
     ];
 
+    /// A floor, so a walk that silently found nothing can't pass vacuously.
+    const MIN_SOURCES: usize = 20;
+    /// Two per detail lifecycle — the section leave and the failed re-fetch that drops
+    /// back to the grid — plus the playlist dialog's, plus one per curated page. A floor
+    /// rather than an equality so a sixth teardown needs no edit here.
+    const MIN_TEARDOWNS: usize = 11;
+
     let mut total = 0;
-    for (rel, code) in crate::test_support::stripped_sources("src/ui/callbacks", "rs", 20) {
-        // The one file that *defines* the two macros, so it names both without being a site.
+    for (rel, code) in
+        crate::test_support::stripped_sources(crate::test_support::CALLBACKS_DIR, "rs", MIN_SOURCES)
+    {
+        // Skipped rather than classified, and for a different reason each: `macros.rs`
+        // *defines* both needles, and a pin under `tests/` spells one to grep for it. Both
+        // would otherwise read as a curated page owing the tabless form.
         if rel == "macros.rs" {
+            assert!(
+                code.contains("macro_rules! release_shared_hero"),
+                "`macros.rs` no longer defines the teardown macros, so the skip above is \
+                 exempting a file nothing is checking"
+            );
+            continue;
+        }
+        if rel.starts_with("tests/") {
             continue;
         }
         let calls = code.matches("release_shared_hero!").count()
@@ -477,5 +510,9 @@ fn every_my_library_leave_names_the_tab_it_is_leaving() {
              clears the chips on frame one of that collapse"
         );
     }
-    assert!(total >= 11, "only {total} hero teardowns found under `callbacks/` — the walk broke");
+    assert!(
+        total >= MIN_TEARDOWNS,
+        "only {total} hero teardowns found under `callbacks/` — either the walk broke or a \
+         leave stopped handing its hero back"
+    );
 }

@@ -73,6 +73,11 @@ export global MyLibrary {
     // no edge at all. Watching the index directly is also what makes "covered" and "left"
     // different events for free: Now Playing and the miniplayer never move it, and the band
     // comes back under them with the same detail open.
+    //
+    // The mirror fires on every nav change, where a gate fired only on its own predicate, so
+    // the Rust hook latches the edge rather than acting on each `false` — otherwise the
+    // page's teardown runs on a step between two pages that were never this one, and hands
+    // back the artwork boot wrote into the detail globals while the page was hidden.
     callback page-active-changed(bool);
 
     // The band has finished collapsing out of a detail, so the hero it was painting is

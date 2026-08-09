@@ -19,6 +19,16 @@ pub(crate) const UI_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/melodia-ui
 /// rather than an edit to a known one.
 pub(crate) const SRC_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/src");
 
+/// The wiring layer, for the pins that ask the same question of one subtree — the
+/// hero teardowns being the first, since which tab a leave names is a `callbacks/`
+/// property and nothing outside it can get the answer wrong.
+///
+/// Anchored on the manifest dir like its two siblings rather than spelled
+/// relative: a bare `"src/ui/callbacks"` resolves against the harness's working
+/// directory, which is the package root only because that is what `cargo test`
+/// happens to set.
+pub(crate) const CALLBACKS_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/src/ui/callbacks");
+
 /// Every file under `root` with extension `ext`, sorted, alongside the
 /// directories that wouldn't list.
 ///
