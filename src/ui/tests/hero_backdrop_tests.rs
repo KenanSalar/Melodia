@@ -466,18 +466,16 @@ fn every_my_library_leave_names_the_tab_it_is_leaving() {
     for (rel, code) in
         crate::test_support::stripped_sources(crate::test_support::CALLBACKS_DIR, "rs", MIN_SOURCES)
     {
-        // Skipped rather than classified, and for a different reason each: `macros.rs`
-        // *defines* both needles, and a pin under `tests/` spells one to grep for it. Both
-        // would otherwise read as a curated page owing the tabless form.
+        // Skipped rather than classified: `macros.rs` *defines* both needles, so it names
+        // them without being a site and would otherwise read as a curated page owing the
+        // tabless form. The assert is what stops the skip outliving its reason.
         if rel == "macros.rs" {
             assert!(
-                code.contains("macro_rules! release_shared_hero"),
-                "`macros.rs` no longer defines the teardown macros, so the skip above is \
+                code.contains("macro_rules! release_shared_hero")
+                    && code.contains("macro_rules! release_detail_hero_images"),
+                "`macros.rs` no longer defines both teardown macros, so the skip above is \
                  exempting a file nothing is checking"
             );
-            continue;
-        }
-        if rel.starts_with("tests/") {
             continue;
         }
         let calls = code.matches("release_shared_hero!").count()
