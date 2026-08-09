@@ -8,9 +8,16 @@ typo line box is much taller than typical Latin UI fonts (~1.20x).
 
 This script rewrites only the layout-metric fields. Glyph outlines,
 capHeight, x-height, and the usWin* clip bounds stay untouched, so glyph
-rendering is unchanged. Arabic combining marks may clip above/below the
-smaller line box in single-line contexts -- acceptable for this app's
-text where Arabic is a minority script and titles are mostly single-script.
+rendering is unchanged.
+
+The cost is that the ink now leaves the box: outlines still reach yMax 2163
+and yMin -1160 against a box of 1650/-500, so Arabic marks sit a quarter of
+an em above it and a third of an em below. That is fine while nothing cuts a
+text run to its own bounds -- and it is exactly why nothing may. Two things
+in Slint do it by default and neither is visible on a Latin locale: a
+sub-unit `opacity`, which rasterizes into a texture sized to child geometry,
+and a `Text` left on the default `overflow: clip`, which scissors itself.
+Both rules, and the fixes, are in `.claude/rules/slint-pitfalls.md`.
 
   typoAsc=1650, typoDesc=-500  (~1.05x line ratio at UPM=2048)
 

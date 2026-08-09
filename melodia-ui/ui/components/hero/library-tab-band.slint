@@ -421,8 +421,10 @@ export component LibraryTabBand inherits Rectangle {
             if root.hero-shown: VerticalLayout {
                 alignment: start;
                 horizontal-stretch: 0;
-                // Acceptable *here*, unlike the idle pane: it settles at 1.0, so there is
-                // no layer at rest and the cost is bounded by the morph.
+                // **The one fade in the band that is still an `opacity`**, and what makes
+                // it safe is that the tile is an image: it fills its box, so the morph's
+                // layer has no ink to crop the way the title block's had. The cost
+                // argument holds too — it settles at 1.0, so there is no layer at rest.
                 opacity: root.hero-t;
 
                 // Sized straight off `Theme.hero-artwork` rather than through an `in`
@@ -466,14 +468,19 @@ export component LibraryTabBand inherits Rectangle {
                 // when the pill row was a child of this column.
                 padding-bottom: root.pill-h + Theme.pad-xs;
 
-                // The text half *may* ride the morph — no tracker anywhere under it — so it
-                // takes the cheaper fade of the two. `opacity` is free at rest here because
-                // rest is `hero-t == 1`, where `Opacity::need_layer` bails before it counts
-                // children, and idle unmounts the branch outright.
+                // **Alpha in the brushes like the rest of the band — and here the reason is
+                // the glyphs rather than the cost.** `Opacity::need_layer` bails at exactly
+                // 1.0, so a fade of this block was a layer for the length of the morph and
+                // nothing at rest; the layer is a texture sized to its children's
+                // *geometry*, and a `Text`'s geometry is its line box, not its ink. The
+                // faces are patched to a 1.05 em box while their outlines still reach well
+                // past it, so every Arabic mark that leaves the box — a hamza above an
+                // alif, the dots under a final ya — was cropped for 400 ms and popped back
+                // on the frame `hero-t` landed on the literal 1.0. Nothing here overlaps,
+                // so per-element alpha paints identically to the group opacity it replaced.
                 if root.hero-shown: VerticalLayout {
                     vertical-stretch: 0;
                     spacing: Theme.pad-xs;
-                    opacity: root.hero-t;
 
                     HorizontalLayout {
                         vertical-stretch: 0;
@@ -486,14 +493,14 @@ export component LibraryTabBand inherits Rectangle {
                             MaterialIcon {
                                 name: "auto_awesome";
                                 icon-size: 22px;
-                                icon-color: HeroBackdrop.chrome;
+                                icon-color: HeroBackdrop.chrome.with-alpha(root.hero-t);
                                 filled: true;
                             }
                         }
 
                         Text {
                             text: "\u{200e}" + root.title;
-                            color: HeroBackdrop.on-backdrop;
+                            color: HeroBackdrop.on-backdrop.with-alpha(root.hero-t);
                             font-size: Theme.hero-title-size;
                             font-weight: Theme.page-title-weight;
                             horizontal-alignment: left;
@@ -504,7 +511,7 @@ export component LibraryTabBand inherits Rectangle {
                     if root.subtitle != "": Text {
                         vertical-stretch: 0;
                         text: "\u{200e}" + root.subtitle;
-                        color: HeroBackdrop.on-backdrop;
+                        color: HeroBackdrop.on-backdrop.with-alpha(root.hero-t);
                         font-size: Theme.font-size-md;
                         horizontal-alignment: left;
                         overflow: elide;

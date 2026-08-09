@@ -33,6 +33,33 @@ fn binding(src: &str, name: &str) -> String {
         .map_or(String::new(), |(value, _)| value.to_owned())
 }
 
+/// The body of the `if root.hero-shown:` branch that paints `needle`, cut at its
+/// own closing brace. Three branches carry that condition and a `split` alone
+/// runs each one into the next, so a pin over "this branch does not X" needs the
+/// walk to mean anything. Net braces per line, the `"\u{200e}"` escapes balancing
+/// out — the `the_chip_strip_outlives_every_morph_it_is_painted_in` reason.
+fn hero_branch(code: &str, needle: &str) -> String {
+    let branch = code
+        .split("if root.hero-shown:")
+        .skip(1)
+        .find(|branch| branch.contains(needle))
+        .unwrap_or_default();
+
+    let mut depth = 0usize;
+    let mut opened = false;
+    let mut body: Vec<&str> = Vec::new();
+    for line in branch.lines() {
+        body.push(line);
+        depth += line.matches('{').count();
+        opened |= depth > 0;
+        depth = depth.saturating_sub(line.matches('}').count());
+        if opened && depth == 0 {
+            break;
+        }
+    }
+    body.join("\n")
+}
+
 /// A mirrored width only reaches the bar through `changed width`, and `changed`
 /// doesn't fire when the first layout settles directly on the final value —
 /// which is every window opened at its size. Without the mount timer the seed
@@ -403,13 +430,17 @@ fn the_chip_strip_outlives_every_morph_it_is_painted_in() {
     );
 }
 
-/// One hero, one clock — and **two fades, because one of them may not cost a
-/// layer.** The text half is `if`-gated and takes `opacity`, which is free at its
-/// resting `1.0` (`Opacity::need_layer` bails before it counts children) and gone
-/// entirely in idle. The chip strip is mounted for the life of the band, where an
-/// `opacity` under 1 would allocate and blend an offscreen layer on every frame
-/// forever, so it fades through its brushes instead. Losing either leaves that half
-/// of the hero snapping while the other half fades.
+/// One hero, one clock — and **every fade is alpha in a brush except the one with
+/// no ink to lose.** `Opacity::need_layer` bails at exactly 1.0, so an `opacity` on
+/// the text half was an offscreen texture for the length of the morph and nothing at
+/// rest. That texture is sized to its children's *geometry*, and a `Text`'s geometry
+/// is its line box rather than its ink: the shipped faces are patched to a 1.05 em
+/// box their outlines reach well past, so an Arabic hero title lost the hamza above
+/// its alifs and the dots under its final yas for the whole 400 ms and got them back
+/// on the frame `hero-t` landed on the literal `1.0`. The artwork tile is the one
+/// half that keeps `opacity` — an image fills its box, so the layer has nothing to
+/// crop. The chip strip could not take one at all, being mounted for the life of the
+/// band. Losing any of them leaves that half of the hero snapping while the rest fades.
 #[test]
 fn the_hero_fades_on_the_morph_at_both_ends() {
     let code = code();
@@ -419,10 +450,42 @@ fn the_hero_fades_on_the_morph_at_both_ends() {
         .filter(|branch| branch.contains("opacity: root.hero-t;"))
         .count();
     assert_eq!(
-        fades, 2,
-        "the artwork tile and the title block fade on `hero-t` itself — it is the morph's only \
+        fades, 1,
+        "the artwork tile is the only half that may fade on `opacity`, because it is the only \
+         one whose ink cannot leave its box. It still rides `hero-t` itself — the morph's only \
          clock, so a second animation would need keeping in step and the reversal would stop \
          being free"
+    );
+
+    // The text half, which used to be the second of those and is the reason the count
+    // above is 1. A layer crops what it composites, so the fade lives in the brushes.
+    let title = hero_branch(&code, "+ root.title;");
+    assert!(
+        !title.is_empty(),
+        "the title is no longer painted inside an `if root.hero-shown:` branch — the pins below \
+         bound against it"
+    );
+    assert!(
+        !title.contains("opacity:"),
+        "the title block must not fade on `opacity`. The layer that buys is sized to child \
+         *geometry*, and a `Text`'s geometry is its line box: every glyph whose ink leaves that \
+         box is cropped for the length of the morph and pops back at the end, which on the \
+         patched faces is every Arabic mark and nothing in Latin — invisible in review, and the \
+         whole of the bug"
+    );
+    assert_eq!(
+        title
+            .matches("color: HeroBackdrop.on-backdrop.with-alpha(root.hero-t);")
+            .count(),
+        2,
+        "the title *and* the subtitle must carry the fade in their own brush. The subtitle is the \
+         block's last child, so it is the edge a layer cut from below — fixing only the title \
+         moves the crop rather than removing it"
+    );
+    assert!(
+        title.contains("icon-color: HeroBackdrop.chrome.with-alpha(root.hero-t);"),
+        "the smart-playlist badge fades with the text beside it — left on a flat brush it is the \
+         one piece of the block that arrives before the morph does"
     );
 
     // The third fade is the back disc's, and it is a *bias* off that same clock rather

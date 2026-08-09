@@ -195,8 +195,8 @@ export component PillDivider inherits Rectangle {
         Rectangle {
             width: 1px;
             height: 18px;
-            background: Theme.surface2;
-            opacity: 0.5;
+            // Alpha in the brush: an `opacity` under 1 costs an offscreen layer.
+            background: Theme.surface2.with-alpha(0.5);
         }
     }
 }
