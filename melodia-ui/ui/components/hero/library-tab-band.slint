@@ -178,6 +178,18 @@ export component LibraryTabBand inherits Rectangle {
     // `.claude/rules/slint-pitfalls.md`.
     property <bool> hero-shown: root.detail-open || root.hero-t > 0;
 
+    // **Is the band's own height still travelling.** The page's body is the stretchy
+    // sibling under this band, so a morph moves that body's `y` by the whole 100 px
+    // between the two floors — which is this page's spatial transition, and the reason a
+    // body mounting into one may not slide on its own. See `slide` on `ViewTransition`.
+    //
+    // Reliable on the mount frame without depending on where `changed detail-open` falls
+    // relative to the repeater that mounts the body: `hero-t` is *written* and never
+    // bound, so until that handler lands it still holds the departing floor's value and
+    // the two disagree either way. **`hero-t > 0` is the wrong spelling** — it is `0` on
+    // a drill-in's first frame, which is the one frame the answer has to be `true`.
+    out property <bool> morphing: root.hero-t != (root.detail-open ? 1.0 : 0.0);
+
     // --- The bar's palette ---------------------------------------------------
     //
     // Four brushes that cross with the pane under them: `Theme.*` tokens on the flat idle

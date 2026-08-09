@@ -1,5 +1,5 @@
 import { MyLibrary } from "../globals/my-library.slint";
-import { Nav } from "../globals/nav.slint";
+import { NavEnterFrom } from "../globals/nav.slint";
 import { AlbumDetail, Albums } from "../globals/albums.slint";
 import { ArtistDetail, Artists } from "../globals/artists.slint";
 import { GenreDetail, Genres } from "../globals/genres.slint";
@@ -98,6 +98,20 @@ export component MyLibraryView inherits Rectangle {
     // the bindings resolve, so it writes the values they just produced and nothing moves.
     init => { root.latch-hero(); }
 
+    // **May a mounting body translate on its own** — see the body router below for what
+    // it costs when it may not. The page's own `ViewTransition` is still in flight on the
+    // frame its first body mounts, and on a cross-section drill that entrance slides
+    // *sideways*, so a body rising into it is the same diagonal one level up.
+    // `tab-anim-armed` answers "a tab has been picked in this page mount", which covers
+    // every arrival except the first drill out of the tab the page opened on — that one
+    // arms here, on the edge that opens it.
+    //
+    // Seeded by the binding and owned by the handler, the band's `hero-t` idiom: the
+    // write orphans the binding, which is harmless because this only ever goes true. It
+    // re-disarms for free, the content-area `if` rebuilding this view on every entry.
+    property <bool> body-anim-armed: band.tab-anim-armed;
+    changed detail-open => { root.body-anim-armed = true; }
+
     changed album-open => {
         if (root.detail-open) { root.latch-hero(); }
     }
@@ -187,17 +201,13 @@ export component MyLibraryView inherits Rectangle {
             tab-labels: [@tr("Songs"), @tr("Albums"), @tr("Artists"), @tr("Genres"), @tr("Playlists")];
             tab-icons: ["music_note", "album", "person", "theater_comedy", "playlist_play"];
             tab-idx <=> MyLibrary.tab-idx;
-            tab-selected(i) => {
-                // **The direction goes through `Nav`, not straight from the band.** The
-                // band has already settled `tab-enter-from` by the time this fires, but
-                // binding the bodies to it would leave the *other* two ways a body
-                // mounts — a drill in, a back out — sliding whichever way the last tab
-                // pick went. `Nav.pending-enter-from` is what `nav_transition::mark`
-                // writes for those, so routing the pick through it keeps one source of
-                // truth for all nine branches.
-                Nav.pending-enter-from = band.tab-enter-from;
-                MyLibrary.tab-changed(i);
-            }
+            // **No `Nav.pending-enter-from` write here, and none of the nine branches
+            // reads one.** A tab pick used to publish the bar's direction so a body would
+            // slide the way the bar moved; on this page that slide is exactly what makes
+            // the entry diagonal, since the band's morph is already moving the body
+            // vertically. The bodies take a fixed `below` now, so the write would only
+            // leave a stale `right`/`left` for whichever *page* mounts next.
+            tab-selected(i) => { MyLibrary.tab-changed(i); }
 
             filter <=> MyLibrary.filter;
             blur-tick: MyLibrary.blur-search-tick;
@@ -333,14 +343,32 @@ export component MyLibraryView inherits Rectangle {
             vertical-stretch: 1;
             clip: true;
 
-            // **A tab body slides, a detail body doesn't gate.** `tab-anim-armed` starts
-            // false and only a bar pick arms it, so the page's own fade-up isn't
-            // compounded with a horizontal slide — the two together read as a diagonal.
+            // **All nine take the same three lines, and the reason is that this page has
+            // a second animation nothing else does: the band's own height.** The band is
+            // the non-stretching sibling above this body, so a morph between the compact
+            // floor and the hero one moves `body.y` by the whole 100 px between them, on
+            // every frame — and the list or grid inside is anchored to that. A body
+            // sliding 32 px sideways at the same time gave the reported diagonal: 32 px
+            // left plus 100 px down on a back out, 32 px right plus 100 px up on a drill
+            // in, and both at once on a tab pick that closes a banner.
+            //
+            // So the page keeps one axis. `below` is the sidebar's own fade-up, which is
+            // what a tab pick with nothing morphing gets; `slide: !band.morphing` drops
+            // even that whenever the band is already doing the moving, leaving a pure
+            // cross-fade over the morph (Material 3's answer for content inside a
+            // container transform). Same-axis is deliberately not enough — the morph's
+            // entry curve is slow off the mark where `ViewTransition`'s is not, so a rise
+            // on top of the push sends the body up before it comes down.
+            //
+            // `body-anim-armed` is the third: it holds the body still while the *page*'s
+            // own entrance is in flight, which is the composition that gate was already
+            // there for.
             if MyLibrary.tab-idx == MyLibrary.tab-songs: ViewTransition {
                 width: parent.width;
                 height: parent.height;
-                enter-from: Nav.pending-enter-from;
-                enabled: band.tab-anim-armed;
+                enter-from: NavEnterFrom.below;
+                enabled: root.body-anim-armed;
+                slide: !band.morphing;
                 MyLibrarySongsTab { width: 100%; height: 100%; }
             }
             // Each grid tab swaps grid ↔ detail on the predicate above, -1 being the
@@ -349,8 +377,9 @@ export component MyLibraryView inherits Rectangle {
             if MyLibrary.tab-idx == MyLibrary.tab-albums && !root.album-open: ViewTransition {
                 width: parent.width;
                 height: parent.height;
-                enter-from: Nav.pending-enter-from;
-                enabled: band.tab-anim-armed;
+                enter-from: NavEnterFrom.below;
+                enabled: root.body-anim-armed;
+                slide: !band.morphing;
                 MyLibraryAlbumsTab {
                     width: 100%;
                     height: 100%;
@@ -363,14 +392,17 @@ export component MyLibraryView inherits Rectangle {
             if root.album-open: ViewTransition {
                 width: parent.width;
                 height: parent.height;
-                enter-from: Nav.pending-enter-from;
+                enter-from: NavEnterFrom.below;
+                enabled: root.body-anim-armed;
+                slide: !band.morphing;
                 AlbumDetailBody { width: 100%; height: 100%; }
             }
             if MyLibrary.tab-idx == MyLibrary.tab-artists && !root.artist-open: ViewTransition {
                 width: parent.width;
                 height: parent.height;
-                enter-from: Nav.pending-enter-from;
-                enabled: band.tab-anim-armed;
+                enter-from: NavEnterFrom.below;
+                enabled: root.body-anim-armed;
+                slide: !band.morphing;
                 MyLibraryArtistsTab {
                     width: 100%;
                     height: 100%;
@@ -383,14 +415,17 @@ export component MyLibraryView inherits Rectangle {
             if root.artist-open: ViewTransition {
                 width: parent.width;
                 height: parent.height;
-                enter-from: Nav.pending-enter-from;
+                enter-from: NavEnterFrom.below;
+                enabled: root.body-anim-armed;
+                slide: !band.morphing;
                 ArtistDetailBody { width: 100%; height: 100%; }
             }
             if MyLibrary.tab-idx == MyLibrary.tab-genres && !root.genre-open: ViewTransition {
                 width: parent.width;
                 height: parent.height;
-                enter-from: Nav.pending-enter-from;
-                enabled: band.tab-anim-armed;
+                enter-from: NavEnterFrom.below;
+                enabled: root.body-anim-armed;
+                slide: !band.morphing;
                 MyLibraryGenresTab {
                     width: 100%;
                     height: 100%;
@@ -403,14 +438,17 @@ export component MyLibraryView inherits Rectangle {
             if root.genre-open: ViewTransition {
                 width: parent.width;
                 height: parent.height;
-                enter-from: Nav.pending-enter-from;
+                enter-from: NavEnterFrom.below;
+                enabled: root.body-anim-armed;
+                slide: !band.morphing;
                 GenreDetailBody { width: 100%; height: 100%; }
             }
             if MyLibrary.tab-idx == MyLibrary.tab-playlists && !root.playlist-open: ViewTransition {
                 width: parent.width;
                 height: parent.height;
-                enter-from: Nav.pending-enter-from;
-                enabled: band.tab-anim-armed;
+                enter-from: NavEnterFrom.below;
+                enabled: root.body-anim-armed;
+                slide: !band.morphing;
                 MyLibraryPlaylistsTab {
                     width: 100%;
                     height: 100%;
@@ -423,7 +461,9 @@ export component MyLibraryView inherits Rectangle {
             if root.playlist-open: ViewTransition {
                 width: parent.width;
                 height: parent.height;
-                enter-from: Nav.pending-enter-from;
+                enter-from: NavEnterFrom.below;
+                enabled: root.body-anim-armed;
+                slide: !band.morphing;
                 PlaylistDetailBody { width: 100%; height: 100%; }
             }
         }

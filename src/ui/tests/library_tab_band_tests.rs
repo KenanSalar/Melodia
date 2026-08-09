@@ -409,6 +409,42 @@ fn the_morph_progress_is_seeded_by_its_binding_and_written_by_its_handler() {
     );
 }
 
+/// **The band publishes whether its height is still travelling, and it has to answer
+/// `true` on the frame the morph starts.**
+///
+/// The page's body is the stretchy sibling under this band, so a morph moves that
+/// body's `y` by the whole distance between the two floors — which is why a body
+/// mounting into one must not slide on its own, and why the sheet reads this to say
+/// so (`slide: !band.morphing`). The tempting spelling is `hero-t > 0`, which
+/// compiles, reads plausibly, and is **false** on exactly the frame that matters: a
+/// drill-in starts at `hero-t == 0`, so the body would take its 32 px rise and the
+/// diagonal is back — reversed into a bounce, since the two curves disagree about
+/// where the travel goes.
+///
+/// Comparing against the target is also what keeps the answer independent of where
+/// `changed detail-open` falls relative to the repeater that mounts the body:
+/// `hero-t` is written and never bound, so until the handler lands it still holds the
+/// departing floor's value and the two disagree either way.
+#[test]
+fn the_band_publishes_whether_its_height_is_still_moving() {
+    let morphing = binding(&code(), "out property <bool> morphing");
+    assert!(
+        !morphing.is_empty(),
+        "`LibraryTabBand` must publish `morphing` — the mount sheet has no other way to ask \
+         whether the band is already translating the body it is about to mount"
+    );
+    assert!(
+        morphing.contains("hero-t") && morphing.contains("detail-open"),
+        "`morphing` must compare `hero-t` against the floor `detail-open` names, so it is true \
+         from the frame the morph starts; got {morphing:?}"
+    );
+    assert!(
+        !morphing.contains('>') && !morphing.contains('<'),
+        "`morphing` must not be a threshold on `hero-t` — `hero-t > 0` is false on a drill-in's \
+         first frame, which is the one frame the body must be told to hold still; got {morphing:?}"
+    );
+}
+
 /// **The column that mounts `HeroChipStrip` carries no `if`, and every other piece
 /// of the hero mounts on `detail-open || hero-t > 0`.** Two failures meet here, and
 /// the pin has to hold both.

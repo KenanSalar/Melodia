@@ -904,3 +904,95 @@ fn only_a_tab_pick_records_a_history_entry() {
          a moment later, and a history walk would push the entry it just walked to",
     );
 }
+
+/// **Every body on this page enters on one axis, and the axis is vertical.**
+///
+/// This page has a second animation no other has: the band's own height. The band is
+/// the non-stretching sibling above the body, so a morph between the compact floor
+/// and the hero one moves `body.y` by the whole distance between them, on every
+/// frame, and the list or grid inside is anchored to that. A body that also slid
+/// sideways gave the diagonal this pin exists to keep out — 32 px left plus the
+/// band's push down on a back out, 32 px right plus its pull up on a drill in, and
+/// both at once on a tab pick that closes a banner.
+///
+/// So all nine branches take the same three lines. `below` is the sidebar's own
+/// fade-up; `slide: !band.morphing` drops even that whenever the band is already
+/// doing the moving, leaving a cross-fade over the morph. Same-axis is deliberately
+/// not enough: the morph's entry curve is slow off the mark where `ViewTransition`'s
+/// is not, so a rise on top of the push sends the body up before it comes down.
+///
+/// Walking the branches rather than listing them is the point — a tenth added later
+/// with `enter-from: Nav.pending-enter-from` copied off a sibling page compiles,
+/// looks right in review, and is the bug.
+#[test]
+fn every_body_branch_enters_on_the_bands_own_axis() {
+    let view = code(VIEW);
+
+    // The condition trails the *previous* chunk, so each branch is paired with the
+    // `if …` that mounts it — a failure that can't name the branch is a failure you
+    // have to go and find.
+    let chunks: Vec<&str> = view.split(": ViewTransition {").collect();
+    let branches: Vec<(&str, &str)> = chunks
+        .windows(2)
+        .map(|pair| {
+            let condition = pair[0].lines().next_back().unwrap_or_default().trim();
+            // The branch's own closing brace: its contents are indented one level
+            // deeper, so this is the first line that can end it.
+            let body =
+                pair[1].split_once("\n            }").map_or(pair[1], |(body, _)| body);
+            (condition, body)
+        })
+        .collect();
+    assert_eq!(
+        branches.len(),
+        9,
+        "my-library-view.slint must wrap all nine bodies — five tabs and four details — in a \
+         `ViewTransition`; one mounted bare appears with no fade at all"
+    );
+
+    for (head, branch) in &branches {
+        for line in [
+            "enter-from: NavEnterFrom.below;",
+            "enabled: root.body-anim-armed;",
+            "slide: !band.morphing;",
+        ] {
+            assert!(
+                branch.contains(line),
+                "the branch mounting `{head}` must carry `{line}` — the three together are what \
+                 keep this page's entry on one axis; any one of them missing puts a slide back \
+                 on top of the band's morph"
+            );
+        }
+    }
+
+    assert!(
+        !view.contains("Nav.pending-enter-from"),
+        "nothing on this page may read or write `Nav.pending-enter-from` — the bodies take a \
+         fixed `below`, so a write here would only leave a stale `right`/`left` for whichever \
+         *page* mounts next, and a read is the horizontal slide coming back"
+    );
+}
+
+/// **`ViewTransition.slide` must gate both axes.** Gating one is the half-fix that
+/// still goes diagonal, and it is the natural shape of a hurried edit — the offset
+/// this page needed suppressed was the horizontal one, so `x` is the line a fix
+/// reaches for first and `y` the one it forgets.
+#[test]
+fn the_fade_only_mode_suppresses_both_offsets() {
+    const TRANSITION: &str =
+        include_str!("../../../../melodia-ui/ui/components/view-transition.slint");
+
+    let transition = code(TRANSITION);
+    assert!(
+        transition.contains("in property <bool> slide: true;"),
+        "`ViewTransition` must default `slide` to true — the ten mounts that own their own \
+         translation say nothing, and only a body under a morphing container opts out"
+    );
+    for axis in ['x', 'y'] {
+        assert!(
+            transition.contains(&format!("{axis}: settled || !root.slide ? 0px :")),
+            "`ViewTransition`'s `{axis}` must be gated on `slide` — an offset left ungated is \
+             still a translation, and it composes with the container that is already moving it"
+        );
+    }
+}
