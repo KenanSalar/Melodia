@@ -64,9 +64,14 @@ pub mod window_chrome;
 
 // Source pins for shared components with no Rust module of their own — the
 // three faked-placeholder inputs and the tooltip pill, the two pinned bands (the one
-// both mosaic pages wear and My Library's own), and the header row all three of those
-// plus the Settings page share. `scrollbar_tests` is the odd one out: it pins a
-// *convention* across the whole tree rather than one component's contract.
+// both mosaic pages wear and My Library's own), the blur stack under both of them, and
+// the header row all three of those plus the Settings page share. `scrollbar_tests` is
+// the odd one out: it pins a *convention* across the whole tree rather than one
+// component's contract — as does `hero_blur_backdrop_tests`' second half, which reaches
+// the Now Playing view because that stack is the same three layers written twice.
+#[cfg(test)]
+#[path = "tests/hero_blur_backdrop_tests.rs"]
+mod hero_blur_backdrop_tests;
 #[cfg(test)]
 #[path = "tests/library_tab_band_tests.rs"]
 mod library_tab_band_tests;

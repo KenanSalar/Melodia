@@ -481,9 +481,7 @@ fn the_cell_eases_floats_and_never_a_brush() {
         );
     }
 
-    for (float, source) in
-        [("hover-t", "touch.has-hover"), ("sel-t", "root.selected")]
-    {
+    for (float, source) in [("hover-t", "touch.has-hover"), ("sel-t", "root.selected")] {
         assert!(
             cell.contains(&format!("property <float> {float}: {source}")),
             "`TabBarCell` must derive `{float}` from `{source}` — the fade has to ride a value \

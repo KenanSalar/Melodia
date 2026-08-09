@@ -91,7 +91,9 @@ export component MosaicTabHero inherits Rectangle {
     // --- The bar's palette --------------------------------------------------
     //
     // The four brushes the header row paints with, mirrored so a late solve *moves*
-    // rather than steps. `LibraryTabBand`'s argument, and it applies harder here: this
+    // rather than steps. `hero-label` has a fifth reader — the band's own title, which
+    // paints the same tier and would otherwise step while the labels beside it eased.
+    // `LibraryTabBand`'s argument, and it applies harder here: this
     // page's solve rides the *mosaic*, and `apply_hero_blur` posts an
     // `invoke_from_event_loop` of its own after the atlas compose — so the title, the
     // tile and the chips are already on screen by the time the colours land, where a
@@ -207,7 +209,12 @@ export component MosaicTabHero inherits Rectangle {
                     vertical-stretch: 0;
                     // Leading LRM keeps the title left-anchored under RTL.
                     text: "\u{200e}" + root.title;
-                    color: HeroBackdrop.on-backdrop;
+                    // `hero-label`, not the tier it mirrors — the same expression, and
+                    // taking it raw is what would leave the title snapping to the new
+                    // solve while the idle tab labels beside it took `dur-med` to reach
+                    // the identical colour. They are one text tier and have to move
+                    // together.
+                    color: root.hero-label;
                     font-size: Theme.hero-title-size;
                     font-weight: Theme.page-title-weight;
                     horizontal-alignment: left;
