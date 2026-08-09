@@ -35,10 +35,11 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, albums_ui: &Arc<AlbumsUi>) 
             let g = ui.global::<AlbumDetail>();
 
             // View-transition direction: `Left` = returning from a detail.
-            // Set before any property write that flips the `if` branch —
-            // for cross-tab origin restores that's the `selected-index`
-            // write below; for same-tab back it's the `album-id = -1`
-            // write a few lines down. One up-front set covers both.
+            // It answers for the **cross-section** close alone — the
+            // `selected-index` write below, which mounts a page. A same-page
+            // back mounts a body, and those take a fixed `below` and hold
+            // still while the band collapses (see `ui::nav_transition`), so
+            // there is nothing here for the `album-id = -1` write to sample.
             crate::ui::nav_transition::mark_drill_back(&ui);
 
             // If another *section* opened this detail (Favorites, Search, …),

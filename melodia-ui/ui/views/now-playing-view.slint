@@ -1,6 +1,6 @@
 import { Theme } from "../theme.slint";
 import { Visualizer } from "../globals/audio.slint";
-import { Nav } from "../globals/nav.slint";
+import { Nav, NavEnterFrom } from "../globals/nav.slint";
 import { Player } from "../globals/player.slint";
 import { IconButton } from "../components/icon-button.slint";
 import { AccentDiscButton } from "../components/now-playing/accent-disc-button.slint";
@@ -142,7 +142,12 @@ export component NowPlayingView inherits Rectangle {
                 alignment: center;
                 AccentDiscButton {
                     icon: "arrow_back";
-                    clicked => { Nav.now-playing-open = false; }
+                    // Lateral: the view underneath remounts and samples this. See the
+                    // bar's own track-info card, which is the other half of the toggle.
+                    clicked => {
+                        Nav.pending-enter-from = NavEnterFrom.below;
+                        Nav.now-playing-open = false;
+                    }
                 }
             }
 

@@ -98,17 +98,23 @@ export component MyLibraryView inherits Rectangle {
     // the bindings resolve, so it writes the values they just produced and nothing moves.
     init => { root.latch-hero(); }
 
-    // **May a mounting body translate on its own** — see the body router below for what
-    // it costs when it may not. The page's own `ViewTransition` is still in flight on the
+    // **May a mounting body animate at all** — see the body router below for what it
+    // costs when it may not. The page's own `ViewTransition` is still in flight on the
     // frame its first body mounts, and on a cross-section drill that entrance slides
     // *sideways*, so a body rising into it is the same diagonal one level up.
-    // `tab-anim-armed` answers "a tab has been picked in this page mount", which covers
-    // every arrival except the first drill out of the tab the page opened on — that one
-    // arms here, on the edge that opens it.
     //
-    // Seeded by the binding and owned by the handler, the band's `hero-t` idiom: the
+    // `tab-anim-armed` answers "a tab has been picked in this page mount", which is every
+    // arrival that came through the bar. The two that don't are armed by hand: the first
+    // drill out of the tab the page opened on, on the edge that opens it, and a tab move
+    // that isn't a pick — a cross-tab drill or a Mouse-4/5 walk — on the mirror below,
+    // which `detail-open` cannot cover because `cross_tab_nav`'s hook writes the new
+    // detail id and moves the tab in **one** tick and the transition never happens.
+    //
+    // Seeded by the binding and owned by the handlers, the band's `hero-t` idiom: the
     // write orphans the binding, which is harmless because this only ever goes true. It
-    // re-disarms for free, the content-area `if` rebuilding this view on every entry.
+    // re-disarms for free, the content-area `if` rebuilding this view on every entry —
+    // and neither handler can fire on that entry, `changed` not running on a first
+    // evaluation, so the page's own entrance still owns the first frame.
     property <bool> body-anim-armed: band.tab-anim-armed;
     changed detail-open => { root.body-anim-armed = true; }
 
@@ -146,8 +152,15 @@ export component MyLibraryView inherits Rectangle {
     // its own. Without a reseat here, walking back into a tab you had filtered re-fetches it
     // through that untouched needle under an empty box. A pick is unaffected: it clears both
     // sides before the change-tracker pass runs, so `sync_box` finds them equal and bails.
+    //
+    // It arms the body fade for the same two arrivals, and for the same reason the reseat
+    // is owed to them: a pick has armed it already through the band, where a drill or a
+    // walk reaches this page with nothing else to fire on.
     property <int> watched-tab-idx: MyLibrary.tab-idx;
-    changed watched-tab-idx => { MyLibrary.detail-scope-changed(); }
+    changed watched-tab-idx => {
+        root.body-anim-armed = true;
+        MyLibrary.detail-scope-changed();
+    }
 
     // A click anywhere the band or a body doesn't claim gives the filter box up.
     TouchArea {
@@ -356,9 +369,13 @@ export component MyLibraryView inherits Rectangle {
             // what a tab pick with nothing morphing gets; `slide: !band.morphing` drops
             // even that whenever the band is already doing the moving, leaving a pure
             // cross-fade over the morph (Material 3's answer for content inside a
-            // container transform). Same-axis is deliberately not enough — the morph's
-            // entry curve is slow off the mark where `ViewTransition`'s is not, so a rise
-            // on top of the push sends the body up before it comes down.
+            // container transform). Same-axis is deliberately not enough either: 32 px of
+            // the body's own travel on top of the 100 px the morph is already spending is
+            // simply a longer move, and the two curves don't agree about it — the entry
+            // one is slow off the mark where `ViewTransition`'s is not, so the sum runs
+            // about 4 px the *wrong* way over the first 60 ms before it turns. Small
+            // enough that the redundancy is the better argument, large enough not to
+            // call it a rounding error.
             //
             // `body-anim-armed` is the third: it holds the body still while the *page*'s
             // own entrance is in flight, which is the composition that gate was already

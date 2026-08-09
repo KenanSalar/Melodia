@@ -1,6 +1,5 @@
 import { Theme } from "../../theme.slint";
 import { HeroBackdrop } from "../../globals/hero-backdrop.slint";
-import { NavEnterFrom } from "../../globals/nav.slint";
 import { ArtworkImage } from "../artwork-image.slint";
 import { HeroBlurBackdrop } from "../hero-blur-backdrop.slint";
 import { HeroChipStrip } from "../hero-chip-strip.slint";
@@ -332,7 +331,13 @@ export component LibraryTabBand inherits Rectangle {
     // Re-published under the names `my-library-view.slint` already reads, so the
     // extraction is invisible to it. What each one is for is argued in
     // `tab-search-header.slint`.
-    out property <NavEnterFrom> tab-enter-from <=> header.tab-enter-from;
+    //
+    // **`tab-enter-from` is deliberately not among them**, where `MosaicTabHero`
+    // forwards it: this page's bodies take a fixed `below` and suppress even that
+    // whenever `morphing` says the band is already moving them, so the bar's
+    // left/right answer has no consumer here. Re-publishing it would leave an
+    // output whose only use is to be bound by the next branch someone copies off
+    // a sibling page — which is the bug this band was fixed for.
     out property <bool> tab-anim-armed <=> header.tab-anim-armed;
 
     out property <length> tip-x:

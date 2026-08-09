@@ -317,23 +317,33 @@ fn no_hero_tier_outlives_the_banner_it_was_solved_for() {
     );
 }
 
-/// The band forwards everything the shared header publishes, under the names its
-/// mount sheet already reads.
+/// The band forwards everything the shared header publishes **that this page
+/// consumes**, under the names its mount sheet already reads.
 ///
 /// The row itself is pinned by `tab_search_header_tests`; what only this file can
 /// check is that the forwards exist, because a band that mounts the header and
-/// drops them compiles, paints correctly, and silently loses the tab slide's
-/// direction and every compact tooltip. Two-way aliases rather than one-way
-/// bindings, so nothing here can be orphaned by a write.
+/// drops them compiles, paints correctly, and silently loses the body fade's arming
+/// and every compact tooltip. Two-way aliases rather than one-way bindings, so
+/// nothing here can be orphaned by a write.
+///
+/// **`tab-enter-from` is absent on purpose**, where `mosaic_tab_hero_tests`' twin
+/// asks for it: this page's nine bodies take a fixed `below` and drop even that
+/// while `morphing` holds, so the bar's left/right answer has no consumer — and an
+/// unread output is what the next branch copied off a sibling page would bind to.
 #[test]
 fn the_band_forwards_what_the_shared_row_publishes() {
-    for prop in ["tab-enter-from", "tab-anim-armed", "tip-w", "tip-h", "tip-label", "tip-visible"]
-    {
+    for prop in ["tab-anim-armed", "tip-w", "tip-h", "tip-label", "tip-visible"] {
         assert!(
             BAND.contains(&format!("{prop} <=> header.{prop};")),
             "the band must re-publish `{prop}` off the shared header — its sheet reads that name"
         );
     }
+    assert!(
+        !BAND.contains("tab-enter-from <=> header.tab-enter-from;"),
+        "the band must not re-publish `tab-enter-from` — nothing on this page can consume a \
+         lateral direction, and an output with no reader is exactly what a tenth body branch \
+         would bind to instead of the fixed `below` every other one takes"
+    );
     // The two positional anchors can't be plain aliases: they are relative to the
     // header, and the sheet's frame is relative to the band.
     for prop in ["tip-x", "tip-y"] {

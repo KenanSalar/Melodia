@@ -1,5 +1,5 @@
 import { Theme } from "../theme.slint";
-import { Nav } from "../globals/nav.slint";
+import { Nav, NavEnterFrom } from "../globals/nav.slint";
 import { Player } from "../globals/player.slint";
 import { Queue } from "../globals/queue.slint";
 import { WindowChrome } from "../globals/shell.slint";
@@ -195,7 +195,15 @@ export component NowPlayingBar inherits Rectangle {
             track-info-touch := TouchArea {
                 mouse-cursor: Player.vm.has_track ? pointer : default;
                 enabled: Player.vm.has_track;
-                clicked => { Nav.now-playing-open = !Nav.now-playing-open; }
+                // The edge is owed on the *close* half of this toggle: the view under
+                // Now Playing is a fresh `ViewTransition` mount, and left unwritten it
+                // enters from whatever the last drill or back put there. Set
+                // unconditionally, since opening reads nothing — that branch hard-codes
+                // `below`.
+                clicked => {
+                    Nav.pending-enter-from = NavEnterFrom.below;
+                    Nav.now-playing-open = !Nav.now-playing-open;
+                }
             }
         }
 

@@ -27,9 +27,11 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
             let Some(ui) = weak.upgrade() else { return };
             let g = ui.global::<PlaylistDetail>();
 
-            // View-transition direction: `Left` = returning from a detail.
-            // Set before the `playlist-id` write that flips the `if` branch.
-            crate::ui::nav_transition::mark_drill_back(&ui);
+            // No `mark_drill_back` here, where its three siblings have one:
+            // theirs precedes a `return_to_section` that flips the nav index,
+            // and this detail records no origin at all. The body that mounts
+            // in its place takes a fixed `below` and reads the global not at
+            // all — see `ui::nav_transition`.
             g.set_playlist_id(-1);
             // The hero Images are *not* dropped here. This id is what the band's
             // whole hero half is a ternary over, so releasing on the same tick

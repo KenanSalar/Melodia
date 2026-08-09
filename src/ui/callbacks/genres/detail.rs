@@ -40,10 +40,9 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, genres_ui: &Arc<GenresUi>) 
             let Some(ui) = weak.upgrade() else { return };
             let g = ui.global::<GenreDetail>();
             // View-transition direction: `Left` = returning from a detail.
-            // Set before any property write that flips the `if` branch
-            // — for cross-tab origin restores that's the `selected-index`
-            // write below; for same-tab back it's the `genre-id = -1`
-            // write a few lines down. One up-front set covers both.
+            // The cross-section close alone samples it — the `selected-index`
+            // write below. See `albums/detail.rs`'s note for why the same-page
+            // back reads nothing.
             crate::ui::nav_transition::mark_drill_back(&ui);
 
             // If another *section* opened this detail, return to it in the same

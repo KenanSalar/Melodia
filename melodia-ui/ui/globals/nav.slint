@@ -1,6 +1,11 @@
 // Which edge the next `ViewTransition` mount slides in from: lateral sidebar nav fades
 // up from `below`, drilling into a detail comes from the `right`, the back button from
-// the `left`.
+// the `left`. **The mount it steers is a *page*** — one of the content-panel branches in
+// `app-window.slint` — and no sub-page mount reads it. There are fourteen of those: the
+// two curated pages wrap their five tab bodies and take `hero.tab-enter-from`, so a tab
+// pick slides along the bar, and My Library's nine take a fixed `below` and hold still
+// entirely while the band morphs their `y` (`ViewTransition.slide`). So a drill or a back
+// that doesn't move `Nav.selected-index` steers nothing.
 export enum NavEnterFrom { below, right, left }
 
 // Which content view the shell shows. Rust persists the index and drives cross-tab

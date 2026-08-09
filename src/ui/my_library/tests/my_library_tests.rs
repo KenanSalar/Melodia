@@ -378,11 +378,17 @@ fn a_drill_a_back_or_a_tab_move_reseats_the_shared_box() {
             "my-library-view.slint must mirror `{id}` as `{mirror}` — `changed` can't watch a \
              global's property directly, and an unmirrored id reseats nothing",
         );
+        // Bounded at the handler's own closing brace rather than matched whole:
+        // `watched-tab-idx` carries a second statement (it arms the body fade too,
+        // see `every_arrival_that_is_not_the_pages_own_entrance_arms_the_body_fade`),
+        // and a pin spelling one body out is a pin that fails on the next one added.
+        let handler = view
+            .split_once(&format!("changed {mirror} => {{"))
+            .and_then(|(_, rest)| rest.split_once('}'))
+            .map_or("", |(body, _)| body);
         assert!(
-            view.contains(&format!(
-                "changed {mirror} => {{ MyLibrary.detail-scope-changed(); }}"
-            )),
-            "`{mirror}` must fire `detail-scope-changed`",
+            handler.contains("MyLibrary.detail-scope-changed();"),
+            "`{mirror}` must fire `detail-scope-changed`; got {handler:?}",
         );
     }
 
@@ -993,6 +999,42 @@ fn the_fade_only_mode_suppresses_both_offsets() {
             transition.contains(&format!("{axis}: settled || !root.slide ? 0px :")),
             "`ViewTransition`'s `{axis}` must be gated on `slide` — an offset left ungated is \
              still a translation, and it composes with the container that is already moving it"
+        );
+    }
+}
+
+/// **The gate the nine branches read has to be armed by every arrival that isn't
+/// the page's own entrance**, and the pin above can't see that: it reads
+/// `enabled: root.body-anim-armed;` on all nine and stays green while the property
+/// is seeded `false` and never written, which silently retires the fade on the two
+/// arrivals the band's own `tab-anim-armed` doesn't cover.
+///
+/// The seed is one of them and the two handlers are the others. `changed detail-open`
+/// arms the first drill out of the tab the page opened on; the `watched-tab-idx`
+/// mirror arms a tab move that isn't a pick, which `detail-open` cannot — a cross-tab
+/// drill writes the new detail id and moves the tab in one tick, so that property
+/// never transitions. Neither can fire on the page's own mount, `changed` not running
+/// on a first evaluation, which is what leaves the entrance uncompounded.
+#[test]
+fn every_arrival_that_is_not_the_pages_own_entrance_arms_the_body_fade() {
+    let view = code(VIEW);
+
+    assert!(
+        view.contains("property <bool> body-anim-armed: band.tab-anim-armed;"),
+        "`body-anim-armed` must be *seeded* off the band's `tab-anim-armed` — a constant `false` \
+         plus a mount `Timer` races `ViewTransition`'s own, and a constant `true` compounds the \
+         body's rise with the page entrance still in flight"
+    );
+
+    for handler in ["changed detail-open =>", "changed watched-tab-idx =>"] {
+        let body = view
+            .split_once(handler)
+            .and_then(|(_, rest)| rest.split_once('}'))
+            .map_or("", |(body, _)| body);
+        assert!(
+            body.contains("root.body-anim-armed = true;"),
+            "`{handler}` must arm `body-anim-armed` — without it the arrival it watches mounts \
+             its body with the fade disabled, which is a body that simply appears; got {body:?}"
         );
     }
 }

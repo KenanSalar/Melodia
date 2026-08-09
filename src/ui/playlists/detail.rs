@@ -143,9 +143,10 @@ pub async fn open_playlist(
         playlists_ui.detail.filter.lock().clear();
         g.set_sort_field(SharedString::from(sort_field.as_str()));
         g.set_sort_dir(SharedString::from(sort_dir.as_str()));
-        // View-transition direction. Caller-supplied: drill-ins pass
-        // `Right`, the first-launch seed passes `Below`. Set before the
-        // `playlist-id` write that flips the `if` branch.
+        // The page's enter direction, kept for symmetry with the other three
+        // `open_*`. Nothing samples it here today: `PlaylistDetailBody` reads a
+        // fixed `below`, and no cross-section drill lands on this detail, so
+        // there is no `Nav.selected-index` flip in this tick to precede.
         crate::ui::nav_transition::mark(&ui, enter_from);
         g.set_playlist_id(clamp_i64_to_i32(playlist_id));
         // Fresh open: no filter, so the displayed cache equals the

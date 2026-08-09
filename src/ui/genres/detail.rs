@@ -160,9 +160,9 @@ where
         genres_ui.detail.filter.lock().clear();
         g.set_sort_field(SharedString::from(sort_field.as_str()));
         g.set_sort_dir(SharedString::from(sort_dir.as_str()));
-        // View-transition direction. Caller-supplied: drill-ins pass
-        // `Right`, the first-launch seed passes `Below`. Set before the
-        // `genre-id` write that flips the `if` branch.
+        // The page's enter direction, set before the `on_applied` hook can
+        // flip `Nav.selected-index`. Inert on a same-page drill, whose body
+        // reads a fixed `below` — see `ui::nav_transition`.
         crate::ui::nav_transition::mark(&ui, enter_from);
         g.set_genre_id(clamp_i64_to_i32(genre_id));
         // Run after `genre-id` is set so the hook's own global writes land in

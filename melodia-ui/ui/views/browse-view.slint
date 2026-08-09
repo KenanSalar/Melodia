@@ -1,6 +1,6 @@
 import { ListView, ScrollView } from "std-widgets.slint";
 import { Theme } from "../theme.slint";
-import { Nav } from "../globals/nav.slint";
+import { Nav, NavEnterFrom } from "../globals/nav.slint";
 import { Player } from "../globals/player.slint";
 import { CompositeScroll } from "../globals/shell.slint";
 import { Browse } from "../globals/tracks.slint";
@@ -304,8 +304,11 @@ export component BrowseView inherits Rectangle {
                 body: @tr("Open Settings to add a folder");
                 action-icon: "settings";
                 action-label: @tr("Open Settings");
-                // Persisted like every other nav entry, so the tab sticks.
+                // Persisted like every other nav entry, so the tab sticks, and
+                // marked like one too — lateral nav fades up from `below`, and
+                // an unwritten edge is whatever the last drill left behind.
                 action-clicked => {
+                    Nav.pending-enter-from = NavEnterFrom.below;
                     Nav.selected-index = 9;
                     Nav.persist-selected-index(9);
                 }

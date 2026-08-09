@@ -84,11 +84,12 @@ pub async fn open_album(
 /// Slint paints `AlbumDetailBody` directly with no Albums-grid frame in
 /// between.
 ///
-/// `enter_from` chooses the `ViewTransition` enter direction for the new
-/// `AlbumDetailBody` mount; pass [`NavEnterFrom::Right`] for any user
-/// drill-in (same-tab or cross-tab), and [`NavEnterFrom::Below`] for the
-/// first-launch seed path so reopening a saved detail feels like a normal
-/// app start.
+/// `enter_from` chooses the enter direction for the **page** mount a
+/// cross-section drill produces — the `AlbumDetailBody` itself takes a fixed
+/// `below` and holds still while the band morphs, so this reaches nothing
+/// when `Nav.selected-index` doesn't move in the same tick. Pass
+/// [`NavEnterFrom::Right`] for any user drill-in and [`NavEnterFrom::Below`]
+/// for the first-launch seed path.
 pub async fn open_album_with<F>(
     state: &AppState,
     albums_ui: &Arc<AlbumsUi>,
@@ -155,12 +156,10 @@ where
         albums_ui.detail.filter.lock().clear();
         g.set_sort_field(SharedString::from(sort_field.as_str()));
         g.set_sort_dir(SharedString::from(sort_dir.as_str()));
-        // Set the view-transition direction before the property writes
-        // that flip the `if` branch. Caller-supplied so the seed path
-        // can pass `Below` (normal app-start fade) instead of `Right`
-        // (drill-in slide). Same UI-thread tick as the `album-id` flip
-        // and any `on_applied` Nav write, so the new `ViewTransition`
-        // samples the right direction on first paint.
+        // Set the page's enter direction before the `on_applied` hook can
+        // flip `Nav.selected-index`, so a cross-section drill's new page
+        // samples it on first paint. Inert on a same-page drill, whose
+        // body reads a fixed `below` — see `ui::nav_transition`.
         crate::ui::nav_transition::mark(&ui, enter_from);
         g.set_album_id(clamp_i64_to_i32(album_id));
         // Fresh open: no filter, so the displayed cache equals the
