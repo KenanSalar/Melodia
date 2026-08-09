@@ -13,17 +13,18 @@
 //! action label — and does nothing when clicked, falling off the end of a
 //! dispatcher with no `else`. Pinned by `the_toast_kind_matches_its_dispatcher_branch`.
 
+use std::path::PathBuf;
 use std::rc::Rc;
 
 use async_compat::Compat;
 use chrono::Local;
-use slint::{ComponentHandle, SharedString};
+use slint::{ComponentHandle, SharedString, Weak};
 
-use crate::error::AppError;
+use crate::error::{AppError, AppResult};
 use crate::services;
 use crate::state::AppState;
-use crate::ui::launcher;
 use crate::ui::notifications::{NotificationParams, NotificationsUi, TOAST_AUTO_DISMISS_MS};
+use crate::ui::{file_dialog, launcher};
 use crate::{AppWindow, Settings};
 
 /// Routing key shared with the `Notifications.action` dispatcher.
@@ -32,85 +33,87 @@ const CRASH_TOAST_KIND: &str = "crash-report";
 pub fn install(ui: &AppWindow, state: &AppState, notifications: &Rc<NotificationsUi>) {
     let settings = ui.global::<Settings>();
 
-    // ---- Open the folder holding the logs and any crash reports ----
-    {
-        let runtime = state.runtime.clone();
-        let logs_dir = state.paths.logs_dir.clone();
-        settings.on_open_log_folder(move || {
-            runtime.spawn(launcher::open_target(logs_dir.clone(), "open-log-folder"));
-        });
-    }
-
-    // ---- Save the hand-over bundle somewhere the reporter can find it ----
-    {
-        let state = state.clone();
-        let weak = ui.as_weak();
-        let notifications = notifications.clone();
-        settings.on_save_diagnostics_report(move || {
-            let state = state.clone();
-            let weak = weak.clone();
-            let notifications = notifications.clone();
-            let _ = slint::spawn_local(Compat::new(async move {
-                let dialog = {
-                    let mut d = rfd::AsyncFileDialog::new()
-                        .set_title("Save Diagnostics Report")
-                        .set_file_name(services::diagnostics::suggested_file_name(Local::now()));
-                    if let Some(ui) = weak.upgrade() {
-                        d = d.set_parent(&ui.window().window_handle());
-                    }
-                    d
-                };
-                let Some(target) = dialog.save_file().await else {
-                    return;
-                };
-                let path = target.path().to_path_buf();
-
-                let result = match services::diagnostics::build_report(&state).await {
-                    // `write_text_atomic_sync` is not async, unlike the playlist
-                    // export this otherwise mirrors — hence the extra hop.
-                    Ok(text) => {
-                        let path = path.clone();
-                        tokio::task::spawn_blocking(move || {
-                            services::write_text_atomic_sync(&path, &text)
-                        })
-                        .await
-                        .map_err(AppError::io_source)
-                        .and_then(|inner| inner)
-                    }
-                    Err(e) => Err(e),
-                };
-
-                let Some(ui) = weak.upgrade() else { return };
-                let settings = ui.global::<Settings>();
-                match result {
-                    Ok(()) => notifications.show_auto_dismiss(
-                        NotificationParams {
-                            variant: "success".into(),
-                            title: settings.invoke_diagnostics_saved_title(),
-                            message: settings.invoke_diagnostics_saved_message(
-                                SharedString::from(path.display().to_string()),
-                            ),
-                            action_label: SharedString::default(),
-                            action_kind: SharedString::default(),
-                        },
-                        TOAST_AUTO_DISMISS_MS,
-                    ),
-                    Err(e) => {
-                        log::warn!("save-diagnostics-report: {e}");
-                        notifications.show(NotificationParams {
-                            variant: "error".into(),
-                            title: settings.invoke_diagnostics_failed_title(),
-                            message: settings.invoke_diagnostics_failed_message(),
-                            action_label: SharedString::default(),
-                            action_kind: SharedString::default(),
-                        })
-                    }
-                };
-            }));
-        });
-    }
-
+    wire_open_log_folder(&settings, state);
+    wire_save_report(&settings, ui, state, notifications);
     notify_previous_crash(ui, state, notifications);
+}
+
+/// Hand the logs directory to the desktop's file manager. The same callback the
+/// crash toast's action button reaches, hence the two buttons and one handler.
+fn wire_open_log_folder(settings: &Settings, state: &AppState) {
+    let runtime = state.runtime.clone();
+    let logs_dir = state.paths.logs_dir.clone();
+    settings.on_open_log_folder(move || {
+        runtime.spawn(launcher::open_target(logs_dir.clone(), "open-log-folder"));
+    });
+}
+
+/// On the UI thread throughout: the picker has to be, and `Rc<NotificationsUi>`
+/// is `!Send`. `Compat` supplies the tokio reactor the awaited halves need.
+fn wire_save_report(
+    settings: &Settings,
+    ui: &AppWindow,
+    state: &AppState,
+    notifications: &Rc<NotificationsUi>,
+) {
+    let state = state.clone();
+    let weak = ui.as_weak();
+    let notifications = notifications.clone();
+    settings.on_save_diagnostics_report(move || {
+        let state = state.clone();
+        let weak = weak.clone();
+        let notifications = notifications.clone();
+        let _ = slint::spawn_local(Compat::new(save_report(state, weak, notifications)));
+    });
+}
+
+/// Ask where the bundle goes, build it, write it, and say which way it went.
+/// A cancelled picker is the ordinary case and says nothing.
+async fn save_report(state: AppState, weak: Weak<AppWindow>, notifications: Rc<NotificationsUi>) {
+    let dialog = file_dialog::parented(&weak, "Save Diagnostics Report")
+        .set_file_name(services::diagnostics::suggested_file_name(Local::now()));
+    let Some(target) = dialog.save_file().await else {
+        return;
+    };
+    let path = target.path().to_path_buf();
+
+    let result = match services::diagnostics::build_report(&state).await {
+        Ok(text) => write_report(path.clone(), text).await,
+        Err(e) => Err(e),
+    };
+
+    let Some(ui) = weak.upgrade() else { return };
+    let settings = ui.global::<Settings>();
+    match result {
+        Ok(()) => {
+            notifications.show_auto_dismiss(
+                NotificationParams::plain(
+                    "success",
+                    settings.invoke_diagnostics_saved_title(),
+                    settings.invoke_diagnostics_saved_message(SharedString::from(
+                        path.display().to_string(),
+                    )),
+                ),
+                TOAST_AUTO_DISMISS_MS,
+            );
+        }
+        Err(e) => {
+            log::warn!("save-diagnostics-report: {e}");
+            notifications.show(NotificationParams::plain(
+                "error",
+                settings.invoke_diagnostics_failed_title(),
+                settings.invoke_diagnostics_failed_message(),
+            ));
+        }
+    }
+}
+
+/// `write_text_atomic_sync` is not async, unlike the playlist export this
+/// otherwise mirrors — hence the hop off the UI thread for one file write.
+async fn write_report(path: PathBuf, text: String) -> AppResult<()> {
+    tokio::task::spawn_blocking(move || services::write_text_atomic_sync(&path, &text))
+        .await
+        .map_err(AppError::io_source)?
 }
 
 /// Announce a panic from the previous run, once.

@@ -19,6 +19,7 @@ pub mod replaygain;
 pub mod visualizer;
 pub mod event_sink;
 pub mod favorites;
+pub mod file_dialog;
 pub mod file_watching;
 pub mod genres;
 pub mod grid_prewarm;

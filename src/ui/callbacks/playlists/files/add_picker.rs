@@ -6,7 +6,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use async_compat::Compat;
-use slint::{ComponentHandle, Model, SharedString};
+use slint::{ComponentHandle, Model};
 
 use super::{
     add_pick_disabled, clamp_usize, refresh_add_selection_meta, set_all_picks, toggle_pick,
@@ -130,14 +130,11 @@ pub(super) fn wire(
                 let settings = ui.global::<Settings>();
                 let variant = if ok < requested { "warning" } else { "success" };
                 notifications.show_auto_dismiss(
-                    NotificationParams {
-                        variant: variant.into(),
-                        title: settings.invoke_add_to_playlist_title(clamp_usize(ok)),
-                        message: settings
-                            .invoke_add_to_playlist_message(clamp_usize(track_count)),
-                        action_label: SharedString::default(),
-                        action_kind: SharedString::default(),
-                    },
+                    NotificationParams::plain(
+                        variant,
+                        settings.invoke_add_to_playlist_title(clamp_usize(ok)),
+                        settings.invoke_add_to_playlist_message(clamp_usize(track_count)),
+                    ),
                     TOAST_AUTO_DISMISS_MS,
                 );
             }));

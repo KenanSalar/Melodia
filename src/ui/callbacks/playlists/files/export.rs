@@ -10,6 +10,7 @@ use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel};
 use super::{clamp_u32, refresh_export_selection_meta, set_all_picks, toggle_pick};
 use crate::library;
 use crate::state::AppState;
+use crate::ui::file_dialog;
 use crate::ui::notifications::{NotificationParams, NotificationsUi, TOAST_AUTO_DISMISS_MS};
 use crate::{
     AppWindow, Dialog, PlaylistExportPickRow as UiPlaylistExportPickRow, Playlists, Settings,
@@ -91,14 +92,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, notifications: &Rc<Notifica
             let weak = weak.clone();
             let notifications = notifications.clone();
             let _ = slint::spawn_local(Compat::new(async move {
-                let dialog = {
-                    let mut d =
-                        rfd::AsyncFileDialog::new().set_title("Export Playlists To Folder");
-                    if let Some(ui) = weak.upgrade() {
-                        d = d.set_parent(&ui.window().window_handle());
-                    }
-                    d
-                };
+                let dialog = file_dialog::parented(&weak, "Export Playlists To Folder");
                 let Some(folder) = dialog.pick_folder().await else {
                     return;
                 };
@@ -118,37 +112,22 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, notifications: &Rc<Notifica
                             "warning"
                         };
                         notifications.show_auto_dismiss(
-                            NotificationParams {
-                                variant: variant.into(),
-                                title: settings
-                                    .invoke_playlist_export_title(clamp_u32(res.exported)),
-                                message: settings.invoke_playlist_export_message(
-                                    SharedString::from(res.folder.as_str()),
-                                ),
-                                action_label: SharedString::default(),
-                                action_kind: SharedString::default(),
-                            },
+                            NotificationParams::plain(
+                                variant,
+                                settings.invoke_playlist_export_title(clamp_u32(res.exported)),
+                                settings.invoke_playlist_export_message(SharedString::from(
+                                    res.folder.as_str(),
+                                )),
+                            ),
                             TOAST_AUTO_DISMISS_MS,
                         );
                     }
                     Ok(_) => {
-                        notifications.show(NotificationParams {
-                            variant: "error".into(),
-                            title: settings.invoke_playlist_export_failed_title(),
-                            message: settings.invoke_playlist_export_failed_message(),
-                            action_label: SharedString::default(),
-                            action_kind: SharedString::default(),
-                        });
+                        notifications.show(export_failed_toast(&settings));
                     }
                     Err(e) => {
                         log::warn!("export_playlists_to_folder: {e}");
-                        notifications.show(NotificationParams {
-                            variant: "error".into(),
-                            title: settings.invoke_playlist_export_failed_title(),
-                            message: settings.invoke_playlist_export_failed_message(),
-                            action_label: SharedString::default(),
-                            action_kind: SharedString::default(),
-                        });
+                        notifications.show(export_failed_toast(&settings));
                     }
                 }
             }));
@@ -189,4 +168,15 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, notifications: &Rc<Notifica
             refresh_export_selection_meta(&dlg);
         });
     }
+}
+
+/// Nothing was written. The two ways that happens — an `Ok` reporting zero
+/// exports, and an outright failure — say the same thing to the user and differ
+/// only in whether there is an error worth logging.
+fn export_failed_toast(settings: &Settings) -> NotificationParams {
+    NotificationParams::plain(
+        "error",
+        settings.invoke_playlist_export_failed_title(),
+        settings.invoke_playlist_export_failed_message(),
+    )
 }

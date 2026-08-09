@@ -5,11 +5,12 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use async_compat::Compat;
-use slint::{ComponentHandle, SharedString};
+use slint::ComponentHandle;
 
 use super::clamp_u32;
 use crate::library;
 use crate::state::AppState;
+use crate::ui::file_dialog;
 use crate::ui::notifications::{NotificationParams, NotificationsUi, TOAST_AUTO_DISMISS_MS};
 use crate::ui::playlists::{self as playlists_ui_mod, PlaylistsUi};
 use crate::{AppWindow, Playlists, Settings};
@@ -32,15 +33,8 @@ pub(super) fn wire(
         let weak = weak.clone();
         let notifications = notifications.clone();
         let _ = slint::spawn_local(Compat::new(async move {
-            let dialog = {
-                let mut d = rfd::AsyncFileDialog::new()
-                    .set_title("Import Playlists")
-                    .add_filter("Playlists", &["m3u8", "m3u"]);
-                if let Some(ui) = weak.upgrade() {
-                    d = d.set_parent(&ui.window().window_handle());
-                }
-                d
-            };
+            let dialog = file_dialog::parented(&weak, "Import Playlists")
+                .add_filter("Playlists", &["m3u8", "m3u"]);
             let Some(handles) = dialog.pick_files().await else {
                 return;
             };
@@ -81,13 +75,11 @@ pub(super) fn wire(
             let Some(ui) = weak.upgrade() else { return };
             let settings = ui.global::<Settings>();
             if imported == 0 {
-                notifications.show(NotificationParams {
-                    variant: "error".into(),
-                    title: settings.invoke_playlist_import_failed_title(),
-                    message: settings.invoke_playlist_import_failed_message(),
-                    action_label: SharedString::default(),
-                    action_kind: SharedString::default(),
-                });
+                notifications.show(NotificationParams::plain(
+                    "error",
+                    settings.invoke_playlist_import_failed_title(),
+                    settings.invoke_playlist_import_failed_message(),
+                ));
             } else {
                 let variant = if missing > 0 || failures > 0 {
                     "warning"
@@ -95,14 +87,12 @@ pub(super) fn wire(
                     "success"
                 };
                 notifications.show_auto_dismiss(
-                    NotificationParams {
-                        variant: variant.into(),
-                        title: settings.invoke_playlist_import_title(clamp_u32(imported)),
-                        message: settings
+                    NotificationParams::plain(
+                        variant,
+                        settings.invoke_playlist_import_title(clamp_u32(imported)),
+                        settings
                             .invoke_playlist_import_message(clamp_u32(tracks), clamp_u32(missing)),
-                        action_label: SharedString::default(),
-                        action_kind: SharedString::default(),
-                    },
+                    ),
                     TOAST_AUTO_DISMISS_MS,
                 );
             }

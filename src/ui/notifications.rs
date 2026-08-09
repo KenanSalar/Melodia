@@ -52,6 +52,23 @@ pub struct NotificationParams {
     pub action_kind: SharedString,
 }
 
+impl NotificationParams {
+    /// A toast with no action button and nothing to dismiss it by — most of
+    /// them. Anything carrying an `action_kind` builds the struct literal
+    /// instead: that field routes the action button *and* groups rows for
+    /// [`NotificationsUi::dismiss_by_kind`], and a constructor hiding it would
+    /// make those two roles harder to tell apart rather than easier.
+    pub fn plain(variant: &str, title: SharedString, message: SharedString) -> Self {
+        Self {
+            variant: variant.into(),
+            title,
+            message,
+            action_label: SharedString::default(),
+            action_kind: SharedString::default(),
+        }
+    }
+}
+
 pub struct NotificationsUi {
     rows: Rc<VecModel<NotificationRow>>,
     next_id: Cell<i32>,
