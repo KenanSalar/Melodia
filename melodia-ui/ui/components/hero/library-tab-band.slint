@@ -589,17 +589,24 @@ export component LibraryTabBand inherits Rectangle {
     // drop takes it too. Folded into the brush, never `opacity`, which would cost a layer
     // for the whole length of every detail.
     //
-    // **The drop is squared, and that is what stops it reading as a flick.** `hero-t` is on
-    // an emphasized-decelerate curve, which spends most of its speed in the first quarter,
-    // so a travel read linearly off it is all but over before the eye has found it — the
-    // 32 px slide had spent every pixel it would ever show inside 80 ms, and only ever
-    // showed sixteen of them, the line being gone by the time `hero-t` reached 0.5. And a
-    // shorter travel alone would not have fixed it, only made the flick smaller. Squaring
-    // hands those frames back: the line sits still, then falls away as it goes, which is the
-    // motion a departure has. Twelve pixels because the compact floor leaves sixteen under
-    // this box, so the whole drop fits inside the band it started in and never depends on
-    // the band having grown to stay unclipped. Deliberately not `ViewTransition`'s 32 px —
-    // that token is a page changing, this is a sentence leaving a 132 px band.
+    // **The drop is linear in that float, which is what puts it in step with the floor
+    // moving under it.** The pill row is anchored to `root.height`, so it starts travelling
+    // on frame one of the morph and covers its 100 px in exact proportion to `hero-t`;
+    // `count-t` is twice `hero-t` over the window the line is visible for, so a linear drop
+    // holds a constant ratio to that and the two leave together. The sentence holding still
+    // while everything sharing its floor moves is the thing you see.
+    //
+    // It was squared for a while, to hand back the frames the old `cubic-bezier(0.2, 0, 0, 1)`
+    // spent in a rush — 61 % of its travel inside the first quarter, which turned any travel
+    // read straight off it into a flick. That was the *curve*'s problem and it is fixed at
+    // the curve now (see the morph above), so the shaping became one compensation too many:
+    // it bought a gentle start by keeping the line still for the first frames of a band that
+    // had already begun to grow.
+    //
+    // Twelve pixels because the compact floor leaves sixteen under this box, so the whole
+    // drop fits inside the band it started in and never depends on the band having grown to
+    // stay unclipped. Deliberately not `ViewTransition`'s 32 px — that token is a page
+    // changing, this is a sentence leaving a 132 px band.
     //
     // The one seam left is a detail re-opened *inside* a collapse: the axis flips
     // mid-flight, so the line steps back to its anchor rather than gliding there. It lands
@@ -614,8 +621,7 @@ export component LibraryTabBand inherits Rectangle {
     property <length> count-slide: 32px;
     property <length> count-drop: 12px;
     property <float> count-t: clamp(root.hero-t * 2.0, 0.0, 1.0);
-    property <length> count-dy:
-        root.detail-open ? root.count-drop * root.count-t * root.count-t : 0px;
+    property <length> count-dy: root.detail-open ? root.count-drop * root.count-t : 0px;
 
     Text {
         x: Theme.pad-lg - (root.detail-open ? 0px : root.count-slide * root.hero-t);

@@ -759,11 +759,11 @@ fn the_count_line_drops_out_of_a_fixed_anchor_and_returns_from_the_left() {
     let drop = binding(&code, "property <length> count-dy:");
     assert_eq!(
         drop.split_whitespace().collect::<Vec<_>>().join(" "),
-        "root.detail-open ? root.count-drop * root.count-t * root.count-t : 0px",
-        "the drop must be gated on `detail-open` and squared: ungated it also fires on the way \
-         back, where the line is sliding in from the left, and read linearly off an \
-         emphasized-decelerate curve it realises most of its travel in the first two frames and \
-         reads as a flick rather than as a departure"
+        "root.detail-open ? root.count-drop * root.count-t : 0px",
+        "the drop must be gated on `detail-open` and *linear* in `count-t`: ungated it also fires \
+         on the way back, where the line is sliding in from the left, and shaped — it was squared \
+         once — it holds the sentence still for the first frames of a band whose pill row is \
+         already travelling, which is the one thing on that floor it has to leave in step with"
     );
     assert!(
         count.contains(
