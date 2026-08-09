@@ -465,6 +465,15 @@ fn the_hero_fades_on_the_morph_at_both_ends() {
         "the title is no longer painted inside an `if root.hero-shown:` branch — the pins below \
          bound against it"
     );
+    // The walk's upper edge, and the only assertion here that can fail *loudly* when it
+    // over-runs: everything below is satisfied by the tail of the file as readily as by the
+    // branch, so an unbalanced brace would silently widen the region instead of breaking it.
+    // `HeroChipStrip` is the block's next sibling.
+    assert!(
+        !title.contains("HeroChipStrip"),
+        "the brace walk ran past the title block and into the column's later children — the pins \
+         below stop meaning anything the moment the region is wider than the branch"
+    );
     assert!(
         !title.contains("opacity:"),
         "the title block must not fade on `opacity`. The layer that buys is sized to child \

@@ -70,6 +70,10 @@ export component RecentSearches inherits VerticalLayout {
                 text: term;
                 color: Theme.text;
                 font-size: Theme.font-size-sm;
+                // Ink, not elision — the chip sizes off `preferred-width` above, which
+                // `elide` leaves alone, so nothing truncates and the line-box scissor
+                // stops cutting the marks off whatever the user typed.
+                overflow: elide;
             }
 
             // Declared **before** the close cell, so that cell's nested TouchArea wins

@@ -218,6 +218,10 @@ export component MosaicTabHero inherits Rectangle {
                     font-size: Theme.hero-title-size;
                     font-weight: Theme.page-title-weight;
                     horizontal-alignment: left;
+                    // The sibling band's title carries this too, and for the same
+                    // reason: the default `clip` scissors a `Text` at its line box,
+                    // which is shorter than the ink the patched faces draw.
+                    overflow: elide;
                 }
 
                 // Which chips the band shows follows the tab, decided in
