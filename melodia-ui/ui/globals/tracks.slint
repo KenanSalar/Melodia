@@ -3,8 +3,9 @@ import { TrackListRow, BrowseFolderRow, BrowseCardGridRow, BreadcrumbRow } from 
 // The two flat track-list views, plus the shared row-cover lookup that every
 // `TrackListRow` consumer in the tree resolves its thumbnail through.
 
-// The Tracks view. Rust owns `rows` and the full unfiltered Vec behind it:
-// `apply-filter` re-derives `rows` in memory, `request-sort` re-queries.
+// The Tracks view. Rust owns `rows` and the full unfiltered set behind it
+// (`ui::track_list_cache`): `apply-filter` and `request-sort` both re-derive
+// `rows` in memory, and neither goes near the DB.
 export global Tracks {
     in-out property <[TrackListRow]> rows;
     // `-1` until fetched; see `Albums.total-count`.

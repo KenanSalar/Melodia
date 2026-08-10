@@ -8,10 +8,11 @@ use std::num::NonZeroUsize;
 use parking_lot::Mutex;
 
 use crate::entities::artist::FavoriteArtist;
-use crate::entities::track::{FavoriteStats, MostPlayedFavorite, TrackListRow as RsTrackListRow};
+use crate::entities::track::{FavoriteStats, MostPlayedFavorite};
 use crate::services::settings::{SortDir, ViewSort};
 use crate::ui::hero_folds::{HeroFold, MostPlayedTotals};
 use crate::ui::row_match::Needle;
+use crate::ui::track_list_cache::TrackListCache;
 
 /// Per-section cached snapshots — every fetch lands here so callbacks
 /// can recover the underlying Rust data without round-tripping through
@@ -19,11 +20,12 @@ use crate::ui::row_match::Needle;
 /// `Mutex<>` wrappers keep them callable from any tokio worker without
 /// pinning the UI thread.
 pub(crate) struct FavoritesUiState {
-    /// All favourites in current sort order, *before* the in-memory
-    /// search filter. The Slint side renders `tracks_filtered`; this
-    /// retains the unfiltered list so a keystroke can rewalk without
-    /// hitting `SQLite`.
-    pub tracks_all: Mutex<Vec<RsTrackListRow>>,
+    /// All favourites, *before* the in-memory search filter, plus the keys
+    /// a filter and a sort need. The Slint side renders the post-filter
+    /// model; this retains the unfiltered set so a keystroke can re-walk
+    /// without hitting `SQLite` — and so a header click can re-sort in
+    /// memory rather than re-issuing the query.
+    pub tracks_all: TrackListCache,
     /// Active filter needle — cached so the live-refresh subscriber
     /// (after a `library_changed_tx` tick) re-applies it without
     /// re-reading the Slint property from a tokio thread.
@@ -87,7 +89,7 @@ pub(crate) struct FavoritesUiState {
 impl FavoritesUiState {
     pub(super) fn new() -> Self {
         Self {
-            tracks_all: Mutex::new(Vec::new()),
+            tracks_all: TrackListCache::new(),
             filter: Mutex::new(Needle::default()),
             sort: Mutex::new(ViewSort {
                 field: "title".to_owned(),

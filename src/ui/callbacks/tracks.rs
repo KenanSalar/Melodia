@@ -82,9 +82,9 @@ pub fn wire_tracks(ui: &AppWindow, state: &AppState, tracks_ui: &Arc<TracksUi>) 
                 next_sort(g.get_sort_field().as_str(), g.get_sort_dir().as_str(), &field);
             g.set_sort_field(SharedString::from(new_field.as_str()));
             g.set_sort_dir(SharedString::from(new_dir.as_str()));
-            let filter = g.get_filter().to_string();
+            let filter = g.get_filter();
 
-            tracks_ui_mod::resort_and_apply(&weak, &tu, &new_field, new_dir.as_str(), filter);
+            tracks_ui_mod::resort_and_apply(&weak, &tu, &new_field, new_dir.as_str(), &filter);
             super::persist_view_sort(&s, view_id::TRACKS, new_field, new_dir);
         });
     }
@@ -94,7 +94,7 @@ pub fn wire_tracks(ui: &AppWindow, state: &AppState, tracks_ui: &Arc<TracksUi>) 
         let tu = tracks_ui.clone();
         let weak = weak.clone();
         tracks.on_apply_filter(move |text| {
-            tracks_ui_mod::refilter(&weak, &tu, text.to_string());
+            tracks_ui_mod::refilter(&weak, &tu, &text);
         });
     }
 

@@ -72,7 +72,7 @@ pub use rows::{install_favorites_models, to_slint_fav_artist_row, to_slint_most_
 pub use selection::{clear_selection, handle_select_row};
 pub use songs::{
     apply_filtered_tracks, apply_filtered_tracks_now, apply_row_rating, current_filter,
-    current_sort, refresh_tracks, set_filter, set_sort,
+    current_sort, refresh_tracks, resort_and_apply, set_filter, set_sort,
 };
 pub use tabs::{FavoritesTab, seed_tab, tab_from_index};
 
@@ -217,7 +217,7 @@ impl FavoritesUi {
         self.artist_thumbs.clear();
         {
             let _gate = self.gate();
-            self.inner.tracks_all.lock().clear();
+            self.inner.tracks_all.clear();
             *self.inner.stats.lock() = FavoriteStats {
                 count: 0,
                 total_duration_ms: 0,
@@ -252,11 +252,7 @@ impl FavoritesUi {
         // the cache + filter here to stay decoupled from the Slint
         // global (callers may be off the UI thread).
         let needle = self.inner.filter.lock().clone();
-        let all = self.inner.tracks_all.lock();
-        all.iter()
-            .filter(|r| crate::ui::row_match::track_matches(r, &needle))
-            .map(|r| r.id)
-            .collect()
+        self.inner.tracks_all.snapshot().ids_filtered(&needle)
     }
 
     /// Track ids of the Most Played grid, in card order. `play-track` and
@@ -289,11 +285,10 @@ impl FavoritesUi {
     /// `library::favorites::get_favorite_tracks` which only returns
     /// `is_favorite = TRUE` rows).
     pub fn flip_or_remove_track(&self, id: i64, fav: bool) {
-        let mut tracks = self.inner.tracks_all.lock();
-        if !fav {
-            tracks.retain(|r| r.id != id);
-        } else if let Some(r) = tracks.iter_mut().find(|r| r.id == id) {
-            r.is_favorite = true;
+        if fav {
+            self.inner.tracks_all.set_favorite(id, true);
+        } else {
+            self.inner.tracks_all.remove(id);
         }
     }
 
@@ -301,9 +296,7 @@ impl FavoritesUi {
     /// [`Self::flip_or_remove_track`], rating never affects membership (the
     /// list stays keyed on `is_favorite = TRUE`), so the row is only patched.
     pub fn flip_track_rating(&self, id: i64, rating: i32) {
-        if let Some(r) = self.inner.tracks_all.lock().iter_mut().find(|r| r.id == id) {
-            r.rating = rating;
-        }
+        self.inner.tracks_all.set_rating(id, rating);
     }
 }
 

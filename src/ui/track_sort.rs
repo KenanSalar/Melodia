@@ -19,13 +19,86 @@
 //! comparisons. `field` is fixed for the whole sort, so branching on it
 //! once and picking the key type per branch is cheaper than a uniform key
 //! enum.
+//!
+//! **What the comparator reads is a trait, not a row type**, because the two
+//! views with the largest lists no longer retain DB rows to hand it — they
+//! keep pre-converted display rows plus a two-field sidecar
+//! (`ui::track_list_cache`), and forking the comparator to match would give
+//! the app two spellings of its sort semantics. [`TrackSortFields`] is the
+//! eight fields the arms below actually read; everything else on a
+//! `TrackListRow` is invisible here.
 
 use crate::entities::track::TrackListRow as RsTrackListRow;
-use crate::ui::util::opt_lc;
+
+/// The fields a track-list sort compares, so the comparator can be handed
+/// either a DB row or a cached display row.
+///
+/// The two flattening rules live here rather than in the arms so both
+/// implementors are held to the same one: `disc` and `track` fold their
+/// `NULL`/`0` cases onto the sentinel the SQL ordering uses, and the three
+/// text fields fold a missing value onto `""` — which is what the old
+/// `opt_lc(Option<&str>)` did anyway, so no ordering moves.
+pub trait TrackSortFields {
+    /// Effective disc number; `NULL` and `0` both mean disc 1.
+    fn disc(&self) -> i32;
+    /// Effective track number, widened so the sentinel can be negated for a
+    /// descending sort. `NULL` and `0` sort last ascending.
+    fn track(&self) -> i64;
+    fn artist(&self) -> &str;
+    fn album(&self) -> &str;
+    fn genre(&self) -> &str;
+    /// `None` sorts first ascending (NULLs-first), matching `SQLite`.
+    fn year(&self) -> Option<i32>;
+    fn duration_ms(&self) -> i64;
+    /// Natural-order key, raw — the comparator owns the case fold.
+    fn sort_key(&self) -> &str;
+}
+
+impl TrackSortFields for RsTrackListRow {
+    fn disc(&self) -> i32 {
+        match self.disc_number {
+            Some(d) if d != 0 => d,
+            _ => 1,
+        }
+    }
+
+    fn track(&self) -> i64 {
+        match self.track_number {
+            Some(n) if n != 0 => i64::from(n),
+            _ => i64::from(i32::MAX),
+        }
+    }
+
+    fn artist(&self) -> &str {
+        self.artist.as_deref().unwrap_or("")
+    }
+
+    fn album(&self) -> &str {
+        self.album.as_deref().unwrap_or("")
+    }
+
+    fn genre(&self) -> &str {
+        self.genre.as_deref().unwrap_or("")
+    }
+
+    fn year(&self) -> Option<i32> {
+        self.year
+    }
+
+    fn duration_ms(&self) -> i64 {
+        self.duration_ms
+    }
+
+    fn sort_key(&self) -> &str {
+        self.sort_key.as_deref().unwrap_or("")
+    }
+}
 
 /// Sort `items` in place by `field` / `dir`.
 ///
-/// * `row` projects each element to its backing [`RsTrackListRow`].
+/// * `row` projects each element to something implementing
+///   [`TrackSortFields`] — a `TrackListRow` for the detail views, Browse and
+///   Search, a `ui::track_list_cache::SortRow` for the two cached lists.
 /// * `secondary` yields the lowercased deterministic tie-breaker key (the
 ///   track title for detail views, the file name for the Files view).
 ///
@@ -34,9 +107,10 @@ use crate::ui::util::opt_lc;
 /// field except `track_number`, whose disc + secondary components stay
 /// ascending — only the track component flips (the track sentinel is
 /// negated instead of reversing the tuple).
-pub fn sort_track_rows_by<T, R, S>(items: &mut [T], field: &str, dir: &str, row: R, secondary: S)
+pub fn sort_track_rows_by<T, F, R, S>(items: &mut [T], field: &str, dir: &str, row: R, secondary: S)
 where
-    R: Fn(&T) -> &RsTrackListRow,
+    F: TrackSortFields + ?Sized,
+    R: Fn(&T) -> &F,
     S: Fn(&T) -> String,
 {
     let desc = dir == "desc";
@@ -48,44 +122,30 @@ where
     if field == "track_number" {
         items.sort_by_cached_key(|t| {
             let r = row(t);
-            let disc = match r.disc_number {
-                Some(d) if d != 0 => d,
-                _ => 1,
-            };
-            let track = match r.track_number {
-                Some(n) if n != 0 => i64::from(n),
-                _ => i64::from(i32::MAX),
-            };
-            (disc, if desc { -track } else { track }, secondary(t))
+            let track = r.track();
+            (r.disc(), if desc { -track } else { track }, secondary(t))
         });
         return;
     }
 
     match field {
         "artist" => {
-            items.sort_by_cached_key(|t| (opt_lc(row(t).artist.as_deref()), secondary(t)));
+            items.sort_by_cached_key(|t| (row(t).artist().to_lowercase(), secondary(t)));
         }
         "album" => {
-            items.sort_by_cached_key(|t| (opt_lc(row(t).album.as_deref()), secondary(t)));
+            items.sort_by_cached_key(|t| (row(t).album().to_lowercase(), secondary(t)));
         }
         "genre" => {
-            items.sort_by_cached_key(|t| (opt_lc(row(t).genre.as_deref()), secondary(t)));
+            items.sort_by_cached_key(|t| (row(t).genre().to_lowercase(), secondary(t)));
         }
-        // `Option<i32>` key — `None` sorts first ascending (NULLs-first),
-        // last after the `desc` reversal, matching SQLite's `year` ordering.
         "year" => {
-            items.sort_by_cached_key(|t| (row(t).year, secondary(t)));
+            items.sort_by_cached_key(|t| (row(t).year(), secondary(t)));
         }
         "length" => {
-            items.sort_by_cached_key(|t| (row(t).duration_ms, secondary(t)));
+            items.sort_by_cached_key(|t| (row(t).duration_ms(), secondary(t)));
         }
         // "title" and any unrecognised field → natural-order `sort_key`.
-        _ => items.sort_by_cached_key(|t| {
-            (
-                row(t).sort_key.as_deref().unwrap_or("").to_ascii_lowercase(),
-                secondary(t),
-            )
-        }),
+        _ => items.sort_by_cached_key(|t| (row(t).sort_key().to_ascii_lowercase(), secondary(t))),
     }
     if desc {
         items.reverse();
@@ -103,20 +163,24 @@ pub fn sort_track_list_rows(rows: &mut [RsTrackListRow], field: &str, dir: &str)
 }
 
 /// Compute the display-order permutation of `rows` for `field` / `dir`,
-/// without reordering `rows` itself. Used by the Tracks view, which keeps
-/// `full` / `search_keys` in a fixed fetch order and re-sorts by swapping
-/// a separate `Vec<usize>` permutation. Thin specialisation of
-/// [`sort_track_rows_by`] — sorts `(index, &row)` pairs so the same
-/// generic accessor shape applies, with the natural-order `sort_key` as
-/// the tie-breaker.
-pub fn compute_track_order(rows: &[RsTrackListRow], field: &str, dir: &str) -> Vec<usize> {
-    let mut indexed: Vec<(usize, &RsTrackListRow)> = rows.iter().enumerate().collect();
+/// without reordering `rows` itself. Used by the two cached list views
+/// (`ui::track_list_cache`), which keep their rows and keys in a fixed
+/// fetch order and re-sort by swapping a separate `Vec<usize>`. Thin
+/// specialisation of [`sort_track_rows_by`] — sorts `(index, &row)` pairs
+/// so the same generic accessor shape applies, with the natural-order
+/// `sort_key` as the tie-breaker.
+///
+/// Generic over the element so a caller holding rows and sort keys in two
+/// parallel `Vec`s can zip a slice of borrowing views and pass that,
+/// rather than the sort growing a second spelling for the pair.
+pub fn compute_track_order<F: TrackSortFields>(rows: &[F], field: &str, dir: &str) -> Vec<usize> {
+    let mut indexed: Vec<(usize, &F)> = rows.iter().enumerate().collect();
     sort_track_rows_by(
         &mut indexed,
         field,
         dir,
         |t| t.1,
-        |t| t.1.sort_key.as_deref().unwrap_or("").to_ascii_lowercase(),
+        |t| t.1.sort_key().to_ascii_lowercase(),
     );
     indexed.into_iter().map(|(i, _)| i).collect()
 }

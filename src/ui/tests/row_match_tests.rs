@@ -182,8 +182,8 @@ fn fold_needle_trims() {
 #[test]
 fn a_nul_in_a_field_matches_the_way_the_packed_key_does() {
     // ID3v2.4 joins a multi-value text frame with `\0`, so this is a real
-    // tag rather than a hypothetical. The Tracks view's packed key maps it
-    // to a space (`tracks_tests::a_nul_in_a_field_cannot_forge_a_separator`);
+    // tag rather than a hypothetical. The cached lists' packed key maps it to
+    // a space (`track_list_cache_tests::a_nul_in_a_field_cannot_forge_a_separator`);
     // `Needle::contains` has to agree, on both its arms — the ASCII byte walk
     // used to skip the mapping, so one non-ASCII character anywhere in the
     // field flipped the answer.

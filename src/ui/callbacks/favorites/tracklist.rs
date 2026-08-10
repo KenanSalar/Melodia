@@ -123,11 +123,11 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, fav_ui: &Arc<FavoritesUi>) 
             favorites_ui_mod::set_sort(&fu, new_field.clone(), new_dir);
             persist_view_sort(&s, view_id::FAVORITES, new_field, new_dir);
 
-            let s_fetch = s.clone();
-            let fu = fu.clone();
-            let weak = weak.clone();
-            spawn_logged!(s_fetch, "favorites::request_sort",
-                favorites_ui_mod::refresh_tracks(&s_fetch, &fu, &weak));
+            // In memory, like the Tracks view's header clicks: the rows are
+            // already resident and their covers already warm, so only the
+            // display permutation moves. This used to re-issue an unbounded
+            // `SELECT` plus a full cover prewarm per click.
+            favorites_ui_mod::resort_and_apply(&fu, &weak);
         });
     }
     {
