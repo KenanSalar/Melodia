@@ -1,4 +1,7 @@
-use super::{DeezerAlbumSearchResponse, DeezerAnswer, DeezerSearchResponse, classify};
+use super::{
+    DeezerAlbumSearchResponse, DeezerAnswer, DeezerSearchResponse, classify, halts_a_batch,
+    quotable,
+};
 
 fn parse(json: &str) -> DeezerAlbumSearchResponse {
     serde_json::from_str(json).unwrap_or(DeezerAlbumSearchResponse { data: Vec::new() })
@@ -70,6 +73,34 @@ fn a_search_body_still_decodes_past_the_error_arm() {
         _ => None,
     };
     assert_eq!(url.as_deref(), Some("https://e-cdn.example/a.jpg"));
+}
+
+/// The artist-image pass abandons every remaining batch on a halting code, and a
+/// refusal is never memoized — so a code that halts on the wrong grounds lets one
+/// unlucky artist name stop the pass at the same place on every scan, forever.
+/// `600` is the live risk: the album search builds an advanced-search string, and
+/// Deezer answers a malformed one with `InvalidQueryException`.
+#[test]
+fn only_the_codes_about_our_own_pace_halt_a_batch() {
+    assert!(halts_a_batch(4), "quota — the batch behind it would refuse too");
+    assert!(halts_a_batch(700), "service busy — same");
+
+    for answered_the_query in [500, 501, 600, 800] {
+        assert!(
+            !halts_a_batch(answered_the_query),
+            "code {answered_the_query} is about the query that asked, not the next one"
+        );
+    }
+}
+
+/// Deezer's advanced-search fields are quote-delimited with no documented escape,
+/// so an embedded quote closes the field early and the whole query comes back as
+/// code 600 — which [`halts_a_batch`] deliberately does not stop on, leaving a
+/// silent per-album miss instead.
+#[test]
+fn an_embedded_quote_cannot_close_a_search_field_early() {
+    assert_eq!(quotable(r#"Rock 'n' "Roll""#), "Rock 'n' Roll");
+    assert!(matches!(quotable("Discovery"), std::borrow::Cow::Borrowed(_)));
 }
 
 #[test]

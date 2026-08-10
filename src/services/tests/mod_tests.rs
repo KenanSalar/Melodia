@@ -3,7 +3,8 @@ use std::path::{Path, PathBuf};
 
 #[cfg(unix)]
 use super::redact_home;
-use super::{redact_prefix, undeleted_exe};
+use super::{describe, redact_prefix, undeleted_exe};
+use crate::error::AppError;
 use crate::test_support::{SRC_DIR, stripped_sources};
 #[cfg(unix)]
 use crate::test_support::with_env_var;
@@ -188,5 +189,32 @@ fn nothing_outside_the_helper_asks_the_os_for_the_binary_path() {
         EXEMPT.len(),
         "EXEMPT names {EXEMPT:?} but the walk only reached {exempt_seen:?} — a moved or \
          renamed entry pre-authorises whatever takes its path next"
+    );
+}
+
+/// The two `Display` shapes in this tree, which is what makes `describe` reachable
+/// without knowing which one is in hand. `Network` names an operation and leaves
+/// the cause on `.source()`, so the walk is the whole point; `Io` is
+/// `#[error("IO error: {0}")]` over the field `#[from]` also makes the source, so
+/// a walk that appended unconditionally would print it twice — and sqlx nests that
+/// same shape, which is how one constraint failure reached a log line three times
+/// over.
+#[test]
+fn a_cause_is_appended_once_and_never_repeated() {
+    let denied = || std::io::Error::from(std::io::ErrorKind::PermissionDenied);
+    let cause = denied().to_string();
+
+    let with_context = AppError::network("Failed to parse Deezer response", denied());
+    assert_eq!(
+        describe(&with_context),
+        format!("Network error: Failed to parse Deezer response: {cause}"),
+        "a context message drops its cause without the walk"
+    );
+
+    let interpolated = AppError::Io(denied());
+    assert_eq!(
+        describe(&interpolated),
+        interpolated.to_string(),
+        "a `Display` that already prints its source has nothing left to append"
     );
 }

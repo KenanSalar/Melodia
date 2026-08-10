@@ -87,7 +87,12 @@ pub fn install(paths: &Paths) {
             let _ = HANDLE.set(handle);
             return;
         }
-        Err(e) => describe(&e),
+        // Flattened rather than `to_string()`d: every `FlexiLoggerError` `Display`
+        // arm is a static sentence and `OutputIo` never interpolates the
+        // `io::Error` it holds, so a root-owned log file and a full disk read
+        // identically without the chain — and the chain is the whole reason this
+        // reason is recorded at all.
+        Err(e) => super::describe(&e),
     };
 
     if let Ok(handle) = base_logger().start() {
@@ -143,27 +148,6 @@ fn start_to_file(paths: &Paths) -> Result<LoggerHandle, FlexiLoggerError> {
         .duplicate_to_stderr(Duplicate::All)
         .format_for_files(detailed_format)
         .start()
-}
-
-/// Flatten an error and its causes onto one line.
-///
-/// `FlexiLoggerError`'s `Display` arms are static sentences — `OutputIo` holds the
-/// `io::Error` on `.source()` and never interpolates it — so "permission denied"
-/// and "no space left on device" exist only in the chain, and the chain is the
-/// whole reason the reason is recorded at all.
-///
-/// `AppError`'s I/O-boundary variants are built the same way — the context message
-/// in the `Display`, the typed cause on `.source()` — so a log line that wants the
-/// cause rather than just the context flattens through here too.
-pub(crate) fn describe(error: &dyn std::error::Error) -> String {
-    let mut text = error.to_string();
-    let mut cause = error.source();
-    while let Some(source) = cause {
-        text.push_str(": ");
-        text.push_str(&source.to_string());
-        cause = source.source();
-    }
-    text
 }
 
 /// Why there are no log files, or `None` when the file sink is running.

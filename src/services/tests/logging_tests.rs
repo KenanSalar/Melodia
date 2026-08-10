@@ -3,7 +3,9 @@ use std::path::PathBuf;
 use flexi_logger::{FlexiLoggerError, LogSpecification};
 use log::LevelFilter;
 
-use super::{DEFAULT_LOG_SPEC, describe, newest_first};
+use crate::services::describe;
+
+use super::{DEFAULT_LOG_SPEC, newest_first};
 
 /// The spec is a string, so a typo in a target name parses cleanly and matches
 /// nothing — the app keeps logging and only the directive silently stops
@@ -30,6 +32,15 @@ fn the_default_spec_parses_into_the_directives_it_spells() {
         level_of(Some("symphonia_bundle_mp3::layer3")),
         Some(LevelFilter::Error),
         "the per-frame bit-reservoir warning would be back, at a frame a line"
+    );
+    // The least observable of the four: it only fires on Wayland under a desktop
+    // whose button-layout answer sctk-adwaita can't parse, once per launch, for a
+    // titlebar we ask winit not to draw. Nothing on this machine reports it going
+    // missing, which is exactly why it is asserted here.
+    assert_eq!(
+        level_of(Some("sctk_adwaita::buttons")),
+        Some(LevelFilter::Error),
+        "the button-layout parse warning would be back, naming controls never drawn"
     );
 }
 

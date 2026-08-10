@@ -233,6 +233,42 @@ fn home_dir_string() -> Option<String> {
     (!home.is_empty()).then(|| home.to_owned())
 }
 
+/// Flatten an error and its causes onto one line.
+///
+/// A great many `Display` impls in and under this tree are a context sentence with
+/// the cause reachable only through `.source()` — `AppError`'s four I/O-boundary
+/// variants by construction (`#[source]` on the boxed cause), and
+/// `FlexiLoggerError`'s arms because they are static sentences that never
+/// interpolate the `io::Error` they hold. So a bare `{e}` reports a root-owned
+/// file and a full disk in the same words, and a log line is left saying which
+/// operation failed but not why.
+///
+/// **The other kind is what the `ends_with` skip is for, and it is why this is
+/// safe to reach for without knowing which variant you hold.** `AppError`'s three
+/// `#[from]` variants spell `#[error("… : {0}")]` over the field `#[from]` also
+/// makes the source, so `Display` has already printed what the walk is about to
+/// append — and sqlx does the same thing one level down, so a plain walk prints a
+/// constraint failure three times. A caller handed a bare `AppError` cannot tell
+/// the two shapes apart, and the one that can is the error itself: a message
+/// already ending in its cause has nothing left to add.
+///
+/// Reach for this in any `log::` call taking an error. A variant carrying only a
+/// message flattens to itself, and one that interpolates its source flattens to
+/// exactly what `{e}` would have printed.
+pub(crate) fn describe(error: &dyn std::error::Error) -> String {
+    let mut text = error.to_string();
+    let mut cause = error.source();
+    while let Some(source) = cause {
+        let message = source.to_string();
+        if !text.ends_with(&message) {
+            text.push_str(": ");
+            text.push_str(&message);
+        }
+        cause = source.source();
+    }
+    text
+}
+
 /// The pure half of [`redact_home`]. Borrows when there is nothing to replace,
 /// which is the common case.
 fn redact_prefix<'a>(text: &'a str, home: &str) -> Cow<'a, str> {
