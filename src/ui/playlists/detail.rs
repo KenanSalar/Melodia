@@ -68,6 +68,12 @@ async fn fetch_playlist_detail(
     Ok((detail, tracks))
 }
 
+/// Fetch a playlist's header + track list and populate the `PlaylistDetail`
+/// global — which flips `playlist-id >= 0`, swapping the grid for the detail
+/// view. Async; the UI write hops back via `upgrade_in_event_loop`.
+/// Fresh-open semantics: restores the persisted detail sort and clears any
+/// prior selection. The watcher-driven refresh uses [`refresh_detail`]
+/// instead, which preserves both.
 pub async fn open_playlist(
     state: &AppState,
     playlists_ui: &Arc<PlaylistsUi>,
@@ -75,6 +81,31 @@ pub async fn open_playlist(
     playlist_id: i64,
     enter_from: NavEnterFrom,
 ) -> AppResult<()> {
+    open_playlist_with(state, playlists_ui, weak, playlist_id, enter_from, |_ui| {}).await
+}
+
+/// Same as [`open_playlist`] but the caller can hook into the **same**
+/// `upgrade_in_event_loop` closure that writes `playlist-id`. The hook runs
+/// after every detail property is set, so a follow-on global write — the tab
+/// and section flip a `nav_history` replay owes — lands in the same frame,
+/// and Slint paints `PlaylistDetailBody` with no Playlists-grid frame in
+/// between. See `albums::detail::open_album_with`, which this mirrors.
+///
+/// `enter_from` chooses the enter direction for the **page** mount a
+/// cross-section arrival produces; `PlaylistDetailBody` itself takes a fixed
+/// `below`, so it reaches nothing when `Nav.selected-index` doesn't move in
+/// the same tick.
+pub async fn open_playlist_with<F>(
+    state: &AppState,
+    playlists_ui: &Arc<PlaylistsUi>,
+    weak: Weak<AppWindow>,
+    playlist_id: i64,
+    enter_from: NavEnterFrom,
+    on_applied: F,
+) -> AppResult<()>
+where
+    F: FnOnce(&AppWindow) + Send + 'static,
+{
     let (detail, mut tracks) = fetch_playlist_detail(state, playlists_ui, playlist_id).await?;
 
     // `fetch_playlist_detail` returns tracks in playlist position order —
@@ -127,14 +158,6 @@ pub async fn open_playlist(
             .collect();
         let header = to_slint_playlist_row(&detail);
         g.set_playlist(header);
-        // The gate is the **live** tab, not the `section_active` shadow the
-        // `SectionActiveGate` only updates next frame — see
-        // `albums::detail::open_album_with`. Playlists has no cross-tab drill of
-        // its own, so this is the shadow's answer today; asking the globals keeps
-        // the four details spelling one question.
-        let on_screen = tab_is_mounted(&ui, MyLibraryTab::Playlists);
-        crate::ui::hero_chips::publish_playlist(&ui, &detail, fold, on_screen);
-        apply_detail_artwork(&ui, &g, pair, /* animate */ true, on_screen);
         replace_tracks_model(&g, ui_tracks);
         reset_detail_selection(&g, &playlists_ui);
         // Fresh open clears the filter so the user lands on the full
@@ -143,16 +166,27 @@ pub async fn open_playlist(
         playlists_ui.detail.filter.lock().clear();
         g.set_sort_field(SharedString::from(sort_field.as_str()));
         g.set_sort_dir(SharedString::from(sort_dir.as_str()));
-        // The page's enter direction, kept for symmetry with the other three
-        // `open_*`. Nothing samples it here today: `PlaylistDetailBody` reads a
-        // fixed `below`, and no cross-section drill lands on this detail, so
-        // there is no `Nav.selected-index` flip in this tick to precede.
+        // Set the page's enter direction before the `on_applied` hook can flip
+        // `Nav.selected-index`, so a cross-section arrival's new page samples it
+        // on first paint. Inert on a same-page open, whose body reads a fixed
+        // `below` — see `ui::nav_transition`.
         crate::ui::nav_transition::mark(&ui, enter_from);
         g.set_playlist_id(clamp_i64_to_i32(playlist_id));
         // Fresh open: no filter, so the displayed cache equals the
         // canonical full set.
         playlists_ui.detail.all_tracks.lock().clone_from(&tracks);
         *playlists_ui.detail.tracks.lock() = tracks;
+        // Run after `playlist-id` is set so any global writes the hook performs
+        // (the tab and section a history replay lands) share this tick with the
+        // detail flip — the router then never sees the Playlists grid.
+        on_applied(&ui);
+        // The two globals six heroes share, written last because their gate is the
+        // **live** tab rather than the `section_active` shadow, which the
+        // `SectionActiveGate` only updates next frame. Read before the hook above
+        // it answers for the tab being *left*, and both are dropped outright.
+        let on_screen = tab_is_mounted(&ui, MyLibraryTab::Playlists);
+        crate::ui::hero_chips::publish_playlist(&ui, &detail, fold, on_screen);
+        apply_detail_artwork(&ui, &g, pair, /* animate */ true, on_screen);
         // Record a browser-style history entry — see the matching
         // `record_current` in `albums::detail::open_album_with` for
         // the rationale.

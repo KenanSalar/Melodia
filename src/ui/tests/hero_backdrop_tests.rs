@@ -124,16 +124,17 @@ fn the_detail_gate_is_the_live_tab_read_after_the_drill_lands() {
              the only answer a drill's own closure can trust"
         );
 
-        // Playlist Detail is the one of the four nothing drills into from another
-        // section, so it has no `open_*_with` and no hook to be after; the live
-        // read is the shadow's own answer there and it takes it for consistency.
-        let Some((before, after)) = src.split_once("on_applied(&ui);") else {
-            assert_eq!(
-                name, "playlists/detail.rs",
-                "{name} gained a cross-section drill hook — pin the gate's position against it"
-            );
-            continue;
-        };
+        // All four carry the hook now. Playlists was the exception while it had no
+        // `open_*_with` — it grew one so a `nav_history` replay could land the tab
+        // beside the id instead of a fetch ahead of it, and the gate's position
+        // became load-bearing there the moment it did.
+        let hook = src.split_once("on_applied(&ui);");
+        assert!(
+            hook.is_some(),
+            "{name} no longer routes through an `on_applied` hook — the tab a cross-view \
+             arrival lands rides in it, so the gate has nothing left to be after"
+        );
+        let (before, after) = hook.unwrap_or_default();
         assert!(
             !before.contains(&bind) && after.contains(&bind),
             "{name} binds `{GATE}` before `on_applied(&ui)`, so a cross-section drill still \

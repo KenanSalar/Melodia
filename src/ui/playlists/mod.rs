@@ -55,8 +55,8 @@ use grid::compute_indices;
 pub use detail::{
     apply_detail_row_favorite, apply_detail_row_rating, apply_filtered_detail,
     apply_optimistic_reorder, clear_detail,
-    open_playlist, refresh_detail, resort_detail, rollback_reorder, seed_detail_from_settings,
-    set_filter,
+    open_playlist, open_playlist_with, refresh_detail, resort_detail, rollback_reorder,
+    seed_detail_from_settings, set_filter,
 };
 pub use grid::{
     fetch_grid, fetch_grid_stats, rebuild_grid, tune_cache_for_display, update_flat_rows,

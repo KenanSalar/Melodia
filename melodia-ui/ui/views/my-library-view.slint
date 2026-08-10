@@ -85,6 +85,42 @@ export component MyLibraryView inherits Rectangle {
         self.hero-playlist = root.playlist-open;
     }
 
+    // **The idle band's sentence, and the latch that holds it across an open** — the mirror
+    // image of the four above, guard included. The band eases this out over the first half
+    // of the morph, so a drill has to fade the sentence that was *on screen*; bound live it
+    // instead re-reads the arriving tab, and the arrival brings two separate wrongs with it.
+    // The destination tab's leave rewound its own count to the unfetched sentinel, so the
+    // departing sentence vanishes on frame one rather than fading — and the section-enter's
+    // `fetch_grid` then lands *inside* the fade and pops "7 playlists" onto a line that is
+    // still three-quarters opaque. Reported as the playlists page flashing up on the way
+    // into a playlist.
+    //
+    // Same shape as `hero-*`: seeded by its binding, owned by `latch-count`, which is
+    // unguarded so `init` can take ownership on a page that mounts straight onto a grid.
+    // The guard is at the two call sites and is `!detail-open` — the hero half holds across
+    // a *close*, this holds across an *open*. A tab pick that closes nothing still moves it,
+    // both writes landing in the tick the tab does.
+    property <string> live-count:
+        MyLibrary.tab-idx == MyLibrary.tab-songs
+            ? (Tracks.total-count >= 0
+                ? @tr("{n} song" | "{n} songs" % Tracks.total-count) : "")
+        : MyLibrary.tab-idx == MyLibrary.tab-albums
+            ? (Albums.total-count >= 0
+                ? @tr("{n} album" | "{n} albums" % Albums.total-count) : "")
+        : MyLibrary.tab-idx == MyLibrary.tab-artists
+            ? (Artists.total-count >= 0
+                ? @tr("{n} artist" | "{n} artists" % Artists.total-count) : "")
+        : MyLibrary.tab-idx == MyLibrary.tab-genres
+            ? (Genres.total-count >= 0
+                ? @tr("{n} genre" | "{n} genres" % Genres.total-count) : "")
+        : (Playlists.total-count >= 0
+            ? @tr("{n} playlist" | "{n} playlists" % Playlists.total-count) : "");
+    property <string> count-line: root.live-count;
+    function latch-count() { self.count-line = root.live-count; }
+    changed live-count => {
+        if (!root.detail-open) { root.latch-count(); }
+    }
+
     // **The seed has to be a *write*, and that is what this line is for.** A declared
     // binding is live until something assigns over it, and the only assignment is
     // `latch-hero`, guarded on `detail-open` — which is false on exactly the frame a close
@@ -96,7 +132,14 @@ export component MyLibraryView inherits Rectangle {
     // content-area `if` rebuilds this view and hands it fresh bindings — drill in, sidebar
     // away, sidebar back, press back — and on a boot resuming a detail. `init` runs after
     // the bindings resolve, so it writes the values they just produced and nothing moves.
-    init => { root.latch-hero(); }
+    //
+    // `latch-count` is here for the same reason and needs it more, its own guard being the
+    // *complement*: a page mounted onto a grid and then drilled has never written either,
+    // so the count line would follow the tab through the live binding for the whole fade.
+    init => {
+        root.latch-hero();
+        root.latch-count();
+    }
 
     // **May a mounting body animate at all** — see the body router below for what it
     // costs when it may not. The page's own `ViewTransition` is still in flight on the
@@ -106,9 +149,12 @@ export component MyLibraryView inherits Rectangle {
     // `tab-anim-armed` answers "a tab has been picked in this page mount", which is every
     // arrival that came through the bar. The two that don't are armed by hand: the first
     // drill out of the tab the page opened on, on the edge that opens it, and a tab move
-    // that isn't a pick — a cross-tab drill or a Mouse-4/5 walk — on the mirror below,
-    // which `detail-open` cannot cover because `cross_tab_nav`'s hook writes the new
-    // detail id and moves the tab in **one** tick and the transition never happens.
+    // that isn't a pick — a cross-tab drill or a Mouse-4/5 walk into another tab's detail
+    // — on the mirror below, which `detail-open` cannot cover because both land the id and
+    // the tab in **one** tick, so the transition never happens. That is `cross_tab_nav`'s
+    // `on_applied` hook in the first case and `nav_history`'s `PendingNav` riding the same
+    // hook in the second; the walk used to write its tab a whole fetch early, which armed
+    // this for free and mounted the destination tab's *grid* to do it.
     //
     // Seeded by the binding and owned by the handlers, the band's `hero-t` idiom: the
     // write orphans the binding, which is harmless because this only ever goes true. It
@@ -116,7 +162,10 @@ export component MyLibraryView inherits Rectangle {
     // and neither handler can fire on that entry, `changed` not running on a first
     // evaluation, so the page's own entrance still owns the first frame.
     property <bool> body-anim-armed: band.tab-anim-armed;
-    changed detail-open => { root.body-anim-armed = true; }
+    changed detail-open => {
+        root.body-anim-armed = true;
+        if (!root.detail-open) { root.latch-count(); }
+    }
 
     changed album-open => {
         if (root.detail-open) { root.latch-hero(); }
@@ -226,24 +275,12 @@ export component MyLibraryView inherits Rectangle {
             blur-tick: MyLibrary.blur-search-tick;
             search-edited(t) => { root.filter-tick-pending += 1; }
 
-            // **Every count is `>= 0`-guarded**, and that is not optional: all five hold
+            // The **latched** sentence, not the live ternary — see `live-count` above for
+            // what a drill does to a line that re-reads the arriving tab mid-fade. Every
+            // count in it is `>= 0`-guarded, and that is not optional: all five hold
             // `ui::tab_bar::UNFETCHED_COUNT` until fetched and again after a tab leave,
             // and a bare `-1` interpolates into the plural as "-1 albums".
-            count-text:
-                MyLibrary.tab-idx == MyLibrary.tab-songs
-                    ? (Tracks.total-count >= 0
-                        ? @tr("{n} song" | "{n} songs" % Tracks.total-count) : "")
-                : MyLibrary.tab-idx == MyLibrary.tab-albums
-                    ? (Albums.total-count >= 0
-                        ? @tr("{n} album" | "{n} albums" % Albums.total-count) : "")
-                : MyLibrary.tab-idx == MyLibrary.tab-artists
-                    ? (Artists.total-count >= 0
-                        ? @tr("{n} artist" | "{n} artists" % Artists.total-count) : "")
-                : MyLibrary.tab-idx == MyLibrary.tab-genres
-                    ? (Genres.total-count >= 0
-                        ? @tr("{n} genre" | "{n} genres" % Genres.total-count) : "")
-                : (Playlists.total-count >= 0
-                    ? @tr("{n} playlist" | "{n} playlists" % Playlists.total-count) : "");
+            count-text: root.count-line;
 
             // A detail's own list comes first, so the drill-in states what the box now
             // filters. Artist Detail is the one that filters two things at once.

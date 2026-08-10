@@ -16,6 +16,7 @@ const PILLS: &str = include_str!("../../../../melodia-ui/ui/views/my-library/tab
 const SORT_ROW: &str =
     include_str!("../../../../melodia-ui/ui/components/sort-pill-row.slint");
 const CALLBACKS: &str = include_str!("../../callbacks/my_library.rs");
+const NAV_HISTORY: &str = include_str!("../../nav_history.rs");
 const FILTER: &str = include_str!("../filter.rs");
 
 /// The five tab bodies, each stripped of the header its predecessor carried.
@@ -691,6 +692,66 @@ fn the_hero_reads_a_latched_arm_where_the_body_reads_the_live_one() {
     );
 }
 
+/// **The count line holds the sentence it is collapsing out of**, which is the mirror
+/// image of the latch above — same idiom, complementary guard.
+///
+/// The band eases the idle count out over the first half of the morph, so a drill has to
+/// fade the sentence that was *on screen*. Bound live it re-read the arriving tab instead,
+/// and the arrival brought two wrongs with it: the destination tab's leave had rewound its
+/// own count to `UNFETCHED_COUNT`, so the departing sentence vanished on frame one rather
+/// than fading, and the section-enter's `fetch_grid` then landed *inside* the fade and
+/// popped "7 playlists" onto a line still three-quarters opaque.
+///
+/// The guard is `!detail-open` where `latch-hero`'s is `detail-open`: the hero half holds
+/// across a *close*, this holds across an *open*.
+#[test]
+fn the_count_line_holds_the_sentence_it_is_collapsing_out_of() {
+    let view: String = code(VIEW).split_whitespace().collect::<Vec<_>>().join(" ");
+
+    assert!(
+        view.contains("count-text: root.count-line;"),
+        "the band must be handed the latched `count-line`; on the live ternary the sentence \
+         re-reads the arriving tab for the whole time it is still legible",
+    );
+    assert!(
+        view.contains("property <string> count-line: root.live-count;"),
+        "`count-line` must be seeded off `live-count` — the seed is what leaves a page \
+         mounted on a grid already stating its own count",
+    );
+    assert!(
+        view.contains("function latch-count() { self.count-line = root.live-count; }"),
+        "`latch-count` must be the single unguarded writer, the `latch-hero` shape: the \
+         guard belongs at the call sites, so `init` can take ownership of the binding",
+    );
+
+    // Bounded at the handler's own closing brace rather than by a fixed width, so a
+    // neighbour that happens to latch can't vouch for one that stopped.
+    for edge in ["changed live-count", "changed detail-open"] {
+        let body = view
+            .split_once(&format!("{edge} => {{"))
+            .and_then(|(_, rest)| rest.split_once("} }"))
+            .map_or(String::new(), |(body, _)| body.to_owned());
+        assert!(
+            body.contains("if (!root.detail-open) { root.latch-count();"),
+            "`{edge}` must latch, and only while no detail is open — unguarded it adopts \
+             the arriving tab's number mid-fade, which is the flash itself",
+        );
+    }
+
+    // The seed has to become a write, and this is the line that does it. Without it the
+    // binding is still live on a page mounted onto a grid, so the first drill follows the
+    // tab through it and every other assertion here stays green.
+    let init = view
+        .split_once("init => {")
+        .and_then(|(_, rest)| rest.split_once('}'))
+        .map_or("", |(body, _)| body);
+    assert!(
+        init.contains("root.latch-count();"),
+        "the sheet must latch the count once at mount, beside `latch-hero` — the guard is \
+         `!detail-open`, so nothing else writes it on a page entered onto a grid",
+    );
+}
+
 /// The hero teardown is **deferred to the end of the collapse** and lives in one place.
 ///
 /// Left in the close handlers it runs on the same tick as the id clear, which is what the
@@ -909,6 +970,70 @@ fn only_a_tab_pick_records_a_history_entry() {
         "`on_persist_tab_idx` must not record — a cross-tab drill records its own destination \
          a moment later, and a history walk would push the entry it just walked to",
     );
+}
+
+/// **A history walk lands the tab in the same tick as the detail id it is walking to.**
+///
+/// `replay`'s cross-view arm used to write `persist_tab` synchronously and leave the
+/// matching `set_*_id` behind a DB fetch and an artwork decode. The body router is a pure
+/// function of `(tab-idx, the four ids)` with no third state, so for that whole window —
+/// tens to hundreds of ms, not a frame — it mounted the destination tab's **grid**, faded
+/// in by the sheet's `changed watched-tab-idx` at that. Reported as the playlists page
+/// flashing up on the way into a playlist.
+///
+/// The cure is the shape `cross_tab_nav` has always had: hand the navigation to
+/// `open_*_with`'s hook, which runs inside the closure that writes the id. Hoisting
+/// `persist_tab` back above the spawn compiles, reads correctly, and is the whole bug —
+/// so the pin is on the *synchronous* body carrying neither write.
+#[test]
+fn a_history_walk_lands_the_tab_beside_the_detail_id() {
+    let deferred = NAV_HISTORY
+        .split_once("let pending = PendingNav {")
+        .and_then(|(_, rest)| rest.split_once("\n    }\n"))
+        .map_or("", |(body, _)| body);
+    assert!(
+        !deferred.is_empty(),
+        "`replay`'s cross-view arm no longer builds a `PendingNav` — if the deferral moved, \
+         move this pin with it",
+    );
+    for write in ["persist_tab(ui,", "set_selected_index("] {
+        assert!(
+            !deferred.contains(write),
+            "`replay` performs `{write}` synchronously on the arm that is also opening a \
+             detail — the id lands a fetch later, so the destination tab's grid mounts in \
+             between",
+        );
+    }
+    assert!(
+        deferred.contains("spawn_open_detail(state, ui, target.section, target.tab, id, direction, Some(pending))"),
+        "the deferred arm must hand its `PendingNav` to `spawn_open_detail`, which is the \
+         only thing that can put it in the same tick as the id",
+    );
+
+    for open in
+        ["open_album_with(", "open_artist_with(", "open_genre_with(", "open_playlist_with("]
+    {
+        assert!(
+            NAV_HISTORY.contains(open),
+            "`spawn_open_detail` must reach `{open}` — the plain `open_*` has no hook, so the \
+             navigation would have to be written before the fetch again",
+        );
+    }
+
+    // A path that skips the hook and can still open something has to land the navigation
+    // itself, or the press does nothing at all — a Mouse-4 into a deleted playlist being
+    // the reachable case. Both spellings are pinned by role: the bail runs before the
+    // spawn and reads the caller's `state`, the failure arm after it and reads the clone.
+    for (spelling, role) in [
+        ("land_pending(pending, state, &fallback);", "the four missing-handle bails"),
+        ("land_pending(pending, &s, &fallback);", "the four failed opens"),
+    ] {
+        assert_eq!(
+            NAV_HISTORY.matches(spelling).count(),
+            4,
+            "{role} in `spawn_open_detail` must each land the pending navigation",
+        );
+    }
 }
 
 /// **Every body on this page enters on one axis, and the axis is vertical.**
