@@ -207,9 +207,11 @@ pub fn record_current(state: &AppState, ui: &AppWindow) {
 /// Walk one step back or forward and drive the UI into the new state.
 /// All replay-side writes are wrapped in `set_suppress(true)` so the
 /// transition hooks they trigger don't re-record. Suppress is cleared
-/// after the synchronous portion of the work; the async `open_*` future
-/// scheduled below isn't itself a recording site, so no re-suppress is
-/// required.
+/// after the synchronous portion of the work — but a cross-view walk
+/// into a detail defers its navigation into the destination `open_*`'s
+/// hook, which lands a section flip long after that, so
+/// [`PendingNav::apply_deferred`] re-arms the flag around itself. The
+/// two regions must not nest; see the module docs.
 pub fn replay(state: &AppState, ui: &AppWindow, going_back: bool) {
     let target = {
         let mut hist = state.nav_history.lock();
@@ -240,9 +242,8 @@ pub fn replay(state: &AppState, ui: &AppWindow, going_back: bool) {
         // The target is a different *view* — a My Library tab move, a section switch,
         // or both. Either way the same four things are owed: tear down whatever the
         // leaving view has open so its release/persist side-effects run, mark the
-        // direction, land on the target tab, and flip the section (conditional, a
-        // same-section move being precisely where it would be a no-op followed by a
-        // redundant persist).
+        // direction, land on the target tab, and put the section where the target
+        // names.
         //
         // **What decides whether those run now or later is whether a detail is
         // coming**, and that split is the whole of why a Mouse-4/5 walk no longer
@@ -258,7 +259,6 @@ pub fn replay(state: &AppState, ui: &AppWindow, going_back: bool) {
             from: current_detail.is_some().then_some((current_section, current_tab)),
             section: target.section,
             tab: target.tab,
-            section_moves: target.section != current_section,
             direction,
         };
         if let Some(id) = target.detail_id {
@@ -300,7 +300,6 @@ struct PendingNav {
     from: Option<(i32, i32)>,
     section: i32,
     tab: i32,
-    section_moves: bool,
     direction: NavEnterFrom,
 }
 
@@ -317,8 +316,16 @@ impl PendingNav {
         // Before the section flip, so the page mounts on the tab it is meant to be on
         // rather than on whichever one it was left at.
         persist_tab(ui, self.tab);
-        if self.section_moves {
-            let nav = ui.global::<Nav>();
+        // **Read the index live, after the close.** "Did this walk cross a section" is a
+        // different question from "is the section where the target names", and only the
+        // second one is the flip's: a detail opened by a cross-section drill carries an
+        // `origin-nav-index`, and closing it *restores that section* — so a same-section
+        // walk out of one has already left the page by the time we get here, and a
+        // decision made against the section the walk started on says there is nothing to
+        // do. The live read still skips the redundant persist on an ordinary same-section
+        // move, which is all the precomputed comparison was ever buying.
+        let nav = ui.global::<Nav>();
+        if nav.get_selected_index() != self.section {
             nav.set_selected_index(self.section);
             nav.invoke_persist_selected_index(self.section);
         }

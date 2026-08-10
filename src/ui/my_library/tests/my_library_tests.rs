@@ -1036,6 +1036,40 @@ fn a_history_walk_lands_the_tab_beside_the_detail_id() {
     }
 }
 
+/// **The section flip is decided against the live index, not against where the walk
+/// started.** The two are the same question only while nothing between them moves the
+/// index — and the close `PendingNav::apply` performs first is exactly something that
+/// does: a detail opened by a cross-section drill carries an `origin-nav-index`, and its
+/// `close-detail` restores that section.
+///
+/// So a walk between two My Library tabs, out of a detail that Favorites or Search had
+/// drilled into, ends on *that* origin page with the destination detail open behind it —
+/// the flip having been decided, before the close, that a same-section move needed none.
+/// A precomputed `section_moves` bool is the mutation: it compiles, it reads correctly,
+/// and it is the whole bug.
+#[test]
+fn the_replay_flips_the_section_against_the_index_the_close_left_behind() {
+    let apply = NAV_HISTORY
+        .split_once("fn apply(self, ui: &AppWindow) {")
+        .and_then(|(_, rest)| rest.split_once("\n    }\n"))
+        .map_or("", |(body, _)| body);
+    assert!(
+        !apply.is_empty(),
+        "`PendingNav::apply` moved — if the navigation is landed somewhere else now, move \
+         this pin with it",
+    );
+    assert!(
+        apply.contains("if nav.get_selected_index() != self.section {"),
+        "`PendingNav::apply` must compare the **live** index against the target section; \
+         anything decided before the close it performs first can't see an origin restore",
+    );
+    assert!(
+        !NAV_HISTORY.contains("section_moves"),
+        "`PendingNav` carries a precomputed section verdict again — it is read after a close \
+         that can move the index, so it answers for a page the walk has already left",
+    );
+}
+
 /// **Every body on this page enters on one axis, and the axis is vertical.**
 ///
 /// This page has a second animation no other has: the band's own height. The band is

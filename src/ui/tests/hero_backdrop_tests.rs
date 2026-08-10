@@ -128,6 +128,8 @@ fn the_detail_gate_is_the_live_tab_read_after_the_drill_lands() {
         // `open_*_with` — it grew one so a `nav_history` replay could land the tab
         // beside the id instead of a fetch ahead of it, and the gate's position
         // became load-bearing there the moment it did.
+        // An assert plus a total unwrap rather than a `let … else`, which would need a
+        // diverging body and `clippy::panic` is denied crate-wide.
         let hook = src.split_once("on_applied(&ui);");
         assert!(
             hook.is_some(),

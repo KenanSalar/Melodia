@@ -78,11 +78,12 @@ pub async fn open_album(
 
 /// Same as [`open_album`] but the caller can hook into the **same**
 /// `upgrade_in_event_loop` closure that writes `album-id`. The hook runs
-/// as the last statement on the UI thread, after every detail property
-/// is set, so a follow-on global write (e.g. flipping `Nav.selected-index`
-/// for cross-tab nav from the Artist Detail) lands in the same frame —
-/// Slint paints `AlbumDetailBody` directly with no Albums-grid frame in
-/// between.
+/// after every detail property is set, so a follow-on global write (e.g.
+/// flipping `Nav.selected-index` for cross-tab nav from the Artist Detail)
+/// lands in the same frame — Slint paints `AlbumDetailBody` directly with
+/// no Albums-grid frame in between. What follows it is the handful of
+/// writes that have to read the tab the hook may have just moved: the
+/// shared-hero gate, the history record and the filter-box reseat.
 ///
 /// `enter_from` chooses the enter direction for the **page** mount a
 /// cross-section drill produces — the `AlbumDetailBody` itself takes a fixed
