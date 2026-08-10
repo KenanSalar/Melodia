@@ -79,7 +79,7 @@ async fn add_and_get_playlist_tracks() -> Result<(), AppError> {
     let db = setup_seeded_db().await?;
     let pl = queries::playlist::create_playlist(&db, "Test", None).await?;
 
-    let all_tracks = queries::track::get_all_tracks(&db, None, None).await?;
+    let all_tracks = queries::track::get_all_tracks(&db).await?;
     let track_ids: Vec<i64> = all_tracks.iter().map(|t| t.id).collect();
 
     queries::playlist::add_tracks_to_playlist(&db, pl.id, &track_ids).await?;
@@ -103,7 +103,7 @@ async fn add_tracks_empty_is_noop() -> Result<(), AppError> {
 async fn remove_track_from_playlist() -> Result<(), AppError> {
     let db = setup_seeded_db().await?;
     let pl = queries::playlist::create_playlist(&db, "Test", None).await?;
-    let all_tracks = queries::track::get_all_tracks(&db, None, None).await?;
+    let all_tracks = queries::track::get_all_tracks(&db).await?;
     let track_ids: Vec<i64> = all_tracks.iter().map(|t| t.id).collect();
 
     queries::playlist::add_tracks_to_playlist(&db, pl.id, &track_ids).await?;
@@ -120,7 +120,7 @@ async fn remove_track_from_playlist() -> Result<(), AppError> {
 async fn remove_tracks_batch() -> Result<(), AppError> {
     let db = setup_seeded_db().await?;
     let pl = queries::playlist::create_playlist(&db, "Test", None).await?;
-    let all_tracks = queries::track::get_all_tracks(&db, None, None).await?;
+    let all_tracks = queries::track::get_all_tracks(&db).await?;
     let track_ids: Vec<i64> = all_tracks.iter().map(|t| t.id).collect();
 
     queries::playlist::add_tracks_to_playlist(&db, pl.id, &track_ids).await?;
@@ -144,7 +144,7 @@ async fn remove_tracks_batch_empty_is_noop() -> Result<(), AppError> {
 async fn reorder_playlist_track() -> Result<(), AppError> {
     let db = setup_seeded_db().await?;
     let pl = queries::playlist::create_playlist(&db, "Test", None).await?;
-    let all_tracks = queries::track::get_all_tracks(&db, None, None).await?;
+    let all_tracks = queries::track::get_all_tracks(&db).await?;
     let track_ids: Vec<i64> = all_tracks.iter().map(|t| t.id).collect();
 
     queries::playlist::add_tracks_to_playlist(&db, pl.id, &track_ids).await?;
@@ -172,7 +172,7 @@ async fn reorder_playlist_track_invalid_index() -> Result<(), AppError> {
 async fn playlist_stats_track_count() -> Result<(), AppError> {
     let db = setup_seeded_db().await?;
     let pl = queries::playlist::create_playlist(&db, "Test", None).await?;
-    let all_tracks = queries::track::get_all_tracks(&db, None, None).await?;
+    let all_tracks = queries::track::get_all_tracks(&db).await?;
     let track_ids: Vec<i64> = all_tracks.iter().map(|t| t.id).collect();
 
     queries::playlist::add_tracks_to_playlist(&db, pl.id, &track_ids).await?;
@@ -197,7 +197,7 @@ async fn clearing_thumbnail_persists_after_adding_tracks() -> Result<(), AppErro
         .execute(db.write())
         .await?;
 
-    let all_tracks = queries::track::get_all_tracks(&db, None, None).await?;
+    let all_tracks = queries::track::get_all_tracks(&db).await?;
     let track_ids: Vec<i64> = all_tracks.iter().map(|t| t.id).collect();
     assert!(track_ids.len() >= 2, "test expects seeded_db to have >= 2 tracks");
 

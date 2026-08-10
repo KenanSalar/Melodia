@@ -48,6 +48,13 @@ fn dir_token(dir: SortDir) -> &'static str {
     }
 }
 
+/// Whether a header click moved the sort between two reads of the shadow.
+/// Compares the direction through [`dir_token`] because `ViewSort` carries no
+/// `PartialEq` and the token is what the comparator is handed anyway.
+fn sort_changed(a: &ViewSort, b: &ViewSort) -> bool {
+    a.field != b.field || dir_token(a.dir) != dir_token(b.dir)
+}
+
 /// Re-sort the Songs tab after a header-column click, entirely in memory.
 ///
 /// This used to re-issue `get_favorite_tracks` with a new `ORDER BY` — an
@@ -88,10 +95,10 @@ pub async fn refresh_tracks(
 ) -> AppResult<()> {
     let sort = current_sort(fav_ui);
 
-    // Fetched in the DB's fixed `sort_key` order — display order is derived
+    // Fetched in the query's fixed `sort_key` order — display order is derived
     // in memory below, so the cold fetch and a later header click share the
     // one `compute_track_order` code path.
-    let rows = library::favorites::get_favorite_tracks(state, None, None).await?;
+    let rows = library::favorites::get_favorite_tracks(state).await?;
 
     // A leave that landed while the query was in flight has already wiped
     // `tracks_all` and emptied the model, so everything below would undo that
@@ -141,19 +148,29 @@ pub async fn refresh_tracks(
     // A header click can land while this fetch is in flight. It re-sorts the
     // cache it finds and returns, so unlike the re-fetch it replaced there is
     // no second query to correct the order afterwards — this store would just
-    // overwrite it with the permutation computed before the click. Cheap to
-    // check, and the recompute only runs on the race.
-    let sort_now = current_sort(fav_ui);
-    let order = if sort_now.field == sort.field && dir_token(sort_now.dir) == dir_token(sort.dir) {
-        order
+    // overwrite it with the permutation computed before the click. Asked twice
+    // for the reason every guard around a slow step is: `store_in_order`
+    // converts every favourite, so a click landing inside it would otherwise
+    // leave the header naming one order and the list showing another until the
+    // next library tick. Both recomputes only run on the race.
+    let sort_used = current_sort(fav_ui);
+    let order = if sort_changed(&sort_used, &sort) {
+        track_sort::compute_track_order(&rows, &sort_used.field, dir_token(sort_used.dir))
     } else {
-        track_sort::compute_track_order(&rows, &sort_now.field, dir_token(sort_now.dir))
+        order
     };
 
     {
         let _gate = fav_ui.gate();
         *fav_ui.state().songs_fold.lock() = fold;
         fav_ui.state().tracks_all.store_in_order(rows, order);
+    }
+    let sort_now = current_sort(fav_ui);
+    if sort_changed(&sort_now, &sort_used) {
+        fav_ui
+            .state()
+            .tracks_all
+            .resort(&sort_now.field, dir_token(sort_now.dir));
     }
     // Then republish: `kick_full_refresh` runs this task concurrently with the
     // hero and grid fetches, so whichever of those published did so against the

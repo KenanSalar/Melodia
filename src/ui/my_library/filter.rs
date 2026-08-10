@@ -147,7 +147,7 @@ fn mounted_filter(ui: &AppWindow) -> SharedString {
 /// until the fetch answered it; dispatching unconditionally overwrote that with the one
 /// value that means "there is nothing here", and the tab came up asserting an empty
 /// library for as long as its query took. Songs is the same write one surface over: its
-/// model survives the leave, so it pays a second full-library `build_visible` on the event
+/// model survives the leave, so it pays a second full-library filter walk on the event
 /// loop instead of painting a lie.
 ///
 /// A tab that is genuinely filtered still has to be cleared — a Songs needle carried into

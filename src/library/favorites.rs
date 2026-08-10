@@ -138,12 +138,8 @@ pub async fn toggle_current_favorite(
     Ok(Some((id, new_fav)))
 }
 
-pub async fn get_favorite_tracks(
-    state: &AppState,
-    sort_by: Option<String>,
-    sort_dir: Option<String>,
-) -> Result<Vec<track::TrackListRow>, AppError> {
-    queries::track::get_favorite_tracks_for_list(&state.db, sort_by, sort_dir).await
+pub async fn get_favorite_tracks(state: &AppState) -> Result<Vec<track::TrackListRow>, AppError> {
+    queries::track::get_favorite_tracks_for_list(&state.db).await
 }
 
 pub async fn get_favorite_stats(state: &AppState) -> Result<track::FavoriteStats, AppError> {

@@ -9,10 +9,15 @@
 //! generic accessor. [`sort_track_list_rows`] and [`compute_track_order`]
 //! are thin specialisations over it.
 //!
-//! Sort semantics mirror the SQL `track_list_order_by`
-//! (`src/database/queries/track.rs`): the default/`"title"` sort uses the
+//! The arms below are now the **only** answer to a header click: the SQL
+//! `track_list_order_by` they were modelled on had an arm per column too, and
+//! went once every caller that could ask for one started retaining its rows
+//! and re-permuting them here (`src/database/queries/track.rs` keeps the one
+//! fetch order that survived, as a const). The default/`"title"` sort uses the
 //! natural-order `sort_key`, `track_number` uses a disc/track sentinel
-//! composite, and `Option` fields put `None` first ascending.
+//! composite, and `Option` fields put `None` first ascending. Which tokens can
+//! reach them is pinned by
+//! `ui::tests::track_sort_tests::every_header_column_asks_for_a_field_the_comparator_knows`.
 //!
 //! `sort_by_cached_key` is deliberate: a plain `sort_by` would
 //! re-`to_lowercase()` both operands on every one of its `O(n log n)`

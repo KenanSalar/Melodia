@@ -21,57 +21,30 @@ use crate::error::AppError;
 /// where it keeps the mosaic's fill newest-first. `id ASC` closes the last gap.
 const MOST_PLAYED_ORDER: &str = "play_count DESC, last_played DESC, date_added DESC, id ASC";
 
-/// Build the body of an `ORDER BY` clause for the Tracks list (used by
-/// `get_all_tracks`, `get_all_tracks_for_list`, and
-/// `get_favorite_tracks_for_list`). Returns the clause without the
-/// leading `ORDER BY` so callers can compose it into longer queries.
+/// The `ORDER BY` body the three whole-table track fetches share — the natural-
+/// ordering key built at scan time from title/artist/album.
 ///
-/// Centralised so adding a new sort column or tweaking collation lands
-/// in one place. `sort_by == Some("track_number")` produces a
-/// disc-then-track-then-title ordering; everything else maps to a
-/// single column with `COLLATE NOCASE` on the four text columns.
+/// **Fixed, and it is `ui::track_sort` that made it so.** This used to be a
+/// `track_list_order_by(sort_by, sort_dir)` switch with an arm per sortable
+/// column, because a header click re-issued the query with a new `ORDER BY`.
+/// Both callers that could ask now retain their rows (`ui::track_list_cache`)
+/// and re-permute them in memory instead, so every arm but this one had
+/// stopped being reachable from anything but its own test — a second, drifting
+/// spelling of sort semantics that nothing in the app consulted.
 ///
-/// Returns a `&'static str` — the inputs come from a fixed enum-bounded
-/// set, so every distinct output is enumerated below as a static literal.
-/// "title" and unrecognised values fall through to `sort_key` (the
-/// natural-ordering key built at scan time from title/artist/album).
-fn track_list_order_by(sort_by: Option<&str>, sort_dir: Option<&str>) -> &'static str {
-    let desc = sort_dir == Some("desc");
-    match sort_by {
-        Some("track_number") => {
-            if desc {
-                "COALESCE(NULLIF(disc_number, 0), 1) ASC, \
-                 CASE WHEN track_number IS NULL OR track_number = 0 THEN 2147483647 ELSE track_number END DESC, \
-                 sort_key COLLATE NOCASE ASC"
-            } else {
-                "COALESCE(NULLIF(disc_number, 0), 1) ASC, \
-                 CASE WHEN track_number IS NULL OR track_number = 0 THEN 2147483647 ELSE track_number END ASC, \
-                 sort_key COLLATE NOCASE ASC"
-            }
-        }
-        Some("artist") => if desc { "artist COLLATE NOCASE DESC" } else { "artist COLLATE NOCASE ASC" },
-        Some("album") => if desc { "album COLLATE NOCASE DESC" } else { "album COLLATE NOCASE ASC" },
-        Some("genre") => if desc { "genre COLLATE NOCASE DESC" } else { "genre COLLATE NOCASE ASC" },
-        Some("length") => if desc { "duration_ms DESC" } else { "duration_ms ASC" },
-        Some("date_added") => if desc { "date_added DESC" } else { "date_added ASC" },
-        Some("play_count") => if desc { "play_count DESC" } else { "play_count ASC" },
-        Some("year") => if desc { "year DESC" } else { "year ASC" },
-        _ => if desc { "sort_key COLLATE NOCASE DESC" } else { "sort_key COLLATE NOCASE ASC" },
-    }
-}
+/// What the clause is still for is **determinism**: the in-memory comparator
+/// appends `sort_key` as its tie-breaker and `sort_by_cached_key` is stable, so
+/// rows tied on it fall back to the order `SQLite` handed over. Dropping the
+/// clause would leave that to the query plan.
+const TRACK_LIST_ORDER: &str = "sort_key COLLATE NOCASE ASC";
 
 // The four `SELECT *` variants below are kept for unit-test fixtures only
 // (they return a full `Track`, which assertions need). Production list views
 // always use the `_for_list` variants further down which fetch the
 // `TrackListRow` projection.
 #[cfg(test)]
-pub async fn get_all_tracks(
-    db: &DbPool,
-    sort_by: Option<String>,
-    sort_dir: Option<String>,
-) -> Result<Vec<track::Track>, AppError> {
-    let order_by = track_list_order_by(sort_by.as_deref(), sort_dir.as_deref());
-    let sql = format!("SELECT * FROM tracks ORDER BY {order_by}");
+pub async fn get_all_tracks(db: &DbPool) -> Result<Vec<track::Track>, AppError> {
+    let sql = format!("SELECT * FROM tracks ORDER BY {TRACK_LIST_ORDER}");
     let tracks = sqlx::query_as::<_, track::Track>(AssertSqlSafe(sql))
         .fetch_all(db.read())
         .await?;
@@ -287,14 +260,12 @@ pub async fn get_track_paths_by_ids(
 }
 
 /// Lightweight version of `get_all_tracks` returning only list-view columns.
-pub async fn get_all_tracks_for_list(
-    db: &DbPool,
-    sort_by: Option<String>,
-    sort_dir: Option<String>,
-) -> Result<Vec<track::TrackListRow>, AppError> {
+///
+/// The display order is the caller's: this hands back [`TRACK_LIST_ORDER`] and
+/// `ui::track_list_cache` permutes it.
+pub async fn get_all_tracks_for_list(db: &DbPool) -> Result<Vec<track::TrackListRow>, AppError> {
     let cols = track::track_list_columns();
-    let order_by = track_list_order_by(sort_by.as_deref(), sort_dir.as_deref());
-    let sql = format!("SELECT {cols} FROM tracks ORDER BY {order_by}");
+    let sql = format!("SELECT {cols} FROM tracks ORDER BY {TRACK_LIST_ORDER}");
     let tracks = sqlx::query_as::<_, track::TrackListRow>(AssertSqlSafe(sql))
         .fetch_all(db.read())
         .await?;
@@ -437,16 +408,15 @@ pub async fn set_track_artwork(
     Ok(())
 }
 
-/// Fetch all favorite tracks (lightweight list-view columns) with sorting.
-pub async fn get_favorite_tracks_for_list(
-    db: &DbPool,
-    sort_by: Option<String>,
-    sort_dir: Option<String>,
-) -> Result<Vec<track::TrackListRow>, AppError> {
+/// Fetch all favorite tracks (lightweight list-view columns).
+///
+/// Ordered like [`get_all_tracks_for_list`] and for the same reason — the
+/// Songs tab's own sort is resolved over the retained rows, not here.
+pub async fn get_favorite_tracks_for_list(db: &DbPool) -> Result<Vec<track::TrackListRow>, AppError> {
     let cols = track::track_list_columns();
-    let order_by = track_list_order_by(sort_by.as_deref(), sort_dir.as_deref());
-    let sql =
-        format!("SELECT {cols} FROM tracks WHERE is_favorite = TRUE ORDER BY {order_by}");
+    let sql = format!(
+        "SELECT {cols} FROM tracks WHERE is_favorite = TRUE ORDER BY {TRACK_LIST_ORDER}"
+    );
     let tracks = sqlx::query_as::<_, track::TrackListRow>(AssertSqlSafe(sql))
         .fetch_all(db.read())
         .await?;

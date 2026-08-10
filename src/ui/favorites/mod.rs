@@ -14,10 +14,11 @@
 //!   backdrop fades through the shared `Favorites.blur-img-{a,b}` dual-slot
 //!   pattern.
 //! * Songs — a full `TrackList` bound to the post-filter
-//!   `Favorites.tracks` model. Search is in-memory (the SQL fetch
-//!   returns the entire sorted set once per `library_changed_tx` tick,
-//!   then keystrokes re-walk the cached `tracks_all` without hitting
-//!   `SQLite`).
+//!   `Favorites.tracks` model. Both the search and the sort are in-memory
+//!   off [`crate::ui::track_list_cache`]: the SQL fetch returns the entire
+//!   set once per `library_changed_tx` tick, then a keystroke re-walks the
+//!   cached `tracks_all` and a header click re-permutes it, neither
+//!   hitting `SQLite`.
 //! * Most Played and Favorite Artists — virtualized `EntityCardGrid`s over
 //!   uncapped fetches from `library::favorites::*`. (No Favorite Albums
 //!   tab; the Albums tab covers that.)

@@ -288,7 +288,7 @@ fn push_date_predicate(qb: &mut QueryBuilder<Sqlite>, col: &str, op: RuleOp, val
 }
 
 /// The `tracks` column each [`RuleField`] filters on. Exhaustive `match` over an
-/// enum, exactly like `track_list_order_by` — no user string reaches SQL.
+/// enum returning `&'static str`, so no user string reaches SQL.
 fn column_for(field: RuleField) -> &'static str {
     match field {
         RuleField::Title => "title",

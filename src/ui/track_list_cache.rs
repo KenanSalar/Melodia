@@ -51,7 +51,7 @@ use parking_lot::Mutex;
 use crate::entities::track::TrackListRow as RsTrackListRow;
 use crate::ui::row_match::{self, Needle};
 use crate::ui::track_sort::{self, TrackSortFields};
-use crate::ui::tracks::{finish_track_list_row, prepare_track_list_row};
+use crate::ui::tracks::to_slint_track_list_row;
 use crate::ui::util::len_as_i32;
 use crate::TrackListRow as UiTrackListRow;
 
@@ -129,7 +129,7 @@ struct SortRow<'a> {
     key: &'a TrackSortKey,
 }
 
-/// Every conversion here undoes one [`prepare_track_list_row`] already made,
+/// Every conversion here undoes one [`crate::ui::tracks::prepare_track_list_row`] made,
 /// so the order this produces is the order the DB rows produce — which
 /// `the_cache_sorts_exactly_as_the_db_rows_do` holds it to.
 ///
@@ -305,7 +305,17 @@ impl TrackListCache {
     /// permutation the shared comparator produces over `TrackListRow`s is the
     /// one it produces over this cache's converted rows —
     /// `the_cache_sorts_exactly_as_the_db_rows_do` is what holds that.
+    ///
+    /// `order` must be a permutation of `0..rows.len()`. This is the one entry
+    /// point where that is a *caller's* obligation rather than a local fact, and
+    /// it is what the bare indexing in [`CacheData::walk`] rests on — an index
+    /// past the end panics on the next filter walk, not here.
     pub fn store_in_order(&self, rows: Vec<RsTrackListRow>, order: Vec<usize>) {
+        debug_assert_eq!(
+            order.len(),
+            rows.len(),
+            "store_in_order needs a permutation of its rows"
+        );
         let (display, search, sort) = convert(rows);
         self.install(display, search, sort, order);
     }
@@ -410,7 +420,7 @@ fn convert(
             disc: row.disc(),
             sort_key: row.sort_key.as_deref().unwrap_or("").into(),
         });
-        display.push(finish_track_list_row(prepare_track_list_row(&row)));
+        display.push(to_slint_track_list_row(&row));
     }
     (display, search, sort)
 }

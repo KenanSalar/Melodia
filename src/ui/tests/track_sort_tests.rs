@@ -2,11 +2,13 @@
 //! `sort_track_list_rows`, and the `compute_track_order` permutation
 //! wrapper, which all share one core.
 //!
-//! Sort semantics mirror the SQL `track_list_order_by`: the default/
+//! These arms are the app's only sort semantics — the SQL `track_list_order_by`
+//! they were modelled on is gone, having become unreachable once every caller
+//! that could ask for a sort started retaining its rows instead. The default/
 //! `"title"` sort uses the natural-order `sort_key`, `track_number` uses a
 //! disc/track sentinel composite (disc stays ascending on `desc`), and
-//! `Option` fields put `None` first ascending. Seeded values are distinct
-//! per field so expected orders are exact.
+//! `Option` fields put `None` first ascending. Seeded values are distinct per
+//! field so expected orders are exact.
 
 use super::*;
 
@@ -184,4 +186,44 @@ fn custom_secondary_key_breaks_ties() {
     sort_track_rows_by(&mut rows, "artist", "asc", |r| r, |r| r.file_name.to_lowercase());
     // file_name "1.flac" < "2.flac".
     assert_eq!(ids(&rows), [1, 2]);
+}
+
+/// Every field a `TrackList` header cell can ask for has to be one the
+/// comparator has an arm for.
+///
+/// The token is a bare string on both sides — a `field:` on a `HeaderCell`
+/// mount, a `match` arm in [`sort_track_rows_by`] — so a rename on either side
+/// compiles and the column quietly sorts by the natural-order default while
+/// painting its arrow as though it had worked. This is the `SortPillRow` pin
+/// (`ui::my_library::tests`, `ui::favorites::tests`) for the other half of the
+/// tree's sortable surfaces, and it earns its place now that `track_list_order_by`
+/// is gone — nothing else answers these tokens any more.
+#[test]
+fn every_header_column_asks_for_a_field_the_comparator_knows() {
+    const HEADER: &str =
+        include_str!("../../../melodia-ui/ui/components/track-list/track-list-header.slint");
+    // The arms above, restated. `track_number` is the one handled ahead of the
+    // `match`; the rest are its named arms. A field dropped there and left here
+    // fails the round-trip below.
+    const ARMS: [&str; 7] =
+        ["track_number", "title", "artist", "album", "genre", "year", "length"];
+
+    let asked: Vec<&str> = HEADER
+        .lines()
+        .filter_map(|line| line.trim().strip_prefix("field: \""))
+        .filter_map(|rest| rest.split_once('"'))
+        .map(|(field, _)| field)
+        .collect();
+
+    assert_eq!(
+        asked.len(),
+        ARMS.len(),
+        "track-list-header.slint must name one sort field per column: got {asked:?}"
+    );
+    for field in &asked {
+        assert!(
+            ARMS.contains(field),
+            "a header cell asks for `{field}`, which falls through to the sort_key arm"
+        );
+    }
 }
