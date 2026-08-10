@@ -1,5 +1,6 @@
 use std::collections::HashSet;
 use std::sync::{Arc, OnceLock};
+use std::time::Duration;
 
 use parking_lot::Mutex;
 
@@ -7,7 +8,8 @@ use crate::config::Paths;
 use crate::database::DbPool;
 use crate::database::queries;
 use crate::error::AppResult;
-use crate::media::deezer;
+use crate::media::deezer::{self, DeezerAnswer};
+use crate::services::logging;
 
 /// Session-scoped negative memo: artist ids whose Deezer search returned a
 /// definitive "no match" this session. `spawn_fetch` runs after every scan
@@ -30,12 +32,23 @@ enum FetchOutcome {
     NoMatch,
     /// Transport/HTTP/download failure — retry on a later scan.
     Transient,
+    /// Deezer refused the search itself, carrying its own reason. In practice a
+    /// tripped quota, which the remaining batches would spend on refusals too —
+    /// so this stops the pass. Nothing is memoized, so the next scan retries.
+    Refused(String),
 }
 
+/// Deezer's ceiling is 50 requests per 5 s per IP, and the Discord presence path
+/// spends from the same budget over the same client. Five at a time a beat apart
+/// stays well under it while still clearing a first-launch backlog quickly.
+const BATCH_SIZE: usize = 5;
+const BATCH_INTERVAL: Duration = Duration::from_millis(750);
+
 /// Fetch artist images from Deezer for artists that don't have one yet.
-/// Processes in batches of 5 concurrent requests with rate limiting. Uses the
-/// shared `reqwest::Client` from `AppState` so the connection pool is reused
-/// across every HTTP-using service.
+/// Runs one [`BATCH_SIZE`] batch of concurrent searches per [`BATCH_INTERVAL`],
+/// and abandons the pass if Deezer refuses one. Uses the shared `reqwest::Client`
+/// from `AppState` so the connection pool is reused across every HTTP-using
+/// service.
 pub async fn fetch_artist_images(
     paths: &Paths,
     db: &DbPool,
@@ -52,10 +65,11 @@ pub async fn fetch_artist_images(
 
     let artists_dir = paths.artists_dir.clone();
     let mut fetched_count: u32 = 0;
+    let mut processed = 0usize;
 
-    for (batch_idx, batch) in artists.chunks(5).enumerate() {
+    for (batch_idx, batch) in artists.chunks(BATCH_SIZE).enumerate() {
         if batch_idx > 0 {
-            tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+            tokio::time::sleep(BATCH_INTERVAL).await;
         }
         let mut set = tokio::task::JoinSet::new();
 
@@ -67,10 +81,17 @@ pub async fn fetch_artist_images(
 
             set.spawn(async move {
                 let url = match deezer::search_artist_image_url(&client, &name).await {
-                    Ok(Some(url)) => url,
-                    Ok(None) => return (id, name, FetchOutcome::NoMatch),
+                    Ok(DeezerAnswer::Body(Some(url))) => url,
+                    Ok(DeezerAnswer::Body(None)) => return (id, name, FetchOutcome::NoMatch),
+                    Ok(DeezerAnswer::ApiError { message, code }) => {
+                        let reason = format!("{message} (code {code})");
+                        return (id, name, FetchOutcome::Refused(reason));
+                    }
                     Err(e) => {
-                        log::warn!("Deezer search failed for '{name}': {e}");
+                        log::warn!(
+                            "Deezer search failed for '{name}': {}",
+                            logging::describe(&e)
+                        );
                         return (id, name, FetchOutcome::Transient);
                     }
                 };
@@ -81,12 +102,19 @@ pub async fn fetch_artist_images(
                     // CDN hiccup — treat as transient so a later scan retries.
                     Ok(None) => (id, name, FetchOutcome::Transient),
                     Err(e) => {
-                        log::warn!("Failed to download image for '{name}': {e}");
+                        log::warn!(
+                            "Failed to download image for '{name}': {}",
+                            logging::describe(&e)
+                        );
                         (id, name, FetchOutcome::Transient)
                     }
                 }
             });
         }
+
+        // The whole batch shares one closed quota window, so it reports one
+        // refusal rather than five identical warnings.
+        let mut refusal: Option<String> = None;
 
         while let Some(result) = set.join_next().await {
             match result {
@@ -101,8 +129,21 @@ pub async fn fetch_artist_images(
                     attempted_no_match().lock().insert(id);
                 }
                 Ok((_id, _name, FetchOutcome::Transient)) => {}
+                Ok((_id, _name, FetchOutcome::Refused(reason))) => {
+                    refusal.get_or_insert(reason);
+                }
                 Err(e) => log::error!("Artist image fetch task failed: {e}"),
             }
+        }
+
+        processed += batch.len();
+
+        if let Some(reason) = refusal {
+            log::warn!(
+                "Deezer refused the artist-image search ({reason}); stopping this pass with {} artist(s) left for the next scan",
+                artists.len() - processed
+            );
+            break;
         }
     }
 

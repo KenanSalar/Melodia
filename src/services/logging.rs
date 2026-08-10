@@ -40,8 +40,18 @@ use crate::config::Paths;
 /// — while the decoder compensates and plays it fine. Safe to scope by module:
 /// that is the only `warn!` in it, and the demuxer's all still land. Directives
 /// match longest-name-first, so this outranks the floor.
+///
+/// `sctk_adwaita::buttons` is the same trade one dependency over. It reads
+/// `org.gnome.desktop.wm.preferences button-layout` out of the XDG portal, KDE
+/// answers with an empty left side, and both `warn!`s in the module are about
+/// that parse — while the frame those buttons belong to is the client-side
+/// titlebar winit builds and immediately hides whenever we ask for no
+/// decorations. So it fires once per launch in custom-titlebar mode, naming
+/// controls that are never drawn. By module rather than by crate: the crate's
+/// other `warn!` is a glyph-rasterization failure and has nothing to do with
+/// the portal.
 const DEFAULT_LOG_SPEC: &str =
-    "warn, melodia=info, Melodia=info, symphonia_bundle_mp3::layer3=error";
+    "warn, melodia=info, Melodia=info, symphonia_bundle_mp3::layer3=error, sctk_adwaita::buttons=error";
 
 /// Rotate at 2 MiB or at the turn of the day; `Cleanup` never counts the live
 /// file, so the ceiling is 8 files, 16 MiB.
@@ -141,7 +151,11 @@ fn start_to_file(paths: &Paths) -> Result<LoggerHandle, FlexiLoggerError> {
 /// `io::Error` on `.source()` and never interpolates it — so "permission denied"
 /// and "no space left on device" exist only in the chain, and the chain is the
 /// whole reason the reason is recorded at all.
-fn describe(error: &dyn std::error::Error) -> String {
+///
+/// `AppError`'s I/O-boundary variants are built the same way — the context message
+/// in the `Display`, the typed cause on `.source()` — so a log line that wants the
+/// cause rather than just the context flattens through here too.
+pub(crate) fn describe(error: &dyn std::error::Error) -> String {
     let mut text = error.to_string();
     let mut cause = error.source();
     while let Some(source) = cause {
