@@ -36,6 +36,11 @@ const MOST_PLAYED_ORDER: &str = "play_count DESC, last_played DESC, date_added D
 /// appends `sort_key` as its tie-breaker and `sort_by_cached_key` is stable, so
 /// rows tied on it fall back to the order `SQLite` handed over. Dropping the
 /// clause would leave that to the query plan.
+///
+/// And it is close to free, which is what makes that trade an easy one:
+/// `idx_tracks_sort_key` is `(sort_key COLLATE NOCASE)` — the same expression
+/// under the same collation — so this reads as an index scan rather than a
+/// sort, and the in-memory permutation is the only sort either list pays for.
 const TRACK_LIST_ORDER: &str = "sort_key COLLATE NOCASE ASC";
 
 // The four `SELECT *` variants below are kept for unit-test fixtures only

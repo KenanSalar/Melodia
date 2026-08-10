@@ -13,19 +13,42 @@ async fn seed_db() -> Result<DbPool, AppError> {
     Ok(db)
 }
 
+/// [`seed_db`]'s three tracks, inserted **back-to-front** so that rowid order
+/// is the reverse of `sort_key` order. Identical in every other respect.
+///
+/// The two ordering pins below need it, and neither works without it.
+/// `seed_db` inserts already sorted, so there rowid order and `sort_key` order
+/// are the same sequence and an assertion over it is satisfied by a bare table
+/// scan — the `ORDER BY` can go missing with nothing failing, which is exactly
+/// what happened to the test this one replaced.
+///
+/// `seed_db` itself can't just be reversed:
+/// [`the_hero_mosaic_leads_with_the_covers_the_most_played_tab_shows`] reads its
+/// insertion order as the rowid order its tiebreakers have to *beat*, so
+/// flipping it would hand that test the answer it exists to prove.
+async fn seed_db_inserted_backwards() -> Result<DbPool, AppError> {
+    let db = DbPool::test_pool().await;
+    queries::folder::insert_folder(&db, "/music", true).await?;
+    insert_test_track(&db, "/music/gamma.mp3", "Gamma", "Alpha Artist", "A Album", "Rock").await?;
+    insert_test_track(&db, "/music/beta.mp3", "Beta", "Alpha Artist", "A Album", "Rock").await?;
+    insert_test_track(&db, "/music/alpha.mp3", "Alpha", "Zeta Artist", "B Album", "Pop").await?;
+    Ok(db)
+}
+
 /// The whole-table fetches hand back one fixed order, and both retained-row
 /// views document it as the order they permute *from*. It stopped being a
 /// default when `track_list_order_by`'s other arms went — nothing asks for
 /// anything else — so this is now the only ordering claim SQL makes about a
 /// track list, and the one worth pinning.
+///
+/// Seeded backwards, because the ordinary fixture cannot pin it — see
+/// [`seed_db_inserted_backwards`].
 #[tokio::test]
 async fn a_whole_table_fetch_comes_back_in_sort_key_order() -> Result<(), AppError> {
-    let db = seed_db().await?;
+    let db = seed_db_inserted_backwards().await?;
     let tracks = queries::track::get_all_tracks(&db).await?;
-    assert_eq!(tracks.len(), 3);
-    assert_eq!(tracks[0].title, "Alpha");
-    assert_eq!(tracks[1].title, "Beta");
-    assert_eq!(tracks[2].title, "Gamma");
+    let titles: Vec<&str> = tracks.iter().map(|t| t.title.as_str()).collect();
+    assert_eq!(titles, ["Alpha", "Beta", "Gamma"]);
     Ok(())
 }
 
@@ -340,7 +363,8 @@ async fn the_favorites_fetch_shares_the_whole_table_order() -> Result<(), AppErr
     // The Songs tab hands its own permutation to `store_in_order`, computed
     // before the section guards let it store — so the two orders only line up
     // because this fetch and `get_all_tracks_for_list` share one clause.
-    let db = seed_db().await?;
+    // Backwards-seeded for the reason the whole-table pin above is.
+    let db = seed_db_inserted_backwards().await?;
     let all = queries::track::get_all_tracks(&db).await?;
     let ids: Vec<i64> = all.iter().map(|t| t.id).collect();
     queries::track::set_favorite(&db, &ids, true).await?;
