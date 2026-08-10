@@ -41,40 +41,6 @@ use macros::{spawn_blocking_logged, spawn_logged_sync, wire_pb, wire_sync, wire_
 #[allow(unused_imports)]
 use macros::spawn_logged;
 
-/// Synchronous shadow of `views.json`'s `last_nav_index`, plus the lock its disk
-/// writes serialize on.
-///
-/// **One UI-thread tick can ask for two different sections**, which is what makes
-/// this more than the usual insurance the `PersistedAccent` / `PersistedLocale`
-/// shadows are: `nav_history::replay` closes the departing detail before it lands
-/// the target, and a detail reached by a cross-section drill carries an
-/// `origin-nav-index` whose `close-detail` calls `return_to_section` — so the
-/// callback below fires once for the origin and once for the target, each spawning
-/// its own write. Two `spawn_blocking` tasks have no ordering between them, so the
-/// origin could land last and a restart would open on the page the walk passed
-/// through.
-///
-/// **Two fields because they answer two questions, and only one of them may be
-/// asked from the UI thread.** [`Self::writer`] *is* the ordering — held across the
-/// whole `views.json` round trip, so writes happen one at a time and in acquisition
-/// order — while [`Self::latest`] only says which index is current, so a task that
-/// acquires the lock and finds a newer one there can drop its write instead of
-/// racing to land it. That split is what lets the UI thread publish with a plain
-/// store: fold the two into one `Mutex<i32>` and the callback below blocks on a
-/// guard held across file I/O, on the path every sidebar click takes.
-///
-/// The invariant is that the load and the write share the writer's critical
-/// section. Releasing early puts the two tasks back in a race, and the spelling
-/// that does it — `let _ = self.writer.lock();` — is `clippy::let_underscore_lock`,
-/// denied here through `correctness`, so it fails the build rather than a review.
-struct NavIndexPersist {
-    /// Written on the UI thread ahead of each spawn; read by the writers under
-    /// [`Self::writer`].
-    latest: AtomicI32,
-    /// Taken by the disk writers alone, for the length of the write.
-    writer: parking_lot::Mutex<()>,
-}
-
 pub use albums::wire_albums;
 pub use artists::wire_artists;
 pub use browse::wire_browse;
@@ -214,6 +180,24 @@ pub(super) fn persisted_sort(state: &AppState, view_id: &str) -> Option<(String,
     library::settings::get_view_sort(state, view_id).map(|s| (s.field, s.dir.as_str()))
 }
 
+/// Shadow of `views.json`'s `last_nav_index` plus the lock its writes serialize on.
+///
+/// `Nav.persist-selected-index` can fire twice in one tick — `nav_history::replay`
+/// closes the departing detail first, and a close restores a cross-section origin —
+/// and two `spawn_blocking` writes have no ordering between them, so the origin can
+/// land last. `writer` supplies that ordering; `latest` lets a task holding it drop a
+/// write a newer index has superseded. **The load has to sit under `writer`**, or both
+/// tasks pass the check and race to land.
+///
+/// Two fields rather than a `Mutex<i32>` so the UI thread publishes with a store
+/// instead of blocking on a guard held across file I/O.
+struct NavIndexPersist {
+    /// Published on the UI thread before each spawn; read by writers under `writer`.
+    latest: AtomicI32,
+    /// Held by the disk writers for the length of the write.
+    writer: parking_lot::Mutex<()>,
+}
+
 /// Wire every Slint `Player.*` callback to its `library::*` counterpart.
 /// Call once after constructing `AppWindow`.
 pub fn wire_all(ui: &AppWindow, state: &AppState) {
@@ -300,10 +284,7 @@ pub fn wire_all(ui: &AppWindow, state: &AppState) {
             if let Some(ui) = ui_weak.upgrade() {
                 crate::ui::nav_history::record_current(&s, &ui);
             }
-            // Published here, on the UI thread, before the spawn — so by the time any
-            // queued write runs it can see the newest request. A store rather than a
-            // lock: the writers hold theirs across a `views.json` round trip, and this
-            // line is on the path every sidebar click takes. See the type.
+            // Ahead of the spawn — a queued write has to be able to see it.
             persist.latest.store(idx, Ordering::Release);
             // Spelled out rather than through `spawn_blocking_logged!`, which takes a
             // string *literal*: the index is what makes this line worth reading, and a
@@ -311,9 +292,8 @@ pub fn wire_all(ui: &AppWindow, state: &AppState) {
             let s_disk = s.clone();
             let persist = Arc::clone(&persist);
             s.runtime.spawn_blocking(move || {
-                // **The load and the write share the writer's critical section**, which
-                // is the whole mechanism: skipping a superseded write is only sound if
-                // nothing can slip its own write in between.
+                // Lock first: dropping a superseded write is only sound inside the
+                // section that performs the write.
                 let _write = persist.writer.lock();
                 if persist.latest.load(Ordering::Acquire) != idx {
                     return;
