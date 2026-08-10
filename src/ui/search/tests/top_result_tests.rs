@@ -6,14 +6,14 @@
 #![allow(clippy::expect_used, clippy::unwrap_used)]
 
 use super::{TopKind, TopSubtitle, compute_top_result};
-use crate::database::queries::SearchResults;
+use crate::library::search::SearchResults;
 use crate::entities::album::AlbumStats;
 use crate::entities::artist::ArtistStats;
 use crate::entities::genre::GenreStats;
 
 const CARD: &str =
     include_str!("../../../../melodia-ui/ui/views/search/top-result-card.slint");
-const ROUTER: &str = include_str!("../../callbacks/search/results.rs");
+const ROUTER: &str = include_str!("../callbacks/results.rs");
 const ARTWORK_IMAGE: &str =
     include_str!("../../../../melodia-ui/ui/components/artwork-image.slint");
 const GENRE_GRID: &str =

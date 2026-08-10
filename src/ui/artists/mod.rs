@@ -19,6 +19,7 @@
 //! Slint properties + models are only touched from the UI thread, reached
 //! via `Weak<AppWindow>::upgrade_in_event_loop`.
 
+mod callbacks;
 mod detail;
 mod grid;
 mod selection;
@@ -33,10 +34,12 @@ use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 
 use crate::entities::artist::ArtistStats;
 use crate::media::cover_thumbs::CoverThumbs;
+use crate::ui::albums::AlbumsUi;
 use crate::ui::detail_artwork::DetailArtwork;
 use crate::ui::row_match::Needle;
 use crate::ui::section_state::SectionState;
 use crate::ui::util::clamp_i64_to_i32;
+use crate::ui::view_ctx::ViewCtx;
 use crate::{
     AlbumRow as UiAlbumRow, AppWindow, ArtistDetail, ArtistGridRow as UiArtistGridRow,
     ArtistRow as UiArtistRow, Artists, TrackListRow as UiTrackListRow,
@@ -51,13 +54,44 @@ use grid::compute_indices;
 #[cfg(test)]
 use state::GridIndexCache;
 
-pub use detail::{
+// Reached from outside the slice: `ui::nav_history` replays a walk into a
+// detail, `boot::ui_setup` seeds the persisted one and retunes the cover cap,
+// and its `initial_grid_fetch!` kicks the first fetch after the window is shown
+// — which is why `fetch_grid` can't fold into `install` with the rest.
+pub use detail::{open_artist_with, seed_detail_from_settings};
+pub use grid::{fetch_grid, tune_cache_for_display};
+
+// Reached only from this slice's own `callbacks/`, which used to live two
+// modules away, plus the cross-slice `apply_detail_row_*` mirrors in
+// `callbacks::now_playing` and the drill in `callbacks::cross_tab_nav`.
+// `pub(super)` is `pub(in crate::ui)` here, which is exactly that reach.
+pub(super) use detail::{
     apply_detail_row_favorite, apply_detail_row_rating, apply_filtered_detail, clear_detail,
-    open_artist, open_artist_with,
-    refresh_detail, resort_detail, seed_detail_from_settings, set_filter,
+    open_artist, refresh_detail, resort_detail, set_filter,
 };
-pub use grid::{fetch_grid, rebuild_grid, tune_cache_for_display};
-pub use selection::{clear_selection, handle_select_row};
+pub(super) use grid::rebuild_grid;
+pub(super) use selection::{clear_selection, handle_select_row};
+
+/// Install the Artists grid + detail models, build the handle, and wire every
+/// `Artists.*` / `ArtistDetail.*` callback to it.
+///
+/// Takes `albums_ui` because Artists depends on Albums twice over: the handle
+/// borrows the Albums grid-cover tier for its own Albums strip, and the
+/// "open album from Artist Detail" hand-off needs a live `AlbumsUi` to call
+/// into. That parameter is the ordering — this does not resolve until
+/// `albums_ui` is bound, so "Albums before Artists" is a compile error to get
+/// wrong rather than a comment in the boot file.
+///
+/// The returned handle is not a keepalive; see [`crate::ui::albums::install`].
+pub fn install(cx: ViewCtx<'_>, albums_ui: &Arc<AlbumsUi>) -> Arc<ArtistsUi> {
+    install_models(cx.app);
+    let artists_ui = Arc::new(ArtistsUi::new(
+        cx.cover_thumbs.clone(),
+        albums_ui.grid_thumbs(),
+    ));
+    callbacks::wire(cx.app, cx.state, &artists_ui, albums_ui);
+    artists_ui
+}
 
 /// Rust-side state for the Artists grid + detail views. Mirrors
 /// [`AlbumsUi`](crate::ui::albums::AlbumsUi) layer by layer; the grid and
@@ -90,7 +124,7 @@ pub struct ArtistsUi {
 }
 
 impl ArtistsUi {
-    pub fn new(cover_thumbs: Arc<CoverThumbs>, albums_grid_covers: Arc<CoverThumbs>) -> Self {
+    fn new(cover_thumbs: Arc<CoverThumbs>, albums_grid_covers: Arc<CoverThumbs>) -> Self {
         Self {
             grid: ArtistGridState {
                 data: Mutex::new(Arc::new(GridData::new(Vec::new()))),
@@ -249,7 +283,7 @@ impl ArtistsUi {
 /// Build the empty `VecModel`s the Artists grid, the detail track list,
 /// the detail Albums sub-section, and the detail selection need, and hand
 /// them to the Slint globals as `ModelRc`s.
-pub fn install_artists_models(ui: &AppWindow) {
+fn install_models(ui: &AppWindow) {
     let grid: Rc<VecModel<UiArtistGridRow>> = Rc::new(VecModel::default());
     ui.global::<Artists>().set_grid_rows(ModelRc::from(grid));
 

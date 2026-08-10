@@ -49,7 +49,7 @@ pub fn spawn_background_tasks(
     // OS media controls → SlintEventSink: souvlaki events drive the same
     // library::* paths the UI does, so MPRIS / SMTC stays in lockstep.
     if let Some(rx) = channels.media_control_rx.take() {
-        let sink: Arc<dyn EventSink> = Arc::new(ui::event_sink::SlintEventSink {
+        let sink: Arc<dyn EventSink> = Arc::new(ui::shell::event_sink::SlintEventSink {
             state: state.clone(),
         });
         services::media_controls::spawn_event_receiver(

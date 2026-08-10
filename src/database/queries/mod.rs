@@ -15,7 +15,6 @@ pub mod track;
 // site documents which area of the schema it touches and renames stay local.
 pub use ingest::{FolderResolution, IngestResult};
 pub use scan::ResolvedIds;
-pub use search::SearchResults;
 
 #[cfg(test)]
 pub(crate) mod tests {

@@ -29,9 +29,10 @@
 //! in three parts — `fetch` (the query), `apply` (cache → model) and `warm` (the
 //! one cache-coherence predicate that names these tabs).
 
+mod callbacks;
 mod covers;
-pub(crate) mod grid;
-pub(crate) mod hero;
+mod grid;
+mod hero;
 mod rows;
 mod selection;
 mod songs;
@@ -44,6 +45,7 @@ use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use crate::media::cover_thumbs::CoverThumbs;
 use crate::ui::hero_folds::{HeroFold, MostPlayedTotals};
 use crate::ui::section_state::SectionState;
+use crate::ui::view_ctx::ViewCtx;
 
 use state::{
     GRID_THUMB_CAP, MOSAIC_THUMB_CAP, MOSAIC_THUMB_SIZE, MOST_PLAYED_THUMB_SIZE,
@@ -53,15 +55,42 @@ use state::{
 /// This page's `Nav.selected-index` — see [`crate::ui::favorites::NAV_FAVORITES`].
 pub const NAV_RECENTLY_PLAYED: i32 = 8;
 
+// `boot::ui_setup` retunes the cover cap once the window is live.
 pub use covers::tune_cache_for_display;
-pub use grid::{apply_filtered_grid_now, mark_covers_warm, refresh_grid};
-pub use rows::{install_recently_played_models, to_slint_most_played_row};
-pub use selection::{clear_selection, handle_select_row};
-pub use songs::{
+
+// Reached only from this slice's own `callbacks/`, which used to live two
+// modules away, plus `ui::hero_chips` for the tab enum and the nav index.
+// `pub(super)` is `pub(in crate::ui)` here, which is exactly that reach.
+pub(super) use grid::{apply_filtered_grid_now, mark_covers_warm, refresh_grid};
+pub(super) use rows::to_slint_most_played_row;
+pub(super) use selection::{clear_selection, handle_select_row};
+pub(super) use songs::{
     apply_filtered_tracks, apply_filtered_tracks_now, apply_row_favorite, apply_row_rating,
-    current_filter, refresh_tracks, set_filter,
+    refresh_tracks, set_filter,
 };
-pub use tabs::{RecentlyPlayedTab, seed_tab, tab_from_index};
+pub(super) use tabs::{seed_tab, tab_from_index};
+pub use tabs::RecentlyPlayedTab;
+
+/// Install the Recently-Played models, build the handle, wire every
+/// `RecentlyPlayed.*` callback, and seed the persisted tab.
+///
+/// A trimmed Favorites: the shared row-tier `cover_thumbs` serves the Songs
+/// list, while the handle allocates its own mosaic and Most Played LRUs (the
+/// latter released on tab-leave as well as on section-leave). Its row-menu
+/// "Go to …" entries are wired centrally by `wire_cross_tab_nav`, so it takes
+/// no peer handle.
+///
+/// The tab seed folds in here for the reason it does on Favorites — see
+/// [`crate::ui::favorites::install`].
+pub fn install(cx: ViewCtx<'_>) -> Arc<RecentlyPlayedUi> {
+    rows::install_recently_played_models(cx.app);
+    let rp_ui = Arc::new(RecentlyPlayedUi::new(cx.cover_thumbs.clone()));
+    callbacks::wire(cx.app, cx.state, &rp_ui);
+    if let Some(vs) = cx.view_state {
+        seed_tab(cx.app, &rp_ui, vs.recently_played_tab);
+    }
+    rp_ui
+}
 
 /// Rust-side state for the Recently-Played view. Shared between the UI
 /// callbacks (`wire_recently_played`) and the async fetchers behind an
@@ -102,7 +131,7 @@ pub struct RecentlyPlayedUi {
 }
 
 impl RecentlyPlayedUi {
-    pub fn new(cover_thumbs: Arc<CoverThumbs>) -> Self {
+    fn new(cover_thumbs: Arc<CoverThumbs>) -> Self {
         Self {
             inner: RecentlyPlayedUiState::new(),
             cover_thumbs,

@@ -360,7 +360,7 @@ impl Default for WindowFlags {
 /// serializes at the top level of `settings.json`.
 ///
 /// `tray_enabled` defaults to `false` — the tray icon is opt-in. When off,
-/// `main.rs` skips `ui::tray_bridge::install` entirely, so none of the tray
+/// `main.rs` skips `ui::shell::tray_bridge::install` entirely, so none of the tray
 /// code runs: no D-Bus connection, no service thread, no action tasks.
 /// Toggling it requires a restart (the `restart-tray` `Dialog` flow).
 ///

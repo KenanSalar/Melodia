@@ -38,6 +38,7 @@
 //! in four parts — `fetch` (queries), `apply` (caches → models), `warm` (the
 //! three cache-coherence predicates) and `sort`.
 
+mod callbacks;
 mod covers;
 mod grids;
 mod hero;
@@ -52,8 +53,10 @@ use std::sync::atomic::{AtomicU8, Ordering};
 
 use crate::entities::track::FavoriteStats;
 use crate::media::cover_thumbs::CoverThumbs;
+use crate::ui::artists::ArtistsUi;
 use crate::ui::hero_folds::{HeroFold, MostPlayedTotals};
 use crate::ui::section_state::SectionState;
+use crate::ui::view_ctx::ViewCtx;
 
 use state::{
     ARTIST_THUMB_SIZE, FavoritesUiState, GRID_THUMB_CAP, MOSAIC_THUMB_CAP, MOSAIC_THUMB_SIZE,
@@ -66,16 +69,49 @@ use state::{
 /// section-active shadow from it, and `hero_chips` asks which band is up.
 pub const NAV_FAVORITES: i32 = 2;
 
+// `boot::ui_setup` retunes the cover cap once the window is live.
 pub use covers::tune_cache_for_display;
-pub use grids::{apply_filtered_grids_now, mark_covers_warm, refresh_grids, set_artist_sort};
-pub use hero::refresh_hero;
-pub use rows::{install_favorites_models, to_slint_fav_artist_row, to_slint_most_played_row};
-pub use selection::{clear_selection, handle_select_row};
-pub use songs::{
-    apply_filtered_tracks, apply_filtered_tracks_now, apply_row_rating, current_filter,
-    current_sort, refresh_tracks, resort_and_apply, set_filter, set_sort,
+
+// Reached only from this slice's own `callbacks/`, which used to live two
+// modules away, plus `ui::hero_chips` for the tab enum and the nav index.
+// `pub(super)` is `pub(in crate::ui)` here, which is exactly that reach.
+pub(super) use grids::{
+    apply_filtered_grids_now, mark_covers_warm, refresh_grids, set_artist_sort,
 };
-pub use tabs::{FavoritesTab, seed_tab, tab_from_index};
+pub(super) use hero::refresh_hero;
+pub(super) use rows::{to_slint_fav_artist_row, to_slint_most_played_row};
+pub(super) use selection::{clear_selection, handle_select_row};
+pub(super) use songs::{
+    apply_filtered_tracks, apply_filtered_tracks_now, apply_row_rating, refresh_tracks,
+    resort_and_apply, set_filter, set_sort,
+};
+pub(super) use tabs::{seed_tab, tab_from_index};
+pub use tabs::FavoritesTab;
+
+/// Install the Favorites models, build the handle, wire every `Favorites.*`
+/// callback, and seed the persisted tab.
+///
+/// Takes `artists_ui` because the sub-view module borrows it for the cross-tab
+/// open-artist hand-off — which is the ordering, made a compile error rather
+/// than a comment: this does not resolve until `artists_ui` is bound.
+///
+/// **The tab seed folds in here** rather than sitting with its siblings in
+/// `hydrate_ui_from_settings`, and the handle is why: seeding writes the Slint
+/// property *and* the handle's synchronous shadow, which the off-thread
+/// fetchers read to decide which model to fill and which cover tier to warm.
+/// Folded, the handle is the receiver instead of something that has to still be
+/// in scope two functions later.
+///
+/// The returned handle is not a keepalive; see [`crate::ui::albums::install`].
+pub fn install(cx: ViewCtx<'_>, artists_ui: &Arc<ArtistsUi>) -> Arc<FavoritesUi> {
+    rows::install_favorites_models(cx.app);
+    let favorites_ui = Arc::new(FavoritesUi::new(cx.cover_thumbs.clone()));
+    callbacks::wire(cx.app, cx.state, &favorites_ui, artists_ui);
+    if let Some(vs) = cx.view_state {
+        seed_tab(cx.app, &favorites_ui, vs.favorites_tab);
+    }
+    favorites_ui
+}
 
 /// Rust-side state for the Favorites view. Shared between the UI
 /// callbacks (`wire_favorites`) and the async fetchers behind an
@@ -105,7 +141,7 @@ pub struct FavoritesUi {
 }
 
 impl FavoritesUi {
-    pub fn new(cover_thumbs: Arc<CoverThumbs>) -> Self {
+    fn new(cover_thumbs: Arc<CoverThumbs>) -> Self {
         Self {
             inner: FavoritesUiState::new(),
             cover_thumbs,

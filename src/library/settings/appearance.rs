@@ -4,8 +4,47 @@
 //! can't race over the read-mutate-write window.
 
 use crate::error::AppError;
-use crate::services::{self, settings::ThemePreference};
+use crate::services::{
+    self,
+    settings::{SettingsData, ThemePreference},
+};
 use crate::state::AppState;
+
+/// Backfill `theme_preferences[theme_id]` from the top-level theme fields when
+/// the active theme has no entry yet, persisting only when one was missing.
+///
+/// A boot-time migration for `settings.json` written before that map existed:
+/// without it, a user who launches with a custom accent (say
+/// `catppuccin/mocha/yellow`) loses it on the first theme swap, the lookup
+/// missing and falling back to defaults. Distinct from [`set_appearance`],
+/// which records a pick the user just made — this writes what an earlier build
+/// never did, and no-ops once it has.
+///
+/// Takes the settings the caller already read rather than re-reading them:
+/// `mutate_settings` writes unconditionally, which would turn a one-off
+/// migration into a full rewrite of `settings.json` on every launch.
+pub fn seed_theme_preference(
+    state: &AppState,
+    mut settings: SettingsData,
+) -> Result<(), AppError> {
+    if settings.theme_preferences.contains_key(&settings.theme_id) {
+        return Ok(());
+    }
+    let last_static_accent = if settings.accent_color == crate::themes::MATERIAL_YOU_ACCENT_ID {
+        None
+    } else {
+        Some(settings.accent_color.clone())
+    };
+    settings.theme_preferences.insert(
+        settings.theme_id.clone(),
+        ThemePreference {
+            variant: settings.theme_variant.clone(),
+            accent: settings.accent_color.clone(),
+            last_static_accent,
+        },
+    );
+    services::settings::write_settings(&state.paths, &settings)
+}
 
 /// Persist the user's appearance picks (theme / variant / accent) into
 /// `settings.json`. Updates the three top-level fields *and*

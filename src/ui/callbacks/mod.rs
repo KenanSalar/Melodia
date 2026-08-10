@@ -7,22 +7,16 @@
 //! callback; every other view has its own `wire_*` entrypoint that callers
 //! invoke directly (see `boot/ui_setup.rs` or `main.rs`).
 
-mod macros;
+// `pub(in crate::ui)` rather than private: each view slice owns its own
+// `callbacks/` submodule, so the wiring reaching these is no longer a
+// descendant of this module. Still sealed inside `ui::` — nothing in
+// `library/`, `player/` or `boot/` can name either.
+pub(in crate::ui) mod macros;
 
-mod albums;
-mod artists;
-mod browse;
-mod cross_tab_nav;
-mod favorites;
-mod genres;
+pub(in crate::ui) mod cross_tab_nav;
 mod library_settings;
-mod my_library;
 mod now_playing;
-mod playlists;
-mod recently_played;
-mod search;
 mod tags;
-mod tracks;
 mod updater;
 
 use std::sync::Arc;
@@ -41,20 +35,10 @@ use macros::{spawn_blocking_logged, spawn_logged_sync, wire_pb, wire_sync, wire_
 #[allow(unused_imports)]
 use macros::spawn_logged;
 
-pub use albums::wire_albums;
-pub use artists::wire_artists;
-pub use browse::wire_browse;
 pub use cross_tab_nav::wire_cross_tab_nav;
-pub use favorites::wire_favorites;
-pub use genres::wire_genres;
 pub use library_settings::wire_library_settings;
-pub use my_library::wire_my_library;
 pub use now_playing::{wire_now_playing_favorite, wire_now_playing_rating};
-pub use playlists::{wire_playlist_files, wire_playlists};
-pub use recently_played::wire_recently_played;
-pub use search::wire_search;
 pub use tags::wire_tags;
-pub use tracks::wire_tracks;
 pub use updater::wire as wire_updater;
 
 /// Convert a Slint `[int]` callback param into `Vec<i64>`. Used by every

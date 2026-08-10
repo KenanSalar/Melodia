@@ -220,7 +220,8 @@ async fn a_narrow_retag_reindexes_the_new_fts_columns() -> Result<(), AppError> 
     .execute(db.write())
     .await?;
 
-    let hit = |r: &queries::SearchResults| r.tracks.iter().any(|t| t.title == "Alpha Song");
+    let hit =
+        |r: &crate::entities::search::SearchResults| r.tracks.iter().any(|t| t.title == "Alpha Song");
 
     assert!(
         !hit(&queries::search::search_all(&db, "Rock").await?),

@@ -161,22 +161,22 @@ fn a_section_pre_fetched_off_screen_re_fetches_on_its_first_enter() {
     // { mark_dirty() }` is the inverted bug, and it reads almost identically.
     const LIFECYCLES: [(&str, &str, &str); 4] = [
         (
-            include_str!("../callbacks/albums/lifecycle.rs"),
+            include_str!("../albums/callbacks/lifecycle.rs"),
             "albums/lifecycle.rs",
             "albums_ui",
         ),
         (
-            include_str!("../callbacks/artists/lifecycle.rs"),
+            include_str!("../artists/callbacks/lifecycle.rs"),
             "artists/lifecycle.rs",
             "artists_ui",
         ),
         (
-            include_str!("../callbacks/genres/lifecycle.rs"),
+            include_str!("../genres/callbacks/lifecycle.rs"),
             "genres/lifecycle.rs",
             "genres_ui",
         ),
         (
-            include_str!("../callbacks/playlists/lifecycle.rs"),
+            include_str!("../playlists/callbacks/lifecycle.rs"),
             "playlists/lifecycle.rs",
             "playlists_ui",
         ),
@@ -354,7 +354,7 @@ fn a_tab_leave_holds_the_slots_the_band_can_still_paint() {
 /// flash a placeholder even once the leave itself had stopped.
 #[test]
 fn the_collapsed_teardown_hands_back_only_what_closed() {
-    const CALLBACKS: &str = include_str!("../callbacks/my_library.rs");
+    const CALLBACKS: &str = include_str!("../my_library/callbacks.rs");
 
     let body = CALLBACKS
         .split_once("fn release_collapsed_hero(ui: &AppWindow) {")
@@ -426,7 +426,7 @@ fn the_collapsed_teardown_hands_back_only_what_closed() {
 fn the_page_leave_is_gated_on_the_nav_index_rather_than_on_the_gate() {
     const APP: &str = include_str!("../../../melodia-ui/ui/app-window.slint");
     const GLOBAL: &str = include_str!("../../../melodia-ui/ui/globals/my-library.slint");
-    const CALLBACKS: &str = include_str!("../callbacks/my_library.rs");
+    const CALLBACKS: &str = include_str!("../my_library/callbacks.rs");
 
     assert!(
         GLOBAL.contains("callback page-active-changed(bool);"),
@@ -482,29 +482,29 @@ fn the_page_leave_is_gated_on_the_nav_index_rather_than_on_the_gate() {
 /// into collapsing over. Both of those are invisible in review at the site, because the site
 /// is the one place with no way to tell which case it is in.
 ///
-/// **It walks `callbacks/` rather than listing the sites**, for the reason
+/// **It walks the wiring tree rather than listing the sites**, for the reason
 /// `ui::file_dialog::tests` does: a list is a list of the sites someone remembered, and the
 /// one that gets this wrong is the one nobody has written yet. A fixed four already missed
-/// `playlists/dialog.rs`, the fifth.
+/// `playlists/dialog.rs`, the fifth. The corpus is `test_support::callback_sources`, whose
+/// own `CALLBACK_HOMES` equality is what stops a renamed subtree shrinking this walk in
+/// silence — the failure a floor here could not catch.
 #[test]
 fn no_leave_clears_the_chips_behind_the_macro() {
-    /// A floor, so a walk that silently found nothing can't pass vacuously.
-    const MIN_SOURCES: usize = 20;
     /// Two per detail lifecycle — the section leave and the failed re-fetch that drops
     /// back to the grid — plus the playlist dialog's, plus one per curated page. A floor
-    /// rather than an equality so a sixth teardown needs no edit here.
+    /// rather than an equality so a sixth teardown needs no edit here; the *corpus* is
+    /// held exact by `CALLBACK_HOMES` instead, which is the half a floor could never do.
     const MIN_TEARDOWNS: usize = 11;
 
     let mut total = 0;
-    for (rel, code) in
-        crate::test_support::stripped_sources(crate::test_support::CALLBACKS_DIR, "rs", MIN_SOURCES)
-    {
+    for (rel, code) in crate::test_support::callback_sources() {
         // Skipped rather than checked: `macros.rs` *defines* the needles, and
-        // `my_library.rs` owns the page's two deliberate teardowns — the unconditional
-        // `clear` once the page is gone, and the collapse's `clear_if_stale`. Both are
-        // pinned by their own tests below. The asserts are what stop each skip outliving
-        // its reason.
-        if rel == "macros.rs" {
+        // `my_library`'s wiring owns the page's two deliberate teardowns — the
+        // unconditional `clear` once the page is gone, and the collapse's `clear_if_stale`.
+        // Both are pinned by their own tests below. The asserts are what stop each skip
+        // outliving its reason, and a file that moves out from under its literal loses its
+        // exemption and trips the `hero_chips::clear` assert instead — the loud direction.
+        if rel == "callbacks/macros.rs" {
             assert!(
                 code.contains("macro_rules! release_shared_hero")
                     && code.contains("macro_rules! release_detail_hero_images"),
@@ -513,7 +513,7 @@ fn no_leave_clears_the_chips_behind_the_macro() {
             );
             continue;
         }
-        if rel == "my_library.rs" {
+        if rel == "my_library/callbacks.rs" {
             assert!(
                 code.contains("fn release_page_hero(") && code.contains("fn release_collapsed_hero("),
                 "`my_library.rs` no longer owns the page's two teardowns, so the skip above is \
@@ -534,7 +534,7 @@ fn no_leave_clears_the_chips_behind_the_macro() {
     }
     assert!(
         total >= MIN_TEARDOWNS,
-        "only {total} hero teardowns found under `callbacks/` — either the walk broke or a \
+        "only {total} hero teardowns found across the wiring tree — either the walk broke or a \
          leave stopped handing its hero back"
     );
 }

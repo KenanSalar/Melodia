@@ -15,7 +15,7 @@ use crate::{
 /// Bind empty Slint `VecModel`s for the two grid tabs, the Songs list, the
 /// selection set, and the mosaic-path string list. Subsequent updates locate
 /// them by downcasting back to `VecModel<T>` from the UI thread.
-pub fn install_favorites_models(ui: &AppWindow) {
+pub(super) fn install_favorites_models(ui: &AppWindow) {
     let g = ui.global::<Favorites>();
 
     let most_played: Rc<VecModel<UiEntityGridRow>> = Rc::new(VecModel::default());

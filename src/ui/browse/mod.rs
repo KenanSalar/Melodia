@@ -41,6 +41,7 @@
 //! result.
 
 mod breadcrumbs;
+mod callbacks;
 mod cards;
 mod fetch;
 mod models;
@@ -58,17 +59,40 @@ use crate::entities::browse::{BrowseFile, BrowseFolder};
 use crate::media::cover_thumbs::CoverThumbs;
 use crate::services::view_state;
 use crate::ui::section_state::SectionState;
+use crate::ui::view_ctx::ViewCtx;
 use crate::state::AppState;
 use crate::{
     AppWindow, Browse, BrowseCardGridRow as UiBrowseCardGridRow,
     BrowseFolderRow as UiBrowseFolderRow, TrackListRow as UiTrackListRow,
 };
 
-pub use cards::{
-    BrowseViewMode, mode_from_index, mode_index, rebuild_cards, tune_cache_for_display,
-};
-pub use fetch::{apply_row_favorite, apply_row_rating, fetch_and_apply, resort_and_apply};
-pub use selection::{clear_selection, handle_select_row};
+// `boot::ui_setup` retunes the cover cap once the window is live.
+pub use cards::tune_cache_for_display;
+
+// Reached only from this slice's own `callbacks.rs`, which used to live two
+// modules away, plus the cross-slice `apply_row_*` mirrors in
+// `callbacks::now_playing`. `pub(super)` is `pub(in crate::ui)` here, which is
+// exactly that reach.
+pub(super) use cards::{BrowseViewMode, mode_from_index, mode_index, rebuild_cards};
+pub(super) use fetch::{apply_row_favorite, apply_row_rating, fetch_and_apply, resort_and_apply};
+pub(super) use selection::{clear_selection, handle_select_row};
+
+/// Install the Browse models, build the handle, wire every `Browse.*` callback,
+/// and seed the persisted path + presentation mode.
+///
+/// The seed folds in here because it is Browse-local and needs only the handle
+/// this call just built — and folding it is what let it take `views.json` as an
+/// argument instead of re-reading the file `install_views` had already parsed.
+///
+/// The returned handle is not a keepalive; see [`crate::ui::albums::install`].
+pub fn install(cx: ViewCtx<'_>) -> Arc<BrowseUi> {
+    install_models(cx.app);
+    install_selection_model(cx.app);
+    let browse_ui = Arc::new(BrowseUi::new(cx.cover_thumbs.clone()));
+    callbacks::wire(cx.app, cx.state, &browse_ui);
+    seed_from_settings(cx.app, cx.state, &browse_ui, cx.view_state);
+    browse_ui
+}
 
 /// Rust-side state for the Browse view. Shared between the UI callbacks
 /// (`wire_browse`) and the async fetcher.
@@ -117,7 +141,7 @@ pub struct BrowseUi {
 }
 
 impl BrowseUi {
-    pub fn new(cover_thumbs: Arc<CoverThumbs>) -> Self {
+    fn new(cover_thumbs: Arc<CoverThumbs>) -> Self {
         Self {
             current_path: Mutex::new(String::new()),
             history: Mutex::new(Vec::new()),
@@ -321,7 +345,7 @@ impl BrowseUi {
 /// grid's `card-rows`, and hand them to the Slint `Browse` global as `ModelRc`s.
 /// Subsequent updates locate them by downcasting back to `VecModel<T>` and
 /// mutating in place.
-pub fn install_browse_models(ui: &AppWindow) {
+fn install_models(ui: &AppWindow) {
     let g = ui.global::<Browse>();
     let folders: Rc<VecModel<UiBrowseFolderRow>> = Rc::new(VecModel::default());
     let rows: Rc<VecModel<UiTrackListRow>> = Rc::new(VecModel::default());
@@ -337,21 +361,25 @@ pub fn install_browse_models(ui: &AppWindow) {
 /// selection mutations can `set_vec` into the same model instead of
 /// allocating a fresh `ModelRc + VecModel` on every click. Mirrors
 /// `tracks::install_selection_model`.
-pub fn install_browse_selection_model(ui: &AppWindow) {
+fn install_selection_model(ui: &AppWindow) {
     let model: Rc<VecModel<i32>> = Rc::new(VecModel::default());
     ui.global::<Browse>().set_selected_ids(ModelRc::from(model));
 }
 
 /// Seed `Browse.current-path` and `Browse.view-mode` from `views.json` at
-/// startup and kick the initial fetch. Missing / unreadable file leaves
-/// `current-path` empty (root) and the mode on the list, and the fetch lands at
-/// the root view.
-pub fn seed_from_settings(ui: &AppWindow, state: &AppState, browse_ui: &Arc<BrowseUi>) {
-    let persisted = view_state::read_view_state(&state.paths).ok();
-    let initial_path = persisted
-        .as_ref()
-        .and_then(|s| s.browse_path.clone())
-        .unwrap_or_default();
+/// startup and kick the initial fetch. `None` — a fresh install, or a file that
+/// wouldn't read — leaves `current-path` empty (root) and the mode on the list,
+/// and the fetch lands at the root view.
+///
+/// Takes the boot read rather than repeating it: `install_views` already has
+/// `views.json` in hand, and this used to be a second full parse of it.
+fn seed_from_settings(
+    ui: &AppWindow,
+    state: &AppState,
+    browse_ui: &Arc<BrowseUi>,
+    persisted: Option<&view_state::ViewStateData>,
+) {
+    let initial_path = persisted.and_then(|s| s.browse_path.clone()).unwrap_or_default();
     let persisted_mode = persisted.map_or(0, |s| s.browse_view_mode);
 
     browse_ui.set_path(initial_path.clone());

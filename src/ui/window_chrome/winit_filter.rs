@@ -77,7 +77,7 @@ fn schedule_minimize_probe(weak: slint::Weak<AppWindow>) {
             .with_winit_window(WinitWindow::is_minimized)
             .flatten();
         if minimized == Some(true) {
-            crate::ui::tray_bridge::set_window_visible(&ui, false);
+            crate::ui::shell::tray_bridge::set_window_visible(&ui, false);
         }
     });
 }
@@ -202,7 +202,7 @@ pub(super) fn install(app: &AppWindow, state: &AppState, drag_hover: Arc<AtomicB
                 // asking while we still believe the window is up: a tray hide
                 // and our own minimize button both lower the shadow first, and
                 // on X11 the answer costs a round-trip on the UI thread.
-                if !focused && crate::ui::tray_bridge::is_window_visible() {
+                if !focused && crate::ui::shell::tray_bridge::is_window_visible() {
                     schedule_minimize_probe(weak.clone());
                 }
                 let _ = weak.upgrade_in_event_loop(move |ui| {
@@ -213,7 +213,7 @@ pub(super) fn install(app: &AppWindow, state: &AppState, drag_hover: Arc<AtomicB
                     // through any of our callbacks, so the tray-bridge shadow
                     // would otherwise stay stuck at the post-minimize `false`.
                     if focused {
-                        crate::ui::tray_bridge::set_window_visible(&ui, true);
+                        crate::ui::shell::tray_bridge::set_window_visible(&ui, true);
                     }
                 });
                 slint::winit_030::EventResult::Propagate
@@ -274,9 +274,9 @@ pub(super) fn install(app: &AppWindow, state: &AppState, drag_hover: Arc<AtomicB
             // `should_hide_to_tray` is false when no tray is active, so this
             // can't strand the user.
             WindowEvent::CloseRequested => {
-                if crate::ui::tray_bridge::should_hide_to_tray() {
+                if crate::ui::shell::tray_bridge::should_hide_to_tray() {
                     if let Err(e) = weak.upgrade_in_event_loop(|ui| {
-                        crate::ui::tray_bridge::hide_window(&ui);
+                        crate::ui::shell::tray_bridge::hide_window(&ui);
                     }) {
                         log::warn!("close-to-tray: schedule hide: {e}");
                     }

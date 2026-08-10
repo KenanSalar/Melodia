@@ -68,7 +68,7 @@ use crate::player::visualizer::RING_CAP;
 use crate::player::waveform::{self, MAX_COLUMNS, WaveformAnalyzer};
 use crate::state::AppState;
 use crate::ui::settings_bind::read_or_default;
-use crate::ui::tray_bridge;
+use crate::ui::shell::tray_bridge;
 use crate::{AppWindow, Visualizer};
 
 const STYLE_BARS: &str = "bars";

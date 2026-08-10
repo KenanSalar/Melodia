@@ -23,7 +23,6 @@ use std::rc::Rc;
 use async_compat::Compat;
 use slint::{ComponentHandle, Image, Model, Rgb8Pixel, SharedPixelBuffer, SharedString};
 
-use crate::database::queries;
 use crate::entities::track::TagEditRow;
 use crate::error::AppError;
 use crate::library;
@@ -32,7 +31,7 @@ use crate::media::image_decode::{MAX_SOURCE_DIM, decode_capped};
 use crate::media::tag_writer::{self, ArtworkEdit, FieldEdit, TagEdit};
 use crate::state::AppState;
 use crate::ui::file_dialog;
-use crate::ui::notifications::{NotificationParams, NotificationsUi};
+use crate::ui::shell::notifications::{NotificationParams, NotificationsUi};
 use crate::ui::util::{COVER_SIZE, buffer_from_rgb};
 use crate::{AppWindow, Dialog, Settings, TagEditor};
 
@@ -109,7 +108,7 @@ fn wire_request_edit(
         let s = state.clone();
         let session = session.clone();
         let _ = slint::spawn_local(Compat::new(async move {
-            let rows = match queries::track::get_tag_edit_rows_by_ids(&s.db, &ids).await {
+            let rows = match library::tags::get_tag_edit_rows(&s, &ids).await {
                 Ok(rows) if !rows.is_empty() => rows,
                 Ok(_) => return,
                 Err(e) => {

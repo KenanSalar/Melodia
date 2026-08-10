@@ -23,6 +23,7 @@
 //! models are only touched from the UI thread, reached via
 //! `Weak<AppWindow>::upgrade_in_event_loop`.
 
+mod callbacks;
 mod detail;
 mod grid;
 mod selection;
@@ -41,6 +42,7 @@ use crate::ui::detail_artwork::DetailArtwork;
 use crate::ui::row_match::Needle;
 use crate::ui::section_state::SectionState;
 use crate::ui::util::clamp_i64_to_i32;
+use crate::ui::view_ctx::ViewCtx;
 use crate::{
     AlbumDetail, AlbumGridRow as UiAlbumGridRow, AlbumRow as UiAlbumRow, Albums, AppWindow,
     TrackListRow as UiTrackListRow,
@@ -55,13 +57,39 @@ use grid::compute_indices;
 #[cfg(test)]
 use state::GridIndexCache;
 
-pub use detail::{
+// Reached from outside the slice: `ui::nav_history` replays a walk into a
+// detail, `boot::ui_setup` seeds the persisted one and retunes the cover cap,
+// and its `initial_grid_fetch!` kicks the first fetch after the window is shown
+// — which is why `fetch_grid` can't fold into `install` with the rest.
+pub use detail::{open_album_with, seed_detail_from_settings};
+pub use grid::{fetch_grid, tune_cache_for_display};
+
+// Reached only from this slice's own `callbacks/`, which used to live two
+// modules away, plus the cross-slice `apply_detail_row_*` mirrors in
+// `callbacks::now_playing` and the drill in `callbacks::cross_tab_nav`.
+// `pub(super)` is `pub(in crate::ui)` here, which is exactly that reach.
+pub(super) use detail::{
     apply_detail_row_favorite, apply_detail_row_rating, apply_filtered_detail, clear_detail,
-    open_album, open_album_with,
-    refresh_detail, resort_detail, seed_detail_from_settings, set_filter,
+    open_album, refresh_detail, resort_detail, set_filter,
 };
-pub use grid::{fetch_grid, rebuild_grid, tune_cache_for_display};
-pub use selection::{clear_selection, handle_select_row};
+pub(super) use grid::rebuild_grid;
+pub(super) use selection::{clear_selection, handle_select_row};
+
+/// Install the Albums grid + detail models, build the handle, and wire every
+/// `Albums.*` / `AlbumDetail.*` callback to it.
+///
+/// The returned handle is read by `install_views` for the four things that
+/// genuinely outlive this call — the persisted-detail seed, the cover retune,
+/// the `ui_handles` registry, and the two peers that need a live `AlbumsUi`
+/// ([`crate::ui::artists`] and [`crate::ui::search`]). It is not a keepalive:
+/// every wired closure clones its own strong `Arc`, and those closures are
+/// owned by the `AppWindow` for the life of the app.
+pub fn install(cx: ViewCtx<'_>) -> Arc<AlbumsUi> {
+    install_models(cx.app);
+    let albums_ui = Arc::new(AlbumsUi::new(cx.cover_thumbs.clone()));
+    callbacks::wire(cx.app, cx.state, &albums_ui);
+    albums_ui
+}
 
 /// Rust-side state for the Albums grid + detail views. Shared between the
 /// UI callbacks (`wire_albums`) and the async fetchers. The grid and detail
@@ -91,7 +119,7 @@ pub struct AlbumsUi {
 }
 
 impl AlbumsUi {
-    pub fn new(cover_thumbs: Arc<CoverThumbs>) -> Self {
+    fn new(cover_thumbs: Arc<CoverThumbs>) -> Self {
         Self {
             grid: AlbumGridState {
                 data: Mutex::new(Arc::new(GridData::new(Vec::new()))),
@@ -286,7 +314,7 @@ impl AlbumsUi {
 /// the detail selection need, and hand them to the Slint globals as
 /// `ModelRc`s. Subsequent updates locate them by downcasting back to
 /// `VecModel<T>`.
-pub fn install_albums_models(ui: &AppWindow) {
+fn install_models(ui: &AppWindow) {
     let grid: Rc<VecModel<UiAlbumGridRow>> = Rc::new(VecModel::default());
     ui.global::<Albums>().set_grid_rows(ModelRc::from(grid));
 

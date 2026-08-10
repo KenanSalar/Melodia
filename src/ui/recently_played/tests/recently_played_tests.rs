@@ -8,7 +8,7 @@ const LIST: &str = include_str!("../../../../melodia-ui/ui/components/track-list
 const HEADER: &str =
     include_str!("../../../../melodia-ui/ui/components/track-list/track-list-header.slint");
 const SONGS: &str = include_str!("../songs.rs");
-const SUBVIEWS: &str = include_str!("../../callbacks/recently_played/subviews.rs");
+const SUBVIEWS: &str = include_str!("../callbacks/subviews.rs");
 
 /// How many tabs the page has, kept local so a change to `tab-count` can't
 /// silently rewrite the assertion it is checked against.
@@ -321,7 +321,7 @@ fn the_grid_pick_rewinds_the_count_it_could_not_answer() {
 /// consumes it *before* the spawn and would otherwise leave the sentinel with no answer coming.
 #[test]
 fn the_grid_dirty_flag_is_maintained_beside_the_cache_it_guards() {
-    const LIFECYCLE: &str = include_str!("../../callbacks/recently_played/lifecycle.rs");
+    const LIFECYCLE: &str = include_str!("../callbacks/lifecycle.rs");
     const HANDLE: &str = include_str!("../mod.rs");
     const FETCH: &str = include_str!("../grid/fetch.rs");
 

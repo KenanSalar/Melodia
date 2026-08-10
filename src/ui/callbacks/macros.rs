@@ -265,7 +265,7 @@ macro_rules! release_detail_hero_images {
     }};
 }
 
-pub(super) use {
+pub(in crate::ui) use {
     release_detail_hero_images, release_hero_slots, release_shared_hero, spawn_blocking_logged,
     spawn_logged, spawn_logged_sync, spawn_logged_toast, wire_pb, wire_row_flag, wire_sync,
     wire_sync_pb,

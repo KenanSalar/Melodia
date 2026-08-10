@@ -16,6 +16,7 @@
 //! rebuilding them from DB rows. A refilter takes one lock and one
 //! `Arc::clone`, and allocates nothing per row.
 
+mod callbacks;
 mod fetch;
 mod selection;
 
@@ -29,10 +30,33 @@ use crate::media::cover_thumbs::CoverThumbs;
 use crate::ui::section_state::SectionState;
 use crate::ui::track_list_cache::TrackListCache;
 use crate::ui::util::clamp_i64_to_i32;
+use crate::ui::view_ctx::ViewCtx;
 use crate::{AppWindow, TrackListRow as UiTrackListRow, Tracks};
 
-pub use fetch::{apply_row_favorite, apply_row_rating, fetch_and_apply, refilter, resort_and_apply};
-pub use selection::{clear_selection, handle_select_row};
+// `boot::ui_setup` kicks the first fetch after the window is shown, which is
+// why `fetch_and_apply` can't fold into `install` with the rest.
+pub use fetch::fetch_and_apply;
+
+// Reached only from this slice's own `callbacks.rs`, which used to live two
+// modules away, plus the cross-slice `apply_row_*` mirrors in
+// `callbacks::now_playing`. `pub(super)` is `pub(in crate::ui)` here, which is
+// exactly that reach.
+pub(super) use fetch::{apply_row_favorite, apply_row_rating, refilter, resort_and_apply};
+pub(super) use selection::{clear_selection, handle_select_row};
+
+/// Install the Tracks models, build the handle, and wire every `Tracks.*`
+/// callback to it.
+///
+/// The returned handle is read by `install_views` for the initial fetch and the
+/// `library_changed` refresher. It is not a keepalive; see
+/// [`crate::ui::albums::install`].
+pub fn install(cx: ViewCtx<'_>) -> Arc<TracksUi> {
+    install_tracks_model(cx.app);
+    install_selection_model(cx.app);
+    let tracks_ui = Arc::new(TracksUi::new(cx.cover_thumbs.clone()));
+    callbacks::wire(cx.app, cx.state, &tracks_ui);
+    tracks_ui
+}
 
 /// Holds the unfiltered set of tracks the Tracks view is currently sorted by.
 /// Filter changes re-derive the visible model from this cache without a DB hit.
@@ -55,7 +79,7 @@ pub struct TracksUi {
 }
 
 impl TracksUi {
-    pub fn new(cover_thumbs: Arc<CoverThumbs>) -> Self {
+    fn new(cover_thumbs: Arc<CoverThumbs>) -> Self {
         Self {
             cache: TrackListCache::new(),
             cover_thumbs,
@@ -115,7 +139,7 @@ impl TracksUi {
 /// Build an empty `VecModel<TrackListRow>`, hand it to the Slint `Tracks`
 /// global as a `ModelRc`. Subsequent updates locate it by downcasting
 /// `Tracks.rows` back to `VecModel<TrackListRow>`.
-pub fn install_tracks_model(ui: &AppWindow) {
+fn install_tracks_model(ui: &AppWindow) {
     let model: Rc<VecModel<UiTrackListRow>> = Rc::new(VecModel::default());
     ui.global::<Tracks>().set_rows(ModelRc::from(model));
 }
@@ -123,7 +147,7 @@ pub fn install_tracks_model(ui: &AppWindow) {
 /// Install a persistent `VecModel<i32>` for `Tracks.selected-ids` so
 /// selection mutations can `set_vec` into the same model instead of
 /// allocating a fresh `ModelRc + VecModel` on every click.
-pub fn install_selection_model(ui: &AppWindow) {
+fn install_selection_model(ui: &AppWindow) {
     let model: Rc<VecModel<i32>> = Rc::new(VecModel::default());
     ui.global::<Tracks>().set_selected_ids(ModelRc::from(model));
 }

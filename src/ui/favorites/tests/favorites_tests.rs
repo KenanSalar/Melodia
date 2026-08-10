@@ -17,7 +17,7 @@ const GRID: &str =
     include_str!("../../../../melodia-ui/ui/components/grid/entity-card-grid.slint");
 const SONGS: &str = include_str!("../songs.rs");
 const SONGS_TAB: &str = include_str!("../../../../melodia-ui/ui/views/favorites/songs-tab.slint");
-const SUBVIEWS: &str = include_str!("../../callbacks/favorites/subviews.rs");
+const SUBVIEWS: &str = include_str!("../callbacks/subviews.rs");
 
 /// `Favorites.tracks` feeds one element in the whole tree, under the Songs
 /// tab's `if` — so off that tab, every prepared row the Songs path builds

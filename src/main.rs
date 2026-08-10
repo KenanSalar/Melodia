@@ -306,7 +306,7 @@ fn main() -> AppResult<()> {
     // 5d5. Playlist import/export (M3U8) action pills. Wired here — after
     // both the playlists UI handle and the notifications stack exist —
     // because the completion toasts need the `Rc<NotificationsUi>`.
-    ui::callbacks::wire_playlist_files(&app, &state, &views.playlists_ui, &notifications);
+    ui::playlists::wire_files(&app, &state, &views.playlists_ui, &notifications);
 
     // 5d6. Edit-Track-Information dialog callbacks. Wired here for the same
     // reason as the playlist pills — the Save completion toast needs the
@@ -348,15 +348,15 @@ fn main() -> AppResult<()> {
 
     // 6. Bridge subscribers: ViewModel / queue / position channels.
     let weak = app.as_weak();
-    ui::bridge::spawn_view_model_subscriber(
+    ui::shell::bridge::spawn_view_model_subscriber(
         weak.clone(),
         &state.sinks,
         views.cover_thumbs.clone(),
     )
     .map_err(|e| AppError::Window(format!("view-model subscriber: {e}")))?;
-    ui::bridge::spawn_queue_subscriber(weak.clone(), &state.sinks)
+    ui::shell::bridge::spawn_queue_subscriber(weak.clone(), &state.sinks)
         .map_err(|e| AppError::Window(format!("queue subscriber: {e}")))?;
-    ui::bridge::spawn_position_subscriber(weak.clone(), &state.position_tx)
+    ui::shell::bridge::spawn_position_subscriber(weak.clone(), &state.position_tx)
         .map_err(|e| AppError::Window(format!("position subscriber: {e}")))?;
 
     // 6b. Queue bottom-sheet.
@@ -381,7 +381,7 @@ fn main() -> AppResult<()> {
     // if `now_playing::install` failed — without it the gate would
     // never affect anything visible.
     if let Some(ref np_state) = np_state
-        && let Err(e) = ui::mini_player::install(&app, &state, &np_artwork, np_state)
+        && let Err(e) = ui::shell::mini_player::install(&app, &state, &np_artwork, np_state)
     {
         log::warn!("mini_player::install: {e}");
     }
@@ -421,7 +421,7 @@ fn main() -> AppResult<()> {
     // (system-managed installs flow through the OS package manager).
     let (updater_event_tx, updater_event_rx) =
         watch::channel::<Option<services::updater::UpdaterEvent>>(None);
-    ui::updater_settings::install_event_subscriber(
+    ui::settings::updater_settings::install_event_subscriber(
         weak.clone(),
         notifications.clone(),
         updater_event_rx,
@@ -487,7 +487,7 @@ fn main() -> AppResult<()> {
     // on Windows / macOS `tray-icon` creation is deferred onto the event
     // loop (it needs the loop running).
     if startup_settings.as_ref().is_some_and(|s| s.tray.tray_enabled) {
-        ui::tray_bridge::install(&spawner, &state, &app);
+        ui::shell::tray_bridge::install(&spawner, &state, &app);
     }
 
     // Windows: SMTC needs a real `HWND`, which only exists once the OS
@@ -570,7 +570,7 @@ fn main() -> AppResult<()> {
     // area. No-op on Linux (the ksni handle is dropped by its subscriber
     // task during `flush_tasks_and_db`). Runs on the main/UI thread, which
     // the `!Send` Windows/macOS tray handle requires.
-    ui::tray_bridge::shutdown();
+    ui::shell::tray_bridge::shutdown();
 
     log::info!("Melodia shutting down — signalling tasks");
     let shutdown_completed = shutdown::flush_tasks_and_db(&runtime, state);

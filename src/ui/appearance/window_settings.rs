@@ -80,7 +80,7 @@ pub(super) fn wire_corner_radius_changed(ui: &AppWindow, state: &AppState) {
 pub(super) fn wire_close_to_tray_changed(ui: &AppWindow, state: &AppState) {
     let s = state.clone();
     ui.global::<Settings>().on_close_to_tray_changed(move |on| {
-        crate::ui::tray_bridge::set_close_to_tray(on);
+        crate::ui::shell::tray_bridge::set_close_to_tray(on);
         let s_clone = s.clone();
         s.runtime.spawn_blocking(move || {
             if let Err(e) = library::window::set_close_to_tray(&s_clone, on) {

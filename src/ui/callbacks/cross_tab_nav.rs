@@ -6,7 +6,7 @@
 //! per-view `wire_*` so the handles are guaranteed to exist.
 //!
 //! Behaviour mirrors the existing cross-tab open-album/artist hand-offs
-//! (`callbacks/artists.rs::on_open_album`, `callbacks/favorites.rs::
+//! (`artists/callbacks/cross_tab.rs::on_open_album`, `favorites/callbacks/subviews.rs::
 //! on_open_artist`):
 //!
 //! 1. Stamp `*Detail.origin-nav-index` from where the user is standing,
@@ -53,19 +53,19 @@ use crate::{
 /// read synchronously, before any await; the tab half guards the mid-fetch flip, and
 /// [`Origin::stamp`] decides what the destination's back arrow records.
 #[derive(Clone, Copy)]
-pub(super) struct Origin {
+pub(in crate::ui) struct Origin {
     nav: i32,
     tab: i32,
 }
 
 impl Origin {
     /// A section that has no tabs — Favorites, Search and the rest.
-    pub(super) fn section(nav: i32) -> Self {
+    pub(in crate::ui) fn section(nav: i32) -> Self {
         Self { nav, tab: NO_TAB }
     }
 
     /// Read the current position off the globals. UI thread only.
-    pub(super) fn read(ui: &AppWindow) -> Self {
+    pub(in crate::ui) fn read(ui: &AppWindow) -> Self {
         let nav = ui.global::<Nav>().get_selected_index();
         Self { nav, tab: tab_of_section(ui, nav) }
     }
@@ -97,7 +97,7 @@ impl Origin {
 ///
 /// A free fn rather than only a method so the rule is testable without an `AppWindow`, the
 /// [`crate::ui::my_library::fold_retired_nav_index`] precedent.
-pub(super) fn origin_stamp(nav: i32) -> i32 {
+pub(in crate::ui) fn origin_stamp(nav: i32) -> i32 {
     if nav == NAV_MY_LIBRARY { -1 } else { nav }
 }
 
@@ -221,7 +221,7 @@ fn make_go_to_artist(
 /// Callers that also want an early `nav_transition::mark` (the track-list
 /// menus do, to cover the same-tab case) must call it themselves before
 /// invoking this helper.
-pub(super) fn open_album_cross_tab(
+pub(in crate::ui) fn open_album_cross_tab(
     state: &AppState,
     albums_ui: &Arc<AlbumsUi>,
     weak: &Weak<AppWindow>,
@@ -268,7 +268,7 @@ pub(super) fn open_album_cross_tab(
 /// Artist counterpart of [`open_album_cross_tab`] — see that function's
 /// docs. Moves to the Artists tab and persists
 /// `views.json`'s `last_detail_ids[ARTIST_DETAIL]`.
-pub(super) fn open_artist_cross_tab(
+pub(in crate::ui) fn open_artist_cross_tab(
     state: &AppState,
     artists_ui: &Arc<ArtistsUi>,
     weak: &Weak<AppWindow>,

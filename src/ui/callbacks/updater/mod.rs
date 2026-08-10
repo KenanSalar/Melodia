@@ -41,7 +41,7 @@ use tokio::sync::watch;
 use crate::library;
 use crate::services::updater::UpdaterEvent;
 use crate::state::AppState;
-use crate::ui::notifications::NotificationsUi;
+use crate::ui::shell::notifications::NotificationsUi;
 use crate::{AppWindow, MelodiaUpdater};
 
 use check::spawn_manual_check;

@@ -15,7 +15,7 @@ use crate::{
 /// Bind empty Slint `VecModel`s for the Most Played grid, the Songs list, the
 /// selection set, and the mosaic-path string list. Subsequent updates locate
 /// them by downcasting back to `VecModel<T>` from the UI thread.
-pub fn install_recently_played_models(ui: &AppWindow) {
+pub(super) fn install_recently_played_models(ui: &AppWindow) {
     let g = ui.global::<RecentlyPlayed>();
 
     let mosaic_paths: Rc<VecModel<SharedString>> = Rc::new(VecModel::default());

@@ -21,7 +21,7 @@ use std::sync::Arc;
 use rayon::prelude::*;
 
 use crate::database::{DbPool, queries};
-use crate::entities::track::TrackSummary;
+use crate::entities::track::{TagEditRow, TrackSummary};
 use crate::error::AppError;
 use crate::media::artwork::{self, CoverCache};
 use crate::media::metadata::{ExtractedMetadata, extract_metadata};
@@ -46,6 +46,18 @@ pub struct TagEditReport {
     /// `(file, fields)` the file's tag format has no key for — a rare safety
     /// net, since all three primary tag types map every exposed field.
     pub unsupported: Vec<(String, Vec<&'static str>)>,
+}
+
+/// The rows that populate the Edit Track Information dialog.
+///
+/// Sits here rather than being called straight off `queries::track` by the
+/// dialog's own wiring: the UI layer reaches the database through this module,
+/// and [`apply_tag_edit`] below is the write half of the same feature.
+pub async fn get_tag_edit_rows(
+    state: &AppState,
+    ids: &[i64],
+) -> Result<Vec<TagEditRow>, AppError> {
+    queries::track::get_tag_edit_rows_by_ids(&state.db, ids).await
 }
 
 /// Apply `edit` to `ids`, then refresh the player's cached summaries and bump

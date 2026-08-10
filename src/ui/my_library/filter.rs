@@ -3,7 +3,7 @@
 //!
 //! **The two halves of the page answer different filter contracts, which is why this
 //! can't be one call.** A grid or list global fires `apply-filter(text)` and Rust ignores
-//! the argument — `callbacks/albums/grid.rs` is `on_apply_filter(move |_text| …
+//! the argument — `albums/callbacks/grid.rs` is `on_apply_filter(move |_text| …
 //! rebuild_grid(…))` and the rebuild reads `<Global>.filter` itself, memoized against a
 //! `GridIndexCache`. A detail global fires `filter-changed(text)` and Rust *uses* the
 //! argument, folding it into that view's `Mutex<Needle>`. So the routing is a match on

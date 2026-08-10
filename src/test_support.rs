@@ -19,15 +19,91 @@ pub(crate) const UI_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/melodia-ui
 /// rather than an edit to a known one.
 pub(crate) const SRC_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/src");
 
-/// The wiring layer, for the pins that ask the same question of one subtree — the
-/// hero teardowns being the first, since which tab a leave names is a `callbacks/`
-/// property and nothing outside it can get the answer wrong.
+/// The Rust UI tree, for the pins that ask the same question of every slice's
+/// wiring rather than of one subtree.
 ///
 /// Anchored on the manifest dir like its two siblings rather than spelled
-/// relative: a bare `"src/ui/callbacks"` resolves against the harness's working
-/// directory, which is the package root only because that is what `cargo test`
-/// happens to set.
-pub(crate) const CALLBACKS_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/src/ui/callbacks");
+/// relative: a bare `"src/ui"` resolves against the harness's working directory,
+/// which is the package root only because that is what `cargo test` happens to
+/// set.
+pub(crate) const UI_SRC_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/src/ui");
+
+/// Every module that owns callback wiring: the cross-cutting root plus the
+/// eleven view slices that keep their own.
+///
+/// **Checked for equality, not containment.** What this guards is a subtree that
+/// stops existing — renamed, deleted, or folded somewhere the walk no longer
+/// reaches. A floor cannot see that: the walk finds fifty sources where there
+/// were fifty-four, every count-based pin over the corpus quietly loses that
+/// slice's coverage, and all of them still pass. An exact set turns it into a
+/// failing assertion *at the ledger*, naming the home that went missing, rather
+/// than a gap somewhere downstream that nothing reports.
+pub(crate) const CALLBACK_HOMES: [&str; 12] = [
+    "albums",
+    "artists",
+    "browse",
+    // The cross-cutting root: the macros, cross-tab nav, the now-playing
+    // fan-out, tags, the updater and library settings — everything that answers
+    // to no single view.
+    "callbacks",
+    "favorites",
+    "genres",
+    "my_library",
+    "playlists",
+    "queue_sheet",
+    "recently_played",
+    "search",
+    "tracks",
+];
+
+/// A floor under the walk itself, so a traversal that found nothing can't pass
+/// vacuously *ahead of* the set check. Loose on purpose — [`CALLBACK_HOMES`] is
+/// the real guard, and a floor tight enough to matter would trip on every
+/// unrelated file deletion.
+const MIN_UI_SOURCES: usize = 180;
+
+/// Every wiring source under [`UI_SRC_DIR`], comment-stripped and paired with its
+/// `src/ui`-relative path (`albums/callbacks/lifecycle.rs`,
+/// `callbacks/cross_tab_nav.rs`, `queue_sheet/callbacks.rs`).
+///
+/// A file counts as wiring iff it sits under a `callbacks` *directory* or *is* a
+/// `callbacks.rs` — the two shapes the tree uses, a directory once a slice's
+/// wiring outgrows one file and a flat file until then. Recognising both is what
+/// lets a slice grow from one into the other with no edit here.
+///
+/// # Panics
+///
+/// If the set of wiring homes found is not exactly [`CALLBACK_HOMES`], or if
+/// [`stripped_sources`]' own floor / unreadable-path checks trip.
+pub(crate) fn callback_sources() -> Vec<(String, String)> {
+    use std::collections::BTreeSet;
+
+    let mut found = BTreeSet::new();
+    let mut out = Vec::new();
+
+    for (rel, code) in stripped_sources(UI_SRC_DIR, "rs", MIN_UI_SOURCES) {
+        let mut parts = rel.split('/');
+        let Some(home) = parts.next() else { continue };
+        let is_wiring = home == "callbacks"
+            || parts.next().is_some_and(|p| p == "callbacks" || p == "callbacks.rs");
+        if !is_wiring {
+            continue;
+        }
+        found.insert(home.to_owned());
+        out.push((rel, code));
+    }
+
+    let expected: BTreeSet<String> = CALLBACK_HOMES.iter().map(|s| (*s).to_owned()).collect();
+    assert_eq!(
+        found, expected,
+        "the set of callback homes under {UI_SRC_DIR} no longer matches `CALLBACK_HOMES`. A \
+         *missing* entry is wiring that was deleted or renamed — every pin walking this corpus \
+         just lost that slice's coverage with nothing to report it. An *extra* entry is a new \
+         wiring home no pin is checking yet: add it to the ledger."
+    );
+
+    out
+}
 
 /// Every file under `root` with extension `ext`, sorted, alongside the
 /// directories that wouldn't list.

@@ -15,7 +15,7 @@ const SIDEBAR: &str = include_str!("../../../../melodia-ui/ui/layout/sidebar.sli
 const PILLS: &str = include_str!("../../../../melodia-ui/ui/views/my-library/tab-pills.slint");
 const SORT_ROW: &str =
     include_str!("../../../../melodia-ui/ui/components/sort-pill-row.slint");
-const CALLBACKS: &str = include_str!("../../callbacks/my_library.rs");
+const CALLBACKS: &str = include_str!("../callbacks.rs");
 const NAV_HISTORY: &str = include_str!("../../nav_history.rs");
 const FILTER: &str = include_str!("../filter.rs");
 
@@ -158,15 +158,15 @@ const CROSS_TAB: &str = include_str!("../../callbacks/cross_tab_nav.rs");
 
 const ORIGIN_WRITERS: [(&str, &str); 7] = [
     ("cross_tab_nav", CROSS_TAB),
-    ("albums/grid", include_str!("../../callbacks/albums/grid.rs")),
-    ("artists/grid", include_str!("../../callbacks/artists/grid.rs")),
-    ("genres/grid", include_str!("../../callbacks/genres/grid.rs")),
-    ("albums/detail", include_str!("../../callbacks/albums/detail.rs")),
-    ("artists/detail", include_str!("../../callbacks/artists/detail.rs")),
-    ("genres/detail", include_str!("../../callbacks/genres/detail.rs")),
+    ("albums/grid", include_str!("../../albums/callbacks/grid.rs")),
+    ("artists/grid", include_str!("../../artists/callbacks/grid.rs")),
+    ("genres/grid", include_str!("../../genres/callbacks/grid.rs")),
+    ("albums/detail", include_str!("../../albums/callbacks/detail.rs")),
+    ("artists/detail", include_str!("../../artists/callbacks/detail.rs")),
+    ("genres/detail", include_str!("../../genres/callbacks/detail.rs")),
 ];
 
-const ARTIST_CROSS_TAB: &str = include_str!("../../callbacks/artists/cross_tab.rs");
+const ARTIST_CROSS_TAB: &str = include_str!("../../artists/callbacks/cross_tab.rs");
 
 const DETAIL_GLOBALS: [(&str, &str); 3] = [
     ("AlbumDetail", include_str!("../../../../melodia-ui/ui/globals/albums.slint")),
@@ -236,9 +236,9 @@ fn a_drill_inside_the_page_records_no_origin() {
 #[test]
 fn every_grid_open_zeroes_a_stale_origin() {
     const GRIDS: [(&str, &str, &str); 3] = [
-        ("albums/grid", include_str!("../../callbacks/albums/grid.rs"), "AlbumDetail"),
-        ("artists/grid", include_str!("../../callbacks/artists/grid.rs"), "ArtistDetail"),
-        ("genres/grid", include_str!("../../callbacks/genres/grid.rs"), "GenreDetail"),
+        ("albums/grid", include_str!("../../albums/callbacks/grid.rs"), "AlbumDetail"),
+        ("artists/grid", include_str!("../../artists/callbacks/grid.rs"), "ArtistDetail"),
+        ("genres/grid", include_str!("../../genres/callbacks/grid.rs"), "GenreDetail"),
     ];
     for (name, source, global) in GRIDS {
         assert!(
@@ -250,11 +250,11 @@ fn every_grid_open_zeroes_a_stale_origin() {
 }
 
 const SECTION_SEEDS: [(&str, &str, &str); 5] = [
-    ("Songs", "tracks", include_str!("../../callbacks/tracks.rs")),
-    ("Albums", "albums", include_str!("../../callbacks/albums/lifecycle.rs")),
-    ("Artists", "artists", include_str!("../../callbacks/artists/lifecycle.rs")),
-    ("Genres", "genres", include_str!("../../callbacks/genres/lifecycle.rs")),
-    ("Playlists", "playlists", include_str!("../../callbacks/playlists/lifecycle.rs")),
+    ("Songs", "tracks", include_str!("../../tracks/callbacks.rs")),
+    ("Albums", "albums", include_str!("../../albums/callbacks/lifecycle.rs")),
+    ("Artists", "artists", include_str!("../../artists/callbacks/lifecycle.rs")),
+    ("Genres", "genres", include_str!("../../genres/callbacks/lifecycle.rs")),
+    ("Playlists", "playlists", include_str!("../../playlists/callbacks/lifecycle.rs")),
 ];
 
 /// `SectionActiveGate` fires on transitions only, and its `ChangeTracker` baselines
@@ -605,10 +605,10 @@ fn the_pill_row_follows_the_body_router() {
 
 /// The four `on_close_detail` handlers, which used to own the hero teardown.
 const CLOSE_HANDLERS: [(&str, &str); 4] = [
-    ("album", include_str!("../../callbacks/albums/detail.rs")),
-    ("artist", include_str!("../../callbacks/artists/detail.rs")),
-    ("genre", include_str!("../../callbacks/genres/detail.rs")),
-    ("playlist", include_str!("../../callbacks/playlists/detail.rs")),
+    ("album", include_str!("../../albums/callbacks/detail.rs")),
+    ("artist", include_str!("../../artists/callbacks/detail.rs")),
+    ("genre", include_str!("../../genres/callbacks/detail.rs")),
+    ("playlist", include_str!("../../playlists/callbacks/detail.rs")),
 ];
 
 /// **The band's hero reads a latched arm; everything else reads the live one.**

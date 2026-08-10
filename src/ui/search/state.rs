@@ -7,7 +7,7 @@ use std::num::NonZeroUsize;
 
 use parking_lot::Mutex;
 
-use crate::database::queries::SearchResults;
+use crate::library::search::SearchResults;
 use crate::services::settings::{SortDir, ViewSort};
 
 /// Per-fetch cached snapshots. Every successful FTS+LIKE round-trip

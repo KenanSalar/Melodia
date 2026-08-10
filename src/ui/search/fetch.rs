@@ -14,9 +14,9 @@ use slint::{ComponentHandle, Model, SharedString, VecModel, Weak};
 
 use super::SearchUi;
 use super::apply::{apply_results_to_slint, clear_results_on_ui, set_loading_on_ui};
-use crate::database::queries::SearchResults;
 use crate::error::AppResult;
 use crate::library;
+use crate::library::search::SearchResults;
 use crate::state::AppState;
 use crate::{AppWindow, Search};
 
