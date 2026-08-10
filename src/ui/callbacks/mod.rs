@@ -25,6 +25,8 @@ mod tags;
 mod tracks;
 mod updater;
 
+use std::sync::Arc;
+
 use rand::RngExt;
 use slint::{ComponentHandle, Model, ModelRc};
 
@@ -34,6 +36,27 @@ use crate::state::AppState;
 use crate::{AppWindow, Nav, Player};
 
 use macros::{spawn_blocking_logged, spawn_logged_sync, wire_pb, wire_sync, wire_sync_pb};
+
+/// Synchronous shadow of `views.json`'s `last_nav_index`, and the lock its disk
+/// write is taken under.
+///
+/// **One UI-thread tick can ask for two different sections**, which is what makes
+/// this more than the usual insurance the `PersistedAccent` / `PersistedLocale`
+/// shadows are: `nav_history::replay` closes the departing detail before it lands
+/// the target, and a detail reached by a cross-section drill carries an
+/// `origin-nav-index` whose `close-detail` calls `return_to_section` — so the
+/// callback below fires once for the origin and once for the target, each spawning
+/// its own write. Two `spawn_blocking` tasks have no ordering between them, so the
+/// origin could land last and a restart would open on the page the walk passed
+/// through.
+///
+/// A captured index alone can't fix that and neither can a shadow read outside the
+/// lock — a stale task may not observe the newer store, and even when it does its
+/// *write* can still be scheduled after the newer one. What closes it is that the
+/// staleness check and the write sit in one critical section: a task that reads a
+/// value equal to its own index is holding the lock, so the UI thread cannot have
+/// moved the shadow yet, and any newer write must queue behind this one.
+type PersistedNavIndex = Arc<parking_lot::Mutex<i32>>;
 
 #[allow(unused_imports)]
 use macros::spawn_logged;
@@ -255,15 +278,29 @@ pub fn wire_all(ui: &AppWindow, state: &AppState) {
     {
         let s = state.clone();
         let ui_weak = ui_weak.clone();
+        let shadow: PersistedNavIndex =
+            Arc::new(parking_lot::Mutex::new(ui.global::<Nav>().get_selected_index()));
         nav.on_persist_selected_index(move |idx| {
             if let Some(ui) = ui_weak.upgrade() {
                 crate::ui::nav_history::record_current(&s, &ui);
             }
+            // The shadow moves here, on the UI thread, before the spawn — so by the
+            // time any queued write runs it names the newest request. See the type.
+            *shadow.lock() = idx;
             // Spelled out rather than through `spawn_blocking_logged!`, which takes a
             // string *literal*: the index is what makes this line worth reading, and a
             // failure that doesn't say which section it dropped says almost nothing.
             let s_disk = s.clone();
+            let shadow = Arc::clone(&shadow);
             s.runtime.spawn_blocking(move || {
+                // **The check and the write share one critical section**, and that is
+                // the whole mechanism: a superseded write can only be skipped here if
+                // nothing can slip its own write in between. Hold the guard across
+                // `set_last_nav_index` or the two tasks are unordered again.
+                let current = shadow.lock();
+                if *current != idx {
+                    return;
+                }
                 if let Err(e) = library::settings::set_last_nav_index(&s_disk, idx) {
                     log::warn!("nav: set_last_nav_index({idx}): {e}");
                 }
@@ -291,3 +328,10 @@ pub fn wire_all(ui: &AppWindow, state: &AppState) {
 #[cfg(test)]
 #[path = "tests/play_row_tests.rs"]
 mod tests;
+
+// A second flat `#[path]` mod rather than nesting both under `tests` — the
+// play-row helpers reach `super::` for the fns they exercise, and nesting moves
+// that one level away from this file.
+#[cfg(test)]
+#[path = "tests/nav_persist_tests.rs"]
+mod nav_persist_tests;
