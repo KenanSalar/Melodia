@@ -138,14 +138,32 @@ pub fn write_text_atomic_sync(path: &Path, text: &str) -> AppResult<()> {
 /// `/usr/bin/Melodia` while it is running, and what cargo does to
 /// `target/debug/Melodia` every time it re-uplifts it from `deps/` (unlink, then
 /// hardlink, so the inode's mtime never moves and the file looks untouched). The
-/// suffixed path names nothing, so every consumer of it fails or writes nonsense:
-/// the post-exit respawn dies and takes the app with it, `desktop_integration`
-/// bakes the marker into the user's `Exec=` line, and `linux_pkg::detect` misses
-/// its package-DB lookup.
+/// suffixed path names nothing, so every consumer of it fails or writes nonsense.
 ///
 /// It **resolves** rather than merely trimming, and that is what makes it correct
 /// rather than cosmetic: in both cases above the replacement file sits at the
 /// stripped path, so respawning from it relaunches the binary the user now has.
+///
+/// **The marker can only appear mid-session** — you cannot exec an unlinked path,
+/// so at boot there is nothing to strip. That is what sorts the callers. The ones
+/// that meet a marked path are the late ones: the post-exit respawn (through
+/// [`crate::ui::window_chrome::respawn_target`]), which without this dies and takes
+/// the app with it, and `spawn_install`'s pre-swap [`updater::install_target`]
+/// capture. `desktop_integration`'s `Exec=` line and `linux_pkg::detect`'s
+/// package-DB lookup reach it too, and are the reason `install_target` routes
+/// through here rather than only the respawn — but both run at boot, so today they
+/// are defended without it. **By two things, and the second is the one that can be
+/// edited away.** `detect` runs at boot, and it also caches: its `OnceLock` is
+/// primed by `is_system_install()` on a root-owned install and by
+/// `desktop_integration` on a writable one, and every *later* caller reads that
+/// answer — `check_for_update` on the daily task and on the user's Check button,
+/// the panic hook through `current_target_key()`, and the install staging path.
+/// Drop the cache and those three are asking a fresh `rpm -qf` mid-session, which
+/// is squarely inside the window. Ordering and memoization are both incidental;
+/// the defence is worth keeping. Their failure compounds, which is what it buys: a
+/// marked path makes `rpm -qf` miss, so `detect` returns `None`, so the updater
+/// offers a tarball to an RPM install and `desktop_integration` stops skipping and
+/// writes the marker into the user's launcher.
 ///
 /// Reach for this over `std::env::current_exe()` anywhere the path is going to be
 /// executed, installed to, or written down. Inside the updater, go through

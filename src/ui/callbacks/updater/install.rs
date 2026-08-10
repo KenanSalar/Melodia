@@ -63,11 +63,12 @@ pub(super) fn spawn_install(
         let _install_guard = InstallGuard;
 
         // Capture the install target *before* `download_and_install`
-        // swaps the binary on disk. After the swap, `current_exe()`
-        // resolves to the stale `<target>.old` (atomic swap) or a
-        // `(deleted)` path (RPM/DEB), so the post-exit respawn in
-        // `shutdown::respawn_if_requested` must use this captured path
-        // instead. See `ui::window_chrome::set_respawn_exe`.
+        // swaps the binary on disk. The atomic swap *renames* the running
+        // binary to `<target>.old`, and nothing recovers that after the
+        // fact — the OS reports the stale path with a straight face — so
+        // the post-exit respawn in `shutdown::respawn_if_requested` must
+        // use this captured path. See `ui::window_chrome::set_respawn_exe`
+        // for why the unlinking installs need no such capture.
         let install_target = updater::install_target();
 
         let etag = read_etag(&state);
@@ -184,7 +185,7 @@ pub(super) fn spawn_install(
                 asset_cache::clear();
                 // Record the pre-swap binary path so the "Restart Now"
                 // respawn relaunches the freshly-installed binary, not
-                // the stale `current_exe()` path.
+                // the pre-swap path the OS still reports after a rename.
                 match &install_target {
                     Ok(target) => {
                         crate::ui::window_chrome::set_respawn_exe(target.clone());

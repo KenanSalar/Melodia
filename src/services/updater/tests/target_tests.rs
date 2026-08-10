@@ -199,8 +199,8 @@ fn install_target_uses_appimage_path_when_set() -> TestResult {
                 assert_eq!(target, PathBuf::from("/home/u/Apps/Melodia.AppImage"));
             } else {
                 // On non-Linux platforms `$APPIMAGE` is ignored — falls
-                // back to `current_exe()`.
-                let cur = std::env::current_exe()?;
+                // back to `services::current_exe()`.
+                let cur = crate::services::current_exe()?;
                 assert_eq!(target, cur);
             }
             Ok(())
@@ -210,13 +210,21 @@ fn install_target_uses_appimage_path_when_set() -> TestResult {
     result.into_inner()
 }
 
+/// The fallback is `services::current_exe`, not `std::env::current_exe` — it
+/// resolves Linux's `" (deleted)"` marker, and the whole reason this function
+/// routes through it is that the updater's answer gets executed and written
+/// down. The assertion **states** that and cannot check it: no marker exists in
+/// a test process, so the two calls agree and this passes against either. What
+/// catches a revert of `install_target`'s last line is
+/// `services::tests::nothing_outside_the_helper_asks_the_os_for_the_binary_path`,
+/// from the corpus.
 #[test]
 fn install_target_falls_back_to_current_exe_when_appimage_unset() -> TestResult {
     let result = std::cell::RefCell::new(Ok(()));
     with_appimage_env(None, || {
         let r: TestResult = (|| {
             let target = install_target()?;
-            let cur = std::env::current_exe()?;
+            let cur = crate::services::current_exe()?;
             assert_eq!(target, cur);
             Ok(())
         })();
@@ -231,7 +239,7 @@ fn install_target_ignores_empty_appimage_var() -> TestResult {
     with_appimage_env(Some(""), || {
         let r: TestResult = (|| {
             let target = install_target()?;
-            let cur = std::env::current_exe()?;
+            let cur = crate::services::current_exe()?;
             assert_eq!(target, cur);
             Ok(())
         })();

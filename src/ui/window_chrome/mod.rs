@@ -114,8 +114,10 @@ pub fn set_respawn_exe(path: PathBuf) {
 }
 
 /// The explicit respawn path, if the updater recorded one this session.
-/// `None` for a plain titlebar-mode restart.
-pub fn respawn_exe() -> Option<PathBuf> {
+/// `None` for a plain titlebar-mode restart. Private: [`respawn_target`] is
+/// what the rest of the crate asks, so no caller can read the slot without
+/// the fallback that makes an empty one mean "ask the OS".
+fn respawn_exe() -> Option<PathBuf> {
     RESPAWN_EXE.lock().ok().and_then(|slot| slot.clone())
 }
 
