@@ -5,7 +5,7 @@
 //! discriminator plus scalars rather than a rendered card: two of the three
 //! subtitles are translated plurals, and `@tr` only reaches literals inside
 //! `.slint`, so the text is resolved on the UI thread by
-//! [`super::apply::write_top_result`].
+//! `apply::write_top_result`.
 
 use crate::entities::album::AlbumStats;
 use crate::entities::artist::ArtistStats;

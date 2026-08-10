@@ -10,7 +10,7 @@
 //! launcher is spawned.
 //!
 //! The version shown in the About card is *not* set here — it rides on
-//! `MelodiaUpdater.current-version`, seeded by [`crate::ui::updater_settings`].
+//! `MelodiaUpdater.current-version`, seeded by [`super::updater_settings`].
 
 use slint::ComponentHandle;
 

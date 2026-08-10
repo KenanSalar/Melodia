@@ -1,4 +1,4 @@
-//! The Settings page: its chrome, and the ten section cards behind it.
+//! The Settings page: its chrome, and the nine section cards behind it.
 //!
 //! One module per card plus [`settings_page`] for the page's own tab index,
 //! search predicate and responsive geometry. Everything here is reached by

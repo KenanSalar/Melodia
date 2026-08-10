@@ -17,7 +17,7 @@ use crate::ui::my_library::return_to_section;
 use crate::ui::track_list_view::{TrackListColumnState, view_id};
 use crate::{AppWindow, GenreDetail};
 
-/// Wire the `GenreDetail` callbacks. See [`super::wire_genres`].
+/// Wire the `GenreDetail` callbacks. See [`super::wire`].
 pub(super) fn wire(ui: &AppWindow, state: &AppState, genres_ui: &Arc<GenresUi>) {
     let detail = ui.global::<GenreDetail>();
     let weak = ui.as_weak();

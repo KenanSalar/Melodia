@@ -49,8 +49,9 @@ pub struct ToastRequest {
     pub detail: String,
 }
 
-/// Process-wide sender, set once by [`init`]. Read by [`notify`] so producers
-/// don't have to carry a channel handle. Unset in tests → [`notify`] no-ops.
+/// Process-wide sender, set once by [`init`]. Read by [`fn@notify`] so producers
+/// don't have to carry a channel handle. Unset in tests → [`fn@notify`] no-ops.
+/// (Disambiguated: the `notify` crate is a dependency of this build.)
 static SENDER: OnceLock<UnboundedSender<ToastRequest>> = OnceLock::new();
 
 /// Register the process-wide sender and hand back the receiver for the UI-thread

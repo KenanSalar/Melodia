@@ -19,7 +19,7 @@ use crate::{
 };
 
 /// Wire the Playlists section-lifecycle callbacks. See
-/// [`super::wire_playlists`].
+/// [`super::wire`].
 pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<PlaylistsUi>) {
     let playlists = ui.global::<Playlists>();
     let weak = ui.as_weak();
@@ -122,7 +122,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
                 // re-fetches from scratch. Without the `mark_dirty`, a
                 // `library_changed` arriving while the section was never
                 // visited (e.g. the first scan after a fresh-DB launch) would
-                // be lost. Mirrors the same gate in `wire_albums`.
+                // be lost. Mirrors the same gate in `albums/callbacks/lifecycle.rs`.
                 if !pu.section_active() {
                     pu.mark_dirty();
                     continue;

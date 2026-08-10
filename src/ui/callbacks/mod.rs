@@ -2,10 +2,10 @@
 //! wired here to a `library::*` function. Callbacks run on the Slint event
 //! loop thread and dispatch the actual work onto the tokio runtime.
 //!
-//! Split across submodules per Slint global / view domain. `wire_all` is the
-//! root entry that wires the `Player` global itself plus the `Nav` persist
-//! callback; every other view has its own `wire_*` entrypoint that callers
-//! invoke directly (see `boot/ui_setup.rs` or `main.rs`).
+//! What is left here is the cross-cutting set — everything answering to no
+//! single view. `wire_all` is the root entry that wires the `Player` global
+//! itself plus the `Nav` persist callback; each view slice owns its own wiring
+//! under `ui/<view>/callbacks/` and reaches it through that slice's `install`.
 
 // `pub(in crate::ui)` rather than private: each view slice owns its own
 // `callbacks/` submodule, so the wiring reaching these is no longer a
@@ -31,9 +31,6 @@ use crate::state::AppState;
 use crate::{AppWindow, Nav, Player};
 
 use macros::{spawn_blocking_logged, spawn_logged_sync, wire_pb, wire_sync, wire_sync_pb};
-
-#[allow(unused_imports)]
-use macros::spawn_logged;
 
 pub use cross_tab_nav::wire_cross_tab_nav;
 pub use library_settings::wire_library_settings;
@@ -226,7 +223,7 @@ pub fn wire_all(ui: &AppWindow, state: &AppState) {
     // survives restarts — mirrors repeat/shuffle/volume). The flyout only
     // ever sends valid preset values; downstream clamps anyway, so no
     // clamp is needed here. Two steps like the gapless callback in
-    // `src/ui/playback_settings.rs`: (a) fast synchronous runtime apply,
+    // `src/ui/settings/playback_settings.rs`: (a) fast synchronous runtime apply,
     // (b) blocking-pool disk write.
     {
         let s = state.clone();

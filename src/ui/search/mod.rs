@@ -90,7 +90,7 @@ pub fn install(
 }
 
 /// Rust-side state for the Search view. Shared between the UI
-/// callbacks (`wire_search`) and async fetchers behind an
+/// callbacks (`callbacks::wire`) and async fetchers behind an
 /// `Arc<SearchUi>` — `Send + Sync`.
 pub struct SearchUi {
     inner: SearchUiState,
@@ -175,7 +175,7 @@ impl SearchUi {
         crate::tasks::heap_trim::trim();
     }
 
-    /// Same cache + state release as [`release_section_state`] but
+    /// Same cache + state release as [`Self::release_section_state`] but
     /// runs while the user is still on Search — fired when the
     /// `SearchBar` text becomes empty. No `section_active()` bail-out:
     /// the user explicitly cleared the input, so we want to release

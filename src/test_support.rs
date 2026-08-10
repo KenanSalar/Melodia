@@ -28,6 +28,15 @@ pub(crate) const SRC_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/src");
 /// set.
 pub(crate) const UI_SRC_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/src/ui");
 
+/// The subsystem-contract rules, whose `paths:` frontmatter decides which of
+/// them loads for which file.
+///
+/// Pinned from here because a stale glob fails *silently and invisibly*: the
+/// rule simply stops loading for the code it governs, and nothing in the build,
+/// the lint gate or the test suite is looking. One `src/ui/` re-home broke four
+/// of them at once while updating a fifth.
+pub(crate) const RULES_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/.claude/rules");
+
 /// Every module that owns callback wiring: the cross-cutting root plus the
 /// eleven view slices that keep their own.
 ///

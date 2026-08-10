@@ -13,7 +13,7 @@ use crate::ui::callbacks::{next_sort, persist_view_sort, persisted_sort};
 use crate::ui::track_list_view::view_id;
 use crate::{AlbumDetail, Albums, AppWindow};
 
-/// Wire the `Albums` grid callbacks. See [`super::wire_albums`].
+/// Wire the `Albums` grid callbacks. See [`super::wire`].
 pub(super) fn wire(ui: &AppWindow, state: &AppState, albums_ui: &Arc<AlbumsUi>) {
     let albums = ui.global::<Albums>();
     let weak = ui.as_weak();

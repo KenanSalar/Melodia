@@ -98,5 +98,5 @@ pub fn install(ui: &AppWindow, state: &AppState) {
 }
 
 #[cfg(test)]
-#[path = "../tests/settings_page_tests.rs"]
+#[path = "tests/settings_page_tests.rs"]
 mod tests;

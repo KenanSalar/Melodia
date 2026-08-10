@@ -5,7 +5,7 @@ paths:
   - src/tasks/mbid_backfill.rs
   - src/library/favorites.rs
   - src/library/mbid.rs
-  - src/ui/scrobbling_settings.rs
+  - src/ui/settings/scrobbling_settings.rs
   - melodia-ui/ui/views/settings/scrobbling-section.slint
 ---
 

@@ -918,7 +918,7 @@ fn the_idle_pane_folds_its_alpha_into_the_brush() {
 /// Data-agnostic, the `MosaicTabHero` contract: `@tr` folds msgids at codegen, so
 /// a string spelled here is one the host can no longer vary per tab — and the
 /// five tabs differ in every one of them. It is also what keeps the catalogue
-/// surface at the host, where `ui::locale::tests` already walks it.
+/// surface at the host, where `ui::settings::locale::tests` already walks it.
 #[test]
 fn the_band_states_no_string_of_its_own() {
     assert!(

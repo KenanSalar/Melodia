@@ -1,6 +1,6 @@
 //! `Favorites.*` card actions and sub-view routing: Most Played
 //! play-track, the cross-tab open-artist hand-off, the tab switch, and the
-//! grid's column-count push. See [`super::wire_favorites`].
+//! grid's column-count push. See [`super::wire`].
 
 use std::sync::Arc;
 

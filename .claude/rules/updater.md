@@ -3,7 +3,7 @@ paths:
   - src/services/updater/**/*.rs
   - src/services/desktop_integration.rs
   - src/tasks/updater_daily.rs
-  - src/ui/updater_settings.rs
+  - src/ui/settings/updater_settings.rs
   - wix/main.wxs
   - scripts/build-latest-json.py
   - scripts/build-appimage.sh

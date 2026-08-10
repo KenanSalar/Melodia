@@ -1,6 +1,6 @@
 //! `Search.*` recent-searches callbacks: pick (re-run a past query),
 //! remove a single term, and clear the whole list. See
-//! [`super::wire_search`].
+//! [`super::wire`].
 
 use std::sync::Arc;
 

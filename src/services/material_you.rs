@@ -15,7 +15,7 @@
 //!    bar. See [`seed_from_pixels`].
 //! 3. Build a `DynamicScheme` of the requested style (`SchemeTonalSpot`,
 //!    `SchemeVibrant`, …) at contrast 0.0 / `is_dark` matching the user's
-//!    variant, then map the M3 roles directly into a [`themes::Palette`].
+//!    variant, then map the M3 roles directly into a [`crate::themes::Palette`].
 //!
 //! All public functions are sync and may block — call from
 //! `tokio::task::spawn_blocking` only.
@@ -278,7 +278,7 @@ pub fn to_tone_capped_chroma(argb: u32, tone: f64, max_chroma: f64) -> u32 {
 }
 
 /// Build a `DynamicScheme` of `style` × `is_dark` (contrast = default)
-/// from the seed and map the M3 roles to a [`themes::Palette`] +
+/// from the seed and map the M3 roles to a [`crate::themes::Palette`] +
 /// accent hex. Matches the M3 → palette role mapping from Tauri's
 /// `dynamicColor.ts::generateDynamicColors`. Pure CPU, sub-millisecond —
 /// safe to call from a tokio worker without `spawn_blocking` if you've

@@ -15,7 +15,7 @@
 //! the UI thread, so pushing toasts through the `Rc<NotificationsUi>` and
 //! reading/writing `Dialog.*` is safe without an extra event-loop hop.
 //!
-//! Wired separately from [`super::wire_playlists`] (in `main.rs`, after the
+//! Wired separately from [`super::wire`] (in `main.rs`, after the
 //! notifications stack exists) because these handlers need the
 //! `Rc<NotificationsUi>` — see [`wire`].
 

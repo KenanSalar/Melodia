@@ -280,7 +280,8 @@ pub fn clear_if_stale(ui: &AppWindow) {
 }
 
 /// The pure half of [`clear_if_stale`]. Split out so the decision is testable
-/// without an `AppWindow`, the [`crate::ui::my_library::detail_open_on`] precedent.
+/// without an `AppWindow`, the [`crate::ui::my_library::fold_retired_nav_index`]
+/// precedent.
 fn should_clear(recorded: ChipOwner, band: Option<ChipOwner>, still_open: bool) -> bool {
     if band == Some(recorded) {
         return false;

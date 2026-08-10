@@ -272,7 +272,8 @@ fn run_write_pass(
 }
 
 /// Cache key for `run_commit`'s FK-resolution memo. Holds everything
-/// [`queries::scan::resolve_track_context`] derives its [`ResolvedIds`] from —
+/// [`queries::scan::resolve_track_context`] derives its
+/// [`queries::ResolvedIds`] from —
 /// folder (via the parent dir, since folder lookup is a path-prefix match),
 /// artist, album, album-artist (the album's grouping key), `year` (album upsert's
 /// `COALESCE`-on-conflict input), and genre — so identical keys yield identical

@@ -1,4 +1,4 @@
-//! Glue between the system tray ([`services::tray`]) and the rest of the app.
+//! Glue between the system tray ([`crate::services::tray`]) and the rest of the app.
 //!
 //! Three pieces:
 //!

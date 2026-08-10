@@ -17,7 +17,7 @@ use crate::{
     AlbumDetail, AlbumGridRow as UiAlbumGridRow, Albums, AppWindow, TrackListRow as UiTrackListRow,
 };
 
-/// Wire the Albums section-lifecycle callbacks. See [`super::wire_albums`].
+/// Wire the Albums section-lifecycle callbacks. See [`super::wire`].
 pub(super) fn wire(ui: &AppWindow, state: &AppState, albums_ui: &Arc<AlbumsUi>) {
     let albums = ui.global::<Albums>();
     let weak = ui.as_weak();

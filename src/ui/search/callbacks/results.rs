@@ -1,7 +1,7 @@
 //! `Search.*` result callbacks: cross-tab open-album / open-artist
 //! hand-offs, Top Result routing, `TrackList` row actions (play, queue,
 //! favorite toggle), sort, column visibility, and selection. See
-//! [`super::wire_search`].
+//! [`super::wire`].
 
 use std::sync::Arc;
 

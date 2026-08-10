@@ -9,7 +9,7 @@ use tokio::sync::mpsc;
 use super::{TrayAction, TraySnapshot};
 
 /// ksni [`Tray`](ksni::Tray) implementation. Holds the latest render snapshot
-/// plus the channel back to `ui::tray_bridge`. Menu callbacks `try_send`
+/// plus the channel back to `ui::shell::tray_bridge`. Menu callbacks `try_send`
 /// `TrayAction`s — non-blocking, so the D-Bus thread never stalls on a full
 /// channel (it just drops the action, which a human clicker cannot trigger).
 struct MelodiaTray {
@@ -84,7 +84,7 @@ impl ksni::Tray for MelodiaTray {
 }
 
 /// Live handle to the running Linux tray. `Send` (ksni's `blocking::Handle`
-/// is `Send`), so `ui::tray_bridge` can own it from a background tokio task.
+/// is `Send`), so `ui::shell::tray_bridge` can own it from a background tokio task.
 /// Dropping it shuts the SNI service down, removing the icon.
 pub struct LinuxTray {
     handle: ksni::blocking::Handle<MelodiaTray>,

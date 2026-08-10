@@ -313,7 +313,8 @@ fn a_tab_pick_clears_the_filter_on_both_sides() {
         .map_or("", |(body, _)| body);
     assert!(
         !handler.is_empty(),
-        "`wire_my_library` must still register `on_tab_changed` before `on_persist_tab_idx` \
+        "`my_library::callbacks::wire` must still register `on_tab_changed` before \
+         `on_persist_tab_idx` \
          — this pin bounds the handler between the two",
     );
     for clear in ["g.set_filter(SharedString::from(\"\"))", "filter::clear_mounted(&ui)"] {
@@ -948,7 +949,8 @@ fn only_a_tab_pick_records_a_history_entry() {
         .map_or("", |(body, _)| body);
     assert!(
         !pick.is_empty(),
-        "`wire_my_library` must still register `on_tab_changed` before `on_persist_tab_idx` \
+        "`my_library::callbacks::wire` must still register `on_tab_changed` before \
+         `on_persist_tab_idx` \
          — this pin bounds the handler between the two",
     );
     assert!(

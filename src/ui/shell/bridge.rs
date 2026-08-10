@@ -85,7 +85,7 @@ pub fn spawn_view_model_subscriber(
                 }
             }
         }
-        log::debug!("ui::bridge view-model subscriber stopped");
+        log::debug!("ui::shell::bridge view-model subscriber stopped");
     }))?;
     Ok(())
 }
@@ -107,7 +107,7 @@ pub fn spawn_queue_subscriber(
                 ui.global::<Player>().set_queue(to_slint_queue_vm(&qvm));
             }
         }
-        log::debug!("ui::bridge queue subscriber stopped");
+        log::debug!("ui::shell::bridge queue subscriber stopped");
     }))?;
     Ok(())
 }
@@ -148,7 +148,7 @@ pub fn spawn_position_subscriber(
                 }
             }
         }
-        log::debug!("ui::bridge position subscriber stopped");
+        log::debug!("ui::shell::bridge position subscriber stopped");
     }))?;
     Ok(())
 }

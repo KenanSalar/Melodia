@@ -14,7 +14,7 @@ use crate::ui::playlists::{self as playlists_ui_mod, PlaylistsUi};
 use crate::ui::track_list_view::{TrackListColumnState, view_id};
 use crate::{AppWindow, Dialog, PlaylistDetail};
 
-/// Wire the `PlaylistDetail` callbacks. See [`super::wire_playlists`].
+/// Wire the `PlaylistDetail` callbacks. See [`super::wire`].
 pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<PlaylistsUi>) {
     let detail = ui.global::<PlaylistDetail>();
     let weak = ui.as_weak();

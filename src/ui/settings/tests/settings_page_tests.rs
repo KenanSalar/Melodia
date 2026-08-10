@@ -26,26 +26,26 @@ fn chunk_indices_floors_a_degenerate_row_width_at_one() {
     assert_eq!(chunk_indices(3, -1), vec![vec![0], vec![1], vec![2]]);
 }
 
-const GLOBAL: &str = include_str!("../../../melodia-ui/ui/globals/settings-page.slint");
-const ROUTER: &str = include_str!("../../../melodia-ui/ui/views/settings/settings-tabs.slint");
-const VIEW: &str = include_str!("../../../melodia-ui/ui/views/settings-view.slint");
+const GLOBAL: &str = include_str!("../../../../melodia-ui/ui/globals/settings-page.slint");
+const ROUTER: &str = include_str!("../../../../melodia-ui/ui/views/settings/settings-tabs.slint");
+const VIEW: &str = include_str!("../../../../melodia-ui/ui/views/settings-view.slint");
 
 /// One tab page per tab, by name so a failure says which file.
 const PAGES: [(&str, &str); 5] = [
-    ("library-page", include_str!("../../../melodia-ui/ui/views/settings/pages/library-page.slint")),
+    ("library-page", include_str!("../../../../melodia-ui/ui/views/settings/pages/library-page.slint")),
     (
         "playback-page",
-        include_str!("../../../melodia-ui/ui/views/settings/pages/playback-page.slint"),
+        include_str!("../../../../melodia-ui/ui/views/settings/pages/playback-page.slint"),
     ),
     (
         "interface-page",
-        include_str!("../../../melodia-ui/ui/views/settings/pages/interface-page.slint"),
+        include_str!("../../../../melodia-ui/ui/views/settings/pages/interface-page.slint"),
     ),
     (
         "services-page",
-        include_str!("../../../melodia-ui/ui/views/settings/pages/services-page.slint"),
+        include_str!("../../../../melodia-ui/ui/views/settings/pages/services-page.slint"),
     ),
-    ("about-page", include_str!("../../../melodia-ui/ui/views/settings/pages/about-page.slint")),
+    ("about-page", include_str!("../../../../melodia-ui/ui/views/settings/pages/about-page.slint")),
 ];
 
 /// The `N` in `SettingsPage`'s `tab-count: N;`.

@@ -27,7 +27,7 @@ use crate::ui::util::clamp_i64_to_i32;
 use crate::{AppWindow, Dialog, SmartEditor, SmartRuleRow};
 
 /// Wire the Smart-Playlist editor callbacks + install its rules model. See
-/// [`super::wire_playlists`].
+/// [`super::wire`].
 pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<PlaylistsUi>) {
     let se = ui.global::<SmartEditor>();
 

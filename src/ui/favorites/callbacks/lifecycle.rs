@@ -1,6 +1,6 @@
 //! Favorites section lifecycle: the `section-active-changed` enter/leave
 //! handler (cache release + re-fetch), the `library_changed` subscriber,
-//! and the first-enter initial fetch. See [`super::wire_favorites`].
+//! and the first-enter initial fetch. See [`super::wire`].
 
 use std::sync::Arc;
 

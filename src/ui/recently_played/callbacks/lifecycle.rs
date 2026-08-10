@@ -1,7 +1,7 @@
 //! Recently-Played section lifecycle: the `section-active-changed` enter/leave
 //! handler (cache release + re-fetch), the joined `library_changed` +
 //! `stats_changed` subscriber, and the first-enter initial fetch. See
-//! [`super::wire_recently_played`].
+//! [`super::wire`].
 
 use std::sync::Arc;
 

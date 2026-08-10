@@ -1,4 +1,4 @@
-//! The hero's shuffle pills. See [`super::wire_favorites`].
+//! The hero's shuffle pills. See [`super::wire`].
 //!
 //! The pill is per-tab, so each one shuffles what its own tab is showing —
 //! and both id lists are filter-aware, so the queue can't disagree with what

@@ -102,7 +102,7 @@ pub fn install(cx: ViewCtx<'_>) -> Arc<GenresUi> {
 }
 
 /// Rust-side state for the Genres grid + detail views. Shared between
-/// the UI callbacks (`wire_genres`) and the async fetchers. The grid and
+/// the UI callbacks (`callbacks::wire`) and the async fetchers. The grid and
 /// detail concerns are largely independent — each lives in its own
 /// sub-struct.
 ///

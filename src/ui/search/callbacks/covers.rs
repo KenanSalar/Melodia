@@ -1,7 +1,7 @@
 //! `Search.*` lazy cover-lookup callbacks — album strip, artist strip,
 //! and the kind-routed Top Result tile. (Result rows resolve through the
 //! shared `RowCovers` global like every other `TrackListRowItem`.) See
-//! [`super::wire_search`].
+//! [`super::wire`].
 
 use std::sync::Arc;
 

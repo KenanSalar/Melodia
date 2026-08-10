@@ -98,7 +98,7 @@ fn query_portal_color_scheme_blocking() -> Option<u32> {
 }
 
 /// Spawn a background task that listens for XDG portal `SettingChanged`
-/// signals and forwards a fresh [`SystemColorState`] on every appearance
+/// signals and forwards a fresh [`crate::themes::SystemColorState`] on every appearance
 /// change. The payload bundles the current dark/light theme *and* the
 /// re-read KDE palette so the UI consumer doesn't have to coordinate two
 /// separate channels — KDE's `kdeglobals` is the same file Plasma rewrites

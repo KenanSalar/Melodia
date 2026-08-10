@@ -25,8 +25,9 @@
 //! [`PendingNav::apply_deferred`] are the split for.
 //!
 //! Not persisted: each launch starts with an empty history. The boot
-//! state is seeded synchronously at the end of [`crate::boot::ui_setup`]
-//! `::install_views` (one entry for the section the user landed on),
+//! state is seeded synchronously at the end of
+//! `boot::ui_setup::install_views` (one entry for the section the user landed
+//! on — `boot` lives in the binary, so there is no link to reach it by),
 //! and any persisted detail's async `seed_detail_from_settings` open
 //! records itself on the way in.
 

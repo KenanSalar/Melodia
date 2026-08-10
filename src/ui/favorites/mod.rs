@@ -114,7 +114,7 @@ pub fn install(cx: ViewCtx<'_>, artists_ui: &Arc<ArtistsUi>) -> Arc<FavoritesUi>
 }
 
 /// Rust-side state for the Favorites view. Shared between the UI
-/// callbacks (`wire_favorites`) and the async fetchers behind an
+/// callbacks (`callbacks::wire`) and the async fetchers behind an
 /// `Arc<FavoritesUi>` — `Send + Sync`.
 pub struct FavoritesUi {
     inner: FavoritesUiState,

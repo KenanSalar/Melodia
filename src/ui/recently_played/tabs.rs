@@ -50,11 +50,11 @@ pub fn tab_from_index(g: &RecentlyPlayed<'_>, idx: i32) -> RecentlyPlayedTab {
 /// `tab-count` (see [`crate::ui::tab_bar::clamp_tab`]).
 ///
 /// Seeds **both** the Slint property and the [`RecentlyPlayedUi`] shadow, which
-/// is why it takes the handle and why it is called from `install_views` rather
-/// than alongside its siblings in `hydrate_ui_from_settings` — that runs after
-/// the handle has gone out of scope, and a shadow left at its `Songs` default
-/// would have the first fetch warm nothing for a session that resumes on the
-/// grid.
+/// is why it takes the handle and why it runs as the last statement of
+/// [`super::install`] rather than alongside its siblings in
+/// `hydrate_ui_from_settings` — that runs after the handle has gone out of
+/// scope, and a shadow left at its `Songs` default would have the first fetch
+/// warm nothing for a session that resumes on the grid.
 pub fn seed_tab(ui: &AppWindow, rp_ui: &RecentlyPlayedUi, persisted_tab: i32) {
     let g = ui.global::<RecentlyPlayed>();
     let clamped = crate::ui::tab_bar::clamp_tab(persisted_tab, g.get_tab_count());

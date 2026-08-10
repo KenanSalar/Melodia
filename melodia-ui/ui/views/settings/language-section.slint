@@ -5,7 +5,7 @@ import { SettingRow } from "../../components/settings/setting-row.slint";
 import { Dropdown } from "../../components/settings/dropdown.slint";
 
 // One row: the locale dropdown. Its options come from the `Settings` global,
-// which `src/ui/locale.rs::install_locale` fills from `SUPPORTED_LOCALES`. The
+// which `src/ui/settings/locale.rs::install_locale` fills from `SUPPORTED_LOCALES`. The
 // native-name labels are deliberately untranslated — a language picker always
 // renders each option in its own script — while the title and row label take
 // `@tr()` so the page stays readable in whatever locale is picked.

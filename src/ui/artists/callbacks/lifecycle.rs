@@ -19,7 +19,7 @@ use crate::{
     TrackListRow as UiTrackListRow,
 };
 
-/// Wire the Artists section-lifecycle callbacks. See [`super::wire_artists`].
+/// Wire the Artists section-lifecycle callbacks. See [`super::wire`].
 pub(super) fn wire(
     ui: &AppWindow,
     state: &AppState,
@@ -105,7 +105,7 @@ pub(super) fn wire(
                             // Detail re-fetch failed (artist deleted while
                             // hidden); drop back to the grid rather than
                             // stranding the user on an empty detail page.
-                            // Mirrors `wire_albums::on_section_active_changed`.
+                            // Mirrors the Albums slice's own lifecycle wiring.
                             artists_ui_mod::clear_detail(&au);
                             let _ = weak.upgrade_in_event_loop(|ui| {
                                 let g = ui.global::<ArtistDetail>();
@@ -147,7 +147,7 @@ pub(super) fn wire(
                 // re-fetches from scratch. Without the `mark_dirty`, a
                 // `library_changed` arriving while the section was never
                 // visited (e.g. the first scan after a fresh-DB launch) would
-                // be lost. Mirrors the same gate in `wire_albums`.
+                // be lost. Mirrors the same gate in `albums/callbacks/lifecycle.rs`.
                 if !au.section_active() {
                     au.mark_dirty();
                     continue;

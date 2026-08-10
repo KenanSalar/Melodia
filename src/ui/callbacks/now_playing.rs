@@ -80,8 +80,8 @@ fn mirrors(
 /// per-row `is_favorite`, so a row showing the currently-playing track
 /// updates instantly regardless of which view it sits in.
 ///
-/// Call once after `wire_tracks`, `wire_browse`, `wire_albums`,
-/// `wire_artists`, and `wire_genres`.
+/// Call once after `tracks::install`, `browse::install`, `albums::install`,
+/// `artists::install` and `genres::install`.
 pub fn wire_now_playing_favorite(
     ui: &AppWindow,
     state: &AppState,

@@ -64,7 +64,7 @@ pub fn install(ui: &AppWindow, state: &AppState) -> Result<(), slint::EventLoopE
                     g.set_scanning_file(SharedString::default());
                 }
             }
-            log::debug!("ui::library_settings scan-progress subscriber stopped");
+            log::debug!("ui::settings::library_settings scan-progress subscriber stopped");
         }))?;
     }
 
@@ -82,7 +82,7 @@ pub fn install(ui: &AppWindow, state: &AppState) -> Result<(), slint::EventLoopE
                 let _ = rx.borrow_and_update();
                 refresh_folders(weak.clone(), s.clone()).await;
             }
-            log::debug!("ui::library_settings library-changed subscriber stopped");
+            log::debug!("ui::settings::library_settings library-changed subscriber stopped");
         }))?;
     }
 
@@ -183,5 +183,5 @@ fn progress_fraction(scanned: u32, total: u32) -> f32 {
 }
 
 #[cfg(test)]
-#[path = "../tests/library_settings_tests.rs"]
+#[path = "tests/library_settings_tests.rs"]
 mod tests;

@@ -31,7 +31,7 @@ use crate::{
     AppWindow, Dialog, PlaylistDetail, PlaylistPickRow as UiPlaylistPickRow, Playlists, TagEditor,
 };
 
-/// Wire the playlist dialog + CRUD callbacks. See [`super::wire_playlists`].
+/// Wire the playlist dialog + CRUD callbacks. See [`super::wire`].
 pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<PlaylistsUi>) {
     let playlists = ui.global::<Playlists>();
     let weak = ui.as_weak();

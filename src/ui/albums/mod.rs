@@ -92,7 +92,7 @@ pub fn install(cx: ViewCtx<'_>) -> Arc<AlbumsUi> {
 }
 
 /// Rust-side state for the Albums grid + detail views. Shared between the
-/// UI callbacks (`wire_albums`) and the async fetchers. The grid and detail
+/// UI callbacks (`callbacks::wire`) and the async fetchers. The grid and detail
 /// concerns are largely independent — each lives in its own sub-struct.
 pub struct AlbumsUi {
     grid: AlbumGridState,

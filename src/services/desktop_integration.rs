@@ -208,7 +208,7 @@ pub(crate) fn render_desktop(template: &str, exec: &Path) -> String {
 /// BLAKE3 hash differs from the payload's. Returns whether a write
 /// happened.
 ///
-/// Creates parent dirs on demand. Uses [`crate::services::write_atomic`]'s
+/// Creates parent dirs on demand. Uses [`crate::services::write_json_atomic_sync`]'s
 /// temp-file-then-rename pattern by virtue of going through
 /// `tempfile::NamedTempFile::persist` to dodge a half-written file
 /// outliving a crash mid-write.

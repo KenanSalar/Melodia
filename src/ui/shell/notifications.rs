@@ -7,7 +7,7 @@
 //!   - [`NotificationsUi::show`] appends a row, returns its id.
 //!   - [`NotificationsUi::dismiss`] removes by id.
 //!   - [`NotificationsUi::dismiss_by_kind`] removes every row whose
-//!     `action_kind` matches — used by `ui::file_watching` to clear the
+//!     `action_kind` matches — used by `ui::settings::file_watching` to clear the
 //!     "watching disabled" row when the user toggles watching back on.
 //!
 //! Threading: `Rc<VecModel<_>>` is UI-thread-only. All public methods are
@@ -152,7 +152,7 @@ impl NotificationsUi {
 
 /// Install the `Notifications` global's row model and wire its `dismiss`
 /// callback. Returns the Rust-side handle the caller (typically
-/// `main.rs`) threads into other modules (`ui::file_watching::install`,
+/// `main.rs`) threads into other modules (`ui::settings::file_watching::install`,
 /// future `Updater` task, …).
 ///
 /// The `action` callback is intentionally left to the Slint-side default
@@ -180,5 +180,5 @@ pub fn install(ui: &AppWindow) -> Rc<NotificationsUi> {
 }
 
 #[cfg(test)]
-#[path = "../tests/notifications_tests.rs"]
+#[path = "tests/notifications_tests.rs"]
 mod tests;

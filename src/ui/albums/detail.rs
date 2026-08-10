@@ -445,7 +445,7 @@ pub fn apply_detail_row_rating(weak: &Weak<AppWindow>, id: i64, rating: i32) {
 }
 
 /// Reopen the album that was visible in the Album Detail view at the last
-/// shutdown, if any. Called once at startup *after* `wire_albums` so the
+/// shutdown, if any. Called once at startup *after* [`super::install`] so the
 /// `AlbumDetail` callbacks are already live by the time
 /// `open_album`'s `upgrade_in_event_loop` lands. Silently no-ops on a
 /// missing / deleted album: `open_album` returns an error, we log it, and

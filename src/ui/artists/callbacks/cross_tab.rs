@@ -12,7 +12,7 @@ use crate::ui::callbacks::cross_tab_nav;
 use crate::{AppWindow, ArtistDetail};
 
 /// Wire the Artist Detail Albums sub-section callbacks. See
-/// [`super::wire_artists`].
+/// [`super::wire`].
 pub(super) fn wire(ui: &AppWindow, state: &AppState, albums_ui: &Arc<AlbumsUi>) {
     let detail = ui.global::<ArtistDetail>();
     let weak = ui.as_weak();

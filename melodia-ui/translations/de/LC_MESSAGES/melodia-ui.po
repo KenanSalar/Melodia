@@ -905,7 +905,7 @@ msgstr "{} von {} bereits hinzugefügt"
 # ---- Auto-updater (Settings → Updates + notification toasts) ----------------
 # Surfaced by `ui/views/settings/update-section.slint` (Skip + package-managed
 # hint) and `ui/settings.slint` (notification pure-callbacks dispatched from
-# `src/ui/callbacks/updater.rs`). The action-button labels ("Install" /
+# `src/ui/callbacks/updater/`). The action-button labels ("Install" /
 # "Restart") map onto `Notifications.action` `kind` values "install-update" /
 # "update-restart" in `ui/globals/updater.slint`.
 

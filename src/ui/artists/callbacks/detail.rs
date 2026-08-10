@@ -16,7 +16,7 @@ use crate::ui::my_library::return_to_section;
 use crate::ui::track_list_view::{TrackListColumnState, view_id};
 use crate::{AppWindow, ArtistDetail};
 
-/// Wire the `ArtistDetail` callbacks. See [`super::wire_artists`].
+/// Wire the `ArtistDetail` callbacks. See [`super::wire`].
 pub(super) fn wire(
     ui: &AppWindow,
     state: &AppState,

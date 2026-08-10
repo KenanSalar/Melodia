@@ -13,7 +13,7 @@
 //! the per-open snapshot lives in an `Rc<RefCell<_>>` and the completion toast
 //! needs the `Rc<NotificationsUi>` — both `!Send`, so the work must stay on the
 //! UI thread. `async_compat::Compat` supplies the tokio reactor for the awaited
-//! sqlx / `spawn_blocking` calls, exactly as `wire_playlist_files` does. Wired
+//! sqlx / `spawn_blocking` calls, exactly as `ui::playlists::wire_files` does. Wired
 //! from `main.rs` after the notifications stack exists, for the same reason.
 
 use std::cell::RefCell;
@@ -77,7 +77,7 @@ struct TagSession {
 
 /// Wire the four `TagEditor` callbacks. Needs `Rc<NotificationsUi>` for the
 /// Save completion toast, so it is called from `main.rs` after the notifications
-/// stack exists (same constraint as `wire_playlist_files`).
+/// stack exists (same constraint as `ui::playlists::wire_files`).
 pub fn wire_tags(ui: &AppWindow, state: &AppState, notifications: &Rc<NotificationsUi>) {
     let session: Rc<RefCell<TagSession>> = Rc::new(RefCell::new(TagSession::default()));
     let te = ui.global::<TagEditor>();

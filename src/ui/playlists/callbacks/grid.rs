@@ -12,7 +12,7 @@ use crate::ui::callbacks::macros::spawn_logged;
 use crate::ui::playlists::{self as playlists_ui_mod, PlaylistsUi};
 use crate::{AppWindow, Playlists};
 
-/// Wire the `Playlists` grid callbacks. See [`super::wire_playlists`].
+/// Wire the `Playlists` grid callbacks. See [`super::wire`].
 pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<PlaylistsUi>) {
     let playlists = ui.global::<Playlists>();
     let weak = ui.as_weak();

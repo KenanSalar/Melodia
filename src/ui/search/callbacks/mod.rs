@@ -40,11 +40,12 @@ use crate::{AppWindow, Search};
 /// `NAV_*` consts in `callbacks/cross_tab_nav.rs`.
 pub(super) const NAV_SEARCH: i32 = 0;
 
-/// Wire every `Search.*` callback. Call once after
-/// [`super::install`], which is what guarantees the models are in place first
-/// and that both `AlbumsUi` + `ArtistsUi` exist (the results module borrows
-/// them for the cross-tab open hand-offs). `wire_all` still has to have run
-/// before it.
+/// Wire every `Search.*` callback.
+///
+/// Called by [`super::install`], which is what guarantees the models are in
+/// place first and that both `AlbumsUi` + `ArtistsUi` exist (the results module
+/// borrows them for the cross-tab open hand-offs). `wire_all` still has to have
+/// run before it.
 pub(super) fn wire(
     ui: &AppWindow,
     state: &AppState,

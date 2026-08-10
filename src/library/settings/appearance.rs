@@ -1,7 +1,13 @@
 //! Appearance-section setters (theme / variant / accent, dynamic colour
-//! style, match-unfocused, corner radius). All persist through
+//! style, match-unfocused, corner radius). Every *setter* persists through
 //! [`crate::services::settings::mutate_settings`] so a burst of clicks
 //! can't race over the read-mutate-write window.
+//!
+//! [`seed_theme_preference`] is the one exception and writes the whole file:
+//! it is a boot-time migration over settings the caller has already read, and
+//! `mutate_settings` writes unconditionally — which would turn a one-off into
+//! a rewrite of `settings.json` on every launch. Nothing else is writing at
+//! that point in the boot, so there is no window to serialise against.
 
 use crate::error::AppError;
 use crate::services::{

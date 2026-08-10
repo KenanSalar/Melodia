@@ -1,6 +1,6 @@
 //! `Favorites.*` Songs-tab callbacks: row actions (play, queue, favorite
 //! toggle), the filter pass, sort, column visibility, and modifier-aware
-//! row selection. See [`super::wire_favorites`].
+//! row selection. See [`super::wire`].
 
 use std::sync::Arc;
 

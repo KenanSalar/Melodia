@@ -2,8 +2,8 @@
 //!
 //! The Slint `Browse` global owns three `Rc<VecModel<_>>` lists
 //! (`folders`, `rows`, `breadcrumbs`) installed once at startup via
-//! [`install_browse_models`], plus a persistent `VecModel<i32>` for the
-//! selection ([`install_browse_selection_model`]). [`fetch_and_apply`]
+//! `install_models`, plus a persistent `VecModel<i32>` for the
+//! selection (`install_selection_model`). `fetch_and_apply`
 //! mutates the existing `VecModel`s in place on every navigation — no
 //! `ModelRc` swaps after install, so Slint's reactive bindings keep their
 //! dependency tracks.
@@ -95,7 +95,7 @@ pub fn install(cx: ViewCtx<'_>) -> Arc<BrowseUi> {
 }
 
 /// Rust-side state for the Browse view. Shared between the UI callbacks
-/// (`wire_browse`) and the async fetcher.
+/// (`callbacks::wire`) and the async fetcher.
 pub struct BrowseUi {
     /// Canonical current location. `""` ⇒ root (library folder list).
     /// Mirrored into `Browse.current-path` on every successful fetch.

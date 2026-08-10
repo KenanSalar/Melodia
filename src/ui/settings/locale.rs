@@ -136,5 +136,5 @@ fn wire_language_changed(ui: &AppWindow, state: &AppState, shadow: PersistedLoca
 }
 
 #[cfg(test)]
-#[path = "../tests/locale_tests.rs"]
+#[path = "tests/locale_tests.rs"]
 mod tests;

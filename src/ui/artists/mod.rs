@@ -94,7 +94,7 @@ pub fn install(cx: ViewCtx<'_>, albums_ui: &Arc<AlbumsUi>) -> Arc<ArtistsUi> {
 }
 
 /// Rust-side state for the Artists grid + detail views. Mirrors
-/// [`AlbumsUi`](crate::ui::albums::AlbumsUi) layer by layer; the grid and
+/// [`AlbumsUi`] layer by layer; the grid and
 /// detail concerns live in their own sub-structs.
 pub struct ArtistsUi {
     grid: ArtistGridState,
@@ -112,7 +112,7 @@ pub struct ArtistsUi {
     /// Albums strip resolves its cards through `AlbumsUi::grid_cover`
     /// (decode-on-miss on the UI thread), so [`detail::open_artist`]'s
     /// fetch prewarms the strip's covers into this cache off-thread first.
-    /// Not released here — `wire_artists` already clears the shared LRU on
+    /// Not released here — the Artists wiring already clears the shared LRU on
     /// section-leave / detail-close via the `AlbumsUi` handle.
     albums_grid_covers: Arc<CoverThumbs>,
     /// Detail-tier `(cover, blur)` pair cache for the Artist Detail header.

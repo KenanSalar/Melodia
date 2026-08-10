@@ -17,6 +17,12 @@ use crate::state::AppState;
 /// comment a later edit can reorder past.
 ///
 /// `Copy` so passing it nine times reads like passing nothing.
+///
+/// Nine, not ten: `ui::my_library::install` takes a bare `(&AppWindow,
+/// &AppState)`. The page's three callbacks need neither the cover cache nor
+/// `views.json`, and it has to run *before* the five tab slices — so it sits
+/// above the point in `install_views` where the cache exists to build a `cx`
+/// from.
 #[derive(Clone, Copy)]
 pub struct ViewCtx<'a> {
     pub app: &'a AppWindow,

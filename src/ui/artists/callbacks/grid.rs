@@ -13,7 +13,7 @@ use crate::ui::callbacks::{next_sort, persist_view_sort, persisted_sort};
 use crate::ui::track_list_view::view_id;
 use crate::{AppWindow, ArtistDetail, Artists};
 
-/// Wire the `Artists` grid callbacks. See [`super::wire_artists`].
+/// Wire the `Artists` grid callbacks. See [`super::wire`].
 pub(super) fn wire(ui: &AppWindow, state: &AppState, artists_ui: &Arc<ArtistsUi>) {
     let artists = ui.global::<Artists>();
     let weak = ui.as_weak();

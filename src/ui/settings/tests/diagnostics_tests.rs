@@ -1,8 +1,8 @@
 use super::CRASH_TOAST_KIND;
 
-const DISPATCHER: &str = include_str!("../../../melodia-ui/ui/globals/updater.slint");
+const DISPATCHER: &str = include_str!("../../../../melodia-ui/ui/globals/updater.slint");
 const SECTION: &str =
-    include_str!("../../../melodia-ui/ui/views/settings/diagnostics-section.slint");
+    include_str!("../../../../melodia-ui/ui/views/settings/diagnostics-section.slint");
 
 /// The routing key Rust pushes and the branch that answers it are one string
 /// split across two languages, so nothing but a scan can hold them together.

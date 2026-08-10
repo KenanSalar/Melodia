@@ -28,7 +28,7 @@
 //!
 //! Search-view exception: the Slint side rewires its row context menu
 //! to call the existing `Search.open-album` / `Search.open-artist`
-//! (already wired in `callbacks/search.rs`). Only `go-to-genre` is new
+//! (already wired in `search/callbacks/results.rs`). Only `go-to-genre` is new
 //! for Search — wired below alongside the other six globals.
 
 use std::sync::Arc;
@@ -103,8 +103,8 @@ pub(in crate::ui) fn origin_stamp(nav: i32) -> i32 {
 
 /// Wire every `*.go-to-album` / `*.go-to-artist` / `*.go-to-genre`
 /// callback to its cross-tab navigation handler. Must be called *after*
-/// `wire_albums` / `wire_artists` / `wire_genres` so the per-target UI
-/// handles exist.
+/// `albums::install` / `artists::install` / `genres::install` so the
+/// per-target UI handles exist.
 pub fn wire_cross_tab_nav(
     ui: &AppWindow,
     state: &AppState,
@@ -166,7 +166,7 @@ pub fn wire_cross_tab_nav(
 
     // --- Search (only Go-to-Genre is new; Album / Artist reuse the
     // pre-existing `Search.open-album` / `Search.open-artist` already
-    // wired in `callbacks/search.rs`) -------------------------------
+    // wired in `search/callbacks/results.rs`) ----------------------
     let g = ui.global::<Search>();
     g.on_go_to_genre(make_go_to_genre(state, genres_ui, weak));
 }

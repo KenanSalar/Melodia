@@ -4,7 +4,7 @@ paths:
   - src/tasks/discord_presence.rs
   - src/media/deezer.rs
   - src/media/itunes.rs
-  - src/ui/discord_settings.rs
+  - src/ui/settings/discord_settings.rs
   - melodia-ui/ui/views/settings/discord-section.slint
 ---
 

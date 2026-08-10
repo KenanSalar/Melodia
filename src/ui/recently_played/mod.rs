@@ -93,7 +93,7 @@ pub fn install(cx: ViewCtx<'_>) -> Arc<RecentlyPlayedUi> {
 }
 
 /// Rust-side state for the Recently-Played view. Shared between the UI
-/// callbacks (`wire_recently_played`) and the async fetchers behind an
+/// callbacks (`callbacks::wire`) and the async fetchers behind an
 /// `Arc<RecentlyPlayedUi>` — `Send + Sync`.
 pub struct RecentlyPlayedUi {
     inner: RecentlyPlayedUiState,

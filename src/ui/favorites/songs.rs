@@ -33,7 +33,7 @@ pub fn current_filter(fav_ui: &FavoritesUi) -> Needle {
     fav_ui.state().filter.lock().clone()
 }
 
-/// Update the cached sort. Callers (`wire_favorites`) are expected to
+/// Update the cached sort. Callers (`callbacks::tracklist`) are expected to
 /// follow this with a [`resort_and_apply`] call + a `set_view_sort` persist
 /// so the next launch lands on the same order.
 pub fn set_sort(fav_ui: &FavoritesUi, field: String, dir: SortDir) {

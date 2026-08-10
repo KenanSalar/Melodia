@@ -1,6 +1,6 @@
 //! Updater UI glue — startup seeding of the `Updater` Slint global +
 //! the `Notifications`-pushing subscriber for backend
-//! [`UpdaterEvent`](crate::services::updater::UpdaterEvent)s.
+//! [`UpdaterEvent`]s.
 //!
 //! Composition:
 //!

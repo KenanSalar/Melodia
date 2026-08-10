@@ -14,7 +14,7 @@ use crate::ui::genres::{self as genres_ui_mod, GenresUi};
 use crate::ui::track_list_view::view_id;
 use crate::{AppWindow, GenreDetail, Genres};
 
-/// Wire the `Genres` grid callbacks. See [`super::wire_genres`].
+/// Wire the `Genres` grid callbacks. See [`super::wire`].
 pub(super) fn wire(ui: &AppWindow, state: &AppState, genres_ui: &Arc<GenresUi>) {
     let genres = ui.global::<Genres>();
     let weak = ui.as_weak();

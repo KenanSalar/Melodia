@@ -1,6 +1,6 @@
 //! Search section lifecycle: the `section-active-changed` enter/leave
 //! handler — UI-thread model teardown + off-thread cache release. See
-//! [`super::wire_search`].
+//! [`super::wire`].
 
 use std::sync::Arc;
 

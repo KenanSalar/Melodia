@@ -96,7 +96,7 @@ pub fn tab_is_mounted(ui: &AppWindow, tab: MyLibraryTab) -> bool {
 /// is one pick away and a tab leave clears no detail id, so a detail left behind on another
 /// tab morphs its banner back open the moment that tab is picked — before the re-fetch that
 /// pick kicks has landed. A teardown inside this window therefore hands nothing back, and
-/// what does is [`crate::ui::callbacks::my_library`]'s pair: `hero-collapsed` for a genuine
+/// what does is `my_library/callbacks.rs`'s pair: `hero-collapsed` for a genuine
 /// close, the page's own teardown for the leave.
 ///
 /// Deliberately *not* the section gate's predicate, which also goes false when Now Playing

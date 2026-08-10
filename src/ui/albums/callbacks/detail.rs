@@ -14,7 +14,7 @@ use crate::ui::my_library::return_to_section;
 use crate::ui::track_list_view::{TrackListColumnState, view_id};
 use crate::{AlbumDetail, AppWindow};
 
-/// Wire the `AlbumDetail` callbacks. See [`super::wire_albums`].
+/// Wire the `AlbumDetail` callbacks. See [`super::wire`].
 pub(super) fn wire(ui: &AppWindow, state: &AppState, albums_ui: &Arc<AlbumsUi>) {
     let detail = ui.global::<AlbumDetail>();
     let weak = ui.as_weak();

@@ -91,7 +91,7 @@ pub fn install(cx: ViewCtx<'_>) -> Arc<PlaylistsUi> {
 }
 
 /// Rust-side state for the Playlists grid + detail views. Shared between
-/// the UI callbacks (`wire_playlists`) and the async fetchers. Mirrors
+/// the UI callbacks (`callbacks::wire`) and the async fetchers. Mirrors
 /// `AlbumsUi` field-for-field.
 pub struct PlaylistsUi {
     grid: PlaylistGridState,

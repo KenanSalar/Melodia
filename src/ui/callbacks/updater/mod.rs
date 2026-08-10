@@ -48,7 +48,7 @@ use check::spawn_manual_check;
 use install::spawn_install;
 
 /// Wire the five `Updater.*` callbacks on the `Updater` global. Must
-/// be called after `ui::updater_settings::install` (which seeds the
+/// be called after `ui::settings::updater_settings::install` (which seeds the
 /// global's initial values).
 pub fn wire(
     ui: &AppWindow,

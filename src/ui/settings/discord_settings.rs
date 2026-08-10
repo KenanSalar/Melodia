@@ -1,6 +1,6 @@
 //! Wire the Discord Rich Presence settings section to Rust.
 //!
-//! Simpler than [`crate::ui::scrobbling_settings`] — Discord has no credentials
+//! Simpler than [`super::scrobbling_settings`] — Discord has no credentials
 //! or login dialog (the application id is a compile-time constant), so this is
 //! only the status side. The connection/enabled props are sync-seeded from
 //! `DiscordPresenceService::status()` (like [`crate::ui::replaygain`]) and then

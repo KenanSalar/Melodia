@@ -17,7 +17,7 @@
 //! watching off stranded new users in a stale-UI failure mode.
 //!
 //! On the OFF transition we surface a transient notification via
-//! [`ui::notifications`] so the user knows the consequence ("your library
+//! [`crate::ui::shell::notifications`] so the user knows the consequence ("your library
 //! won't auto-sync") instead of silently moving on. Re-enabling clears the
 //! lingering row by kind. The notification system is reusable — the
 //! future auto-updater pushes its three states through the same

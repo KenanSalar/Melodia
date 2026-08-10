@@ -2,7 +2,7 @@
 //!
 //! Slint 1.16 has no `Flow` and can't build a nested array, so anything that
 //! wraps does the split here and hands the view two real arrays to walk — the
-//! same shape as [`crate::ui::settings_page::chunk_indices`], which wraps by
+//! same shape as `settings::settings_page::chunk_indices`, which wraps by
 //! *index* because its chips are measured Slint-side. These are wrapped by
 //! *width*, because the chip texts are built in Rust and never leave it.
 //!

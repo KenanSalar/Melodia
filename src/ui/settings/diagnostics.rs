@@ -134,5 +134,5 @@ fn notify_previous_crash(ui: &AppWindow, state: &AppState, notifications: &Notif
 }
 
 #[cfg(test)]
-#[path = "../tests/diagnostics_tests.rs"]
+#[path = "tests/diagnostics_tests.rs"]
 mod tests;

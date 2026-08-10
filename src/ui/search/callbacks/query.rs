@@ -1,5 +1,5 @@
 //! `Search.*` query callbacks: keystroke debounce, commit → FTS fetch,
-//! and the compact/full Songs toggle. See [`super::wire_search`].
+//! and the compact/full Songs toggle. See [`super::wire`].
 
 use std::sync::Arc;
 use std::sync::atomic::Ordering;

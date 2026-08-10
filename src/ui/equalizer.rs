@@ -3,7 +3,7 @@
 //! Seeds the `Equalizer` global from `settings.json` at startup (enabled flag,
 //! the band-gains model, and the selected-preset dropdown index) and registers
 //! the five callbacks. Each follows the established two-phase shape (see
-//! [`crate::ui::playback_settings`]): apply to the live Rodio player
+//! [`crate::ui::settings::playback_settings`]): apply to the live Rodio player
 //! synchronously, then persist on the blocking pool. Live band drags update the
 //! Slint model in place (so the slider tracks the cursor) and persist only on
 //! release via `commit-band`, mirroring the `set-volume` / `commit-volume`

@@ -29,7 +29,7 @@ pub(super) struct PreparedGrids {
     pub(super) most_played: Vec<UiEntityStripRow>,
     /// Empty unless [`Self::tab`] is `Artists`. Still entities rather than rows:
     /// the Slint `Favorites.artist-favorite-subtitle` callback that resolves the
-    /// translated "{n} favorite[s]" line only runs on the UI thread, so these
+    /// translated `"{n} favorite[s]"` line only runs on the UI thread, so these
     /// are finished inside `invoke_from_event_loop` rather than here.
     pub(super) artists: Vec<FavoriteArtist>,
     /// Filtered counts gating the two `GridEmptyState`s. `0` on a tab that

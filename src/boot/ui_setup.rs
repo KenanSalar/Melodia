@@ -41,7 +41,8 @@ pub fn install_app_chrome(app: &AppWindow, state: &AppState) {
 /// `install_views` — they need handles that don't leave this function.
 ///
 /// Only the handles a *caller* actually reads live here. `BrowseUi` /
-/// `FavoritesUi` / `SearchUi` deliberately do **not**: every `wire_*` closure
+/// `FavoritesUi` / `RecentlyPlayedUi` / `SearchUi` deliberately do **not**:
+/// every wired closure
 /// and `library_changed_tx` subscriber captures its own strong `Arc` clone, and
 /// those closures are owned by the `AppWindow` (and by spawned tasks) for the
 /// lifetime of the app. There is not a single `Arc::downgrade` or `Weak<…Ui>`
@@ -244,9 +245,9 @@ pub fn install_views(
     ui::recently_played::tune_cache_for_display(app, &recently_played_ui);
     ui::browse::tune_cache_for_display(app, &browse_ui);
 
-    // `browse_ui` / `favorites_ui` / `search_ui` are deliberately dropped here:
-    // their `wire_*` closures each hold a strong `Arc` clone, so the objects
-    // outlive this scope regardless. See the note on `UiHandles`.
+    // `browse_ui` / `favorites_ui` / `recently_played_ui` / `_search_ui` are
+    // deliberately dropped here: their wired closures each hold a strong `Arc`
+    // clone, so the objects outlive this scope regardless. See `UiHandles`.
     UiHandles {
         cover_thumbs,
         tracks_ui,
@@ -406,7 +407,7 @@ fn apply_sidebar_collapsed(app: &AppWindow, settings: &services::settings::Setti
 /// user navigates to it. The sort comes from the persisted
 /// `view_sort["tracks"]` (so a relaunch restores it); a fresh install
 /// falls back to title ascending, matching the `Tracks` global default
-/// and the header seeded by `wire_tracks`.
+/// and the header seeded by `ui::tracks::install`.
 pub fn spawn_initial_tracks_fetch(
     state: &AppState,
     tracks_ui: &Arc<ui::tracks::TracksUi>,

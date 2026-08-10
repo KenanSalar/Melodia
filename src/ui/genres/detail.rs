@@ -409,7 +409,7 @@ pub fn apply_detail_row_rating(weak: &Weak<AppWindow>, id: i64, rating: i32) {
 }
 
 /// Reopen the genre that was visible in the Genre Detail view at the
-/// last shutdown, if any. Called once at startup *after* `wire_genres`
+/// last shutdown, if any. Called once at startup *after* [`super::install`]
 /// so the `GenreDetail` callbacks are already live by the time
 /// `open_genre`'s `upgrade_in_event_loop` lands. Silently no-ops on a
 /// missing / deleted genre.

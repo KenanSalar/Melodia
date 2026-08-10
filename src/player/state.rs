@@ -582,7 +582,7 @@ fn begin_track(
 }
 
 /// Core playback logic — reused by commands, bus handler, position poller.
-/// Returns Vec<PlayerAction> for the caller to execute after releasing the state lock.
+/// Returns `Vec<PlayerAction>` for the caller to execute after releasing the state lock.
 /// `start_position_ms` — if `Some`, seeks to that position after starting playback (used for resume).
 pub fn play_track_inner(
     state: &mut PlayerState,

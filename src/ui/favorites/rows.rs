@@ -48,7 +48,7 @@ pub fn to_slint_most_played_row(t: &MostPlayedFavorite) -> UiEntityStripRow {
 }
 
 /// Map a `FavoriteArtist` + caller-supplied subtitle to its Slint card
-/// row. The subtitle is the translated "{n} favorite[s]" count line and
+/// row. The subtitle is the translated `"{n} favorite[s]"` count line and
 /// must be resolved on the UI thread via `Favorites.artist-favorite-subtitle(count)`
 /// (Slint 1.16 doesn't expose `translate_from_bundle` to Rust). `play_count`
 /// is unused.

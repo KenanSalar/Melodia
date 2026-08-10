@@ -159,10 +159,8 @@ pub fn install(ui: &AppWindow, state: &AppState) -> Result<AppearanceHandles, Ap
         g.set_overflow_queue(v.iter().any(|x| x == "queue"));
     }
 
-    // Seed `theme_preferences[active_theme]` from the top-level fields if
-    // missing — without this, a user who launches with a custom accent
-    // (e.g. catppuccin/mocha/yellow) would lose it on the first
-    // theme-swap because the lookup would miss and fall back to defaults.
+    // The boot migration for a `settings.json` written before `theme_preferences`
+    // existed; it takes the settings read above rather than re-reading them.
     if let Err(e) = library::settings::seed_theme_preference(state, settings) {
         log::warn!("seed theme_preferences: {e}");
     }

@@ -1,6 +1,6 @@
 //! `RecentlyPlayed.*` card actions and sub-view routing: the Most Played
 //! play-track and shuffle actions, the tab switch, and the grid's column-count
-//! push. See [`super::wire_recently_played`].
+//! push. See [`super::wire`].
 
 use std::sync::Arc;
 
