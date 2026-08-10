@@ -30,11 +30,15 @@
 //! 6. **Restart flow** ([`controls::wire`]'s `on_restart_app`). `no-frame` is
 //!    sticky after first show, so toggling the native titlebar needs a fresh
 //!    process: persist through `library::window::set_use_native_titlebar`,
-//!    set [`RESPAWN_AFTER_EXIT`], then `slint::quit_event_loop()` so `main()`
-//!    falls through to `save_state_on_exit` and shuts the runtime down before
-//!    the new process takes over. The updater's "Restart Now" reuses the flag
-//!    and additionally records the binary path via [`set_respawn_exe`],
-//!    captured before the install swapped the binary on disk.
+//!    then hand off to [`request_respawn_and_quit`], which sets
+//!    [`RESPAWN_AFTER_EXIT`] and quits the event loop so `main()` falls through
+//!    to `save_state_on_exit` and shuts the runtime down before the new process
+//!    takes over. It is one function rather than three copies because it also
+//!    owns the refusal: with no binary left to relaunch it keeps the app up and
+//!    toasts instead, the setting having already been persisted. The tray toggle
+//!    and the updater's "Restart Now" take the same call; the updater
+//!    additionally records the binary path via [`set_respawn_exe`], captured
+//!    before the install swapped the binary on disk.
 
 mod controls;
 mod drop_coalescer;
@@ -56,6 +60,7 @@ use slint::winit_030::winit::window::WindowLevel;
 
 use crate::error::AppError;
 use crate::services::always_on_top::AlwaysOnTopMethod;
+use crate::services::toast::{self, ToastKind};
 use crate::state::AppState;
 use crate::{AppWindow, Theme};
 
@@ -80,26 +85,19 @@ pub fn should_respawn_after_exit() -> bool {
     RESPAWN_AFTER_EXIT.load(Ordering::SeqCst)
 }
 
-/// Set the respawn flag. Used by the auto-updater's "Restart Now"
-/// flow — calling this followed by `slint::quit_event_loop()` exits
-/// the event loop and re-launches the binary via
-/// `crate::shutdown::respawn_if_requested()` (the last step of
-/// `main()`). The static stays private; callers go through this
-/// accessor so the dataflow is greppable.
-pub fn request_respawn() {
-    RESPAWN_AFTER_EXIT.store(true, Ordering::SeqCst);
-}
-
 /// Explicit binary path for the post-exit respawn. Set by the
-/// auto-updater at install-success time, while `current_exe()` still
-/// resolves to the live binary. `shutdown::respawn_if_requested`
-/// prefers this over `current_exe()` because, by the time it runs, the
-/// updater has already replaced the binary on disk: `current_exe()`
-/// would resolve to the stale `<target>.old` (atomic-swap install) or
-/// a `<path> (deleted)` path (RPM/DEB install), so respawning from it
-/// would relaunch the *old* binary or fail outright. The titlebar
-/// restart never sets this — no install happened, so its
-/// `current_exe()` fallback stays correct.
+/// auto-updater at install-success time, while the path still resolves
+/// to the live binary. [`respawn_target`] prefers it over asking the OS,
+/// because by the time the respawn runs the updater has already replaced
+/// the binary on disk and an **atomic-swap** install *renamed* the
+/// running one to `<target>.old` — a move, not an unlink, so
+/// `/proc/self/exe` reports that stale path with a straight face and
+/// respawning from it relaunches the *old* binary. That is what keeps
+/// this static necessary: the RPM/DEB half of the problem, a `(deleted)`
+/// marker on an unlinked path, is now resolved centrally by
+/// [`crate::services::current_exe`], but nothing can recover a rename
+/// after the fact. The titlebar and tray restarts never set this — no
+/// install happened, so the OS answer is the right one.
 static RESPAWN_EXE: Mutex<Option<PathBuf>> = Mutex::new(None);
 
 /// Record the binary path to relaunch on exit. The auto-updater calls
@@ -119,6 +117,59 @@ pub fn set_respawn_exe(path: PathBuf) {
 /// `None` for a plain titlebar-mode restart.
 pub fn respawn_exe() -> Option<PathBuf> {
     RESPAWN_EXE.lock().ok().and_then(|slot| slot.clone())
+}
+
+/// The binary the post-exit respawn should launch: the path the updater
+/// recorded before its install swapped the file, else the running
+/// binary's own. `None` only when there is neither — the OS refused to
+/// say where we are running from, so there is nothing to come back to.
+pub fn respawn_target() -> Option<PathBuf> {
+    if let Some(recorded) = respawn_exe() {
+        return Some(recorded);
+    }
+    match crate::services::current_exe() {
+        Ok(exe) => Some(exe),
+        Err(e) => {
+            log::warn!("respawn: executable lookup failed: {e}");
+            None
+        }
+    }
+}
+
+/// Arm the post-exit respawn and quit the event loop — unless there is no
+/// binary to come back to, in which case leave the app running and say so.
+///
+/// All three restart paths go through here (the titlebar and tray toggles
+/// and the updater's "Restart Now") because the check is the same one and
+/// getting it wrong costs the user their session: past `quit_event_loop()`
+/// the window is gone, and a failed `exec` in
+/// `crate::shutdown::respawn_if_requested` has nothing left to fall back
+/// to — the app simply vanishes. So the target is resolved *before* the
+/// exit rather than after it. Every caller has already persisted its
+/// setting by this point, so a refusal still applies on the next manual
+/// launch, which is what the toast tells the user.
+pub fn request_respawn_and_quit() {
+    match respawn_target() {
+        Some(exe) if exe.exists() => {}
+        gone => {
+            let reason = gone.map_or_else(
+                || "the executable path is unavailable".to_owned(),
+                |exe| format!("{} no longer exists", exe.display()),
+            );
+            log::warn!("restart: staying up — {reason}");
+            toast::notify(ToastKind::RestartRequired, "");
+            return;
+        }
+    }
+
+    RESPAWN_AFTER_EXIT.store(true, Ordering::SeqCst);
+    if let Err(e) = slint::quit_event_loop() {
+        // The loop is still running, so nothing will read the flag now —
+        // but an ordinary window close later in the session would, and
+        // relaunching out of that is not what the user asked for.
+        RESPAWN_AFTER_EXIT.store(false, Ordering::SeqCst);
+        log::warn!("restart: quit_event_loop: {e}");
+    }
 }
 
 /// Hydrate `Theme.use-native-titlebar` from the persisted setting and

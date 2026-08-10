@@ -38,6 +38,12 @@ pub enum ToastKind {
     /// user enabled a love toggle or connected a service — an informational
     /// result (how many were synced), shown as an auto-dismissing info toast.
     LoveSync,
+    /// A restart the user asked for couldn't relaunch the app, so it stayed up
+    /// instead of exiting into nothing. The setting is already persisted, so
+    /// the toast is an instruction rather than a failure report: it sticks, and
+    /// it is the one kind carrying **no** detail — the body is localized too,
+    /// there being no path or error worth putting in front of the user.
+    RestartRequired,
 }
 
 /// A queued toast. The localized title is chosen by [`kind`](Self::kind) on the

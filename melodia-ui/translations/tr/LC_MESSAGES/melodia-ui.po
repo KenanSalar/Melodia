@@ -1562,6 +1562,9 @@ msgstr "Beğendiğin parçaları ListenBrainz'de beğenilmiş olarak işaretle �
 msgid "Loved tracks"
 msgstr "Beğenilen parçalar"
 
+msgid "Melodia couldn't relaunch itself. Close and reopen it to apply the change."
+msgstr "Melodia kendini yeniden başlatamadı. Değişikliği uygulamak için uygulamayı kapatıp yeniden açın."
+
 msgid "Add MusicBrainz IDs to your music"
 msgstr "Müziğine MusicBrainz kimliklerini ekle"
 

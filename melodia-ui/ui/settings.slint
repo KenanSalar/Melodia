@@ -371,6 +371,16 @@ export global Settings {
     toast-love-sync-title => {
         return @tr("Loved tracks");
     }
+    // The one toast kind whose body is localized too — a restart that couldn't
+    // relaunch carries no path or error worth showing, only an instruction.
+    pure callback toast-restart-required-title() -> string;
+    toast-restart-required-title => {
+        return @tr("Restart Required");
+    }
+    pure callback toast-restart-required-message() -> string;
+    toast-restart-required-message => {
+        return @tr("Melodia couldn't relaunch itself. Close and reopen it to apply the change.");
+    }
 
     // The Add-to-Playlist picker's commit toast: title pluralizes on playlists,
     // message on tracks added.

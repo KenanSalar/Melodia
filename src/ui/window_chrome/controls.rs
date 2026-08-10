@@ -181,11 +181,9 @@ pub(super) fn wire(app: &AppWindow, state: &AppState, drag_hover: Arc<AtomicBool
             // finishes its `tracker.wait()`. With the flag, the old
             // process tears down completely first, then forks the
             // new one as the very last step before returning from
-            // `main()`.
-            super::RESPAWN_AFTER_EXIT.store(true, Ordering::SeqCst);
-            if let Err(e) = slint::quit_event_loop() {
-                log::warn!("quit_event_loop on restart: {e}");
-            }
+            // `main()`. A refusal there leaves the app running with the
+            // new value already on disk.
+            super::request_respawn_and_quit();
         });
     }
 
@@ -207,10 +205,7 @@ pub(super) fn wire(app: &AppWindow, state: &AppState, drag_hover: Arc<AtomicBool
 
             // Same deferred-respawn rationale as `on_restart_app`: tearing
             // the old process down fully before forking the new one.
-            super::RESPAWN_AFTER_EXIT.store(true, Ordering::SeqCst);
-            if let Err(e) = slint::quit_event_loop() {
-                log::warn!("quit_event_loop on tray restart: {e}");
-            }
+            super::request_respawn_and_quit();
         });
     }
 }

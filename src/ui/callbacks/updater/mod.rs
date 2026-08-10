@@ -14,12 +14,14 @@
 //!   `upgrade_in_event_loop`. On success → `Updater.restart-needed=true`
 //!   + Installed event onto the channel. On failure → `Updater.error-message`
 //!   + Failed event. Backend lives in [`install`].
-//! - `Updater.restart()` — sets the respawn flag via
-//!   `ui::window_chrome::request_respawn` and quits the event loop.
-//!   `shutdown::respawn_if_requested` (already last step of `main()`)
-//!   relaunches the binary, using the path `spawn_install` recorded
-//!   via `ui::window_chrome::set_respawn_exe` on a successful install
-//!   (captured before the swap, while `current_exe()` was still live).
+//! - `Updater.restart()` — hands off to
+//!   `ui::window_chrome::request_respawn_and_quit`, which arms the respawn
+//!   flag and quits the event loop (or keeps the app up and toasts, if the
+//!   binary it would relaunch has gone). `shutdown::respawn_if_requested`
+//!   (already last step of `main()`) then relaunches, using the path
+//!   `spawn_install` recorded via `ui::window_chrome::set_respawn_exe` on a
+//!   successful install — captured before the swap, while the path still
+//!   pointed at the live binary.
 //! - `Updater.skip()` — persists `available-version` into
 //!   `settings.updates.skipped_release`. Clears
 //!   `Updater.update-available` locally so the panel repaints to the
@@ -81,10 +83,7 @@ pub fn wire(
 
     // ---- Updater.restart ----
     updater.on_restart(|| {
-        crate::ui::window_chrome::request_respawn();
-        if let Err(e) = slint::quit_event_loop() {
-            log::warn!("quit_event_loop on updater restart: {e}");
-        }
+        crate::ui::window_chrome::request_respawn_and_quit();
     });
 
     // ---- Updater.skip ----

@@ -158,13 +158,11 @@ pub fn drop_runtime_in_background(runtime: tokio::runtime::Runtime) {
 /// the same instant the new one comes up — `execvp` semantics, no
 /// fork-then-exit race on the shared screen.
 ///
-/// The auto-updater path also records an explicit binary path
-/// (`respawn_exe`) captured before the install swapped the binary on disk.
-/// We prefer it over `current_exe()`, which by this point resolves to the
-/// stale `<target>.old` (atomic swap) or a `(deleted)` path (RPM/DEB) —
-/// respawning from that relaunches the old binary or fails outright. The
-/// titlebar restart records no path (no install happened), so its
-/// `current_exe()` fallback stays correct.
+/// Which binary to launch is `ui::window_chrome::respawn_target`'s answer —
+/// the path the auto-updater recorded before its install swapped the file,
+/// else the running binary's own, resolved through `services::current_exe`
+/// so a package upgrade mid-session can't hand us the `<path> (deleted)`
+/// string the kernel appends to an unlinked executable.
 ///
 /// **Unix** — uses `CommandExt::exec` (`execvp`). This atomically
 /// replaces the running process with the new binary: same PID, same
@@ -186,14 +184,9 @@ pub fn respawn_if_requested() {
     if !ui::window_chrome::should_respawn_after_exit() {
         return;
     }
-    let exe = match ui::window_chrome::respawn_exe()
-        .map_or_else(std::env::current_exe, Ok)
-    {
-        Ok(exe) => exe,
-        Err(e) => {
-            log::warn!("current_exe lookup failed during respawn: {e}");
-            return;
-        }
+    // `respawn_target` logs the reason; there is nothing to fall back to.
+    let Some(exe) = ui::window_chrome::respawn_target() else {
+        return;
     };
 
     #[cfg(unix)]

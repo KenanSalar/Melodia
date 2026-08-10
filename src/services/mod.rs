@@ -22,7 +22,7 @@ pub mod view_state;
 
 use std::borrow::Cow;
 use std::io::{BufWriter, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use serde::Serialize;
 use serde::de::DeserializeOwned;
@@ -128,6 +128,56 @@ pub fn write_text_atomic_sync(path: &Path, text: &str) -> AppResult<()> {
     }
     tmp.persist(path).map_err(|e| AppError::Io(e.error))?;
     Ok(())
+}
+
+/// The running binary's path, with Linux's `" (deleted)"` marker resolved.
+///
+/// `std::env::current_exe()` is a bare `readlink("/proc/self/exe")` on Linux, and
+/// the kernel appends that literal suffix once the dentry the process was exec'd
+/// from has been unlinked — which is what an RPM/DEB upgrade does to
+/// `/usr/bin/Melodia` while it is running, and what cargo does to
+/// `target/debug/Melodia` every time it re-uplifts it from `deps/` (unlink, then
+/// hardlink, so the inode's mtime never moves and the file looks untouched). The
+/// suffixed path names nothing, so every consumer of it fails or writes nonsense:
+/// the post-exit respawn dies and takes the app with it, `desktop_integration`
+/// bakes the marker into the user's `Exec=` line, and `linux_pkg::detect` misses
+/// its package-DB lookup.
+///
+/// It **resolves** rather than merely trimming, and that is what makes it correct
+/// rather than cosmetic: in both cases above the replacement file sits at the
+/// stripped path, so respawning from it relaunches the binary the user now has.
+///
+/// Reach for this over `std::env::current_exe()` anywhere the path is going to be
+/// executed, installed to, or written down. Inside the updater, go through
+/// [`updater::install_target`] instead — it answers the `$APPIMAGE` question first.
+pub fn current_exe() -> std::io::Result<PathBuf> {
+    Ok(undeleted_exe(std::env::current_exe()?, Path::exists))
+}
+
+/// The pure half of [`current_exe`], with `exists` standing in for the filesystem.
+///
+/// The order of the three guards is the whole of it. The suffix test comes first,
+/// so the overwhelmingly common case costs no `stat`; a suffixed path that is
+/// itself a live file then wins over its sibling, because a file genuinely named
+/// `… (deleted)` is not this bug; and anything left unresolved comes back verbatim,
+/// so the caller's error still reports what the kernel said.
+///
+/// Deliberately not `cfg`-gated to Linux — no other platform produces the marker,
+/// and the live-file guard makes it inert where a path ends that way by
+/// coincidence. The strip goes through `to_str` because the kernel appends to the
+/// whole path string; a non-UTF-8 path is returned unchanged rather than reaching
+/// for `OsStr::from_encoded_bytes_unchecked`, which is `unsafe`.
+fn undeleted_exe(exe: PathBuf, exists: impl Fn(&Path) -> bool) -> PathBuf {
+    const DELETED_MARKER: &str = " (deleted)";
+
+    let Some(base) = exe.to_str().and_then(|p| p.strip_suffix(DELETED_MARKER)) else {
+        return exe;
+    };
+    let base = PathBuf::from(base);
+    if exists(&exe) || !exists(&base) {
+        return exe;
+    }
+    base
 }
 
 /// Replace the user's home directory with `~` throughout `text`.

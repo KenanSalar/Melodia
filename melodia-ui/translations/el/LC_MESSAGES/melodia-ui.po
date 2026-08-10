@@ -1561,6 +1561,9 @@ msgstr "Σημειώστε ως αγαπημένα στο ListenBrainz τα κο
 msgid "Loved tracks"
 msgstr "Αγαπημένα κομμάτια"
 
+msgid "Melodia couldn't relaunch itself. Close and reopen it to apply the change."
+msgstr "Το Melodia δεν μπόρεσε να επανεκκινήσει. Κλείστε και ανοίξτε ξανά την εφαρμογή για να εφαρμοστεί η αλλαγή."
+
 msgid "Add MusicBrainz IDs to your music"
 msgstr "Προσθήκη αναγνωριστικών MusicBrainz στη μουσική σας"
 

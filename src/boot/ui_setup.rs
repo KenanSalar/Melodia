@@ -561,7 +561,8 @@ pub fn install_rescan_notice_subscriber(
 /// coalesce like a `watch` slot would) and resolves the localized title by
 /// toast kind at push time — so a failure that fires on a tokio worker still
 /// paints in whichever locale is active when it surfaces. The dynamic detail
-/// (a path or error message) is shown verbatim as the toast body.
+/// (a path or error message) is shown verbatim as the toast body — except for
+/// `RestartRequired`, which carries none and takes its body from `Settings` too.
 pub fn install_toast_bridge(
     weak: slint::Weak<AppWindow>,
     notifications: std::rc::Rc<ui::shell::notifications::NotificationsUi>,
@@ -605,6 +606,19 @@ pub fn install_toast_bridge(
                         },
                         6000,
                     );
+                }
+                // A restart that had nowhere to relaunch from. Both strings are
+                // localized — there is no dynamic detail — and it sticks,
+                // because it asks the user to do something rather than
+                // reporting what happened.
+                ToastKind::RestartRequired => {
+                    notifications.show(NotificationParams {
+                        variant: "warning".into(),
+                        title: g.invoke_toast_restart_required_title(),
+                        message: g.invoke_toast_restart_required_message(),
+                        action_label: slint::SharedString::default(),
+                        action_kind: "warning".into(),
+                    });
                 }
                 // Informational result of a retroactive loved-tracks backfill.
                 ToastKind::LoveSync => {

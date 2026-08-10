@@ -1558,6 +1558,9 @@ msgstr "Marquer comme favoris sur ListenBrainz les titres que vous aimez — l'a
 msgid "Loved tracks"
 msgstr "Titres favoris"
 
+msgid "Melodia couldn't relaunch itself. Close and reopen it to apply the change."
+msgstr "Melodia n'a pas pu se relancer. Fermez puis rouvrez l'application pour appliquer la modification."
+
 msgid "Add MusicBrainz IDs to your music"
 msgstr "Ajouter les identifiants MusicBrainz à votre musique"
 

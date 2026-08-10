@@ -20,7 +20,7 @@
 //!                                    swap_in_place (atomic; cfg-branched)
 //!                                         │
 //!                                         ▼
-//!                                    request_respawn + quit_event_loop
+//!                                    request_respawn_and_quit
 //! ```
 //!
 //! The manifest schema lives in [`manifest`], signature verification in
@@ -75,11 +75,19 @@ pub fn install_target_old() -> AppResult<PathBuf> {
 }
 
 /// Resolves to the file the swap actually replaces. On `AppImage` runs
-/// `std::env::current_exe()` returns the read-only squashfs mount path
+/// the executable path is the read-only squashfs mount
 /// (`/tmp/.mount_*/usr/bin/Melodia`); the replaceable `AppImage` file
 /// itself is at `$APPIMAGE`. Every path-touching module in this tree
 /// routes through this — it's the **only** function in the updater
-/// that calls `std::env::current_exe()` directly.
+/// that asks for the running binary's path.
+///
+/// The non-`AppImage` arm goes through [`crate::services::current_exe`]
+/// rather than `std::env::current_exe()`, which on Linux hands back a
+/// `<path> (deleted)` string once the running binary has been replaced
+/// on disk — an RPM/DEB upgrade mid-session is exactly that, and it is
+/// this function's answer that `desktop_integration` bakes into the
+/// user's `Exec=` line and that `linux_pkg::detect` looks up in the
+/// package database.
 pub fn install_target() -> AppResult<PathBuf> {
     if cfg!(target_os = "linux")
         && let Ok(p) = std::env::var("APPIMAGE")
@@ -87,5 +95,5 @@ pub fn install_target() -> AppResult<PathBuf> {
     {
         return Ok(PathBuf::from(p));
     }
-    Ok(std::env::current_exe()?)
+    Ok(crate::services::current_exe()?)
 }
