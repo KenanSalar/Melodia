@@ -26,6 +26,7 @@ mod tracks;
 mod updater;
 
 use std::sync::Arc;
+use std::sync::atomic::{AtomicI32, Ordering};
 
 use rand::RngExt;
 use slint::{ComponentHandle, Model, ModelRc};
@@ -37,8 +38,11 @@ use crate::{AppWindow, Nav, Player};
 
 use macros::{spawn_blocking_logged, spawn_logged_sync, wire_pb, wire_sync, wire_sync_pb};
 
-/// Synchronous shadow of `views.json`'s `last_nav_index`, and the lock its disk
-/// write is taken under.
+#[allow(unused_imports)]
+use macros::spawn_logged;
+
+/// Synchronous shadow of `views.json`'s `last_nav_index`, plus the lock its disk
+/// writes serialize on.
 ///
 /// **One UI-thread tick can ask for two different sections**, which is what makes
 /// this more than the usual insurance the `PersistedAccent` / `PersistedLocale`
@@ -50,16 +54,26 @@ use macros::{spawn_blocking_logged, spawn_logged_sync, wire_pb, wire_sync, wire_
 /// origin could land last and a restart would open on the page the walk passed
 /// through.
 ///
-/// A captured index alone can't fix that and neither can a shadow read outside the
-/// lock — a stale task may not observe the newer store, and even when it does its
-/// *write* can still be scheduled after the newer one. What closes it is that the
-/// staleness check and the write sit in one critical section: a task that reads a
-/// value equal to its own index is holding the lock, so the UI thread cannot have
-/// moved the shadow yet, and any newer write must queue behind this one.
-type PersistedNavIndex = Arc<parking_lot::Mutex<i32>>;
-
-#[allow(unused_imports)]
-use macros::spawn_logged;
+/// **Two fields because they answer two questions, and only one of them may be
+/// asked from the UI thread.** [`Self::writer`] *is* the ordering — held across the
+/// whole `views.json` round trip, so writes happen one at a time and in acquisition
+/// order — while [`Self::latest`] only says which index is current, so a task that
+/// acquires the lock and finds a newer one there can drop its write instead of
+/// racing to land it. That split is what lets the UI thread publish with a plain
+/// store: fold the two into one `Mutex<i32>` and the callback below blocks on a
+/// guard held across file I/O, on the path every sidebar click takes.
+///
+/// The invariant is that the load and the write share the writer's critical
+/// section. Releasing early puts the two tasks back in a race, and the spelling
+/// that does it — `let _ = self.writer.lock();` — is `clippy::let_underscore_lock`,
+/// denied here through `correctness`, so it fails the build rather than a review.
+struct NavIndexPersist {
+    /// Written on the UI thread ahead of each spawn; read by the writers under
+    /// [`Self::writer`].
+    latest: AtomicI32,
+    /// Taken by the disk writers alone, for the length of the write.
+    writer: parking_lot::Mutex<()>,
+}
 
 pub use albums::wire_albums;
 pub use artists::wire_artists;
@@ -278,27 +292,30 @@ pub fn wire_all(ui: &AppWindow, state: &AppState) {
     {
         let s = state.clone();
         let ui_weak = ui_weak.clone();
-        let shadow: PersistedNavIndex =
-            Arc::new(parking_lot::Mutex::new(ui.global::<Nav>().get_selected_index()));
+        let persist = Arc::new(NavIndexPersist {
+            latest: AtomicI32::new(ui.global::<Nav>().get_selected_index()),
+            writer: parking_lot::Mutex::new(()),
+        });
         nav.on_persist_selected_index(move |idx| {
             if let Some(ui) = ui_weak.upgrade() {
                 crate::ui::nav_history::record_current(&s, &ui);
             }
-            // The shadow moves here, on the UI thread, before the spawn — so by the
-            // time any queued write runs it names the newest request. See the type.
-            *shadow.lock() = idx;
+            // Published here, on the UI thread, before the spawn — so by the time any
+            // queued write runs it can see the newest request. A store rather than a
+            // lock: the writers hold theirs across a `views.json` round trip, and this
+            // line is on the path every sidebar click takes. See the type.
+            persist.latest.store(idx, Ordering::Release);
             // Spelled out rather than through `spawn_blocking_logged!`, which takes a
             // string *literal*: the index is what makes this line worth reading, and a
             // failure that doesn't say which section it dropped says almost nothing.
             let s_disk = s.clone();
-            let shadow = Arc::clone(&shadow);
+            let persist = Arc::clone(&persist);
             s.runtime.spawn_blocking(move || {
-                // **The check and the write share one critical section**, and that is
-                // the whole mechanism: a superseded write can only be skipped here if
-                // nothing can slip its own write in between. Hold the guard across
-                // `set_last_nav_index` or the two tasks are unordered again.
-                let current = shadow.lock();
-                if *current != idx {
+                // **The load and the write share the writer's critical section**, which
+                // is the whole mechanism: skipping a superseded write is only sound if
+                // nothing can slip its own write in between.
+                let _write = persist.writer.lock();
+                if persist.latest.load(Ordering::Acquire) != idx {
                     return;
                 }
                 if let Err(e) = library::settings::set_last_nav_index(&s_disk, idx) {
