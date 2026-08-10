@@ -1,4 +1,12 @@
-//! The Settings page: its chrome, and the nine section cards behind it.
+//! The Settings page: its chrome, and the nine section cards it owns.
+//!
+//! Nine of the page's twelve. The other three are [`crate::ui::appearance`]'s,
+//! and only two of them for the same reason: Appearance and Window Chrome write
+//! `Theme` brushes and the window-chrome globals rather than a settings row.
+//! **Overflow Menu is a plain persisted toggle set** — `Settings.overflow-*`
+//! into `SettingsData::overflow_buttons`, which is exactly a settings row — and
+//! sits there because `appearance::window_settings` already owns the window
+//! toggles beside it. Don't read its address as an argument about what it does.
 //!
 //! One module per card plus [`settings_page`] for the page's own tab index,
 //! search predicate and responsive geometry. Everything here is reached by

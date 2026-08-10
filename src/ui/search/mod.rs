@@ -5,16 +5,16 @@
 //!
 //! * Hero — centered `SearchBar` (autofocus). Each keystroke bumps a
 //!   debounce tick; a 300 ms Timer in `melodia-ui/ui/views/search-view.slint` then
-//!   fires `commit-search`, which calls [`fetch::kick_search`] to run
+//!   fires `commit-search`, which calls `fetch::kick_search` to run
 //!   the FTS5 + LIKE query via `library::search::search_all` on the
 //!   read pool.
 //! * Top Result — single featured card (album, artist OR genre) computed
-//!   via [`top_result::compute_top_result`]'s 9-step ranking: all three exact
+//!   via `top_result::compute_top_result`'s 9-step ranking: all three exact
 //!   matches, then all three starts-with, then first-of-each. A genre
 //!   gets the card rather than a strip of its own — it is a route to a
 //!   page, not a row of things to browse.
 //! * Songs — shared `TrackList` bound to `Search.tracks`. Compact by
-//!   default ([`state::COMPACT_TRACK_LIMIT`] rows); the "Show all N"
+//!   default (`state::COMPACT_TRACK_LIMIT` rows); the "Show all N"
 //!   toggle swaps to the whole backend result — capped by `search_all`'s
 //!   own `LIMIT` — from the cached `last_results`, no DB round-trip.
 //! * Albums + Artists strips — `EntityCard` in a horizontal scroller
