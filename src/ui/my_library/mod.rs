@@ -25,8 +25,9 @@ use crate::AppWindow;
 use crate::state::AppState;
 
 pub use tabs::{
-    MyLibraryTab, NO_TAB, close_open_detail, go_to_tab, persist_tab, return_to_section,
-    seed_tab, tab_from_index, tab_is_mounted, tab_of_section, the_band_is_up,
+    MountedSurface, MyLibraryTab, NO_TAB, close_open_detail, detail_id_for, go_to_tab,
+    mounted_surface, persist_tab, return_to_section, seed_tab, tab_from_index,
+    tab_is_mounted, tab_of_section, the_band_is_up,
 };
 
 /// Wire the My Library page's own three callbacks — the tab pick, the shared

@@ -15,22 +15,14 @@ const BAND: &str =
     include_str!("../../../melodia-ui/ui/components/hero/library-tab-band.slint");
 /// The band's only mount. Three of the pins below are about the seam rather than
 /// the component, and a band nobody feeds passes every check on its own source.
+use crate::test_support::{binding_value as binding, strip_line_comments};
+
 const SHEET: &str = include_str!("../../../melodia-ui/ui/views/my-library-view.slint");
 
-/// The file with its comment lines dropped, so prose about a fix can neither
-/// satisfy a pin nor bound a region early. The `placeholder_tests.rs` helper.
+/// The band with its comments dropped, so prose about a fix can neither satisfy a
+/// pin nor bound a region early.
 fn code() -> String {
-    BAND.lines()
-        .filter(|line| !line.trim_start().starts_with("//"))
-        .collect::<Vec<_>>()
-        .join("\n")
-}
-
-/// The value of a `name:` binding, up to its terminating `;`.
-fn binding(src: &str, name: &str) -> String {
-    src.split_once(name)
-        .and_then(|(_, rest)| rest.split_once(';'))
-        .map_or(String::new(), |(value, _)| value.to_owned())
+    strip_line_comments(BAND)
 }
 
 /// The body of the `if root.hero-shown:` branch that paints `needle`, cut at its
@@ -437,7 +429,8 @@ fn the_morph_progress_is_seeded_by_its_binding_and_written_by_its_handler() {
 /// departing floor's value and the two disagree either way.
 #[test]
 fn the_band_publishes_whether_its_height_is_still_moving() {
-    let morphing = binding(&code(), "out property <bool> morphing");
+    let code = code();
+    let morphing = binding(&code, "out property <bool> morphing");
     assert!(
         !morphing.is_empty(),
         "`LibraryTabBand` must publish `morphing` — the mount sheet has no other way to ask \

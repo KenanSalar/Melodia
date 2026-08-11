@@ -221,6 +221,52 @@ pub(crate) fn strip_line_comments(src: &str) -> String {
     out
 }
 
+/// Runs of whitespace collapsed to one space, so a pin reads a token sequence rather
+/// than one file's indentation.
+///
+/// Pair it with [`strip_line_comments`] rather than using it alone — this joins lines,
+/// so a trailing comment would otherwise run into the code that followed it.
+pub(crate) fn normalize_ws(src: &str) -> String {
+    src.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+/// The value of a `name:` binding in `src`, up to its terminating `;`, or `""` when
+/// `name` doesn't appear.
+///
+/// The empty string is the caller's failure to report — every pin over this asserts
+/// something about the value, and there is no binding whose expected value is nothing.
+pub(crate) fn binding_value<'a>(src: &'a str, name: &str) -> &'a str {
+    src.split_once(name)
+        .and_then(|(_, rest)| rest.split_once(';'))
+        .map_or("", |(value, _)| value)
+}
+
+/// The `N` in a global's `out property <int> tab-count: N;`.
+///
+/// `None` covers both "no such declaration" and "not a plain integer literal", which are
+/// one failure to every caller: the count is the sole definition of how many tabs a page
+/// has, and Rust clamps the persisted index against it, so anything it can't read is a
+/// page that can restore onto a branch mounting nothing.
+///
+/// Takes the source rather than reading a file, because the two curated globals share
+/// one — `RecentlyPlayed`'s pin scopes to its own global's body first, else `Favorites`
+/// growing a tab would answer for it.
+pub(crate) fn declared_tab_count(src: &str) -> Option<usize> {
+    src.split_once("out property <int> tab-count:")
+        .and_then(|(_, rest)| rest.split_once(';'))
+        .and_then(|(digits, _)| digits.trim().parse().ok())
+}
+
+/// The body of an inline `marker … ];` array literal in `src`.
+///
+/// The `@tr` arrays a `TabBar` mount hands over have to stay literals — a `[string]`
+/// seeded from Rust renders untranslated — so several pins count what is inside one.
+pub(crate) fn array_body<'a>(src: &'a str, marker: &str) -> Option<&'a str> {
+    src.split_once(marker)
+        .and_then(|(_, rest)| rest.split_once("];"))
+        .map(|(body, _)| body)
+}
+
 /// The `labels` and `fields` arrays of the one `SortPillRow` mount in `src` whose
 /// `sort-field` reads `field_property`, as raw comma-separated element lists.
 ///

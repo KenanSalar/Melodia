@@ -230,7 +230,8 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, albums_ui: &Arc<AlbumsUi>) 
             let columns = ui.global::<AlbumDetail>().snapshot_visible();
             let s = s.clone();
             spawn_blocking_logged!(s, "albums::toggle_column",
-                library::settings::update_view_columns(&s, "album_detail".to_string(), columns));
+                library::settings::update_view_columns(
+                    &s, view_id::ALBUM_DETAIL.to_owned(), columns));
         });
     }
 

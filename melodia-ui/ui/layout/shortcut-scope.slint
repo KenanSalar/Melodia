@@ -192,19 +192,10 @@ export component ShortcutScope inherits FocusScope {
                 return accept;
             }
             if (ev.text == "n") {
-                // Populates the dialog exactly as the New-Playlist menu entry does;
-                // `Dialog`'s own dispatcher routes the `kind` from there.
-                Dialog.kind = "create-playlist";
-                Dialog.input-text = "";
-                Dialog.input-text-2 = "";
-                Dialog.pending-track-ids = [];
-                Dialog.target-id = -1;
-                Dialog.title = @tr("Create Playlist");
-                Dialog.message = "";
-                Dialog.confirm-label = @tr("Create");
-                Dialog.cancel-label = @tr("Cancel");
-                Dialog.destructive = false;
-                Dialog.open = true;
+                // Populates the dialog exactly as the New-Playlist menu entry does —
+                // which it now does by construction rather than by having been copied
+                // from it. Spelled out here, this had drifted to its own title.
+                Dialog.open-create-playlist([]);
                 return accept;
             }
             return reject;

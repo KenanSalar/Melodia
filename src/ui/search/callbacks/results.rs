@@ -201,7 +201,8 @@ pub(super) fn wire(
             let columns = ui.global::<Search>().snapshot_visible();
             let s_disk = s.clone();
             spawn_blocking_logged!(s, "search::toggle_column",
-                library::settings::update_view_columns(&s_disk, "search".to_owned(), columns));
+                library::settings::update_view_columns(
+                    &s_disk, view_id::SEARCH.to_owned(), columns));
         });
     }
     {

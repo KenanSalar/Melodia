@@ -11,13 +11,13 @@
 //! file can answer — that the band still mounts that row, hands it hero tiers, and
 //! forwards what its two pages read back.
 
+use crate::test_support::binding_value;
+
 const HERO: &str = include_str!("../../../melodia-ui/ui/components/hero/mosaic-tab-hero.slint");
 
-/// The value of a `name:` binding, up to its terminating `;`.
+/// The value of a `name:` binding in the hero, up to its terminating `;`.
 fn binding(name: &str) -> &'static str {
-    HERO.split_once(name)
-        .and_then(|(_, rest)| rest.split_once(';'))
-        .map_or("", |(value, _)| value)
+    binding_value(HERO, name)
 }
 
 /// A mirrored width only reaches the bar through `changed width`, and `changed`

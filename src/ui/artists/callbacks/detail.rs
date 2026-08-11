@@ -229,7 +229,8 @@ pub(super) fn wire(
             let columns = ui.global::<ArtistDetail>().snapshot_visible();
             let s = s.clone();
             spawn_blocking_logged!(s, "artists::toggle_column",
-                library::settings::update_view_columns(&s, "artist_detail".to_string(), columns));
+                library::settings::update_view_columns(
+                    &s, view_id::ARTIST_DETAIL.to_owned(), columns));
         });
     }
 

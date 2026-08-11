@@ -4,7 +4,7 @@ import { Player } from "../../globals/player.slint";
 import { PlaylistDetail } from "../../globals/playlists.slint";
 import { DraggableTrackList } from "../../components/track-list/draggable-track-list.slint";
 import { GridEmptyState } from "../../components/grid/grid-empty-state.slint";
-import { OverlayScrollbar } from "../../components/overlay-scrollbar.slint";
+import { TrackListScrollbars } from "../../components/track-list-scrollbars.slint";
 import { MaterialIcon } from "../../components/material-icon.slint";
 
 // `AlbumDetailBody`'s shape over `DraggableTrackList` — the shared `TrackList` stays
@@ -138,27 +138,20 @@ export component PlaylistDetailBody inherits Rectangle {
         }
     }
 
-    OverlayScrollbar {
-        horizontal: false;
-        x: parent.width - self.width;
-        y: tl.absolute-position.y - root.absolute-position.y + tl.body-y;
-        width: 10px;
-        height: tl.body-height;
-        visible-size: tl.v-visible-height;
-        content-size: tl.v-viewport-height;
-        offset: tl.v-offset;
-        scroll-to(o) => { tl.set-v-offset(o); }
-    }
-
-    OverlayScrollbar {
-        horizontal: true;
-        x: tl.absolute-position.x - root.absolute-position.x;
-        y: parent.height - self.height;
-        width: tl.width - 10px;
-        height: 10px;
-        visible-size: tl.h-visible-width;
-        content-size: tl.h-viewport-width;
-        offset: tl.h-offset;
-        scroll-to(o) => { tl.set-h-offset(o); }
+    TrackListScrollbars {
+        x: 0; y: 0; width: 100%; height: 100%;
+        list-x: tl.absolute-position.x - root.absolute-position.x;
+        list-y: tl.absolute-position.y - root.absolute-position.y;
+        list-width: tl.width;
+        body-y: tl.body-y;
+        body-height: tl.body-height;
+        v-visible-height: tl.v-visible-height;
+        v-viewport-height: tl.v-viewport-height;
+        v-offset: tl.v-offset;
+        h-visible-width: tl.h-visible-width;
+        h-viewport-width: tl.h-viewport-width;
+        h-offset: tl.h-offset;
+        set-v-offset(o) => { tl.set-v-offset(o); }
+        set-h-offset(o) => { tl.set-h-offset(o); }
     }
 }

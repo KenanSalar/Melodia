@@ -14,24 +14,15 @@
 //! They live here rather than under a host for the `tab_bar_tests.rs` reason — no Rust
 //! module owns the file.
 
+use crate::test_support::{binding_value as binding, strip_line_comments};
+
 const HEADER: &str =
     include_str!("../../../melodia-ui/ui/components/hero/tab-search-header.slint");
 
-/// The file with its comment lines dropped, so prose about a fix can neither satisfy a
-/// pin nor bound a region early. The `placeholder_tests.rs` helper.
+/// The header with its comments dropped, so prose about a fix can neither satisfy a
+/// pin nor bound a region early.
 fn code() -> String {
-    HEADER
-        .lines()
-        .filter(|line| !line.trim_start().starts_with("//"))
-        .collect::<Vec<_>>()
-        .join("\n")
-}
-
-/// The value of a `name:` binding, up to its terminating `;`.
-fn binding(src: &str, name: &str) -> String {
-    src.split_once(name)
-        .and_then(|(_, rest)| rest.split_once(';'))
-        .map_or(String::new(), |(value, _)| value.to_owned())
+    strip_line_comments(HEADER)
 }
 
 /// **The floor is published rather than restated.**

@@ -16,7 +16,7 @@
 //! borrow the opt-out of the `TrackList` nested inside it, which is exactly the
 //! arrangement every composite view has.
 
-use crate::test_support::{UI_DIR, stripped_sources};
+use crate::test_support::{UI_DIR, normalize_ws as normalized, stripped_sources};
 
 /// The elements that own a scrollbar-policy pair. `Flickable` is deliberately
 /// absent: it has no scrollbars to turn off.
@@ -38,12 +38,6 @@ const MIN_SOURCES: usize = 100;
 /// The whole tree, comment-stripped, paired with the file it came from.
 fn sources() -> Vec<(String, String)> {
     stripped_sources(UI_DIR, "slint", MIN_SOURCES)
-}
-
-/// Collapses runs of whitespace, so a pin reads a token sequence rather than one
-/// mount's indentation.
-fn normalized(src: &str) -> String {
-    src.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
 /// The first index at or after `from` holding a non-whitespace byte.

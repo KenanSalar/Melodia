@@ -106,6 +106,69 @@ pub fn the_band_is_up(ui: &AppWindow) -> bool {
     ui.global::<Nav>().get_selected_index() == super::NAV_MY_LIBRARY
 }
 
+/// The detail `tab` has open, or `None` when it has none open — or, for Songs, when it
+/// has no detail concept at all.
+///
+/// **The tab is what discriminates, not the id.** `seed_detail_from_settings` runs for all
+/// four detail views at boot whichever tab is restored, so more than one `*Detail.*-id` can
+/// be `>= 0` at a time and "some id is set" answers nothing on its own.
+///
+/// Takes the tab rather than reading the mounted one, because one caller genuinely asks
+/// about a tab that isn't mounted: `nav_history` resolves a *recorded* entry's detail.
+/// [`mounted_surface`] is the same question about the tab on screen.
+pub fn detail_id_for(ui: &AppWindow, tab: MyLibraryTab) -> Option<i64> {
+    let id = match tab {
+        MyLibraryTab::Songs => return None,
+        MyLibraryTab::Albums => i64::from(ui.global::<AlbumDetail>().get_album_id()),
+        MyLibraryTab::Artists => i64::from(ui.global::<ArtistDetail>().get_artist_id()),
+        MyLibraryTab::Genres => i64::from(ui.global::<GenreDetail>().get_genre_id()),
+        MyLibraryTab::Playlists => i64::from(ui.global::<PlaylistDetail>().get_playlist_id()),
+    };
+    (id >= 0).then_some(id)
+}
+
+/// Which of the page's nine surfaces is on screen: the mounted tab, and the detail it has
+/// open if it has one.
+///
+/// **One answer to a question that was being asked five different ways.** The page routes a
+/// keystroke, reads a filter back, rewinds a count and resolves a history entry off the
+/// same *(tab, is its detail open)* pair, and each of those spelled the five arms and the
+/// `>= 0` check for itself — `filter.rs` alone held three copies and twelve id reads, under
+/// a doc comment warning that asking twice is how the two halves of its hand-off drift
+/// apart. Callers now match on this and keep only what is genuinely per-surface: which
+/// global to write, which callback it fires.
+///
+/// UI thread only, like everything else that reaches a global.
+///
+/// Two askers deliberately stay off it, and both answer a *different* question about the
+/// same globals: `hero_chips::my_library_owner` wants the `ChipOwner` a published row was
+/// stamped with — which is not always the mounted tab's, that being the whole point of the
+/// staleness rule — and `tasks::rss_sampler::my_library_tag` wants a diagnostic string.
+/// Neither would delete a line by routing through here.
+pub fn mounted_surface(ui: &AppWindow) -> MountedSurface {
+    let tab = {
+        let g = ui.global::<MyLibrary>();
+        tab_from_index(&g, g.get_tab_idx())
+    };
+    MountedSurface { tab, detail_id: detail_id_for(ui, tab) }
+}
+
+/// The mounted tab and the detail it has open, from [`mounted_surface`].
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct MountedSurface {
+    pub tab: MyLibraryTab,
+    /// `None` when the tab is showing its grid — or its list, on Songs.
+    pub detail_id: Option<i64>,
+}
+
+impl MountedSurface {
+    /// Whether a detail is covering the mounted tab's grid.
+    #[must_use]
+    pub fn detail_open(self) -> bool {
+        self.detail_id.is_some()
+    }
+}
+
 /// Close whatever detail `tab` has open, if any.
 ///
 /// The band's one back arrow and a Mouse-4 step out of a detail are the same act, so they

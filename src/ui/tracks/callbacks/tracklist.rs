@@ -1,27 +1,20 @@
-//! `Tracks.*` callbacks: sort, filter, play, favorite, selection,
-//! column-visibility persistence.
+//! The Songs list itself: sort, filter, play, queue, favorite, rating, selection.
 
 use std::sync::Arc;
 
 use slint::{ComponentHandle, Model, SharedString};
 
-use crate::ui::callbacks::macros::{spawn_blocking_logged, spawn_logged, wire_row_flag};
+use crate::ui::callbacks::macros::{spawn_logged, wire_row_flag};
 use crate::ui::callbacks::{
     collect_track_ids, next_sort, persist_view_sort, persisted_sort, play_row_start,
 };
 use crate::library;
 use crate::state::AppState;
-use crate::ui::my_library::{MyLibraryTab, tab_is_mounted};
-use crate::ui::track_list_view::{TrackListColumnState, view_id};
+use crate::ui::track_list_view::view_id;
 use crate::ui::tracks::{self as tracks_ui_mod, TracksUi};
 use crate::{AppWindow, Tracks};
 
-/// Wire every `Tracks.*` callback to its `library::*` counterpart and the
-/// `tracks_ui` shared state.
-///
-/// Called by [`super::install`], which is what guarantees the models are in
-/// place first; that pairing used to be two statements a boot-file reorder
-/// could separate. `wire_all` still has to have run before it.
+/// Wire the list's own callbacks, and seed the sort header they persist through.
 pub(super) fn wire(ui: &AppWindow, state: &AppState, tracks_ui: &Arc<TracksUi>) {
     let tracks = ui.global::<Tracks>();
     let weak = ui.as_weak();
@@ -31,45 +24,6 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, tracks_ui: &Arc<TracksUi>) 
     if let Some((field, dir)) = persisted_sort(state, view_id::TRACKS) {
         tracks.set_sort_field(SharedString::from(field.as_str()));
         tracks.set_sort_dir(SharedString::from(dir));
-    }
-
-    // section-active-changed: mirror visibility into the synchronous shadow,
-    // and on re-enter run the deferred refresh. **A tab leave is one of those
-    // leaves now** — the Songs tab has its own `SectionActiveGate` — so seed the
-    // shadow from the mounted tab, not from the nav index: the gate's
-    // `ChangeTracker` baselines inside `AppWindow::new()` and fires only on a
-    // later difference, so a view the boot doesn't land on gets no edge at all,
-    // and the one it does land on gets its edge a frame late — after boot has
-    // already read this shadow. See the `SectionActiveGate` bullet in
-    // `.claude/rules/ui-patterns.md`.
-    tracks_ui.set_section_active(tab_is_mounted(ui, MyLibraryTab::Songs));
-    {
-        let tu = tracks_ui.clone();
-        let weak = weak.clone();
-        tracks.on_section_active_changed(move |active| {
-            tu.set_section_active(active);
-            // **The leave does nothing else, and Tracks is the one library view
-            // that can say that.** Its four siblings empty their models on the
-            // way out, so each owes the `UNFETCHED_COUNT` rewind that stops a
-            // count outliving the rows it numbers — and, having rewound, owes
-            // the `mark_dirty` that answers it. This model *survives* the leave,
-            // so the count is never stale over an empty list and there is
-            // nothing to answer. Marking dirty anyway made a tab pick a full
-            // `get_tracks` plus a library-sized row build on the event loop,
-            // every time the user came back to Songs. Freshness is unaffected:
-            // `boot::ui_setup::install_library_changed_refresher` already folds
-            // every bump arriving while this tab is unmounted into the same
-            // flag.
-            if !active {
-                return;
-            }
-            if tu.take_dirty() {
-                let Some(ui) = weak.upgrade() else { return };
-                // Reuse the request-refresh path so the deferred fetch
-                // picks up the current sort + filter.
-                ui.global::<Tracks>().invoke_request_refresh();
-            }
-        });
     }
 
     // request-sort: clicking a header column. Same field flips dir; new field
@@ -207,24 +161,6 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, tracks_ui: &Arc<TracksUi>) 
             let weak = weak.clone();
             spawn_logged!(s, "tracks::refresh",
                 tracks_ui_mod::fetch_and_apply(&s, &tu, weak, field, dir, filter));
-        });
-    }
-
-    // toggle-column: the popup has already flipped the matching `show-*`
-    // flag for instant visual feedback. We persist the new visible-column
-    // list to `views.json`'s `view_columns["tracks"]` so the choice survives
-    // restarts. The Slint flag is the source of truth here — we read it
-    // through `TrackListColumnState::snapshot_visible` so the on-disk shape
-    // stays consistent with the shutdown-snapshot path.
-    {
-        let s = state.clone();
-        let weak = weak.clone();
-        tracks.on_toggle_column(move |_id| {
-            let Some(ui) = weak.upgrade() else { return };
-            let columns = ui.global::<Tracks>().snapshot_visible();
-            let s = s.clone();
-            spawn_blocking_logged!(s, "tracks::toggle_column",
-                library::settings::update_view_columns(&s, "tracks".to_string(), columns));
         });
     }
 }

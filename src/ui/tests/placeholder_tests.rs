@@ -21,6 +21,11 @@
 //! copy-pasted block in three files with no Rust owner between them — the
 //! reason `src/ui/tab_bar.rs` holds `tab-bar.slint`'s invariants.
 
+// Every file here documents its own invariants at length, which is exactly the text a
+// `contains` would otherwise match — so each pin reads the source stripped of comments and
+// with its indentation collapsed to single spaces.
+use crate::test_support::{normalize_ws as normalized, strip_line_comments as code};
+
 const SEARCH_BAR: &str = include_str!("../../../melodia-ui/ui/components/search-bar.slint");
 const LABELED_INPUT: &str = include_str!("../../../melodia-ui/ui/components/labeled-input.slint");
 const RULE_VALUE_INPUT: &str =
@@ -55,19 +60,6 @@ const BUDGETING_HOST: (&str, &str) = (
     "tab-search-header.slint",
     include_str!("../../../melodia-ui/ui/components/hero/tab-search-header.slint"),
 );
-
-/// Collapses runs of whitespace so a pin reads a token sequence rather than one
-/// file's indentation.
-fn normalized(src: &str) -> String {
-    src.split_whitespace().collect::<Vec<_>>().join(" ")
-}
-
-/// `src` with its comment lines dropped, so prose about a fix can neither satisfy
-/// a pin nor end a region early. Every file here documents its own invariants at
-/// length, which is exactly the text a `contains` would otherwise match.
-fn code(src: &str) -> String {
-    src.lines().filter(|line| !line.trim_start().starts_with("//")).collect::<Vec<_>>().join("\n")
-}
 
 /// The declaration between two anchors. Bounding a region on the element that
 /// follows it rather than on a closing brace keeps this out of the business of

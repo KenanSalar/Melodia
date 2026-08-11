@@ -30,8 +30,17 @@ pub async fn search_album_cover(
         .await
         .map_err(|e| AppError::network("iTunes album search failed", e))?;
 
-    if !response.status().is_success() {
-        return Ok(None);
+    // An `Err`, never `Ok(None)`. A non-success status says nothing about whether the
+    // album exists, and `discord::artwork::run_lookup` reads `Ok(None)` as a
+    // *definitive* miss — cached as "this album has no cover" for the rest of the
+    // session once Deezer has missed too. iTunes Search rate-limits with a status, so
+    // folding one in blanks that album's cover until restart. Deezer's own non-body
+    // arms come back the same way; see `deezer::DeezerAnswer::HttpStatus`.
+    let status = response.status();
+    if !status.is_success() {
+        return Err(AppError::network_msg(format!(
+            "iTunes album search returned HTTP {status}"
+        )));
     }
 
     let body = response

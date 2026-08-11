@@ -186,7 +186,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
             let s_disk = s.clone();
             spawn_blocking_logged!(s, "playlists::toggle_column",
                 library::settings::update_view_columns(
-                    &s_disk, "playlist_detail".to_owned(), columns));
+                    &s_disk, view_id::PLAYLIST_DETAIL.to_owned(), columns));
         });
     }
 

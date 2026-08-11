@@ -39,12 +39,9 @@ use slint::{ComponentHandle, Weak};
 
 use crate::state::AppState;
 use crate::ui::my_library::{
-    MyLibraryTab, NAV_MY_LIBRARY, persist_tab, tab_from_index, tab_of_section,
+    self, MyLibraryTab, NAV_MY_LIBRARY, persist_tab, tab_from_index, tab_of_section,
 };
-use crate::{
-    AlbumDetail, AppWindow, ArtistDetail, Dialog, GenreDetail, MyLibrary, Nav, NavEnterFrom,
-    PlaylistDetail, Queue,
-};
+use crate::{AppWindow, Dialog, MyLibrary, Nav, NavEnterFrom, Queue};
 
 const HISTORY_CAP: usize = 24;
 
@@ -161,32 +158,14 @@ impl Default for NavHistory {
 /// Slint globals, or `None` if that view has no detail concept or its detail
 /// is closed.
 ///
-/// **The tab is what discriminates, not the id.** `seed_detail_from_settings` runs
-/// for all four detail views at boot whichever section is restored, so more than one
-/// `*Detail.*-id` can be `>= 0` at a time.
+/// Only My Library has details, so everything past that check is
+/// [`my_library::detail_id_for`] — which takes the tab rather than reading the mounted
+/// one precisely so this caller can ask about a *recorded* entry's tab.
 fn current_detail_id_for(ui: &AppWindow, section: i32, tab: i32) -> Option<i64> {
     if section != NAV_MY_LIBRARY {
         return None;
     }
-    match tab_from_index(&ui.global::<MyLibrary>(), tab) {
-        MyLibraryTab::Songs => None,
-        MyLibraryTab::Albums => {
-            let id = i64::from(ui.global::<AlbumDetail>().get_album_id());
-            (id >= 0).then_some(id)
-        }
-        MyLibraryTab::Artists => {
-            let id = i64::from(ui.global::<ArtistDetail>().get_artist_id());
-            (id >= 0).then_some(id)
-        }
-        MyLibraryTab::Genres => {
-            let id = i64::from(ui.global::<GenreDetail>().get_genre_id());
-            (id >= 0).then_some(id)
-        }
-        MyLibraryTab::Playlists => {
-            let id = i64::from(ui.global::<PlaylistDetail>().get_playlist_id());
-            (id >= 0).then_some(id)
-        }
-    }
+    my_library::detail_id_for(ui, tab_from_index(&ui.global::<MyLibrary>(), tab))
 }
 
 /// Record an arbitrary `(section, detail_id)` snapshot. Used by detail

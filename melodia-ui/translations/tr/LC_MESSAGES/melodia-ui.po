@@ -753,9 +753,6 @@ msgstr "Açıklama (isteğe bağlı)"
 msgid "Add a description…"
 msgstr "Açıklama ekle…"
 
-msgid "Create Playlist"
-msgstr "Çalma Listesi Oluştur"
-
 # Confirm-button label on the create-playlist dialog.
 msgid "Create"
 msgstr "Oluştur"

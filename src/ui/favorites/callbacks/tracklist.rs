@@ -139,7 +139,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, fav_ui: &Arc<FavoritesUi>) 
             let s_disk = s.clone();
             spawn_blocking_logged!(s, "favorites::toggle_column",
                 library::settings::update_view_columns(
-                    &s_disk, "favorites".to_owned(), columns));
+                    &s_disk, view_id::FAVORITES.to_owned(), columns));
         });
     }
     // select-row / clear-selection — modifier-aware selection with

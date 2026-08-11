@@ -750,9 +750,6 @@ msgstr "Περιγραφή (προαιρετική)"
 msgid "Add a description…"
 msgstr "Προσθήκη περιγραφής…"
 
-msgid "Create Playlist"
-msgstr "Δημιουργία λίστας"
-
 # Confirm-button label on the create-playlist dialog.
 msgid "Create"
 msgstr "Δημιουργία"

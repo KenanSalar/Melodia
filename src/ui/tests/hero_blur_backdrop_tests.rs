@@ -14,21 +14,15 @@
 //! backdrop is also the one that eases, and on My Library the globals behind it outlive the
 //! tab that filled them.
 
+// A file with its comments dropped, so prose about a fix can neither satisfy a pin nor
+// bound a region early. Needed here for a reason particular to this file: every anchor
+// below is a gradient literal, and the comment block sitting directly above the floor's
+// own binding argues about gradients and stop counts. One line spelling the literal would
+// re-anchor both pins ahead of the code.
+use crate::test_support::strip_line_comments as code;
+
 const HERO_BLUR: &str = include_str!("../../../melodia-ui/ui/components/hero-blur-backdrop.slint");
 const NOW_PLAYING: &str = include_str!("../../../melodia-ui/ui/views/now-playing-view.slint");
-
-/// The file with its comment lines dropped, so prose about a fix can neither satisfy a pin
-/// nor bound a region early. The `library_tab_band_tests.rs` helper, and needed here for a
-/// reason particular to this file: every anchor below is a gradient literal, and the comment
-/// block sitting directly above the floor's own binding argues about gradients and stop
-/// counts. One line spelling the literal would re-anchor both pins ahead of the code.
-fn code(source: &str) -> String {
-    source
-        .lines()
-        .filter(|line| !line.trim_start().starts_with("//"))
-        .collect::<Vec<_>>()
-        .join("\n")
-}
 
 /// Both floors ease, on the same token the layers above them take.
 ///

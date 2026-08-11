@@ -78,17 +78,12 @@ const TABS: usize = 3;
 
 /// The `N` in `Favorites`'s `tab-count: N;`.
 fn declared_tab_count() -> Option<usize> {
-    GLOBAL
-        .split_once("out property <int> tab-count:")
-        .and_then(|(_, rest)| rest.split_once(';'))
-        .and_then(|(digits, _)| digits.trim().parse().ok())
+    crate::test_support::declared_tab_count(GLOBAL)
 }
 
 /// The body of an inline `name: [ … ];` array literal in `favorites-view.slint`.
 fn array_body(marker: &str) -> Option<&'static str> {
-    VIEW.split_once(marker)
-        .and_then(|(_, rest)| rest.split_once("];"))
-        .map(|(body, _)| body)
+    crate::test_support::array_body(VIEW, marker)
 }
 
 /// `Favorites.tab-count` is the sole definition of how many sub-views exist —

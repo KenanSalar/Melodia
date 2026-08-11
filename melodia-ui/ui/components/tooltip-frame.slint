@@ -1,0 +1,37 @@
+import { Tooltip, TooltipSide } from "tooltip.slint";
+
+// The top-layer mount shape for a tooltip whose host is somewhere Slint paints *later*.
+//
+// `Tooltip` normally sits inside the element it annotates, which works wherever nothing
+// clips or overpaints that element. A band does neither of those things to itself — it is
+// the *page* that paints its scroll body afterwards, and paint order is declaration order,
+// so a below-anchored pill anchored on the band lands in the body's band and the first row
+// or card covers it. The fix is to declare a frame at the end of the page tracking the
+// host's rect, and put the pill in that; five pages had spelled it out, identically.
+//
+// **The host publishes the rect, this places it.** A component's ids aren't readable from
+// outside it, so a band hands over `tip-x` / `tip-y` / `tip-w` / `tip-h` / `tip-label` /
+// `tip-visible` — derived from the hovered *index* rather than snapshotted, so a tab moving
+// under a parked pointer keeps its anchor — and the page passes them through here. The two
+// `absolute-position` deltas stay at the call site: they are the page's own geometry, and
+// `parent` is not reachable from a component's root binding.
+//
+// A plain `Rectangle`, so it captures no input and the host underneath keeps its hover.
+//
+// **Not every top-layer tooltip belongs here.** `app-window.slint`'s `sidebar-tip` is the
+// deliberate exception: its `x` comes off the live rail width so the frame rides the
+// collapse animation, and it owns a `held` latch across the gaps between rail rows. Both
+// are real behaviour rather than boilerplate, and neither of the five below has either.
+export component TooltipFrame inherits Rectangle {
+    in property <string> label;
+    in property <bool> shown;
+    in property <TooltipSide> side: TooltipSide.below;
+
+    Tooltip {
+        text: root.label;
+        hovered: root.shown;
+        host-width: root.width;
+        host-height: root.height;
+        side: root.side;
+    }
+}

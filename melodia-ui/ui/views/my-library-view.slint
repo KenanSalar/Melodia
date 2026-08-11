@@ -10,7 +10,7 @@ import { FilterThrottle } from "../components/filter-throttle.slint";
 import { GridColumnsSync } from "../components/grid-columns-sync.slint";
 import { GridGeometry } from "../components/grid-geometry.slint";
 import { LibraryTabBand } from "../components/hero/library-tab-band.slint";
-import { Tooltip, TooltipSide } from "../components/tooltip.slint";
+import { TooltipFrame } from "../components/tooltip-frame.slint";
 import { ViewTransition } from "../components/view-transition.slint";
 import { MyLibrarySongsTab } from "my-library/songs-tab.slint";
 import { MyLibraryAlbumsTab } from "my-library/albums-tab.slint";
@@ -527,31 +527,21 @@ export component MyLibraryView inherits Rectangle {
     // band, and Slint paints in declaration order, so anything the band owns is covered by
     // the body underneath. Each publishes the rect it derives from the hovered element, so
     // a tab or a pill that moves under a parked pointer keeps its tooltip anchored.
-    tab-tip := Rectangle {
+    TooltipFrame {
         x: band.absolute-position.x - root.absolute-position.x + band.tip-x;
         y: band.absolute-position.y - root.absolute-position.y + band.tip-y;
         width: band.tip-w;
         height: band.tip-h;
-        Tooltip {
-            text: band.tip-label;
-            hovered: band.tip-visible;
-            host-width: tab-tip.width;
-            host-height: tab-tip.height;
-            side: TooltipSide.below;
-        }
+        label: band.tip-label;
+        shown: band.tip-visible;
     }
 
-    header-tip := Rectangle {
+    TooltipFrame {
         x: pills.absolute-position.x - root.absolute-position.x + pills.tip-x;
         y: pills.absolute-position.y - root.absolute-position.y + pills.tip-y;
         width: pills.tip-w;
         height: pills.tip-h;
-        Tooltip {
-            text: pills.tip-label;
-            hovered: pills.tip-visible;
-            host-width: header-tip.width;
-            host-height: header-tip.height;
-            side: TooltipSide.below;
-        }
+        label: pills.tip-label;
+        shown: pills.tip-visible;
     }
 }

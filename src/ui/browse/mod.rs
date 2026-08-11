@@ -69,6 +69,12 @@ use crate::{
 // `boot::ui_setup` retunes the cover cap once the window is live.
 pub use cards::tune_cache_for_display;
 
+/// Browse's `Nav.selected-index`. **The single definition** — every other section has
+/// carried one of these for a while and this was the last literal `1` left standing in a
+/// `get_selected_index()` comparison, which is the same shape as the five duplicated
+/// `const`s `my_library::NAV_MY_LIBRARY` retired.
+pub const NAV_BROWSE: i32 = 1;
+
 // Reached only from this slice's own `callbacks.rs`, which used to live two
 // modules away, plus the cross-slice `apply_row_*` mirrors in
 // `callbacks::now_playing`. `pub(super)` is `pub(in crate::ui)` here, which is

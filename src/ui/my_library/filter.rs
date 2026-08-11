@@ -27,114 +27,94 @@
 
 use slint::{ComponentHandle, SharedString};
 
-use super::{MyLibraryTab, tab_from_index};
+use super::{MountedSurface, MyLibraryTab, mounted_surface};
 use crate::ui::tab_bar::UNFETCHED_COUNT;
 use crate::{
     AlbumDetail, Albums, AppWindow, ArtistDetail, Artists, GenreDetail, Genres, MyLibrary,
     PlaylistDetail, Playlists, Tracks,
 };
 
+/// Run `$body` against whichever global `$surface` names, binding it as `$g`.
+///
+/// The five tabs and their four details are nine distinct Slint-generated types with no
+/// trait between them, so the *dispatch* can't be a function — but everything each arm
+/// then does is identical, which is what the callback body absorbs. Same wall, and same
+/// answer, as `impl_mosaic_hero!` and `impl_detail_view_helpers`.
+///
+/// Two callbacks are threaded through rather than one because the halves of the page
+/// answer different contracts and always have: a grid or list global fires
+/// `apply-filter(text)` and Rust ignores the argument, reading `<Global>.filter` back
+/// inside a memoized rebuild, where a detail global fires `filter-changed(text)` and Rust
+/// uses it. `$grid` runs on the five grid/list surfaces, `$detail` on the four details.
+macro_rules! on_mounted_surface {
+    ($ui:expr, $surface:expr, |$g:ident| $grid:expr, |$d:ident| $detail:expr $(,)?) => {{
+        let ui = $ui;
+        let surface: MountedSurface = $surface;
+        match surface.tab {
+            // Songs has no detail view; its list is the only surface.
+            MyLibraryTab::Songs => {
+                let $g = ui.global::<Tracks>();
+                $grid
+            }
+            MyLibraryTab::Albums if surface.detail_open() => {
+                let $d = ui.global::<AlbumDetail>();
+                $detail
+            }
+            MyLibraryTab::Albums => {
+                let $g = ui.global::<Albums>();
+                $grid
+            }
+            MyLibraryTab::Artists if surface.detail_open() => {
+                let $d = ui.global::<ArtistDetail>();
+                $detail
+            }
+            MyLibraryTab::Artists => {
+                let $g = ui.global::<Artists>();
+                $grid
+            }
+            MyLibraryTab::Genres if surface.detail_open() => {
+                let $d = ui.global::<GenreDetail>();
+                $detail
+            }
+            MyLibraryTab::Genres => {
+                let $g = ui.global::<Genres>();
+                $grid
+            }
+            MyLibraryTab::Playlists if surface.detail_open() => {
+                let $d = ui.global::<PlaylistDetail>();
+                $detail
+            }
+            MyLibraryTab::Playlists => {
+                let $g = ui.global::<Playlists>();
+                $grid
+            }
+        }
+    }};
+}
+
 /// Route the page's filter text to whichever surface the mounted tab is showing.
 pub fn dispatch(ui: &AppWindow, text: &str) {
-    let g = ui.global::<MyLibrary>();
     let needle = SharedString::from(text);
-
-    match tab_from_index(&g, g.get_tab_idx()) {
-        // Songs has no detail view; its list is the only surface.
-        MyLibraryTab::Songs => {
-            let tracks = ui.global::<Tracks>();
-            tracks.set_filter(needle.clone());
-            tracks.invoke_apply_filter(needle);
-        }
-        MyLibraryTab::Albums => {
-            let detail = ui.global::<AlbumDetail>();
-            if detail.get_album_id() >= 0 {
-                detail.set_filter(needle.clone());
-                detail.invoke_filter_changed(needle);
-            } else {
-                let grid = ui.global::<Albums>();
-                grid.set_filter(needle.clone());
-                grid.invoke_apply_filter(needle);
-            }
-        }
-        MyLibraryTab::Artists => {
-            let detail = ui.global::<ArtistDetail>();
-            if detail.get_artist_id() >= 0 {
-                detail.set_filter(needle.clone());
-                detail.invoke_filter_changed(needle);
-            } else {
-                let grid = ui.global::<Artists>();
-                grid.set_filter(needle.clone());
-                grid.invoke_apply_filter(needle);
-            }
-        }
-        MyLibraryTab::Genres => {
-            let detail = ui.global::<GenreDetail>();
-            if detail.get_genre_id() >= 0 {
-                detail.set_filter(needle.clone());
-                detail.invoke_filter_changed(needle);
-            } else {
-                let grid = ui.global::<Genres>();
-                grid.set_filter(needle.clone());
-                grid.invoke_apply_filter(needle);
-            }
-        }
-        MyLibraryTab::Playlists => {
-            let detail = ui.global::<PlaylistDetail>();
-            if detail.get_playlist_id() >= 0 {
-                detail.set_filter(needle.clone());
-                detail.invoke_filter_changed(needle);
-            } else {
-                let grid = ui.global::<Playlists>();
-                grid.set_filter(needle.clone());
-                grid.invoke_apply_filter(needle);
-            }
-        }
-    }
+    on_mounted_surface!(
+        ui,
+        mounted_surface(ui),
+        |g| {
+            g.set_filter(needle.clone());
+            g.invoke_apply_filter(needle);
+        },
+        |d| {
+            d.set_filter(needle.clone());
+            d.invoke_filter_changed(needle);
+        },
+    );
 }
 
 /// Whichever of the nine surfaces is mounted, and what it is currently filtered by.
 ///
-/// [`dispatch`]'s routing table read for its answer instead of its destination. Both
-/// callers below need the same nine-way question asked, and asking it twice is how the two
-/// halves of the hand-off drift apart.
+/// [`dispatch`] read for its answer instead of its destination — the same routing, so the
+/// two halves of the hand-off cannot drift apart.
 fn mounted_filter(ui: &AppWindow) -> SharedString {
-    let g = ui.global::<MyLibrary>();
-    match tab_from_index(&g, g.get_tab_idx()) {
-        MyLibraryTab::Songs => ui.global::<Tracks>().get_filter(),
-        MyLibraryTab::Albums => {
-            let detail = ui.global::<AlbumDetail>();
-            if detail.get_album_id() >= 0 {
-                detail.get_filter()
-            } else {
-                ui.global::<Albums>().get_filter()
-            }
-        }
-        MyLibraryTab::Artists => {
-            let detail = ui.global::<ArtistDetail>();
-            if detail.get_artist_id() >= 0 {
-                detail.get_filter()
-            } else {
-                ui.global::<Artists>().get_filter()
-            }
-        }
-        MyLibraryTab::Genres => {
-            let detail = ui.global::<GenreDetail>();
-            if detail.get_genre_id() >= 0 {
-                detail.get_filter()
-            } else {
-                ui.global::<Genres>().get_filter()
-            }
-        }
-        MyLibraryTab::Playlists => {
-            let detail = ui.global::<PlaylistDetail>();
-            if detail.get_playlist_id() >= 0 {
-                detail.get_filter()
-            } else {
-                ui.global::<Playlists>().get_filter()
-            }
-        }
-    }
+    on_mounted_surface!(ui, mounted_surface(ui), |g| g.get_filter(), |d| d.get_filter())
 }
 
 /// Drop the entering tab's own needle, if it has one.
@@ -176,30 +156,20 @@ pub fn clear_mounted(ui: &AppWindow) {
 /// number was never a lie. A detail arm writes no grid count at all — its own `open_*`
 /// re-runs on the same section enter.
 fn rewind_grid_count(ui: &AppWindow) {
-    let g = ui.global::<MyLibrary>();
-    match tab_from_index(&g, g.get_tab_idx()) {
-        MyLibraryTab::Songs => {}
-        MyLibraryTab::Albums => {
-            if ui.global::<AlbumDetail>().get_album_id() < 0 {
-                ui.global::<Albums>().set_total_count(UNFETCHED_COUNT);
-            }
-        }
-        MyLibraryTab::Artists => {
-            if ui.global::<ArtistDetail>().get_artist_id() < 0 {
-                ui.global::<Artists>().set_total_count(UNFETCHED_COUNT);
-            }
-        }
-        MyLibraryTab::Genres => {
-            if ui.global::<GenreDetail>().get_genre_id() < 0 {
-                ui.global::<Genres>().set_total_count(UNFETCHED_COUNT);
-            }
-        }
-        MyLibraryTab::Playlists => {
-            if ui.global::<PlaylistDetail>().get_playlist_id() < 0 {
-                ui.global::<Playlists>().set_total_count(UNFETCHED_COUNT);
-            }
-        }
+    let surface = mounted_surface(ui);
+    // Songs falls in the grid arm too and must not rewind, so it is excluded here rather
+    // than by the dispatch: `Tracks` carries no `total-count` for the header to read.
+    if surface.tab == MyLibraryTab::Songs {
+        return;
     }
+    on_mounted_surface!(
+        ui,
+        surface,
+        |g| g.set_total_count(UNFETCHED_COUNT),
+        // A detail arm writes no grid count at all — its own `open_*` re-runs on the same
+        // section enter.
+        |_d| (),
+    );
 }
 
 /// Reseat the page's box from whichever surface is now mounted.

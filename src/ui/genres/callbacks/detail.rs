@@ -210,7 +210,8 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, genres_ui: &Arc<GenresUi>) 
             let columns = ui.global::<GenreDetail>().snapshot_visible();
             let s = s.clone();
             spawn_blocking_logged!(s, "genres::toggle_column",
-                library::settings::update_view_columns(&s, "genre_detail".to_string(), columns));
+                library::settings::update_view_columns(
+                    &s, view_id::GENRE_DETAIL.to_owned(), columns));
         });
     }
 

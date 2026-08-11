@@ -47,14 +47,9 @@ const DETAIL_BODIES: [(&str, &str); 4] = [
     ),
 ];
 
-/// A `.slint` source with its comment lines dropped, so prose naming a component can't
-/// satisfy — or trip — a pin about mounting one. The `library_tab_band_tests.rs` helper.
-fn code(src: &str) -> String {
-    src.lines()
-        .filter(|line| !line.trim_start().starts_with("//"))
-        .collect::<Vec<_>>()
-        .join("\n")
-}
+// A `.slint` source with its comments dropped, so prose naming a component can't satisfy
+// — or trip — a pin about mounting one.
+use crate::test_support::strip_line_comments as code;
 
 /// The `tab-*` constant names the `MyLibrary` global declares, `tab-count` excluded.
 fn declared_tabs() -> Vec<String> {
@@ -68,16 +63,16 @@ fn declared_tabs() -> Vec<String> {
 }
 
 fn declared_tab_count() -> usize {
-    let digits = GLOBAL
-        .split_once("out property <int> tab-count:")
-        .and_then(|(_, rest)| rest.split_once(';'))
-        .map_or("", |(digits, _)| digits.trim());
-    let parsed = digits.parse::<usize>().ok();
+    let parsed = crate::test_support::declared_tab_count(GLOBAL);
+    // The whole line rather than the digits the parser failed on — if it failed, the
+    // digits are whatever the split happened to leave, which explains nothing.
+    let declared =
+        GLOBAL.lines().find(|line| line.contains("tab-count:")).unwrap_or("<no declaration>");
     assert!(
         parsed.is_some(),
         "`MyLibrary.tab-count` must stay a plain `out property <int> tab-count: N;` — it is \
          the sole definition of how many tabs there are, and Rust clamps the persisted tab \
-         against it. Found: {digits:?}",
+         against it. Found: {declared:?}",
     );
     parsed.unwrap_or_default()
 }
@@ -250,7 +245,7 @@ fn every_grid_open_zeroes_a_stale_origin() {
 }
 
 const SECTION_SEEDS: [(&str, &str, &str); 5] = [
-    ("Songs", "tracks", include_str!("../../tracks/callbacks.rs")),
+    ("Songs", "tracks", include_str!("../../tracks/callbacks/lifecycle.rs")),
     ("Albums", "albums", include_str!("../../albums/callbacks/lifecycle.rs")),
     ("Artists", "artists", include_str!("../../artists/callbacks/lifecycle.rs")),
     ("Genres", "genres", include_str!("../../genres/callbacks/lifecycle.rs")),
@@ -406,8 +401,7 @@ fn a_drill_a_back_or_a_tab_move_reseats_the_shared_box() {
 
     // Nine surfaces out, nine back. A missing read leaves that surface's needle
     // unrepresented, which is the same lie one direction at a time. Both readers —
-    // `sync_box` and `clear_mounted`'s guard — go through `mounted_filter`, so this is
-    // the one place the return leg is spelled.
+    // `sync_box` and `clear_mounted`'s guard — go through `mounted_filter`.
     let sync = FILTER
         .split_once("fn mounted_filter(")
         .and_then(|(_, rest)| rest.split_once("pub fn clear_mounted("))
@@ -416,6 +410,34 @@ fn a_drill_a_back_or_a_tab_move_reseats_the_shared_box() {
         !sync.is_empty(),
         "`ui::my_library::filter` must expose `mounted_filter` above `clear_mounted`",
     );
+    assert!(
+        sync.contains("on_mounted_surface!("),
+        "`mounted_filter` must route through `on_mounted_surface!` — the return leg has to \
+         ask the same nine-way question `dispatch` asks, and a second spelling of it is how \
+         the two halves drift apart",
+    );
+}
+
+/// **The nine surfaces are enumerated exactly once, and everything routes through it.**
+///
+/// The dispatch table used to be written out three times inside `filter.rs` — once to
+/// write a needle, once to read one back, once to rewind a count — with the
+/// `get_*_id() >= 0` detail predicate spelled twelve times between them, under a doc
+/// comment warning that asking twice is how the hand-off drifts apart. It is
+/// `on_mounted_surface!` now, over the pair `my_library::mounted_surface` resolves.
+///
+/// Pinned here rather than at each consumer for the reason the fold was made: a per-caller
+/// check is satisfied by a *copy*, which is the thing being prevented. The mutation to
+/// check is inlining any one arm back into a caller — the caller still reaches its own
+/// surface, so a body scan would pass.
+#[test]
+fn the_nine_surfaces_are_enumerated_once_and_every_caller_routes_through_it() {
+    let table = FILTER
+        .split_once("macro_rules! on_mounted_surface {")
+        .and_then(|(_, rest)| rest.split_once("\n}\n"))
+        .map_or("", |(body, _)| body);
+    assert!(!table.is_empty(), "`ui::my_library::filter` must declare `on_mounted_surface!`");
+
     for surface in [
         "Tracks",
         "AlbumDetail",
@@ -428,9 +450,32 @@ fn a_drill_a_back_or_a_tab_move_reseats_the_shared_box() {
         "Playlists",
     ] {
         assert!(
-            sync.contains(&format!("ui.global::<{surface}>()")),
-            "`mounted_filter` must reach `{surface}` — `dispatch` routes to all nine surfaces \
-             on the way out and this owes all nine on the way back",
+            table.contains(&format!("ui.global::<{surface}>()")),
+            "`on_mounted_surface!` must reach `{surface}` — it is the page's whole routing \
+             table, so a missing arm silently drops that surface from every caller at once",
+        );
+    }
+
+    // The predicate that decides grid-versus-detail is the resolver's, asked once per
+    // dispatch, rather than a `get_*_id() >= 0` per arm.
+    assert!(
+        table.contains("surface.detail_open()") && !table.contains("_id() >= 0"),
+        "`on_mounted_surface!` must split on `MountedSurface::detail_open`, not on a \
+         per-arm id read — the id check is `my_library::detail_id_for`'s and is what the \
+         resolver exists to state once",
+    );
+
+    // Every consumer, so a fourth question about the mounted surface can't quietly grow a
+    // fourth copy of the table beside them.
+    for caller in ["pub fn dispatch(", "fn mounted_filter(", "fn rewind_grid_count("] {
+        let body = FILTER
+            .split_once(caller)
+            .and_then(|(_, rest)| rest.split_once("\n}\n"))
+            .map_or("", |(body, _)| body);
+        assert!(
+            body.contains("on_mounted_surface!("),
+            "`{caller}…` must route through `on_mounted_surface!` rather than re-spelling \
+             the nine arms",
         );
     }
 }
@@ -482,17 +527,20 @@ fn a_tab_pick_dispatches_only_into_a_tab_that_is_filtered() {
         .and_then(|(_, rest)| rest.split_once("\n}\n"))
         .map_or("", |(body, _)| body);
     assert!(!rewind.is_empty(), "`ui::my_library::filter` must expose `rewind_grid_count`");
-    for grid in ["Albums", "Artists", "Genres", "Playlists"] {
-        assert!(
-            rewind.contains(&format!("ui.global::<{grid}>().set_total_count(UNFETCHED_COUNT)")),
-            "`rewind_grid_count` must rewind `{grid}` — every grid tab's cache is wiped by \
-             its own leave, so every one of them takes the same `0` from the rebuild",
-        );
-    }
     assert!(
-        !rewind.contains("ui.global::<Tracks>()"),
-        "`rewind_grid_count` must leave Songs alone — its model survives the leave, so \
-         `refilter` re-derives a true count off a warm cache and there is nothing to take back",
+        rewind.contains("set_total_count(UNFETCHED_COUNT)"),
+        "`rewind_grid_count`'s grid arm must write the sentinel — every grid tab's cache is \
+         wiped by its own leave, so every one of them takes the same `0` from the rebuild",
+    );
+    // Songs shares the grid arm (it is a list, not a detail), so what excludes it is no
+    // longer an absent match arm but this guard — and `Tracks` really does carry a
+    // `total-count`, so dropping the guard compiles and silently rewinds a count that was
+    // never a lie.
+    assert!(
+        rewind.contains("MyLibraryTab::Songs") && rewind.contains("return;"),
+        "`rewind_grid_count` must bail on Songs before it dispatches — its model survives \
+         the leave, so `refilter` re-derives a true count off a warm cache and there is \
+         nothing to take back",
     );
 
     let handler = CALLBACKS

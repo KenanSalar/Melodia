@@ -13,14 +13,10 @@ const CALLBACKS: &str = include_str!("../mod.rs");
 const GUARD: &str = "let _write = persist.writer.lock();";
 const WRITE_CALL: &str = "library::settings::set_last_nav_index(";
 
-/// `mod.rs` less its comment lines — the assertions below turn on a call being
-/// *absent* from one half of the closure, and the prose either side names it.
+/// `mod.rs` less its comments — the assertions below turn on a call being *absent*
+/// from one half of the closure, and the prose either side names it.
 fn code() -> String {
-    CALLBACKS
-        .lines()
-        .filter(|line| !line.trim_start().starts_with("//"))
-        .collect::<Vec<_>>()
-        .join("\n")
+    crate::test_support::strip_line_comments(CALLBACKS)
 }
 
 /// Whether the guard bound at `guard` is still held once `needle` is reached — no

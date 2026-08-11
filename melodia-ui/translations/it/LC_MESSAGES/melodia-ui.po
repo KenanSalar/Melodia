@@ -748,9 +748,6 @@ msgstr "Descrizione (facoltativa)"
 msgid "Add a description…"
 msgstr "Aggiungi una descrizione…"
 
-msgid "Create Playlist"
-msgstr "Crea playlist"
-
 # Confirm-button label on the create-playlist dialog.
 msgid "Create"
 msgstr "Crea"

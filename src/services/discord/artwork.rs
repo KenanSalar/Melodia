@@ -117,3 +117,7 @@ pub(super) async fn resolve_album_cover(
         _ => None,
     }
 }
+
+#[cfg(test)]
+#[path = "tests/artwork_tests.rs"]
+mod tests;

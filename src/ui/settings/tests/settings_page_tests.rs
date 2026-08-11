@@ -50,17 +50,12 @@ const PAGES: [(&str, &str); 5] = [
 
 /// The `N` in `SettingsPage`'s `tab-count: N;`.
 fn declared_tab_count() -> Option<usize> {
-    GLOBAL
-        .split_once("out property <int> tab-count:")
-        .and_then(|(_, rest)| rest.split_once(';'))
-        .and_then(|(digits, _)| digits.trim().parse().ok())
+    crate::test_support::declared_tab_count(GLOBAL)
 }
 
 /// The body of an inline `name: [ … ];` array literal in `settings-view.slint`.
 fn array_body(marker: &str) -> Option<&'static str> {
-    VIEW.split_once(marker)
-        .and_then(|(_, rest)| rest.split_once("];"))
-        .map(|(body, _)| body)
+    crate::test_support::array_body(VIEW, marker)
 }
 
 /// `SettingsPage.tab-count` is the sole definition of how many tabs exist —

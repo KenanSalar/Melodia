@@ -231,7 +231,7 @@ const LIBRARY_PAGES: [LibraryPage; 5] = [
         label: "songs",
         global: "Tracks",
         source: include_str!("../../../melodia-ui/ui/globals/tracks.slint"),
-        lifecycle: include_str!("../tracks/callbacks.rs"),
+        lifecycle: include_str!("../tracks/callbacks/lifecycle.rs"),
         rewinds_on_leave: false,
     },
     LibraryPage {
