@@ -473,11 +473,6 @@ export component LibraryTabBand inherits Rectangle {
             if root.hero-shown: VerticalLayout {
                 alignment: start;
                 horizontal-stretch: 0;
-                // **The one fade in the band that is still an `opacity`**, and what makes
-                // it safe is that the tile is an image: it fills its box, so the morph's
-                // layer has no ink to crop the way the title block's had. The cost
-                // argument holds too — it settles at 1.0, so there is no layer at rest.
-                opacity: root.hero-t;
 
                 // Sized straight off `Theme.hero-artwork` rather than through an `in`
                 // property: the heroes are one band, and a per-view knob is how they
@@ -499,6 +494,21 @@ export component LibraryTabBand inherits Rectangle {
                     fallback-icon: root.fallback-icon;
                     tile-bg: root.tile-bg;
                     tile-icon-color: root.tile-icon-color;
+                    // **The tile fades through the component, not under an `opacity`
+                    // here**, which is the same rule the rest of the band follows and the
+                    // last half of it still spelling the exception. Wrapping this in an
+                    // `opacity` was safe on *ink* — an image fills its box, so the layer
+                    // had nothing to crop the way the title block's had — and that
+                    // argument was never the whole cost. `need_layer` bails at exactly 1.0
+                    // and on a lone childless child, and `ArtworkImage`'s root has
+                    // children, so the wrapper rendered the 140 px square to an offscreen
+                    // texture for the whole morph; and because this band clips against an
+                    // animating height, the layer's bounding rect rode a clip that moved
+                    // every frame, which is the branch in `render_layer` that allocates a
+                    // fresh GPU texture rather than reusing one. The float lands on the
+                    // fill and on the mounted `Image`, both of which take a canvas alpha
+                    // multiply instead. See `artwork-image.slint`'s `fade`.
+                    fade: root.hero-t;
                 }
             }
 

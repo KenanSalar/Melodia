@@ -35,6 +35,33 @@ export component ArtworkImage inherits Rectangle {
     // The shared default: a faintly accent-tinted square with an accent-coloured glyph.
     in property <brush> tile-bg: Theme.accent.with-alpha(0.15);
     in property <brush> tile-icon-color: Theme.accent;
+    // **Fades the whole tile, so a host never has to wrap one in an `opacity`.**
+    // `Opacity::need_layer` bails at exactly 1.0 and on a lone *childless* child, and this
+    // root is neither — it has children — so a host fading the tile from outside renders
+    // the whole 140 px square to an offscreen texture for the length of its animation.
+    // `LibraryTabBand` did, and its band clips against an animating height, which puts the
+    // layer's bounding rect on a clip that moves every frame: that is the branch in
+    // `render_layer` that allocates a *new* GPU texture rather than reusing one. Taking the
+    // float instead moves the fade onto the fill and onto whichever `Image` is mounted,
+    // each of which is childless and so costs a canvas alpha multiply rather than a layer.
+    //
+    // **`transparentize`, not `with-alpha`, on the fill** — the first multiplies the alpha
+    // where the second sets it, and `tile-bg` defaults to `Theme.accent.with-alpha(0.15)`,
+    // so the wrong one turns every coverless tile in the app fully opaque
+    // (`slint-pitfalls.md`, the `TabBarCell` entry, which paid for this once already).
+    //
+    // **And the fallback icons fade on `opacity` like the cover, not through `colorize`**,
+    // which is the tempting fold: `colorize` takes a brush, so alpha in it looks free. It
+    // isn't — the renderer caches the colorized result as its own texture
+    // (`ItemGraphicsCacheEntry::ColorizedImage`), so a brush that moves per frame
+    // re-renders that texture per frame, which is the cost this property exists to remove
+    // rather than relocate.
+    //
+    // The root's own rounded `clip: true` is a layer at all times and is untouched by any
+    // of this — non-rectangular clips render children into a texture regardless of fading,
+    // and that is what makes the tile a rounded tile. Defaulted `1.0`, where `need_layer`
+    // bails on its first condition, so the fourteen mounts that never fade are unaffected.
+    in property <float> fade: 1.0;
 
     // The one question the tile asks, stated once — the five fallback branches below each
     // used to spell its negation.
@@ -43,7 +70,7 @@ export component ArtworkImage inherits Rectangle {
     width: tile-size;
     height: tile-size;
     border-radius: tile-radius;
-    background: tile-bg;
+    background: tile-bg.transparentize(1.0 - root.fade);
     clip: true;
 
     if root.shows-cover: Image {
@@ -55,6 +82,7 @@ export component ArtworkImage inherits Rectangle {
         y: (parent.height - self.height) / 2;
         source: root.cover;
         image-fit: ImageFit.cover;
+        opacity: root.fade;
     }
 
     // **An SVG `Image`, not a Material Symbols glyph.** A glyph scales from its
@@ -72,6 +100,7 @@ export component ArtworkImage inherits Rectangle {
         height: parent.height * 0.55 * root.anim-scale;
         x: (parent.width - self.width) / 2;
         y: (parent.height - self.height) / 2;
+        opacity: root.fade;
     }
     if !root.shows-cover && root.fallback-icon == "person": Image {
         source: @image-url("../assets/icons/person.svg");
@@ -81,6 +110,7 @@ export component ArtworkImage inherits Rectangle {
         height: parent.height * 0.55 * root.anim-scale;
         x: (parent.width - self.width) / 2;
         y: (parent.height - self.height) / 2;
+        opacity: root.fade;
     }
     if !root.shows-cover && root.fallback-icon == "playlist": Image {
         source: @image-url("../assets/icons/playlist.svg");
@@ -90,6 +120,7 @@ export component ArtworkImage inherits Rectangle {
         height: parent.height * 0.55 * root.anim-scale;
         x: (parent.width - self.width) / 2;
         y: (parent.height - self.height) / 2;
+        opacity: root.fade;
     }
     if !root.shows-cover && root.fallback-icon == "theater_comedy": Image {
         source: @image-url("../assets/icons/theater-comedy.svg");
@@ -99,6 +130,7 @@ export component ArtworkImage inherits Rectangle {
         height: parent.height * 0.55 * root.anim-scale;
         x: (parent.width - self.width) / 2;
         y: (parent.height - self.height) / 2;
+        opacity: root.fade;
     }
     if !root.shows-cover && root.fallback-icon == "album": Image {
         source: @image-url("../assets/icons/album.svg");
@@ -108,6 +140,7 @@ export component ArtworkImage inherits Rectangle {
         height: parent.height * 0.55 * root.anim-scale;
         x: (parent.width - self.width) / 2;
         y: (parent.height - self.height) / 2;
+        opacity: root.fade;
     }
     // Browse's card view, whose grid mixes subfolders and files — a folder card has no
     // cover to have, so this is its resting state rather than a missing-artwork one.
@@ -119,5 +152,6 @@ export component ArtworkImage inherits Rectangle {
         height: parent.height * 0.55 * root.anim-scale;
         x: (parent.width - self.width) / 2;
         y: (parent.height - self.height) / 2;
+        opacity: root.fade;
     }
 }

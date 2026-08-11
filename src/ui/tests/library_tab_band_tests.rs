@@ -510,17 +510,33 @@ fn the_chip_strip_outlives_every_morph_it_is_painted_in() {
     );
 }
 
-/// One hero, one clock — and **every fade is alpha in a brush except the one with
-/// no ink to lose.** `Opacity::need_layer` bails at exactly 1.0, so an `opacity` on
-/// the text half was an offscreen texture for the length of the morph and nothing at
-/// rest. That texture is sized to its children's *geometry*, and a `Text`'s geometry
-/// is its line box rather than its ink: the shipped faces are patched to a 1.05 em
-/// box their outlines reach well past, so an Arabic hero title lost the hamza above
-/// its alifs and the dots under its final yas for the whole 400 ms and got them back
-/// on the frame `hero-t` landed on the literal `1.0`. The artwork tile is the one
-/// half that keeps `opacity` — an image fills its box, so the layer has nothing to
-/// crop. The chip strip could not take one at all, being mounted for the life of the
-/// band. Losing any of them leaves that half of the hero snapping while the rest fades.
+/// One hero, one clock — and **nothing that carries content fades on a plain
+/// `opacity: root.hero-t`.** `Opacity::need_layer` bails at exactly 1.0 and on a lone
+/// *childless* child, so such a fade is an offscreen texture for the length of the
+/// morph and nothing at rest — and both halves that used to take one cost it for a
+/// different reason. The text half's texture is sized to its children's *geometry*,
+/// and a `Text`'s geometry is its line box rather than its ink: the shipped faces are
+/// patched to a 1.05 em box their outlines reach well past, so an Arabic hero title
+/// lost the hamza above its alifs and the dots under its final yas for the whole
+/// 400 ms and got them back on the frame `hero-t` landed on the literal `1.0`.
+///
+/// **The artwork tile was exempted from that on ink and is no longer exempt on
+/// cost.** An image fills its box, so the layer had nothing to crop — true, and never
+/// the whole argument: `ArtworkImage`'s root has children, so the wrapper layered
+/// anyway, and this band clips against an animating height, which put the layer's
+/// bounding rect on a clip that moved every frame and so on `render_layer`'s
+/// allocate-a-fresh-texture branch. It takes the component's own `fade` float now,
+/// which lands on the fill and on the mounted childless `Image`. The chip strip could
+/// never have taken an `opacity` at all, being mounted for the life of the band.
+///
+/// **The back disc is the one `opacity` left in the file and is deliberately out of
+/// scope here**, which is why the needle is the exact spelling rather than a bare
+/// `opacity:`: it fades on `clamp(root.hero-t * 2.0, …)`, a doubled bias its scaling
+/// size obliges, and folding it into `IconButton` is a wider change across far more
+/// mounts than this one had. `the_back_disc_scales_with_the_slot_it_sits_in` owns it.
+///
+/// Losing any of these leaves that half of the hero snapping while the rest fades;
+/// putting the tile's back leaves it fading and paying for a texture to do it.
 #[test]
 fn the_hero_fades_on_the_morph_at_both_ends() {
     let code = code();
@@ -530,11 +546,21 @@ fn the_hero_fades_on_the_morph_at_both_ends() {
         .filter(|branch| branch.contains("opacity: root.hero-t;"))
         .count();
     assert_eq!(
-        fades, 1,
-        "the artwork tile is the only half that may fade on `opacity`, because it is the only \
-         one whose ink cannot leave its box. It still rides `hero-t` itself — the morph's only \
-         clock, so a second animation would need keeping in step and the reversal would stop \
-         being free"
+        fades, 0,
+        "no `if root.hero-shown:` half may fade on a plain `opacity: root.hero-t` — it costs an \
+         offscreen texture for the length of the morph, and on this band a freshly allocated one \
+         per frame. The artwork tile was the last of them and takes `ArtworkImage`'s `fade` now"
+    );
+
+    // The other half of that: the tile still *fades*, and still off the morph's only
+    // clock. A second animation here would need keeping in step, and the reversal would
+    // stop being free.
+    let tile = hero_branch(&code, "ArtworkImage {");
+    assert!(
+        tile.contains("fade: root.hero-t;"),
+        "the artwork tile must still fade, through `ArtworkImage`'s `fade` and off `hero-t` \
+         itself — dropping the binding leaves it snapping in at full opacity while the title \
+         beside it eases, which reads as the morph being broken rather than as a missing line"
     );
 
     // The text half, which used to be the second of those and is the reason the count
