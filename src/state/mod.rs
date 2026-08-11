@@ -281,9 +281,9 @@ impl AppState {
         label: &'static str,
         f: impl FnOnce(&AppState) -> Result<(), AppError> + Send + 'static,
     ) {
-        // `label` already names the setting, so one line here covers all
-        // eighteen call sites. On the way in, so a write that hangs still says
-        // what it was.
+        // `label` already names the setting, so one line here covers every
+        // caller — including the three settings-row helpers that pass one
+        // through. On the way in, so a write that hangs still says what it was.
         log::debug!("settings: {label}");
         let s = self.clone();
         self.runtime.spawn_blocking(move || {

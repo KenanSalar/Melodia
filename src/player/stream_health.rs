@@ -55,6 +55,11 @@ impl AudioStreamHealth {
             // Both mean the stream won't produce sound again on its own and both
             // reach the user the same way, so `StreamInvalidated` earns no
             // counter of its own.
+            //
+            // **Neither arm is reachable on Linux**: cpal's ALSA host folds every
+            // `alsa::Error` into `BackendSpecific`, so the same unplugged device
+            // arrives below, as an `other` count that never stops climbing.
+            // `tasks::audio_health` reads that rate as the second half of this.
             StreamError::DeviceNotAvailable | StreamError::StreamInvalidated => {
                 self.device_lost.store(true, Ordering::Relaxed);
             }

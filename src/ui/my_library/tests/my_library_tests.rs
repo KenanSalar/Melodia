@@ -99,6 +99,15 @@ fn tab_count_matches_the_tabs_slint_declares() {
         tabs.len(),
     );
 
+    // `tab_from_index` ends in a default arm, so a sixth tab without a variant
+    // resolves to `Songs` — and `ui::view_tag` logs it as `MyLibrary/Songs`,
+    // right-looking on the one tab nobody added a name for.
+    assert_eq!(
+        crate::ui::my_library::MyLibraryTab::ALL.len(),
+        count,
+        "`MyLibraryTab` needs one variant per tab the global declares"
+    );
+
     // The labels have to stay an inline `[@tr(…), …]` literal — a Rust-seeded
     // `[string]` renders untranslated — and the icons array has to match it 1:1.
     let labels = sheet_array("labels");

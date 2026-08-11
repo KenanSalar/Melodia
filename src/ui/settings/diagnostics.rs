@@ -22,11 +22,11 @@ use slint::{ComponentHandle, SharedString, Weak};
 
 use crate::error::{AppError, AppResult};
 use crate::state::AppState;
-use crate::{library, services};
 use crate::ui::shell::notifications::{
     NotificationParams, NotificationsUi, TOAST_AUTO_DISMISS_MS,
 };
 use crate::ui::{file_dialog, launcher};
+use crate::{library, services};
 use crate::{AppWindow, Settings};
 
 /// Routing key shared with the `Notifications.action` dispatcher.

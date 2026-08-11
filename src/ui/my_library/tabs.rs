@@ -58,6 +58,15 @@ pub enum MyLibraryTab {
     Playlists,
 }
 
+impl MyLibraryTab {
+    /// Every variant. [`tab_from_index`] ends in a default arm, so a tab added to
+    /// `my-library.slint` without one here resolves to `Songs` — which reads right
+    /// on the tab nobody named, and is what `ui::view_tag` would then log. Pinned
+    /// against `tab-count`.
+    pub const ALL: [Self; 5] =
+        [Self::Songs, Self::Albums, Self::Artists, Self::Genres, Self::Playlists];
+}
+
 /// Resolve a `MyLibrary.tab-idx` value against the global's own `tab-*` constants. UI
 /// thread only — that's where the global is reachable.
 pub fn tab_from_index(g: &MyLibrary<'_>, idx: i32) -> MyLibraryTab {

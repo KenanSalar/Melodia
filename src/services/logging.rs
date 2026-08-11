@@ -108,8 +108,13 @@ static HANDLE: OnceLock<LoggerHandle> = OnceLock::new();
 /// rather than looking like an install that never wrote any.
 static FILE_SINK_ERROR: OnceLock<String> = OnceLock::new();
 
-/// Whether `RUST_LOG` was set when [`install`] ran — the moment it was
-/// honoured. When it was, it owns the spec and [`set_verbose`] declines.
+/// Whether `RUST_LOG` was **set** when [`install`] ran. When it was, it owns the
+/// spec and [`set_verbose`] declines.
+///
+/// Presence rather than a successful parse: a malformed value falls back to
+/// [`spec_for`] and only the variable's own directives are lost, but it is still
+/// a developer saying which levels they want, and a GUI switch quietly taking
+/// the spec back from a typo is the surprising answer.
 static ENV_SPEC_WINS: OnceLock<bool> = OnceLock::new();
 
 /// Start logging. Call once, as early in `main` as a [`Paths`] exists.
