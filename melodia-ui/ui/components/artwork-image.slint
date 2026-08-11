@@ -36,12 +36,14 @@ export component ArtworkImage inherits Rectangle {
     in property <brush> tile-bg: Theme.accent.with-alpha(0.15);
     in property <brush> tile-icon-color: Theme.accent;
     // Fades the tile without a host `opacity`, which would layer — this root has children,
-    // so `need_layer` bails on neither condition. Three things a caller can get wrong, all
-    // argued in `slint-pitfalls.md`'s `opacity` entry: `transparentize` multiplies alpha
-    // where `with-alpha` sets it and `tile-bg` is translucent by default; the icons fade on
-    // `opacity` rather than through `colorize`, which caches a texture per brush value; and
-    // per-element alpha isn't pixel-identical to a group one where the fill and the image
-    // overlap, so the tile reads a few percent heavier mid-fade.
+    // so `need_layer` bails on neither condition. Three things an edit here can get wrong,
+    // the first and last argued in `slint-pitfalls.md`'s `opacity` entry: `transparentize`
+    // multiplies alpha where `with-alpha` sets it and `tile-bg` is translucent by default;
+    // the icons fade on `opacity` rather than through `colorize`, which the renderer caches
+    // per item as its own texture (`ItemGraphicsCacheEntry::ColorizedImage`), so a brush
+    // moving per frame re-renders it per frame; and per-element alpha isn't pixel-identical
+    // to a group one where the fill and the image overlap, so the tile reads a few percent
+    // heavier mid-fade.
     in property <float> fade: 1.0;
 
     // The one question the tile asks, stated once — the five fallback branches below each

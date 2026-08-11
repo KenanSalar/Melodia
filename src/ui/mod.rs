@@ -55,8 +55,9 @@ pub mod window_chrome;
 // three faked-placeholder inputs and the tooltip pill, the two pinned bands (the one
 // both mosaic pages wear and My Library's own), the blur stack under both of them, the
 // header row all three of those plus the Settings page share, and `IconButton`, whose
-// glyph has to place itself or a layout fold puts an animated press on every host's
-// layout cache. `scrollbar_tests` is the odd one out: it pins a *convention* across the
+// glyph sits outside the disc and places itself — nested it costs a layer per frame of a
+// band morph, centred by a layout it folds an animated press into every host's layout
+// cache. `scrollbar_tests` is the odd one out: it pins a *convention* across the
 // whole tree rather than one component's contract — as does `hero_blur_backdrop_tests`'
 // second half, which reaches the Now Playing view because that stack is the same three
 // layers written twice, `placeholder_tests`' two walks — one asking every page and every
