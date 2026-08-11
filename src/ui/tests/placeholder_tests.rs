@@ -262,7 +262,7 @@ fn the_volume_readouts_are_the_shared_tooltip() {
     }
 }
 
-/// **A page reaches the pill through `TooltipFrame`, never past it.**
+/// **A page or a shell container reaches the pill through `TooltipFrame`, never past it.**
 ///
 /// A top-layer tooltip — one whose host sits somewhere Slint paints over afterwards — is
 /// a frame tracking the host's rect with the pill inside it, and six of those had been
@@ -277,8 +277,13 @@ fn the_volume_readouts_are_the_shared_tooltip() {
 /// was the one site the extraction missed. A pin over a list is precisely the pin a
 /// missing entry walks past, which is also why the walk covers `layout/` and not only the
 /// pages: see [`FRAME_DIRS`] for which trees are in and why `components/` is not.
+///
+/// **The name says "shell" rather than "view" because `layout/` is neither.** Those four
+/// files are the chrome *around* every page — the rail, the transport bar, the shortcut
+/// scope, the resize ring — and a walk whose name promised only views is one a later
+/// reader would narrow back to `views/` on the grounds that it had overreached.
 #[test]
-fn no_view_mounts_a_bare_tooltip() {
+fn no_page_or_shell_mounts_a_bare_tooltip() {
     let offenders: Vec<String> = stripped_sources(UI_DIR, "slint", MIN_SLINT_SOURCES)
         .into_iter()
         .filter(|(path, src)| {
@@ -289,12 +294,12 @@ fn no_view_mounts_a_bare_tooltip() {
 
     assert!(
         offenders.is_empty(),
-        "a page may not mount `Tooltip` directly — a top-layer tooltip is \
-         `components/tooltip-frame.slint`'s `TooltipFrame`, which owns the `host-width` \
-         wiring and leaves the host only its two `absolute-position` deltas. If a mount \
-         genuinely needs what the component doesn't do — a live-width `x`, a `held` latch, \
-         a `gap` — it belongs beside `app-window.slint`'s `sidebar-tip` with the reason \
-         written down, not inline in a page:\n{}",
+        "nothing under `views/` or `layout/` may mount `Tooltip` directly — a top-layer \
+         tooltip is `components/tooltip-frame.slint`'s `TooltipFrame`, which owns the \
+         `host-width` wiring and leaves the host only its two `absolute-position` deltas. \
+         If a mount genuinely needs what the component doesn't do — a live-width `x`, a \
+         `held` latch, a `gap` — it belongs beside `app-window.slint`'s `sidebar-tip` with \
+         the reason written down, not inline in a page or a shell container:\n{}",
         offenders.join("\n")
     );
 }

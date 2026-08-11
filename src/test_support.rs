@@ -21,9 +21,12 @@ pub(crate) const UI_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/melodia-ui
 /// naming a third as where it came from. Loose on purpose — the tree is well past it, and
 /// a floor tight enough to matter would trip on an ordinary file deletion.
 ///
-/// **Not the `SRC_DIR` walks' floor**, which is 200 over a different and much larger tree
-/// (`file_dialog_tests`, `services::tests::mod_tests`). Those keep their own `MIN_SOURCES`
-/// and should: same name, same purpose, different corpus.
+/// **It is one of three floors in this file, and they bound three different corpora.**
+/// The `SRC_DIR` walks use 200 over the whole Rust tree (`file_dialog_tests`,
+/// `services::tests::mod_tests`, each keeping its own `MIN_SOURCES`), and
+/// [`MIN_UI_SOURCES`] is 180 over `UI_SRC_DIR` alone. Same name, same purpose, different
+/// trees — so a walk takes the one matching the root it passes, and none of the three is
+/// derivable from another.
 pub(crate) const MIN_SLINT_SOURCES: usize = 100;
 
 /// The root of the Rust tree, for the pins that have to answer "does anything in

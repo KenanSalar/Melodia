@@ -347,6 +347,28 @@ fn the_band_forwards_what_the_shared_row_publishes() {
     }
 }
 
+/// The band hands its tooltip rect *up*, and draws no pill of its own.
+///
+/// `tab_search_header_tests` pins the same thing one level down, on the row this band
+/// mounts, and the forwarding test above pins that the anchors reach the sheet. What
+/// neither covers is the band growing a pill *beside* those forwards — which compiles,
+/// keeps every `tip-*` alias resolving, and paints two tooltips: the sheet's frame at the
+/// top layer and this one under the scroll body that occludes it.
+///
+/// That is the whole reason the anchors are published rather than drawn, and it is not
+/// covered by `placeholder_tests::no_page_or_shell_mounts_a_bare_tooltip` either: that
+/// walk deliberately excludes `components/`, where an in-tree mount is the default. A
+/// shared band is the one kind of component where it isn't.
+#[test]
+fn the_band_publishes_its_tooltip_anchor_rather_than_drawing_one() {
+    assert!(
+        !code().contains("Tooltip {"),
+        "`LibraryTabBand` must not mount the tooltip itself — the sheet's own frame is \
+         declared after the scroll body precisely because anything the band draws is \
+         painted over by it, so a pill here is both invisible and a duplicate"
+    );
+}
+
 /// **The one that costs most to get wrong.** Slint reports a component root's
 /// bound dimension as both `min` and `max`, so an animated `height` here would
 /// put the *window's* own minimum height on the morph: dragging the bottom edge
