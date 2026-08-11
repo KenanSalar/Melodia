@@ -19,7 +19,7 @@ rather than here.**
 | `.claude/rules/discord.md` | Rich Presence — the pure model, the hand-rolled IPC, external artwork URLs |
 | `.claude/rules/updater.md` | install methods, download/resume, manifest signing, the release matrix |
 | `.claude/rules/visualizer.md` | the visualizer's UI half — arming, the tick's gates, the strip and its pickers |
-| `.claude/rules/*.md` (rest) | per-crate best practices (tokio, sqlx, slint, rodio-symphonia, lofty, rayon, serde, blake3, rust-performance) plus `slint-pitfalls` and `unsafe-rust` |
+| `.claude/rules/*.md` (rest) | per-crate best practices (tokio, sqlx, slint, rodio-symphonia, lofty, rayon, serde, blake3, rust-performance) plus `slint-pitfalls`, `unsafe-rust` and `code-style` (how a change and its comments should read, tree-wide) |
 
 Every one is **path-scoped** by a `paths:` frontmatter glob and loads when Claude *reads* a
 matching file — a grep hit or a clippy failure won't pull one in. That asymmetry decides what

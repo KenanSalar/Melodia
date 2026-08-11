@@ -53,20 +53,24 @@ pub mod window_chrome;
 
 // Source pins for shared components with no Rust module of their own — the
 // three faked-placeholder inputs and the tooltip pill, the two pinned bands (the one
-// both mosaic pages wear and My Library's own), the blur stack under both of them, and
-// the header row all three of those plus the Settings page share. `scrollbar_tests` is
-// the odd one out: it pins a *convention* across the whole tree rather than one
-// component's contract — as does `hero_blur_backdrop_tests`' second half, which reaches
-// the Now Playing view because that stack is the same three layers written twice,
-// `placeholder_tests`' two walks — one asking every page and every shell container
-// whether it hand-rolled a tooltip frame instead of mounting the shared one, the other
-// asking every shared band whether it drew a pill where it should have published an
-// anchor — and `nav_transition_tests`, which asks every mount in the tree whether it wrote
+// both mosaic pages wear and My Library's own), the blur stack under both of them, the
+// header row all three of those plus the Settings page share, and `IconButton`, whose
+// glyph has to place itself or a layout fold puts an animated press on every host's
+// layout cache. `scrollbar_tests` is the odd one out: it pins a *convention* across the
+// whole tree rather than one component's contract — as does `hero_blur_backdrop_tests`'
+// second half, which reaches the Now Playing view because that stack is the same three
+// layers written twice, `placeholder_tests`' two walks — one asking every page and every
+// shell container whether it hand-rolled a tooltip frame instead of mounting the shared
+// one, the other asking every shared band whether it drew a pill where it should have
+// published an anchor — and `nav_transition_tests`, which asks every mount whether it wrote
 // its own enter edge. That last one has a Rust module (`nav_transition`), but what it pins
 // is the Slint half of the same contract, so it sits with the other tree walks.
 #[cfg(test)]
 #[path = "tests/hero_blur_backdrop_tests.rs"]
 mod hero_blur_backdrop_tests;
+#[cfg(test)]
+#[path = "tests/icon_button_tests.rs"]
+mod icon_button_tests;
 #[cfg(test)]
 #[path = "tests/library_tab_band_tests.rs"]
 mod library_tab_band_tests;

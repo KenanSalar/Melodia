@@ -69,16 +69,8 @@ export component MacOsTrafficLight inherits Rectangle {
             x: (parent.width - self.width) / 2;
             y: (parent.height - self.height) / 2;
             icon-color: root.glyph-color;
-            // **Through `MaterialIcon`'s own `fade`, not an `opacity` here.**
-            // `Opacity::need_layer` bails only at exactly `1.0` and on a lone
-            // *childless* child, and this root wraps a `Text` — so an `opacity`
-            // put the glyph behind an offscreen texture at every value but full,
-            // which on a control resting at `0.0` is its whole life. The layer is
-            // small and reused, so the cost is not the point; the crop is. It is
-            // sized to child geometry, and a `Text`'s geometry is the line box this
-            // component deliberately collapses to the em box, so the fade cut
-            // whatever ink the glyph puts on that edge. Nothing overlaps inside the
-            // icon, so the alpha itself lands identically.
+            // `fade`, never `opacity` — see the property. It matters most here: this
+            // rests at `0.0`, so the layer and the ink crop would be its whole life.
             fade: root.cluster-hovered ? 1.0 : 0.0;
             animate fade { duration: Theme.dur-fast; easing: ease-in-out; }
         }

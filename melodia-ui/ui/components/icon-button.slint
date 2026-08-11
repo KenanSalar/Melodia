@@ -35,25 +35,13 @@ export component IconButton inherits Rectangle {
     // Lets a host gate its own visuals on *either* hover: a higher-z TouchArea captures
     // the pointer and flips the outer one's `has-hover` false — see `EntityCard`.
     out property <bool> has-hover: touch.has-hover;
-    // **Fades the button without the host wrapping it in an `opacity`.** This root has
-    // children, so `need_layer` bails on neither of its conditions and a host fade
-    // rendered the whole button to an offscreen texture — `LibraryTabBand`'s back disc
-    // did, for the first half of every morph, on a band whose animating clip put that
-    // texture on `render_layer`'s allocate-a-fresh-one branch. Routed here it lands on the
-    // childless `disc` and on `MaterialIcon`'s own `fade`, neither of which layers.
-    //
-    // Deliberately **not** folded into `idle-bg` / `hover-bg` / `idle-fg`: those feed the
-    // two `animate` blocks below, and an animated binding restarts on dependency dirtiness
-    // rather than on a value change, so a per-frame fade would stall both crossfades for
-    // the length of it. That is `TabBarCell`'s round-two failure, and its escape hatch —
-    // "no pointer is on the control while it animates" — fails here for the same kind of
-    // reason it failed there: you *click the back disc* to close a detail, so the pointer
-    // is on it for the whole collapse. Defaulted `1.0`, so the other mounts are untouched.
-    //
-    // The trade is `artwork-image.slint`'s: two per-element alphas are only pixel-identical
-    // to one group opacity where nothing overlaps, and the glyph overlaps the disc — so the
-    // button reads a shade heavier mid-fade than the wrapper did. That is the honest price
-    // of not allocating a texture rather than something to chase.
+    // Fades the button without a host `opacity`, which would layer — this root has
+    // children. Lands on the childless `disc` and on `MaterialIcon`'s own `fade`, and
+    // deliberately not in `idle-bg` / `hover-bg` / `idle-fg`: those feed the two `animate`
+    // blocks below, and an animated binding restarts on dependency dirtiness, so a
+    // per-frame fade would stall both crossfades. Per-element alpha reads a shade heavier
+    // mid-fade than the group opacity did, the glyph overlapping the disc. Argued in
+    // `slint-pitfalls.md`'s `opacity` entry.
     in property <float> fade: 1.0;
 
     callback clicked();
@@ -73,14 +61,10 @@ export component IconButton inherits Rectangle {
 
     // The root keeps a fixed layout slot so siblings never reflow; the disc scales.
     //
-    // **The glyph is a sibling rather than a child, and that is what keeps `fade` free.**
-    // `Opacity::need_layer` bails on a lone *childless* child, so an `opacity` on this
-    // element costs a canvas alpha multiply only while it has none — with the glyph nested
-    // inside, the same line rendered the whole disc to an offscreen texture. The two are
-    // both centred on the root and the glyph carries its own `press-scale`, so moving it
-    // out changes no geometry; declaration order keeps it painted on top. There is no
-    // `clip` here to care either way — the disc is a rounded *fill*, not a rounded clip, so
-    // nothing on this path allocates a layer at all.
+    // **The glyph is a sibling rather than a child, and that is what keeps `fade` free** —
+    // `need_layer` bails on a lone *childless* child, so nesting it here would put the
+    // whole disc behind a texture. Both are centred on the root and the glyph carries its
+    // own `press-scale`, so the split changes no geometry.
     disc := Rectangle {
         width: root.diameter * root.press-scale;
         height: root.diameter * root.press-scale;
@@ -93,10 +77,8 @@ export component IconButton inherits Rectangle {
                 ? root.hover-bg
                 : (root.active ? root.active-bg : root.idle-bg));
 
-        // **`fade` reaches the alpha here and never the brush above.** Folded into
-        // `background` it would be a dependency of that binding, and an animated binding
-        // restarts on dependency dirtiness rather than on a value change — so a host
-        // fading per frame would restart this crossfade per frame and stall it.
+        // Here rather than folded into `background`, which would make it a dependency of
+        // the animated binding below and restart the crossfade every frame.
         opacity: root.fade;
 
         animate background { duration: Theme.dur-fast; easing: ease-in-out; }
