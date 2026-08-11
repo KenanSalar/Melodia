@@ -13,6 +13,19 @@ use crate::config::Paths;
 /// The root of the Slint tree, for the pins that walk it rather than naming files.
 pub(crate) const UI_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/melodia-ui/ui");
 
+/// The vacuity floor for a walk over [`UI_DIR`], so a traversal that silently found
+/// nothing can't pass every pin standing on it.
+///
+/// Beside the directory it bounds rather than at each caller: the four pins that walk
+/// this corpus each carried their own copy of the number, two of them under a comment
+/// naming a third as where it came from. Loose on purpose — the tree is well past it, and
+/// a floor tight enough to matter would trip on an ordinary file deletion.
+///
+/// **Not the `SRC_DIR` walks' floor**, which is 200 over a different and much larger tree
+/// (`file_dialog_tests`, `services::tests::mod_tests`). Those keep their own `MIN_SOURCES`
+/// and should: same name, same purpose, different corpus.
+pub(crate) const MIN_SLINT_SOURCES: usize = 100;
+
 /// The root of the Rust tree, for the pins that have to answer "does anything in
 /// the tree do X" rather than "do these named files do X" — the native-dialog
 /// check being the first, since what it guards against is a *new* call site

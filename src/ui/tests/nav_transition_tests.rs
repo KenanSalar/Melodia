@@ -20,10 +20,7 @@
 //! — a Slint-side mount is lateral by construction, since the two that aren't (a
 //! drill in, a back out) are Rust's and go through `ui::nav_transition`.
 
-use crate::test_support::{UI_DIR, stripped_sources};
-
-/// A floor, so a walk that silently found nothing can't pass vacuously.
-const MIN_SOURCES: usize = 100;
+use crate::test_support::{MIN_SLINT_SOURCES, UI_DIR, stripped_sources};
 
 /// The nine writes as of this pin — six closers (five Now Playing entry points plus
 /// the sidebar's, which dismisses it on any nav click) and three index flips. A
@@ -58,7 +55,7 @@ fn mounts_a_view(line: &str) -> bool {
 fn every_slint_side_mount_writes_its_own_enter_edge() {
     let mut found = 0usize;
 
-    for (path, src) in stripped_sources(UI_DIR, "slint", MIN_SOURCES) {
+    for (path, src) in stripped_sources(UI_DIR, "slint", MIN_SLINT_SOURCES) {
         // Comment-stripped leaves the line structure with blank tails, so the
         // lookback counts *code* lines — otherwise a long comment block above a
         // write pushes its own mark out of the window.

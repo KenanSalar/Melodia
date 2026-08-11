@@ -3,6 +3,7 @@
 //! the identical `row_match::Needle::contains` walk over a single name.
 
 use super::*;
+use crate::test_support::{MIN_SLINT_SOURCES, UI_DIR, stripped_sources};
 
 /// Minimal `PlaylistStats` builder — only the fields the grid filter / sort
 /// read matter. Regular playlist, so `smart_criteria` never parses.
@@ -86,32 +87,29 @@ fn compute_indices_default_sort_is_most_recently_updated_first() {
 /// dialog, two headings, and two msgids translated separately in all six catalogues,
 /// with nothing failing.
 ///
-/// **The other eleven `Dialog.kind` writes stay inline and stay out of this.** A kind
-/// with one caller earns nothing by moving: its populate block is already stated once,
-/// where it is used. The two `smart-playlist-editor` sites share a `kind` and nothing
-/// else — Edit Rules / Save over an existing list, New Smart Playlist / Create — so they
-/// are deliberately absent too.
+/// **The remaining fifteen `Dialog.kind` writes, across fourteen kinds, stay inline and
+/// stay out of this.** Thirteen of those kinds have one caller each and earn nothing by
+/// moving: the populate block is already stated once, where it is used. The fourteenth is
+/// `smart-playlist-editor`, which is the interesting one — two sites, and deliberately
+/// absent anyway, because they share a `kind` and nothing else: Edit Rules / Save over an
+/// existing list, New Smart Playlist / Create. Two callers is the trigger for folding only
+/// when the two are meant to be the same dialog.
 #[test]
 fn every_multi_caller_playlist_dialog_opens_through_its_own_function() {
     const OWNER: &str = "globals/dialog.slint";
     const FOLDED_KINDS: [&str; 3] = ["create-playlist", "rename-playlist", "delete-playlist"];
 
-    let offenders: Vec<String> = crate::test_support::stripped_sources(
-        crate::test_support::UI_DIR,
-        "slint",
-        // The `scrollbar_tests.rs` floor, over the same corpus.
-        100,
-    )
-    .into_iter()
-    .filter(|(path, _)| !path.ends_with(OWNER))
-    .flat_map(|(path, src)| {
-        FOLDED_KINDS
-            .iter()
-            .filter(|kind| src.contains(&format!("Dialog.kind = \"{kind}\"")))
-            .map(|kind| format!("{path}: Dialog.kind = \"{kind}\""))
-            .collect::<Vec<_>>()
-    })
-    .collect();
+    let offenders: Vec<String> = stripped_sources(UI_DIR, "slint", MIN_SLINT_SOURCES)
+        .into_iter()
+        .filter(|(path, _)| !path.ends_with(OWNER))
+        .flat_map(|(path, src)| {
+            FOLDED_KINDS
+                .iter()
+                .filter(|kind| src.contains(&format!("Dialog.kind = \"{kind}\"")))
+                .map(|kind| format!("{path}: Dialog.kind = \"{kind}\""))
+                .collect::<Vec<_>>()
+        })
+        .collect();
 
     assert!(
         offenders.is_empty(),

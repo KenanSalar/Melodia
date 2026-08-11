@@ -57,10 +57,12 @@ pub mod window_chrome;
 // the header row all three of those plus the Settings page share. `scrollbar_tests` is
 // the odd one out: it pins a *convention* across the whole tree rather than one
 // component's contract — as does `hero_blur_backdrop_tests`' second half, which reaches
-// the Now Playing view because that stack is the same three layers written twice, and
-// `nav_transition_tests`, which asks every mount in the tree whether it wrote its own
-// enter edge. That one has a Rust module (`nav_transition`), but what it pins is the
-// Slint half of the same contract, so it sits with the other tree walks.
+// the Now Playing view because that stack is the same three layers written twice,
+// `placeholder_tests`' own last test, which asks every page whether it hand-rolled a
+// tooltip frame instead of mounting the shared one, and `nav_transition_tests`, which
+// asks every mount in the tree whether it wrote its own enter edge. That last one has a
+// Rust module (`nav_transition`), but what it pins is the Slint half of the same
+// contract, so it sits with the other tree walks.
 #[cfg(test)]
 #[path = "tests/hero_blur_backdrop_tests.rs"]
 mod hero_blur_backdrop_tests;

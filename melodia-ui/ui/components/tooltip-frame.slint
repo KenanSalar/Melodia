@@ -22,8 +22,9 @@ import { Tooltip, TooltipSide } from "tooltip.slint";
 // **Not every top-layer tooltip belongs here.** `app-window.slint`'s `sidebar-tip` is the
 // deliberate exception: its `x` comes off the live rail width so the frame rides the
 // collapse animation, it owns a `held` latch across the gaps between rail rows, and it is
-// the only one passing `gap`. All three are real behaviour rather than boilerplate, and
-// none of the six that route through here has any of them.
+// the only *frame* passing `gap` — the two volume readouts pass one too, but they anchor
+// to a point rather than to a box and are not frames at all. All three are real behaviour
+// rather than boilerplate, and none of the six that route through here has any of them.
 export component TooltipFrame inherits Rectangle {
     in property <string> label;
     in property <bool> shown;

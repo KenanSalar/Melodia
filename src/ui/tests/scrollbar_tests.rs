@@ -16,7 +16,7 @@
 //! borrow the opt-out of the `TrackList` nested inside it, which is exactly the
 //! arrangement every composite view has.
 
-use crate::test_support::{UI_DIR, normalize_ws as normalized, stripped_sources};
+use crate::test_support::{MIN_SLINT_SOURCES, UI_DIR, normalize_ws as normalized, stripped_sources};
 
 /// The elements that own a scrollbar-policy pair. `Flickable` is deliberately
 /// absent: it has no scrollbars to turn off.
@@ -50,12 +50,9 @@ const SCROLLBAR_COMPONENTS: [&str; 2] =
 /// separates.
 const TRACK_LIST_V_METRICS: [&str; 2] = ["body-y", "body-height"];
 
-/// A floor, so a walk that silently found nothing can't pass vacuously.
-const MIN_SOURCES: usize = 100;
-
 /// The whole tree, comment-stripped, paired with the file it came from.
 fn sources() -> Vec<(String, String)> {
-    stripped_sources(UI_DIR, "slint", MIN_SOURCES)
+    stripped_sources(UI_DIR, "slint", MIN_SLINT_SOURCES)
 }
 
 /// The first index at or after `from` holding a non-whitespace byte.
