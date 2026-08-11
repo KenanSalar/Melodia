@@ -332,3 +332,110 @@ fn a_prewarm_outliving_the_leave_keeps_nothing() -> TestResult {
     );
     Ok(())
 }
+
+/// Each fetch is armed wherever the cache it fills is emptied and disarmed
+/// wherever it is filled — the `RecentlyPlayedUi::grid_dirty` discipline, over
+/// two flags because this page has two gated fetches.
+///
+/// Three obligations, each a bug on the way in. The fetching branch **consumes**
+/// its flag (seeded `true`, so a boot onto a tab otherwise pays for its own
+/// fetch twice) and marks the *other*, which is the whole record that a tick
+/// went by. The section wipe re-arms both beside the caches it just cleared,
+/// rather than leaving it to the leave's own `mark_dirty` two files away. And
+/// each fetch re-arms its own on either way of storing nothing — a failed query
+/// or a leave landing mid-flight — because the tab pick consumes the flag
+/// *before* spawning, so nothing else would.
+#[test]
+fn each_gated_fetch_is_armed_beside_the_cache_it_fills() {
+    const LIFECYCLE: &str = include_str!("../callbacks/lifecycle.rs");
+    const HANDLE: &str = include_str!("../mod.rs");
+    const GRIDS_FETCH: &str = include_str!("../grids/fetch.rs");
+
+    let kick = LIFECYCLE
+        .split_once("async fn kick_full_refresh(")
+        .and_then(|(_, rest)| rest.split_once("\n}"))
+        .map(|(body, _)| body)
+        .unwrap_or_default();
+    for consumed in ["fav_ui.take_songs_dirty();", "fav_ui.take_grids_dirty();"] {
+        assert!(
+            kick.contains(consumed),
+            "`kick_full_refresh`'s fetching branch must consume its own flag — leaving it set \
+             makes the next pick re-query a cache this call just filled ({consumed})"
+        );
+    }
+    for marked in ["fav_ui.mark_songs_dirty();", "fav_ui.mark_grids_dirty();"] {
+        assert!(
+            kick.contains(marked),
+            "and it must mark the branch it skipped, or the pick that mounts that tab has no \
+             record that a tick went by ({marked})"
+        );
+    }
+
+    let release = HANDLE
+        .split_once("pub fn release_section_state(")
+        .and_then(|(_, rest)| rest.split_once("\n    }"))
+        .map(|(body, _)| body)
+        .unwrap_or_default();
+    for marked in ["self.mark_songs_dirty();", "self.mark_grids_dirty();"] {
+        assert!(
+            release.contains(marked),
+            "`release_section_state` must re-arm both flags beside the caches it wipes ({marked})"
+        );
+    }
+
+    // Two ways of storing nothing per fetch: a failed query and a leave landing
+    // mid-flight. `refresh_tracks` asks the section guard twice — before and
+    // after its cover prewarm — so it carries three marks in all.
+    assert_eq!(
+        SONGS.matches("mark_songs_dirty()").count(),
+        3,
+        "`refresh_tracks` must re-arm on the failed query and on both section bails"
+    );
+    assert_eq!(
+        GRIDS_FETCH.matches("mark_grids_dirty()").count(),
+        2,
+        "`refresh_grids` must re-arm on a failed query and on the section bail"
+    );
+}
+
+/// A grid pick that spawns a fetch takes back the count its synchronous apply
+/// just wrote.
+///
+/// The apply walks the cache the skipped tick left empty, so the `0` it writes
+/// is the one value meaning "there is nothing here" — `GridEmptyState` over a
+/// library that has plenty, for the length of the query plus the cover-decode
+/// burst it awaits. Songs owes no equivalent and that asymmetry is the point:
+/// `Favorites.track-count` is written by `refresh_hero`, which is never gated.
+#[test]
+fn a_grid_pick_rewinds_the_count_it_could_not_answer() {
+    let pick = SUBVIEWS
+        .split_once("g.on_tab_changed(move |tab| {")
+        .and_then(|(_, rest)| rest.split_once("\n        });"))
+        .map(|(body, _)| body)
+        .unwrap_or_default();
+
+    let (before_fetch, after_fetch) = pick
+        .split_once("if needs_fetch {")
+        .unwrap_or_default();
+    assert!(
+        before_fetch.contains("fu.take_songs_dirty()")
+            && before_fetch.contains("fu.take_grids_dirty()"),
+        "the pick must consume the entering tab's flag before the applies — the answer is what \
+         decides whether the count they write stands for anything"
+    );
+    assert!(
+        before_fetch.contains("apply_filtered_grids_now(&ui, &fu)"),
+        "and the apply must come first, so a warm cache still paints on this tick"
+    );
+    for rewound in ["set_most_played_count(UNFETCHED_COUNT)", "set_artist_count(UNFETCHED_COUNT)"] {
+        assert!(
+            after_fetch.contains(rewound),
+            "a grid pick that spawns a fetch must rewind that tab's count ({rewound})"
+        );
+    }
+    assert!(
+        !after_fetch.contains("set_track_count(UNFETCHED_COUNT)"),
+        "Songs must not rewind: its count comes from the ungated `refresh_hero`, so it is \
+         answered on every tab either way"
+    );
+}

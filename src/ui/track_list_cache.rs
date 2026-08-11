@@ -38,10 +38,13 @@
 //! `Mutex<Arc<…>>`: a reader takes a single lock, clones one `Arc` and is
 //! guaranteed a consistent set. The three-lock version this replaced could
 //! be swapped between locks by a concurrent fetch and needed a `.get(i)` on
-//! every index to stay panic-safe. The two key vectors are `Arc`s *inside*
-//! `CacheData` for the copy-on-write reason above — they are never patched,
-//! so cloning the struct bumps their refcounts instead of duplicating a
-//! `Box<str>` per row.
+//! every index to stay panic-safe. **All four vectors are `Arc`s *inside*
+//! `CacheData`** for the copy-on-write reason above, so cloning the struct bumps
+//! four refcounts instead of duplicating a `Box<str>` per row. Three of them are
+//! never patched at all; `rows` is, and holds its own `Arc` so the operations
+//! that *don't* touch it — above all a re-sort, which replaces `order` and
+//! nothing else — stop paying for the row copy `Arc::make_mut` would otherwise
+//! make on their behalf.
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -189,7 +192,15 @@ impl TrackSortFields for SortRow<'_> {
 pub struct CacheData {
     /// Display rows in fetch order — never reordered, only patched in place
     /// by the single-row favourite / rating helpers.
-    rows: Vec<UiTrackListRow>,
+    ///
+    /// Behind its own `Arc` for the same copy-on-write reason as the two key
+    /// vectors, and the case that forced it is [`TrackListCache::resort`]:
+    /// a header click replaces `order` and nothing else, but `Arc::make_mut` on
+    /// the enclosing [`CacheData`] clones **every** field it finds shared — so
+    /// a re-sort landing while a background fetch held a snapshot duplicated the
+    /// whole row vector to move a permutation. The single-row patches keep the
+    /// copy-on-write they always had; it is simply theirs alone now.
+    rows: Arc<Vec<UiTrackListRow>>,
     /// Filter keys, aligned with `rows`.
     search: Arc<Vec<RowSearchKey>>,
     /// Sort keys, aligned with `rows`.
@@ -201,7 +212,7 @@ pub struct CacheData {
 impl CacheData {
     fn empty() -> Self {
         Self {
-            rows: Vec::new(),
+            rows: Arc::new(Vec::new()),
             search: Arc::new(Vec::new()),
             sort: Arc::new(Vec::new()),
             order: Arc::new(Vec::new()),
@@ -214,14 +225,34 @@ impl CacheData {
     /// increment per `SharedString`, no allocation. This is what runs per
     /// throttled keystroke.
     pub fn visible(&self, needle: &Needle) -> Vec<UiTrackListRow> {
-        self.walk(needle).map(|(_, row)| row.clone()).collect()
+        let mut out = Vec::with_capacity(self.reserve_for(needle));
+        out.extend(self.walk(needle).map(|(_, row)| row.clone()));
+        out
     }
 
     /// Ids of the rows passing `needle`, in display order — what a row
     /// activation hands to `player_play_tracks` so the queue becomes exactly
     /// the list the user is looking at.
     pub fn ids_filtered(&self, needle: &Needle) -> Vec<i64> {
-        self.walk(needle).map(|(i, _)| self.sort[i].id).collect()
+        let mut out = Vec::with_capacity(self.reserve_for(needle));
+        out.extend(self.walk(needle).map(|(i, _)| self.sort[i].id));
+        out
+    }
+
+    /// Exact capacity for an unfiltered walk, none for a filtered one.
+    ///
+    /// A `Filter` adapter reports a `size_hint` lower bound of `0`, so building
+    /// straight off [`Self::walk`] starts at zero capacity and grows
+    /// geometrically — roughly `log2(n)` reallocations and about one extra full
+    /// copy of the result. On an empty needle the answer is exactly `rows`, and
+    /// that is the case every cold fetch and every library tick takes, over the
+    /// largest list in the app.
+    ///
+    /// A real needle gets nothing on purpose: no cheap thing predicts the
+    /// survivor count, and reserving a library-sized `Vec` to put three rows in
+    /// it is the worse of the two wrongs.
+    fn reserve_for(&self, needle: &Needle) -> usize {
+        if needle.is_empty() { self.rows.len() } else { 0 }
     }
 
     /// Unique artwork paths in **display** order, capped — so that on a
@@ -328,7 +359,7 @@ impl TrackListCache {
         order: Vec<usize>,
     ) {
         *self.data.lock() = Arc::new(CacheData {
-            rows,
+            rows: Arc::new(rows),
             search: Arc::new(search),
             sort: Arc::new(sort),
             order: Arc::new(order),
@@ -338,6 +369,19 @@ impl TrackListCache {
     /// Recompute only the display permutation — a header click costs no DB
     /// round trip and no key rebuild, the `(row, key)` set being unchanged by
     /// a re-order.
+    ///
+    /// **And no row copy either, which is what `rows` being an `Arc` buys.**
+    /// `Arc::make_mut` clones every field of a shared [`CacheData`], so while
+    /// `rows` was a bare `Vec` this duplicated the entire row set — the largest
+    /// allocation the app makes — whenever a reader held a snapshot, which a
+    /// background `fetch_and_apply` does across its whole cover prewarm. Now the
+    /// clone is four refcount bumps and the permutation is the only thing built.
+    ///
+    /// The lock is still held across [`compute_order`], deliberately: the caller
+    /// is the UI thread, so this parks background workers rather than the event
+    /// loop, and computing outside it would let a `store` land in the gap and
+    /// leave a permutation indexing rows that no longer exist — a panic on the
+    /// next filter walk, in exchange for latency nobody can observe.
     pub fn resort(&self, field: &str, dir: &str) -> Arc<CacheData> {
         let mut guard = self.data.lock();
         let data = Arc::make_mut(&mut *guard);
@@ -376,7 +420,7 @@ impl TrackListCache {
             return;
         };
         let data = Arc::make_mut(&mut *guard);
-        data.rows.remove(at);
+        Arc::make_mut(&mut data.rows).remove(at);
         Arc::make_mut(&mut data.search).remove(at);
         Arc::make_mut(&mut data.sort).remove(at);
         let order = Arc::make_mut(&mut data.order);
@@ -395,7 +439,7 @@ impl TrackListCache {
         let Some(at) = guard.sort.iter().position(|k| k.id == id) else {
             return;
         };
-        edit(&mut Arc::make_mut(&mut *guard).rows[at]);
+        edit(&mut Arc::make_mut(&mut Arc::make_mut(&mut *guard).rows)[at]);
     }
 }
 

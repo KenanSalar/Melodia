@@ -23,7 +23,10 @@
 //! re-`to_lowercase()` both operands on every one of its `O(n log n)`
 //! comparisons. `field` is fixed for the whole sort, so branching on it
 //! once and picking the key type per branch is cheaper than a uniform key
-//! enum.
+//! enum. **Per branch is what makes the natural-order arm able to drop its
+//! tie-breaker**: each arm is its own `sort_by_cached_key` call with its own
+//! key type, so the one arm whose tie-breaker duplicates its primary can key
+//! on a bare `String` while the other six keep a pair. See [`sort_rows`].
 //!
 //! **What the comparator reads is a trait, not a row type**, because the two
 //! views with the largest lists no longer retain DB rows to hand it — they
@@ -118,6 +121,36 @@ where
     R: Fn(&T) -> &F,
     S: Fn(&T) -> String,
 {
+    sort_rows(items, field, dir, row, secondary, false);
+}
+
+/// [`sort_track_rows_by`] plus the one thing only [`compute_track_order`] can
+/// say about itself.
+///
+/// `secondary_is_natural_key` marks a caller whose tie-breaker *is* the value
+/// the natural-order arm already compares on, so that arm keys on it once
+/// instead of twice. `(k, k)` and `k` are the same comparison — this is
+/// arithmetic, not an assumption about the input — and the second copy cost a
+/// `String` per row on the default sort, which is the one every cold fetch and
+/// every re-sort back to title order takes. Only that arm can drop it: the
+/// other six compare a different primary and genuinely need the tie-breaker.
+///
+/// A private flag rather than a public parameter because there is exactly one
+/// caller that may pass `true`, and it lives in this file — a fifth argument on
+/// the shared entry point would put the question in front of four callers who
+/// have no way to answer it wrong.
+fn sort_rows<T, F, R, S>(
+    items: &mut [T],
+    field: &str,
+    dir: &str,
+    row: R,
+    secondary: S,
+    secondary_is_natural_key: bool,
+) where
+    F: TrackSortFields + ?Sized,
+    R: Fn(&T) -> &F,
+    S: Fn(&T) -> String,
+{
     let desc = dir == "desc";
 
     // `track_number`: disc ASC, track ASC/DESC (NULL/0 → sentinel), then
@@ -150,6 +183,9 @@ where
             items.sort_by_cached_key(|t| (row(t).duration_ms(), secondary(t)));
         }
         // "title" and any unrecognised field → natural-order `sort_key`.
+        _ if secondary_is_natural_key => {
+            items.sort_by_cached_key(|t| row(t).sort_key().to_ascii_lowercase());
+        }
         _ => items.sort_by_cached_key(|t| (row(t).sort_key().to_ascii_lowercase(), secondary(t))),
     }
     if desc {
@@ -178,14 +214,19 @@ pub fn sort_track_list_rows(rows: &mut [RsTrackListRow], field: &str, dir: &str)
 /// Generic over the element so a caller holding rows and sort keys in two
 /// parallel `Vec`s can zip a slice of borrowing views and pass that,
 /// rather than the sort growing a second spelling for the pair.
+///
+/// Its tie-breaker being `sort_key` is what lets it take [`sort_rows`]'
+/// `secondary_is_natural_key` arm: on the default sort the two halves of the
+/// key are the same string, so only one is built.
 pub fn compute_track_order<F: TrackSortFields>(rows: &[F], field: &str, dir: &str) -> Vec<usize> {
     let mut indexed: Vec<(usize, &F)> = rows.iter().enumerate().collect();
-    sort_track_rows_by(
+    sort_rows(
         &mut indexed,
         field,
         dir,
         |t| t.1,
         |t| t.1.sort_key().to_ascii_lowercase(),
+        true,
     );
     indexed.into_iter().map(|(i, _)| i).collect()
 }

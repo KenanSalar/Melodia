@@ -102,14 +102,24 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, rp_ui: &Arc<RecentlyPlayedU
     }
 
     // --- Filter ---------------------------------------------------
+    // One needle, two caches — and they are walked on different threads because
+    // they are bounded by different things. Songs is the 200-row recency set, so
+    // its walk stays here. Most Played is whatever `get_most_played` returned,
+    // uncapped and library-wide, so its walk goes to a worker and comes back
+    // through `generation` to prove it still answers the needle on screen.
     {
+        let s = state.clone();
         let ru = rp_ui.clone();
         let weak = weak.clone();
         g.on_filter_changed(move |text| {
-            let Some(ui) = weak.upgrade() else { return };
-            recently_played_ui_mod::set_filter(&ru, &text);
+            let generation = recently_played_ui_mod::set_filter(&ru, &text);
             recently_played_ui_mod::apply_filtered_tracks(&ru, &weak);
-            recently_played_ui_mod::apply_filtered_grid_now(&ui, &ru);
+
+            let ru = ru.clone();
+            let weak = weak.clone();
+            s.runtime.spawn(async move {
+                recently_played_ui_mod::apply_filtered_grid_settled(&ru, &weak, generation);
+            });
         });
     }
 

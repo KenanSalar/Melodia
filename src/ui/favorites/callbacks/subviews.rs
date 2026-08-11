@@ -14,7 +14,7 @@ use crate::ui::callbacks::macros::spawn_logged;
 use crate::ui::callbacks::{cross_tab_nav, next_sort, persist_view_sort};
 use crate::ui::favorites::{self as favorites_ui_mod, FavoritesUi};
 use crate::ui::model_diff::clear_vec_model;
-use crate::ui::tab_bar::should_announce_warm;
+use crate::ui::tab_bar::{UNFETCHED_COUNT, should_announce_warm};
 use crate::ui::track_list_view::view_id;
 use crate::{AppWindow, Favorites, TrackListRow as UiTrackListRow};
 
@@ -93,6 +93,15 @@ pub(super) fn wire(
             fu.set_active_tab(entering);
             favorites_ui_mod::set_filter(&fu, "");
 
+            // Asked *before* the applies below, because they are what has to
+            // know: the answer decides whether the counts they write stand for
+            // anything. Each tab's fetch only runs while that tab is mounted, so
+            // entering one is where a tick skipped on another gets paid for; the
+            // flag is what keeps a pick back and forth from re-querying a cache
+            // nothing has invalidated. See `lifecycle::kick_full_refresh`.
+            let songs = entering == favorites_ui_mod::FavoritesTab::Songs;
+            let needs_fetch = if songs { fu.take_songs_dirty() } else { fu.take_grids_dirty() };
+
             // The entering tier was cleared when its tab was last left, so the
             // cards mount cold: hold the lookups at cache-only until the
             // prewarm below reports back, or each visible card drags a 448 px
@@ -117,10 +126,49 @@ pub(super) fn wire(
             // favourite is one `TrackListRow` of `SharedString`s pinned behind
             // a tab the user has left. `apply_filtered_tracks` refuses to
             // refill it while that's true, so nothing puts them back.
-            if entering == favorites_ui_mod::FavoritesTab::Songs {
+            if songs {
                 favorites_ui_mod::apply_filtered_tracks_now(&ui, &fu);
             } else {
                 clear_vec_model::<UiTrackListRow>(&g.get_tracks(), "favorites: leave songs tab");
+            }
+
+            // Spawned *after* the synchronous applies above, so whatever the
+            // cache already holds paints on this tick and the fetch refreshes
+            // behind it.
+            //
+            // **And a grid pick has to take its count back, because the cache it
+            // just walked is the one this fetch is about to fill.** A `0` there
+            // is the one value meaning "there is nothing here" — it mounts
+            // `GridEmptyState` over a library that has plenty, for the length of
+            // the query plus the cover-decode burst it awaits.
+            // `UNFETCHED_COUNT` matches neither `== 0` nor `> 0`, so the panel
+            // stays quiet until the fetch answers. Songs owes no equivalent:
+            // `Favorites.track-count` is written by `refresh_hero`, which is
+            // never gated, so it is answered on every tab either way.
+            if needs_fetch {
+                match entering {
+                    favorites_ui_mod::FavoritesTab::MostPlayed => {
+                        g.set_most_played_count(UNFETCHED_COUNT);
+                    }
+                    favorites_ui_mod::FavoritesTab::Artists => {
+                        g.set_artist_count(UNFETCHED_COUNT);
+                    }
+                    favorites_ui_mod::FavoritesTab::Songs => {}
+                }
+                let s_fetch = s.clone();
+                let fu_fetch = fu.clone();
+                let weak_fetch = weak.clone();
+                s.runtime.spawn(async move {
+                    if songs {
+                        if let Err(e) =
+                            favorites_ui_mod::refresh_tracks(&s_fetch, &fu_fetch, &weak_fetch).await
+                        {
+                            log::warn!("favorites::refresh_tracks: {e}");
+                        }
+                    } else {
+                        favorites_ui_mod::refresh_grids(&s_fetch, &fu_fetch, &weak_fetch).await;
+                    }
+                });
             }
 
             let fu_covers = fu.clone();

@@ -185,26 +185,52 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, fav_ui: &Arc<FavoritesUi>) 
     }
 }
 
-/// Fetch hero stats + the two grid tabs + the Songs list and apply each
-/// as it lands. Concurrent — `tokio::join!` runs all three in
-/// parallel. `refresh_grids` already logs its own per-tab errors
-/// (because Most Played + Artists are applied independently), so it
-/// returns `()`; the other two return `AppResult<()>` and have their
-/// errors logged here.
+/// Fetch the hero stats plus **whichever tab is mounted**, concurrently.
+///
+/// `refresh_hero` always runs: it answers the count, the running time and the
+/// mosaic, which the band states on all three tabs, and it is self-contained —
+/// `get_favorite_stats` carries its own `artwork_paths` and reads neither grid
+/// cache. The other two are gated, because the three tabs are mutually exclusive
+/// `if`s and everything downstream already knows it: `build_filtered_tracks`
+/// returns `None` off Songs and `build_filtered_grids` materialises only the
+/// mounted tab. Ungated, a grid tab still paid `get_favorite_tracks`, a sort over
+/// every favourite and a conversion of the lot into rows that reached nothing —
+/// once per finished track, for as long as the page was up.
+///
+/// **The fetching branch consumes its flag**, which is what stops a boot onto a
+/// tab paying for its own fetch twice; the branch that skips *sets* the other, so
+/// the pick that mounts it knows a tick went by. `refresh_grids` is one fetch for
+/// two tabs, hence two flags rather than three.
+///
+/// `refresh_grids` already logs its own per-tab errors (Most Played and Artists
+/// are applied independently), so it returns `()`; the other two return
+/// `AppResult<()>` and have their errors logged here.
 async fn kick_full_refresh(
     state: &AppState,
     fav_ui: &Arc<FavoritesUi>,
     weak: &slint::Weak<AppWindow>,
 ) {
-    let (h, _grids, t) = tokio::join!(
-        favorites_ui_mod::refresh_hero(state, fav_ui, weak, /* animate */ true),
-        favorites_ui_mod::refresh_grids(state, fav_ui, weak),
-        favorites_ui_mod::refresh_tracks(state, fav_ui, weak),
-    );
-    if let Err(e) = h {
-        log::warn!("favorites::refresh_hero: {e}");
-    }
-    if let Err(e) = t {
+    let hero = favorites_ui_mod::refresh_hero(state, fav_ui, weak, /* animate */ true);
+
+    let tracks = if fav_ui.active_tab() == favorites_ui_mod::FavoritesTab::Songs {
+        fav_ui.take_songs_dirty();
+        fav_ui.mark_grids_dirty();
+        let (h, t) = tokio::join!(hero, favorites_ui_mod::refresh_tracks(state, fav_ui, weak));
+        if let Err(e) = h {
+            log::warn!("favorites::refresh_hero: {e}");
+        }
+        t
+    } else {
+        fav_ui.take_grids_dirty();
+        fav_ui.mark_songs_dirty();
+        let (h, ()) = tokio::join!(hero, favorites_ui_mod::refresh_grids(state, fav_ui, weak));
+        if let Err(e) = h {
+            log::warn!("favorites::refresh_hero: {e}");
+        }
+        Ok(())
+    };
+
+    if let Err(e) = tracks {
         log::warn!("favorites::refresh_tracks: {e}");
     }
 }

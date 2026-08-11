@@ -98,7 +98,13 @@ pub async fn refresh_tracks(
     // Fetched in the query's fixed `sort_key` order — display order is derived
     // in memory below, so the cold fetch and a later header click share the
     // one `compute_track_order` code path.
-    let rows = library::favorites::get_favorite_tracks(state).await?;
+    // Both ways of storing nothing re-arm the flag, because the tab pick
+    // *consumes* it before spawning this: without the re-arm a failed query
+    // leaves the sentinel with no answer coming, and the pick that would have
+    // re-asked believes the cache is current.
+    let rows = library::favorites::get_favorite_tracks(state)
+        .await
+        .inspect_err(|_| fav_ui.mark_songs_dirty())?;
 
     // A leave that landed while the query was in flight has already wiped
     // `tracks_all` and emptied the model, so everything below would undo that
@@ -106,6 +112,7 @@ pub async fn refresh_tracks(
     // result: every leave sets `mark_dirty`, so the next enter re-fetches. Same
     // guard, same placement, as `grids::fetch::refresh_grids`.
     if !fav_ui.section_active() {
+        fav_ui.mark_songs_dirty();
         return Ok(());
     }
 
@@ -134,6 +141,7 @@ pub async fn refresh_tracks(
     // again — after the slow part, because before it the leave hasn't happened
     // yet.
     if !fav_ui.section_active() {
+        fav_ui.mark_songs_dirty();
         return Ok(());
     }
 

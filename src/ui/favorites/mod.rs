@@ -49,7 +49,7 @@ mod state;
 mod tabs;
 
 use std::sync::Arc;
-use std::sync::atomic::{AtomicU8, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 
 use crate::entities::track::FavoriteStats;
 use crate::media::cover_thumbs::CoverThumbs;
@@ -138,6 +138,27 @@ pub struct FavoritesUi {
     /// only one grid is ever mounted, so warming both is half the decodes
     /// and twice the resident buffers for nothing.
     active_tab: AtomicU8,
+    /// [`SectionState`]'s dirty flag one level down, per fetch rather than per
+    /// tab — the `RecentlyPlayedUi::grid_dirty` shape, one page over.
+    ///
+    /// **The page has one `SectionActiveGate` for three mutually exclusive
+    /// tabs**, so without these `kick_full_refresh` ran all three fetches on
+    /// every tick regardless of what was mounted. Everything downstream already
+    /// knew better — `build_filtered_tracks` returns `None` off Songs,
+    /// `build_filtered_grids` materialises only the mounted tab — so with a grid
+    /// tab up, `refresh_tracks` was still fetching every favourite, sorting it
+    /// and converting the lot into rows that reached nothing, once per finished
+    /// track. Two flags rather than three because `refresh_grids` is one fetch
+    /// feeding both grid tabs.
+    ///
+    /// What makes gating safe here is that `hero_chips::favorites_chips` is a
+    /// per-tab match: each tab's chips come from the fetch that tab needs, and
+    /// `refresh_hero` — which answers the count, the running time and the mosaic
+    /// on every tab — is never gated.
+    ///
+    /// Both seeded `true`, so the first pick onto a tab always fetches.
+    songs_dirty: AtomicBool,
+    grids_dirty: AtomicBool,
 }
 
 impl FavoritesUi {
@@ -159,6 +180,8 @@ impl FavoritesUi {
             )),
             section: SectionState::new(),
             active_tab: AtomicU8::new(FavoritesTab::Songs.as_code()),
+            songs_dirty: AtomicBool::new(true),
+            grids_dirty: AtomicBool::new(true),
         }
     }
 
@@ -191,6 +214,28 @@ impl FavoritesUi {
     /// `library_changed_tx` tick arrives while the view is hidden.
     pub fn take_dirty(&self) -> bool {
         self.section.take_dirty()
+    }
+
+    /// Remember that a refresh tick reached the page while the Songs tab was not
+    /// the one mounted. See [`Self::songs_dirty`].
+    pub fn mark_songs_dirty(&self) {
+        self.songs_dirty.store(true, Ordering::Release);
+    }
+
+    /// Atomically read-and-clear it — `true` iff the Songs cache has missed a
+    /// tick since the last fetch.
+    pub fn take_songs_dirty(&self) -> bool {
+        self.songs_dirty.swap(false, Ordering::AcqRel)
+    }
+
+    /// The two grid tabs' equivalent. One flag, because one fetch fills both.
+    pub fn mark_grids_dirty(&self) {
+        self.grids_dirty.store(true, Ordering::Release);
+    }
+
+    /// Atomically read-and-clear it.
+    pub fn take_grids_dirty(&self) -> bool {
+        self.grids_dirty.swap(false, Ordering::AcqRel)
     }
 
     /// Serialize a bulk-state wipe against a data write. Held only around
@@ -273,6 +318,12 @@ impl FavoritesUi {
             *self.inner.most_played_totals.lock() = MostPlayedTotals::default();
             self.inner.applied_selection.lock().clear();
         }
+        // Re-armed beside the caches they guard rather than left to the leave's
+        // own `mark_dirty` two files away — every one of the three sets above is
+        // now empty, so whichever tab is entered next owes a fetch whatever the
+        // flags happened to hold when the section went away.
+        self.mark_songs_dirty();
+        self.mark_grids_dirty();
         crate::tasks::heap_trim::trim();
     }
 

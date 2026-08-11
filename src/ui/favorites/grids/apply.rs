@@ -141,7 +141,10 @@ pub(super) fn build_filtered_grids(fav_ui: &FavoritesUi) -> PreparedGrids {
 /// dropped: [`write_grid`] is a `set_vec` reset, so it tears down and rebuilds
 /// every mounted card, and a `stats_changed` tick reaches both tabs while only
 /// Most Played is ranked by play count.
-fn write_filtered_grids(ui: &AppWindow, fav_ui: &FavoritesUi, prepared: &PreparedGrids) {
+/// Takes `prepared` **by value**, so the rows move into the per-row models
+/// rather than being cloned into them. The three early returns below drop them
+/// instead, which is what happened to them anyway.
+fn write_filtered_grids(ui: &AppWindow, fav_ui: &FavoritesUi, prepared: PreparedGrids) {
     if !fav_ui.section_active() {
         return;
     }
@@ -153,7 +156,7 @@ fn write_filtered_grids(ui: &AppWindow, fav_ui: &FavoritesUi, prepared: &Prepare
         return;
     }
 
-    let signature = grid_signature(tab, columns, mounted_content(tab, prepared));
+    let signature = grid_signature(tab, columns, mounted_content(tab, &prepared));
     if fav_ui.state().last_grid_signature.lock().replace(signature) == Some(signature) {
         return;
     }
@@ -172,7 +175,7 @@ fn write_filtered_grids(ui: &AppWindow, fav_ui: &FavoritesUi, prepared: &Prepare
     // chunks to nothing.
     write_grid(
         &g.get_most_played_rows(),
-        chunk_entity_rows(&prepared.most_played, columns),
+        chunk_entity_rows(prepared.most_played, columns),
         "Favorites.most-played-rows",
     );
 
@@ -183,7 +186,7 @@ fn write_filtered_grids(ui: &AppWindow, fav_ui: &FavoritesUi, prepared: &Prepare
         .collect();
     write_grid(
         &g.get_artist_rows(),
-        chunk_entity_rows(&artist_rows, columns),
+        chunk_entity_rows(artist_rows, columns),
         "Favorites.artist-rows",
     );
 }
@@ -204,7 +207,7 @@ pub(super) fn apply_filtered_grids(
     let weak = weak.clone();
     let _ = slint::invoke_from_event_loop(move || {
         let Some(ui) = weak.upgrade() else { return };
-        write_filtered_grids(&ui, &fav_ui, &prepared);
+        write_filtered_grids(&ui, &fav_ui, prepared);
         if should_announce_warm(warmed_tab, fav_ui.section_active(), fav_ui.active_tab()) {
             mark_covers_warm(&ui);
         }
@@ -219,7 +222,7 @@ pub(super) fn apply_filtered_grids(
 /// `GridEmptyState` is suppressed by a count that is already non-zero. Mirrors
 /// `ui::albums::grid::rebuild_grid`, which is a plain call for the same reason.
 pub fn apply_filtered_grids_now(ui: &AppWindow, fav_ui: &FavoritesUi) {
-    write_filtered_grids(ui, fav_ui, &build_filtered_grids(fav_ui));
+    write_filtered_grids(ui, fav_ui, build_filtered_grids(fav_ui));
 }
 
 /// Let the mounted grid's card bindings start decoding on a miss again — see

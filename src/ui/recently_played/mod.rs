@@ -40,7 +40,7 @@ mod state;
 mod tabs;
 
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU8, AtomicU64, Ordering};
 
 use crate::media::cover_thumbs::CoverThumbs;
 use crate::ui::hero_folds::{HeroFold, MostPlayedTotals};
@@ -61,7 +61,9 @@ pub use covers::tune_cache_for_display;
 // Reached only from this slice's own `callbacks/`, which used to live two
 // modules away, plus `ui::hero_chips` for the tab enum and the nav index.
 // `pub(super)` is `pub(in crate::ui)` here, which is exactly that reach.
-pub(super) use grid::{apply_filtered_grid_now, mark_covers_warm, refresh_grid};
+pub(super) use grid::{
+    apply_filtered_grid_now, apply_filtered_grid_settled, mark_covers_warm, refresh_grid,
+};
 pub(super) use rows::to_slint_most_played_row;
 pub(super) use selection::{clear_selection, handle_select_row};
 pub(super) use songs::{
@@ -128,6 +130,17 @@ pub struct RecentlyPlayedUi {
     /// that mounts the grid knows to fetch. Seeded `true`, the first pick
     /// therefore always fetching.
     grid_dirty: AtomicBool,
+    /// Bumped by every write to the filter needle, so a grid build running off
+    /// the UI thread can tell whether it is still answering the current one.
+    ///
+    /// The Most Played walk is the one filter pass in the app that is uncapped
+    /// and library-wide, so it is built on a worker rather than on the event
+    /// loop — and the moment a build outlives its keystroke, two of them can
+    /// finish in either order and the loser would paint a needle the user has
+    /// moved past. `write_filtered_grid`'s own signature check can't see it: a
+    /// stale set has a *different* signature, which is exactly what it reads as
+    /// "this needs applying". The `BrowseUi::fetch_token` shape, one view over.
+    filter_generation: AtomicU64,
 }
 
 impl RecentlyPlayedUi {
@@ -146,6 +159,7 @@ impl RecentlyPlayedUi {
             section: SectionState::new(),
             active_tab: AtomicU8::new(RecentlyPlayedTab::Songs.as_code()),
             grid_dirty: AtomicBool::new(true),
+            filter_generation: AtomicU64::new(0),
         }
     }
 
@@ -187,6 +201,18 @@ impl RecentlyPlayedUi {
     /// missed a tick since the last fetch.
     pub fn take_grid_dirty(&self) -> bool {
         self.grid_dirty.swap(false, Ordering::AcqRel)
+    }
+
+    /// Record that the needle moved, and hand back the token a deferred build
+    /// carries so it can tell whether it is still the current answer.
+    pub(super) fn bump_filter_generation(&self) -> u64 {
+        self.filter_generation.fetch_add(1, Ordering::AcqRel).wrapping_add(1)
+    }
+
+    /// The token a deferred grid build has to still match to be allowed to
+    /// write. See [`Self::filter_generation`].
+    pub(super) fn filter_generation(&self) -> u64 {
+        self.filter_generation.load(Ordering::Acquire)
     }
 
     /// Serialize a bulk-state wipe against a data write. Held only around
