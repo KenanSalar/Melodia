@@ -20,6 +20,15 @@
 //! These live here rather than beside one component because the defect is one
 //! copy-pasted block in three files with no Rust owner between them — the
 //! reason `src/ui/tab_bar.rs` holds `tab-bar.slint`'s invariants.
+//!
+//! **The last two pins are corpus walks rather than checks on a named file**, which is
+//! why this module is listed with the tree walks in `src/ui/mod.rs` as well as with the
+//! component contracts. `no_page_or_shell_mounts_a_bare_tooltip` asks every page and
+//! every shell container whether it hand-rolled a tooltip frame instead of mounting
+//! `TooltipFrame`; `no_shared_band_draws_its_own_tooltip` asks every shared band whether
+//! it drew a pill where it should have published an anchor. Both replaced a written
+//! inventory that had already missed a site, and both carry a floor over their own
+//! subtree — a walk whose filter stops matching reports a clean tree, not a broken walk.
 
 // Every file here documents its own invariants at length, which is exactly the text a
 // `contains` would otherwise match — so each pin reads the source stripped of comments and
@@ -41,9 +50,27 @@ use crate::test_support::{
 ///
 /// `components/` stays out — an in-tree mount is the *default* there, and `IconButton`,
 /// `PillButton`, the traffic lights, the swatch dots and the two volume readouts all
-/// annotate a host they sit inside. `app-window.slint` is neither tree, and holds the one
-/// documented exception.
+/// annotate a host they sit inside. [`BAND_DIR`] is the one subtree where it isn't.
+/// `app-window.slint` is neither tree, and holds the one documented exception.
 const FRAME_DIRS: [&str; 2] = ["views/", "layout/"];
+
+/// The shared banners, relative to [`UI_DIR`] — the one corner of `components/` where an
+/// in-tree tooltip is a defect rather than the default.
+///
+/// A band is mounted *into* a page and its host's scroll body is declared after it, so
+/// anything it draws is painted over. That is why all three publish `tip-x` … `tip-visible`
+/// and let the page hang the frame: `LibraryTabBand`, `MosaicTabHero`, and the
+/// `TabSearchHeader` row all three of them mount. `MosaicHeroTile` is here too and needs no
+/// argument of its own — it is a tile inside a band, one level further from the frame.
+///
+/// **The boundary is the directory, not the concept**, and the difference is reachable:
+/// `components/hero-blur-backdrop.slint` and `components/hero-chip-strip.slint` are hero
+/// parts that sit at the `components/` root, so the "one level further from the frame"
+/// argument covers them exactly as it covers `MosaicHeroTile` — and neither walk does.
+/// Nothing is wrong today, because neither is a band and `MetaChip` is decorative with no
+/// `TouchArea` at all. A chip that grows a hover affordance wants moving under `hero/`
+/// rather than a third walk.
+const BAND_DIR: &str = "components/hero/";
 
 const SEARCH_BAR: &str = include_str!("../../../melodia-ui/ui/components/search-bar.slint");
 const LABELED_INPUT: &str = include_str!("../../../melodia-ui/ui/components/labeled-input.slint");
@@ -284,14 +311,26 @@ fn the_volume_readouts_are_the_shared_tooltip() {
 /// reader would narrow back to `views/` on the grounds that it had overreached.
 #[test]
 fn no_page_or_shell_mounts_a_bare_tooltip() {
-    let offenders: Vec<String> = stripped_sources(UI_DIR, "slint", MIN_SLINT_SOURCES)
-        .into_iter()
-        .filter(|(path, src)| {
-            FRAME_DIRS.iter().any(|dir| path.starts_with(dir)) && src.contains("Tooltip {")
-        })
-        .map(|(path, _)| path)
-        .collect();
+    let mut pages = 0usize;
+    let mut offenders = Vec::new();
 
+    for (path, src) in stripped_sources(UI_DIR, "slint", MIN_SLINT_SOURCES) {
+        if !FRAME_DIRS.iter().any(|dir| path.starts_with(dir)) {
+            continue;
+        }
+        pages += 1;
+        if src.contains("Tooltip {") {
+            offenders.push(path);
+        }
+    }
+
+    // A floor over the *subset*, which `MIN_SLINT_SOURCES` can't stand in for: it bounds
+    // the whole tree, so renaming `views/` — or dropping an entry from `FRAME_DIRS` —
+    // leaves this filter matching nothing while the walk still sees every file it asked
+    // for. An empty offender list is then indistinguishable from a clean tree. Loose on
+    // purpose: 54 files today, and a floor tight enough to matter would trip on an
+    // ordinary page deletion.
+    assert!(pages >= 30, "only {pages} files under {FRAME_DIRS:?} — the walk is broken");
     assert!(
         offenders.is_empty(),
         "nothing under `views/` or `layout/` may mount `Tooltip` directly — a top-layer \
@@ -300,6 +339,54 @@ fn no_page_or_shell_mounts_a_bare_tooltip() {
          If a mount genuinely needs what the component doesn't do — a live-width `x`, a \
          `held` latch, a `gap` — it belongs beside `app-window.slint`'s `sidebar-tip` with \
          the reason written down, not inline in a page or a shell container:\n{}",
+        offenders.join("\n")
+    );
+}
+
+/// **A shared band publishes its tooltip rect and draws no pill of its own.**
+///
+/// The mirror of the walk above, one level in. A band is mounted *into* a page, and the
+/// page declares its scroll body afterwards — so a pill the band draws is painted over by
+/// the very content the frame exists to clear, while the page's own frame draws the real
+/// one at the top layer. A band that grows a pill beside its `tip-*` forwards compiles,
+/// keeps every alias resolving, and paints two tooltips of which one is invisible.
+///
+/// **One walk rather than an assertion per band**, which is what this replaced: the rule
+/// was stated three times — once in `library_tab_band_tests`, once in
+/// `mosaic_tab_hero_tests`, once inside `tab_search_header_tests`' anchor pin — over three
+/// of the four files in [`BAND_DIR`]. Three copies of one rule is the shape this tree
+/// keeps folding, and a per-band test is a list: it cannot cover the band nobody has
+/// written, which is the same argument [`FRAME_DIRS`] makes one directory out.
+///
+/// The three per-band tests each said *which* frame occludes them — the sheet's, or each
+/// page's. That detail is the bands' own and stays in their files, on the forwarding pins
+/// that assert the anchors reach a host at all; what is shared is only "draws none".
+#[test]
+fn no_shared_band_draws_its_own_tooltip() {
+    let mut bands = 0usize;
+    let mut offenders = Vec::new();
+
+    for (path, src) in stripped_sources(UI_DIR, "slint", MIN_SLINT_SOURCES) {
+        if !path.starts_with(BAND_DIR) {
+            continue;
+        }
+        bands += 1;
+        if src.contains("Tooltip {") {
+            offenders.push(path);
+        }
+    }
+
+    // The subset floor its sibling above now carries too, and for the same reason: a
+    // renamed `components/hero/` would sail past the tree-wide one while this filter
+    // quietly matched nothing. Exact rather than loose — the directory is the four files
+    // [`BAND_DIR`] names, and a fifth band is precisely what this walk exists to reach.
+    assert!(bands >= 4, "only {bands} files under {BAND_DIR} — the walk is broken");
+    assert!(
+        offenders.is_empty(),
+        "a shared band must publish `tip-x` … `tip-visible` and let its host hang the \
+         frame, never mount `Tooltip` itself — the host declares its scroll body after the \
+         band, so a pill here is painted over *and* duplicated by the frame the host \
+         already draws:\n{}",
         offenders.join("\n")
     );
 }

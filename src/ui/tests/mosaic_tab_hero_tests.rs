@@ -11,7 +11,7 @@
 //! file can answer — that the band still mounts that row, hands it hero tiers, and
 //! forwards what its two pages read back.
 
-use crate::test_support::{binding_value, strip_line_comments};
+use crate::test_support::binding_value;
 
 const HERO: &str = include_str!("../../../melodia-ui/ui/components/hero/mosaic-tab-hero.slint");
 
@@ -134,28 +134,6 @@ fn the_band_forwards_what_the_shared_row_publishes() {
             "the band's `{prop}` must offset the header's own by their `absolute-position` delta"
         );
     }
-}
-
-/// The band hands its tooltip rect *up*, and draws no pill of its own.
-///
-/// `tab_search_header_tests` pins the same thing one level down, on the row this band
-/// mounts, and the forwarding test above pins that the anchors reach both pages. What
-/// neither covers is the band growing a pill *beside* those forwards — which compiles,
-/// keeps every `tip-*` alias resolving, and paints two tooltips: each page's frame at the
-/// top layer and this one under the scroll body that occludes it.
-///
-/// That is the whole reason the anchors are published rather than drawn, and it is not
-/// covered by `placeholder_tests::no_page_or_shell_mounts_a_bare_tooltip` either: that
-/// walk deliberately excludes `components/`, where an in-tree mount is the default. A
-/// shared band is the one kind of component where it isn't.
-#[test]
-fn the_band_publishes_its_tooltip_anchor_rather_than_drawing_one() {
-    assert!(
-        !strip_line_comments(HERO).contains("Tooltip {"),
-        "`MosaicTabHero` must not mount the tooltip itself — each page's own frame is \
-         declared after the scroll body precisely because anything the band draws is \
-         painted over by it, so a pill here is both invisible and a duplicate"
-    );
 }
 
 /// The banner's height is derived, not a literal, so growing the artwork or the bar
