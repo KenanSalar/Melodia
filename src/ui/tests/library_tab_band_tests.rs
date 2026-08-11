@@ -529,11 +529,16 @@ fn the_chip_strip_outlives_every_morph_it_is_painted_in() {
 /// which lands on the fill and on the mounted childless `Image`. The chip strip could
 /// never have taken an `opacity` at all, being mounted for the life of the band.
 ///
-/// **The back disc is the one `opacity` left in the file and is deliberately out of
-/// scope here**, which is why the needle is the exact spelling rather than a bare
-/// `opacity:`: it fades on `clamp(root.hero-t * 2.0, …)`, a doubled bias its scaling
-/// size obliges, and folding it into `IconButton` is a wider change across far more
-/// mounts than this one had. `the_back_disc_scales_with_the_slot_it_sits_in` owns it.
+/// **The back disc is the one `opacity` left in the file, and that is why the needle
+/// is the exact spelling rather than a bare `opacity:`** — it fades on
+/// `clamp(root.hero-t * 2.0, …)`, a doubled bias its scaling size obliges, and
+/// `IconButton` cannot take the tile's cure regardless — it owns two `animate`s over
+/// the brushes a `fade` would have to fold into, and an animated binding restarts on
+/// dirtiness rather than on a value change.
+/// It is out of reach of the *count* rather than out of scope: the third assertion
+/// below pins the bias, and its **geometry** is
+/// `the_back_disc_scales_with_the_slot_it_sits_in`'s, which says in as many words that
+/// fading the disc is not the same fix as scaling it.
 ///
 /// Losing any of these leaves that half of the hero snapping while the rest fades;
 /// putting the tile's back leaves it fading and paying for a texture to do it.
@@ -563,8 +568,8 @@ fn the_hero_fades_on_the_morph_at_both_ends() {
          beside it eases, which reads as the morph being broken rather than as a missing line"
     );
 
-    // The text half, which used to be the second of those and is the reason the count
-    // above is 1. A layer crops what it composites, so the fade lives in the brushes.
+    // The text half, which used to be one of those and is why the count above was ever
+    // non-zero. A layer crops what it composites, so the fade lives in the brushes.
     let title = hero_branch(&code, "+ root.title;");
     assert!(
         !title.is_empty(),

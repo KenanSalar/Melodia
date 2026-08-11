@@ -43,7 +43,8 @@ export component ArtworkImage inherits Rectangle {
     // layer's bounding rect on a clip that moves every frame: that is the branch in
     // `render_layer` that allocates a *new* GPU texture rather than reusing one. Taking the
     // float instead moves the fade onto the fill and onto whichever `Image` is mounted,
-    // each of which is childless and so costs a canvas alpha multiply rather than a layer.
+    // each of which is childless and so costs a canvas alpha multiply rather than a layer
+    // of its own.
     //
     // **`transparentize`, not `with-alpha`, on the fill** — the first multiplies the alpha
     // where the second sets it, and `tile-bg` defaults to `Theme.accent.with-alpha(0.15)`,
@@ -57,9 +58,13 @@ export component ArtworkImage inherits Rectangle {
     // re-renders that texture per frame, which is the cost this property exists to remove
     // rather than relocate.
     //
-    // The root's own rounded `clip: true` is a layer at all times and is untouched by any
-    // of this — non-rectangular clips render children into a texture regardless of fading,
-    // and that is what makes the tile a rounded tile. Defaulted `1.0`, where `need_layer`
+    // The root's own rounded `clip: true` is a layer at all times — non-rectangular clips
+    // render children into a texture whether anything fades or not, and that is what makes
+    // the tile a rounded tile. What a fade *does* reach is that layer's cache: the `Image`'s
+    // opacity is read inside it, so it re-renders per frame of a morph where it was static
+    // across one before. That is the trade, and it is the point — `visit_clip` sizes this
+    // layer off `item_rc.geometry()` rather than off the current clip, so the texture is
+    // reused and the per-frame allocation is what goes. Defaulted `1.0`, where `need_layer`
     // bails on its first condition, so the fourteen mounts that never fade are unaffected.
     in property <float> fade: 1.0;
 
