@@ -17,6 +17,25 @@ export component MaterialIcon {
     in property <length> icon-size: 22px;
     in property <brush> icon-color: Theme.text;
     in property <bool> filled: false;
+    // **Fades the glyph without an `opacity` on it, and without touching `icon-color`.**
+    // Two separate reasons, and the second is why this is a property rather than alpha the
+    // host folds in itself.
+    //
+    // The layer: `Opacity::need_layer` bails at exactly 1.0 and on a lone *childless*
+    // child, and this root wraps a `Text` — so a host fading it from outside renders the
+    // glyph to an offscreen texture. That texture is sized to child *geometry*, and a
+    // `Text`'s geometry is its line box rather than its ink, so it also crops every mark
+    // the patched faces put outside that box (`slint-pitfalls.md`).
+    //
+    // The animation: the hosts that fade are the same hosts that `animate icon-color` —
+    // `IconButton` does, to cross idle → hover → active — and an animated *binding*
+    // restarts whenever a dependency is marked dirty rather than when its value changes.
+    // A fade folded into that brush would restart the crossfade on every frame it moved
+    // and stall it, which is `TabBarCell`'s round-two failure. Kept apart, the host
+    // animates the colour it always did and this multiplies the result afterwards.
+    //
+    // Defaulted `1.0`, where `transparentize(0)` is an identity.
+    in property <float> fade: 1.0;
 
     width: icon-size;
     height: icon-size;
@@ -25,7 +44,7 @@ export component MaterialIcon {
         text: root.name;
         font-family: root.filled ? "Material Symbols Rounded Filled" : "Material Symbols Rounded";
         font-size: root.icon-size;
-        color: root.icon-color;
+        color: root.icon-color.transparentize(1.0 - root.fade);
         width: 100%;
         height: 100%;
         horizontal-alignment: center;

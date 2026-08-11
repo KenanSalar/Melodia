@@ -529,32 +529,43 @@ fn the_chip_strip_outlives_every_morph_it_is_painted_in() {
 /// which lands on the fill and on the mounted childless `Image`. The chip strip could
 /// never have taken an `opacity` at all, being mounted for the life of the band.
 ///
-/// **The back disc is the one `opacity` left in the file, and that is why the needle
-/// is the exact spelling rather than a bare `opacity:`** — it fades on
-/// `clamp(root.hero-t * 2.0, …)`, a doubled bias its scaling size obliges, and
-/// `IconButton` cannot take the tile's cure regardless — it owns two `animate`s over
-/// the brushes a `fade` would have to fold into, and an animated binding restarts on
-/// dirtiness rather than on a value change.
-/// It is out of reach of the *count* rather than out of scope: the third assertion
-/// below pins the bias, and its **geometry** is
+/// **The back disc was the last one and now takes the same cure**, through
+/// `IconButton`'s own `fade`. What made it look unreachable is that `IconButton` owns
+/// two `animate`s over the brushes a fade would have to fold into, and an animated
+/// binding restarts on dirtiness rather than on a value change — so folding it there
+/// stalls both crossfades for the length of the morph. It doesn't have to fold there:
+/// the glyph moved out of the disc, which leaves the disc childless and so its own
+/// `opacity` free, and the glyph fades through `MaterialIcon`'s `fade` while
+/// `animate icon-color` keeps animating the *unfaded* brush. Its bias is unchanged —
+/// `clamp(root.hero-t * 2.0, …)`, which its scaling size obliges — and the third
+/// assertion below pins that; the **geometry** is
 /// `the_back_disc_scales_with_the_slot_it_sits_in`'s, which says in as many words that
 /// fading the disc is not the same fix as scaling it.
 ///
+/// So the needle can be the bare property now rather than one spelling of it, which is
+/// the stronger pin: `opacity: root.hero-t` exactly would never have caught the disc,
+/// whose fade is a bias and not the clock.
+///
 /// Losing any of these leaves that half of the hero snapping while the rest fades;
-/// putting the tile's back leaves it fading and paying for a texture to do it.
+/// putting one back leaves it fading and paying for a texture to do it.
 #[test]
 fn the_hero_fades_on_the_morph_at_both_ends() {
     let code = code();
     let fades = code
         .split("if root.hero-shown:")
         .skip(1)
-        .filter(|branch| branch.contains("opacity: root.hero-t;"))
+        .filter(|branch| branch.contains("opacity:"))
         .count();
     assert_eq!(
         fades, 0,
-        "no `if root.hero-shown:` half may fade on a plain `opacity: root.hero-t` — it costs an \
-         offscreen texture for the length of the morph, and on this band a freshly allocated one \
-         per frame. The artwork tile was the last of them and takes `ArtworkImage`'s `fade` now"
+        "no `if root.hero-shown:` half may fade on an `opacity` — over anything with children it \
+         costs an offscreen texture for the length of the morph, and on this band a freshly \
+         allocated one per frame, the layer being sized against a clip that is itself animating. \
+         The artwork tile and the back disc were the last two, and take `ArtworkImage`'s and \
+         `IconButton`'s `fade` instead. The needle is the bare property rather than one spelling \
+         of it, so the pin is deliberately blunter than `need_layer`: an `opacity` on a lone \
+         childless child really would be free, and the answer there is still a brush alpha rather \
+         than an exemption carved into this walk"
     );
 
     // The other half of that: the tile still *fades*, and still off the morph's only
@@ -613,11 +624,13 @@ fn the_hero_fades_on_the_morph_at_both_ends() {
     // formatting, not contract.
     let flat = code.split_whitespace().collect::<Vec<_>>().join(" ");
     assert!(
-        flat.contains("opacity: clamp(root.hero-t * 2.0, 0.0, 1.0);"),
+        flat.contains("fade: clamp(root.hero-t * 2.0, 0.0, 1.0);"),
         "the back disc's alpha must lead the morph rather than track it. It is the one piece of \
-         the hero whose size rides `hero-t` too, so a plain `opacity: root.hero-t` multiplies \
-         into the scale and its presence goes as the square — half size at half alpha is a \
-         quarter of a button, which is an entry that animates but reads as one that pops"
+         the hero whose size rides `hero-t` too, so a plain `root.hero-t` multiplies into the \
+         scale and its presence goes as the square — half size at half alpha is a quarter of a \
+         button, which is an entry that animates but reads as one that pops. It rides \
+         `IconButton`'s `fade` rather than an `opacity`, for the reason the assertion at the \
+         top of this test gives"
     );
 
     assert!(

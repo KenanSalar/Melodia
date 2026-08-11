@@ -460,7 +460,15 @@ export component LibraryTabBand inherits Rectangle {
                     // arithmetic, opening at full presence and receding, which is why only
                     // one direction ever looked wrong. Doubling the alpha lets the scale
                     // carry the motion and leaves the fade to lead it in.
-                    opacity: clamp(root.hero-t * 2.0, 0.0, 1.0);
+                    //
+                    // **Through the component's `fade`, not an `opacity` here**, the
+                    // artwork tile's reason one column over: `IconButton`'s root has
+                    // children, so a fade from outside rendered the disc to an offscreen
+                    // texture — and this band clips against an animating height, which put
+                    // that texture on `render_layer`'s allocate-a-fresh-one branch for the
+                    // first half of every morph. The bias is unchanged; only where it is
+                    // applied moved.
+                    fade: clamp(root.hero-t * 2.0, 0.0, 1.0);
                     clicked => { root.back-clicked(); }
                 }
             }
