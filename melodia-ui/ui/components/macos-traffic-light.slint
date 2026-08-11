@@ -49,7 +49,7 @@ export component MacOsTrafficLight inherits Rectangle {
     // The centring is all-integer on purpose. An 11 px glyph inside centring
     // layouts left it at `(14 - 11) / 2 = 1.5 px`, and the renderer snapped that
     // differently across hover states — so the symbol jiggled a pixel sideways
-    // as the opacity fade came in. Explicit x/y off even dimensions has no such
+    // as the fade came in. Explicit x/y off even dimensions has no such
     // half-pixel to round.
     circle := Rectangle {
         width: 14px;
@@ -69,8 +69,10 @@ export component MacOsTrafficLight inherits Rectangle {
             x: (parent.width - self.width) / 2;
             y: (parent.height - self.height) / 2;
             icon-color: root.glyph-color;
-            opacity: root.cluster-hovered ? 1.0 : 0.0;
-            animate opacity { duration: Theme.dur-fast; easing: ease-in-out; }
+            // `fade`, never `opacity` — see the property. It matters most here: this
+            // rests at `0.0`, so the layer and the ink crop would be its whole life.
+            fade: root.cluster-hovered ? 1.0 : 0.0;
+            animate fade { duration: Theme.dur-fast; easing: ease-in-out; }
         }
     }
 

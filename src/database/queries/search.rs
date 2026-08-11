@@ -1,16 +1,9 @@
 use sqlx::AssertSqlSafe;
 
 use crate::database::DbPool;
+use crate::entities::search::SearchResults;
 use crate::entities::{album, artist, genre, track};
 use crate::error::AppError;
-
-#[derive(Clone, serde::Serialize, serde::Deserialize)]
-pub struct SearchResults {
-    pub tracks: Vec<track::TrackListRow>,
-    pub albums: Vec<album::AlbumStats>,
-    pub artists: Vec<artist::ArtistStats>,
-    pub genres: Vec<genre::GenreStats>,
-}
 
 /// Build an FTS5 MATCH expression from a raw query string.
 /// Each whitespace-separated word is quoted and suffixed with `*` for prefix matching.

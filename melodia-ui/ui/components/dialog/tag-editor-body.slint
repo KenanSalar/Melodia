@@ -27,6 +27,10 @@ component SummaryRow inherits HorizontalLayout {
         font-size: Theme.font-size-sm;
         horizontal-stretch: 1;
         wrap: word-wrap;
+        // Ink, not elision — a wrapped line never exceeds the width elision is
+        // measured against, so this only retires the line-box scissor. A tag value
+        // is user data and carries whatever the file does.
+        overflow: elide;
     }
 }
 

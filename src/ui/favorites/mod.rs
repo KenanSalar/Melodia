@@ -14,10 +14,11 @@
 //!   backdrop fades through the shared `Favorites.blur-img-{a,b}` dual-slot
 //!   pattern.
 //! * Songs — a full `TrackList` bound to the post-filter
-//!   `Favorites.tracks` model. Search is in-memory (the SQL fetch
-//!   returns the entire sorted set once per `library_changed_tx` tick,
-//!   then keystrokes re-walk the cached `tracks_all` without hitting
-//!   `SQLite`).
+//!   `Favorites.tracks` model. Both the search and the sort are in-memory
+//!   off [`crate::ui::track_list_cache`]: the SQL fetch returns the entire
+//!   set once per `library_changed_tx` tick, then a keystroke re-walks the
+//!   cached `tracks_all` and a header click re-permutes it, neither
+//!   hitting `SQLite`.
 //! * Most Played and Favorite Artists — virtualized `EntityCardGrid`s over
 //!   uncapped fetches from `library::favorites::*`. (No Favorite Albums
 //!   tab; the Albums tab covers that.)
@@ -37,6 +38,7 @@
 //! in four parts — `fetch` (queries), `apply` (caches → models), `warm` (the
 //! three cache-coherence predicates) and `sort`.
 
+mod callbacks;
 mod covers;
 mod grids;
 mod hero;
@@ -47,31 +49,72 @@ mod state;
 mod tabs;
 
 use std::sync::Arc;
-use std::sync::atomic::{AtomicU8, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 
 use crate::entities::track::FavoriteStats;
 use crate::media::cover_thumbs::CoverThumbs;
+use crate::ui::artists::ArtistsUi;
 use crate::ui::hero_folds::{HeroFold, MostPlayedTotals};
 use crate::ui::section_state::SectionState;
+use crate::ui::view_ctx::ViewCtx;
 
 use state::{
     ARTIST_THUMB_SIZE, FavoritesUiState, GRID_THUMB_CAP, MOSAIC_THUMB_CAP, MOSAIC_THUMB_SIZE,
     MOST_PLAYED_THUMB_SIZE,
 };
 
+/// This page's `Nav.selected-index`. **The single definition**, beside the view it
+/// names, the way [`crate::ui::my_library::NAV_MY_LIBRARY`] sits beside its page —
+/// the cross-tab hand-off stamps it as an origin, the lifecycle seeds the
+/// section-active shadow from it, and `hero_chips` asks which band is up.
+pub const NAV_FAVORITES: i32 = 2;
+
+// `boot::ui_setup` retunes the cover cap once the window is live.
 pub use covers::tune_cache_for_display;
-pub use grids::{apply_filtered_grids_now, mark_covers_warm, refresh_grids, set_artist_sort};
-pub use hero::refresh_hero;
-pub use rows::{install_favorites_models, to_slint_fav_artist_row, to_slint_most_played_row};
-pub use selection::{clear_selection, handle_select_row};
-pub use songs::{
-    apply_filtered_tracks, apply_filtered_tracks_now, apply_row_rating, current_filter,
-    current_sort, refresh_tracks, set_filter, set_sort,
+
+// Reached only from this slice's own `callbacks/`, which used to live two
+// modules away, plus `ui::hero_chips` for the tab enum and the nav index.
+// `pub(super)` is `pub(in crate::ui)` here, which is exactly that reach.
+pub(super) use grids::{
+    apply_filtered_grids_now, mark_covers_warm, refresh_grids, set_artist_sort,
 };
-pub use tabs::{FavoritesTab, seed_tab, tab_from_index};
+pub(super) use hero::refresh_hero;
+pub(super) use rows::{to_slint_fav_artist_row, to_slint_most_played_row};
+pub(super) use selection::{clear_selection, handle_select_row};
+pub(super) use songs::{
+    apply_filtered_tracks, apply_filtered_tracks_now, apply_row_rating, refresh_tracks,
+    resort_and_apply, set_filter, set_sort,
+};
+pub(super) use tabs::{seed_tab, tab_from_index};
+pub use tabs::FavoritesTab;
+
+/// Install the Favorites models, build the handle, wire every `Favorites.*`
+/// callback, and seed the persisted tab.
+///
+/// Takes `artists_ui` because the sub-view module borrows it for the cross-tab
+/// open-artist hand-off — which is the ordering, made a compile error rather
+/// than a comment: this does not resolve until `artists_ui` is bound.
+///
+/// **The tab seed folds in here** rather than sitting with its siblings in
+/// `hydrate_ui_from_settings`, and the handle is why: seeding writes the Slint
+/// property *and* the handle's synchronous shadow, which the off-thread
+/// fetchers read to decide which model to fill and which cover tier to warm.
+/// Folded, the handle is the receiver instead of something that has to still be
+/// in scope two functions later.
+///
+/// The returned handle is not a keepalive; see [`crate::ui::albums::install`].
+pub fn install(cx: ViewCtx<'_>, artists_ui: &Arc<ArtistsUi>) -> Arc<FavoritesUi> {
+    rows::install_favorites_models(cx.app);
+    let favorites_ui = Arc::new(FavoritesUi::new(cx.cover_thumbs.clone()));
+    callbacks::wire(cx.app, cx.state, &favorites_ui, artists_ui);
+    if let Some(vs) = cx.view_state {
+        seed_tab(cx.app, &favorites_ui, vs.favorites_tab);
+    }
+    favorites_ui
+}
 
 /// Rust-side state for the Favorites view. Shared between the UI
-/// callbacks (`wire_favorites`) and the async fetchers behind an
+/// callbacks (`callbacks::wire`) and the async fetchers behind an
 /// `Arc<FavoritesUi>` — `Send + Sync`.
 pub struct FavoritesUi {
     inner: FavoritesUiState,
@@ -95,10 +138,31 @@ pub struct FavoritesUi {
     /// only one grid is ever mounted, so warming both is half the decodes
     /// and twice the resident buffers for nothing.
     active_tab: AtomicU8,
+    /// [`SectionState`]'s dirty flag one level down, per fetch rather than per
+    /// tab — the `RecentlyPlayedUi::grid_dirty` shape, one page over.
+    ///
+    /// **The page has one `SectionActiveGate` for three mutually exclusive
+    /// tabs**, so without these `kick_full_refresh` ran all three fetches on
+    /// every tick regardless of what was mounted. Everything downstream already
+    /// knew better — `build_filtered_tracks` returns `None` off Songs,
+    /// `build_filtered_grids` materialises only the mounted tab — so with a grid
+    /// tab up, `refresh_tracks` was still fetching every favourite, sorting it
+    /// and converting the lot into rows that reached nothing, once per finished
+    /// track. Two flags rather than three because `refresh_grids` is one fetch
+    /// feeding both grid tabs.
+    ///
+    /// What makes gating safe here is that `hero_chips::favorites_chips` is a
+    /// per-tab match: each tab's chips come from the fetch that tab needs, and
+    /// `refresh_hero` — which answers the count, the running time and the mosaic
+    /// on every tab — is never gated.
+    ///
+    /// Both seeded `true`, so the first pick onto a tab always fetches.
+    songs_dirty: AtomicBool,
+    grids_dirty: AtomicBool,
 }
 
 impl FavoritesUi {
-    pub fn new(cover_thumbs: Arc<CoverThumbs>) -> Self {
+    fn new(cover_thumbs: Arc<CoverThumbs>) -> Self {
         Self {
             inner: FavoritesUiState::new(),
             cover_thumbs,
@@ -116,6 +180,8 @@ impl FavoritesUi {
             )),
             section: SectionState::new(),
             active_tab: AtomicU8::new(FavoritesTab::Songs.as_code()),
+            songs_dirty: AtomicBool::new(true),
+            grids_dirty: AtomicBool::new(true),
         }
     }
 
@@ -148,6 +214,28 @@ impl FavoritesUi {
     /// `library_changed_tx` tick arrives while the view is hidden.
     pub fn take_dirty(&self) -> bool {
         self.section.take_dirty()
+    }
+
+    /// Remember that a refresh tick reached the page while the Songs tab was not
+    /// the one mounted. See [`Self::songs_dirty`].
+    pub fn mark_songs_dirty(&self) {
+        self.songs_dirty.store(true, Ordering::Release);
+    }
+
+    /// Atomically read-and-clear it — `true` iff the Songs cache has missed a
+    /// tick since the last fetch.
+    pub fn take_songs_dirty(&self) -> bool {
+        self.songs_dirty.swap(false, Ordering::AcqRel)
+    }
+
+    /// The two grid tabs' equivalent. One flag, because one fetch fills both.
+    pub fn mark_grids_dirty(&self) {
+        self.grids_dirty.store(true, Ordering::Release);
+    }
+
+    /// Atomically read-and-clear it.
+    pub fn take_grids_dirty(&self) -> bool {
+        self.grids_dirty.swap(false, Ordering::AcqRel)
     }
 
     /// Serialize a bulk-state wipe against a data write. Held only around
@@ -211,7 +299,7 @@ impl FavoritesUi {
         self.artist_thumbs.clear();
         {
             let _gate = self.gate();
-            self.inner.tracks_all.lock().clear();
+            self.inner.tracks_all.clear();
             *self.inner.stats.lock() = FavoriteStats {
                 count: 0,
                 total_duration_ms: 0,
@@ -230,6 +318,12 @@ impl FavoritesUi {
             *self.inner.most_played_totals.lock() = MostPlayedTotals::default();
             self.inner.applied_selection.lock().clear();
         }
+        // Re-armed beside the caches they guard rather than left to the leave's
+        // own `mark_dirty` two files away — every one of the three sets above is
+        // now empty, so whichever tab is entered next owes a fetch whatever the
+        // flags happened to hold when the section went away.
+        self.mark_songs_dirty();
+        self.mark_grids_dirty();
         crate::tasks::heap_trim::trim();
     }
 
@@ -246,11 +340,7 @@ impl FavoritesUi {
         // the cache + filter here to stay decoupled from the Slint
         // global (callers may be off the UI thread).
         let needle = self.inner.filter.lock().clone();
-        let all = self.inner.tracks_all.lock();
-        all.iter()
-            .filter(|r| crate::ui::row_match::track_matches(r, &needle))
-            .map(|r| r.id)
-            .collect()
+        self.inner.tracks_all.snapshot().ids_filtered(&needle)
     }
 
     /// Track ids of the Most Played grid, in card order. `play-track` and
@@ -283,11 +373,10 @@ impl FavoritesUi {
     /// `library::favorites::get_favorite_tracks` which only returns
     /// `is_favorite = TRUE` rows).
     pub fn flip_or_remove_track(&self, id: i64, fav: bool) {
-        let mut tracks = self.inner.tracks_all.lock();
-        if !fav {
-            tracks.retain(|r| r.id != id);
-        } else if let Some(r) = tracks.iter_mut().find(|r| r.id == id) {
-            r.is_favorite = true;
+        if fav {
+            self.inner.tracks_all.set_favorite(id, true);
+        } else {
+            self.inner.tracks_all.remove(id);
         }
     }
 
@@ -295,9 +384,7 @@ impl FavoritesUi {
     /// [`Self::flip_or_remove_track`], rating never affects membership (the
     /// list stays keyed on `is_favorite = TRUE`), so the row is only patched.
     pub fn flip_track_rating(&self, id: i64, rating: i32) {
-        if let Some(r) = self.inner.tracks_all.lock().iter_mut().find(|r| r.id == id) {
-            r.rating = rating;
-        }
+        self.inner.tracks_all.set_rating(id, rating);
     }
 }
 

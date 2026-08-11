@@ -377,17 +377,22 @@ Crash reports are
 `crash-<date>-<time>.txt` and hold the panic message, the thread and location, a
 backtrace, and what Melodia knows about your system.
 
-**Settings → About → Diagnostics** has the two buttons worth knowing about:
+**Settings → About → Diagnostics** has the three controls worth knowing about:
 
 - **Open Folder** opens that directory.
 - **Save…** writes a single `melodia-diagnostics-*.txt` — the file to attach to a
   bug report. It contains your Melodia version, OS, desktop session and install
   method; how many tracks and folders your library has; a short, fixed list of
   settings (theme, language, titlebar, tray, crossfade, EQ, ReplayGain,
-  auto-update); the most recent crash reports; and the tail of the logs. Home
-  directory paths are shortened to `~`, and **no credentials, tokens or session
-  keys are ever included** — those live in a separate file this report doesn't
-  read.
+  auto-update, verbose logging); the most recent crash reports; and the tail of
+  the logs. Home directory paths are shortened to `~`, and **no credentials,
+  tokens or session keys are ever included** — those live in a separate file this
+  report doesn't read.
+- **Verbose logging** records extra detail. Turn it on, reproduce the problem,
+  then save a report — the change applies immediately, with no restart, and it
+  stays on across launches so a problem that happens during startup is captured
+  too. Leave it off otherwise: the log files are size-capped, so the extra detail
+  costs you the older history a report would have carried.
 
 If Melodia crashed the last time you ran it, the next launch says so and offers to
 open the folder.
@@ -398,9 +403,10 @@ the failed launch are already in it. On Linux and macOS only: a Windows build ru
 without a console attached, so it can't print to the terminal you launched it from
 — use the `%APPDATA%\Melodia\logs\` path above instead.
 
-For more detail than the default, set `RUST_LOG` — for example
+For finer control than the Verbose logging switch, set `RUST_LOG` — for example
 `RUST_LOG=debug melodia`. It overrides the built-in filter for both the log file
-and the terminal.
+and the terminal, and it takes precedence over the switch, which then leaves the
+filter alone and says so in the log.
 
 ## Contributing
 

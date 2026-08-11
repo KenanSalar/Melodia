@@ -1,5 +1,5 @@
 import { Dialog } from "../globals/dialog.slint";
-import { Nav } from "../globals/nav.slint";
+import { Nav, NavEnterFrom } from "../globals/nav.slint";
 import { Player } from "../globals/player.slint";
 import { Queue } from "../globals/queue.slint";
 import { MiniPlayer, WindowChrome } from "../globals/shell.slint";
@@ -109,6 +109,7 @@ export component ShortcutScope inherits FocusScope {
                 return accept;
             }
             if (Nav.now-playing-open) {
+                Nav.pending-enter-from = NavEnterFrom.below;
                 Nav.now-playing-open = false;
                 return accept;
             }
@@ -181,25 +182,20 @@ export component ShortcutScope inherits FocusScope {
                 return accept;
             }
             if (ev.text == ",") {
-                // Settings' nav index; the `Nav` global has the map.
+                // Settings' nav index; the `Nav` global has the map. The edge goes
+                // with it, as `sidebar.slint` does: this is lateral nav, and left
+                // unwritten the page inherits whichever direction the last drill or
+                // back put there.
+                Nav.pending-enter-from = NavEnterFrom.below;
                 Nav.selected-index = 9;
                 Nav.persist-selected-index(9);
                 return accept;
             }
             if (ev.text == "n") {
-                // Populates the dialog exactly as the New-Playlist menu entry does;
-                // `Dialog`'s own dispatcher routes the `kind` from there.
-                Dialog.kind = "create-playlist";
-                Dialog.input-text = "";
-                Dialog.input-text-2 = "";
-                Dialog.pending-track-ids = [];
-                Dialog.target-id = -1;
-                Dialog.title = @tr("Create Playlist");
-                Dialog.message = "";
-                Dialog.confirm-label = @tr("Create");
-                Dialog.cancel-label = @tr("Cancel");
-                Dialog.destructive = false;
-                Dialog.open = true;
+                // Populates the dialog exactly as the New-Playlist menu entry does —
+                // which it now does by construction rather than by having been copied
+                // from it. Spelled out here, this had drifted to its own title.
+                Dialog.open-create-playlist([]);
                 return accept;
             }
             return reject;
@@ -222,6 +218,7 @@ export component ShortcutScope inherits FocusScope {
             return accept;
         }
         if (ev.text == "f") {
+            Nav.pending-enter-from = NavEnterFrom.below;
             Nav.now-playing-open = !Nav.now-playing-open;
             return accept;
         }

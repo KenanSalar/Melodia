@@ -17,6 +17,11 @@ export component MaterialIcon {
     in property <length> icon-size: 22px;
     in property <brush> icon-color: Theme.text;
     in property <bool> filled: false;
+    // Fades the glyph without an `opacity` on it, which would both layer and crop the ink
+    // to the line box this component exists to collapse. Separate from `icon-color` because
+    // the hosts that fade also `animate` that brush, and an animated binding restarts on
+    // dependency dirtiness — folded in, the fade would stall the colour crossfade.
+    in property <float> fade: 1.0;
 
     width: icon-size;
     height: icon-size;
@@ -25,7 +30,7 @@ export component MaterialIcon {
         text: root.name;
         font-family: root.filled ? "Material Symbols Rounded Filled" : "Material Symbols Rounded";
         font-size: root.icon-size;
-        color: root.icon-color;
+        color: root.icon-color.transparentize(1.0 - root.fade);
         width: 100%;
         height: 100%;
         horizontal-alignment: center;

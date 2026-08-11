@@ -30,7 +30,8 @@
 //!     path, so it still resolves to `windows-*-msi`; left unguarded the
 //!     updater would `msiexec /i` and orphan the portable copy under a fresh
 //!     `C:\Program Files\` install. [`probe`]'s Windows arm gates on
-//!     [`is_under_program_files`] before the MSI escape hatch.
+//!     `is_under_program_files` before the MSI escape hatch (a `cfg(windows)`
+//!     item, so there is no link that resolves on every host).
 //!
 //! Probe is keyed on `install_target().parent()`, **not**
 //! `current_exe().parent()` — under `AppImage` the latter resolves to a

@@ -29,7 +29,7 @@ pub(super) struct PreparedGrids {
     pub(super) most_played: Vec<UiEntityStripRow>,
     /// Empty unless [`Self::tab`] is `Artists`. Still entities rather than rows:
     /// the Slint `Favorites.artist-favorite-subtitle` callback that resolves the
-    /// translated "{n} favorite[s]" line only runs on the UI thread, so these
+    /// translated `"{n} favorite[s]"` line only runs on the UI thread, so these
     /// are finished inside `invoke_from_event_loop` rather than here.
     pub(super) artists: Vec<FavoriteArtist>,
     /// Filtered counts gating the two `GridEmptyState`s. `0` on a tab that
@@ -130,6 +130,28 @@ pub(super) fn build_filtered_grids(fav_ui: &FavoritesUi) -> PreparedGrids {
 /// under a `tab-idx` gate, so a count nothing walked is one nothing can render,
 /// and picking that tab is itself a signature change that recomputes it.
 ///
+/// **They are written above the signature guard, and that placement is the whole
+/// of what keeps the tab pick's `UNFETCHED_COUNT` rewind from being permanent.**
+/// The pick stamps a signature against the cache its skipped tick left in place
+/// and *then* rewinds the count; when the fetch it spawned returns the same
+/// content — an empty grid on a library with no favourites, or a `stats_changed`
+/// tick for a track this query doesn't rank — the guard fires and the sentinel is
+/// left with nothing coming. `-1` misses `> 0` as well as `== 0`, so what that
+/// hides is not only the empty state: the Most Played Shuffle pill and the
+/// Artists sort row are gated the other way and vanish over a full grid. And
+/// when the guard fires the model already holds exactly `prepared`, so the
+/// counts written above it are by construction the ones the model shows.
+///
+/// **Hoisting them past the guard costs nothing, rather than costing a little.**
+/// The guard is there to skip a [`write_grid`] `set_vec` reset that tears down
+/// every mounted card, and the tempting reading is that two scalar writes are
+/// merely a cheaper thing to have stopped skipping — which invites weighing them
+/// again later. They aren't: `Property::set` is value-compared (`i-slint-core`'s
+/// `properties.rs`, `*self.value.get() != t && …`), so on the path the guard
+/// would have taken both counts are unchanged, nothing is stored and no
+/// dependent is marked dirty. The writes are free exactly when they are
+/// redundant.
+///
 /// Three things short-circuit it. A hidden section is never written to — the
 /// leave teardown emptied these models deliberately, and refilling them behind
 /// it holds a card row per entity for a view nobody can see. An apply carrying
@@ -141,7 +163,11 @@ pub(super) fn build_filtered_grids(fav_ui: &FavoritesUi) -> PreparedGrids {
 /// dropped: [`write_grid`] is a `set_vec` reset, so it tears down and rebuilds
 /// every mounted card, and a `stats_changed` tick reaches both tabs while only
 /// Most Played is ranked by play count.
-fn write_filtered_grids(ui: &AppWindow, fav_ui: &FavoritesUi, prepared: &PreparedGrids) {
+///
+/// Takes `prepared` **by value**, so the rows move into the per-row models
+/// rather than being cloned into them. The three early returns below drop them
+/// instead, which is what happened to them anyway.
+fn write_filtered_grids(ui: &AppWindow, fav_ui: &FavoritesUi, prepared: PreparedGrids) {
     if !fav_ui.section_active() {
         return;
     }
@@ -153,13 +179,17 @@ fn write_filtered_grids(ui: &AppWindow, fav_ui: &FavoritesUi, prepared: &Prepare
         return;
     }
 
-    let signature = grid_signature(tab, columns, mounted_content(tab, prepared));
+    // Above the signature guard: a pick's `UNFETCHED_COUNT` rewind has no other
+    // answer coming, and the fetch that would give it one lands on the guard
+    // whenever the content hasn't moved. See the doc comment.
+    g.set_most_played_count(len_as_i32(prepared.most_played_count));
+    g.set_artist_count(len_as_i32(prepared.artists_count));
+
+    let signature = grid_signature(tab, columns, mounted_content(tab, &prepared));
     if fav_ui.state().last_grid_signature.lock().replace(signature) == Some(signature) {
         return;
     }
 
-    g.set_most_played_count(len_as_i32(prepared.most_played_count));
-    g.set_artist_count(len_as_i32(prepared.artists_count));
     // Covers a tab pick as well as a count change, because the signature above
     // hashes the tab — so anything that moves what the band should say has
     // already got past that early return.
@@ -172,7 +202,7 @@ fn write_filtered_grids(ui: &AppWindow, fav_ui: &FavoritesUi, prepared: &Prepare
     // chunks to nothing.
     write_grid(
         &g.get_most_played_rows(),
-        chunk_entity_rows(&prepared.most_played, columns),
+        chunk_entity_rows(prepared.most_played, columns),
         "Favorites.most-played-rows",
     );
 
@@ -183,7 +213,7 @@ fn write_filtered_grids(ui: &AppWindow, fav_ui: &FavoritesUi, prepared: &Prepare
         .collect();
     write_grid(
         &g.get_artist_rows(),
-        chunk_entity_rows(&artist_rows, columns),
+        chunk_entity_rows(artist_rows, columns),
         "Favorites.artist-rows",
     );
 }
@@ -204,7 +234,7 @@ pub(super) fn apply_filtered_grids(
     let weak = weak.clone();
     let _ = slint::invoke_from_event_loop(move || {
         let Some(ui) = weak.upgrade() else { return };
-        write_filtered_grids(&ui, &fav_ui, &prepared);
+        write_filtered_grids(&ui, &fav_ui, prepared);
         if should_announce_warm(warmed_tab, fav_ui.section_active(), fav_ui.active_tab()) {
             mark_covers_warm(&ui);
         }
@@ -219,7 +249,7 @@ pub(super) fn apply_filtered_grids(
 /// `GridEmptyState` is suppressed by a count that is already non-zero. Mirrors
 /// `ui::albums::grid::rebuild_grid`, which is a plain call for the same reason.
 pub fn apply_filtered_grids_now(ui: &AppWindow, fav_ui: &FavoritesUi) {
-    write_filtered_grids(ui, fav_ui, &build_filtered_grids(fav_ui));
+    write_filtered_grids(ui, fav_ui, build_filtered_grids(fav_ui));
 }
 
 /// Let the mounted grid's card bindings start decoding on a miss again — see

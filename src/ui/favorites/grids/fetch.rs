@@ -36,11 +36,21 @@ pub async fn refresh_grids(state: &AppState, fav_ui: &Arc<FavoritesUi>, weak: &W
         .inspect_err(|e| log::warn!("favorites::refresh_grids fav_artists: {e}"))
         .ok();
 
+    // Either query failing is a way of storing nothing, and the tab pick
+    // *consumes* the flag before spawning this — so without the re-arm the
+    // sentinel is left with no answer coming and the next pick believes the
+    // cache is current. Two queries, one flag: a partial failure re-arms too,
+    // since the tab that got nothing is as stale as if both had failed.
+    if most_played.is_none() || fav_artists.is_none() {
+        fav_ui.mark_grids_dirty();
+    }
+
     // A leave that landed while the two queries were in flight has already
     // cleared these caches (and emptied both models), so storing now would undo
     // the teardown behind a view nobody can see. Nothing is lost by dropping the
     // result: every leave sets `mark_dirty`, so the next enter re-fetches.
     if !fav_ui.section_active() {
+        fav_ui.mark_grids_dirty();
         return;
     }
 

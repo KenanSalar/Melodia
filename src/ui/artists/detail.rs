@@ -22,6 +22,7 @@ use crate::ui::detail_artwork::decode_detail_pair;
 use crate::ui::detail_filter::restamp_selection;
 use crate::ui::detail_view::{impl_detail_view_helpers, resolve_view_sort};
 use crate::ui::model_patch;
+use crate::ui::my_library::{MyLibraryTab, tab_is_mounted};
 use crate::ui::row_match::{self, track_matches};
 use crate::ui::track_list_view::view_id;
 use crate::ui::track_sort::sort_track_list_rows;
@@ -100,7 +101,9 @@ pub async fn open_artist(
 /// Artists-grid frame in between. Mirrors `albums::open_album_with`
 /// exactly.
 ///
-/// `enter_from` chooses the `ViewTransition` enter direction; pass
+/// `enter_from` chooses the enter direction for the **page** mount a
+/// cross-section drill produces, not for `ArtistDetailBody` — that takes a
+/// fixed `below` and holds still while the band morphs. Pass
 /// [`NavEnterFrom::Right`] for any user drill-in and
 /// [`NavEnterFrom::Below`] for the first-launch seed path.
 pub async fn open_artist_with<F>(
@@ -155,7 +158,6 @@ where
 
         let header = to_slint_artist_row(&detail);
         g.set_artist(header);
-        crate::ui::hero_chips::publish_artist(&ui, &detail, years, artists_ui.section_active());
 
         // Albums sub-section model — small grid above the track list.
         let album_rows: Vec<UiAlbumRow> = albums
@@ -164,7 +166,6 @@ where
             .collect();
         write_albums_model(&g, album_rows);
 
-        apply_detail_artwork(&ui, &g, pair, /* animate */ true, artists_ui.section_active());
         replace_tracks_model(&g, ui_tracks);
         reset_detail_selection(&g, &artists_ui);
         // Fresh open clears the filter so the user lands on the full
@@ -174,11 +175,10 @@ where
         artists_ui.detail.filter.lock().clear();
         g.set_sort_field(SharedString::from(sort_field.as_str()));
         g.set_sort_dir(SharedString::from(sort_dir.as_str()));
-        // Set the view-transition direction before the property writes
-        // that flip the `if` branch. Caller-supplied so the seed path
-        // can pass `Below` (normal app-start fade) instead of `Right`
-        // (drill-in slide). Same UI-thread tick as the `artist-id` flip
-        // and any `on_applied` Nav write.
+        // Set the page's enter direction before the `on_applied` hook can
+        // flip `Nav.selected-index`, so a cross-section drill's new page
+        // samples it on first paint. Inert on a same-page drill, whose
+        // body reads a fixed `below` — see `ui::nav_transition`.
         crate::ui::nav_transition::mark(&ui, enter_from);
         g.set_artist_id(clamp_i64_to_i32(artist_id));
         // Fresh open: no filter, so the displayed cache equals the
@@ -190,6 +190,12 @@ where
         // performs (Nav.selected-index for cross-tab nav, …) land in
         // the same UI-thread tick as the detail flip.
         on_applied(&ui);
+        // The two globals six heroes share, written last because their gate is
+        // the **live** tab rather than the `section_active` shadow — see
+        // `albums::detail::open_album_with` for the drill this exists to fix.
+        let on_screen = tab_is_mounted(&ui, MyLibraryTab::Artists);
+        crate::ui::hero_chips::publish_artist(&ui, &detail, years, on_screen);
+        apply_detail_artwork(&ui, &g, pair, /* animate */ true, on_screen);
         // Record a browser-style history entry — see the matching
         // `record_current` in `albums::detail::open_album_with` for
         // the rationale.
@@ -236,8 +242,9 @@ pub async fn refresh_detail(
         sort_track_list_rows(&mut tracks, &field, &dir);
 
         g.set_artist(to_slint_artist_row(&detail));
-        crate::ui::hero_chips::publish_artist(&ui, &detail, years, artists_ui.section_active());
-        apply_detail_artwork(&ui, &g, pair, /* animate */ false, artists_ui.section_active());
+        let on_screen = tab_is_mounted(&ui, MyLibraryTab::Artists);
+        crate::ui::hero_chips::publish_artist(&ui, &detail, years, on_screen);
+        apply_detail_artwork(&ui, &g, pair, /* animate */ false, on_screen);
 
         // Refresh the canonical Rust caches (all_tracks + albums) with
         // the freshly-fetched data. The displayed `tracks` cache + the

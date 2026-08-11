@@ -58,6 +58,15 @@ pub enum MyLibraryTab {
     Playlists,
 }
 
+impl MyLibraryTab {
+    /// Every variant. [`tab_from_index`] ends in a default arm, so a tab added to
+    /// `my-library.slint` without one here resolves to `Songs` — which reads right
+    /// on the tab nobody named, and is what `ui::view_tag` would then log. Pinned
+    /// against `tab-count`.
+    pub const ALL: [Self; 5] =
+        [Self::Songs, Self::Albums, Self::Artists, Self::Genres, Self::Playlists];
+}
+
 /// Resolve a `MyLibrary.tab-idx` value against the global's own `tab-*` constants. UI
 /// thread only — that's where the global is reachable.
 pub fn tab_from_index(g: &MyLibrary<'_>, idx: i32) -> MyLibraryTab {
@@ -88,6 +97,85 @@ pub fn tab_is_mounted(ui: &AppWindow, tab: MyLibraryTab) -> bool {
     }
     let g = ui.global::<MyLibrary>();
     tab_from_index(&g, g.get_tab_idx()) == tab
+}
+
+/// Whether the band is on screen at all.
+///
+/// **The window inside which a hero global is still reachable without a fetch.** Every tab
+/// is one pick away and a tab leave clears no detail id, so a detail left behind on another
+/// tab morphs its banner back open the moment that tab is picked — before the re-fetch that
+/// pick kicks has landed. A teardown inside this window therefore hands nothing back, and
+/// what does is `my_library/callbacks.rs`'s pair: `hero-collapsed` for a genuine
+/// close, the page's own teardown for the leave.
+///
+/// Deliberately *not* the section gate's predicate, which also goes false when Now Playing
+/// or the miniplayer covers the band. Covering it is not leaving it — the same detail is
+/// still open underneath. UI thread only.
+pub fn the_band_is_up(ui: &AppWindow) -> bool {
+    ui.global::<Nav>().get_selected_index() == super::NAV_MY_LIBRARY
+}
+
+/// The detail `tab` has open, or `None` when it has none open — or, for Songs, when it
+/// has no detail concept at all.
+///
+/// **The tab is what discriminates, not the id.** `seed_detail_from_settings` runs for all
+/// four detail views at boot whichever tab is restored, so more than one `*Detail.*-id` can
+/// be `>= 0` at a time and "some id is set" answers nothing on its own.
+///
+/// Takes the tab rather than reading the mounted one, because one caller genuinely asks
+/// about a tab that isn't mounted: `nav_history` resolves a *recorded* entry's detail.
+/// [`mounted_surface`] is the same question about the tab on screen.
+pub fn detail_id_for(ui: &AppWindow, tab: MyLibraryTab) -> Option<i64> {
+    let id = match tab {
+        MyLibraryTab::Songs => return None,
+        MyLibraryTab::Albums => i64::from(ui.global::<AlbumDetail>().get_album_id()),
+        MyLibraryTab::Artists => i64::from(ui.global::<ArtistDetail>().get_artist_id()),
+        MyLibraryTab::Genres => i64::from(ui.global::<GenreDetail>().get_genre_id()),
+        MyLibraryTab::Playlists => i64::from(ui.global::<PlaylistDetail>().get_playlist_id()),
+    };
+    (id >= 0).then_some(id)
+}
+
+/// Which of the page's nine surfaces is on screen: the mounted tab, and the detail it has
+/// open if it has one.
+///
+/// **One answer to a question that was being asked five different ways.** The page routes a
+/// keystroke, reads a filter back, rewinds a count and resolves a history entry off the
+/// same *(tab, is its detail open)* pair, and each of those spelled the five arms and the
+/// `>= 0` check for itself — `filter.rs` alone held three copies and twelve id reads, under
+/// a doc comment warning that asking twice is how the two halves of its hand-off drift
+/// apart. Callers now match on this and keep only what is genuinely per-surface: which
+/// global to write, which callback it fires.
+///
+/// UI thread only, like everything else that reaches a global.
+///
+/// Two askers deliberately stay off it, and both answer a *different* question about the
+/// same globals: `hero_chips::my_library_owner` wants the `ChipOwner` a published row was
+/// stamped with — which is not always the mounted tab's, that being the whole point of the
+/// staleness rule — and `tasks::rss_sampler::my_library_tag` wants a diagnostic string.
+/// Neither would delete a line by routing through here.
+pub fn mounted_surface(ui: &AppWindow) -> MountedSurface {
+    let tab = {
+        let g = ui.global::<MyLibrary>();
+        tab_from_index(&g, g.get_tab_idx())
+    };
+    MountedSurface { tab, detail_id: detail_id_for(ui, tab) }
+}
+
+/// The mounted tab and the detail it has open, from [`mounted_surface`].
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct MountedSurface {
+    pub tab: MyLibraryTab,
+    /// `None` when the tab is showing its grid — or its list, on Songs.
+    pub detail_id: Option<i64>,
+}
+
+impl MountedSurface {
+    /// Whether a detail is covering the mounted tab's grid.
+    #[must_use]
+    pub fn detail_open(self) -> bool {
+        self.detail_id.is_some()
+    }
 }
 
 /// Close whatever detail `tab` has open, if any.
@@ -126,17 +214,31 @@ pub fn seed_tab(ui: &AppWindow, persisted_tab: i32) {
     g.set_tab_idx(crate::ui::tab_bar::clamp_tab(persisted_tab, g.get_tab_count()));
 }
 
-/// Return to the view a drill started from: the `origin-nav-index` / `origin-tab` pair
-/// a detail global carries, restored together.
+/// Land on a My Library tab from outside the tab bar: the destination half of a
+/// cross-section drill, which has to move the nav index as well as the tab.
 ///
-/// Called from each detail's `on_close_detail`, **before** it clears its own id, so
-/// Slint reroutes straight to the origin in one frame rather than flashing the grid
-/// this detail sits over. Restoring the nav index alone used to be the whole job; with
-/// five views sharing index 3 it is a no-op that leaves the wrong tab mounted.
-pub fn restore_origin(ui: &AppWindow, origin_nav: i32, origin_tab: i32) {
-    if origin_nav == super::NAV_MY_LIBRARY {
-        persist_tab(ui, origin_tab);
-    }
+/// [`persist_tab`] rather than `tab-changed` for the reason that function gives — a drill
+/// is not a pick and must not clear the shared filter box. The tab is written first so the
+/// page mounts on the body it is meant to show.
+pub fn go_to_tab(ui: &AppWindow, tab: i32) {
+    persist_tab(ui, tab);
+    let nav = ui.global::<Nav>();
+    nav.set_selected_index(super::NAV_MY_LIBRARY);
+    nav.invoke_persist_selected_index(super::NAV_MY_LIBRARY);
+}
+
+/// Return to the section a drill started from, recorded as `origin-nav-index`.
+///
+/// Called from each detail's `on_close_detail`, **before** it clears its own id, so Slint
+/// reroutes straight to the origin in one frame rather than flashing the grid this detail
+/// sits over.
+///
+/// **Only a drill from another section records one.** The band's back arrow means "close
+/// this detail", and the tab bar names the detail's own tab for the whole visit — so a
+/// drill between two tabs of this page restores nothing and the arrow lands on the grid
+/// the bar has been pointing at all along. Mouse-4/5 is the control that walks the real
+/// history, and it still steps back into the detail the drill came from.
+pub fn return_to_section(ui: &AppWindow, origin_nav: i32) {
     let nav = ui.global::<Nav>();
     nav.set_selected_index(origin_nav);
     nav.invoke_persist_selected_index(origin_nav);

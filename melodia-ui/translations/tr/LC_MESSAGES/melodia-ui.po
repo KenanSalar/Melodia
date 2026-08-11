@@ -753,9 +753,6 @@ msgstr "Açıklama (isteğe bağlı)"
 msgid "Add a description…"
 msgstr "Açıklama ekle…"
 
-msgid "Create Playlist"
-msgstr "Çalma Listesi Oluştur"
-
 # Confirm-button label on the create-playlist dialog.
 msgid "Create"
 msgstr "Oluştur"
@@ -989,6 +986,14 @@ msgstr ""
 msgid "Save…"
 msgstr "Kaydet…"
 
+msgid "Verbose logging"
+msgstr "Ayrıntılı günlük kaydı"
+
+msgid "Record extra detail. Turn this on, reproduce the problem, then save a report."
+msgstr ""
+"Ek ayrıntıları kaydeder. Bunu açın, sorunu yeniden oluşturun, ardından bir "
+"rapor kaydedin."
+
 msgid "Diagnostics report saved"
 msgstr "Tanılama raporu kaydedildi"
 
@@ -1004,6 +1009,15 @@ msgstr "Melodia geçen sefer çöktü"
 
 msgid "A crash report was written. Open the log folder to find it."
 msgstr "Bir çökme raporu yazıldı. Bulmak için günlük klasörünü açın."
+
+# Pushed when the audio output device goes away mid-session.
+msgid "Audio device disconnected"
+msgstr "Ses aygıtı bağlantısı kesildi"
+
+msgid "Playback won't be audible until you reconnect it and restart Melodia."
+msgstr ""
+"Aygıtı yeniden bağlayıp Melodia'yı yeniden başlatana kadar oynatma "
+"duyulmayacak."
 
 msgid "Close to Tray"
 msgstr "Sistem Tepsisine Kapat"
@@ -1561,6 +1575,9 @@ msgstr "Beğendiğin parçaları ListenBrainz'de beğenilmiş olarak işaretle �
 
 msgid "Loved tracks"
 msgstr "Beğenilen parçalar"
+
+msgid "Melodia couldn't relaunch itself. Close and reopen it to apply the change."
+msgstr "Melodia kendini yeniden başlatamadı. Değişikliği uygulamak için uygulamayı kapatıp yeniden açın."
 
 msgid "Add MusicBrainz IDs to your music"
 msgstr "Müziğine MusicBrainz kimliklerini ekle"

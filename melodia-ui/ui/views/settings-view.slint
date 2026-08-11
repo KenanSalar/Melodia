@@ -2,7 +2,7 @@ import { ScrollView } from "std-widgets.slint";
 import { Theme } from "../theme.slint";
 import { SettingsPage } from "../globals/settings-page.slint";
 import { OverlayScrollbar } from "../components/overlay-scrollbar.slint";
-import { Tooltip, TooltipSide } from "../components/tooltip.slint";
+import { TooltipFrame } from "../components/tooltip-frame.slint";
 import { TabSearchHeader } from "../components/hero/tab-search-header.slint";
 import { FilterThrottle } from "../components/filter-throttle.slint";
 import { SettingsTabs } from "settings/settings-tabs.slint";
@@ -278,17 +278,12 @@ export component SettingsView inherits Rectangle {
     // The rect is derived from the hovered *index* rather than snapshotted out of the
     // bar — which the equal-width cells are what make possible — so a tab that moves
     // under a parked pointer keeps its tooltip anchored to it.
-    tab-tip := Rectangle {
+    TooltipFrame {
         x: header.absolute-position.x - root.absolute-position.x + header.tip-x;
         y: header.absolute-position.y - root.absolute-position.y + header.tip-y;
         width: header.tip-w;
         height: header.tip-h;
-        Tooltip {
-            text: header.tip-label;
-            hovered: header.tip-visible;
-            host-width: tab-tip.width;
-            host-height: tab-tip.height;
-            side: TooltipSide.below;
-        }
+        label: header.tip-label;
+        shown: header.tip-visible;
     }
 }

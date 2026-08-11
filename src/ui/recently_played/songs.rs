@@ -29,8 +29,14 @@ pub fn current_filter(rp_ui: &RecentlyPlayedUi) -> Needle {
 
 /// Update the cached filter needle. Folded on the way in, so the list and the
 /// Most Played grid beside it share one needle.
-pub fn set_filter(rp_ui: &RecentlyPlayedUi, filter: &str) {
+///
+/// Returns the token that names this needle. The Songs walk is bounded by the
+/// 200-row recency set and stays on the UI thread; the Most Played walk is not,
+/// so it is built on a worker and carries this back to prove it is still the
+/// answer being asked for — see `RecentlyPlayedUi::filter_generation`.
+pub fn set_filter(rp_ui: &RecentlyPlayedUi, filter: &str) -> u64 {
     *rp_ui.state().filter.lock() = row_match::fold_needle(filter);
+    rp_ui.bump_filter_generation()
 }
 
 /// Fetch the 200 most-recently-played tracks, cache them, push the hero stats,

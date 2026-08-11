@@ -24,35 +24,17 @@ export component MyLibraryPlaylistsTab inherits Rectangle {
         row-height: root.row-h;
         gap: root.gap;
         open-playlist(id) => { Playlists.open-playlist(id); }
-        // Delete and rename fill the Dialog inline, as the detail view's pills do;
-        // edit-artwork routes to Rust, which has to fetch the track artwork pool and
-        // seed the preview before opening.
-        delete-playlist(id) => {
-            Dialog.title = @tr("Delete playlist?");
-            Dialog.message = @tr("The playlist and its track order will be removed. The tracks themselves stay in your library.");
-            Dialog.confirm-label = @tr("Delete");
-            Dialog.cancel-label = @tr("Cancel");
-            Dialog.destructive = true;
-            Dialog.kind = "delete-playlist";
-            Dialog.target-id = id;
-            Dialog.open = true;
-        }
+        // Delete and rename open the Dialog through its own openers, as the detail
+        // view's pills do; edit-artwork routes to Rust, which has to fetch the track
+        // artwork pool and seed the preview before opening.
+        delete-playlist(id) => { Dialog.open-delete-playlist(id); }
         edit-playlist-artwork(id) => {
             Playlists.request-edit-artwork-for(id);
         }
         rename-playlist(id) => {
             // The grid model carries no description, so both come off the cached
             // `PlaylistStats` list through Rust — no DB hop.
-            Dialog.title = @tr("Rename Playlist");
-            Dialog.message = "";
-            Dialog.confirm-label = @tr("Save");
-            Dialog.cancel-label = @tr("Cancel");
-            Dialog.destructive = false;
-            Dialog.kind = "rename-playlist";
-            Dialog.target-id = id;
-            Dialog.input-text = Playlists.row-name(id);
-            Dialog.input-text-2 = Playlists.row-description(id);
-            Dialog.open = true;
+            Dialog.open-rename-playlist(id, Playlists.row-name(id), Playlists.row-description(id));
         }
         request-cover(p) => { Playlists.request-cover(p) }
     }

@@ -5,16 +5,16 @@
 //!
 //! * Hero — centered `SearchBar` (autofocus). Each keystroke bumps a
 //!   debounce tick; a 300 ms Timer in `melodia-ui/ui/views/search-view.slint` then
-//!   fires `commit-search`, which calls [`fetch::kick_search`] to run
+//!   fires `commit-search`, which calls `fetch::kick_search` to run
 //!   the FTS5 + LIKE query via `library::search::search_all` on the
 //!   read pool.
 //! * Top Result — single featured card (album, artist OR genre) computed
-//!   via [`top_result::compute_top_result`]'s 9-step ranking: all three exact
+//!   via `top_result::compute_top_result`'s 9-step ranking: all three exact
 //!   matches, then all three starts-with, then first-of-each. A genre
 //!   gets the card rather than a strip of its own — it is a route to a
 //!   page, not a row of things to browse.
 //! * Songs — shared `TrackList` bound to `Search.tracks`. Compact by
-//!   default ([`state::COMPACT_TRACK_LIMIT`] rows); the "Show all N"
+//!   default (`state::COMPACT_TRACK_LIMIT` rows); the "Show all N"
 //!   toggle swaps to the whole backend result — capped by `search_all`'s
 //!   own `LIMIT` — from the cached `last_results`, no DB round-trip.
 //! * Albums + Artists strips — `EntityCard` in a horizontal scroller
@@ -36,11 +36,14 @@
 //! data-driven; a scan completing mid-query MUST NOT swap results out
 //! from under the user).
 
-pub mod apply;
-pub mod fetch;
+// `apply` / `fetch` / `top_result` were `pub` only so the callbacks tree could
+// reach them from two modules away. That consumer is a descendant now.
+mod apply;
+mod callbacks;
+mod fetch;
 mod selection;
 mod state;
-pub mod top_result;
+mod top_result;
 
 use std::rc::Rc;
 use std::sync::Arc;
@@ -51,7 +54,10 @@ use slint::{ComponentHandle, Image, ModelRc, SharedString, VecModel};
 use crate::entities::album::AlbumStats;
 use crate::entities::artist::ArtistStats;
 use crate::media::cover_thumbs::CoverThumbs;
+use crate::ui::albums::AlbumsUi;
+use crate::ui::artists::ArtistsUi;
 use crate::ui::util::clamp_i64_to_i32;
+use crate::ui::view_ctx::ViewCtx;
 use crate::{
     AppWindow, EntityStripRow as UiEntityStripRow, Search, TrackListRow as UiTrackListRow,
 };
@@ -60,10 +66,31 @@ use state::{
     ALBUM_STRIP_THUMB_SIZE, ARTIST_STRIP_THUMB_SIZE, STRIP_THUMB_CAP, SearchUiState,
 };
 
-pub use selection::{clear_selection, handle_select_row, restamp_rows};
+pub(super) use selection::{clear_selection, handle_select_row, restamp_rows};
+
+/// Install the Search models, build the handle, and wire every `Search.*`
+/// callback to it.
+///
+/// Takes both peers because the cross-tab open-album / open-artist hand-offs
+/// need live handles to call into — which is the ordering, made a compile error
+/// rather than a comment: this does not resolve until both are bound. There is
+/// no initial fetch; Search is query-driven, so the page paints empty until the
+/// user types.
+///
+/// The returned handle is not a keepalive; see [`crate::ui::albums::install`].
+pub fn install(
+    cx: ViewCtx<'_>,
+    albums_ui: &Arc<AlbumsUi>,
+    artists_ui: &Arc<ArtistsUi>,
+) -> Arc<SearchUi> {
+    install_models(cx.app);
+    let search_ui = Arc::new(SearchUi::new(cx.cover_thumbs.clone()));
+    callbacks::wire(cx.app, cx.state, &search_ui, albums_ui, artists_ui);
+    search_ui
+}
 
 /// Rust-side state for the Search view. Shared between the UI
-/// callbacks (`wire_search`) and async fetchers behind an
+/// callbacks (`callbacks::wire`) and async fetchers behind an
 /// `Arc<SearchUi>` — `Send + Sync`.
 pub struct SearchUi {
     inner: SearchUiState,
@@ -98,7 +125,7 @@ pub struct SearchUi {
 }
 
 impl SearchUi {
-    pub fn new(cover_thumbs: Arc<CoverThumbs>) -> Self {
+    fn new(cover_thumbs: Arc<CoverThumbs>) -> Self {
         Self {
             inner: SearchUiState::new(),
             cover_thumbs,
@@ -148,7 +175,7 @@ impl SearchUi {
         crate::tasks::heap_trim::trim();
     }
 
-    /// Same cache + state release as [`release_section_state`] but
+    /// Same cache + state release as [`Self::release_section_state`] but
     /// runs while the user is still on Search — fired when the
     /// `SearchBar` text becomes empty. No `section_active()` bail-out:
     /// the user explicitly cleared the input, so we want to release
@@ -195,7 +222,7 @@ impl SearchUi {
 /// strips, the recent-searches list, and the selection set. Subsequent
 /// updates locate them by downcasting back to `VecModel<T>` from the UI
 /// thread.
-pub fn install_search_models(ui: &AppWindow) {
+fn install_models(ui: &AppWindow) {
     let g = ui.global::<Search>();
 
     let tracks: Rc<VecModel<UiTrackListRow>> = Rc::new(VecModel::default());

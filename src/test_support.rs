@@ -13,11 +13,122 @@ use crate::config::Paths;
 /// The root of the Slint tree, for the pins that walk it rather than naming files.
 pub(crate) const UI_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/melodia-ui/ui");
 
+/// The vacuity floor for a walk over [`UI_DIR`], so a traversal that silently found
+/// nothing can't pass every pin standing on it.
+///
+/// Beside the directory it bounds rather than at each caller: the four pins that walk
+/// this corpus each carried their own copy of the number, two of them under a comment
+/// naming a third as where it came from. Loose on purpose — the tree is well past it, and
+/// a floor tight enough to matter would trip on an ordinary file deletion.
+///
+/// **It is one of three floors in this file, and they bound three different corpora.**
+/// The `SRC_DIR` walks use 200 over the whole Rust tree (`file_dialog_tests`,
+/// `services::tests::mod_tests`, each keeping its own `MIN_SOURCES`), and
+/// [`MIN_UI_SOURCES`] is 180 over `UI_SRC_DIR` alone. Same name, same purpose, different
+/// trees — so a walk takes the one matching the root it passes, and none of the three is
+/// derivable from another.
+pub(crate) const MIN_SLINT_SOURCES: usize = 100;
+
 /// The root of the Rust tree, for the pins that have to answer "does anything in
 /// the tree do X" rather than "do these named files do X" — the native-dialog
 /// check being the first, since what it guards against is a *new* call site
 /// rather than an edit to a known one.
 pub(crate) const SRC_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/src");
+
+/// The Rust UI tree, for the pins that ask the same question of every slice's
+/// wiring rather than of one subtree.
+///
+/// Anchored on the manifest dir like its two siblings rather than spelled
+/// relative: a bare `"src/ui"` resolves against the harness's working directory,
+/// which is the package root only because that is what `cargo test` happens to
+/// set.
+pub(crate) const UI_SRC_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/src/ui");
+
+/// The subsystem-contract rules, whose `paths:` frontmatter decides which of
+/// them loads for which file.
+///
+/// Pinned from here because a stale glob fails *silently and invisibly*: the
+/// rule simply stops loading for the code it governs, and nothing in the build,
+/// the lint gate or the test suite is looking. One `src/ui/` re-home broke four
+/// of them at once while updating a fifth.
+pub(crate) const RULES_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/.claude/rules");
+
+/// Every module that owns callback wiring: the cross-cutting root plus the
+/// eleven view slices that keep their own.
+///
+/// **Checked for equality, not containment.** What this guards is a subtree that
+/// stops existing — renamed, deleted, or folded somewhere the walk no longer
+/// reaches. A floor cannot see that: the walk finds fifty sources where there
+/// were fifty-four, every count-based pin over the corpus quietly loses that
+/// slice's coverage, and all of them still pass. An exact set turns it into a
+/// failing assertion *at the ledger*, naming the home that went missing, rather
+/// than a gap somewhere downstream that nothing reports.
+pub(crate) const CALLBACK_HOMES: [&str; 12] = [
+    "albums",
+    "artists",
+    "browse",
+    // The cross-cutting root: the macros, cross-tab nav, the now-playing
+    // fan-out, tags, the updater and library settings — everything that answers
+    // to no single view.
+    "callbacks",
+    "favorites",
+    "genres",
+    "my_library",
+    "playlists",
+    "queue_sheet",
+    "recently_played",
+    "search",
+    "tracks",
+];
+
+/// A floor under the walk itself, so a traversal that found nothing can't pass
+/// vacuously *ahead of* the set check. Loose on purpose — [`CALLBACK_HOMES`] is
+/// the real guard, and a floor tight enough to matter would trip on every
+/// unrelated file deletion.
+const MIN_UI_SOURCES: usize = 180;
+
+/// Every wiring source under [`UI_SRC_DIR`], comment-stripped and paired with its
+/// `src/ui`-relative path (`albums/callbacks/lifecycle.rs`,
+/// `callbacks/cross_tab_nav.rs`, `queue_sheet/callbacks.rs`).
+///
+/// A file counts as wiring iff it sits under a `callbacks` *directory* or *is* a
+/// `callbacks.rs` — the two shapes the tree uses, a directory once a slice's
+/// wiring outgrows one file and a flat file until then. Recognising both is what
+/// lets a slice grow from one into the other with no edit here.
+///
+/// # Panics
+///
+/// If the set of wiring homes found is not exactly [`CALLBACK_HOMES`], or if
+/// [`stripped_sources`]' own floor / unreadable-path checks trip.
+pub(crate) fn callback_sources() -> Vec<(String, String)> {
+    use std::collections::BTreeSet;
+
+    let mut found = BTreeSet::new();
+    let mut out = Vec::new();
+
+    for (rel, code) in stripped_sources(UI_SRC_DIR, "rs", MIN_UI_SOURCES) {
+        let mut parts = rel.split('/');
+        let Some(home) = parts.next() else { continue };
+        let is_wiring = home == "callbacks"
+            || parts.next().is_some_and(|p| p == "callbacks" || p == "callbacks.rs");
+        if !is_wiring {
+            continue;
+        }
+        found.insert(home.to_owned());
+        out.push((rel, code));
+    }
+
+    let expected: BTreeSet<String> = CALLBACK_HOMES.iter().map(|s| (*s).to_owned()).collect();
+    assert_eq!(
+        found, expected,
+        "the set of callback homes under {UI_SRC_DIR} no longer matches `CALLBACK_HOMES`. A \
+         *missing* entry is wiring that was deleted or renamed — every pin walking this corpus \
+         just lost that slice's coverage with nothing to report it. An *extra* entry is a new \
+         wiring home no pin is checking yet: add it to the ledger."
+    );
+
+    out
+}
 
 /// Every file under `root` with extension `ext`, sorted, alongside the
 /// directories that wouldn't list.
@@ -124,6 +235,52 @@ pub(crate) fn strip_line_comments(src: &str) -> String {
         out.push('\n');
     }
     out
+}
+
+/// Runs of whitespace collapsed to one space, so a pin reads a token sequence rather
+/// than one file's indentation.
+///
+/// Pair it with [`strip_line_comments`] rather than using it alone — this joins lines,
+/// so a trailing comment would otherwise run into the code that followed it.
+pub(crate) fn normalize_ws(src: &str) -> String {
+    src.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+/// The value of a `name:` binding in `src`, up to its terminating `;`, or `""` when
+/// `name` doesn't appear.
+///
+/// The empty string is the caller's failure to report — every pin over this asserts
+/// something about the value, and there is no binding whose expected value is nothing.
+pub(crate) fn binding_value<'a>(src: &'a str, name: &str) -> &'a str {
+    src.split_once(name)
+        .and_then(|(_, rest)| rest.split_once(';'))
+        .map_or("", |(value, _)| value)
+}
+
+/// The `N` in a global's `out property <int> tab-count: N;`.
+///
+/// `None` covers both "no such declaration" and "not a plain integer literal", which are
+/// one failure to every caller: the count is the sole definition of how many tabs a page
+/// has, and Rust clamps the persisted index against it, so anything it can't read is a
+/// page that can restore onto a branch mounting nothing.
+///
+/// Takes the source rather than reading a file, because the two curated globals share
+/// one — `RecentlyPlayed`'s pin scopes to its own global's body first, else `Favorites`
+/// growing a tab would answer for it.
+pub(crate) fn declared_tab_count(src: &str) -> Option<usize> {
+    src.split_once("out property <int> tab-count:")
+        .and_then(|(_, rest)| rest.split_once(';'))
+        .and_then(|(digits, _)| digits.trim().parse().ok())
+}
+
+/// The body of an inline `marker … ];` array literal in `src`.
+///
+/// The `@tr` arrays a `TabBar` mount hands over have to stay literals — a `[string]`
+/// seeded from Rust renders untranslated — so several pins count what is inside one.
+pub(crate) fn array_body<'a>(src: &'a str, marker: &str) -> Option<&'a str> {
+    src.split_once(marker)
+        .and_then(|(_, rest)| rest.split_once("];"))
+        .map(|(body, _)| body)
 }
 
 /// The `labels` and `fields` arrays of the one `SortPillRow` mount in `src` whose

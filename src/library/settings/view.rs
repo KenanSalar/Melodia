@@ -11,7 +11,7 @@ use crate::state::AppState;
 /// against a hot-reload of the list) can't pin `settings.json` to a code
 /// that has no bundled `.po`. The runtime application
 /// (`slint::select_bundled_translation`) happens synchronously in
-/// `src/ui/locale.rs::wire_language_changed` *before* this async persist —
+/// `src/ui/settings/locale.rs::wire_language_changed` *before* this async persist —
 /// the UI re-renders immediately; this write only carries the choice
 /// across the next process boot.
 pub fn set_locale(state: &AppState, code: String) -> Result<(), AppError> {

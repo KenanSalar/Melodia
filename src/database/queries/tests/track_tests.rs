@@ -13,36 +13,42 @@ async fn seed_db() -> Result<DbPool, AppError> {
     Ok(db)
 }
 
-#[tokio::test]
-async fn get_all_tracks_default_sort() -> Result<(), AppError> {
-    let db = seed_db().await?;
-    let tracks = queries::track::get_all_tracks(&db, None, None).await?;
-    assert_eq!(tracks.len(), 3);
-    // Default sort is by sort_key (natural sort of title), ascending
-    assert_eq!(tracks[0].title, "Alpha");
-    assert_eq!(tracks[1].title, "Beta");
-    assert_eq!(tracks[2].title, "Gamma");
-    Ok(())
+/// [`seed_db`]'s three tracks, inserted **back-to-front** so that rowid order
+/// is the reverse of `sort_key` order. Identical in every other respect.
+///
+/// The two ordering pins below need it, and neither works without it.
+/// `seed_db` inserts already sorted, so there rowid order and `sort_key` order
+/// are the same sequence and an assertion over it is satisfied by a bare table
+/// scan — the `ORDER BY` can go missing with nothing failing, which is exactly
+/// what happened to the test this one replaced.
+///
+/// `seed_db` itself can't just be reversed:
+/// [`the_hero_mosaic_leads_with_the_covers_the_most_played_tab_shows`] reads its
+/// insertion order as the rowid order its tiebreakers have to *beat*, so
+/// flipping it would hand that test the answer it exists to prove.
+async fn seed_db_inserted_backwards() -> Result<DbPool, AppError> {
+    let db = DbPool::test_pool().await;
+    queries::folder::insert_folder(&db, "/music", true).await?;
+    insert_test_track(&db, "/music/gamma.mp3", "Gamma", "Alpha Artist", "A Album", "Rock").await?;
+    insert_test_track(&db, "/music/beta.mp3", "Beta", "Alpha Artist", "A Album", "Rock").await?;
+    insert_test_track(&db, "/music/alpha.mp3", "Alpha", "Zeta Artist", "B Album", "Pop").await?;
+    Ok(db)
 }
 
+/// The whole-table fetches hand back one fixed order, and both retained-row
+/// views document it as the order they permute *from*. It stopped being a
+/// default when `track_list_order_by`'s other arms went — nothing asks for
+/// anything else — so this is now the only ordering claim SQL makes about a
+/// track list, and the one worth pinning.
+///
+/// Seeded backwards, because the ordinary fixture cannot pin it — see
+/// [`seed_db_inserted_backwards`].
 #[tokio::test]
-async fn get_all_tracks_sort_by_artist() -> Result<(), AppError> {
-    let db = seed_db().await?;
-    let tracks =
-        queries::track::get_all_tracks(&db, Some("artist".to_owned()), None).await?;
-    // "Alpha Artist" before "Zeta Artist"
-    assert_eq!(tracks[0].artist.as_deref(), Some("Alpha Artist"));
-    assert_eq!(tracks[2].artist.as_deref(), Some("Zeta Artist"));
-    Ok(())
-}
-
-#[tokio::test]
-async fn get_all_tracks_sort_desc() -> Result<(), AppError> {
-    let db = seed_db().await?;
-    let tracks =
-        queries::track::get_all_tracks(&db, None, Some("desc".to_owned())).await?;
-    assert_eq!(tracks[0].title, "Gamma");
-    assert_eq!(tracks[2].title, "Alpha");
+async fn a_whole_table_fetch_comes_back_in_sort_key_order() -> Result<(), AppError> {
+    let db = seed_db_inserted_backwards().await?;
+    let tracks = queries::track::get_all_tracks(&db).await?;
+    let titles: Vec<&str> = tracks.iter().map(|t| t.title.as_str()).collect();
+    assert_eq!(titles, ["Alpha", "Beta", "Gamma"]);
     Ok(())
 }
 
@@ -101,7 +107,7 @@ async fn get_track_by_id_not_found() {
 #[tokio::test]
 async fn get_tracks_by_ids_preserves_order() -> Result<(), AppError> {
     let db = seed_db().await?;
-    let all = queries::track::get_all_tracks(&db, None, None).await?;
+    let all = queries::track::get_all_tracks(&db).await?;
     let ids: Vec<i64> = vec![all[2].id, all[0].id, all[1].id];
     let result = queries::track::get_tracks_by_ids(&db, &ids).await?;
     assert_eq!(result.len(), 3);
@@ -114,7 +120,7 @@ async fn get_tracks_by_ids_preserves_order() -> Result<(), AppError> {
 #[tokio::test]
 async fn get_tracks_by_ids_skips_missing() -> Result<(), AppError> {
     let db = seed_db().await?;
-    let all = queries::track::get_all_tracks(&db, None, None).await?;
+    let all = queries::track::get_all_tracks(&db).await?;
     let ids = vec![all[0].id, 99999];
     let result = queries::track::get_tracks_by_ids(&db, &ids).await?;
     assert_eq!(result.len(), 1);
@@ -340,12 +346,12 @@ async fn set_favorite_flips_flag() -> Result<(), AppError> {
 #[tokio::test]
 async fn get_favorite_tracks_returns_only_favorites() -> Result<(), AppError> {
     let db = seed_db().await?;
-    let all = queries::track::get_all_tracks(&db, None, None).await?;
+    let all = queries::track::get_all_tracks(&db).await?;
 
     // Favorite the first track
     queries::track::set_favorite(&db, &[all[0].id], true).await?;
 
-    let favs = queries::track::get_favorite_tracks_for_list(&db, None, None).await?;
+    let favs = queries::track::get_favorite_tracks_for_list(&db).await?;
     assert_eq!(favs.len(), 1);
     assert_eq!(favs[0].id, all[0].id);
     assert!(favs[0].is_favorite);
@@ -353,24 +359,19 @@ async fn get_favorite_tracks_returns_only_favorites() -> Result<(), AppError> {
 }
 
 #[tokio::test]
-async fn get_favorite_tracks_respects_sort() -> Result<(), AppError> {
-    let db = seed_db().await?;
-    let all = queries::track::get_all_tracks(&db, None, None).await?;
+async fn the_favorites_fetch_shares_the_whole_table_order() -> Result<(), AppError> {
+    // The Songs tab hands its own permutation to `store_in_order`, computed
+    // before the section guards let it store — so the two orders only line up
+    // because this fetch and `get_all_tracks_for_list` share one clause.
+    // Backwards-seeded for the reason the whole-table pin above is.
+    let db = seed_db_inserted_backwards().await?;
+    let all = queries::track::get_all_tracks(&db).await?;
     let ids: Vec<i64> = all.iter().map(|t| t.id).collect();
-
-    // Favorite all tracks
     queries::track::set_favorite(&db, &ids, true).await?;
 
-    // Sort desc by title
-    let favs = queries::track::get_favorite_tracks_for_list(
-        &db,
-        Some("title".to_owned()),
-        Some("desc".to_owned()),
-    )
-    .await?;
-    assert_eq!(favs.len(), 3);
-    assert_eq!(favs[0].title, "Gamma");
-    assert_eq!(favs[2].title, "Alpha");
+    let favs = queries::track::get_favorite_tracks_for_list(&db).await?;
+    let titles: Vec<&str> = favs.iter().map(|t| t.title.as_str()).collect();
+    assert_eq!(titles, ["Alpha", "Beta", "Gamma"]);
     Ok(())
 }
 
@@ -407,7 +408,7 @@ async fn set_rating_updates_value() -> Result<(), AppError> {
 #[tokio::test]
 async fn set_rating_targets_only_given_ids() -> Result<(), AppError> {
     let db = seed_db().await?;
-    let all = queries::track::get_all_tracks(&db, None, None).await?;
+    let all = queries::track::get_all_tracks(&db).await?;
     assert!(all.len() >= 2);
 
     queries::track::set_rating(&db, &[all[0].id], 5).await?;
@@ -433,7 +434,7 @@ async fn set_rating_empty_ids_is_noop() -> Result<(), AppError> {
 #[tokio::test]
 async fn get_favorite_stats_orders_artwork_by_play_count() -> Result<(), AppError> {
     let db = seed_db().await?;
-    let all = queries::track::get_all_tracks(&db, None, None).await?;
+    let all = queries::track::get_all_tracks(&db).await?;
     let ids: Vec<i64> = all.iter().map(|t| t.id).collect();
     queries::track::set_favorite(&db, &ids, true).await?;
 
@@ -466,7 +467,7 @@ async fn get_favorite_stats_orders_artwork_by_play_count() -> Result<(), AppErro
 #[tokio::test]
 async fn get_favorite_stats_returns_distinct_artworks_no_duplicates() -> Result<(), AppError> {
     let db = seed_db().await?;
-    let all = queries::track::get_all_tracks(&db, None, None).await?;
+    let all = queries::track::get_all_tracks(&db).await?;
     let ids: Vec<i64> = all.iter().map(|t| t.id).collect();
     queries::track::set_favorite(&db, &ids, true).await?;
 
@@ -494,7 +495,7 @@ async fn get_favorite_stats_returns_distinct_artworks_no_duplicates() -> Result<
 #[tokio::test]
 async fn get_favorite_stats_empty_when_favorites_have_no_artwork() -> Result<(), AppError> {
     let db = seed_db().await?;
-    let all = queries::track::get_all_tracks(&db, None, None).await?;
+    let all = queries::track::get_all_tracks(&db).await?;
     let ids: Vec<i64> = all.iter().map(|t| t.id).collect();
     queries::track::set_favorite(&db, &ids, true).await?;
 
@@ -529,7 +530,7 @@ async fn get_favorite_stats_empty_when_favorites_have_no_artwork() -> Result<(),
 async fn the_hero_mosaic_leads_with_the_covers_the_most_played_tab_shows()
 -> Result<(), AppError> {
     let db = seed_db().await?;
-    let all = queries::track::get_all_tracks(&db, None, None).await?;
+    let all = queries::track::get_all_tracks(&db).await?;
     let ids: Vec<i64> = all.iter().map(|t| t.id).collect();
     queries::track::set_favorite(&db, &ids, true).await?;
 

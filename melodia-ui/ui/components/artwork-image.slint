@@ -35,6 +35,16 @@ export component ArtworkImage inherits Rectangle {
     // The shared default: a faintly accent-tinted square with an accent-coloured glyph.
     in property <brush> tile-bg: Theme.accent.with-alpha(0.15);
     in property <brush> tile-icon-color: Theme.accent;
+    // Fades the tile without a host `opacity`, which would layer — this root has children,
+    // so `need_layer` bails on neither condition. Three things an edit here can get wrong,
+    // the first and last argued in `slint-pitfalls.md`'s `opacity` entry: `transparentize`
+    // multiplies alpha where `with-alpha` sets it and `tile-bg` is translucent by default;
+    // the icons fade on `opacity` rather than through `colorize`, which the renderer caches
+    // per item as its own texture (`ItemGraphicsCacheEntry::ColorizedImage`), so a brush
+    // moving per frame re-renders it per frame; and per-element alpha isn't pixel-identical
+    // to a group one where the fill and the image overlap, so the tile reads a few percent
+    // heavier mid-fade.
+    in property <float> fade: 1.0;
 
     // The one question the tile asks, stated once — the five fallback branches below each
     // used to spell its negation.
@@ -43,7 +53,7 @@ export component ArtworkImage inherits Rectangle {
     width: tile-size;
     height: tile-size;
     border-radius: tile-radius;
-    background: tile-bg;
+    background: tile-bg.transparentize(1.0 - root.fade);
     clip: true;
 
     if root.shows-cover: Image {
@@ -55,6 +65,7 @@ export component ArtworkImage inherits Rectangle {
         y: (parent.height - self.height) / 2;
         source: root.cover;
         image-fit: ImageFit.cover;
+        opacity: root.fade;
     }
 
     // **An SVG `Image`, not a Material Symbols glyph.** A glyph scales from its
@@ -72,6 +83,7 @@ export component ArtworkImage inherits Rectangle {
         height: parent.height * 0.55 * root.anim-scale;
         x: (parent.width - self.width) / 2;
         y: (parent.height - self.height) / 2;
+        opacity: root.fade;
     }
     if !root.shows-cover && root.fallback-icon == "person": Image {
         source: @image-url("../assets/icons/person.svg");
@@ -81,6 +93,7 @@ export component ArtworkImage inherits Rectangle {
         height: parent.height * 0.55 * root.anim-scale;
         x: (parent.width - self.width) / 2;
         y: (parent.height - self.height) / 2;
+        opacity: root.fade;
     }
     if !root.shows-cover && root.fallback-icon == "playlist": Image {
         source: @image-url("../assets/icons/playlist.svg");
@@ -90,6 +103,7 @@ export component ArtworkImage inherits Rectangle {
         height: parent.height * 0.55 * root.anim-scale;
         x: (parent.width - self.width) / 2;
         y: (parent.height - self.height) / 2;
+        opacity: root.fade;
     }
     if !root.shows-cover && root.fallback-icon == "theater_comedy": Image {
         source: @image-url("../assets/icons/theater-comedy.svg");
@@ -99,6 +113,7 @@ export component ArtworkImage inherits Rectangle {
         height: parent.height * 0.55 * root.anim-scale;
         x: (parent.width - self.width) / 2;
         y: (parent.height - self.height) / 2;
+        opacity: root.fade;
     }
     if !root.shows-cover && root.fallback-icon == "album": Image {
         source: @image-url("../assets/icons/album.svg");
@@ -108,6 +123,7 @@ export component ArtworkImage inherits Rectangle {
         height: parent.height * 0.55 * root.anim-scale;
         x: (parent.width - self.width) / 2;
         y: (parent.height - self.height) / 2;
+        opacity: root.fade;
     }
     // Browse's card view, whose grid mixes subfolders and files — a folder card has no
     // cover to have, so this is its resting state rather than a missing-artwork one.
@@ -119,5 +135,6 @@ export component ArtworkImage inherits Rectangle {
         height: parent.height * 0.55 * root.anim-scale;
         x: (parent.width - self.width) / 2;
         y: (parent.height - self.height) / 2;
+        opacity: root.fade;
     }
 }

@@ -140,7 +140,8 @@ fn settings_block(paths: &Paths) -> String {
          crossfade : {crossfade}\n\
          equalizer : {equalizer}\n\
          replaygain: {replaygain}\n\
-         autoupdate: {autoupdate}\n",
+         autoupdate: {autoupdate}\n\
+         verbose   : {verbose}\n",
         theme = settings.theme_id,
         variant = settings.theme_variant,
         locale = settings.locale,
@@ -155,6 +156,9 @@ fn settings_block(paths: &Paths) -> String {
         equalizer = settings.equalizer.eq_enabled,
         replaygain = settings.replaygain.rg_enabled,
         autoupdate = settings.updates.auto_check_enabled,
+        // Decides how to read the log tail below it: thin because nothing
+        // happened, or thin because nobody asked for the detail.
+        verbose = settings.diagnostics.verbose_logging,
     )
 }
 

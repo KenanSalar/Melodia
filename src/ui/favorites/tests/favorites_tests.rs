@@ -17,7 +17,7 @@ const GRID: &str =
     include_str!("../../../../melodia-ui/ui/components/grid/entity-card-grid.slint");
 const SONGS: &str = include_str!("../songs.rs");
 const SONGS_TAB: &str = include_str!("../../../../melodia-ui/ui/views/favorites/songs-tab.slint");
-const SUBVIEWS: &str = include_str!("../../callbacks/favorites/subviews.rs");
+const SUBVIEWS: &str = include_str!("../callbacks/subviews.rs");
 
 /// `Favorites.tracks` feeds one element in the whole tree, under the Songs
 /// tab's `if` — so off that tab, every prepared row the Songs path builds
@@ -78,17 +78,12 @@ const TABS: usize = 3;
 
 /// The `N` in `Favorites`'s `tab-count: N;`.
 fn declared_tab_count() -> Option<usize> {
-    GLOBAL
-        .split_once("out property <int> tab-count:")
-        .and_then(|(_, rest)| rest.split_once(';'))
-        .and_then(|(digits, _)| digits.trim().parse().ok())
+    crate::test_support::declared_tab_count(GLOBAL)
 }
 
 /// The body of an inline `name: [ … ];` array literal in `favorites-view.slint`.
 fn array_body(marker: &str) -> Option<&'static str> {
-    VIEW.split_once(marker)
-        .and_then(|(_, rest)| rest.split_once("];"))
-        .map(|(body, _)| body)
+    crate::test_support::array_body(VIEW, marker)
 }
 
 /// `Favorites.tab-count` is the sole definition of how many sub-views exist —
@@ -122,6 +117,12 @@ fn tab_count_matches_the_tabs_slint_declares() {
         .filter(|line| !line.starts_with("out property <int> tab-count"))
         .count();
     assert_eq!(indices, count, "`Favorites`'s `tab-*` constants don't add up to `tab-count`");
+
+    assert_eq!(
+        FavoritesTab::ALL.len(),
+        count,
+        "`FavoritesTab` needs one variant per tab the global declares"
+    );
 
     // Anchored on the branch's own shape (`… : ViewTransition {`) rather than
     // on the comparison alone: the hero reads `tab-idx` several more times
@@ -336,4 +337,153 @@ fn a_prewarm_outliving_the_leave_keeps_nothing() -> TestResult {
         "a prewarm that landed after the section leave must hand its buffers back"
     );
     Ok(())
+}
+
+/// Each fetch is armed wherever the cache it fills is emptied and disarmed
+/// wherever it is filled — the `RecentlyPlayedUi::grid_dirty` discipline, over
+/// two flags because this page has two gated fetches.
+///
+/// Three obligations, each a bug on the way in. The fetching branch **consumes**
+/// its flag (seeded `true`, so a boot onto a tab otherwise pays for its own
+/// fetch twice) and marks the *other*, which is the whole record that a tick
+/// went by. The section wipe re-arms both beside the caches it just cleared,
+/// rather than leaving it to the leave's own `mark_dirty` two files away. And
+/// each fetch re-arms its own on either way of storing nothing — a failed query
+/// or a leave landing mid-flight — because the tab pick consumes the flag
+/// *before* spawning, so nothing else would.
+#[test]
+fn each_gated_fetch_is_armed_beside_the_cache_it_fills() {
+    const LIFECYCLE: &str = include_str!("../callbacks/lifecycle.rs");
+    const HANDLE: &str = include_str!("../mod.rs");
+    const GRIDS_FETCH: &str = include_str!("../grids/fetch.rs");
+
+    let kick = LIFECYCLE
+        .split_once("async fn kick_full_refresh(")
+        .and_then(|(_, rest)| rest.split_once("\n}"))
+        .map(|(body, _)| body)
+        .unwrap_or_default();
+    for consumed in ["fav_ui.take_songs_dirty();", "fav_ui.take_grids_dirty();"] {
+        assert!(
+            kick.contains(consumed),
+            "`kick_full_refresh`'s fetching branch must consume its own flag — leaving it set \
+             makes the next pick re-query a cache this call just filled ({consumed})"
+        );
+    }
+    for marked in ["fav_ui.mark_songs_dirty();", "fav_ui.mark_grids_dirty();"] {
+        assert!(
+            kick.contains(marked),
+            "and it must mark the branch it skipped, or the pick that mounts that tab has no \
+             record that a tick went by ({marked})"
+        );
+    }
+
+    let release = HANDLE
+        .split_once("pub fn release_section_state(")
+        .and_then(|(_, rest)| rest.split_once("\n    }"))
+        .map(|(body, _)| body)
+        .unwrap_or_default();
+    for marked in ["self.mark_songs_dirty();", "self.mark_grids_dirty();"] {
+        assert!(
+            release.contains(marked),
+            "`release_section_state` must re-arm both flags beside the caches it wipes ({marked})"
+        );
+    }
+
+    // Two ways of storing nothing per fetch: a failed query and a leave landing
+    // mid-flight. `refresh_tracks` asks the section guard twice — before and
+    // after its cover prewarm — so it carries three marks in all.
+    assert_eq!(
+        SONGS.matches("mark_songs_dirty()").count(),
+        3,
+        "`refresh_tracks` must re-arm on the failed query and on both section bails"
+    );
+    assert_eq!(
+        GRIDS_FETCH.matches("mark_grids_dirty()").count(),
+        2,
+        "`refresh_grids` must re-arm on a failed query and on the section bail"
+    );
+}
+
+/// A grid pick that spawns a fetch takes back the count its synchronous apply
+/// just wrote.
+///
+/// The apply walks the cache the skipped tick left empty, so the `0` it writes
+/// is the one value meaning "there is nothing here" — `GridEmptyState` over a
+/// library that has plenty, for the length of the query plus the cover-decode
+/// burst it awaits. Songs owes no equivalent and that asymmetry is the point:
+/// `Favorites.track-count` is written by `refresh_hero`, which is never gated.
+#[test]
+fn a_grid_pick_rewinds_the_count_it_could_not_answer() {
+    let pick = SUBVIEWS
+        .split_once("g.on_tab_changed(move |tab| {")
+        .and_then(|(_, rest)| rest.split_once("\n        });"))
+        .map(|(body, _)| body)
+        .unwrap_or_default();
+
+    let (before_fetch, after_fetch) = pick
+        .split_once("if needs_fetch {")
+        .unwrap_or_default();
+    assert!(
+        before_fetch.contains("fu.take_songs_dirty()")
+            && before_fetch.contains("fu.take_grids_dirty()"),
+        "the pick must consume the entering tab's flag before the applies — the answer is what \
+         decides whether the count they write stands for anything"
+    );
+    assert!(
+        before_fetch.contains("apply_filtered_grids_now(&ui, &fu)"),
+        "and the apply must come first, so a warm cache still paints on this tick"
+    );
+    for rewound in ["set_most_played_count(UNFETCHED_COUNT)", "set_artist_count(UNFETCHED_COUNT)"] {
+        assert!(
+            after_fetch.contains(rewound),
+            "a grid pick that spawns a fetch must rewind that tab's count ({rewound})"
+        );
+    }
+    assert!(
+        !after_fetch.contains("set_track_count(UNFETCHED_COUNT)"),
+        "Songs must not rewind: its count comes from the ungated `refresh_hero`, so it is \
+         answered on every tab either way"
+    );
+}
+
+/// And the apply that answers that rewind writes its counts **above** the
+/// signature guard, or the sentinel above is permanent.
+///
+/// The pick stamps a signature over the cache its skipped tick left in place and
+/// only then rewinds; the fetch it spawned lands on that same signature whenever
+/// the content hasn't moved — an empty grid on a library with no favourites, or a
+/// `stats_changed` tick for a track this query doesn't rank — so a count written
+/// past the guard is one that never arrives. `-1` misses `> 0` as well as `== 0`,
+/// so what strands is not only the empty state: `favorites-view.slint` gates the
+/// Most Played Shuffle pill and the Artists sort row the other way, and both
+/// vanish over a grid that is full.
+///
+/// The mutation to check is moving either write back under the guard, where it
+/// reads as belonging with the model write beside it and compiles.
+#[test]
+fn the_grid_counts_are_written_before_the_signature_can_skip_them() {
+    const GRIDS_APPLY: &str = include_str!("../grids/apply.rs");
+
+    let write = GRIDS_APPLY
+        .split_once("fn write_filtered_grids(")
+        .and_then(|(_, rest)| rest.split_once("\n}"))
+        .map(|(body, _)| body)
+        .unwrap_or_default();
+
+    assert!(
+        write.contains("last_grid_signature"),
+        "`write_filtered_grids` must still take the signature guard — this pin is about where \
+         the counts sit relative to it, not about retiring it"
+    );
+    let before_guard = write
+        .split_once("last_grid_signature")
+        .map_or("", |(head, _)| head);
+    for count in ["set_most_played_count(", "set_artist_count("] {
+        assert!(
+            before_guard.contains(count),
+            "{count} must be written above the signature guard: the guard is what a tab pick's \
+             own fetch lands on when the content hasn't moved, and it would leave \
+             `UNFETCHED_COUNT` standing with no answer coming"
+        );
+    }
 }

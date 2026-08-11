@@ -46,7 +46,7 @@ async fn headless_scan_persists_track() -> Result<(), AppError> {
     let scanned = library::settings::scan_folder(&state, folder.id).await?;
     assert_eq!(scanned, 1, "expected exactly the silence fixture to ingest");
 
-    let tracks = library::tracks::get_tracks(&state, None, None).await?;
+    let tracks = library::tracks::get_tracks(&state).await?;
     assert_eq!(tracks.len(), 1, "exactly one track should be in DB");
 
     let row = &tracks[0];

@@ -50,6 +50,10 @@ export component BrowseFolderRowItem inherits Rectangle {
                     font-size: Theme.font-size-md;
                     font-weight: 500;
                     min-width: self.preferred-width;
+                    // For the ink, not the elision — the floor above pins the width, so
+                    // this only retires the scissor `clip` would push at the line box.
+                    // A filename is the one string here that can carry Arabic marks.
+                    overflow: elide;
                 }
             }
 

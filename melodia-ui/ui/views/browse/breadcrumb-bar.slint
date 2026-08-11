@@ -26,6 +26,10 @@ component BreadcrumbPill inherits Rectangle {
                 color: root.is-current ? Theme.accent : Theme.subtext0;
                 font-size: Theme.font-size-sm;
                 font-weight: 500;
+                // Ink, not elision: the pill's bound width above keeps the segment
+                // incompressible either way, so this only drops the line-box scissor
+                // that would cut a path segment's Arabic marks.
+                overflow: elide;
             }
         }
     }

@@ -15,7 +15,8 @@ const SIDEBAR: &str = include_str!("../../../../melodia-ui/ui/layout/sidebar.sli
 const PILLS: &str = include_str!("../../../../melodia-ui/ui/views/my-library/tab-pills.slint");
 const SORT_ROW: &str =
     include_str!("../../../../melodia-ui/ui/components/sort-pill-row.slint");
-const CALLBACKS: &str = include_str!("../../callbacks/my_library.rs");
+const CALLBACKS: &str = include_str!("../callbacks.rs");
+const NAV_HISTORY: &str = include_str!("../../nav_history.rs");
 const FILTER: &str = include_str!("../filter.rs");
 
 /// The five tab bodies, each stripped of the header its predecessor carried.
@@ -46,14 +47,9 @@ const DETAIL_BODIES: [(&str, &str); 4] = [
     ),
 ];
 
-/// A `.slint` source with its comment lines dropped, so prose naming a component can't
-/// satisfy — or trip — a pin about mounting one. The `library_tab_band_tests.rs` helper.
-fn code(src: &str) -> String {
-    src.lines()
-        .filter(|line| !line.trim_start().starts_with("//"))
-        .collect::<Vec<_>>()
-        .join("\n")
-}
+// A `.slint` source with its comments dropped, so prose naming a component can't satisfy
+// — or trip — a pin about mounting one.
+use crate::test_support::strip_line_comments as code;
 
 /// The `tab-*` constant names the `MyLibrary` global declares, `tab-count` excluded.
 fn declared_tabs() -> Vec<String> {
@@ -67,16 +63,16 @@ fn declared_tabs() -> Vec<String> {
 }
 
 fn declared_tab_count() -> usize {
-    let digits = GLOBAL
-        .split_once("out property <int> tab-count:")
-        .and_then(|(_, rest)| rest.split_once(';'))
-        .map_or("", |(digits, _)| digits.trim());
-    let parsed = digits.parse::<usize>().ok();
+    let parsed = crate::test_support::declared_tab_count(GLOBAL);
+    // The whole line rather than the digits the parser failed on — if it failed, the
+    // digits are whatever the split happened to leave, which explains nothing.
+    let declared =
+        GLOBAL.lines().find(|line| line.contains("tab-count:")).unwrap_or("<no declaration>");
     assert!(
         parsed.is_some(),
         "`MyLibrary.tab-count` must stay a plain `out property <int> tab-count: N;` — it is \
          the sole definition of how many tabs there are, and Rust clamps the persisted tab \
-         against it. Found: {digits:?}",
+         against it. Found: {declared:?}",
     );
     parsed.unwrap_or_default()
 }
@@ -101,6 +97,15 @@ fn tab_count_matches_the_tabs_slint_declares() {
         count,
         "`MyLibrary` declares {} `tab-*` constants but `tab-count: {count}`: {tabs:?}",
         tabs.len(),
+    );
+
+    // `tab_from_index` ends in a default arm, so a sixth tab without a variant
+    // resolves to `Songs` — and `ui::view_tag` logs it as `MyLibrary/Songs`,
+    // right-looking on the one tab nobody added a name for.
+    assert_eq!(
+        crate::ui::my_library::MyLibraryTab::ALL.len(),
+        count,
+        "`MyLibraryTab` needs one variant per tab the global declares"
     );
 
     // The labels have to stay an inline `[@tr(…), …]` literal — a Rust-seeded
@@ -153,15 +158,19 @@ fn every_tab_carries_its_own_section_gate() {
     );
 }
 
-const ORIGIN_WRITERS: [(&str, &str); 5] = [
-    ("cross_tab_nav", include_str!("../../callbacks/cross_tab_nav.rs")),
-    ("albums/grid", include_str!("../../callbacks/albums/grid.rs")),
-    ("albums/detail", include_str!("../../callbacks/albums/detail.rs")),
-    ("artists/detail", include_str!("../../callbacks/artists/detail.rs")),
-    ("genres/detail", include_str!("../../callbacks/genres/detail.rs")),
+const CROSS_TAB: &str = include_str!("../../callbacks/cross_tab_nav.rs");
+
+const ORIGIN_WRITERS: [(&str, &str); 7] = [
+    ("cross_tab_nav", CROSS_TAB),
+    ("albums/grid", include_str!("../../albums/callbacks/grid.rs")),
+    ("artists/grid", include_str!("../../artists/callbacks/grid.rs")),
+    ("genres/grid", include_str!("../../genres/callbacks/grid.rs")),
+    ("albums/detail", include_str!("../../albums/callbacks/detail.rs")),
+    ("artists/detail", include_str!("../../artists/callbacks/detail.rs")),
+    ("genres/detail", include_str!("../../genres/callbacks/detail.rs")),
 ];
 
-const ARTIST_CROSS_TAB: &str = include_str!("../../callbacks/artists/cross_tab.rs");
+const ARTIST_CROSS_TAB: &str = include_str!("../../artists/callbacks/cross_tab.rs");
 
 const DETAIL_GLOBALS: [(&str, &str); 3] = [
     ("AlbumDetail", include_str!("../../../../melodia-ui/ui/globals/albums.slint")),
@@ -169,47 +178,87 @@ const DETAIL_GLOBALS: [(&str, &str); 3] = [
     ("GenreDetail", include_str!("../../../../melodia-ui/ui/globals/genres.slint")),
 ];
 
-/// **A drill's origin is a pair.** With five views on nav index 3, `origin-nav-index`
-/// alone can't tell one tab from another: the guard that stops a mid-fetch nav from
-/// yanking the user becomes `3 == 3`, and the back path's restore becomes a no-op that
-/// leaves the wrong tab mounted. Both halves are written and cleared together.
+/// **A drill's origin is a section, and a drill inside the page has none.**
+///
+/// The four destinations are all tabs of one page, so a drill starting there ends there:
+/// the tab bar names the detail's own tab for the whole visit, and a back arrow restoring
+/// the tab it came from contradicts the bar beside it. Mouse-4/5 is the control with
+/// history semantics, and it still steps back into the detail the drill came from.
+///
+/// The mutation to catch is `origin-tab` coming back — either as a property or as a second
+/// write beside the nav index — since that is the shape the arrow's tab-jump had.
 #[test]
-fn every_detail_records_the_tab_it_was_opened_from() {
+fn a_drill_inside_the_page_records_no_origin() {
     for (name, source) in DETAIL_GLOBALS {
         assert!(
-            source.contains("in-out property <int> origin-tab: -1;"),
-            "`{name}` no longer declares `origin-tab`",
+            !source.contains("origin-tab"),
+            "`{name}` declares `origin-tab` again — an origin restores a *section*, and \
+             restoring a sibling tab is what made the back arrow jump the tab bar",
         );
     }
     for (name, source) in ORIGIN_WRITERS {
-        let nav = source.matches("set_origin_nav_index(").count();
-        let tab = source.matches("set_origin_tab(").count();
-        assert!(nav > 0, "`{name}` no longer writes `origin-nav-index` — pin is stale");
-        assert_eq!(
-            nav, tab,
-            "`{name}` writes `origin-nav-index` {nav}× but `origin-tab` {tab}×; the two \
-             halves have to move together",
+        assert!(
+            source.contains("set_origin_nav_index("),
+            "`{name}` no longer writes `origin-nav-index` — pin is stale",
+        );
+        assert!(
+            !source.contains("set_origin_tab("),
+            "`{name}` writes an `origin-tab` again",
         );
     }
 
+    // Every stamp goes through `Origin::stamp`, which is where the `-1` lives. A site
+    // spelling `origin.nav` compiles and is right for the cross-section drills the author
+    // was looking at — and wrong for exactly the one this rule is about.
+    let stamps = CROSS_TAB.matches("set_origin_nav_index(origin.stamp())").count();
+    assert_eq!(
+        CROSS_TAB.matches("set_origin_nav_index(").count(),
+        stamps,
+        "every drill in `cross_tab_nav` must stamp through `Origin::stamp` — reading \
+         `origin.nav` straight records the page itself as an origin and restores a sibling tab",
+    );
+    assert!(stamps >= 3, "only {stamps} origin stamps found — the walk or the pin is stale");
+
     // Artist Detail → Album Detail is the one drill that used to stamp the origin
     // itself, with the source tab hardcoded. It goes through the shared hand-off now,
-    // so the pair and the mid-fetch guard are spelled once; re-inlining it is what
+    // so the stamp and the mid-fetch guard are spelled once; re-inlining it is what
     // this catches.
     assert!(
         ARTIST_CROSS_TAB.contains("cross_tab_nav::open_album_cross_tab(")
             && !ARTIST_CROSS_TAB.contains("set_origin_nav_index("),
         "`artists/cross_tab` must route through `cross_tab_nav::open_album_cross_tab` \
-         rather than stamping the origin pair itself",
+         rather than stamping the origin itself",
     );
 }
 
+/// **A same-tab grid open zeroes whatever origin is left over.**
+///
+/// A "Go to Album" from Favorites stamps one and only `close-detail` clears it, so reaching
+/// that grid by any path that left the detail open sends the next back press to Favorites.
+/// Albums carried this line for years and its two siblings did not, which is the shape of
+/// the bug: correct at the site someone looked at, absent at the two they didn't.
+#[test]
+fn every_grid_open_zeroes_a_stale_origin() {
+    const GRIDS: [(&str, &str, &str); 3] = [
+        ("albums/grid", include_str!("../../albums/callbacks/grid.rs"), "AlbumDetail"),
+        ("artists/grid", include_str!("../../artists/callbacks/grid.rs"), "ArtistDetail"),
+        ("genres/grid", include_str!("../../genres/callbacks/grid.rs"), "GenreDetail"),
+    ];
+    for (name, source, global) in GRIDS {
+        assert!(
+            source.contains(&format!("ui.global::<{global}>().set_origin_nav_index(-1);")),
+            "`{name}`'s same-tab open must zero `{global}.origin-nav-index` — otherwise a \
+             cross-section origin nobody closed sends this detail's back arrow to that section",
+        );
+    }
+}
+
 const SECTION_SEEDS: [(&str, &str, &str); 5] = [
-    ("Songs", "tracks", include_str!("../../callbacks/tracks.rs")),
-    ("Albums", "albums", include_str!("../../callbacks/albums/lifecycle.rs")),
-    ("Artists", "artists", include_str!("../../callbacks/artists/lifecycle.rs")),
-    ("Genres", "genres", include_str!("../../callbacks/genres/lifecycle.rs")),
-    ("Playlists", "playlists", include_str!("../../callbacks/playlists/lifecycle.rs")),
+    ("Songs", "tracks", include_str!("../../tracks/callbacks/lifecycle.rs")),
+    ("Albums", "albums", include_str!("../../albums/callbacks/lifecycle.rs")),
+    ("Artists", "artists", include_str!("../../artists/callbacks/lifecycle.rs")),
+    ("Genres", "genres", include_str!("../../genres/callbacks/lifecycle.rs")),
+    ("Playlists", "playlists", include_str!("../../playlists/callbacks/lifecycle.rs")),
 ];
 
 /// `SectionActiveGate` fires on transitions only, and its `ChangeTracker` baselines
@@ -268,7 +317,8 @@ fn a_tab_pick_clears_the_filter_on_both_sides() {
         .map_or("", |(body, _)| body);
     assert!(
         !handler.is_empty(),
-        "`wire_my_library` must still register `on_tab_changed` before `on_persist_tab_idx` \
+        "`my_library::callbacks::wire` must still register `on_tab_changed` before \
+         `on_persist_tab_idx` \
          — this pin bounds the handler between the two",
     );
     for clear in ["g.set_filter(SharedString::from(\"\"))", "filter::clear_mounted(&ui)"] {
@@ -334,11 +384,17 @@ fn a_drill_a_back_or_a_tab_move_reseats_the_shared_box() {
             "my-library-view.slint must mirror `{id}` as `{mirror}` — `changed` can't watch a \
              global's property directly, and an unmirrored id reseats nothing",
         );
+        // Bounded at the handler's own closing brace rather than matched whole:
+        // `watched-tab-idx` carries a second statement (it arms the body fade too,
+        // see `every_arrival_that_is_not_the_pages_own_entrance_arms_the_body_fade`),
+        // and a pin spelling one body out is a pin that fails on the next one added.
+        let handler = view
+            .split_once(&format!("changed {mirror} => {{"))
+            .and_then(|(_, rest)| rest.split_once('}'))
+            .map_or("", |(body, _)| body);
         assert!(
-            view.contains(&format!(
-                "changed {mirror} => {{ MyLibrary.detail-scope-changed(); }}"
-            )),
-            "`{mirror}` must fire `detail-scope-changed`",
+            handler.contains("MyLibrary.detail-scope-changed();"),
+            "`{mirror}` must fire `detail-scope-changed`; got {handler:?}",
         );
     }
 
@@ -354,8 +410,7 @@ fn a_drill_a_back_or_a_tab_move_reseats_the_shared_box() {
 
     // Nine surfaces out, nine back. A missing read leaves that surface's needle
     // unrepresented, which is the same lie one direction at a time. Both readers —
-    // `sync_box` and `clear_mounted`'s guard — go through `mounted_filter`, so this is
-    // the one place the return leg is spelled.
+    // `sync_box` and `clear_mounted`'s guard — go through `mounted_filter`.
     let sync = FILTER
         .split_once("fn mounted_filter(")
         .and_then(|(_, rest)| rest.split_once("pub fn clear_mounted("))
@@ -364,6 +419,34 @@ fn a_drill_a_back_or_a_tab_move_reseats_the_shared_box() {
         !sync.is_empty(),
         "`ui::my_library::filter` must expose `mounted_filter` above `clear_mounted`",
     );
+    assert!(
+        sync.contains("on_mounted_surface!("),
+        "`mounted_filter` must route through `on_mounted_surface!` — the return leg has to \
+         ask the same nine-way question `dispatch` asks, and a second spelling of it is how \
+         the two halves drift apart",
+    );
+}
+
+/// **The nine surfaces are enumerated exactly once, and everything routes through it.**
+///
+/// The dispatch table used to be written out three times inside `filter.rs` — once to
+/// write a needle, once to read one back, once to rewind a count — with the
+/// `get_*_id() >= 0` detail predicate spelled twelve times between them, under a doc
+/// comment warning that asking twice is how the hand-off drifts apart. It is
+/// `on_mounted_surface!` now, over the pair `my_library::mounted_surface` resolves.
+///
+/// Pinned here rather than at each consumer for the reason the fold was made: a per-caller
+/// check is satisfied by a *copy*, which is the thing being prevented. The mutation to
+/// check is inlining any one arm back into a caller — the caller still reaches its own
+/// surface, so a body scan would pass.
+#[test]
+fn the_nine_surfaces_are_enumerated_once_and_every_caller_routes_through_it() {
+    let table = FILTER
+        .split_once("macro_rules! on_mounted_surface {")
+        .and_then(|(_, rest)| rest.split_once("\n}\n"))
+        .map_or("", |(body, _)| body);
+    assert!(!table.is_empty(), "`ui::my_library::filter` must declare `on_mounted_surface!`");
+
     for surface in [
         "Tracks",
         "AlbumDetail",
@@ -376,9 +459,32 @@ fn a_drill_a_back_or_a_tab_move_reseats_the_shared_box() {
         "Playlists",
     ] {
         assert!(
-            sync.contains(&format!("ui.global::<{surface}>()")),
-            "`mounted_filter` must reach `{surface}` — `dispatch` routes to all nine surfaces \
-             on the way out and this owes all nine on the way back",
+            table.contains(&format!("ui.global::<{surface}>()")),
+            "`on_mounted_surface!` must reach `{surface}` — it is the page's whole routing \
+             table, so a missing arm silently drops that surface from every caller at once",
+        );
+    }
+
+    // The predicate that decides grid-versus-detail is the resolver's, asked once per
+    // dispatch, rather than a `get_*_id() >= 0` per arm.
+    assert!(
+        table.contains("surface.detail_open()") && !table.contains("_id() >= 0"),
+        "`on_mounted_surface!` must split on `MountedSurface::detail_open`, not on a \
+         per-arm id read — the id check is `my_library::detail_id_for`'s and is what the \
+         resolver exists to state once",
+    );
+
+    // Every consumer, so a fourth question about the mounted surface can't quietly grow a
+    // fourth copy of the table beside them.
+    for caller in ["pub fn dispatch(", "fn mounted_filter(", "fn rewind_grid_count("] {
+        let body = FILTER
+            .split_once(caller)
+            .and_then(|(_, rest)| rest.split_once("\n}\n"))
+            .map_or("", |(body, _)| body);
+        assert!(
+            body.contains("on_mounted_surface!("),
+            "`{caller}…` must route through `on_mounted_surface!` rather than re-spelling \
+             the nine arms",
         );
     }
 }
@@ -430,17 +536,20 @@ fn a_tab_pick_dispatches_only_into_a_tab_that_is_filtered() {
         .and_then(|(_, rest)| rest.split_once("\n}\n"))
         .map_or("", |(body, _)| body);
     assert!(!rewind.is_empty(), "`ui::my_library::filter` must expose `rewind_grid_count`");
-    for grid in ["Albums", "Artists", "Genres", "Playlists"] {
-        assert!(
-            rewind.contains(&format!("ui.global::<{grid}>().set_total_count(UNFETCHED_COUNT)")),
-            "`rewind_grid_count` must rewind `{grid}` — every grid tab's cache is wiped by \
-             its own leave, so every one of them takes the same `0` from the rebuild",
-        );
-    }
     assert!(
-        !rewind.contains("ui.global::<Tracks>()"),
-        "`rewind_grid_count` must leave Songs alone — its model survives the leave, so \
-         `refilter` re-derives a true count off a warm cache and there is nothing to take back",
+        rewind.contains("set_total_count(UNFETCHED_COUNT)"),
+        "`rewind_grid_count`'s grid arm must write the sentinel — every grid tab's cache is \
+         wiped by its own leave, so every one of them takes the same `0` from the rebuild",
+    );
+    // Songs shares the grid arm (it is a list, not a detail), so what excludes it is no
+    // longer an absent match arm but this guard — and `Tracks` really does carry a
+    // `total-count`, so dropping the guard compiles and silently rewinds a count that was
+    // never a lie.
+    assert!(
+        rewind.contains("MyLibraryTab::Songs") && rewind.contains("return;"),
+        "`rewind_grid_count` must bail on Songs before it dispatches — its model survives \
+         the leave, so `refilter` re-derives a true count off a warm cache and there is \
+         nothing to take back",
     );
 
     let handler = CALLBACKS
@@ -554,10 +663,10 @@ fn the_pill_row_follows_the_body_router() {
 
 /// The four `on_close_detail` handlers, which used to own the hero teardown.
 const CLOSE_HANDLERS: [(&str, &str); 4] = [
-    ("album", include_str!("../../callbacks/albums/detail.rs")),
-    ("artist", include_str!("../../callbacks/artists/detail.rs")),
-    ("genre", include_str!("../../callbacks/genres/detail.rs")),
-    ("playlist", include_str!("../../callbacks/playlists/detail.rs")),
+    ("album", include_str!("../../albums/callbacks/detail.rs")),
+    ("artist", include_str!("../../artists/callbacks/detail.rs")),
+    ("genre", include_str!("../../genres/callbacks/detail.rs")),
+    ("playlist", include_str!("../../playlists/callbacks/detail.rs")),
 ];
 
 /// **The band's hero reads a latched arm; everything else reads the live one.**
@@ -612,8 +721,12 @@ fn the_hero_reads_a_latched_arm_where_the_body_reads_the_live_one() {
     // still *bound*, so the guard holds nothing and the first close after a mount that
     // landed on an open detail collapses over the last ternary arm. Deleting this line
     // leaves every other assertion here green, which is exactly why it is pinned.
+    let init = view
+        .split_once("init => {")
+        .and_then(|(_, rest)| rest.split_once('}'))
+        .map_or("", |(body, _)| body);
     assert!(
-        view.contains("init => { root.latch-hero(); }"),
+        init.contains("root.latch-hero();"),
         "the sheet must latch once at mount: a view rebuilt straight onto a detail — a \
          re-entry, or a boot resuming one — has never written the arms, so the bindings are \
          live and the first back drops the banner instead of collapsing it",
@@ -637,13 +750,74 @@ fn the_hero_reads_a_latched_arm_where_the_body_reads_the_live_one() {
     );
 }
 
+/// **The count line holds the sentence it is collapsing out of**, which is the mirror
+/// image of the latch above — same idiom, complementary guard.
+///
+/// The band eases the idle count out over the first half of the morph, so a drill has to
+/// fade the sentence that was *on screen*. Bound live it re-read the arriving tab instead,
+/// and the arrival brought two wrongs with it: the destination tab's leave had rewound its
+/// own count to `UNFETCHED_COUNT`, so the departing sentence vanished on frame one rather
+/// than fading, and the section-enter's `fetch_grid` then landed *inside* the fade and
+/// popped "7 playlists" onto a line still three-quarters opaque.
+///
+/// The guard is `!detail-open` where `latch-hero`'s is `detail-open`: the hero half holds
+/// across a *close*, this holds across an *open*.
+#[test]
+fn the_count_line_holds_the_sentence_it_is_collapsing_out_of() {
+    let view: String = code(VIEW).split_whitespace().collect::<Vec<_>>().join(" ");
+
+    assert!(
+        view.contains("count-text: root.count-line;"),
+        "the band must be handed the latched `count-line`; on the live ternary the sentence \
+         re-reads the arriving tab for the whole time it is still legible",
+    );
+    assert!(
+        view.contains("property <string> count-line: root.live-count;"),
+        "`count-line` must be seeded off `live-count` — the seed is what leaves a page \
+         mounted on a grid already stating its own count",
+    );
+    assert!(
+        view.contains("function latch-count() { self.count-line = root.live-count; }"),
+        "`latch-count` must be the single unguarded writer, the `latch-hero` shape: the \
+         guard belongs at the call sites, so `init` can take ownership of the binding",
+    );
+
+    // Bounded at the handler's own closing brace rather than by a fixed width, so a
+    // neighbour that happens to latch can't vouch for one that stopped.
+    for edge in ["changed live-count", "changed detail-open"] {
+        let body = view
+            .split_once(&format!("{edge} => {{"))
+            .and_then(|(_, rest)| rest.split_once("} }"))
+            .map_or(String::new(), |(body, _)| body.to_owned());
+        assert!(
+            body.contains("if (!root.detail-open) { root.latch-count();"),
+            "`{edge}` must latch, and only while no detail is open — unguarded it adopts \
+             the arriving tab's number mid-fade, which is the flash itself",
+        );
+    }
+
+    // The seed has to become a write, and this is the line that does it. Without it the
+    // binding is still live on a page mounted onto a grid, so the first drill follows the
+    // tab through it and every other assertion here stays green.
+    let init = view
+        .split_once("init => {")
+        .and_then(|(_, rest)| rest.split_once('}'))
+        .map_or("", |(body, _)| body);
+    assert!(
+        init.contains("root.latch-count();"),
+        "the sheet must latch the count once at mount, beside `latch-hero` — the guard is \
+         `!detail-open`, so nothing else writes it on a page entered onto a grid",
+    );
+}
+
 /// The hero teardown is **deferred to the end of the collapse** and lives in one place.
 ///
 /// Left in the close handlers it runs on the same tick as the id clear, which is what the
 /// latches above exist to survive — holding the arm is worthless if the cover, the blur
 /// pair, the shared `HeroBackdrop` tiers and the `HeroChips` row are already gone. The
-/// backstop for a collapse the band doesn't live to finish is the per-tab section leave,
-/// which keeps its own release.
+/// backstop for a collapse the band doesn't live to finish is the page's own teardown off
+/// `MyLibrary.page-active-changed` — not the per-tab section leave, which now holds the
+/// hero instead of handing it back.
 #[test]
 fn no_close_detail_hands_the_hero_back() {
     for (name, src) in CLOSE_HANDLERS {
@@ -813,4 +987,272 @@ fn the_retired_indices_fold_onto_the_page_that_absorbed_them() {
     // Out of range in either direction is the caller's problem, not the fold's.
     assert_eq!(fold_retired_nav_index(-1), -1);
     assert_eq!(fold_retired_nav_index(42), 42);
+}
+
+/// **A tab pick is the one tab move that enters the back/forward history**, and it is
+/// the only one that records.
+///
+/// `NavEntry.tab` has always existed to tell two tabs of this page apart — without it
+/// `record`'s dedup swallows a same-section move — but no call site ever pushed one, so
+/// Mouse-4 walked straight past every grid the user reached by picking a tab. The moves
+/// made on the user's *behalf* (a cross-tab drill, a Mouse-4/5 step) go through
+/// `persist-tab-idx` instead and must stay silent: the first is followed by the drill's
+/// own `record_current`, and the second is a replay, which is suppressed anyway.
+#[test]
+fn only_a_tab_pick_records_a_history_entry() {
+    let pick = CALLBACKS
+        .split_once("g.on_tab_changed(")
+        .and_then(|(_, rest)| rest.split_once("g.on_persist_tab_idx("))
+        .map_or("", |(body, _)| body);
+    assert!(
+        !pick.is_empty(),
+        "`my_library::callbacks::wire` must still register `on_tab_changed` before \
+         `on_persist_tab_idx` \
+         — this pin bounds the handler between the two",
+    );
+    assert!(
+        pick.contains("nav_history::record_current(&s, &ui)"),
+        "`on_tab_changed` must record the tab it lands on, or Mouse-4 skips every grid \
+         reached by a pick",
+    );
+
+    let behalf = CALLBACKS
+        .split_once("g.on_persist_tab_idx(")
+        .and_then(|(_, rest)| rest.split_once("g.on_filter_changed("))
+        .map_or("", |(body, _)| body);
+    assert!(
+        !behalf.is_empty(),
+        "`on_persist_tab_idx` must still sit between `on_tab_changed` and `on_filter_changed`",
+    );
+    assert!(
+        !behalf.contains("nav_history::"),
+        "`on_persist_tab_idx` must not record — a cross-tab drill records its own destination \
+         a moment later, and a history walk would push the entry it just walked to",
+    );
+}
+
+/// **A history walk lands the tab in the same tick as the detail id it is walking to.**
+///
+/// `replay`'s cross-view arm used to write `persist_tab` synchronously and leave the
+/// matching `set_*_id` behind a DB fetch and an artwork decode. The body router is a pure
+/// function of `(tab-idx, the four ids)` with no third state, so for that whole window —
+/// tens to hundreds of ms, not a frame — it mounted the destination tab's **grid**, faded
+/// in by the sheet's `changed watched-tab-idx` at that. Reported as the playlists page
+/// flashing up on the way into a playlist.
+///
+/// The cure is the shape `cross_tab_nav` has always had: hand the navigation to
+/// `open_*_with`'s hook, which runs inside the closure that writes the id. Hoisting
+/// `persist_tab` back above the spawn compiles, reads correctly, and is the whole bug —
+/// so the pin is on the *synchronous* body carrying neither write.
+#[test]
+fn a_history_walk_lands_the_tab_beside_the_detail_id() {
+    let deferred = NAV_HISTORY
+        .split_once("let pending = PendingNav {")
+        .and_then(|(_, rest)| rest.split_once("\n    }\n"))
+        .map_or("", |(body, _)| body);
+    assert!(
+        !deferred.is_empty(),
+        "`replay`'s cross-view arm no longer builds a `PendingNav` — if the deferral moved, \
+         move this pin with it",
+    );
+    for write in ["persist_tab(ui,", "set_selected_index("] {
+        assert!(
+            !deferred.contains(write),
+            "`replay` performs `{write}` synchronously on the arm that is also opening a \
+             detail — the id lands a fetch later, so the destination tab's grid mounts in \
+             between",
+        );
+    }
+    assert!(
+        deferred.contains("spawn_open_detail(state, ui, target.section, target.tab, id, direction, Some(pending))"),
+        "the deferred arm must hand its `PendingNav` to `spawn_open_detail`, which is the \
+         only thing that can put it in the same tick as the id",
+    );
+
+    for open in
+        ["open_album_with(", "open_artist_with(", "open_genre_with(", "open_playlist_with("]
+    {
+        assert!(
+            NAV_HISTORY.contains(open),
+            "`spawn_open_detail` must reach `{open}` — the plain `open_*` has no hook, so the \
+             navigation would have to be written before the fetch again",
+        );
+    }
+
+    // A path that skips the hook and can still open something has to land the navigation
+    // itself, or the press does nothing at all — a Mouse-4 into a deleted playlist being
+    // the reachable case. Both spellings are pinned by role: the bail runs before the
+    // spawn and reads the caller's `state`, the failure arm after it and reads the clone.
+    for (spelling, role) in [
+        ("land_pending(pending, state, &fallback);", "the four missing-handle bails"),
+        ("land_pending(pending, &s, &fallback);", "the four failed opens"),
+    ] {
+        assert_eq!(
+            NAV_HISTORY.matches(spelling).count(),
+            4,
+            "{role} in `spawn_open_detail` must each land the pending navigation",
+        );
+    }
+}
+
+/// **The section flip is decided against the live index, not against where the walk
+/// started.** The two are the same question only while nothing between them moves the
+/// index — and the close `PendingNav::apply` performs first is exactly something that
+/// does: a detail opened by a cross-section drill carries an `origin-nav-index`, and its
+/// `close-detail` restores that section.
+///
+/// So a walk between two My Library tabs, out of a detail that Favorites or Search had
+/// drilled into, ends on *that* origin page with the destination detail open behind it —
+/// the flip having been decided, before the close, that a same-section move needed none.
+/// A precomputed `section_moves` bool is the mutation: it compiles, it reads correctly,
+/// and it is the whole bug.
+#[test]
+fn the_replay_flips_the_section_against_the_index_the_close_left_behind() {
+    let apply = NAV_HISTORY
+        .split_once("fn apply(self, ui: &AppWindow) {")
+        .and_then(|(_, rest)| rest.split_once("\n    }\n"))
+        .map_or("", |(body, _)| body);
+    assert!(
+        !apply.is_empty(),
+        "`PendingNav::apply` moved — if the navigation is landed somewhere else now, move \
+         this pin with it",
+    );
+    assert!(
+        apply.contains("if nav.get_selected_index() != self.section {"),
+        "`PendingNav::apply` must compare the **live** index against the target section; \
+         anything decided before the close it performs first can't see an origin restore",
+    );
+    assert!(
+        !NAV_HISTORY.contains("section_moves"),
+        "`PendingNav` carries a precomputed section verdict again — it is read after a close \
+         that can move the index, so it answers for a page the walk has already left",
+    );
+}
+
+/// **Every body on this page enters on one axis, and the axis is vertical.**
+///
+/// This page has a second animation no other has: the band's own height. The band is
+/// the non-stretching sibling above the body, so a morph between the compact floor
+/// and the hero one moves `body.y` by the whole distance between them, on every
+/// frame, and the list or grid inside is anchored to that. A body that also slid
+/// sideways gave the diagonal this pin exists to keep out — 32 px left plus the
+/// band's push down on a back out, 32 px right plus its pull up on a drill in, and
+/// both at once on a tab pick that closes a banner.
+///
+/// So all nine branches take the same three lines. `below` is the sidebar's own
+/// fade-up; `slide: !band.morphing` drops even that whenever the band is already
+/// doing the moving, leaving a cross-fade over the morph. Same-axis is deliberately
+/// not enough: the morph's entry curve is slow off the mark where `ViewTransition`'s
+/// is not, so a rise on top of the push sends the body up before it comes down.
+///
+/// Walking the branches rather than listing them is the point — a tenth added later
+/// with `enter-from: Nav.pending-enter-from` copied off a sibling page compiles,
+/// looks right in review, and is the bug.
+#[test]
+fn every_body_branch_enters_on_the_bands_own_axis() {
+    let view = code(VIEW);
+
+    // The condition trails the *previous* chunk, so each branch is paired with the
+    // `if …` that mounts it — a failure that can't name the branch is a failure you
+    // have to go and find.
+    let chunks: Vec<&str> = view.split(": ViewTransition {").collect();
+    let branches: Vec<(&str, &str)> = chunks
+        .windows(2)
+        .map(|pair| {
+            let condition = pair[0].lines().next_back().unwrap_or_default().trim();
+            // The branch's own closing brace: its contents are indented one level
+            // deeper, so this is the first line that can end it.
+            let body =
+                pair[1].split_once("\n            }").map_or(pair[1], |(body, _)| body);
+            (condition, body)
+        })
+        .collect();
+    assert_eq!(
+        branches.len(),
+        9,
+        "my-library-view.slint must wrap all nine bodies — five tabs and four details — in a \
+         `ViewTransition`; one mounted bare appears with no fade at all"
+    );
+
+    for (head, branch) in &branches {
+        for line in [
+            "enter-from: NavEnterFrom.below;",
+            "enabled: root.body-anim-armed;",
+            "slide: !band.morphing;",
+        ] {
+            assert!(
+                branch.contains(line),
+                "the branch mounting `{head}` must carry `{line}` — the three together are what \
+                 keep this page's entry on one axis; any one of them missing puts a slide back \
+                 on top of the band's morph"
+            );
+        }
+    }
+
+    assert!(
+        !view.contains("Nav.pending-enter-from"),
+        "nothing on this page may read or write `Nav.pending-enter-from` — the bodies take a \
+         fixed `below`, so a write here would only leave a stale `right`/`left` for whichever \
+         *page* mounts next, and a read is the horizontal slide coming back"
+    );
+}
+
+/// **`ViewTransition.slide` must gate both axes.** Gating one is the half-fix that
+/// still goes diagonal, and it is the natural shape of a hurried edit — the offset
+/// this page needed suppressed was the horizontal one, so `x` is the line a fix
+/// reaches for first and `y` the one it forgets.
+#[test]
+fn the_fade_only_mode_suppresses_both_offsets() {
+    const TRANSITION: &str =
+        include_str!("../../../../melodia-ui/ui/components/view-transition.slint");
+
+    let transition = code(TRANSITION);
+    assert!(
+        transition.contains("in property <bool> slide: true;"),
+        "`ViewTransition` must default `slide` to true — the ten mounts that own their own \
+         translation say nothing, and only a body under a morphing container opts out"
+    );
+    for axis in ['x', 'y'] {
+        assert!(
+            transition.contains(&format!("{axis}: settled || !root.slide ? 0px :")),
+            "`ViewTransition`'s `{axis}` must be gated on `slide` — an offset left ungated is \
+             still a translation, and it composes with the container that is already moving it"
+        );
+    }
+}
+
+/// **The gate the nine branches read has to be armed by every arrival that isn't
+/// the page's own entrance**, and the pin above can't see that: it reads
+/// `enabled: root.body-anim-armed;` on all nine and stays green while the property
+/// is seeded `false` and never written, which silently retires the fade on the two
+/// arrivals the band's own `tab-anim-armed` doesn't cover.
+///
+/// The seed is one of them and the two handlers are the others. `changed detail-open`
+/// arms the first drill out of the tab the page opened on; the `watched-tab-idx`
+/// mirror arms a tab move that isn't a pick, which `detail-open` cannot — a cross-tab
+/// drill writes the new detail id and moves the tab in one tick, so that property
+/// never transitions. Neither can fire on the page's own mount, `changed` not running
+/// on a first evaluation, which is what leaves the entrance uncompounded.
+#[test]
+fn every_arrival_that_is_not_the_pages_own_entrance_arms_the_body_fade() {
+    let view = code(VIEW);
+
+    assert!(
+        view.contains("property <bool> body-anim-armed: band.tab-anim-armed;"),
+        "`body-anim-armed` must be *seeded* off the band's `tab-anim-armed` — a constant `false` \
+         plus a mount `Timer` races `ViewTransition`'s own, and a constant `true` compounds the \
+         body's rise with the page entrance still in flight"
+    );
+
+    for handler in ["changed detail-open =>", "changed watched-tab-idx =>"] {
+        let body = view
+            .split_once(handler)
+            .and_then(|(_, rest)| rest.split_once('}'))
+            .map_or("", |(body, _)| body);
+        assert!(
+            body.contains("root.body-anim-armed = true;"),
+            "`{handler}` must arm `body-anim-armed` — without it the arrival it watches mounts \
+             its body with the fade disabled, which is a body that simply appears; got {body:?}"
+        );
+    }
 }

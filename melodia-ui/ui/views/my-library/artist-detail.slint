@@ -135,8 +135,9 @@ export component ArtistDetailBody inherits Rectangle {
                         // gives the hidden sub-section a clear lower edge against the list.
                         Rectangle {
                             height: 1px;
-                            background: Theme.surface2;
-                            opacity: 0.5;
+                            // Alpha in the brush, never `opacity` — free on a childless
+                            // rect, and a layer that crops its ink on anything else.
+                            background: Theme.surface2.with-alpha(0.5);
                         }
                     }
 

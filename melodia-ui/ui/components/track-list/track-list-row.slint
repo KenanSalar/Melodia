@@ -614,21 +614,11 @@ export component TrackListRowItem inherits Rectangle {
                         label: @tr("New Playlist…");
                         icon: "add";
                         clicked => {
-                            // Stash the ids and open the Create dialog inline, no Rust
+                            // Stash the ids and open the Create dialog, no Rust
                             // round-trip. The dispatcher's create-playlist branch
                             // reads `pending-track-ids` once the row exists and adds
                             // the tracks in the same call.
-                            Dialog.title = @tr("New Playlist");
-                            Dialog.message = "";
-                            Dialog.confirm-label = @tr("Create");
-                            Dialog.cancel-label = @tr("Cancel");
-                            Dialog.destructive = false;
-                            Dialog.kind = "create-playlist";
-                            Dialog.target-id = -1;
-                            Dialog.input-text = "";
-                            Dialog.input-text-2 = "";
-                            Dialog.pending-track-ids = ctx-popup.effective-ids;
-                            Dialog.open = true;
+                            Dialog.open-create-playlist(ctx-popup.effective-ids);
                         }
                     }
                     // Hidden when there is nothing to add to. The chrome is set here so

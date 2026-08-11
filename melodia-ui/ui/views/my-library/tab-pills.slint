@@ -202,16 +202,11 @@ export component MyLibraryTabPills inherits Rectangle {
                 icon: "edit";
                 tooltip-text: @tr("Rename");
                 clicked => {
-                    Dialog.title = @tr("Rename Playlist");
-                    Dialog.message = "";
-                    Dialog.confirm-label = @tr("Save");
-                    Dialog.cancel-label = @tr("Cancel");
-                    Dialog.destructive = false;
-                    Dialog.kind = "rename-playlist";
-                    Dialog.target-id = PlaylistDetail.playlist-id;
-                    Dialog.input-text = PlaylistDetail.playlist.name;
-                    Dialog.input-text-2 = PlaylistDetail.playlist.description;
-                    Dialog.open = true;
+                    Dialog.open-rename-playlist(
+                        PlaylistDetail.playlist-id,
+                        PlaylistDetail.playlist.name,
+                        PlaylistDetail.playlist.description,
+                    );
                 }
             }
             // Chrome inline so `@tr` applies; Rust loads the criteria and opens the editor
@@ -237,14 +232,7 @@ export component MyLibraryTabPills inherits Rectangle {
                 danger: true;
                 tooltip-text: @tr("Delete playlist");
                 clicked => {
-                    Dialog.title = @tr("Delete playlist?");
-                    Dialog.message = @tr("The playlist and its track order will be removed. The tracks themselves stay in your library.");
-                    Dialog.confirm-label = @tr("Delete");
-                    Dialog.cancel-label = @tr("Cancel");
-                    Dialog.destructive = true;
-                    Dialog.kind = "delete-playlist";
-                    Dialog.target-id = PlaylistDetail.playlist-id;
-                    Dialog.open = true;
+                    Dialog.open-delete-playlist(PlaylistDetail.playlist-id);
                 }
             }
             PillDivider { }
@@ -321,19 +309,7 @@ export component MyLibraryTabPills inherits Rectangle {
                     tooltip-text: @tr("Create an empty playlist");
                     // Drawn by the host's top-layer frame, out of the grid's way.
                     tooltip-overlay: true;
-                    clicked => {
-                        Dialog.title = @tr("New Playlist");
-                        Dialog.message = "";
-                        Dialog.confirm-label = @tr("Create");
-                        Dialog.cancel-label = @tr("Cancel");
-                        Dialog.destructive = false;
-                        Dialog.kind = "create-playlist";
-                        Dialog.target-id = -1;
-                        Dialog.input-text = "";
-                        Dialog.input-text-2 = "";
-                        Dialog.pending-track-ids = [];
-                        Dialog.open = true;
-                    }
+                    clicked => { Dialog.open-create-playlist([]); }
                 }
 
                 PillDivider { }

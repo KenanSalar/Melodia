@@ -68,7 +68,7 @@ use crate::player::visualizer::RING_CAP;
 use crate::player::waveform::{self, MAX_COLUMNS, WaveformAnalyzer};
 use crate::state::AppState;
 use crate::ui::settings_bind::read_or_default;
-use crate::ui::tray_bridge;
+use crate::ui::shell::tray_bridge;
 use crate::{AppWindow, Visualizer};
 
 const STYLE_BARS: &str = "bars";
@@ -185,7 +185,8 @@ impl FrameWatch {
 /// `visualizer-strip.slint` that mounts on the key. `tests/visualizer_tests.rs`
 /// pins both against this array.
 ///
-/// A third mirror is [`DEFAULT_VIZ_STYLE`], which has to be the key at index 0 —
+/// A third mirror is [`crate::services::settings::DEFAULT_VIZ_STYLE`], which has
+/// to be the key at index 0 —
 /// where both of the fallbacks below land. It is spelled out separately rather
 /// than substituted in here on purpose: the test that pins the two together can
 /// only fail if they are two literals.

@@ -22,6 +22,9 @@ pub fn spawn_background_tasks(
     tasks::queue_prune::spawn(spawner, state);
     tasks::retroactive_hash::spawn(spawner, state);
     tasks::heap_trim::spawn(spawner);
+    // Folds the output device's fault counters into one line per window, and is
+    // the only thing watching for a device that goes away mid-session.
+    tasks::audio_health::spawn(spawner, state);
     // Batches `play_count` / `skip_count` UPDATEs every 2 s so a fast skip
     // burst becomes one write instead of N. Must be spawned before any
     // playback can fire `UpdatePlayCount` actions.
@@ -49,7 +52,7 @@ pub fn spawn_background_tasks(
     // OS media controls → SlintEventSink: souvlaki events drive the same
     // library::* paths the UI does, so MPRIS / SMTC stays in lockstep.
     if let Some(rx) = channels.media_control_rx.take() {
-        let sink: Arc<dyn EventSink> = Arc::new(ui::event_sink::SlintEventSink {
+        let sink: Arc<dyn EventSink> = Arc::new(ui::shell::event_sink::SlintEventSink {
             state: state.clone(),
         });
         services::media_controls::spawn_event_receiver(

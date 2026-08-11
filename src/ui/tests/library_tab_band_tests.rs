@@ -11,26 +11,46 @@
 //! They live here rather than under a host for the `tab_bar_tests.rs` reason —
 //! no Rust module owns the file.
 
+use crate::test_support::{binding_value as binding, strip_line_comments};
+
 const BAND: &str =
     include_str!("../../../melodia-ui/ui/components/hero/library-tab-band.slint");
+
 /// The band's only mount. Three of the pins below are about the seam rather than
 /// the component, and a band nobody feeds passes every check on its own source.
 const SHEET: &str = include_str!("../../../melodia-ui/ui/views/my-library-view.slint");
 
-/// The file with its comment lines dropped, so prose about a fix can neither
-/// satisfy a pin nor bound a region early. The `placeholder_tests.rs` helper.
+/// The band with its comments dropped, so prose about a fix can neither satisfy a
+/// pin nor bound a region early.
 fn code() -> String {
-    BAND.lines()
-        .filter(|line| !line.trim_start().starts_with("//"))
-        .collect::<Vec<_>>()
-        .join("\n")
+    strip_line_comments(BAND)
 }
 
-/// The value of a `name:` binding, up to its terminating `;`.
-fn binding(src: &str, name: &str) -> String {
-    src.split_once(name)
-        .and_then(|(_, rest)| rest.split_once(';'))
-        .map_or(String::new(), |(value, _)| value.to_owned())
+/// The body of the `if root.hero-shown:` branch that paints `needle`, cut at its
+/// own closing brace. Three branches carry that condition and a `split` alone
+/// runs each one into the next, so a pin over "this branch does not X" needs the
+/// walk to mean anything. Net braces per line, the `"\u{200e}"` escapes balancing
+/// out — the `the_chip_strip_outlives_every_morph_it_is_painted_in` reason.
+fn hero_branch(code: &str, needle: &str) -> String {
+    let branch = code
+        .split("if root.hero-shown:")
+        .skip(1)
+        .find(|branch| branch.contains(needle))
+        .unwrap_or_default();
+
+    let mut depth = 0usize;
+    let mut opened = false;
+    let mut body: Vec<&str> = Vec::new();
+    for line in branch.lines() {
+        body.push(line);
+        depth += line.matches('{').count();
+        opened |= depth > 0;
+        depth = depth.saturating_sub(line.matches('}').count());
+        if opened && depth == 0 {
+            break;
+        }
+    }
+    body.join("\n")
 }
 
 /// A mirrored width only reaches the bar through `changed width`, and `changed`
@@ -83,7 +103,7 @@ fn every_tab_bar_brush_crosses_from_a_theme_token_to_a_backdrop_tier() {
     let code = code();
     let hero_state = code
         .split_once("hero when root.detail-open: {")
-        .and_then(|(_, rest)| rest.split_once("in-out {"))
+        .and_then(|(_, rest)| rest.split_once("\n            in {"))
         .map_or(String::new(), |(body, _)| body.to_owned());
     assert!(!hero_state.is_empty(), "the band no longer declares its `hero` state");
 
@@ -133,11 +153,17 @@ fn every_tab_bar_brush_crosses_from_a_theme_token_to_a_backdrop_tier() {
 /// `set_animated_binding` carries), so the crossing begins and ends with the
 /// morph however often the target moves underneath it.
 ///
-/// The mirrors are the other half: with the emphasized curve spending most of
-/// its travel in the first quarter, a decode landing mid-morph would otherwise be
-/// adopted in a single frame. Easing them is what turns that step into a move,
-/// and it is also the only thing left covering a decode that lands *after* the
-/// morph, where the transition's own progress is already 1.
+/// The mirrors are the other half: with the entry curve spending most of its
+/// travel early, a decode landing mid-morph would otherwise be adopted in a
+/// single frame. Easing them is what turns that step into a move, and it is also
+/// the only thing left covering a decode that lands *after* the morph, where the
+/// transition's own progress is already 1.
+///
+/// **It is split `in` / `out` to take the morph's two curves**, so each arm is
+/// pinned against the arm of `animate hero-t` it belongs to. `Theme` cannot carry
+/// an easing, so those curves are spelled at both sites and this is the only thing
+/// holding the copies together: change one and the colour stops crossing on the
+/// shape of the geometry, which is the whole reason the crossing is a transition.
 #[test]
 fn the_palette_crossing_is_anchored_to_the_morph() {
     let code = code();
@@ -149,28 +175,62 @@ fn the_palette_crossing_is_anchored_to_the_morph() {
     for input in ["label-brush", "active-brush", "hover-brush", "divider-brush"] {
         assert!(
             !declarations.contains(&format!("animate {input}")),
-            "`{input}` must cross inside the state's `in-out` transition, never on an `animate` of \
-             its own — a binding animation restarts on every dependency tick, and the hero tier it \
-             reads is written from a decode that lands mid-morph"
+            "`{input}` must cross inside the state's transition, never on an `animate` of its own \
+             — a binding animation restarts on every dependency tick, and the hero tier it reads \
+             is written from a decode that lands mid-morph"
         );
     }
 
-    let transition = code
-        .split_once("in-out {")
-        .and_then(|(_, rest)| rest.split_once('}'))
-        .map_or(String::new(), |(body, _)| body.to_owned());
-    for input in ["label-brush", "active-brush", "hover-brush", "divider-brush"] {
+    // The morph's own two arms, taken off the `animate` block so the transition is
+    // checked against the geometry rather than against a second copy of the numbers.
+    let morph = binding(&code, "easing: root.detail-open");
+    let (entry, exit) = morph
+        .split_once(':')
+        .map_or_else(Default::default, |(a, b)| (a.replace('?', ""), b.to_owned()));
+    let entry = entry.trim().to_owned();
+    let exit = exit.trim().to_owned();
+    assert!(
+        entry.starts_with("cubic-bezier(") && exit.starts_with("cubic-bezier("),
+        "`hero-t` must ease on a per-direction ternary of two curves — the entry is gentler than \
+         the collapse because only the collapse has a tail (the count line arriving over its \
+         second half), so one curve reads as a snap going in; got entry {entry:?}, exit {exit:?}"
+    );
+    assert_ne!(
+        entry, exit,
+        "the two arms must be different curves — collapsed to one, the entry goes back to \
+         spending most of its travel in the first quarter and the fix is silently undone"
+    );
+
+    for (direction, curve) in [("in", &entry), ("out", &exit)] {
+        let transition = code
+            .split_once(&format!("\n            {direction} {{"))
+            .and_then(|(_, rest)| rest.split_once("\n            }"))
+            .map_or(String::new(), |(body, _)| body.to_owned());
         assert!(
-            transition.contains(input),
-            "the `hero` state's transition must animate `{input}` — left out, that brush steps on \
-             the frame the detail opens while its three siblings cross"
+            !transition.is_empty(),
+            "the `hero` state must declare an `{direction}` transition — an `in-out` block can \
+             only carry one curve, and the morph now has two"
+        );
+        for input in ["label-brush", "active-brush", "hover-brush", "divider-brush"] {
+            assert!(
+                transition.contains(input),
+                "the `hero` state's `{direction}` transition must animate `{input}` — left out, \
+                 that brush steps on the frame the detail opens while its three siblings cross"
+            );
+        }
+        assert!(
+            transition.contains("duration: Theme.dur-spatial;"),
+            "the `{direction}` crossing must run the morph's own duration — it is the same \
+             gesture, and a second number here is one that can drift from `hero-t`, the collapse \
+             timer and the body's own `ViewTransition`"
+        );
+        assert!(
+            transition.contains(&format!("easing: {curve};")),
+            "the `{direction}` crossing must ease on {curve}, the arm of `animate hero-t` it \
+             belongs to — a transition anchored to the morph's start time but running a different \
+             shape drifts from the geometry in the middle, which is where the whole crossing is"
         );
     }
-    assert!(
-        transition.contains("duration: Theme.dur-spatial;"),
-        "the crossing must run the morph's own duration — it is the same gesture, and a second \
-         number here is one that can drift from `hero-t` and the collapse timer"
-    );
 
     assert!(
         code.contains("animate hero-label, hero-active, hero-hover, hero-divider {"),
@@ -179,23 +239,104 @@ fn the_palette_crossing_is_anchored_to_the_morph() {
     );
 }
 
-/// The band forwards everything the shared header publishes, under the names its
-/// mount sheet already reads.
+/// **Nothing may ease *from* a `HeroBackdrop` value the band was not painting**, and on a
+/// tabbed page that is a live hazard rather than a theoretical one: a tab leave clears no
+/// detail id, so the colour set is deliberately held for the pick that morphs that banner
+/// back open — which means it routinely describes a hero this band stopped painting several
+/// tabs ago.
+///
+/// Bound to the tiers unconditionally the four mirrors settle on exactly that, and the
+/// transition then crosses out of it. Leave a genre for a detail-less tab and open a playlist
+/// there: the bar spends the first quarter of a 400 ms emphasized curve — most of its travel
+/// — rushing toward a mirror still two thirds of the way through its own ease off the genre's
+/// pink. The gate is what makes the mirror's resting value the one the bar is already
+/// painting; it also stops a write to the global dirtying these at all while the band is
+/// flat, Slint subscribing to a dependency only on the arm it evaluates.
+///
+/// The floor is the same rule one layer down and is pinned by
+/// `hero_blur_backdrop_tests::the_floors_hero_gate_defaults_to_shown`; the mount that joins
+/// them is asserted here, since the shared component defaults to ungated and a band that
+/// stops passing it looks right in both files.
+#[test]
+fn no_hero_tier_outlives_the_banner_it_was_solved_for() {
+    let code = code();
+
+    for (mirror, idle) in [
+        ("hero-label", "Theme.text"),
+        ("hero-active", "Theme.accent"),
+        ("hero-hover", "Theme.surface0"),
+        ("hero-divider", "Theme.surface1"),
+    ] {
+        let value = binding(&code, &format!("property <brush> {mirror}:"));
+        // Anchored at the head of the value rather than searched: a negated `!root.detail-open ?`
+        // is a substring match, so it would fall through to the arm assert below and be
+        // reported as an inversion — which it is, spelled the other way round. `trim_start`
+        // because `binding` cuts right after the name, and `hero-hover`'s value wraps.
+        assert!(
+            value.trim_start().starts_with("root.detail-open ?"),
+            "`{mirror}` must fall back to its idle half while no detail is open — held across a \
+             tab leave, the tier it reads is the last banner's and the transition crosses out of \
+             it on the next open"
+        );
+
+        // Each arm on its own, not the value as a whole: an *inverted* ternary carries both
+        // tokens too, reads correctly at a glance, and paints the theme's grey over every
+        // open hero while the flat band wears the last entity's tone. No arm here holds a
+        // `?` or a `:` of its own — `with-alpha(0.12)` is the busiest of the eight — so the
+        // two splits land exactly on the halves.
+        let (open_arm, idle_arm) =
+            value.split_once('?').and_then(|(_, rest)| rest.split_once(':')).unwrap_or(("", ""));
+        assert!(
+            open_arm.contains("HeroBackdrop."),
+            "`{mirror}`'s open arm must be the solved tier — the other way round the bar takes \
+             `{idle}` for the whole of every detail and the entity's tone for the flat band"
+        );
+        assert!(
+            idle_arm.contains(idle),
+            "`{mirror}`'s idle arm must be `{idle}`, the same token its own pair takes on the flat \
+             band — a third value here is a colour the bar crosses through on every morph"
+        );
+    }
+
+    let mount = code
+        .split_once("HeroBlurBackdrop {")
+        .and_then(|(_, rest)| rest.split_once('}'))
+        .map_or(String::new(), |(body, _)| body.to_owned());
+    assert!(
+        mount.contains("hero-open: root.detail-open;"),
+        "the band must gate the shared floor on the same predicate — it defaults to ungated for \
+         the two mosaic bands, which never stop painting a hero, and an ungated floor here is the \
+         whole backdrop of an artwork-less detail easing out of the previous tab's stops"
+    );
+}
+
+/// The band forwards everything the shared header publishes **that this page
+/// consumes**, under the names its mount sheet already reads.
 ///
 /// The row itself is pinned by `tab_search_header_tests`; what only this file can
 /// check is that the forwards exist, because a band that mounts the header and
-/// drops them compiles, paints correctly, and silently loses the tab slide's
-/// direction and every compact tooltip. Two-way aliases rather than one-way
-/// bindings, so nothing here can be orphaned by a write.
+/// drops them compiles, paints correctly, and silently loses the body fade's arming
+/// and every compact tooltip. Two-way aliases rather than one-way bindings, so
+/// nothing here can be orphaned by a write.
+///
+/// **`tab-enter-from` is absent on purpose**, where `mosaic_tab_hero_tests`' twin
+/// asks for it: this page's nine bodies take a fixed `below` and drop even that
+/// while `morphing` holds, so the bar's left/right answer has no consumer — and an
+/// unread output is what the next branch copied off a sibling page would bind to.
 #[test]
 fn the_band_forwards_what_the_shared_row_publishes() {
-    for prop in ["tab-enter-from", "tab-anim-armed", "tip-w", "tip-h", "tip-label", "tip-visible"]
-    {
+    for prop in ["tab-anim-armed", "tip-w", "tip-h", "tip-label", "tip-visible"] {
         assert!(
             BAND.contains(&format!("{prop} <=> header.{prop};")),
             "the band must re-publish `{prop}` off the shared header — its sheet reads that name"
         );
     }
+    assert!(
+        !BAND.contains("tab-enter-from <=> header.tab-enter-from;"),
+        "the band must not re-publish `tab-enter-from` — nothing on this page can consume a \
+         lateral direction, and an output with no reader is exactly what a tenth body branch \
+         would bind to instead of the fixed `below` every other one takes"
+    );
     // The two positional anchors can't be plain aliases: they are relative to the
     // header, and the sheet's frame is relative to the band.
     for prop in ["tip-x", "tip-y"] {
@@ -271,6 +412,43 @@ fn the_morph_progress_is_seeded_by_its_binding_and_written_by_its_handler() {
     );
 }
 
+/// **The band publishes whether its height is still travelling, and it has to answer
+/// `true` on the frame the morph starts.**
+///
+/// The page's body is the stretchy sibling under this band, so a morph moves that
+/// body's `y` by the whole distance between the two floors — which is why a body
+/// mounting into one must not slide on its own, and why the sheet reads this to say
+/// so (`slide: !band.morphing`). The tempting spelling is `hero-t > 0`, which
+/// compiles, reads plausibly, and is **false** on exactly the frame that matters: a
+/// drill-in starts at `hero-t == 0`, so the body would take its 32 px rise and the
+/// diagonal is back — reversed into a bounce, since the two curves disagree about
+/// where the travel goes.
+///
+/// Comparing against the target is also what keeps the answer independent of where
+/// `changed detail-open` falls relative to the repeater that mounts the body:
+/// `hero-t` is written and never bound, so until the handler lands it still holds the
+/// departing floor's value and the two disagree either way.
+#[test]
+fn the_band_publishes_whether_its_height_is_still_moving() {
+    let code = code();
+    let morphing = binding(&code, "out property <bool> morphing");
+    assert!(
+        !morphing.is_empty(),
+        "`LibraryTabBand` must publish `morphing` — the mount sheet has no other way to ask \
+         whether the band is already translating the body it is about to mount"
+    );
+    assert!(
+        morphing.contains("hero-t") && morphing.contains("detail-open"),
+        "`morphing` must compare `hero-t` against the floor `detail-open` names, so it is true \
+         from the frame the morph starts; got {morphing:?}"
+    );
+    assert!(
+        !morphing.contains('>') && !morphing.contains('<'),
+        "`morphing` must not be a threshold on `hero-t` — `hero-t > 0` is false on a drill-in's \
+         first frame, which is the one frame the body must be told to hold still; got {morphing:?}"
+    );
+}
+
 /// **The column that mounts `HeroChipStrip` carries no `if`, and every other piece
 /// of the hero mounts on `detail-open || hero-t > 0`.** Two failures meet here, and
 /// the pin has to hold both.
@@ -332,26 +510,113 @@ fn the_chip_strip_outlives_every_morph_it_is_painted_in() {
     );
 }
 
-/// One hero, one clock — and **two fades, because one of them may not cost a
-/// layer.** The text half is `if`-gated and takes `opacity`, which is free at its
-/// resting `1.0` (`Opacity::need_layer` bails before it counts children) and gone
-/// entirely in idle. The chip strip is mounted for the life of the band, where an
-/// `opacity` under 1 would allocate and blend an offscreen layer on every frame
-/// forever, so it fades through its brushes instead. Losing either leaves that half
-/// of the hero snapping while the other half fades.
+/// One hero, one clock — and **nothing that carries content fades on a plain
+/// `opacity: root.hero-t`.** `Opacity::need_layer` bails at exactly 1.0 and on a lone
+/// *childless* child, so such a fade is an offscreen texture for the length of the
+/// morph and nothing at rest — and both halves that used to take one cost it for a
+/// different reason. The text half's texture is sized to its children's *geometry*,
+/// and a `Text`'s geometry is its line box rather than its ink: the shipped faces are
+/// patched to a 1.05 em box their outlines reach well past, so an Arabic hero title
+/// lost the hamza above its alifs and the dots under its final yas for the whole
+/// 400 ms and got them back on the frame `hero-t` landed on the literal `1.0`.
+///
+/// **The artwork tile was exempted from that on ink and is no longer exempt on
+/// cost.** An image fills its box, so the layer had nothing to crop — true, and never
+/// the whole argument: `ArtworkImage`'s root has children, so the wrapper layered
+/// anyway, and this band clips against an animating height, which put the layer's
+/// bounding rect on a clip that moved every frame and so on `render_layer`'s
+/// allocate-a-fresh-texture branch. It takes the component's own `fade` float now,
+/// which lands on the fill and on the mounted childless `Image`. The chip strip could
+/// never have taken an `opacity` at all, being mounted for the life of the band.
+///
+/// **The back disc was the last one and now takes the same cure**, through
+/// `IconButton`'s own `fade`. What made it look unreachable is that `IconButton` owns
+/// two `animate`s over the brushes a fade would have to fold into, and an animated
+/// binding restarts on dirtiness rather than on a value change — so folding it there
+/// stalls both crossfades for the length of the morph. It doesn't have to fold there:
+/// the glyph moved out of the disc, which leaves the disc childless and so its own
+/// `opacity` free, and the glyph fades through `MaterialIcon`'s `fade` while
+/// `animate icon-color` keeps animating the *unfaded* brush. Its bias is unchanged —
+/// `clamp(root.hero-t * 2.0, …)`, which its scaling size obliges — and the third
+/// assertion below pins that; the **geometry** is
+/// `the_back_disc_scales_with_the_slot_it_sits_in`'s, which says in as many words that
+/// fading the disc is not the same fix as scaling it.
+///
+/// So the needle can be the bare property now rather than one spelling of it, which is
+/// the stronger pin: `opacity: root.hero-t` exactly would never have caught the disc,
+/// whose fade is a bias and not the clock.
+///
+/// Losing any of these leaves that half of the hero snapping while the rest fades;
+/// putting one back leaves it fading and paying for a texture to do it.
 #[test]
 fn the_hero_fades_on_the_morph_at_both_ends() {
     let code = code();
     let fades = code
         .split("if root.hero-shown:")
         .skip(1)
-        .filter(|branch| branch.contains("opacity: root.hero-t;"))
+        .filter(|branch| branch.contains("opacity:"))
         .count();
     assert_eq!(
-        fades, 2,
-        "the artwork tile and the title block fade on `hero-t` itself — it is the morph's only \
-         clock, so a second animation would need keeping in step and the reversal would stop \
-         being free"
+        fades, 0,
+        "no `if root.hero-shown:` half may fade on an `opacity` — over anything with children it \
+         costs an offscreen texture for the length of the morph, and on this band a freshly \
+         allocated one per frame, the layer being sized against a clip that is itself animating. \
+         The artwork tile and the back disc were the last two, and take `ArtworkImage`'s and \
+         `IconButton`'s `fade` instead. The needle is the bare property rather than one spelling \
+         of it, so the pin is deliberately blunter than `need_layer`: an `opacity` on a lone \
+         childless child really would be free, and the answer there is still a brush alpha rather \
+         than an exemption carved into this walk"
+    );
+
+    // The other half of that: the tile still *fades*, and still off the morph's only
+    // clock. A second animation here would need keeping in step, and the reversal would
+    // stop being free.
+    let tile = hero_branch(&code, "ArtworkImage {");
+    assert!(
+        tile.contains("fade: root.hero-t;"),
+        "the artwork tile must still fade, through `ArtworkImage`'s `fade` and off `hero-t` \
+         itself — dropping the binding leaves it snapping in at full opacity while the title \
+         beside it eases, which reads as the morph being broken rather than as a missing line"
+    );
+
+    // The text half, which used to be one of those and is why the count above was ever
+    // non-zero. A layer crops what it composites, so the fade lives in the brushes.
+    let title = hero_branch(&code, "+ root.title;");
+    assert!(
+        !title.is_empty(),
+        "the title is no longer painted inside an `if root.hero-shown:` branch — the pins below \
+         bound against it"
+    );
+    // The walk's upper edge, and the only assertion here that can fail *loudly* when it
+    // over-runs: everything below is satisfied by the tail of the file as readily as by the
+    // branch, so an unbalanced brace would silently widen the region instead of breaking it.
+    // `HeroChipStrip` is the block's next sibling.
+    assert!(
+        !title.contains("HeroChipStrip"),
+        "the brace walk ran past the title block and into the column's later children — the pins \
+         below stop meaning anything the moment the region is wider than the branch"
+    );
+    assert!(
+        !title.contains("opacity:"),
+        "the title block must not fade on `opacity`. The layer that buys is sized to child \
+         *geometry*, and a `Text`'s geometry is its line box: every glyph whose ink leaves that \
+         box is cropped for the length of the morph and pops back at the end, which on the \
+         patched faces is every Arabic mark and nothing in Latin — invisible in review, and the \
+         whole of the bug"
+    );
+    assert_eq!(
+        title
+            .matches("color: HeroBackdrop.on-backdrop.with-alpha(root.hero-t);")
+            .count(),
+        2,
+        "the title *and* the subtitle must carry the fade in their own brush. The subtitle is the \
+         block's last child, so it is the edge a layer cut from below — fixing only the title \
+         moves the crop rather than removing it"
+    );
+    assert!(
+        title.contains("icon-color: HeroBackdrop.chrome.with-alpha(root.hero-t);"),
+        "the smart-playlist badge fades with the text beside it — left on a flat brush it is the \
+         one piece of the block that arrives before the morph does"
     );
 
     // The third fade is the back disc's, and it is a *bias* off that same clock rather
@@ -359,11 +624,13 @@ fn the_hero_fades_on_the_morph_at_both_ends() {
     // formatting, not contract.
     let flat = code.split_whitespace().collect::<Vec<_>>().join(" ");
     assert!(
-        flat.contains("opacity: clamp(root.hero-t * 2.0, 0.0, 1.0);"),
+        flat.contains("fade: clamp(root.hero-t * 2.0, 0.0, 1.0);"),
         "the back disc's alpha must lead the morph rather than track it. It is the one piece of \
-         the hero whose size rides `hero-t` too, so a plain `opacity: root.hero-t` multiplies \
-         into the scale and its presence goes as the square — half size at half alpha is a \
-         quarter of a button, which is an entry that animates but reads as one that pops"
+         the hero whose size rides `hero-t` too, so a plain `root.hero-t` multiplies into the \
+         scale and its presence goes as the square — half size at half alpha is a quarter of a \
+         button, which is an entry that animates but reads as one that pops. It rides \
+         `IconButton`'s `fade` rather than an `opacity`, for the reason the assertion at the \
+         top of this test gives"
     );
 
     assert!(
@@ -374,11 +641,46 @@ fn the_hero_fades_on_the_morph_at_both_ends() {
     );
     let strip = include_str!("../../../melodia-ui/ui/components/hero-chip-strip.slint");
     assert!(
-        strip.contains("chip-fill: HeroBackdrop.chip-fill-at(root.fade);")
-            && strip.contains("chip-label-color: HeroBackdrop.chrome.with-alpha(root.fade);"),
+        strip.contains("chip-fill: HeroBackdrop.chip-fill-at(root.fade * root.arrive-t);")
+            && strip.contains(
+                "chip-label-color: HeroBackdrop.chrome.with-alpha(root.fade * root.arrive-t);"
+            ),
         "both of the strip's brushes must carry the fade, and the pill must go through the \
          global's own function — `with-alpha` *sets* alpha rather than multiplying it, so a local \
          spelling would have to restate the tier's weight"
+    );
+}
+
+/// **The chips fade in on their own clock, because they are the one hero fact that can
+/// arrive after the banner.** A tab re-entered onto an open detail morphs open on artwork
+/// and colours held for it while these are still behind the re-fetch that folds them, so
+/// stepping them in reads as a glitch beside a band that has already settled.
+///
+/// The mutation to catch is multiplying only one of the two brushes: the pill fades while
+/// its label steps, which reads as a rendering bug rather than as a missing factor.
+#[test]
+fn the_chip_row_fades_in_when_it_lands() {
+    let strip = include_str!("../../../melodia-ui/ui/components/hero-chip-strip.slint");
+    let flat = strip.split_whitespace().collect::<Vec<_>>().join(" ");
+
+    assert!(
+        flat.contains("property <float> arrive-t: root.rows.length > 0 ? 1.0 : 0.0;"),
+        "the arrival fade must ride the row model's own emptiness — nothing else knows when \
+         the chips have landed, and a host-driven flag would need one per hero"
+    );
+    assert!(
+        flat.contains("animate arrive-t { duration: Theme.dur-med; easing: ease-in-out; }"),
+        "`arrive-t` must ease on `dur-med` — the weight the blur crossfade and the palette \
+         mirrors either side of it already use, so the band settles as one thing rather than \
+         gaining a part that snaps"
+    );
+    assert_eq!(
+        flat.matches("root.fade * root.arrive-t").count(),
+        2,
+        "both brushes must carry both factors. A float multiplied into the brushes, never an \
+         `opacity`: this strip carries `MetaChipStrip`'s change tracker so it cannot be \
+         unmounted, and `Opacity::need_layer` bails only at exactly 1.0 — a permanently \
+         mounted subtree under one blends an offscreen layer on every frame forever"
     );
 }
 
@@ -500,16 +802,22 @@ fn the_back_disc_scales_with_the_slot_it_sits_in() {
 /// **The count line and the pill row take opposite anchors, and that is the
 /// point.** A detail's pills belong on whichever floor is current, so they ride
 /// `root.height` and follow the morph. The count sentence belongs where it
-/// already sits: anchored to the *compact* floor it holds still and leaves
-/// sideways, where riding the height dragged it down out of the page and shoved
-/// it back in — the movement this replaced.
+/// already sits: anchored to the *compact* floor, its travel an offset off that
+/// anchor rather than a ride on the height, which dragged it down out of the page
+/// and shoved it back in — the movement this replaced.
 ///
-/// Both ends of the slide read `hero-t`, so the travel is the morph's own clock
-/// and the reversal is free; the alpha is a bias off the same source, folded into
-/// the brush rather than spent on an `opacity` layer that would stand for the
-/// whole length of every detail.
+/// **It leaves down and comes back from the left, and `detail-open` is the only
+/// thing in scope that can tell those apart** — `hero-t` knows how far along the
+/// morph is and not which way it is going. Down because the back slot eases open
+/// on the same clock, so a sideways exit crossed an arriving button through the
+/// same sixteen pixels for the whole time the sentence was still legible.
+///
+/// Both directions still read `hero-t`, so the travel is the morph's own clock and
+/// there is no second animation to keep in step; the alpha is a bias off that
+/// clock, folded into the brush rather than spent on an `opacity` layer that would
+/// stand for the whole length of every detail.
 #[test]
-fn the_count_line_slides_out_of_a_fixed_anchor() {
+fn the_count_line_drops_out_of_a_fixed_anchor_and_returns_from_the_left() {
     let code = code();
     let count = code
         .split_once("\n    Text {")
@@ -527,19 +835,34 @@ fn the_count_line_slides_out_of_a_fixed_anchor() {
     );
 
     assert!(
-        count.contains("y: root.compact-h - Theme.pad-lg - root.pill-h;"),
-        "the count must anchor to the *compact* band's floor — off `root.height` it rides the \
-         morph, which is the vertical travel it exists to not have"
+        count.contains("y: root.compact-h - Theme.pad-lg - root.pill-h + root.count-dy;"),
+        "the count must anchor to the *compact* band's floor and take its drop as an offset off \
+         it — off `root.height` it rides the morph, which is the vertical travel it exists to \
+         not have"
+    );
+    let drop = binding(&code, "property <length> count-dy:");
+    assert_eq!(
+        drop.split_whitespace().collect::<Vec<_>>().join(" "),
+        "root.detail-open ? root.count-drop * root.count-t : 0px",
+        "the drop must be gated on `detail-open` and *linear* in `count-t`: ungated it also fires \
+         on the way back, where the line is sliding in from the left, and shaped — it was squared \
+         once — it holds the sentence still for the first frames of a band whose pill row is \
+         already travelling, which is the one thing on that floor it has to leave in step with"
     );
     assert!(
-        count.contains("x: Theme.pad-lg - root.count-slide * root.hero-t;"),
-        "the count must leave sideways off `hero-t` — a slide on a clock of its own drifts from \
-         the band it is leaving"
+        count.contains(
+            "x: Theme.pad-lg - (root.detail-open ? 0px : root.count-slide * root.hero-t);"
+        ),
+        "the *return* must keep its leftward slide and the exit must take none — one axis per \
+         direction is the whole shape, and a slide left on the way in is what crossed the back \
+         button"
     );
     assert!(
-        count.contains("color: Theme.text.with-alpha(clamp(1.0 - root.hero-t * 2.0, 0.0, 1.0));"),
-        "the count must fade by alpha inside its brush, biased ahead of the morph so the artwork \
-         tile crossing behind it is never legible through the sentence"
+        count.contains("color: Theme.text.with-alpha(1.0 - root.count-t);")
+            && code.contains("property <float> count-t: clamp(root.hero-t * 2.0, 0.0, 1.0);"),
+        "the count must fade by alpha inside its brush, on a bias biased ahead of the morph so \
+         the artwork tile crossing behind it is never legible through the sentence — pinned at \
+         both ends so the window can't drift alone, the drop reading the same float"
     );
     assert!(
         !count.contains("opacity:"),
@@ -633,7 +956,7 @@ fn the_idle_pane_folds_its_alpha_into_the_brush() {
 /// Data-agnostic, the `MosaicTabHero` contract: `@tr` folds msgids at codegen, so
 /// a string spelled here is one the host can no longer vary per tab — and the
 /// five tabs differ in every one of them. It is also what keeps the catalogue
-/// surface at the host, where `ui::locale::tests` already walks it.
+/// surface at the host, where `ui::settings::locale::tests` already walks it.
 #[test]
 fn the_band_states_no_string_of_its_own() {
     assert!(

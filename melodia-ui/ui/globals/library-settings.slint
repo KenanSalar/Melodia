@@ -2,7 +2,7 @@ import { FolderListRow } from "../models.slint";
 
 // LibrarySettings: drives the Library Folders section of Settings. The
 // `folders` model is owned by Rust (`Rc<VecModel<FolderListRow>>` rebuilt
-// on each refresh in `src/ui/library_settings.rs`) and pushed in via
+// on each refresh in `src/ui/settings/library_settings.rs`) and pushed in via
 // `set_folders(ModelRc::from(...))`. Scan-progress fields are patched by a
 // `slint::spawn_local` subscriber on `state.scan_progress_tx`.
 export global LibrarySettings {

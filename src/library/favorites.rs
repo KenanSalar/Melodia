@@ -14,6 +14,8 @@ pub async fn set_favorite(
     favorite: bool,
 ) -> Result<(), AppError> {
     queries::track::set_favorite(&state.db, &ids, favorite).await?;
+    // After the write, so the line means it landed rather than was attempted.
+    log::debug!("favorite: {} track(s) → {favorite}", ids.len());
     // If the currently-playing track was one of the toggled ids, mirror the new
     // flag onto `current_track` so the Now-Playing heart updates without waiting
     // for the next track load (parity with `toggle_current_favorite`).
@@ -117,6 +119,7 @@ pub async fn toggle_current_favorite(
     };
 
     queries::track::set_favorite(&state.db, &[id], new_fav).await?;
+    log::debug!("favorite: playing track {id} → {new_fav}");
 
     with_state_emit(&state.player_state, &state.sinks, |s| {
         // Guard against a track change between the id read above and here: only
@@ -138,12 +141,8 @@ pub async fn toggle_current_favorite(
     Ok(Some((id, new_fav)))
 }
 
-pub async fn get_favorite_tracks(
-    state: &AppState,
-    sort_by: Option<String>,
-    sort_dir: Option<String>,
-) -> Result<Vec<track::TrackListRow>, AppError> {
-    queries::track::get_favorite_tracks_for_list(&state.db, sort_by, sort_dir).await
+pub async fn get_favorite_tracks(state: &AppState) -> Result<Vec<track::TrackListRow>, AppError> {
+    queries::track::get_favorite_tracks_for_list(&state.db).await
 }
 
 pub async fn get_favorite_stats(state: &AppState) -> Result<track::FavoriteStats, AppError> {

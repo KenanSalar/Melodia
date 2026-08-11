@@ -10,6 +10,7 @@ pub mod replaygain;
 pub mod rodio_backend;
 pub mod spectrum;
 pub mod state;
+pub mod stream_health;
 pub mod types;
 pub mod visualizer;
 pub mod waveform;

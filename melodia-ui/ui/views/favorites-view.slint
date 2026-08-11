@@ -3,7 +3,7 @@ import { Favorites } from "../globals/curated.slint";
 import { GridColumnsSync } from "../components/grid-columns-sync.slint";
 import { GridGeometry } from "../components/grid-geometry.slint";
 import { MosaicTabHero } from "../components/hero/mosaic-tab-hero.slint";
-import { Tooltip, TooltipSide } from "../components/tooltip.slint";
+import { TooltipFrame } from "../components/tooltip-frame.slint";
 import { ViewTransition } from "../components/view-transition.slint";
 import { ActionPill, PillButton, PillDivider } from "../components/action-pill.slint";
 import { SelectionPills } from "../components/selection-pills.slint";
@@ -249,17 +249,12 @@ export component FavoritesView inherits Rectangle {
     // Slint paints in declaration order, so anything the hero owns is covered by the
     // body underneath. The band publishes the rect it derives from the hovered *index*,
     // so a tab that moves under a parked pointer keeps its tooltip anchored.
-    tab-tip := Rectangle {
+    TooltipFrame {
         x: hero.absolute-position.x - root.absolute-position.x + hero.tip-x;
         y: hero.absolute-position.y - root.absolute-position.y + hero.tip-y;
         width: hero.tip-w;
         height: hero.tip-h;
-        Tooltip {
-            text: hero.tip-label;
-            hovered: hero.tip-visible;
-            host-width: tab-tip.width;
-            host-height: tab-tip.height;
-            side: TooltipSide.below;
-        }
+        label: hero.tip-label;
+        shown: hero.tip-visible;
     }
 }

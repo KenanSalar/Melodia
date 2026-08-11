@@ -72,15 +72,21 @@ pub(super) fn build_filtered_grid(rp_ui: &RecentlyPlayedUi) -> PreparedGrid {
 
     let needle = rp_ui.state().filter.lock().clone();
     let mut hasher = DefaultHasher::new();
-    let most_played: Vec<UiEntityStripRow> = rp_ui
-        .state()
-        .most_played
-        .lock()
-        .iter()
-        .filter(|t| most_played_matches(t, &needle))
-        .inspect(|t| t.hash(&mut hasher))
-        .map(to_slint_most_played_row)
-        .collect();
+    let cache = rp_ui.state().most_played.lock();
+    // An empty needle keeps every row, and this cache is library-sized — a
+    // `Filter`'s `size_hint` floor of `0` would otherwise grow the `Vec` from
+    // nothing, reallocating and copying its way up. A real needle reserves
+    // nothing: no cheap thing predicts the survivor count.
+    let mut most_played: Vec<UiEntityStripRow> =
+        Vec::with_capacity(if needle.is_empty() { cache.len() } else { 0 });
+    most_played.extend(
+        cache
+            .iter()
+            .filter(|t| most_played_matches(t, &needle))
+            .inspect(|t| t.hash(&mut hasher))
+            .map(to_slint_most_played_row),
+    );
+    drop(cache);
 
     let most_played_count = most_played.len();
     PreparedGrid {
@@ -104,6 +110,24 @@ pub(super) fn build_filtered_grid(rp_ui: &RecentlyPlayedUi) -> PreparedGrid {
 /// the pick then owes is the sentinel**, when the cache it recomputed against is
 /// one a skipped tick left empty — `callbacks::recently_played::subviews` argues it.
 ///
+/// **And what *this* owes the sentinel is being written above the signature
+/// guard.** The pick stamps a signature against that empty cache and then rewinds
+/// the count, so when the fetch it spawned returns the same content — nothing
+/// played yet, or a tick that didn't move this ranking — the guard fires and the
+/// sentinel is left with no answer coming. `-1` misses `> 0` as well as `== 0`,
+/// so that strands the Shuffle pill as well as the empty state. And when the
+/// guard fires the model already holds exactly `prepared`, so the count written
+/// above it is by construction the one the model shows.
+///
+/// **Hoisting it past the guard costs nothing, rather than costing a little.**
+/// The guard is there to skip a `write_grid` `set_vec` reset that tears down
+/// every mounted card, and the tempting reading is that a scalar write is merely
+/// a cheaper thing to have stopped skipping — which invites weighing it again
+/// later. It isn't: `Property::set` is value-compared
+/// (`i-slint-core`'s `properties.rs`, `*self.value.get() != t && …`), so on the
+/// path the guard would have taken the count is unchanged, nothing is stored and
+/// no dependent is marked dirty. The write is free exactly when it is redundant.
+///
 /// Three things short-circuit it. A hidden section is never written to — the
 /// leave teardown emptied this model deliberately, and refilling it behind that
 /// holds a card row per track for a view nobody can see. An apply carrying
@@ -115,7 +139,11 @@ pub(super) fn build_filtered_grid(rp_ui: &RecentlyPlayedUi) -> PreparedGrid {
 /// dropped: `write_grid` is a `set_vec` reset, so it tears down and rebuilds
 /// every mounted card, and a `stats_changed` tick reaches both tabs while only
 /// this one is ranked by play count.
-fn write_filtered_grid(ui: &AppWindow, rp_ui: &RecentlyPlayedUi, prepared: &PreparedGrid) {
+///
+/// Takes `prepared` **by value**, so the rows move into the per-row models
+/// rather than being cloned into them. The three early returns below drop them
+/// instead, which is what happened to them anyway.
+fn write_filtered_grid(ui: &AppWindow, rp_ui: &RecentlyPlayedUi, prepared: PreparedGrid) {
     if !rp_ui.section_active() {
         return;
     }
@@ -127,12 +155,16 @@ fn write_filtered_grid(ui: &AppWindow, rp_ui: &RecentlyPlayedUi, prepared: &Prep
         return;
     }
 
-    let signature = grid_signature(tab, columns, mounted_content(tab, prepared));
+    // Above the signature guard: a pick's `UNFETCHED_COUNT` rewind has no other
+    // answer coming, and the fetch that would give it one lands on the guard
+    // whenever the content hasn't moved. See the doc comment.
+    g.set_most_played_count(len_as_i32(prepared.most_played_count));
+
+    let signature = grid_signature(tab, columns, mounted_content(tab, &prepared));
     if rp_ui.state().last_grid_signature.lock().replace(signature) == Some(signature) {
         return;
     }
 
-    g.set_most_played_count(len_as_i32(prepared.most_played_count));
     // Covers a tab pick as well as a count change, because the signature above
     // hashes the tab — so anything that moves what the band should say has
     // already got past that early return.
@@ -145,7 +177,7 @@ fn write_filtered_grid(ui: &AppWindow, rp_ui: &RecentlyPlayedUi, prepared: &Prep
     // empty and chunks to nothing.
     write_grid(
         &g.get_most_played_rows(),
-        chunk_entity_rows(&prepared.most_played, columns),
+        chunk_entity_rows(prepared.most_played, columns),
         "RecentlyPlayed.most-played-rows",
     );
 }
@@ -166,10 +198,49 @@ pub(super) fn apply_filtered_grid(
     let weak = weak.clone();
     let _ = slint::invoke_from_event_loop(move || {
         let Some(ui) = weak.upgrade() else { return };
-        write_filtered_grid(&ui, &rp_ui, &prepared);
+        write_filtered_grid(&ui, &rp_ui, prepared);
         if should_announce_warm(warmed_tab, rp_ui.section_active(), rp_ui.active_tab()) {
             mark_covers_warm(&ui);
         }
+    });
+}
+
+/// Apply for a settled keystroke: build on the calling worker, then post.
+///
+/// **The one apply path that must not run on the UI thread.** Every other caller
+/// either already sits on a worker or is a tab pick that has to land
+/// synchronously; this one is a filter keystroke, and the cache it walks is the
+/// output of an uncapped, library-wide `get_most_played`. On the event loop that
+/// was a needle folded against every played track, each survivor's six strings
+/// pushed through a hasher and three `SharedString`s built for it, every 130 ms
+/// while the user types.
+///
+/// Deferring is safe here in a way it is not for a pick — the tab isn't moving,
+/// so the model already holds the previous needle's rows rather than the empty
+/// set a leave writes, and a late apply updates them instead of painting a bare
+/// panel. What deferring *does* cost is ordering: two builds can finish in either
+/// order, and [`write_filtered_grid`]'s signature check reads a stale set as a
+/// change rather than as staleness. Hence `generation`, checked twice — once
+/// here to drop the walk's result before it is worth posting, and again on the
+/// UI thread, where a newer keystroke may have landed while the post was in
+/// flight.
+pub fn apply_filtered_grid_settled(
+    rp_ui: &Arc<RecentlyPlayedUi>,
+    weak: &Weak<AppWindow>,
+    generation: u64,
+) {
+    let prepared = build_filtered_grid(rp_ui);
+    if rp_ui.filter_generation() != generation {
+        return;
+    }
+    let rp_ui = rp_ui.clone();
+    let weak = weak.clone();
+    let _ = slint::invoke_from_event_loop(move || {
+        if rp_ui.filter_generation() != generation {
+            return;
+        }
+        let Some(ui) = weak.upgrade() else { return };
+        write_filtered_grid(&ui, &rp_ui, prepared);
     });
 }
 
@@ -180,7 +251,7 @@ pub(super) fn apply_filtered_grid(
 /// panel: the hidden tab's model is emptied on every apply, and its
 /// `GridEmptyState` is suppressed by a count that is already non-zero.
 pub fn apply_filtered_grid_now(ui: &AppWindow, rp_ui: &RecentlyPlayedUi) {
-    write_filtered_grid(ui, rp_ui, &build_filtered_grid(rp_ui));
+    write_filtered_grid(ui, rp_ui, build_filtered_grid(rp_ui));
 }
 
 /// Let the mounted grid's card bindings start decoding on a miss again — see

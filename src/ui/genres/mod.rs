@@ -30,6 +30,7 @@
 //! and models are only touched from the UI thread, reached via
 //! `Weak<AppWindow>::upgrade_in_event_loop`.
 
+mod callbacks;
 mod color;
 mod detail;
 mod grid;
@@ -48,6 +49,7 @@ use crate::media::cover_thumbs::CoverThumbs;
 use crate::ui::row_match::Needle;
 use crate::ui::section_state::SectionState;
 use crate::ui::util::clamp_i64_to_i32;
+use crate::ui::view_ctx::ViewCtx;
 use crate::{
     AppWindow, GenreDetail, GenreGridRow as UiGenreGridRow, GenreRow as UiGenreRow, Genres,
     TrackListRow as UiTrackListRow,
@@ -64,16 +66,43 @@ use state::GridIndexCache;
 // has to carry the same tint as its card in this grid, and the only way
 // to guarantee that is to derive both from the one function.
 pub use color::{GenreAccent, genre_accent};
-pub use detail::{
+// Reached from outside the slice: `boot::ui_setup` seeds the persisted detail,
+// `ui::nav_history` replays a walk into one, and the cross-tab drill lands here
+// from `callbacks::cross_tab_nav`.
+pub use detail::{open_genre_with, seed_detail_from_settings};
+// `boot::ui_setup`'s `initial_grid_fetch!` kicks this after the window is shown,
+// which is why it can't fold into `install` with the models and the wiring.
+pub use grid::fetch_grid;
+
+// Reached only from this slice's own `callbacks/`, which used to live two
+// modules away. `pub(super)` is `pub(in crate::ui)` here — one notch wider than
+// needed, and the notch the cross-slice `apply_detail_row_*` mirrors in
+// `callbacks::now_playing` still use.
+pub(super) use detail::{
     apply_detail_row_favorite, apply_detail_row_rating, apply_filtered_detail, clear_detail,
-    open_genre, refresh_detail,
-    resort_detail, seed_detail_from_settings, set_filter,
+    open_genre, refresh_detail, resort_detail, set_filter,
 };
-pub use grid::{fetch_grid, rebuild_grid};
-pub use selection::{clear_selection, handle_select_row};
+pub(super) use grid::rebuild_grid;
+pub(super) use selection::{clear_selection, handle_select_row};
+
+/// Install the Genres grid + detail models, build the handle, and wire every
+/// `Genres.*` / `GenreDetail.*` callback to it.
+///
+/// Self-contained: no cross-tab origin and no artwork, just the shared row-tier
+/// `cover_thumbs` for the detail track list's small artwork column.
+///
+/// The returned handle is a convenience for the caller's own later wiring, not
+/// a keepalive — every wired closure clones its own strong `Arc` and those
+/// closures are owned by the `AppWindow` for the life of the app.
+pub fn install(cx: ViewCtx<'_>) -> Arc<GenresUi> {
+    install_models(cx.app);
+    let genres_ui = Arc::new(GenresUi::new(cx.cover_thumbs.clone()));
+    callbacks::wire(cx.app, cx.state, &genres_ui);
+    genres_ui
+}
 
 /// Rust-side state for the Genres grid + detail views. Shared between
-/// the UI callbacks (`wire_genres`) and the async fetchers. The grid and
+/// the UI callbacks (`callbacks::wire`) and the async fetchers. The grid and
 /// detail concerns are largely independent — each lives in its own
 /// sub-struct.
 ///
@@ -97,7 +126,7 @@ pub struct GenresUi {
 }
 
 impl GenresUi {
-    pub fn new(cover_thumbs: Arc<CoverThumbs>) -> Self {
+    fn new(cover_thumbs: Arc<CoverThumbs>) -> Self {
         Self {
             grid: GenreGridState {
                 data: Mutex::new(Arc::new(GridData::new(Vec::new()))),
@@ -224,7 +253,7 @@ impl GenresUi {
 /// and the detail selection need, and hand them to the Slint globals as
 /// `ModelRc`s. Subsequent updates locate them by downcasting back to
 /// `VecModel<T>`.
-pub fn install_genres_models(ui: &AppWindow) {
+fn install_models(ui: &AppWindow) {
     let grid: Rc<VecModel<UiGenreGridRow>> = Rc::new(VecModel::default());
     ui.global::<Genres>().set_grid_rows(ModelRc::from(grid));
 

@@ -2,7 +2,7 @@
 //!
 //! Slint 1.16 has no `Flow` and can't build a nested array, so anything that
 //! wraps does the split here and hands the view two real arrays to walk — the
-//! same shape as [`crate::ui::settings_page::chunk_indices`], which wraps by
+//! same shape as `settings::settings_page::chunk_indices`, which wraps by
 //! *index* because its chips are measured Slint-side. These are wrapped by
 //! *width*, because the chip texts are built in Rust and never leave it.
 //!
@@ -25,9 +25,11 @@ const SPACING: f32 = 8.0;
 /// **The two error directions are not symmetric**, because this packs a row as
 /// full as the estimate allows — unlike `ChipGroup`, which sizes every row off
 /// its widest chip and so is never full at all. Over-shoot only wraps early;
-/// under-shoot overflows, and nothing downstream absorbs it, since a no-wrap
-/// `Text` reports its full string as its layout *minimum* and the row is
-/// therefore incompressible. So `CHAR_W` leans generous: 6.5 px against a 12 px
+/// under-shoot truncates, and it truncates the whole *row* rather than the chip
+/// that didn't fit — `MetaChip`'s label carries `overflow: elide` for its ink
+/// rather than for elision (`slint-pitfalls.md`), and that lowers each chip's
+/// layout *minimum* to one `…`, so the layout shares the shortfall out across
+/// all of them. So `CHAR_W` leans generous: 6.5 px against a 12 px
 /// `font-size-sm` is ≈0.54 em, where Vazirmatn's digits sit near 0.55 and its
 /// lowercase near 0.5, and chip texts are counts, years and short words. Both
 /// spacings are exact (`pad-sm`, `2 × pad-md`) — only the glyph term estimates.

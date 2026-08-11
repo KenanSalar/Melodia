@@ -31,6 +31,10 @@ export component MetaChip inherits Rectangle {
                 // that has to stay readable on a dark cover.
                 color: root.label-color;
                 font-size: Theme.font-size-sm;
+                // **About ink, not elision** — a chip sizes to its label, so nothing can
+                // overflow. The default `clip` scissors a `Text` at its own line box, and
+                // these labels carry names: a genre whose marks leave the box loses them.
+                overflow: elide;
             }
         }
     }

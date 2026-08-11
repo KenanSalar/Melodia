@@ -1,11 +1,11 @@
 import { ListView, ScrollView } from "std-widgets.slint";
 import { Theme } from "../theme.slint";
-import { Nav } from "../globals/nav.slint";
+import { Nav, NavEnterFrom } from "../globals/nav.slint";
 import { Player } from "../globals/player.slint";
 import { CompositeScroll } from "../globals/shell.slint";
 import { Browse } from "../globals/tracks.slint";
 import { IconButton } from "../components/icon-button.slint";
-import { Tooltip, TooltipSide } from "../components/tooltip.slint";
+import { TooltipFrame } from "../components/tooltip-frame.slint";
 import { ActionPill, PillButton, PillDivider } from "../components/action-pill.slint";
 import { SelectionPills } from "../components/selection-pills.slint";
 import { ColumnTogglePopup } from "../components/track-list/column-toggle-popup.slint";
@@ -304,8 +304,11 @@ export component BrowseView inherits Rectangle {
                 body: @tr("Open Settings to add a folder");
                 action-icon: "settings";
                 action-label: @tr("Open Settings");
-                // Persisted like every other nav entry, so the tab sticks.
+                // Persisted like every other nav entry, so the tab sticks, and
+                // marked like one too — lateral nav fades up from `below`, and
+                // an unwritten edge is whatever the last drill left behind.
                 action-clicked => {
+                    Nav.pending-enter-from = NavEnterFrom.below;
                     Nav.selected-index = 9;
                     Nav.persist-selected-index(9);
                 }
@@ -374,22 +377,16 @@ export component BrowseView inherits Rectangle {
     // The view-toggle's tooltip, on the top layer. It hangs **below** its pill —
     // the pill sits in the header strip, where an above-tooltip would clear the
     // panel edge — and everything below the header is declared after it, so an
-    // in-tree pill would be painted over by the body. A frame tracking the host's
-    // rect through `absolute-position` is the tree's answer to that; it is
-    // declared last, after the scrollbars, because Slint paints in declaration
-    // order. Same shape as `my-library-view.slint`'s `header-tip`.
-    Rectangle {
+    // in-tree pill would be painted over by the body. Hence the shared
+    // `TooltipFrame`, declared last, after the scrollbars, because Slint paints in
+    // declaration order. The two `absolute-position` deltas stay here: they are
+    // this view's own geometry, and `parent` is unreachable from a component root.
+    TooltipFrame {
         x: view-toggle.absolute-position.x - root.absolute-position.x;
         y: view-toggle.absolute-position.y - root.absolute-position.y;
         width: view-toggle.width;
         height: view-toggle.height;
-
-        Tooltip {
-            text: root.card-mode ? @tr("List view") : @tr("Card view");
-            hovered: view-toggle.hovered;
-            host-width: parent.width;
-            host-height: parent.height;
-            side: TooltipSide.below;
-        }
+        label: root.card-mode ? @tr("List view") : @tr("Card view");
+        shown: view-toggle.hovered;
     }
 }

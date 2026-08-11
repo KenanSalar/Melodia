@@ -168,7 +168,7 @@ pub(super) fn schedule_drop_flush(state: &AppState, path: PathBuf) {
                 match library::playlists::import_files_to_playlist(&state, id, paths).await {
                     Ok(_) => {
                         // Bump library-changed so the playlist's
-                        // detail subscriber (`wire_playlists::library_changed`)
+                        // detail subscriber (`playlists/callbacks/lifecycle.rs`)
                         // refreshes the open detail's track list AND the
                         // grid (track count + auto-thumbnail may have
                         // changed for a previously-empty playlist).

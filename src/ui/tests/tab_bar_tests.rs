@@ -110,14 +110,14 @@ const CURATED_PAGES: [CuratedPage; 2] = [
         label: "favorites",
         global: "Favorites",
         view: include_str!("../../../melodia-ui/ui/views/favorites-view.slint"),
-        lifecycle: include_str!("../callbacks/favorites/lifecycle.rs"),
+        lifecycle: include_str!("../favorites/callbacks/lifecycle.rs"),
         counts: &["track-count", "most-played-count", "artist-count"],
     },
     CuratedPage {
         label: "recently-played",
         global: "RecentlyPlayed",
         view: include_str!("../../../melodia-ui/ui/views/recently-played-view.slint"),
-        lifecycle: include_str!("../callbacks/recently_played/lifecycle.rs"),
+        lifecycle: include_str!("../recently_played/callbacks/lifecycle.rs"),
         counts: &["track-count", "most-played-count"],
     },
 ];
@@ -231,35 +231,35 @@ const LIBRARY_PAGES: [LibraryPage; 5] = [
         label: "songs",
         global: "Tracks",
         source: include_str!("../../../melodia-ui/ui/globals/tracks.slint"),
-        lifecycle: include_str!("../callbacks/tracks.rs"),
+        lifecycle: include_str!("../tracks/callbacks/lifecycle.rs"),
         rewinds_on_leave: false,
     },
     LibraryPage {
         label: "albums",
         global: "Albums",
         source: include_str!("../../../melodia-ui/ui/globals/albums.slint"),
-        lifecycle: include_str!("../callbacks/albums/lifecycle.rs"),
+        lifecycle: include_str!("../albums/callbacks/lifecycle.rs"),
         rewinds_on_leave: true,
     },
     LibraryPage {
         label: "artists",
         global: "Artists",
         source: include_str!("../../../melodia-ui/ui/globals/artists.slint"),
-        lifecycle: include_str!("../callbacks/artists/lifecycle.rs"),
+        lifecycle: include_str!("../artists/callbacks/lifecycle.rs"),
         rewinds_on_leave: true,
     },
     LibraryPage {
         label: "genres",
         global: "Genres",
         source: include_str!("../../../melodia-ui/ui/globals/genres.slint"),
-        lifecycle: include_str!("../callbacks/genres/lifecycle.rs"),
+        lifecycle: include_str!("../genres/callbacks/lifecycle.rs"),
         rewinds_on_leave: true,
     },
     LibraryPage {
         label: "playlists",
         global: "Playlists",
         source: include_str!("../../../melodia-ui/ui/globals/playlists.slint"),
-        lifecycle: include_str!("../callbacks/playlists/lifecycle.rs"),
+        lifecycle: include_str!("../playlists/callbacks/lifecycle.rs"),
         rewinds_on_leave: true,
     },
 ];
@@ -449,40 +449,30 @@ fn every_painted_brush_is_an_input() {
     );
 }
 
-/// **A cell may not ease a colour its host is already easing**, and the icon is
-/// the one that tried.
+/// **A cell eases floats and never a brush**, because it cannot tell an eased
+/// input from a stepped one.
 ///
-/// It carried a `dur-fast` `animate icon-color`, which bought nothing on a pick —
-/// the label beside it snaps and `filled` swaps font face in a single frame — and
-/// cost the bar every crossing a host paints. `LibraryTabBand` hands these four
-/// brushes over *animating* for the length of its 400 ms morph, so the binding's
-/// dependency was re-dirtied every frame; an animated binding restarts on
-/// dirtiness rather than on a value change, so it re-based from the current
-/// colour with its clock back at zero and the glyph sat still until the source
-/// stopped, then caught up in one late rush. That is the whole "the tab colours
-/// change at the end of the morph" symptom, in both directions, and a cell has no
-/// way to tell an eased input from a stepped one — so the fix is to not ease
-/// here at all.
+/// Every colour it paints is handed down by its host, and `LibraryTabBand` hands
+/// all four over *animating* for the length of its 400 ms morph. An animated
+/// binding restarts on **dirtiness** rather than on a value change, so a leaf
+/// easing one of them re-bases from the current colour with its clock back at
+/// zero on every frame of the crossing: the value sits still until the source
+/// settles, then catches up in one late rush. That is the whole "the tab colours
+/// change at the end of the morph" symptom, in both directions.
 ///
-/// The hover fill keeps its `animate` on purpose: its binding reads `hover-fill`
-/// only on the hovered arm, so a morph with no pointer on the bar never dirties
-/// it, and the fade is the whole of what a state layer is.
+/// The icon went first. The **hover fill** was then exempted on the grounds that
+/// `has-hover ? hover-fill : transparent` reads the input only on the hovered
+/// arm, so a morph with no pointer on the bar never dirties it — true, and beside
+/// the point: the tab you are pointing at while you click it *is* the hovered arm,
+/// so the cell you just picked kept the idle theme's grey for the whole morph and
+/// snapped to the hero tier at the end. Both fades are floats now, and the two
+/// brush expressions track their sources unanimated.
 #[test]
-fn the_cell_eases_no_colour_its_host_may_be_easing() {
-    // Comments dropped, so the prose above each of these can neither satisfy a
-    // pin nor trip one — the file argues the absence at length.
-    let cell: String = TAB_BAR
-        .split_once("component TabBarCell")
-        .and_then(|(_, body)| body.split_once("export component TabBar"))
-        .map(|(body, _)| body)
-        .unwrap_or_default()
-        .lines()
-        .filter(|line| !line.trim_start().starts_with("//"))
-        .collect::<Vec<_>>()
-        .join("\n");
+fn the_cell_eases_floats_and_never_a_brush() {
+    let cell = cell_body();
     assert!(cell.contains("icon-color:"), "the cell no longer paints its icon");
 
-    for prop in ["icon-color", "label-color", "color"] {
+    for prop in ["icon-color", "label-color", "color", "background"] {
         assert!(
             !cell.contains(&format!("animate {prop}")),
             "`TabBarCell` must not `animate {prop}` — a host on a hero band feeds these brushes \
@@ -490,6 +480,100 @@ fn the_cell_eases_no_colour_its_host_may_be_easing() {
              frame and stalls until that source settles"
         );
     }
+
+    for (float, source) in [("hover-t", "touch.has-hover"), ("sel-t", "root.selected")] {
+        assert!(
+            cell.contains(&format!("property <float> {float}: {source}")),
+            "`TabBarCell` must derive `{float}` from `{source}` — the fade has to ride a value \
+             no host can dirty"
+        );
+        assert!(
+            cell.contains(&format!("animate {float}")),
+            "`TabBarCell` must ease `{float}`; without it the state it stands for steps"
+        );
+    }
+}
+
+/// The selected colour crosses by **stacking two layers**, and three things about
+/// that stack are load-bearing in a way the source alone doesn't force.
+///
+/// Slint's `mix()` takes `color` operands (`ColorMix: (Color, Color, Float32)`)
+/// and every brush here is a `brush`, so a blend between the idle and the active
+/// tier can only be two elements with the top one faded. Then:
+///
+/// - the **bottom layer paints at full alpha** and only the top rides `sel-t`.
+///   Two layers at `t` and `1 - t` composite to three quarters coverage at the
+///   midpoint, so the word and the glyph visibly thin halfway through every pick —
+///   and it still looks right at both ends, which is what makes it worth pinning.
+/// - the two layers differ in **colour only**. A divergent `font-size`, weight or
+///   `filled` ghosts for the length of the crossing.
+/// - the fades **multiply** (`transparentize`) rather than being set
+///   (`with-alpha`), so the compact close still takes the label away whichever tab
+///   is selected, and a translucent hero tier keeps its own weight.
+#[test]
+fn the_selected_colour_crosses_over_two_matched_layers() {
+    let cell = cell_body();
+
+    assert_eq!(
+        cell.matches("icon-color:").count(),
+        2,
+        "the icon crossfade wants exactly two glyphs — one idle underneath, one selected over it"
+    );
+    assert_eq!(
+        cell.matches("font-size: Theme.font-size-md * root.press-scale;").count(),
+        2,
+        "both label layers must take the same font size, or the crossfade ghosts"
+    );
+    assert_eq!(
+        cell.matches("font-weight: 500;").count(),
+        2,
+        "both label layers must take the same weight, or the crossfade ghosts"
+    );
+    assert_eq!(
+        cell.matches("filled: root.selected;").count(),
+        2,
+        "both glyph layers must take the same `filled`, so the crossfade is colour only and the \
+         FILL=1 face swap stays the single frame it always was"
+    );
+
+    // Only the *active* half may read `sel-t`: the idle half underneath is what
+    // keeps the ink constant across the crossing and reverses it for free.
+    for idle in [
+        "icon-color: root.label-color-idle;",
+        "color: root.label-color-idle.transparentize(1.0 - root.label-alpha);",
+    ] {
+        assert!(
+            cell.contains(idle),
+            "the idle layer must paint at full alpha — `{idle}` is what stops the label thinning \
+             at the midpoint of every pick"
+        );
+    }
+    assert_eq!(
+        cell.matches("root.sel-t").count(),
+        2,
+        "`sel-t` is read by the two active layers and by nothing else — an idle layer that \
+         fades with it is the thinning midpoint again"
+    );
+
+    assert!(
+        !cell.contains("with-alpha"),
+        "`with-alpha` *sets* alpha where `transparentize` multiplies it — the two fades on a \
+         label have to compose, and a translucent hover tier has to keep its own weight"
+    );
+}
+
+/// The cell's body with comments dropped, so the prose arguing an absence can
+/// neither satisfy a pin nor trip one.
+fn cell_body() -> String {
+    TAB_BAR
+        .split_once("component TabBarCell")
+        .and_then(|(_, body)| body.split_once("export component TabBar"))
+        .map(|(body, _)| body)
+        .unwrap_or_default()
+        .lines()
+        .filter(|line| !line.trim_start().starts_with("//"))
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 /// A cell writes `selected-index` before it emits `selected`, and it has to —

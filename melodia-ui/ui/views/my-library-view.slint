@@ -1,5 +1,5 @@
 import { MyLibrary } from "../globals/my-library.slint";
-import { Nav } from "../globals/nav.slint";
+import { NavEnterFrom } from "../globals/nav.slint";
 import { AlbumDetail, Albums } from "../globals/albums.slint";
 import { ArtistDetail, Artists } from "../globals/artists.slint";
 import { GenreDetail, Genres } from "../globals/genres.slint";
@@ -10,7 +10,7 @@ import { FilterThrottle } from "../components/filter-throttle.slint";
 import { GridColumnsSync } from "../components/grid-columns-sync.slint";
 import { GridGeometry } from "../components/grid-geometry.slint";
 import { LibraryTabBand } from "../components/hero/library-tab-band.slint";
-import { Tooltip, TooltipSide } from "../components/tooltip.slint";
+import { TooltipFrame } from "../components/tooltip-frame.slint";
 import { ViewTransition } from "../components/view-transition.slint";
 import { MyLibrarySongsTab } from "my-library/songs-tab.slint";
 import { MyLibraryAlbumsTab } from "my-library/albums-tab.slint";
@@ -85,6 +85,42 @@ export component MyLibraryView inherits Rectangle {
         self.hero-playlist = root.playlist-open;
     }
 
+    // **The idle band's sentence, and the latch that holds it across an open** — the mirror
+    // image of the four above, guard included. The band eases this out over the first half
+    // of the morph, so a drill has to fade the sentence that was *on screen*; bound live it
+    // instead re-reads the arriving tab, and the arrival brings two separate wrongs with it.
+    // The destination tab's leave rewound its own count to the unfetched sentinel, so the
+    // departing sentence vanishes on frame one rather than fading — and the section-enter's
+    // `fetch_grid` then lands *inside* the fade and pops "7 playlists" onto a line that is
+    // still three-quarters opaque. Reported as the playlists page flashing up on the way
+    // into a playlist.
+    //
+    // Same shape as `hero-*`: seeded by its binding, owned by `latch-count`, which is
+    // unguarded so `init` can take ownership on a page that mounts straight onto a grid.
+    // The guard is at the two call sites and is `!detail-open` — the hero half holds across
+    // a *close*, this holds across an *open*. A tab pick that closes nothing still moves it,
+    // both writes landing in the tick the tab does.
+    property <string> live-count:
+        MyLibrary.tab-idx == MyLibrary.tab-songs
+            ? (Tracks.total-count >= 0
+                ? @tr("{n} song" | "{n} songs" % Tracks.total-count) : "")
+        : MyLibrary.tab-idx == MyLibrary.tab-albums
+            ? (Albums.total-count >= 0
+                ? @tr("{n} album" | "{n} albums" % Albums.total-count) : "")
+        : MyLibrary.tab-idx == MyLibrary.tab-artists
+            ? (Artists.total-count >= 0
+                ? @tr("{n} artist" | "{n} artists" % Artists.total-count) : "")
+        : MyLibrary.tab-idx == MyLibrary.tab-genres
+            ? (Genres.total-count >= 0
+                ? @tr("{n} genre" | "{n} genres" % Genres.total-count) : "")
+        : (Playlists.total-count >= 0
+            ? @tr("{n} playlist" | "{n} playlists" % Playlists.total-count) : "");
+    property <string> count-line: root.live-count;
+    function latch-count() { self.count-line = root.live-count; }
+    changed live-count => {
+        if (!root.detail-open) { root.latch-count(); }
+    }
+
     // **The seed has to be a *write*, and that is what this line is for.** A declared
     // binding is live until something assigns over it, and the only assignment is
     // `latch-hero`, guarded on `detail-open` — which is false on exactly the frame a close
@@ -96,7 +132,40 @@ export component MyLibraryView inherits Rectangle {
     // content-area `if` rebuilds this view and hands it fresh bindings — drill in, sidebar
     // away, sidebar back, press back — and on a boot resuming a detail. `init` runs after
     // the bindings resolve, so it writes the values they just produced and nothing moves.
-    init => { root.latch-hero(); }
+    //
+    // `latch-count` is here for the same reason and needs it more, its own guard being the
+    // *complement*: a page mounted onto a grid and then drilled has never written either,
+    // so the count line would follow the tab through the live binding for the whole fade.
+    init => {
+        root.latch-hero();
+        root.latch-count();
+    }
+
+    // **May a mounting body animate at all** — see the body router below for what it
+    // costs when it may not. The page's own `ViewTransition` is still in flight on the
+    // frame its first body mounts, and on a cross-section drill that entrance slides
+    // *sideways*, so a body rising into it is the same diagonal one level up.
+    //
+    // `tab-anim-armed` answers "a tab has been picked in this page mount", which is every
+    // arrival that came through the bar. The two that don't are armed by hand: the first
+    // drill out of the tab the page opened on, on the edge that opens it, and a tab move
+    // that isn't a pick — a cross-tab drill or a Mouse-4/5 walk into another tab's detail
+    // — on the mirror below, which `detail-open` cannot cover because both land the id and
+    // the tab in **one** tick, so the transition never happens. That is `cross_tab_nav`'s
+    // `on_applied` hook in the first case and `nav_history`'s `PendingNav` riding the same
+    // hook in the second; the walk used to write its tab a whole fetch early, which armed
+    // this for free and mounted the destination tab's *grid* to do it.
+    //
+    // Seeded by the binding and owned by the handlers, the band's `hero-t` idiom: the
+    // write orphans the binding, which is harmless because this only ever goes true. It
+    // re-disarms for free, the content-area `if` rebuilding this view on every entry —
+    // and neither handler can fire on that entry, `changed` not running on a first
+    // evaluation, so the page's own entrance still owns the first frame.
+    property <bool> body-anim-armed: band.tab-anim-armed;
+    changed detail-open => {
+        root.body-anim-armed = true;
+        if (!root.detail-open) { root.latch-count(); }
+    }
 
     changed album-open => {
         if (root.detail-open) { root.latch-hero(); }
@@ -132,8 +201,15 @@ export component MyLibraryView inherits Rectangle {
     // its own. Without a reseat here, walking back into a tab you had filtered re-fetches it
     // through that untouched needle under an empty box. A pick is unaffected: it clears both
     // sides before the change-tracker pass runs, so `sync_box` finds them equal and bails.
+    //
+    // It arms the body fade for the same two arrivals, and for the same reason the reseat
+    // is owed to them: a pick has armed it already through the band, where a drill or a
+    // walk reaches this page with nothing else to fire on.
     property <int> watched-tab-idx: MyLibrary.tab-idx;
-    changed watched-tab-idx => { MyLibrary.detail-scope-changed(); }
+    changed watched-tab-idx => {
+        root.body-anim-armed = true;
+        MyLibrary.detail-scope-changed();
+    }
 
     // A click anywhere the band or a body doesn't claim gives the filter box up.
     TouchArea {
@@ -187,40 +263,24 @@ export component MyLibraryView inherits Rectangle {
             tab-labels: [@tr("Songs"), @tr("Albums"), @tr("Artists"), @tr("Genres"), @tr("Playlists")];
             tab-icons: ["music_note", "album", "person", "theater_comedy", "playlist_play"];
             tab-idx <=> MyLibrary.tab-idx;
-            tab-selected(i) => {
-                // **The direction goes through `Nav`, not straight from the band.** The
-                // band has already settled `tab-enter-from` by the time this fires, but
-                // binding the bodies to it would leave the *other* two ways a body
-                // mounts — a drill in, a back out — sliding whichever way the last tab
-                // pick went. `Nav.pending-enter-from` is what `nav_transition::mark`
-                // writes for those, so routing the pick through it keeps one source of
-                // truth for all nine branches.
-                Nav.pending-enter-from = band.tab-enter-from;
-                MyLibrary.tab-changed(i);
-            }
+            // **No `Nav.pending-enter-from` write here, and none of the nine branches
+            // reads one.** A tab pick used to publish the bar's direction so a body would
+            // slide the way the bar moved; on this page that slide is exactly what makes
+            // the entry diagonal, since the band's morph is already moving the body
+            // vertically. The bodies take a fixed `below` now, so the write would only
+            // leave a stale `right`/`left` for whichever *page* mounts next.
+            tab-selected(i) => { MyLibrary.tab-changed(i); }
 
             filter <=> MyLibrary.filter;
             blur-tick: MyLibrary.blur-search-tick;
             search-edited(t) => { root.filter-tick-pending += 1; }
 
-            // **Every count is `>= 0`-guarded**, and that is not optional: all five hold
+            // The **latched** sentence, not the live ternary — see `live-count` above for
+            // what a drill does to a line that re-reads the arriving tab mid-fade. Every
+            // count in it is `>= 0`-guarded, and that is not optional: all five hold
             // `ui::tab_bar::UNFETCHED_COUNT` until fetched and again after a tab leave,
             // and a bare `-1` interpolates into the plural as "-1 albums".
-            count-text:
-                MyLibrary.tab-idx == MyLibrary.tab-songs
-                    ? (Tracks.total-count >= 0
-                        ? @tr("{n} song" | "{n} songs" % Tracks.total-count) : "")
-                : MyLibrary.tab-idx == MyLibrary.tab-albums
-                    ? (Albums.total-count >= 0
-                        ? @tr("{n} album" | "{n} albums" % Albums.total-count) : "")
-                : MyLibrary.tab-idx == MyLibrary.tab-artists
-                    ? (Artists.total-count >= 0
-                        ? @tr("{n} artist" | "{n} artists" % Artists.total-count) : "")
-                : MyLibrary.tab-idx == MyLibrary.tab-genres
-                    ? (Genres.total-count >= 0
-                        ? @tr("{n} genre" | "{n} genres" % Genres.total-count) : "")
-                : (Playlists.total-count >= 0
-                    ? @tr("{n} playlist" | "{n} playlists" % Playlists.total-count) : "");
+            count-text: root.count-line;
 
             // A detail's own list comes first, so the drill-in states what the box now
             // filters. Artist Detail is the one that filters two things at once.
@@ -333,14 +393,36 @@ export component MyLibraryView inherits Rectangle {
             vertical-stretch: 1;
             clip: true;
 
-            // **A tab body slides, a detail body doesn't gate.** `tab-anim-armed` starts
-            // false and only a bar pick arms it, so the page's own fade-up isn't
-            // compounded with a horizontal slide — the two together read as a diagonal.
+            // **All nine take the same three lines, and the reason is that this page has
+            // a second animation nothing else does: the band's own height.** The band is
+            // the non-stretching sibling above this body, so a morph between the compact
+            // floor and the hero one moves `body.y` by the whole 100 px between them, on
+            // every frame — and the list or grid inside is anchored to that. A body
+            // sliding 32 px sideways at the same time gave the reported diagonal: 32 px
+            // left plus 100 px down on a back out, 32 px right plus 100 px up on a drill
+            // in, and both at once on a tab pick that closes a banner.
+            //
+            // So the page keeps one axis. `below` is the sidebar's own fade-up, which is
+            // what a tab pick with nothing morphing gets; `slide: !band.morphing` drops
+            // even that whenever the band is already doing the moving, leaving a pure
+            // cross-fade over the morph (Material 3's answer for content inside a
+            // container transform). Same-axis is deliberately not enough either: 32 px of
+            // the body's own travel on top of the 100 px the morph is already spending is
+            // simply a longer move, and the two curves don't agree about it — the entry
+            // one is slow off the mark where `ViewTransition`'s is not, so the sum runs
+            // about 4 px the *wrong* way over the first 60 ms before it turns. Small
+            // enough that the redundancy is the better argument, large enough not to
+            // call it a rounding error.
+            //
+            // `body-anim-armed` is the third: it holds the body still while the *page*'s
+            // own entrance is in flight, which is the composition that gate was already
+            // there for.
             if MyLibrary.tab-idx == MyLibrary.tab-songs: ViewTransition {
                 width: parent.width;
                 height: parent.height;
-                enter-from: Nav.pending-enter-from;
-                enabled: band.tab-anim-armed;
+                enter-from: NavEnterFrom.below;
+                enabled: root.body-anim-armed;
+                slide: !band.morphing;
                 MyLibrarySongsTab { width: 100%; height: 100%; }
             }
             // Each grid tab swaps grid ↔ detail on the predicate above, -1 being the
@@ -349,8 +431,9 @@ export component MyLibraryView inherits Rectangle {
             if MyLibrary.tab-idx == MyLibrary.tab-albums && !root.album-open: ViewTransition {
                 width: parent.width;
                 height: parent.height;
-                enter-from: Nav.pending-enter-from;
-                enabled: band.tab-anim-armed;
+                enter-from: NavEnterFrom.below;
+                enabled: root.body-anim-armed;
+                slide: !band.morphing;
                 MyLibraryAlbumsTab {
                     width: 100%;
                     height: 100%;
@@ -363,14 +446,17 @@ export component MyLibraryView inherits Rectangle {
             if root.album-open: ViewTransition {
                 width: parent.width;
                 height: parent.height;
-                enter-from: Nav.pending-enter-from;
+                enter-from: NavEnterFrom.below;
+                enabled: root.body-anim-armed;
+                slide: !band.morphing;
                 AlbumDetailBody { width: 100%; height: 100%; }
             }
             if MyLibrary.tab-idx == MyLibrary.tab-artists && !root.artist-open: ViewTransition {
                 width: parent.width;
                 height: parent.height;
-                enter-from: Nav.pending-enter-from;
-                enabled: band.tab-anim-armed;
+                enter-from: NavEnterFrom.below;
+                enabled: root.body-anim-armed;
+                slide: !band.morphing;
                 MyLibraryArtistsTab {
                     width: 100%;
                     height: 100%;
@@ -383,14 +469,17 @@ export component MyLibraryView inherits Rectangle {
             if root.artist-open: ViewTransition {
                 width: parent.width;
                 height: parent.height;
-                enter-from: Nav.pending-enter-from;
+                enter-from: NavEnterFrom.below;
+                enabled: root.body-anim-armed;
+                slide: !band.morphing;
                 ArtistDetailBody { width: 100%; height: 100%; }
             }
             if MyLibrary.tab-idx == MyLibrary.tab-genres && !root.genre-open: ViewTransition {
                 width: parent.width;
                 height: parent.height;
-                enter-from: Nav.pending-enter-from;
-                enabled: band.tab-anim-armed;
+                enter-from: NavEnterFrom.below;
+                enabled: root.body-anim-armed;
+                slide: !band.morphing;
                 MyLibraryGenresTab {
                     width: 100%;
                     height: 100%;
@@ -403,14 +492,17 @@ export component MyLibraryView inherits Rectangle {
             if root.genre-open: ViewTransition {
                 width: parent.width;
                 height: parent.height;
-                enter-from: Nav.pending-enter-from;
+                enter-from: NavEnterFrom.below;
+                enabled: root.body-anim-armed;
+                slide: !band.morphing;
                 GenreDetailBody { width: 100%; height: 100%; }
             }
             if MyLibrary.tab-idx == MyLibrary.tab-playlists && !root.playlist-open: ViewTransition {
                 width: parent.width;
                 height: parent.height;
-                enter-from: Nav.pending-enter-from;
-                enabled: band.tab-anim-armed;
+                enter-from: NavEnterFrom.below;
+                enabled: root.body-anim-armed;
+                slide: !band.morphing;
                 MyLibraryPlaylistsTab {
                     width: 100%;
                     height: 100%;
@@ -423,7 +515,9 @@ export component MyLibraryView inherits Rectangle {
             if root.playlist-open: ViewTransition {
                 width: parent.width;
                 height: parent.height;
-                enter-from: Nav.pending-enter-from;
+                enter-from: NavEnterFrom.below;
+                enabled: root.body-anim-armed;
+                slide: !band.morphing;
                 PlaylistDetailBody { width: 100%; height: 100%; }
             }
         }
@@ -433,31 +527,21 @@ export component MyLibraryView inherits Rectangle {
     // band, and Slint paints in declaration order, so anything the band owns is covered by
     // the body underneath. Each publishes the rect it derives from the hovered element, so
     // a tab or a pill that moves under a parked pointer keeps its tooltip anchored.
-    tab-tip := Rectangle {
+    TooltipFrame {
         x: band.absolute-position.x - root.absolute-position.x + band.tip-x;
         y: band.absolute-position.y - root.absolute-position.y + band.tip-y;
         width: band.tip-w;
         height: band.tip-h;
-        Tooltip {
-            text: band.tip-label;
-            hovered: band.tip-visible;
-            host-width: tab-tip.width;
-            host-height: tab-tip.height;
-            side: TooltipSide.below;
-        }
+        label: band.tip-label;
+        shown: band.tip-visible;
     }
 
-    header-tip := Rectangle {
+    TooltipFrame {
         x: pills.absolute-position.x - root.absolute-position.x + pills.tip-x;
         y: pills.absolute-position.y - root.absolute-position.y + pills.tip-y;
         width: pills.tip-w;
         height: pills.tip-h;
-        Tooltip {
-            text: pills.tip-label;
-            hovered: pills.tip-visible;
-            host-width: header-tip.width;
-            host-height: header-tip.height;
-            side: TooltipSide.below;
-        }
+        label: pills.tip-label;
+        shown: pills.tip-visible;
     }
 }

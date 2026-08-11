@@ -18,7 +18,6 @@ use crate::error::AppError;
 use crate::library;
 use crate::services;
 use crate::state::AppState;
-use crate::themes::MATERIAL_YOU_ACCENT_ID;
 use crate::{AppWindow, Settings, Theme};
 
 /// Hydrate the Settings global from `settings.json`, paint the resolved
@@ -143,7 +142,7 @@ pub fn install(ui: &AppWindow, state: &AppState) -> Result<AppearanceHandles, Ap
         ui.global::<Settings>().set_tray_enabled(settings.tray.tray_enabled);
         let on = settings.tray.close_to_tray;
         ui.global::<Settings>().set_close_to_tray(on);
-        crate::ui::tray_bridge::set_close_to_tray(on);
+        crate::ui::shell::tray_bridge::set_close_to_tray(on);
     }
 
     // Seed the Overflow Menu Buttons checkboxes from
@@ -160,28 +159,10 @@ pub fn install(ui: &AppWindow, state: &AppState) -> Result<AppearanceHandles, Ap
         g.set_overflow_queue(v.iter().any(|x| x == "queue"));
     }
 
-    // Seed `theme_preferences[active_theme]` from the top-level fields if
-    // missing — without this, a user who launches with a custom accent
-    // (e.g. catppuccin/mocha/yellow) would lose it on the first
-    // theme-swap because the lookup would miss and fall back to defaults.
-    if !settings.theme_preferences.contains_key(&settings.theme_id) {
-        let mut seeded = settings;
-        let last_static_accent = if seeded.accent_color == MATERIAL_YOU_ACCENT_ID {
-            None
-        } else {
-            Some(seeded.accent_color.clone())
-        };
-        seeded.theme_preferences.insert(
-            seeded.theme_id.clone(),
-            services::settings::ThemePreference {
-                variant: seeded.theme_variant.clone(),
-                accent: seeded.accent_color.clone(),
-                last_static_accent,
-            },
-        );
-        if let Err(e) = services::settings::write_settings(&state.paths, &seeded) {
-            log::warn!("seed theme_preferences: {e}");
-        }
+    // The boot migration for a `settings.json` written before `theme_preferences`
+    // existed; it takes the settings read above rather than re-reading them.
+    if let Err(e) = library::settings::seed_theme_preference(state, settings) {
+        log::warn!("seed theme_preferences: {e}");
     }
 
     theme_picker::wire_theme_changed(

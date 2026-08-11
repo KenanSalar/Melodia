@@ -112,7 +112,7 @@ pub(super) fn spawn_up_next_subscriber(
 /// snapshot has been stashed. Shared between:
 ///
 /// - `wire_now_playing_open` — when the full-screen Now Playing view opens.
-/// - `crate::ui::mini_player::install` — via `NowPlayingState::kick_up_next`,
+/// - `crate::ui::shell::mini_player::install` — via `NowPlayingState::kick_up_next`,
 ///   when the responsive miniplayer becomes visible.
 ///
 /// Resets the slide bookkeeping (`last_current_id`, `last_queue_index`) so

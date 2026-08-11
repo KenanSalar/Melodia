@@ -120,9 +120,10 @@ impl From<&Track> for TrackSummary {
 
 /// List-view shape: the columns shown in the Tracks table (and the same
 /// shape returned by per-album / per-artist / per-genre track queries).
-/// `~14 fields vs Track's 41` reduces serialization cost ~65 % for the most
-/// common queries. Includes the foreign-key ids (`album_id`, `artist_id`,
-/// `genre_id`) so the UI can navigate from a row without a second fetch.
+/// 20 fields against `Track`'s 44 — under half the per-row decode cost for
+/// the most common queries. Includes the foreign-key ids (`album_id`,
+/// `artist_id`, `genre_id`) so the UI can navigate from a row without a
+/// second fetch.
 #[derive(Clone, Debug, PartialEq, FromRow, Serialize, Deserialize)]
 pub struct TrackListRow {
     pub id: i64,

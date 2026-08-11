@@ -3,7 +3,7 @@
 //! The strip's Timer fires off the event loop, so it keeps ticking for a window
 //! the compositor has stopped showing. Two of those cases announce themselves —
 //! a tray hide and our own minimize button both drop
-//! [`tray_bridge`](crate::ui::tray_bridge)'s visibility shadow — but an OS-driven
+//! [`tray_bridge`](crate::ui::shell::tray_bridge)'s visibility shadow — but an OS-driven
 //! minimize only sometimes does, and on Wayland a client is never told it was
 //! minimized at all (`xdg_toplevel` has `set_minimized` and no inverse).
 //!

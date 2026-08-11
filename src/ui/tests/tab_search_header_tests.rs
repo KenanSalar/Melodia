@@ -14,24 +14,15 @@
 //! They live here rather than under a host for the `tab_bar_tests.rs` reason — no Rust
 //! module owns the file.
 
+use crate::test_support::{binding_value as binding, strip_line_comments};
+
 const HEADER: &str =
     include_str!("../../../melodia-ui/ui/components/hero/tab-search-header.slint");
 
-/// The file with its comment lines dropped, so prose about a fix can neither satisfy a
-/// pin nor bound a region early. The `placeholder_tests.rs` helper.
+/// The header with its comments dropped, so prose about a fix can neither satisfy a
+/// pin nor bound a region early.
 fn code() -> String {
-    HEADER
-        .lines()
-        .filter(|line| !line.trim_start().starts_with("//"))
-        .collect::<Vec<_>>()
-        .join("\n")
-}
-
-/// The value of a `name:` binding, up to its terminating `;`.
-fn binding(src: &str, name: &str) -> String {
-    src.split_once(name)
-        .and_then(|(_, rest)| rest.split_once(';'))
-        .map_or(String::new(), |(value, _)| value.to_owned())
+    strip_line_comments(HEADER)
 }
 
 /// **The floor is published rather than restated.**
@@ -135,13 +126,14 @@ fn the_sub_view_slide_is_disarmed_until_the_first_switch() {
 /// below it. So the row publishes the rect instead — derived from the hovered index rather
 /// than snapshotted, which is what keeps a tab that moves under a parked pointer (Ctrl+B,
 /// F11) anchored to its tooltip.
+///
+/// The other half — that the row draws no pill of its own — is
+/// `placeholder_tests::no_shared_band_draws_its_own_tooltip`, which walks
+/// `components/hero/` rather than asserting it here, in `library_tab_band_tests` and in
+/// `mosaic_tab_hero_tests` as it used to. Publishing an anchor and drawing nothing are two
+/// rules: this one is the row's alone, that one is every band's.
 #[test]
-fn the_row_publishes_its_tooltip_anchor_rather_than_drawing_one() {
-    assert!(
-        !HEADER.contains("Tooltip {"),
-        "the row must not mount the tooltip itself — a host's body paints over anything declared \
-         here"
-    );
+fn the_row_publishes_every_tooltip_anchor_its_host_needs() {
     for prop in ["tip-x", "tip-y", "tip-w", "tip-h", "tip-label", "tip-visible"] {
         assert!(
             HEADER.contains(&format!("out property <length> {prop}:"))

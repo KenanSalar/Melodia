@@ -11,13 +11,13 @@
 //! file can answer — that the band still mounts that row, hands it hero tiers, and
 //! forwards what its two pages read back.
 
+use crate::test_support::binding_value;
+
 const HERO: &str = include_str!("../../../melodia-ui/ui/components/hero/mosaic-tab-hero.slint");
 
-/// The value of a `name:` binding, up to its terminating `;`.
+/// The value of a `name:` binding in the hero, up to its terminating `;`.
 fn binding(name: &str) -> &'static str {
-    HERO.split_once(name)
-        .and_then(|(_, rest)| rest.split_once(';'))
-        .map_or("", |(value, _)| value)
+    binding_value(HERO, name)
 }
 
 /// A mirrored width only reaches the bar through `changed width`, and `changed`
@@ -64,6 +64,13 @@ fn the_page_width_mirror_has_a_mount_seed() {
 /// Asserted as "reads *some* `HeroBackdrop` tier" rather than pinning which one: the
 /// tier a brush should take is a design call that may move, but reaching for `Theme.*`
 /// here is a bug at any tier.
+///
+/// **They reach the bar through eased mirrors, not directly**, and this band needs that
+/// more than the morphing one does: its solve rides the *mosaic*, and `apply_hero_blur`
+/// posts an `invoke_from_event_loop` of its own after the atlas compose — so the title,
+/// the tile and the chips are on screen a hop before the colours are, and the bar used
+/// to snap. The bar itself must not ease them; see
+/// `tab_bar_tests::the_cell_eases_floats_and_never_a_brush`.
 #[test]
 fn the_hero_tab_bar_takes_every_brush_from_the_backdrop() {
     let mount = HERO
@@ -75,14 +82,30 @@ fn the_hero_tab_bar_takes_every_brush_from_the_backdrop() {
         "the hero band no longer mounts `header := TabSearchHeader` ahead of its callbacks"
     );
 
-    for prop in ["label-color", "active-color", "hover-fill", "divider-color"] {
+    for (prop, mirror) in [
+        ("label-color", "hero-label"),
+        ("active-color", "hero-active"),
+        ("hover-fill", "hero-hover"),
+        ("divider-color", "hero-divider"),
+    ] {
         assert!(
-            mount.contains(&format!("{prop}: HeroBackdrop.")),
-            "the hero band's header must pass `{prop}` a `HeroBackdrop` tier — omitting it falls \
-             back to the component's `Theme.*` default, which is a theme value on a band that is \
-             no longer theme-seeded"
+            mount.contains(&format!("{prop}: root.{mirror};")),
+            "the hero band's header must take `{prop}` from the `{mirror}` mirror — a tier passed \
+             straight through snaps when the mosaic's solve lands a hop after the band is drawn"
+        );
+        assert!(
+            binding(&format!("property <brush> {mirror}:")).contains("HeroBackdrop."),
+            "`{mirror}` must read a `HeroBackdrop` tier — omitting it falls back to the \
+             component's `Theme.*` default, which is a theme value on a band that is no longer \
+             theme-seeded"
         );
     }
+
+    assert!(
+        HERO.contains("animate hero-label, hero-active, hero-hover, hero-divider {"),
+        "the four mirrors exist to be eased — unanimated they are the tiers again with two more \
+         names"
+    );
 }
 
 /// The band forwards everything the shared header publishes, under the names its two

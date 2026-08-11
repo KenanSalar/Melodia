@@ -748,9 +748,6 @@ msgstr "Beschreibung (optional)"
 msgid "Add a description…"
 msgstr "Beschreibung hinzufügen…"
 
-msgid "Create Playlist"
-msgstr "Playlist erstellen"
-
 # Confirm-button label on the create-playlist dialog.
 msgid "Create"
 msgstr "Erstellen"
@@ -905,7 +902,7 @@ msgstr "{} von {} bereits hinzugefügt"
 # ---- Auto-updater (Settings → Updates + notification toasts) ----------------
 # Surfaced by `ui/views/settings/update-section.slint` (Skip + package-managed
 # hint) and `ui/settings.slint` (notification pure-callbacks dispatched from
-# `src/ui/callbacks/updater.rs`). The action-button labels ("Install" /
+# `src/ui/callbacks/updater/`). The action-button labels ("Install" /
 # "Restart") map onto `Notifications.action` `kind` values "install-update" /
 # "update-restart" in `ui/globals/updater.slint`.
 
@@ -989,6 +986,14 @@ msgstr ""
 msgid "Save…"
 msgstr "Speichern…"
 
+msgid "Verbose logging"
+msgstr "Ausführliche Protokollierung"
+
+msgid "Record extra detail. Turn this on, reproduce the problem, then save a report."
+msgstr ""
+"Zeichnet zusätzliche Details auf. Aktiviere dies, reproduziere das Problem "
+"und speichere dann einen Bericht."
+
 msgid "Diagnostics report saved"
 msgstr "Diagnosebericht gespeichert"
 
@@ -1006,6 +1011,15 @@ msgid "A crash report was written. Open the log folder to find it."
 msgstr ""
 "Es wurde ein Absturzbericht geschrieben. Öffne den Protokollordner, um ihn "
 "zu finden."
+
+# Pushed when the audio output device goes away mid-session.
+msgid "Audio device disconnected"
+msgstr "Audiogerät getrennt"
+
+msgid "Playback won't be audible until you reconnect it and restart Melodia."
+msgstr ""
+"Die Wiedergabe bleibt stumm, bis du das Gerät wieder anschließt und Melodia "
+"neu startest."
 
 msgid "Close to Tray"
 msgstr "In den Systembereich schließen"
@@ -1563,6 +1577,9 @@ msgstr "Titel, die du magst, auf ListenBrainz als Loved markieren — beim Aktiv
 
 msgid "Loved tracks"
 msgstr "Lieblingstitel"
+
+msgid "Melodia couldn't relaunch itself. Close and reopen it to apply the change."
+msgstr "Melodia konnte sich nicht selbst neu starten. Schließen und öffnen Sie die App erneut, um die Änderung zu übernehmen."
 
 msgid "Add MusicBrainz IDs to your music"
 msgstr "MusicBrainz-IDs zu deiner Musik hinzufügen"

@@ -240,6 +240,7 @@ pub(super) fn wire_callbacks(
         let queue_covers = queue_covers.clone();
         let shadow = shadow.clone();
         queue.on_open_changed(move |open| {
+            log::debug!("queue sheet: {}", if open { "open" } else { "closed" });
             is_open.store(open, Ordering::Relaxed);
             if open {
                 // Open renders in two steps:

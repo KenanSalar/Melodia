@@ -8,11 +8,11 @@ use crate::error::AppError;
 use crate::library;
 use crate::state::AppState;
 use crate::ui::file_dialog;
-use crate::ui::library_settings as lib_settings_ui;
+use crate::ui::settings::library_settings as lib_settings_ui;
 use crate::{AppWindow, LibrarySettings};
 
 /// Wire the `LibrarySettings.*` callbacks. Pairs with
-/// `ui::library_settings::install`, which handles the push side (folder list
+/// `ui::settings::library_settings::install`, which handles the push side (folder list
 /// hydration + scan-progress subscriber). Call once after `wire_all`.
 ///
 /// Add-folder runs the native `rfd` picker on the UI thread (via

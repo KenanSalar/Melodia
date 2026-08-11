@@ -14,16 +14,33 @@
 //! (the filter dispatcher, `nav_history`, `cross_tab_nav`, `rss_sampler::format_view`)
 //! runs on the UI thread with the global in reach.
 
-pub mod filter;
+mod callbacks;
+// `pub(super)` is `pub(in crate::ui)`: the dispatcher is reached by the four
+// detail slices' `open_*` (which reseat the shared box) and by nothing outside
+// `ui::`.
+pub(super) mod filter;
 mod tabs;
 
+use crate::AppWindow;
+use crate::state::AppState;
+
 pub use tabs::{
-    MyLibraryTab, NO_TAB, close_open_detail, persist_tab, restore_origin, seed_tab,
-    tab_from_index, tab_is_mounted, tab_of_section,
+    MountedSurface, MyLibraryTab, NO_TAB, close_open_detail, detail_id_for, go_to_tab,
+    mounted_surface, persist_tab, return_to_section, seed_tab, tab_from_index,
+    tab_is_mounted, tab_of_section, the_band_is_up,
 };
 
+/// Wire the My Library page's own three callbacks — the tab pick, the shared
+/// filter, the back arrow.
+///
+/// Takes no view handle, which is why it runs before the five tab slices rather
+/// than after them. Call once, after `wire_all`.
+pub fn install(ui: &AppWindow, state: &AppState) {
+    callbacks::wire(ui, state);
+}
+
 /// The page's `Nav.selected-index`. **The single definition** — five separate `const`s
-/// spelled 4/5/6/7 across `nav_history`, `cross_tab_nav` and `callbacks/artists` used to
+/// spelled 4/5/6/7 across `nav_history`, `cross_tab_nav` and `artists/callbacks` used to
 /// stand for the sections this page absorbed.
 pub const NAV_MY_LIBRARY: i32 = 3;
 

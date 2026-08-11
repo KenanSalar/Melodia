@@ -8,7 +8,7 @@ const LIST: &str = include_str!("../../../../melodia-ui/ui/components/track-list
 const HEADER: &str =
     include_str!("../../../../melodia-ui/ui/components/track-list/track-list-header.slint");
 const SONGS: &str = include_str!("../songs.rs");
-const SUBVIEWS: &str = include_str!("../../callbacks/recently_played/subviews.rs");
+const SUBVIEWS: &str = include_str!("../callbacks/subviews.rs");
 
 /// How many tabs the page has, kept local so a change to `tab-count` can't
 /// silently rewrite the assertion it is checked against.
@@ -140,6 +140,12 @@ fn tab_count_matches_the_tabs_slint_declares() {
         .filter(|l| !l.contains("tab-count"))
         .count();
     assert_eq!(constants, TABS, "one `tab-*` index constant per tab");
+
+    assert_eq!(
+        crate::ui::recently_played::RecentlyPlayedTab::ALL.len(),
+        TABS,
+        "`RecentlyPlayedTab` needs one variant per tab the global declares"
+    );
 
     // Anchored on the branch's own shape (`… : ViewTransition {`) rather than on
     // the comparison alone: the hero reads `tab-idx` several more times for its
@@ -311,6 +317,40 @@ fn the_grid_pick_rewinds_the_count_it_could_not_answer() {
     );
 }
 
+/// And the apply that answers that rewind writes its count **above** the signature guard, or
+/// the sentinel above never comes back.
+///
+/// The pick stamps a signature over the empty cache and only then rewinds; the fetch it
+/// spawned lands on that same signature whenever the content hasn't moved — nothing played
+/// yet, or a `library_changed` tick that doesn't touch this ranking — so a count written past
+/// the guard is one that never arrives. `-1` misses `> 0` as well as `== 0`, so that strands
+/// the Shuffle pill as well as the empty state, and it holds until the next content change or
+/// a tab round-trip.
+///
+/// The mutation to check is moving the write back under the guard, where it reads as belonging
+/// with the model write beside it and compiles.
+#[test]
+fn the_grid_count_is_written_before_the_signature_can_skip_it() {
+    const APPLY: &str = include_str!("../grid/apply.rs");
+
+    let write = block_body(APPLY, "fn write_filtered_grid(", "\n}").unwrap_or_default();
+    assert!(
+        write.contains("last_grid_signature"),
+        "`write_filtered_grid` must still take the signature guard — this pin is about where \
+         the count sits relative to it, not about retiring it"
+    );
+
+    let before_guard = write
+        .split_once("last_grid_signature")
+        .map_or("", |(head, _)| head);
+    assert!(
+        before_guard.contains("set_most_played_count("),
+        "the count must be written above the signature guard: the guard is what the pick's own \
+         fetch lands on when the content hasn't moved, and it would leave `UNFETCHED_COUNT` \
+         standing with no answer coming"
+    );
+}
+
 /// The flag is armed wherever the cache it guards is emptied, and disarmed wherever it is
 /// filled — both stated locally rather than left to the caller that happens to do it today.
 ///
@@ -321,7 +361,7 @@ fn the_grid_pick_rewinds_the_count_it_could_not_answer() {
 /// consumes it *before* the spawn and would otherwise leave the sentinel with no answer coming.
 #[test]
 fn the_grid_dirty_flag_is_maintained_beside_the_cache_it_guards() {
-    const LIFECYCLE: &str = include_str!("../../callbacks/recently_played/lifecycle.rs");
+    const LIFECYCLE: &str = include_str!("../callbacks/lifecycle.rs");
     const HANDLE: &str = include_str!("../mod.rs");
     const FETCH: &str = include_str!("../grid/fetch.rs");
 
@@ -345,5 +385,81 @@ fn the_grid_dirty_flag_is_maintained_beside_the_cache_it_guards() {
         2,
         "`refresh_grid` must re-arm on both ways of storing nothing — a failed query and a \
          leave landing mid-flight"
+    );
+}
+
+/// A keystroke's grid walk is built off the UI thread, and a superseded one may
+/// not write.
+///
+/// The Most Played cache is the output of an uncapped, library-wide query, so
+/// walking it on the event loop cost a fold against every played track plus a
+/// string hash and three `SharedString`s per survivor, every 130 ms while the
+/// user types. Moving it to a worker is what buys that back, and the moment the
+/// walk outlives its keystroke two builds can finish in either order —
+/// `write_filtered_grid`'s signature check reads a *stale* set as a change
+/// rather than as staleness, so it cannot be what stops the loser.
+///
+/// Both halves matter and each fails silently alone. Route the callback back
+/// through `apply_filtered_grid_now` and the walk is on the event loop again
+/// with every test still green; drop either generation check and the grid
+/// intermittently paints a needle the user has already typed past.
+#[test]
+fn a_superseded_filter_build_does_not_reach_the_grid() {
+    const TRACKLIST: &str = include_str!("../callbacks/tracklist.rs");
+    const APPLY: &str = include_str!("../grid/apply.rs");
+
+    let filter = block_body(TRACKLIST, "g.on_filter_changed(move |text| {", "\n        });")
+        .unwrap_or_default();
+    assert!(
+        filter.contains("apply_filtered_grid_settled(&ru, &weak, generation)"),
+        "the keystroke must defer the Most Played walk — `apply_filtered_grid_now` puts an \
+         uncapped library-wide filter pass back on the event loop"
+    );
+    assert!(
+        filter.contains("s.runtime.spawn("),
+        "and it must be spawned: calling the deferred form from the UI thread still walks \
+         the cache there, which is the whole cost being moved"
+    );
+    assert!(
+        !filter.contains("apply_filtered_grid_now"),
+        "the synchronous form belongs to the tab pick, whose entering `if` is already true"
+    );
+
+    let settled = block_body(APPLY, "pub fn apply_filtered_grid_settled(", "\n}")
+        .unwrap_or_default();
+    assert_eq!(
+        settled.matches("filter_generation() != generation").count(),
+        2,
+        "the token must be checked twice — once on the worker to drop a walk not worth \
+         posting, and again on the UI thread, where a newer keystroke can land while the \
+         post is in flight"
+    );
+
+    // The other two callers stay synchronous, and for reasons that are not this
+    // one: a pick has to land before Slint re-evaluates the mounting `if`.
+    assert!(
+        APPLY.contains("pub fn apply_filtered_grid_now("),
+        "the synchronous form must survive — the tab pick and the column push need it"
+    );
+}
+
+/// The token strictly advances, because the checks above compare it for
+/// equality: a counter that repeated a value would let a stale build match.
+#[test]
+fn every_filter_write_moves_the_token_the_deferred_build_carries() {
+    let rp_ui = super::RecentlyPlayedUi::new(std::sync::Arc::new(
+        crate::media::cover_thumbs::CoverThumbs::new(),
+    ));
+
+    let mut seen = vec![rp_ui.filter_generation()];
+    for needle in ["a", "ab", "ab", ""] {
+        seen.push(crate::ui::recently_played::set_filter(&rp_ui, needle));
+    }
+
+    assert_eq!(seen, vec![0, 1, 2, 3, 4], "each write must yield a fresh token");
+    assert_eq!(
+        rp_ui.filter_generation(),
+        4,
+        "and the handle must read back the token the last write handed out"
     );
 }

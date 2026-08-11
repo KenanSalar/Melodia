@@ -65,10 +65,11 @@ component NotificationCard inherits Rectangle {
         padding-bottom: Theme.pad-sm;
         spacing: Theme.pad-sm;
 
-        // Top-aligned so it sits at the start of the title.
+        // Centred, like every other column: the 20 px glyph box is taller than
+        // the title's line box, so there is no top alignment to hit — pinning it
+        // to the start only pushes it further off the row's centre line.
         VerticalLayout {
-            alignment: start;
-            padding-top: 2px;
+            alignment: center;
             MaterialIcon {
                 name: root.variant-icon;
                 icon-size: 20px;
@@ -79,7 +80,10 @@ component NotificationCard inherits Rectangle {
         VerticalLayout {
             horizontal-stretch: 1;
             spacing: 2px;
-            alignment: start;
+            // A no-op while the text is the tallest thing in the row, which is
+            // why this only shows on a card whose message fits one line: there
+            // the 32 px action pill sets the height and the slack fell below.
+            alignment: center;
             Text {
                 text: root.data.title;
                 color: Theme.text;
@@ -97,8 +101,7 @@ component NotificationCard inherits Rectangle {
             }
         }
 
-        // Filled, so the action reads as a button rather than a label, and
-        // centred against the text column to line up with the close beside it.
+        // Filled, so the action reads as a button rather than a label.
         if root.data.action-label != "": VerticalLayout {
             alignment: center;
             SectionButton {

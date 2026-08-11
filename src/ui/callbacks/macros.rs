@@ -67,9 +67,18 @@ macro_rules! spawn_logged_sync {
 ///
 /// **The label is a literal, which is the one reason a site legitimately stays
 /// hand-rolled**: `Nav.persist-selected-index` interpolates the index it failed
-/// to store, and a warning that doesn't name it says almost nothing.
+/// to store, and a warning that doesn't name it says almost nothing. The two
+/// tab persists are hand-rolled for a second reason — see below.
+///
+/// Every site writes `views.json`, which is what the `debug` line can call it:
+/// column toggles and widths, sort, browse path and view mode leave no other
+/// trace, so this is the whole record that a view's own state moved.
+/// `AppState::persist_blocking` is the `settings.json` half of the same idea.
 macro_rules! spawn_blocking_logged {
     ($state:ident, $label:literal, $expr:expr) => {{
+        // Before the spawn, so a write that hangs still says what it was — the
+        // `persist_blocking` argument.
+        log::debug!("view state: {}", $label);
         // `.clone()` on the runtime handle first, the `spawn_logged_sync!` shape:
         // `$expr` usually moves the state it borrows `runtime` from, and a bare
         // `$state.runtime.spawn_blocking(…)` holds that borrow across the move.
@@ -207,23 +216,65 @@ macro_rules! release_hero_slots {
 /// two mosaic pages, whose tiles belong to their own tier. Four sites spelled
 /// the pair out, each with its own paragraph saying it was the macro minus the
 /// slots.
+///
+/// **On My Library a section leave is not a teardown, and the two halves stop
+/// short of one at different points.**
+///
+/// The *colour set* belongs to the page rather than to a tab, so it is handed
+/// back only once the page itself is left. That is the gate the publish side has
+/// always had, read at the level it actually holds at: `apply_detail_artwork`
+/// writes the set only while its own section is active, and
+/// [`crate::ui::my_library::the_band_is_up`] is the same question on the way out.
+/// It subsumes the narrower hand-off case it replaced — switch from Genre Detail
+/// to a Playlists tab that already has a detail open and `detail-open` never goes
+/// false, so the band deliberately doesn't morph while the departing tab hands
+/// the colours back and the entering tab republishes them a query and a decode
+/// later — and covers the two the hand-off gate missed: the band *collapsing*
+/// over a hero whose colours it is still painting, and a tab re-entered onto a
+/// detail whose banner has to come back with it.
+///
+/// The *chip row* stops one step earlier, at
+/// [`crate::ui::hero_chips::clear_if_stale`], and that asymmetry is the point: a
+/// colour held across a **hand-off** is the outgoing hero's *tone*, where a count
+/// held across it is the outgoing hero's *facts* under the incoming one's title.
+/// An empty strip states nothing, which is what a hero with no answer yet should
+/// say — but a strip the *incoming* hero has already filled states the right
+/// thing, and every cross-tab drill fills it in the tick that moves the tab. So the
+/// question is the record's rather than the departing view's, and the leave hands
+/// over no tab at all: the two cases where the counts stay put — the band
+/// collapsing the departing banner, and Now Playing merely covering a page whose
+/// hero comes back underneath — are both readable off the ids.
 macro_rules! release_shared_hero {
     ($ui:expr) => {{
-        $crate::ui::hero_backdrop::reset(&$ui);
-        $crate::ui::hero_chips::clear(&$ui);
+        if !$crate::ui::my_library::the_band_is_up(&$ui) {
+            $crate::ui::hero_backdrop::reset(&$ui);
+        }
+        $crate::ui::hero_chips::clear_if_stale(&$ui);
     }};
 }
 
 /// [`release_hero_slots`] for one detail global, plus [`release_shared_hero`].
 /// `$ui` is the `AppWindow`.
+///
+/// **The slots ride the same page-level gate the colour set does**, for the
+/// reason the detail id gives: nothing on this page clears one on a tab leave, so
+/// `AlbumDetail.album-id >= 0` still means "this banner is in the globals" and
+/// picking that tab again morphs it straight back open — ahead of the re-fetch
+/// the pick kicks. Emptying `cover` here is what left that morph painting
+/// `ArtworkImage`'s fallback glyph, and left the 400 ms collapse before it doing
+/// the same. Every path that genuinely closes a detail writes `-1` first, and
+/// `release_collapsed_hero` hands the slots back on that id once the band has
+/// finished shrinking.
 macro_rules! release_detail_hero_images {
     ($ui:expr, $g:expr) => {{
-        $crate::ui::callbacks::macros::release_hero_slots!($g);
+        if !$crate::ui::my_library::the_band_is_up(&$ui) {
+            $crate::ui::callbacks::macros::release_hero_slots!($g);
+        }
         $crate::ui::callbacks::macros::release_shared_hero!($ui);
     }};
 }
 
-pub(super) use {
+pub(in crate::ui) use {
     release_detail_hero_images, release_hero_slots, release_shared_hero, spawn_blocking_logged,
     spawn_logged, spawn_logged_sync, spawn_logged_toast, wire_pb, wire_row_flag, wire_sync,
     wire_sync_pb,

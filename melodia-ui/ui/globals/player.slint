@@ -1,7 +1,8 @@
 import { PlayerVm, QueueVm, TrackMetaRow } from "../models.slint";
 
 // Bound to the backend through watch channels (push) and `library::*` (pull); Rust
-// wires every callback in `src/ui/callbacks/`.
+// wires every callback in `src/ui/callbacks/` — the cross-cutting wiring; each view
+// slice owns its own under `src/ui/<view>/callbacks/`.
 export global Player {
     in-out property <PlayerVm> vm;
     in-out property <QueueVm> queue;

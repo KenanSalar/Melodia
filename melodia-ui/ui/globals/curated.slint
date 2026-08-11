@@ -151,7 +151,7 @@ export global Favorites {
     callback go-to-genre(int /*genre_id*/);
 
     // Fires when the page enters or leaves the screen — a sidebar nav, or Now Playing
-    // opening over it. `wire_favorites` mirrors it into `FavoritesUi.section_active` and
+    // opening over it. The Favorites wiring mirrors it into `FavoritesUi.section_active` and
     // drives the cache release / re-fetch.
     callback section-active-changed(bool);
 

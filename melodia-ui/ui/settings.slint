@@ -198,11 +198,15 @@ export global Settings {
     // Opens `CARGO_PKG_REPOSITORY` in the system browser. No Slint-side handler.
     callback open-repository();
 
-    // The Diagnostics card's two actions, both handled in `src/ui/diagnostics.rs`.
+    // The Diagnostics card's three rows, all handled in `src/ui/settings/diagnostics.rs`.
     // `open-log-folder` is also what the "crashed last run" toast's action button
     // routes to, via the `Notifications.action` dispatcher.
     callback open-log-folder();
     callback save-diagnostics-report();
+    // Applied live via `LoggerHandle::set_new_spec` — no relaunch — then persisted.
+    // Inert when `RUST_LOG` is set, which wins outright; see `services::logging`.
+    in-out property <bool> verbose-logging: false;
+    callback verbose-logging-changed(bool);
 
     // Everything below is a `pure callback` wrapping an `@tr` literal, because Slint
     // 1.16 exposes no Rust-callable `tr(...)`: Rust invokes these at push time so each
@@ -313,6 +317,17 @@ export global Settings {
         return @tr("Open Folder");
     }
 
+    // Pushed by `tasks::audio_health` when the output device goes away. No action
+    // button — there is no device picker to send the user to.
+    pure callback audio-device-lost-title() -> string;
+    audio-device-lost-title => {
+        return @tr("Audio device disconnected");
+    }
+    pure callback audio-device-lost-message() -> string;
+    audio-device-lost-message => {
+        return @tr("Playback won't be audible until you reconnect it and restart Melodia.");
+    }
+
     // The import/export header pills on the Playlists view.
     pure callback playlist-import-title(int /*imported*/) -> string;
     playlist-import-title(imported) => {
@@ -370,6 +385,16 @@ export global Settings {
     pure callback toast-love-sync-title() -> string;
     toast-love-sync-title => {
         return @tr("Loved tracks");
+    }
+    // The one toast kind whose body is localized too — a restart that couldn't
+    // relaunch carries no path or error worth showing, only an instruction.
+    pure callback toast-restart-required-title() -> string;
+    toast-restart-required-title => {
+        return @tr("Restart Required");
+    }
+    pure callback toast-restart-required-message() -> string;
+    toast-restart-required-message => {
+        return @tr("Melodia couldn't relaunch itself. Close and reopen it to apply the change.");
     }
 
     // The Add-to-Playlist picker's commit toast: title pluralizes on playlists,

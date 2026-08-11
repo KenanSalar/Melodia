@@ -21,7 +21,7 @@ use slint::{ComponentHandle, SharedString};
 use super::BrowseUi;
 use crate::entities::browse::{BrowseFile, BrowseFolder};
 use crate::ui::grid_prewarm;
-use crate::ui::grid_rows::{chunk_rows, write_grid};
+use crate::ui::grid_rows::{chunk_built_rows, write_grid};
 use crate::ui::util::{clamp_i64_to_i32, len_as_i32};
 use crate::{
     AppWindow, Browse, BrowseCardGridRow as UiBrowseCardGridRow,
@@ -143,9 +143,7 @@ pub fn rebuild_cards(ui: &AppWindow, browse_ui: &BrowseUi) {
         let files = browse_ui.last_files.lock();
         to_browse_card_rows(&folders, &files)
     };
-    let rows = chunk_rows(&cards, g.get_columns(), Clone::clone, |cards| {
-        UiBrowseCardGridRow { cards }
-    });
+    let rows = chunk_built_rows(cards, g.get_columns(), |cards| UiBrowseCardGridRow { cards });
     write_grid(&g.get_card_rows(), rows, "browse::cards");
 }
 

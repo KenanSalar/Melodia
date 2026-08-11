@@ -21,7 +21,7 @@ pub fn install_locale(
     if let Err(e) = slint::select_bundled_translation(&persisted_locale) {
         log::warn!("select_bundled_translation({persisted_locale}): {e:?}");
     }
-    ui::locale::install_locale(app, state);
+    ui::settings::locale::install_locale(app, state);
 }
 
 /// Install `WindowChrome` (titlebar mode, drag-region, native-frame hydrate).
@@ -41,7 +41,8 @@ pub fn install_app_chrome(app: &AppWindow, state: &AppState) {
 /// `install_views` — they need handles that don't leave this function.
 ///
 /// Only the handles a *caller* actually reads live here. `BrowseUi` /
-/// `FavoritesUi` / `SearchUi` deliberately do **not**: every `wire_*` closure
+/// `FavoritesUi` / `RecentlyPlayedUi` / `SearchUi` deliberately do **not**:
+/// every wired closure
 /// and `library_changed_tx` subscriber captures its own strong `Arc` clone, and
 /// those closures are owned by the `AppWindow` (and by spawned tasks) for the
 /// lifetime of the app. There is not a single `Arc::downgrade` or `Weak<…Ui>`
@@ -55,9 +56,24 @@ pub struct UiHandles {
     pub playlists_ui: Arc<ui::playlists::PlaylistsUi>,
 }
 
-/// Install the Tracks / Browse / Albums views + their callbacks. Seeds the
-/// persisted nav index and reopens the persisted Album Detail (if any).
-/// Returns the per-view handles for downstream wiring.
+/// Resolve every `TrackListRowItem` thumbnail — all track tables, all views —
+/// through the one shared row-tier LRU.
+///
+/// Rows carry only the artwork path, so only instantiated (~visible) rows pay a
+/// lookup/decode and nothing pins evicted buffers. The closure captures only the
+/// `Arc<CoverThumbs>` — no UI handle, no reference cycle.
+///
+/// Not part of any slice's `install`: it sat inside the Tracks block for years
+/// while its own comment said it serves every view.
+fn install_row_covers(app: &AppWindow, cover_thumbs: &Arc<media::cover_thumbs::CoverThumbs>) {
+    let ct = cover_thumbs.clone();
+    app.global::<melodia::RowCovers>()
+        .on_request(move |path| ct.get_or_load_opt(Some(path.as_str()).filter(|s| !s.is_empty())));
+}
+
+/// Install every view slice and its callbacks. Seeds the persisted nav index
+/// and reopens each view's persisted detail (if any). Returns the per-view
+/// handles for downstream wiring.
 pub fn install_views(
     app: &AppWindow,
     state: &AppState,
@@ -98,55 +114,44 @@ pub fn install_views(
     ui::callbacks::wire_all(app, state);
     // The page's own three callbacks — the tab pick, the shared filter, the back
     // arrow. None takes a view handle, so it wires here rather than after the five.
-    ui::callbacks::wire_my_library(app, state);
+    ui::my_library::install(app, state);
+
+    // The shared row tier, and the one lazy callback every track table in the
+    // app resolves its thumbnails through — both ahead of the first `install`,
+    // since every slice clones the cache into its handle.
+    let cover_thumbs = Arc::new(media::cover_thumbs::CoverThumbs::new());
+    install_row_covers(app, &cover_thumbs);
+
+    let cx = ui::view_ctx::ViewCtx {
+        app,
+        state,
+        cover_thumbs: &cover_thumbs,
+        view_state: startup_view_state,
+    };
+
+    // Each `install` is models + handle + wiring, in that order, inside the
+    // slice. The peer parameters below are the ordering: `artists::install`
+    // cannot be written above `albums_ui`.
 
     // 5b. Tracks view.
-    ui::tracks::install_tracks_model(app);
-    ui::tracks::install_selection_model(app);
-    let cover_thumbs = Arc::new(media::cover_thumbs::CoverThumbs::new());
-    // Every `TrackListRowItem` thumbnail (all track tables, all views)
-    // resolves through this one lazy callback into the shared row-tier
-    // LRU — rows carry only the artwork path, so only instantiated
-    // (~visible) rows pay a lookup/decode and nothing pins evicted
-    // buffers. The closure captures only the `Arc<CoverThumbs>` — no UI
-    // handle, no reference cycle.
-    {
-        let ct = cover_thumbs.clone();
-        app.global::<melodia::RowCovers>().on_request(move |path| {
-            ct.get_or_load_opt(Some(path.as_str()).filter(|s| !s.is_empty()))
-        });
-    }
-    let tracks_ui = Arc::new(ui::tracks::TracksUi::new(cover_thumbs.clone()));
-    ui::callbacks::wire_tracks(app, state, &tracks_ui);
+    let tracks_ui = ui::tracks::install(cx);
 
     // 5c. Browse view.
-    ui::browse::install_browse_models(app);
-    ui::browse::install_browse_selection_model(app);
-    let browse_ui = Arc::new(ui::browse::BrowseUi::new(cover_thumbs.clone()));
-    ui::callbacks::wire_browse(app, state, &browse_ui);
-    ui::browse::seed_from_settings(app, state, &browse_ui);
+    let browse_ui = ui::browse::install(cx);
 
     // 5c2a. Albums view.
-    ui::albums::install_albums_models(app);
-    let albums_ui = Arc::new(ui::albums::AlbumsUi::new(cover_thumbs.clone()));
-    ui::callbacks::wire_albums(app, state, &albums_ui);
+    let albums_ui = ui::albums::install(cx);
 
-    // 5c2b. Artists view. Wired after Albums so the cross-tab "open
+    // 5c2b. Artists view. Installed after Albums so the cross-tab "open
     // album from Artist Detail" hand-off has a live `AlbumsUi` to call
-    // into.
-    ui::artists::install_artists_models(app);
-    let artists_ui = Arc::new(ui::artists::ArtistsUi::new(
-        cover_thumbs.clone(),
-        albums_ui.grid_thumbs(),
-    ));
-    ui::callbacks::wire_artists(app, state, &artists_ui, &albums_ui);
+    // into — the peer parameter is what makes that a compile error to
+    // get wrong rather than a comment to read.
+    let artists_ui = ui::artists::install(cx, &albums_ui);
 
     // 5c2c. Genres view. Self-contained: no cross-tab origin, no
     // artwork — just the shared row-tier `cover_thumbs` for the
     // detail track-list's small artwork column.
-    ui::genres::install_genres_models(app);
-    let genres_ui = Arc::new(ui::genres::GenresUi::new(cover_thumbs.clone()));
-    ui::callbacks::wire_genres(app, state, &genres_ui);
+    let genres_ui = ui::genres::install(cx);
 
     // 5c2d. Playlists view. CRUD entry points route through the
     // shared `Dialog` global; drag-reorder lives in the sibling
@@ -158,36 +163,32 @@ pub fn install_views(
     // `ui::window_chrome::drop_coalescer` (set/cleared by
     // `playlists::detail::open_playlist` / `close_detail`). Queue
     // Sheet always wins when both targets are open.
-    ui::playlists::install_playlists_models(app);
-    let playlists_ui = Arc::new(ui::playlists::PlaylistsUi::new(cover_thumbs.clone()));
-    ui::callbacks::wire_playlists(app, state, &playlists_ui);
+    let playlists_ui = ui::playlists::install(cx);
 
-    // 5c2e. Favorites view. Wired after Artists so the cross-tab
+    // 5c2e. Favorites view. Installed after Artists so the cross-tab
     // open-artist hand-off has a live `ArtistsUi` to call into.
-    ui::favorites::install_favorites_models(app);
-    let favorites_ui = Arc::new(ui::favorites::FavoritesUi::new(cover_thumbs.clone()));
-    ui::callbacks::wire_favorites(app, state, &favorites_ui, &artists_ui);
+    let favorites_ui = ui::favorites::install(cx, &artists_ui);
 
     // 5c2e-bis. Recently-Played view (sidebar index 8). A trimmed Favorites —
     // the shared row-tier `cover_thumbs` serves the Songs list; the handle
     // allocates its own mosaic and Most Played LRUs (the latter released on
     // tab-leave as well as on section-leave). Its row-menu "Go to …" entries are
     // wired centrally by `wire_cross_tab_nav` below.
-    ui::recently_played::install_recently_played_models(app);
-    let recently_played_ui =
-        Arc::new(ui::recently_played::RecentlyPlayedUi::new(cover_thumbs.clone()));
-    ui::callbacks::wire_recently_played(app, state, &recently_played_ui);
+    let recently_played_ui = ui::recently_played::install(cx);
 
-    // 5c2f. Search view (sidebar index 0). Wired after both Albums +
+    // 5c2f. Search view (sidebar index 0). Installed after both Albums +
     // Artists so the cross-tab open-album / open-artist hand-offs have
     // live UI handles to call into. The shared row-tier `cover_thumbs`
     // serves the Songs `TrackList`; the SearchUi allocates its own
     // 180 px + 200 px LRUs for the Albums + Artists strips (released
     // on tab-leave). No initial fetch — Search is query-driven, so
     // the page paints empty until the user types.
-    ui::search::install_search_models(app);
-    let search_ui = Arc::new(ui::search::SearchUi::new(cover_thumbs.clone()));
-    ui::callbacks::wire_search(app, state, &search_ui, &albums_ui, &artists_ui);
+    //
+    // Bound under an underscore rather than dropped at the semicolon: nothing
+    // downstream reads it, and the binding is where the keepalive note on
+    // `UiHandles` has something to attach to. Every wired closure holds its own
+    // strong `Arc`, so the handle outlives this scope regardless.
+    let _search_ui = ui::search::install(cx, &albums_ui, &artists_ui);
 
     // 5c2g. Cross-tab navigation for every track-list view's right-
     // click "Go to Album/Artist/Genre" entries. Must run *after* every
@@ -204,17 +205,11 @@ pub fn install_views(
     *state.ui_handles.genres.lock() = Some(genres_ui.clone());
     *state.ui_handles.playlists.lock() = Some(playlists_ui.clone());
 
-    // 5c2h. The two tabbed pages seed here rather than in
-    // `hydrate_ui_from_settings` with their siblings, because each seeds two
-    // things: the Slint property *and* its handle's synchronous shadow, which
-    // the off-thread fetchers read to decide which model to fill and which cover
-    // tier to warm. Those handles are in scope here and deliberately dropped by
-    // the time hydration runs. (The nav index itself is hydrated at the top of
-    // this function — see the note there.)
-    if let Some(vs) = startup_view_state {
-        ui::favorites::seed_tab(app, &favorites_ui, vs.favorites_tab);
-        ui::recently_played::seed_tab(app, &recently_played_ui, vs.recently_played_tab);
-    }
+    // 5c2h. The four persisted-detail reopens, then the history seed that
+    // depends on none of them having landed yet — which is why they stay four
+    // adjacent lines here rather than folding into each slice's `install`. The
+    // two tabbed pages' own tab seeds *did* fold in, their handle being the
+    // receiver; see `ui::favorites::install`.
     ui::albums::seed_detail_from_settings(app, state, &albums_ui);
     ui::artists::seed_detail_from_settings(app, state, &artists_ui);
     ui::genres::seed_detail_from_settings(app, state, &genres_ui);
@@ -250,9 +245,9 @@ pub fn install_views(
     ui::recently_played::tune_cache_for_display(app, &recently_played_ui);
     ui::browse::tune_cache_for_display(app, &browse_ui);
 
-    // `browse_ui` / `favorites_ui` / `search_ui` are deliberately dropped here:
-    // their `wire_*` closures each hold a strong `Arc` clone, so the objects
-    // outlive this scope regardless. See the note on `UiHandles`.
+    // `browse_ui` / `favorites_ui` / `recently_played_ui` / `_search_ui` are
+    // deliberately dropped here: their wired closures each hold a strong `Arc`
+    // clone, so the objects outlive this scope regardless. See `UiHandles`.
     UiHandles {
         cover_thumbs,
         tracks_ui,
@@ -271,25 +266,25 @@ pub fn install_views(
 pub fn install_library_settings_and_friends(
     app: &AppWindow,
     state: &AppState,
-) -> Result<std::rc::Rc<ui::notifications::NotificationsUi>, melodia::error::AppError> {
-    ui::library_settings::install(app, state)
+) -> Result<std::rc::Rc<ui::shell::notifications::NotificationsUi>, melodia::error::AppError> {
+    ui::settings::library_settings::install(app, state)
         .map_err(|e| melodia::error::AppError::Window(format!("library_settings install: {e}")))?;
     ui::callbacks::wire_library_settings(app, state);
-    ui::playback_settings::install_playback_settings(app, state);
+    ui::settings::playback_settings::install_playback_settings(app, state);
     ui::equalizer::install_equalizer(app, state);
     ui::replaygain::install_replaygain(app, state);
     ui::visualizer::install_visualizer(app, state);
     ui::sleep_timer::install_sleep_timer(app, state);
-    ui::scrobbling_settings::install_scrobbling(app, state);
-    ui::discord_settings::install_discord(app, state);
-    let notifications = ui::notifications::install(app);
-    ui::file_watching::install(app, state, &notifications);
-    ui::updater_settings::install(app, state);
-    ui::about::install(app, state);
+    ui::settings::scrobbling_settings::install_scrobbling(app, state);
+    ui::settings::discord_settings::install_discord(app, state);
+    let notifications = ui::shell::notifications::install(app);
+    ui::settings::file_watching::install(app, state, &notifications);
+    ui::settings::updater_settings::install(app, state);
+    ui::settings::about::install(app, state);
     // Takes the stack because it both toasts and, on the launch after a panic,
     // pushes the "crashed last time" notice itself.
-    ui::diagnostics::install(app, state, &notifications);
-    ui::settings_page::install(app, state);
+    ui::settings::diagnostics::install(app, state, &notifications);
+    ui::settings::settings_page::install(app, state);
     ui::hero_chips::install(app);
     Ok(notifications)
 }
@@ -309,7 +304,7 @@ pub fn seed_initial_view_model(
     drop(s);
 
     let player = app.global::<Player>();
-    player.set_vm(ui::bridge::to_slint_player_vm(&light, cover_thumbs));
+    player.set_vm(ui::shell::bridge::to_slint_player_vm(&light, cover_thumbs));
     // Seed the position scalars from the snapshot so a freshly-restored
     // session shows the saved position immediately, before the first
     // playback-monitor tick lands. Position scalars live outside `vm` —
@@ -329,7 +324,7 @@ pub fn seed_initial_view_model(
         0.0
     };
     player.set_progress(progress);
-    player.set_queue(ui::bridge::to_slint_queue_vm(&qvm));
+    player.set_queue(ui::shell::bridge::to_slint_queue_vm(&qvm));
 }
 
 /// Apply every UI-visible persisted section to the Slint globals: sidebar
@@ -386,7 +381,7 @@ pub fn hydrate_ui_from_settings(
     ui::track_list_view::hydrate_search_view(app, vs);
     app.global::<ArtistDetail>()
         .set_albums_collapsed(vs.artist_albums_collapsed);
-    ui::settings_page::seed_tab(app, vs.settings_tab);
+    ui::settings::settings_page::seed_tab(app, vs.settings_tab);
 }
 
 /// The Slint side already clamps `Nav.sidebar-width` to
@@ -412,7 +407,7 @@ fn apply_sidebar_collapsed(app: &AppWindow, settings: &services::settings::Setti
 /// user navigates to it. The sort comes from the persisted
 /// `view_sort["tracks"]` (so a relaunch restores it); a fresh install
 /// falls back to title ascending, matching the `Tracks` global default
-/// and the header seeded by `wire_tracks`.
+/// and the header seeded by `ui::tracks::install`.
 pub fn spawn_initial_tracks_fetch(
     state: &AppState,
     tracks_ui: &Arc<ui::tracks::TracksUi>,
@@ -533,10 +528,10 @@ pub fn install_library_changed_refresher(
 pub fn install_rescan_notice_subscriber(
     state: &AppState,
     weak: slint::Weak<AppWindow>,
-    notifications: std::rc::Rc<ui::notifications::NotificationsUi>,
+    notifications: std::rc::Rc<ui::shell::notifications::NotificationsUi>,
 ) -> Result<(), melodia::error::AppError> {
     use melodia::Settings;
-    use ui::notifications::NotificationParams;
+    use ui::shell::notifications::NotificationParams;
 
     let mut rx = state.rescan_notice_tx.subscribe();
     slint::spawn_local(async_compat::Compat::new(async move {
@@ -560,20 +555,56 @@ pub fn install_rescan_notice_subscriber(
     .map_err(|e| melodia::error::AppError::Window(format!("rescan-notice subscriber: {e}")))
 }
 
+/// Subscribe to `audio_device_lost_tx` and push a sticky warning toast when the
+/// output device goes away. Sticky for the crash notice's reason: nothing else
+/// reports this and playback carries on regardless, so a notice the user looked
+/// away for did nothing. No action button — there is no device picker to send
+/// them to — so the kind only groups the row for `dismiss_by_kind`.
+pub fn install_audio_device_lost_subscriber(
+    state: &AppState,
+    weak: slint::Weak<AppWindow>,
+    notifications: std::rc::Rc<ui::shell::notifications::NotificationsUi>,
+) -> Result<(), melodia::error::AppError> {
+    use melodia::Settings;
+    use ui::shell::notifications::NotificationParams;
+
+    let mut rx = state.audio_device_lost_tx.subscribe();
+    slint::spawn_local(async_compat::Compat::new(async move {
+        loop {
+            if rx.changed().await.is_err() {
+                break;
+            }
+            let _ = rx.borrow_and_update();
+            let Some(ui) = weak.upgrade() else { break };
+            let g = ui.global::<Settings>();
+            notifications.show(NotificationParams {
+                variant: "warning".into(),
+                title: g.invoke_audio_device_lost_title(),
+                message: g.invoke_audio_device_lost_message(),
+                action_label: slint::SharedString::default(),
+                action_kind: "audio-device-lost".into(),
+            });
+        }
+    }))
+    .map(|_| ())
+    .map_err(|e| melodia::error::AppError::Window(format!("audio-device-lost subscriber: {e}")))
+}
+
 /// Drain the process-wide `services::toast` channel on the UI thread and render
 /// each backend-failure as an error toast. Mirrors
 /// [`install_rescan_notice_subscriber`] but consumes an `mpsc` (errors must not
 /// coalesce like a `watch` slot would) and resolves the localized title by
 /// toast kind at push time — so a failure that fires on a tokio worker still
 /// paints in whichever locale is active when it surfaces. The dynamic detail
-/// (a path or error message) is shown verbatim as the toast body.
+/// (a path or error message) is shown verbatim as the toast body — except for
+/// `RestartRequired`, which carries none and takes its body from `Settings` too.
 pub fn install_toast_bridge(
     weak: slint::Weak<AppWindow>,
-    notifications: std::rc::Rc<ui::notifications::NotificationsUi>,
+    notifications: std::rc::Rc<ui::shell::notifications::NotificationsUi>,
 ) -> Result<(), melodia::error::AppError> {
     use melodia::Settings;
     use melodia::services::toast::{self, ToastKind, ToastRequest};
-    use ui::notifications::NotificationParams;
+    use ui::shell::notifications::NotificationParams;
 
     // First installer owns delivery; a second call (shouldn't happen) is a no-op.
     let Some(mut rx) = toast::init() else {
@@ -610,6 +641,19 @@ pub fn install_toast_bridge(
                         },
                         6000,
                     );
+                }
+                // A restart that had nowhere to relaunch from. Both strings are
+                // localized — there is no dynamic detail — and it sticks,
+                // because it asks the user to do something rather than
+                // reporting what happened.
+                ToastKind::RestartRequired => {
+                    notifications.show(NotificationParams {
+                        variant: "warning".into(),
+                        title: g.invoke_toast_restart_required_title(),
+                        message: g.invoke_toast_restart_required_message(),
+                        action_label: slint::SharedString::default(),
+                        action_kind: "warning".into(),
+                    });
                 }
                 // Informational result of a retroactive loved-tracks backfill.
                 ToastKind::LoveSync => {
