@@ -45,8 +45,9 @@ fn persist_path(state: &AppState, path: Option<String>) {
         library::settings::set_browse_path(&s, path));
 }
 
-/// The path a navigation target names, as [`persist_path`] wants it.
-fn persisted(path: &str) -> Option<String> {
+/// The path a navigation target names, as [`persist_path`] wants it: `None` for the
+/// library root, which is what an empty path means everywhere in this slice.
+fn path_or_root(path: &str) -> Option<String> {
     (!path.is_empty()).then(|| path.to_owned())
 }
 
@@ -65,8 +66,8 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, browse_ui: &Arc<BrowseUi>) 
             let leaving = bu.current_path();
             bu.push_history(leaving, path.clone());
             spawn_fetch(&s, &bu, &weak, path.clone(), "browse::open_folder");
-            // Not `persisted` — an `open-folder` target is always a real directory, so an
-            // empty string here would be a bug rather than the root.
+            // Not `path_or_root` — an `open-folder` target is always a real directory, so
+            // an empty string here would be a bug rather than the root.
             persist_path(&s, Some(path));
         });
     }
@@ -81,7 +82,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, browse_ui: &Arc<BrowseUi>) 
                 return;
             };
             spawn_fetch(&s, &bu, &weak, target.clone(), "browse::go_back");
-            persist_path(&s, persisted(&target));
+            persist_path(&s, path_or_root(&target));
         });
     }
 
@@ -96,7 +97,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, browse_ui: &Arc<BrowseUi>) 
             let path = path.to_string();
             bu.truncate_history_to(&path);
             spawn_fetch(&s, &bu, &weak, path.clone(), "browse::navigate_to");
-            persist_path(&s, persisted(&path));
+            persist_path(&s, path_or_root(&path));
         });
     }
 }

@@ -24,7 +24,17 @@
 // Every file here documents its own invariants at length, which is exactly the text a
 // `contains` would otherwise match — so each pin reads the source stripped of comments and
 // with its indentation collapsed to single spaces.
-use crate::test_support::{normalize_ws as normalized, strip_line_comments as code};
+use crate::test_support::{
+    UI_DIR, normalize_ws as normalized, strip_line_comments as code, stripped_sources,
+};
+
+/// The page tree, relative to [`UI_DIR`] — the half of the Slint sources where a
+/// hand-rolled tooltip frame is the defect rather than the default.
+const VIEWS_DIR: &str = "views/";
+
+/// A floor, so a walk that silently found nothing can't pass vacuously. The
+/// `scrollbar_tests.rs` value, over the same corpus.
+const MIN_SLINT_SOURCES: usize = 100;
 
 const SEARCH_BAR: &str = include_str!("../../../melodia-ui/ui/components/search-bar.slint");
 const LABELED_INPUT: &str = include_str!("../../../melodia-ui/ui/components/labeled-input.slint");
@@ -241,4 +251,43 @@ fn the_volume_readouts_are_the_shared_tooltip() {
              tooltip, once on the slider's"
         );
     }
+}
+
+/// **A view reaches the pill through `TooltipFrame`, never past it.**
+///
+/// A top-layer tooltip — one whose host sits somewhere Slint paints over afterwards — is
+/// a frame tracking the host's rect with the pill inside it, and six of those had been
+/// spelled out identically. `components/tooltip-frame.slint` is that shape now, and this
+/// walks `views/` rather than naming the five hosts for the reason
+/// `ui::file_dialog::tests` walks `src/`: the site that gets it wrong is the one nobody
+/// has written yet.
+///
+/// It is not a hypothetical. `browse-view.slint`'s view-toggle frame — the same six
+/// lines, its own comment saying "same shape as `my-library-view.slint`'s `header-tip`" —
+/// sat outside the rule's written inventory for as long as that inventory existed, and
+/// was the one site the extraction missed. A pin over a list is precisely the pin a
+/// missing entry walks past.
+///
+/// Scoped to `views/` because `components/` is where a legitimate in-tree mount lives:
+/// `IconButton`, `PillButton`, the traffic lights, the swatch dots and the two volume
+/// readouts all annotate a host they are *inside*, which is the default shape and needs
+/// no frame. `app-window.slint` is neither, and holds the one documented exception.
+#[test]
+fn no_view_mounts_a_bare_tooltip() {
+    let offenders: Vec<String> = stripped_sources(UI_DIR, "slint", MIN_SLINT_SOURCES)
+        .into_iter()
+        .filter(|(path, src)| path.starts_with(VIEWS_DIR) && src.contains("Tooltip {"))
+        .map(|(path, _)| path)
+        .collect();
+
+    assert!(
+        offenders.is_empty(),
+        "a view may not mount `Tooltip` directly — a top-layer tooltip is \
+         `components/tooltip-frame.slint`'s `TooltipFrame`, which owns the `host-width` \
+         wiring and leaves the host only its two `absolute-position` deltas. If a mount \
+         genuinely needs what the component doesn't do — a live-width `x`, a `held` latch, \
+         a `gap` — it belongs beside `app-window.slint`'s `sidebar-tip` with the reason \
+         written down, not inline in a view:\n{}",
+        offenders.join("\n")
+    );
 }

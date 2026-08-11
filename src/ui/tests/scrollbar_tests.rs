@@ -32,6 +32,24 @@ const DIALOG_DIR: &str = "components/dialog/";
 const DIALOG_STRAYS: [&str; 1] = ["multiline-input.slint"];
 const CARD_TRACK: &str = "track-color: Theme.scrollbar-track-on-card;";
 
+/// The two components that own a `TrackList`'s bar pair — the plain page and the
+/// nested-under-another-scroller case. They are the only files allowed to bind a list's
+/// vertical metrics onto an `OverlayScrollbar`.
+const SCROLLBAR_COMPONENTS: [&str; 2] =
+    ["components/track-list-scrollbars.slint", "components/composite-scrollbars.slint"];
+
+/// The band a `TrackList`'s vertical bar has to clear, and the height of what's left —
+/// the two metrics **only** a `TrackList` publishes, since only it has a column header
+/// above its scrolling region.
+///
+/// Deliberately not `v-viewport-height` / `v-visible-height`, which every entity card
+/// grid publishes too: those mount a *single* vertical bar over a body with no header and
+/// no horizontal axis, which is a different shape and correctly not this component's.
+/// Either name inside an `OverlayScrollbar` block is a hand-rolled pair; both appear in
+/// the six converted hosts as hand-overs *outside* one, which is what the block walk
+/// separates.
+const TRACK_LIST_V_METRICS: [&str; 2] = ["body-y", "body-height"];
+
 /// A floor, so a walk that silently found nothing can't pass vacuously.
 const MIN_SOURCES: usize = 100;
 
@@ -233,6 +251,63 @@ fn no_scrollbar_policy_asks_for_the_stock_bar() {
         offenders.is_empty(),
         "the only scrollbar in the tree is OverlayScrollbar, so every policy reads \
          `{OPT_OUT}` (CLAUDE.md, Slint Conventions):\n{}",
+        offenders.join("\n")
+    );
+}
+
+/// **A `TrackList`'s bars come from a component; nobody hand-rolls the pair again.**
+///
+/// Six pages had — the three Songs tabs and the Album / Genre / Playlist detail bodies —
+/// and they had already drifted into two spellings of the vertical anchor:
+/// `tl.absolute-position.y - root.absolute-position.y + tl.body-y` in the details, a bare
+/// `tl.y + tl.body-y` in the tabs. Both are right at their own nesting depth, and the
+/// short one stops being right the moment a wrapper appears above it — silently, since
+/// nothing about it reads wrong.
+///
+/// The `10px` thickness is the other half and the reason a snippet wouldn't do: it is a
+/// *pair*, the horizontal bar's width subtracting exactly the vertical bar's so the two
+/// don't overlap in the corner. Spelled per site, that coupling is invisible.
+///
+/// **Anchored on the header-band metrics, inside a bar's own block.** The six hosts still
+/// spell `body-y:` and `body-height:` — as property hand-overs to `TrackListScrollbars`,
+/// *outside* any `OverlayScrollbar { … }` — so the block walk is what tells a hand-over
+/// from a mount. Two neighbouring shapes stay out for the same reason and are worth
+/// naming, since widening the needle would sweep both in: every entity card grid mounts a
+/// lone vertical bar over a body with no header, and `views/search/songs-section.slint`
+/// mounts a lone *horizontal* one because the whole search view scrolls.
+#[test]
+fn no_page_hand_rolls_a_track_lists_scrollbars() {
+    let sources = sources();
+    let mut bars = 0usize;
+    let mut offenders = Vec::new();
+
+    for (path, src) in &sources {
+        if SCROLLBAR_COMPONENTS.iter().any(|owner| path.ends_with(owner)) {
+            continue;
+        }
+        let mut from = 0;
+        while let Some(at) = src[from..].find("OverlayScrollbar").map(|rel| rel + from) {
+            from = at + "OverlayScrollbar".len();
+            let Some(open) = next_non_ws(src.as_bytes(), from) else { continue };
+            if src.as_bytes()[open] != b'{' {
+                continue;
+            }
+            let Some(body) = block_body(src, open) else { continue };
+            bars += 1;
+            if let Some(metric) = TRACK_LIST_V_METRICS.iter().find(|m| body.contains(**m)) {
+                offenders.push(format!("{path}: OverlayScrollbar binds {metric}"));
+            }
+        }
+    }
+
+    assert!(bars >= 10, "only {bars} non-component scrollbars found — the walk is broken");
+    assert!(
+        offenders.is_empty(),
+        "a plain `TrackList` page mounts `components/track-list-scrollbars.slint`'s \
+         `TrackListScrollbars` as the last child of its root at `x: 0; y: 0; width: 100%; \
+         height: 100%` — never a hand-rolled pair, which drifts on the anchor and hides \
+         the two bars' shared thickness. A list nested *under* another scroller wants \
+         `CompositeScrollbars` instead:\n{}",
         offenders.join("\n")
     );
 }

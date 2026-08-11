@@ -233,6 +233,12 @@ export global Dialog {
     // Edit Rules / Save over an existing list, the other New Smart Playlist / Create,
     // so they share a `kind` and nothing else. A kind with one caller earns nothing by
     // moving — the populate block is already stated once, where it is used.
+    //
+    // `ui::playlists::tests::every_multi_caller_playlist_dialog_opens_through_its_own_function`
+    // holds the three folded kinds to this file. It walks the tree rather than naming the
+    // six call sites, because what it guards against is the *seventh* — and because the
+    // failure it guards against is silent: a re-spelled populate block opens the right
+    // dialog and is simply free to drift on the title, which is exactly what Ctrl+N did.
 
     // Three call sites: the Playlists tab's New pill, Ctrl+N, and a track row's
     // Add-to-Playlist → "New Playlist…". The last passes the ids it wants added the
