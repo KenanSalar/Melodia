@@ -17,6 +17,40 @@ use crate::ui::row_match::{self, Needle};
 use crate::ui::tab_bar::clamp_tab;
 use crate::{AppWindow, SettingsPage};
 
+/// Which Settings tab is showing. The `FavoritesTab` / `RecentlyPlayedTab` shape.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum SettingsTab {
+    Library,
+    Playback,
+    Interface,
+    Services,
+    About,
+}
+
+impl SettingsTab {
+    /// Every variant, so a tab added to the `.slint` without one here fails a
+    /// test rather than falling through [`tab_from_index`]'s default arm.
+    pub const ALL: [Self; 5] =
+        [Self::Library, Self::Playback, Self::Interface, Self::Services, Self::About];
+}
+
+/// Resolve the page's live index against the Slint-declared `tab-*` constants.
+///
+/// Reads them rather than restating the numbering, so it lives in one place.
+pub fn tab_from_index(page: &SettingsPage<'_>, idx: i32) -> SettingsTab {
+    if idx == page.get_tab_playback() {
+        SettingsTab::Playback
+    } else if idx == page.get_tab_interface() {
+        SettingsTab::Interface
+    } else if idx == page.get_tab_services() {
+        SettingsTab::Services
+    } else if idx == page.get_tab_about() {
+        SettingsTab::About
+    } else {
+        SettingsTab::Library
+    }
+}
+
 /// Split `0..count` into rows of at most `per_row`.
 ///
 /// The wrapping chip and swatch strips need their items grouped into rows, and
@@ -89,10 +123,24 @@ pub fn install(ui: &AppWindow, state: &AppState) {
     // The tab bar two-way binds `tab-idx`, so the UI is already showing the
     // new tab by the time this runs — the disk write is pure catch-up and a
     // failure must not try to undo it.
+    //
+    // Hand-rolled rather than `spawn_blocking_logged!`, which this otherwise
+    // matches: a tab pick already logs its own `nav:` line, so the macro's
+    // `view state:` line would say the same thing twice. `my_library`'s tab
+    // persist bypasses it for the same reason.
     let s = state.clone();
+    let weak = ui.as_weak();
     page.on_tab_changed(move |tab| {
-        s.persist_blocking("settings_page::set_settings_tab", move |st| {
-            library::settings::set_settings_tab(st, tab)
+        // Like the two curated pages: a tab pick moves no nav index, so
+        // `nav_history::record_current` never hears about it.
+        if let Some(ui) = weak.upgrade() {
+            crate::ui::view_tag::log_current(&ui);
+        }
+        let s_disk = s.clone();
+        s.runtime.spawn_blocking(move || {
+            if let Err(e) = library::settings::set_settings_tab(&s_disk, tab) {
+                log::warn!("settings_page: set_settings_tab({tab}): {e}");
+            }
         });
     });
 }

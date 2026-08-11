@@ -57,6 +57,9 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, search_ui: &Arc<SearchUi>) 
             let su = su.clone();
             let weak = weak.clone();
             let q = text.to_string();
+            // The commit, not `query-changed` beside it, which fires per
+            // keystroke. Behind the view's 300 ms debounce or an Enter press.
+            log::debug!("search: {q:?}");
             // Reset selection if this commit targets a different
             // query than the one whose results currently populate
             // the model. Previous selection ids reference tracks

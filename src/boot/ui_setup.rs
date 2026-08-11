@@ -555,6 +555,41 @@ pub fn install_rescan_notice_subscriber(
     .map_err(|e| melodia::error::AppError::Window(format!("rescan-notice subscriber: {e}")))
 }
 
+/// Subscribe to `audio_device_lost_tx` and push a sticky warning toast when the
+/// output device goes away. Sticky for the crash notice's reason: nothing else
+/// reports this and playback carries on regardless, so a notice the user looked
+/// away for did nothing. No action button — there is no device picker to send
+/// them to — so the kind only groups the row for `dismiss_by_kind`.
+pub fn install_audio_device_lost_subscriber(
+    state: &AppState,
+    weak: slint::Weak<AppWindow>,
+    notifications: std::rc::Rc<ui::shell::notifications::NotificationsUi>,
+) -> Result<(), melodia::error::AppError> {
+    use melodia::Settings;
+    use ui::shell::notifications::NotificationParams;
+
+    let mut rx = state.audio_device_lost_tx.subscribe();
+    slint::spawn_local(async_compat::Compat::new(async move {
+        loop {
+            if rx.changed().await.is_err() {
+                break;
+            }
+            let _ = rx.borrow_and_update();
+            let Some(ui) = weak.upgrade() else { break };
+            let g = ui.global::<Settings>();
+            notifications.show(NotificationParams {
+                variant: "warning".into(),
+                title: g.invoke_audio_device_lost_title(),
+                message: g.invoke_audio_device_lost_message(),
+                action_label: slint::SharedString::default(),
+                action_kind: "audio-device-lost".into(),
+            });
+        }
+    }))
+    .map(|_| ())
+    .map_err(|e| melodia::error::AppError::Window(format!("audio-device-lost subscriber: {e}")))
+}
+
 /// Drain the process-wide `services::toast` channel on the UI thread and render
 /// each backend-failure as an error toast. Mirrors
 /// [`install_rescan_notice_subscriber`] but consumes an `mpsc` (errors must not

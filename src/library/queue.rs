@@ -48,6 +48,7 @@ pub async fn queue_add_tracks(state: &AppState, track_ids: Vec<i64>) -> Result<(
             .map(Arc::new)
             .collect();
 
+    log::debug!("queue: append {} track(s)", summaries.len());
     with_state_emit(&state.player_state, &state.sinks, |s| {
         s.queue.add_tracks(summaries);
     });
@@ -72,6 +73,7 @@ pub async fn queue_play_next_many(
             .map(Arc::new)
             .collect();
 
+    log::debug!("queue: play next, {} track(s)", summaries.len());
     with_state_emit(&state.player_state, &state.sinks, |s| {
         // `insert_next` puts the argument at `current_index + 1`, so
         // walking the input in reverse produces forward order in the
@@ -85,6 +87,7 @@ pub async fn queue_play_next_many(
 }
 
 pub fn queue_remove(state: &AppState, index: usize) -> Result<(), AppError> {
+    log::debug!("queue: remove index {index}");
     with_state_emit(&state.player_state, &state.sinks, |s| {
         s.queue.remove_at(index);
     });
@@ -92,6 +95,8 @@ pub fn queue_remove(state: &AppState, index: usize) -> Result<(), AppError> {
 }
 
 pub fn queue_move(state: &AppState, from: usize, to: usize) -> Result<(), AppError> {
+    // Once per drop, not per drag frame — Slint only emits on the drop gesture.
+    log::debug!("queue: move {from} → {to}");
     with_state_emit(&state.player_state, &state.sinks, |s| {
         s.queue.move_track(from, to);
     });
@@ -99,6 +104,7 @@ pub fn queue_move(state: &AppState, from: usize, to: usize) -> Result<(), AppErr
 }
 
 pub fn queue_remove_batch(state: &AppState, indices: &[usize]) -> Result<(), AppError> {
+    log::debug!("queue: remove {} selected", indices.len());
     with_state_emit(&state.player_state, &state.sinks, |s| {
         s.queue.remove_batch(indices);
     });
@@ -106,6 +112,9 @@ pub fn queue_remove_batch(state: &AppState, indices: &[usize]) -> Result<(), App
 }
 
 pub fn queue_clear(state: &AppState) -> Result<(), AppError> {
+    // The one queue edit that can leave no other trace: with nothing playing it
+    // emits no `PlayerAction`.
+    log::debug!("queue: clear");
     with_state_emit(&state.player_state, &state.sinks, |s| {
         s.queue.clear();
     });
@@ -113,6 +122,8 @@ pub fn queue_clear(state: &AppState) -> Result<(), AppError> {
 }
 
 pub fn queue_skip_to_index(state: &AppState, index: usize) -> Result<(), AppError> {
+    // The `play` line this produces names the file; only this names why.
+    log::debug!("queue: skip to index {index}");
     emit_and_execute(&*state.rodio, &state.db, &state.player_state, &state.sinks, |s| {
         let track = s.queue.skip_to_index(index).cloned();
         match track {
@@ -143,6 +154,9 @@ pub fn queue_set_shuffle(state: &AppState, enabled: bool) -> Result<(), AppError
         }
         s.queue.shuffle_enabled
     });
+    // The resulting state rather than the request: this is the idempotent form,
+    // so a Shuffle pill pressed twice asks for `true` twice and only moves once.
+    log::debug!("queue: shuffle {new_shuffle}");
     persist_shuffle(state, new_shuffle);
     Ok(())
 }
@@ -156,11 +170,13 @@ pub fn queue_toggle_shuffle(state: &AppState) -> Result<(), AppError> {
         }
         s.queue.shuffle_enabled
     });
+    log::debug!("queue: shuffle {new_shuffle}");
     persist_shuffle(state, new_shuffle);
     Ok(())
 }
 
 pub fn queue_set_repeat(state: &AppState, mode: RepeatMode) -> Result<(), AppError> {
+    log::debug!("queue: repeat → {mode:?}");
     with_state_emit(&state.player_state, &state.sinks, |s| {
         s.queue.set_repeat_mode(mode);
     });
@@ -173,6 +189,7 @@ pub fn queue_cycle_repeat(state: &AppState) -> Result<(), AppError> {
         s.queue.cycle_repeat_mode();
         s.queue.repeat_mode
     });
+    log::debug!("queue: repeat → {new_mode:?}");
     persist_repeat(state, new_mode);
     Ok(())
 }

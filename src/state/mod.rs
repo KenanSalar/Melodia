@@ -22,6 +22,7 @@ use crate::player::rodio_backend::RodioPlayer;
 use crate::player::state::{
     PlayerStateHandle, PlayerViewModelLight, PositionTick, QueueViewModel, lock_state,
 };
+use crate::player::stream_health::{self, AudioStreamHealth};
 use crate::services::{
     always_on_top::{self, AlwaysOnTopCapability},
     discord::DiscordPresenceService,
@@ -50,6 +51,9 @@ pub struct AppState {
     pub cover_cache: CoverCache,
     pub player_state: Arc<PlayerStateHandle>,
     pub rodio: Arc<RodioPlayer>,
+    /// Fault counters the output device's error callback writes into, on the
+    /// audio thread. Drained by `tasks::audio_health` and read nowhere else.
+    pub audio_health: Arc<AudioStreamHealth>,
     pub sinks: Arc<PlayerSinks>,
     pub position_tx: watch::Sender<Option<PositionTick>>,
     /// Bumped whenever the track library is mutated by a scan or watcher
@@ -73,6 +77,11 @@ pub struct AppState {
     /// also what `RECONCILE_IN_FLIGHT` does to the reconcile spawn
     /// itself.
     pub rescan_notice_tx: watch::Sender<u64>,
+    /// Bumped by `tasks::audio_health` when the output device goes away. A
+    /// UI-thread subscriber pushes a sticky warning toast — nothing else
+    /// notices, so playback runs on with the position ticking and no sound.
+    /// Coalesces like `rescan_notice_tx`: a burst paints one toast.
+    pub audio_device_lost_tx: watch::Sender<u64>,
     /// Live progress for the folder scan in flight. `None` means idle; the UI
     /// uses that to hide the progress bar in the Library settings section.
     pub scan_progress_tx: watch::Sender<Option<ScanProgressTick>>,
@@ -124,18 +133,20 @@ pub struct StartupChannels {
 
 impl AppState {
     pub async fn init(paths: Paths, runtime: Handle) -> AppResult<(Self, StartupChannels)> {
-        // Open the output device with our own error callback instead of
-        // `open_default_sink()`'s default — rodio's default handler `eprintln!`s
-        // straight to stderr (it only routes through a logger when its
-        // `tracing` feature is on, which we don't enable). A transient ALSA
-        // xrun at device-open time under a CPU-heavy first-launch scan is
-        // benign and self-recovering; routing it through `log` keeps it
-        // filterable and consistent, while a genuine device failure mid-session
-        // still surfaces as a `warn`.
-        let mut speakers = rodio::DeviceSinkBuilder::from_default_device()
+        // Our own error callback rather than rodio's, which `eprintln!`s to
+        // stderr unless its `tracing` feature is on. It records into counters
+        // instead of logging because cpal calls it on the output worker thread;
+        // `player::stream_health` argues that.
+        //
+        // `open_sink_or_fallback` rather than `open_stream`: the latter turns
+        // any config the device rejects into a boot that stops with no audio at
+        // all, where this first retries every config the device supports.
+        let audio_health = Arc::new(AudioStreamHealth::default());
+        let builder = rodio::DeviceSinkBuilder::from_default_device()
             .map_err(|e| AppError::Player(format!("Failed to open audio output device: {e}")))?
-            .with_error_callback(|err| log::warn!("audio stream error: {err}"))
-            .open_stream()
+            .with_error_callback(stream_health::error_callback(audio_health.clone()));
+        let mut speakers = builder
+            .open_sink_or_fallback()
             .map_err(|e| AppError::Player(format!("Failed to open audio output device: {e}")))?;
         speakers.log_on_drop(false);
         let speakers: &'static rodio::MixerDeviceSink = Box::leak(Box::new(speakers));
@@ -178,6 +189,7 @@ impl AppState {
         let (library_changed_tx, _) = watch::channel::<u64>(0);
         let (stats_changed_tx, _) = watch::channel::<u64>(0);
         let (rescan_notice_tx, _) = watch::channel::<u64>(0);
+        let (audio_device_lost_tx, _) = watch::channel::<u64>(0);
         let (scan_progress_tx, _) = watch::channel::<Option<ScanProgressTick>>(None);
 
         let (mc_handle, mc_rx) = media_controls::init_media_controls();
@@ -226,11 +238,13 @@ impl AppState {
             cover_cache,
             player_state,
             rodio,
+            audio_health,
             sinks,
             position_tx,
             library_changed_tx,
             stats_changed_tx,
             rescan_notice_tx,
+            audio_device_lost_tx,
             scan_progress_tx,
             watcher,
             self_writes: Arc::new(SelfWrites::default()),
@@ -267,6 +281,10 @@ impl AppState {
         label: &'static str,
         f: impl FnOnce(&AppState) -> Result<(), AppError> + Send + 'static,
     ) {
+        // `label` already names the setting, so one line here covers all
+        // eighteen call sites. On the way in, so a write that hangs still says
+        // what it was.
+        log::debug!("settings: {label}");
         let s = self.clone();
         self.runtime.spawn_blocking(move || {
             if let Err(e) = f(&s) {

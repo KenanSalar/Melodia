@@ -170,3 +170,22 @@ fn cross_section_walk() {
     assert_eq!(h.forward(), Some(tab(ALBUMS, Some(11))));
     assert_eq!(h.forward(), None);
 }
+
+/// `record`'s verdict is what the verbose log's `nav:` line fires on, so it has
+/// to agree with what the history did — `true` exactly when the entry landed.
+///
+/// The three cases are the three the log gets wrong if this drifts: a repeat
+/// (the eleven hooks fire two or three deep per click), a replay in flight
+/// (which logs its own line), and a real move.
+#[test]
+fn record_reports_whether_it_took_the_entry() {
+    let mut h = NavHistory::new();
+    assert!(h.record(tab(ALBUMS, None)), "the first entry lands");
+    assert!(!h.record(tab(ALBUMS, None)), "a repeat collapses onto the cursor");
+    assert!(h.record(tab(ARTISTS, None)), "a real move lands");
+
+    h.set_suppress(true);
+    assert!(!h.record(tab(PLAYLISTS, None)), "a replay records nothing");
+    h.set_suppress(false);
+    assert!(h.record(tab(PLAYLISTS, None)), "and lands once the replay is done");
+}

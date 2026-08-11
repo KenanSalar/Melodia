@@ -983,6 +983,14 @@ msgstr ""
 msgid "Save…"
 msgstr "Αποθήκευση…"
 
+msgid "Verbose logging"
+msgstr "Αναλυτική καταγραφή"
+
+msgid "Record extra detail. Turn this on, reproduce the problem, then save a report."
+msgstr ""
+"Καταγράφει επιπλέον λεπτομέρειες. Ενεργοποιήστε το, αναπαραγάγετε το "
+"πρόβλημα και μετά αποθηκεύστε μια αναφορά."
+
 msgid "Diagnostics report saved"
 msgstr "Η αναφορά διαγνωστικών αποθηκεύτηκε"
 
@@ -1000,6 +1008,15 @@ msgid "A crash report was written. Open the log folder to find it."
 msgstr ""
 "Γράφτηκε μια αναφορά κατάρρευσης. Ανοίξτε τον φάκελο καταγραφής για να τη "
 "βρείτε."
+
+# Pushed when the audio output device goes away mid-session.
+msgid "Audio device disconnected"
+msgstr "Η συσκευή ήχου αποσυνδέθηκε"
+
+msgid "Playback won't be audible until you reconnect it and restart Melodia."
+msgstr ""
+"Η αναπαραγωγή δεν θα ακούγεται μέχρι να τη συνδέσετε ξανά και να "
+"επανεκκινήσετε το Melodia."
 
 msgid "Close to Tray"
 msgstr "Κλείσιμο στην περιοχή ειδοποιήσεων"

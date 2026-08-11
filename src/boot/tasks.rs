@@ -22,6 +22,9 @@ pub fn spawn_background_tasks(
     tasks::queue_prune::spawn(spawner, state);
     tasks::retroactive_hash::spawn(spawner, state);
     tasks::heap_trim::spawn(spawner);
+    // Folds the output device's fault counters into one line per window, and is
+    // the only thing watching for a device that goes away mid-session.
+    tasks::audio_health::spawn(spawner, state);
     // Batches `play_count` / `skip_count` UPDATEs every 2 s so a fast skip
     // burst becomes one write instead of N. Must be spawned before any
     // playback can fire `UpdatePlayCount` actions.

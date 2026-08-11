@@ -141,6 +141,12 @@ fn tab_count_matches_the_tabs_slint_declares() {
         .count();
     assert_eq!(constants, TABS, "one `tab-*` index constant per tab");
 
+    assert_eq!(
+        crate::ui::recently_played::RecentlyPlayedTab::ALL.len(),
+        TABS,
+        "`RecentlyPlayedTab` needs one variant per tab the global declares"
+    );
+
     // Anchored on the branch's own shape (`… : ViewTransition {`) rather than on
     // the comparison alone: the hero reads `tab-idx` several more times for its
     // placeholder, its empty-copy gate and its two pill gates, and those are not

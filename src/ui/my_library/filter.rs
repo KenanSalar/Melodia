@@ -95,6 +95,9 @@ macro_rules! on_mounted_surface {
 /// Route the page's filter text to whichever surface the mounted tab is showing.
 pub fn dispatch(ui: &AppWindow, text: &str) {
     let needle = SharedString::from(text);
+    // Behind the view's 130 ms `FilterThrottle`, so once per settled burst. Names
+    // the surface too, one box driving nine of them.
+    log::debug!("filter: {:?} → {:?}", text, mounted_surface(ui));
     on_mounted_surface!(
         ui,
         mounted_surface(ui),

@@ -252,7 +252,7 @@ fn the_settings_block_is_an_allowlist() -> Result<(), AppError> {
 
     let block = reading_env(|| settings_block(&paths));
 
-    for expected in ["theme", "locale", "titlebar", "tray", "crossfade"] {
+    for expected in ["theme", "locale", "titlebar", "tray", "crossfade", "verbose"] {
         assert!(block.contains(expected), "block is missing {expected:?}");
     }
     for forbidden in [

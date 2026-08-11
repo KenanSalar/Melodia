@@ -3,8 +3,8 @@
 //! Everything `services::{logging, crash_report, diagnostics}` produces lands in
 //! one directory and is otherwise unreachable — a user launching from a
 //! `.desktop` entry or the Start Menu has no console and no reason to go looking
-//! in `~/.local/share`. This module is the whole of what surfaces it: two buttons
-//! and one notice.
+//! in `~/.local/share`. This module is the whole of what surfaces it: two
+//! buttons, a switch and one notice.
 //!
 //! **The toast's `action_kind` and the branch that routes it are one string.**
 //! `"crash-report"` here has to match the `kind ==` test in the
@@ -21,8 +21,8 @@ use chrono::Local;
 use slint::{ComponentHandle, SharedString, Weak};
 
 use crate::error::{AppError, AppResult};
-use crate::services;
 use crate::state::AppState;
+use crate::{library, services};
 use crate::ui::shell::notifications::{
     NotificationParams, NotificationsUi, TOAST_AUTO_DISMISS_MS,
 };
@@ -35,6 +35,7 @@ const CRASH_TOAST_KIND: &str = "crash-report";
 pub fn install(ui: &AppWindow, state: &AppState, notifications: &Rc<NotificationsUi>) {
     wire_open_log_folder(ui, state);
     wire_save_report(ui, state, notifications);
+    wire_verbose_logging(ui, state);
     notify_previous_crash(ui, state, notifications);
 }
 
@@ -109,6 +110,29 @@ async fn write_report(path: PathBuf, text: String) -> AppResult<()> {
     tokio::task::spawn_blocking(move || services::write_text_atomic_sync(&path, &text))
         .await
         .map_err(AppError::io_source)?
+}
+
+/// Apply the Verbose Logging switch live, then persist it.
+///
+/// Seeded with `if let Ok` rather than [`crate::ui::settings_bind::read_or_default`]
+/// so an unreadable file leaves the Slint-declared `false` — the same answer
+/// `logging::install` reached from the same read, so the two can't disagree.
+fn wire_verbose_logging(ui: &AppWindow, state: &AppState) {
+    if let Ok(settings) = services::settings::read_settings(&state.paths) {
+        ui.global::<Settings>()
+            .set_verbose_logging(settings.diagnostics.verbose_logging);
+    }
+
+    let state = state.clone();
+    ui.global::<Settings>()
+        .on_verbose_logging_changed(move |on| {
+            // Live first: a failed disk write must not undo what the user can
+            // already see working.
+            services::logging::set_verbose(on);
+            state.persist_blocking("persist verbose_logging", move |s| {
+                library::settings::set_verbose_logging(s, on)
+            });
+        });
 }
 
 /// Announce a panic from the previous run, once.

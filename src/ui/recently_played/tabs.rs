@@ -18,6 +18,11 @@ pub enum RecentlyPlayedTab {
 }
 
 impl RecentlyPlayedTab {
+    /// Every variant. [`tab_from_index`] ends in a default arm, so a tab added
+    /// to `curated.slint` without one here resolves to `Songs` — which reads
+    /// right on the tab nobody named. Pinned against `tab-count`.
+    pub const ALL: [Self; 2] = [Self::Songs, Self::MostPlayed];
+
     /// Storage code for the atomic shadow. Deliberately *not* the Slint index
     /// — that lives in the Slint, and these two numbering schemes agreeing
     /// today is a coincidence worth not depending on.

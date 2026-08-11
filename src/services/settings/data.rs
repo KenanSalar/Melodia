@@ -457,6 +457,18 @@ impl Default for LibraryFlags {
     }
 }
 
+/// What the diagnostics surfaces record. See `PlaybackFlags` for the substruct
+/// rationale.
+///
+/// `verbose_logging` defaults off: it is a debugging mode, and against a 2 MiB
+/// rotation budget leaving it on costs a reporter the older history. Persisted
+/// rather than session-scoped so `logging::install` can start a boot at it.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct DiagnosticsFlags {
+    pub verbose_logging: bool,
+}
+
 /// Auto-updater state persisted between launches. See `PlaybackFlags` for
 /// the substruct rationale.
 ///
@@ -636,6 +648,8 @@ pub struct SettingsData {
     pub layout: LayoutFlags,
     #[serde(flatten)]
     pub updates: UpdateFlags,
+    #[serde(flatten)]
+    pub diagnostics: DiagnosticsFlags,
 }
 
 impl Default for SettingsData {
@@ -677,6 +691,7 @@ impl Default for SettingsData {
             library: LibraryFlags::default(),
             layout: LayoutFlags::default(),
             updates: UpdateFlags::default(),
+            diagnostics: DiagnosticsFlags::default(),
         }
     }
 }

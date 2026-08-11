@@ -67,9 +67,18 @@ macro_rules! spawn_logged_sync {
 ///
 /// **The label is a literal, which is the one reason a site legitimately stays
 /// hand-rolled**: `Nav.persist-selected-index` interpolates the index it failed
-/// to store, and a warning that doesn't name it says almost nothing.
+/// to store, and a warning that doesn't name it says almost nothing. The two
+/// tab persists are hand-rolled for a second reason — see below.
+///
+/// Every site writes `views.json`, which is what the `debug` line can call it:
+/// column toggles and widths, sort, browse path and view mode leave no other
+/// trace, so this is the whole record that a view's own state moved.
+/// `AppState::persist_blocking` is the `settings.json` half of the same idea.
 macro_rules! spawn_blocking_logged {
     ($state:ident, $label:literal, $expr:expr) => {{
+        // Before the spawn, so a write that hangs still says what it was — the
+        // `persist_blocking` argument.
+        log::debug!("view state: {}", $label);
         // `.clone()` on the runtime handle first, the `spawn_logged_sync!` shape:
         // `$expr` usually moves the state it borrows `runtime` from, and a bare
         // `$state.runtime.spawn_blocking(…)` holds that borrow across the move.

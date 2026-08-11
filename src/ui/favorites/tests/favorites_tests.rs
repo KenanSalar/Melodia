@@ -118,6 +118,12 @@ fn tab_count_matches_the_tabs_slint_declares() {
         .count();
     assert_eq!(indices, count, "`Favorites`'s `tab-*` constants don't add up to `tab-count`");
 
+    assert_eq!(
+        FavoritesTab::ALL.len(),
+        count,
+        "`FavoritesTab` needs one variant per tab the global declares"
+    );
+
     // Anchored on the branch's own shape (`… : ViewTransition {`) rather than
     // on the comparison alone: the hero reads `tab-idx` several more times
     // for its stats line, its placeholder and its two pill gates, and those

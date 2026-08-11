@@ -76,6 +76,10 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
         ui.global::<Dialog>().on_closed(move || {
             let Some(ui) = weak.upgrade() else { return };
             let dlg = ui.global::<Dialog>();
+            // Before the teardown, which clears `kind`. Opens reach no Rust
+            // seam, so this is the only trace a dialog leaves — which one, not
+            // whether it was accepted, the accept dispatcher being pure Slint.
+            log::debug!("dialog closed: {}", dlg.get_kind());
             dlg.invoke_closed_teardown();
             dlg.set_current_artwork(Image::default());
             // The Edit-Tags dialog pins a decoded cover in `TagEditor.cover`

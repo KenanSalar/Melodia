@@ -4,12 +4,14 @@ import { SectionCard } from "../../components/settings/section-card.slint";
 import { SectionDivider } from "../../components/settings/section-divider.slint";
 import { SettingRow } from "../../components/settings/setting-row.slint";
 import { SectionButton } from "../../components/settings/section-button.slint";
+import { ToggleSwitch } from "../../components/settings/toggle-switch.slint";
 
-// What to hand over when something goes wrong. Both rows reach the same folder
-// — log files and crash reports share one directory so a reporter opens it once
-// — and both callbacks live in `src/ui/settings/diagnostics.rs`.
+// What to hand over when something goes wrong, and the switch that decides how
+// much of it there is. The first two rows reach the same folder — log files and
+// crash reports share one directory so a reporter opens it once — and all three
+// callbacks live in `src/ui/settings/diagnostics.rs`.
 //
-// Neither row is gated by backend state; only the search filter can hide one.
+// No row is gated by backend state; only the search filter can hide one.
 // Structure follows `about-section.slint`, which this sits under.
 export component DiagnosticsSection inherits Rectangle {
     background: transparent;
@@ -29,8 +31,11 @@ export component DiagnosticsSection inherits Rectangle {
     property <bool> show-report:
         row-visible(@tr("Diagnostics report"),
                     @tr("One text file with your system details, settings and recent logs, for attaching to a bug report."));
+    property <bool> show-verbose:
+        row-visible(@tr("Verbose logging"),
+                    @tr("Record extra detail. Turn this on, reproduce the problem, then save a report."));
 
-    out property <bool> has-matches: show-logs || show-report;
+    out property <bool> has-matches: show-logs || show-report || show-verbose;
 
     // Wrapper so the root's preferred-height tracks the card's natural height —
     // see `language-section.slint`.
@@ -50,9 +55,9 @@ export component DiagnosticsSection inherits Rectangle {
                 }
             }
 
-            // Two rows, so this reads as "both neighbours" — a third would need
-            // the cumulative form `(show-logs || show-report) && show-new`, per
-            // the second divider in `about-section.slint`.
+            // Each divider asks whether anything above it survived the filter,
+            // so past the first they take the cumulative form — the shape the
+            // second divider in `about-section.slint` uses.
             if root.show-logs && root.show-report: SectionDivider {}
             if root.show-report: SettingRow {
                 icon: "bug_report";
@@ -63,6 +68,17 @@ export component DiagnosticsSection inherits Rectangle {
                     icon: "";
                     primary: false;
                     clicked => { Settings.save-diagnostics-report(); }
+                }
+            }
+
+            if (root.show-logs || root.show-report) && root.show-verbose: SectionDivider {}
+            if root.show-verbose: SettingRow {
+                icon: "tune";
+                label: @tr("Verbose logging");
+                description: @tr("Record extra detail. Turn this on, reproduce the problem, then save a report.");
+                ToggleSwitch {
+                    checked <=> Settings.verbose-logging;
+                    toggled(v) => { Settings.verbose-logging-changed(v); }
                 }
             }
         }

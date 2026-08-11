@@ -66,6 +66,10 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, rp_ui: &Arc<RecentlyPlayedU
             let Some(ui) = weak.upgrade() else { return };
             let g = ui.global::<RecentlyPlayed>();
             let entering = recently_played_ui_mod::tab_from_index(&g, tab);
+            // A sub-view pick moves no nav index, so `record_current` never
+            // hears about it. The bar has already written `tab-idx`, so the tag
+            // reads the tab being entered.
+            crate::ui::view_tag::log_current(&ui);
 
             // Shadow first: the model build below and every later fetch decide
             // which model to fill and which tier to warm from it, and both can

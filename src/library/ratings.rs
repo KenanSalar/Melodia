@@ -19,6 +19,8 @@ fn clamp_rating(rating: i32) -> i32 {
 pub async fn set_rating(state: &AppState, ids: Vec<i64>, rating: i32) -> Result<(), AppError> {
     let rating = clamp_rating(rating);
     queries::track::set_rating(&state.db, &ids, rating).await?;
+    // After the write, so the line means it landed rather than was attempted.
+    log::debug!("rating: {} track(s) → {rating}", ids.len());
     // If the currently-playing track was one of the rated ids, mirror the new
     // rating onto `current_track` so the Now-Playing star strip updates without
     // waiting for the next track load (parity with `set_current_rating`).
@@ -53,6 +55,7 @@ pub async fn set_current_rating(
     };
 
     queries::track::set_rating(&state.db, &[id], rating).await?;
+    log::debug!("rating: playing track {id} → {rating}");
 
     with_state_emit(&state.player_state, &state.sinks, |s| {
         // Guard against a track change between the id read above and here: only

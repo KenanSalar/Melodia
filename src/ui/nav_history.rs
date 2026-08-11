@@ -41,6 +41,7 @@ use crate::state::AppState;
 use crate::ui::my_library::{
     self, MyLibraryTab, NAV_MY_LIBRARY, persist_tab, tab_from_index, tab_of_section,
 };
+use crate::ui::view_tag;
 use crate::{AppWindow, Dialog, MyLibrary, Nav, NavEnterFrom, Queue};
 
 const HISTORY_CAP: usize = 24;
@@ -79,17 +80,22 @@ impl NavHistory {
 
     /// Push a new entry at `cursor + 1`, truncating any forward history.
     /// No-op while a replay is in flight. Consecutive duplicates collapse.
-    pub fn record(&mut self, entry: NavEntry) {
+    ///
+    /// Returns whether the entry was taken, which is what
+    /// [`record_current`] logs on: the eleven hooks fire two or three times for
+    /// one move, so an unconditional line reads as a stutter rather than as a
+    /// navigation.
+    pub fn record(&mut self, entry: NavEntry) -> bool {
         if self.suppress {
-            return;
+            return false;
         }
         if self.entries.is_empty() {
             self.entries.push_back(entry);
             self.cursor = 0;
-            return;
+            return true;
         }
         if self.entries.get(self.cursor) == Some(&entry) {
-            return;
+            return false;
         }
         // User-initiated navigation invalidates the forward stack.
         self.entries.truncate(self.cursor + 1);
@@ -98,6 +104,7 @@ impl NavHistory {
             self.entries.pop_front();
         }
         self.cursor = self.entries.len() - 1;
+        true
     }
 
     /// Move cursor one step back; return the entry now under the cursor,
@@ -181,7 +188,11 @@ pub fn record_current(state: &AppState, ui: &AppWindow) {
     let section = ui.global::<Nav>().get_selected_index();
     let tab = tab_of_section(ui, section);
     let detail_id = current_detail_id_for(ui, section, tab);
-    state.nav_history.lock().record(NavEntry { section, tab, detail_id });
+    // Only what the history took: the eleven hooks fire two or three deep for
+    // one click, and logging each reads as a stutter rather than a navigation.
+    if state.nav_history.lock().record(NavEntry { section, tab, detail_id }) {
+        view_tag::log_current(ui);
+    }
 }
 
 /// Walk one step back or forward and drive the UI into the new state.
@@ -205,6 +216,16 @@ pub fn replay(state: &AppState, ui: &AppWindow, going_back: bool) {
     let current_tab = tab_of_section(ui, current_section);
     let current_detail = current_detail_id_for(ui, current_section, current_tab);
     let direction = if going_back { NavEnterFrom::Left } else { NavEnterFrom::Right };
+
+    // Its own line because a replay suppresses recording, so this is otherwise
+    // the one navigation leaving no trace.
+    log::debug!(
+        "nav: history {} → section {} tab {} detail {:?}",
+        if going_back { "back" } else { "forward" },
+        target.section,
+        target.tab,
+        target.detail_id
+    );
 
     state.nav_history.lock().set_suppress(true);
 

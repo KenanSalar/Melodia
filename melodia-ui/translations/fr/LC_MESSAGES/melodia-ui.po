@@ -980,6 +980,14 @@ msgstr ""
 msgid "Save…"
 msgstr "Enregistrer…"
 
+msgid "Verbose logging"
+msgstr "Journalisation détaillée"
+
+msgid "Record extra detail. Turn this on, reproduce the problem, then save a report."
+msgstr ""
+"Enregistre des détails supplémentaires. Activez cette option, reproduisez le "
+"problème, puis enregistrez un rapport."
+
 msgid "Diagnostics report saved"
 msgstr "Rapport de diagnostic enregistré"
 
@@ -997,6 +1005,15 @@ msgid "A crash report was written. Open the log folder to find it."
 msgstr ""
 "Un rapport de plantage a été écrit. Ouvrez le dossier des journaux pour le "
 "retrouver."
+
+# Pushed when the audio output device goes away mid-session.
+msgid "Audio device disconnected"
+msgstr "Périphérique audio déconnecté"
+
+msgid "Playback won't be audible until you reconnect it and restart Melodia."
+msgstr ""
+"La lecture restera inaudible jusqu'à ce que vous le rebranchiez et "
+"redémarriez Melodia."
 
 msgid "Close to Tray"
 msgstr "Fermer dans la zone de notification"

@@ -232,10 +232,36 @@ pub enum PlayerAction {
     PreloadGapless(Option<String>),
     UpdatePlayCount(i64),
     UpdateSkipCount(i64),
-    SavePosition {
-        track_id: i64,
-        position_ms: u64,
-    },
+}
+
+/// The verbose log's playback narrative, one action per line.
+///
+/// Terse where the derived `Debug` is exhaustive — `PlayMedia` alone would print
+/// a whole `TrackReplayGain`. On the enum rather than in `execute_actions` so a
+/// new variant is a non-exhaustive-match failure here, where a `_ =>` arm in the
+/// executor would have logged it as nothing at all.
+impl std::fmt::Display for PlayerAction {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::PlayMedia { file_path, start_position_ms, .. } => match start_position_ms {
+                Some(ms) => write!(f, "play {file_path} from {ms}ms"),
+                None => write!(f, "play {file_path}"),
+            },
+            Self::BeginCrossfade { file_path, fade_ms, .. } => {
+                write!(f, "crossfade {fade_ms}ms into {file_path}")
+            }
+            Self::Resume => f.write_str("resume"),
+            Self::Pause { fade_ms } => write!(f, "pause (fade {fade_ms}ms)"),
+            Self::Stop { fade_ms } => write!(f, "stop (fade {fade_ms}ms)"),
+            Self::Seek { position_ms } => write!(f, "seek to {position_ms}ms"),
+            Self::SetVolume(v) => write!(f, "volume {v:.2}"),
+            Self::SetSpeed(s) => write!(f, "speed {s:.2}"),
+            Self::PreloadGapless(Some(path)) => write!(f, "preload gapless {path}"),
+            Self::PreloadGapless(None) => f.write_str("clear gapless preload"),
+            Self::UpdatePlayCount(id) => write!(f, "play count +1 for track {id}"),
+            Self::UpdateSkipCount(id) => write!(f, "skip count +1 for track {id}"),
+        }
+    }
 }
 
 impl PlayerState {

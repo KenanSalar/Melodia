@@ -6,6 +6,27 @@
 //! to have captured stderr from, and "reproduce it with `RUST_LOG=info`" is
 //! advice nobody follows after the crash they already had.
 //!
+//! [`set_verbose`] (Settings → About → Diagnostics) swaps the live spec with no
+//! relaunch, and [`install`] reads the persisted flag back so the next boot
+//! starts at the same level. Same argument as the file sink itself: a reporter
+//! who already hit the bug will flip a toggle, not re-export `RUST_LOG`.
+//!
+//! # Which level
+//!
+//! - **`info`** — happened once, matters at a glance. On for every user, so the
+//!   rotation budget is sized against its volume.
+//! - **`warn`** — a user could notice. Expected, self-recovering and unbounded
+//!   belongs at `debug` with a count instead; logged per occurrence it teaches
+//!   the reader to skim past warnings (`player::stream_health`).
+//! - **`debug`** — what the user did, written to be read as a narrative. One
+//!   line per class of action, at the seam every path funnels through
+//!   (`execute_actions`, `nav_history::record_current`, `persist_blocking`,
+//!   `spawn_blocking_logged!`), and **nothing on a timer, frame or keystroke** —
+//!   the debounced seams are the floor. Log the *action*, never the widget: a
+//!   play/pause line at the button would miss the shortcut, the tray, the media
+//!   keys and Now Playing. `trace` is unused, hence [`VERBOSE_LEVEL`] stopping
+//!   at `debug`.
+//!
 //! Crash reports land in the same directory (`services::crash_report`) so
 //! "Open log folder" hands a reporter everything at once. The two naming
 //! schemes can't collide — this one owns the `melodia` basename and `log`
@@ -28,12 +49,14 @@ use flexi_logger::{
 
 use crate::config::Paths;
 
-/// Dependency warnings, our own narrative, and nothing else.
-///
-/// A bare `"info"` would set that floor for every crate in the graph — slint,
-/// symphonia, zbus, notify, reqwest — whose volume is decided by their choices
-/// against our rotation budget. Both tokens are real targets: `melodia` is the
-/// lib (all of `src/`), `Melodia` the bin (`main.rs`). `RUST_LOG` overrides it.
+/// What our own two targets log at with Verbose Logging off.
+const NORMAL_LEVEL: &str = "info";
+
+/// …and with it on. Not `trace`: there are no `log::trace!` sites in the tree,
+/// so it would differ only in what the muted dependencies say.
+const VERBOSE_LEVEL: &str = "debug";
+
+/// The two dependency modules that warn about something we already know.
 ///
 /// `layer3` is muted because its bit-reservoir underflow warns once per *frame*
 /// on any stream not opened at byte zero — every seek and every gapless preload
@@ -50,8 +73,21 @@ use crate::config::Paths;
 /// controls that are never drawn. By module rather than by crate: the crate's
 /// other `warn!` is a glyph-rasterization failure and has nothing to do with
 /// the portal.
-const DEFAULT_LOG_SPEC: &str =
-    "warn, melodia=info, Melodia=info, symphonia_bundle_mp3::layer3=error, sctk_adwaita::buttons=error";
+///
+/// Shared by both specs, which is why they are built rather than written twice:
+/// a verbose spec that dropped `layer3` would bury the detail the switch was
+/// flipped for under a warning per decoded frame.
+const SPEC_TAIL: &str = "symphonia_bundle_mp3::layer3=error, sctk_adwaita::buttons=error";
+
+/// Dependency warnings, our own narrative at `level`, and nothing else.
+///
+/// A bare `"info"` would set that floor for every crate in the graph — slint,
+/// symphonia, zbus, notify, reqwest — whose volume is decided by their choices
+/// against our rotation budget. Both tokens are real targets: `melodia` is the
+/// lib (all of `src/`), `Melodia` the bin (`main.rs`). `RUST_LOG` overrides it.
+fn spec_for(level: &str) -> String {
+    format!("warn, melodia={level}, Melodia={level}, {SPEC_TAIL}")
+}
 
 /// Rotate at 2 MiB or at the turn of the day; `Cleanup` never counts the live
 /// file, so the ceiling is 8 files, 16 MiB.
@@ -72,6 +108,10 @@ static HANDLE: OnceLock<LoggerHandle> = OnceLock::new();
 /// rather than looking like an install that never wrote any.
 static FILE_SINK_ERROR: OnceLock<String> = OnceLock::new();
 
+/// Whether `RUST_LOG` was set when [`install`] ran — the moment it was
+/// honoured. When it was, it owns the spec and [`set_verbose`] declines.
+static ENV_SPEC_WINS: OnceLock<bool> = OnceLock::new();
+
 /// Start logging. Call once, as early in `main` as a [`Paths`] exists.
 ///
 /// **Infallible on purpose.** Opening the file can fail for reasons that have
@@ -81,8 +121,20 @@ static FILE_SINK_ERROR: OnceLock<String> = OnceLock::new();
 /// discards. That is the failure this whole module exists to stop happening, so
 /// it degrades to stderr-only instead. The panic hook writes through plain `fs`
 /// and doesn't touch the logger, so crash reports survive either way.
+///
+/// Reads the Verbose Logging flag itself rather than taking it as an argument:
+/// applied later, from the UI, the whole boot would stay at [`NORMAL_LEVEL`] —
+/// and a boot that goes wrong is the window the switch is worth having.
 pub fn install(paths: &Paths) {
-    let error = match start_to_file(paths) {
+    let _ = ENV_SPEC_WINS.set(std::env::var_os("RUST_LOG").is_some());
+
+    // An unparseable settings file is no reason to start louder; it surfaces
+    // later through `AppState::init`'s own read.
+    let verbose = super::settings::read_settings(paths)
+        .is_ok_and(|settings| settings.diagnostics.verbose_logging);
+    let spec = spec_for(if verbose { VERBOSE_LEVEL } else { NORMAL_LEVEL });
+
+    let error = match start_to_file(paths, &spec) {
         Ok(handle) => {
             let _ = HANDLE.set(handle);
             return;
@@ -95,7 +147,7 @@ pub fn install(paths: &Paths) {
         Err(e) => super::describe(&e),
     };
 
-    if let Ok(handle) = base_logger().start() {
+    if let Ok(handle) = base_logger(&spec).start() {
         let _ = HANDLE.set(handle);
     }
     let _ = FILE_SINK_ERROR.set(error);
@@ -108,23 +160,22 @@ pub fn install(paths: &Paths) {
 }
 
 /// The spec, the levels and the stderr half — everything the fallback keeps.
-fn base_logger() -> Logger {
+fn base_logger(spec: &str) -> Logger {
     // `try_with_env_or_str` falls back to the given spec when `RUST_LOG` is
-    // malformed, so the only way this errors is a broken `DEFAULT_LOG_SPEC` —
-    // which `tests::the_default_spec_parses_into_the_directives_it_spells`
-    // pins. An unparseable literal then degrades to the `warn` floor that
-    // spec's first directive sets, minus the app's own narrative, rather than
-    // costing the process its logger. Not `LogSpecification::default()`, which
-    // is `off()`.
-    Logger::try_with_env_or_str(DEFAULT_LOG_SPEC)
+    // malformed, so the only way this errors is a broken [`spec_for`] — which
+    // `tests::both_specs_parse_into_the_directives_they_spell` pins. An
+    // unparseable spec then degrades to the `warn` floor its first directive
+    // sets, minus the app's own narrative, rather than costing the process its
+    // logger. Not `LogSpecification::default()`, which is `off()`.
+    Logger::try_with_env_or_str(spec)
         .unwrap_or_else(|_| Logger::with(LogSpecification::warn()))
         // Adaptive, not plain coloured: env_logger's `auto-color` suppressed
         // ANSI off a tty and piping the app somewhere shouldn't regress.
         .adaptive_format_for_stderr(AdaptiveFormat::Default)
 }
 
-fn start_to_file(paths: &Paths) -> Result<LoggerHandle, FlexiLoggerError> {
-    base_logger()
+fn start_to_file(paths: &Paths, spec: &str) -> Result<LoggerHandle, FlexiLoggerError> {
+    base_logger(spec)
         .log_to_file(
             FileSpec::default()
                 .directory(&paths.logs_dir)
@@ -153,6 +204,30 @@ fn start_to_file(paths: &Paths) -> Result<LoggerHandle, FlexiLoggerError> {
 /// Why there are no log files, or `None` when the file sink is running.
 pub fn unavailable_reason() -> Option<&'static str> {
     FILE_SINK_ERROR.get().map(String::as_str)
+}
+
+/// Swap the running level between [`NORMAL_LEVEL`] and [`VERBOSE_LEVEL`],
+/// applied to the live sinks so no relaunch is needed.
+///
+/// **`RUST_LOG` wins and this declines**, logging rather than skipping in
+/// silence: it is the developer escape hatch, and a GUI switch fighting it would
+/// make the variable mean nothing from the moment the user opened Settings.
+pub fn set_verbose(on: bool) {
+    if ENV_SPEC_WINS.get().copied().unwrap_or(false) {
+        log::info!("verbose logging: RUST_LOG is set and takes precedence; leaving the spec alone");
+        return;
+    }
+    let Some(handle) = HANDLE.get() else { return };
+    let spec = spec_for(if on { VERBOSE_LEVEL } else { NORMAL_LEVEL });
+    match LogSpecification::parse(&spec) {
+        Ok(parsed) => {
+            handle.set_new_spec(parsed);
+            log::info!("verbose logging {}", if on { "enabled" } else { "disabled" });
+        }
+        // Unreachable while `both_specs_parse_into_the_directives_they_spell`
+        // passes; keeping the current level beats dropping to the floor.
+        Err(e) => log::warn!("verbose logging: could not parse the spec '{spec}': {e}"),
+    }
 }
 
 /// Flush before an exit path that runs no destructors. A no-op under

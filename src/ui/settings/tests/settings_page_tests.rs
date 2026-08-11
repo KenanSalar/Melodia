@@ -1,4 +1,4 @@
-use super::chunk_indices;
+use super::{SettingsTab, chunk_indices};
 
 /// The tab count Slint declares today. Kept local so a change to
 /// `SettingsPage.tab-count` doesn't silently rewrite what these assert.
@@ -117,6 +117,15 @@ fn tab_count_matches_the_tabs_slint_declares() {
         labels.matches("@tr(\"").count(),
         count,
         "every tab label must stay an inline `@tr(\"…\")` literal"
+    );
+
+    // `tab_from_index` ends in a default arm, so a sixth tab without a variant
+    // logs as `Settings/Library` — right-looking, and wrong on the one tab
+    // nobody added a name for.
+    assert_eq!(
+        SettingsTab::ALL.len(),
+        count,
+        "`SettingsTab` needs one variant per tab the page declares"
     );
     assert_eq!(
         icons.unwrap_or_default().split(',').count(),

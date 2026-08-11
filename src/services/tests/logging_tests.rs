@@ -5,43 +5,60 @@ use log::LevelFilter;
 
 use crate::services::describe;
 
-use super::{DEFAULT_LOG_SPEC, newest_first};
+use super::{NORMAL_LEVEL, VERBOSE_LEVEL, newest_first, spec_for};
 
 /// The spec is a string, so a typo in a target name parses cleanly and matches
 /// nothing — the app keeps logging and only the directive silently stops
 /// applying. `melodia` vs `Melodia` is the live example: they are the lib and
 /// bin targets, one character apart, and dropping either loses half the
 /// narrative.
+///
+/// Both levels, since the switch reaches the second at runtime and nothing else
+/// would notice it malformed. The mutation that matters is a verbose spec built
+/// without `SPEC_TAIL` — that unmutes `layer3`, a warning per decoded frame.
 #[test]
-fn the_default_spec_parses_into_the_directives_it_spells() {
-    let parsed = LogSpecification::parse(DEFAULT_LOG_SPEC);
-    assert!(parsed.is_ok(), "DEFAULT_LOG_SPEC does not parse: {DEFAULT_LOG_SPEC}");
-    let Ok(spec) = parsed else { return };
+fn both_specs_parse_into_the_directives_they_spell() {
+    for (level, expected) in [
+        (NORMAL_LEVEL, LevelFilter::Info),
+        (VERBOSE_LEVEL, LevelFilter::Debug),
+    ] {
+        let spec_str = spec_for(level);
+        let parsed = LogSpecification::parse(&spec_str);
+        assert!(parsed.is_ok(), "the {level} spec does not parse: {spec_str}");
+        let Ok(spec) = parsed else { continue };
 
-    let level_of = |module: Option<&str>| {
-        spec.module_filters()
-            .iter()
-            .find(|filter| filter.module_name.as_deref() == module)
-            .map(|filter| filter.level_filter)
-    };
+        let level_of = |module: Option<&str>| {
+            spec.module_filters()
+                .iter()
+                .find(|filter| filter.module_name.as_deref() == module)
+                .map(|filter| filter.level_filter)
+        };
 
-    assert_eq!(level_of(None), Some(LevelFilter::Warn), "dependency floor");
-    assert_eq!(level_of(Some("melodia")), Some(LevelFilter::Info), "lib target");
-    assert_eq!(level_of(Some("Melodia")), Some(LevelFilter::Info), "bin target");
-    assert_eq!(
-        level_of(Some("symphonia_bundle_mp3::layer3")),
-        Some(LevelFilter::Error),
-        "the per-frame bit-reservoir warning would be back, at a frame a line"
-    );
-    // The least observable of the four: it only fires on Wayland under a desktop
-    // whose button-layout answer sctk-adwaita can't parse, once per launch, for a
-    // titlebar we ask winit not to draw. Nothing on this machine reports it going
-    // missing, which is exactly why it is asserted here.
-    assert_eq!(
-        level_of(Some("sctk_adwaita::buttons")),
-        Some(LevelFilter::Error),
-        "the button-layout parse warning would be back, naming controls never drawn"
-    );
+        assert_eq!(level_of(None), Some(LevelFilter::Warn), "{level}: dependency floor");
+        assert_eq!(level_of(Some("melodia")), Some(expected), "{level}: lib target");
+        assert_eq!(level_of(Some("Melodia")), Some(expected), "{level}: bin target");
+        assert_eq!(
+            level_of(Some("symphonia_bundle_mp3::layer3")),
+            Some(LevelFilter::Error),
+            "{level}: the per-frame bit-reservoir warning would be back, at a frame a line"
+        );
+        // The least observable of the four: it only fires on Wayland under a desktop
+        // whose button-layout answer sctk-adwaita can't parse, once per launch, for a
+        // titlebar we ask winit not to draw. Nothing on this machine reports it going
+        // missing, which is exactly why it is asserted here.
+        assert_eq!(
+            level_of(Some("sctk_adwaita::buttons")),
+            Some(LevelFilter::Error),
+            "{level}: the button-layout parse warning would be back, naming controls never drawn"
+        );
+    }
+}
+
+/// The two levels have to actually differ, or the switch is a no-op that still
+/// logs "verbose logging enabled" and persists a flag.
+#[test]
+fn the_verbose_level_is_louder_than_the_normal_one() {
+    assert_ne!(NORMAL_LEVEL, VERBOSE_LEVEL);
 }
 
 /// `services::diagnostics` spends a byte budget down this list, so the order is

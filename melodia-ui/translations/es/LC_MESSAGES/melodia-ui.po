@@ -980,6 +980,14 @@ msgstr ""
 msgid "Save…"
 msgstr "Guardar…"
 
+msgid "Verbose logging"
+msgstr "Registro detallado"
+
+msgid "Record extra detail. Turn this on, reproduce the problem, then save a report."
+msgstr ""
+"Registra detalles adicionales. Actívalo, reproduce el problema y luego "
+"guarda un informe."
+
 msgid "Diagnostics report saved"
 msgstr "Informe de diagnóstico guardado"
 
@@ -997,6 +1005,15 @@ msgid "A crash report was written. Open the log folder to find it."
 msgstr ""
 "Se escribió un informe de fallo. Abre la carpeta de registros para "
 "encontrarlo."
+
+# Pushed when the audio output device goes away mid-session.
+msgid "Audio device disconnected"
+msgstr "Dispositivo de audio desconectado"
+
+msgid "Playback won't be audible until you reconnect it and restart Melodia."
+msgstr ""
+"No se oirá la reproducción hasta que lo vuelvas a conectar y reinicies "
+"Melodia."
 
 msgid "Close to Tray"
 msgstr "Cerrar en la bandeja del sistema"

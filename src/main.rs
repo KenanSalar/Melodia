@@ -404,6 +404,13 @@ fn main() -> AppResult<()> {
     // 9b. Toast on watcher-overflow rescan (kernel queue dropped events).
     boot::ui_setup::install_rescan_notice_subscriber(&state, weak.clone(), notifications.clone())?;
 
+    // 9b-ii. Toast when the audio output device goes away mid-session.
+    boot::ui_setup::install_audio_device_lost_subscriber(
+        &state,
+        weak.clone(),
+        notifications.clone(),
+    )?;
+
     // 9c. Surface backend failures (playback decode errors, failed scans /
     // imports / saves) pushed through the `services::toast` bridge as toasts.
     boot::ui_setup::install_toast_bridge(weak.clone(), notifications.clone())?;

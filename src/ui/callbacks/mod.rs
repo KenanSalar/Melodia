@@ -30,7 +30,7 @@ use crate::services::settings::{SortDir, ViewSort};
 use crate::state::AppState;
 use crate::{AppWindow, Nav, Player};
 
-use macros::{spawn_blocking_logged, spawn_logged_sync, wire_pb, wire_sync, wire_sync_pb};
+use macros::{spawn_logged_sync, wire_pb, wire_sync, wire_sync_pb};
 
 pub use cross_tab_nav::wire_cross_tab_nav;
 pub use library_settings::wire_library_settings;
@@ -235,9 +235,12 @@ pub fn wire_all(ui: &AppWindow, state: &AppState) {
                 "set_playback_speed",
                 library::playback::player_set_playback_speed(&s_apply.playback_ctx(), speed)
             );
-            let s_disk = s.clone();
-            spawn_blocking_logged!(s, "persist playback_speed",
-                library::settings::set_playback_speed(&s_disk, speed));
+            // `persist_blocking`, not the macro beside it: this writes
+            // `settings.json`, and the macro is the `views.json` shape. Its
+            // label already read as this one's, which was the tell.
+            s.persist_blocking("persist playback_speed", move |st| {
+                library::settings::set_playback_speed(st, speed)
+            });
         });
     }
 

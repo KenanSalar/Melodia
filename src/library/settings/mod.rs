@@ -10,6 +10,7 @@
 //!   visibility / widths, sort, browse path, nav index, detail ids,
 //!   section-collapse toggles — plus the `snap_to_preset` helper.
 //! - [`folders`]: library folder CRUD, watcher toggle, and `scan_folder*`.
+//! - [`diagnostics`]: the Verbose Logging switch.
 //!
 //! `settings.json` setters funnel through
 //! [`crate::services::settings::mutate_settings`]; the per-view-state
@@ -20,6 +21,7 @@
 
 pub mod appearance;
 pub mod crossfade;
+pub mod diagnostics;
 pub mod discord;
 pub mod equalizer;
 pub mod folders;
@@ -38,6 +40,7 @@ pub use crossfade::{
     set_crossfade_duration_ms, set_crossfade_enabled, set_crossfade_fade_on_pause,
     set_crossfade_manual, set_crossfade_skip_same_album,
 };
+pub use diagnostics::set_verbose_logging;
 pub use discord::{
     set_discord_rpc_artwork, set_discord_rpc_enabled, set_discord_rpc_hide_when_paused,
 };

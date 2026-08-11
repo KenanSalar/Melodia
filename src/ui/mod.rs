@@ -49,6 +49,7 @@ pub mod track_sort;
 pub mod tracks;
 pub mod util;
 pub mod view_ctx;
+pub mod view_tag;
 pub mod window_chrome;
 
 // Source pins for shared components with no Rust module of their own — the
