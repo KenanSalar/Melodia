@@ -439,3 +439,45 @@ fn a_grid_pick_rewinds_the_count_it_could_not_answer() {
          answered on every tab either way"
     );
 }
+
+/// And the apply that answers that rewind writes its counts **above** the
+/// signature guard, or the sentinel above is permanent.
+///
+/// The pick stamps a signature over the cache its skipped tick left in place and
+/// only then rewinds; the fetch it spawned lands on that same signature whenever
+/// the content hasn't moved — an empty grid on a library with no favourites, or a
+/// `stats_changed` tick for a track this query doesn't rank — so a count written
+/// past the guard is one that never arrives. `-1` misses `> 0` as well as `== 0`,
+/// so what strands is not only the empty state: `favorites-view.slint` gates the
+/// Most Played Shuffle pill and the Artists sort row the other way, and both
+/// vanish over a grid that is full.
+///
+/// The mutation to check is moving either write back under the guard, where it
+/// reads as belonging with the model write beside it and compiles.
+#[test]
+fn the_grid_counts_are_written_before_the_signature_can_skip_them() {
+    const GRIDS_APPLY: &str = include_str!("../grids/apply.rs");
+
+    let write = GRIDS_APPLY
+        .split_once("fn write_filtered_grids(")
+        .and_then(|(_, rest)| rest.split_once("\n}"))
+        .map(|(body, _)| body)
+        .unwrap_or_default();
+
+    assert!(
+        write.contains("last_grid_signature"),
+        "`write_filtered_grids` must still take the signature guard — this pin is about where \
+         the counts sit relative to it, not about retiring it"
+    );
+    let before_guard = write
+        .split_once("last_grid_signature")
+        .map_or("", |(head, _)| head);
+    for count in ["set_most_played_count(", "set_artist_count("] {
+        assert!(
+            before_guard.contains(count),
+            "{count} must be written above the signature guard: the guard is what a tab pick's \
+             own fetch lands on when the content hasn't moved, and it would leave \
+             `UNFETCHED_COUNT` standing with no answer coming"
+        );
+    }
+}

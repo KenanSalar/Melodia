@@ -439,7 +439,8 @@ impl TrackListCache {
         let Some(at) = guard.sort.iter().position(|k| k.id == id) else {
             return;
         };
-        edit(&mut Arc::make_mut(&mut Arc::make_mut(&mut *guard).rows)[at]);
+        let data = Arc::make_mut(&mut *guard);
+        edit(&mut Arc::make_mut(&mut data.rows)[at]);
     }
 }
 

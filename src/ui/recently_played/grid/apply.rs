@@ -110,6 +110,24 @@ pub(super) fn build_filtered_grid(rp_ui: &RecentlyPlayedUi) -> PreparedGrid {
 /// the pick then owes is the sentinel**, when the cache it recomputed against is
 /// one a skipped tick left empty — `callbacks::recently_played::subviews` argues it.
 ///
+/// **And what *this* owes the sentinel is being written above the signature
+/// guard.** The pick stamps a signature against that empty cache and then rewinds
+/// the count, so when the fetch it spawned returns the same content — nothing
+/// played yet, or a tick that didn't move this ranking — the guard fires and the
+/// sentinel is left with no answer coming. `-1` misses `> 0` as well as `== 0`,
+/// so that strands the Shuffle pill as well as the empty state. And when the
+/// guard fires the model already holds exactly `prepared`, so the count written
+/// above it is by construction the one the model shows.
+///
+/// **Hoisting it past the guard costs nothing, rather than costing a little.**
+/// The guard is there to skip a `write_grid` `set_vec` reset that tears down
+/// every mounted card, and the tempting reading is that a scalar write is merely
+/// a cheaper thing to have stopped skipping — which invites weighing it again
+/// later. It isn't: `Property::set` is value-compared
+/// (`i-slint-core`'s `properties.rs`, `*self.value.get() != t && …`), so on the
+/// path the guard would have taken the count is unchanged, nothing is stored and
+/// no dependent is marked dirty. The write is free exactly when it is redundant.
+///
 /// Three things short-circuit it. A hidden section is never written to — the
 /// leave teardown emptied this model deliberately, and refilling it behind that
 /// holds a card row per track for a view nobody can see. An apply carrying
@@ -121,6 +139,7 @@ pub(super) fn build_filtered_grid(rp_ui: &RecentlyPlayedUi) -> PreparedGrid {
 /// dropped: `write_grid` is a `set_vec` reset, so it tears down and rebuilds
 /// every mounted card, and a `stats_changed` tick reaches both tabs while only
 /// this one is ranked by play count.
+///
 /// Takes `prepared` **by value**, so the rows move into the per-row models
 /// rather than being cloned into them. The three early returns below drop them
 /// instead, which is what happened to them anyway.
@@ -136,12 +155,16 @@ fn write_filtered_grid(ui: &AppWindow, rp_ui: &RecentlyPlayedUi, prepared: Prepa
         return;
     }
 
+    // Above the signature guard: a pick's `UNFETCHED_COUNT` rewind has no other
+    // answer coming, and the fetch that would give it one lands on the guard
+    // whenever the content hasn't moved. See the doc comment.
+    g.set_most_played_count(len_as_i32(prepared.most_played_count));
+
     let signature = grid_signature(tab, columns, mounted_content(tab, &prepared));
     if rp_ui.state().last_grid_signature.lock().replace(signature) == Some(signature) {
         return;
     }
 
-    g.set_most_played_count(len_as_i32(prepared.most_played_count));
     // Covers a tab pick as well as a count change, because the signature above
     // hashes the tab — so anything that moves what the band should say has
     // already got past that early return.

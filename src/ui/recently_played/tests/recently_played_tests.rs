@@ -311,6 +311,40 @@ fn the_grid_pick_rewinds_the_count_it_could_not_answer() {
     );
 }
 
+/// And the apply that answers that rewind writes its count **above** the signature guard, or
+/// the sentinel above never comes back.
+///
+/// The pick stamps a signature over the empty cache and only then rewinds; the fetch it
+/// spawned lands on that same signature whenever the content hasn't moved — nothing played
+/// yet, or a `library_changed` tick that doesn't touch this ranking — so a count written past
+/// the guard is one that never arrives. `-1` misses `> 0` as well as `== 0`, so that strands
+/// the Shuffle pill as well as the empty state, and it holds until the next content change or
+/// a tab round-trip.
+///
+/// The mutation to check is moving the write back under the guard, where it reads as belonging
+/// with the model write beside it and compiles.
+#[test]
+fn the_grid_count_is_written_before_the_signature_can_skip_it() {
+    const APPLY: &str = include_str!("../grid/apply.rs");
+
+    let write = block_body(APPLY, "fn write_filtered_grid(", "\n}").unwrap_or_default();
+    assert!(
+        write.contains("last_grid_signature"),
+        "`write_filtered_grid` must still take the signature guard — this pin is about where \
+         the count sits relative to it, not about retiring it"
+    );
+
+    let before_guard = write
+        .split_once("last_grid_signature")
+        .map_or("", |(head, _)| head);
+    assert!(
+        before_guard.contains("set_most_played_count("),
+        "the count must be written above the signature guard: the guard is what the pick's own \
+         fetch lands on when the content hasn't moved, and it would leave `UNFETCHED_COUNT` \
+         standing with no answer coming"
+    );
+}
+
 /// The flag is armed wherever the cache it guards is emptied, and disarmed wherever it is
 /// filled — both stated locally rather than left to the caller that happens to do it today.
 ///
