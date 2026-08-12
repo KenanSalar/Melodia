@@ -1036,7 +1036,8 @@ msgstr "Disponible solo mientras el icono de la bandeja del sistema esté activo
 # ---- About -------------------------------------------------------------------
 
 # Settings → About section (`ui/views/settings/about-section.slint`): app
-# name + version, authorship, source-repository link, and license.
+# name + version, authorship, a support link, the source-repository link, and
+# the license.
 msgid "About"
 msgstr "Acerca de"
 
@@ -1048,6 +1049,29 @@ msgstr "Versión {}"
 # passed verbatim and never translated.
 msgid "Made by {}"
 msgstr "Creado por {}"
+
+# Translators: the Ko-fi row — its label, its button and its blurb. "Ko-fi" is a
+# brand and stays verbatim wherever it appears. "Support" throughout this block
+# means backing the project financially — never technical support.
+msgid "Support Melodia"
+msgstr "Apoyar a Melodia"
+
+msgid "Support me on Ko-fi"
+msgstr "Apóyame en Ko-fi"
+
+msgid "Melodia is free and open source. Support helps keep it going."
+msgstr "Melodia es gratuito y de código abierto. El apoyo ayuda a que siga adelante."
+
+# The one-time support toast (`src/ui/support.rs`), shown on one early launch and
+# never again. Its action button opens the Ko-fi page.
+msgid "Enjoying Melodia?"
+msgstr "¿Te gusta Melodia?"
+
+msgid "It's free and open source, built in my spare time. If it's useful to you, you can support me. You'll only see this once."
+msgstr "Es gratuito y de código abierto, hecho en mi tiempo libre. Si te resulta útil, puedes apoyarme. Solo verás esto una vez."
+
+msgid "Support"
+msgstr "Apoyar"
 
 msgid "License"
 msgstr "Licencia"

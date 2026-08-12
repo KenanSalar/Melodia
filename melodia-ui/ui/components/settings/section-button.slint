@@ -6,6 +6,12 @@ import { MaterialIcon } from "../material-icon.slint";
 export component SectionButton inherits Rectangle {
     in property <string> label;
     in property <string> icon;            // empty = no leading icon
+    // A leading *image* instead of a glyph, for a mark the icon font doesn't have and
+    // shouldn't: a third-party logo is multi-colour and must not be recoloured, which is
+    // exactly what a `MaterialIcon` would do. Slint has no empty-`image` literal, so the
+    // branch below gates on the source size the way `ArtworkImage` does — and on `icon`
+    // being empty, so "instead of" is enforced rather than left to the call site.
+    in property <image>  leading-image;
     in property <bool>   button-enabled: true;
     in property <bool>   primary: true;   // false = outline / "text" variant
     // Only meaningful on the filled variant, where it swaps both the fill and
@@ -14,12 +20,15 @@ export component SectionButton inherits Rectangle {
     // `PillButton`'s `danger` is a different treatment entirely — neutral hover
     // fill, tinted label — so don't read the two as one pattern.
     in property <bool>   destructive;
+    // Defaulted to the stadium every existing site draws. Softening it is for a button
+    // standing in for a third-party badge, where the brand's own shape is the reference.
+    in property <length> corner-radius: root.height / 2;
 
     callback clicked();
 
     height: 32px;
     horizontal-stretch: 0;
-    border-radius: self.height / 2;
+    border-radius: root.corner-radius;
     background: !root.button-enabled
         ? Theme.surface1
         : (root.primary
@@ -48,6 +57,19 @@ export component SectionButton inherits Rectangle {
                 icon-color: root.primary
                     ? (root.destructive ? Theme.danger-text : Theme.accent-text)
                     : Theme.text;
+            }
+        }
+
+        if root.icon == "" && root.leading-image.width > 0 && root.leading-image.height > 0: VerticalLayout {
+            alignment: center;
+            Image {
+                source: root.leading-image;
+                // Height matches the glyph branch; the width follows the source aspect,
+                // since `contain` inside a square box letterboxes a wide mark and paints
+                // it smaller than the icon beside it would be.
+                height: 18px;
+                width: 18px * root.leading-image.width / root.leading-image.height;
+                image-fit: contain;
             }
         }
 

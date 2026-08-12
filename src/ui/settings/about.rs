@@ -6,8 +6,8 @@
 //! the link tracks the canonical repo with no hardcoded magic string.
 //!
 //! The launch itself goes through [`crate::ui::launcher::open_target`], which
-//! owns the hop off the UI thread — `open::that` blocks until the child
-//! launcher is spawned.
+//! owns the hop off the UI thread — `open::that_detached` still forks and execs
+//! a child launcher, which is not something to do on the event loop.
 //!
 //! The version shown in the About card is *not* set here — it rides on
 //! `MelodiaUpdater.current-version`, seeded by [`super::updater_settings`].

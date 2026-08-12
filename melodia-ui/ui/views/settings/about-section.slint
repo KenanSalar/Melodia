@@ -1,4 +1,5 @@
 import { Settings } from "../../settings.slint";
+import { Theme } from "../../theme.slint";
 import { SettingsPage } from "../../globals/settings-page.slint";
 import { MelodiaUpdater } from "../../globals/updater.slint";
 import { SectionCard } from "../../components/settings/section-card.slint";
@@ -6,14 +7,15 @@ import { SectionDivider } from "../../components/settings/section-divider.slint"
 import { SettingRow } from "../../components/settings/setting-row.slint";
 import { SectionButton } from "../../components/settings/section-button.slint";
 
-// The conventional About pane: identity, authorship, a repository link and the
-// license. Unlike Updates, no backend state gates a row — only the search
-// filter can hide one.
+// The conventional About pane: identity, authorship, a support link, a repository
+// link and the license. Unlike Updates, no backend state gates a row — only the
+// search filter can hide one.
 //
 // The version reads `MelodiaUpdater.current-version` rather than its own copy,
-// so About and Updates can't disagree; the link goes through `src/ui/settings/about.rs`
-// to the same launcher "Open Containing Folder" uses. Search visibility follows
-// `language-section.slint`.
+// so About and Updates can't disagree. Both links reach the same launcher "Open
+// Containing Folder" uses — the repository through `src/ui/settings/about.rs`, Ko-fi
+// through `src/ui/support.rs`, which owns it because the support toast fires the same
+// callback. Search visibility follows `language-section.slint`.
 export component AboutSection inherits Rectangle {
     background: transparent;
     horizontal-stretch: 1;
@@ -27,16 +29,18 @@ export component AboutSection inherits Rectangle {
                                         SettingsPage.search-query);
     }
 
-    // The brand, the SPDX id and "GitHub" stay untranslated but still belong in
-    // the haystack — they're what a user would type.
+    // The brands, the SPDX id and "GitHub" / "Ko-fi" stay untranslated but still
+    // belong in the haystack — they're what a user would type.
     property <bool> show-app:
         row-visible("Melodia", @tr("Version {}", MelodiaUpdater.current-version));
     property <bool> show-author:
         row-visible(@tr("Made by {}", "Kenan Salar"), "GitHub");
+    property <bool> show-support:
+        row-visible(@tr("Support Melodia"), "Ko-fi");
     property <bool> show-license:
         row-visible(@tr("License"), "AGPL-3.0-or-later");
 
-    out property <bool> has-matches: show-app || show-author || show-license;
+    out property <bool> has-matches: show-app || show-author || show-support || show-license;
 
     // Wrapper so the root's preferred-height tracks the card's natural height —
     // see `language-section.slint`.
@@ -63,7 +67,26 @@ export component AboutSection inherits Rectangle {
                 }
             }
 
-            if (root.show-app || root.show-author) && root.show-license: SectionDivider {}
+            // The one filled button in the card, and deliberately so — it asks for
+            // something rather than going somewhere. The mark keeps its own colours: it
+            // is Ko-fi's, and it reads on any accent because it carries both ends — the
+            // dark outline over a light one, the white cup over a dark one.
+            if (root.show-app || root.show-author) && root.show-support: SectionDivider {}
+            if root.show-support: SettingRow {
+                icon: "favorite";
+                label: @tr("Support Melodia");
+                description: @tr("Melodia is free and open source. Support helps keep it going.");
+                SectionButton {
+                    label: @tr("Support me on Ko-fi");
+                    icon: "";
+                    leading-image: @image-url("../../assets/icons/kofi-symbol.svg");
+                    corner-radius: Theme.radius-md;
+                    primary: true;
+                    clicked => { Settings.open-kofi(); }
+                }
+            }
+
+            if (root.show-app || root.show-author || root.show-support) && root.show-license: SectionDivider {}
             if root.show-license: SettingRow {
                 icon: "balance";
                 label: @tr("License");

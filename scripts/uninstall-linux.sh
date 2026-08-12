@@ -26,9 +26,21 @@ remove() {
   fi
 }
 
+# `remove` can't take the third-party licence dir — its contents are whatever
+# `licenses/` held at package time, so removing them by name here would drift
+# the moment a fourth file lands there.
+remove_dir() {
+  if [[ -d "$1" ]]; then
+    rm -rf "$1"
+    echo "  removed $1"
+    removed=$((removed + 1))
+  fi
+}
+
 echo "==> uninstalling Melodia from $INSTALL_DIR"
 remove "$INSTALL_DIR/Melodia"
 remove "$INSTALL_DIR/LICENSE"
+remove_dir "$INSTALL_DIR/licenses"
 # Try to rmdir the install dir; non-fatal if user data is mixed in.
 [[ -d "$INSTALL_DIR" ]] && rmdir --ignore-fail-on-non-empty "$INSTALL_DIR" 2>/dev/null || true
 

@@ -42,6 +42,7 @@ pub mod settings;
 pub mod settings_bind;
 pub mod shell;
 pub mod sleep_timer;
+pub mod support;
 pub mod tab_bar;
 pub mod track_list_cache;
 pub mod track_list_view;

@@ -430,6 +430,14 @@ all three. Coverage is a separate manual run
 (**Actions → Deploy Coverage → Run workflow**) published to GitHub Pages at
 [kenansalar.github.io/Melodia](https://kenansalar.github.io/Melodia/).
 
+## Support
+
+Melodia is free, open source and built in my spare time. If it's useful to you,
+you can support me at [ko-fi.com/kenansalar](https://ko-fi.com/kenansalar).
+The same link is in the app, at **Settings → About**.
+
+Nothing is gated behind it.
+
 ## License
 
 Copyright (C) 2026 Kenan Salar
@@ -444,6 +452,10 @@ WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
 PARTICULAR PURPOSE. See the [GNU Affero General Public License](LICENSE) for
 more details.
 
+The AGPL covers Melodia itself. Two fonts and a patched winit fork are compiled
+into the binary under their own terms — see [`licenses/`](licenses/), which
+every package ships alongside this file.
+
 ## Acknowledgments
 
 Built on the work of the [Slint](https://slint.dev/),
@@ -453,3 +465,13 @@ Built on the work of the [Slint](https://slint.dev/),
 [Catppuccin](https://catppuccin.com/) palette, and
 [Material Foundation](https://m3.material.io/)'s color utilities — along with
 the many other crates listed in `Cargo.toml`.
+
+Melodia's interface is set in
+[Vazirmatn](https://github.com/rastikerdar/vazirmatn) (SIL Open Font License
+1.1) and draws its icons from
+[Material Symbols Rounded](https://github.com/google/material-design-icons)
+(Apache License 2.0). Both are modified — Vazirmatn's line metrics are
+repatched for the renderer, and the icon faces are subset to the glyphs the app
+uses — as is the vendored [winit](https://github.com/rust-windowing/winit) fork
+(Apache License 2.0) that gives Wayland its drag-and-drop events. Every license,
+and the details of what changed in each, ship in [`licenses/`](licenses/).

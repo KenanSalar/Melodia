@@ -79,6 +79,9 @@ export global Notifications {
         } else if (kind == "crash-report") {
             Settings.open-log-folder();
             Notifications.dismiss(id);
+        } else if (kind == "support-melodia") {
+            Settings.open-kofi();
+            Notifications.dismiss(id);
         }
     }
 }

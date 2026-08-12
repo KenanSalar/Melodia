@@ -35,6 +35,15 @@ pub(crate) const MIN_SLINT_SOURCES: usize = 100;
 /// rather than an edit to a known one.
 pub(crate) const SRC_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/src");
 
+/// The bundled font faces, which the Slint build compiles into the binary — so
+/// every artifact this repo ships redistributes them and owes their licence text.
+pub(crate) const FONTS_DIR: &str =
+    concat!(env!("CARGO_MANIFEST_DIR"), "/melodia-ui/ui/assets/fonts");
+
+/// The repo root, for the pins that reach packaging — which lives beside `src/`
+/// rather than under it.
+pub(crate) const REPO_ROOT: &str = env!("CARGO_MANIFEST_DIR");
+
 /// The Rust UI tree, for the pins that ask the same question of every slice's
 /// wiring rather than of one subtree.
 ///
@@ -169,6 +178,37 @@ pub(crate) fn slint_sources() -> (Vec<PathBuf>, Vec<PathBuf>) {
     sources_under(UI_DIR, "slint")
 }
 
+/// Every shipped `.ttf` under [`FONTS_DIR`], as paths.
+///
+/// Paths rather than contents, these being the one corpus in the tree that isn't
+/// text — the licence pin keys on each face's repo-relative path, and the walk
+/// recurses, so a face added under a new subdirectory is found without an edit
+/// here.
+///
+/// `originals/` is the one subdirectory held back, and it is the counterexample
+/// to the walk's own premise. Slint embeds a face because a `.slint` file
+/// `import`s it, not because it sits under this root; that directory is
+/// gitignored scratch space for the pristine upstream Vazirmatn
+/// `scripts/patch_vazirmatn.py` reads, so its faces are redistributed by neither
+/// the binary nor the repo. Walking them made the documented re-patch workflow
+/// fail a licence pin on a developer's own machine.
+pub(crate) fn font_sources() -> (Vec<PathBuf>, Vec<PathBuf>) {
+    let (mut fonts, unreadable) = sources_under(FONTS_DIR, "ttf");
+    fonts.retain(|path| !path.components().any(|part| part.as_os_str() == "originals"));
+    (fonts, unreadable)
+}
+
+/// `path` relative to `root`, forward-slashed so a pin can compare it against a
+/// literal on either platform.
+///
+/// A path that doesn't sit under `root` comes back whole rather than erroring —
+/// every caller is walking a tree it just rooted at `root`, so the fallback is
+/// unreachable, and reporting the absolute path is more use than a panic if it
+/// ever isn't.
+pub(crate) fn rel_path(root: &str, path: &Path) -> String {
+    path.strip_prefix(root).unwrap_or(path).display().to_string().replace('\\', "/")
+}
+
 /// Every source under `root` with extension `ext`, comment-stripped and paired
 /// with its `root`-relative path, forward-slashed so a pin can compare against a
 /// literal on either platform.
@@ -188,12 +228,7 @@ pub(crate) fn stripped_sources(root: &str, ext: &str, floor: usize) -> Vec<(Stri
 
     let mut out = Vec::with_capacity(paths.len());
     for path in &paths {
-        let rel = path
-            .strip_prefix(root)
-            .unwrap_or(path)
-            .display()
-            .to_string()
-            .replace('\\', "/");
+        let rel = rel_path(root, path);
         match fs::read_to_string(path) {
             Ok(src) => out.push((rel, strip_line_comments(&src))),
             Err(_) => unreadable.push(path.clone()),

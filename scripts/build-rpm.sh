@@ -11,10 +11,11 @@
 #   sudo dnf install ~/rpmbuild/RPMS/x86_64/melodia-*.rpm
 #
 # The RPM packages the prebuilt binary + a .desktop file + AppStream
-# MetaInfo + the SVG logo + the project LICENSE + the polkit update
-# helper/policy. Per-user data (queue.json, settings.json,
-# melodia.db, artwork/) stays at `$XDG_DATA_HOME/Melodia/` and is shared
-# across installs — install + uninstall doesn't touch user data.
+# MetaInfo + the SVG logo + the project LICENSE + the third-party
+# license texts + the polkit update helper/policy. Per-user data
+# (queue.json, settings.json, melodia.db, artwork/) stays at
+# `$XDG_DATA_HOME/Melodia/` and is shared across installs — install +
+# uninstall doesn't touch user data.
 
 set -euo pipefail
 
@@ -55,7 +56,7 @@ trap 'rm -rf "$STAGE"' EXIT
 PKG_DIR="$STAGE/melodia-$VERSION"
 mkdir -p "$PKG_DIR"
 
-# Stage: binary + icon + desktop file + license + polkit helper/policy
+# Stage: binary + icon + desktop file + licenses + polkit helper/policy
 cp "$BINARY" "$PKG_DIR/melodia"
 chmod 0755 "$PKG_DIR/melodia"
 # With-background SVG for the OS launcher / taskbar / KRunner icon —
@@ -63,6 +64,18 @@ chmod 0755 "$PKG_DIR/melodia"
 # titlebar where the window mantle provides the disc behind the glyph.
 cp "$REPO_ROOT/assets/icons/logo-with-background.svg" "$PKG_DIR/melodia.svg"
 cp "$REPO_ROOT/LICENSE" "$PKG_DIR/LICENSE"
+# The two bundled fonts and the vendored winit fork are all compiled
+# into the binary, so this package redistributes them and owes their
+# license text — Apache-2.0 §4(a) outright, and SIL's OFL FAQ
+# recommends it for a bundled font even though the name-table metadata
+# would technically do. `%license` below globs this directory and
+# flattens the paths, so its contents land beside LICENSE in
+# %{_licensedir}/melodia/ rather than in a `licenses/` subdirectory the
+# way the DEB and AppImage lay them out. That still reads as
+# licenses/ATTRIBUTION.txt describes it — "the full license text for
+# each sits beside this file" — which is the only placement claim it
+# makes, and the only one worth keeping true across five formats.
+cp -r "$REPO_ROOT/licenses" "$PKG_DIR/licenses"
 
 # Polkit helper + policy for branded auth prompts on in-app updater.
 # The helper argv-dispatches to dnf5/dnf/apt/apt-get; the policy
@@ -168,7 +181,7 @@ if [ \$1 -eq 0 ]; then
 fi
 
 %files
-%license LICENSE
+%license LICENSE licenses/*
 %{_bindir}/melodia
 %{_datadir}/applications/com.github.kenansalar.melodia.desktop
 %{_datadir}/metainfo/com.github.kenansalar.melodia.metainfo.xml

@@ -315,6 +315,7 @@ jobs:
           mkdir -p staging/melodia
           cp target/${{ matrix.target }}/release/Melodia staging/melodia/Melodia
           cp LICENSE                                     staging/melodia/
+          cp -r licenses                                 staging/melodia/licenses
           cp assets/icons/logo-with-background.svg       staging/melodia/melodia.svg
           cp scripts/Melodia.desktop                     staging/melodia/com.github.kenansalar.melodia.desktop
           cp scripts/install-linux.sh                    staging/melodia/install-linux.sh
@@ -355,9 +356,23 @@ jobs:
       # via cargo-binstall does work but logs a noisy warning per run.
       # Compile from source instead — ~30s on top of an already-slow
       # release build, immune to upstream index lag.
+      #
+      # Version-pinned, and not merely for reproducibility: `Cargo.toml`'s
+      # `license-file = "packaging/debian-copyright"` leans on cargo-deb
+      # behaviour its README doesn't document. The README describes only the
+      # `[path, skip-lines]` pair form, while the bare string and the decision to
+      # copy the file *verbatim* both live in `config.rs` —
+      # `has_copyright_metadata` looks for one of five DEP-5 keys in the first ten
+      # lines and skips the generated header when it finds one. A bump that
+      # narrows that check fails silently and in the worst direction: the .deb
+      # ships a copyright declaring the whole package AGPL by one author, which
+      # the bundled fonts and the vendored winit falsify. Nothing catches it —
+      # `services::tests::the_debian_copyright_quotes_the_licences_it_ships` reads
+      # the source file, not the built package. So bumping this is a re-read of
+      # that function, not a version edit.
       - name: Install cargo-deb
         if: matrix.kind == 'linux-deb'
-        run: cargo install --locked cargo-deb
+        run: cargo install --locked --version 3.7.0 cargo-deb
 
       - name: Package deb
         if: matrix.kind == 'linux-deb'

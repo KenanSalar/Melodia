@@ -11,6 +11,7 @@
 //!   section-collapse toggles — plus the `snap_to_preset` helper.
 //! - [`folders`]: library folder CRUD, watcher toggle, and `scan_folder*`.
 //! - [`diagnostics`]: the Verbose Logging switch.
+//! - [`support`]: the launch counter behind the one-time Ko-fi prompt.
 //!
 //! `settings.json` setters funnel through
 //! [`crate::services::settings::mutate_settings`]; the per-view-state
@@ -28,6 +29,7 @@ pub mod folders;
 pub mod playback;
 pub mod replaygain;
 pub mod scrobble;
+pub mod support;
 pub mod updates;
 pub mod view;
 pub mod visualizer;
@@ -45,6 +47,13 @@ pub use discord::{
     set_discord_rpc_artwork, set_discord_rpc_enabled, set_discord_rpc_hide_when_paused,
 };
 pub use equalizer::{set_eq_band_gains_and_preset, set_eq_enabled, set_eq_preamp};
+pub use folders::{
+    add_folder, get_folders, reconcile_watched_folders, remove_folder, scan_folder,
+    scan_folder_internal, set_folder_watching_enabled, toggle_folder_watching,
+};
+pub use playback::{
+    set_gapless_playback, set_play_button_animation, set_playback_speed, set_resume_on_startup,
+};
 pub use replaygain::{
     set_replaygain_enabled, set_replaygain_mode, set_replaygain_preamp,
     set_replaygain_prevent_clipping,
@@ -54,13 +63,7 @@ pub use scrobble::{
     set_scrobble_listenbrainz_enabled, set_scrobble_listenbrainz_love_enabled,
     set_scrobble_mbid_auto_tag,
 };
-pub use folders::{
-    add_folder, get_folders, reconcile_watched_folders, remove_folder, scan_folder,
-    scan_folder_internal, set_folder_watching_enabled, toggle_folder_watching,
-};
-pub use playback::{
-    set_gapless_playback, set_play_button_animation, set_playback_speed, set_resume_on_startup,
-};
+pub use support::{mark_support_prompt_seen, record_launch};
 pub use updates::{
     record_check_failure, record_check_success, reset_skipped_release, set_auto_check_enabled,
     set_skipped_release,
