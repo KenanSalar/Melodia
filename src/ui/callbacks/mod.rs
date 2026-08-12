@@ -155,7 +155,7 @@ pub(super) fn next_sort_with_natural(
     if cur_dir != "desc" {
         return (clicked.to_owned(), SortDir::Desc);
     }
-    natural.map_or_else(|| (clicked.to_owned(), SortDir::Asc), |f| (f.to_owned(), SortDir::Asc))
+    (natural.unwrap_or(clicked).to_owned(), SortDir::Asc)
 }
 
 /// Spawn a fire-and-forget task that persists `view_id`'s sort field +

@@ -17,6 +17,7 @@ const QUEUE_SHEET: &str = include_str!("../../../../melodia-ui/ui/views/queue-sh
 const DETAIL_VIEW: &str =
     include_str!("../../../../melodia-ui/ui/views/my-library/playlist-detail.slint");
 const DETAIL_CALLBACKS: &str = include_str!("../callbacks/detail.rs");
+const DETAIL: &str = include_str!("../detail.rs");
 
 /// Minimal `PlaylistStats` builder — only the fields the grid filter / sort
 /// read matter. Regular playlist, so `smart_criteria` never parses.
@@ -143,15 +144,19 @@ fn every_multi_caller_playlist_dialog_opens_through_its_own_function() {
 /// clean, and only misbehaves on a list long enough to scroll.
 #[test]
 fn every_draggable_list_opts_out_of_drag_panning() {
-    let list = strip_line_comments(DRAGGABLE_LIST);
+    // The binding rather than the token: the property reads as an *enable*, so
+    // `mouse-drag-pan-enabled: true` is the likeliest wrong edit and a bare
+    // occurrence count can't fail on it.
+    let list = normalize_ws(&strip_line_comments(DRAGGABLE_LIST));
     assert_eq!(
-        list.matches("mouse-drag-pan-enabled").count(),
+        list.matches("mouse-drag-pan-enabled: !root.reorder-enabled").count(),
         2,
         "both `outer-scroll` and `inner-list` must opt out — a diagonal drag steals the \
          grab on either axis once the columns overflow"
     );
     assert!(
-        strip_line_comments(QUEUE_SHEET).contains("mouse-drag-pan-enabled: false"),
+        normalize_ws(&strip_line_comments(QUEUE_SHEET))
+            .contains("mouse-drag-pan-enabled: false"),
         "every row in the queue sheet is draggable, so its ListView never gets the gesture"
     );
 }
@@ -186,6 +191,29 @@ fn the_sort_cycle_still_offers_a_way_back_to_the_curated_order() {
     assert!(
         src.contains("Some(playlists_ui_mod::POSITION_FIELD)"),
         "the cycle needs the curated order named as its third state"
+    );
+}
+
+/// `is_manual_order` answers two of `reorder-enabled`'s terms; the filter is the
+/// third the drag depends on, and the one that fails silently — filtered,
+/// `tracks` is a subset of `position_order`, so a display index is still in
+/// range and the DB write lands on a different track than the one dragged.
+///
+/// Scoped to the guard rather than searched for over the file: `refresh_detail`
+/// asks the same question a few lines up, so a whole-file `contains` would pass
+/// on its copy.
+#[test]
+fn the_optimistic_reorder_refuses_a_filtered_list() {
+    let src = normalize_ws(&strip_line_comments(DETAIL));
+    let body = src.split_once("pub fn apply_optimistic_reorder").map_or("", |(_, rest)| rest);
+    let guard = body.split_once("let saved =").map_or("", |(head, _)| head);
+    assert!(
+        guard.contains("is_manual_order(&field, &dir)"),
+        "the order half must be asked before the display indices reach `position_order`"
+    );
+    assert!(
+        guard.contains("filter.lock().is_empty()"),
+        "so must the filter half — a filtered index is in range, so the write lands"
     );
 }
 

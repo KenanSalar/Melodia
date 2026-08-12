@@ -333,16 +333,15 @@ pub async fn refresh_detail(
     Ok(())
 }
 
-/// Re-sort the cached detail tracks to the current `PlaylistDetail` sort
-/// state, then reorder the existing `tracks` model rows to match.
-/// `"position"` rebuilds from the canonical position-order cache via an
-/// O(N) `HashMap` lookup per row; any other field falls through to the
-/// shared `sort_track_rows_by` helper.
-pub fn resort_detail(ui: &AppWindow, playlists_ui: &PlaylistsUi) {
-    let g = ui.global::<PlaylistDetail>();
-    let field = g.get_sort_field().to_string();
-    let dir = g.get_sort_dir().to_string();
-
+/// Sort both cached track lists to `field` / `dir` and permute the visible
+/// `tracks` model to match. `"position"` rebuilds from the canonical
+/// position-order cache via an O(N) `HashMap` lookup per row; any other field
+/// falls through to the shared `sort_track_rows_by` helper.
+///
+/// Reconciling the selection is the caller's, and only [`resort_detail`] owes
+/// it: a permutation carries each row's `selected` with it, so the drag path
+/// has nothing to reconcile.
+fn reapply_order(g: &PlaylistDetail, playlists_ui: &PlaylistsUi, field: &str, dir: &str) {
     // Sort the canonical full set + the displayed subset in lockstep so
     // `play-row` / range-select read consistent order and widening the
     // filter later still yields sorted rows.
@@ -351,11 +350,11 @@ pub fn resort_detail(ui: &AppWindow, playlists_ui: &PlaylistsUi) {
         sort_playlist_tracks(
             &mut playlists_ui.detail.all_tracks.lock(),
             &position_order,
-            &field,
-            &dir,
+            field,
+            dir,
         );
         let mut tracks = playlists_ui.detail.tracks.lock();
-        sort_playlist_tracks(&mut tracks, &position_order, &field, &dir);
+        sort_playlist_tracks(&mut tracks, &position_order, field, dir);
         tracks.iter().map(|t| clamp_i64_to_i32(t.id)).collect()
     };
 
@@ -371,6 +370,15 @@ pub fn resort_detail(ui: &AppWindow, playlists_ui: &PlaylistsUi) {
             order.iter().filter_map(|id| by_id.remove(id)).collect();
         vm.set_vec(reordered);
     }
+}
+
+/// Re-sort the cached detail tracks to the current `PlaylistDetail` sort state,
+/// then reorder the existing `tracks` model rows to match.
+pub fn resort_detail(ui: &AppWindow, playlists_ui: &PlaylistsUi) {
+    let g = ui.global::<PlaylistDetail>();
+    let field = g.get_sort_field();
+    let dir = g.get_sort_dir();
+    reapply_order(&g, playlists_ui, &field, &dir);
     apply_selection_to_rows(&g, playlists_ui);
 }
 
@@ -385,11 +393,14 @@ pub fn apply_optimistic_reorder(
     to: usize,
 ) -> Option<(Vec<i64>, Vec<RsTrackListRow>)> {
     let g = ui.global::<PlaylistDetail>();
-    let field = g.get_sort_field().to_string();
-    let dir = g.get_sort_dir().to_string();
+    let field = g.get_sort_field();
+    let dir = g.get_sort_dir();
     // Asked here as well as in `reorder-enabled`, this being where the display
-    // indices reach the cache.
-    if !is_manual_order(&field, &dir) {
+    // indices reach the cache. The filter term is the sharp one: filtered,
+    // `tracks` is a subset of the canonical `position_order`, so `from` names a
+    // different track — and the write still lands, a filtered index being in
+    // range. (`is_smart` needs no term: the query refuses an empty item set.)
+    if !is_manual_order(&field, &dir) || !playlists_ui.detail.filter.lock().is_empty() {
         return None;
     }
 
@@ -410,34 +421,9 @@ pub fn apply_optimistic_reorder(
         pos.insert(insert_at, id);
     }
 
-    // Mirror the in-memory order onto the visible model. The Rust caches are
-    // mutated in lock-step; the Slint VecModel is permuted. Drag-reorder is
-    // disabled while a filter is active, so the displayed `tracks` cache equals
-    // the canonical `all_tracks` here — both are re-sorted.
-    let order: Vec<i32> = {
-        let position_order = playlists_ui.detail.position_order.lock();
-        sort_playlist_tracks(
-            &mut playlists_ui.detail.all_tracks.lock(),
-            &position_order,
-            &field,
-            &dir,
-        );
-        let mut tracks = playlists_ui.detail.tracks.lock();
-        sort_playlist_tracks(&mut tracks, &position_order, &field, &dir);
-        tracks.iter().map(|t| clamp_i64_to_i32(t.id)).collect()
-    };
-    let model = g.get_tracks();
-    if let Some(vm) = model.as_any().downcast_ref::<VecModel<UiTrackListRow>>() {
-        let mut by_id: HashMap<i32, UiTrackListRow> = HashMap::with_capacity(vm.row_count());
-        for i in 0..vm.row_count() {
-            if let Some(r) = vm.row_data(i) {
-                by_id.insert(r.id, r);
-            }
-        }
-        let reordered: Vec<UiTrackListRow> =
-            order.iter().filter_map(|id| by_id.remove(id)).collect();
-        vm.set_vec(reordered);
-    }
+    // The guard above rules out a filter, so the displayed `tracks` cache equals
+    // the canonical `all_tracks` here and both re-sort off the same order.
+    reapply_order(&g, playlists_ui, &field, &dir);
 
     Some(saved)
 }
@@ -469,10 +455,11 @@ pub fn clear_detail(playlists_ui: &PlaylistsUi) {
     crate::ui::window_chrome::set_current_playlist_id(-1);
 }
 
-/// Update the cached filter needle. The Slint side already mirrors the
-/// live text via the `<=>` binding; this Rust mirror lets the re-fetch
-/// path (`refresh_detail`) re-apply the filter to fresh data without
-/// round-tripping the UI thread for the property read. Always stored
+/// Update the cached filter needle. Nothing binds the Slint half to this one —
+/// the page's single box reaches nine surfaces through Rust, so
+/// `ui::my_library::filter::dispatch` writes both sides. This mirror is what
+/// lets the re-fetch path (`refresh_detail`) re-apply the filter to fresh data
+/// without round-tripping the UI thread for the property read. Always stored
 /// folded so the per-keystroke walk doesn't re-fold per row.
 pub fn set_filter(playlists_ui: &PlaylistsUi, needle: &str) {
     *playlists_ui.detail.filter.lock() = crate::ui::row_match::fold_needle(needle);
