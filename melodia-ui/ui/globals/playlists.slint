@@ -106,8 +106,11 @@ export global Playlists {
 //
 // The table is the shared `TrackList`, so the column / sort / selection shape mirrors
 // the `Tracks` / `Browse` / `AlbumDetail` globals, under its own persistence key.
-// **Drag-to-reorder is gated to the default `"position"` sort** — the persisted
+// **Drag-to-reorder is gated to an ascending `"position"` sort** — the persisted
 // insertion order — since reordering a list sorted by something else means nothing.
+// No header cell asks for that field, so the third click on a column is what hands it
+// back (`ui::callbacks::next_sort_with_natural`); without one, a single click on Title
+// used to retire reordering for the whole install.
 //
 // `drag-source` / `drop-slot` mirror `Queue`'s reorder state, and the state itself lives
 // on `DraggableTrackList`, which this view two-way binds into them. Rust never writes
@@ -182,7 +185,7 @@ export global PlaylistDetail {
     callback go-to-genre(int /*genre_id*/);
 
     // Fires on pointer-up only once the drag passed the click threshold *and* the sort
-    // is still `"position"`.
+    // is still `"position"`, ascending.
     callback reorder(int /*from*/, int /*to*/);
 
     // The one action needing a Rust hop before its dialog mounts: the mosaic picker has

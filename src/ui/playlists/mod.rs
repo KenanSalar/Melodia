@@ -66,7 +66,7 @@ pub use grid::{fetch_grid, tune_cache_for_display};
 // `callbacks::now_playing`. `pub(super)` is `pub(in crate::ui)` here, which is
 // exactly that reach.
 pub(super) use detail::{
-    apply_detail_row_favorite, apply_detail_row_rating, apply_filtered_detail,
+    POSITION_FIELD, apply_detail_row_favorite, apply_detail_row_rating, apply_filtered_detail,
     apply_optimistic_reorder, clear_detail, open_playlist, refresh_detail, resort_detail,
     rollback_reorder, set_filter,
 };

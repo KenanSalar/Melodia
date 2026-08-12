@@ -33,6 +33,21 @@ use crate::{AppWindow, NavEnterFrom, PlaylistDetail, TrackListRow as UiTrackList
 // `sort_playlist_tracks` below.
 impl_detail_view_helpers!(artwork PlaylistDetail);
 
+/// The playlist's own curated order. Synthetic — no column header asks for it,
+/// which is why the sort cycle has to hand it back (`next_sort_with_natural`).
+pub const POSITION_FIELD: &str = "position";
+
+/// Whether the rows on screen are in canonical position order, ascending.
+///
+/// The drag hands over *display* indices and [`apply_optimistic_reorder`] writes
+/// them straight into `position_order`, so this is the whole precondition for
+/// that mapping being the identity. The direction half is the easy one to miss:
+/// [`sort_playlist_tracks`] reverses on `"desc"`, which would make every drag
+/// write the inverse permutation.
+pub(super) fn is_manual_order(field: &str, dir: &str) -> bool {
+    field == POSITION_FIELD && dir != "desc"
+}
+
 async fn fetch_playlist_detail(
     state: &AppState,
     playlists_ui: &PlaylistsUi,
@@ -115,7 +130,7 @@ where
     // is restored across opens and restarts.
     let position_order: Vec<i64> = tracks.iter().map(|t| t.id).collect();
     let (sort_field, sort_dir) =
-        resolve_view_sort(state, view_id::PLAYLIST_DETAIL, "position");
+        resolve_view_sort(state, view_id::PLAYLIST_DETAIL, POSITION_FIELD);
     sort_playlist_tracks(&mut tracks, &position_order, &sort_field, &sort_dir);
 
     let pair = decode_detail_pair(
@@ -360,15 +375,24 @@ pub fn resort_detail(ui: &AppWindow, playlists_ui: &PlaylistsUi) {
 }
 
 /// Optimistically reorder the cached detail state for a drag-and-drop
-/// commit *before* the DB write lands. Mutates both `position_order` and
-/// (if sort-field is `"position"`) the visible `tracks` Vec. Returns the
-/// pre-mutation pair so the caller can roll back on a DB error.
+/// commit *before* the DB write lands. Mutates `position_order` and the
+/// visible `tracks` Vec. Returns the pre-mutation pair so the caller can roll
+/// back on a DB error, or `None` when nothing was touched.
 pub fn apply_optimistic_reorder(
     ui: &AppWindow,
     playlists_ui: &PlaylistsUi,
     from: usize,
     to: usize,
 ) -> Option<(Vec<i64>, Vec<RsTrackListRow>)> {
+    let g = ui.global::<PlaylistDetail>();
+    let field = g.get_sort_field().to_string();
+    let dir = g.get_sort_dir().to_string();
+    // Asked here as well as in `reorder-enabled`, this being where the display
+    // indices reach the cache.
+    if !is_manual_order(&field, &dir) {
+        return None;
+    }
+
     // Snapshot for rollback BEFORE we mutate anything.
     let saved = {
         let pos = playlists_ui.detail.position_order.lock().clone();
@@ -386,39 +410,33 @@ pub fn apply_optimistic_reorder(
         pos.insert(insert_at, id);
     }
 
-    let g = ui.global::<PlaylistDetail>();
-    let field = g.get_sort_field().to_string();
-    if field == "position" {
-        // Mirror the in-memory order onto the visible model. The Rust
-        // caches are mutated in lock-step; the Slint VecModel is permuted.
-        // Drag-reorder is disabled while a filter is active, so the
-        // displayed `tracks` cache equals the canonical `all_tracks`
-        // here — both are re-sorted.
-        let dir = g.get_sort_dir().to_string();
-        let order: Vec<i32> = {
-            let position_order = playlists_ui.detail.position_order.lock();
-            sort_playlist_tracks(
-                &mut playlists_ui.detail.all_tracks.lock(),
-                &position_order,
-                &field,
-                &dir,
-            );
-            let mut tracks = playlists_ui.detail.tracks.lock();
-            sort_playlist_tracks(&mut tracks, &position_order, &field, &dir);
-            tracks.iter().map(|t| clamp_i64_to_i32(t.id)).collect()
-        };
-        let model = g.get_tracks();
-        if let Some(vm) = model.as_any().downcast_ref::<VecModel<UiTrackListRow>>() {
-            let mut by_id: HashMap<i32, UiTrackListRow> = HashMap::with_capacity(vm.row_count());
-            for i in 0..vm.row_count() {
-                if let Some(r) = vm.row_data(i) {
-                    by_id.insert(r.id, r);
-                }
+    // Mirror the in-memory order onto the visible model. The Rust caches are
+    // mutated in lock-step; the Slint VecModel is permuted. Drag-reorder is
+    // disabled while a filter is active, so the displayed `tracks` cache equals
+    // the canonical `all_tracks` here — both are re-sorted.
+    let order: Vec<i32> = {
+        let position_order = playlists_ui.detail.position_order.lock();
+        sort_playlist_tracks(
+            &mut playlists_ui.detail.all_tracks.lock(),
+            &position_order,
+            &field,
+            &dir,
+        );
+        let mut tracks = playlists_ui.detail.tracks.lock();
+        sort_playlist_tracks(&mut tracks, &position_order, &field, &dir);
+        tracks.iter().map(|t| clamp_i64_to_i32(t.id)).collect()
+    };
+    let model = g.get_tracks();
+    if let Some(vm) = model.as_any().downcast_ref::<VecModel<UiTrackListRow>>() {
+        let mut by_id: HashMap<i32, UiTrackListRow> = HashMap::with_capacity(vm.row_count());
+        for i in 0..vm.row_count() {
+            if let Some(r) = vm.row_data(i) {
+                by_id.insert(r.id, r);
             }
-            let reordered: Vec<UiTrackListRow> =
-                order.iter().filter_map(|id| by_id.remove(id)).collect();
-            vm.set_vec(reordered);
         }
+        let reordered: Vec<UiTrackListRow> =
+            order.iter().filter_map(|id| by_id.remove(id)).collect();
+        vm.set_vec(reordered);
     }
 
     Some(saved)
@@ -537,7 +555,7 @@ fn sort_playlist_tracks(
     field: &str,
     dir: &str,
 ) {
-    if field == "position" {
+    if field == POSITION_FIELD {
         let index_of: HashMap<i64, usize> = position_order
             .iter()
             .enumerate()

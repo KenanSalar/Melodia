@@ -39,6 +39,10 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
             // owns that teardown now, and the band fires it once the morph is
             // done. See `callbacks::my_library::release_collapsed_hero`.
             playlists_ui_mod::clear_detail(&pu);
+            // `clear_detail` only reaches the Rust needle; leaving the Slint
+            // half set would have the two disagree until the next open, on the
+            // property `reorder-enabled` reads.
+            g.set_filter(SharedString::new());
 
             let pu_swap = pu.clone();
             s.runtime.spawn_blocking(move || {
@@ -160,10 +164,13 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
         detail.on_request_sort(move |field| {
             let Some(ui) = weak.upgrade() else { return };
             let g = ui.global::<PlaylistDetail>();
-            let (new_field, new_dir) = crate::ui::callbacks::next_sort(
+            // Third click lands back on the curated order, which is the only
+            // way back to it — no header cell asks for `"position"`.
+            let (new_field, new_dir) = crate::ui::callbacks::next_sort_with_natural(
                 g.get_sort_field().as_str(),
                 g.get_sort_dir().as_str(),
                 &field,
+                Some(playlists_ui_mod::POSITION_FIELD),
             );
             g.set_sort_field(SharedString::from(new_field.as_str()));
             g.set_sort_dir(SharedString::from(new_dir.as_str()));

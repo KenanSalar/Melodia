@@ -1,9 +1,22 @@
 //! The Playlists grid's filter + sort pass — the last of the four entity
 //! grids to get one. Same three cases its siblings pin, since all four run
 //! the identical `row_match::Needle::contains` walk over a single name.
+//!
+//! Plus the four things drag-to-reorder needs to stay alive, none of which any
+//! other pin can see go missing.
 
+use super::detail::is_manual_order;
 use super::*;
-use crate::test_support::{MIN_SLINT_SOURCES, UI_DIR, stripped_sources};
+use crate::test_support::{
+    MIN_SLINT_SOURCES, UI_DIR, normalize_ws, strip_line_comments, stripped_sources,
+};
+
+const DRAGGABLE_LIST: &str =
+    include_str!("../../../../melodia-ui/ui/components/track-list/draggable-track-list.slint");
+const QUEUE_SHEET: &str = include_str!("../../../../melodia-ui/ui/views/queue-sheet.slint");
+const DETAIL_VIEW: &str =
+    include_str!("../../../../melodia-ui/ui/views/my-library/playlist-detail.slint");
+const DETAIL_CALLBACKS: &str = include_str!("../callbacks/detail.rs");
 
 /// Minimal `PlaylistStats` builder — only the fields the grid filter / sort
 /// read matter. Regular playlist, so `smart_criteria` never parses.
@@ -121,4 +134,67 @@ fn every_multi_caller_playlist_dialog_opens_through_its_own_function() {
          msgid of its own:\n{}",
         offenders.join("\n")
     );
+}
+
+/// A row drag and the list's own drag-pan are one gesture, and left to itself
+/// the pan wins: it intercepts the row's grab mid-drag, so the drop never
+/// commits. Both scrollers around the rows opt out, and so does the queue
+/// sheet's list. Nothing else catches a regression here — it compiles, reads
+/// clean, and only misbehaves on a list long enough to scroll.
+#[test]
+fn every_draggable_list_opts_out_of_drag_panning() {
+    let list = strip_line_comments(DRAGGABLE_LIST);
+    assert_eq!(
+        list.matches("mouse-drag-pan-enabled").count(),
+        2,
+        "both `outer-scroll` and `inner-list` must opt out — a diagonal drag steals the \
+         grab on either axis once the columns overflow"
+    );
+    assert!(
+        strip_line_comments(QUEUE_SHEET).contains("mouse-drag-pan-enabled: false"),
+        "every row in the queue sheet is draggable, so its ListView never gets the gesture"
+    );
+}
+
+/// The gate has to read the direction too: `sort_playlist_tracks` reverses on
+/// `"desc"`, and the drag writes display indices straight into
+/// `position_order`, so a reversed position sort lands every drop at the
+/// mirrored slot.
+#[test]
+fn the_reorder_gate_reads_the_direction_as_well_as_the_field() {
+    let src = normalize_ws(&strip_line_comments(DETAIL_VIEW));
+    assert!(
+        src.contains(
+            "reorder-enabled: PlaylistDetail.sort-field == \"position\" \
+             && PlaylistDetail.sort-dir != \"desc\""
+        ),
+        "playlist-detail.slint must gate reorder on an *ascending* position sort"
+    );
+}
+
+/// `"position"` is what drag-to-reorder is gated on and no header cell asks for
+/// it, so the sort cycle is the only way back. Drop the natural field and the
+/// first click on any column retires reordering for the whole install —
+/// persisted, so it survives a restart.
+#[test]
+fn the_sort_cycle_still_offers_a_way_back_to_the_curated_order() {
+    let src = normalize_ws(&strip_line_comments(DETAIL_CALLBACKS));
+    assert!(
+        src.contains("next_sort_with_natural"),
+        "the plain `next_sort` has two states and cannot reach `\"position\"`"
+    );
+    assert!(
+        src.contains("Some(playlists_ui_mod::POSITION_FIELD)"),
+        "the cycle needs the curated order named as its third state"
+    );
+}
+
+#[test]
+fn only_an_ascending_position_sort_is_the_manual_order() {
+    assert!(is_manual_order(POSITION_FIELD, "asc"));
+    assert!(!is_manual_order(POSITION_FIELD, "desc"));
+    assert!(!is_manual_order("title", "asc"));
+    assert!(!is_manual_order("title", "desc"));
+    // `SortDir::from_token`'s rule — only `"desc"` is descending.
+    assert!(is_manual_order(POSITION_FIELD, "sideways"));
 }

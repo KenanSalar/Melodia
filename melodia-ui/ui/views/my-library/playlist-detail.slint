@@ -44,9 +44,12 @@ export component PlaylistDetailBody inherits Rectangle {
                 rows: PlaylistDetail.tracks;
                 // Reorder only in insertion order: any other sort makes it ambiguous, a
                 // filter breaks the index → position mapping, and a smart playlist has no
-                // curated order to reorder into. `filter` is the page's one needle,
-                // mirrored onto this global by `ui::my_library::filter::dispatch`.
+                // curated order to reorder into. The direction counts too — a reversed
+                // position sort would land every drop at the mirrored slot. `filter` is
+                // the page's one needle, mirrored onto this global by
+                // `ui::my_library::filter::dispatch`.
                 reorder-enabled: PlaylistDetail.sort-field == "position"
+                    && PlaylistDetail.sort-dir != "desc"
                     && PlaylistDetail.filter == ""
                     && !PlaylistDetail.playlist.is_smart;
                 // On the global so Rust can abort an in-flight drag: refreshing `tracks`

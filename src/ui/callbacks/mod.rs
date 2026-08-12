@@ -129,9 +129,33 @@ pub(super) fn spawn_play_then_shuffle(state: &AppState, tag: &'static str, ids: 
 /// produce, but disagreeing about it would leave that pill unable to reach
 /// descending at all.
 pub(super) fn next_sort(cur_field: &str, cur_dir: &str, clicked: &str) -> (String, SortDir) {
-    let flip = cur_field == clicked && cur_dir != "desc";
-    let dir = if flip { SortDir::Desc } else { SortDir::Asc };
-    (clicked.to_owned(), dir)
+    next_sort_with_natural(cur_field, cur_dir, clicked, None)
+}
+
+/// [`next_sort`] for a view with an order of its own to fall back to:
+/// ascending, descending, then `natural`.
+///
+/// A *synthetic* order — one no column header can ask for — is otherwise
+/// unreachable the moment anything else is clicked, and the sort persists, so
+/// it stays unreachable across restarts. Playlist Detail is the only caller:
+/// `"position"` is what drag-to-reorder is gated on, so one click on Title used
+/// to retire reordering for good. Everything else passes `None`.
+///
+/// Nothing paints the third state — with the natural field in force no header
+/// cell matches it, so no arrow is drawn anywhere.
+pub(super) fn next_sort_with_natural(
+    cur_field: &str,
+    cur_dir: &str,
+    clicked: &str,
+    natural: Option<&str>,
+) -> (String, SortDir) {
+    if cur_field != clicked {
+        return (clicked.to_owned(), SortDir::Asc);
+    }
+    if cur_dir != "desc" {
+        return (clicked.to_owned(), SortDir::Desc);
+    }
+    natural.map_or_else(|| (clicked.to_owned(), SortDir::Asc), |f| (f.to_owned(), SortDir::Asc))
 }
 
 /// Spawn a fire-and-forget task that persists `view_id`'s sort field +

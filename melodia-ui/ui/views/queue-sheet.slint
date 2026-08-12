@@ -251,6 +251,11 @@ export component QueueSheet inherits Rectangle {
                     // row hover pill paints under the scrollbar with no breathing room.
                     width: parent.width - 14px;
                     height: 100%;
+                    // Every row here is draggable, so the pan never gets the gesture:
+                    // it intercepts the row's grab mid-drag and the drop never
+                    // commits. Mechanism in `draggable-track-list.slint`; it hid here
+                    // behind queues short enough not to scroll.
+                    mouse-drag-pan-enabled: false;
                     for row[idx] in Queue.rows: QueueRowItem {
                         row-data: row;
                         row-index: idx;

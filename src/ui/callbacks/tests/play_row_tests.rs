@@ -2,7 +2,7 @@
 //! the `play-row` start-slot resolver, and [`super::next_sort`], the sort-pill
 //! toggle every sortable view routes through.
 
-use super::{next_sort, play_row_start};
+use super::{next_sort, next_sort_with_natural, play_row_start};
 use crate::services::settings::SortDir;
 
 #[test]
@@ -68,4 +68,29 @@ fn an_unrecognised_direction_flips_like_the_ascending_it_parses_as() {
 
     let (_, dir) = next_sort("name", "sideways", "name");
     assert_eq!(dir.as_str(), "desc");
+}
+
+/// Playlist Detail's full cycle. The third step is the one that matters: its
+/// `"position"` order is what drag-to-reorder is gated on and no header cell
+/// asks for it, so without a way back one click retired reordering for good.
+#[test]
+fn a_natural_order_takes_the_third_click() {
+    let natural = Some("position");
+
+    let (field, dir) = next_sort_with_natural("position", "asc", "title", natural);
+    assert_eq!((field.as_str(), dir.as_str()), ("title", "asc"));
+
+    let (field, dir) = next_sort_with_natural("title", "asc", "title", natural);
+    assert_eq!((field.as_str(), dir.as_str()), ("title", "desc"));
+
+    let (field, dir) = next_sort_with_natural("title", "desc", "title", natural);
+    assert_eq!((field.as_str(), dir.as_str()), ("position", "asc"));
+}
+
+/// The eleven views that pass `None` keep the two-state flip — a sort pill has
+/// no natural order to name and no way to paint one.
+#[test]
+fn without_a_natural_order_the_third_click_flips_back_to_ascending() {
+    let (field, dir) = next_sort_with_natural("name", "desc", "name", None);
+    assert_eq!((field.as_str(), dir.as_str()), ("name", "asc"));
 }
