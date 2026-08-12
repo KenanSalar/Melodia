@@ -73,7 +73,8 @@ each earn its place, and re-read every comment before moving on.
 - **Comment the genuinely non-obvious** - empty catch blocks, unsafe casts, workarounds (link the
   issue/PR), non-trivial regexes, magic constants, and concurrency/ordering assumptions.
 - **No commented-out code** - delete it; version control remembers.
-- **Match the file** - follow the surrounding code's existing comment style and density.
+- **Match the file** - follow the surrounding code's existing comment *style*. Not its density:
+  a dense neighbour is not a budget, and the rules above outrank it.
 - **Document public APIs** using the doc-comment format below. Start with a single-sentence
   summary; don't just repeat the member name.
 
