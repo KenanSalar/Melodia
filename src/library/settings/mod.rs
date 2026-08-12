@@ -11,6 +11,7 @@
 //!   section-collapse toggles — plus the `snap_to_preset` helper.
 //! - [`folders`]: library folder CRUD, watcher toggle, and `scan_folder*`.
 //! - [`diagnostics`]: the Verbose Logging switch.
+//! - [`support`]: the launch counter behind the one-time Ko-fi prompt.
 //!
 //! `settings.json` setters funnel through
 //! [`crate::services::settings::mutate_settings`]; the per-view-state
@@ -28,6 +29,7 @@ pub mod folders;
 pub mod playback;
 pub mod replaygain;
 pub mod scrobble;
+pub mod support;
 pub mod updates;
 pub mod view;
 pub mod visualizer;
@@ -54,6 +56,7 @@ pub use scrobble::{
     set_scrobble_listenbrainz_enabled, set_scrobble_listenbrainz_love_enabled,
     set_scrobble_mbid_auto_tag,
 };
+pub use support::{mark_support_prompt_seen, record_launch};
 pub use folders::{
     add_folder, get_folders, reconcile_watched_folders, remove_folder, scan_folder,
     scan_folder_internal, set_folder_watching_enabled, toggle_folder_watching,

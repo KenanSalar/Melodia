@@ -1,18 +1,19 @@
 Third-party software bundled with Melodia
 =========================================
 
-Melodia links the software below into its executable -- the fonts are compiled
-in rather than loaded from disk, and the winit fork is built from this tree
-rather than fetched from crates.io -- so every artifact we ship (tarball,
-AppImage, RPM, DEB and MSI) is a distribution of it. The full license text for
-each sits beside this file.
+Melodia links the work below into its executable -- the fonts and the Ko-fi mark
+are compiled in rather than loaded from disk, and the winit fork is built from
+this tree rather than fetched from crates.io -- so every artifact we ship
+(tarball, AppImage, RPM, DEB and MSI) is a distribution of it. The full license
+text for each sits beside this file, except where an entry says there is none to
+ship.
 
 Melodia's own license (AGPL-3.0-or-later) ships with this package as LICENSE
 and covers none of the software below.
 
 The "Files" lists give each component's path in the source repository, which is
-what identifies it -- the fonts and the fork are inside the binary, not
-installed.
+what identifies it -- the fonts, the mark and the fork are inside the binary,
+not installed.
 
 Debian packages carry a fuller machine-readable version of this at
 /usr/share/doc/melodia/copyright; the two are kept in step by
@@ -91,6 +92,26 @@ Files:
 Vendored in-tree rather than fetched, so a fresh clone and every CI runner build
 identically. The whole directory retires once upstream lands native Wayland
 drag-and-drop.
+
+
+Ko-fi logo
+----------
+The cup symbol, by Ko-fi.
+https://more.ko-fi.com/brand-assets
+
+UNMODIFIED. Embedded by the Slint build and painted on one control: the Settings
+-> About support button, which opens the project's Ko-fi page. Never recoloured,
+which is also why it is an SVG Image rather than an icon-font glyph -- the mark
+is three colours and a glyph would be one.
+
+Files:
+  melodia-ui/ui/assets/icons/kofi-symbol.svg
+
+A trade mark rather than licensed software, so there is no license text beside
+this file for it and none to ship. Ko-fi publishes the mark as a brand asset for
+linking to a Ko-fi page and it is included for that purpose alone; all rights in
+it remain Ko-fi's, and Melodia claims no affiliation with or endorsement by
+them.
 
 
 Rust dependencies

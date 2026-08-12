@@ -1039,7 +1039,8 @@ msgstr "Διαθέσιμο μόνο όταν το εικονίδιο περιο�
 # ---- About -------------------------------------------------------------------
 
 # Settings → About section (`ui/views/settings/about-section.slint`): app
-# name + version, authorship, source-repository link, and license.
+# name + version, authorship, a support link, the source-repository link, and
+# the license.
 msgid "About"
 msgstr "Σχετικά"
 
@@ -1051,6 +1052,30 @@ msgstr "Έκδοση {}"
 # passed verbatim and never translated.
 msgid "Made by {}"
 msgstr "Δημιουργήθηκε από {}"
+
+# Translators: the Ko-fi row — its label, its button and its blurb. "Ko-fi" is a
+# brand and stays verbatim wherever it appears. "Support" throughout this block
+# means backing the project financially — never technical support, which is what
+# "Υποστήριξη" would read as here.
+msgid "Support Melodia"
+msgstr "Στηρίξτε το Melodia"
+
+msgid "Support me on Ko-fi"
+msgstr "Στηρίξτε με στο Ko-fi"
+
+msgid "Melodia is free and open source. A coffee helps keep it going."
+msgstr "Το Melodia είναι δωρεάν και ανοιχτού κώδικα. Ένας καφές βοηθά να συνεχιστεί."
+
+# The one-time support toast (`src/ui/support.rs`), shown on one early launch and
+# never again. Its action button opens the Ko-fi page.
+msgid "Enjoying Melodia?"
+msgstr "Σας αρέσει το Melodia;"
+
+msgid "It's free and open source, built in my spare time. If it's useful to you, you can buy me a coffee."
+msgstr "Είναι δωρεάν και ανοιχτού κώδικα, φτιαγμένο στον ελεύθερο χρόνο μου. Αν σας φαίνεται χρήσιμο, μπορείτε να μου κεράσετε έναν καφέ."
+
+msgid "Support"
+msgstr "Στήριξη"
 
 msgid "License"
 msgstr "Άδεια"

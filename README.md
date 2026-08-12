@@ -430,6 +430,14 @@ all three. Coverage is a separate manual run
 (**Actions → Deploy Coverage → Run workflow**) published to GitHub Pages at
 [kenansalar.github.io/Melodia](https://kenansalar.github.io/Melodia/).
 
+## Support
+
+Melodia is free, open source and built in my spare time. If it's useful to you,
+you can support me at [ko-fi.com/kenansalar](https://ko-fi.com/kenansalar).
+The same link is in the app, at **Settings → About**.
+
+Nothing is gated behind it.
+
 ## License
 
 Copyright (C) 2026 Kenan Salar

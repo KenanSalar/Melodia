@@ -411,6 +411,10 @@ fn main() -> AppResult<()> {
         notifications.clone(),
     )?;
 
+    // 9b-iii. The Ko-fi link, plus the one-time support toast a few minutes into
+    // whichever early launch is the fifth. Counts this launch either way.
+    ui::support::install(&app, &state, notifications.clone())?;
+
     // 9c. Surface backend failures (playback decode errors, failed scans /
     // imports / saves) pushed through the `services::toast` bridge as toasts.
     boot::ui_setup::install_toast_bridge(weak.clone(), notifications.clone())?;

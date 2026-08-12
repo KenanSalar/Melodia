@@ -1,10 +1,10 @@
 Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
 Upstream-Name: Melodia
 Source: https://github.com/KenanSalar/Melodia
-Comment: Melodia's Slint build compiles its fonts into the executable, so this
- package redistributes them as well as the application itself. Each is listed
- below with its own copyright holder and licence. Their full texts, and a note
- of what was modified in each, also ship in
+Comment: Melodia's Slint build compiles its fonts and one third-party logo into
+ the executable, so this package redistributes them as well as the application
+ itself. Each is listed below with its own copyright holder and licence. Their
+ full texts, and a note of what was modified in each, also ship in
  /usr/share/doc/melodia/licenses/.
 
 Files: *
@@ -32,6 +32,13 @@ Copyright: 2014 The winit contributors
 License: Apache-2.0
 Comment: Vendored fork of winit 0.30.13 carrying three Wayland drag-and-drop
  commits, applied through Cargo's [patch.crates-io]. See winit/README.md.
+
+Files: melodia-ui/ui/assets/icons/kofi-symbol.svg
+Copyright: Ko-fi
+License: Ko-fi-brand-asset
+Comment: Ko-fi's cup symbol, exactly as published, painted on the one button
+ that links to a Ko-fi page. Listed separately because the Files: * stanza above
+ would otherwise declare someone else's trade mark AGPL by this package's author.
 
 License: AGPL-3.0-or-later
                      GNU AFFERO GENERAL PUBLIC LICENSE
@@ -794,3 +801,10 @@ License: OFL-1.1
 License: Apache-2.0
  On Debian systems the complete text of the Apache License, Version 2.0
  can be found in /usr/share/common-licenses/Apache-2.0.
+
+License: Ko-fi-brand-asset
+ Ko-fi's trade mark rather than licensed software, so there is no licence text
+ to quote or to ship. Ko-fi publishes the mark as a brand asset for linking to a
+ Ko-fi page, and it is included here for that purpose alone, exactly as
+ published and never recoloured. All rights in the mark remain Ko-fi's, and
+ Melodia claims no affiliation with or endorsement by them.

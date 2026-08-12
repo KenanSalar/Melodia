@@ -1040,7 +1040,8 @@ msgstr "Yalnızca sistem tepsisi simgesi etkinken kullanılabilir."
 # ---- About -------------------------------------------------------------------
 
 # Settings → About section (`ui/views/settings/about-section.slint`): app
-# name + version, authorship, source-repository link, and license.
+# name + version, authorship, a support link, the source-repository link, and
+# the license.
 msgid "About"
 msgstr "Hakkında"
 
@@ -1052,6 +1053,29 @@ msgstr "Sürüm {}"
 # passed verbatim and never translated.
 msgid "Made by {}"
 msgstr "{} tarafından yapıldı"
+
+# Translators: the Ko-fi row — its label, its button and its blurb. "Ko-fi" is a
+# brand and stays verbatim wherever it appears. "Support" throughout this block
+# means backing the project financially — never technical support.
+msgid "Support Melodia"
+msgstr "Melodia'ya destek ol"
+
+msgid "Support me on Ko-fi"
+msgstr "Ko-fi'de bana destek ol"
+
+msgid "Melodia is free and open source. A coffee helps keep it going."
+msgstr "Melodia ücretsiz ve açık kaynaklıdır. Bir kahve, devam etmesine yardımcı olur."
+
+# The one-time support toast (`src/ui/support.rs`), shown on one early launch and
+# never again. Its action button opens the Ko-fi page.
+msgid "Enjoying Melodia?"
+msgstr "Melodia'yı beğendin mi?"
+
+msgid "It's free and open source, built in my spare time. If it's useful to you, you can buy me a coffee."
+msgstr "Ücretsiz ve açık kaynaklı, boş zamanlarımda geliştiriliyor. İşine yarıyorsa bana bir kahve ısmarlayabilirsin."
+
+msgid "Support"
+msgstr "Destek ol"
 
 msgid "License"
 msgstr "Lisans"
