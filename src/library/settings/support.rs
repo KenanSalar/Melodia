@@ -30,7 +30,13 @@ pub fn count_launch(flags: &mut SupportFlags) -> bool {
 /// The read ahead of the mutate is what keeps the claim above true:
 /// `mutate_settings_with` writes unconditionally, so without it a settled install
 /// would rewrite `settings.json` on every boot to store a counter it had stopped
-/// advancing. `support` has exactly one writer, so nothing can land in the gap.
+/// advancing. It sits outside `MUTATE_LOCK` and doesn't need to be inside it —
+/// `count_launch` re-checks the flag against the copy `mutate_settings_with` re-reads
+/// from disk, so a stale `false` costs a redundant write and can never re-raise a spent
+/// prompt. That re-read is what carries it rather than the lock:
+/// `mark_support_prompt_seen` lands `PROMPT_DELAY` later in this process, so the only
+/// writer that can race the read below is a second one, which a process-local `static`
+/// doesn't reach either way.
 pub fn record_launch(state: &AppState) -> Result<bool, AppError> {
     if services::settings::read_settings(&state.paths)?
         .support
