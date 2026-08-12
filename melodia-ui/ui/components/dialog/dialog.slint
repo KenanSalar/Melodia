@@ -107,7 +107,13 @@ export component DialogOverlay inherits Rectangle {
         y: (parent.height - self.height) / 2 + (1.0 - root.card-t) * 12px;
         height: layout.preferred-height;
         background: Theme.surface0;
-        border-color: Theme.border;
+        // `Tooltip`'s chrome, and for its reason: a transient surface floating over the
+        // app has to state its own edge. **Not `Theme.border`** — all four Catppuccin
+        // variants define that as literally the same hex as `surface0` (Mocha, both
+        // `#313244`), so this card shipped with a border that painted its own fill and
+        // the dialog read as a flat slab. Every surface *inside* it that draws an edge
+        // on `surface0` owes the same token.
+        border-color: Theme.surface2;
         border-width: 1px;
         border-radius: Theme.radius-lg;
         opacity: root.card-t;

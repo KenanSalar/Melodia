@@ -2,7 +2,7 @@
 //!
 //! The Slint `Tracks` global owns a `Rc<VecModel<TrackListRow>>` set
 //! once at startup via `install_tracks_model`. The canonical (unfiltered) list
-//! lives in `TracksUi::full` so client-side filter changes don't hit the DB.
+//! lives in `TracksUi::cache` so client-side filter changes don't hit the DB.
 //!
 //! Cross-thread layout:
 //! * `TracksUi` is `Send + Sync` — `Arc<TracksUi>` cloned into callback
@@ -10,91 +10,60 @@
 //! * Slint properties / model can only be touched from the UI thread; we
 //!   reach back via `Weak<AppWindow>::upgrade_in_event_loop`.
 //!
-//! Allocation strategy: `full` and `search_keys` are stored behind
-//! `Mutex<Arc<Vec<…>>>`. Refilter takes a cheap `Arc::clone` instead of
-//! deep-cloning a 10 000-element `Vec` of `String`-bearing rows on every
-//! keystroke. Pre-folded columns in `RowSearchKey` mean the filter walk
-//! allocates zero per row.
+//! Allocation strategy is [`crate::ui::track_list_cache`]'s and is argued
+//! there: this is the largest list in the app, so it retains *converted*
+//! rows and a rebuild clones them (refcounted `SharedString`s) rather than
+//! rebuilding them from DB rows. A refilter takes one lock and one
+//! `Arc::clone`, and allocates nothing per row.
 
+mod callbacks;
 mod fetch;
 mod selection;
 
 use std::rc::Rc;
 use std::sync::Arc;
 
-use parking_lot::Mutex;
 use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 
 use crate::entities::track::TrackListRow as RsTrackListRow;
 use crate::media::cover_thumbs::CoverThumbs;
-use crate::ui::row_match::{self, Needle};
 use crate::ui::section_state::SectionState;
+use crate::ui::track_list_cache::TrackListCache;
 use crate::ui::util::clamp_i64_to_i32;
+use crate::ui::view_ctx::ViewCtx;
 use crate::{AppWindow, TrackListRow as UiTrackListRow, Tracks};
 
-pub use fetch::{apply_row_favorite, apply_row_rating, fetch_and_apply, refilter, resort_and_apply};
-pub use selection::{clear_selection, handle_select_row};
+// `boot::ui_setup` kicks the first fetch after the window is shown, which is
+// why `fetch_and_apply` can't fold into `install` with the rest.
+pub use fetch::fetch_and_apply;
 
-/// Pre-folded text columns for fuzzy filtering. Built once per
-/// `fetch_and_apply` and aligned positionally with `TracksUi::full`, so
-/// `full[i]` and `search_keys[i]` describe the same row.
+// Reached only from this slice's own `callbacks.rs`, which used to live two
+// modules away, plus the cross-slice `apply_row_*` mirrors in
+// `callbacks::now_playing`. `pub(super)` is `pub(in crate::ui)` here, which is
+// exactly that reach.
+pub(super) use fetch::{apply_row_favorite, apply_row_rating, refilter, resort_and_apply};
+pub(super) use selection::{clear_selection, handle_select_row};
+
+/// Install the Tracks models, build the handle, and wire every `Tracks.*`
+/// callback to it.
 ///
-/// Storage is a single packed `Box<str>` of [`row_match::search_fields`]
-/// joined by `\0` — one heap allocation per row instead of one `String`
-/// header per column. `\0` is a safe separator because needles come from
-/// text input (no NUL) and `push_folded` maps away the rare field value
-/// carrying one.
-///
-/// `year` stays an integer beside the packed text rather than being
-/// rendered into it, so the Tracks view and every `track_matches` surface
-/// run the *same* [`row_match::Needle::matches_year`] rule instead of two spellings
-/// of it.
-pub(super) struct RowSearchKey {
-    packed: Box<str>,
-    year: Option<i32>,
-}
-
-impl RowSearchKey {
-    pub(super) fn from_row(r: &RsTrackListRow) -> Self {
-        let fields = row_match::search_fields(r);
-        let text_len: usize = fields.iter().map(|f| f.len()).sum();
-        // One separator between each pair, so one fewer than there are fields.
-        let mut buf = String::with_capacity(text_len + fields.len() - 1);
-        for (i, field) in fields.iter().enumerate() {
-            if i > 0 {
-                buf.push('\0');
-            }
-            row_match::push_folded(&mut buf, field);
-        }
-        Self {
-            packed: buf.into_boxed_str(),
-            year: r.year,
-        }
-    }
-
-    /// A plain `str::contains` on the packed text, because both sides are
-    /// already folded — this is the one matcher that doesn't go through
-    /// [`Needle::contains`], and `Needle::as_str` exists for it.
-    pub(super) fn matches(&self, needle: &Needle) -> bool {
-        self.packed.contains(needle.as_str()) || needle.matches_year(self.year)
-    }
+/// The returned handle is read by `install_views` for the initial fetch and the
+/// `library_changed` refresher. It is not a keepalive; see
+/// [`crate::ui::albums::install`].
+pub fn install(cx: ViewCtx<'_>) -> Arc<TracksUi> {
+    install_tracks_model(cx.app);
+    install_selection_model(cx.app);
+    let tracks_ui = Arc::new(TracksUi::new(cx.cover_thumbs.clone()));
+    callbacks::wire(cx.app, cx.state, &tracks_ui);
+    tracks_ui
 }
 
 /// Holds the unfiltered set of tracks the Tracks view is currently sorted by.
-/// Filter changes re-derive the visible model from this Vec without a DB hit.
+/// Filter changes re-derive the visible model from this cache without a DB hit.
 pub struct TracksUi {
-    /// Canonical row set, kept in DB-fetch order. Never reordered — a
-    /// header-click sort only rebuilds `order`, never this Vec.
-    pub(super) full: Mutex<Arc<Vec<RsTrackListRow>>>,
-    /// Pre-folded filter keys, aligned positionally with `full`
-    /// (`full[i]` ↔ `search_keys[i]`).
-    pub(super) search_keys: Mutex<Arc<Vec<RowSearchKey>>>,
-    /// Display-order permutation into `full` / `search_keys`. A sort
-    /// change recomputes only this index `Vec` in memory — no DB
-    /// round-trip and no `search_keys` rebuild. After a fresh fetch this
-    /// is the identity `0..full.len()` (the DB `ORDER BY` already
-    /// produced display order on the cold path).
-    pub(super) order: Mutex<Arc<Vec<usize>>>,
+    /// Canonical row set plus its filter keys, sort keys and display-order
+    /// permutation. A header-click sort recomputes only the permutation.
+    pub(super) cache: TrackListCache,
     /// Path-keyed thumbnail cache. Many tracks share an album cover, so
     /// hitting this from `to_slint_track_list_row` avoids re-decoding the
     /// same file per track. Shared with the now-playing-bar bridge so
@@ -110,11 +79,9 @@ pub struct TracksUi {
 }
 
 impl TracksUi {
-    pub fn new(cover_thumbs: Arc<CoverThumbs>) -> Self {
+    fn new(cover_thumbs: Arc<CoverThumbs>) -> Self {
         Self {
-            full: Mutex::new(Arc::new(Vec::new())),
-            search_keys: Mutex::new(Arc::new(Vec::new())),
-            order: Mutex::new(Arc::new(Vec::new())),
+            cache: TrackListCache::new(),
             cover_thumbs,
             section: SectionState::new(),
         }
@@ -147,62 +114,32 @@ impl TracksUi {
     /// `play-row` hands these to `player_play_tracks`, so the queue becomes
     /// exactly the view the user was looking at.
     pub fn current_ids_filtered(&self, filter: &str) -> Vec<i64> {
-        // Hold each guard only long enough to bump the Arc refcount, then drop
-        // immediately so concurrent UI callers don't queue behind us.
-        let (full, keys, order) = {
-            let f = self.full.lock().clone();
-            let k = self.search_keys.lock().clone();
-            let o = self.order.lock().clone();
-            (f, k, o)
-        };
-        let needle = row_match::fold_needle(filter);
-        // Walk `order` so ids come back in the current display sort order.
-        // `.get()` keeps this panic-safe if a fetch swapped `full` between
-        // the three locks above — the next rebuild restores consistency.
-        if needle.is_empty() {
-            return order.iter().filter_map(|&i| Some(full.get(i)?.id)).collect();
-        }
-        order
-            .iter()
-            .filter_map(|&i| {
-                let r = full.get(i)?;
-                keys.get(i)?.matches(&needle).then_some(r.id)
-            })
-            .collect()
+        // One lock, one `Arc::clone`, then walk off it — a concurrent fetch
+        // can swap the cache underneath but not tear the set we hold.
+        self.cache
+            .snapshot()
+            .ids_filtered(&crate::ui::row_match::fold_needle(filter))
     }
 
-    /// Surgical mutation of `is_favorite` on the canonical Vec. Combined with
+    /// Surgical mutation of `is_favorite` on the cached row. Combined with
     /// `apply_row_favorite` below, lets us avoid re-fetching the whole list
     /// on a single-row favourite toggle (preserves scroll position + no flash).
-    ///
-    /// `Arc::make_mut` performs copy-on-write: when no other reader holds a
-    /// clone, the mutation happens in place; if a refilter is mid-flight
-    /// holding an `Arc` clone, we get a fresh Vec so the in-flight read
-    /// keeps its consistent view.
     pub fn flip_favorite(&self, id: i64, fav: bool) {
-        let mut full = self.full.lock();
-        let v = Arc::make_mut(&mut *full);
-        if let Some(r) = v.iter_mut().find(|r| r.id == id) {
-            r.is_favorite = fav;
-        }
+        self.cache.set_favorite(id, fav);
     }
 
-    /// Surgical mutation of `rating` on the canonical Vec — the star-rating
+    /// Surgical mutation of `rating` on the cached row — the star-rating
     /// analogue of [`Self::flip_favorite`]. Paired with `apply_row_rating` so a
     /// hover-set rating doesn't re-fetch the whole list.
     pub fn flip_rating(&self, id: i64, rating: i32) {
-        let mut full = self.full.lock();
-        let v = Arc::make_mut(&mut *full);
-        if let Some(r) = v.iter_mut().find(|r| r.id == id) {
-            r.rating = rating;
-        }
+        self.cache.set_rating(id, rating);
     }
 }
 
 /// Build an empty `VecModel<TrackListRow>`, hand it to the Slint `Tracks`
 /// global as a `ModelRc`. Subsequent updates locate it by downcasting
 /// `Tracks.rows` back to `VecModel<TrackListRow>`.
-pub fn install_tracks_model(ui: &AppWindow) {
+fn install_tracks_model(ui: &AppWindow) {
     let model: Rc<VecModel<UiTrackListRow>> = Rc::new(VecModel::default());
     ui.global::<Tracks>().set_rows(ModelRc::from(model));
 }
@@ -210,7 +147,7 @@ pub fn install_tracks_model(ui: &AppWindow) {
 /// Install a persistent `VecModel<i32>` for `Tracks.selected-ids` so
 /// selection mutations can `set_vec` into the same model instead of
 /// allocating a fresh `ModelRc + VecModel` on every click.
-pub fn install_selection_model(ui: &AppWindow) {
+fn install_selection_model(ui: &AppWindow) {
     let model: Rc<VecModel<i32>> = Rc::new(VecModel::default());
     ui.global::<Tracks>().set_selected_ids(ModelRc::from(model));
 }
@@ -312,7 +249,3 @@ pub(crate) fn format_duration_ms(ms: i64) -> String {
         format!("{mins}:{secs:02}")
     }
 }
-
-#[cfg(test)]
-#[path = "tests/tracks_tests.rs"]
-mod tests;

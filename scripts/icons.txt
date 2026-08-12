@@ -10,6 +10,7 @@ balance
 bar_chart
 bedtime
 brush
+bug_report
 category
 chat
 check
@@ -22,6 +23,7 @@ colorize
 create_new_folder
 crop_square
 delete
+description
 dock_to_left
 dock_to_right
 download
@@ -36,6 +38,7 @@ folder
 folder_off
 folder_open
 graphic_eq
+grid_view
 heart_minus
 history
 home
@@ -84,6 +87,7 @@ tonality
 translate
 tune
 upload
+view_list
 visibility
 volume_down
 volume_off

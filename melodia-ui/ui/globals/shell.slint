@@ -50,14 +50,23 @@ export global MiniPlayer {
 }
 
 // Bridges the winit `MouseWheel` filter to whichever *composite* view is mounted —
-// Artist Detail, Browse, Recently Played. Those wrap a strip section and a height-capped
-// virtualized `TrackList` in one outer `ScrollView`, and Slint's inner `ListView`
-// swallows the vertical wheel at its scroll edge rather than bubbling out, so the hero
-// can't be wheeled back once scrolled away. Pure Slint can't fix it without breaking row
+// Artist Detail and Browse. Those wrap a section above a height-capped virtualized
+// `TrackList` in one outer `ScrollView`, and Slint's inner `ListView` swallows the
+// vertical wheel at its scroll edge rather than bubbling out, so the hero can't be
+// wheeled back once scrolled away. Pure Slint can't fix it without breaking row
 // clicks — a wrapping TouchArea hands the wheel to the ListView first, an overlay one
 // grabs presses — so the winit layer intercepts vertical-dominant wheel over the region
 // and drives the composite scroll math here. The height cap, and so the virtualization,
 // is untouched.
+//
+// **A page whose sections become tabs stops needing any of this**, one scroller per tab
+// having nothing to nest: Favorites left when its strips became tabs and Recently Played
+// with it. Reach for tabs before reaching for the composite when a new page wants a list
+// under a band of cards.
+//
+// That arm has a second, unrelated job — normalizing a touchpad's phased gesture, which
+// a `Flickable` otherwise captures whatever direction it is going. It reads none of this
+// global and needs no sentinel; see `route_wheel` in `winit_filter.rs`.
 export global CompositeScroll {
     // Set by the mounted view's hover sentinel over its below-hero region, and cleared
     // by `reset()` on any view switch so a view unmounting mid-hover can't strand it.

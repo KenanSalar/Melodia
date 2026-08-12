@@ -45,6 +45,16 @@
 
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs" xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util" xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
 
+    <!--
+      cargo-wix's variables all point into `target/`, and there is none for the
+      repo. `sys.SOURCEFILEDIR` is the directory of *this* file (WiX appends the
+      separator itself), so `..` is the repo root without going through the
+      working directory. Every repo-relative source in this file spells it —
+      including the product icon, which was a bare `assets\melodia.ico` and
+      worked only because cargo-wix happens to run from the package root.
+    -->
+    <?define RepoRoot = $(sys.SOURCEFILEDIR).. ?>
+
     <Package Name="Melodia" UpgradeCode="D79812BC-9AE2-42C4-8D1B-418DB5A537B6" Manufacturer="Kenan Salar" Language="1033" Codepage="65001" Version="$(var.Version)" InstallerVersion="500" Scope="perMachine"><!--
           Per-machine MSI. Installs to `C:\Program Files\Melodia\` (or
           `Program Files (x86)\` on 32-bit hosts via the
@@ -90,14 +100,10 @@
         -->
         
 
-        <Feature Id="Binaries" Title="Application" Description="Installs all binaries and the license." Level="1" ConfigurableDirectory="APPLICATIONFOLDER" AllowAdvertise="no" Display="expand" AllowAbsent="no">
-            
-            <!--
-              Uncomment the following `ComponentRef` tag to add the license
-              sidecar file to the installer.
-            -->
-            <!--<ComponentRef Id='License'/>-->
+        <Feature Id="Binaries" Title="Application" Description="Installs all binaries and the licenses." Level="1" ConfigurableDirectory="APPLICATIONFOLDER" AllowAdvertise="no" Display="expand" AllowAbsent="no">
 
+            <ComponentRef Id="AppLicense" />
+            <ComponentRef Id="ThirdPartyLicenses" />
             <ComponentRef Id="binary0" />
             <ComponentRef Id="StartMenuShortcut" />
 
@@ -125,7 +131,7 @@
                 -define icon:auto-resize=256,128,96,64,48,32,24,16 \
                 assets/melodia.ico
         -->
-        <Icon Id="ProductICO" SourceFile="assets\melodia.ico" />
+        <Icon Id="ProductICO" SourceFile="$(var.RepoRoot)\assets\melodia.ico" />
         <Property Id="ARPPRODUCTICON" Value="ProductICO" />
 
         <!--
@@ -188,6 +194,47 @@
     
             <StandardDirectory Id="ProgramFiles6432Folder">
                 <Directory Id="APPLICATIONFOLDER" Name="Melodia">
+                    <!--
+                      Melodia's own licence, at the install root where the
+                      convention puts it. A component belongs to exactly one
+                      directory, which is why the third-party texts below are a
+                      second component rather than three more Files here.
+
+                      Explicit GUIDs (WIX0230) on both, stable across releases
+                      so MajorUpgrade replaces rather than duplicates them —
+                      the `binary0` reasoning further down. First File in each
+                      is the KeyPath; per-machine ICE rules take a File keypath
+                      directly.
+                    -->
+                    <Component Id="AppLicense" Guid="22687C47-514D-4454-8B81-38B5B1FF9B27">
+                        <File Id="AgplLicense" Name="LICENSE" KeyPath="yes" DiskId="1" Source="$(var.RepoRoot)\LICENSE" />
+                    </Component>
+                    <!--
+                      The bundled fonts and the vendored winit fork are all
+                      compiled into Melodia.exe, so this MSI redistributes them
+                      and owes their licence text — Apache-2.0 §4(a) outright.
+                      Every other format globs the directory; WiX needs each file
+                      named, so this is the one place a fourth entry in
+                      `licenses/` costs an edit. Two pins hold that, and they
+                      answer different questions:
+                      `every_package_format_ships_the_licenses_dir` catches this
+                      file dropping the directory entirely, and
+                      `the_msi_names_every_licence_file` walks `licenses/` and
+                      fails on any file that isn't a `<File>` below — so the
+                      edit is a red test rather than a note someone has to read.
+                      Apache-2.0.txt
+                      covers two of the three bundled works (Material Symbols and
+                      winit) and is deliberately shipped once — the text is the
+                      same and a second copy would only be one more thing to keep
+                      in step.
+                    -->
+                    <Directory Id="LicenseDir" Name="licenses">
+                        <Component Id="ThirdPartyLicenses" Guid="5E7B947C-120B-4675-898E-21152E128358">
+                            <File Id="Attribution" Name="ATTRIBUTION.txt" KeyPath="yes" DiskId="1" Source="$(var.RepoRoot)\licenses\ATTRIBUTION.txt" />
+                            <File Id="VazirmatnOfl" Name="Vazirmatn-OFL-1.1.txt" DiskId="1" Source="$(var.RepoRoot)\licenses\Vazirmatn-OFL-1.1.txt" />
+                            <File Id="Apache20" Name="Apache-2.0.txt" DiskId="1" Source="$(var.RepoRoot)\licenses\Apache-2.0.txt" />
+                        </Component>
+                    </Directory>
                     <Directory Id="Bin" Name="bin">
                         <!--
                           Per-machine PATH update. `System="yes"` writes

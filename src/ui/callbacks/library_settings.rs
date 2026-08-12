@@ -7,11 +7,12 @@ use super::macros::{spawn_logged, spawn_logged_toast};
 use crate::error::AppError;
 use crate::library;
 use crate::state::AppState;
-use crate::ui::library_settings as lib_settings_ui;
+use crate::ui::file_dialog;
+use crate::ui::settings::library_settings as lib_settings_ui;
 use crate::{AppWindow, LibrarySettings};
 
 /// Wire the `LibrarySettings.*` callbacks. Pairs with
-/// `ui::library_settings::install`, which handles the push side (folder list
+/// `ui::settings::library_settings::install`, which handles the push side (folder list
 /// hydration + scan-progress subscriber). Call once after `wire_all`.
 ///
 /// Add-folder runs the native `rfd` picker on the UI thread (via
@@ -35,23 +36,7 @@ pub fn wire_library_settings(ui: &AppWindow, state: &AppState) {
             // safely invoked from). `Compat` provides a tokio reactor so
             // the awaited sqlx calls work.
             let _ = slint::spawn_local(Compat::new(async move {
-                // Build the dialog, parenting it to the main window when
-                // possible so the OS picker z-orders above Melodia on
-                // Windows + macOS (Linux XDG portal handles parenting
-                // OS-side regardless). `set_parent` only stashes the raw
-                // window / display handles (see rfd 0.17.2
-                // `file_dialog.rs::set_parent`); the strong `ui` handle
-                // drops at the end of this block, and the underlying
-                // Slint window stays alive via the owning `AppWindow`
-                // in `main.rs`.
-                let dialog = {
-                    let mut d = rfd::AsyncFileDialog::new()
-                        .set_title("Select Music Folder");
-                    if let Some(ui) = weak.upgrade() {
-                        d = d.set_parent(&ui.window().window_handle());
-                    }
-                    d
-                };
+                let dialog = file_dialog::parented(&weak, "Select Music Folder");
                 let Some(handle) = dialog.pick_folder().await else {
                     return;
                 };

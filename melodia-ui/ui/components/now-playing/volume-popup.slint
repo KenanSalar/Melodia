@@ -3,14 +3,15 @@ import { Player } from "../../globals/player.slint";
 import { PopupHighlight } from "../../globals/shell.slint";
 import { IconButton } from "../icon-button.slint";
 import { PopupSurface } from "../popup-surface.slint";
+import { Tooltip, TooltipSide } from "../tooltip.slint";
 import { FocusLossWatcher } from "../focus-loss-watcher.slint";
 
 // An icon button and a popup holding a Material 3 vertical slider — two rounded bars
-// with a thin pill thumb between them and a stop-indicator dot near the max end — plus a
-// percentage badge floating to its left.
+// with a thin pill thumb between them and a stop-indicator dot near the max end — plus
+// the shared `Tooltip` pill reading the percentage out to its left.
 //
 // **The popup is wider than the slider chrome**: the slider sits in the right strip and
-// the badge in the left, with a transparent gap between, so the two read as separate
+// the readout in the left, with a transparent gap between, so the two read as separate
 // floating chromes rather than one wide bar. A `PopupWindow`'s content can't render
 // outside its own rectangle, so the gap is how that's spelled — not a second popup or
 // negative coordinates.
@@ -258,27 +259,25 @@ export component VolumePopup inherits Rectangle {
             }
         }
 
-        // Positioned in popup-absolute coordinates by chaining through the chrome and
-        // slider offsets, so it stays centred on the thumb. Shown only while the slider
-        // is hovered or dragged.
+        // A zero-size anchor at the chrome's left edge, level with the thumb: `Tooltip`
+        // positions itself against a host *box*, and what this pill hangs off is a
+        // *point*. Chained through the chrome and slider offsets, so it stays on the
+        // thumb through a drag.
         Rectangle {
-            width: 42px;
-            height: 22px;
-            x: 0;
-            y: chrome.y + slider.y + slider.thumb-cy - self.height / 2;
-            background: Theme.surface2;
-            border-radius: Theme.radius-sm;
-            // Opacity rather than `visible`, so the `animate` has something to
-            // interpolate.
-            opacity: vol-touch.has-hover || vol-touch.pressed ? 1.0 : 0.0;
-            animate opacity { duration: 150ms; easing: cubic-bezier(0.34, 1.56, 0.64, 1); }
+            x: chrome.x;
+            y: chrome.y + slider.y + slider.thumb-cy;
+            width: 0px;
+            height: 0px;
 
-            Text {
+            Tooltip {
                 text: round(Player.vm.volume) + "%";
-                color: Theme.text;
-                font-size: Theme.font-size-sm;
-                horizontal-alignment: center;
-                vertical-alignment: center;
+                host-width: 0px;
+                host-height: 0px;
+                side: TooltipSide.left;
+                gap: 10px;
+                // No reveal delay — the readout has to be up on the frame the drag
+                // starts. Same hook the keyboard HUD above takes.
+                force-shown: vol-touch.has-hover || vol-touch.pressed;
             }
         }
     }

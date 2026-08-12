@@ -360,7 +360,7 @@ impl Default for WindowFlags {
 /// serializes at the top level of `settings.json`.
 ///
 /// `tray_enabled` defaults to `false` — the tray icon is opt-in. When off,
-/// `main.rs` skips `ui::tray_bridge::install` entirely, so none of the tray
+/// `main.rs` skips `ui::shell::tray_bridge::install` entirely, so none of the tray
 /// code runs: no D-Bus connection, no service thread, no action tasks.
 /// Toggling it requires a restart (the `restart-tray` `Dialog` flow).
 ///
@@ -455,6 +455,31 @@ impl Default for LibraryFlags {
             music_folder_auto_added: false,
         }
     }
+}
+
+/// What the diagnostics surfaces record. See `PlaybackFlags` for the substruct
+/// rationale.
+///
+/// `verbose_logging` defaults off: it is a debugging mode, and against a 2 MiB
+/// rotation budget leaving it on costs a reporter the older history. Persisted
+/// rather than session-scoped so `logging::install` can start a boot at it.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct DiagnosticsFlags {
+    pub verbose_logging: bool,
+}
+
+/// What the one-time Ko-fi prompt remembers. See `PlaybackFlags` for the substruct
+/// rationale.
+///
+/// Both fields default to zero, which is what a first launch means. `launch_count`
+/// stops advancing once `support_prompt_seen` is set, so a settled install stops
+/// writing `settings.json` at boot rather than counting forever.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SupportFlags {
+    pub launch_count: u32,
+    pub support_prompt_seen: bool,
 }
 
 /// Auto-updater state persisted between launches. See `PlaybackFlags` for
@@ -636,6 +661,10 @@ pub struct SettingsData {
     pub layout: LayoutFlags,
     #[serde(flatten)]
     pub updates: UpdateFlags,
+    #[serde(flatten)]
+    pub diagnostics: DiagnosticsFlags,
+    #[serde(flatten)]
+    pub support: SupportFlags,
 }
 
 impl Default for SettingsData {
@@ -677,6 +706,8 @@ impl Default for SettingsData {
             library: LibraryFlags::default(),
             layout: LayoutFlags::default(),
             updates: UpdateFlags::default(),
+            diagnostics: DiagnosticsFlags::default(),
+            support: SupportFlags::default(),
         }
     }
 }

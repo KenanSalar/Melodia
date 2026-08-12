@@ -1,6 +1,6 @@
 //! Winit `WindowEvent` filter installed by `window_chrome::install`.
 //!
-//! Subscribes to winit window events for five reasons:
+//! Subscribes to winit window events for six reasons:
 //!
 //! 1. **`MouseInput { Pressed, Left }`** when the cursor is over the
 //!    titlebar drag area: start an OS-level window move and return
@@ -33,6 +33,9 @@
 //!    Slint 1.16 has no cross-app `DnD` API, so the winit layer is the
 //!    only path through which the platform reports file drops to us.
 //!    Drops route through [`super::drop_coalescer::schedule_drop_flush`].
+//! 6. **`MouseWheel`**, for two unrelated `Flickable` defects — see
+//!    [`route_wheel`]. `CursorMoved` is mirrored for the same arm,
+//!    since a wheel event carries no position.
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -40,7 +43,9 @@ use std::time::Duration;
 
 use slint::ComponentHandle;
 use slint::winit_030::WinitWindowAccessor;
-use slint::winit_030::winit::event::{ElementState, MouseButton, MouseScrollDelta, WindowEvent};
+use slint::winit_030::winit::event::{
+    ElementState, MouseButton, MouseScrollDelta, TouchPhase, WindowEvent,
+};
 use slint::winit_030::winit::window::Window as WinitWindow;
 
 use crate::state::AppState;
@@ -77,14 +82,61 @@ fn schedule_minimize_probe(weak: slint::Weak<AppWindow>) {
             .with_winit_window(WinitWindow::is_minimized)
             .flatten();
         if minimized == Some(true) {
-            crate::ui::tray_bridge::set_window_visible(&ui, false);
+            crate::ui::shell::tray_bridge::set_window_visible(&ui, false);
         }
     });
+}
+
+/// What the `MouseWheel` arm does with one event.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum WheelRoute {
+    /// Into the mounted composite view's own scroll math.
+    Composite,
+    /// Re-send to Slint without the gesture phase, then swallow the original.
+    Unphased,
+    /// Leave it to Slint.
+    Native,
+}
+
+/// Decide where one wheel event goes. Two unrelated `Flickable` defects meet
+/// here, and the composite view is asked first — it owns its region outright.
+///
+/// `Composite` is the nested-`ListView`-swallows-the-wheel one, argued at
+/// `CompositeScroll` in `globals/shell.slint`. Horizontal-dominant wheel stays
+/// native there: that axis belongs to the column pan.
+///
+/// `Unphased` is the touchpad one. `Flickable` intercepts `TouchPhase::Started`
+/// unconditionally and sets its capture flag without checking whether the delta
+/// is on an axis it can scroll, so the outermost one under the pointer owns the
+/// whole gesture — where its `Moved` and `Cancelled` arms check direction first.
+/// Only a precision device sends the phase (Wayland folds a discrete axis to
+/// `Moved`; X11 and Win32 send nothing else), which is why a plain `TrackList`
+/// page scrolls under a wheel and not under two fingers: its column pan is a
+/// horizontal-only `ScrollView` wrapping the vertical list. Re-sending the
+/// delta unphased leaves the capture flag unset, so the gesture takes a wheel's
+/// route. Costs Slint's kinetic fling, gated on that same flag — macOS sends
+/// its own momentum deltas, Wayland doesn't.
+fn route_wheel(
+    composite_hovered: bool,
+    overlay_open: bool,
+    phase: TouchPhase,
+    dx: f32,
+    dy: f32,
+) -> WheelRoute {
+    if composite_hovered && !overlay_open && dy != 0.0 && dy.abs() >= dx.abs() {
+        return WheelRoute::Composite;
+    }
+    if matches!(phase, TouchPhase::Started) {
+        return WheelRoute::Unphased;
+    }
+    WheelRoute::Native
 }
 
 pub(super) fn install(app: &AppWindow, state: &AppState, drag_hover: Arc<AtomicBool>) {
     let weak = app.as_weak();
     let state = state.clone();
+    // Where the pointer is, for the synthetic scroll below.
+    let mut cursor_pos = slint::LogicalPosition::default();
     app.window().on_winit_window_event(move |w, event| {
         match event {
             WindowEvent::MouseInput {
@@ -202,7 +254,7 @@ pub(super) fn install(app: &AppWindow, state: &AppState, drag_hover: Arc<AtomicB
                 // asking while we still believe the window is up: a tray hide
                 // and our own minimize button both lower the shadow first, and
                 // on X11 the answer costs a round-trip on the UI thread.
-                if !focused && crate::ui::tray_bridge::is_window_visible() {
+                if !focused && crate::ui::shell::tray_bridge::is_window_visible() {
                     schedule_minimize_probe(weak.clone());
                 }
                 let _ = weak.upgrade_in_event_loop(move |ui| {
@@ -213,7 +265,7 @@ pub(super) fn install(app: &AppWindow, state: &AppState, drag_hover: Arc<AtomicB
                     // through any of our callbacks, so the tray-bridge shadow
                     // would otherwise stay stuck at the post-minimize `false`.
                     if focused {
-                        crate::ui::tray_bridge::set_window_visible(&ui, true);
+                        crate::ui::shell::tray_bridge::set_window_visible(&ui, true);
                     }
                 });
                 slint::winit_030::EventResult::Propagate
@@ -274,9 +326,9 @@ pub(super) fn install(app: &AppWindow, state: &AppState, drag_hover: Arc<AtomicB
             // `should_hide_to_tray` is false when no tray is active, so this
             // can't strand the user.
             WindowEvent::CloseRequested => {
-                if crate::ui::tray_bridge::should_hide_to_tray() {
+                if crate::ui::shell::tray_bridge::should_hide_to_tray() {
                     if let Err(e) = weak.upgrade_in_event_loop(|ui| {
-                        crate::ui::tray_bridge::hide_window(&ui);
+                        crate::ui::shell::tray_bridge::hide_window(&ui);
                     }) {
                         log::warn!("close-to-tray: schedule hide: {e}");
                     }
@@ -285,21 +337,17 @@ pub(super) fn install(app: &AppWindow, state: &AppState, drag_hover: Arc<AtomicB
                 }
                 slint::winit_030::EventResult::PreventDefault
             }
-            // Composite-view wheel routing. Favorites / Recently Played /
-            // Artist Detail / Browse stack a strip section above a height-
-            // capped (virtualized) `TrackList` inside one outer `ScrollView`.
-            // Slint's inner `ListView` swallows the vertical wheel at its top
-            // edge instead of bubbling to the outer scroller, so the strips/hero
-            // can't be wheeled back once scrolled away (see `CompositeScroll` in
-            // globals/shell.slint for the full root-cause note). There is no
-            // Slint-native seam to intercept the wheel without eating row
-            // clicks, so we do it here: only vertical-dominant wheel over a live
-            // composite region is taken over and fed into that view's existing
-            // composite scroll math. Horizontal-dominant wheel (column pan,
-            // strip carousels), the sidebar, and every non-composite view stay
-            // native. Delta conversion mirrors the Slint winit backend exactly
-            // (`event_loop.rs`: line delta × 60, pixel delta → logical).
-            WindowEvent::MouseWheel { delta, .. } => {
+            // Same conversion the Slint backend does for its own copy
+            // (`event_loop.rs`), so the two can't disagree.
+            WindowEvent::CursorMoved { position, .. } => {
+                let l = position.to_logical::<f32>(f64::from(w.scale_factor()));
+                cursor_pos = slint::LogicalPosition::new(l.x, l.y);
+                slint::winit_030::EventResult::Propagate
+            }
+            // Routing argued at `route_wheel`. Delta conversion mirrors the
+            // Slint winit backend exactly (`event_loop.rs`: line delta × 60,
+            // pixel delta → logical).
+            WindowEvent::MouseWheel { delta, phase, .. } => {
                 let (dx, dy) = match delta {
                     MouseScrollDelta::LineDelta(lx, ly) => (lx * 60.0, ly * 60.0),
                     MouseScrollDelta::PixelDelta(p) => {
@@ -310,31 +358,49 @@ pub(super) fn install(app: &AppWindow, state: &AppState, drag_hover: Arc<AtomicB
                 let Some(ui) = weak.upgrade() else {
                     return slint::winit_030::EventResult::Propagate;
                 };
-                // Don't hijack the wheel while an overlay (Queue sheet / Dialog /
-                // Now Playing) is up: `hovered` can be stale-true if the overlay
-                // opened over a composite region without a pointer move, since
-                // Slint only clears `has-hover` on the next `MouseEvent::Exit`
-                // (one pointer event later). Mirrors the Mouse-4/5 arm's own
-                // overlay gate.
                 let cs = ui.global::<CompositeScroll>();
-                if cs.get_hovered()
-                    && !crate::ui::nav_history::overlay_open(&ui)
-                    && dy != 0.0
-                    && dy.abs() >= dx.abs()
-                {
-                    // Accumulate rather than overwrite: Slint fires the mounted
-                    // view's `changed wheel-tick` handler at most once per loop
-                    // iteration, so several wheel events landing before a re-eval
-                    // would otherwise collapse to just the last delta (under-scroll
-                    // on fast flicks). The view zeroes `wheel-dy` after applying, so
-                    // this only ever sums deltas within one un-applied frame.
-                    cs.set_wheel_dy(cs.get_wheel_dy() + dy);
-                    cs.set_wheel_tick(cs.get_wheel_tick().wrapping_add(1));
-                    return slint::winit_030::EventResult::PreventDefault;
+                // `hovered` can be stale-true if an overlay (Queue sheet /
+                // Dialog / Now Playing) opened over a composite region without a
+                // pointer move — Slint clears `has-hover` only on the next
+                // `MouseEvent::Exit`, one pointer event later. Mirrors the
+                // Mouse-4/5 arm's own gate.
+                let overlay_open = crate::ui::nav_history::overlay_open(&ui);
+                match route_wheel(cs.get_hovered(), overlay_open, *phase, dx, dy) {
+                    WheelRoute::Composite => {
+                        // Accumulate rather than overwrite: Slint fires the mounted
+                        // view's `changed wheel-tick` handler at most once per loop
+                        // iteration, so several wheel events landing before a re-eval
+                        // would otherwise collapse to just the last delta (under-scroll
+                        // on fast flicks). The view zeroes `wheel-dy` after applying, so
+                        // this only ever sums deltas within one un-applied frame.
+                        cs.set_wheel_dy(cs.get_wheel_dy() + dy);
+                        cs.set_wheel_tick(cs.get_wheel_tick().wrapping_add(1));
+                        slint::winit_030::EventResult::PreventDefault
+                    }
+                    // `PointerScrolled` arrives as a one-shot
+                    // `TouchPhase::Cancelled` wheel (`i-slint-core/api.rs`) — the
+                    // direction-aware arm. Re-sent rather than dropped so the
+                    // shortest gestures, one event and a stop, still move
+                    // something.
+                    WheelRoute::Unphased => {
+                        let scrolled = slint::platform::WindowEvent::PointerScrolled {
+                            position: cursor_pos,
+                            delta_x: dx,
+                            delta_y: dy,
+                        };
+                        if let Err(e) = ui.window().try_dispatch_event(scrolled) {
+                            log::warn!("touchpad scroll: dispatch: {e}");
+                        }
+                        slint::winit_030::EventResult::PreventDefault
+                    }
+                    WheelRoute::Native => slint::winit_030::EventResult::Propagate,
                 }
-                slint::winit_030::EventResult::Propagate
             }
             _ => slint::winit_030::EventResult::Propagate,
         }
     });
 }
+
+#[cfg(test)]
+#[path = "tests/winit_filter_tests.rs"]
+mod tests;

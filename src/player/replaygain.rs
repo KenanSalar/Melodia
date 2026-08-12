@@ -107,7 +107,8 @@ impl RgMode {
 
 /// The four `ReplayGain` values for one track, in playback-ready `f32`. `gain`
 /// fields are decibels (as stored in the tag); `peak` fields are linear sample
-/// peaks (1.0 = full scale). Baked into each [`EqSource`] at build time. Cheap
+/// peaks (1.0 = full scale). Baked into each [`super::equalizer::EqSource`] at
+/// build time. Cheap
 /// to copy (four `Option<f32>`), so it threads through the play actions by value.
 #[derive(Copy, Clone, Debug, Default, PartialEq)]
 pub struct TrackReplayGain {

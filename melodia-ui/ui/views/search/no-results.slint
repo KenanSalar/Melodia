@@ -1,0 +1,38 @@
+import { Theme } from "../../theme.slint";
+import { MaterialIcon } from "../../components/material-icon.slint";
+
+// The verdict when a settled query matched nothing anywhere — no tracks, no albums, no
+// artists, no top result. Reads nothing: the mount site owns that conjunction, since it
+// is also what decides whether the results section renders at all.
+export component NoResults inherits VerticalLayout {
+    vertical-stretch: 0;
+    alignment: center;
+    padding-top: 48px;
+    spacing: Theme.pad-sm;
+
+    HorizontalLayout {
+        alignment: center;
+        MaterialIcon {
+            name: "search_off";
+            icon-size: 42px;
+            icon-color: Theme.subtext0;
+        }
+    }
+    HorizontalLayout {
+        alignment: center;
+        Text {
+            text: @tr("No results found");
+            color: Theme.text;
+            font-size: Theme.font-size-lg;
+            font-weight: 600;
+        }
+    }
+    HorizontalLayout {
+        alignment: center;
+        Text {
+            text: @tr("Try a different search term");
+            color: Theme.subtext0;
+            font-size: Theme.font-size-sm;
+        }
+    }
+}

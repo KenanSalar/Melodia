@@ -1,10 +1,11 @@
 import { NotificationRow } from "../models.slint";
+import { Settings } from "../settings.slint";
 
 // The updater's state and the toast stack that surfaces it. Together because
 // the stack's only cross-global action target is the updater — keeping that
 // edge inside one file rather than turning it into an import.
 
-// In-app auto-update state, owned by `src/ui/updater_settings.rs` and
+// In-app auto-update state, owned by `src/ui/settings/updater_settings.rs` and
 // `src/ui/callbacks/updater/`. `UpdaterState` in `src/services/updater/state.rs`
 // is the source of truth and these are its projection;
 // `update-section.slint` imports it aliased back to `Updater`.
@@ -54,7 +55,7 @@ export global MelodiaUpdater {
 }
 
 // The bottom-right transient stack, for messages that don't warrant a modal.
-// `src/ui/notifications.rs` owns the backing model and does the removal behind
+// `src/ui/shell/notifications.rs` owns the backing model and does the removal behind
 // `dismiss`.
 //
 // Unlike `Dialog`, `kind` lives on the *row*: several can be up at once, each
@@ -74,6 +75,12 @@ export global Notifications {
             Notifications.dismiss(id);
         } else if (kind == "update-restart") {
             MelodiaUpdater.restart();
+            Notifications.dismiss(id);
+        } else if (kind == "crash-report") {
+            Settings.open-log-folder();
+            Notifications.dismiss(id);
+        } else if (kind == "support-melodia") {
+            Settings.open-kofi();
             Notifications.dismiss(id);
         }
     }

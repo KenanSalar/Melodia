@@ -18,6 +18,7 @@ use crate::ui::detail_artwork::decode_detail_pair;
 use crate::ui::detail_filter::FilterRefs;
 use crate::ui::detail_view::{impl_detail_view_helpers, resolve_view_sort};
 use crate::ui::model_patch;
+use crate::ui::my_library::{MyLibraryTab, tab_is_mounted};
 use crate::ui::track_list_view::view_id;
 use crate::ui::track_sort::sort_track_list_rows;
 use crate::ui::tracks::PreparedTrackRow;
@@ -77,17 +78,19 @@ pub async fn open_album(
 
 /// Same as [`open_album`] but the caller can hook into the **same**
 /// `upgrade_in_event_loop` closure that writes `album-id`. The hook runs
-/// as the last statement on the UI thread, after every detail property
-/// is set, so a follow-on global write (e.g. flipping `Nav.selected-index`
-/// for cross-tab nav from the Artist Detail) lands in the same frame —
-/// Slint paints `AlbumDetailView` directly with no `AlbumView` frame in
-/// between.
+/// after every detail property is set, so a follow-on global write (e.g.
+/// flipping `Nav.selected-index` for cross-tab nav from the Artist Detail)
+/// lands in the same frame — Slint paints `AlbumDetailBody` directly with
+/// no Albums-grid frame in between. What follows it is the handful of
+/// writes that have to read the tab the hook may have just moved: the
+/// shared-hero gate, the history record and the filter-box reseat.
 ///
-/// `enter_from` chooses the `ViewTransition` enter direction for the new
-/// `AlbumDetailView` mount; pass [`NavEnterFrom::Right`] for any user
-/// drill-in (same-tab or cross-tab), and [`NavEnterFrom::Below`] for the
-/// first-launch seed path so reopening a saved detail feels like a normal
-/// app start.
+/// `enter_from` chooses the enter direction for the **page** mount a
+/// cross-section drill produces — the `AlbumDetailBody` itself takes a fixed
+/// `below` and holds still while the band morphs, so this reaches nothing
+/// when `Nav.selected-index` doesn't move in the same tick. Pass
+/// [`NavEnterFrom::Right`] for any user drill-in and [`NavEnterFrom::Below`]
+/// for the first-launch seed path.
 pub async fn open_album_with<F>(
     state: &AppState,
     albums_ui: &Arc<AlbumsUi>,
@@ -130,7 +133,7 @@ where
     // Folded here rather than inside the `upgrade_in_event_loop` below — this
     // is the worker that already has the rows, and the UI thread has no reason
     // to walk a long album's track list a second time.
-    let genre = crate::ui::hero_chips::dominant_genre(&tracks);
+    let genre = crate::ui::hero_folds::dominant_genre(&tracks);
 
     *albums_ui.detail.album_id.lock() = album_id;
 
@@ -145,18 +148,6 @@ where
             .collect();
         let header = to_slint_album_row(&detail);
         g.set_album(header);
-        // Off `detail` rather than the row above it — `disc_count` and
-        // `is_compilation` are fetched but never reach `AlbumRow`.
-        crate::ui::hero_chips::publish_album(
-            &ui,
-            &detail,
-            genre.as_deref(),
-            albums_ui.section_active(),
-        );
-        // Hero blur cross-fades from the previous album; the cover slot
-        // is written directly (no fade — the artwork tile itself is
-        // covered by the next album's tile in one frame).
-        apply_detail_artwork(&ui, &g, pair, /* animate */ true, albums_ui.section_active());
         replace_tracks_model(&g, ui_tracks);
         reset_detail_selection(&g, &albums_ui);
         // Fresh open clears the filter so the user lands on the full
@@ -166,12 +157,10 @@ where
         albums_ui.detail.filter.lock().clear();
         g.set_sort_field(SharedString::from(sort_field.as_str()));
         g.set_sort_dir(SharedString::from(sort_dir.as_str()));
-        // Set the view-transition direction before the property writes
-        // that flip the `if` branch. Caller-supplied so the seed path
-        // can pass `Below` (normal app-start fade) instead of `Right`
-        // (drill-in slide). Same UI-thread tick as the `album-id` flip
-        // and any `on_applied` Nav write, so the new `ViewTransition`
-        // samples the right direction on first paint.
+        // Set the page's enter direction before the `on_applied` hook can
+        // flip `Nav.selected-index`, so a cross-section drill's new page
+        // samples it on first paint. Inert on a same-page drill, whose
+        // body reads a fixed `below` — see `ui::nav_transition`.
         crate::ui::nav_transition::mark(&ui, enter_from);
         g.set_album_id(clamp_i64_to_i32(album_id));
         // Fresh open: no filter, so the displayed cache equals the
@@ -182,12 +171,37 @@ where
         // performs (Nav.selected-index for cross-tab nav, …) land in
         // the same UI-thread tick as the detail flip.
         on_applied(&ui);
+        // The two globals six heroes share, written last because their gate is
+        // the **live** tab rather than the `section_active` shadow, which the
+        // `SectionActiveGate` only updates next frame. A cross-section drill is
+        // what forced it: read before the hook above, the gate answers for the
+        // tab the user *left*, so both were dropped and only reappeared once the
+        // section-enter re-ran `fetch_grid` plus this whole fetch again.
+        let on_screen = tab_is_mounted(&ui, MyLibraryTab::Albums);
+        // Off `detail` rather than the `AlbumRow` above — `disc_count` and
+        // `is_compilation` are fetched but never reach the row.
+        crate::ui::hero_chips::publish_album(&ui, &detail, genre.as_deref(), on_screen);
+        // Hero blur cross-fades from the previous album; the cover slot
+        // is written directly (no fade — the artwork tile itself is
+        // covered by the next album's tile in one frame).
+        apply_detail_artwork(&ui, &g, pair, /* animate */ true, on_screen);
         // Record a browser-style history entry. Cross-tab `on_applied`
         // may have already flipped `Nav.selected-index`, so reading it
         // here gives the post-flip section. Mouse-4/Mouse-5 walks back
         // and forward through these entries. No-op while a replay is
         // in flight (the replay's own writes set `suppress`).
         crate::ui::nav_history::record_current(&state_for_history, &ui);
+        // The filter clear above is only half a clear: the page's one box
+        // is `MyLibrary.filter`, and the sheet's `album-id` mirror can't
+        // announce a re-open that writes the *same* id. That is the
+        // section re-enter — a nav-away and back over an open detail
+        // re-runs this function, so the box would keep the needle the
+        // user typed over a list this call just unfiltered. Last in the
+        // closure because `sync_box` reads the mounted tab, which
+        // `on_applied` may have just moved for a cross-tab drill; on a
+        // fresh drill the id mirror reaches the same answer and this is
+        // idempotent. See `ui::my_library::filter::sync_box`.
+        ui.global::<crate::MyLibrary>().invoke_detail_scope_changed();
     });
     Ok(())
 }
@@ -220,7 +234,7 @@ pub async fn refresh_detail(
     )
     .await;
 
-    let genre = crate::ui::hero_chips::dominant_genre(&tracks);
+    let genre = crate::ui::hero_folds::dominant_genre(&tracks);
 
     let albums_ui = albums_ui.clone();
     let _ = weak.upgrade_in_event_loop(move |ui| {
@@ -239,16 +253,12 @@ pub async fn refresh_detail(
         // Header is one row — always refresh it (artwork / counts may
         // have changed).
         g.set_album(to_slint_album_row(&detail));
-        crate::ui::hero_chips::publish_album(
-            &ui,
-            &detail,
-            genre.as_deref(),
-            albums_ui.section_active(),
-        );
+        let on_screen = tab_is_mounted(&ui, MyLibraryTab::Albums);
+        crate::ui::hero_chips::publish_album(&ui, &detail, genre.as_deref(), on_screen);
         // No fade on the refresh path — this is the same album, the
         // user did not navigate. Either it's a cache hit (no change) or
         // the cover/blur is being replaced in place.
-        apply_detail_artwork(&ui, &g, pair, /* animate */ false, albums_ui.section_active());
+        apply_detail_artwork(&ui, &g, pair, /* animate */ false, on_screen);
 
         // With an active filter the displayed model is a subset, so the
         // id-slice fast path below (which assumes an unfiltered model)
@@ -435,7 +445,7 @@ pub fn apply_detail_row_rating(weak: &Weak<AppWindow>, id: i64, rating: i32) {
 }
 
 /// Reopen the album that was visible in the Album Detail view at the last
-/// shutdown, if any. Called once at startup *after* `wire_albums` so the
+/// shutdown, if any. Called once at startup *after* [`super::install`] so the
 /// `AlbumDetail` callbacks are already live by the time
 /// `open_album`'s `upgrade_in_event_loop` lands. Silently no-ops on a
 /// missing / deleted album: `open_album` returns an error, we log it, and

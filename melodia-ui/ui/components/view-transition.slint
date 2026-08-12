@@ -20,6 +20,14 @@ export component ViewTransition inherits Rectangle {
     // would play and a horizontal tab slide composed with the page's fade-up
     // reads as a diagonal. The host arms it on the first real tab pick.
     in property <bool> enabled: true;
+    // **Fade without translating.** `enabled` answers "does this view animate at
+    // all"; this answers "is anything *else* already moving it". A body sitting
+    // under a container that morphs its own height is translated by that morph, so
+    // its own slide composes with it — on the other axis that reads as a diagonal,
+    // and even on the same axis the two curves can send it one way and then back.
+    // Material 3 cross-fades content through a container transform for the same
+    // reason. My Library's band is the one such container here.
+    in property <bool> slide: true;
     private property <bool> shown: false;
     // Disabled, this is `true` from the first evaluation, so the three bindings
     // below never transition and the Timer's flip is a write nothing reads.
@@ -35,9 +43,9 @@ export component ViewTransition inherits Rectangle {
     }
 
     opacity: settled ? 1.0 : 0.0;
-    x: settled ? 0px : (enter-from == NavEnterFrom.right ? 32px
-                      : enter-from == NavEnterFrom.left  ? -32px : 0px);
-    y: settled ? 0px : (enter-from == NavEnterFrom.below ? 32px : 0px);
+    x: settled || !root.slide ? 0px : (enter-from == NavEnterFrom.right ? 32px
+                                     : enter-from == NavEnterFrom.left  ? -32px : 0px);
+    y: settled || !root.slide ? 0px : (enter-from == NavEnterFrom.below ? 32px : 0px);
 
     animate opacity { duration: Theme.dur-spatial; easing: cubic-bezier(0.2, 0, 0, 1); }
     animate x       { duration: Theme.dur-spatial; easing: cubic-bezier(0.2, 0, 0, 1); }

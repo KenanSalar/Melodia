@@ -258,6 +258,29 @@ export struct BrowseFolderRow {
     name: string,
 }
 
+// One card in Browse's card view, which draws subfolders and files in one grid —
+// folders first, then files in the list's own display order. Deliberately *not*
+// `EntityStripRow`: a browse card carries three things no entity card has, and
+// widening that struct would tax the four grids sharing it for a case none of them
+// has. `is_folder` picks the fallback glyph and the click target; `row_index` is the
+// index into `Browse.rows`, so a card activation reaches `play-row` with exactly the
+// index the `TrackList` would have passed; `enabled` is false for a disk-only file,
+// which renders dimmed and inert here as it does in the list.
+export struct BrowseCardRow {
+    id: int,             // track id; 0 for a folder and for a disk-only file
+    row_index: int,      // index into `Browse.rows`; -1 for a folder
+    path: string,        // folder path; "" for a track card
+    title: string,
+    subtitle: string,
+    artwork_path: string,
+    is_folder: bool,
+    enabled: bool,
+}
+
+export struct BrowseCardGridRow {
+    cards: [BrowseCardRow],
+}
+
 // One card in a `HorizontalCardStrip` or an `EntityCardGrid`. Deliberately one shape
 // across every flavour, so a single card component renders all of them:
 //   * Most Played      → id = track id,  play_count > 0 reveals the badge

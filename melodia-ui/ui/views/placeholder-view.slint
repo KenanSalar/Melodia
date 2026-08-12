@@ -4,7 +4,7 @@ export component PlaceholderView inherits Rectangle {
     in property <string> title;
 
     // No background of its own, so the content panel's rounded fill shows
-    // through at the corners — see `tracks-view.slint`.
+    // through at the corners, as every view root does.
 
     VerticalLayout {
         alignment: center;

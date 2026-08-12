@@ -19,6 +19,11 @@ pub enum FavoritesTab {
 }
 
 impl FavoritesTab {
+    /// Every variant. [`tab_from_index`] ends in a default arm, so a tab added
+    /// to `curated.slint` without one here resolves to `Songs` — which reads
+    /// right on the tab nobody named. Pinned against `tab-count`.
+    pub const ALL: [Self; 3] = [Self::Songs, Self::MostPlayed, Self::Artists];
+
     /// Storage code for the atomic shadow. Deliberately *not* the Slint index
     /// — that lives in the Slint, and these two numbering schemes agreeing
     /// today is a coincidence worth not depending on.
@@ -55,11 +60,11 @@ pub fn tab_from_index(g: &Favorites<'_>, idx: i32) -> FavoritesTab {
 /// `tab-count` (see [`crate::ui::tab_bar::clamp_tab`]).
 ///
 /// Seeds **both** the Slint property and the [`FavoritesUi`] shadow, which is
-/// why it takes the handle and why it is called from `install_views` rather
-/// than alongside its siblings in `hydrate_ui_from_settings` — that runs after
-/// the handle has gone out of scope, and a shadow left at its `Songs` default
-/// would have the first fetch warm the wrong tier for a session that resumes
-/// on a grid tab.
+/// why it takes the handle and why it runs as the last statement of
+/// [`super::install`] rather than alongside its siblings in
+/// `hydrate_ui_from_settings` — that runs after the handle has gone out of
+/// scope, and a shadow left at its `Songs` default would have the first fetch
+/// warm the wrong tier for a session that resumes on a grid tab.
 pub fn seed_tab(ui: &AppWindow, fav_ui: &FavoritesUi, persisted_tab: i32) {
     let g = ui.global::<Favorites>();
     let clamped = crate::ui::tab_bar::clamp_tab(persisted_tab, g.get_tab_count());

@@ -24,6 +24,11 @@ msgstr "Gözat"
 msgid "Favorites"
 msgstr "Favoriler"
 
+# The sidebar row, and the window title, for the page carrying the Songs / Albums /
+# Artists / Genres / Playlists tabs. Each tab reuses its own msgid below.
+msgid "My Library"
+msgstr "Kitaplığım"
+
 msgid "Tracks"
 msgstr "Parçalar"
 
@@ -232,6 +237,15 @@ msgstr "Parçaları filtrele…"
 
 msgid "Columns"
 msgstr "Sütunlar"
+
+msgid "Card view"
+msgstr "Kart görünümü"
+
+msgid "List view"
+msgstr "Liste görünümü"
+
+msgid "Folder"
+msgstr "Klasör"
 
 # ---- Track table column headers ---------------------------------------------
 
@@ -739,9 +753,6 @@ msgstr "Açıklama (isteğe bağlı)"
 msgid "Add a description…"
 msgstr "Açıklama ekle…"
 
-msgid "Create Playlist"
-msgstr "Çalma Listesi Oluştur"
-
 # Confirm-button label on the create-playlist dialog.
 msgid "Create"
 msgstr "Oluştur"
@@ -819,6 +830,9 @@ msgstr "Henüz hiçbir şey çalınmadı"
 
 msgid "Play one of your favorites and it will show up here."
 msgstr "Favorilerinden birini çal, burada görünsün."
+
+msgid "Play something and it will show up here."
+msgstr "Bir şey çal, burada görünsün."
 
 msgid "No favorite artists yet"
 msgstr "Henüz favori sanatçı yok"
@@ -946,6 +960,65 @@ msgstr "İndirilen güncelleme diske yazılamadı."
 msgid "Update failed. See logs for details."
 msgstr "Güncelleme başarısız. Ayrıntılar için günlüklere bakın."
 
+# ---- Settings → About → Diagnostics -----------------------------------------
+
+msgid "Diagnostics"
+msgstr "Tanılama"
+
+msgid "Logs"
+msgstr "Günlükler"
+
+msgid "Where Melodia writes its log files and crash reports."
+msgstr "Melodia'nın günlük dosyalarını ve çökme raporlarını yazdığı yer."
+
+# Shared with the crash-report toast's action button, which opens the same folder.
+msgid "Open Folder"
+msgstr "Klasörü Aç"
+
+msgid "Diagnostics report"
+msgstr "Tanılama raporu"
+
+msgid "One text file with your system details, settings and recent logs, for attaching to a bug report."
+msgstr ""
+"Sistem bilgilerinizi, ayarlarınızı ve son günlükleri içeren tek bir metin "
+"dosyası — hata bildirimine eklemek için."
+
+msgid "Save…"
+msgstr "Kaydet…"
+
+msgid "Verbose logging"
+msgstr "Ayrıntılı günlük kaydı"
+
+msgid "Record extra detail. Turn this on, reproduce the problem, then save a report."
+msgstr ""
+"Ek ayrıntıları kaydeder. Bunu açın, sorunu yeniden oluşturun, ardından bir "
+"rapor kaydedin."
+
+msgid "Diagnostics report saved"
+msgstr "Tanılama raporu kaydedildi"
+
+msgid "Couldn't save the diagnostics report"
+msgstr "Tanılama raporu kaydedilemedi"
+
+msgid "See the log for details."
+msgstr "Ayrıntılar için günlüğe bakın."
+
+# Pushed once on the launch after a panic.
+msgid "Melodia crashed last time"
+msgstr "Melodia geçen sefer çöktü"
+
+msgid "A crash report was written. Open the log folder to find it."
+msgstr "Bir çökme raporu yazıldı. Bulmak için günlük klasörünü açın."
+
+# Pushed when the audio output device goes away mid-session.
+msgid "Audio device disconnected"
+msgstr "Ses aygıtı bağlantısı kesildi"
+
+msgid "Playback won't be audible until you reconnect it and restart Melodia."
+msgstr ""
+"Aygıtı yeniden bağlayıp Melodia'yı yeniden başlatana kadar oynatma "
+"duyulmayacak."
+
 msgid "Close to Tray"
 msgstr "Sistem Tepsisine Kapat"
 
@@ -967,7 +1040,8 @@ msgstr "Yalnızca sistem tepsisi simgesi etkinken kullanılabilir."
 # ---- About -------------------------------------------------------------------
 
 # Settings → About section (`ui/views/settings/about-section.slint`): app
-# name + version, authorship, source-repository link, and license.
+# name + version, authorship, a support link, the source-repository link, and
+# the license.
 msgid "About"
 msgstr "Hakkında"
 
@@ -979,6 +1053,29 @@ msgstr "Sürüm {}"
 # passed verbatim and never translated.
 msgid "Made by {}"
 msgstr "{} tarafından yapıldı"
+
+# Translators: the Ko-fi row — its label, its button and its blurb. "Ko-fi" is a
+# brand and stays verbatim wherever it appears. "Support" throughout this block
+# means backing the project financially — never technical support.
+msgid "Support Melodia"
+msgstr "Melodia'ya destek ol"
+
+msgid "Support me on Ko-fi"
+msgstr "Ko-fi'de bana destek ol"
+
+msgid "Melodia is free and open source. Support helps keep it going."
+msgstr "Melodia ücretsiz ve açık kaynaklıdır. Destek, devam etmesine yardımcı olur."
+
+# The one-time support toast (`src/ui/support.rs`), shown on one early launch and
+# never again. Its action button opens the Ko-fi page.
+msgid "Enjoying Melodia?"
+msgstr "Melodia'yı beğendin mi?"
+
+msgid "It's free and open source, built in my spare time. If it's useful to you, you can support me. You'll only see this once."
+msgstr "Ücretsiz ve açık kaynaklı, boş zamanlarımda geliştiriliyor. İşine yarıyorsa bana destek olabilirsin. Bunu yalnızca bir kez göreceksin."
+
+msgid "Support"
+msgstr "Destek ol"
 
 msgid "License"
 msgstr "Lisans"
@@ -1502,6 +1599,9 @@ msgstr "Beğendiğin parçaları ListenBrainz'de beğenilmiş olarak işaretle �
 
 msgid "Loved tracks"
 msgstr "Beğenilen parçalar"
+
+msgid "Melodia couldn't relaunch itself. Close and reopen it to apply the change."
+msgstr "Melodia kendini yeniden başlatamadı. Değişikliği uygulamak için uygulamayı kapatıp yeniden açın."
 
 msgid "Add MusicBrainz IDs to your music"
 msgstr "Müziğine MusicBrainz kimliklerini ekle"

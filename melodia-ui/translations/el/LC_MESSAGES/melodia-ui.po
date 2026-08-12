@@ -24,6 +24,11 @@ msgstr "Περιήγηση"
 msgid "Favorites"
 msgstr "Αγαπημένα"
 
+# The sidebar row, and the window title, for the page carrying the Songs / Albums /
+# Artists / Genres / Playlists tabs. Each tab reuses its own msgid below.
+msgid "My Library"
+msgstr "Η βιβλιοθήκη μου"
+
 msgid "Tracks"
 msgstr "Κομμάτια"
 
@@ -229,6 +234,15 @@ msgstr "Φιλτράρισμα κομματιών…"
 
 msgid "Columns"
 msgstr "Στήλες"
+
+msgid "Card view"
+msgstr "Προβολή καρτών"
+
+msgid "List view"
+msgstr "Προβολή λίστας"
+
+msgid "Folder"
+msgstr "Φάκελος"
 
 # ---- Track table column headers ---------------------------------------------
 
@@ -736,9 +750,6 @@ msgstr "Περιγραφή (προαιρετική)"
 msgid "Add a description…"
 msgstr "Προσθήκη περιγραφής…"
 
-msgid "Create Playlist"
-msgstr "Δημιουργία λίστας"
-
 # Confirm-button label on the create-playlist dialog.
 msgid "Create"
 msgstr "Δημιουργία"
@@ -816,6 +827,9 @@ msgstr "Δεν έχει παίξει τίποτα ακόμη"
 
 msgid "Play one of your favorites and it will show up here."
 msgstr "Παίξε ένα από τα αγαπημένα σου και θα εμφανιστεί εδώ."
+
+msgid "Play something and it will show up here."
+msgstr "Παίξε κάτι και θα εμφανιστεί εδώ."
 
 msgid "No favorite artists yet"
 msgstr "Δεν υπάρχουν αγαπημένοι καλλιτέχνες ακόμη"
@@ -942,6 +956,68 @@ msgstr "Δεν ήταν δυνατή η εγγραφή της ενημέρωση
 msgid "Update failed. See logs for details."
 msgstr "Η ενημέρωση απέτυχε. Δείτε τα αρχεία καταγραφής για λεπτομέρειες."
 
+# ---- Settings → About → Diagnostics -----------------------------------------
+
+msgid "Diagnostics"
+msgstr "Διαγνωστικά"
+
+msgid "Logs"
+msgstr "Αρχεία καταγραφής"
+
+msgid "Where Melodia writes its log files and crash reports."
+msgstr ""
+"Εκεί όπου το Melodia γράφει τα αρχεία καταγραφής και τις αναφορές κατάρρευσης."
+
+# Shared with the crash-report toast's action button, which opens the same folder.
+msgid "Open Folder"
+msgstr "Άνοιγμα φακέλου"
+
+msgid "Diagnostics report"
+msgstr "Αναφορά διαγνωστικών"
+
+msgid "One text file with your system details, settings and recent logs, for attaching to a bug report."
+msgstr ""
+"Ένα αρχείο κειμένου με τα στοιχεία του συστήματός σας, τις ρυθμίσεις και τα "
+"πρόσφατα αρχεία καταγραφής, για επισύναψη σε αναφορά σφάλματος."
+
+msgid "Save…"
+msgstr "Αποθήκευση…"
+
+msgid "Verbose logging"
+msgstr "Αναλυτική καταγραφή"
+
+msgid "Record extra detail. Turn this on, reproduce the problem, then save a report."
+msgstr ""
+"Καταγράφει επιπλέον λεπτομέρειες. Ενεργοποιήστε το, αναπαραγάγετε το "
+"πρόβλημα και μετά αποθηκεύστε μια αναφορά."
+
+msgid "Diagnostics report saved"
+msgstr "Η αναφορά διαγνωστικών αποθηκεύτηκε"
+
+msgid "Couldn't save the diagnostics report"
+msgstr "Δεν ήταν δυνατή η αποθήκευση της αναφοράς διαγνωστικών"
+
+msgid "See the log for details."
+msgstr "Δείτε το αρχείο καταγραφής για λεπτομέρειες."
+
+# Pushed once on the launch after a panic.
+msgid "Melodia crashed last time"
+msgstr "Το Melodia κατέρρευσε την προηγούμενη φορά"
+
+msgid "A crash report was written. Open the log folder to find it."
+msgstr ""
+"Γράφτηκε μια αναφορά κατάρρευσης. Ανοίξτε τον φάκελο καταγραφής για να τη "
+"βρείτε."
+
+# Pushed when the audio output device goes away mid-session.
+msgid "Audio device disconnected"
+msgstr "Η συσκευή ήχου αποσυνδέθηκε"
+
+msgid "Playback won't be audible until you reconnect it and restart Melodia."
+msgstr ""
+"Η αναπαραγωγή δεν θα ακούγεται μέχρι να τη συνδέσετε ξανά και να "
+"επανεκκινήσετε το Melodia."
+
 msgid "Close to Tray"
 msgstr "Κλείσιμο στην περιοχή ειδοποιήσεων"
 
@@ -963,7 +1039,8 @@ msgstr "Διαθέσιμο μόνο όταν το εικονίδιο περιο�
 # ---- About -------------------------------------------------------------------
 
 # Settings → About section (`ui/views/settings/about-section.slint`): app
-# name + version, authorship, source-repository link, and license.
+# name + version, authorship, a support link, the source-repository link, and
+# the license.
 msgid "About"
 msgstr "Σχετικά"
 
@@ -975,6 +1052,30 @@ msgstr "Έκδοση {}"
 # passed verbatim and never translated.
 msgid "Made by {}"
 msgstr "Δημιουργήθηκε από {}"
+
+# Translators: the Ko-fi row — its label, its button and its blurb. "Ko-fi" is a
+# brand and stays verbatim wherever it appears. "Support" throughout this block
+# means backing the project financially — never technical support, which is what
+# "Υποστήριξη" would read as here.
+msgid "Support Melodia"
+msgstr "Στηρίξτε το Melodia"
+
+msgid "Support me on Ko-fi"
+msgstr "Στηρίξτε με στο Ko-fi"
+
+msgid "Melodia is free and open source. Support helps keep it going."
+msgstr "Το Melodia είναι δωρεάν και ανοιχτού κώδικα. Η στήριξη βοηθά να συνεχιστεί."
+
+# The one-time support toast (`src/ui/support.rs`), shown on one early launch and
+# never again. Its action button opens the Ko-fi page.
+msgid "Enjoying Melodia?"
+msgstr "Σας αρέσει το Melodia;"
+
+msgid "It's free and open source, built in my spare time. If it's useful to you, you can support me. You'll only see this once."
+msgstr "Είναι δωρεάν και ανοιχτού κώδικα, φτιαγμένο στον ελεύθερο χρόνο μου. Αν σας φαίνεται χρήσιμο, μπορείτε να με στηρίξετε. Θα το δείτε μόνο μία φορά."
+
+msgid "Support"
+msgstr "Στήριξη"
 
 msgid "License"
 msgstr "Άδεια"
@@ -1498,6 +1599,9 @@ msgstr "Σημειώστε ως αγαπημένα στο ListenBrainz τα κο
 
 msgid "Loved tracks"
 msgstr "Αγαπημένα κομμάτια"
+
+msgid "Melodia couldn't relaunch itself. Close and reopen it to apply the change."
+msgstr "Το Melodia δεν μπόρεσε να επανεκκινήσει. Κλείστε και ανοίξτε ξανά την εφαρμογή για να εφαρμοστεί η αλλαγή."
 
 msgid "Add MusicBrainz IDs to your music"
 msgstr "Προσθήκη αναγνωριστικών MusicBrainz στη μουσική σας"

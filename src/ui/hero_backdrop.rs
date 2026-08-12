@@ -34,7 +34,7 @@ pub(crate) fn apply(ui: &AppWindow, sample: BackdropSample) {
 
 /// Solve and publish for a hero whose backdrop *is* a gradient — Genre Detail,
 /// which has no artwork by nature and paints the name-hashed stops from
-/// [`crate::ui::genres::color`]. Those stops are already theme-independent, so
+/// [`crate::ui::genres::genre_accent`]. Those stops are already theme-independent, so
 /// they are kept verbatim and only measured; the scrim and foreground are
 /// solved against them exactly as they would be against a cover.
 ///

@@ -10,7 +10,8 @@ import { EntityCard } from "entity-card.slint";
 // That is the whole reason a strip and a grid aren't one component: a strip
 // walks its rows in a plain `for`, which is affordable for a capped carousel and
 // not for an uncapped page, where every card would be built and every cover
-// requested. Both Favorites grid tabs are uncapped.
+// requested. All three grid tabs — Favorites' two and Recently Played's — are
+// uncapped, and each dropped a `LIMIT` sized for the carousel it replaced.
 //
 // Covers come lazily — only a mounted card evaluates its binding, so nothing the
 // user hasn't scrolled to is decoded and the model stays pure data. The

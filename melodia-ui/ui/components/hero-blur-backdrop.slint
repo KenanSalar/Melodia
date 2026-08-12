@@ -6,8 +6,8 @@ import { HeroBackdrop } from "../globals/hero-backdrop.slint";
 // — the outgoing slot is never cleared, so a refresh fades A↔B without flashing,
 // and with no blur both fade to 0 and the floor shows through.
 //
-// Mounted by `DetailHeader` over its whole hero and by the two mosaic heroes
-// over their top band. The caller sizes it; the children fill it.
+// Mounted by both shared bands — `LibraryTabBand` over its whole morphing hero
+// and `MosaicTabHero` over its top band. The caller sizes it; the children fill it.
 //
 // **Every colour here comes from `HeroBackdrop`, solved per artwork, and none of
 // it may be a `Theme.*` brush.** Theme brushes flip polarity with the variant,
@@ -24,7 +24,33 @@ export component HeroBlurBackdrop inherits Rectangle {
     in property <bool> use-a;
     in property <bool> has-blur;
 
-    background: @linear-gradient(135deg, HeroBackdrop.floor-start, HeroBackdrop.floor-end);
+    // Whether the host is painting a hero at all. The two mosaic bands always are and take
+    // the default; `LibraryTabBand` morphs, and on a tabbed page its globals outlive the tab
+    // that filled them — a detail left open on another tab keeps its colours in here, ready
+    // for the pick that morphs it back. Below, that is a floor easing *from* a banner nobody
+    // has seen since the tab changed: leave a genre for a detail-less tab, open a playlist
+    // there, and the genre's stops are three quarters uncovered by the morph while still two
+    // thirds of the way through their own ease. So while the host paints no hero this floor
+    // is nothing, and an opening one eases up out of nothing instead.
+    in property <bool> hero-open: true;
+
+    // **The floor eases on the slots' own duration**, like the scrim below it — it was the
+    // one layer here that hard-cut, and it is the layer that *is* the backdrop whenever
+    // there is no blur image: an artwork-less hero, Genre Detail's name-hashed stops, and
+    // the window between a hero opening and its decode landing. `Brush::interpolate`
+    // handles gradient↔gradient stop-for-stop and both sides here are two stops at 135deg —
+    // including the transparent pair, which is why the gate swaps the *stops* for a second
+    // gradient rather than the whole brush for a colour. Safe to `animate` where a tab-bar
+    // brush is not: Rust writes these two discretely and nothing eases them, so the binding
+    // can't be restarted by a moving source.
+    //
+    // The scrim below is deliberately *not* gated: it is solved at a tone that holds almost
+    // no chroma, so it is near-black at both ends and has nothing to flash, and draining it
+    // would brighten the artwork for the length of every collapse.
+    background: root.hero-open
+        ? @linear-gradient(135deg, HeroBackdrop.floor-start, HeroBackdrop.floor-end)
+        : @linear-gradient(135deg, transparent, transparent);
+    animate background { duration: Theme.dur-med; easing: ease-in-out; }
 
     Image {
         x: 0;

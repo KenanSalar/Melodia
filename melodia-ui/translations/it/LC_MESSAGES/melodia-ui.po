@@ -24,6 +24,11 @@ msgstr "Esplora"
 msgid "Favorites"
 msgstr "Preferiti"
 
+# The sidebar row, and the window title, for the page carrying the Songs / Albums /
+# Artists / Genres / Playlists tabs. Each tab reuses its own msgid below.
+msgid "My Library"
+msgstr "La mia libreria"
+
 msgid "Tracks"
 msgstr "Brani"
 
@@ -227,6 +232,15 @@ msgstr "Filtra brani…"
 
 msgid "Columns"
 msgstr "Colonne"
+
+msgid "Card view"
+msgstr "Vista a schede"
+
+msgid "List view"
+msgstr "Vista a elenco"
+
+msgid "Folder"
+msgstr "Cartella"
 
 # ---- Track table column headers ---------------------------------------------
 
@@ -734,9 +748,6 @@ msgstr "Descrizione (facoltativa)"
 msgid "Add a description…"
 msgstr "Aggiungi una descrizione…"
 
-msgid "Create Playlist"
-msgstr "Crea playlist"
-
 # Confirm-button label on the create-playlist dialog.
 msgid "Create"
 msgstr "Crea"
@@ -814,6 +825,9 @@ msgstr "Ancora nessun ascolto"
 
 msgid "Play one of your favorites and it will show up here."
 msgstr "Ascolta uno dei tuoi preferiti e comparirà qui."
+
+msgid "Play something and it will show up here."
+msgstr "Ascolta qualcosa e comparirà qui."
 
 msgid "No favorite artists yet"
 msgstr "Ancora nessun artista preferito"
@@ -940,6 +954,66 @@ msgstr "Impossibile scrivere l'aggiornamento scaricato su disco."
 msgid "Update failed. See logs for details."
 msgstr "Aggiornamento non riuscito. Consulta i log per i dettagli."
 
+# ---- Settings → About → Diagnostics -----------------------------------------
+
+msgid "Diagnostics"
+msgstr "Diagnostica"
+
+msgid "Logs"
+msgstr "Log"
+
+msgid "Where Melodia writes its log files and crash reports."
+msgstr "Dove Melodia scrive i suoi file di log e i rapporti di arresto anomalo."
+
+# Shared with the crash-report toast's action button, which opens the same folder.
+msgid "Open Folder"
+msgstr "Apri cartella"
+
+msgid "Diagnostics report"
+msgstr "Rapporto diagnostico"
+
+msgid "One text file with your system details, settings and recent logs, for attaching to a bug report."
+msgstr ""
+"Un file di testo con i dettagli del sistema, le impostazioni e i log "
+"recenti, da allegare a una segnalazione di bug."
+
+msgid "Save…"
+msgstr "Salva…"
+
+msgid "Verbose logging"
+msgstr "Registrazione dettagliata"
+
+msgid "Record extra detail. Turn this on, reproduce the problem, then save a report."
+msgstr ""
+"Registra dettagli aggiuntivi. Attivalo, riproduci il problema, poi salva un "
+"rapporto."
+
+msgid "Diagnostics report saved"
+msgstr "Rapporto diagnostico salvato"
+
+msgid "Couldn't save the diagnostics report"
+msgstr "Impossibile salvare il rapporto diagnostico"
+
+msgid "See the log for details."
+msgstr "Consulta il log per i dettagli."
+
+# Pushed once on the launch after a panic.
+msgid "Melodia crashed last time"
+msgstr "Melodia si è arrestata in modo anomalo l'ultima volta"
+
+msgid "A crash report was written. Open the log folder to find it."
+msgstr ""
+"È stato scritto un rapporto di arresto anomalo. Apri la cartella dei log per "
+"trovarlo."
+
+# Pushed when the audio output device goes away mid-session.
+msgid "Audio device disconnected"
+msgstr "Dispositivo audio disconnesso"
+
+msgid "Playback won't be audible until you reconnect it and restart Melodia."
+msgstr ""
+"La riproduzione non sarà udibile finché non lo ricolleghi e riavvii Melodia."
+
 msgid "Close to Tray"
 msgstr "Chiudi nell'area di notifica"
 
@@ -961,7 +1035,8 @@ msgstr "Disponibile solo quando l'icona nell'area di notifica è attiva."
 # ---- About -------------------------------------------------------------------
 
 # Settings → About section (`ui/views/settings/about-section.slint`): app
-# name + version, authorship, source-repository link, and license.
+# name + version, authorship, a support link, the source-repository link, and
+# the license.
 msgid "About"
 msgstr "Informazioni"
 
@@ -973,6 +1048,29 @@ msgstr "Versione {}"
 # passed verbatim and never translated.
 msgid "Made by {}"
 msgstr "Creato da {}"
+
+# Translators: the Ko-fi row — its label, its button and its blurb. "Ko-fi" is a
+# brand and stays verbatim wherever it appears. "Support" throughout this block
+# means backing the project financially — never technical support.
+msgid "Support Melodia"
+msgstr "Sostieni Melodia"
+
+msgid "Support me on Ko-fi"
+msgstr "Sostienimi su Ko-fi"
+
+msgid "Melodia is free and open source. Support helps keep it going."
+msgstr "Melodia è gratuito e open source. Il sostegno aiuta a mandarlo avanti."
+
+# The one-time support toast (`src/ui/support.rs`), shown on one early launch and
+# never again. Its action button opens the Ko-fi page.
+msgid "Enjoying Melodia?"
+msgstr "Ti piace Melodia?"
+
+msgid "It's free and open source, built in my spare time. If it's useful to you, you can support me. You'll only see this once."
+msgstr "È gratuito e open source, sviluppato nel mio tempo libero. Se ti è utile, puoi sostenermi. Lo vedrai solo una volta."
+
+msgid "Support"
+msgstr "Sostieni"
 
 msgid "License"
 msgstr "Licenza"
@@ -1496,6 +1594,9 @@ msgstr "Segna come preferiti su ListenBrainz i brani che ami — attivandolo si 
 
 msgid "Loved tracks"
 msgstr "Brani preferiti"
+
+msgid "Melodia couldn't relaunch itself. Close and reopen it to apply the change."
+msgstr "Melodia non è riuscita a riavviarsi. Chiudi e riapri l'app per applicare la modifica."
 
 msgid "Add MusicBrainz IDs to your music"
 msgstr "Aggiungi gli ID MusicBrainz alla tua musica"

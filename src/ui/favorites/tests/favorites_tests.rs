@@ -1,21 +1,11 @@
-use std::num::NonZeroUsize;
-use std::path::PathBuf;
 use std::sync::Arc;
 
 use super::{FavoritesTab, FavoritesUi};
 use crate::entities::artist::FavoriteArtist;
 use crate::media::cover_thumbs::CoverThumbs;
+use crate::test_support::write_test_png;
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
-
-/// A solid-colour square PNG in a fresh temp dir; the dir is returned so the
-/// caller can keep it alive.
-fn write_test_png() -> Result<(tempfile::TempDir, PathBuf), Box<dyn std::error::Error>> {
-    let tmp = tempfile::tempdir()?;
-    let path = tmp.path().join("cover.png");
-    image::RgbImage::from_pixel(512, 512, image::Rgb([120, 60, 200])).save(&path)?;
-    Ok((tmp, path))
-}
 
 const GLOBAL: &str = include_str!("../../../../melodia-ui/ui/globals/curated.slint");
 const VIEW: &str = include_str!("../../../../melodia-ui/ui/views/favorites-view.slint");
@@ -27,7 +17,7 @@ const GRID: &str =
     include_str!("../../../../melodia-ui/ui/components/grid/entity-card-grid.slint");
 const SONGS: &str = include_str!("../songs.rs");
 const SONGS_TAB: &str = include_str!("../../../../melodia-ui/ui/views/favorites/songs-tab.slint");
-const SUBVIEWS: &str = include_str!("../../callbacks/favorites/subviews.rs");
+const SUBVIEWS: &str = include_str!("../callbacks/subviews.rs");
 
 /// `Favorites.tracks` feeds one element in the whole tree, under the Songs
 /// tab's `if` — so off that tab, every prepared row the Songs path builds
@@ -88,17 +78,12 @@ const TABS: usize = 3;
 
 /// The `N` in `Favorites`'s `tab-count: N;`.
 fn declared_tab_count() -> Option<usize> {
-    GLOBAL
-        .split_once("out property <int> tab-count:")
-        .and_then(|(_, rest)| rest.split_once(';'))
-        .and_then(|(digits, _)| digits.trim().parse().ok())
+    crate::test_support::declared_tab_count(GLOBAL)
 }
 
 /// The body of an inline `name: [ … ];` array literal in `favorites-view.slint`.
 fn array_body(marker: &str) -> Option<&'static str> {
-    VIEW.split_once(marker)
-        .and_then(|(_, rest)| rest.split_once("];"))
-        .map(|(body, _)| body)
+    crate::test_support::array_body(VIEW, marker)
 }
 
 /// `Favorites.tab-count` is the sole definition of how many sub-views exist —
@@ -132,6 +117,12 @@ fn tab_count_matches_the_tabs_slint_declares() {
         .filter(|line| !line.starts_with("out property <int> tab-count"))
         .count();
     assert_eq!(indices, count, "`Favorites`'s `tab-*` constants don't add up to `tab-count`");
+
+    assert_eq!(
+        FavoritesTab::ALL.len(),
+        count,
+        "`FavoritesTab` needs one variant per tab the global declares"
+    );
 
     // Anchored on the branch's own shape (`… : ViewTransition {`) rather than
     // on the comparison alone: the hero reads `tab-idx` several more times
@@ -173,134 +164,41 @@ fn tab_count_matches_the_tabs_slint_declares() {
     );
 }
 
-/// The header row is drawn from `page-w` for one frame before the first layout
-/// reports the truth, and that seed has to be the row's own floor rather than a
-/// plausible page width. Seeded wide, the bar believes it can afford full-width
-/// tabs, draws them into a panel that can't seat them, and they spill under the
-/// search bar — which is what a miniplayer → full swap reliably produces. Same
-/// contract `settings-view.slint` carries; a literal reads as harmless to
-/// anyone who hasn't seen it fail, so pin that it stays derived.
+/// A tab pick has to clear the filter it was made under, and clear it on *both*
+/// sides. A Songs needle carried into the Artists grid silently hides cards, and
+/// the two halves fail differently: leaving the Slint property set leaves the
+/// box holding text the page is no longer filtered by, and leaving the Rust
+/// shadow set filters the entering tab's model against it.
 #[test]
-fn the_page_width_seed_is_the_rows_floor() {
-    let seed = VIEW
-        .split_once("property <length> page-w:")
-        .and_then(|(_, rest)| rest.split_once(';'))
-        .map_or("", |(value, _)| value);
-
-    assert!(
-        seed.contains("compact-w"),
-        "favorites-view.slint's `page-w` seed must be the header row's floor, derived from the \
-         bar's own `compact-w` — not a plausible page width"
-    );
-}
-
-/// The tab bodies sit inside the page's own enter transition, so theirs has to
-/// stay off until the user actually switches — a horizontal slide composed with
-/// the page's fade-up reads as a diagonal on every arrival from the sidebar.
-/// `tab-anim-armed` starts `false` and is written by the pick handler; the page
-/// is destroyed and rebuilt on every entry, so it re-disarms for free. Seed it
-/// `true`, or arm it from a mount timer, and the bug is back and looks like a
-/// design choice.
-#[test]
-fn the_sub_view_slide_is_disarmed_until_the_first_switch() {
-    assert!(
-        VIEW.contains("property <bool> tab-anim-armed: false;"),
-        "favorites-view.slint's `tab-anim-armed` must start false — the page's own entrance is \
-         the only thing that should move when it arrives"
-    );
-
+fn a_tab_pick_clears_the_filter_on_both_sides() {
     let handler = VIEW
-        .split_once("selected(i) =>")
+        .split_once("tab-selected(i) =>")
         .and_then(|(_, rest)| rest.split_once("Favorites.tab-changed(i);"))
         .map_or("", |(body, _)| body);
     assert!(
-        handler.contains("root.tab-anim-armed = true;"),
-        "the tab bar's `selected` handler must arm the slide — nothing else can tell a real \
-         switch from the page mounting"
-    );
-    // Pinned down to the operand: the direction has to come off the bar's own
-    // `previous-index`, since `tab-idx` and everything bound to it already read
-    // the tab just picked. A local mirror reintroduced here would compare `i`
-    // against `i` and enter from the left every time.
-    assert!(
-        handler.contains("root.tab-enter-from = i > bar.previous-index"),
-        "the tab bar's `selected` handler must set the direction from `bar.previous-index`, and \
-         *before* the branch flips — the same ordering `nav_transition.rs` follows for the \
-         page-level transition"
-    );
-}
-
-/// A mirrored width only reaches the bar through `changed width`, and `changed`
-/// doesn't fire when the first layout settles directly on the final value —
-/// which is every window opened at its size. Without the mount timer the seed
-/// above is never corrected, and a roomy window draws icon-only tabs until
-/// something resizes it. It only looks fixed coming out of the miniplayer,
-/// where the floor's answer happens to be the right one.
-#[test]
-fn the_page_width_mirror_has_a_mount_seed() {
-    assert!(
-        VIEW.contains("changed width => { self.page-w = self.width; }"),
-        "favorites-view.slint must mirror its width imperatively — a live `root.width` read \
-         feeding a child's size re-enters layout"
+        handler.contains("Favorites.filter = \"\";"),
+        "favorites-view.slint's `tab-selected` handler must clear the Slint-side filter before \
+         handing the pick to Rust"
     );
 
-    let timer = VIEW
-        .split_once("Timer {")
-        .and_then(|(_, rest)| rest.split_once("\n    }"))
-        .map_or("", |(body, _)| body);
     assert!(
-        timer.contains("root.page-w = root.width"),
-        "favorites-view.slint's mount Timer must re-run the `page-w` mirror — `changed` never \
-         fires for a window born at its final size"
+        SUBVIEWS.contains("favorites_ui_mod::set_filter(&fu, \"\");"),
+        "the tab-change handler must drop the Rust filter shadow to match — the model build and \
+         every later fetch read that, not the Slint property"
     );
-}
-
-/// `TabBar`'s four brushes all default to `Theme.*` tokens, which is right for
-/// Settings and wrong on a banner — and a mount that omits one still builds and
-/// still looks correct in Settings, so nothing else catches it.
-///
-/// `active-color` is the one this exists for. It was left at the default long
-/// after the other three moved, and it drives the selected label, its FILL=1
-/// icon *and* the underline from one input, so the omission is three surfaces
-/// at once. Two things make it wrong rather than merely inconsistent: the band
-/// takes its hue from the mosaic now, and a theme accent has no contrast floor
-/// against it — Latte's mauve lands near 1.7:1 on the pinned band, under even
-/// the 3:1 non-text bar, where `HeroBackdrop.chrome` is solved to clear it.
-///
-/// Asserted as "reads *some* `HeroBackdrop` tier" rather than pinning which
-/// one: the tier a brush should take is a design call that may move, but
-/// reaching for `Theme.*` here is a bug at any tier.
-#[test]
-fn the_hero_tab_bar_takes_every_brush_from_the_backdrop() {
-    let mount = VIEW
-        .split_once("bar := TabBar {")
-        .and_then(|(_, rest)| rest.split_once("selected(i) =>"))
-        .map_or("", |(body, _)| body);
-    assert!(
-        !mount.is_empty(),
-        "favorites-view.slint no longer mounts `bar := TabBar` ahead of its `selected` handler"
-    );
-
-    for prop in ["label-color", "active-color", "hover-fill", "divider-color"] {
-        assert!(
-            mount.contains(&format!("{prop}: HeroBackdrop.")),
-            "the Favorites hero's TabBar must pass `{prop}` a `HeroBackdrop` tier — omitting it \
-             falls back to the component's `Theme.*` default, which is a theme value on a band \
-             that is no longer theme-seeded"
-        );
-    }
 }
 
 /// Every field a sort pill can ask for has to be one the comparator handles.
 ///
-/// The token is a bare string on both sides — `request-artist-sort("name")` in
-/// the Slint, a `match` arm in `grids::sort::sort_artists` — so a typo or a rename
-/// on either side compiles, and the pill just quietly sorts by the default arm
-/// while painting its arrow as though it had worked. Nothing pins this for the
-/// Albums / Artists / Genres rows, which is exactly why it's worth pinning here.
+/// The token is a bare string on both sides — an element of the mount's `fields`
+/// array in the Slint, a `match` arm in `grids::sort::sort_artists` — so a typo or
+/// a rename on either side compiles, and the pill just quietly sorts by the default
+/// arm while painting its arrow as though it had worked. My Library's three rows are
+/// pinned the same way, by `ui::my_library::tests`, through the same parser.
 ///
-/// Also asserts the pills carry `reserve-sort-slot`, without which there is no
-/// arrow slot and the active field is indicated by colour alone.
+/// The per-pill contracts this used to count — `reserve-sort-slot`, and
+/// `sort-direction` bound to the active field — moved into `SortPillRow` with the
+/// row itself, and `ui::my_library::tests` pins them there once for all four rows.
 #[test]
 fn every_sort_pill_asks_for_a_field_the_comparator_knows() {
     // The arms of `grids::sort::sort_artists`, restated. A field dropped there and
@@ -309,35 +207,42 @@ fn every_sort_pill_asks_for_a_field_the_comparator_knows() {
     // the default is a defined order, not a no-op.
     const FIELDS: [&str; 2] = ["name", "favorite_count"];
 
-    let asked: Vec<&str> = VIEW
-        .match_indices("Favorites.request-artist-sort(\"")
-        .filter_map(|(i, m)| VIEW[i + m.len()..].split_once('"').map(|(field, _)| field))
-        .collect();
+    let arrays =
+        crate::test_support::sort_pill_row_arrays(VIEW, "Favorites.artist-sort-field");
+    assert!(
+        arrays.is_some(),
+        "favorites-view.slint must mount a `SortPillRow` bound to \
+         Favorites.artist-sort-field"
+    );
+    // Unreachable past the assert; spelled this way because the crate denies
+    // `unwrap`, `expect` and `panic!` in tests as well as in production code.
+    let Some((labels, asked)) = arrays else { return };
+    let asked: Vec<&str> = asked.split(',').map(|f| f.trim().trim_matches('"')).collect();
 
     assert_eq!(
         asked.len(),
         FIELDS.len(),
-        "favorites-view.slint must mount one sort pill per field the Artists tab sorts on"
+        "favorites-view.slint must name one field per pill the Artists tab sorts on"
     );
-    for field in asked {
+    for field in &asked {
         assert!(
-            FIELDS.contains(&field),
-            "`request-artist-sort(\"{field}\")` names a field `sort_artists` has no arm for"
+            FIELDS.contains(field),
+            "the Artists sort row asks for `{field}`, a field `sort_artists` has no arm for"
         );
     }
 
-    // Counted against the pills rather than asserted once: a row where only the
-    // first pill reserves the slot has its labels jump sideways as the active
-    // field moves.
+    // The two arrays are indexed against each other, so a label without a field
+    // reads past the end and sorts by the empty string — a pill that looks live and
+    // does nothing.
     assert_eq!(
-        VIEW.matches("sort-direction: Favorites.artist-sort-field ==").count(),
+        labels.matches("@tr(").count(),
         FIELDS.len(),
-        "every Artists-tab sort pill must bind `sort-direction` to the active field"
+        "the Artists sort row must carry one `@tr` label per field"
     );
-    assert_eq!(
-        VIEW.matches("reserve-sort-slot: true;").count(),
-        FIELDS.len(),
-        "every Artists-tab sort pill must reserve the arrow slot"
+
+    assert!(
+        VIEW.contains("request-sort(f) => { Favorites.request-artist-sort(f); }"),
+        "the Artists sort row must forward its pick to Favorites.request-artist-sort"
     );
 }
 
@@ -396,36 +301,6 @@ fn every_grid_mount_forwards_the_covers_generation() {
     );
 }
 
-/// Generation 0 means "this tier was cleared when its tab was left", and the
-/// lookup must answer from the cache alone — a decode here lands on the UI
-/// thread, in the frame that mounts the grid, once per visible card. It is not
-/// "return nothing": an entry that survives still comes back, which is what
-/// makes a re-entered warm tab paint instantly.
-#[test]
-fn a_cold_generation_serves_the_cache_without_decoding() -> TestResult {
-    let cap = NonZeroUsize::new(4).ok_or("cap must be > 0")?;
-    let thumbs = CoverThumbs::with_config(64, cap);
-    let (_tmp, path) = write_test_png()?;
-    let path = path.to_str().ok_or("temp path is not UTF-8")?;
-
-    assert_eq!(
-        super::covers::grid_cover(&thumbs, path, 0).size().width,
-        0,
-        "a cold tier must hand back a placeholder rather than decode on the UI thread"
-    );
-    assert_eq!(
-        super::covers::grid_cover(&thumbs, path, 1).size().width,
-        64,
-        "a warmed tier must decode on miss, so rows scrolled to later still get covers"
-    );
-    assert_eq!(
-        super::covers::grid_cover(&thumbs, path, 0).size().width,
-        64,
-        "generation 0 gates the *decode*, not the lookup — a cached cover still resolves"
-    );
-    Ok(())
-}
-
 /// The decode outlives a fast section leave, and `release_section_state` is
 /// spawned on that leave — it can easily finish first, so a prewarm that
 /// ignored it would refill the tier that release just emptied and hold a
@@ -434,7 +309,7 @@ fn a_cold_generation_serves_the_cache_without_decoding() -> TestResult {
 /// happened yet, which is the whole problem.
 #[test]
 fn a_prewarm_outliving_the_leave_keeps_nothing() -> TestResult {
-    let (_tmp, path) = write_test_png()?;
+    let (_tmp, path) = write_test_png(512)?;
     let path = path.to_str().ok_or("temp path is not UTF-8")?;
 
     let fav_ui = FavoritesUi::new(Arc::new(CoverThumbs::new()));
@@ -462,4 +337,153 @@ fn a_prewarm_outliving_the_leave_keeps_nothing() -> TestResult {
         "a prewarm that landed after the section leave must hand its buffers back"
     );
     Ok(())
+}
+
+/// Each fetch is armed wherever the cache it fills is emptied and disarmed
+/// wherever it is filled — the `RecentlyPlayedUi::grid_dirty` discipline, over
+/// two flags because this page has two gated fetches.
+///
+/// Three obligations, each a bug on the way in. The fetching branch **consumes**
+/// its flag (seeded `true`, so a boot onto a tab otherwise pays for its own
+/// fetch twice) and marks the *other*, which is the whole record that a tick
+/// went by. The section wipe re-arms both beside the caches it just cleared,
+/// rather than leaving it to the leave's own `mark_dirty` two files away. And
+/// each fetch re-arms its own on either way of storing nothing — a failed query
+/// or a leave landing mid-flight — because the tab pick consumes the flag
+/// *before* spawning, so nothing else would.
+#[test]
+fn each_gated_fetch_is_armed_beside_the_cache_it_fills() {
+    const LIFECYCLE: &str = include_str!("../callbacks/lifecycle.rs");
+    const HANDLE: &str = include_str!("../mod.rs");
+    const GRIDS_FETCH: &str = include_str!("../grids/fetch.rs");
+
+    let kick = LIFECYCLE
+        .split_once("async fn kick_full_refresh(")
+        .and_then(|(_, rest)| rest.split_once("\n}"))
+        .map(|(body, _)| body)
+        .unwrap_or_default();
+    for consumed in ["fav_ui.take_songs_dirty();", "fav_ui.take_grids_dirty();"] {
+        assert!(
+            kick.contains(consumed),
+            "`kick_full_refresh`'s fetching branch must consume its own flag — leaving it set \
+             makes the next pick re-query a cache this call just filled ({consumed})"
+        );
+    }
+    for marked in ["fav_ui.mark_songs_dirty();", "fav_ui.mark_grids_dirty();"] {
+        assert!(
+            kick.contains(marked),
+            "and it must mark the branch it skipped, or the pick that mounts that tab has no \
+             record that a tick went by ({marked})"
+        );
+    }
+
+    let release = HANDLE
+        .split_once("pub fn release_section_state(")
+        .and_then(|(_, rest)| rest.split_once("\n    }"))
+        .map(|(body, _)| body)
+        .unwrap_or_default();
+    for marked in ["self.mark_songs_dirty();", "self.mark_grids_dirty();"] {
+        assert!(
+            release.contains(marked),
+            "`release_section_state` must re-arm both flags beside the caches it wipes ({marked})"
+        );
+    }
+
+    // Two ways of storing nothing per fetch: a failed query and a leave landing
+    // mid-flight. `refresh_tracks` asks the section guard twice — before and
+    // after its cover prewarm — so it carries three marks in all.
+    assert_eq!(
+        SONGS.matches("mark_songs_dirty()").count(),
+        3,
+        "`refresh_tracks` must re-arm on the failed query and on both section bails"
+    );
+    assert_eq!(
+        GRIDS_FETCH.matches("mark_grids_dirty()").count(),
+        2,
+        "`refresh_grids` must re-arm on a failed query and on the section bail"
+    );
+}
+
+/// A grid pick that spawns a fetch takes back the count its synchronous apply
+/// just wrote.
+///
+/// The apply walks the cache the skipped tick left empty, so the `0` it writes
+/// is the one value meaning "there is nothing here" — `GridEmptyState` over a
+/// library that has plenty, for the length of the query plus the cover-decode
+/// burst it awaits. Songs owes no equivalent and that asymmetry is the point:
+/// `Favorites.track-count` is written by `refresh_hero`, which is never gated.
+#[test]
+fn a_grid_pick_rewinds_the_count_it_could_not_answer() {
+    let pick = SUBVIEWS
+        .split_once("g.on_tab_changed(move |tab| {")
+        .and_then(|(_, rest)| rest.split_once("\n        });"))
+        .map(|(body, _)| body)
+        .unwrap_or_default();
+
+    let (before_fetch, after_fetch) = pick
+        .split_once("if needs_fetch {")
+        .unwrap_or_default();
+    assert!(
+        before_fetch.contains("fu.take_songs_dirty()")
+            && before_fetch.contains("fu.take_grids_dirty()"),
+        "the pick must consume the entering tab's flag before the applies — the answer is what \
+         decides whether the count they write stands for anything"
+    );
+    assert!(
+        before_fetch.contains("apply_filtered_grids_now(&ui, &fu)"),
+        "and the apply must come first, so a warm cache still paints on this tick"
+    );
+    for rewound in ["set_most_played_count(UNFETCHED_COUNT)", "set_artist_count(UNFETCHED_COUNT)"] {
+        assert!(
+            after_fetch.contains(rewound),
+            "a grid pick that spawns a fetch must rewind that tab's count ({rewound})"
+        );
+    }
+    assert!(
+        !after_fetch.contains("set_track_count(UNFETCHED_COUNT)"),
+        "Songs must not rewind: its count comes from the ungated `refresh_hero`, so it is \
+         answered on every tab either way"
+    );
+}
+
+/// And the apply that answers that rewind writes its counts **above** the
+/// signature guard, or the sentinel above is permanent.
+///
+/// The pick stamps a signature over the cache its skipped tick left in place and
+/// only then rewinds; the fetch it spawned lands on that same signature whenever
+/// the content hasn't moved — an empty grid on a library with no favourites, or a
+/// `stats_changed` tick for a track this query doesn't rank — so a count written
+/// past the guard is one that never arrives. `-1` misses `> 0` as well as `== 0`,
+/// so what strands is not only the empty state: `favorites-view.slint` gates the
+/// Most Played Shuffle pill and the Artists sort row the other way, and both
+/// vanish over a grid that is full.
+///
+/// The mutation to check is moving either write back under the guard, where it
+/// reads as belonging with the model write beside it and compiles.
+#[test]
+fn the_grid_counts_are_written_before_the_signature_can_skip_them() {
+    const GRIDS_APPLY: &str = include_str!("../grids/apply.rs");
+
+    let write = GRIDS_APPLY
+        .split_once("fn write_filtered_grids(")
+        .and_then(|(_, rest)| rest.split_once("\n}"))
+        .map(|(body, _)| body)
+        .unwrap_or_default();
+
+    assert!(
+        write.contains("last_grid_signature"),
+        "`write_filtered_grids` must still take the signature guard — this pin is about where \
+         the counts sit relative to it, not about retiring it"
+    );
+    let before_guard = write
+        .split_once("last_grid_signature")
+        .map_or("", |(head, _)| head);
+    for count in ["set_most_played_count(", "set_artist_count("] {
+        assert!(
+            before_guard.contains(count),
+            "{count} must be written above the signature guard: the guard is what a tab pick's \
+             own fetch lands on when the content hasn't moved, and it would leave \
+             `UNFETCHED_COUNT` standing with no answer coming"
+        );
+    }
 }

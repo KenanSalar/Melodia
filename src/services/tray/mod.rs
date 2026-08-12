@@ -1,7 +1,9 @@
 //! Cross-platform system tray icon.
 //!
-//! Linux uses [`ksni`] (a pure-Rust `StatusNotifierItem` implementation over
-//! D-Bus — no GTK). Windows / macOS use [`tray_icon`]. The two backends are
+//! Linux uses `ksni` (a pure-Rust `StatusNotifierItem` implementation over
+//! D-Bus — no GTK). Windows / macOS use `tray_icon`. Neither is linked: each is
+//! a platform-gated dependency, so a link resolves only on the host that has
+//! it. The two backends are
 //! `cfg`-split; this module is the shared façade — action / snapshot types,
 //! the embedded icon, and `init_tray`.
 //!
@@ -35,7 +37,7 @@ pub use tray_icon_backend::{init as init_tray, shutdown as shutdown_tray, update
 /// human clicking menu items can never outrun 16 buffered actions.
 pub const TRAY_ACTION_CHANNEL_CAP: usize = 16;
 
-/// A menu action emitted by the tray, drained by `ui::tray_bridge`.
+/// A menu action emitted by the tray, drained by `ui::shell::tray_bridge`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TrayAction {
     /// Toggle play / pause.
@@ -51,7 +53,7 @@ pub enum TrayAction {
 }
 
 /// Minimal render state the tray needs: tooltip text + the Play/Pause label.
-/// Derived from `PlayerViewModelLight` by `ui::tray_bridge`. `PartialEq`
+/// Derived from `PlayerViewModelLight` by `ui::shell::tray_bridge`. `PartialEq`
 /// lets the state subscribers skip the blocking tray round-trip when an
 /// emit (volume step, seek, queue edit) didn't change anything the tray
 /// renders.

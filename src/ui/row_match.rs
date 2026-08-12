@@ -170,7 +170,8 @@ impl Default for Needle {
 
 impl Needle {
     /// The folded text, for the one caller that matches against an
-    /// already-folded haystack of its own: `ui::tracks`' packed `RowSearchKey`.
+    /// already-folded haystack of its own: the packed `RowSearchKey` behind
+    /// both cached track lists (`ui::track_list_cache`).
     pub fn as_str(&self) -> &str {
         &self.text
     }

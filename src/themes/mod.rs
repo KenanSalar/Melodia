@@ -15,7 +15,7 @@
 //!   `MATERIAL_YOU_ACCENT_ID` constants.
 //! - [`system_color_state`]: bundled OS appearance signals (`SystemColorState`)
 //!   consumed by `apply()`.
-//! - [`apply`]: the Slint-facing pipeline that writes palette brushes into
+//! - [`mod@apply`]: the Slint-facing pipeline that writes palette brushes into
 //!   the `Theme` global plus the colour-dot picker helper.
 //! - Per-theme modules ([`catppuccin`], [`gnome`], [`kde`], [`macos`],
 //!   [`material3`], [`windows`]): the static palette data.

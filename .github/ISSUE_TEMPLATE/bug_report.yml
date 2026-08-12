@@ -1,0 +1,109 @@
+name: Bug report
+description: Something in Melodia doesn't work the way it should
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report this.
+
+        Please search the [existing issues](https://github.com/KenanSalar/Melodia/issues?q=is%3Aissue)
+        first — if you find yours, add a comment there rather than opening a new one.
+
+  - type: input
+    id: version
+    attributes:
+      label: Melodia version
+      description: >-
+        Settings → About. From a terminal it's `melodia --version` —
+        `Melodia.exe --version` on Windows, `./melodia-*.AppImage --version` for the AppImage.
+      placeholder: "0.10.0"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - Linux
+        - Windows
+        - Other (built from source)
+    validations:
+      required: true
+
+  - type: input
+    id: os-detail
+    attributes:
+      label: Distribution / OS version
+      placeholder: "Fedora 44, Windows 11 24H2, …"
+
+  - type: dropdown
+    id: install-method
+    attributes:
+      label: How did you install it?
+      options:
+        - AppImage
+        - RPM (Fedora, openSUSE, …)
+        - DEB (Debian, Ubuntu, …)
+        - Tarball
+        - MSI (Windows)
+        - Built from source
+        - Other
+    validations:
+      required: true
+
+  - type: dropdown
+    id: arch
+    attributes:
+      label: Architecture
+      options:
+        - x86_64
+        - aarch64
+        - Not sure
+
+  - type: dropdown
+    id: session
+    attributes:
+      label: Display server
+      description: Linux only — some rendering, drag-and-drop and window-chrome bugs are specific to one.
+      options:
+        - Wayland
+        - X11
+        - Not applicable (Windows)
+        - Not sure
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What did you see, and what did you expect instead?
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open …
+        2. Click …
+        3. …
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Log output
+      description: |
+        Go to **Settings → About → Diagnostics → Save…** and attach the file to this issue. It gathers your system details, a short list of settings, any recent crash reports and the tail of the log — paths are shortened to `~`, and no credentials or tokens are included.
+        Melodia logs to a file on every run, so there's no need to reproduce the problem from a terminal. **Open Folder** on the same card shows you where they live. If Melodia won't start far enough to reach Settings, `melodia --logs` prints the same path on Linux and macOS; on Windows the folder is `%APPDATA%\Melodia\logs\`.
+        If you'd rather paste than attach, this box is automatically formatted as code — no backticks needed.
+      render: shell
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Anything else?
+      description: Screenshots, theme, language, library size — whatever seems relevant.

@@ -29,7 +29,7 @@
 //!    it manually.
 //! 4. On `Available` (and not previously skipped), forward an
 //!    [`UpdaterEvent::Available`] onto the `event_tx` channel so the
-//!    UI-thread subscriber in `ui::updater_settings` can push a toast.
+//!    UI-thread subscriber in `ui::settings::updater_settings` can push a toast.
 
 use std::time::Duration;
 

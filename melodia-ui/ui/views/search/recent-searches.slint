@@ -1,0 +1,110 @@
+import { Theme } from "../../theme.slint";
+import { Search } from "../../globals/search.slint";
+import { MaterialIcon } from "../../components/material-icon.slint";
+
+// The empty-query state: saved history as removable chips under a "Clear all"
+// affordance. No inputs — everything it reads and writes is on `Search`. The mount site
+// gates it on there being history, so it never renders an empty case of its own.
+export component RecentSearches inherits VerticalLayout {
+    vertical-stretch: 0;
+    spacing: Theme.pad-sm;
+
+    HorizontalLayout {
+        alignment: space-between;
+        VerticalLayout {
+            alignment: center;
+            Text {
+                text: @tr("Recent");
+                color: Theme.text;
+                font-size: Theme.font-size-md;
+                font-weight: 700;
+                letter-spacing: 0.4px;
+            }
+        }
+        VerticalLayout {
+            alignment: center;
+            clear-target := Rectangle {
+                width: clear-label.preferred-width + 16px;
+                height: 24px;
+                border-radius: self.height / 2;
+                background: clear-touch.has-hover
+                    ? Theme.surface1
+                    : transparent;
+                animate background { duration: Theme.dur-fast; easing: ease-in-out; }
+                clear-label := Text {
+                    x: 8px;
+                    y: (parent.height - self.height) / 2;
+                    text: @tr("Clear all");
+                    color: Theme.subtext0;
+                    font-size: Theme.font-size-sm;
+                }
+                clear-touch := TouchArea {
+                    mouse-cursor: pointer;
+                    clicked => { Search.recent-clear(); }
+                }
+            }
+        }
+    }
+
+    // Slint 1.16 has no wrapping `HorizontalLayout`, so this is a plain one and overflow
+    // sits outside the visible area. The history is capped and chip widths are bounded,
+    // so at any sensible window size every chip fits — the `SettingsPage.chunk-indices`
+    // wrap is what a real fix looks like, if this ever stops being true.
+    HorizontalLayout {
+        spacing: Theme.pad-sm;
+        alignment: start;
+        for term in Search.recent-rows: chip-host := Rectangle {
+            height: 28px;
+            width: term-text.preferred-width + close-cell.width + 18px;
+            border-radius: self.height / 2;
+            background: chip-touch.has-hover
+                ? Theme.surface1
+                : Theme.surface0;
+            border-width: 1px;
+            border-color: Theme.surface2;
+            animate background { duration: Theme.dur-fast; easing: ease-in-out; }
+
+            term-text := Text {
+                x: 10px;
+                y: (parent.height - self.height) / 2;
+                text: term;
+                color: Theme.text;
+                font-size: Theme.font-size-sm;
+                // Ink, not elision — the chip sizes off `preferred-width` above, which
+                // `elide` leaves alone, so nothing truncates and the line-box scissor
+                // stops cutting the marks off whatever the user typed.
+                overflow: elide;
+            }
+
+            // Declared **before** the close cell, so that cell's nested TouchArea wins
+            // dispatch on the X: Slint dispatches to the last-declared overlapping one.
+            chip-touch := TouchArea {
+                mouse-cursor: pointer;
+                clicked => { Search.recent-pick(term); }
+            }
+
+            close-cell := Rectangle {
+                x: parent.width - self.width - 4px;
+                y: (parent.height - self.height) / 2;
+                width: 20px;
+                height: 20px;
+                border-radius: 10px;
+                background: close-touch.has-hover
+                    ? Theme.surface2
+                    : transparent;
+                animate background { duration: Theme.dur-fast; easing: ease-in-out; }
+                MaterialIcon {
+                    name: "close";
+                    icon-size: 14px;
+                    icon-color: Theme.subtext0;
+                }
+                close-touch := TouchArea {
+                    mouse-cursor: pointer;
+                    // Declared after the chip's own, so this sits on top and wins
+                    // dispatch here.
+                    clicked => { Search.recent-remove(term); }
+                }
+            }
+        }
+    }
+}

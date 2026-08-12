@@ -5,7 +5,7 @@ import { SmartRuleRow } from "../models.slint";
 // they sit apart from `Dialog`: the dispatcher imports them, never the reverse.
 
 // The Smart-Playlist rule builder (`kind == "smart-playlist-editor"`), owned by
-// `src/ui/callbacks/playlists/smart.rs`. The entry points populate everything
+// `src/ui/playlists/callbacks/smart.rs`. The entry points populate everything
 // and open the dialog from a fresh event-loop tick — a synchronous
 // `Dialog.open = true` off a click trips the recursion guard. `commit`
 // reconstructs a `SmartCriteria` from the model plus the scalars.
@@ -105,7 +105,7 @@ export global TagEditor {
     callback commit();
 }
 
-// The two scrobble login dialogs, owned by `src/ui/scrobbling_settings.rs`; the
+// The two scrobble login dialogs, owned by `src/ui/settings/scrobbling_settings.rs`; the
 // section resets this to defaults just before opening one. Last.fm is two-step
 // browser auth — `lastfm-open-auth()` fetches an unauthorized token, opens the
 // approval page and advances `lastfm-step`, then `lastfm-finish` exchanges it

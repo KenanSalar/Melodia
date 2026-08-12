@@ -1,4 +1,4 @@
-import { Nav } from "../globals/nav.slint";
+import { Nav, NavEnterFrom } from "../globals/nav.slint";
 import { MiniPlayer } from "../globals/shell.slint";
 
 // The responsive full-UI ↔ miniplayer swap, as a non-visual state machine: both `Timer`s
@@ -42,6 +42,12 @@ export component MiniPlayerSwitch {
     private property <bool> watched-active: root.active;
     changed watched-active => {
         MiniPlayer.active = root.watched-active;
+        // **Lateral, and owed twice.** The swap destroys the whole full UI, so the
+        // content branch is a fresh `ViewTransition` mount on the way back; and the
+        // line below closes Now Playing, which remounts the branch underneath it.
+        // Unconditional because the first of those is owed in both directions — an
+        // unwritten edge is whatever the last drill or back left behind.
+        Nav.pending-enter-from = NavEnterFrom.below;
         if (root.watched-active && Nav.now-playing-open) {
             Nav.now-playing-open = false;
         }

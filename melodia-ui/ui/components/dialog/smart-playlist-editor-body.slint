@@ -6,6 +6,7 @@ import { Dropdown } from "../settings/dropdown.slint";
 import { ToggleSwitch } from "../settings/toggle-switch.slint";
 import { LabeledInput } from "../labeled-input.slint";
 import { IconButton } from "../icon-button.slint";
+import { OverlayScrollbar } from "../overlay-scrollbar.slint";
 
 // Controlled value input for a rule row or the limit count. `text` is one-way —
 // the host owns it — and every keystroke reports back through `edited`. The
@@ -214,12 +215,19 @@ export component SmartPlaylistEditorBody inherits VerticalLayout {
         max-height: 280px;
         vertical-stretch: 1;
         rules-sv := ScrollView {
+            horizontal-scrollbar-policy: always-off;
+            vertical-scrollbar-policy: always-off;
             // Locked to the viewport so each value input's stretch has real
             // space: left alone, a ScrollView sizes its content to the content's
             // own preferred width and the stretchy input collapses to nothing.
             viewport-width: rules-sv.visible-width;
             VerticalLayout {
                 spacing: Theme.pad-sm;
+                // A row stretches to the full width and ends in its remove
+                // button, so the bar needs a gutter of its own rather than an
+                // overlay — parked over that button, its TouchArea would eat
+                // the click.
+                padding-right: Theme.pad-md;
                 for rule[i] in SmartEditor.rules: SmartRuleRowView {
                     rule: rule;
                     field-names: root.field-names;
@@ -230,6 +238,19 @@ export component SmartPlaylistEditorBody inherits VerticalLayout {
                     remove => { SmartEditor.remove-rule(i); }
                 }
             }
+        }
+
+        OverlayScrollbar {
+            horizontal: false;
+            track-color: Theme.scrollbar-track-on-card;
+            x: parent.width - self.width;
+            y: 0;
+            width: 10px;
+            height: parent.height;
+            visible-size: rules-sv.visible-height;
+            content-size: rules-sv.viewport-height;
+            offset: -rules-sv.viewport-y;
+            scroll-to(o) => { rules-sv.viewport-y = -o; }
         }
     }
 

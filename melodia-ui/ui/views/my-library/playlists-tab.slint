@@ -1,0 +1,60 @@
+import { Theme } from "../../theme.slint";
+import { Dialog } from "../../globals/dialog.slint";
+import { Playlists } from "../../globals/playlists.slint";
+import { PlaylistGrid } from "../../components/grid/playlist-grid.slint";
+import { GridEmptyState } from "../../components/grid/grid-empty-state.slint";
+import { OverlayScrollbar } from "../../components/overlay-scrollbar.slint";
+
+// The Playlists tab, `MyLibraryAlbumsTab`'s shape over the `Playlists` global. It keeps
+// `Dialog` because the *cards* reach it — delete and rename fill the dialog inline, the
+// same hop the page's New / Smart pills make from the band.
+export component MyLibraryPlaylistsTab inherits Rectangle {
+    in property <length> card-w;
+    in property <length> card-h;
+    in property <length> row-h;
+    in property <length> gap;
+
+    grid := PlaylistGrid {
+        y: Theme.pad-md;
+        width: 100%;
+        height: parent.height - Theme.pad-md;
+        rows: Playlists.grid-rows;
+        card-width: root.card-w;
+        card-height: root.card-h;
+        row-height: root.row-h;
+        gap: root.gap;
+        open-playlist(id) => { Playlists.open-playlist(id); }
+        // Delete and rename open the Dialog through its own openers, as the detail
+        // view's pills do; edit-artwork routes to Rust, which has to fetch the track
+        // artwork pool and seed the preview before opening.
+        delete-playlist(id) => { Dialog.open-delete-playlist(id); }
+        edit-playlist-artwork(id) => {
+            Playlists.request-edit-artwork-for(id);
+        }
+        rename-playlist(id) => {
+            // The grid model carries no description, so both come off the cached
+            // `PlaylistStats` list through Rust — no DB hop.
+            Dialog.open-rename-playlist(id, Playlists.row-name(id), Playlists.row-description(id));
+        }
+        request-cover(p) => { Playlists.request-cover(p) }
+    }
+
+    // Its copy points at the action pill in the band above.
+    if Playlists.total-count == 0: GridEmptyState {
+        icon: "queue_music";
+        title: @tr("No playlists yet");
+        body: @tr("Click \"+ New Playlist\" to create one.");
+    }
+
+    OverlayScrollbar {
+        horizontal: false;
+        x: parent.width - self.width;
+        y: Theme.pad-md;
+        width: 10px;
+        height: parent.height - Theme.pad-md;
+        visible-size: grid.v-visible-height;
+        content-size: grid.v-viewport-height;
+        offset: grid.v-offset;
+        scroll-to(o) => { grid.set-v-offset(o); }
+    }
+}

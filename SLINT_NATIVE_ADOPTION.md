@@ -112,15 +112,21 @@ foundation only — watch, not yet usable.
 
 - **Today:** `melodia-ui/ui/components/tooltip.slint` (hand-rolled, `reveal-timer` at line 55) — our
   component name shadows the new built-in, which compiles fine but is confusing long-term.
-  Seven call sites, all importing ours explicitly: `icon-button.slint:119`,
-  `macos-traffic-light.slint:112`, `action-pill.slint:182`, `settings/color-dot-grid.slint:43`,
-  `playlists-view.slint:321`, `custom-titlebar.slint:83`, `now-playing/play-button.slint:160`.
+  Twelve call sites in eleven files, all importing ours explicitly — five in-tree
+  (`icon-button.slint:95`, `macos-traffic-light.slint:77`, `action-pill.slint:149`,
+  `settings/color-dot-grid.slint:44`, `custom-titlebar.slint:66`,
+  `now-playing/play-button.slint:149`) and six top-layer frames the host declares after
+  whatever paints over the anchor (`my-library-view.slint:402` and `:416`,
+  `favorites-view.slint:272`, `recently-played-view.slint:217`, `settings-view.slint:317`,
+  `app-window.slint:576`). The six top-layer ones are the awkward half of any migration:
+  they exist precisely because the pill has to be drawn somewhere other than on its
+  anchor, which is not something a built-in anchored element can express.
 - **Upstream in 1.17:** native `Tooltip` element.
 - **Blocked (was 🟢; re-checked 2026-07-23):** slint#12260 *"Tooltip is clipped when the anchor
   widget is near the edge of the window"* is **still open** (filed 2026-06-26). The 1.17.1
   popup-clipping fix (#12324) is a *different* bug — non-native popups — and does not resolve
-  it. Several of our call sites are edge-adjacent (`custom-titlebar.slint:83`,
-  `macos-traffic-light.slint:112`), so adopting today would regress them.
+  it. Several of our call sites are edge-adjacent (`custom-titlebar.slint:66`,
+  `macos-traffic-light.slint:77`), so adopting today would regress them.
 - **Trigger:** #12260 closed and released.
 - **Migration:** swap call sites (IconButton `tooltip-text`, etc.), delete our component, drop
   the name shadowing.

@@ -1,14 +1,25 @@
 import { Theme } from "../../theme.slint";
 import { MaterialIcon } from "../material-icon.slint";
+import { PillButton } from "../action-pill.slint";
 
 // The empty-grid placeholder. Mounted as an opaque overlay *over* the grid
 // rather than as an alternative branch, so the host doesn't tear the grid down
 // and rebuild it every time the count crosses zero. `body` is optional — a grid
 // whose emptiness explains itself takes the heading alone.
+//
+// **The action is optional the same way `body` is, and it has to be a property
+// rather than `@children`.** An empty `@children` still occupies a cell and
+// claims one of the column's `pad-md` gaps, which would shift the vertical
+// centring of every mount that wants no action; a false `if` costs nothing.
+// `action-label` is the gate, so a caller passing only an icon gets nothing —
+// a glyph with no word is not an affordance.
 export component GridEmptyState inherits Rectangle {
     in property <string> icon;
     in property <string> title;
     in property <string> body;
+    in property <string> action-icon;
+    in property <string> action-label;
+    callback action-clicked();
 
     background: Theme.base;
 
@@ -43,6 +54,15 @@ export component GridEmptyState inherits Rectangle {
                 font-size: Theme.font-size-sm;
                 horizontal-alignment: center;
                 wrap: word-wrap;
+            }
+        }
+
+        if root.action-label != "": HorizontalLayout {
+            alignment: center;
+            PillButton {
+                icon: root.action-icon;
+                text: root.action-label;
+                clicked => { root.action-clicked(); }
             }
         }
     }

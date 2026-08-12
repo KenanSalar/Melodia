@@ -65,9 +65,7 @@ jobs:
         run: |
           # build-latest-json.py recomputes every platform entry's size
           # and inlines its `.minisig`, so it needs the actual artifact
-          # files + sigs on disk. The existing `latest.json` is pulled
-          # too — its `critical` / `manifest_schema_version` / `version`
-          # / `pub_date` fields are carried over verbatim.
+          # files + sigs on disk.
           mkdir -p artifacts
           gh release download "$TAG" --dir ./artifacts \
             --pattern '*.AppImage' \
@@ -75,14 +73,25 @@ jobs:
             --pattern '*.deb' \
             --pattern '*.rpm' \
             --pattern '*.msi' \
-            --pattern '*.minisig' \
-            --pattern 'latest.json'
+            --pattern '*.minisig'
+
+          # The published manifest is carry-over INPUT — its `version` /
+          # `manifest_schema_version` / `critical` / `pub_date` are re-used
+          # verbatim — and NOT an artifact to classify, so it is staged
+          # outside `artifacts/`. That directory holds installable artifacts
+          # and their `.minisig` siblings and nothing else, and since the
+          # missing-deb fix build-latest-json.py enforces it: a file matching
+          # no PLATFORM_PATTERNS entry aborts the rebuild rather than dropping
+          # a platform in silence. `latest.json` had been staged in there, so
+          # the first publish under that guard failed on the very file this
+          # step exists to read (v0.9.0). Keep carry-over inputs out of it.
+          gh release download "$TAG" --dir "$RUNNER_TEMP" --pattern 'latest.json'
 
       - name: Resolve carry-over manifest fields
         id: meta
         shell: bash
         run: |
-          MANIFEST=artifacts/latest.json
+          MANIFEST="$RUNNER_TEMP/latest.json"
           [[ -f "$MANIFEST" ]] || {
             echo "::error::$MANIFEST not found in release $TAG"
             exit 1

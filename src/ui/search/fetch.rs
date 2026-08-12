@@ -14,9 +14,9 @@ use slint::{ComponentHandle, Model, SharedString, VecModel, Weak};
 
 use super::SearchUi;
 use super::apply::{apply_results_to_slint, clear_results_on_ui, set_loading_on_ui};
-use crate::database::queries::SearchResults;
 use crate::error::AppResult;
 use crate::library;
+use crate::library::search::SearchResults;
 use crate::state::AppState;
 use crate::{AppWindow, Search};
 
@@ -136,7 +136,7 @@ pub fn swap_tracks_compact_or_full(search_ui: &Arc<SearchUi>, weak: &Weak<AppWin
 }
 
 /// 2-second delayed history add. The history token is bumped on every
-/// keystroke (via the `query-changed` callback in `wire_search`); the
+/// keystroke (via the `query-changed` callback in `callbacks::query`); the
 /// delayed task captures the token at spawn time and bails if a newer
 /// keystroke moved it. After persisting, pushes the returned ordered
 /// `Vec<String>` into `Search.recent-rows` so the empty-input state
@@ -167,7 +167,7 @@ pub fn schedule_history_add(
 }
 
 /// Push a freshly-loaded recent-searches list into `Search.recent-rows`.
-/// Called from `wire_search` on initial hydrate, after a successful
+/// Called from `callbacks::recent` on initial hydrate, after a successful
 /// history-add, and after `recent-remove` / `recent-clear`.
 pub fn push_recent_rows_to_slint(weak: &Weak<AppWindow>, rows: Vec<String>) {
     let weak = weak.clone();

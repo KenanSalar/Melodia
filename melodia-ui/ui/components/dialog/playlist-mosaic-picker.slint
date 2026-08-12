@@ -4,6 +4,7 @@ import { Dialog } from "../../globals/dialog.slint";
 import { Playlists } from "../../globals/playlists.slint";
 import { ArtworkImage } from "../artwork-image.slint";
 import { CoverMosaic } from "../grid/cover-mosaic.slint";
+import { OverlayScrollbar } from "../overlay-scrollbar.slint";
 import { SectionButton } from "../settings/section-button.slint";
 
 // Mosaic picker body — mounted by `DialogOverlay` for
@@ -191,11 +192,14 @@ export component PlaylistMosaicPicker inherits Rectangle {
             background: Theme.surface0;
             border-radius: Theme.radius-md;
             border-width: 1px;
-            border-color: Theme.border;
+            // `surface2`, for `PickerListCard`'s reason: `Theme.border` is `surface0`
+            // on Catppuccin, so this card had no edge against the dialog behind it.
+            border-color: Theme.surface2;
             clip: true;
 
-            ScrollView {
+            cand-sv := ScrollView {
                 horizontal-scrollbar-policy: always-off;
+                vertical-scrollbar-policy: always-off;
                 viewport-width: self.visible-width;
                 viewport-height: root.grid-content-h + 8px;
 
@@ -295,6 +299,21 @@ export component PlaylistMosaicPicker inherits Rectangle {
                         }
                     }
                 }
+            }
+
+            // Inset off the card's border and radius. The tiles are anchored left
+            // at a fixed six-column stride, so it needs no gutter reserved for it.
+            OverlayScrollbar {
+                horizontal: false;
+                track-color: Theme.scrollbar-track-on-card;
+                x: parent.width - self.width - 2px;
+                y: 2px;
+                width: 10px;
+                height: parent.height - 4px;
+                visible-size: cand-sv.visible-height;
+                content-size: cand-sv.viewport-height;
+                offset: -cand-sv.viewport-y;
+                scroll-to(o) => { cand-sv.viewport-y = -o; }
             }
         }
     }

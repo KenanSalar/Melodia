@@ -13,7 +13,7 @@
 //! the per-open snapshot lives in an `Rc<RefCell<_>>` and the completion toast
 //! needs the `Rc<NotificationsUi>` — both `!Send`, so the work must stay on the
 //! UI thread. `async_compat::Compat` supplies the tokio reactor for the awaited
-//! sqlx / `spawn_blocking` calls, exactly as `wire_playlist_files` does. Wired
+//! sqlx / `spawn_blocking` calls, exactly as `ui::playlists::wire_files` does. Wired
 //! from `main.rs` after the notifications stack exists, for the same reason.
 
 use std::cell::RefCell;
@@ -23,7 +23,6 @@ use std::rc::Rc;
 use async_compat::Compat;
 use slint::{ComponentHandle, Image, Model, Rgb8Pixel, SharedPixelBuffer, SharedString};
 
-use crate::database::queries;
 use crate::entities::track::TagEditRow;
 use crate::error::AppError;
 use crate::library;
@@ -31,7 +30,8 @@ use crate::library::tags::TagEditReport;
 use crate::media::image_decode::{MAX_SOURCE_DIM, decode_capped};
 use crate::media::tag_writer::{self, ArtworkEdit, FieldEdit, TagEdit};
 use crate::state::AppState;
-use crate::ui::notifications::{NotificationParams, NotificationsUi};
+use crate::ui::file_dialog;
+use crate::ui::shell::notifications::{NotificationParams, NotificationsUi};
 use crate::ui::util::{COVER_SIZE, buffer_from_rgb};
 use crate::{AppWindow, Dialog, Settings, TagEditor};
 
@@ -77,7 +77,7 @@ struct TagSession {
 
 /// Wire the four `TagEditor` callbacks. Needs `Rc<NotificationsUi>` for the
 /// Save completion toast, so it is called from `main.rs` after the notifications
-/// stack exists (same constraint as `wire_playlist_files`).
+/// stack exists (same constraint as `ui::playlists::wire_files`).
 pub fn wire_tags(ui: &AppWindow, state: &AppState, notifications: &Rc<NotificationsUi>) {
     let session: Rc<RefCell<TagSession>> = Rc::new(RefCell::new(TagSession::default()));
     let te = ui.global::<TagEditor>();
@@ -108,7 +108,7 @@ fn wire_request_edit(
         let s = state.clone();
         let session = session.clone();
         let _ = slint::spawn_local(Compat::new(async move {
-            let rows = match queries::track::get_tag_edit_rows_by_ids(&s.db, &ids).await {
+            let rows = match library::tags::get_tag_edit_rows(&s, &ids).await {
                 Ok(rows) if !rows.is_empty() => rows,
                 Ok(_) => return,
                 Err(e) => {
@@ -174,21 +174,12 @@ fn wire_pick_artwork(
         let s = state.clone();
         let session = session.clone();
         let _ = slint::spawn_local(Compat::new(async move {
-            let dialog = {
-                // Filter broadly — the orchestrator normalizes on write
-                // (lofty's accepted set and MP4's differ; no single filter
-                // expresses it).
-                let mut d = rfd::AsyncFileDialog::new()
-                    .set_title("Choose Cover Image")
-                    .add_filter(
-                        "Images",
-                        &["jpg", "jpeg", "png", "webp", "gif", "bmp", "tiff"],
-                    );
-                if let Some(ui) = weak.upgrade() {
-                    d = d.set_parent(&ui.window().window_handle());
-                }
-                d
-            };
+            // Filter broadly — the orchestrator normalizes on write (lofty's
+            // accepted set and MP4's differ; no single filter expresses it).
+            let dialog = file_dialog::parented(&weak, "Choose Cover Image").add_filter(
+                "Images",
+                &["jpg", "jpeg", "png", "webp", "gif", "bmp", "tiff"],
+            );
             let Some(handle) = dialog.pick_file().await else {
                 return;
             };
@@ -459,25 +450,21 @@ fn show_report_toast(
         "warning"
     };
     notifications.show_auto_dismiss(
-        NotificationParams {
-            variant: variant.into(),
-            title: settings.invoke_tag_edit_title(clamp_i32(report.updated)),
-            message: settings.invoke_tag_edit_message(failed, unsupported),
-            action_label: SharedString::default(),
-            action_kind: SharedString::default(),
-        },
+        NotificationParams::plain(
+            variant,
+            settings.invoke_tag_edit_title(clamp_i32(report.updated)),
+            settings.invoke_tag_edit_message(failed, unsupported),
+        ),
         TOAST_MS,
     );
 }
 
 fn failure_toast(settings: &Settings) -> NotificationParams {
-    NotificationParams {
-        variant: "error".into(),
-        title: settings.invoke_tag_edit_failed_title(),
-        message: settings.invoke_tag_edit_failed_message(),
-        action_label: SharedString::default(),
-        action_kind: SharedString::default(),
-    }
+    NotificationParams::plain(
+        "error",
+        settings.invoke_tag_edit_failed_title(),
+        settings.invoke_tag_edit_failed_message(),
+    )
 }
 
 /// Build the `TagEdit` by diffing each current field value against the

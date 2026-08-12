@@ -38,12 +38,15 @@ use std::time::Duration;
 #[cfg(target_os = "linux")]
 use async_compat::Compat;
 #[cfg(target_os = "linux")]
-use slint::ComponentHandle;
-#[cfg(target_os = "linux")]
 use slint::Weak;
 
+// `tasks/` imports no `ui::*` — this module is the documented, env-gated exception,
+// since a memory tag naming the view has to read the view's own globals. The tag
+// itself is `ui::view_tag`, shared with the verbose log's navigation line.
 #[cfg(target_os = "linux")]
-use crate::{AlbumDetail, AppWindow, ArtistDetail, GenreDetail, Nav};
+use crate::AppWindow;
+#[cfg(target_os = "linux")]
+use crate::ui::view_tag::format_view;
 
 #[cfg(target_os = "linux")]
 const SAMPLE_INTERVAL: Duration = Duration::from_millis(500);
@@ -99,48 +102,6 @@ async fn run(weak: Weak<AppWindow>) {
             );
         }
     }
-}
-
-/// Format the current view as a compact tag. Reads the `Nav` selected
-/// index + per-section detail-id globals + overlay flags. Index mapping
-/// matches `melodia-ui/ui/globals/nav.slint::Nav` (`0=search 1=browse 2=favorites
-/// 3=tracks 4=albums 5=artists 6=genres 7=playlists 8=recently-played
-/// 9=settings`).
-#[cfg(target_os = "linux")]
-fn format_view(ui: &AppWindow) -> String {
-    let nav = ui.global::<Nav>();
-    let nav_idx = nav.get_selected_index();
-    let np_open = nav.get_now_playing_open();
-    let qs_open = crate::ui::window_chrome::is_queue_sheet_open();
-    let album_id = i64::from(ui.global::<AlbumDetail>().get_album_id());
-    let artist_id = i64::from(ui.global::<ArtistDetail>().get_artist_id());
-    let genre_id = i64::from(ui.global::<GenreDetail>().get_genre_id());
-
-    let base = match nav_idx {
-        0 => "Search".to_owned(),
-        1 => "Browse".to_owned(),
-        2 => "Favorites".to_owned(),
-        3 => "Tracks".to_owned(),
-        4 if album_id >= 0 => format!("AlbumDetail({album_id})"),
-        4 => "Albums".to_owned(),
-        5 if artist_id >= 0 => format!("ArtistDetail({artist_id})"),
-        5 => "Artists".to_owned(),
-        6 if genre_id >= 0 => format!("GenreDetail({genre_id})"),
-        6 => "Genres".to_owned(),
-        7 => "Playlists".to_owned(),
-        8 => "RecentlyPlayed".to_owned(),
-        9 => "Settings".to_owned(),
-        n => format!("Nav({n})"),
-    };
-
-    let mut tag = base;
-    if np_open {
-        tag.push_str("+NP");
-    }
-    if qs_open {
-        tag.push_str("+QS");
-    }
-    tag
 }
 
 /// Per-tick memory snapshot. All values in KiB.

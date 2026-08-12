@@ -10,6 +10,8 @@
 //!   visibility / widths, sort, browse path, nav index, detail ids,
 //!   section-collapse toggles — plus the `snap_to_preset` helper.
 //! - [`folders`]: library folder CRUD, watcher toggle, and `scan_folder*`.
+//! - [`diagnostics`]: the Verbose Logging switch.
+//! - [`support`]: the launch counter behind the one-time Ko-fi prompt.
 //!
 //! `settings.json` setters funnel through
 //! [`crate::services::settings::mutate_settings`]; the per-view-state
@@ -20,27 +22,38 @@
 
 pub mod appearance;
 pub mod crossfade;
+pub mod diagnostics;
 pub mod discord;
 pub mod equalizer;
 pub mod folders;
 pub mod playback;
 pub mod replaygain;
 pub mod scrobble;
+pub mod support;
 pub mod updates;
 pub mod view;
 pub mod visualizer;
 
 pub use appearance::{
-    set_appearance, set_corner_radius, set_dynamic_color_style, set_match_unfocused_to_system_bg,
+    seed_theme_preference, set_appearance, set_corner_radius, set_dynamic_color_style,
+    set_match_unfocused_to_system_bg,
 };
 pub use crossfade::{
     set_crossfade_duration_ms, set_crossfade_enabled, set_crossfade_fade_on_pause,
     set_crossfade_manual, set_crossfade_skip_same_album,
 };
+pub use diagnostics::set_verbose_logging;
 pub use discord::{
     set_discord_rpc_artwork, set_discord_rpc_enabled, set_discord_rpc_hide_when_paused,
 };
 pub use equalizer::{set_eq_band_gains_and_preset, set_eq_enabled, set_eq_preamp};
+pub use folders::{
+    add_folder, get_folders, reconcile_watched_folders, remove_folder, scan_folder,
+    scan_folder_internal, set_folder_watching_enabled, toggle_folder_watching,
+};
+pub use playback::{
+    set_gapless_playback, set_play_button_animation, set_playback_speed, set_resume_on_startup,
+};
 pub use replaygain::{
     set_replaygain_enabled, set_replaygain_mode, set_replaygain_preamp,
     set_replaygain_prevent_clipping,
@@ -50,21 +63,16 @@ pub use scrobble::{
     set_scrobble_listenbrainz_enabled, set_scrobble_listenbrainz_love_enabled,
     set_scrobble_mbid_auto_tag,
 };
-pub use folders::{
-    add_folder, get_folders, reconcile_watched_folders, remove_folder, scan_folder,
-    scan_folder_internal, set_folder_watching_enabled, toggle_folder_watching,
-};
-pub use playback::{
-    set_gapless_playback, set_play_button_animation, set_playback_speed, set_resume_on_startup,
-};
+pub use support::{mark_support_prompt_seen, record_launch};
 pub use updates::{
     record_check_failure, record_check_success, reset_skipped_release, set_auto_check_enabled,
     set_skipped_release,
 };
 pub use view::{
-    get_view_sort, set_artist_albums_collapsed, set_browse_path, set_favorites_tab,
-    set_last_detail_id, set_last_nav_index, set_locale, set_overflow_button, set_settings_tab,
-    set_view_sort, snap_to_preset, update_view_columns,
+    get_view_sort, set_artist_albums_collapsed, set_browse_path, set_browse_view_mode,
+    set_favorites_tab, set_last_detail_id, set_last_nav_index, set_locale, set_my_library_tab,
+    set_overflow_button, set_recently_played_tab, set_settings_tab, set_view_sort,
+    snap_to_preset, update_view_columns,
 };
 pub use visualizer::{set_visualizer_enabled, set_visualizer_style};
 

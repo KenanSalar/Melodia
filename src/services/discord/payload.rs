@@ -1,7 +1,7 @@
 //! Discord Rich Presence wire payloads: serde DTOs that mirror the Discord
 //! "activity" object, plus the `*_json` frame-body builders [`super::ipc`] ships.
 //!
-//! Pure — no I/O, no clock. Fed the [`Presence`](super::model::Presence) that
+//! Pure — no I/O, no clock. Fed the [`super::model::Presence`] that
 //! [`super::model`] projects from the player's view-model. Kept apart from the
 //! projection so the state machine and the serialization evolve independently.
 

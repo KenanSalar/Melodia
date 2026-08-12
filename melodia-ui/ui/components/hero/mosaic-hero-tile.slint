@@ -7,9 +7,10 @@ import { MaterialIcon } from "../material-icon.slint";
 // chrome and `CoverMosaic` paints the tile layout inside it; an empty set gets a
 // single centred glyph instead.
 //
-// One component rather than two copies: the two views differ in exactly three
-// values plus the cover callback, which is a callback rather than a global read
-// because each owns its own mosaic tier.
+// Mounted once, by `MosaicTabHero`, which forwards each page's three values and
+// its cover callback — a callback rather than a global read because each page
+// owns its own mosaic tier. Still its own component rather than inlined into the
+// band: the square is the one part of that banner a non-tabbed hero could want.
 //
 // **Every brush here is a `HeroBackdrop` tier, and none may become a `Theme.*`
 // token.** The tile sits *on* the hero: with no mosaic that's the dark gradient

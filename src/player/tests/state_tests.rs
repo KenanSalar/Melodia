@@ -1097,3 +1097,68 @@ fn sync_track_summaries_patches_current_queue_and_republishes() {
         "an edit touching nothing queued must not republish"
     );
 }
+
+/// Every `PlayerAction` arm names the fact a reader needs from it.
+///
+/// A new variant is already a build failure — the match is exhaustive — so this
+/// covers the silent half: an arm that drops its identifying field, or two whose
+/// fields get swapped. Both compile, and are wrong only when read in a log.
+#[test]
+fn every_player_action_names_what_it_did() {
+    let rg = TrackReplayGain::default();
+    let cases: Vec<(PlayerAction, &[&str])> = vec![
+        (
+            PlayerAction::PlayMedia {
+                file_path: "/music/a.flac".to_owned(),
+                volume: 1.0,
+                speed: 1.0,
+                start_position_ms: Some(4_200),
+                replaygain: rg,
+            },
+            &["/music/a.flac", "4200"],
+        ),
+        (
+            PlayerAction::PlayMedia {
+                file_path: "/music/b.flac".to_owned(),
+                volume: 1.0,
+                speed: 1.0,
+                start_position_ms: None,
+                replaygain: rg,
+            },
+            &["/music/b.flac"],
+        ),
+        (
+            PlayerAction::BeginCrossfade {
+                file_path: "/music/c.flac".to_owned(),
+                replaygain: rg,
+                fade_ms: 3_000,
+                volume: 1.0,
+                speed: 1.0,
+            },
+            &["/music/c.flac", "3000"],
+        ),
+        (PlayerAction::Resume, &["resume"]),
+        (PlayerAction::Pause { fade_ms: 250 }, &["pause", "250"]),
+        (PlayerAction::Stop { fade_ms: 0 }, &["stop", "0"]),
+        (PlayerAction::Seek { position_ms: 9_001 }, &["seek", "9001"]),
+        (PlayerAction::SetVolume(0.5), &["volume", "0.50"]),
+        (PlayerAction::SetSpeed(1.25), &["speed", "1.25"]),
+        (
+            PlayerAction::PreloadGapless(Some("/music/d.flac".to_owned())),
+            &["preload", "/music/d.flac"],
+        ),
+        (PlayerAction::PreloadGapless(None), &["clear"]),
+        (PlayerAction::UpdatePlayCount(7), &["play count", "7"]),
+        (PlayerAction::UpdateSkipCount(8), &["skip count", "8"]),
+    ];
+
+    for (action, expected) in cases {
+        let rendered = action.to_string();
+        for needle in expected {
+            assert!(
+                rendered.contains(needle),
+                "{action:?} rendered as {rendered:?}, which is missing {needle:?}"
+            );
+        }
+    }
+}

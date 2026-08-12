@@ -2,11 +2,13 @@
 //! `sort_track_list_rows`, and the `compute_track_order` permutation
 //! wrapper, which all share one core.
 //!
-//! Sort semantics mirror the SQL `track_list_order_by`: the default/
+//! These arms are the app's only sort semantics — the SQL `track_list_order_by`
+//! they were modelled on is gone, having become unreachable once every caller
+//! that could ask for a sort started retaining its rows instead. The default/
 //! `"title"` sort uses the natural-order `sort_key`, `track_number` uses a
 //! disc/track sentinel composite (disc stays ascending on `desc`), and
-//! `Option` fields put `None` first ascending. Seeded values are distinct
-//! per field so expected orders are exact.
+//! `Option` fields put `None` first ascending. Seeded values are distinct per
+//! field so expected orders are exact.
 
 use super::*;
 
@@ -184,4 +186,93 @@ fn custom_secondary_key_breaks_ties() {
     sort_track_rows_by(&mut rows, "artist", "asc", |r| r, |r| r.file_name.to_lowercase());
     // file_name "1.flac" < "2.flac".
     assert_eq!(ids(&rows), [1, 2]);
+}
+
+/// The natural-order arm keys on `sort_key` **once** for `compute_track_order`,
+/// and that has to be the same order keying on it twice produced.
+///
+/// `compute_track_order`'s tie-breaker *is* `sort_key`, so on the default sort
+/// its key used to be a `(k, k)` pair whose halves were byte-identical — a
+/// `String` per row built for nothing, on the one sort every cold fetch takes.
+/// Dropping the second half is arithmetic rather than a judgement call, but it
+/// is only visible where rows actually tie, and `fixture()` has four distinct
+/// keys — so nothing here could fail on the change until this existed.
+///
+/// Both directions, because `desc` reverses the whole slice: a tie that stays
+/// in input order ascending must come back in reversed input order descending,
+/// and an arm that had quietly grown a second component would break that first.
+#[test]
+fn the_natural_arm_orders_ties_the_same_with_one_key_as_with_two() {
+    // Two tied pairs rather than one, so a comparator that happened to be
+    // stable only at the head of the slice still fails.
+    let tied = || {
+        vec![
+            mk(1, "same", Some("Z"), None, None, None, 0, None, None),
+            mk(2, "same", Some("A"), None, None, None, 0, None, None),
+            mk(3, "other", Some("M"), None, None, None, 0, None, None),
+            mk(4, "other", Some("B"), None, None, None, 0, None, None),
+        ]
+    };
+
+    for dir in ["asc", "desc"] {
+        let rows = tied();
+        // What the pair key produced: the same slice, sorted in place through
+        // the public entry point with `sort_key` spelled out as the secondary.
+        let mut expect = tied();
+        sort_track_rows_by(&mut expect, "title", dir, |r| r, |r| {
+            r.sort_key.as_deref().unwrap_or("").to_ascii_lowercase()
+        });
+
+        assert_eq!(
+            perm_ids(&rows, &compute_track_order(&rows, "title", dir)),
+            ids(&expect),
+            "dir={dir}",
+        );
+    }
+
+    // And spelled out, so the expectation above can't drift with the helper it
+    // is compared against: ties keep input order ascending, reversed descending.
+    let rows = tied();
+    assert_eq!(perm_ids(&rows, &compute_track_order(&rows, "title", "asc")), [3, 4, 1, 2]);
+    assert_eq!(perm_ids(&rows, &compute_track_order(&rows, "title", "desc")), [2, 1, 4, 3]);
+}
+
+/// Every field a `TrackList` header cell can ask for has to be one the
+/// comparator has an arm for.
+///
+/// The token is a bare string on both sides — a `field:` on a `HeaderCell`
+/// mount, a `match` arm in [`sort_track_rows_by`] — so a rename on either side
+/// compiles and the column quietly sorts by the natural-order default while
+/// painting its arrow as though it had worked. This is the `SortPillRow` pin
+/// (`ui::my_library::tests`, `ui::favorites::tests`) for the other half of the
+/// tree's sortable surfaces, and it earns its place now that `track_list_order_by`
+/// is gone — nothing else answers these tokens any more.
+#[test]
+fn every_header_column_asks_for_a_field_the_comparator_knows() {
+    const HEADER: &str =
+        include_str!("../../../melodia-ui/ui/components/track-list/track-list-header.slint");
+    // The arms above, restated. `track_number` is the one handled ahead of the
+    // `match`; the rest are its named arms. A field dropped there and left here
+    // fails the round-trip below.
+    const ARMS: [&str; 7] =
+        ["track_number", "title", "artist", "album", "genre", "year", "length"];
+
+    let asked: Vec<&str> = HEADER
+        .lines()
+        .filter_map(|line| line.trim().strip_prefix("field: \""))
+        .filter_map(|rest| rest.split_once('"'))
+        .map(|(field, _)| field)
+        .collect();
+
+    assert_eq!(
+        asked.len(),
+        ARMS.len(),
+        "track-list-header.slint must name one sort field per column: got {asked:?}"
+    );
+    for field in &asked {
+        assert!(
+            ARMS.contains(field),
+            "a header cell asks for `{field}`, which falls through to the sort_key arm"
+        );
+    }
 }

@@ -2,27 +2,25 @@
 //! wired here to a `library::*` function. Callbacks run on the Slint event
 //! loop thread and dispatch the actual work onto the tokio runtime.
 //!
-//! Split across submodules per Slint global / view domain. `wire_all` is the
-//! root entry that wires the `Player` global itself plus the `Nav` persist
-//! callback; every other view has its own `wire_*` entrypoint that callers
-//! invoke directly (see `boot/ui_setup.rs` or `main.rs`).
+//! What is left here is the cross-cutting set — everything answering to no
+//! single view. `wire_all` is the root entry that wires the `Player` global
+//! itself plus the `Nav` persist callback; each view slice owns its own wiring
+//! under `ui/<view>/callbacks/` and reaches it through that slice's `install`.
 
-mod macros;
+// `pub(in crate::ui)` rather than private: each view slice owns its own
+// `callbacks/` submodule, so the wiring reaching these is no longer a
+// descendant of this module. Still sealed inside `ui::` — nothing in
+// `library/`, `player/` or `boot/` can name either.
+pub(in crate::ui) mod macros;
 
-mod albums;
-mod artists;
-mod browse;
-mod cross_tab_nav;
-mod favorites;
-mod genres;
+pub(in crate::ui) mod cross_tab_nav;
 mod library_settings;
 mod now_playing;
-mod playlists;
-mod recently_played;
-mod search;
 mod tags;
-mod tracks;
 mod updater;
+
+use std::sync::Arc;
+use std::sync::atomic::{AtomicI32, Ordering};
 
 use rand::RngExt;
 use slint::{ComponentHandle, Model, ModelRc};
@@ -34,22 +32,10 @@ use crate::{AppWindow, Nav, Player};
 
 use macros::{spawn_logged_sync, wire_pb, wire_sync, wire_sync_pb};
 
-#[allow(unused_imports)]
-use macros::spawn_logged;
-
-pub use albums::wire_albums;
-pub use artists::wire_artists;
-pub use browse::wire_browse;
 pub use cross_tab_nav::wire_cross_tab_nav;
-pub use favorites::wire_favorites;
-pub use genres::wire_genres;
 pub use library_settings::wire_library_settings;
 pub use now_playing::{wire_now_playing_favorite, wire_now_playing_rating};
-pub use playlists::{wire_playlist_files, wire_playlists};
-pub use recently_played::wire_recently_played;
-pub use search::wire_search;
 pub use tags::wire_tags;
-pub use tracks::wire_tracks;
 pub use updater::wire as wire_updater;
 
 /// Convert a Slint `[int]` callback param into `Vec<i64>`. Used by every
@@ -175,6 +161,24 @@ pub(super) fn persisted_sort(state: &AppState, view_id: &str) -> Option<(String,
     library::settings::get_view_sort(state, view_id).map(|s| (s.field, s.dir.as_str()))
 }
 
+/// Shadow of `views.json`'s `last_nav_index` plus the lock its writes serialize on.
+///
+/// `Nav.persist-selected-index` can fire twice in one tick — `nav_history::replay`
+/// closes the departing detail first, and a close restores a cross-section origin —
+/// and two `spawn_blocking` writes have no ordering between them, so the origin can
+/// land last. `writer` supplies that ordering; `latest` lets a task holding it drop a
+/// write a newer index has superseded. **The load has to sit under `writer`**, or both
+/// tasks pass the check and race to land.
+///
+/// Two fields rather than a `Mutex<i32>` so the UI thread publishes with a store
+/// instead of blocking on a guard held across file I/O.
+struct NavIndexPersist {
+    /// Published on the UI thread before each spawn; read by writers under `writer`.
+    latest: AtomicI32,
+    /// Held by the disk writers for the length of the write.
+    writer: parking_lot::Mutex<()>,
+}
+
 /// Wire every Slint `Player.*` callback to its `library::*` counterpart.
 /// Call once after constructing `AppWindow`.
 pub fn wire_all(ui: &AppWindow, state: &AppState) {
@@ -219,7 +223,7 @@ pub fn wire_all(ui: &AppWindow, state: &AppState) {
     // survives restarts — mirrors repeat/shuffle/volume). The flyout only
     // ever sends valid preset values; downstream clamps anyway, so no
     // clamp is needed here. Two steps like the gapless callback in
-    // `src/ui/playback_settings.rs`: (a) fast synchronous runtime apply,
+    // `src/ui/settings/playback_settings.rs`: (a) fast synchronous runtime apply,
     // (b) blocking-pool disk write.
     {
         let s = state.clone();
@@ -231,11 +235,11 @@ pub fn wire_all(ui: &AppWindow, state: &AppState) {
                 "set_playback_speed",
                 library::playback::player_set_playback_speed(&s_apply.playback_ctx(), speed)
             );
-            let s_disk = s.clone();
-            s.runtime.spawn_blocking(move || {
-                if let Err(e) = library::settings::set_playback_speed(&s_disk, speed) {
-                    log::warn!("persist playback_speed: {e}");
-                }
+            // `persist_blocking`, not the macro beside it: this writes
+            // `settings.json`, and the macro is the `views.json` shape. Its
+            // label already read as this one's, which was the tell.
+            s.persist_blocking("persist playback_speed", move |st| {
+                library::settings::set_playback_speed(st, speed)
             });
         });
     }
@@ -256,12 +260,28 @@ pub fn wire_all(ui: &AppWindow, state: &AppState) {
     {
         let s = state.clone();
         let ui_weak = ui_weak.clone();
+        let persist = Arc::new(NavIndexPersist {
+            latest: AtomicI32::new(ui.global::<Nav>().get_selected_index()),
+            writer: parking_lot::Mutex::new(()),
+        });
         nav.on_persist_selected_index(move |idx| {
             if let Some(ui) = ui_weak.upgrade() {
                 crate::ui::nav_history::record_current(&s, &ui);
             }
+            // Ahead of the spawn — a queued write has to be able to see it.
+            persist.latest.store(idx, Ordering::Release);
+            // Spelled out rather than through `spawn_blocking_logged!`, which takes a
+            // string *literal*: the index is what makes this line worth reading, and a
+            // failure that doesn't say which section it dropped says almost nothing.
             let s_disk = s.clone();
+            let persist = Arc::clone(&persist);
             s.runtime.spawn_blocking(move || {
+                // Lock first: dropping a superseded write is only sound inside the
+                // section that performs the write.
+                let _write = persist.writer.lock();
+                if persist.latest.load(Ordering::Acquire) != idx {
+                    return;
+                }
                 if let Err(e) = library::settings::set_last_nav_index(&s_disk, idx) {
                     log::warn!("nav: set_last_nav_index({idx}): {e}");
                 }
@@ -289,3 +309,10 @@ pub fn wire_all(ui: &AppWindow, state: &AppState) {
 #[cfg(test)]
 #[path = "tests/play_row_tests.rs"]
 mod tests;
+
+// A second flat `#[path]` mod rather than nesting both under `tests` — the
+// play-row helpers reach `super::` for the fns they exercise, and nesting moves
+// that one level away from this file.
+#[cfg(test)]
+#[path = "tests/nav_persist_tests.rs"]
+mod nav_persist_tests;

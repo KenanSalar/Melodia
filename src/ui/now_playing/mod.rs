@@ -45,7 +45,7 @@ use up_next::{rebuild_up_next, spawn_up_next_subscriber, wire_now_playing_open};
 /// Closure type for re-seeding a `NowPlayingState`-shadowed surface
 /// (Up Next list or high-res cover slot) from the stashed snapshot. Set
 /// once by [`install`] after construction; called by
-/// [`crate::ui::mini_player::install`] when the responsive miniplayer
+/// [`crate::ui::shell::mini_player::install`] when the responsive miniplayer
 /// becomes visible, so the square variant doesn't render an empty list
 /// or a stale low-res cover until the next queue / track mutation. The
 /// subscribers stash snapshots while no surface renders the model —
@@ -74,7 +74,7 @@ pub struct NowPlayingState {
     /// in square) is cheap. The up-next subscriber gates on
     /// `open || mini_visible` so the same model serves both surfaces
     /// without a parallel subscriber. Written from the
-    /// `MiniPlayer.active-changed` callback in `crate::ui::mini_player`.
+    /// `MiniPlayer.active-changed` callback in `crate::ui::shell::mini_player`.
     pub(crate) mini_visible: Cell<bool>,
     /// Mirrors `MiniPlayer.square` — true only when the responsive
     /// miniplayer is rendering the square variant (the one with the
@@ -83,7 +83,7 @@ pub struct NowPlayingState {
     /// `open || (mini_visible && mini_square)` so the rectangle variant
     /// (48 px tile, served from the row-tier `CoverThumbs`) doesn't pay
     /// for a 384 px decode it can't display. Written from the
-    /// `MiniPlayer.square-changed` callback in `crate::ui::mini_player`.
+    /// `MiniPlayer.square-changed` callback in `crate::ui::shell::mini_player`.
     pub(crate) mini_square: Cell<bool>,
     /// Latest queue snapshot, kept whether or not the view is open, so
     /// opening the view can rebuild the Up Next list immediately.
@@ -132,7 +132,7 @@ pub struct NowPlayingState {
     up_next_seeder: RefCell<Option<Seeder>>,
     /// Re-seeder for the high-res cover (and per-artwork accent + metadata
     /// chips), invoked by [`Self::kick_artwork`]. Called from
-    /// `crate::ui::mini_player` when the square miniplayer becomes
+    /// `crate::ui::shell::mini_player` when the square miniplayer becomes
     /// visible (either by entering mini-active directly into the square
     /// variant or by flipping from rectangle → square) so the user
     /// doesn't have to wait for the next track change before the sharp
@@ -146,7 +146,7 @@ impl NowPlayingState {
     /// when the seeder hasn't been wired yet (only before `install`
     /// returns) or when no snapshot has been stashed (subscriber never
     /// saw a queue update — empty library). Called from
-    /// `crate::ui::mini_player::install` when the responsive miniplayer
+    /// `crate::ui::shell::mini_player::install` when the responsive miniplayer
     /// becomes visible, so the square variant doesn't render an empty
     /// list while the subscriber's stashed snapshot is fresh.
     pub(crate) fn kick_up_next(&self) {
@@ -159,7 +159,7 @@ impl NowPlayingState {
     /// chips) and write into the `Player` global. No-op when no seeder
     /// has been wired (only before [`install`] returns) and a no-op
     /// inside the closure when the current track is already applied.
-    /// Called from `crate::ui::mini_player` on the rectangle→square
+    /// Called from `crate::ui::shell::mini_player` on the rectangle→square
     /// transition (and on enter-mini if the entry is directly into the
     /// square variant) so the sharp 384 px cover replaces the row-tier
     /// fallback without waiting for the next track change. Mirrors

@@ -1,6 +1,6 @@
-//! Album-art decode + cache for the detail-view headers.
+//! Album-art decode + cache for the band's hero half.
 //!
-//! A detail hero needs the active cover in two forms — a sharp header tile
+//! A detail hero needs the active cover in two forms — a sharp artwork tile
 //! and a heavily-blurred, full-bleed backdrop — so it takes a
 //! [`crate::ui::artwork_cache`] tier configured for its own working set.
 //! Everything about how that cache behaves is documented there; this file is

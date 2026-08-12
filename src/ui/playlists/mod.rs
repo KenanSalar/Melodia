@@ -22,7 +22,8 @@
 //! only touched from the UI thread via
 //! `Weak<AppWindow>::upgrade_in_event_loop`.
 
-pub mod detail;
+mod callbacks;
+mod detail;
 mod grid;
 mod selection;
 mod state;
@@ -40,6 +41,7 @@ use crate::ui::detail_artwork::DetailArtwork;
 use crate::ui::row_match::Needle;
 use crate::ui::section_state::SectionState;
 use crate::ui::util::clamp_i64_to_i32;
+use crate::ui::view_ctx::ViewCtx;
 use crate::{
     AppWindow, PlaylistDetail, PlaylistGridRow as UiPlaylistGridRow,
     PlaylistRow as UiPlaylistRow, Playlists, TrackListRow as UiTrackListRow,
@@ -52,19 +54,44 @@ use state::{
 #[cfg(test)]
 use grid::compute_indices;
 
-pub use detail::{
+// Reached from outside the slice: `ui::nav_history` replays a walk into a
+// detail, `boot::ui_setup` seeds the persisted one and retunes the cover cap,
+// and its `initial_grid_fetch!` kicks the first fetch after the window is shown
+// — which is why `fetch_grid` can't fold into `install` with the rest.
+pub use detail::{open_playlist_with, seed_detail_from_settings};
+pub use grid::{fetch_grid, tune_cache_for_display};
+
+// Reached only from this slice's own `callbacks/`, which used to live two
+// modules away, plus the cross-slice `apply_detail_row_*` mirrors in
+// `callbacks::now_playing`. `pub(super)` is `pub(in crate::ui)` here, which is
+// exactly that reach.
+pub(super) use detail::{
     apply_detail_row_favorite, apply_detail_row_rating, apply_filtered_detail,
-    apply_optimistic_reorder, clear_detail,
-    open_playlist, refresh_detail, resort_detail, rollback_reorder, seed_detail_from_settings,
-    set_filter,
+    apply_optimistic_reorder, clear_detail, open_playlist, refresh_detail, resort_detail,
+    rollback_reorder, set_filter,
 };
-pub use grid::{
-    fetch_grid, fetch_grid_stats, rebuild_grid, tune_cache_for_display, update_flat_rows,
-};
-pub use selection::{clear_selection, handle_select_row};
+pub(super) use grid::{fetch_grid_stats, rebuild_grid};
+pub(super) use selection::{clear_selection, handle_select_row};
+
+/// The M3U8 import / export wiring, kept out of [`install`] because it needs
+/// the `Rc<NotificationsUi>` for its completion toasts and that is created
+/// after the per-view wiring runs. `main.rs` calls it once the stack exists.
+pub use callbacks::wire_files;
+
+/// Install the Playlists grid + detail models, build the handle, and wire every
+/// `Playlists.*` / `PlaylistDetail.*` callback to it — except the file
+/// import/export pair, which is [`wire_files`].
+///
+/// The returned handle is not a keepalive; see [`crate::ui::albums::install`].
+pub fn install(cx: ViewCtx<'_>) -> Arc<PlaylistsUi> {
+    install_models(cx.app);
+    let playlists_ui = Arc::new(PlaylistsUi::new(cx.cover_thumbs.clone()));
+    callbacks::wire(cx.app, cx.state, &playlists_ui);
+    playlists_ui
+}
 
 /// Rust-side state for the Playlists grid + detail views. Shared between
-/// the UI callbacks (`wire_playlists`) and the async fetchers. Mirrors
+/// the UI callbacks (`callbacks::wire`) and the async fetchers. Mirrors
 /// `AlbumsUi` field-for-field.
 pub struct PlaylistsUi {
     grid: PlaylistGridState,
@@ -85,7 +112,7 @@ pub struct PlaylistsUi {
 }
 
 impl PlaylistsUi {
-    pub fn new(cover_thumbs: Arc<CoverThumbs>) -> Self {
+    fn new(cover_thumbs: Arc<CoverThumbs>) -> Self {
         Self {
             grid: PlaylistGridState {
                 data: Mutex::new(Arc::new(GridData::new(Vec::new()))),
@@ -270,7 +297,7 @@ impl PlaylistsUi {
 /// Build the empty `VecModel`s the Playlists grid (chunked + flat),
 /// the detail track list, and the detail selection need, and hand them
 /// to the Slint globals as `ModelRc`s.
-pub fn install_playlists_models(ui: &AppWindow) {
+fn install_models(ui: &AppWindow) {
     let grid: Rc<VecModel<UiPlaylistGridRow>> = Rc::new(VecModel::default());
     ui.global::<Playlists>().set_grid_rows(ModelRc::from(grid));
 

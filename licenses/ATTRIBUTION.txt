@@ -1,0 +1,124 @@
+Third-party software bundled with Melodia
+=========================================
+
+Melodia links the work below into its executable -- the fonts and the Ko-fi mark
+are compiled in rather than loaded from disk, and the winit fork is built from
+this tree rather than fetched from crates.io -- so every artifact we ship
+(tarball, AppImage, RPM, DEB and MSI) is a distribution of it. The full license
+text for each sits beside this file, except where an entry says there is none to
+ship.
+
+Melodia's own license (AGPL-3.0-or-later) ships with this package as LICENSE
+and covers none of the software below.
+
+The "Files" lists give each component's path in the source repository, which is
+what identifies it -- the fonts, the mark and the fork are inside the binary,
+not installed.
+
+Debian packages carry a fuller machine-readable version of this at
+/usr/share/doc/melodia/copyright; the two are kept in step by
+services::tests::the_debian_copyright_quotes_the_licences_it_ships.
+
+
+Vazirmatn
+---------
+Version 33.003, by Saber Rastikerdar and the Vazirmatn Project Authors.
+https://github.com/rastikerdar/vazirmatn
+
+Licensed under the SIL Open Font License, Version 1.1 -- full text in
+Vazirmatn-OFL-1.1.txt.
+
+MODIFIED. `scripts/patch_vazirmatn.py` rewrites the OS/2 typo and hhea
+ascent/descent values so glyph mass lands at the line-box centre under the
+FemtoVG renderer; upstream's metrics are sized to clear Arabic combining marks
+and push centred Latin text upward at the app's UI sizes. Glyph outlines,
+capHeight, x-height and the usWin* clip bounds are untouched.
+
+Files:
+  melodia-ui/ui/assets/fonts/vazirmatn/Vazirmatn-Regular.ttf
+  melodia-ui/ui/assets/fonts/vazirmatn/Vazirmatn-Medium.ttf
+  melodia-ui/ui/assets/fonts/vazirmatn/Vazirmatn-SemiBold.ttf
+
+Upstream declares NO Reserved Font Name -- its copyright line names the project
+and stops there -- so OFL section 5 imposes no rename on the patched build, and
+it keeps the Vazirmatn name. Check this again before bumping to a release whose
+copyright line has changed.
+
+Upstream notes that Vazirmatn's non-Arabic glyphs derive from Roboto under the
+Apache License 2.0; that combination is upstream's, and their OFL covers the
+result.
+
+
+Material Symbols Rounded
+------------------------
+Version 2.935, by Google LLC. Outlined (FILL=0) and filled (FILL=1) faces.
+https://github.com/google/material-design-icons
+
+Licensed under the Apache License, Version 2.0 -- full text in Apache-2.0.txt.
+Upstream ships no NOTICE file, so section 4(d) carries nothing here.
+
+MODIFIED. `scripts/subset-icon-fonts.sh` subsets both faces down to the icon
+ligatures listed in `scripts/icons.txt`, by glyph id with --no-layout-closure so
+the closure can't pull the rest of the catalogue back in. No outline is altered.
+
+Files:
+  melodia-ui/ui/assets/fonts/MaterialSymbolsRounded.ttf
+  melodia-ui/ui/assets/fonts/MaterialSymbolsRoundedFilled.ttf
+
+Neither face carries a license string in its name table, in the subsets or in
+the pristine upstream sources -- Apache-2.0.txt is the only copy that travels
+with them.
+
+
+winit
+-----
+Version 0.30.13, by Pierre Krieger and the winit contributors.
+https://github.com/rust-windowing/winit
+
+Licensed under the Apache License, Version 2.0 -- full text in Apache-2.0.txt,
+the same copy Material Symbols above is under. Upstream ships no NOTICE file.
+
+MODIFIED. The fork carries three commits on top of the v0.30.13 tag: PR #4009
+("wayland: register drag & drop events", by PeakKS), a WindowId fixup and URI
+percent-decoding. Together they give Wayland the DroppedFile / HoveredFile
+events winit has only ever delivered on X11, macOS and Windows
+(rust-windowing/winit#1881). The additions are cfg-gated to Linux. Applied
+through Cargo's [patch.crates-io], so this is what every platform builds
+against; see winit/README.md.
+
+Files:
+  winit/*
+
+Vendored in-tree rather than fetched, so a fresh clone and every CI runner build
+identically. The whole directory retires once upstream lands native Wayland
+drag-and-drop.
+
+
+Ko-fi logo
+----------
+The cup symbol, by Ko-fi.
+https://more.ko-fi.com/brand-assets
+
+UNMODIFIED. Embedded by the Slint build and painted on one control: the Settings
+-> About support button, which opens the project's Ko-fi page. Never recoloured,
+which is also why it is an SVG Image rather than an icon-font glyph -- the mark
+is three colours and a glyph would be one.
+
+Files:
+  melodia-ui/ui/assets/icons/kofi-symbol.svg
+
+A trade mark rather than licensed software, so there is no license text beside
+this file for it and none to ship. Ko-fi publishes the mark as a brand asset for
+linking to a Ko-fi page and it is included for that purpose alone; all rights in
+it remain Ko-fi's, and Melodia claims no affiliation with or endorsement by
+them.
+
+
+Rust dependencies
+-----------------
+Everything else Melodia links is an unmodified crate resolved from crates.io and
+pinned in Cargo.lock, predominantly under MIT and Apache-2.0. Those are not
+listed here individually: they are redistributed unmodified and their own
+license files travel in the published crates, where `cargo license` or a
+vendored checkout reproduces the set for any given release. Only the software
+this repository *modifies* or *carries a copy of* is enumerated above.

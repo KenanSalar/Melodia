@@ -1,6 +1,7 @@
 //! Scrobbling background tasks: a **detector** that turns the player's
 //! view-model + position watch channels into scrobble / now-playing decisions
-//! (via the pure [`detector::DetectorState`]), and a **submitter** that drains
+//! (via the pure [`crate::services::scrobble::detector::DetectorState`]), and a
+//! **submitter** that drains
 //! the durable queue to the providers with per-provider batching, retry, and
 //! backoff.
 //!

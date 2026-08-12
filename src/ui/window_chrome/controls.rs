@@ -45,7 +45,7 @@ pub(super) fn wire(app: &AppWindow, state: &AppState, drag_hover: Arc<AtomicBool
             // tray a second time to actually restore the window. The
             // visualizer's Timer gates on it too, so this is also what
             // stops it drawing for a window nobody can see.
-            crate::ui::tray_bridge::set_window_visible(&ui, false);
+            crate::ui::shell::tray_bridge::set_window_visible(&ui, false);
         });
     }
 
@@ -87,11 +87,11 @@ pub(super) fn wire(app: &AppWindow, state: &AppState, drag_hover: Arc<AtomicBool
             // from this callback (which runs inside a winit `WindowEvent`
             // dispatch) trips Slint's "references to the window still exist"
             // warning, because the dispatcher still holds the window `Arc`.
-            if crate::ui::tray_bridge::should_hide_to_tray() {
+            if crate::ui::shell::tray_bridge::should_hide_to_tray() {
                 let weak = weak.clone();
                 if let Err(e) = slint::invoke_from_event_loop(move || {
                     if let Some(ui) = weak.upgrade() {
-                        crate::ui::tray_bridge::hide_window(&ui);
+                        crate::ui::shell::tray_bridge::hide_window(&ui);
                     }
                 }) {
                     log::warn!("close-to-tray: schedule hide: {e}");
@@ -181,11 +181,9 @@ pub(super) fn wire(app: &AppWindow, state: &AppState, drag_hover: Arc<AtomicBool
             // finishes its `tracker.wait()`. With the flag, the old
             // process tears down completely first, then forks the
             // new one as the very last step before returning from
-            // `main()`.
-            super::RESPAWN_AFTER_EXIT.store(true, Ordering::SeqCst);
-            if let Err(e) = slint::quit_event_loop() {
-                log::warn!("quit_event_loop on restart: {e}");
-            }
+            // `main()`. A refusal there leaves the app running with the
+            // new value already on disk.
+            super::request_respawn_and_quit();
         });
     }
 
@@ -207,10 +205,7 @@ pub(super) fn wire(app: &AppWindow, state: &AppState, drag_hover: Arc<AtomicBool
 
             // Same deferred-respawn rationale as `on_restart_app`: tearing
             // the old process down fully before forking the new one.
-            super::RESPAWN_AFTER_EXIT.store(true, Ordering::SeqCst);
-            if let Err(e) = slint::quit_event_loop() {
-                log::warn!("quit_event_loop on tray restart: {e}");
-            }
+            super::request_respawn_and_quit();
         });
     }
 }

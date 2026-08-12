@@ -1,6 +1,6 @@
 import { Theme } from "../theme.slint";
 import { Visualizer } from "../globals/audio.slint";
-import { Nav } from "../globals/nav.slint";
+import { Nav, NavEnterFrom } from "../globals/nav.slint";
 import { Player } from "../globals/player.slint";
 import { IconButton } from "../components/icon-button.slint";
 import { AccentDiscButton } from "../components/now-playing/accent-disc-button.slint";
@@ -68,10 +68,20 @@ export component NowPlayingView inherits Rectangle {
     // surface an art-less track's title sits on and the foreground here is solved light —
     // a theme-derived floor would be bright on a light theme. The stops keep the theme's
     // hue and drop its polarity.
+    //
+    // Eased on the slots' own duration, like the scrim below them — this was the one layer
+    // here that hard-cut, and it is the layer that *is* the backdrop whenever both slots
+    // are at 0, so two art-less tracks in a row stepped the whole view. Safe to `animate`
+    // where a leaf's brush is not: `Brush::interpolate` handles gradient↔gradient
+    // stop-for-stop and both sides are two stops at 135deg, and `track_change.rs` writes
+    // the two stops discretely, so nothing can restart the binding mid-flight.
+    // `hero-blur-backdrop.slint` carries the same three-layer arrangement and the same
+    // three animations.
     Rectangle {
         width: 100%;
         height: 100%;
         background: @linear-gradient(135deg, Player.np-floor-start, Player.np-floor-end);
+        animate background { duration: Theme.dur-med; easing: ease-in-out; }
     }
 
     // Rust writes the new blurred cover into the *inactive* slot then flips the bool;
@@ -132,7 +142,12 @@ export component NowPlayingView inherits Rectangle {
                 alignment: center;
                 AccentDiscButton {
                     icon: "arrow_back";
-                    clicked => { Nav.now-playing-open = false; }
+                    // Lateral: the view underneath remounts and samples this. See the
+                    // bar's own track-info card, which is the other half of the toggle.
+                    clicked => {
+                        Nav.pending-enter-from = NavEnterFrom.below;
+                        Nav.now-playing-open = false;
+                    }
                 }
             }
 

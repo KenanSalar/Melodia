@@ -31,7 +31,7 @@ use crate::{AppWindow, Settings};
 pub use install::install;
 pub use repaint::{apply_and_seed, repaint_from_settings};
 
-/// Handles returned by [`install`] so `main.rs` can wire the Material You
+/// Handles returned by [`fn@install`] so `main.rs` can wire the Material You
 /// coordinator (`tasks::material_you`) without `appearance` having to
 /// reach across into the player view-model channel itself.
 pub struct AppearanceHandles {
@@ -46,7 +46,7 @@ pub struct AppearanceHandles {
     pub kick_tx: watch::Sender<u64>,
     /// Snapshot-style repaint channel — the Material You coordinator
     /// publishes the fresh [`SystemColorState`] after each palette
-    /// generation; a UI-thread subscriber spawned inside [`install`]
+    /// generation; a UI-thread subscriber spawned inside [`fn@install`]
     /// consumes the latest value and calls [`repaint_from_settings`].
     pub repaint_tx: watch::Sender<SystemColorState>,
 }

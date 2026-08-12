@@ -11,7 +11,7 @@ use crate::state::AppState;
 /// against a hot-reload of the list) can't pin `settings.json` to a code
 /// that has no bundled `.po`. The runtime application
 /// (`slint::select_bundled_translation`) happens synchronously in
-/// `src/ui/locale.rs::wire_language_changed` *before* this async persist —
+/// `src/ui/settings/locale.rs::wire_language_changed` *before* this async persist —
 /// the UI re-renders immediately; this write only carries the choice
 /// across the next process boot.
 pub fn set_locale(state: &AppState, code: String) -> Result<(), AppError> {
@@ -75,6 +75,15 @@ pub fn snap_to_preset(px: u32) -> u32 {
 pub fn set_browse_path(state: &AppState, path: Option<String>) -> Result<(), AppError> {
     services::view_state::mutate_view_state(&state.paths, move |s| {
         s.browse_path = path;
+    })
+}
+
+/// Persist the Browse view's list-versus-cards presentation. Same no-kick
+/// shape as [`set_browse_path`]: the toggle callback has already written
+/// `Browse.view-mode` and rebuilt the models by the time this runs.
+pub fn set_browse_view_mode(state: &AppState, mode: i32) -> Result<(), AppError> {
+    services::view_state::mutate_view_state(&state.paths, move |s| {
+        s.browse_view_mode = mode;
     })
 }
 
@@ -143,6 +152,22 @@ pub fn set_settings_tab(state: &AppState, tab: i32) -> Result<(), AppError> {
 pub fn set_favorites_tab(state: &AppState, tab: i32) -> Result<(), AppError> {
     services::view_state::mutate_view_state(&state.paths, move |s| {
         s.favorites_tab = tab;
+    })
+}
+
+/// Persist the Recently-Played page's active tab. Same contract again —
+/// `RecentlyPlayed.tab-idx` is two-way bound to its tab bar.
+pub fn set_recently_played_tab(state: &AppState, tab: i32) -> Result<(), AppError> {
+    services::view_state::mutate_view_state(&state.paths, move |s| {
+        s.recently_played_tab = tab;
+    })
+}
+
+/// Persist the My Library page's active tab. Same contract again —
+/// `MyLibrary.tab-idx` is two-way bound to its tab bar.
+pub fn set_my_library_tab(state: &AppState, tab: i32) -> Result<(), AppError> {
+    services::view_state::mutate_view_state(&state.paths, move |s| {
+        s.my_library_tab = tab;
     })
 }
 

@@ -1,6 +1,6 @@
 use super::apply::build_filtered_grids;
 use super::sort::{set_artist_sort, sort_artists};
-use super::warm::{grid_signature, mounted_content, should_announce_warm};
+use super::warm::mounted_content;
 use crate::entities::artist::FavoriteArtist;
 use crate::entities::track::MostPlayedFavorite;
 use crate::media::cover_thumbs::CoverThumbs;
@@ -41,6 +41,15 @@ fn seeded(play_count: i32, favorite_count: i32) -> FavoritesUi {
     fav_ui
 }
 
+/// The same, with `tab` mounted. Only the mounted tab's cache is walked, so a
+/// test asserting anything about a grid's rows, count or hash has to say which
+/// tab it is asking from.
+fn seeded_on(tab: FavoritesTab, play_count: i32, favorite_count: i32) -> FavoritesUi {
+    let fav_ui = seeded(play_count, favorite_count);
+    fav_ui.set_active_tab(tab);
+    fav_ui
+}
+
 /// `(name, favorite_count)` pairs in the order [`sort_artists`] left them.
 fn sorted_names(mut artists: Vec<FavoriteArtist>, field: &str, dir: SortDir) -> Vec<String> {
     sort_artists(&mut artists, field, dir);
@@ -64,23 +73,29 @@ fn unsorted() -> Vec<FavoriteArtist> {
 /// show.
 #[test]
 fn a_play_count_flush_moves_only_the_most_played_hash() {
-    let before = build_filtered_grids(&seeded(5, 3));
-    let after = build_filtered_grids(&seeded(6, 3));
-
+    let before = build_filtered_grids(&seeded_on(FavoritesTab::MostPlayed, 5, 3));
+    let after = build_filtered_grids(&seeded_on(FavoritesTab::MostPlayed, 6, 3));
     assert_ne!(
         before.most_played_content, after.most_played_content,
         "a play-count change must rebuild Most Played — it reranks the grid and retitles a badge"
     );
-    assert_eq!(
-        before.artists_content, after.artists_content,
-        "a play-count change must not rebuild the Artists grid — nothing on those cards reads it"
-    );
-
-    // Hashing them apart only pays off if the mounted tab picks one, not both.
     assert_ne!(
         mounted_content(FavoritesTab::MostPlayed, &before),
         mounted_content(FavoritesTab::MostPlayed, &after),
         "Most Played must see its own change"
+    );
+
+    // Asked from the Artists tab, where that grid *is* the one walked — the tab
+    // the flush must leave alone.
+    let before = build_filtered_grids(&seeded_on(FavoritesTab::Artists, 5, 3));
+    let after = build_filtered_grids(&seeded_on(FavoritesTab::Artists, 6, 3));
+    assert_eq!(
+        before.artists_content, after.artists_content,
+        "a play-count change must not rebuild the Artists grid — nothing on those cards reads it"
+    );
+    assert_ne!(
+        before.artists_content, 0,
+        "…and it must be a real hash, else this passes on a grid that walked nothing"
     );
     assert_eq!(
         mounted_content(FavoritesTab::Artists, &before),
@@ -119,44 +134,66 @@ fn only_the_mounted_tabs_rows_are_built() {
     );
 }
 
-/// Counts go to *both* tabs where rows go to one: they gate the two
-/// `GridEmptyState`s and feed the hero's stats band, so the unmounted tab still
-/// owes one. Deriving them from the built rows is the tempting simplification,
-/// and it would silently zero whichever grid isn't showing.
+/// **The count follows the rows, and so does the hash — an unmounted grid is not
+/// walked at all.**
+///
+/// Both used to be published on every tab, on the reasoning that the counts gate
+/// the two `GridEmptyState`s and feed the hero band. Only the first half is
+/// true, and it is true *within* a tab: each count's readers sit inside its own
+/// tab's branch (`favorites/{most-played,artists}-tab.slint`, plus the two pill
+/// rows in `favorites-view.slint`, all gated on `tab-idx`), and the band takes
+/// its facts from the folds on `FavoritesUiState`. So the extra walk answered
+/// nobody — while folding the needle against every cached entity and pushing
+/// each survivor's strings through a hasher, on the UI thread whenever
+/// `apply_filtered_grids_now` is the caller.
+///
+/// The mutation to catch is restoring the both-tabs walk. Nothing visible
+/// breaks, so only the cost comes back.
 #[test]
-fn both_tabs_publish_a_count_whichever_one_is_mounted() {
-    let fav_ui = seeded(7, 3);
-    for tab in [FavoritesTab::Songs, FavoritesTab::MostPlayed, FavoritesTab::Artists] {
-        fav_ui.set_active_tab(tab);
-        let prepared = build_filtered_grids(&fav_ui);
-        assert_eq!(prepared.most_played_count, 1, "Most Played count is owed on {tab:?}");
-        assert_eq!(prepared.artists_count, 1, "Artists count is owed on {tab:?}");
+fn only_the_mounted_tabs_cache_is_walked() {
+    for (tab, most_played, artists) in [
+        (FavoritesTab::Songs, 0, 0),
+        (FavoritesTab::MostPlayed, 1, 0),
+        (FavoritesTab::Artists, 0, 1),
+    ] {
+        let prepared = build_filtered_grids(&seeded_on(tab, 7, 3));
+        assert_eq!(prepared.most_played_count, most_played, "Most Played count on {tab:?}");
+        assert_eq!(prepared.artists_count, artists, "Artists count on {tab:?}");
+        assert_eq!(
+            prepared.most_played_content == 0,
+            most_played == 0,
+            "the Most Played hash must be taken exactly when its cache is walked, on {tab:?}"
+        );
+        assert_eq!(
+            prepared.artists_content == 0,
+            artists == 0,
+            "the Artists hash must be taken exactly when its cache is walked, on {tab:?}"
+        );
     }
 }
 
-/// Both content hashes come off the *source* entities, which is the whole
-/// reason the rows above can be built for one tab. If the mounted tab moved a
-/// hash, a tab pick would be indistinguishable from a data change — and
-/// `grid_signature` already folds the tab in separately, so the apply that has
-/// to run on a pick is exactly the one that would then be skipped.
+/// A hash is taken off the *source* entities rather than the built rows, so a
+/// re-mount of the same tab over the same cache answers identically. If it
+/// didn't, `grid_signature` — which already folds the tab in separately — could
+/// not tell a pick from a data change, and the apply that has to run on a pick
+/// is exactly the one that would then be skipped.
 #[test]
-fn which_tab_is_mounted_moves_neither_hash() {
-    let fav_ui = seeded(7, 3);
+fn re_mounting_a_tab_over_the_same_cache_moves_no_hash() {
+    for tab in [FavoritesTab::MostPlayed, FavoritesTab::Artists] {
+        let fav_ui = seeded_on(tab, 7, 3);
+        let first = build_filtered_grids(&fav_ui);
 
-    fav_ui.set_active_tab(FavoritesTab::MostPlayed);
-    let reference = build_filtered_grids(&fav_ui);
-
-    for tab in [FavoritesTab::Artists, FavoritesTab::Songs] {
+        fav_ui.set_active_tab(FavoritesTab::Songs);
+        let _ = build_filtered_grids(&fav_ui);
         fav_ui.set_active_tab(tab);
-        let prepared = build_filtered_grids(&fav_ui);
+        let second = build_filtered_grids(&fav_ui);
+
         assert_eq!(
-            prepared.most_played_content, reference.most_played_content,
-            "the Most Played hash must not depend on {tab:?} being mounted"
+            mounted_content(tab, &first),
+            mounted_content(tab, &second),
+            "{tab:?} must hash the same cache to the same value across a pick away and back"
         );
-        assert_eq!(
-            prepared.artists_content, reference.artists_content,
-            "the Artists hash must not depend on {tab:?} being mounted"
-        );
+        assert_ne!(mounted_content(tab, &first), 0, "{tab:?} must walk something to hash");
     }
 }
 
@@ -165,26 +202,13 @@ fn which_tab_is_mounted_moves_neither_hash() {
 /// identity. Favouriting a song is a `library_changed` tick, not a stats one.
 #[test]
 fn a_favorite_count_change_moves_the_artists_hash() {
-    let before = build_filtered_grids(&seeded(5, 3));
-    let after = build_filtered_grids(&seeded(5, 4));
+    let before = build_filtered_grids(&seeded_on(FavoritesTab::Artists, 5, 3));
+    let after = build_filtered_grids(&seeded_on(FavoritesTab::Artists, 5, 4));
 
     assert_ne!(
         before.artists_content, after.artists_content,
         "the count behind the artist subtitle must rebuild the grid that renders it"
     );
-}
-
-/// Both shape what is on screen independently of the data — a tab switch fills
-/// one model and empties the other, a column change re-chunks the same cards
-/// into different rows. Leave either out of the signature and the apply that
-/// most needs to run is the one that gets skipped.
-#[test]
-fn the_signature_folds_in_the_tab_and_the_column_count() {
-    let base = grid_signature(FavoritesTab::Artists, 4, 7);
-
-    assert_ne!(base, grid_signature(FavoritesTab::MostPlayed, 4, 7), "the tab must count");
-    assert_ne!(base, grid_signature(FavoritesTab::Artists, 5, 7), "the column count must count");
-    assert_ne!(base, grid_signature(FavoritesTab::Artists, 4, 8), "the contents must count");
 }
 
 /// Case-insensitive, so a lowercased name doesn't sort below every capitalised
@@ -238,6 +262,9 @@ fn an_unknown_sort_field_falls_back_to_favorite_count() {
 fn a_re_sort_moves_the_artists_hash() {
     let fav_ui = FavoritesUi::new(std::sync::Arc::new(CoverThumbs::new()));
     *fav_ui.state().fav_artists.lock() = unsorted();
+    // The grid is only walked while its own tab is mounted, and a re-sort is a
+    // thing the user does from that tab.
+    fav_ui.set_active_tab(FavoritesTab::Artists);
 
     set_artist_sort(&fav_ui, "favorite_count".to_owned(), SortDir::Desc);
     let by_count = build_filtered_grids(&fav_ui).artists_content;
@@ -249,47 +276,6 @@ fn a_re_sort_moves_the_artists_hash() {
         by_count, by_name,
         "a sort change must move the content hash — the same cards in a new order is still a repaint"
     );
-}
-
-/// The re-enter case, and the one that was broken: the grid's rows can land
-/// before the prewarm returns (the view's mount-time `columns-changed` writes
-/// them), so by the time the decodes are done there is nothing left to repaint —
-/// and the tier is warm regardless. Gating the announcement on the write left
-/// `covers-generation` at its cold 0 and every card on a placeholder until the
-/// next tab pick.
-#[test]
-fn a_landed_prewarm_announces_even_when_the_rows_did_not_move() {
-    assert!(should_announce_warm(
-        Some(FavoritesTab::MostPlayed),
-        /* section_active */ true,
-        FavoritesTab::MostPlayed,
-    ));
-}
-
-/// A leave that landed mid-refresh has already rewound the counter and dropped
-/// the buffers, so there is no tier to announce and nothing on screen to hear it.
-#[test]
-fn a_section_left_mid_refresh_announces_nothing() {
-    assert!(!should_announce_warm(
-        Some(FavoritesTab::MostPlayed),
-        /* section_active */ false,
-        FavoritesTab::MostPlayed,
-    ));
-    // `None` is the same refresh finding the section already hidden before it
-    // ever spawned the prewarm — no decode ran, so nothing is warm.
-    assert!(!should_announce_warm(None, true, FavoritesTab::MostPlayed));
-}
-
-/// A tab pick that overtook the decodes owns a different tier — `swap_tab_covers`
-/// cleared the one this task warmed. Announcing it would put the entering tab's
-/// cards straight back on the UI-thread decoding path.
-#[test]
-fn a_tab_pick_that_overtook_the_prewarm_announces_nothing() {
-    assert!(!should_announce_warm(
-        Some(FavoritesTab::MostPlayed),
-        true,
-        FavoritesTab::Artists,
-    ));
 }
 
 /// The prewarm reads the cache, not the filtered copy, so the setter has to

@@ -22,6 +22,7 @@ use crate::themes::color_to_rgb;
 use crate::ui::detail_filter::FilterRefs;
 use crate::ui::detail_view::{impl_detail_view_helpers, resolve_view_sort};
 use crate::ui::model_patch;
+use crate::ui::my_library::{MyLibraryTab, tab_is_mounted};
 use crate::ui::track_list_view::view_id;
 use crate::ui::track_sort::sort_track_list_rows;
 use crate::ui::tracks::PreparedTrackRow;
@@ -99,6 +100,28 @@ pub async fn open_genre(
     genre_id: i64,
     enter_from: NavEnterFrom,
 ) -> AppResult<()> {
+    open_genre_with(state, genres_ui, weak, genre_id, enter_from, |_ui| {}).await
+}
+
+/// [`open_genre`] plus a hook that runs inside the same UI-thread tick as the
+/// `genre-id` flip — the `albums::detail::open_album_with` shape, and the cross-tab
+/// drill's only way to land on the Genres tab **in the tick that opens the detail**.
+///
+/// It used to hop the event loop a second time to move the tab, which put the tab flip
+/// after the hero writes below and so left them gated on a section that was not yet
+/// mounted: the chips and the solved backdrop were dropped, and only reappeared once the
+/// section-enter re-ran the whole fetch.
+pub async fn open_genre_with<F>(
+    state: &AppState,
+    genres_ui: &Arc<GenresUi>,
+    weak: Weak<AppWindow>,
+    genre_id: i64,
+    enter_from: NavEnterFrom,
+    on_applied: F,
+) -> AppResult<()>
+where
+    F: FnOnce(&AppWindow) + Send + 'static,
+{
     let (detail, mut tracks) = fetch_genre_detail(state, genres_ui, genre_id).await?;
 
     // Apply the persisted detail sort (one shared sort for every genre —
@@ -115,7 +138,7 @@ pub async fn open_genre(
 
     // How far the genre spreads — folded on the worker that fetched the rows,
     // since a broad genre's track list is the longest in the app.
-    let fold = crate::ui::hero_chips::fold_tracks(&tracks);
+    let fold = crate::ui::hero_folds::fold_tracks(&tracks);
 
     *genres_ui.detail.genre_id.lock() = genre_id;
 
@@ -129,9 +152,6 @@ pub async fn open_genre(
             .map(crate::ui::tracks::finish_track_list_row)
             .collect();
         let header = to_slint_genre_row(&detail);
-        apply_genre_hero(&ui, &header, genres_ui.section_active());
-        g.set_genre(header);
-        crate::ui::hero_chips::publish_genre(&ui, &detail, fold, genres_ui.section_active());
         replace_tracks_model(&g, ui_tracks);
         reset_detail_selection(&g, &genres_ui);
         // Fresh open clears the filter so the user lands on the full
@@ -140,11 +160,23 @@ pub async fn open_genre(
         genres_ui.detail.filter.lock().clear();
         g.set_sort_field(SharedString::from(sort_field.as_str()));
         g.set_sort_dir(SharedString::from(sort_dir.as_str()));
-        // View-transition direction. Caller-supplied: drill-ins pass
-        // `Right`, the first-launch seed passes `Below`. Set before the
-        // `genre-id` write that flips the `if` branch.
+        // The page's enter direction, set before the `on_applied` hook can
+        // flip `Nav.selected-index`. Inert on a same-page drill, whose body
+        // reads a fixed `below` — see `ui::nav_transition`.
         crate::ui::nav_transition::mark(&ui, enter_from);
         g.set_genre_id(clamp_i64_to_i32(genre_id));
+        // Run after `genre-id` is set so the hook's own global writes land in
+        // the same UI-thread tick as the detail flip — and *before* the two
+        // shared-hero writes below, which are gated on the tab this hook moves to.
+        on_applied(&ui);
+        // The two globals six heroes share, written last because their gate is the
+        // live tab rather than a shadow the `SectionActiveGate` only updates next
+        // frame. A cross-section drill is the case that forced it: read before the
+        // hook above, the gate answers for the tab the user *left*.
+        let on_screen = tab_is_mounted(&ui, MyLibraryTab::Genres);
+        apply_genre_hero(&ui, &header, on_screen);
+        g.set_genre(header);
+        crate::ui::hero_chips::publish_genre(&ui, &detail, fold, on_screen);
         // Fresh open: no filter, so the displayed cache equals the
         // canonical full set.
         genres_ui.detail.all_tracks.lock().clone_from(&tracks);
@@ -153,6 +185,10 @@ pub async fn open_genre(
         // `record_current` in `albums::detail::open_album_with` for
         // the rationale.
         crate::ui::nav_history::record_current(&state_for_history, &ui);
+        // Reseat the page's shared filter box, which the clear above
+        // doesn't reach — same reasoning, and same closure position, as
+        // `albums::detail::open_album_with`.
+        ui.global::<crate::MyLibrary>().invoke_detail_scope_changed();
     });
     Ok(())
 }
@@ -168,7 +204,7 @@ pub async fn refresh_detail(
 ) -> AppResult<()> {
     let (detail, mut tracks) = fetch_genre_detail(state, genres_ui, genre_id).await?;
 
-    let fold = crate::ui::hero_chips::fold_tracks(&tracks);
+    let fold = crate::ui::hero_folds::fold_tracks(&tracks);
 
     let genres_ui = genres_ui.clone();
     let _ = weak.upgrade_in_event_loop(move |ui| {
@@ -189,9 +225,10 @@ pub async fn refresh_detail(
         // identical to the open path; the stops are name-derived, so in
         // practice this only matters if the name itself moved.
         let header = to_slint_genre_row(&detail);
-        apply_genre_hero(&ui, &header, genres_ui.section_active());
+        let on_screen = tab_is_mounted(&ui, MyLibraryTab::Genres);
+        apply_genre_hero(&ui, &header, on_screen);
         g.set_genre(header);
-        crate::ui::hero_chips::publish_genre(&ui, &detail, fold, genres_ui.section_active());
+        crate::ui::hero_chips::publish_genre(&ui, &detail, fold, on_screen);
 
         // With an active filter the displayed model is a subset, so the
         // id-slice fast path below (which assumes an unfiltered model)
@@ -372,7 +409,7 @@ pub fn apply_detail_row_rating(weak: &Weak<AppWindow>, id: i64, rating: i32) {
 }
 
 /// Reopen the genre that was visible in the Genre Detail view at the
-/// last shutdown, if any. Called once at startup *after* `wire_genres`
+/// last shutdown, if any. Called once at startup *after* [`super::install`]
 /// so the `GenreDetail` callbacks are already live by the time
 /// `open_genre`'s `upgrade_in_event_loop` lands. Silently no-ops on a
 /// missing / deleted genre.

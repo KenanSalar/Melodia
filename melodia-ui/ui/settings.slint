@@ -198,6 +198,20 @@ export global Settings {
     // Opens `CARGO_PKG_REPOSITORY` in the system browser. No Slint-side handler.
     callback open-repository();
 
+    // Opens the Ko-fi page, from the About card's button and from the one-time support
+    // toast's action button alike — hence `src/ui/support.rs` rather than `about.rs`.
+    callback open-kofi();
+
+    // The Diagnostics card's three rows, all handled in `src/ui/settings/diagnostics.rs`.
+    // `open-log-folder` is also what the "crashed last run" toast's action button
+    // routes to, via the `Notifications.action` dispatcher.
+    callback open-log-folder();
+    callback save-diagnostics-report();
+    // Applied live via `LoggerHandle::set_new_spec` — no relaunch — then persisted.
+    // Inert when `RUST_LOG` is set, which wins outright; see `services::logging`.
+    in-out property <bool> verbose-logging: false;
+    callback verbose-logging-changed(bool);
+
     // Everything below is a `pure callback` wrapping an `@tr` literal, because Slint
     // 1.16 exposes no Rust-callable `tr(...)`: Rust invokes these at push time so each
     // string resolves in the locale selected right then, rather than the one that was
@@ -273,6 +287,67 @@ export global Settings {
         return @tr("Update failed. See logs for details.");
     }
 
+    // Saving a diagnostics bundle from the Diagnostics card.
+    pure callback diagnostics-saved-title() -> string;
+    diagnostics-saved-title => {
+        return @tr("Diagnostics report saved");
+    }
+    pure callback diagnostics-saved-message(string /*path*/) -> string;
+    diagnostics-saved-message(path) => {
+        return @tr("Saved to {}", path);
+    }
+    pure callback diagnostics-failed-title() -> string;
+    diagnostics-failed-title => {
+        return @tr("Couldn't save the diagnostics report");
+    }
+    pure callback diagnostics-failed-message() -> string;
+    diagnostics-failed-message => {
+        return @tr("See the log for details.");
+    }
+
+    // Pushed once on the launch after a panic, by `crash_report::take_unseen`.
+    // The action label deliberately repeats the Diagnostics card's button, both
+    // because it goes to the same place and so the two share one msgid.
+    pure callback crash-report-title() -> string;
+    crash-report-title => {
+        return @tr("Melodia crashed last time");
+    }
+    pure callback crash-report-message() -> string;
+    crash-report-message => {
+        return @tr("A crash report was written. Open the log folder to find it.");
+    }
+    pure callback crash-report-action-label() -> string;
+    crash-report-action-label => {
+        return @tr("Open Folder");
+    }
+
+    // Pushed once ever, by `ui::support`, on an early launch that isn't the first.
+    // Sticky for the crash notice's reason: it fires once, so a notice the user was
+    // looking away for is a notice that did nothing.
+    pure callback support-prompt-title() -> string;
+    support-prompt-title => {
+        return @tr("Enjoying Melodia?");
+    }
+    pure callback support-prompt-message() -> string;
+    support-prompt-message => {
+        return @tr("It's free and open source, built in my spare time. If it's useful to you, you can support me. You'll only see this once.");
+    }
+    pure callback support-prompt-action-label() -> string;
+    support-prompt-action-label => {
+        return @tr("Support");
+    }
+
+    // Pushed by `tasks::audio_health` when the output device goes away. No action
+    // button — there is no device picker to send the user to.
+    pure callback audio-device-lost-title() -> string;
+    audio-device-lost-title => {
+        return @tr("Audio device disconnected");
+    }
+    pure callback audio-device-lost-message() -> string;
+    audio-device-lost-message => {
+        return @tr("Playback won't be audible until you reconnect it and restart Melodia.");
+    }
+
     // The import/export header pills on the Playlists view.
     pure callback playlist-import-title(int /*imported*/) -> string;
     playlist-import-title(imported) => {
@@ -330,6 +405,16 @@ export global Settings {
     pure callback toast-love-sync-title() -> string;
     toast-love-sync-title => {
         return @tr("Loved tracks");
+    }
+    // The one toast kind whose body is localized too — a restart that couldn't
+    // relaunch carries no path or error worth showing, only an instruction.
+    pure callback toast-restart-required-title() -> string;
+    toast-restart-required-title => {
+        return @tr("Restart Required");
+    }
+    pure callback toast-restart-required-message() -> string;
+    toast-restart-required-message => {
+        return @tr("Melodia couldn't relaunch itself. Close and reopen it to apply the change.");
     }
 
     // The Add-to-Playlist picker's commit toast: title pluralizes on playlists,

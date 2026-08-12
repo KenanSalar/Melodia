@@ -1,0 +1,80 @@
+import { Theme } from "../../theme.slint";
+import { RecentlyPlayed } from "../../globals/curated.slint";
+import { Player } from "../../globals/player.slint";
+import { TrackListScrollbars } from "../../components/track-list-scrollbars.slint";
+import { TrackList } from "../../components/track-list/track-list.slint";
+
+// The Songs tab: a `TrackList` over the post-filter recency model, with its own
+// overlay scrollbars. No inputs — everything it reads is on a global. The
+// scrollbars live here rather than at the mount site because Slint can't read an
+// id declared inside an `if` from outside it, which is also what makes a per-tab
+// file the natural boundary.
+//
+// **Mounted `sortable: false`, and that is the page.** Recency is what this list
+// is; the order it would otherwise offer is a synthetic `"recency"` field no
+// header cell owns, so a single click was unreachable to undo — and it persisted,
+// so the page reopened permanently alphabetical. The headers still resize and
+// still toggle.
+export component RecentlyPlayedSongsTab inherits Rectangle {
+    HorizontalLayout {
+        padding-left: Theme.pad-lg;
+        padding-right: Theme.pad-lg;
+        padding-top: Theme.pad-md;
+
+        tl := TrackList {
+            horizontal-stretch: 1;
+            vertical-stretch: 1;
+
+            rows: RecentlyPlayed.tracks;
+
+            w-number <=> RecentlyPlayed.w-number;
+            w-title <=> RecentlyPlayed.w-title;
+            w-artist <=> RecentlyPlayed.w-artist;
+            w-album <=> RecentlyPlayed.w-album;
+            w-genre <=> RecentlyPlayed.w-genre;
+            w-year <=> RecentlyPlayed.w-year;
+            w-length <=> RecentlyPlayed.w-length;
+
+            show-number <=> RecentlyPlayed.show-number;
+            show-artwork <=> RecentlyPlayed.show-artwork;
+            show-artist <=> RecentlyPlayed.show-artist;
+            show-album <=> RecentlyPlayed.show-album;
+            show-genre <=> RecentlyPlayed.show-genre;
+            show-year <=> RecentlyPlayed.show-year;
+            number-mode: "index";
+
+            sortable: false;
+            playing-track-id: Player.vm.track.id;
+            view-context: "recently_played";
+            view-selected-ids: RecentlyPlayed.selected-ids;
+
+            play-row(id, idx) => { RecentlyPlayed.play-row(id, idx); }
+            play-next(ids) => { RecentlyPlayed.play-next(ids); }
+            add-to-queue(ids) => { RecentlyPlayed.add-to-queue(ids); }
+            toggle-row-favorite(ids, on) => { RecentlyPlayed.toggle-row-favorite(ids, on); }
+            set-row-rating(ids, n) => { RecentlyPlayed.set-row-rating(ids, n); }
+            select-row(idx, id, sh, ct) => { RecentlyPlayed.select-row(idx, id, sh, ct); }
+            request-blur-search => { RecentlyPlayed.blur-search-tick += 1; }
+            go-to-album(aid) => { RecentlyPlayed.go-to-album(aid); }
+            go-to-artist(aid) => { RecentlyPlayed.go-to-artist(aid); }
+            go-to-genre(gid) => { RecentlyPlayed.go-to-genre(gid); }
+        }
+    }
+
+    TrackListScrollbars {
+        x: 0; y: 0; width: 100%; height: 100%;
+        list-x: tl.absolute-position.x - root.absolute-position.x;
+        list-y: tl.absolute-position.y - root.absolute-position.y;
+        list-width: tl.width;
+        body-y: tl.body-y;
+        body-height: tl.body-height;
+        v-visible-height: tl.v-visible-height;
+        v-viewport-height: tl.v-viewport-height;
+        v-offset: tl.v-offset;
+        h-visible-width: tl.h-visible-width;
+        h-viewport-width: tl.h-viewport-width;
+        h-offset: tl.h-offset;
+        set-v-offset(o) => { tl.set-v-offset(o); }
+        set-h-offset(o) => { tl.set-h-offset(o); }
+    }
+}

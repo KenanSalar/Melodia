@@ -8,12 +8,12 @@ import { GenreRow, GenreGridRow, TrackListRow } from "../models.slint";
 // plumbing — and makes `section-active-changed` a no-op today, kept for symmetry.
 export global Genres {
     in-out property <[GenreGridRow]> grid-rows;
-    in-out property <int> total-count;
+    // `-1` until fetched; see `Albums.total-count`.
+    in-out property <int> total-count: -1;
     in-out property <int> columns: 4;
     in-out property <string> filter;
     in-out property <string> sort-field: "name";   // "name" | "track_count" | "duration"
     in-out property <string> sort-dir: "asc";
-    in-out property <int> blur-search-tick: 0;
 
     callback columns-changed(int);
     callback apply-filter(string);
@@ -24,20 +24,20 @@ export global Genres {
 
 // The Genre Detail view, on the `AlbumDetail` shape under its own persistence key.
 // `show-genre` defaults false — the column is redundant inside a single genre — and
-// **there are no image slots at all**, since a genre has no artwork: the header renders
-// its gradient floor and scrim alone.
+// **there are no image slots at all**, since a genre has no artwork: the band paints its
+// gradient floor and scrim alone, which is what `has-blur: false` on that arm asks for.
 export global GenreDetail {
     in-out property <int> genre-id: -1;
     in-out property <GenreRow> genre;
     in-out property <[TrackListRow]> tracks;
 
-    // The hero SearchBar's needle. Cleared on a fresh open, preserved across
-    // library-changed refreshes.
+    // What the band's search box means while this detail is open. Cleared on a fresh
+    // open, preserved across library-changed refreshes.
     in-out property <string> filter;
-    in-out property <int>    blur-search-tick: 0;
 
-    // `AlbumDetail.origin-nav-index`, so cross-tab back-nav takes the same atomic
-    // flip-Nav-then-clear-id path.
+    // `AlbumDetail.origin-nav-index`, so cross-section back-nav takes the same atomic
+    // flip-Nav-then-clear-id path — see the argument there for why a drill from a sibling
+    // tab records nothing at all.
     in-out property <int> origin-nav-index: -1;
 
     in-out property <length> w-number: 56px;

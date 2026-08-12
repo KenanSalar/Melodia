@@ -21,14 +21,32 @@ export global HeroBackdrop {
     in-out property <color> floor-end: #14101a;
 
     // The hue-carrying tier, solved to 3:1 against the composited backdrop. Read by the
-    // `DetailHeader` tile fallback, the smart-playlist badge, the chips' label, and both
+    // `LibraryTabBand` tile fallback, the smart-playlist badge, the chips' label, and both
     // mosaic heroes' empty state and placeholder slots.
     in-out property <brush> chrome: #cba6f7;
 
     // Derived here rather than at each call site, so surfaces meant to match can't
     // drift — the `np-accent-pill` precedent, at the same alpha, the hero chips and the
     // Now Playing ones being the same component.
-    out property <brush> chip-fill: root.chrome.with-alpha(0.16);
+    //
+    // **The function is what lets a morphing band fade the tier without respelling it.**
+    // `with-alpha` *sets* alpha rather than multiplying it, so a caller wanting the pill at
+    // a fraction of its weight would have to know the 0.16 — and a second copy of that
+    // number is exactly the drift the tier exists to stop. `LibraryTabBand` is the one
+    // caller; it fades by brush and not by `opacity` because its chip strip is mounted for
+    // the life of the page (see the band's own note) and an `opacity` under 1 on a subtree
+    // with children costs an offscreen layer every frame, at rest included.
+    public pure function chip-fill-at(alpha: float) -> brush {
+        return root.chrome.with-alpha(0.16 * alpha);
+    }
+    out property <brush> chip-fill: root.chip-fill-at(1.0);
+
+    // The band's back button on hover, at `np-accent-disc-hover`'s weight — the two discs
+    // are the same control on two backdrops, so they climb the same ladder. Named for the
+    // reason that one is, despite the single reader: `IconButton` defaults `hover-bg` to
+    // an opaque `Theme.surface0`, so a mount that forgets it flashes the theme's grey over
+    // the blur, and a tier is harder to forget than an alpha.
+    out property <brush> disc-hover: root.chrome.with-alpha(0.3);
 
     // The title and its secondary line, and the meta line under them. Solved per artwork
     // exactly as `np-*` is — same call, same 4.5:1 and 3:1 targets against the
@@ -44,7 +62,7 @@ export global HeroBackdrop {
     in-out property <brush> on-backdrop-muted: #c9c5d3;
 
     // The mosaic heroes' artwork square, the only bordered hero surface —
-    // `DetailHeader`'s tile is borderless. A `Theme.border` hairline was a wash against
+    // `LibraryTabBand`'s tile is borderless. A `Theme.border` hairline was a wash against
     // the old `surface1` fill under either theme, but against a fill pinned dark it
     // vanishes under Mocha and turns a hard bright ring under every light theme, so the
     // edge is a hero token for the same reason the fill is.

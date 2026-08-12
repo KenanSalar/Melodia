@@ -3,12 +3,8 @@ use crate::entities::track;
 use crate::error::AppError;
 use crate::state::AppState;
 
-pub async fn get_tracks(
-    state: &AppState,
-    sort_by: Option<String>,
-    sort_dir: Option<String>,
-) -> Result<Vec<track::TrackListRow>, AppError> {
-    queries::track::get_all_tracks_for_list(&state.db, sort_by, sort_dir).await
+pub async fn get_tracks(state: &AppState) -> Result<Vec<track::TrackListRow>, AppError> {
+    queries::track::get_all_tracks_for_list(&state.db).await
 }
 
 /// Fetch the [`track::TrackMeta`] projection for a single id — the 8

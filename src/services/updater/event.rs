@@ -2,7 +2,7 @@
 //!
 //! Constructed by `tasks::updater_daily` and the `Updater.install` /
 //! `Updater.check` callbacks (both run on tokio workers), drained by a
-//! UI-thread subscriber installed in `ui::updater_settings`. The
+//! UI-thread subscriber installed in `ui::settings::updater_settings`. The
 //! subscriber translates each variant into a `NotificationsUi::show`
 //! call plus the matching `Updater.*` global writes.
 //!

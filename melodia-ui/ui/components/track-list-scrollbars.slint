@@ -1,0 +1,80 @@
+import { OverlayScrollbar } from "overlay-scrollbar.slint";
+
+// The vertical + horizontal `OverlayScrollbar` pair every plain `TrackList` page mounts.
+//
+// `CompositeScrollbars` is the sibling for the two views that nest a list *under* another
+// scroller; this is the simple case, and it was spelled out six times — the two curated
+// Songs tabs, My Library's Songs tab, and the Album / Genre / Playlist detail bodies.
+//
+// **Mount contract**, the same as `CompositeScrollbars`': the last child of the view root,
+// at `x: 0; y: 0; width: 100%; height: 100%`, so `parent` inside resolves to the page and
+// the bars pin to its edges. Everything else the host mirrors off its `TrackList` — Slint
+// has no way to hand an element over, so the metrics come across as properties and the two
+// setters as callbacks.
+//
+// **`list-x` / `list-y` are the reason this is a component rather than a snippet.** The bar
+// has to be placed in the *page's* coordinates, and the six copies had drifted into two
+// spellings of that: `tl.absolute-position.y - root.absolute-position.y + tl.body-y` in the
+// three detail bodies, a bare `tl.y + tl.body-y` in the three Songs tabs. Both are right at
+// their own nesting depth — the tabs mount their list directly on the root, the details
+// wrap theirs — and the short one silently stops being right the moment a wrapper appears
+// above it. The general form is the one that survives either, so every host now passes it.
+//
+// The `10px` thickness is stated once here for the same reason. It is not one number but a
+// *pair*: the horizontal bar's width subtracts exactly the vertical bar's, so the two never
+// overlap in the corner. Spelled per site, that coupling is invisible and getting it wrong
+// leaves a bar the corner eats.
+export component TrackListScrollbars inherits Rectangle {
+    // The list's origin in the *page's* coordinates. Pass
+    // `tl.absolute-position.x - root.absolute-position.x` (and the `y` twin) — correct at
+    // every depth, unlike a bare `tl.x`.
+    in property <length> list-x;
+    in property <length> list-y;
+    in property <length> list-width;
+
+    // The scrolling region inside the list, below its column headers.
+    in property <length> body-y;
+    in property <length> body-height;
+
+    in property <length> v-visible-height;
+    in property <length> v-viewport-height;
+    in property <length> v-offset;
+    in property <length> h-visible-width;
+    in property <length> h-viewport-width;
+    in property <length> h-offset;
+
+    // The host forwards these to its list's own clamping setters. A callback rather than a
+    // two-way binding for `OverlayScrollbar`'s documented reason — the sign flip blocks
+    // `<=>`, and the host stays the source of truth.
+    callback set-v-offset(length);
+    callback set-h-offset(length);
+
+    // Thickness of both bars, and the gutter each leaves the other in the corner.
+    private property <length> thickness: 10px;
+
+    OverlayScrollbar {
+        horizontal: false;
+        x: parent.width - self.width;
+        // Aligned with the inner ListView, so the bar stays clear of the header band.
+        // `body-y` carries that offset; the list's own origin makes it page-relative.
+        y: root.list-y + root.body-y;
+        width: root.thickness;
+        height: root.body-height;
+        visible-size: root.v-visible-height;
+        content-size: root.v-viewport-height;
+        offset: root.v-offset;
+        scroll-to(o) => { root.set-v-offset(o); }
+    }
+
+    OverlayScrollbar {
+        horizontal: true;
+        x: root.list-x;
+        y: parent.height - self.height;
+        width: root.list-width - root.thickness;
+        height: root.thickness;
+        visible-size: root.h-visible-width;
+        content-size: root.h-viewport-width;
+        offset: root.h-offset;
+        scroll-to(o) => { root.set-h-offset(o); }
+    }
+}

@@ -147,6 +147,15 @@ mkdir -p "$APPDIR/usr/share/metainfo"
 cp "$REPO_ROOT/packaging/com.github.kenansalar.melodia.metainfo.xml" \
    "$APPDIR/usr/share/metainfo/com.github.kenansalar.melodia.metainfo.xml"
 
+# Licences. The AppImage is self-contained — nothing resolves the MetaInfo's
+# `<project_license>` back to a text — so it needs the AGPL itself, and the
+# bundled fonts and the vendored winit fork are all compiled into the binary,
+# which puts their licence text here under Apache-2.0 §4(a) rather than as a
+# courtesy. Same destination the DEB uses. See licenses/ATTRIBUTION.txt.
+mkdir -p "$APPDIR/usr/share/doc/melodia"
+cp "$REPO_ROOT/LICENSE" "$APPDIR/usr/share/doc/melodia/LICENSE"
+cp -r "$REPO_ROOT/licenses" "$APPDIR/usr/share/doc/melodia/licenses"
+
 # Run linuxdeploy. `--output appimage` invokes the plugin to produce
 # the final AppImage; without it we'd only get a populated AppDir.
 echo "==> linuxdeploy → $OUTPUT"

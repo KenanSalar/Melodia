@@ -42,7 +42,7 @@ pub async fn get_smart_playlist_tracks(
 }
 
 /// `(track_count, total_duration_ms)` for a smart playlist without projecting
-/// any track rows — backs the grid card and detail-header stats, which can't
+/// any track rows — backs the grid card and the hero's chips, which can't
 /// rely on the `playlist_items` triggers (a smart playlist has no junction
 /// rows). Respects the limit so a "top 25" playlist reports 25, not the full
 /// match count.
@@ -288,7 +288,7 @@ fn push_date_predicate(qb: &mut QueryBuilder<Sqlite>, col: &str, op: RuleOp, val
 }
 
 /// The `tracks` column each [`RuleField`] filters on. Exhaustive `match` over an
-/// enum, exactly like `track_list_order_by` — no user string reaches SQL.
+/// enum returning `&'static str`, so no user string reaches SQL.
 fn column_for(field: RuleField) -> &'static str {
     match field {
         RuleField::Title => "title",

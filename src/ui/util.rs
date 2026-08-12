@@ -61,12 +61,6 @@ pub fn len_as_i32(len: usize) -> i32 {
     i32::try_from(len).unwrap_or(i32::MAX)
 }
 
-/// Lowercased sort key for an optional string; `None` sorts as the empty
-/// string. Used by the in-memory track-list sorts in [`crate::ui::track_sort`].
-pub fn opt_lc(s: Option<&str>) -> String {
-    s.unwrap_or("").to_lowercase()
-}
-
 #[cfg(test)]
 #[path = "tests/util_tests.rs"]
 mod tests;

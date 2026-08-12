@@ -15,7 +15,7 @@ use crate::{
 /// Bind empty Slint `VecModel`s for the two grid tabs, the Songs list, the
 /// selection set, and the mosaic-path string list. Subsequent updates locate
 /// them by downcasting back to `VecModel<T>` from the UI thread.
-pub fn install_favorites_models(ui: &AppWindow) {
+pub(super) fn install_favorites_models(ui: &AppWindow) {
     let g = ui.global::<Favorites>();
 
     let most_played: Rc<VecModel<UiEntityGridRow>> = Rc::new(VecModel::default());
@@ -48,7 +48,7 @@ pub fn to_slint_most_played_row(t: &MostPlayedFavorite) -> UiEntityStripRow {
 }
 
 /// Map a `FavoriteArtist` + caller-supplied subtitle to its Slint card
-/// row. The subtitle is the translated "{n} favorite[s]" count line and
+/// row. The subtitle is the translated `"{n} favorite[s]"` count line and
 /// must be resolved on the UI thread via `Favorites.artist-favorite-subtitle(count)`
 /// (Slint 1.16 doesn't expose `translate_from_bundle` to Rust). `play_count`
 /// is unused.

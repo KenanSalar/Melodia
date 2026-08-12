@@ -4,10 +4,362 @@
 //! into production binaries.
 
 use std::cell::Cell;
-use std::path::Path;
+use std::fs;
+use std::path::{Path, PathBuf};
 use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use crate::config::Paths;
+
+/// The root of the Slint tree, for the pins that walk it rather than naming files.
+pub(crate) const UI_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/melodia-ui/ui");
+
+/// The vacuity floor for a walk over [`UI_DIR`], so a traversal that silently found
+/// nothing can't pass every pin standing on it.
+///
+/// Beside the directory it bounds rather than at each caller: the four pins that walk
+/// this corpus each carried their own copy of the number, two of them under a comment
+/// naming a third as where it came from. Loose on purpose — the tree is well past it, and
+/// a floor tight enough to matter would trip on an ordinary file deletion.
+///
+/// **It is one of three floors in this file, and they bound three different corpora.**
+/// The `SRC_DIR` walks use 200 over the whole Rust tree (`file_dialog_tests`,
+/// `services::tests::mod_tests`, each keeping its own `MIN_SOURCES`), and
+/// [`MIN_UI_SOURCES`] is 180 over `UI_SRC_DIR` alone. Same name, same purpose, different
+/// trees — so a walk takes the one matching the root it passes, and none of the three is
+/// derivable from another.
+pub(crate) const MIN_SLINT_SOURCES: usize = 100;
+
+/// The root of the Rust tree, for the pins that have to answer "does anything in
+/// the tree do X" rather than "do these named files do X" — the native-dialog
+/// check being the first, since what it guards against is a *new* call site
+/// rather than an edit to a known one.
+pub(crate) const SRC_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/src");
+
+/// The bundled font faces, which the Slint build compiles into the binary — so
+/// every artifact this repo ships redistributes them and owes their licence text.
+pub(crate) const FONTS_DIR: &str =
+    concat!(env!("CARGO_MANIFEST_DIR"), "/melodia-ui/ui/assets/fonts");
+
+/// The repo root, for the pins that reach packaging — which lives beside `src/`
+/// rather than under it.
+pub(crate) const REPO_ROOT: &str = env!("CARGO_MANIFEST_DIR");
+
+/// The Rust UI tree, for the pins that ask the same question of every slice's
+/// wiring rather than of one subtree.
+///
+/// Anchored on the manifest dir like its two siblings rather than spelled
+/// relative: a bare `"src/ui"` resolves against the harness's working directory,
+/// which is the package root only because that is what `cargo test` happens to
+/// set.
+pub(crate) const UI_SRC_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/src/ui");
+
+/// The subsystem-contract rules, whose `paths:` frontmatter decides which of
+/// them loads for which file.
+///
+/// Pinned from here because a stale glob fails *silently and invisibly*: the
+/// rule simply stops loading for the code it governs, and nothing in the build,
+/// the lint gate or the test suite is looking. One `src/ui/` re-home broke four
+/// of them at once while updating a fifth.
+pub(crate) const RULES_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/.claude/rules");
+
+/// Every module that owns callback wiring: the cross-cutting root plus the
+/// eleven view slices that keep their own.
+///
+/// **Checked for equality, not containment.** What this guards is a subtree that
+/// stops existing — renamed, deleted, or folded somewhere the walk no longer
+/// reaches. A floor cannot see that: the walk finds fifty sources where there
+/// were fifty-four, every count-based pin over the corpus quietly loses that
+/// slice's coverage, and all of them still pass. An exact set turns it into a
+/// failing assertion *at the ledger*, naming the home that went missing, rather
+/// than a gap somewhere downstream that nothing reports.
+pub(crate) const CALLBACK_HOMES: [&str; 12] = [
+    "albums",
+    "artists",
+    "browse",
+    // The cross-cutting root: the macros, cross-tab nav, the now-playing
+    // fan-out, tags, the updater and library settings — everything that answers
+    // to no single view.
+    "callbacks",
+    "favorites",
+    "genres",
+    "my_library",
+    "playlists",
+    "queue_sheet",
+    "recently_played",
+    "search",
+    "tracks",
+];
+
+/// A floor under the walk itself, so a traversal that found nothing can't pass
+/// vacuously *ahead of* the set check. Loose on purpose — [`CALLBACK_HOMES`] is
+/// the real guard, and a floor tight enough to matter would trip on every
+/// unrelated file deletion.
+const MIN_UI_SOURCES: usize = 180;
+
+/// Every wiring source under [`UI_SRC_DIR`], comment-stripped and paired with its
+/// `src/ui`-relative path (`albums/callbacks/lifecycle.rs`,
+/// `callbacks/cross_tab_nav.rs`, `queue_sheet/callbacks.rs`).
+///
+/// A file counts as wiring iff it sits under a `callbacks` *directory* or *is* a
+/// `callbacks.rs` — the two shapes the tree uses, a directory once a slice's
+/// wiring outgrows one file and a flat file until then. Recognising both is what
+/// lets a slice grow from one into the other with no edit here.
+///
+/// # Panics
+///
+/// If the set of wiring homes found is not exactly [`CALLBACK_HOMES`], or if
+/// [`stripped_sources`]' own floor / unreadable-path checks trip.
+pub(crate) fn callback_sources() -> Vec<(String, String)> {
+    use std::collections::BTreeSet;
+
+    let mut found = BTreeSet::new();
+    let mut out = Vec::new();
+
+    for (rel, code) in stripped_sources(UI_SRC_DIR, "rs", MIN_UI_SOURCES) {
+        let mut parts = rel.split('/');
+        let Some(home) = parts.next() else { continue };
+        let is_wiring = home == "callbacks"
+            || parts.next().is_some_and(|p| p == "callbacks" || p == "callbacks.rs");
+        if !is_wiring {
+            continue;
+        }
+        found.insert(home.to_owned());
+        out.push((rel, code));
+    }
+
+    let expected: BTreeSet<String> = CALLBACK_HOMES.iter().map(|s| (*s).to_owned()).collect();
+    assert_eq!(
+        found, expected,
+        "the set of callback homes under {UI_SRC_DIR} no longer matches `CALLBACK_HOMES`. A \
+         *missing* entry is wiring that was deleted or renamed — every pin walking this corpus \
+         just lost that slice's coverage with nothing to report it. An *extra* entry is a new \
+         wiring home no pin is checking yet: add it to the ledger."
+    );
+
+    out
+}
+
+/// Every file under `root` with extension `ext`, sorted, alongside the
+/// directories that wouldn't list.
+///
+/// The unreadable paths come back rather than being skipped: a dropped subtree
+/// lowers whatever a caller counts and its pin goes quiet, and the source-count
+/// floors those pins carry are far too loose to notice one missing folder. Every
+/// caller asserts the second list is empty.
+fn sources_under(root: &str, ext: &str) -> (Vec<PathBuf>, Vec<PathBuf>) {
+    fn walk(dir: &Path, ext: &str, out: &mut Vec<PathBuf>, unreadable: &mut Vec<PathBuf>) {
+        let Ok(entries) = fs::read_dir(dir) else {
+            unreadable.push(dir.to_path_buf());
+            return;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                walk(&path, ext, out, unreadable);
+            } else if path.extension().is_some_and(|found| found == ext) {
+                out.push(path);
+            }
+        }
+    }
+
+    let (mut sources, mut unreadable) = (Vec::new(), Vec::new());
+    walk(Path::new(root), ext, &mut sources, &mut unreadable);
+    sources.sort();
+    (sources, unreadable)
+}
+
+/// Every `.slint` file under [`UI_DIR`], as paths.
+///
+/// The raw form, for the one pin that reports on the walk itself — the
+/// translation check counts the sources it found and names the ones it couldn't
+/// read. Anything that only wants the file *contents* wants
+/// [`stripped_sources`] instead.
+pub(crate) fn slint_sources() -> (Vec<PathBuf>, Vec<PathBuf>) {
+    sources_under(UI_DIR, "slint")
+}
+
+/// Every shipped `.ttf` under [`FONTS_DIR`], as paths.
+///
+/// Paths rather than contents, these being the one corpus in the tree that isn't
+/// text — the licence pin keys on each face's repo-relative path, and the walk
+/// recurses, so a face added under a new subdirectory is found without an edit
+/// here.
+///
+/// `originals/` is the one subdirectory held back, and it is the counterexample
+/// to the walk's own premise. Slint embeds a face because a `.slint` file
+/// `import`s it, not because it sits under this root; that directory is
+/// gitignored scratch space for the pristine upstream Vazirmatn
+/// `scripts/patch_vazirmatn.py` reads, so its faces are redistributed by neither
+/// the binary nor the repo. Walking them made the documented re-patch workflow
+/// fail a licence pin on a developer's own machine.
+pub(crate) fn font_sources() -> (Vec<PathBuf>, Vec<PathBuf>) {
+    let (mut fonts, unreadable) = sources_under(FONTS_DIR, "ttf");
+    fonts.retain(|path| !path.components().any(|part| part.as_os_str() == "originals"));
+    (fonts, unreadable)
+}
+
+/// `path` relative to `root`, forward-slashed so a pin can compare it against a
+/// literal on either platform.
+///
+/// A path that doesn't sit under `root` comes back whole rather than erroring —
+/// every caller is walking a tree it just rooted at `root`, so the fallback is
+/// unreachable, and reporting the absolute path is more use than a panic if it
+/// ever isn't.
+pub(crate) fn rel_path(root: &str, path: &Path) -> String {
+    path.strip_prefix(root).unwrap_or(path).display().to_string().replace('\\', "/")
+}
+
+/// Every source under `root` with extension `ext`, comment-stripped and paired
+/// with its `root`-relative path, forward-slashed so a pin can compare against a
+/// literal on either platform.
+///
+/// Shared for the reason [`sources_under`] is, one layer up: both tree-walking
+/// pins need this same loop over a different tree, and a copy in each is a copy
+/// that can disagree about what "the sources" are.
+///
+/// # Panics
+///
+/// If fewer than `floor` files turn up, or any path won't read. The floor is a
+/// vacuity guard — a traversal that silently found nothing otherwise passes every
+/// pin over it.
+pub(crate) fn stripped_sources(root: &str, ext: &str, floor: usize) -> Vec<(String, String)> {
+    let (paths, mut unreadable) = sources_under(root, ext);
+    assert!(paths.len() >= floor, "only {} .{ext} files found under {root}", paths.len());
+
+    let mut out = Vec::with_capacity(paths.len());
+    for path in &paths {
+        let rel = rel_path(root, path);
+        match fs::read_to_string(path) {
+            Ok(src) => out.push((rel, strip_line_comments(&src))),
+            Err(_) => unreadable.push(path.clone()),
+        }
+    }
+    assert!(unreadable.is_empty(), "unreadable paths under {root}: {unreadable:?}");
+    out
+}
+
+/// `src` with everything after an unquoted `//` dropped on each line, keeping the
+/// line structure.
+///
+/// Shared because prose about the code reads exactly like the code to any pin
+/// that greps for a construct, and the two that walk the whole tree both trip on
+/// it. The translation pin would collect a msgid off the ellipsis placeholders
+/// `tab-bar.slint` and `overflow-menu-section.slint` spell inside comments
+/// (`@tr("…")`); the scrollbar pin's brace walk would be thrown by any comment
+/// quoting an unbalanced `{`.
+pub(crate) fn strip_line_comments(src: &str) -> String {
+    let mut out = String::with_capacity(src.len());
+    for line in src.lines() {
+        let bytes = line.as_bytes();
+        let mut cut = line.len();
+        let mut in_string = false;
+        let mut i = 0;
+        while i < bytes.len() {
+            match bytes[i] {
+                b'\\' if in_string => i += 1,
+                b'"' => in_string = !in_string,
+                b'/' if !in_string && bytes.get(i + 1) == Some(&b'/') => {
+                    cut = i;
+                    break;
+                }
+                _ => {}
+            }
+            i += 1;
+        }
+        out.push_str(&line[..cut]);
+        out.push('\n');
+    }
+    out
+}
+
+/// Runs of whitespace collapsed to one space, so a pin reads a token sequence rather
+/// than one file's indentation.
+///
+/// Pair it with [`strip_line_comments`] rather than using it alone — this joins lines,
+/// so a trailing comment would otherwise run into the code that followed it.
+pub(crate) fn normalize_ws(src: &str) -> String {
+    src.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+/// The value of a `name:` binding in `src`, up to its terminating `;`, or `""` when
+/// `name` doesn't appear.
+///
+/// The empty string is the caller's failure to report — every pin over this asserts
+/// something about the value, and there is no binding whose expected value is nothing.
+pub(crate) fn binding_value<'a>(src: &'a str, name: &str) -> &'a str {
+    src.split_once(name)
+        .and_then(|(_, rest)| rest.split_once(';'))
+        .map_or("", |(value, _)| value)
+}
+
+/// The `N` in a global's `out property <int> tab-count: N;`.
+///
+/// `None` covers both "no such declaration" and "not a plain integer literal", which are
+/// one failure to every caller: the count is the sole definition of how many tabs a page
+/// has, and Rust clamps the persisted index against it, so anything it can't read is a
+/// page that can restore onto a branch mounting nothing.
+///
+/// Takes the source rather than reading a file, because the two curated globals share
+/// one — `RecentlyPlayed`'s pin scopes to its own global's body first, else `Favorites`
+/// growing a tab would answer for it.
+pub(crate) fn declared_tab_count(src: &str) -> Option<usize> {
+    src.split_once("out property <int> tab-count:")
+        .and_then(|(_, rest)| rest.split_once(';'))
+        .and_then(|(digits, _)| digits.trim().parse().ok())
+}
+
+/// The body of an inline `marker … ];` array literal in `src`.
+///
+/// The `@tr` arrays a `TabBar` mount hands over have to stay literals — a `[string]`
+/// seeded from Rust renders untranslated — so several pins count what is inside one.
+pub(crate) fn array_body<'a>(src: &'a str, marker: &str) -> Option<&'a str> {
+    src.split_once(marker)
+        .and_then(|(_, rest)| rest.split_once("];"))
+        .map(|(body, _)| body)
+}
+
+/// The `labels` and `fields` arrays of the one `SortPillRow` mount in `src` whose
+/// `sort-field` reads `field_property`, as raw comma-separated element lists.
+///
+/// `field_property` is the whole property path the mount binds — `Albums.sort-field`,
+/// or `Favorites.artist-sort-field` where one global sorts more than one thing. It is
+/// the only binding naming both the component and the global, so it locates the mount;
+/// the two arrays are then read backwards from it, both being declared above. Returns
+/// `None` when no such mount exists, which is itself the failure a caller reports.
+///
+/// Shared because both sort-pill pins ask the same question of two different view
+/// files, and a parser copied into each is a parser that can disagree with itself
+/// about what a mount looks like.
+pub(crate) fn sort_pill_row_arrays<'a>(
+    src: &'a str,
+    field_property: &str,
+) -> Option<(&'a str, &'a str)> {
+    let anchor = src.find(&format!("sort-field: {field_property};"))?;
+    let head = &src[..anchor];
+    let array_after = |start: usize| -> Option<&'a str> {
+        let open = src[start..].find('[')? + start + 1;
+        let close = src[open..].find(']')? + open;
+        Some(&src[open..close])
+    };
+    Some((array_after(head.rfind("labels:")?)?, array_after(head.rfind("fields:")?)?))
+}
+
+/// A solid-colour `side` × `side` PNG in a fresh temp dir. The dir is returned
+/// alongside the path so the caller can keep it alive — dropping it deletes the
+/// file, which is the failure mode to watch for when adopting this.
+///
+/// Shared because every cover-cache test needs a real decodable image and the
+/// two that did each wrote their own; the tier tests want a large source to
+/// downscale from and the lookup tests only want *an* image, so the size is the
+/// one thing worth parameterising.
+pub(crate) fn write_test_png(
+    side: u32,
+) -> Result<(tempfile::TempDir, PathBuf), Box<dyn std::error::Error>> {
+    let tmp = tempfile::tempdir()?;
+    let path = tmp.path().join("cover.png");
+    image::RgbImage::from_pixel(side, side, image::Rgb([120, 60, 200])).save(&path)?;
+    Ok((tmp, path))
+}
 
 /// A [`Paths`] rooted in a throwaway directory, with the same subdirectories
 /// [`Paths::resolve`] creates already in place — so a test that writes into one
@@ -22,7 +374,8 @@ pub(crate) fn paths_in(dir: &Path) -> Paths {
     let artwork_dir = dir.join("artwork");
     let artists_dir = dir.join("artists");
     let backups_dir = dir.join("backups");
-    for sub in [&artwork_dir, &artists_dir, &backups_dir] {
+    let logs_dir = dir.join("logs");
+    for sub in [&artwork_dir, &artists_dir, &backups_dir, &logs_dir] {
         let _ = std::fs::create_dir_all(sub);
     }
 
@@ -39,6 +392,7 @@ pub(crate) fn paths_in(dir: &Path) -> Paths {
         artwork_dir,
         artists_dir,
         backups_dir,
+        logs_dir,
     }
 }
 

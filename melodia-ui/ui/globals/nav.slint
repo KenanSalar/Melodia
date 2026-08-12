@@ -1,12 +1,20 @@
 // Which edge the next `ViewTransition` mount slides in from: lateral sidebar nav fades
 // up from `below`, drilling into a detail comes from the `right`, the back button from
-// the `left`.
+// the `left`. **The mount it steers is a *page*** — one of the content-panel branches in
+// `app-window.slint` — and no sub-page mount reads it. There are fourteen of those: the
+// two curated pages wrap their five tab bodies and take `hero.tab-enter-from`, so a tab
+// pick slides along the bar, and My Library's nine take a fixed `below` and hold still
+// entirely while the band morphs their `y` (`ViewTransition.slide`). So a drill or a back
+// that doesn't move `Nav.selected-index` steers nothing.
 export enum NavEnterFrom { below, right, left }
 
 // Which content view the shell shows. Rust persists the index and drives cross-tab
 // navigation off it:
-//   0=search, 1=browse, 2=favorites, 3=tracks, 4=albums, 5=artists,
-//   6=genres, 7=playlists, 8=recently-played, 9=settings
+//   0=search, 1=browse, 2=favorites, 3=my-library, 8=recently-played, 9=settings
+// **4–7 are retired.** They were Albums / Artists / Genres / Playlists, and with Tracks
+// they are the five tabs of My Library at index 3 — `MyLibrary.tab-idx` is what tells
+// them apart, and `boot::ui_setup` folds a persisted 4–7 onto 3. The gaps stay rather
+// than renumbering: 8 and 9 are in `views.json` on every install already.
 // **Sidebar order is source order, not index order** — Recently Played renders under
 // Favorites while keeping index 8.
 export global Nav {

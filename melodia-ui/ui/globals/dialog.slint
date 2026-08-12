@@ -216,4 +216,79 @@ export global Dialog {
         root.cancel-label = "";
         root.destructive = false;
     }
+
+    // --- Openers -----------------------------------------------------------------
+    //
+    // The symmetric half of the `accepted` dispatcher above: that one owns where a
+    // confirmed dialog *goes*, these own what it *says*. Both live here for the same
+    // reason — one copy, in one place — and they are `public function`s rather than
+    // callbacks for the `closed-teardown()` reason, a callback's single handler slot
+    // being clobberable by any Rust `on_*` registration.
+    //
+    // They take their payload as parameters, so this file still imports no sibling
+    // global on their account and the globals DAG stays as shallow as it was.
+    //
+    // **Only the kinds opened from more than one place are here.** The two
+    // `smart-playlist-editor` sites read alike and are deliberately left alone: one is
+    // Edit Rules / Save over an existing list, the other New Smart Playlist / Create,
+    // so they share a `kind` and nothing else. A kind with one caller earns nothing by
+    // moving — the populate block is already stated once, where it is used.
+    //
+    // `ui::playlists::tests::every_multi_caller_playlist_dialog_opens_through_its_own_function`
+    // holds the three folded kinds to this file. It walks the tree rather than naming the
+    // six call sites, because what it guards against is the *seventh* — and because the
+    // failure it guards against is silent: a re-spelled populate block opens the right
+    // dialog and is simply free to drift on the title, which is exactly what Ctrl+N did.
+
+    // Three call sites: the Playlists tab's New pill, Ctrl+N, and a track row's
+    // Add-to-Playlist → "New Playlist…". The last passes the ids it wants added the
+    // moment the row exists; the other two pass `[]`, which is a plain Create.
+    //
+    // The title used to be spelled at each of them, and the shortcut's copy had drifted
+    // to `@tr("Create Playlist")` under a comment claiming it matched the other two —
+    // one dialog, two headings, and two msgids translated separately in all six
+    // catalogues. That is the class of bug a shared opener makes unspellable.
+    public function open-create-playlist(track-ids: [int]) {
+        root.title = @tr("New Playlist");
+        root.message = "";
+        root.confirm-label = @tr("Create");
+        root.cancel-label = @tr("Cancel");
+        root.destructive = false;
+        root.kind = "create-playlist";
+        root.target-id = -1;
+        root.input-text = "";
+        root.input-text-2 = "";
+        root.pending-track-ids = track-ids;
+        root.open = true;
+    }
+
+    // Two call sites — the Playlists grid card's overflow and the open playlist's own
+    // pill row — differing only in where they read the current name and description
+    // from, which is what the parameters carry.
+    public function open-rename-playlist(id: int, name: string, description: string) {
+        root.title = @tr("Rename Playlist");
+        root.message = "";
+        root.confirm-label = @tr("Save");
+        root.cancel-label = @tr("Cancel");
+        root.destructive = false;
+        root.kind = "rename-playlist";
+        root.target-id = id;
+        root.input-text = name;
+        root.input-text-2 = description;
+        root.open = true;
+    }
+
+    // Same two call sites as the rename above, and these two were already byte-identical
+    // — including both `@tr` literals, which is two msgids' worth of copy to keep in
+    // step by hand.
+    public function open-delete-playlist(id: int) {
+        root.title = @tr("Delete playlist?");
+        root.message = @tr("The playlist and its track order will be removed. The tracks themselves stay in your library.");
+        root.confirm-label = @tr("Delete");
+        root.cancel-label = @tr("Cancel");
+        root.destructive = true;
+        root.kind = "delete-playlist";
+        root.target-id = id;
+        root.open = true;
+    }
 }

@@ -82,7 +82,7 @@ impl AppError {
     }
 
     /// Metadata error wrapping an underlying cause (Lofty, hashing I/O, …).
-    /// `msg` is the operation context ("Failed to open <path>"); the typed cause
+    /// `msg` is the operation context (`"Failed to open <path>"`); the typed cause
     /// rides on `.source()` so logs can walk the chain.
     pub fn metadata(msg: impl Into<String>, source: impl Into<BoxedSource>) -> Self {
         Self::Metadata { msg: msg.into(), source: Some(source.into()) }

@@ -62,7 +62,7 @@ pub fn set_use_native_titlebar(state: &AppState, on: bool) -> Result<(), AppErro
 /// is actually active) closing the window hides it to the system tray
 /// instead of quitting. The runtime effect — `window_chrome`'s close
 /// handlers consulting the value — is applied synchronously by the UI
-/// callback through `ui::tray_bridge::set_close_to_tray` *before* this
+/// callback through `ui::shell::tray_bridge::set_close_to_tray` *before* this
 /// async disk write, so the new behaviour takes effect immediately.
 pub fn set_close_to_tray(state: &AppState, on: bool) -> Result<(), AppError> {
     services::settings::mutate_settings(&state.paths, move |s| {
@@ -71,7 +71,7 @@ pub fn set_close_to_tray(state: &AppState, on: bool) -> Result<(), AppError> {
 }
 
 /// Persist the user toggle for "System Tray Icon". When `false` (the
-/// default) `main.rs` skips `ui::tray_bridge::install` at startup, so the
+/// default) `main.rs` skips `ui::shell::tray_bridge::install` at startup, so the
 /// tray subsystem — D-Bus connection, service thread, action tasks — never
 /// runs. The toggle is restart-gated through the `restart-tray` `Dialog`
 /// flow, so this write commits just before the process respawns and the new

@@ -31,6 +31,10 @@ pub fn execute_actions<B: PlayerBackend>(
 ) {
     let mut pending: VecDeque<PlayerAction> = actions.into();
     while let Some(action) = pending.pop_front() {
+        // Safe per action because nothing periodic reaches here: the position
+        // tick decides in `evaluate_playing_tick` and the 30 s queue save writes
+        // its file directly.
+        log::debug!("player: {action}");
         match action {
             PlayerAction::PlayMedia {
                 file_path,
@@ -116,24 +120,6 @@ pub fn execute_actions<B: PlayerBackend>(
                         }
                     });
                 }
-            }
-            PlayerAction::SavePosition {
-                track_id,
-                position_ms,
-            } => {
-                let db = db.clone();
-                tokio::spawn(async move {
-                    if let Err(e) =
-                        queries::track::update_last_position(
-                            &db,
-                            track_id,
-                            i64::try_from(position_ms).unwrap_or(i64::MAX),
-                        )
-                        .await
-                    {
-                        log::warn!("Failed to save position for {track_id}: {e}");
-                    }
-                });
             }
         }
     }

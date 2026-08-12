@@ -13,10 +13,10 @@ import { MaterialIcon } from "material-icon.slint";
 // is an inner Rectangle scaling from its own centre, so neighbours don't shift on focus.
 //
 //     SearchBar {
-//         text <=> Tracks.filter;
-//         placeholder: "Filter tracks…";
-//         blur-trigger: Tracks.blur-search-tick;
-//         edited(t) => { Tracks.apply-filter(t); }
+//         text <=> MyLibrary.filter;
+//         placeholder: @tr("Filter tracks…");
+//         blur-trigger: MyLibrary.blur-search-tick;
+//         edited(t) => { root.filter-tick-pending += 1; }   // settled by a FilterThrottle
 //     }
 //
 // A named instance exposes `clear-input-focus()` for a backdrop or pill to call
@@ -68,6 +68,43 @@ export component SearchBar inherits Rectangle {
     // `Search.query`, so Enter re-runs the fetch without retyping the same characters.
     callback accepted();
 
+    // **`has-hover` is not continuous, so the fill can't read it raw.** Slint drops the
+    // flag on a wheel event the bar doesn't handle and puts it back on the next move
+    // (`i-slint-core` `input_items.rs`), and its exit dispatch compares an item's stack
+    // *position* rather than its membership, so an item the pointer never left can still
+    // be handed an `Exit` (`input.rs`). Either way the flag blinks off for a frame. The
+    // rest fill is translucent, so every blink shows whatever is behind the bar straight
+    // through it — nothing to see over a flat panel, a visible flicker over the Search
+    // view's results, which this floats on. `engaged` therefore arms on the raw flag and
+    // is released only once the pointer has stayed gone: the sidebar rail tooltip's
+    // `held` shape. **`hover-held` sits beside the raw flag rather than replacing it**,
+    // for that component's reason too — `changed` doesn't fire on a first evaluation, so
+    // a bar mounted under the pointer would otherwise never engage at all.
+    property <bool> pointer-inside: chrome-touch.has-hover;
+    property <bool> hover-held;
+    property <bool> engaged:
+        root.pointer-inside || root.hover-held || input.has-focus;
+
+    changed pointer-inside => {
+        if (root.pointer-inside) {
+            root.hover-held = true;
+            hover-grace.running = false;
+        } else {
+            hover-grace.running = true;
+        }
+    }
+
+    // Long enough to swallow a blink, short enough that a real leave still reads as
+    // immediate against the fade that follows it.
+    hover-grace := Timer {
+        interval: 120ms;
+        running: false;
+        triggered() => {
+            self.running = false;
+            root.hover-held = root.pointer-inside;
+        }
+    }
+
     // The simple case: a same-file caller with an id skips the `blur-trigger` plumbing.
     public function clear-input-focus() {
         input.clear-focus();
@@ -106,7 +143,7 @@ export component SearchBar inherits Rectangle {
 
         // Rest matches the `ActionPill` chip's fill, so adjacent bars and pills read as
         // one family; engagement closes it to opaque, as a hovered `PillButton` does.
-        background: (chrome-touch.has-hover || input.has-focus)
+        background: root.engaged
             ? Theme.surface0
             : Theme.floating-chrome-bg;
         // The `ActionPill` outline at rest; focus lifts it with a glow and tints the

@@ -6,13 +6,14 @@
 #![allow(clippy::expect_used, clippy::unwrap_used)]
 
 use super::{TopKind, TopSubtitle, compute_top_result};
-use crate::database::queries::SearchResults;
+use crate::library::search::SearchResults;
 use crate::entities::album::AlbumStats;
 use crate::entities::artist::ArtistStats;
 use crate::entities::genre::GenreStats;
 
-const VIEW: &str = include_str!("../../../../melodia-ui/ui/views/search-view.slint");
-const ROUTER: &str = include_str!("../../callbacks/search/results.rs");
+const CARD: &str =
+    include_str!("../../../../melodia-ui/ui/views/search/top-result-card.slint");
+const ROUTER: &str = include_str!("../callbacks/results.rs");
 const ARTWORK_IMAGE: &str =
     include_str!("../../../../melodia-ui/ui/components/artwork-image.slint");
 const GENRE_GRID: &str =
@@ -286,7 +287,7 @@ fn subtitle_for_album_top_uses_artist_name() {
 }
 
 /// `top-kind` is a bare string crossing three files — Rust writes the
-/// token, the view branches on it for the badge, the fallback glyph and
+/// token, the card branches on it for the badge, the fallback glyph and
 /// the genre gradient, and `results.rs` routes the click. A typo in any
 /// one of them still builds and silently drops that kind back to a
 /// default: the wrong badge, the wrong glyph, a dead card, or the grey
@@ -296,8 +297,8 @@ fn subtitle_for_album_top_uses_artist_name() {
 fn every_top_kind_token_reaches_the_view_and_the_router() {
     for token in ["album", "artist", "genre"] {
         assert!(
-            VIEW.contains(&format!("Search.top-kind == \"{token}\"")),
-            "search-view.slint branches on no `{token}` top result"
+            CARD.contains(&format!("Search.top-kind == \"{token}\"")),
+            "top-result-card.slint branches on no `{token}` top result"
         );
         assert!(
             ROUTER.contains(&format!("\"{token}\" =>")),
@@ -308,7 +309,7 @@ fn every_top_kind_token_reaches_the_view_and_the_router() {
 
 /// Both of the tile's fills are ternaries, so neither arm can *fall
 /// through* to the default it would otherwise inherit — all four values
-/// are spelled out in the view, and all four can drift in silence.
+/// are spelled out in the card, and all four can drift in silence.
 ///
 /// The genre arm drifting stops the card matching that genre's grid card.
 /// The other arm drifting stops it matching every track row and entity
@@ -316,10 +317,10 @@ fn every_top_kind_token_reaches_the_view_and_the_router() {
 /// grey square while everything around it wore the accent placeholder.
 /// So each arm is pinned against the file that owns it, and the two
 /// bindings are matched whole: `top-kind == "genre"` appears three times
-/// in the view, and a looser check would keep passing with a fill gone.
+/// in the card, and a looser check would keep passing with a fill gone.
 #[test]
 fn the_top_tile_matches_artwork_image_and_the_genre_grid() {
-    let view = squeeze(VIEW);
+    let view = squeeze(CARD);
     let component = squeeze(ARTWORK_IMAGE);
     let grid = squeeze(GENRE_GRID);
 

@@ -36,11 +36,21 @@ pub async fn refresh_grids(state: &AppState, fav_ui: &Arc<FavoritesUi>, weak: &W
         .inspect_err(|e| log::warn!("favorites::refresh_grids fav_artists: {e}"))
         .ok();
 
+    // Either query failing is a way of storing nothing, and the tab pick
+    // *consumes* the flag before spawning this — so without the re-arm the
+    // sentinel is left with no answer coming and the next pick believes the
+    // cache is current. Two queries, one flag: a partial failure re-arms too,
+    // since the tab that got nothing is as stale as if both had failed.
+    if most_played.is_none() || fav_artists.is_none() {
+        fav_ui.mark_grids_dirty();
+    }
+
     // A leave that landed while the two queries were in flight has already
     // cleared these caches (and emptied both models), so storing now would undo
     // the teardown behind a view nobody can see. Nothing is lost by dropping the
     // result: every leave sets `mark_dirty`, so the next enter re-fetches.
     if !fav_ui.section_active() {
+        fav_ui.mark_grids_dirty();
         return;
     }
 
@@ -49,7 +59,7 @@ pub async fn refresh_grids(state: &AppState, fav_ui: &Arc<FavoritesUi>, weak: &W
     // business summing a play history inside an `upgrade_in_event_loop`. Ahead
     // of the gate, for the reason it gives too — the walk isn't a store, and the
     // wipe queues behind whatever the gate is held across.
-    let most_played = most_played.map(|rows| (crate::ui::hero_chips::fold_most_played(&rows), rows));
+    let most_played = most_played.map(|rows| (crate::ui::hero_folds::fold_most_played(&rows), rows));
 
     // Serialize the stores against `release_section_state`'s wipe through the
     // section gate, the way `albums::grid::fetch_grid` does: without it a fast

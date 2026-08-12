@@ -35,6 +35,14 @@ export component IconButton inherits Rectangle {
     // Lets a host gate its own visuals on *either* hover: a higher-z TouchArea captures
     // the pointer and flips the outer one's `has-hover` false — see `EntityCard`.
     out property <bool> has-hover: touch.has-hover;
+    // Fades the button without a host `opacity`, which would layer — this root has
+    // children. Lands on the childless `disc` and on `MaterialIcon`'s own `fade`, and
+    // deliberately not in `idle-bg` / `hover-bg` / `idle-fg`: those feed the two `animate`
+    // blocks below, and an animated binding restarts on dependency dirtiness, so a
+    // per-frame fade would stall both crossfades. Per-element alpha reads a shade heavier
+    // mid-fade than the group opacity did, the glyph overlapping the disc. Argued in
+    // `slint-pitfalls.md`'s `opacity` entry.
+    in property <float> fade: 1.0;
 
     callback clicked();
 
@@ -52,6 +60,11 @@ export component IconButton inherits Rectangle {
     }
 
     // The root keeps a fixed layout slot so siblings never reflow; the disc scales.
+    //
+    // **The glyph is a sibling rather than a child, and that is what keeps `fade` free** —
+    // `need_layer` bails on a lone *childless* child, so nesting it here would put the
+    // whole disc behind a texture. Both are centred on the root and the glyph carries its
+    // own `press-scale`, so the split changes no geometry.
     disc := Rectangle {
         width: root.diameter * root.press-scale;
         height: root.diameter * root.press-scale;
@@ -64,32 +77,42 @@ export component IconButton inherits Rectangle {
                 ? root.hover-bg
                 : (root.active ? root.active-bg : root.idle-bg));
 
-        animate background { duration: Theme.dur-fast; easing: ease-in-out; }
+        // Here rather than folded into `background`, which would make it a dependency of
+        // the animated binding below and restart the crossfade every frame.
+        opacity: root.fade;
 
-        // Nested layouts, because Slint doesn't auto-centre a child in a Rectangle.
-        HorizontalLayout {
-            alignment: center;
-            VerticalLayout {
-                alignment: center;
-                MaterialIcon {
-                    name: root.icon;
-                    // Scales with the disc, so the glyph wobbles with the chrome rather
-                    // than sitting static on top of it.
-                    icon-size: root.icon-size * root.press-scale;
-                    filled: root.filled;
-                    // Active beats hover, so a hovered toggled button still reads as
-                    // toggled; hover then beats idle, which is what carries a
-                    // destructive cue.
-                    icon-color: !root.button-enabled
-                        ? Theme.overlay0
-                        : (root.active
-                            ? root.active-fg
-                            : (touch.has-hover ? root.hover-fg : root.idle-fg));
-                    opacity: root.button-enabled ? 1 : 0.5;
-                    animate icon-color { duration: Theme.dur-fast; easing: ease-in-out; }
-                }
-            }
-        }
+        animate background { duration: Theme.dur-fast; easing: ease-in-out; }
+    }
+
+    // **Centred by hand rather than by a layout, and that is not a style preference.**
+    // `gen_layout_info_prop` folds a child's layout info into its parent's *unless the
+    // child binds `x` or `y`* — which is how `disc` above has always stayed out of it. A
+    // centring `HorizontalLayout` here binds neither, so it folds, and with it the glyph's
+    // width and the animated `press-scale` behind it. Nothing would move, the root pinning
+    // `min == max == diameter` and the solver clamping the folded `preferred` straight back
+    // out; what it costs is that every press would dirty this root's `layout_info` and
+    // re-solve the *host* layout once per frame, at the twenty `press-shrink` mounts where
+    // that animation runs. Two lines of arithmetic buy the whole of it back.
+    MaterialIcon {
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        name: root.icon;
+        // Scales with the disc, so the glyph wobbles with the chrome rather than
+        // sitting static on top of it.
+        icon-size: root.icon-size * root.press-scale;
+        filled: root.filled;
+        // Active beats hover, so a hovered toggled button still reads as toggled;
+        // hover then beats idle, which is what carries a destructive cue.
+        icon-color: !root.button-enabled
+            ? Theme.overlay0
+            : (root.active
+                ? root.active-fg
+                : (touch.has-hover ? root.hover-fg : root.idle-fg));
+        // The disabled dim rides the same float rather than a second `opacity`: this
+        // root wraps a `Text`, so an `opacity` here layered — and cropped the glyph to
+        // its line box — every time a button was disabled.
+        fade: root.fade * (root.button-enabled ? 1.0 : 0.5);
+        animate icon-color { duration: Theme.dur-fast; easing: ease-in-out; }
     }
 
     Tooltip {

@@ -24,6 +24,11 @@ msgstr "Durchsuchen"
 msgid "Favorites"
 msgstr "Favoriten"
 
+# The sidebar row, and the window title, for the page carrying the Songs / Albums /
+# Artists / Genres / Playlists tabs. Each tab reuses its own msgid below.
+msgid "My Library"
+msgstr "Meine Bibliothek"
+
 msgid "Tracks"
 msgstr "Lieder"
 
@@ -227,6 +232,15 @@ msgstr "Lieder filtern…"
 
 msgid "Columns"
 msgstr "Spalten"
+
+msgid "Card view"
+msgstr "Kartenansicht"
+
+msgid "List view"
+msgstr "Listenansicht"
+
+msgid "Folder"
+msgstr "Ordner"
 
 # ---- Track table column headers ---------------------------------------------
 
@@ -734,9 +748,6 @@ msgstr "Beschreibung (optional)"
 msgid "Add a description…"
 msgstr "Beschreibung hinzufügen…"
 
-msgid "Create Playlist"
-msgstr "Playlist erstellen"
-
 # Confirm-button label on the create-playlist dialog.
 msgid "Create"
 msgstr "Erstellen"
@@ -815,6 +826,9 @@ msgstr "Noch nichts gespielt"
 msgid "Play one of your favorites and it will show up here."
 msgstr "Spiele einen deiner Favoriten ab, dann erscheint er hier."
 
+msgid "Play something and it will show up here."
+msgstr "Spiele etwas ab, dann erscheint es hier."
+
 msgid "No favorite artists yet"
 msgstr "Noch keine Lieblingsinterpreten"
 
@@ -888,7 +902,7 @@ msgstr "{} von {} bereits hinzugefügt"
 # ---- Auto-updater (Settings → Updates + notification toasts) ----------------
 # Surfaced by `ui/views/settings/update-section.slint` (Skip + package-managed
 # hint) and `ui/settings.slint` (notification pure-callbacks dispatched from
-# `src/ui/callbacks/updater.rs`). The action-button labels ("Install" /
+# `src/ui/callbacks/updater/`). The action-button labels ("Install" /
 # "Restart") map onto `Notifications.action` `kind` values "install-update" /
 # "update-restart" in `ui/globals/updater.slint`.
 
@@ -946,6 +960,67 @@ msgstr "Die heruntergeladene Aktualisierung konnte nicht auf der Festplatte gesp
 msgid "Update failed. See logs for details."
 msgstr "Aktualisierung fehlgeschlagen. Details siehe Protokoll."
 
+# ---- Settings → About → Diagnostics -----------------------------------------
+
+msgid "Diagnostics"
+msgstr "Diagnose"
+
+msgid "Logs"
+msgstr "Protokolle"
+
+msgid "Where Melodia writes its log files and crash reports."
+msgstr "Wo Melodia seine Protokolldateien und Absturzberichte ablegt."
+
+# Shared with the crash-report toast's action button, which opens the same folder.
+msgid "Open Folder"
+msgstr "Ordner öffnen"
+
+msgid "Diagnostics report"
+msgstr "Diagnosebericht"
+
+msgid "One text file with your system details, settings and recent logs, for attaching to a bug report."
+msgstr ""
+"Eine Textdatei mit deinen Systemdaten, Einstellungen und den letzten "
+"Protokollen — zum Anhängen an einen Fehlerbericht."
+
+msgid "Save…"
+msgstr "Speichern…"
+
+msgid "Verbose logging"
+msgstr "Ausführliche Protokollierung"
+
+msgid "Record extra detail. Turn this on, reproduce the problem, then save a report."
+msgstr ""
+"Zeichnet zusätzliche Details auf. Aktiviere dies, reproduziere das Problem "
+"und speichere dann einen Bericht."
+
+msgid "Diagnostics report saved"
+msgstr "Diagnosebericht gespeichert"
+
+msgid "Couldn't save the diagnostics report"
+msgstr "Diagnosebericht konnte nicht gespeichert werden"
+
+msgid "See the log for details."
+msgstr "Details siehe Protokoll."
+
+# Pushed once on the launch after a panic.
+msgid "Melodia crashed last time"
+msgstr "Melodia ist beim letzten Mal abgestürzt"
+
+msgid "A crash report was written. Open the log folder to find it."
+msgstr ""
+"Es wurde ein Absturzbericht geschrieben. Öffne den Protokollordner, um ihn "
+"zu finden."
+
+# Pushed when the audio output device goes away mid-session.
+msgid "Audio device disconnected"
+msgstr "Audiogerät getrennt"
+
+msgid "Playback won't be audible until you reconnect it and restart Melodia."
+msgstr ""
+"Die Wiedergabe bleibt stumm, bis du das Gerät wieder anschließt und Melodia "
+"neu startest."
+
 msgid "Close to Tray"
 msgstr "In den Systembereich schließen"
 
@@ -967,7 +1042,8 @@ msgstr "Nur verfügbar, solange das Systembereich-Symbol aktiv ist."
 # ---- About -------------------------------------------------------------------
 
 # Settings → About section (`ui/views/settings/about-section.slint`): app
-# name + version, authorship, source-repository link, and license.
+# name + version, authorship, a support link, the source-repository link, and
+# the license.
 msgid "About"
 msgstr "Über"
 
@@ -979,6 +1055,29 @@ msgstr "Version {}"
 # passed verbatim and never translated.
 msgid "Made by {}"
 msgstr "Erstellt von {}"
+
+# Translators: the Ko-fi row — its label, its button and its blurb. "Ko-fi" is a
+# brand and stays verbatim wherever it appears. "Support" throughout this block
+# means backing the project financially — never technical support.
+msgid "Support Melodia"
+msgstr "Melodia unterstützen"
+
+msgid "Support me on Ko-fi"
+msgstr "Unterstütze mich auf Ko-fi"
+
+msgid "Melodia is free and open source. Support helps keep it going."
+msgstr "Melodia ist kostenlos und quelloffen. Unterstützung hilft, es am Laufen zu halten."
+
+# The one-time support toast (`src/ui/support.rs`), shown on one early launch and
+# never again. Its action button opens the Ko-fi page.
+msgid "Enjoying Melodia?"
+msgstr "Gefällt dir Melodia?"
+
+msgid "It's free and open source, built in my spare time. If it's useful to you, you can support me. You'll only see this once."
+msgstr "Es ist kostenlos und quelloffen und entsteht in meiner Freizeit. Wenn es dir nützt, kannst du mich unterstützen. Du siehst das nur einmal."
+
+msgid "Support"
+msgstr "Unterstützen"
 
 msgid "License"
 msgstr "Lizenz"
@@ -1502,6 +1601,9 @@ msgstr "Titel, die du magst, auf ListenBrainz als Loved markieren — beim Aktiv
 
 msgid "Loved tracks"
 msgstr "Lieblingstitel"
+
+msgid "Melodia couldn't relaunch itself. Close and reopen it to apply the change."
+msgstr "Melodia konnte sich nicht selbst neu starten. Schließen und öffnen Sie die App erneut, um die Änderung zu übernehmen."
 
 msgid "Add MusicBrainz IDs to your music"
 msgstr "MusicBrainz-IDs zu deiner Musik hinzufügen"
