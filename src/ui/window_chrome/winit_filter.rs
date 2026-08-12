@@ -89,7 +89,7 @@ fn schedule_minimize_probe(weak: slint::Weak<AppWindow>) {
 
 /// What the `MouseWheel` arm does with one event.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) enum WheelRoute {
+enum WheelRoute {
     /// Into the mounted composite view's own scroll math.
     Composite,
     /// Re-send to Slint without the gesture phase, then swallow the original.
