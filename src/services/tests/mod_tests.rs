@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use super::redact_home;
 use super::{describe, redact_prefix, undeleted_exe};
 use crate::error::AppError;
-use crate::test_support::{SRC_DIR, stripped_sources};
+use crate::test_support::{REPO_ROOT, SRC_DIR, font_sources, rel_path, stripped_sources};
 #[cfg(unix)]
 use crate::test_support::with_env_var;
 
@@ -217,4 +217,301 @@ fn a_cause_is_appended_once_and_never_repeated() {
         interpolated.to_string(),
         "a `Display` that already prints its source has nothing left to append"
     );
+}
+
+/// `licenses/ATTRIBUTION.txt`, which every pin below reads.
+const ATTRIBUTION: &str = include_str!("../../../licenses/ATTRIBUTION.txt");
+
+/// The floor for the font walk: the five faces that ship today.
+///
+/// A floor rather than an exact set, and the asymmetry is the point — it blocks
+/// the silent *loss* the walk can't otherwise see while still permitting the
+/// *addition* this pin exists to catch. Retiring a face is a deliberate act that
+/// moves this number; a subdirectory dropping out of the walk is not, and three
+/// of the five sit in one. Tight rather than loose, unlike the source-tree floors
+/// in `test_support`: the corpus is five files that change about once a release
+/// cycle, so a number that only catches *most* of a loss buys nothing.
+///
+/// Here rather than beside `FONTS_DIR`, which is the opposite placement from those
+/// three. What put them there was duplication — four pins walked one corpus and
+/// each carried its own copy of the number. This has one caller, and being tight
+/// it is an assertion about the corpus rather than a vacuity guard on the walk, so
+/// it belongs with the pin that makes the claim. Move it the day a second pin
+/// walks the font tree.
+const MIN_FONTS: usize = 5;
+
+/// A face imported by a `.slint` file is `include_bytes!`d into the binary, so it
+/// starts being redistributed by all five package formats the moment that import
+/// lands — and by the git tree immediately. Neither licence we carry is satisfied
+/// by the font's own name table alone: Apache-2.0 §4(a) wants a copy of the
+/// licence delivered to recipients, and Material Symbols carries no licence
+/// string in its name table at all.
+///
+/// Asks the *directory* rather than the imports, which over-approximates on
+/// purpose: a face committed under `melodia-ui/ui/assets/fonts/` is redistributed
+/// by the repo whether or not anything imports it yet, and the import is the edit
+/// most likely to arrive in a later commit than the file. [`font_sources`] holds
+/// the one carve-out that needs one.
+///
+/// Keyed on each face's repo-relative path rather than on a family name, because
+/// the family is not derivable from the file: `MaterialSymbolsRoundedFilled.ttf`
+/// declares "Material Symbols Rounded Filled", and no split of the stem gets there
+/// without knowing the answer. The path is exact, and the `Files:` list it checks
+/// is what a packager reads anyway.
+///
+/// **Walk, don't list.** A sixth face is precisely the regression, and a fixed
+/// list of the five is what it walks past.
+#[test]
+fn every_bundled_font_is_named_in_the_attribution() {
+    let (fonts, unreadable) = font_sources();
+    assert!(unreadable.is_empty(), "unreadable font directories: {unreadable:?}");
+    assert!(
+        fonts.len() >= MIN_FONTS,
+        "only {} .ttf files found under the font tree — a dropped subdirectory \
+         silently narrows this pin to whatever is left",
+        fonts.len()
+    );
+
+    let mut unlicensed = Vec::new();
+    for font in &fonts {
+        let rel = rel_path(REPO_ROOT, font);
+        if !ATTRIBUTION.contains(&rel) {
+            unlicensed.push(rel);
+        }
+    }
+
+    assert!(
+        unlicensed.is_empty(),
+        "{unlicensed:?} ship inside the binary with nothing in licenses/ATTRIBUTION.txt \
+         covering them — add the face under its upstream's entry (or a new entry plus its \
+         licence text) and list the file there"
+    );
+}
+
+/// Which packaging file carries `licenses/`, and the spelling that does it.
+///
+/// The needle is the mechanism rather than the word: every one of these files can
+/// mention the directory in a comment, and a pin that accepts a mention is a pin
+/// that goes green on a format which stopped shipping it.
+///
+/// The RPM is the one where staging and shipping are separate statements, so the
+/// needle has to be the second. `build-rpm.sh` copies `licenses/` into the source
+/// tarball and `%license` is what pulls it out of the unpacked tree into the
+/// package; drop the `%files` line and the staged copy simply goes unread, in the
+/// *build* directory, which `check-files` never looks at — no warning, no package,
+/// and a pin on the `cp` still green.
+const LICENSE_SHIPPERS: [(&str, &str); 5] = [
+    ("scripts/build-rpm.sh", "%license LICENSE licenses/"),
+    ("Cargo.toml", "[\"licenses/*\""),
+    (".github/workflows/release.yml", "cp -r licenses"),
+    ("scripts/build-appimage.sh", "cp -r \"$REPO_ROOT/licenses\""),
+    ("wix/main.wxs", "$(var.RepoRoot)\\licenses\\"),
+];
+
+/// Five formats built by five unrelated toolchains, four of which no reviewer on
+/// this machine can run and one of which (the MSI) no Linux runner can build at
+/// all. That is exactly the shape where one format quietly stops shipping the
+/// licence text and nothing says so until a distro packager files it.
+///
+/// A `%license` line, an asset triple, a `cp` and an MSI `File` have nothing in
+/// common but their effect, so this is a named list rather than a walk — the
+/// opposite call from the font pin above, and for the opposite reason: the set of
+/// package formats is closed and changing it is a deliberate act, where the set of
+/// fonts is open and adding to it is not.
+///
+/// `.github/workflows/release.yml` is why that file is no longer on
+/// `pr-validation.yml`'s skip denylist. It was excluded there on the grounds that
+/// it compiles nothing, which is true and beside the point now that it is an input
+/// to this test: a PR touching only that file skipped the `test` job, and the gate
+/// counts `skipped` as a pass.
+#[test]
+fn every_package_format_ships_the_licenses_dir() {
+    let root = Path::new(REPO_ROOT);
+    let (mut missing, mut unreadable) = (Vec::new(), Vec::new());
+
+    for (file, needle) in LICENSE_SHIPPERS {
+        match std::fs::read_to_string(root.join(file)) {
+            Ok(src) if src.contains(needle) => {}
+            Ok(_) => missing.push(file),
+            Err(_) => unreadable.push(file),
+        }
+    }
+
+    assert!(
+        unreadable.is_empty(),
+        "{unreadable:?} are named as shipping licenses/ but won't read — did they move?"
+    );
+    assert!(
+        missing.is_empty(),
+        "{missing:?} no longer ship licenses/ — the fonts and the vendored winit fork are \
+         compiled into the binary, so every format that ships the binary redistributes \
+         them. If the spelling changed rather than the behaviour, update LICENSE_SHIPPERS."
+    );
+}
+
+/// `src` with every `<!-- … -->` block removed.
+///
+/// `test_support::strip_line_comments`' argument, in the one markup language that
+/// doesn't use `//`: prose about the markup reads exactly like the markup to a pin
+/// that greps for a construct. Kept local rather than shared because it has one
+/// caller and `main.wxs` is the only XML in the tree a pin reads.
+///
+/// An unterminated `<!--` swallows the rest of the file, which is the safe
+/// direction — the pin then finds nothing and fails, where keeping the tail would
+/// silently search markup the compiler never sees either.
+fn strip_xml_comments(src: &str) -> String {
+    let mut out = String::with_capacity(src.len());
+    let mut rest = src;
+    while let Some(open) = rest.find("<!--") {
+        out.push_str(&rest[..open]);
+        rest = match rest[open..].find("-->") {
+            Some(close) => &rest[open + close + "-->".len()..],
+            None => "",
+        };
+    }
+    out.push_str(rest);
+    out
+}
+
+/// The sibling above catches `main.wxs` dropping `licenses/` altogether. This
+/// catches one file going missing from it, which is the likelier half and the one
+/// no reviewer here can see: the other four formats glob the directory, so a
+/// fourth licence text ships in all of them for free and is absent from exactly
+/// the format no Linux runner can build.
+///
+/// A walk rather than a list, which is [`every_bundled_font_is_named_in_the_attribution`]'s
+/// call and not [`every_package_format_ships_the_licenses_dir`]'s — the set of
+/// package formats is closed, the set of licence texts is not, and an addition to
+/// an open set is precisely what a fixed list walks past.
+///
+/// Keyed on the file *name* rather than the `Source=` path, so it holds whichever
+/// way the attribute is spelled — the `$(var.RepoRoot)` prefix is the sibling's
+/// needle and this one has no opinion about it. Which is only safe **because the
+/// comments come out first**: `main.wxs`'s own comment names all three files while
+/// explaining why each needs a `<File>`, so a needle run over the raw source
+/// survives deleting the element it is looking for. Verified by deleting one — the
+/// pin passed until [`strip_xml_comments`] went in.
+#[test]
+fn the_msi_names_every_licence_file() {
+    let root = Path::new(REPO_ROOT);
+    let raw = std::fs::read_to_string(root.join("wix/main.wxs")).unwrap_or_default();
+    assert!(!raw.is_empty(), "wix/main.wxs won't read — did the MSI source move?");
+    let wxs = strip_xml_comments(&raw);
+
+    let mut shipped = Vec::new();
+    if let Ok(entries) = std::fs::read_dir(root.join("licenses")) {
+        for entry in entries.flatten() {
+            if entry.path().is_file() {
+                shipped.push(entry.file_name().to_string_lossy().into_owned());
+            }
+        }
+    }
+    assert!(
+        !shipped.is_empty(),
+        "licenses/ listed no files — a walk that finds nothing satisfies the loop below \
+         without ever asking main.wxs for anything"
+    );
+
+    let unnamed: Vec<_> = shipped.iter().filter(|name| !wxs.contains(name.as_str())).collect();
+    assert!(
+        unnamed.is_empty(),
+        "{unnamed:?} ship in every other package format but are not `<File>` elements in \
+         wix/main.wxs. WiX has no glob, so each file costs an edit there — add one beside \
+         the others under `LicenseDir`."
+    );
+}
+
+/// `licenses/Vazirmatn-OFL-1.1.txt` and the root `LICENSE`, restated as a DEP-5
+/// field body: one leading space per line, trailing whitespace dropped, and a
+/// blank line written ` .`.
+///
+/// The one transformation, so the pin below is its own specification rather than
+/// a second opinion about it.
+fn as_dep5_field_body(text: &str) -> String {
+    let mut out = String::with_capacity(text.len() + text.len() / 40);
+    for line in text.lines() {
+        let line = line.trim_end();
+        if line.is_empty() {
+            out.push_str(" .\n");
+        } else {
+            out.push(' ');
+            out.push_str(line);
+            out.push('\n');
+        }
+    }
+    out
+}
+
+/// `usr/share/doc/melodia/copyright` is the first thing a Debian packager reads,
+/// and cargo-deb generates it from `license` + `authors` unless handed a file
+/// that already opens with DEP-5 keys — which is to say the default states the
+/// whole package is AGPL-3.0-or-later by one author, and the bundled fonts and
+/// the vendored winit both falsify that.
+///
+/// Debian Policy 12.5 lets a package *reference* `/usr/share/common-licenses`
+/// only for the licences shipped there. Apache-2.0 is one; AGPL-3 and OFL-1.1
+/// are not, so both are quoted in full — and a quoted licence is a second copy
+/// that can drift from the one the package actually ships. This re-derives both
+/// from their sources rather than trusting the copy.
+///
+/// `LICENSE` is the second file this suite reads that used to sit on
+/// `pr-validation.yml`'s skip denylist — see
+/// [`every_package_format_ships_the_licenses_dir`] for the argument. An edit to
+/// the very file this drift check is anchored on was the one edit it could not
+/// run for.
+#[test]
+fn the_debian_copyright_quotes_the_licences_it_ships() {
+    let root = Path::new(REPO_ROOT);
+    let copyright = std::fs::read_to_string(root.join("packaging/debian-copyright"))
+        .unwrap_or_default();
+
+    assert!(
+        !copyright.is_empty(),
+        "packaging/debian-copyright won't read — cargo-deb falls back to generating \
+         `usr/share/doc/melodia/copyright` from `license` + `authors`, which declares the \
+         whole package AGPL by one author"
+    );
+    assert!(
+        copyright.starts_with("Format: https://www.debian.org/doc/packaging-manuals/"),
+        "packaging/debian-copyright must open with the DEP-5 `Format:` key — without it \
+         cargo-deb prepends its own generated header and the stanzas below become a \
+         second, contradictory declaration"
+    );
+
+    for (source, licence) in [("LICENSE", "AGPL-3.0-or-later"), ("licenses/Vazirmatn-OFL-1.1.txt", "OFL-1.1")] {
+        let text = std::fs::read_to_string(root.join(source)).unwrap_or_default();
+        assert!(!text.is_empty(), "{source} won't read");
+        assert!(
+            copyright.contains(as_dep5_field_body(&text).trim_end()),
+            "packaging/debian-copyright's `License: {licence}` stanza no longer matches \
+             {source}. Regenerate the body with:\n  \
+             sed -e 's/[[:space:]]*$//' -e 's/^$/./' -e 's/^/ /' {source}"
+        );
+    }
+
+    assert!(
+        copyright.contains("/usr/share/common-licenses/Apache-2.0"),
+        "Apache-2.0 is in Debian's common-licenses, so Policy 12.5 wants a reference to it \
+         rather than a third quoted copy"
+    );
+}
+
+/// A truncated or placeholder copy satisfies every path check above while
+/// delivering nothing, and the two texts are large enough that no reviewer diffs
+/// them against upstream. One phrase apiece, from deep enough in each to require
+/// the body rather than the header.
+#[test]
+fn the_bundled_licence_texts_are_the_real_ones() {
+    let root = Path::new(REPO_ROOT);
+    for (file, phrase) in [
+        ("licenses/Vazirmatn-OFL-1.1.txt", "SIL OPEN FONT LICENSE Version 1.1"),
+        ("licenses/Apache-2.0.txt", "TERMS AND CONDITIONS FOR USE"),
+    ] {
+        let src = std::fs::read_to_string(root.join(file)).unwrap_or_default();
+        assert!(
+            src.contains(phrase),
+            "{file} does not contain {phrase:?} — missing, truncated, or not the licence \
+             text it claims to be"
+        );
+    }
 }

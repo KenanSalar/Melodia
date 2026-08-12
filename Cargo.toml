@@ -10,65 +10,50 @@ homepage = "https://github.com/KenanSalar/Melodia"
 authors = ["Kenan Salar <kenansalar@users.noreply.github.com>"]
 keywords = ["music", "player", "audio", "slint"]
 categories = ["multimedia::audio"]
-# Not publishable regardless — `melodia-ui` is `publish = false` and depended on
-# by path with no version — so say so rather than letting `cargo publish` find
-# out late. The metadata above is still worth keeping for the repo's own sake.
+# Unpublishable anyway — `melodia-ui` is `publish = false` and depended on by
+# path with no version — so say so rather than letting `cargo publish` find out
+# late. The metadata above still documents the repo.
 publish = false
 
-# `melodia-ui` holds nothing but the Slint compiler's output. It is split off
-# because `cargo test` builds this package twice — once as the rlib the bin and
-# the integration tests link, once as the `--test` harness — and the generated
-# unit dwarfs everything else in the crate. As a dependency it is built once,
-# and only when a `.slint` file or a translation catalog changes.
+# `melodia-ui` holds nothing but the Slint compiler's output, split off because
+# `cargo test` builds this package twice — rlib and `--test` harness — and the
+# generated unit dwarfs the rest. As a dependency it builds once, and only when
+# a `.slint` file or a catalog changes.
 #
-# The vendored winit fork carries its own `[workspace]`, so it is already an
-# independent root; excluding it explicitly means a future upstream re-sync that
-# drops that table can't silently pull the fork in as a member.
+# `winit` already carries its own `[workspace]`; excluding it explicitly stops a
+# future upstream re-sync that drops that table from pulling it in as a member.
 [workspace]
 members = ["melodia-ui"]
 exclude = ["winit"]
 
 [workspace.package]
-# The release version, inherited by both packages. `melodia-ui` is `publish =
-# false` and depended on by path, so its own number buys nothing — inheriting
-# means it can't drift from the app's. The three toolchain-less manifest
-# scrapes (`release.yml`, `build-rpm.sh`, `build-appimage.sh`) anchor on this
-# table by name, so this stanza can sit anywhere in the file.
+# Inherited by both packages, so `melodia-ui` can't drift from the app. The
+# three toolchain-less scrapes (`release.yml`, `build-rpm.sh`,
+# `build-appimage.sh`) anchor on this table by name, not by position.
 version = "0.10.0"
 edition = "2024"
 license = "AGPL-3.0-or-later"
 # Kept in lockstep with `rust-toolchain.toml` and `clippy.toml`'s `msrv`.
 rust-version = "1.97"
 
-# Declared once here rather than spelled out in both manifests. Cargo unifies
-# features across the two packages, so a drifted *version* is the real hazard:
-# two `slint` crates resolve, the types `melodia-ui` generates then implement a
-# different `slint::ComponentHandle` than the one every file in `src/ui/` names,
-# and the build dies in a wall of `expected slint::Weak, found slint::Weak`.
+# Declared once rather than in both manifests, because a drifted *version*
+# resolves two `slint` crates: the types `melodia-ui` generates then implement a
+# different `ComponentHandle` than every file in `src/ui/` names, and the build
+# dies in a wall of `expected slint::Weak, found slint::Weak`.
 #
-# The `raw-window-handle-06` feature makes `slint::Window::window_handle()`
-# return a `WindowHandle` that implements `raw_window_handle::HasWindowHandle`
-# + `HasDisplayHandle` (raw-window-handle 0.6). Used by `wire_library_settings`
-# to parent the rfd folder picker to the main window so the OS file dialog
-# z-orders correctly on Windows + macOS (Linux XDG portal handles parenting
-# OS-side regardless).
+# `raw-window-handle-06` makes `Window::window_handle()` implement
+# `HasWindowHandle` + `HasDisplayHandle`, which `ui::file_dialog` needs to parent
+# the rfd pickers (Windows + macOS only; the Linux portal parents OS-side).
 #
-# `unstable-winit-030` exposes `slint::winit_030::WinitWindowAccessor` so the
-# custom titlebar can call winit's `drag_window()` for native OS-level window
-# moves (snap, multi-desktop, Wayland-correct) and subscribe to
-# `WindowEvent::Resized` to keep the maximize/restore icon in sync with
-# Win+↑ / window-tile shortcuts. Slint has no built-in `start_system_move`
-# in 1.16 (slint-ui#2521); manual `set_position` math is broken on Wayland
-# (slint-ui#6273) and `no-frame` windows (slint-ui#4817), so winit is the
-# only sane path. The feature is gated as "unstable" upstream and may be
-# renamed in 1.17+ — expected to be a one-line bump when that lands.
+# `unstable-winit-030` exposes `WinitWindowAccessor`, for winit's `drag_window()`
+# and `WindowEvent::Resized`. Slint 1.16 has no `start_system_move`
+# (slint-ui#2521) and manual `set_position` math is broken on Wayland
+# (slint-ui#6273) and `no-frame` windows (slint-ui#4817). Upstream may rename the
+# feature in 1.17+.
 #
-# Renderer: FemtoVG. Rounded `border-radius` clipping works end-to-end
-# (artwork tiles, custom titlebar, content panel) and idle/playback RSS
-# is flat with the `M_ARENA_MAX=2` cap in `main()`. The software
-# renderer was dropped — it can't clip to `border-radius` (slint#4176)
-# and its only draw, a lower idle RSS, no longer mattered once the
-# arena cap landed.
+# `renderer-femtovg`: the software renderer can't clip to `border-radius`
+# (slint#4176), and its one advantage — lower idle RSS — stopped mattering once
+# the `M_ARENA_MAX` cap in `main()` landed.
 [workspace.dependencies]
 slint = { version = "1.16.1", default-features = false, features = [
     "std",
@@ -83,56 +68,47 @@ slint = { version = "1.16.1", default-features = false, features = [
 # above — declaring the pair adjacently is the whole point of it being here.
 slint-build = "1.16.1"
 
-# Keep the library crate name lowercase so `use melodia::…` stays idiomatic
-# (matches `non_snake_case`) — the *package* name being capitalised drives
-# the binary output (`target/release/Melodia`) and `cargo run -p Melodia`,
-# while the library identifier Rust sees on the import side stays
-# `melodia`.
+# Lowercase so `use melodia::…` stays idiomatic; the capitalised *package* name
+# is what drives `target/release/Melodia` and `cargo run -p Melodia`.
 [lib]
 name = "melodia"
 # Nothing consumes `melodia` as a library and every doc example is an
 # `ignore` fence, so this only bought a rustdoc build per `cargo test`.
 doctest = false
 
-# cargo-deb metadata — drives the `.deb` build in release CI. Ships the
-# binary, .desktop, icon, license, and the polkit helper + policy. The
-# helper + policy are what `src/services/updater/install/swap.rs` looks
-# for at `/usr/libexec/melodia-update-helper` to surface a branded auth
-# dialog on updates ("Install Melodia update" instead of raw
-# `dnf install ...`).
+# cargo-deb metadata — drives the `.deb` build in release CI. The polkit helper
+# + policy are what `services/updater/install/swap.rs` looks for at
+# `/usr/libexec/melodia-update-helper`, for a branded auth dialog on updates.
 #
-# Asset triples are `(source-path, dest-path, mode)`. Dest paths follow
-# the Debian Filesystem Hierarchy (no `${prefix}` quirks) so they match
-# the RPM `%files` layout 1:1 — a user moving between RPM and DEB sees
-# the same files in the same places.
+# Dest paths follow the Debian FHS and match the RPM `%files` layout — except
+# licences, where the distros' rules conflict and the divergence is deliberate:
+# Policy 12.5 mandates `/usr/share/doc/<pkg>/copyright` and Debian has no
+# `/usr/share/licenses`, while RPM's `%license` tags files `RPMFILE_LICENSE`
+# rather than `RPMFILE_DOC` so they survive `--excludedocs`.
 [package.metadata.deb]
 section = "sound"
 priority = "optional"
-# `$auto` keeps cargo-deb's auto-detected shared-library deps (libGL,
-# libwayland-client, libxkbcommon, libfontconfig, libfreetype, alsa,
-# libdbus, …). `pkexec | policykit-1` is the runtime dep for `pkexec`
-# in the in-app updater's RPM/DEB install path and for activating the
-# bundled `com.github.kenansalar.melodia.update` polkit policy. The
-# OR-alternative is for forward compat: `policykit-1` is transitional
-# in Debian Trixie and slated for removal during the Trixie cycle —
-# the real binary the updater invokes ships in `pkexec` (which pulls
-# `polkitd` transitively). apt picks `pkexec` on Trixie+ and falls
-# back to `policykit-1` on Bookworm and older Ubuntu releases. Without
-# polkit the updater falls back gracefully to a "polkit not installed"
-# error, but declaring the dep up front is what Debian Policy expects.
+# cargo-deb ships a licence file into `usr/share/doc/melodia/copyright` verbatim
+# only when it opens with DEP-5 keys (`has_copyright_metadata`, first ten lines);
+# otherwise it *prepends* a header generated from `license` + `authors`, and the
+# stanzas below become a second, contradictory declaration — one author, whole
+# package AGPL, which the bundled fonts and the vendored winit falsify. Bare
+# string rather than the `[path, skip-lines]` pair: cargo-deb models the pair as
+# `Vec<String>`, so a numeric `0` there fails to deserialize.
+license-file = "packaging/debian-copyright"
+# `$auto` keeps cargo-deb's detected shared-library deps. The OR-alternative is
+# forward compat: the updater invokes `pkexec` (which pulls `polkitd`), but
+# `policykit-1` is transitional in Trixie and slated for removal, so apt picks
+# `pkexec` there and falls back on Bookworm and older Ubuntu. The updater
+# degrades to a "polkit not installed" error without it; declaring it is what
+# Policy expects.
 depends = "$auto, pkexec | policykit-1"
-# Recommended (not required) helpers: `desktop-file-utils` and
-# `hicolor-icon-theme` ship `debian/triggers` files declaring
-# `interest-noawait` on the *paths* `/usr/share/applications` and
-# `/usr/share/icons/hicolor`. dpkg auto-activates these path triggers
-# whenever any package installs files under those directories — our
-# DEB lands the desktop entry + the icon there, so the cache refresh
-# happens once per transaction without us shipping our own triggers
-# file or maintainer scripts. Pulled via `recommends` (not `depends`)
-# so server / minimal-base installs that won't ever launch a GUI don't
-# pay for them; on those, the path activation has no listener and is a
-# safe no-op. The RPM `%post` / `%postun` blocks in
-# `scripts/build-rpm.sh` cover the equivalent path on Fedora.
+# `recommends`, not `depends`: both ship `debian/triggers` declaring
+# `interest-noawait` on `/usr/share/{applications,icons/hicolor}`, so dpkg
+# refreshes those caches once per transaction whenever any package lands files
+# there — no maintainer scripts of our own. Minimal/server installs that never
+# launch a GUI skip them, and the path activation is then a no-op.
+# `scripts/build-rpm.sh`'s `%post`/`%postun` cover the Fedora equivalent.
 recommends = "desktop-file-utils, hicolor-icon-theme"
 extended-description = """
 Melodia is a modern, local-first desktop music player with a Material
@@ -143,16 +119,20 @@ Symphonia (MP3, FLAC, M4A/AAC, OGG, WAV, ALAC and AIFF), a fast local
 SQLite library with full-text search, browsing by album, artist, genre
 and playlist, OS media controls (MPRIS), and pluggable themes including
 system light/dark and Material You."""
-# `com.github.kenansalar.melodia.desktop` / `.metainfo.xml` — the
-# reverse-DNS names match the AppStream component id so KDE Discover /
-# GNOME Software merge the desktop entry with the MetaInfo component
-# and show the proper name, developer and licence.
+# The reverse-DNS dest names match the AppStream component id, which is what
+# makes KDE Discover / GNOME Software merge the desktop entry with the MetaInfo
+# component instead of listing them separately.
 assets = [
     ["target/release/Melodia", "usr/bin/melodia", "755"],
     ["scripts/Melodia.desktop", "usr/share/applications/com.github.kenansalar.melodia.desktop", "644"],
     ["packaging/com.github.kenansalar.melodia.metainfo.xml", "usr/share/metainfo/com.github.kenansalar.melodia.metainfo.xml", "644"],
     ["assets/icons/logo-with-background.svg", "usr/share/icons/hicolor/scalable/apps/melodia.svg", "644"],
     ["LICENSE", "usr/share/doc/melodia/LICENSE", "644"],
+    # The fonts and the vendored winit fork are compiled into the binary, so this
+    # package redistributes them and owes their licence text. Glob + trailing
+    # slash, so a fourth file in `licenses/` needs no edit here — unlike
+    # `wix/main.wxs`, which has to name each one.
+    ["licenses/*", "usr/share/doc/melodia/licenses/", "644"],
     ["packaging/melodia-update-helper", "usr/libexec/melodia-update-helper", "755"],
     ["packaging/com.github.kenansalar.melodia.update.policy", "usr/share/polkit-1/actions/com.github.kenansalar.melodia.update.policy", "644"],
 ]
@@ -162,9 +142,8 @@ assets = [
 # generated types stay reachable as `crate::AppWindow`, `crate::TrackRow`, ….
 melodia-ui = { path = "melodia-ui" }
 
-# UI. Version and features live in `[workspace.dependencies]`, along with the
-# rationale for each feature — `melodia-ui` takes the same line, and the two
-# must not drift.
+# Version and features in `[workspace.dependencies]`; `melodia-ui` takes the
+# same line and the two must not drift.
 slint.workspace = true
 
 # Async runtime / utilities
@@ -173,13 +152,11 @@ tokio-util = { version = "0.7.19", features = ["rt"] }
 async-compat = "0.2.5"
 parking_lot = "0.12.5"
 
-# Database. `default-features = false` drops `any` + `json` (unused — no
-# `sqlx::Any`, no `sqlx::types::Json`). `macros` stays: `sqlx::migrate!` is
-# re-exported from sqlx only under `cfg(all(feature = "macros", feature =
-# "migrate"))`, so dropping it breaks `database/mod.rs`. The compile-time
-# `query!` / `query_as!` machinery comes along for the ride but we don't
-# call it — all queries go through runtime `query_as::<_, T>()` /
-# `query_scalar`. `derive` covers `#[derive(sqlx::FromRow)]`.
+# `default-features = false` drops the unused `any` + `json`. `macros` stays
+# despite every query going through runtime `query_as::<_, T>()` /
+# `query_scalar`: `sqlx::migrate!` is re-exported only under
+# `all(feature = "macros", feature = "migrate")`, so dropping it breaks
+# `database/mod.rs`. `derive` covers `#[derive(sqlx::FromRow)]`.
 sqlx = { version = "0.9.0", default-features = false, features = ["runtime-tokio", "sqlite", "migrate", "derive", "macros"] }
 
 # Audio
@@ -196,17 +173,15 @@ rodio = { version = "0.22.2", default-features = false, features = [
     "symphonia-alac",
     "symphonia-aiff",
 ] }
-# Second-order IIR biquads for the graphic equalizer. Rodio 0.22 ships only
-# low/high-pass BLT filters (no peaking/parametric), so the EQ runs samples
-# through a cascade of `Type::PeakingEQ` `DirectForm1` filters from this crate.
-# `DirectForm1` keeps past inputs/outputs in its delay line, so live
-# coefficient swaps (slider drags) don't inject transients.
+# Rodio 0.22 ships only low/high-pass BLT filters, so the graphic EQ cascades
+# this crate's `Type::PeakingEQ` `DirectForm1` filters instead. `DirectForm1`
+# keeps past inputs/outputs in its delay line, so a live coefficient swap (a
+# slider drag) injects no transient.
 biquad = "0.6.0"
-# Real-to-complex FFT for the spectrum visualizer. Preferred over raw `rustfft`
-# (which it wraps): a real input yields N/2+1 bins from a half-length internal
-# complex FFT, so there's no manual complex packing and half the work. Its
-# planner caches twiddle factors and hands out reusable scratch buffers, which
-# is what lets the per-frame analysis allocate nothing.
+# Real-to-complex FFT for the spectrum visualizer. Over raw `rustfft` (which it
+# wraps) because a real input yields N/2+1 bins from a half-length complex FFT —
+# no manual packing, half the work — and its planner hands out reusable scratch,
+# which is what lets the per-frame analysis allocate nothing.
 realfft = "3.5.0"
 lofty = "0.24.0"
 
@@ -225,9 +200,8 @@ unicode-normalization = "0.1.25"
 image = { version = "0.25.10", default-features = false, features = ["jpeg", "png", "webp"] }
 lru = "0.18.2"
 
-# Material 3 dynamic colour generation (Material You). Default `std` feature
-# is what we want; `image`, `serde`, `libm` are off by default and we don't
-# need any of them — we feed quantized pixel data ourselves.
+# Material 3 dynamic colour (Material You). Its optional `image`/`serde`/`libm`
+# features stay off — we feed it quantized pixel data ourselves.
 material-colors = "0.4.2"
 
 # Serde / config
@@ -243,14 +217,13 @@ reqwest = { version = "0.13.4", default-features = false, features = ["form", "j
 # not used for anything security-sensitive.
 md5 = "0.8.1"
 
-# Logging. `flexi_logger` replaced `env_logger` when logs had to reach a file —
-# it is the only candidate with size *and* age rotation in one criterion, and
-# retention that needs no background thread. `services::logging` argues the rest.
+# `flexi_logger` replaced `env_logger` when logs had to reach a file: it is the
+# only candidate with size *and* age rotation in one criterion, and retention
+# that needs no background thread. `services::logging` argues the rest.
 #
-# `textfilter` is its `regex` feature and stays off — the same trap the
-# env_logger line was written to dodge, since we never match a regex inside a
+# `textfilter` (its `regex` feature) stays off — we never match a regex inside a
 # `RUST_LOG` directive. `colors` pulls `nu-ansi-term`, the only crate the swap
-# adds; it retires thirteen, so don't "restore" env_logger for dependency weight.
+# adds against thirteen it retires, so don't "restore" env_logger for weight.
 log = "0.4.33"
 flexi_logger = { version = "0.31.9", default-features = false, features = ["colors"] }
 
@@ -267,93 +240,64 @@ rfd = "0.17.2"
 # "Open Containing Folder" context-menu action.
 open = "5.4.0"
 
-# Auto-updater. `minisign-verify` is zero-dep and verify-only (Ed25519
-# signature verification of the artifact + global signature of the trusted
-# comment). `semver` powers `is_upgrade()` so a manifest reporting an older
-# or equal version transitions to `UpToDate` rather than `Available` —
-# string equality on the `version` field lets a compromised or rolled-back
-# `latest.json` force a downgrade. `futures-util` provides `StreamExt` so
-# the download path can `.next().await` reqwest's `bytes_stream()` without
-# buffering the full 80–150 MiB artifact. See `src/services/updater/`.
+# Auto-updater — see `src/services/updater/`. `minisign-verify` is zero-dep and
+# verify-only. `semver` powers `is_upgrade()`, so an older-or-equal manifest
+# reports `UpToDate`; string equality on `version` would let a rolled-back
+# `latest.json` force a downgrade. `futures-util`'s `StreamExt` lets the download
+# `.next().await` reqwest's `bytes_stream()` rather than buffering 80–150 MiB.
 minisign-verify = "0.2.5"
 semver = "1.0.28"
 futures-util = { version = "0.3.33", default-features = false, features = ["std"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
-# NOTE: do NOT enable the `tokio` feature here. Cargo unifies features across
-# all dependents of zbus, including Slint's transitive accesskit_unix → atspi
-# → zbus chain. Slint runs its a11y/D-Bus work on its own thread that has no
-# tokio context, so enabling `tokio` here makes that thread panic at startup
-# with: "there is no reactor running, must be called from the context of a
-# Tokio 1.x runtime". Phase 13 (always-on-top) will use `zbus::blocking::*`
-# from inside `tokio::task::spawn_blocking`, which doesn't need either
-# executor flavour.
+# Do NOT enable the `tokio` feature. Cargo unifies it onto Slint's transitive
+# accesskit_unix → atspi → zbus chain, and Slint's a11y thread has no tokio
+# context — it panics at startup with "there is no reactor running". Always-on-
+# top goes through `zbus::blocking::*` inside `spawn_blocking`, which needs
+# neither executor flavour.
 zbus = "5.18.0"
 
-# Linux system tray (StatusNotifierItem over D-Bus — pure-Rust, no GTK).
-# `default-features = false` drops ksni's default `tokio` feature: it turns
-# on `zbus/tokio`, and Cargo feature-unification would then force
-# `zbus/tokio` onto the accesskit → atspi → zbus chain above, panicking
-# Slint's a11y thread at startup — the exact footgun the zbus note
-# documents. `async-io` is mandatory (ksni's `compat` module
-# `compile_error!`s unless `tokio` or `async-io` is on) and pulls
-# `zbus/async-io`, matching what accesskit already uses. `blocking` adds
-# the synchronous `ksni::blocking` API so the tray runs on its own thread
-# with no tokio handle. Windows / macOS use `tray-icon` instead — see the
-# `cfg(any(windows, macos))` block below and `src/services/tray/`.
+# Linux tray (StatusNotifierItem over D-Bus, no GTK). See `src/services/tray/`;
+# Windows/macOS use `tray-icon` below. `default-features = false` drops ksni's
+# default `tokio` feature, which turns on `zbus/tokio` and so walks straight into
+# the footgun above. `async-io` is mandatory — ksni's `compat` module
+# `compile_error!`s without an executor feature — and matches accesskit's;
+# `blocking` gives the sync API the tray's own thread needs.
 ksni = { version = "0.3.6", default-features = false, features = ["blocking", "async-io"] }
 
-# Two glibc-only malloc knobs, both cfg-gated at their call sites — musl's
-# allocator exposes neither.
-#
-#   * `mallopt` in `src/main.rs` caps the per-thread arenas and pins the mmap
-#     and trim thresholds. Long-lived threads otherwise get an arena each, and
-#     the committed slack across them is pure free-list overhead for a
-#     mostly-idle desktop player; the thresholds otherwise ratchet upward on
-#     every large free until nothing is returned to the kernel at all.
-#   * `malloc_trim` in `src/tasks/heap_trim.rs` hands retained free-list
-#     pages back to the kernel: once after the startup churn settles, then
-#     ad-hoc after a bulk free (a view-close cache release).
+# Two glibc-only malloc knobs, cfg-gated at their call sites since musl exposes
+# neither. `mallopt` in `main.rs` caps the per-thread arenas — long-lived threads
+# otherwise get one each, all committed slack on a mostly-idle player — and pins
+# the mmap/trim thresholds, which otherwise ratchet up on every large free until
+# nothing returns to the kernel. `malloc_trim` in `tasks/heap_trim.rs` hands
+# retained pages back, once after startup churn and again after a bulk free.
 libc = "0.2.189"
 
 [target.'cfg(target_os = "windows")'.dependencies]
-# Used only by the auto-updater's atomic-swap fallback path
-# (`MoveFileExW(MOVEFILE_DELAY_UNTIL_REBOOT)` in
-# `src/services/updater/install/swap.rs`). The common case is the early
-# `remove_file` of `Melodia.exe.old` at the top of `main()`, which clears
-# the stale rename ~99% of the time. The reboot-delay flag is the
-# fallback for the rare case where `.old` is still loaded — e.g. the
-# user opened a second window before quitting.
+# `MoveFileExW(MOVEFILE_DELAY_UNTIL_REBOOT)` in `updater/install/swap.rs`, the
+# fallback for when `Melodia.exe.old` is still loaded (a second window open at
+# quit). `main()`'s early `remove_file` clears the stale rename otherwise.
 windows-sys = { version = "0.61.2", features = ["Win32_Storage_FileSystem", "Win32_Graphics_Dwm", "Win32_Foundation"] }
 
-# `std::fs::canonicalize` on Windows returns the verbatim/extended-length
-# form (`\\?\C:\...`) — which then leaks into the persisted `folders.path`
-# + `tracks.file_path` columns and fails to equality-match against the
-# regular `C:\...` paths that `std::fs::read_dir` yields, leaving Browse
-# rows greyed-out as "disk-only". `dunce::canonicalize` strips the
-# `\\?\` prefix whenever the resolved path fits in `MAX_PATH` (paths
-# that genuinely require the prefix keep it). Used via the
-# `crate::utils::canonicalize_path` wrapper, which forwards to
-# `std::fs::canonicalize` on non-Windows.
+# `std::fs::canonicalize` returns the extended-length form (`\\?\C:\...`) on
+# Windows, which lands in `folders.path` / `tracks.file_path` and then fails to
+# match the plain `C:\...` paths `read_dir` yields — Browse rows go grey as
+# "disk-only". `dunce` strips the prefix where the path fits in `MAX_PATH`.
+# Reached through `utils::canonicalize_path`, which forwards to std elsewhere.
 dunce = "1.0.5"
 
 [target.'cfg(any(target_os = "windows", target_os = "macos"))'.dependencies]
-# System tray / status-area icon for Windows + macOS. `default-features =
-# false` drops the `gtk` + `libxdo` features — those are the Linux code
-# paths (libappindicator / X11 `xdotool`), and Linux uses `ksni` instead.
-# The tray icon is created on the UI/main thread and its menu events are
-# pumped from the winit event loop Slint owns. See `src/services/tray/`.
+# `default-features = false` drops the `gtk` + `libxdo` features, which are the
+# Linux paths (libappindicator / X11 `xdotool`) that `ksni` covers instead. The
+# icon is created on the main thread and its menu events pumped from the winit
+# loop Slint owns. See `src/services/tray/`.
 tray-icon = { version = "0.24.2", default-features = false }
 
-# Windows-only: embed an `ICON` resource into the Melodia.exe binary so the
-# OS taskbar, titlebar, Alt-Tab thumbnail, and Explorer entry all render the
-# Melodia logo instead of the generic placeholder. `winresource` is an
-# actively-maintained fork of the unmaintained `winres` (which broke on
-# rustc ≥ 1.61) and uses `embed-resource` internally, so the icon embed
-# works from MSVC and GNU toolchains alike. The same `assets/melodia.ico`
-# is also referenced by `wix/main.wxs` for the Start-Menu shortcut and
-# Add/Remove Programs entry — single source of truth for the EXE icon
-# everywhere it appears in Windows shell surfaces.
+# Embeds an `ICON` resource into Melodia.exe, so the taskbar, Alt-Tab thumbnail
+# and Explorer entry aren't the generic placeholder. A maintained fork of
+# `winres` (which broke on rustc ≥ 1.61); works from MSVC and GNU alike.
+# `wix/main.wxs` reads the same `assets/melodia.ico` for its shortcut and
+# Add/Remove entry, so the EXE icon has one source.
 [target.'cfg(target_os = "windows")'.build-dependencies]
 winresource = "0.1.31"
 
@@ -370,11 +314,10 @@ workspace = true
 unused = { level = "warn", priority = -1 }
 unsafe_code = "deny"
 rust_2024_compatibility = { level = "warn", priority = -1 }
-# Deliberately NOT enabling 1.97's `dead_code_pub_in_binary`. It is unusable for
-# this crate's lib+bin split: a test harness is itself an executable, so under
-# `--all-targets` the lint treats every `pub` item reachable only from `main.rs`
-# as dead and flags the whole library API (670 hits — 0 on `--lib`, 0 on
-# `--bin`, all of them from the test targets).
+# Deliberately NOT enabling 1.97's `dead_code_pub_in_binary`: a test harness is
+# itself an executable, so under `--all-targets` it treats every `pub` item
+# reachable only from `main.rs` as dead and flags the whole library API. Measured
+# 670 hits, all from the test targets — 0 on `--lib`, 0 on `--bin`.
 
 [workspace.lints.clippy]
 correctness = { level = "deny", priority = -1 }
@@ -415,45 +358,30 @@ io_other_error              = "warn"
 lto = "fat"
 codegen-units = 1
 panic = "abort"
-# `strip = "debuginfo"` removes the heavy DWARF data (most of the size win)
-# but keeps the symbol table — `strip = true` (alias for "symbols") would
-# leave panic backtraces as raw hex addresses, useless for crash reports
-# from end users. Per rustc docs: programs wanting crash-reporting should
-# avoid `-Cstrip=symbols`.
+# DWARF is most of the size win; the symbol table stays because `strip = true`
+# (alias for "symbols") leaves panic backtraces as raw hex, useless in the crash
+# reports users attach. rustc's own docs say to avoid it when crash-reporting.
 strip = "debuginfo"
 
-# Dependencies only. The `"*"` glob is documented as "all dependencies (but not
-# any workspace member)", so this does NOT reach `melodia-ui` — it never did,
-# back when the generated unit was part of this package either. Raising it for
-# that crate specifically is now possible (`[profile.dev.package.melodia-ui]`)
-# and is the one place where it would be nearly free, since the crate rebuilds
-# only when a `.slint` file or a catalog changes. Deliberately not done: that
-# crate is also the build-memory peak the CI `CARGO_BUILD_JOBS` cap exists to
-# hold down, so the trade needs measuring before anyone makes it.
+# The `"*"` glob is "all dependencies (but not any workspace member)", so this
+# never reaches `melodia-ui`. Raising it for that crate specifically
+# (`[profile.dev.package.melodia-ui]`) would be nearly free on rebuild time, but
+# that crate is also the build-memory peak the CI `CARGO_BUILD_JOBS` cap holds
+# down — measure before making the trade.
 [profile.dev.package."*"]
 opt-level = 3
 
-# ---------------------------------------------------------------------------
-# Vendored winit fork (checked in at `winit/`).
+# winit 0.30.13 has no `wl_data_device` handling, so `WindowEvent::DroppedFile`
+# and friends fire everywhere but Wayland (rust-windowing/winit#1881, open since
+# 2021, not being worked on). `winit/` is that tag plus 3 commits — PR #4009 by
+# PeakKS, a WindowId fixup, URI percent-decoding — reaching
+# `WinitWindowAccessor::on_winit_window_event` in
+# `src/ui/window_chrome/winit_filter.rs`. The additions are cfg-gated to Linux, so
+# every platform builds the fork.
 #
-# Slint 1.16 depends transitively on winit 0.30.13, which has zero
-# `wl_data_device` handling on its Wayland backend — `WindowEvent::DroppedFile`
-# / `HoveredFile` / `HoveredFileCancelled` only fire on X11, macOS, Windows.
-# Tracking issue: rust-windowing/winit#1881 (open since 2021). Maintainer
-# stance: not actively worked on.
-#
-# `winit/` is a checked-in copy of winit at the v0.30.13 tag plus 3 commits:
-# PR #4009 ("wayland: register drag & drop events" by PeakKS) + a WindowId
-# fixup + URI percent-decoding. Result: KDE / GNOME / Sway Wayland users get
-# the same `DroppedFile` event the other platforms have always delivered,
-# surfaced through `slint::winit_030::WinitWindowAccessor::on_winit_window_event`
-# in `src/ui/window_chrome.rs`. The added code is cfg-gated to Linux, so the
-# fork is a no-op drop-in on Windows / macOS — every platform builds it.
-#
-# Vendored in-tree (rather than a path to an external checkout) so a fresh
-# clone and every CI runner build identically with zero setup. To follow an
-# upstream winit bump: rebase the fork onto the new tag, then re-sync the
-# `winit/` tree. Drop this block and delete `winit/` once upstream lands
-# native Wayland DnD.
+# In-tree rather than a path to an external checkout, so a fresh clone and every
+# CI runner build identically with no setup. To follow an upstream bump, rebase
+# the fork onto the new tag and re-sync `winit/`; delete both once upstream
+# lands native Wayland DnD.
 [patch.crates-io]
 winit = { path = "winit" }

@@ -52,7 +52,7 @@ jobs:
       # trigger a build.
       #
       # `.github/` is split the same way, and deliberately NOT excluded
-      # wholesale. The four workflows named below compile nothing and are never
+      # wholesale. The three workflows named below compile nothing and are never
       # exercised here, so a build proves nothing about them; the issue forms
       # are the same case — GitHub parses them, nothing in this repo builds
       # them, and the PR template already rides the `*.md` line. The two
@@ -66,6 +66,17 @@ jobs:
       # over again. A workflow added later therefore defaults to running
       # everything, which is the denylist working as designed — the line below
       # is the deliberate part.
+      #
+      # **`release.yml` and `LICENSE` are in for a third reason: the test suite
+      # reads them.** Compiling nothing is not the same as being unexercised —
+      # `services::tests::every_package_format_ships_the_licenses_dir` asserts
+      # `release.yml` still stages `licenses/` into the tarball, and
+      # `…::the_debian_copyright_quotes_the_licences_it_ships` re-derives the
+      # AGPL body in `packaging/debian-copyright` from `LICENSE`. Both were
+      # excluded here, so a PR touching only one of them skipped `test`
+      # entirely and the gate below counts `skipped` as a pass — the pin whose
+      # whole point is catching a second copy drifting could never fire on the
+      # edit that drifts it.
       - uses: dorny/paths-filter@7b450fff21473bca461d4b92ce414b9d0420d706 # v4.0.2
         id: paths
         if: github.event_name == 'pull_request'
@@ -76,13 +87,11 @@ jobs:
               - '**'
               - '!**/*.md'
               - '!.claude/**'
-              - '!.github/workflows/release.yml'
               - '!.github/workflows/deploy-coverage.yml'
               - '!.github/workflows/enforce-pr-source.yml'
               - '!.github/workflows/refresh-manifest.yml'
               - '!.github/ISSUE_TEMPLATE/**'
               - '!assets/screenshots/**'
-              - '!LICENSE'
               - '!.gitignore'
               - '!.env.example'
 

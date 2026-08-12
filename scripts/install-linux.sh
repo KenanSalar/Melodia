@@ -68,8 +68,19 @@ rm -f "$APPS_DIR/Melodia.desktop" "$APPS_DIR/melodia.desktop"
 # ~/.local/share/metainfo/ on first launch (see desktop_integration.rs).
 
 # LICENSE is informational — drop it next to the binary so users can
-# find it from the install dir.
+# find it from the install dir. The bundled fonts and the vendored winit
+# fork are compiled into the binary, so `licenses/` is not informational:
+# Apache-2.0 §4(a) requires it to travel with what it covers. See
+# licenses/ATTRIBUTION.txt.
+#
+# Guard on the expansion rather than on the directory: nullglob is off, so
+# an empty (or absent) licenses/ leaves the pattern literal, and `install`
+# would then fail the whole script under `set -e` — halfway through, with the
+# .desktop Exec rewrite and the cache refresh below still to run. `-D` creates
+# the target directory, which plain `-t` will not.
+LICENSE_FILES=("$SCRIPT_DIR"/licenses/*)
 [[ -f "$SCRIPT_DIR/LICENSE" ]] && install -m 0644 "$SCRIPT_DIR/LICENSE" "$INSTALL_DIR/LICENSE"
+[[ -e "${LICENSE_FILES[0]}" ]] && install -D -m 0644 -t "$INSTALL_DIR/licenses" "${LICENSE_FILES[@]}"
 
 # Rewrite the .desktop file's Exec line to point at the actual install
 # path. The tarballed .desktop assumes the binary is on $PATH; we make
