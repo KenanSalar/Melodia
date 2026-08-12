@@ -161,19 +161,27 @@ fn every_draggable_list_opts_out_of_drag_panning() {
     );
 }
 
-/// The gate has to read the direction too: `sort_playlist_tracks` reverses on
-/// `"desc"`, and the drag writes display indices straight into
-/// `position_order`, so a reversed position sort lands every drop at the
-/// mirrored slot.
+/// All four terms, since each fails differently and only the first is obvious.
+/// `sort_playlist_tracks` reverses on `"desc"`, and the drag writes display
+/// indices straight into `position_order`, so a reversed position sort lands
+/// every drop at the mirrored slot; a filter makes those indices name a
+/// different track entirely; and a smart playlist has no curated order to
+/// reorder into. Dropping one of the last three costs no wrong write —
+/// `apply_optimistic_reorder` refuses the filtered case and the query the empty
+/// item set — but the drag then starts, paints a ghost and a drop line, and does
+/// nothing on release, which is worse than a list that never armed.
 #[test]
-fn the_reorder_gate_reads_the_direction_as_well_as_the_field() {
+fn the_reorder_gate_reads_every_term_the_drag_depends_on() {
     let src = normalize_ws(&strip_line_comments(DETAIL_VIEW));
     assert!(
         src.contains(
             "reorder-enabled: PlaylistDetail.sort-field == \"position\" \
-             && PlaylistDetail.sort-dir != \"desc\""
+             && PlaylistDetail.sort-dir != \"desc\" \
+             && PlaylistDetail.filter == \"\" \
+             && !PlaylistDetail.playlist.is_smart"
         ),
-        "playlist-detail.slint must gate reorder on an *ascending* position sort"
+        "playlist-detail.slint must gate reorder on an *ascending* position sort, \
+         an unfiltered list and a playlist with a curated order"
     );
 }
 
@@ -201,18 +209,20 @@ fn the_sort_cycle_still_offers_a_way_back_to_the_curated_order() {
 ///
 /// Scoped to the guard rather than searched for over the file: `refresh_detail`
 /// asks the same question a few lines up, so a whole-file `contains` would pass
-/// on its copy.
+/// on its copy. Each needle carries its operator for the same reason the
+/// drag-pan pin above matches a binding — a dropped `!` or an `&&` in place of
+/// the `||` inverts the guard, and a bare token match can't see either.
 #[test]
 fn the_optimistic_reorder_refuses_a_filtered_list() {
     let src = normalize_ws(&strip_line_comments(DETAIL));
     let body = src.split_once("pub fn apply_optimistic_reorder").map_or("", |(_, rest)| rest);
     let guard = body.split_once("let saved =").map_or("", |(head, _)| head);
     assert!(
-        guard.contains("is_manual_order(&field, &dir)"),
+        guard.contains("!is_manual_order(&field, &dir)"),
         "the order half must be asked before the display indices reach `position_order`"
     );
     assert!(
-        guard.contains("filter.lock().is_empty()"),
+        guard.contains("|| !playlists_ui.detail.filter.lock().is_empty()"),
         "so must the filter half — a filtered index is in range, so the write lands"
     );
 }
