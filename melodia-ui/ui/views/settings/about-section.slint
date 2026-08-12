@@ -69,12 +69,13 @@ export component AboutSection inherits Rectangle {
 
             // The one filled button in the card, and deliberately so — it asks for
             // something rather than going somewhere. The mark keeps its own colours: it
-            // is Ko-fi's, and its white outline is what carries it over any accent.
+            // is Ko-fi's, and it reads on any accent because it carries both ends — the
+            // dark outline over a light one, the white cup over a dark one.
             if (root.show-app || root.show-author) && root.show-support: SectionDivider {}
             if root.show-support: SettingRow {
                 icon: "favorite";
                 label: @tr("Support Melodia");
-                description: @tr("Melodia is free and open source. A coffee helps keep it going.");
+                description: @tr("Melodia is free and open source. Support helps keep it going.");
                 SectionButton {
                     label: @tr("Support me on Ko-fi");
                     icon: "";

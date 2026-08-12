@@ -26,7 +26,19 @@ pub fn count_launch(flags: &mut SupportFlags) -> bool {
 }
 
 /// Record this launch, and say whether the prompt is due.
+///
+/// The read ahead of the mutate is what keeps the claim above true:
+/// `mutate_settings_with` writes unconditionally, so without it a settled install
+/// would rewrite `settings.json` on every boot to store a counter it had stopped
+/// advancing. `support` has exactly one writer, so nothing can land in the gap.
 pub fn record_launch(state: &AppState) -> Result<bool, AppError> {
+    if services::settings::read_settings(&state.paths)?
+        .support
+        .support_prompt_seen
+    {
+        return Ok(false);
+    }
+
     services::settings::mutate_settings_with(&state.paths, |settings| {
         count_launch(&mut settings.support)
     })

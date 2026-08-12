@@ -9,7 +9,8 @@ export component SectionButton inherits Rectangle {
     // A leading *image* instead of a glyph, for a mark the icon font doesn't have and
     // shouldn't: a third-party logo is multi-colour and must not be recoloured, which is
     // exactly what a `MaterialIcon` would do. Slint has no empty-`image` literal, so the
-    // branch below gates on the source size the way `ArtworkImage` does.
+    // branch below gates on the source size the way `ArtworkImage` does — and on `icon`
+    // being empty, so "instead of" is enforced rather than left to the call site.
     in property <image>  leading-image;
     in property <bool>   button-enabled: true;
     in property <bool>   primary: true;   // false = outline / "text" variant
@@ -59,7 +60,7 @@ export component SectionButton inherits Rectangle {
             }
         }
 
-        if root.leading-image.width > 0 && root.leading-image.height > 0: VerticalLayout {
+        if root.icon == "" && root.leading-image.width > 0 && root.leading-image.height > 0: VerticalLayout {
             alignment: center;
             Image {
                 source: root.leading-image;

@@ -1059,16 +1059,16 @@ msgstr "Soutenir Melodia"
 msgid "Support me on Ko-fi"
 msgstr "Soutenez-moi sur Ko-fi"
 
-msgid "Melodia is free and open source. A coffee helps keep it going."
-msgstr "Melodia est gratuit et open source. Un café aide à le faire vivre."
+msgid "Melodia is free and open source. Support helps keep it going."
+msgstr "Melodia est gratuit et open source. Le soutien aide à le faire vivre."
 
 # The one-time support toast (`src/ui/support.rs`), shown on one early launch and
 # never again. Its action button opens the Ko-fi page.
 msgid "Enjoying Melodia?"
 msgstr "Melodia vous plaît ?"
 
-msgid "It's free and open source, built in my spare time. If it's useful to you, you can buy me a coffee."
-msgstr "Il est gratuit et open source, développé sur mon temps libre. S'il vous est utile, vous pouvez m'offrir un café."
+msgid "It's free and open source, built in my spare time. If it's useful to you, you can support me. You'll only see this once."
+msgstr "Il est gratuit et open source, développé sur mon temps libre. S'il vous est utile, vous pouvez me soutenir. Vous ne verrez ceci qu'une fois."
 
 msgid "Support"
 msgstr "Soutenir"

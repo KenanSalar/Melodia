@@ -68,6 +68,12 @@ fn wire_open_kofi(ui: &AppWindow, state: &AppState) {
 /// launch however short; the *seen* flag lands beside the `show`, so a session that ends
 /// inside the delay leaves the prompt for the next one instead of spending it on nobody.
 /// Neither is tied to the dismiss — a toast the user closes must not come back.
+///
+/// The message says so out loud ("You'll only see this once"), which makes that second
+/// write the one thing here that is a promise rather than a preference. It goes out
+/// through `persist_blocking`, which logs a failed write and swallows it, so a config
+/// directory that is read-only or full shows the toast again next launch. Accepted: a
+/// `settings.json` that won't write has broken more than this.
 fn schedule_prompt(
     ui: &AppWindow,
     state: &AppState,
