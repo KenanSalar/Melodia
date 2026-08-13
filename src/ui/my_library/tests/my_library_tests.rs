@@ -1129,27 +1129,22 @@ fn the_replay_flips_the_section_against_the_index_the_close_left_behind() {
     );
 }
 
-/// **Every body on this page enters on one axis, and the axis is vertical.**
+/// **No body may move while the band is moving it**, which is `slide: !band.morphing`
+/// on all nine. The band is the non-stretching sibling above the body, so a morph
+/// moves `body.y` by the whole distance between its two floors — and a body travelling
+/// at the same time is the diagonal of #45. Same-axis is deliberately not enough: the
+/// morph's entry curve is slow off the mark where `ViewTransition`'s is not, so a rise
+/// on top of the push sends the body up before it comes down.
 ///
-/// This page has a second animation no other has: the band's own height. The band is
-/// the non-stretching sibling above the body, so a morph between the compact floor
-/// and the hero one moves `body.y` by the whole distance between them, on every
-/// frame, and the list or grid inside is anchored to that. A body that also slid
-/// sideways gave the diagonal this pin exists to keep out — 32 px left plus the
-/// band's push down on a back out, 32 px right plus its pull up on a drill in, and
-/// both at once on a tab pick that closes a banner.
-///
-/// So all nine branches take the same three lines. `below` is the sidebar's own
-/// fade-up; `slide: !band.morphing` drops even that whenever the band is already
-/// doing the moving, leaving a cross-fade over the morph. Same-axis is deliberately
-/// not enough: the morph's entry curve is slow off the mark where `ViewTransition`'s
-/// is not, so a rise on top of the push sends the body up before it comes down.
+/// What the branches then differ on is only where they enter *from*. A tab pick with
+/// the band still is a move along the bar, so the five tab bodies take its direction;
+/// a drill is not, so the four details keep `below`.
 ///
 /// Walking the branches rather than listing them is the point — a tenth added later
 /// with `enter-from: Nav.pending-enter-from` copied off a sibling page compiles,
 /// looks right in review, and is the bug.
 #[test]
-fn every_body_branch_enters_on_the_bands_own_axis() {
+fn every_body_branch_enters_on_an_axis_the_band_is_not_already_moving() {
     let view = code(VIEW);
 
     // The condition trails the *previous* chunk, so each branch is paired with the
@@ -1175,25 +1170,33 @@ fn every_body_branch_enters_on_the_bands_own_axis() {
     );
 
     for (head, branch) in &branches {
-        for line in [
-            "enter-from: NavEnterFrom.below;",
-            "enabled: root.body-anim-armed;",
-            "slide: !band.morphing;",
-        ] {
+        for line in ["enabled: root.body-anim-armed;", "slide: !band.morphing;"] {
             assert!(
                 branch.contains(line),
-                "the branch mounting `{head}` must carry `{line}` — the three together are what \
-                 keep this page's entry on one axis; any one of them missing puts a slide back \
-                 on top of the band's morph"
+                "the branch mounting `{head}` must carry `{line}` — without them a body travels \
+                 on top of the band's own morph, which is the diagonal"
             );
         }
+
+        // A detail branch is one that doesn't name the tab it sits under: the four
+        // `if root.*-open:` heads. Derived from the condition rather than a list, so
+        // a sixth tab can't be quietly filed under the wrong rule.
+        let (expected, why) = if head.contains("MyLibrary.tab-idx") {
+            ("enter-from: band.tab-enter-from;", "a tab pick is a move along the bar")
+        } else {
+            ("enter-from: NavEnterFrom.below;", "a drill is not a move along the bar")
+        };
+        assert!(
+            branch.contains(expected),
+            "the branch mounting `{head}` must carry `{expected}` — {why}"
+        );
     }
 
     assert!(
         !view.contains("Nav.pending-enter-from"),
-        "nothing on this page may read or write `Nav.pending-enter-from` — the bodies take a \
-         fixed `below`, so a write here would only leave a stale `right`/`left` for whichever \
-         *page* mounts next, and a read is the horizontal slide coming back"
+        "nothing on this page may read or write `Nav.pending-enter-from` — the direction comes \
+         off the band, and a write here would leave a stale `right`/`left` for whichever *page* \
+         mounts next"
     );
 }
 

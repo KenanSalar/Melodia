@@ -495,10 +495,15 @@ silently miss the other.
     reading as a diagonal. The host arms it in the tab bar's `selected` handler; starting `false`
     is what makes the page re-disarm for free, being rebuilt on every entry. Direction comes off
     `bar.previous-index`, so the host keeps no tab state and needs no mount seed.
-  - **My Library takes no direction at all, being the one page with a *third* animation — its own
-    band's height**, which moves `body.y` by the whole distance between the two floors every frame.
-    All nine branches carry `enter-from: below`, `enabled: root.body-anim-armed`,
-    `slide: !band.morphing`, and none reads `Nav.pending-enter-from`. **`morphing` is
+  - **My Library gates its direction on `morphing` rather than dropping it**, being the one page
+    with a *third* animation — its own band's height, which moves `body.y` by the whole distance
+    between the two floors every frame. All nine branches carry `enabled: root.body-anim-armed`
+    and `slide: !band.morphing`, and none reads `Nav.pending-enter-from`; the five **tab** bodies
+    take `enter-from: band.tab-enter-from` (the bar's own left/right, forwarded off the band as on
+    `MosaicTabHero`) and the four **details** keep `below`, a drill not being a move along the bar.
+    So a tab pick with the band still slides like the sibling pages, and anything the band morphs
+    through is a cross-fade with both offsets zeroed — which is what makes `slide` the load-bearing
+    line rather than the fixed axis it replaced. **`morphing` is
     `hero-t != (detail-open ? 1.0 : 0.0)`** — deliberately not `hero-t > 0`, which is `false` on a
     drill-in's first frame, the one frame the answer must be `true`; same-axis is not enough to
     skip it, the body's 32 px being made of a curve that disagrees with the morph's, so the sum

@@ -1,5 +1,6 @@
 import { Theme } from "../../theme.slint";
 import { HeroBackdrop } from "../../globals/hero-backdrop.slint";
+import { NavEnterFrom } from "../../globals/nav.slint";
 import { ArtworkImage } from "../artwork-image.slint";
 import { HeroBlurBackdrop } from "../hero-blur-backdrop.slint";
 import { HeroChipStrip } from "../hero-chip-strip.slint";
@@ -332,12 +333,10 @@ export component LibraryTabBand inherits Rectangle {
     // extraction is invisible to it. What each one is for is argued in
     // `tab-search-header.slint`.
     //
-    // **`tab-enter-from` is deliberately not among them**, where `MosaicTabHero`
-    // forwards it: this page's bodies take a fixed `below` and suppress even that
-    // whenever `morphing` says the band is already moving them, so the bar's
-    // left/right answer has no consumer here. Re-publishing it would leave an
-    // output whose only use is to be bound by the next branch someone copies off
-    // a sibling page — which is the bug this band was fixed for.
+    // Forwarded despite the diagonal this band caused (#45): whether a body may move is
+    // a question about the morph, not about the direction, and the page answers that one
+    // on `slide`, where it can see both. This is only ever the bar's left/right.
+    out property <NavEnterFrom> tab-enter-from <=> header.tab-enter-from;
     out property <bool> tab-anim-armed <=> header.tab-anim-armed;
 
     out property <length> tip-x:

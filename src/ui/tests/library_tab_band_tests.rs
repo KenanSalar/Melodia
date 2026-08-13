@@ -319,24 +319,20 @@ fn no_hero_tier_outlives_the_banner_it_was_solved_for() {
 /// and every compact tooltip. Two-way aliases rather than one-way bindings, so
 /// nothing here can be orphaned by a write.
 ///
-/// **`tab-enter-from` is absent on purpose**, where `mosaic_tab_hero_tests`' twin
-/// asks for it: this page's nine bodies take a fixed `below` and drop even that
-/// while `morphing` holds, so the bar's left/right answer has no consumer — and an
-/// unread output is what the next branch copied off a sibling page would bind to.
+/// `tab-enter-from` is among them, as it is on `MosaicTabHero`. What stops it
+/// composing with the morph into the diagonal of #45 is `morphing`, read on the
+/// page's own `slide` — so a band that drops this forward doesn't restore that
+/// fix, it only strands the five tab bodies on a direction they can't reach.
 #[test]
 fn the_band_forwards_what_the_shared_row_publishes() {
-    for prop in ["tab-anim-armed", "tip-w", "tip-h", "tip-label", "tip-visible"] {
+    for prop in
+        ["tab-enter-from", "tab-anim-armed", "tip-w", "tip-h", "tip-label", "tip-visible"]
+    {
         assert!(
             BAND.contains(&format!("{prop} <=> header.{prop};")),
             "the band must re-publish `{prop}` off the shared header — its sheet reads that name"
         );
     }
-    assert!(
-        !BAND.contains("tab-enter-from <=> header.tab-enter-from;"),
-        "the band must not re-publish `tab-enter-from` — nothing on this page can consume a \
-         lateral direction, and an output with no reader is exactly what a tenth body branch \
-         would bind to instead of the fixed `below` every other one takes"
-    );
     // The two positional anchors can't be plain aliases: they are relative to the
     // header, and the sheet's frame is relative to the band.
     for prop in ["tip-x", "tip-y"] {
