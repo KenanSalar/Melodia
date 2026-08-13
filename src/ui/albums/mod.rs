@@ -48,9 +48,8 @@ use crate::{
     TrackListRow as UiTrackListRow,
 };
 
-use state::{
-    AlbumDetailState, AlbumGridState, DEFAULT_GRID_COVER_CAP, GRID_COVER_SIZE, GridData,
-};
+use crate::ui::grid_prewarm::GRID_COVER_SIZE;
+use state::{AlbumDetailState, AlbumGridState, DEFAULT_GRID_COVER_CAP, GridData};
 
 #[cfg(test)]
 use grid::compute_indices;
@@ -97,7 +96,7 @@ pub fn install(cx: ViewCtx<'_>) -> Arc<AlbumsUi> {
 pub struct AlbumsUi {
     grid: AlbumGridState,
     detail: AlbumDetailState,
-    /// Row-tier (72 px) cache shared with Tracks / Browse / now-playing-bar
+    /// Row-tier cache shared with Tracks / Browse / now-playing-bar
     /// — backs the small artwork column of the detail view's `TrackList`.
     cover_thumbs: Arc<CoverThumbs>,
     /// Grid-tier (`GRID_COVER_SIZE`) cache for the Albums grid card tiles —

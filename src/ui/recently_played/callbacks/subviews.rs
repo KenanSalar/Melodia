@@ -85,7 +85,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, rp_ui: &Arc<RecentlyPlayedU
 
             // The entering tier was cleared when its tab was last left, so the
             // cards mount cold: hold the lookups at cache-only until the prewarm
-            // below reports back, or each visible card drags a 448 px decode onto
+            // below reports back, or each visible card drags a grid-tier decode onto
             // this thread in the frame that paints the grid.
             g.set_covers_generation(0);
 

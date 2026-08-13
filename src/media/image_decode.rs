@@ -35,6 +35,19 @@ pub fn decode_capped(path: &Path, max_dim: u32) -> image::ImageResult<DynamicIma
     reader.decode()
 }
 
+/// Source pixel count from the header alone, without decoding a pixel.
+///
+/// `into_dimensions` stops after the decoder has parsed enough to answer, so
+/// this is a header read rather than a decode — cheap enough to ask before
+/// every decode, and the only way to know what a decode is about to cost. A
+/// forged header lies here exactly as it lies to `decode_capped`, which is why
+/// callers use it to *order* work rather than to trust a size.
+pub fn source_pixels(path: &Path) -> Option<u64> {
+    let reader = image::ImageReader::open(path).ok()?.with_guessed_format().ok()?;
+    let (width, height) = reader.into_dimensions().ok()?;
+    Some(u64::from(width) * u64::from(height))
+}
+
 /// Decoder limits refusing anything wider or taller than `max_dim`.
 ///
 /// Everything else is left at `image`'s defaults, which already cap a single

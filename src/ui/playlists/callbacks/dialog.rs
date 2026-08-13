@@ -36,7 +36,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
     let playlists = ui.global::<Playlists>();
     let weak = ui.as_weak();
 
-    // request-row-cover: 72 px row-tier lookup for the mosaic picker's
+    // request-row-cover: row-tier lookup for the mosaic picker's
     // small candidate tiles + preview slots. Shares the row-tier
     // `cover_thumbs` LRU with Tracks / Browse / detail track-lists.
     {

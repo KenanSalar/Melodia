@@ -59,8 +59,7 @@ use crate::ui::section_state::SectionState;
 use crate::ui::view_ctx::ViewCtx;
 
 use state::{
-    ARTIST_THUMB_SIZE, FavoritesUiState, GRID_THUMB_CAP, MOSAIC_THUMB_CAP, MOSAIC_THUMB_SIZE,
-    MOST_PLAYED_THUMB_SIZE,
+    FavoritesUiState, GRID_THUMB_CAP, MOSAIC_THUMB_CAP, MOSAIC_THUMB_SIZE,
 };
 
 /// This page's `Nav.selected-index`. **The single definition**, beside the view it
@@ -118,7 +117,7 @@ pub fn install(cx: ViewCtx<'_>, artists_ui: &Arc<ArtistsUi>) -> Arc<FavoritesUi>
 /// `Arc<FavoritesUi>` — `Send + Sync`.
 pub struct FavoritesUi {
     inner: FavoritesUiState,
-    /// Shared row-tier (72 px) cache — used for the Songs tab's
+    /// Shared row-tier cache — used for the Songs tab's
     /// `TrackList` row column. Same instance every view consumes.
     pub(super) cover_thumbs: Arc<CoverThumbs>,
     /// Mosaic-tile cache (128 px). Released on section leave; warm
@@ -171,11 +170,13 @@ impl FavoritesUi {
                 MOSAIC_THUMB_CAP,
             )),
             most_played_thumbs: Arc::new(CoverThumbs::with_config(
-                MOST_PLAYED_THUMB_SIZE,
+                crate::ui::grid_prewarm::GRID_COVER_SIZE,
                 GRID_THUMB_CAP,
             )),
+            // Same tier as Most Played — the circular mask is applied at draw
+            // time, so the source needs no extra resolution.
             artist_thumbs: Arc::new(CoverThumbs::with_config(
-                ARTIST_THUMB_SIZE,
+                crate::ui::grid_prewarm::GRID_COVER_SIZE,
                 GRID_THUMB_CAP,
             )),
             section: SectionState::new(),

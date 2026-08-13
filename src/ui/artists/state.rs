@@ -92,11 +92,6 @@ pub(super) struct ArtistDetailState {
     pub applied_selection: Mutex<HashSet<i32>>,
 }
 
-/// Square decode size (px) for the Artists **grid card** tiles. Same as
-/// the Albums tier — circular crop applied at render time leaves room for
-/// the diagonal extents of the underlying square.
-pub(super) const GRID_COVER_SIZE: u32 = 448;
-
 /// Fallback LRU capacity. Replaced at startup by
 /// `tune_cache_for_display`.
 pub(super) const DEFAULT_GRID_COVER_CAP: NonZeroUsize = match NonZeroUsize::new(48) {

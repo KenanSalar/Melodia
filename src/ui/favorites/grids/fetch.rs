@@ -89,7 +89,7 @@ pub async fn refresh_grids(state: &AppState, fav_ui: &Arc<FavoritesUi>, weak: &W
     // Prewarm the mounted tab's tier off-thread before its rows land in the
     // Slint model: the cards' `request-*-cover` lookups decode on miss *on
     // the UI thread*, so a cold tab would otherwise pay one synchronous
-    // 448 px decode per visible card at first paint.
+    // grid-tier decode per visible card at first paint.
     //
     // Only the mounted tab, and only while the section is on screen. The two
     // grids are mutually exclusive, so warming both is twice the decodes and

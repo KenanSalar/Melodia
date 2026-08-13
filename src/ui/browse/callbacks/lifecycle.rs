@@ -43,7 +43,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, browse_ui: &Arc<BrowseUi>) 
             bu.set_section_active(active);
             if !active {
                 // The card tier is Browse's only cache, and it is worth a section's
-                // release: at 448 px a full LRU is tens of megabytes. The generation
+                // release: at grid-tier size a full LRU is tens of megabytes. The generation
                 // rewinds beside it so `0` keeps meaning "cold" rather than "first toggle
                 // of the session".
                 //

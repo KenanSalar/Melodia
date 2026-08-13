@@ -2,7 +2,7 @@
 //! and when it is handed back.
 //!
 //! Three of them are the view's own — the hero mosaic (128 px), Most Played
-//! and Favorite Artists (grid-sized) — and the fourth is the shared 72 px row
+//! and Favorite Artists (grid-sized) — and the fourth is the shared row
 //! tier the Songs tab's `TrackList` draws from, which this module only ever
 //! reads. Tab-leave is the event the collapse toggles used to be, so the two
 //! grid tiers are released and re-warmed on a tab pick as well as on a
@@ -40,7 +40,7 @@ impl FavoritesUi {
     }
 
     /// The cover tier a grid tab draws from. `None` for Songs, whose row
-    /// covers come from the shared 72 px tier instead.
+    /// covers come from the shared row tier instead.
     fn grid_tier(&self, tab: FavoritesTab) -> Option<&CoverThumbs> {
         match tab {
             FavoritesTab::MostPlayed => Some(&self.most_played_thumbs),
@@ -153,7 +153,10 @@ impl FavoritesUi {
 /// nothing.
 pub fn tune_cache_for_display(app: &AppWindow, fav_ui: &FavoritesUi) {
     let cap = crate::ui::grid_prewarm::cover_cap_for_window(app, GRID_THUMB_CAP);
-    fav_ui.most_played_thumbs.resize(cap);
-    fav_ui.artist_thumbs.resize(cap);
-    log::debug!("ui::favorites grid-cover cache caps tuned to {cap}");
+    let size = crate::ui::grid_prewarm::cover_size_for_window(app);
+    for tier in [&fav_ui.most_played_thumbs, &fav_ui.artist_thumbs] {
+        tier.resize(cap);
+        tier.set_thumb_size(size);
+    }
+    log::debug!("ui::favorites grid-cover caches tuned to cap {cap}, {size} px");
 }

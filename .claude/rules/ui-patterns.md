@@ -401,6 +401,16 @@ silently miss the other.
   card footprint; resized from `install_views` once the winit window is live, the fallback passed
   in so a module keeps its own default and a monitor reporting `None` lands there.
 
+- **Decode size via `grid_prewarm::cover_size_for_window(app)`, in the same `tune_cache_for_display`
+  call** — the cap and the size are two halves of one budget, and both are answers about the
+  display. `GRID_COVER_SIZE` replaced a `448` copied into five files, each justifying it in its own
+  doc comment off the same claim that flex-filled cards "run well past 260 px". They don't:
+  `GridGeometry` packs toward `min-card-w`, so a card is **largest in a narrow panel** and lands
+  near 190 px on a wide one. A tier spelling its own size is the thing to reach for this instead
+  of. Needs no winit round trip and has no failure arm, unlike the cap — the scale factor is
+  Slint's own. `cover_thumbs::row_cover_size` is the row tier's twin, wired at each of its two
+  construction sites rather than through a tune hook, neither having one.
+
 - **Prewarm path dedup via `grid_prewarm::unique_artwork_paths(paths, cap)`**, first-seen-ordered
   and non-empty. **Every prewarm site goes through it**, the per-entity wrapper owning only the
   projection; don't lean on `prewarm`'s internal dedup as a reason to skip it, the two sites that

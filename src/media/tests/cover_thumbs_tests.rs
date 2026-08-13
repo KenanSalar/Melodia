@@ -10,8 +10,8 @@ fn new_decodes_to_row_tier_size() -> TestResult {
     let buf = thumbs
         .get_or_load_rgb8(&path)
         .ok_or("row-tier cover failed to decode")?;
-    assert_eq!(buf.width(), THUMB_SIZE);
-    assert_eq!(buf.height(), THUMB_SIZE);
+    assert_eq!(buf.width(), ROW_THUMB_SIZE);
+    assert_eq!(buf.height(), ROW_THUMB_SIZE);
     Ok(())
 }
 
@@ -63,6 +63,61 @@ fn clear_empties_the_cache() -> TestResult {
     assert!(thumbs.cache.lock().contains(&path));
     thumbs.clear();
     assert_eq!(thumbs.cache.lock().len(), 0);
+    Ok(())
+}
+
+/// The oversized-decode gate is driven entirely by this probe, so a probe that
+/// answered `None` for real files would leave it permanently disengaged while
+/// everything still built and every cover still decoded.
+#[test]
+fn source_pixels_reads_dimensions_from_the_header() -> TestResult {
+    let (_tmp, path) = write_test_png(120)?;
+    assert_eq!(source_pixels(&path), Some(120 * 120));
+    assert_eq!(source_pixels(Path::new("/nonexistent/melodia/none.png")), None);
+    Ok(())
+}
+
+/// The row tier feeds a 36 px track-row tile and a now-playing bar tile that
+/// clamps at 46 px, so the 1× size only has to beat the larger of those. The
+/// `HiDPI` size is 2× the *row* tile and deliberately short of 2× the bar tile
+/// — that ratio predates the split and is left where it was, this change being
+/// about what a 1× display pays.
+#[test]
+fn row_cover_size_steps_up_for_hidpi_and_covers_the_bar_tile() {
+    const ROW_TILE: u32 = 36;
+    const BAR_TILE_MAX: u32 = 46;
+
+    assert_eq!(row_cover_size(1.0), ROW_THUMB_SIZE);
+    assert_eq!(row_cover_size(2.0), ROW_THUMB_SIZE_HIDPI);
+    // A fractional scale rounds up — softness is the worse failure.
+    assert_eq!(row_cover_size(1.5), ROW_THUMB_SIZE_HIDPI);
+
+    assert!(row_cover_size(1.0) > BAR_TILE_MAX);
+    assert!(row_cover_size(2.0) >= ROW_TILE * 2);
+    assert!(row_cover_size(2.0) > row_cover_size(1.0));
+}
+
+/// Every cached buffer was decoded at the old size, so a genuine change has to
+/// drop them — a retune that kept them would serve the wrong resolution for the
+/// rest of the session. A no-op change must keep them, the one call site
+/// running on every boot.
+#[test]
+fn set_thumb_size_drops_stale_buffers_only_when_the_size_moves() -> TestResult {
+    let thumbs = CoverThumbs::new();
+    let (_tmp, path) = write_test_png(120)?;
+    let _ = thumbs.get_or_load_rgb8(&path);
+    assert_eq!(thumbs.cache.lock().len(), 1);
+
+    thumbs.set_thumb_size(ROW_THUMB_SIZE);
+    assert_eq!(thumbs.cache.lock().len(), 1, "a no-op retune kept the tier");
+
+    thumbs.set_thumb_size(ROW_THUMB_SIZE_HIDPI);
+    assert_eq!(thumbs.cache.lock().len(), 0);
+
+    let buf = thumbs
+        .get_or_load_rgb8(&path)
+        .ok_or("cover failed to decode at the retuned size")?;
+    assert_eq!(buf.width(), ROW_THUMB_SIZE_HIDPI);
     Ok(())
 }
 

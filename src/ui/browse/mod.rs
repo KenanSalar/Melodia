@@ -126,7 +126,7 @@ pub struct BrowseUi {
     /// Shared with Tracks/now-playing-bar so cached thumbnails are
     /// reused across views.
     pub(super) cover_thumbs: Arc<CoverThumbs>,
-    /// The card view's own 448 px tier — private, so releasing it can't
+    /// The card view's own grid tier — private, so releasing it can't
     /// yank the row thumbnails the shared tier above is still serving.
     /// Released on section-leave and whenever the view goes back to the
     /// list. See `cards.rs`.
@@ -157,7 +157,7 @@ impl BrowseUi {
             sort_dir: Mutex::new("asc".to_owned()),
             cover_thumbs,
             grid_covers: Arc::new(CoverThumbs::with_config(
-                cards::GRID_COVER_SIZE,
+                crate::ui::grid_prewarm::GRID_COVER_SIZE,
                 cards::DEFAULT_GRID_COVER_CAP,
             )),
             card_mode: AtomicBool::new(false),
@@ -207,7 +207,7 @@ impl BrowseUi {
     /// Resolve one card's cover against the card tier, decoding only once the
     /// tier is known warm — `generation == 0` means "just toggled or just
     /// re-entered", so answer from the cache and let the card paint its
-    /// placeholder rather than putting a 448 px decode per visible card on the
+    /// placeholder rather than putting a grid-tier decode per visible card on the
     /// UI thread.
     pub fn grid_cover(&self, artwork_path: &str, generation: i32) -> slint::Image {
         crate::ui::grid_prewarm::grid_cover(&self.grid_covers, artwork_path, generation)

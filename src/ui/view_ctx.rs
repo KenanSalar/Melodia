@@ -27,7 +27,7 @@ use crate::state::AppState;
 pub struct ViewCtx<'a> {
     pub app: &'a AppWindow,
     pub state: &'a AppState,
-    /// The one 72 px row-tier LRU every track table shares. Each slice clones
+    /// The one row-tier LRU every track table shares. Each slice clones
     /// it into its handle; the private grid / mosaic tiers stay the handle's.
     pub cover_thumbs: &'a Arc<CoverThumbs>,
     /// `None` on a fresh install *and* on an unreadable file — a slice seeding

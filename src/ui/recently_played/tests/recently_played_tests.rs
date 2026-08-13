@@ -261,7 +261,7 @@ fn a_tab_pick_clears_the_filter_on_both_sides() {
 /// Reading it is the only thing that re-runs a `pure` callback whose result is
 /// otherwise cached until a dependency dirties, and its *value* is the is-it-warm
 /// flag Rust branches on. Drop either half and every card mounted on a cold tab
-/// drags a 448 px decode onto the UI thread in the frame that paints the grid.
+/// drags a grid-tier decode onto the UI thread in the frame that paints the grid.
 #[test]
 fn the_grid_mount_forwards_the_covers_generation() {
     assert!(
